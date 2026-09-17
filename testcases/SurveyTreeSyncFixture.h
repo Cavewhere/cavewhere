@@ -49,21 +49,31 @@ inline const QString kSiblingTripName = QStringLiteral("Sibling survey");
 inline const QString kAuthorSideCave = QStringLiteral("Author Side Cave");
 inline const QString kPeerSideCave = QStringLiteral("Peer Side Cave");
 inline const QString kAuthorSibling = QStringLiteral("Author Sibling");
+inline const QString kSectionName = QStringLiteral("Upper level");
+inline const QString kSectionTripName = QStringLiteral("Dome climb");
+inline const QString kAuthorSection = QStringLiteral("Author Upper level");
+inline const QString kPeerSection = QStringLiteral("Peer Upper level");
 
 //! The depth-2 project both sides of every case below start from:
 //!
 //!   Kentucky field seasons          (Folder)
 //!     nodes/Side Cave               (Cave)
 //!     nodes/Sibling Cave            (Cave, one trip carrying a note image)
+//!
+//! With a section asked for, Side Cave gains one more level:
+//!
+//!     nodes/Side Cave/nodes/Upper level   (Folder, one trip carrying a note image)
 struct TreeFixture {
     cwCave* folder = nullptr;
     cwCave* sideCave = nullptr;
     cwCave* siblingCave = nullptr;
+    cwCave* section = nullptr;
 };
 
 using SurveyTreeTestHelper::addNode;
 
-inline TreeFixture buildTree(cwRootData* rootData)
+//! \a withSection adds the depth-3 node the depth-N sync cases need.
+inline TreeFixture buildTree(cwRootData* rootData, bool withSection = false)
 {
     auto* region = rootData->project()->cavingRegion();
     region->setName(kProjectName);
@@ -83,6 +93,21 @@ inline TreeFixture buildTree(cwRootData* rootData)
     siblingTrip->notes()->addFromFiles({QUrl::fromLocalFile(noteImagePath)});
     rootData->futureManagerModel()->waitForFinished();
     REQUIRE(siblingTrip->notes()->rowCount() == 1);
+
+    if (withSection) {
+        fixture.section = addNode(region, fixture.sideCave, cwSurveyNode::Kind::Folder, kSectionName);
+
+        fixture.section->addTrip();
+        cwTrip* sectionTrip = fixture.section->trip(0);
+        REQUIRE(sectionTrip != nullptr);
+        sectionTrip->setName(kSectionTripName);
+
+        const QString sectionImagePath =
+            copyToTempFolder(testcasesDatasetPath("test_cwAddImageTask/supportedImage.png"));
+        sectionTrip->notes()->addFromFiles({QUrl::fromLocalFile(sectionImagePath)});
+        rootData->futureManagerModel()->waitForFinished();
+        REQUIRE(sectionTrip->notes()->rowCount() == 1);
+    }
 
     return fixture;
 }
@@ -114,7 +139,7 @@ struct TwoClones {
 //! Saves the fixture project, pushes it to a bare remote, and clones it for the peer.
 //! \a loadPeerProject opens the clone in a second cwProject; a case that edits the clone's
 //! working tree by hand leaves it closed.
-inline std::unique_ptr<TwoClones> makeTwoClones(bool loadPeerProject)
+inline std::unique_ptr<TwoClones> makeTwoClones(bool loadPeerProject, bool withSection = false)
 {
     auto clones = std::make_unique<TwoClones>();
     REQUIRE(clones->authorProjectDir.isValid());
@@ -125,7 +150,7 @@ inline std::unique_ptr<TwoClones> makeTwoClones(bool loadPeerProject)
     clones->authorRootData->account()->setName(QStringLiteral("Author User"));
     clones->authorRootData->account()->setEmail(QStringLiteral("author@example.com"));
 
-    buildTree(clones->authorRootData.get());
+    buildTree(clones->authorRootData.get(), withSection);
 
     auto* authorProject = clones->authorProject();
     clones->projectPath = QDir(clones->authorProjectDir.path())

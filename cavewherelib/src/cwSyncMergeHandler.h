@@ -5,6 +5,9 @@
 #include <QDir>
 #include <QList>
 #include <QString>
+#include <QStringList>
+
+#include <algorithm>
 
 class cwCavingRegion;
 class QObject;
@@ -25,6 +28,11 @@ struct cwReconcileMergeContext {
     // project directory. All other handlers should then set diskAlreadySynchronized=true
     // because git already placed the files in the correct locations on disk.
     mutable bool gitProjectDirMoved = false;
+    // Node directories (repository-root relative) cwSurveyNodeSyncMergeHandler restored
+    // from our pre-merge commit after a peer's delete lost to a local change inside them.
+    // Our side won that whole subtree, so every changed path below one is already settled:
+    // handlers merge mergeablePaths() rather than the report's raw changedPaths.
+    mutable QStringList locallyRestoredNodeDirectories;
 
     QString dataRootName() const
     {
@@ -33,6 +41,46 @@ struct cwReconcileMergeContext {
         }
         return saveLoad != nullptr ? saveLoad->dataRoot() : QString();
     }
+
+    bool isUnderRestoredNodeDirectory(const QString& relativePath) const
+    {
+        const QString cleanPath = QDir::cleanPath(QDir::fromNativeSeparators(relativePath));
+        return std::any_of(locallyRestoredNodeDirectories.cbegin(),
+                           locallyRestoredNodeDirectories.cend(),
+                           [&cleanPath](const QString& restoredDir) {
+            return cleanPath.startsWith(restoredDir + QLatin1Char('/'));
+        });
+    }
+
+    //! The changed paths a handler merges: everything the pull touched, minus the
+    //! subtrees a local change already won whole.
+    QStringList mergeablePaths() const
+    {
+        if (report == nullptr) {
+            return {};
+        }
+        if (locallyRestoredNodeDirectories.isEmpty()) {
+            return report->changedPaths;
+        }
+
+        QStringList paths;
+        paths.reserve(report->changedPaths.size());
+        for (const QString& changedPath : report->changedPaths) {
+            if (!isUnderRestoredNodeDirectory(changedPath)) {
+                paths.append(changedPath);
+            }
+        }
+        return paths;
+    }
+};
+
+//! Files (repository-root relative) to write back from \a commit because a local change
+//! won their whole subtree. A handler reports the write rather than performing it: the
+//! registry discards its result when a later handler asks for a full reload, and files
+//! already written would outlive that decision.
+struct cwRestoreFilesFromCommit {
+    QString commit;
+    QStringList relativePaths;
 };
 
 struct cwReconcileMergeResult {
@@ -64,6 +112,9 @@ struct cwReconcileMergeResult {
     // removed. Handlers record them here instead of queuing the removal themselves, so a
     // later handler's RequiresFullReload discards them along with the rest of the result.
     QStringList orphanDirectoriesToRemove;
+    // Subtrees a handler wants written back from a commit, applied by cwSaveLoad once the
+    // registry settled on Applied.
+    QList<cwRestoreFilesFromCommit> filesToRestore;
     QList<QObject*> objectsPathReady;
     QStringList diagnostics;
 };

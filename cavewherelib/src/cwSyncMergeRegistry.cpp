@@ -64,6 +64,7 @@ cwReconcileMergeResult cwSyncMergeRegistry::reconcile(const cwReconcileMergeCont
         aggregateResult.persistLiDARNoteDescriptors =
             aggregateResult.persistLiDARNoteDescriptors || result.persistLiDARNoteDescriptors;
         aggregateResult.orphanDirectoriesToRemove.append(result.orphanDirectoriesToRemove);
+        aggregateResult.filesToRestore.append(result.filesToRestore);
         aggregateResult.diagnostics.append(result.diagnostics);
         appliedHandlers.append(result.handlerName);
         // If a mutating handler did NOT synchronize disk, persistence is required.

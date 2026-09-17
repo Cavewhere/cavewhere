@@ -72,7 +72,8 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
         return {};
     }
 
-    if (context.report->changedPaths.isEmpty()) {
+    const QStringList mergeablePaths = context.mergeablePaths();
+    if (mergeablePaths.isEmpty()) {
         return {};
     }
 
@@ -100,7 +101,7 @@ cwReconcileMergeResult cwNoteLiDARSyncMergeHandler::reconcile(const cwReconcileM
                                                          dataRootName,
                                                          context.saveLoad,
                                                          context.region,
-                                                         context.report->changedPaths,
+                                                         mergeablePaths,
                                                          currentNoteIndex,
                                                          loadedNoteIndex);
     if (resolvedTripChanges.isEmpty()) {

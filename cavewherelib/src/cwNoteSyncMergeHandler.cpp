@@ -165,7 +165,8 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
         return {};
     }
 
-    if (context.report->changedPaths.isEmpty()) {
+    const QStringList mergeablePaths = context.mergeablePaths();
+    if (mergeablePaths.isEmpty()) {
         return {};
     }
 
@@ -201,7 +202,7 @@ cwReconcileMergeResult cwNoteSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                     dataRootName,
                                                     context.saveLoad,
                                                     context.region,
-                                                    context.report->changedPaths,
+                                                    mergeablePaths,
                                                     currentNoteIndex,
                                                     loadedNoteIndex);
     if (resolvedTripChanges.isEmpty()) {

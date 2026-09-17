@@ -548,6 +548,56 @@ LfsSnapshot captureLfsSnapshot(const QString& repoPath)
     return snapshot;
 }
 
+//! What a restore of a merge handler's files wrote, and what it could not write.
+struct RestoreFromCommitOutcome {
+    int writtenFileCount = 0;
+    QStringList skippedPaths;
+};
+
+//! Writes each of \a relativePaths back from \a commit. An LFS-tracked file — a note
+//! image is one — is a pointer in the commit, so its bytes come from \a lfsStore; with
+//! the object missing locally the pointer text is written as it stands, which is how an
+//! unhydrated clone already holds its own images, and a later hydration fills it in.
+RestoreFromCommitOutcome restoreFilesFromCommit(const QDir& repoRoot,
+                                                const QString& commit,
+                                                const QStringList& relativePaths,
+                                                const std::shared_ptr<QQuickGit::LfsStore>& lfsStore)
+{
+    RestoreFromCommitOutcome outcome;
+    for (const QString& relativePath : relativePaths) {
+        const auto contentResult = QQuickGit::GitRepository::fileContentAtCommit(repoRoot.absolutePath(),
+                                                                                 commit,
+                                                                                 relativePath);
+        if (contentResult.hasError() || contentResult.value().isEmpty()) {
+            outcome.skippedPaths.append(relativePath);
+            continue;
+        }
+
+        QByteArray content = contentResult.value();
+        QQuickGit::LfsPointer pointer;
+        if (lfsStore != nullptr
+                && QQuickGit::LfsPointer::parse(content, &pointer)
+                && pointer.isValid()) {
+            const auto objectResult = lfsStore->readObject(pointer.oid);
+            if (!objectResult.hasError() && !objectResult.value().isEmpty()) {
+                content = objectResult.value();
+            }
+        }
+
+        const QString absolutePath = repoRoot.absoluteFilePath(relativePath);
+        QFile file(absolutePath);
+        if (!QDir().mkpath(QFileInfo(absolutePath).absolutePath())
+                || !file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+                || file.write(content) != content.size()) {
+            outcome.skippedPaths.append(relativePath);
+            continue;
+        }
+        ++outcome.writtenFileCount;
+    }
+
+    return outcome;
+}
+
 QStringList hydrationDeltaPaths(const LfsSnapshot& beforeSnapshot,
                                 const LfsSnapshot& afterSnapshot)
 {
@@ -6190,6 +6240,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         bool persistLiDARNoteDescriptors = false;
         QString reconcileDiagnostic;
         QStringList mergeDiagnostics;
+        QStringList restoreDiagnostics;
         SyncReport handlerReport = report;
         const cwReconcileMergeContext mergeContext {
             this,
@@ -6204,6 +6255,27 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         const cwReconcileMergeResult mergeResult = cwSyncMergeRegistry::instance().reconcile(mergeContext);
         const bool fullReloadApplied = (mergeResult.outcome != cwReconcileMergeResult::Outcome::Applied);
         if (!fullReloadApplied) {
+            // A subtree a local change won whole is written back only once the registry
+            // settled on Applied, for the same reason as the orphan removals below: a
+            // later handler's full reload discards this result, and files already written
+            // would outlive that decision while the model went back to the loaded data.
+            for (const cwRestoreFilesFromCommit& restore : mergeResult.filesToRestore) {
+                const auto restoreOutcome = restoreFilesFromCommit(projectRootDir(),
+                                                                   restore.commit,
+                                                                   restore.relativePaths,
+                                                                   d->repository != nullptr
+                                                                   ? d->repository->lfsStore()
+                                                                   : nullptr);
+                restoreDiagnostics.append(QStringLiteral("restore from %1 wrote %2 files")
+                                          .arg(restore.commit)
+                                          .arg(restoreOutcome.writtenFileCount));
+                if (!restoreOutcome.skippedPaths.isEmpty()) {
+                    restoreDiagnostics.append(QStringLiteral("restore from %1 could not write: %2")
+                                              .arg(restore.commit,
+                                                   restoreOutcome.skippedPaths.join(QStringLiteral(", "))));
+                }
+            }
+
             // Orphan removals are queued only once the registry settled on Applied: a
             // handler that reported one may still be overruled by a later handler's
             // full reload, and a queued recursive delete would outlive that decision.
@@ -6259,6 +6331,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         }
 
         mergeDiagnostics = mergeResult.diagnostics;
+        mergeDiagnostics.append(restoreDiagnostics);
 
         if (!reconcileDiagnostic.isEmpty() && d->lastSyncReport.has_value()) {
             d->lastSyncReport->diagnostics.append(reconcileDiagnostic);

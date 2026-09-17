@@ -16,6 +16,7 @@
 #include <QUuid>
 #include <QSet>
 
+#include <algorithm>
 #include <optional>
 
 namespace {
@@ -143,6 +144,156 @@ bool holdsNodeDescriptor(const QString& absoluteDir)
     return !QDir(absoluteDir).entryList({QStringLiteral("*.cwcave")}, QDir::Files).isEmpty();
 }
 
+bool isUnderDirectory(const QString& relativePath, const QString& relativeDir)
+{
+    return relativePath.startsWith(relativeDir + QLatin1Char('/'));
+}
+
+//! \a directories with every entry that sits inside another one dropped: restoring a
+//! directory brings everything nested in it back along with it.
+QStringList topmostDirectories(const QStringList& directories)
+{
+    QStringList topmost;
+    for (const QString& directory : directories) {
+        const bool nested = std::any_of(directories.cbegin(), directories.cend(),
+                                        [&directory](const QString& other) {
+            return isUnderDirectory(directory, other);
+        });
+        if (!nested) {
+            topmost.append(directory);
+        }
+    }
+    return topmost;
+}
+
+//! The node directories the merge deleted, and only the topmost ones. A changed
+//! ".cwcave" that is gone from disk names one when the node it described is still in our
+//! model yet absent from the fresh disk load: a rename or a move leaves that id on disk
+//! under another path, so only a delete gets here.
+QStringList deletedNodeDirectories(const cwReconcileMergeContext& context,
+                                   const QString& dataRootName,
+                                   const QHash<QUuid, cwCave*>& currentCavesById,
+                                   const QHash<QUuid, const cwCaveData*>& loadedCavesById)
+{
+    QStringList nodeDirs;
+    for (const QString& changedPath : context.report->changedPaths) {
+        const QString normalizedPath = normalizeSyncPath(changedPath);
+        if (!normalizedPath.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive)
+            || QFileInfo::exists(context.repoRoot.absoluteFilePath(normalizedPath))) {
+            continue;
+        }
+
+        const auto beforeContent = QQuickGit::GitRepository::fileContentAtCommit(
+            context.repoRoot.absolutePath(),
+            context.report->beforeHead,
+            normalizedPath);
+        if (beforeContent.hasError() || beforeContent.value().isEmpty()) {
+            continue;
+        }
+
+        CavewhereProto::Cave protoCave;
+        if (!parseProtoCave(beforeContent.value(), &protoCave) || !protoCave.has_id()) {
+            continue;
+        }
+        const QUuid caveId = uuidFromProtoString(protoCave.id());
+        if (caveId.isNull()
+            || !currentCavesById.contains(caveId)
+            || loadedCavesById.contains(caveId)) {
+            continue;
+        }
+
+        const QString nodeDir = QFileInfo(normalizedPath).dir().path();
+        if (isBelowDataRoot(nodeDir, dataRootName) && !nodeDirs.contains(nodeDir)) {
+            nodeDirs.append(nodeDir);
+        }
+    }
+
+    return topmostDirectories(nodeDirs);
+}
+
+//! The node directories a local change won whole, and the files that must be written
+//! back from our pre-merge commit to bring them back.
+struct NodeRestorePlan {
+    QStringList directories;
+    QStringList filesToRestore;
+};
+
+//! Plans the restore of every node directory a peer deleted that our side also changed.
+//! CaveWhere's merge policy is ours-wins, and a node directory is one unit: when anything
+//! below it changed here since the merge base the delete loses and the whole subtree comes
+//! back, siblings included, so every tie that resolved before the sync still resolves
+//! after. A checkout or a restore to a commit hands that commit the win instead, and then
+//! ours-wins has nothing to defend: a node the target commit predates has to go.
+NodeRestorePlan planLocallyChangedDeletedNodeRestore(const cwReconcileMergeContext& context,
+                                                     const QHash<QUuid, cwCave*>& currentCavesById,
+                                                     const QHash<QUuid, const cwCaveData*>& loadedCavesById,
+                                                     QStringList* diagnostics)
+{
+    const QString dataRootName = context.dataRootName();
+    if (context.applyMode == cwReconcileApplyMode::TargetCommitWins
+        || dataRootName.isEmpty()
+        || context.report->beforeHead.isEmpty()
+        || context.report->afterHead.isEmpty()
+        || context.report->mergeBaseHead.isEmpty()) {
+        return {};
+    }
+
+    const QStringList deletedDirs = deletedNodeDirectories(context,
+                                                           dataRootName,
+                                                           currentCavesById,
+                                                           loadedCavesById);
+    if (deletedDirs.isEmpty()) {
+        return {};
+    }
+
+    const QString repoPath = context.repoRoot.absolutePath();
+    const auto ourChanges = QQuickGit::GitRepository::diffPathsBetweenCommits(repoPath,
+                                                                              context.report->mergeBaseHead,
+                                                                              context.report->beforeHead);
+    const auto mergeChanges = QQuickGit::GitRepository::diffPathsBetweenCommits(repoPath,
+                                                                                context.report->afterHead,
+                                                                                context.report->beforeHead);
+    if (ourChanges.hasError() || mergeChanges.hasError()) {
+        return {};
+    }
+
+    const QStringList ourChangedPaths = ourChanges.value();
+    const QStringList mergeChangedPaths = mergeChanges.value();
+
+    NodeRestorePlan plan;
+    for (const QString& deletedDir : deletedDirs) {
+        const bool contested = std::any_of(ourChangedPaths.cbegin(), ourChangedPaths.cend(),
+                                           [&deletedDir](const QString& ourPath) {
+            return isUnderDirectory(normalizeSyncPath(ourPath), deletedDir);
+        });
+        if (!contested) {
+            continue;
+        }
+
+        int plannedFiles = 0;
+        for (const QString& mergePath : mergeChangedPaths) {
+            const QString normalizedPath = normalizeSyncPath(mergePath);
+            // A file our side modified is already on disk as ours; only what the merge
+            // deleted has to come back.
+            if (!isUnderDirectory(normalizedPath, deletedDir)
+                || QFileInfo::exists(context.repoRoot.absoluteFilePath(normalizedPath))) {
+                continue;
+            }
+            plan.filesToRestore.append(normalizedPath);
+            ++plannedFiles;
+        }
+
+        plan.directories.append(deletedDir);
+        if (diagnostics != nullptr) {
+            diagnostics->append(QStringLiteral("node directory %1 won a delete locally (%2 files to restore)")
+                                    .arg(deletedDir)
+                                    .arg(plannedFiles));
+        }
+    }
+
+    return plan;
+}
+
 } // namespace
 
 QString cwSurveyNodeSyncMergeHandler::name() const
@@ -185,13 +336,45 @@ cwReconcileMergeResult cwSurveyNodeSyncMergeHandler::reconcile(const cwReconcile
         }
     });
 
+    QStringList restoreDiagnostics;
+    const NodeRestorePlan restorePlan = planLocallyChangedDeletedNodeRestore(context,
+                                                                             currentCavesById,
+                                                                             loadedCavesById,
+                                                                             &restoreDiagnostics);
+    context.locallyRestoredNodeDirectories = restorePlan.directories;
+    const bool restoredAnyNodeDirectory = !restorePlan.directories.isEmpty();
+    // A restored subtree is ours whole: nothing of the peer's applies to it, no merge plan
+    // runs for it, and the reconcile commit has to carry the files written back.
+    const auto reportRestore = [&](cwReconcileMergeResult& result) {
+        result.diagnostics = restoreDiagnostics;
+        result.pendingConflictCleanup = restoredAnyNodeDirectory;
+        if (!restorePlan.filesToRestore.isEmpty()) {
+            result.filesToRestore.append(cwRestoreFilesFromCommit {
+                                             context.report->beforeHead,
+                                             restorePlan.filesToRestore
+                                         });
+        }
+    };
+    const auto restoredOnlyResult = [&]() {
+        cwReconcileMergeResult result;
+        result.outcome = cwReconcileMergeResult::Outcome::Applied;
+        result.handlerName = name();
+        reportRestore(result);
+        return result;
+    };
+
+    const QStringList mergeablePaths = context.mergeablePaths();
+    if (mergeablePaths.isEmpty()) {
+        return restoredAnyNodeDirectory ? restoredOnlyResult() : cwReconcileMergeResult();
+    }
+
     QList<cwCave*> changedCurrentCaves;
     QList<const cwCaveData*> changedLoadedCaves;
     QList<QPair<QString, cwCave*>> changedDescriptors;
     QHash<QUuid, cwCaveData> baseCaveById;
     QSet<QUuid> seenCaveIds;
 
-    for (const QString& changedPath : context.report->changedPaths) {
+    for (const QString& changedPath : mergeablePaths) {
         const QString normalizedPath = normalizeSyncPath(changedPath);
         if (!normalizedPath.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive)) {
             continue;
@@ -250,7 +433,7 @@ cwReconcileMergeResult cwSurveyNodeSyncMergeHandler::reconcile(const cwReconcile
     }
 
     if (changedCurrentCaves.isEmpty()) {
-        return {};
+        return restoredAnyNodeDirectory ? restoredOnlyResult() : cwReconcileMergeResult();
     }
 
     const auto mergePreparation = cwCaveMergePlanBuilder::build(changedCurrentCaves,
@@ -269,6 +452,7 @@ cwReconcileMergeResult cwSurveyNodeSyncMergeHandler::reconcile(const cwReconcile
     cwReconcileMergeResult result;
     result.outcome = cwReconcileMergeResult::Outcome::Applied;
     result.handlerName = name();
+    reportRestore(result);
 
     QSet<QObject*> objectPathReadySet;
     for (const cwCaveMergePlan& plan : mergePreparation.value().plans) {

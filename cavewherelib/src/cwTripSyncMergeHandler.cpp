@@ -156,7 +156,8 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         return {};
     }
 
-    if (context.report->changedPaths.isEmpty()) {
+    const QStringList mergeablePaths = context.mergeablePaths();
+    if (mergeablePaths.isEmpty()) {
         return {};
     }
 
@@ -190,14 +191,14 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                                           context.loadData->region);
 
     const QStringList nodeDirCandidates =
-        nodeDirectoryCandidatesFromChangedNodePaths(context.report->changedPaths);
+        nodeDirectoryCandidatesFromChangedNodePaths(mergeablePaths);
 
     QList<cwTrip*> changedCurrentTrips;
     QList<const cwTripData*> changedLoadedTrips;
     QHash<QUuid, cwTripData> baseTripById;
     QSet<QUuid> seenTripIds;
 
-    for (const QString& changedPath : context.report->changedPaths) {
+    for (const QString& changedPath : mergeablePaths) {
         const QString normalizedPath = normalizeSyncPath(changedPath);
         if (!normalizedPath.endsWith(QStringLiteral(".cwtrip"), Qt::CaseInsensitive)) {
             continue;
@@ -332,7 +333,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
         }
 
         if (!baseTripData.has_value()) {
-            for (const QString& reportPath : context.report->changedPaths) {
+            for (const QString& reportPath : mergeablePaths) {
                 const QString reportNormalizedPath = normalizeSyncPath(reportPath);
                 if (!reportNormalizedPath.endsWith(QStringLiteral(".cwtrip"), Qt::CaseInsensitive)) {
                     continue;
@@ -402,7 +403,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
     // a winning trip's sanitized name is an orphan and must be removed.
     if (!dataRootName.isEmpty()) {
         QSet<QString> checkedTripDirs;
-        for (const QString& changedPath : context.report->changedPaths) {
+        for (const QString& changedPath : mergeablePaths) {
             const QString normalizedPath = normalizeSyncPath(changedPath);
             if (!normalizedPath.endsWith(QStringLiteral(".cwtrip"), Qt::CaseInsensitive)) {
                 continue;
