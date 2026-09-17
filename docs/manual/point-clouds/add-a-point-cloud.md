@@ -126,14 +126,15 @@ coordinates. Two things happen automatically.
   neighbors sit in front of it, which brings out relief and edges. It runs at
   strength 1500, max darken 3.0, and a 1.4 px sample radius, and no control in the
   app changes that or turns it off.
-- **Every point draws as a 1.29 m-radius sphere.** CaveWhere uses that radius for every
-  cloud rather than measuring it from the scan, so a dense tile looks solid and a
-  sparse one shows background through the gaps. Tune it in the view: **hover the
-  3D view, hold `P`, and scroll** the mouse wheel or trackpad.
-  While `P` is held the wheel resizes points instead of zooming the camera, about
-  13% a tick (roughly 6 ticks to double), clamped to 0.01 m through 50 m, and it
-  moves every loaded cloud together. CaveWhere does measure the scan's mean spacing,
-  but that sizes the invisible pick spheres, not the drawn ones.
+- **Each point sizes itself to its own cell.** A point covers a set multiple of the
+  cell it sits in, so it draws as big as the gap it fills at any zoom, rather than a
+  fixed number of meters. Zoom out and the cloud thins smoothly: points drop away as
+  the survivors grow to cover them. Tune the coverage in the view: **hover the 3D
+  view, hold `P`, and scroll** the mouse wheel or trackpad. While `P` is held the
+  wheel changes coverage instead of zooming the camera, about 13% a tick (roughly
+  6 ticks to double), clamped to a quarter cell through 8 cells from a default of
+  1.5, and it moves every loaded cloud together. CaveWhere measures the scan's mean
+  spacing, but that sizes the invisible pick spheres, not the drawn ones.
 
 ## Next steps
 
