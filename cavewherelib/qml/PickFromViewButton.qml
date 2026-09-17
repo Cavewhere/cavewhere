@@ -66,6 +66,9 @@ QQ.Item {
         anchors.fill: parent
         enabled: pickButton.canPick
         icon.source: "qrc:/twbs-icons/icons/crosshair.svg"
+        // The bundled SVG is black. The button's own palette, unlike Theme.icon,
+        // switches to the disabled group so the crosshair still grays out.
+        icon.color: buttonId.palette.buttonText
         icon.width: Theme.iconSizeButton
         icon.height: Theme.iconSizeButton
 
