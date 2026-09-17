@@ -17,6 +17,13 @@ DrawLengthInteraction {
 
     doneTextLabel: "<b>In cave length</b>"
 
+    //Reset on each activation instead of binding: picking a unit in the input
+    //writes lengthObject.unit, which would break a binding
+    onActivated: {
+        const trip = note ? note.parentTrip() : null
+        lengthObject.unit = trip ? trip.calibration.distanceUnit : Units.Meters
+    }
+
     onDoneButtonPressed: {
         let p1 = scrapView.toNoteCoordinates(firstMouseLocation);
         let p2 = scrapView.toNoteCoordinates(secondMouseLocation);

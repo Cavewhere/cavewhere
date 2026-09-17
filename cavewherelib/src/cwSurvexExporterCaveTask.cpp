@@ -8,9 +8,9 @@
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterTripTask.h"
+#include "cwSurvexExporter.h"
 #include "cwSurvexExporterUtils.h"
 #include "cwSurvexCS.h"
-#include "cwTrip.h"
 
 //Qt includes
 #include <QDir>
@@ -140,10 +140,8 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
             continue;
         }
 
-        auto trip = std::make_unique<cwTrip>();
-        trip->setData(tripData);
-        TripExporter->writeTrip(stream, trip.get(), autoDeclinationInScope, gridConvergence);
-        TotalProgress += trip->numberOfStations();
+        TripExporter->writeTrip(stream, tripData, autoDeclinationInScope, gridConvergence);
+        TotalProgress += cwSurvexExporter::stationCount(tripData);
         stream << Qt::endl;
     }
 
@@ -155,8 +153,7 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 /**
  * Emit the *cs / *fix block for the cave. Validates the snapshot's
  * fixStations against the actual station names; rejected fixes are dropped
- * silently here (the user-facing exporter — cwSurvexExporterRule — runs
- * the same validation at snapshot time and surfaces errors on the cave).
+ * from the output and their reasons appended to Errors.
  * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists so
  * un-fixed caves still resolve in cavern.
  */

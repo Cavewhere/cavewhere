@@ -15,6 +15,7 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
 #include "cwLocalProjection.h"
@@ -35,6 +36,10 @@ namespace {
 const QString kUtm12N = QStringLiteral("EPSG:32612");
 
 constexpr double kAnchorEasting = 500000.0;
+
+//! A million meters past the zone's edge: a real coordinate system, and a
+//! number nowhere inside it — a transposed digit, or the wrong zone.
+constexpr double kOutOfZoneEasting = 1478000.0;
 constexpr double kAnchorNorthing = 4194000.0;
 constexpr double kElevation = 2700.0;
 
@@ -883,7 +888,8 @@ TEST_CASE("The manager names what the frame is centered on",
           "[cwLocalProjectionManager][cwAnchorDescription]")
 {
     cwCavingRegion region;
-    CHECK(region.geoReference()->anchorDescription().isEmpty());
+    auto* localProjection = region.localProjection();
+    CHECK(localProjection->anchorDescription().isEmpty());
 
     const cwFixStation fix = makeFix(QStringLiteral("A42"), kUtm12N,
                                      kAnchorEasting, kAnchorNorthing, kElevation);
@@ -891,30 +897,30 @@ TEST_CASE("The manager names what the frame is centered on",
     cave->setName(QStringLiteral("Roppel Cave"));
 
     REQUIRE(region.geoReference()->state() == cwGeoReference::Anchored);
-    CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A42 — Roppel Cave"));
+    CHECK(localProjection->anchorDescription() == QStringLiteral("A42 — Roppel Cave"));
 
     SECTION("renaming the cave moves the description") {
-        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
         cave->setName(QStringLiteral("Hidden River Cave"));
 
         CHECK(spy.count() == 1);
-        CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A42 — Hidden River Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("A42 — Hidden River Cave"));
     }
 
     SECTION("renaming the station moves the description") {
-        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
         cwFixStation renamed = fix;
         renamed.setStationName(QStringLiteral("A43"));
         cave->fixStations()->setFixStations({renamed});
 
         CHECK(spy.count() == 1);
-        CHECK(region.geoReference()->anchorDescription() == QStringLiteral("A43 — Roppel Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("A43 — Roppel Cave"));
     }
 
     SECTION("a frame with no anchor left names nothing") {
-        QSignalSpy spy(region.geoReference(), &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
         // The anchor was the only georeferenced input, so deleting it takes the
         // frame with it — and there is nothing left the description could name.
@@ -922,7 +928,7 @@ TEST_CASE("The manager names what the frame is centered on",
 
         REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
         CHECK(spy.count() >= 1);
-        CHECK(region.geoReference()->anchorDescription().isEmpty());
+        CHECK(localProjection->anchorDescription().isEmpty());
     }
 }
 
@@ -943,33 +949,200 @@ TEST_CASE("Recentering renames what the frame is centered on",
     cave->setName(QStringLiteral("Roppel Cave"));
 
     auto* geoReference = region.geoReference();
-    REQUIRE(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+    auto* localProjection = region.localProjection();
+    REQUIRE(localProjection->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
 
     SECTION("a picked station is the one named") {
-        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
-        REQUIRE(region.localProjection()->recenterOnStation(surveyed.id()));
+        REQUIRE(localProjection->recenterOnStation(surveyed.id()));
 
         CHECK(spy.count() == 1);
-        CHECK(geoReference->anchorDescription() == QStringLiteral("B1 — Roppel Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("B1 — Roppel Cave"));
     }
 
     SECTION("the data's middle is no station, so it names nothing") {
-        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
-        REQUIRE(region.localProjection()->recenterOnDataCenter());
+        REQUIRE(localProjection->recenterOnDataCenter());
 
         REQUIRE(geoReference->state() == cwGeoReference::Frozen);
         CHECK(spy.count() == 1);
-        CHECK(geoReference->anchorDescription().isEmpty());
+        CHECK(localProjection->anchorDescription().isEmpty());
     }
 
     SECTION("a refused recentering leaves the description alone") {
-        QSignalSpy spy(geoReference, &cwGeoReference::anchorDescriptionChanged);
+        QSignalSpy spy(localProjection, &cwLocalProjectionManager::anchorDescriptionChanged);
 
-        CHECK_FALSE(region.localProjection()->recenterOnStation(QUuid::createUuid()));
+        CHECK_FALSE(localProjection->recenterOnStation(QUuid::createUuid()));
 
         CHECK(spy.count() == 0);
-        CHECK(geoReference->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+        CHECK(localProjection->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+    }
+}
+
+TEST_CASE("The region walk reaches past the first cave",
+          "[cwLocalProjectionManager][cwRecenter][cwAnchorDescription]")
+{
+    // Everything that resolves a fix station — the picker's rows, recentering,
+    // the description — shares one walk of the region. A walk that stopped at
+    // the first cave, or at the first cave holding no fixes, would lose every
+    // project surveyed as more than one cave.
+    cwCavingRegion region;
+
+    const cwFixStation entrance = makeFix(QStringLiteral("A1"), kUtm12N,
+                                          kAnchorEasting, kAnchorNorthing, kElevation);
+    cwCave* first = addCaveWithFixes(&region, {entrance});
+    first->setName(QStringLiteral("Roppel Cave"));
+
+    // A cave nobody has fixed yet sits between the two, so the walk has to carry
+    // on through a cave that contributes nothing.
+    addCaveWithFixes(&region, {})->setName(QStringLiteral("Unfixed Cave"));
+
+    const cwFixStation nearby = makeFix(QStringLiteral("B1"), kUtm12N,
+                                        kNearbyEasting, kNearbyNorthing, kElevation);
+    cwCave* second = addCaveWithFixes(&region, {nearby});
+    second->setName(QStringLiteral("Hidden River Cave"));
+
+    auto* geoReference = region.geoReference();
+    auto* localProjection = region.localProjection();
+    REQUIRE(localProjection->anchorDescription() == QStringLiteral("A1 — Roppel Cave"));
+
+    SECTION("the picker offers the stations of every cave") {
+        auto* candidates = openedCandidates(&region);
+
+        REQUIRE(candidates->count() == 2);
+        CHECK(candidateRole(candidates, 1, cwRecenterCandidateModel::StationNameRole).toString()
+              == QStringLiteral("B1"));
+        CHECK(candidateRole(candidates, 1, cwRecenterCandidateModel::CaveNameRole).toString()
+              == QStringLiteral("Hidden River Cave"));
+        CHECK(candidateRole(candidates, 1, cwRecenterCandidateModel::EligibleRole).toBool());
+    }
+
+    SECTION("a station in the last cave is the one recentered on and named") {
+        REQUIRE(localProjection->recenterOnStation(nearby.id()));
+
+        CHECK(localProjection->anchorDescription() == QStringLiteral("B1 — Hidden River Cave"));
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kNearbyEasting, kNearbyNorthing);
+    }
+
+    SECTION("both caves' fixes place the project") {
+        // gatherInputs() walks the same hierarchy: the middle of the project is
+        // between the two entrances, not on the first one.
+        const auto center = localProjection->dataCenter();
+        REQUIRE(center.has_value());
+        constexpr double kHalfway = 50.0;
+        // Loose enough for the frame's own scale factor: the two entrances are
+        // 100 m apart in UTM, and UTM at this easting runs a few hundred ppm
+        // long against the tmerc the frame is.
+        constexpr double kToleranceMeters = 0.1;
+        CHECK_THAT(center->x, WithinAbs(kHalfway, kToleranceMeters));
+        CHECK_THAT(center->y, WithinAbs(kHalfway, kToleranceMeters));
+    }
+}
+
+TEST_CASE("A domain-invalid fix never anchors the project (#660)",
+          "[cwLocalProjectionManager][issue660]")
+{
+    // The typo parses and its CS is real, but the coordinate is nowhere the
+    // zone covers. Anchoring on it centers the frame on the typo and puts every
+    // good fix hundreds of kilometers from the origin.
+    const cwFixStation typo = makeFix(QStringLiteral("A1"), kUtm12N,
+                                      kOutOfZoneEasting, kAnchorNorthing, kElevation);
+    REQUIRE_FALSE(cwFixStationDiagnostics::isDomainValid(typo));
+    const cwFixStation good = makeFix(QStringLiteral("A2"), kUtm12N,
+                                      kAnchorEasting, kAnchorNorthing, kElevation);
+
+    SECTION("the typo entered first hands the anchor to the good fix") {
+        cwCavingRegion region;
+        addCaveWithFixes(&region, {typo, good});
+        auto* geoReference = region.geoReference();
+        REQUIRE(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor()
+              == cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, good.id()});
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kAnchorNorthing);
+    }
+
+    SECTION("a project whose only fix is a typo stays ungeoreferenced") {
+        cwCavingRegion region;
+        addCaveWithFixes(&region, {typo});
+        CHECK(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+    }
+}
+
+TEST_CASE("A stored anchor the domain gate refuses can still be deleted (#660)",
+          "[cwLocalProjectionManager][issue660]")
+{
+    // A project saved before the gate existed can open anchored on a typo. That
+    // anchor can never appear among the inputs again, so deleting it — the
+    // user's own repair — is the one way out, and reading that as an anchor
+    // that hasn't loaded yet would strand the project on the typo forever.
+    const cwFixStation typo = makeFix(QStringLiteral("A1"), kUtm12N,
+                                      kOutOfZoneEasting, kAnchorNorthing, kElevation);
+    const cwFixStation good = makeFix(QStringLiteral("A2"), kUtm12N,
+                                      kAnchorEasting, kAnchorNorthing, kElevation);
+
+    cwCavingRegion source;
+    addCaveWithFixes(&source, {typo, good});
+    cwCavingRegionData data = source.data();
+    data.geoReference.state = cwGeoReference::Anchored;
+    data.geoReference.localCoordinateSystem = kElsewhereCS;
+    data.geoReference.anchor = cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation,
+                                                      typo.id()};
+
+    cwCavingRegion region;
+    region.setData(data);
+    auto* geoReference = region.geoReference();
+    REQUIRE(geoReference->state() == cwGeoReference::Anchored);
+    REQUIRE(geoReference->anchor().id == typo.id());
+    REQUIRE(geoReference->localCoordinateSystem() == kElsewhereCS);
+
+    REQUIRE(region.caveCount() == 1);
+    region.cave(0)->fixStations()->removeAt(0);
+
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor()
+          == cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, good.id()});
+    checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                    kAnchorEasting, kAnchorNorthing);
+}
+
+TEST_CASE("An anchor edited into a typo stops holding the frame (#660)",
+          "[cwLocalProjectionManager][issue660]")
+{
+    // Typing the wrong easting into the anchor itself reads exactly like
+    // deleting it: the fix is still there, but nothing the frame can follow.
+    cwCavingRegion region;
+    const cwFixStation anchor = makeFix(QStringLiteral("A1"), kUtm12N,
+                                        kAnchorEasting, kAnchorNorthing, kElevation);
+    cwCave* cave = addCaveWithFixes(&region, {anchor});
+    auto* geoReference = region.geoReference();
+    const QString before = geoReference->localCoordinateSystem();
+
+    cwFixStation typo = anchor;
+    typo.setCoordinate(kOutOfZoneEasting, kAnchorNorthing, kElevation);
+
+    SECTION("the only fix gives the project back its ungeoreferenced state") {
+        cave->fixStations()->setFixStations({typo});
+
+        CHECK(geoReference->state() == cwGeoReference::Ungeoreferenced);
+
+        // Correcting the typo anchors the project again.
+        cave->fixStations()->setFixStations({anchor});
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kAnchorNorthing);
+    }
+
+    SECTION("a neighbor still near the origin keeps the frame, frozen") {
+        const cwFixStation neighbor = makeFix(QStringLiteral("B1"), kUtm12N,
+                                              kNearbyEasting, kNearbyNorthing, kElevation);
+        cave->fixStations()->appendFixStation(neighbor);
+        cave->fixStations()->setFixStations({typo, neighbor});
+
+        CHECK(geoReference->state() == cwGeoReference::Frozen);
+        CHECK(geoReference->localCoordinateSystem() == before);
     }
 }

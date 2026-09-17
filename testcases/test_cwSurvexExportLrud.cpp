@@ -9,15 +9,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Cavewhere includes
-#include "cwSurvexExporterTripTask.h"
-#include "cwSurvexExporterRule.h"
+#include "cwSurvexExporter.h"
 #include "cwSurvexExporterUtils.h"
-#include "cwSurveyDataArtifact.h"
-#include "cwTrip.h"
-#include "cwSurveyChunk.h"
 #include "cwShot.h"
 #include "cwStation.h"
-#include "cwTripCalibration.h"
 #include "cwDistanceReading.h"
 
 //Qt includes
@@ -47,32 +42,13 @@ cwStation station(const QString& name, bool withLrud) {
 }
 
 //The i-th chunk gets one shot whose from-station carries LRUDs when chunkHasLrud.at(i)
-QString exportWithTripTask(const QList<bool>& chunkHasLrud) {
-    cwTrip trip;
-    trip.calibrations()->setFrontSights(true);
-    trip.calibrations()->setBackSights(false);
+QString exportTrip(const QList<bool>& chunkHasLrud) {
+    cwTripData trip;
+    trip.calibrations.setFrontSights(true);
+    trip.calibrations.setBackSights(false);
 
     for(int i = 0; i < chunkHasLrud.size(); i++) {
-        auto chunk = new cwSurveyChunk(&trip);
-        chunk->appendShot(station(QStringLiteral("a%1").arg(i * 2 + 1), chunkHasLrud.at(i)),
-                          station(QStringLiteral("a%1").arg(i * 2 + 2), false),
-                          shotWithReadings());
-        trip.addChunk(chunk);
-    }
-
-    QString output;
-    QTextStream stream(&output);
-    cwSurvexExporterTripTask exporter;
-    exporter.writeTrip(stream, &trip);
-    return output;
-}
-
-QString exportWithRule(const QList<bool>& chunkHasLrud) {
-    cwSurveyDataArtifact::Trip trip;
-    trip.calibration.setBackSights(false);
-
-    for(int i = 0; i < chunkHasLrud.size(); i++) {
-        cwSurveyDataArtifact::SurveyChunk chunk;
+        cwSurveyChunkData chunk;
         chunk.stations.append(station(QStringLiteral("a%1").arg(i * 2 + 1), chunkHasLrud.at(i)));
         chunk.stations.append(station(QStringLiteral("a%1").arg(i * 2 + 2), false));
         chunk.shots.append(shotWithReadings());
@@ -81,8 +57,9 @@ QString exportWithRule(const QList<bool>& chunkHasLrud) {
 
     QString output;
     QTextStream stream(&output);
-    auto result = cwSurvexExporterRule::writeTrip(stream, trip);
-    REQUIRE(!result.hasError());
+    QStringList errors;
+    cwSurvexExporter::writeTrip(stream, trip, errors);
+    REQUIRE(errors.isEmpty());
     return output;
 }
 
@@ -98,7 +75,7 @@ QString firstPassageRow(const QString& output) {
 
 TEST_CASE("Survex trip export writes no *data passage block for chunks without LRUDs",
           "[SurvexExport][SurvexLrud]") {
-    const QString output = exportWithTripTask({false, false, false, false});
+    const QString output = exportTrip({false, false, false, false});
 
     INFO("Exporter output:\n" << output.toStdString());
     CHECK(output.count(cwSurvexExporterUtils::passageDataHeader()) == 0);
@@ -106,24 +83,7 @@ TEST_CASE("Survex trip export writes no *data passage block for chunks without L
 
 TEST_CASE("Survex trip export writes one *data passage block per chunk with LRUDs",
           "[SurvexExport][SurvexLrud]") {
-    const QString output = exportWithTripTask({true, false});
-
-    INFO("Exporter output:\n" << output.toStdString());
-    CHECK(output.count(cwSurvexExporterUtils::passageDataHeader()) == 1);
-    CHECK(firstPassageRow(output).toStdString() == "a1 1 2 3 4");
-}
-
-TEST_CASE("cwSurvexExportRule writes no *data passage block for chunks without LRUDs",
-          "[cwSurvexExportRule][SurvexLrud]") {
-    const QString output = exportWithRule({false, false, false, false});
-
-    INFO("Exporter output:\n" << output.toStdString());
-    CHECK(output.count(cwSurvexExporterUtils::passageDataHeader()) == 0);
-}
-
-TEST_CASE("cwSurvexExportRule writes one *data passage block per chunk with LRUDs",
-          "[cwSurvexExportRule][SurvexLrud]") {
-    const QString output = exportWithRule({true, false});
+    const QString output = exportTrip({true, false});
 
     INFO("Exporter output:\n" << output.toStdString());
     CHECK(output.count(cwSurvexExporterUtils::passageDataHeader()) == 1);

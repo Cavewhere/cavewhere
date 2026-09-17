@@ -55,7 +55,9 @@ QQ.Item {
         }
 
         function addJob(name) {
-            fakeJobsId.append({"nameRole": name, "progressRole": 0, "numberOfStepsRole": 0})
+            fakeJobsId.append({"nameRole": name, "progressRole": 0, "numberOfStepsRole": 0,
+                               "detailNameRole": "", "detailProgressRole": 0, "detailTotalRole": 0,
+                               "treeBackedRole": false})
         }
 
         function test_closedWithTasksRunningStaysOffScreen() {

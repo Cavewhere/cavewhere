@@ -27,15 +27,23 @@
 class CAVEWHERE_LIB_EXPORT cwGltfBaseColorTexture
 {
 public:
+    //`parent` is the progress node the file checksum reports under. A null
+    //scope leaves the checksum untracked.
     cwGltfBaseColorTexture(const QString& dataRootPath,
-                           const QString& gltfFilename);
+                           const QString& gltfFilename,
+                           const cwProgressScope& parent = {});
 
+    //`parent` is this texture's own progress node. Only an encode hangs a child
+    //off it, so a cache hit leaves it childless.
     void setOn(cwRenderTexturedItems::Item& item,
                const cw::gltf::SceneCPU& scene,
-               const cw::gltf::MaterialCPU& material) const;
+               const cw::gltf::MaterialCPU& material,
+               const cwProgressScope& parent = {}) const;
 
 private:
-    cwStreamedTexture streamedSource(const cw::gltf::SceneCPU& scene, int textureIndex) const;
+    cwStreamedTexture streamedSource(const cw::gltf::SceneCPU& scene,
+                                     int textureIndex,
+                                     const cwProgressScope& parent) const;
 
     QString m_dataRootPath;
     QString m_gltfFilename;

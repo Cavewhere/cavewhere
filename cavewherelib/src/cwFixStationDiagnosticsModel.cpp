@@ -66,6 +66,15 @@ QString coordinateErrorMessage(const cwFixStation& fix)
     return QString();
 }
 
+//! Whether the row's datum may be changed — see DatumEnabledRole. The stored
+//! coordinate rather than the state: an Empty row and a row of whitespace are
+//! both rows with nothing for a datum to describe, and only the first of those
+//! is a state.
+bool datumEnabled(const cwFixStation& fix)
+{
+    return !fix.coordinate().trimmed().isEmpty() && coordinateErrorMessage(fix).isEmpty();
+}
+
 //! The datum codes the picker may offer for this row — see AvailableDatumsRole.
 //! The geodesy runs here, in C++, off the same per-thread transform cache the
 //! domain check uses, so no QML binding ever reaches PROJ.
@@ -85,9 +94,7 @@ QStringList availableDatums(const cwFixStation& fix)
         const std::optional<cwGeoPoint> geographic =
             cwCoordinateTransform::transformPoint(fix.inputCS(),
                                                   cwCoordinateTransform::Wgs84,
-                                                  cwGeoPoint(fix.easting(),
-                                                             fix.northing(),
-                                                             fix.elevation()));
+                                                  fix.position());
         if (geographic.has_value()) {
             const QStringList plateFixed =
                 cwLocalProjection::plateFixedDatumsFor(geographic->y, geographic->x);
@@ -160,6 +167,8 @@ void cwFixStationDiagnosticsModel::augmentSourceChange(const QModelIndex& topLef
         || roles.contains(cwFixStationModel::InputCSRole)) {
         derived.append(CoordinateErrorRole);
         derived.append(CoordinateOrderUnknownRole);
+        // Same two inputs as the coordinate verdict, and it reads that verdict.
+        derived.append(DatumEnabledRole);
     }
     if (roles.contains(cwFixStationModel::StationNameRole)) {
         derived.append(StationErrorRole);
@@ -225,6 +234,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case CoordinateOrderUnknownRole:
     case StationErrorRole:
     case AvailableDatumsRole:
+    case DatumEnabledRole:
         break;
     default:
         return QIdentityProxyModel::data(index, role);
@@ -241,6 +251,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case CoordinateOrderUnknownRole: return fix->state() == cwFixStation::NoSystem;
     case StationErrorRole:           return stationErrorMessage(*fix);
     case AvailableDatumsRole:        return availableDatums(*fix);
+    case DatumEnabledRole:           return datumEnabled(*fix);
     default:                         break;
     }
 
@@ -263,5 +274,6 @@ QHash<int, QByteArray> cwFixStationDiagnosticsModel::roleNames() const
     names.insert(CoordinateOrderUnknownRole, "coordinateOrderUnknown");
     names.insert(StationErrorRole, "stationError");
     names.insert(AvailableDatumsRole, "availableDatums");
+    names.insert(DatumEnabledRole, "datumEnabled");
     return names;
 }

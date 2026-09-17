@@ -28,8 +28,15 @@ public:
         NameRole = Qt::UserRole,
         ProgressRole,
         NumberOfStepRole,
-        RunTimeRole
+        RunTimeRole,
+        DetailNameRole,     //QString, empty when nothing qualifies
+        DetailProgressRole, //qint64 done, 0 for an opaque leaf
+        DetailTotalRole,    //qint64 total, 0 for an opaque leaf
+        TreeBackedRole      //bool, true when the row's run owns a progress tree
     };
+
+    //! How long a node has to live before it can hold the detail line
+    static constexpr qint64 kDetailMinAgeMs = 150;
 
     cwFutureManagerModel(QObject* parent = nullptr);
     ~cwFutureManagerModel() {}
@@ -55,6 +62,9 @@ public:
     //! How far along everything is, in [0, 1], or negative when nothing can say
     double progress() const;
 
+    //! The one leaf a run's tree shows on its detail line, or false for none
+    static bool detailFor(const cwProgressNodePtr& root, QString& name, qint64& done, qint64& total);
+
 signals:
     void intervalChanged();
     void allFinished();
@@ -68,12 +78,19 @@ private:
         bool visible;
         QElapsedTimer startTime;
         QFutureWatcher<void>* watcher = nullptr;
+        cwProgressNodePtr tree;
+        QString detailName;
+        qint64 detailDone = 0;
+        qint64 detailTotal = 0;
     };
 
     QVector<WatcherContainer> Watchers;
     QTimer* Timer;
+    QTimer* DetailTimer;
 
     void removeWatcher(QFutureWatcher<void> *watcher);
+    void pollDetails();
+    void updateDetailTimer();
 
     QModelIndex indexOf(const QFutureWatcher<void>* watcher) const;
 };

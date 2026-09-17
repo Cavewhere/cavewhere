@@ -12,10 +12,12 @@
 
 //Our includes
 #include "cwCoordinateTransform.h"
+#include "cwDatumCatalog.h"
 #include "cwGeoPoint.h"
 #include "cwLocalProjection.h"
 
 //Qt includes
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -401,6 +403,45 @@ TEST_CASE("cwLocalProjection::origin reads back the point a frame was derived on
     }
 }
 
+TEST_CASE("cwLocalProjection::describe answers both questions at once",
+          "[cwLocalProjection]")
+{
+    // Everything that moves the frame wants the datum and the origin together,
+    // and describe() exists so that costs one PROJ resolution. It has to agree
+    // with the two single-answer calls exactly, including where they refuse.
+    SECTION("an LDP describes as its datum and the point it was derived on")
+    {
+        const QString ldp = cwLocalProjection::derive(kAnchorLatitude, kAnchorLongitude,
+                                                      QString::fromLatin1(kNad83Utm16N));
+        REQUIRE_FALSE(ldp.isEmpty());
+
+        const cwLocalProjection::Description description = cwLocalProjection::describe(ldp);
+        CHECK(description.datumName == cwLocalProjection::datumName(ldp));
+        CHECK_THAT(description.datumName.toStdString(),
+                   ContainsSubstring("North American Datum 1983"));
+
+        const std::optional<cwGeoPoint> origin = cwLocalProjection::origin(ldp);
+        REQUIRE(origin.has_value());
+        REQUIRE(description.origin.has_value());
+        CHECK_THAT(description.origin->x, WithinAbs(origin->x, 1e-9));
+        CHECK_THAT(description.origin->y, WithinAbs(origin->y, 1e-9));
+        CHECK_THAT(description.origin->x, WithinAbs(kAnchorLongitude, 1e-9));
+        CHECK_THAT(description.origin->y, WithinAbs(kAnchorLatitude, 1e-9));
+    }
+
+    SECTION("nothing readable describes as nothing at all")
+    {
+        for (const QString& cs : {QString(),
+                                  QStringLiteral("   "),
+                                  QStringLiteral("not a coordinate system"),
+                                  QStringLiteral("+proj=utm +zone=16")}) {
+            const cwLocalProjection::Description description = cwLocalProjection::describe(cs);
+            CHECK(description.datumName.isEmpty());
+            CHECK_FALSE(description.origin.has_value());
+        }
+    }
+}
+
 TEST_CASE("cwLocalProjection puts an unclaimed coordinate on the plate-fixed datum",
           "[cwLocalProjection]")
 {
@@ -587,5 +628,35 @@ TEST_CASE("cwLocalProjection::plateFixedDatumsFor answers with every frame that 
         REQUIRE_FALSE(ldp.isEmpty());
         CHECK_THAT(datumNameOf(ldp), ContainsSubstring(kNad83_2011DatumName));
         CHECK(datums.first() == QStringLiteral("EPSG:6318"));
+    }
+}
+
+TEST_CASE("Every plate-fixed datum is one the coordinate system picker can name",
+          "[cwLocalProjection]")
+{
+    const QStringList datumList = cwCoordinateSystem::datumList();
+    QSet<QString> offeredAnywhere;
+
+    for (const cwDatumCatalog::Datum& datum : cwDatumCatalog::kDatums) {
+        for (const cwDatumCatalog::Region& region : datum.regions) {
+            const double latitude = (region.minLatitude + region.maxLatitude) / 2.0;
+            const double longitude = (region.minLongitude + region.maxLongitude) / 2.0;
+            const QStringList offered =
+                cwLocalProjection::plateFixedDatumsFor(latitude, longitude);
+            REQUIRE_FALSE(offered.isEmpty());
+            for (const QString& code : offered) {
+                INFO(code.toStdString());
+                CHECK_FALSE(cwCoordinateSystem::datumDisplayName(code).isEmpty());
+                CHECK(datumList.contains(code));
+            }
+            offeredAnywhere.unite(QSet<QString>(offered.begin(), offered.end()));
+        }
+    }
+
+    for (const QString& code : datumList) {
+        if (code != cwCoordinateTransform::Wgs84) {
+            INFO(code.toStdString());
+            CHECK(offeredAnywhere.contains(code));
+        }
     }
 }

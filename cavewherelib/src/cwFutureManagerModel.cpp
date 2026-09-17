@@ -11,12 +11,41 @@
 namespace {
     //! Nothing can say how far along it is, so there is no honest number to give
     constexpr double kIndeterminateProgress = -1.0;
+
+    //! How often the detail line is recomputed, in milliseconds
+    constexpr int kDetailPollMs = 100;
+
+    //! Keeps the oldest active leaf that has lived long enough to be worth naming
+    void findOldestLeaf(const cwProgressNodePtr& node, cwProgressNodePtr& oldest)
+    {
+        if(node->isFinished()) {
+            return;
+        }
+
+        const auto children = node->activeChildren();
+        if(children.isEmpty()) {
+            if(node->isLeaf()
+                    && node->ageMs() >= cwFutureManagerModel::kDetailMinAgeMs
+                    && (!oldest || node->ageMs() > oldest->ageMs())) {
+                oldest = node;
+            }
+            return;
+        }
+
+        for(const cwProgressNodePtr& child : children) {
+            findOldestLeaf(child, oldest);
+        }
+    }
 }
 
 cwFutureManagerModel::cwFutureManagerModel(QObject *parent) :
     QAbstractListModel(parent),
-    Timer(new QTimer(this))
+    Timer(new QTimer(this)),
+    DetailTimer(new QTimer(this))
 {
+    DetailTimer->setInterval(kDetailPollMs);
+    connect(DetailTimer, &QTimer::timeout, this, &cwFutureManagerModel::pollDetails);
+
     Timer->setInterval(250);
     connect(Timer, &QTimer::timeout, this, [this](){
         if(rowCount() > 0) {
@@ -38,6 +67,7 @@ void cwFutureManagerModel::addJob(const cwFuture &job)
     WatcherContainer container;
     container.watcher = watcher;
     container.job = job;
+    container.tree = job.tree();
     container.startTime.start();
 
     auto remove = [this, watcher]() {
@@ -82,6 +112,8 @@ void cwFutureManagerModel::addJob(const cwFuture &job)
     if(!Timer->isActive()) {
         Timer->start();
     }
+
+    updateDetailTimer();
 }
 
 int cwFutureManagerModel::rowCount(const QModelIndex &parent) const
@@ -107,6 +139,14 @@ QVariant cwFutureManagerModel::data(const QModelIndex &index, int role) const
         return watcher.watcher->progressValue();
     case cwFutureManagerModel::RunTimeRole:
         return watcher.startTime.elapsed();
+    case cwFutureManagerModel::DetailNameRole:
+        return watcher.detailName;
+    case cwFutureManagerModel::DetailProgressRole:
+        return watcher.detailDone;
+    case cwFutureManagerModel::DetailTotalRole:
+        return watcher.detailTotal;
+    case cwFutureManagerModel::TreeBackedRole:
+        return watcher.tree != nullptr;
     default:
         break;
     }
@@ -165,7 +205,11 @@ QHash<int, QByteArray> cwFutureManagerModel::defaultRoles()
         {NameRole, "nameRole"},
         {ProgressRole, "progressRole"},
         {NumberOfStepRole, "numberOfStepsRole"},
-        {RunTimeRole, "runTimeRole"}
+        {RunTimeRole, "runTimeRole"},
+        {DetailNameRole, "detailNameRole"},
+        {DetailProgressRole, "detailProgressRole"},
+        {DetailTotalRole, "detailTotalRole"},
+        {TreeBackedRole, "treeBackedRole"}
     };
     return roles;
 }
@@ -187,7 +231,85 @@ void cwFutureManagerModel::removeWatcher(QFutureWatcher<void> *watcher)
         emit allFinished();
     }
 
+    updateDetailTimer();
+
     delete watcher;
+}
+
+/**
+ * Oldest-first keeps the line still: a leaf holds it until it finishes, so
+ * parallel workers don't fight over it. The root is skipped, since the row
+ * already carries its name.
+ */
+bool cwFutureManagerModel::detailFor(const cwProgressNodePtr &root, QString &name, qint64 &done, qint64 &total)
+{
+    name = QString();
+    done = 0;
+    total = 0;
+
+    if(!root) {
+        return false;
+    }
+
+    cwProgressNodePtr oldest;
+    for(const cwProgressNodePtr& child : root->activeChildren()) {
+        findOldestLeaf(child, oldest);
+    }
+
+    if(!oldest) {
+        return false;
+    }
+
+    name = oldest->name();
+    done = oldest->done();
+    total = oldest->total();
+    return true;
+}
+
+void cwFutureManagerModel::pollDetails()
+{
+    for(int row = 0; row < Watchers.size(); row++) {
+        WatcherContainer& container = Watchers[row];
+
+        if(!container.tree) {
+            continue;
+        }
+
+        QString name;
+        qint64 done = 0;
+        qint64 total = 0;
+        detailFor(container.tree, name, done, total);
+
+        if(container.detailName == name
+                && container.detailDone == done
+                && container.detailTotal == total) {
+            continue;
+        }
+
+        container.detailName = name;
+        container.detailDone = done;
+        container.detailTotal = total;
+
+        const QModelIndex modelIndex = index(row);
+        emit dataChanged(modelIndex, modelIndex,
+                         {DetailNameRole, DetailProgressRole, DetailTotalRole});
+    }
+}
+
+void cwFutureManagerModel::updateDetailTimer()
+{
+    const bool hasTree = std::any_of(Watchers.cbegin(), Watchers.cend(),
+                                     [](const WatcherContainer& container) {
+        return container.tree != nullptr;
+    });
+
+    if(hasTree) {
+        if(!DetailTimer->isActive()) {
+            DetailTimer->start();
+        }
+    } else {
+        DetailTimer->stop();
+    }
 }
 
 QModelIndex cwFutureManagerModel::indexOf(const QFutureWatcher<void> *watcher) const

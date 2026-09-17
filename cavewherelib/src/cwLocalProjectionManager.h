@@ -15,12 +15,14 @@
 #include <QUuid>
 
 //Std includes
+#include <functional>
 #include <optional>
 
 //AsyncFuture
 #include <asyncfuture.h>
 
 //Our includes
+#include "cwFixStation.h"
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwGlobals.h"
@@ -28,7 +30,6 @@
 
 class cwCave;
 class cwCavingRegion;
-class cwFixStation;
 class cwLazLayer;
 
 /**
@@ -69,6 +70,10 @@ class CAVEWHERE_LIB_EXPORT cwLocalProjectionManager : public QObject
     //! reads is the number isWithinReach() applies.
     Q_PROPERTY(double anchorThresholdMeters READ anchorThresholdMeters CONSTANT FINAL)
 
+    //! Who the frame is centered on, for the projection group box to print —
+    //! see anchorDescription().
+    Q_PROPERTY(QString anchorDescription READ anchorDescription NOTIFY anchorDescriptionChanged FINAL)
+
 public:
     //! How far an input may sit from the origin before the origin counts as
     //! meaningfully wrong. Scale error out here is ~30 ppm — still negligible —
@@ -80,6 +85,17 @@ public:
     ~cwLocalProjectionManager() override;
 
     double anchorThresholdMeters() const { return kAnchorThresholdMeters; }
+
+    //! What the frame is centered on, for a reader: "A42 — Roppel Cave" when the
+    //! anchor is a fix station, the layer's name when it is a GIS layer, and ""
+    //! when no anchor is answerable for the frame (Ungeoreferenced or Frozen).
+    //!
+    //! Resolved on every read rather than stored: the anchor is an id, and only
+    //! the caves and layers know what carries it, so this class is the only one
+    //! that can answer and there is nothing to gain by keeping a copy of the
+    //! answer anywhere else. It follows renames, which is why the signal fires
+    //! on a rename as well as on a move of the frame.
+    QString anchorDescription() const;
 
     //! The project's frame, as a future that finishes once the frame has
     //! stopped moving — settled is exactly "this future is finished", and its
@@ -123,6 +139,18 @@ public:
     //! PROJ transform a second time.
     bool isCenteredOnDataCenter(const std::optional<cwGeoPoint>& center) const;
 
+    //! The frame this class derives and the anchor it followed from, so a
+    //! reader asks the manager about the project's projection instead of
+    //! reaching past it to the region.
+    cwGeoReference* geoReference() const;
+
+    //! Every fix station the region holds, paired with the cave holding it, in
+    //! region order. The one walk of the hierarchy, so nothing that needs the
+    //! pair has to know how caves store their fixes or that a region's cave list
+    //! can carry empty entries.
+    void forEachFixStation(
+            const std::function<void(cwCave*, const cwFixStation&)>& callback) const;
+
     //! Where \a fix sits in the project's frame, or an empty result when the fix
     //! has no coordinate the frame can read. A station the frame can't place is
     //! not one the project can be centered on, so the two refusals are the same
@@ -147,6 +175,11 @@ public:
     //! built on every open for nothing. Leaving the loading state runs one
     //! evaluate() against the restored frame.
     void setLoading(bool loading);
+
+signals:
+    //! Who the frame is centered on now reads differently — either the frame
+    //! moved, or whatever carries the anchor was renamed or went away.
+    void anchorDescriptionChanged();
 
 private:
     //! One candidate to anchor on: what would identify it, where it is, and the
@@ -180,6 +213,11 @@ private:
     //! Whether a project load is replacing the region's data — see setLoading().
     bool m_loading = false;
 
+    //! anchorDescription() as it last read, so the signal reports a change
+    //! rather than an opportunity for one. Bookkeeping for the notification
+    //! only: every read still resolves against the region.
+    QString m_lastAnchorDescription;
+
     //! The epoch currently being settled, if the frame is still being derived.
     //! Held only while frameFuture() has been asked for during an open epoch,
     //! so a project that never has to derive anything never mints one.
@@ -203,9 +241,21 @@ private:
     //! doesn't transform every one of them a second time.
     std::optional<cwGeoPoint> centerOf(const QList<Input>& inputs) const;
 
-    //! The region's fix station carrying \a stationId, or an empty result when
-    //! the project no longer has it.
-    std::optional<cwFixStation> fixStationWithId(const QUuid& stationId) const;
+    //! A fix station found in the region, and the cave holding it — which is
+    //! half of what the anchor is called.
+    struct FoundFix {
+        cwCave* cave = nullptr;
+        cwFixStation fix;
+    };
+
+    //! Every cave the region holds, in region order, skipping the empty entries
+    //! the list can carry. \a callback returns whether to keep walking.
+    void forEachCave(const std::function<bool(cwCave*)>& callback) const;
+
+    //! The region's fix station carrying \a stationId, with its cave, or an
+    //! empty result when the project no longer has it. Each cave answers for
+    //! its own rows, so the id lookup is the model's.
+    std::optional<FoundFix> findFixStation(const QUuid& stationId) const;
 
     //! The two halves of gatherInputs(), in the order it concatenates them.
     //! The fix half stands on its own while headers are still arriving: it is
@@ -217,17 +267,12 @@ private:
     //! if the last thing it was waiting on has landed.
     void evaluate();
 
-    //! Re-resolve who the frame is centered on and publish it on the
-    //! cwGeoReference. Separate from evaluate() because a rename changes the
-    //! answer without changing a single thing the state machine reads — running
-    //! the machine for one would be work at best and a re-derive at worst.
+    //! Announce that anchorDescription() may read differently, emitting only
+    //! when it actually does. Separate from evaluate() because a rename changes
+    //! the answer without changing a single thing the state machine reads —
+    //! running the machine for one would be work at best and a re-derive at
+    //! worst.
     void updateAnchorDescription();
-
-    //! The anchor's id spelled back out as a name, by finding whatever currently
-    //! carries it. Empty when nothing does, which covers both "no anchor" and
-    //! "the input holding it has just gone" — the evaluate that settles the
-    //! second case runs this again.
-    QString resolveAnchorDescription() const;
 
     //! The state machine itself. Split from evaluate() so that every path out
     //! of it — including the early returns — goes through the settle.

@@ -313,7 +313,7 @@ StandardPage {
                         Layout.fillWidth: true
                         spacing: Theme.delegatePadding
                         visible: RootData.region.geoReference.state === GeoReference.Anchored
-                                 && RootData.region.geoReference.anchorDescription !== ""
+                                 && RootData.region.localProjection.anchorDescription !== ""
 
                         QC.Label {
                             text: qsTr("Centered on:")
@@ -327,7 +327,7 @@ StandardPage {
                             // with nowhere to break, and WordWrap paints it
                             // past the frame instead of folding it.
                             wrapMode: QQ.Text.Wrap
-                            text: RootData.region.geoReference.anchorDescription
+                            text: RootData.region.localProjection.anchorDescription
                         }
 
                         QQ.Item { Layout.fillWidth: true }

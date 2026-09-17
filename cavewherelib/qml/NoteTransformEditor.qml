@@ -148,7 +148,7 @@ QQ.Item {
                         id: scaleInputId
                         scaleObject: editor.noteTransform == null ? null : editor.noteTransform.scaleObject
                         scaleHelp: scaleHelpAreaId
-                        onScaleInteractionActivated: editor.interactionManager.active(editor.scaleInteraction)
+                        onScaleInteractionActivated: editor.scaleInteraction.activate()
                         autoScaling: checkableBoxId.checked
                     }
 

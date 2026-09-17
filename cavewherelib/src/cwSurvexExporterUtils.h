@@ -173,7 +173,7 @@ inline QString shareableCSForFix(const cwFixStation& fix)
     // could use either — and a geographic CS as *cs out fails the solve
     // outright, whatever it is spelled like.
     return cwCoordinateTransform::deriveProjectedOutputCS(
-        fix.inputCS(), cwGeoPoint(fix.easting(), fix.northing(), fix.elevation()));
+        fix.inputCS(), fix.position());
 }
 
 //! The first fix in \a fixes that yields a shareable CS, or empty when none
@@ -208,11 +208,9 @@ inline QString shareableCSForFixes(const QList<cwFixStation>& fixes)
  * fix that yields a shareable system wins — for a geographic fix that is the
  * UTM zone containing it.
  *
- * The Region template parameter is duck-typed: it must expose `.caves`, and
- * each cave must expose `.fixStations`. This works for both
- * cwSurveyDataArtifact::Region (Rule export path) and cwCavingRegionData
- * (line-plot export path), which is why this lives here as a template rather
- * than beside the rest.
+ * Takes a cwCavingRegionData. It stays a template because it needs only
+ * `.caves`, each with `.fixStations`, so it can live here beside
+ * shareableCSForFixes instead of pulling the region header in.
  */
 template <typename Region>
 QString resolveOutputCS(const Region& region, const QString& frameCS, OutputCSPolicy policy)

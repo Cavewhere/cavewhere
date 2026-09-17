@@ -1687,7 +1687,8 @@ MainWindowTest {
 
         // Load the demo project, open the Settings page, and select tab `index`
         // on the vertical tab bar (0 Jobs, 1 Warping, 2 PDF/SVG, 3 Git,
-        // 4 Appearance, 5 Rendering, 6 Sketch). Returns the tab bar, or null after
+        // 4 Appearance, 5 Rendering, 6 Units; the Sketch tab is hidden for this
+        // release, #587). Returns the tab bar, or null after
         // skip() when there is no live QRhi. The Settings panels don't depend on
         // project content, but reloading hands each shot a known-clean window; the
         // font/PDF/MSAA defaults come from QSettings, which the test harness clears

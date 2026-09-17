@@ -5,6 +5,7 @@
 #include <QByteArray>
 #include <QImage>
 #include <QSize>
+#include <QThreadPool>
 #include <QVector>
 
 // Qt RHI
@@ -13,6 +14,7 @@
 // Our includes
 #include "CaveWhereLibExport.h"
 #include "cwDiskCacher.h"
+#include "cwProgressNode.h"
 #include "cwStreamedTexture.h"
 
 // Monad includes
@@ -53,6 +55,14 @@ namespace cw::ktx2 {
      * cavewherelib; cwKtx2Codec.cpp static_asserts it against the enum.
      */
     constexpr int kDefaultUastcQuality = 0;
+
+    /**
+     * The pool every UASTC compress runs on. It has one thread, so encodes run
+     * one at a time and each one is free to use every core through libktx.
+     * Exposed so callers can see whether an encode is active
+     * (activeThreadCount) or queued.
+     */
+    CAVEWHERE_LIB_EXPORT QThreadPool* encodeLane();
 
     /**
      * Encodes image as a UASTC supercompressed .ktx2 file with a full mip chain
@@ -132,10 +142,14 @@ namespace cw::ktx2 {
      *
      * An error Result means the cache has no usable entry at key and the caller
      * should stay on its uncompressed image; the reason is also warned about.
+     *
+     * `progressParent` gets a "Compressing texture" child only when an encode
+     * runs, so a cache hit leaves it childless. Null leaves the encode untracked.
      */
     CAVEWHERE_LIB_EXPORT Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
                                                               const cwDiskCacher::Key& key,
-                                                              const std::function<QImage()>& source);
+                                                              const std::function<QImage()>& source,
+                                                              const cwProgressNodePtr& progressParent = {});
 }
 
 #endif // CWKTX2CODEC_H

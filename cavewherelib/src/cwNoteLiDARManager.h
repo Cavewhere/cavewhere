@@ -31,6 +31,7 @@ class cwNoteLiDAR;
 // Ours
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
+#include "cwProgressNode.h"
 #include "asyncfuture.h"
 #include "cwTriangulateLiDARInData.h"
 #include "cwTriangulateLiDARTask.h"
@@ -159,6 +160,10 @@ private:
 
     cwFutureManagerToken m_futureManagerToken;
     AsyncFuture::Restarter<void> m_restarter;
+
+    // The run's progress tree, and the job the task list watches. The run grows
+    // it as it works, so nothing here declares how many steps a note takes.
+    cwProgressNodePtr m_progressRoot;
 
     // One note waiting to be triangulated, with the trip and cave it hung from
     // when it was marked. Both are cached so isRunnable() reads only this entry:

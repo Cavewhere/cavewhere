@@ -1,10 +1,12 @@
 // Our includes
 #include "cwKtx2Codec.h"
 #include "cwMipMath.h"
+#include "cwTask.h"
 
 // Qt includes
 #include <QDebug>
 #include <QDir>
+#include <QSemaphore>
 #include <QThread>
 
 // libktx includes
@@ -27,6 +29,7 @@ namespace {
 
     constexpr int kBytesPerRgbaPixel = 4;
     constexpr int kSmallestThreadCount = 1;
+    constexpr int kEncodeLaneThreads = 1;
 
     static_assert(cw::ktx2::kDefaultUastcQuality == KTX_PACK_UASTC_LEVEL_FASTEST,
                   "kDefaultUastcQuality must match libktx's fastest UASTC level");
@@ -116,9 +119,53 @@ namespace {
         const KtxTexturePtr texture(rawTexture);
         return createError == KTX_SUCCESS;
     }
+
+    /**
+     * Runs the compress on the encode lane and waits for it. A cwConcurrent
+     * worker releases its pool slot while it waits, so queued encodes leave the
+     * pool's threads free for other work; the release/reserve pair is the same
+     * dance cwGeometryItersecter::waitOnPool does.
+     *
+     * The handoff is a semaphore rather than a QFuture because waiting on a
+     * QtConcurrent future steals the queued runnable and runs it on the calling
+     * thread, putting several compresses back on the cores at once.
+     */
+    KTX_error_code compressOnLane(ktxTexture2* texture, ktxBasisParams* params)
+    {
+        KTX_error_code compressError = KTX_SUCCESS;
+        QSemaphore compressed;
+
+        cw::ktx2::encodeLane()->start([texture, params, &compressError, &compressed]() {
+            compressError = ktxTexture2_CompressBasisEx(texture, params);
+            compressed.release();
+        });
+
+        QThreadPool* callerPool = cwTask::threadPool();
+        if(callerPool != nullptr) {
+            callerPool->releaseThread();
+        }
+        compressed.acquire();
+        if(callerPool != nullptr) {
+            callerPool->reserveThread();
+        }
+
+        return compressError;
+    }
 }
 
 namespace cw::ktx2 {
+
+QThreadPool* encodeLane()
+{
+    //QThreadPool is a QObject, so build it in place and configure it once.
+    static QThreadPool lane;
+    [[maybe_unused]] static const bool configured = []() {
+        lane.setMaxThreadCount(kEncodeLaneThreads);
+        lane.setObjectName(QStringLiteral("cw::ktx2::encodeLane"));
+        return true;
+    }();
+    return &lane;
+}
 
 Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality)
 {
@@ -175,13 +222,12 @@ Monad::Result<QByteArray> encodeRgba(const QImage& image, int quality)
     params.uastc = KTX_TRUE;
     params.uastcFlags = static_cast<ktx_pack_uastc_flags>(quality);
 
-    //libktx encodes on one thread unless told otherwise. Encodes are bursty and
-    //rare, so letting each one use every core is worth the brief
-    //oversubscription when a few cwConcurrent workers encode at once.
+    //libktx encodes on one thread unless told otherwise. The encode lane runs
+    //one compress at a time, so that compress owns every core.
     params.threadCount = static_cast<ktx_uint32_t>(std::max(kSmallestThreadCount,
                                                             QThread::idealThreadCount()));
 
-    const KTX_error_code compressError = ktxTexture2_CompressBasisEx(texture.get(), &params);
+    const KTX_error_code compressError = compressOnLane(texture.get(), &params);
     if(compressError != KTX_SUCCESS) {
         return Monad::Result<QByteArray>(
             ktxErrorText(QStringLiteral("ktxTexture2_CompressBasisEx failed"), compressError));
@@ -313,7 +359,8 @@ QString cacheKeyId(const QString& baseKey)
 
 Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
                                      const cwDiskCacher::Key& key,
-                                     const std::function<QImage()>& source)
+                                     const std::function<QImage()>& source,
+                                     const cwProgressNodePtr& progressParent)
 {
     //entry() rather than hasEntry(): an edited source lands on the same cache
     //file path with a new checksum, and only a read tells a current encode from
@@ -327,6 +374,10 @@ Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
         //A damaged entry is worth replacing, so fall through to the encode
         qWarning() << "Re-encoding the damaged KTX2 cache entry at" << cacher.filePath(key);
     }
+
+    //Only a miss has anything to compress, so a hit grows no node at all. The
+    //encode can't say how far along it is, so the node stays opaque.
+    const cwProgressScope compressing(progressParent, QStringLiteral("Compressing texture"));
 
     const auto encoded = encodeRgba(source());
     if(encoded.hasError()) {

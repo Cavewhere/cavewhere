@@ -24,11 +24,14 @@
 #include "cwRenderTexturedItemVisibility.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRegionSceneManager.h"
+#include "cwScene.h"
+#include "cwSceneVisibility.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwImageUtils.h"
 #include "cwCavingRegion.h"
 #include "cwScrap.h"
 #include "cwLead.h"
+#include "cwFutureManagerModel.h"
 
 //Qt includes
 #include <QFile>
@@ -38,9 +41,11 @@
 #include <QCoreApplication>
 #include <QEvent>
 #include <QThreadPool>
+#include <QEventLoop>
 #include "cwSignalSpy.h"
 
 //Std includes
+#include <algorithm>
 #include <random>
 
 //Async includes
@@ -391,12 +396,52 @@ TEST_CASE("Each scrap reaches the render items as it finishes", "[cwScrapManager
         });
     }
 
+    // A delivered scrap stays hidden until the intersecter publishes a BVH that
+    // contains it, so per-scrap delivery only fills the 3d view in if the pick
+    // gate opens mid-run too (issue #671). attachScrap mints a render id that
+    // reads visible before the scrap's geometry arrives, so a scrap counts as
+    // drawable only once it has been delivered.
+    auto* scene = rootData->regionSceneManager()->scene();
+    REQUIRE(scene != nullptr);
+    const auto renderObjectId = renderItems->renderObjectId();
+
+    constexpr int kRunTimeoutMs = 120000;
+    constexpr int kPollWaitMs = 2;
+    bool sawVisibleWhileWorking = false;
+    QElapsedTimer runTimer;
+    runTimer.start();
+    while(scrapManager->updateState() == cwUpdatable::State::Working
+          && runTimer.elapsed() < kRunTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                        kPollWaitMs);
+
+        const auto snapshot = scene->visibility()->snapshot();
+        bool anyDeliveredVisible = false;
+        bool anyPending = false;
+        for(cwScrap* scrap : std::as_const(extraScraps)) {
+            if(deliveryCount.value(scrap) > 0) {
+                if(snapshot.subVisible(renderObjectId, scrapManager->renderId(scrap))) {
+                    anyDeliveredVisible = true;
+                }
+            } else {
+                anyPending = true;
+            }
+        }
+
+        if(anyDeliveredVisible && anyPending) {
+            sawVisibleWhileWorking = true;
+        }
+    }
+
     scrapManager->waitForFinish();
     rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
 
     // Every scrap ended up delivered, exactly one texture descriptor each.
     CHECK(deliveredScrapCount(renderItems) == totalScraps);
+
+    // A scrap was drawable while the rest of the batch was still running.
+    CHECK(sawVisibleWhileWorking);
 
     // Each scrap was delivered exactly once, mid-run.
     for(cwScrap* scrap : std::as_const(extraScraps)) {
@@ -802,4 +847,220 @@ TEST_CASE("V6 conversion with correct EXIF coords does not modify", "[cwScrapMan
     const QPointF station0 = scrap->stations().at(0).positionOnNote();
     CHECK(station0.x() == Catch::Approx(0.621).margin(0.005));
     CHECK(station0.y() == Catch::Approx(0.339).margin(0.005));
+}
+
+namespace {
+    //What one "Updating Scraps" row said while it was alive, read through the
+    //roles a person sees in the task list.
+    struct ScrapRunObservation {
+        QList<int> progress;
+        QList<int> steps;
+        QSet<QString> detailNames;
+
+        int distinctProgressCount() const { return QSet<int>(progress.begin(), progress.end()).size(); }
+    };
+
+    //Records every scrap run the model announces, one entry per row. Nothing
+    //test-only lives on the manager: this is the same data the task list draws.
+    class ScrapRunRecorder
+    {
+    public:
+        ScrapRunRecorder(cwFutureManagerModel* model) :
+            m_model(model)
+        {
+            QObject::connect(model, &QAbstractItemModel::rowsInserted, &m_context,
+                             [this](const QModelIndex&, int first, int last)
+            {
+                for(int row = first; row <= last; row++) {
+                    if(isScrapRow(row)) {
+                        //One observation per row, so two runs that overlap in
+                        //the model stay two runs here
+                        m_open.append({QPersistentModelIndex(m_model->index(row)),
+                                       ScrapRunObservation()});
+                    }
+                }
+            });
+
+            QObject::connect(model, &QAbstractItemModel::dataChanged, &m_context,
+                             [this](const QModelIndex& topLeft,
+                                    const QModelIndex& bottomRight,
+                                    const QList<int>&)
+            {
+                for(int row = topLeft.row(); row <= bottomRight.row(); row++) {
+                    sample(row);
+                }
+            });
+
+            QObject::connect(model, &QAbstractItemModel::rowsAboutToBeRemoved, &m_context,
+                             [this](const QModelIndex&, int first, int last)
+            {
+                for(int row = first; row <= last; row++) {
+                    //The last thing the row says before it goes
+                    sample(row);
+                    close(m_model->index(row));
+                }
+            });
+        }
+
+        const QList<ScrapRunObservation>& runs() const { return m_runs; }
+
+        //The run that had the most to say — the cold one, when a test does a
+        //cold run and a warm one.
+        ScrapRunObservation richestRun() const
+        {
+            ScrapRunObservation richest;
+            for(const auto& run : m_runs) {
+                if(run.progress.size() > richest.progress.size()) {
+                    richest = run;
+                }
+            }
+            return richest;
+        }
+
+    private:
+        bool isScrapRow(int row) const
+        {
+            return m_model->data(m_model->index(row), cwFutureManagerModel::NameRole).toString()
+                   == QStringLiteral("Updating Scraps");
+        }
+
+        ScrapRunObservation* openRun(const QModelIndex& modelIndex)
+        {
+            for(auto& entry : m_open) {
+                if(entry.first == modelIndex) {
+                    return &entry.second;
+                }
+            }
+            return nullptr;
+        }
+
+        void sample(int row)
+        {
+            const QModelIndex modelIndex = m_model->index(row);
+            ScrapRunObservation* run = openRun(modelIndex);
+            if(run == nullptr) {
+                return;
+            }
+
+            run->progress.append(m_model->data(modelIndex, cwFutureManagerModel::ProgressRole).toInt());
+            run->steps.append(m_model->data(modelIndex, cwFutureManagerModel::NumberOfStepRole).toInt());
+
+            const QString detail = m_model->data(modelIndex, cwFutureManagerModel::DetailNameRole).toString();
+            if(!detail.isEmpty()) {
+                run->detailNames.insert(detail);
+            }
+        }
+
+        void close(const QModelIndex& modelIndex)
+        {
+            for(int i = 0; i < m_open.size(); i++) {
+                if(m_open.at(i).first == modelIndex) {
+                    m_runs.append(m_open.at(i).second);
+                    m_open.removeAt(i);
+                    return;
+                }
+            }
+        }
+
+        cwFutureManagerModel* m_model;
+        QList<QPair<QPersistentModelIndex, ScrapRunObservation>> m_open;
+        QList<ScrapRunObservation> m_runs;
+
+        //Owns the model connections: they go when the recorder does
+        QObject m_context;
+    };
+
+    //Pumps the event loop until the pipeline is done and its row has gone. The
+    //detail line is polled on a timer, so a run has to be watched, never waited
+    //out in a nested loop.
+    void pumpUntilScrapsSettle(cwRootData* rootData, cwScrapManager* scrapManager)
+    {
+        constexpr int kRunTimeoutMs = 120000;
+        constexpr int kPollWaitMs = 2;
+
+        QElapsedTimer timer;
+        timer.start();
+        while(timer.elapsed() < kRunTimeoutMs
+              && (scrapManager->updateState() != cwUpdatable::State::Clean
+                  || rootData->futureManagerModel()->rowCount() > 0)) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
+                                            kPollWaitMs);
+        }
+    }
+}
+
+TEST_CASE("A scrap run's progress moves in steps finer than one per scrap",
+          "[cwScrapManager][Issue671]")
+{
+    // The row for a scrap run used to hold still until the run was over, which
+    // reads as a hang. The run now grows a progress tree as it works, so the bar
+    // moves through the crop, the encode, the mesh and the morph of each scrap.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto model = rootData->futureManagerModel();
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager != nullptr);
+
+    // The dataset is copied to a fresh temp folder, so the run that loading
+    // starts is a cold one: nothing is in the texture cache yet.
+    ScrapRunRecorder recorder(model);
+    fileToProject(rootData->project(), testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    pumpUntilScrapsSettle(rootData.get(), scrapManager);
+
+    const int scrapCount = scrapManager->renderScrapCount();
+    REQUIRE(scrapCount > 0);
+    REQUIRE_FALSE(recorder.runs().isEmpty());
+
+    for(const auto& run : recorder.runs()) {
+        INFO("Progress: " << run.progress.size() << " observations");
+        REQUIRE_FALSE(run.steps.isEmpty());
+
+        // The range is fixed for the life of the row: the bar's denominator
+        // never moves under it.
+        const int steps = run.steps.first();
+        CHECK(steps > 0);
+        CHECK(std::count(run.steps.begin(), run.steps.end(), steps) == run.steps.size());
+
+        // Monotone: the bar stalls when an unhinted parent grows, it never
+        // steps backward.
+        CHECK(std::is_sorted(run.progress.begin(), run.progress.end()));
+    }
+
+    const ScrapRunObservation coldRun = recorder.richestRun();
+
+    // Reaches full: the last thing the row said before it went was its maximum.
+    CHECK(coldRun.progress.last() == coldRun.steps.last());
+
+    // Finer than one step per scrap.
+    CHECK(coldRun.distinctProgressCount() > scrapCount);
+
+    // ...and the row named what it was working on while it worked.
+    CHECK_FALSE(coldRun.detailNames.isEmpty());
+}
+
+TEST_CASE("A rerun off a warm texture cache still reaches full",
+          "[cwScrapManager][Issue671]")
+{
+    // The encode is the longest step of a cold run and the one the cache skips.
+    // A rerun that finds its textures already compressed grows no
+    // "Compressing texture" node at all — no caller declared that step, so
+    // nothing has to be kept in sync with the cache.
+    requireAutomaticUpdatesEnabled();
+    auto rootData = std::make_unique<cwRootData>();
+    auto model = rootData->futureManagerModel();
+    auto scrapManager = rootData->scrapManager();
+    REQUIRE(scrapManager != nullptr);
+
+    fileToProject(rootData->project(), testcasesDatasetPath("test_cwScrapManager/scrapGuessNeigborPlan.cw"));
+    pumpUntilScrapsSettle(rootData.get(), scrapManager);
+
+    ScrapRunRecorder recorder(model);
+    computeAllScraps(scrapManager);
+    pumpUntilScrapsSettle(rootData.get(), scrapManager);
+
+    REQUIRE_FALSE(recorder.runs().isEmpty());
+
+    const ScrapRunObservation warmRun = recorder.richestRun();
+    CHECK(warmRun.progress.last() == warmRun.steps.last());
+    CHECK_FALSE(warmRun.detailNames.contains(QStringLiteral("Compressing texture")));
 }

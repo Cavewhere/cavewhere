@@ -91,33 +91,34 @@ QQ.Item {
                         }
                     }
 
-                    VLine {}
+                    // Sketch is still in development; hidden for this release (#587).
+                    // VLine {}
 
-                    ColumnLayout {
-                        spacing: 6
-                        Layout.alignment: Qt.AlignVCenter
+                    // ColumnLayout {
+                    //     spacing: 6
+                    //     Layout.alignment: Qt.AlignVCenter
 
-                        QC.Label {
-                            text: "Create"
-                            font.bold: true
-                            Layout.alignment: Qt.AlignHCenter
-                        }
+                    //     QC.Label {
+                    //         text: "Create"
+                    //         font.bold: true
+                    //         Layout.alignment: Qt.AlignHCenter
+                    //     }
 
-                        QC.Label {
-                            text: "Draw a blank\nsketch"
-                            horizontalAlignment: QQ.Text.AlignHCenter
-                            Layout.alignment: Qt.AlignHCenter
-                        }
+                    //     QC.Label {
+                    //         text: "Draw a blank\nsketch"
+                    //         horizontalAlignment: QQ.Text.AlignHCenter
+                    //         Layout.alignment: Qt.AlignHCenter
+                    //     }
 
-                        IconButton {
-                            Layout.alignment: Qt.AlignHCenter
-                            objectName: "emptyStateNewSketchButton"
-                            iconSource: "qrc:/twbs-icons/icons/pencil-square.svg"
-                            sourceSize: Qt.size(48, 48)
-                            text: "Sketch"
-                            onClicked: widgetId.sketchRequested()
-                        }
-                    }
+                    //     IconButton {
+                    //         Layout.alignment: Qt.AlignHCenter
+                    //         objectName: "emptyStateNewSketchButton"
+                    //         iconSource: "qrc:/twbs-icons/icons/pencil-square.svg"
+                    //         sourceSize: Qt.size(48, 48)
+                    //         text: "Sketch"
+                    //         onClicked: widgetId.sketchRequested()
+                    //     }
+                    // }
                 }
             }
         }

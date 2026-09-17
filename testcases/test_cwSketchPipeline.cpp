@@ -20,8 +20,8 @@
 #include "cwTripCalibration.h"
 #include "cwLinePlotManager.h"
 #include "cwFutureManagerModel.h"
-#include "cwSurveyNetworkArtifact.h"
-#include "cwSurvey2DGeometryArtifact.h"
+#include "cwSurveyNetworkSource.h"
+#include "cwSurvey2DGeometrySource.h"
 #include "cwSurvey2DGeometry.h"
 #include "cwSurveyNetwork.h"
 #include "cwStationPositionLookup.h"
@@ -45,7 +45,7 @@ void drainEventLoop() {
     QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
 }
 
-// Waits for the sketch's 2D geometry artifact to produce a non-empty result.
+// Waits for the sketch's 2D geometry source to produce a non-empty result.
 // Returns the settled value or falls back to asserting via Catch2.
 cwSurvey2DGeometry waitForGeometry(cwSketch *sketch, int timeoutMs = 2000) {
     auto future = sketch->survey2DGeometry()->geometryResult();
@@ -57,7 +57,7 @@ cwSurvey2DGeometry waitForGeometry(cwSketch *sketch, int timeoutMs = 2000) {
 } // namespace
 
 
-TEST_CASE("cwLinePlotManager exposes region-wide cwSurveyNetworkArtifact", "[cwSketchPipeline]") {
+TEST_CASE("cwLinePlotManager exposes region-wide cwSurveyNetworkSource", "[cwSketchPipeline]") {
     auto project = fileToProject(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto region = project->cavingRegion();
     REQUIRE(region != nullptr);
@@ -70,10 +70,10 @@ TEST_CASE("cwLinePlotManager exposes region-wide cwSurveyNetworkArtifact", "[cwS
     linePlotManager.waitToFinish();
     drainEventLoop();
 
-    auto *artifact = linePlotManager.surveyNetworkArtifact();
-    REQUIRE(artifact != nullptr);
+    auto *networkSource = linePlotManager.surveyNetworkSource();
+    REQUIRE(networkSource != nullptr);
 
-    auto networkFuture = artifact->surveyNetwork();
+    auto networkFuture = networkSource->surveyNetwork();
     REQUIRE(AsyncFuture::waitForFinished(networkFuture, 2000));
     REQUIRE_FALSE(networkFuture.result().hasError());
 
@@ -120,7 +120,7 @@ TEST_CASE("cwLinePlotManager exposes region-wide cwSurveyNetworkArtifact", "[cwS
 }
 
 
-TEST_CASE("cwSketch produces 2D geometry from the shared survey network artifact", "[cwSketchPipeline]") {
+TEST_CASE("cwSketch produces 2D geometry from the shared survey network source", "[cwSketchPipeline]") {
     auto project = fileToProject(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto region = project->cavingRegion();
     REQUIRE(region != nullptr);
@@ -145,7 +145,7 @@ TEST_CASE("cwSketch produces 2D geometry from the shared survey network artifact
     // Before wiring the network, survey2DGeometry() exists but has no result.
     REQUIRE(sketch.survey2DGeometry() != nullptr);
 
-    sketch.setSurveyNetworkArtifact(linePlotManager.surveyNetworkArtifact());
+    sketch.setSurveyNetworkSource(linePlotManager.surveyNetworkSource());
     drainEventLoop();
 
     const cwSurvey2DGeometry geometry = waitForGeometry(&sketch);
@@ -167,9 +167,9 @@ TEST_CASE("cwCenterlineSketchPainterModel populates three rows from survey2DGeom
     drainEventLoop();
 
     cwSketch sketch;
-    sketch.setSurveyNetworkArtifact(linePlotManager.surveyNetworkArtifact());
+    sketch.setSurveyNetworkSource(linePlotManager.surveyNetworkSource());
     drainEventLoop();
-    waitForGeometry(&sketch); // ensure the rule has settled
+    waitForGeometry(&sketch); // ensure the builder has settled
 
     cwCenterlineSketchPainterModel centerline;
     QSignalSpy resetSpy(&centerline, &cwCenterlineSketchPainterModel::modelReset);

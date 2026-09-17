@@ -22,7 +22,6 @@
 #include "cwGeoPoint.h"
 #include "cwGlobals.h"
 
-class cwCavingRegion;
 class cwLocalProjectionManager;
 
 //! One station the project's projection could be recentered on: which station it
@@ -98,7 +97,7 @@ public:
     };
     Q_ENUM(Roles)
 
-    cwRecenterCandidateModel(cwLocalProjectionManager* manager, cwCavingRegion* region);
+    explicit cwRecenterCandidateModel(cwLocalProjectionManager* manager);
 
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
     QVariant data(const QModelIndex& index, int role) const override;
@@ -121,7 +120,6 @@ signals:
 
 private:
     cwLocalProjectionManager* m_manager = nullptr;
-    cwCavingRegion* m_region = nullptr;
 
     QList<cwRecenterCandidate> m_candidates;
 

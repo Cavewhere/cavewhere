@@ -154,5 +154,74 @@ MainWindowTest {
             trip.calibration.distanceUnit = Units.Meters
             checkScaleReads(scrap, onPaperUnitInput, inCaveUnitInput, Units.Centimeters, Units.Meters)
         }
+
+        // The scale tool's "In cave length" starts in the trip's survey unit, and
+        // re-reads it every time the tool opens, so a trip that switched units
+        // since the last use gets the new one.
+        function test_scaleToolStartsInTripDistanceUnit() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+
+            tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
+
+            let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
+            mouseClick(carpetButton)
+
+            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
+            // that reposition the toolbar; clicks miss during the animation
+            wait(1000)
+
+            let imageItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
+            mouseClick(imageItem, 475.801, 600.855)
+
+            let noteArea = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea")
+            let scrapView = findChild(noteArea, "scrapViewId")
+            tryVerify(() => { return scrapView.selectedScrapItem !== null },
+                      5000,
+                      "the click selected a scrap")
+            let scrap = scrapView.selectedScrapItem.scrap as Scrap
+            verify(scrap !== null)
+
+            let trip = RootData.region.cave(0).trip(0)
+            trip.calibration.distanceUnit = Units.Feet
+
+            let setLengthButton = null
+            tryVerify(() => {
+                setLengthButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->setLengthButton")
+                return setLengthButton !== null
+            })
+            mouseClick(setLengthButton)
+
+            let scaleInteraction = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction")
+            let lengthUnitInput = unitInputIn(scaleInteraction, "lengthUnitValue")
+            tryVerify(() => { return displayedUnit(lengthUnitInput) === Units.lengthUnitName(Units.Feet) },
+                      5000,
+                      "in cave length reads in the trip's feet")
+
+            mouseClick(imageItem, 645.111, 738.692)
+            mouseClick(imageItem, 777.563, 738.692)
+
+            let lengthText = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->lengthUnitValue->coreTextInput")
+            mouseClick(lengthText, 0.867188, 12.7031)
+
+            keyClick(Qt.Key_1)
+            keyClick(Qt.Key_0)
+            keyClick(Qt.Key_Return)
+
+            let done = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->noteScaleInteraction->doneButton->label")
+            mouseClick(done)
+
+            //Same clicks as tst_NoteScaleInteraction's 10 m (1:574.5), in feet
+            const kMetersPerFoot = 0.3048
+            tryFuzzyCompare(1.0 / scrap.noteTransformation.scale, 574.5 * kMetersPerFoot, 1.0,
+                            `1.0 / ${scrap.noteTransformation.scale} is a 10 ft length`)
+
+            trip.calibration.distanceUnit = Units.Meters
+            tryVerify(() => { return !scaleInteraction.visible })
+            mouseClick(setLengthButton)
+            tryVerify(() => { return displayedUnit(lengthUnitInput) === Units.lengthUnitName(Units.Meters) },
+                      5000,
+                      "reopening the tool picks up the trip's switch to meters")
+        }
     }
 }

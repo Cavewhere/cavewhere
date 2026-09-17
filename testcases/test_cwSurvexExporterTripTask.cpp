@@ -33,7 +33,7 @@ TEST_CASE("cwSurvexExporterTripTask writes UP/DOWN for vertical shots without az
     REQUIRE(buffer.open(QIODevice::WriteOnly));
 
     QTextStream stream(&buffer);
-    exporter.writeTrip(stream, &trip);
+    exporter.writeTrip(stream, trip.data());
     buffer.close();
 
     const QString output = QString::fromUtf8(outputData);
@@ -87,7 +87,7 @@ TEST_CASE("cwSurvexExporterTripTask writes UP/DOWN for vertical shots with azimu
     REQUIRE(buffer.open(QIODevice::WriteOnly));
 
     QTextStream stream(&buffer);
-    exporter.writeTrip(stream, &trip);
+    exporter.writeTrip(stream, trip.data());
     buffer.close();
 
     const QString output = QString::fromUtf8(outputData);
@@ -135,7 +135,7 @@ TEST_CASE("cwSurvexExporterTripTask filters invalid team roles", "[cwSurvexExpor
     REQUIRE(buffer.open(QIODevice::WriteOnly));
 
     QTextStream stream(&buffer);
-    exporter.writeTrip(stream, &trip);
+    exporter.writeTrip(stream, trip.data());
     buffer.close();
 
     const QString output = QString::fromUtf8(outputData);

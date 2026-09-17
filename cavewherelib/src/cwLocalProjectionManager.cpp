@@ -11,6 +11,7 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
@@ -46,11 +47,15 @@ namespace {
     //! Whether \a fix can place anything. Only a Valid fix has components at
     //! all — every other state reads zeros, and a frame centered on a coordinate
     //! system's own origin is exactly the "cave in the Gulf of Guinea" failure
-    //! the LDP exists to make impossible.
+    //! the LDP exists to make impossible. The domain check is the other half: a
+    //! coordinate its own system can't hold — a transposed digit, the wrong UTM
+    //! zone — would center the frame on the typo, leaving every good fix
+    //! hundreds of kilometers out for the outlier validator to blame.
     bool usableFixStation(const cwFixStation& fix)
     {
         return fix.state() == cwFixStation::Valid
-                && cwCoordinateTransform::isValidCS(fix.inputCS().trimmed());
+                && cwCoordinateTransform::isValidCS(fix.inputCS().trimmed())
+                && cwFixStationDiagnostics::isDomainValid(fix);
     }
 }
 
@@ -188,19 +193,37 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherFixInputs
 {
     QList<Input> inputs;
 
+    forEachFixStation([&inputs](cwCave*, const cwFixStation& fix) {
+        if (usableFixStation(fix)) {
+            inputs.append(inputOf(fix));
+        }
+    });
+
+    return inputs;
+}
+
+void cwLocalProjectionManager::forEachCave(
+        const std::function<bool(cwCave*)>& callback) const
+{
     for (cwCave* cave : m_region->caves()) {
         if (cave == nullptr) {
             continue;
         }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            if (!usableFixStation(fix)) {
-                continue;
-            }
-            inputs.append(inputOf(fix));
+        if (!callback(cave)) {
+            return;
         }
     }
+}
 
-    return inputs;
+void cwLocalProjectionManager::forEachFixStation(
+        const std::function<void(cwCave*, const cwFixStation&)>& callback) const
+{
+    forEachCave([&callback](cwCave* cave) {
+        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
+            callback(cave, fix);
+        }
+        return true;
+    });
 }
 
 cwLocalProjectionManager::Input cwLocalProjectionManager::inputOf(const cwFixStation& fix)
@@ -208,7 +231,7 @@ cwLocalProjectionManager::Input cwLocalProjectionManager::inputOf(const cwFixSta
     return Input{
         cwGeoReference::Anchor{cwGeoReference::Anchor::FixStation, fix.id()},
         fix.inputCS().trimmed(),
-        cwGeoPoint(fix.easting(), fix.northing(), fix.elevation())
+        fix.position()
     };
 }
 
@@ -236,10 +259,17 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherLayerInpu
         if (!cwCoordinateTransform::isValidCS(layerCS)) {
             continue;
         }
+        // Same domain rule as a fix station: a header, or a source-CS override,
+        // can put the cloud somewhere its own system doesn't reach, and a frame
+        // centered there is centered on the mistake.
+        const cwGeoPoint center = layer->sourceBboxCenter();
+        if (!cwCoordinateTransform::domainCheck(layerCS, center).isValid()) {
+            continue;
+        }
         inputs.append(Input{
             cwGeoReference::Anchor{cwGeoReference::Anchor::LazLayer, layer->id()},
             layerCS,
-            layer->sourceBboxCenter()
+            center
         });
     }
 
@@ -311,37 +341,46 @@ std::optional<cwGeoPoint> cwLocalProjectionManager::localPointOfFix(const cwFixS
     return localPointOf(inputOf(fix));
 }
 
+cwGeoReference* cwLocalProjectionManager::geoReference() const
+{
+    return m_region->geoReference();
+}
+
 cwRecenterCandidateModel* cwLocalProjectionManager::recenterCandidates()
 {
     if (m_recenterCandidates == nullptr) {
-        m_recenterCandidates = new cwRecenterCandidateModel(this, m_region);
+        m_recenterCandidates = new cwRecenterCandidateModel(this);
     }
     return m_recenterCandidates;
 }
 
-std::optional<cwFixStation> cwLocalProjectionManager::fixStationWithId(const QUuid& stationId) const
+std::optional<cwLocalProjectionManager::FoundFix>
+cwLocalProjectionManager::findFixStation(const QUuid& stationId) const
 {
-    for (cwCave* cave : m_region->caves()) {
-        if (cave == nullptr) {
-            continue;
+    std::optional<FoundFix> found;
+
+    forEachCave([&](cwCave* cave) {
+        cwFixStationModel* fixes = cave->fixStations();
+        const int row = fixes->indexOf(stationId);
+        if (row < 0) {
+            return true;
         }
-        for (const cwFixStation& fix : cave->fixStations()->fixStations()) {
-            if (fix.id() == stationId) {
-                return fix;
-            }
-        }
-    }
-    return std::nullopt;
+        found = FoundFix{cave, fixes->fixStationAt(row)};
+        return false;
+    });
+
+    return found;
 }
 
 bool cwLocalProjectionManager::recenterOnStation(const QUuid& stationId)
 {
-    const auto fix = fixStationWithId(stationId);
-    if (!fix.has_value()) {
+    const auto found = findFixStation(stationId);
+    if (!found.has_value()) {
         return false;
     }
+    const cwFixStation& fix = found->fix;
 
-    const auto local = localPointOfFix(*fix);
+    const auto local = localPointOfFix(fix);
     const auto center = dataCenter();
     if (!local.has_value() || !center.has_value()
             || !isWithinReach(*center, *local)) {
@@ -351,7 +390,7 @@ bool cwLocalProjectionManager::recenterOnStation(const QUuid& stationId)
         return false;
     }
 
-    return anchorTo(inputOf(*fix));
+    return anchorTo(inputOf(fix));
 }
 
 bool cwLocalProjectionManager::isCenteredOnDataCenter() const
@@ -519,29 +558,29 @@ void cwLocalProjectionManager::evaluate()
 
 void cwLocalProjectionManager::updateAnchorDescription()
 {
-    m_region->geoReference()->setAnchorDescription(resolveAnchorDescription());
+    const QString description = anchorDescription();
+    if (m_lastAnchorDescription == description) {
+        return;
+    }
+    m_lastAnchorDescription = description;
+    emit anchorDescriptionChanged();
 }
 
-QString cwLocalProjectionManager::resolveAnchorDescription() const
+QString cwLocalProjectionManager::anchorDescription() const
 {
     const cwGeoReference::Anchor anchor = m_region->geoReference()->anchor();
 
     switch (anchor.kind) {
     case cwGeoReference::Anchor::None:
         break;
-    case cwGeoReference::Anchor::FixStation:
-        for (cwCave* cave : m_region->caves()) {
-            if (cave == nullptr) {
-                continue;
-            }
-            const QList<cwFixStation>& fixes = cave->fixStations()->fixStations();
-            for (const cwFixStation& fix : fixes) {
-                if (fix.id() == anchor.id) {
-                    return QStringLiteral("%1 — %2").arg(fix.stationName(), cave->name());
-                }
-            }
+    case cwGeoReference::Anchor::FixStation: {
+        const auto found = findFixStation(anchor.id);
+        if (found.has_value()) {
+            return QStringLiteral("%1 — %2").arg(found->fix.stationName(),
+                                                 found->cave->name());
         }
         break;
+    }
     case cwGeoReference::Anchor::LazLayer:
         for (cwLazLayer* layer : m_region->lazLayers()->layers()) {
             if (layer != nullptr && layer->id() == anchor.id) {
@@ -601,7 +640,18 @@ void cwLocalProjectionManager::evaluateFrame()
             return;
         }
 
-        if (!m_anchorSeen) {
+        // "Hasn't loaded yet" only describes a layer: layers are rescanned off
+        // disk, while a fix station arrives with the cave that holds it. A fix
+        // anchor the region can't find at all is a deleted one, and the frame
+        // has to move off it even if it was never usable — that is the only way
+        // out for a project stored anchored on a fix whose coordinate its own
+        // system can't hold.
+        const cwGeoReference::Anchor anchor = geoReference->anchor();
+        const bool anchorFixDeleted =
+            anchor.kind == cwGeoReference::Anchor::FixStation
+            && !findFixStation(anchor.id).has_value();
+
+        if (!m_anchorSeen && !anchorFixDeleted) {
             // The anchor has never been among the inputs, so this is a project
             // whose layers haven't been rescanned yet, not one whose anchor was
             // deleted.

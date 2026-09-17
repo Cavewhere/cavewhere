@@ -88,7 +88,6 @@ private:
     QPointer<cwTrip> m_currentTrip;
 
     void createCurrentTrip();
-    void createGeometry2DPipeline();
 
     CenterlinePainterModel* m_centerlinePainterModel;
     PenLineModel* m_penLineModel;

@@ -250,13 +250,6 @@ QQ.Item {
     }
 
     QQ.Component {
-        id: pipelinePageComponent
-        PipelinePage {
-            anchors.fill: parent
-        }
-    }
-
-    QQ.Component {
         id: remoteManagementPageComponent
         RemoteManagementPage {
             anchors.fill: parent
@@ -298,7 +291,6 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Colors", colorsPageComponent)
-        RootData.pageSelectionModel.registerPage(null, "Pipeline", pipelinePageComponent)
         RootData.pageSelectionModel.registerPage(null, "Remote Settings", remoteManagementPageComponent)
         RootData.pageSelectionModel.registerPage(null, "History", gitHistoryPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Cavern", cavernOutputPageComponent)

@@ -23,16 +23,15 @@
 #include "cwPenStroke.h"
 #include "cwSketchData.h"
 #include "cwSketchViewState.h"
-#include "cwSurvey2DGeometryArtifact.h"
-#include "cwSurveyNetworkArtifact.h"
+#include "cwSurvey2DGeometrySource.h"
+#include "cwSurveyNetworkSource.h"
 #include "cwUnits.h"
 
 class cwScale;
 class cwKeywordModel;
 class cwPenStrokeModel;
 class cwAbstractScrapViewMatrix;
-class cwMatrix4x4Artifact;
-class cwSurvey2DGeometryRule;
+class cwSurvey2DGeometryBuilder;
 class cwTrip;
 
 // Result of cwSketch::findContinuationTarget. strokeIndex == -1 means no
@@ -84,8 +83,8 @@ class CAVEWHERE_LIB_EXPORT cwSketch : public QObject
     Q_PROPERTY(cwPenStrokeModel* strokeModel READ strokeModel CONSTANT)
     Q_PROPERTY(QUndoStack* undoStack READ undoStack CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
-    Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact WRITE setSurveyNetworkArtifact NOTIFY surveyNetworkArtifactChanged)
-    Q_PROPERTY(cwSurvey2DGeometryArtifact* survey2DGeometry READ survey2DGeometry CONSTANT)
+    Q_PROPERTY(cwSurveyNetworkSource* surveyNetworkSource READ surveyNetworkSource WRITE setSurveyNetworkSource NOTIFY surveyNetworkSourceChanged)
+    Q_PROPERTY(cwSurvey2DGeometrySource* survey2DGeometry READ survey2DGeometry CONSTANT)
     Q_PROPERTY(QString anchorStation READ anchorStation WRITE setAnchorStation NOTIFY anchorStationChanged)
     Q_PROPERTY(cwSketchViewState* viewState READ viewState CONSTANT)
 
@@ -140,12 +139,12 @@ public:
     cwKeywordModel   *keywordModel() const { return m_keywordModel; }
 
     // Region-wide network input; typically pointed at
-    // cwLinePlotManager::surveyNetworkArtifact(). When it or the view matrix
+    // cwLinePlotManager::surveyNetworkSource(). When it or the view matrix
     // changes, survey2DGeometry() regenerates.
-    cwSurveyNetworkArtifact   *surveyNetworkArtifact() const;
-    void setSurveyNetworkArtifact(cwSurveyNetworkArtifact *artifact);
+    cwSurveyNetworkSource   *surveyNetworkSource() const;
+    void setSurveyNetworkSource(cwSurveyNetworkSource *source);
 
-    cwSurvey2DGeometryArtifact *survey2DGeometry() const;
+    cwSurvey2DGeometrySource *survey2DGeometry() const;
 
     void setParentTrip(cwTrip *trip);
     Q_INVOKABLE cwTrip *parentTrip() const { return m_parentTrip; }
@@ -233,7 +232,7 @@ signals:
     // Toggles around the live drawing window (begin/endStroke). cwSketchManager
     // uses this to suppress async icon rendering while a stroke is in flight.
     void activeDrawingChanged(bool active);
-    void surveyNetworkArtifactChanged();
+    void surveyNetworkSourceChanged();
     void anchorStationChanged();
 
     // Fired from inside appendPoint() when probation passes the hit-rate
@@ -263,8 +262,7 @@ private:
     cwSketchViewState *m_viewState   = nullptr;
 
     cwAbstractScrapViewMatrix *m_viewMatrix      = nullptr;
-    cwMatrix4x4Artifact       *m_matrixArtifact  = nullptr;
-    cwSurvey2DGeometryRule    *m_geometryRule    = nullptr;
+    cwSurvey2DGeometryBuilder *m_geometryBuilder = nullptr;
     cwTrip                    *m_parentTrip      = nullptr;
 
     // -1 sentinel doubles as the "no flush scheduled" flag; see Decision 2
@@ -359,7 +357,7 @@ private:
 
     void applyStrokes(const QVector<cwPenStroke> &strokes);
     void rebuildViewMatrixForType();
-    void syncMatrixArtifact();
+    void syncBuilderViewMatrix();
     // Coalesces per-sample dataChanged emits into one queued call per row so
     // a fast pen drag doesn't flood Qt's event loop. Used by appendPoint
     // (both the probation and the post-probation paths).

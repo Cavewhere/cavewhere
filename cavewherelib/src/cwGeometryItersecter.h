@@ -260,11 +260,12 @@ public:
     // task panel. No-op until called.
     void setFutureManagerToken(cwFutureManagerToken token);
 
-    // Test-only: spin the event loop until the most recently scheduled
-    // build has completed (or returns immediately if no build is in
-    // flight). Mirrors cwProject::waitForFinish() / cwScrapManager::
-    // waitForFinish() — production code should listen for the bvhReady()
-    // signal instead, because waitForFinished spins a nested event loop.
+    // Test-only: spin the event loop until every scheduled build has
+    // completed, including a follow-up build queued behind the one in flight
+    // (or returns immediately if nothing is scheduled). Mirrors
+    // cwProject::waitForFinish() / cwScrapManager::waitForFinish() —
+    // production code should listen for the bvhReady() signal instead,
+    // because waitForFinished spins a nested event loop.
     void waitForFinish();
 
 signals:
@@ -450,10 +451,10 @@ private:
     // every time a Key's geometry is replaced. A build records the counter at
     // launch (its launchSeq) and installBuildResult publishes/banks a Key only
     // when its stamp is <= that launchSeq — i.e. it was not re-dirtied after
-    // the build started. This is what m_dirtyKeys cannot do on the cancel path:
-    // the replacement build clears m_dirtyKeys before a cancelled build's
-    // finished callback runs, so a re-dirtied Key would look clean and its
-    // stale sub-BVH would be banked. The stamp is ordering-independent.
+    // the build started. This is what m_dirtyKeys cannot do: a follow-up build
+    // clears m_dirtyKeys before the earlier build's finished callback runs, so
+    // a re-dirtied Key would look clean and its stale sub-BVH would be banked.
+    // The stamp is ordering-independent.
     quint64 m_mutationSeq = 0;
     QHash<Key, quint64> m_keyDirtySeq;
 
@@ -496,9 +497,18 @@ private:
     };
     mutable QHash<Key, MaskedBoxEntry> m_maskedBoxCache;
 
-    // Coalesces rapid mutations into a single rebuild and cancels the
-    // in-flight build when a new mutation arrives.
+    // Coalesces a synchronous burst of mutations into a single rebuild. Builds
+    // are never canceled: a mutation that arrives while a build runs queues a
+    // follow-up build instead (see requestBuild).
     AsyncFuture::Restarter<void> m_bvhRestarter;
+
+    // One build in flight, at most one pending. The follow-up build
+    // re-snapshots Nodes, so it covers every mutation made during the first.
+    // m_buildInFlight is set when a launch is requested (the restarter queues
+    // the actual start on the event loop) and cleared once that build has
+    // installed.
+    bool m_buildInFlight = false;
+    bool m_buildPending = false;
     cwFutureManagerToken m_futureManagerToken;
 
     // BuildPrim and BuildContext are defined in the .cpp; declared here so
@@ -514,15 +524,25 @@ private:
 
     // Invalidate the cached sub-BVH for one Object and schedule a rebuild.
     // Use for addObject (which always replaces) and any mutation that
-    // changed the Object's geometry. The schedule call is coalesced via
-    // m_bvhRestarter so back-to-back invalidations don't queue extra work.
+    // changed the Object's geometry. The schedule call goes through
+    // requestBuild, which coalesces back-to-back invalidations and queues
+    // behind a build already in flight.
     void scheduleObjectRebuild(const Key& key);
 
     // Schedule a rebuild that touches only the top-level BVH; cached
     // sub-BVHs are reused unchanged. Use for setModelMatrix (which leaves
     // model-space geometry intact) and removeObject (which only shrinks
-    // the set of objects).
+    // the set of objects). Queues behind a build in flight, like
+    // scheduleObjectRebuild.
     void scheduleTopLevelRebuild();
+
+    // The only place that talks to m_bvhRestarter. Launches when idle, sets
+    // m_buildPending otherwise.
+    void requestBuild();
+
+    // Called on every build completion, installed or not. Clears the in-flight
+    // flag and launches the pending follow-up build when there is one.
+    void finishBuildCycle();
 
     // The visibility view every query traverses against: the store's current
     // snapshot, or a default (everything-visible) one when no store is wired.
@@ -581,18 +601,23 @@ private:
 
     // Drain a finished build worker on the UI thread: promote its banked
     // sub-BVHs (worker-written `banked`) into m_subBvhs, and — when the run
-    // produced a BvhData (`built` non-null — i.e. the run was neither cancelled
-    // nor empty of primitives) — publish it as the live BVH and emit
-    // bvhReady(). Called from the build
-    // worker's finished watcher, which fires after the worker returns for
-    // cancelled and completed runs alike, so reading the worker-written
-    // arguments here is race-free. `launchSeq` is m_mutationSeq captured when
-    // the build launched; a Key re-dirtied since then (stamp > launchSeq) is
-    // skipped so a cancelled build never banks stale geometry. See
-    // launchBuildJob().
+    // produced a BvhData (`built` non-null — i.e. the run had primitives) —
+    // publish it as the live BVH and emit bvhReady(), then run
+    // finishBuildCycle() so a queued follow-up build launches. Called from the
+    // build worker's finished watcher, which fires after the worker returns, so
+    // reading the worker-written arguments here is race-free. `launchSeq` is
+    // m_mutationSeq captured when the build launched; a Key re-dirtied since
+    // then (stamp > launchSeq) is skipped so a build never banks stale
+    // geometry. See launchBuildJob().
     void installBuildResult(std::shared_ptr<BvhData> built,
                             const QHash<Key, std::shared_ptr<const SubBvh>>& banked,
                             quint64 launchSeq);
+
+    // The banking, filtering and publishing half of installBuildResult; split
+    // out so the build-cycle bookkeeping runs on every exit path.
+    void applyBuildResult(std::shared_ptr<BvhData> built,
+                          const QHash<Key, std::shared_ptr<const SubBvh>>& banked,
+                          quint64 launchSeq);
 
     // The readiness future for `key`: reused when a promise already exists
     // (first-publish-only keeps a resolved one resolved across rebuilds), else

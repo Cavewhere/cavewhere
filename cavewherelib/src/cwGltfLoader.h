@@ -14,6 +14,7 @@
 
 // Our includes
 #include "cwGeometry.h"
+#include "cwProgressNode.h"
 #include "CaveWhereLibExport.h"
 
 // tinygltf (forward declare to avoid heavy includes in headers)
@@ -85,7 +86,13 @@ class CAVEWHERE_LIB_EXPORT Loader
 {
 public:
     static SceneCPU loadGltf(const QString& filePath);
-    static SceneCPU loadGltf(const QString& filePath, const LoadOptions& options);
+
+    //`parent` is the progress node the load hangs its own steps off. A null
+    //scope leaves the load untracked, which is how every caller outside a
+    //tracked run reads a .glb.
+    static SceneCPU loadGltf(const QString& filePath,
+                             const LoadOptions& options,
+                             const cwProgressScope& parent = {});
 
 private:
     // No instances

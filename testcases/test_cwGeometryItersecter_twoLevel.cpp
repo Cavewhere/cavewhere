@@ -15,6 +15,7 @@
 #include <QThreadPool>
 #include <QVector3D>
 #include <QRay3D>
+#include <QSignalSpy>
 
 // SUT
 #include "cwGeometryItersecter.h"
@@ -69,7 +70,8 @@ QVector<QVector3D> deterministicCloud(int count, float range, const QVector3D& t
 // Warm-up shared by the Phase 4a banking tests: a one-point Object (id 1 at the
 // origin) plus a slow ~500k cloud (id 2) in a single build, pumped just long
 // enough that the microsecond point sub-BVH finishes while the cloud is still
-// building. Leaves the build in flight, ready to be cancelled.
+// building. Leaves the build in flight, ready for a mutation to queue a
+// follow-up build.
 //
 // The beat has to land inside a window with no main-thread signal at either
 // edge: a sub-BVH is banked only when the whole build's finished callback runs,
@@ -97,9 +99,24 @@ void seedPointAndSlowCloud(cwGeometryItersecter& intersector,
     QThread::msleep(kPointCompletesMs);
 
     INFO("the " << kPointCompletesMs << "ms beat outran the whole "
-         << kSlowCloudCount << "-point build, so there is no build left to "
-         << "cancel — shorten the beat or grow the cloud");
+         << kSlowCloudCount << "-point build, so there is no build left in "
+         << "flight — shorten the beat or grow the cloud");
     REQUIRE(intersector.debugStatistics().cachedSubBvhCount == 0);
+}
+
+// Pumps the event loop until `installed()` reports the first build has landed,
+// and fails the caller when none does.
+template <typename Predicate>
+void pumpUntilFirstInstall(Predicate installed)
+{
+    constexpr int kPollTimeoutMs = 10000;
+    QElapsedTimer pollTimer;
+    pollTimer.start();
+    while (pollTimer.elapsed() < kPollTimeoutMs && !installed()) {
+        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 100);
+    }
+    INFO("no build installed within " << kPollTimeoutMs << "ms");
+    REQUIRE(installed());
 }
 
 } // namespace
@@ -560,86 +577,90 @@ TEST_CASE("Stale install: a re-dirtied Key never reaches picks via a late instal
     }
 }
 
-TEST_CASE("A cancelled build banks its completed sub-BVHs for reuse",
-          "[cwGeometryItersecter][twoLevel][Issue505]")
+TEST_CASE("A mutation during a build queues one follow-up build instead of canceling",
+          "[cwGeometryItersecter][twoLevel][Issue505][Issue671]")
 {
-    // Phase 4a — readiness starvation. One restarter serves every build, so
-    // each mutation cancels the build in flight. If a cancelled build discarded
-    // the sub-BVHs it had already finished, a large first build repeatedly
-    // interrupted by interaction churn (a rotation drag restarts per mouse-move)
-    // would never make progress. The fix banks completed sub-BVHs across a
-    // cancel so the eventual uncancelled build starts warm.
+    // Builds are never canceled. A mutation that lands while a build runs sets
+    // the pending flag; the install callback launches exactly one follow-up
+    // build that re-snapshots Nodes. So the first build still publishes (every
+    // key it finished becomes pickable right away — issue #671) and the second
+    // publishes the mutation.
     //
-    // Here a one-point Object and a slow cloud share a single build. The build
-    // is cancelled while the cloud is still building, and the point's finished
-    // sub-BVH must land in the cache even though this build never publishes a
-    // BVH. Before the fix the cache stays empty on the cancel path.
-    //
-    // Timing: the point sub-BVH is microseconds and the cloud is far slower, so
-    // a short beat after the worker launches guarantees the point is done while
-    // the cloud is not — the same large-ratio assumption the stale-install test
-    // above relies on. cachedSubBvhCount is read through the debug-panel
-    // introspection API (debugStatistics), not test-only scaffolding.
+    // Here a one-point Object and a slow cloud share a single build. The cloud
+    // is nudged with setModelMatrix while that build is still running, so two
+    // builds install in total and the nudged position is what picks see, both
+    // from the first install (which patches matrices from the live Nodes and
+    // rebuilds the world-space top level from them) and from the follow-up.
 
     cwGeometryItersecter intersector;
-    seedPointAndSlowCloud(intersector, QVector3D(0.0f, 0.0f, 80.0f), 11);
+    constexpr float kCloudTargetX = 300.0f;
+    constexpr float kCloudTargetY = 300.0f;
+    constexpr float kCloudTargetZ = 80.0f;
+    seedPointAndSlowCloud(intersector,
+                          QVector3D(kCloudTargetX, kCloudTargetY, kCloudTargetZ), 11);
 
-    // Cancel the in-flight build. setModelMatrix on the cloud restarts the
-    // worker without dirtying Object 1, so its banked sub-BVH survives the
-    // install-time dirty/live filter.
+    QSignalSpy readySpy(&intersector, &cwGeometryItersecter::bvhReady);
+
+    // The nudge carries the cloud clear of the world box the worker computed
+    // from the launch-time matrix (the cloud spans 500 units), so a top level
+    // left at those bounds would miss the ray below outright.
+    constexpr float kNudgeX = 1000.0f;
     QMatrix4x4 nudge;
-    nudge.translate(1.0f, 0.0f, 0.0f);
+    nudge.translate(kNudgeX, 0.0f, 0.0f);
+
+    // The nudged cloud is pickable at its new position from the very first
+    // install, before the follow-up build re-snapshots the matrices. The pick
+    // runs inside the first bvhReady so it reads that install and no later one.
+    const QRay3D rayAtNudgedCloud(QVector3D(kNudgeX + kCloudTargetX, kCloudTargetY, 200.0f),
+                                  QVector3D(0.0f, 0.0f, -1.0f));
+    bool firstInstallSeen = false;
+    cwRayHit firstInstallHit;
+    QObject::connect(&intersector, &cwGeometryItersecter::bvhReady,
+                     &intersector, [&]() {
+        if (firstInstallSeen) {
+            return;
+        }
+        firstInstallSeen = true;
+        firstInstallHit = intersector.intersectsDetailed(rayAtNudgedCloud);
+    });
+
     intersector.setModelMatrix(cwRenderObjectId{}, 2, nudge);
 
-    // Pump until the cancelled build's finished callback banks Object 1. The
-    // replacement build rebuilds both Objects from a cold snapshot and takes
-    // far longer, so the cache passes through exactly one banked sub-BVH
-    // (0 -> 1 -> 2) and dwells there for the whole cloud rebuild. Before the
-    // fix the cancel path banks nothing, so the cache jumps straight from 0 to
-    // 2 when the replacement lands and this window (cachedSubBvhCount == 1)
-    // never appears — the poll times out and the CHECK fails.
-    constexpr int kBankPollTimeoutMs = 10000;
-    QElapsedTimer pollTimer;
-    pollTimer.start();
-    int cachedInWindow = 0;
-    while (pollTimer.elapsed() < kBankPollTimeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 100);
-        cachedInWindow = intersector.debugStatistics().cachedSubBvhCount;
-        if (cachedInWindow >= 1) {
-            break;
-        }
-    }
-    INFO("cachedInWindow=" << cachedInWindow
-         << " pollElapsedMs=" << pollTimer.elapsed());
-    CHECK(cachedInWindow == 1);
+    // Pump until the first build installs, so the assertion below is about two
+    // installs rather than a race with the follow-up launch.
+    pumpUntilFirstInstall([&]() { return firstInstallSeen; });
 
-    // Settle: the eventual build reuses the banked sub-BVH and publishes both
-    // Objects, so the point is pickable.
+    CHECK(firstInstallHit.hit());
+    if (firstInstallHit.hit()) {
+        CHECK(firstInstallHit.pointWorld().x()
+              == Approx(kNudgeX + kCloudTargetX).margin(1e-3));
+        CHECK(firstInstallHit.pointWorld().z() == Approx(kCloudTargetZ).margin(1e-3));
+    }
+
     intersector.waitForFinish();
+    INFO("bvhReady count=" << readySpy.count());
+    CHECK(readySpy.count() == 2);
+
     const QRay3D rayAtOne(QVector3D(0.0f, 0.0f, 100.0f),
                           QVector3D(0.0f, 0.0f, -1.0f));
     CHECK(intersector.intersectsDetailed(rayAtOne).hit());
+
+    // The follow-up build publishes the same nudged position.
+    const cwRayHit cloudHit = intersector.intersectsDetailed(rayAtNudgedCloud);
+    CHECK(cloudHit.hit());
+    if (cloudHit.hit()) {
+        CHECK(cloudHit.pointWorld().x() == Approx(kNudgeX + kCloudTargetX).margin(1e-3));
+    }
 }
 
-TEST_CASE("A cancelled build does not bank a sub-BVH re-dirtied mid-build",
-          "[cwGeometryItersecter][twoLevel][Issue505]")
+TEST_CASE("A key re-dirtied during a build publishes only from the follow-up build",
+          "[cwGeometryItersecter][twoLevel][Issue505][Issue671]")
 {
-    // Phase 4a corner: banking must NOT resurrect stale geometry. If a key is
-    // geometry-replaced (re-dirtied) while its build is in flight, the sub-BVH
-    // that build already finished is now stale, and the cancelled build must
-    // not promote it into the cache. The hazard is subtle: the replacement
-    // build's launch clears m_dirtyKeys before the cancelled build's finished
-    // callback runs, so an install that filters only on the live dirty set
-    // would see the key "clean" and bank the stale sub-BVH — which a later
-    // build could then reuse and publish, serving picks stale geometry (the
-    // #505 symptom).
-    //
-    // Mirror of the banking test above, but the cancel is triggered by
-    // re-adding the point with new geometry (re-dirtying it). The point's stale
-    // sub-BVH must be dropped, so the cache goes 0 -> 2 (the replacement builds
-    // both fresh) and never dwells at 1. If the stale sub-BVH is wrongly banked
-    // it sits in the cache at count 1 for the whole cloud rebuild, which the
-    // poll below reliably samples.
+    // Banking must not resurrect stale geometry, and neither must publishing.
+    // A key geometry-replaced while its build is in flight is stale in that
+    // build's result: the staleness filter nulls its slot, so the first install
+    // leaves the key out of picks, and only the follow-up build publishes it at
+    // its new position.
 
     cwGeometryItersecter intersector;
     // The cloud target sits off the x=y=0 and x=50,y=0 axes so it can't be hit
@@ -647,42 +668,116 @@ TEST_CASE("A cancelled build does not bank a sub-BVH re-dirtied mid-build",
     // checks).
     seedPointAndSlowCloud(intersector, QVector3D(300.0f, 300.0f, 80.0f), 13);
 
-    // Re-dirty Object 1 with new geometry. This cancels the in-flight build
-    // and makes the point's just-finished sub-BVH stale.
-    intersector.addObject(makePointObject(1, {QVector3D(50.0f, 0.0f, 0.0f)}));
+    QSignalSpy readySpy(&intersector, &cwGeometryItersecter::bvhReady);
 
-    // Poll across the replacement build's cloud rebuild. A wrongly-banked stale
-    // point sub-BVH sits in the cache at count 1 for that whole window; a
-    // correct run promotes nothing until the replacement lands both fresh
-    // (0 -> 2). Sample until both are cached (count 2) or timeout.
-    constexpr int kPollTimeoutMs = 10000;
-    QElapsedTimer pollTimer;
-    pollTimer.start();
-    bool sawStalePromotion = false;
-    int cached = 0;
-    while (pollTimer.elapsed() < kPollTimeoutMs) {
-        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 100);
-        cached = intersector.debugStatistics().cachedSubBvhCount;
-        if (cached == 1) {
-            sawStalePromotion = true;
-        }
-        if (cached >= 2) {
-            break;
-        }
-    }
-    INFO("cached=" << cached << " sawStalePromotion=" << sawStalePromotion
-         << " pollElapsedMs=" << pollTimer.elapsed());
-    CHECK_FALSE(sawStalePromotion);
+    constexpr float kNewPointX = 50.0f;
+    intersector.addObject(makePointObject(1, {QVector3D(kNewPointX, 0.0f, 0.0f)}));
 
-    // Settle: the replacement publishes the new geometry, so the point is
-    // pickable at its new position and not at the old one.
-    intersector.waitForFinish();
-    const QRay3D rayAtFifty(QVector3D(50.0f, 0.0f, 100.0f),
+    const QRay3D rayAtFifty(QVector3D(kNewPointX, 0.0f, 100.0f),
                             QVector3D(0.0f, 0.0f, -1.0f));
     const QRay3D rayAtZero(QVector3D(0.0f, 0.0f, 100.0f),
                            QVector3D(0.0f, 0.0f, -1.0f));
+
+    pumpUntilFirstInstall([&]() { return !readySpy.isEmpty(); });
+
+    // The first install dropped the stale point, so nothing picks at the old
+    // position and the key is not pick-ready yet.
+    CHECK_FALSE(intersector.intersectsDetailed(rayAtZero).hit());
+    CHECK_FALSE(intersector.isObjectPickReady({cwRenderObjectId{}, 1}));
+
+    intersector.waitForFinish();
+    INFO("bvhReady count=" << readySpy.count());
+    CHECK(readySpy.count() == 2);
     CHECK(intersector.intersectsDetailed(rayAtFifty).hit());
     CHECK_FALSE(intersector.intersectsDetailed(rayAtZero).hit());
+}
+
+TEST_CASE("An object added during a build becomes pick-ready before the follow-up build finishes",
+          "[cwGeometryItersecter][twoLevel][Issue671]")
+{
+    // The heart of issue #671: an item delivered mid-run must not hold back the
+    // items already built. The first install publishes objects 1 and 2 — the
+    // ones its snapshot contained — and object 3 waits for the follow-up build.
+    // Under the old cancel behavior the first (and only) install contained all
+    // three, so everything appeared in the same frame.
+
+    cwGeometryItersecter intersector;
+    seedPointAndSlowCloud(intersector, QVector3D(300.0f, 300.0f, 80.0f), 17);
+
+    constexpr float kLatePointX = 70.0f;
+    bool firstInstallSeen = false;
+    bool readyAtFirstInstall = false;
+    QObject::connect(&intersector, &cwGeometryItersecter::bvhReady,
+                     &intersector, [&]() {
+        if (firstInstallSeen) {
+            return;
+        }
+        firstInstallSeen = true;
+        readyAtFirstInstall = intersector.isObjectPickReady({cwRenderObjectId{}, 1})
+                && intersector.isObjectPickReady({cwRenderObjectId{}, 2})
+                && !intersector.isObjectPickReady({cwRenderObjectId{}, 3});
+    });
+
+    intersector.addObject(makePointObject(3, {QVector3D(kLatePointX, 0.0f, 0.0f)}));
+
+    pumpUntilFirstInstall([&]() { return firstInstallSeen; });
+    CHECK(readyAtFirstInstall);
+
+    intersector.waitForFinish();
+    CHECK(intersector.isObjectPickReady({cwRenderObjectId{}, 1}));
+    CHECK(intersector.isObjectPickReady({cwRenderObjectId{}, 2}));
+    CHECK(intersector.isObjectPickReady({cwRenderObjectId{}, 3}));
+}
+
+TEST_CASE("Several additions during a build coalesce into one follow-up build",
+          "[cwGeometryItersecter][twoLevel][Issue671]")
+{
+    // At most one build is pending, so a burst of additions during a build
+    // costs exactly one follow-up build, not one per addition.
+
+    cwGeometryItersecter intersector;
+    seedPointAndSlowCloud(intersector, QVector3D(300.0f, 300.0f, 80.0f), 19);
+
+    QSignalSpy readySpy(&intersector, &cwGeometryItersecter::bvhReady);
+
+    constexpr uint64_t kFirstAddedId = 3;
+    constexpr int kAddedCount = 5;
+    constexpr float kAddedSpacingX = 10.0f;
+    for (int i = 0; i < kAddedCount; ++i) {
+        const float x = kAddedSpacingX * static_cast<float>(i + 1);
+        intersector.addObject(makePointObject(kFirstAddedId + static_cast<uint64_t>(i),
+                                              {QVector3D(x, 0.0f, 0.0f)}));
+    }
+
+    intersector.waitForFinish();
+    INFO("bvhReady count=" << readySpy.count());
+    CHECK(readySpy.count() == 2);
+
+    CHECK(intersector.isObjectPickReady({cwRenderObjectId{}, 1}));
+    CHECK(intersector.isObjectPickReady({cwRenderObjectId{}, 2}));
+    for (int i = 0; i < kAddedCount; ++i) {
+        CHECK(intersector.isObjectPickReady(
+                  {cwRenderObjectId{}, kFirstAddedId + static_cast<uint64_t>(i)}));
+    }
+}
+
+TEST_CASE("waitForFinish covers the queued follow-up build",
+          "[cwGeometryItersecter][twoLevel][Issue671]")
+{
+    // One waitForFinish() call must cover the follow-up build too, even though
+    // that build is launched from the first build's install callback.
+
+    cwGeometryItersecter intersector;
+    seedPointAndSlowCloud(intersector, QVector3D(300.0f, 300.0f, 80.0f), 23);
+
+    constexpr float kLatePointX = 70.0f;
+    intersector.addObject(makePointObject(3, {QVector3D(kLatePointX, 0.0f, 0.0f)}));
+
+    intersector.waitForFinish();
+
+    CHECK(intersector.isObjectPickReady({cwRenderObjectId{}, 3}));
+    constexpr int kExpectedCachedSubBvhs = 3;
+    CHECK(intersector.debugStatistics().cachedSubBvhCount == kExpectedCachedSubBvhs);
 }
 
 // ============================================================================

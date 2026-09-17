@@ -673,6 +673,130 @@ TEST_CASE("cwCoordinateSystem round-trips every datum's CS strings",
     }
 }
 
+TEST_CASE("cwCoordinateSystem owns the picker's datum policy",
+          "[cwCoordinateSystem][datumPolicy]")
+{
+    using Mode = cwCoordinateSystem::Mode;
+
+    SECTION("csFor builds a mode's system on the datum it names")
+    {
+        // The zone and hemisphere are along for the ride in Lat/Lon.
+        CHECK(cwCoordinateSystem::csFor(Mode::LatLon, 16, true, "EPSG:6318") == "EPSG:6318");
+        CHECK(cwCoordinateSystem::csFor(Mode::LatLon, 32, false, "EPSG:4258") == "EPSG:4258");
+
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 16, true, "EPSG:6318") == "EPSG:6345");
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 32, true, "EPSG:4258") == "EPSG:25832");
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 16, true, "EPSG:4326") == "EPSG:32616");
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 16, false, "EPSG:4326") == "EPSG:32716");
+    }
+
+    SECTION("A datum the mode can't reach falls back to WGS84")
+    {
+        CHECK(cwCoordinateSystem::csFor(Mode::LatLon, 16, true, "EPSG:26916") == "EPSG:4326");
+        CHECK(cwCoordinateSystem::csFor(Mode::LatLon, 16, true, "") == "EPSG:4326");
+
+        // NAD83(2011)'s series stops at zone 19 and has no southern half.
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 20, true, "EPSG:6318") == "EPSG:32620");
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 16, false, "EPSG:6318") == "EPSG:32716");
+        // NAD83(CSRS) ships lat/long only, so every UTM zone falls back.
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 11, true, "EPSG:4617") == "EPSG:32611");
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 16, true, "EPSG:26916") == "EPSG:32616");
+    }
+
+    SECTION("A mode with no system of its own builds nothing")
+    {
+        CHECK(cwCoordinateSystem::csFor(Mode::Local, 16, true, "EPSG:4326").isEmpty());
+        CHECK(cwCoordinateSystem::csFor(Mode::Custom, 16, true, "EPSG:4326").isEmpty());
+
+        // Not even WGS84 has a zone outside 1..60 to fall back to.
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 0, true, "EPSG:4326").isEmpty());
+        CHECK(cwCoordinateSystem::csFor(Mode::UTM, 61, true, "EPSG:6318").isEmpty());
+    }
+
+    SECTION("datumChoices narrows the offered list to what the mode can build")
+    {
+        const QStringList all = cwCoordinateSystem::datumList();
+
+        CHECK(cwCoordinateSystem::datumChoices(Mode::LatLon, 16, true, all) == all);
+
+        // Offered from the whole table, UTM is the series list — zone 16N is
+        // North American, spelled out, and every zone agrees with utmDatumList.
+        CHECK(cwCoordinateSystem::datumChoices(Mode::UTM, 16, true, all)
+              == QStringList({"EPSG:4326", "EPSG:6318", "EPSG:6365"}));
+        for (const bool north : {true, false}) {
+            for (int zone = kFirstUtmZone; zone <= kLastUtmZone; ++zone) {
+                INFO("zone " << zone << (north ? " north" : " south"));
+                CHECK(cwCoordinateSystem::datumChoices(Mode::UTM, zone, north, all)
+                      == cwCoordinateSystem::utmDatumList(zone, north));
+            }
+        }
+
+        // A host offering fewer datums keeps its own order and gets no extras.
+        CHECK(cwCoordinateSystem::datumChoices(Mode::UTM, 16, true,
+                                               {"EPSG:6365", "EPSG:4326", "EPSG:4258"})
+              == QStringList({"EPSG:6365", "EPSG:4326"}));
+        CHECK(cwCoordinateSystem::datumChoices(Mode::LatLon, 16, true, {"EPSG:26916"}).isEmpty());
+
+        CHECK(cwCoordinateSystem::datumChoices(Mode::Local, 16, true, all).isEmpty());
+        CHECK(cwCoordinateSystem::datumChoices(Mode::Custom, 16, true, all).isEmpty());
+    }
+
+    SECTION("Every datum datumChoices offers builds its own system, and every one it drops "
+            "falls back")
+    {
+        const QStringList all = cwCoordinateSystem::datumList();
+        for (const Mode mode : {Mode::LatLon, Mode::UTM}) {
+            for (const bool north : {true, false}) {
+                for (int zone = kFirstUtmZone; zone <= kLastUtmZone; ++zone) {
+                    const QStringList offered =
+                        cwCoordinateSystem::datumChoices(mode, zone, north, all);
+                    const QString fallback = mode == Mode::LatLon
+                                                 ? cwCoordinateSystem::wgs84()
+                                                 : cwCoordinateSystem::utmZoneToEpsg(zone, north);
+                    REQUIRE_FALSE(fallback.isEmpty());
+
+                    for (const QString& code : all) {
+                        const QString cs = cwCoordinateSystem::csFor(mode, zone, north, code);
+                        INFO((mode == Mode::LatLon ? "lat/lon " : "utm ")
+                             << code.toStdString() << (north ? " north" : " south") << " zone "
+                             << zone << " -> " << cs.toStdString());
+                        if (offered.contains(code)) {
+                            CHECK(cwCoordinateSystem::datumFor(cs) == code);
+                        } else {
+                            CHECK(cs == fallback);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    SECTION("recommendedDatum names the first plate-fixed datum a WGS84 row could move to")
+    {
+        CHECK(cwCoordinateSystem::recommendedDatum({"EPSG:4326", "EPSG:6318"}, "EPSG:4326")
+              == "EPSG:6318");
+        // The list's order decides, not the table's.
+        CHECK(cwCoordinateSystem::recommendedDatum({"EPSG:4326", "EPSG:6365", "EPSG:6318"},
+                                                   "EPSG:4326")
+              == "EPSG:6365");
+        CHECK(cwCoordinateSystem::recommendedDatum({"EPSG:6318", "EPSG:4326"}, "EPSG:4326")
+              == "EPSG:6318");
+    }
+
+    SECTION("A row already off WGS84 is recommended nothing")
+    {
+        CHECK(cwCoordinateSystem::recommendedDatum({"EPSG:4326", "EPSG:6318"}, "EPSG:6318")
+              .isEmpty());
+        CHECK(cwCoordinateSystem::recommendedDatum({"EPSG:4326", "EPSG:6318"}, "").isEmpty());
+    }
+
+    SECTION("A list holding nothing but WGS84 recommends nothing")
+    {
+        CHECK(cwCoordinateSystem::recommendedDatum({"EPSG:4326"}, "EPSG:4326").isEmpty());
+        CHECK(cwCoordinateSystem::recommendedDatum({}, "EPSG:4326").isEmpty());
+    }
+}
+
 TEST_CASE("cwCoordinateTransform::geographicDatumFor names the datum a system is on",
           "[cwCoordinateSystem][geographicDatumFor]")
 {

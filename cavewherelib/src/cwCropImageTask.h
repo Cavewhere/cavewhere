@@ -16,6 +16,7 @@
 #include "cwGlobals.h"
 #include "cwTextureUploadTask.h"
 #include "cwTrackedImage.h"
+#include "cwProgressNode.h"
 
 //Qt includes
 #include <QRectF>
@@ -51,6 +52,10 @@ public:
     void setFormatType(cwTextureUploadTask::Format format);
     void setDataRootDir(const QDir& dataRootDir);
 
+    //The node this crop hangs its progress children off. Null leaves the crop
+    //untracked, which is how every caller outside a tracked run uses it.
+    void setProgressParent(cwProgressNodePtr parent);
+
     QFuture<Result> crop();
 
 protected:
@@ -62,6 +67,7 @@ private:
     QRectF CropRect;
     cwTextureUploadTask::Format Format = cwTextureUploadTask::Unknown;
     QDir DataRootDir;
+    cwProgressNodePtr m_progressParent;
 
     //Output
     cwImage CroppedImage;

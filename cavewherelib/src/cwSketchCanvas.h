@@ -24,7 +24,7 @@
 class cwSketch;
 class cwInfiniteGridModel;
 class cwCenterlineSketchPainterModel;
-class cwSurvey2DGeometryArtifact;
+class cwSurvey2DGeometrySource;
 class cwTrip;
 class cwScrapManager;
 class QAbstractItemModel;
@@ -115,7 +115,7 @@ private:
     QMetaObject::Connection m_scrapDebugChangedConnection;
     QMetaObject::Connection m_viewStateDebugChangedConnection;
     cwCenterlineSketchPainterModel *m_linePlotModel = nullptr;
-    cwSurvey2DGeometryArtifact *m_linePlotGeometry = nullptr;
+    cwSurvey2DGeometrySource *m_linePlotGeometry = nullptr;
     QPointer<cwTrip> m_acquiredTrip;
     QMetaObject::Connection m_linePlotUpdatedConnection;
     QMetaObject::Connection m_anchorStationChangedConnection;

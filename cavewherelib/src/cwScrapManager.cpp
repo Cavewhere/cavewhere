@@ -7,7 +7,7 @@
 
 //Our includes
 #include "cwScrapManager.h"
-#include "cwRestarterTracking.h"
+#include "cwProgressNode.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -66,6 +66,9 @@ namespace {
 inline const QString kSketchTextureCacheKeyPrefix =
     QStringLiteral("sketch-texture");
 
+//What the task list calls a scrap run
+inline const QString kScrapJobName = QStringLiteral("Updating Scraps");
+
 } // namespace
 
 // A dirty scrap is only worth (re)triangulating once it is out of editing and
@@ -82,8 +85,6 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     m_renderScraps(nullptr),
     m_warpingSettings(new cwTriangulateWarping(this))
 {
-    cwTrackRestarter(FutureManagerToken, TriangulateRestarter, QStringLiteral("Updating Scraps"));
-
     //Warping changes mark every scrap dirty; the auto-update policy (via
     //cwUpdateCoordinator) decides whether to run. Uncoordinated managers
     //recompute eagerly.
@@ -123,6 +124,11 @@ cwScrapManager::~cwScrapManager()
     //from ~Restarter, which cancels the inner future synchronously as
     //TriangulateRestarter is destroyed.
     TriangulateRestarter.future().cancel();
+
+    //The row would otherwise outlive the run that feeds it
+    if(m_progressRoot) {
+        m_progressRoot->cancel();
+    }
 }
 
 /**
@@ -1112,7 +1118,8 @@ void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
     runIfStandalone();
 }
 
-QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps) const
+QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps,
+                                                                                 const cwProgressNodePtr& progressRoot) const
 {
     QList<TriangulatedScrapResult> results;
 
@@ -1129,6 +1136,7 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
     }
 
     cwTriangulateTask task;
+    task.setProgressRoot(progressRoot);
     task.setDataRootDir(Project->dataRootDir());
     task.setScrapData(scrapData);
     task.setFormatType(cwTextureUploadTask::format());
@@ -1184,6 +1192,18 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     const QFuture<void> task = beginRun();
     emit updateStateChanged();
 
+    //One tree, and one row, per run. Created here rather than in startTask so
+    //the row appears the moment the run is dispatched, and reused when a
+    //dispatch lands on a live run: the restarter coalesces a burst of edits
+    //into one run, and one run is one row.
+    if(!m_progressRoot) {
+        m_progressRoot = cwProgressNode::createRoot(kScrapJobName);
+
+        if(FutureManagerToken.isValid()) {
+            FutureManagerToken.addJob(cwFuture(m_progressRoot->future(), kScrapJobName, m_progressRoot));
+        }
+    }
+
     auto startTask = [this]() {
 
         //Running
@@ -1199,7 +1219,13 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             return AsyncFuture::completed();
         }
 
-        auto triangulationResults = triangulateScraps(dirtyScraps);
+        //The loop knows its count, so hint it. Nothing below here declares
+        //anything.
+        if(m_progressRoot) {
+            m_progressRoot->expectChildren(dirtyScraps.size());
+        }
+
+        auto triangulationResults = triangulateScraps(dirtyScraps, m_progressRoot);
 
         if(triangulationResults.isEmpty()) {
             finishScrapTask();
@@ -1632,6 +1658,11 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
 
 void cwScrapManager::finishScrapTask()
 {
+    if(m_progressRoot) {
+        m_progressRoot->finish();
+        m_progressRoot.reset();
+    }
+
     if(!isRunning()) {
         return;
     }

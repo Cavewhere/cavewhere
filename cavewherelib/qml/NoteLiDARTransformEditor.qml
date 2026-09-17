@@ -275,7 +275,7 @@ QQ.Item {
                     //unitless numerator against a real-world denominator
                     onPaperHasUnits: false
                     onScaleInteractionActivated: if (editor.interactionManager && editor.scaleInteraction) {
-                        editor.interactionManager.active(editor.scaleInteraction)
+                        editor.scaleInteraction.activate()
                     }
                 }
 

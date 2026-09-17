@@ -94,21 +94,21 @@ void appendEmptyFix(cwCavingRegion* region,
 }
 
 //! The system \a csArgument names — the survex spelling read back off, so these
-//! tests compare systems rather than quoting. A CUSTOM argument carries the
-//! system inline or points at a `.prj` beside the file, and \a directory is
-//! where that file is.
+//! tests compare systems rather than quoting. The argument carries the system
+//! inline, or a FILE argument points at a `.prj` beside the file, and
+//! \a directory is where that file is.
 QString namedSystem(const QString& csArgument, const QDir& directory)
 {
+    const QString reference = cwSurvexCS::sidecarFileReference(csArgument);
+    if (!reference.isEmpty()) {
+        QFile sidecar(directory.filePath(reference));
+        REQUIRE(sidecar.open(QIODevice::ReadOnly));
+        return QString::fromUtf8(sidecar.readAll()).trimmed();
+    }
+
     const QString custom = QStringLiteral("CUSTOM ");
     if (!csArgument.startsWith(custom)) {
         return csArgument;
-    }
-
-    const QString argument = csArgument.mid(custom.size()).trimmed();
-    if (argument.startsWith(QLatin1Char('@'))) {
-        QFile sidecar(directory.filePath(argument.mid(1)));
-        REQUIRE(sidecar.open(QIODevice::ReadOnly));
-        return QString::fromUtf8(sidecar.readAll()).trimmed();
     }
 
     //An inline system goes back through the production reader, so the survex

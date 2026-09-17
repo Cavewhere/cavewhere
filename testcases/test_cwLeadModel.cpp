@@ -76,9 +76,8 @@ namespace {
 //Regression test for issue #662: cwLeadModel changes its row count when a
 //scrap comes or goes, so it has to say so the way every other model does.
 //
-//Each row count is checked before the rows themselves: stale offsets send
-//scrapAndIndex() off the front of OffsetToScrap, so a wrong count has to stop
-//the section rather than fall through to reading rows.
+//Each row count is checked before the rows themselves, so a wrong count stops
+//the section rather than falling through to reading rows that moved.
 TEST_CASE("cwLeadModel should follow scraps coming and going", "[cwLeadModel]")
 {
     TestHelper helper;
@@ -107,6 +106,26 @@ TEST_CASE("cwLeadModel should follow scraps coming and going", "[cwLeadModel]")
         REQUIRE(model.rowCount() == 5);
         CHECK(modelLeadDescriptions(model)
               == leadDescriptions(kFirstNote, 3) + leadDescriptions(kSecondNote, 2));
+    }
+
+    //A scrap holds no rows until it holds leads, so it shares the first row of
+    //whichever scrap follows it. Looking a row up has to reach past that tie to
+    //the scrap that owns the row, and adding to the empty scrap has to land its
+    //lead between its neighbors rather than at the end.
+    SECTION("A scrap without leads sitting between two that have them") {
+        firstNote->addScrap(new cwScrap());
+        addNoteWithLeads(helper, trip, kSecondNote, 2);
+
+        REQUIRE(model.rowCount() == 5);
+        CHECK(modelLeadDescriptions(model)
+              == leadDescriptions(kFirstNote, 3) + leadDescriptions(kSecondNote, 2));
+
+        const QString middle = QStringLiteral("Middle lead");
+        REQUIRE(helper.addScrapLead(firstNote, 1, QPointF(0, 0), kLeadSize, middle));
+
+        REQUIRE(model.rowCount() == 6);
+        CHECK(modelLeadDescriptions(model)
+              == leadDescriptions(kFirstNote, 3) + QStringList{middle} + leadDescriptions(kSecondNote, 2));
     }
 
     //Both removals take the same 3 leads away, leaving the second note's 2

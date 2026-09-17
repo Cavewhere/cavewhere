@@ -68,19 +68,21 @@ TEST_CASE("A PROJ string survives the round trip through survex's syntax", "[cwS
 
 TEST_CASE("fromSurvexCS leaves a sidecar reference to the file it names", "[cwSurvexCS]")
 {
-    //`CUSTOM "@name.prj"` says the system is in that file. Reading the argument
-    //itself would make "@name.prj" the coordinate system, which names no system
-    //PROJ knows and hides the reference from whoever resolves it.
-    CHECK_FALSE(fromSurvexCS(QStringLiteral("CUSTOM \"@My Cave.prj\"")).has_value());
-    CHECK_FALSE(fromSurvexCS(QStringLiteral("CUSTOM \"@region.prj\"")).has_value());
+    //`FILE name.prj` says the system is in that file, so the argument carries a
+    //file name where a system would go. Answering with one would name a system
+    //PROJ never heard of and hide the reference from whoever resolves it.
+    CHECK_FALSE(fromSurvexCS(QStringLiteral("FILE \"My Cave.prj\"")).has_value());
+    CHECK_FALSE(fromSurvexCS(QStringLiteral("FILE region.prj")).has_value());
 
-    //The unquoted spelling is the same reference, and survex defines no other
-    //meaning for it either.
-    CHECK_FALSE(fromSurvexCS(QStringLiteral("CUSTOM @region.prj")).has_value());
+    //sidecarFileReference() is the one that answers, and it reads both
+    //spellings back as the name itself.
+    CHECK(cwSurvexCS::sidecarFileReference(QStringLiteral("FILE \"My Cave.prj\""))
+          == QStringLiteral("My Cave.prj"));
+    CHECK(cwSurvexCS::sidecarFileReference(QStringLiteral("FILE region.prj"))
+          == QStringLiteral("region.prj"));
 
-    //A reference naming no file is still a reference, so "@" stays out of the
-    //systems as well.
-    CHECK_FALSE(fromSurvexCS(QStringLiteral("CUSTOM \"@\"")).has_value());
+    //A system spelled out on the line is no reference, so the answer is empty.
+    CHECK(cwSurvexCS::sidecarFileReference(QStringLiteral("EPSG:32616")).isEmpty());
 }
 
 TEST_CASE("fromSurvexCS reads the keyword systems", "[cwSurvexCS]")
@@ -163,17 +165,17 @@ TEST_CASE("A system carrying a quote is written to a .prj beside the file",
                                        cwSurvexCS::SidecarPolicy::BundledCavern);
 
     CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars)
-          == QStringLiteral("CUSTOM @region.prj"));
+          == QStringLiteral("FILE region.prj"));
 
     //The same system asked for again takes the file it already has, so two *cs
     //lines naming one system stay one file.
     CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars)
-          == QStringLiteral("CUSTOM @region.prj"));
+          == QStringLiteral("FILE region.prj"));
 
     //A second system takes its own, or the last one written would decide what
     //both *cs lines resolve to.
     CHECK(cwSurvexCS::toSurvexCS(otherWkt, sidecars)
-          == QStringLiteral("CUSTOM @region-2.prj"));
+          == QStringLiteral("FILE region-2.prj"));
 
     //Nothing is on disk until write().
     CHECK_FALSE(QFile::exists(dir.filePath(QStringLiteral("region.prj"))));
@@ -190,8 +192,8 @@ TEST_CASE("A system carrying a quote is written to a .prj beside the file",
 
 TEST_CASE("A .prj whose name has a space is quoted whole", "[cwSurvexCS]")
 {
-    //Survex reads @"My Cave.prj" as one token either way it is quoted; this is
-    //the spelling read_string() keeps intact.
+    //Survex reads the name after FILE with read_string(), so a name carrying a
+    //space arrives whole only inside quotes.
     const QString wkt = QStringLiteral(R"WKT(PROJCRS["A",ID["EPSG",32616]])WKT");
 
     QTemporaryDir dir;
@@ -200,13 +202,13 @@ TEST_CASE("A .prj whose name has a space is quoted whole", "[cwSurvexCS]")
                                        cwSurvexCS::SidecarPolicy::BundledCavern);
 
     CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars)
-          == QStringLiteral("CUSTOM \"@My Cave.prj\""));
+          == QStringLiteral("FILE \"My Cave.prj\""));
 }
 
 TEST_CASE("Official syntax spells a quote-carrying system out on the line",
           "[cwSurvexCS]")
 {
-    //The @ reference only the bundled cavern reads, so a file for everybody
+    //The file reference only the bundled cavern reads, so a file for everybody
     //else names the system PROJ identifies it as.
     const QString wgs84Wkt = QStringLiteral(
         R"WKT(GEOGCRS["WGS 84",DATUM["World Geodetic System 1984",)WKT"
@@ -238,10 +240,10 @@ TEST_CASE("A retargeted writer names its sidecars after the new file", "[cwSurve
 
     cwSurvexCS::SidecarWriter sidecars(dir.filePath(QStringLiteral("first.svx")),
                                        cwSurvexCS::SidecarPolicy::BundledCavern);
-    CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars) == QStringLiteral("CUSTOM @first.prj"));
+    CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars) == QStringLiteral("FILE first.prj"));
 
     sidecars.setSurvexFile(dir.filePath(QStringLiteral("second.svx")));
-    CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars) == QStringLiteral("CUSTOM @second.prj"));
+    CHECK(cwSurvexCS::toSurvexCS(wkt, sidecars) == QStringLiteral("FILE second.prj"));
 
     //The first file's reservation went with it, so the second export writes the
     //one sidecar it references.

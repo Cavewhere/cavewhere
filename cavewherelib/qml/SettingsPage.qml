@@ -17,7 +17,9 @@ StandardPage {
             Layout.maximumWidth: 200
             implicitWidth: 200
 
-            model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance", "Rendering", "Sketch", "Units"]
+            // Sketch is still in development; its tab is hidden for this release (#587).
+            // model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance", "Rendering", "Sketch", "Units"]
+            model: ["Jobs", "Warping", "PDF / SVG", "Git", "Appearance", "Rendering", "Units"]
         }
 
         QC.ScrollView {
@@ -57,9 +59,9 @@ StandardPage {
                     objectName: "renderingSettingsItem"
                 }
 
-                SketchSettingsItem {
+                // SketchSettingsItem {
 
-                }
+                // }
 
                 UnitsSettingsItem {
 

@@ -9,20 +9,26 @@
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
 #include "cwRenderTexturedItems.h"
+#include "cwProgressNode.h"
 #include "LoadProjectHelper.h"
+#include "asyncfuture.h"
 
 //Qt includes
 #include <QBuffer>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QImage>
 #include <QTemporaryDir>
+#include <QtConcurrent>
 
 //AsyncFuture includes
 #include <asyncfuture.h>
 
 //Std includes
+#include <algorithm>
 #include <cstring>
 
 namespace {
@@ -538,4 +544,148 @@ TEST_CASE("Scrap and glTF cache keys share the encode generation", "[Gltf][cwGlt
     const QString suffix = cw::ktx2::cacheKeyId(QString());
     CHECK(item.texture.streamed().key.id.contains(suffix));
     CHECK(crop.compressedKey.id.contains(suffix));
+}
+
+namespace {
+
+//Bytes enough to take the checksum through several chunks.
+constexpr qint64 kChecksumFileMegabytes = 3;
+constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
+
+//Records what a root's promise published while a worker filled the tree.
+class ProgressRecorder
+{
+public:
+    explicit ProgressRecorder(const cwProgressNodePtr& root) :
+        m_root(root)
+    {
+        QObject::connect(&m_watcher, &QFutureWatcherBase::progressValueChanged,
+                         &m_watcher, [this](int value) { m_values.append(value); });
+        QObject::connect(&m_watcher, &QFutureWatcherBase::finished,
+                         &m_watcher, [this]() { m_delivered = true; });
+        m_watcher.setFuture(root->future());
+    }
+
+    //Waits for the worker, then for every value the watcher still has in
+    //flight: the watcher posts them, so they arrive only through the loop.
+    void waitForFinished(QFuture<void> work)
+    {
+        work.waitForFinished();
+        AsyncFuture::waitForFinished(m_root->future());
+        while(!m_delivered) {
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents);
+        }
+    }
+
+    const QList<int>& values() const { return m_values; }
+
+private:
+    cwProgressNodePtr m_root;
+    QFutureWatcher<void> m_watcher;
+    QList<int> m_values;
+    bool m_delivered = false;
+};
+
+}
+
+TEST_CASE("Loading a glTF reports progress as it parses", "[cwGltfLoader][Issue671]")
+{
+    // A LiDAR run's row has to keep moving while a big scan loads, so the load
+    // grows a node per phase rather than sitting still for seconds.
+    const QString gltfPath = copyToTempFolder(testcasesDatasetPath("test_cwGltfLoader/test.glb"));
+    REQUIRE_FALSE(gltfPath.isEmpty());
+
+    cw::gltf::LoadOptions options;
+    options.requestedLayout = cwRenderTexturedItems::geometryLayout();
+
+    auto root = cwProgressNode::createRoot(QStringLiteral("Triangulating LiDAR notes"));
+    root->expectChildren(1);
+
+    ProgressRecorder recorder(root);
+
+    QFuture<void> work = QtConcurrent::run([root, gltfPath, options]() {
+        const cwProgressScope scope(root);
+        cw::gltf::Loader::loadGltf(gltfPath, options, scope);
+    });
+
+    recorder.waitForFinished(work);
+
+    // The load grew its own phases under the root...
+    CHECK_FALSE(root->isLeaf());
+    CHECK(root->activeChildren().isEmpty());
+
+    // ...and the bar climbed through them, in order, to full.
+    REQUIRE(recorder.values().size() >= 2);
+    CHECK(std::is_sorted(recorder.values().begin(), recorder.values().end()));
+    CHECK(recorder.values().last() == root->future().progressMaximum());
+}
+
+TEST_CASE("The glTF file checksum reports as it reads", "[cwGltfLoader][Issue671]")
+{
+    // Hashing a multi-gigabyte scan is the first thing a note does, and a bar
+    // that only moves when it finishes reads as a hang.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir dataRootDir(tempDir.path());
+    const QString gltfPath = writeGltfFile(
+        dataRootDir, QByteArray(kChecksumFileMegabytes * kBytesPerMegabyte, 'g'));
+    REQUIRE_FALSE(gltfPath.isEmpty());
+
+    auto root = cwProgressNode::createRoot(QStringLiteral("Triangulating LiDAR notes"));
+    root->expectChildren(1);
+
+    ProgressRecorder recorder(root);
+
+    const QString dataRootPath = dataRootDir.path();
+    QFuture<void> work = QtConcurrent::run([root, dataRootPath, gltfPath]() {
+        const cwProgressScope scope(root);
+        const cwGltfBaseColorTexture baseColorTexture(dataRootPath, gltfPath, scope);
+        Q_UNUSED(baseColorTexture)
+    });
+
+    recorder.waitForFinished(work);
+
+    CHECK_FALSE(root->isLeaf());
+    REQUIRE(recorder.values().size() >= 2);
+    CHECK(std::is_sorted(recorder.values().begin(), recorder.values().end()));
+    CHECK(recorder.values().last() == root->future().progressMaximum());
+}
+
+TEST_CASE("Only an encode grows a compression node", "[cwGltfLoader][Issue671]")
+{
+    // The encode exists only on a cache miss, and no caller declares it: the
+    // node appears where the decision is made, so a warm run's tree simply
+    // never has one.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QDir dataRootDir(tempDir.path());
+    const QString gltfPath = writeGltfFile(dataRootDir, QByteArray("glb-bytes"));
+    REQUIRE_FALSE(gltfPath.isEmpty());
+
+    const cw::gltf::SceneCPU scene = sceneWithBaseColor(compressibleImage());
+    cw::gltf::MaterialCPU material;
+    material.baseColorTextureIndex = 0;
+
+    auto root = cwProgressNode::createRoot(QStringLiteral("Triangulating LiDAR notes"));
+
+    const cwProgressNodePtr coldNode = root->addChild(QStringLiteral("Texture 1"));
+    const cwGltfBaseColorTexture cold(dataRootDir.path(), gltfPath);
+    cwRenderTexturedItems::Item first;
+    cold.setOn(first, scene, material, cwProgressScope(coldNode));
+    REQUIRE_FALSE(first.texture.streamed().isNull());
+
+    //A node that took a child is a parent for good, so the encode is visible
+    //after the fact without anything test-only on the production side
+    CHECK_FALSE(coldNode->isLeaf());
+
+    //A fresh instance, so the memo can't be what makes the second run cheap
+    const cwProgressNodePtr warmNode = root->addChild(QStringLiteral("Texture 2"));
+    const cwGltfBaseColorTexture warm(dataRootDir.path(), gltfPath);
+    cwRenderTexturedItems::Item second;
+    warm.setOn(second, scene, material, cwProgressScope(warmNode));
+    CHECK(second.texture.streamed() == first.texture.streamed());
+
+    CHECK(warmNode->isLeaf());
 }

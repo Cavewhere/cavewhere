@@ -33,16 +33,12 @@ cwCoordinateTransform::DomainCheck domainCheck(const cwFixStation& fix)
     }
 
     // An absent CS is already excluded above — state() is NoSystem, not Valid.
-    return cwCoordinateTransform::domainCheck(fix.inputCS(),
-                                              cwGeoPoint(fix.easting(),
-                                                         fix.northing(),
-                                                         fix.elevation()));
+    return cwCoordinateTransform::domainCheck(fix.inputCS(), fix.position());
 }
 
 bool isDomainValid(const cwFixStation& fix)
 {
-    const cwCoordinateTransform::DomainCheck check = domainCheck(fix);
-    return check.eastingValid && check.northingValid;
+    return domainCheck(fix).isValid();
 }
 
 StationReference classifyStationReference(const QString& stationName,

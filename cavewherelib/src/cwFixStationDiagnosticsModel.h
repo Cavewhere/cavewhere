@@ -112,7 +112,16 @@ public:
         //! A row with no readable coordinate offers WGS84 and its own datum,
         //! since there is no location to filter by. The picker disables the
         //! combo in that case, so the list is only what it displays.
-        AvailableDatumsRole
+        AvailableDatumsRole,
+        //! Read-only bool: whether the row's datum may be changed. True only
+        //! when the row holds a coordinate and that coordinate reads as one —
+        //! a datum says what a position is measured against, so there has to be
+        //! a position for it to say anything about.
+        //!
+        //! Refreshed exactly when CoordinateErrorRole is, since it is a
+        //! function of the same two inputs: the coordinate text and the CS it
+        //! is read under.
+        DatumEnabledRole
     };
     Q_ENUM(Roles)
 

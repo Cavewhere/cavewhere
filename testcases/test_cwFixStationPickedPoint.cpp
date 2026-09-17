@@ -18,6 +18,7 @@
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
 #include "cwLocalProjection.h"
+#include "cwUnits.h"
 
 #include "GeoreferenceFixtureHelper.h"
 #include "LazFixtureHelper.h"
@@ -92,7 +93,8 @@ struct PickFixture {
         return fixes->setPickedPoint(id,
                                      scenePoint,
                                      region.geoReference()->localCoordinateSystem(),
-                                     region.defaultFixDatum());
+                                     region.defaultFixDatum(),
+                                     region.unitSystem());
     }
 };
 
@@ -159,6 +161,32 @@ TEST_CASE("A pick over a scanned tile lands on the tile's datum",
     CHECK(fix.state() == cwFixStation::Valid);
 }
 
+TEST_CASE("A pick writes its elevation in the project's own unit",
+          "[cwFixStationPickedPoint]")
+{
+    PickFixture fixture;
+
+    //kPickElevation meters, spelled at each unit's own display precision.
+    QString expected = QStringLiteral(", 300.000m");
+
+    SECTION("metric") {
+        fixture.region.setUnitSystem(cwUnits::Metric);
+    }
+
+    SECTION("imperial") {
+        fixture.region.setUnitSystem(cwUnits::Imperial);
+        expected = QStringLiteral(", 984.25ft");
+    }
+
+    REQUIRE(fixture.pick(QVector3D(0.0f, 0.0f, kPickElevation)));
+
+    const cwFixStation fix = fixture.fixes->fixStationAt(0);
+    CHECK(fix.coordinate().endsWith(expected));
+    //A fix reads its elevation back by the suffix it was written with, so every
+    //other surface sees the meters that were picked whichever unit the row uses.
+    CHECK(fix.elevation() == Approx(kPickElevation).margin(1e-3));
+}
+
 TEST_CASE("A pick lands on the row the fix's id names, not on its old index",
           "[cwFixStationPickedPoint]")
 {
@@ -208,6 +236,7 @@ TEST_CASE("A pick with no frame writes nothing", "[cwFixStationPickedPoint]")
     CHECK_FALSE(cave->fixStations()->setPickedPoint(fixId,
                                                     QVector3D(0.0f, 0.0f, kPickElevation),
                                                     region.geoReference()->localCoordinateSystem(),
-                                                    region.defaultFixDatum()));
+                                                    region.defaultFixDatum(),
+                                                    region.unitSystem()));
     CHECK(cave->fixStations()->fixStationAt(0).state() == cwFixStation::Empty);
 }
