@@ -44,6 +44,7 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QUndoStack>
 #include <QUrl>
 #include <QUuid>
 
@@ -690,4 +691,600 @@ TEST_CASE("cwSaveLoad restamps every file when a move flattens the project",
     flushSaves(rootData.get());
 
     checkEveryFileVersion(projectRootDir, kFlatVersion);
+}
+
+namespace {
+
+const QString kChildNodeName = QStringLiteral("kid");
+const QString kChildTripName = QStringLiteral("Kid survey");
+
+//! Saves a parent named \a parentName holding one child node with one trip,
+//! reloads it, and checks the whole subtree came back.
+void checkNestedChildSurvivesReload(const QString& parentName)
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto region = rootData->project()->cavingRegion();
+
+    cwCave* parent = addNode(region, nullptr, cwSurveyNode::Kind::Cave, parentName);
+    cwCave* child = addNode(region, parent, cwSurveyNode::Kind::Folder, kChildNodeName);
+    addTrip(child, kChildTripName, QStringLiteral("K"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectFile =
+            saveProjectAs(rootData.get(), QDir(tempDir.path()), QStringLiteral("sort-order"));
+
+    auto loadedRoot = std::make_unique<cwRootData>();
+    addTokenManager(loadedRoot->project());
+    loadedRoot->project()->loadOrConvert(projectFile);
+    loadedRoot->project()->waitLoadToFinish();
+
+    INFO("Parent node \"" << parentName.toStdString() << "\"");
+    const QList<cwError> errors = loadedRoot->project()->errorModel()->toList();
+    for (const cwError& error : errors) {
+        INFO("Error: " << error.message().toStdString());
+    }
+    CHECK(loadedRoot->project()->errorModel()->isEmpty());
+
+    cwCave* loadedParent = childNamed(loadedRoot->project()->cavingRegion()->rootNode(), parentName);
+    REQUIRE(loadedParent != nullptr);
+    cwCave* loadedChild = childNamed(loadedParent, kChildNodeName);
+    REQUIRE(loadedChild != nullptr);
+    CHECK(loadedChild->tripCount() == 1);
+    CHECK(loadedParent->tripCount() == 0);
+}
+
+}
+
+TEST_CASE("cwSaveLoad loads a nested child whose parent sorts after its nodes directory",
+          "[cwSaveLoad][NodeTree]")
+{
+    //The loader places a parent before its children by sorting descriptors on
+    //their absolute path, which holds only while the parent's own file name
+    //sorts before "nodes". Every name whose first character sorts after "n"
+    //breaks that, and the child's whole subtree is then re-parented on open.
+    SECTION("a parent whose name starts after n")
+    {
+        checkNestedChildSurvivesReload(QStringLiteral("zeta"));
+    }
+
+    SECTION("a lowercase parent in the middle of the alphabet")
+    {
+        checkNestedChildSurvivesReload(QStringLiteral("upper level"));
+    }
+
+    SECTION("a parent named like the layout directory but longer")
+    {
+        checkNestedChildSurvivesReload(QStringLiteral("notes"));
+    }
+
+    SECTION("a parent whose name starts with a non-ASCII letter")
+    {
+        checkNestedChildSurvivesReload(QString::fromUtf8("\xC3\x81rea"));
+    }
+}
+
+TEST_CASE("cwSaveLoad leaves a symlinked directory out of the project scan",
+          "[cwSaveLoad][NodeTree]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    buildTree(rootData.get(), false);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectFile =
+            saveProjectAs(rootData.get(), QDir(tempDir.path()), QStringLiteral("symlink-scan"));
+
+    const QDir dataRoot = rootData->project()->dataRootDir();
+    const QString fisherRidgeTripsDir =
+            dataRoot.absoluteFilePath(kFisherRidgeName + QStringLiteral("/trips"));
+    const QStringList fisherRidgeTripFilesBefore = relativeFiles(QDir(fisherRidgeTripsDir));
+
+    SECTION("a link to another project's data root")
+    {
+        //A second, foreign project: its descriptors name nodes this project
+        //never heard of, and its trips would be adopted by whatever node the
+        //link hangs under.
+        auto foreignRoot = std::make_unique<cwRootData>();
+        auto* foreignRegion = foreignRoot->project()->cavingRegion();
+        cwCave* foreignCave = addNode(foreignRegion, nullptr, cwSurveyNode::Kind::Cave,
+                                      QStringLiteral("Foreign Cave"));
+        addTrip(foreignCave, QStringLiteral("Foreign survey"), QStringLiteral("F"));
+        addTrip(foreignCave, QStringLiteral("Foreign second"), QStringLiteral("G"));
+
+        QTemporaryDir foreignDir;
+        REQUIRE(foreignDir.isValid());
+        saveProjectAs(foreignRoot.get(), QDir(foreignDir.path()), QStringLiteral("foreign"));
+        const QDir foreignDataRoot = foreignRoot->project()->dataRootDir();
+
+        REQUIRE(QFile::link(foreignDataRoot.absolutePath(),
+                            dataRoot.absoluteFilePath(kFisherRidgeName + QStringLiteral("/alias"))));
+
+        auto loadedRoot = std::make_unique<cwRootData>();
+        addTokenManager(loadedRoot->project());
+        loadedRoot->project()->loadOrConvert(projectFile);
+        loadedRoot->project()->waitLoadToFinish();
+
+        const QList<cwError> errors = loadedRoot->project()->errorModel()->toList();
+        for (const cwError& error : errors) {
+            INFO("Error: " << error.message().toStdString());
+        }
+        CHECK(loadedRoot->project()->errorModel()->isEmpty());
+
+        auto loadedRegion = loadedRoot->project()->cavingRegion();
+        CHECK(loadedRegion->caveCount() == 3);
+        cwCave* loadedFisherRidge = childNamed(loadedRegion->rootNode(), kFisherRidgeName);
+        REQUIRE(loadedFisherRidge != nullptr);
+        CHECK(loadedFisherRidge->tripCount() == 2);
+
+        flushSaves(loadedRoot.get());
+        CHECK(relativeFiles(QDir(fisherRidgeTripsDir)) == fisherRidgeTripFilesBefore);
+    }
+
+    SECTION("a link back to the project's own data root")
+    {
+        REQUIRE(QFile::link(dataRoot.absolutePath(),
+                            dataRoot.absoluteFilePath(kFisherRidgeName + QStringLiteral("/loop"))));
+
+        auto loadedRoot = std::make_unique<cwRootData>();
+        addTokenManager(loadedRoot->project());
+        loadedRoot->project()->loadOrConvert(projectFile);
+        loadedRoot->project()->waitLoadToFinish();
+
+        CHECK(loadedRoot->project()->errorModel()->isEmpty());
+        CHECK(loadedRoot->project()->cavingRegion()->caveCount() == 3);
+    }
+}
+
+TEST_CASE("cwSaveLoad renames a loaded node at depth two and depth three",
+          "[cwSaveLoad][NodeTree]")
+{
+    static const QString kRenamedCave = QStringLiteral("Renamed cave");
+    static const QString kRenamedSection = QStringLiteral("Renamed section");
+
+    const QString fixturePath = testcasesDatasetSourcePath(QStringLiteral("survey-tree/depth2"));
+    REQUIRE(QDir(fixturePath).exists());
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir workingRoot(QDir(tempDir.path()).absoluteFilePath(QStringLiteral("depth2")));
+    copyDirectory(QDir(fixturePath), workingRoot);
+
+    const QString projectFile = projectFileIn(workingRoot);
+
+    auto rootData = std::make_unique<cwRootData>();
+    addTokenManager(rootData->project());
+    rootData->project()->loadOrConvert(projectFile);
+    rootData->project()->waitLoadToFinish();
+    REQUIRE(rootData->project()->errorModel()->isEmpty());
+
+    auto region = rootData->project()->cavingRegion();
+    cwCave* folder = childNamed(region->rootNode(), kFolderName);
+    REQUIRE(folder != nullptr);
+    cwCave* sideCave = childNamed(folder, kSideCaveName);
+    REQUIRE(sideCave != nullptr);
+    cwCave* section = childNamed(sideCave, kSectionName);
+    REQUIRE(section != nullptr);
+
+    const QDir dataRoot = rootData->project()->dataRootDir();
+    const int fileCountBefore = relativeFiles(dataRoot).size();
+
+    //A node loaded from disk carries the path it was read from, so a rename
+    //moves that directory rather than writing a second one beside it.
+    sideCave->setName(kRenamedCave);
+    flushSaves(rootData.get());
+
+    section->setName(kRenamedSection);
+    flushSaves(rootData.get());
+
+    const QString renamedCaveDir =
+            QStringLiteral("%1/nodes/%2").arg(kFolderName, kRenamedCave);
+    CHECK_FALSE(QFileInfo::exists(
+                    dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2").arg(kFolderName, kSideCaveName))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
+                                QStringLiteral("%1/%2.cwcave").arg(renamedCaveDir, kRenamedCave))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
+                                QStringLiteral("%1/trips/%2/%2.cwtrip").arg(renamedCaveDir, kSideCaveTripName))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
+                                QStringLiteral("%1/nodes/%2/%2.cwcave").arg(renamedCaveDir, kRenamedSection))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
+                                QStringLiteral("%1/nodes/%2/trips/%3/%3.cwtrip")
+                                .arg(renamedCaveDir, kRenamedSection, kSectionTripName))));
+    CHECK(relativeFiles(dataRoot).size() == fileCountBefore);
+
+    auto loadedRoot = std::make_unique<cwRootData>();
+    addTokenManager(loadedRoot->project());
+    loadedRoot->project()->loadOrConvert(projectFile);
+    loadedRoot->project()->waitLoadToFinish();
+    CHECK(loadedRoot->project()->errorModel()->isEmpty());
+
+    cwCave* loadedFolder = childNamed(loadedRoot->project()->cavingRegion()->rootNode(), kFolderName);
+    REQUIRE(loadedFolder != nullptr);
+    cwCave* loadedCave = childNamed(loadedFolder, kRenamedCave);
+    REQUIRE(loadedCave != nullptr);
+    CHECK(childNamed(loadedCave, kRenamedSection) != nullptr);
+}
+
+TEST_CASE("cwSaveLoad rewrites nothing when it opens a nested project",
+          "[cwSaveLoad][NodeTree]")
+{
+    const QString fixturePath = testcasesDatasetSourcePath(QStringLiteral("survey-tree/depth2"));
+    REQUIRE(QDir(fixturePath).exists());
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir workingRoot(QDir(tempDir.path()).absoluteFilePath(QStringLiteral("depth2")));
+    copyDirectory(QDir(fixturePath), workingRoot);
+
+    const QString projectFile = projectFileIn(workingRoot);
+
+    const QStringList filesBefore = relativeFiles(workingRoot);
+    QList<QByteArray> contentBefore;
+    for (const QString& relative : filesBefore) {
+        contentBefore.append(readFile(workingRoot.absoluteFilePath(relative)));
+    }
+
+    auto rootData = std::make_unique<cwRootData>();
+    addTokenManager(rootData->project());
+    rootData->project()->loadOrConvert(projectFile);
+    rootData->project()->waitLoadToFinish();
+    flushSaves(rootData.get());
+
+    CHECK(rootData->project()->errorModel()->isEmpty());
+    REQUIRE(relativeFiles(workingRoot) == filesBefore);
+    for (int i = 0; i < filesBefore.size(); i++) {
+        INFO("File " << filesBefore.at(i).toStdString());
+        CHECK(readFile(workingRoot.absoluteFilePath(filesBefore.at(i))) == contentBefore.at(i));
+    }
+}
+
+TEST_CASE("cwSaveLoad stamps the tree version for each field that needs it",
+          "[cwSaveLoad][NodeTree]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto region = rootData->project()->cavingRegion();
+
+    cwCave* cave = addNode(region, nullptr, cwSurveyNode::Kind::Cave, kFisherRidgeName);
+    addTrip(cave, kEntranceTripName, QStringLiteral("A"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectFile =
+            saveProjectAs(rootData.get(), QDir(tempDir.path()), QStringLiteral("stamp-fields"));
+    const QDir projectRootDir = QFileInfo(projectFile).absoluteDir();
+
+    checkEveryFileVersion(projectRootDir, kFlatVersion);
+
+    SECTION("a kind an older build cannot express")
+    {
+        cave->setKind(cwSurveyNode::Kind::Folder);
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+    }
+
+    SECTION("a read-only node")
+    {
+        cave->setReadOnly(true);
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+    }
+
+    SECTION("a node that came from an external source")
+    {
+        cave->setSourceId(QUuid::createUuid());
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+    }
+
+TEST_CASE("cwSaveLoad reports what it cannot place and loads the rest of the tree",
+          "[cwSaveLoad][NodeTree]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    buildTree(rootData.get(), false);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectFile =
+            saveProjectAs(rootData.get(), QDir(tempDir.path()), QStringLiteral("load-report"));
+
+    const QDir dataRoot = rootData->project()->dataRootDir();
+
+    const auto loadReport = [&projectFile](std::unique_ptr<cwRootData>& loadedRoot) {
+        loadedRoot = std::make_unique<cwRootData>();
+        addTokenManager(loadedRoot->project());
+        loadedRoot->project()->loadOrConvert(projectFile);
+        loadedRoot->project()->waitLoadToFinish();
+
+        QStringList messages;
+        const QList<cwError> errors = loadedRoot->project()->errorModel()->toList();
+        for (const cwError& error : errors) {
+            messages.append(error.message());
+        }
+        return messages;
+    };
+
+    const auto countNaming = [](const QStringList& messages, const QString& needle) {
+        int count = 0;
+        for (const QString& message : messages) {
+            if (message.contains(needle)) {
+                count++;
+            }
+        }
+        return count;
+    };
+
+    std::unique_ptr<cwRootData> loadedRoot;
+
+    SECTION("an ancestor descriptor that cannot be parsed")
+    {
+        QFile folderDescriptor(dataRoot.absoluteFilePath(
+                                   QStringLiteral("%1/%1.cwcave").arg(kFolderName)));
+        REQUIRE(folderDescriptor.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        folderDescriptor.write("{garbage");
+        folderDescriptor.close();
+
+        const QStringList messages = loadReport(loadedRoot);
+        INFO("Errors: " << messages.join(QStringLiteral(" | ")).toStdString());
+
+        CHECK(countNaming(messages, kFolderName) > 0);
+        CHECK(countNaming(messages, kSideCaveName) > 0);
+        CHECK(countNaming(messages, kSectionName) > 0);
+        CHECK(countNaming(messages, QStringLiteral("belongs to no survey node")) >= 2);
+
+        //The siblings of the unreadable node are never dropped with it.
+        auto loadedRegion = loadedRoot->project()->cavingRegion();
+        CHECK(childNamed(loadedRegion->rootNode(), kFisherRidgeName) != nullptr);
+        CHECK(childNamed(loadedRegion->rootNode(), kSideCaveName) != nullptr);
+    }
+
+    SECTION("a descriptor sitting directly in a nodes directory")
+    {
+        const QString loosePath =
+                dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/Loose.cwcave").arg(kFolderName));
+        REQUIRE(QFile::copy(dataRoot.absoluteFilePath(QStringLiteral("Side Cave/Side Cave.cwcave")),
+                            loosePath));
+
+        const QStringList messages = loadReport(loadedRoot);
+        INFO("Errors: " << messages.join(QStringLiteral(" | ")).toStdString());
+        CHECK(countNaming(messages, QStringLiteral("Loose.cwcave")) == 1);
+        CHECK(messages.size() == 1);
+
+        auto loadedRegion = loadedRoot->project()->cavingRegion();
+        CHECK(loadedRegion->caveCount() == 3);
+        cwCave* loadedFolder = childNamed(loadedRegion->rootNode(), kFolderName);
+        REQUIRE(loadedFolder != nullptr);
+        CHECK(childNamed(loadedFolder, kSideCaveName) != nullptr);
+    }
+
+    SECTION("an empty nodes directory")
+    {
+        REQUIRE(QDir().mkpath(dataRoot.absoluteFilePath(
+                                  kFisherRidgeName + QStringLiteral("/nodes"))));
+
+        const QStringList messages = loadReport(loadedRoot);
+        INFO("Errors: " << messages.join(QStringLiteral(" | ")).toStdString());
+        CHECK(messages.isEmpty());
+        CHECK(loadedRoot->project()->cavingRegion()->caveCount() == 3);
+    }
+
+    SECTION("a plain file named after the nodes directory")
+    {
+        QFile strayFile(dataRoot.absoluteFilePath(kFisherRidgeName + QStringLiteral("/nodes")));
+        REQUIRE(strayFile.open(QIODevice::WriteOnly));
+        strayFile.write("not a directory");
+        strayFile.close();
+
+        const QStringList messages = loadReport(loadedRoot);
+        INFO("Errors: " << messages.join(QStringLiteral(" | ")).toStdString());
+        CHECK(messages.isEmpty());
+        CHECK(loadedRoot->project()->cavingRegion()->caveCount() == 3);
+    }
+}
+
+TEST_CASE("cwSaveLoad restamps every file when a flattening move is undone",
+          "[cwSaveLoad][NodeTree][MoveNode]")
+{
+    auto rootData = std::make_unique<cwRootData>();
+    auto region = rootData->project()->cavingRegion();
+
+    cwCave* parent = addNode(region, nullptr, cwSurveyNode::Kind::Cave, kFisherRidgeName);
+    addTrip(parent, kEntranceTripName, QStringLiteral("A"));
+
+    cwCave* child = addNode(region, parent, cwSurveyNode::Kind::Cave, kSideCaveName);
+    addTrip(child, kSideCaveTripName, QStringLiteral("C"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectFile =
+            saveProjectAs(rootData.get(), QDir(tempDir.path()), QStringLiteral("flatten-undo"));
+    const QDir projectRootDir = QFileInfo(projectFile).absoluteDir();
+    const int fileCountBefore = relativeFiles(projectRootDir).size();
+
+    SECTION("a move away from the parent and back")
+    {
+        region->moveNode(child, nullptr, 0);
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, kFlatVersion);
+
+        rootData->undoStack()->undo();
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+        CHECK(relativeFiles(projectRootDir).size() == fileCountBefore);
+
+        rootData->undoStack()->redo();
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, kFlatVersion);
+        CHECK(relativeFiles(projectRootDir).size() == fileCountBefore);
+    }
+
+    SECTION("a delete that leaves the project flat")
+    {
+        parent->removeNode(parent->indexOfNode(child));
+        flushSaves(rootData.get());
+        checkEveryFileVersion(projectRootDir, kFlatVersion);
+    }
+}
+
+TEST_CASE("cwSaveLoad renames the data root of a nested project",
+          "[cwSaveLoad][NodeTree]")
+{
+    static const QString kRenamedRegion = QStringLiteral("Renamed region");
+
+    auto rootData = std::make_unique<cwRootData>();
+    buildTree(rootData.get(), false);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectFile =
+            saveProjectAs(rootData.get(), QDir(tempDir.path()), QStringLiteral("region-rename"));
+
+    const QStringList filesBefore = relativeFiles(rootData->project()->dataRootDir());
+
+    rootData->project()->cavingRegion()->setName(kRenamedRegion);
+    flushSaves(rootData.get());
+
+    const QDir newDataRoot = rootData->project()->dataRootDir();
+    CHECK(newDataRoot.dirName() == kRenamedRegion);
+    CHECK(relativeFiles(newDataRoot) == filesBefore);
+    CHECK(QFileInfo::exists(newDataRoot.absoluteFilePath(
+                                QStringLiteral("%1/nodes/%2/nodes/%3/%3.cwcave")
+                                .arg(kFolderName, kSideCaveName, kSectionName))));
+
+    auto loadedRoot = std::make_unique<cwRootData>();
+    addTokenManager(loadedRoot->project());
+    loadedRoot->project()->loadOrConvert(rootData->project()->filename());
+    loadedRoot->project()->waitLoadToFinish();
+
+    QStringList messages;
+    const QList<cwError> errors = loadedRoot->project()->errorModel()->toList();
+    for (const cwError& error : errors) {
+        messages.append(error.message());
+    }
+    INFO("Errors: " << messages.join(QStringLiteral(" | ")).toStdString());
+    CHECK(loadedRoot->project()->errorModel()->isEmpty());
+
+    auto loadedRegion = loadedRoot->project()->cavingRegion();
+    cwCave* loadedFolder = childNamed(loadedRegion->rootNode(), kFolderName);
+    REQUIRE(loadedFolder != nullptr);
+    cwCave* loadedSideCave = childNamed(loadedFolder, kSideCaveName);
+    REQUIRE(loadedSideCave != nullptr);
+    CHECK(childNamed(loadedSideCave, kSectionName) != nullptr);
+}
+
+TEST_CASE("cwSaveLoad round trips a nested tree through a bundled file",
+          "[cwSaveLoad][NodeTree][bundled]")
+{
+    static const QString kEditedTripName = QStringLiteral("Dome climb revisited");
+
+    auto rootData = std::make_unique<cwRootData>();
+    //A bundled save commits to the project's own repository, which needs an
+    //author before it will write anything.
+    rootData->account()->setName(QStringLiteral("Author User"));
+    rootData->account()->setEmail(QStringLiteral("author@example.com"));
+
+    const TreeFixture fixture = buildTree(rootData.get(), true);
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString bundlePath = QDir(tempDir.path()).absoluteFilePath(QStringLiteral("tree.cw"));
+    REQUIRE(rootData->project()->saveAs(bundlePath));
+    flushSaves(rootData.get());
+    REQUIRE(QFileInfo::exists(bundlePath));
+
+    const auto loadBundle = [&bundlePath]() {
+        auto loadedRoot = std::make_unique<cwRootData>();
+        addTokenManager(loadedRoot->project());
+        loadedRoot->project()->loadOrConvert(bundlePath);
+        loadedRoot->project()->waitLoadToFinish();
+        CHECK(loadedRoot->project()->errorModel()->isEmpty());
+        return loadedRoot;
+    };
+
+    {
+        auto loadedRoot = loadBundle();
+        auto loadedRegion = loadedRoot->project()->cavingRegion();
+        cwCave* loadedFolder = childNamed(loadedRegion->rootNode(), kFolderName);
+        REQUIRE(loadedFolder != nullptr);
+        CHECK(loadedFolder->kind() == cwSurveyNode::Kind::Folder);
+        cwCave* loadedSideCave = childNamed(loadedFolder, kSideCaveName);
+        REQUIRE(loadedSideCave != nullptr);
+        cwCave* loadedSection = childNamed(loadedSideCave, kSectionName);
+        REQUIRE(loadedSection != nullptr);
+        CHECK(loadedSection->kind() == cwSurveyNode::Kind::Folder);
+        REQUIRE(loadedSection->tripCount() == 1);
+        CHECK(loadedSection->trip(0)->name() == kSectionTripName);
+        CHECK(childNamed(loadedRegion->rootNode(), kSideCaveName) != nullptr);
+    }
+
+    //An edit three levels down and a plain save: the bundle is rewritten from
+    //the same tree, not from a flattened copy of it.
+    REQUIRE(fixture.section->tripCount() == 1);
+    fixture.section->trip(0)->setName(kEditedTripName);
+    flushSaves(rootData.get());
+    //A bundle is rewritten by an explicit save, not by the working directory's
+    //own queue draining.
+    REQUIRE(rootData->project()->save());
+    flushSaves(rootData.get());
+
+    auto loadedRoot = loadBundle();
+    cwCave* loadedFolder = childNamed(loadedRoot->project()->cavingRegion()->rootNode(), kFolderName);
+    REQUIRE(loadedFolder != nullptr);
+    cwCave* loadedSideCave = childNamed(loadedFolder, kSideCaveName);
+    REQUIRE(loadedSideCave != nullptr);
+    cwCave* loadedSection = childNamed(loadedSideCave, kSectionName);
+    REQUIRE(loadedSection != nullptr);
+    CHECK(tripNamed(loadedSection, kEditedTripName) != nullptr);
+}
+
+TEST_CASE("cwSaveLoad renames a nested node in a Save As copy and leaves the source alone",
+          "[cwSaveLoad][NodeTree][saveAs]")
+{
+    static const QString kRenamedCave = QStringLiteral("Copied side cave");
+
+    auto rootData = std::make_unique<cwRootData>();
+    const TreeFixture fixture = buildTree(rootData.get(), false);
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString sourceProjectFile =
+            saveProjectAs(rootData.get(), QDir(sourceDir.path()), QStringLiteral("save-as-source"));
+    const QDir sourceDataRoot = rootData->project()->dataRootDir();
+    const QStringList sourceFilesBefore = relativeFiles(sourceDataRoot);
+
+    QTemporaryDir copyDir;
+    REQUIRE(copyDir.isValid());
+    saveProjectAs(rootData.get(), QDir(copyDir.path()), QStringLiteral("save-as-copy"));
+    const QDir copyDataRoot = rootData->project()->dataRootDir();
+    REQUIRE(copyDataRoot.absolutePath() != sourceDataRoot.absolutePath());
+
+    //The copy is the live project now, so a rename inside it moves the copy's
+    //directory and never reaches the project it was copied from.
+    fixture.sideCave->setName(kRenamedCave);
+    flushSaves(rootData.get());
+
+    CHECK(QFileInfo::exists(copyDataRoot.absoluteFilePath(
+                                QStringLiteral("%1/nodes/%2/%2.cwcave").arg(kFolderName, kRenamedCave))));
+    CHECK_FALSE(QFileInfo::exists(copyDataRoot.absoluteFilePath(
+                                      QStringLiteral("%1/nodes/%2").arg(kFolderName, kSideCaveName))));
+    CHECK(relativeFiles(sourceDataRoot) == sourceFilesBefore);
+
+    auto loadedSource = std::make_unique<cwRootData>();
+    addTokenManager(loadedSource->project());
+    loadedSource->project()->loadOrConvert(sourceProjectFile);
+    loadedSource->project()->waitLoadToFinish();
+    CHECK(loadedSource->project()->errorModel()->isEmpty());
+
+    cwCave* sourceFolder = childNamed(loadedSource->project()->cavingRegion()->rootNode(), kFolderName);
+    REQUIRE(sourceFolder != nullptr);
+    CHECK(childNamed(sourceFolder, kSideCaveName) != nullptr);
+
+    auto loadedCopy = std::make_unique<cwRootData>();
+    addTokenManager(loadedCopy->project());
+    loadedCopy->project()->loadOrConvert(rootData->project()->filename());
+    loadedCopy->project()->waitLoadToFinish();
+    CHECK(loadedCopy->project()->errorModel()->isEmpty());
+
+    cwCave* copyFolder = childNamed(loadedCopy->project()->cavingRegion()->rootNode(), kFolderName);
+    REQUIRE(copyFolder != nullptr);
+    CHECK(childNamed(copyFolder, kRenamedCave) != nullptr);
 }

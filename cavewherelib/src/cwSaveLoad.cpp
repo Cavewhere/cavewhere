@@ -3011,15 +3011,25 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
             // content directories the layout puts a node's or a trip's payload
             // in. The prune is positional (childScanRole), so a node or trip the
             // user happened to name "trips" or "notes" is still walked into.
+            // Symlinked directories stay out of the walk: a link to another
+            // project's data root would hand this project that project's nodes
+            // and trips, and a link that points at an ancestor would loop.
+            // Symlinked descriptor files are still read, so a survey tracked as
+            // a link keeps loading.
             const auto scanForFiles = [](const QDir& rootDir,
                                          const QString& suffix,
                                          bool scanTrips)
             {
                 QFileInfoList found;
                 const auto walk = [&](const QDir& dir, ScanRole role, auto&& self) -> void {
-                    const QFileInfoList entries = dir.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
+                    const QFileInfoList entries = dir.entryInfoList(QDir::Dirs
+                                                                   | QDir::Files
+                                                                   | QDir::NoDotAndDotDot);
                     for (const QFileInfo& entry : entries) {
                         if (entry.isDir()) {
+                            if (entry.isSymLink()) {
+                                continue;
+                            }
                             const auto childRole = childScanRole(role, entry.fileName(), scanTrips);
                             if (childRole.has_value()) {
                                 self(QDir(entry.absoluteFilePath()), *childRole, self);
@@ -3055,9 +3065,25 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
 
             QFileInfoList caveFiles = scanForFiles(regionDir, QStringLiteral("cwcave"), false);
 
-            // Sorted by absolute path, so a parent — whose directory is a prefix
-            // of its children's — is always placed before its children.
-            std::sort(caveFiles.begin(), caveFiles.end(), filePathLess);
+            // Sorted by directory path with a trailing separator, so a parent —
+            // whose directory, with that separator, is a prefix of every child's
+            // — is always placed before its children, whatever the descriptors
+            // themselves are named.
+            // Two descriptors in one directory fall back to the file path, so
+            // which of them is kept and which is reported stays the same on
+            // every open.
+            const auto caveDirPathLess = [](const QFileInfo& a, const QFileInfo& b) {
+                const auto dirKey = [](const QFileInfo& info) {
+                    return QDir::cleanPath(info.absoluteDir().absolutePath()) + QLatin1Char('/');
+                };
+                const QString keyA = dirKey(a);
+                const QString keyB = dirKey(b);
+                if (keyA != keyB) {
+                    return keyA < keyB;
+                }
+                return a.absoluteFilePath() < b.absoluteFilePath();
+            };
+            std::sort(caveFiles.begin(), caveFiles.end(), caveDirPathLess);
 
             for (const QFileInfo &caveFileInfo : caveFiles) {
                 const QString cavePath = caveFileInfo.absoluteFilePath();
