@@ -66,7 +66,6 @@
 #include <QFile>
 #include <QDateTime>
 #include <QQueue>
-#include <QMetaEnum>
 #include <QDirIterator>
 
 #ifdef CW_WITH_PDF_SUPPORT
@@ -175,14 +174,6 @@ std::optional<ScanRole> childScanRole(ScanRole parentRole, const QString& name, 
         return ScanRole::Unknown;
     }
     return ScanRole::Unknown;
-}
-
-//! The Kind a saved kind field names, Cave for a value this build has no name
-//! for — a newer file's node still loads as an ordinary cave.
-cwSurveyNodeKind::Kind toSurveyNodeKind(int protoKind)
-{
-    const bool known = QMetaEnum::fromType<cwSurveyNodeKind::Kind>().valueToKey(protoKind) != nullptr;
-    return known ? static_cast<cwSurveyNodeKind::Kind>(protoKind) : cwSurveyNodeKind::Kind::Cave;
 }
 
 //! The version to stamp into one object's own file. Every file of a project
@@ -3121,7 +3112,7 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                         : cwUnits::Meters;
 
                 if (caveProto.has_kind()) {
-                    cave.kind = toSurveyNodeKind(caveProto.kind());
+                    cave.kind = cwSurveyNodeKind::fromSavedValue(caveProto.kind());
                 }
                 if (caveProto.has_read_only()) {
                     cave.readOnly = caveProto.read_only();
@@ -6100,6 +6091,13 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         const cwReconcileMergeResult mergeResult = cwSyncMergeRegistry::instance().reconcile(mergeContext);
         const bool fullReloadApplied = (mergeResult.outcome != cwReconcileMergeResult::Outcome::Applied);
         if (!fullReloadApplied) {
+            // Orphan removals are queued only once the registry settled on Applied: a
+            // handler that reported one may still be overruled by a later handler's
+            // full reload, and a queued recursive delete would outlive that decision.
+            for (const QString& orphanDir : mergeResult.orphanDirectoriesToRemove) {
+                enqueueOrphanDirectoryCleanup(orphanDir);
+            }
+
             for (QObject* object : mergeResult.objectsPathReady) {
                 if (object != nullptr) {
                     emit objectPathReady(object);

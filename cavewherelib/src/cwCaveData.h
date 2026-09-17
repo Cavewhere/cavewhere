@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QString>
+#include <QStringList>
 #include <QUuid>
 
 //Our includes
@@ -34,5 +35,29 @@ struct cwCaveData {
     QUuid sourceId;
     QString sourcePath;
 };
+
+/**
+ * Calls visit(nodeData, nodePath) on every node in \a nodes and on their descendants,
+ * pre-order. nodePath is the node-name chain from the region root down, root excluded,
+ * which is what composes the node's directory on disk.
+ */
+template <class Visitor>
+void walkCaveDataTree(const QList<cwCaveData>& nodes,
+                      const QStringList& parentNodePath,
+                      const Visitor& visit)
+{
+    for (const cwCaveData& nodeData : nodes) {
+        const QStringList nodePath = parentNodePath + QStringList{nodeData.name};
+        visit(nodeData, nodePath);
+        walkCaveDataTree(nodeData.nodes, nodePath, visit);
+    }
+}
+
+//! walkCaveDataTree() over a whole loaded region, whose caves are the root's children.
+template <class Visitor>
+void walkCaveDataTree(const QList<cwCaveData>& nodes, const Visitor& visit)
+{
+    walkCaveDataTree(nodes, QStringList(), visit);
+}
 
 #endif // CWCAVEDATA_H

@@ -12,6 +12,7 @@
 #include "CaveWhereLibExport.h"
 
 //Qt includes
+#include <QMetaEnum>
 #include <QObject>
 #include <QQmlEngine>
 
@@ -39,6 +40,14 @@ enum class Kind {
     SurvexBlock
 };
 Q_ENUM_NS(Kind)
+
+//! The Kind a saved kind field names, Cave for a value this build has no name
+//! for — a newer file's node still loads as an ordinary cave.
+inline Kind fromSavedValue(int savedKind)
+{
+    const bool known = QMetaEnum::fromType<Kind>().valueToKey(savedKind) != nullptr;
+    return known ? static_cast<Kind>(savedKind) : Kind::Cave;
+}
 }
 
 #endif // CWSURVEYNODEKIND_H

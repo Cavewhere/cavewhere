@@ -1,6 +1,7 @@
 #include "cwSaveLoadPrivate.h"
 
 //Our includes
+#include "cwCaveData.h"
 #include "cwProtoUtils.h"
 #include "cwSurveyChunk.h"
 
@@ -991,9 +992,7 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
 {
     LoadedPathIndex index;
 
-    const auto indexNode = [&index](const cwCaveData& caveData, const QStringList& parentPath, auto&& self) -> void {
-        const QStringList nodePath = QStringList(parentPath) << caveData.name;
-
+    walkCaveDataTree(loadedRegion.caves, [&index](const cwCaveData& caveData, const QStringList& nodePath) {
         if (!caveData.id.isNull()) {
             index.nodePathById.insert(caveData.id, nodePath);
         }
@@ -1028,15 +1027,7 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
                                              LoadedNotePathParts {nodePath, tripData.name, sketchData.name});
             }
         }
-
-        for (const cwCaveData& childData : caveData.nodes) {
-            self(childData, nodePath, self);
-        }
-    };
-
-    for (const cwCaveData& caveData : loadedRegion.caves) {
-        indexNode(caveData, QStringList(), indexNode);
-    }
+    });
 
     return index;
 }

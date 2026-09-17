@@ -1,10 +1,12 @@
-#include "cwCaveSyncMergeHandler.h"
+#include "cwSurveyNodeSyncMergeHandler.h"
 
 #include "cwCave.h"
+#include "cwCaveData.h"
 #include "cwCaveMergeApplier.h"
 #include "cwCaveMergePlanBuilder.h"
 #include "cwCavingRegion.h"
 #include "cwSaveLoad.h"
+#include "cwSurveyNode.h"
 #include "GitRepository.h"
 #include "cavewhere.pb.h"
 #include "google/protobuf/util/json_util.h"
@@ -96,18 +98,59 @@ std::optional<std::pair<QUuid, cwCaveData>> loadBaseCaveDataForPath(const QDir& 
     if (protoCave.has_name()) {
         baseCaveData.name = QString::fromStdString(protoCave.name());
     }
+    if (protoCave.has_kind()) {
+        baseCaveData.kind = cwSurveyNodeKind::fromSavedValue(protoCave.kind());
+    }
+    if (protoCave.has_read_only()) {
+        baseCaveData.readOnly = protoCave.read_only();
+    }
+    if (protoCave.has_source_id()) {
+        baseCaveData.sourceId = uuidFromProtoString(protoCave.source_id());
+    }
+    if (protoCave.has_source_path()) {
+        baseCaveData.sourcePath = QString::fromStdString(protoCave.source_path());
+    }
 
     return std::make_optional(std::make_pair(baseCaveData.id, baseCaveData));
 }
 
-} // namespace
-
-QString cwCaveSyncMergeHandler::name() const
+//! The node's directory relative to the repository root, e.g.
+//! "DataRoot/Kentucky field seasons/nodes/Side Cave".
+QString relativeNodeDirectory(const QString& dataRootName, const cwSurveyNode* node)
 {
-    return QStringLiteral("cwCaveSyncMergeHandler");
+    const QString nodeDir = cwSaveLoad::relativeNodeDir(node->path());
+    if (nodeDir.isEmpty()) {
+        return QString();
+    }
+    return normalizeSyncPath(QDir(dataRootName).filePath(nodeDir));
 }
 
-cwReconcileMergeResult cwCaveSyncMergeHandler::reconcile(const cwReconcileMergeContext& context) const
+//! True when \a relativeDir names a directory at least one segment below the data root.
+//! A descriptor sitting at the data root or the repository root composes a directory that
+//! must never be handed to a recursive removal.
+bool isBelowDataRoot(const QString& relativeDir, const QString& dataRootName)
+{
+    if (relativeDir.isEmpty() || QDir::isAbsolutePath(relativeDir)) {
+        return false;
+    }
+    const QString prefix = dataRootName + QLatin1Char('/');
+    return relativeDir.startsWith(prefix) && relativeDir.size() > prefix.size();
+}
+
+//! True when \a absoluteDir holds a node descriptor of its own.
+bool holdsNodeDescriptor(const QString& absoluteDir)
+{
+    return !QDir(absoluteDir).entryList({QStringLiteral("*.cwcave")}, QDir::Files).isEmpty();
+}
+
+} // namespace
+
+QString cwSurveyNodeSyncMergeHandler::name() const
+{
+    return QStringLiteral("cwSurveyNodeSyncMergeHandler");
+}
+
+cwReconcileMergeResult cwSurveyNodeSyncMergeHandler::reconcile(const cwReconcileMergeContext& context) const
 {
     if (context.saveLoad == nullptr
         || context.region == nullptr
@@ -121,7 +164,13 @@ cwReconcileMergeResult cwCaveSyncMergeHandler::reconcile(const cwReconcileMergeC
     }
 
     QHash<QUuid, cwCave*> currentCavesById;
-    for (cwCave* cave : context.region->caves()) {
+    const cwSurveyNode* const rootNode = context.region->rootNode();
+    if (rootNode == nullptr) {
+        return {};
+    }
+    const QList<cwSurveyNode*> allNodes = rootNode->allNodes();
+    for (cwSurveyNode* node : allNodes) {
+        auto* cave = qobject_cast<cwCave*>(node);
         if (cave == nullptr || cave->id().isNull()) {
             continue;
         }
@@ -129,14 +178,16 @@ cwReconcileMergeResult cwCaveSyncMergeHandler::reconcile(const cwReconcileMergeC
     }
 
     QHash<QUuid, const cwCaveData*> loadedCavesById;
-    for (const cwCaveData& caveData : context.loadData->region.caves) {
-        if (!caveData.id.isNull()) {
-            loadedCavesById.insert(caveData.id, &caveData);
+    walkCaveDataTree(context.loadData->region.caves,
+                     [&](const cwCaveData& nodeData, const QStringList&) {
+        if (!nodeData.id.isNull()) {
+            loadedCavesById.insert(nodeData.id, &nodeData);
         }
-    }
+    });
 
     QList<cwCave*> changedCurrentCaves;
     QList<const cwCaveData*> changedLoadedCaves;
+    QList<QPair<QString, cwCave*>> changedDescriptors;
     QHash<QUuid, cwCaveData> baseCaveById;
     QSet<QUuid> seenCaveIds;
 
@@ -163,11 +214,6 @@ cwReconcileMergeResult cwCaveSyncMergeHandler::reconcile(const cwReconcileMergeC
             return result;
         }
 
-        if (seenCaveIds.contains(*caveId)) {
-            continue;
-        }
-        seenCaveIds.insert(*caveId);
-
         const auto currentCaveIt = currentCavesById.constFind(*caveId);
         if (currentCaveIt == currentCavesById.constEnd()) {
             cwReconcileMergeResult result;
@@ -176,6 +222,15 @@ cwReconcileMergeResult cwCaveSyncMergeHandler::reconcile(const cwReconcileMergeC
             result.fallbackReason = QStringLiteral("No current cave matches changed cave descriptor id.");
             return result;
         }
+
+        // Every changed descriptor is recorded, including the second path a
+        // rename/rename conflict produces for one node: that path is the orphan.
+        changedDescriptors.append(qMakePair(normalizedPath, currentCaveIt.value()));
+
+        if (seenCaveIds.contains(*caveId)) {
+            continue;
+        }
+        seenCaveIds.insert(*caveId);
 
         const auto loadedCaveIt = loadedCavesById.constFind(*caveId);
         if (loadedCaveIt == loadedCavesById.constEnd()) {
@@ -237,41 +292,49 @@ cwReconcileMergeResult cwCaveSyncMergeHandler::reconcile(const cwReconcileMergeC
         result.objectsPathReady.append(object);
     }
 
-    // Clean up orphaned cave directories left by rename/rename conflicts.
-    // After the merge, the winning cave name is set on each changedCurrentCave.
-    // Any .cwcave path in changedPaths whose parent directory name does not match
-    // a winning cave's sanitized name is an orphan and must be removed.
+    // Clean up orphaned node directories left by rename/rename conflicts.
+    // After the merge the winning name is set on each changed node, so a changed
+    // descriptor sitting somewhere other than its node's own directory is a candidate.
+    // It is removed only when the node's own directory already holds a descriptor, which
+    // means this one is the losing duplicate git checked out from the peer. When the
+    // node's own directory holds no descriptor, this directory is the only copy of the
+    // subtree — a peer moved the node, or git did not follow an ancestor rename — and a
+    // later Directory Move job relocates it. Only the descriptor's own directory is ever
+    // removed: an ancestor's would take its siblings with it.
     const QString dataRootName = context.dataRootName();
     if (!dataRootName.isEmpty()) {
-        QSet<QString> winningCaveDirNames;
-        for (cwCave* cave : changedCurrentCaves) {
-            winningCaveDirNames.insert(cwSaveLoad::sanitizeFileName(cave->name()));
+        QSet<QString> winningNodeDirs;
+        for (cwCave* cave : std::as_const(changedCurrentCaves)) {
+            const QString nodeDir = relativeNodeDirectory(dataRootName, cave);
+            if (!nodeDir.isEmpty()) {
+                winningNodeDirs.insert(nodeDir);
+            }
         }
 
-        QSet<QString> checkedCaveDirs;
-        for (const QString& changedPath : context.report->changedPaths) {
-            const QString normalizedPath = normalizeSyncPath(changedPath);
-            if (!normalizedPath.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive)) {
+        QSet<QString> checkedNodeDirs;
+        for (const auto& [changedPath, cave] : std::as_const(changedDescriptors)) {
+            const QString orphanDir = QFileInfo(changedPath).dir().path();
+            if (!isBelowDataRoot(orphanDir, dataRootName)
+                || winningNodeDirs.contains(orphanDir)
+                || checkedNodeDirs.contains(orphanDir)) {
                 continue;
             }
-            const QString caveDirName = QFileInfo(normalizedPath).dir().dirName();
-            if (caveDirName.isEmpty() || checkedCaveDirs.contains(caveDirName)) {
-                continue;
-            }
-            checkedCaveDirs.insert(caveDirName);
+            checkedNodeDirs.insert(orphanDir);
 
-            if (!winningCaveDirNames.contains(caveDirName)) {
-                // Only enqueue cleanup if the descriptor file is still on disk.
-                // In a rename/rename conflict both descriptors exist simultaneously
-                // (git checked out the losing side as a new file from the remote).
-                // In a normal rename git removes the old descriptor, so the file
-                // will not be present even if the directory structure lingers.
-                if (QFileInfo::exists(context.repoRoot.absoluteFilePath(normalizedPath))) {
-                    const QString relOrphanDir = dataRootName + QChar('/') + caveDirName;
-                    context.saveLoad->enqueueOrphanDirectoryCleanup(relOrphanDir);
-                    result.pendingConflictCleanup = true;
-                }
+            // In a normal rename git removes the old descriptor, so the losing file is
+            // absent even when the directory structure lingers.
+            if (!QFileInfo::exists(context.repoRoot.absoluteFilePath(changedPath))) {
+                continue;
             }
+
+            const QString liveNodeDir = relativeNodeDirectory(dataRootName, cave);
+            if (liveNodeDir.isEmpty()
+                || !holdsNodeDescriptor(context.repoRoot.absoluteFilePath(liveNodeDir))) {
+                continue;
+            }
+
+            result.orphanDirectoriesToRemove.append(orphanDir);
+            result.pendingConflictCleanup = true;
         }
     }
 

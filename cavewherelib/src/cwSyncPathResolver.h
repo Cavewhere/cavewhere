@@ -109,9 +109,11 @@ QList<TripChangeResolution> resolveChangedNoteLiDARPaths(const QDir& repoRoot,
                                                          const NoteLiDARLoadedIndex& loadedIndex);
 
 QString currentTripDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwTrip* trip);
+//! <dataRoot>/<relativeNodeDir(nodePath)>/trips/<trip>/<trip>.cwtrip, relative to the
+//! repository root. \a nodePath is the node-name chain from the region root, root excluded.
 QString loadedTripDescriptorPath(const QDir& repoRoot,
                                  const QString& dataRootName,
-                                 const QString& caveName,
+                                 const QStringList& nodePath,
                                  const QString& tripName);
 QString currentNoteDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwNote* note);
 QString currentNoteLiDARDescriptorPath(const QDir& repoRoot, const QString& dataRootName, const cwNoteLiDAR* note);

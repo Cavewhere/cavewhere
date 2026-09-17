@@ -55,6 +55,10 @@ struct cwReconcileMergeResult {
     // left on disk by a git merge and must be deleted. Forces a cleanup commit even when
     // diskAlreadySynchronized is true for all other handlers.
     bool pendingConflictCleanup = false;
+    // Directories (repository-root relative) a handler found orphaned by a merge and wants
+    // removed. Handlers record them here instead of queuing the removal themselves, so a
+    // later handler's RequiresFullReload discards them along with the rest of the result.
+    QStringList orphanDirectoriesToRemove;
     QList<QObject*> objectsPathReady;
     QStringList diagnostics;
 };

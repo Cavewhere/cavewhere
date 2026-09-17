@@ -1,11 +1,13 @@
 #include "cwTripSyncMergeHandler.h"
 
+#include "cwCaveData.h"
 #include "cwCavingRegion.h"
 #include "cwGlobals.h"
 #include "cwRegionLoadTask.h"
 #include "cwSaveLoad.h"
 #include "cwSyncPathResolver.h"
 #include "cwSyncMergeApplyUtils.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwTripMergeApplier.h"
 #include "cwTripMergePlanBuilder.h"
@@ -20,6 +22,9 @@
 #include <optional>
 
 namespace {
+
+//! "trips/<tripDir>/<file>" — the tail every trip descriptor path ends with.
+constexpr int kTripTailSegmentCount = 3;
 
 QString normalizeSyncPath(const QString& path)
 {
@@ -89,47 +94,50 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForCandidatePaths(
     return std::nullopt;
 }
 
-QStringList caveDirectoryCandidatesFromChangedCavePaths(const QStringList& changedPaths)
+//! Every changed node descriptor's own directory, relative to the repository root
+//! (e.g. "DataRoot/Kentucky field seasons/nodes/Side Cave").
+QStringList nodeDirectoryCandidatesFromChangedNodePaths(const QStringList& changedPaths)
 {
-    QSet<QString> caveDirs;
+    QSet<QString> nodeDirs;
     for (const QString& changedPath : changedPaths) {
         const QString normalizedPath = normalizeSyncPath(changedPath);
         if (!normalizedPath.endsWith(QStringLiteral(".cwcave"), Qt::CaseInsensitive)) {
             continue;
         }
 
-        const QString caveDir = QFileInfo(normalizedPath).dir().dirName();
-        if (!caveDir.isEmpty()) {
-            caveDirs.insert(caveDir);
+        const QString nodeDir = QFileInfo(normalizedPath).dir().path();
+        if (!nodeDir.isEmpty()) {
+            nodeDirs.insert(nodeDir);
         }
     }
 
-    return caveDirs.values();
+    return nodeDirs.values();
 }
 
-QString synthesizeTripPathWithCaveDir(const QString& dataRootName,
-                                      const QString& caveDirName,
+//! Re-roots \a tripDescriptorPath under \a nodeDirPath, keeping its trip directory and
+//! file name. A trip descriptor is always <nodeDir>/trips/<tripDir>/<file>, so the trip's
+//! own tail is the last three segments — a node sanitized to "trips" cannot fool that,
+//! while searching for the first "trips" segment could.
+QString synthesizeTripPathWithNodeDir(const QString& nodeDirPath,
                                       const QString& tripDescriptorPath)
 {
     const QString normalizedTripPath = normalizeSyncPath(tripDescriptorPath);
     const QStringList segments = normalizedTripPath.split(QChar('/'), Qt::SkipEmptyParts);
-    const int tripsIndex = segments.indexOf(QStringLiteral("trips"));
-    if (tripsIndex <= 0 || tripsIndex + 2 >= segments.size()) {
+    if (segments.size() < kTripTailSegmentCount + 1
+        || segments.at(segments.size() - kTripTailSegmentCount) != QStringLiteral("trips")) {
         return QString();
     }
 
-    const QString tripDirName = segments.at(tripsIndex + 1);
-    const QString tripFileName = segments.at(tripsIndex + 2);
-    if (tripDirName.isEmpty() || tripFileName.isEmpty()) {
+    const QString tripDirName = segments.at(segments.size() - 2);
+    const QString tripFileName = segments.last();
+    if (tripDirName.isEmpty() || tripFileName.isEmpty() || nodeDirPath.isEmpty()) {
         return QString();
     }
 
-    const QString dataRootDir = dataRootName.isEmpty() ? segments.first() : dataRootName;
     return normalizeSyncPath(
-        QDir(dataRootDir).filePath(
-            QDir(caveDirName).filePath(
-                QDir(QStringLiteral("trips")).filePath(
-                    QDir(tripDirName).filePath(tripFileName)))));
+        QDir(nodeDirPath).filePath(
+            QDir(QStringLiteral("trips")).filePath(
+                QDir(tripDirName).filePath(tripFileName))));
 }
 
 } // namespace
@@ -153,29 +161,31 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
     }
 
     QHash<QUuid, cwTrip*> currentTripsById;
-    for (cwCave* cave : context.region->caves()) {
-        if (cave == nullptr) {
+    const cwSurveyNode* const rootNode = context.region->rootNode();
+    if (rootNode == nullptr) {
+        return {};
+    }
+    const QList<cwTrip*> currentTrips = rootNode->allTrips();
+    for (cwTrip* trip : currentTrips) {
+        if (trip == nullptr || trip->id().isNull()) {
             continue;
         }
-
-        for (cwTrip* trip : cave->trips()) {
-            if (trip == nullptr || trip->id().isNull()) {
-                continue;
-            }
-            currentTripsById.insert(trip->id(), trip);
-        }
+        currentTripsById.insert(trip->id(), trip);
     }
 
+    //Every loaded trip by id, with the node-name path it hangs under — the path that
+    //composes its directory.
     QHash<QUuid, const cwTripData*> loadedTripsById;
-    QHash<QUuid, QString> loadedCaveNameByTripId;
-    for (const cwCaveData& caveData : context.loadData->region.caves) {
-        for (const cwTripData& tripData : caveData.trips) {
+    QHash<QUuid, QStringList> loadedNodePathByTripId;
+    walkCaveDataTree(context.loadData->region.caves,
+                     [&](const cwCaveData& nodeData, const QStringList& nodePath) {
+        for (const cwTripData& tripData : nodeData.trips) {
             if (!tripData.id.isNull()) {
                 loadedTripsById.insert(tripData.id, &tripData);
-                loadedCaveNameByTripId.insert(tripData.id, caveData.name);
+                loadedNodePathByTripId.insert(tripData.id, nodePath);
             }
         }
-    }
+    });
 
     const QString dataRootName = context.dataRootName();
 
@@ -185,6 +195,9 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
     const auto loadedTripIndex = cwSyncPathResolver::buildLoadedTripIndex(context.repoRoot,
                                                                           dataRootName,
                                                                           context.loadData->region);
+
+    const QStringList nodeDirCandidates =
+        nodeDirectoryCandidatesFromChangedNodePaths(context.report->changedPaths);
 
     QList<cwTrip*> changedCurrentTrips;
     QList<const cwTripData*> changedLoadedTrips;
@@ -292,12 +305,12 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
             baseLookupPaths.append(currentTripPath);
         }
 
-        const QString loadedCaveName = loadedCaveNameByTripId.value(tripId);
-        if (!loadedCaveName.isEmpty()) {
+        const QStringList loadedNodePath = loadedNodePathByTripId.value(tripId);
+        if (!loadedNodePath.isEmpty()) {
             const QString loadedTripPath = cwSyncPathResolver::loadedTripDescriptorPath(
                 context.repoRoot,
                 dataRootName,
-                loadedCaveName,
+                loadedNodePath,
                 loadedTripIt.value()->name);
             if (!loadedTripPath.isEmpty()) {
                 baseLookupPaths.append(loadedTripPath);
@@ -308,11 +321,8 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
                                                               context.report->mergeBaseHead,
                                                               baseLookupPaths);
         if (!baseTripData.has_value()) {
-            const QStringList caveDirCandidates =
-                caveDirectoryCandidatesFromChangedCavePaths(context.report->changedPaths);
-            for (const QString& caveDirCandidate : caveDirCandidates) {
-                const QString synthesizedPath = synthesizeTripPathWithCaveDir(dataRootName,
-                                                                              caveDirCandidate,
+            for (const QString& nodeDirCandidate : nodeDirCandidates) {
+                const QString synthesizedPath = synthesizeTripPathWithNodeDir(nodeDirCandidate,
                                                                               normalizedPath);
                 if (synthesizedPath.isEmpty()) {
                     continue;
@@ -419,7 +429,7 @@ cwReconcileMergeResult cwTripSyncMergeHandler::reconcile(const cwReconcileMergeC
                 if (QFileInfo::exists(context.repoRoot.absoluteFilePath(normalizedPath))) {
                     // Relative path to the orphan trip dir, e.g. "DataRoot/Cave A/trips/Peer Trip"
                     const QString relOrphanDir = QFileInfo(normalizedPath).dir().path();
-                    context.saveLoad->enqueueOrphanDirectoryCleanup(relOrphanDir);
+                    result.orphanDirectoriesToRemove.append(relOrphanDir);
                     result.pendingConflictCleanup = true;
                 }
             }

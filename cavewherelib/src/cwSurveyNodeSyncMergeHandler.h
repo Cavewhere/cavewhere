@@ -2,7 +2,7 @@
 
 #include "cwSyncMergeHandler.h"
 
-class cwCaveSyncMergeHandler final : public cwSyncMergeHandler
+class cwSurveyNodeSyncMergeHandler final : public cwSyncMergeHandler
 {
 public:
     QString name() const override;
