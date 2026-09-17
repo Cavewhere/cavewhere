@@ -27,6 +27,7 @@
 #include "cwTrip.h"
 #include "LoadProjectHelper.h"
 #include "ProjectFilenameTestHelper.h"
+#include "SurveyTreeTestHelper.h"
 #include "TestHelper.h"
 
 //QQuickGit includes
@@ -46,6 +47,8 @@
 #include <QUrl>
 #include <QUuid>
 
+using namespace SurveyTreeTestHelper;
+
 namespace {
 
 const QString kFolderName = QStringLiteral("Kentucky field seasons");
@@ -60,43 +63,6 @@ const QString kSideCaveTripName = QStringLiteral("Sump dig");
 //The version a project with no hierarchy is stamped with, so it still opens in
 //a build that predates the survey tree.
 constexpr int kFlatVersion = 9;
-
-constexpr double kShotDistance = 10.0;
-constexpr double kShotCompass = 45.0;
-constexpr double kShotClino = -5.0;
-
-//! Gives \a trip one shot, so it holds real survey data on disk.
-void addShot(cwTrip* trip, const QString& fromStation, const QString& toStation)
-{
-    trip->addNewChunk();
-    cwSurveyChunk* chunk = trip->chunk(trip->chunkCount() - 1);
-    chunk->setData(cwSurveyChunk::StationNameRole, 0, fromStation);
-    chunk->setData(cwSurveyChunk::StationNameRole, 1, toStation);
-    chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, kShotDistance);
-    chunk->setData(cwSurveyChunk::ShotCompassRole, 0, kShotCompass);
-    chunk->setData(cwSurveyChunk::ShotClinoRole, 0, kShotClino);
-}
-
-cwCave* addNode(cwCavingRegion* region,
-                cwSurveyNode* parent,
-                cwSurveyNode::Kind kind,
-                const QString& name)
-{
-    auto node = qobject_cast<cwCave*>(region->addNode(parent, kind));
-    REQUIRE(node != nullptr);
-    node->setName(name);
-    return node;
-}
-
-cwTrip* addTrip(cwCave* node, const QString& name, const QString& station)
-{
-    node->addTrip();
-    cwTrip* trip = node->trip(node->tripCount() - 1);
-    REQUIRE(trip != nullptr);
-    trip->setName(name);
-    addShot(trip, station + QStringLiteral("1"), station + QStringLiteral("2"));
-    return trip;
-}
 
 //! The project layout every tree test and the checked-in fixture share:
 //!
@@ -146,42 +112,6 @@ TreeFixture buildTree(cwRootData* rootData, bool withNoteImage)
     }
 
     return fixture;
-}
-
-QString saveProjectAs(cwRootData* rootData, const QDir& parentDir, const QString& baseName)
-{
-    auto project = rootData->project();
-    const QString projectPath = parentDir.absoluteFilePath(baseName + QStringLiteral(".cwproj"));
-    REQUIRE(project->saveAs(projectPath));
-    project->waitSaveToFinish();
-    rootData->futureManagerModel()->waitForFinished();
-    project->waitSaveToFinish();
-    return project->filename();
-}
-
-//! Every file below \a dir, as data-root-relative paths, with git's own files
-//! left out — they are not part of the project's layout.
-QStringList relativeFiles(const QDir& dir)
-{
-    QStringList files;
-    QDirIterator it(dir.absolutePath(), QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString path = it.next();
-        const QString relative = dir.relativeFilePath(path);
-        if (relative.startsWith(QStringLiteral(".git"))) {
-            continue;
-        }
-        files.append(relative);
-    }
-    files.sort();
-    return files;
-}
-
-QByteArray readFile(const QString& path)
-{
-    QFile file(path);
-    REQUIRE(file.open(QIODevice::ReadOnly));
-    return file.readAll();
 }
 
 //! The FileVersion stamped in one saved descriptor, which is written as proto
@@ -725,4 +655,39 @@ TEST_CASE("The survey-tree depth2 fixture loads", "[cwSaveLoad][NodeTree]")
 
     CHECK(childNamed(region->rootNode(), kSideCaveName) != nullptr);
     CHECK(region->equates()->count() == 1);
+}
+
+TEST_CASE("cwSaveLoad restamps every file when a move flattens the project",
+          "[cwSaveLoad][NodeTree][MoveNode]")
+{
+    //A move reaches the tree model as a row removal and then a row insertion,
+    //and halfway through it the moved subtree is off the tree. Answering the
+    //version question there records a stamp the subtree's own files never get,
+    //leaving a project whose descriptor says 9 while its trips and notes say 10.
+    auto rootData = std::make_unique<cwRootData>();
+    auto region = rootData->project()->cavingRegion();
+
+    cwCave* parent = addNode(region, nullptr, cwSurveyNode::Kind::Cave, kFisherRidgeName);
+    addTrip(parent, kEntranceTripName, QStringLiteral("A"));
+
+    cwCave* child = addNode(region, parent, cwSurveyNode::Kind::Cave, kSideCaveName);
+    cwTrip* childTrip = addTrip(child, kSideCaveTripName, QStringLiteral("C"));
+    const QString noteImagePath =
+            copyToTempFolder(testcasesDatasetPath("test_cwAddImageTask/supportedImage.png"));
+    childTrip->notes()->addFromFiles({QUrl::fromLocalFile(noteImagePath)});
+    rootData->futureManagerModel()->waitForFinished();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString projectFile =
+            saveProjectAs(rootData.get(), QDir(tempDir.path()), QStringLiteral("flatten-move"));
+    const QDir projectRootDir = QFileInfo(projectFile).absoluteDir();
+    checkEveryFileVersion(projectRootDir, cwRegionIOTask::protoVersion());
+
+    //With the only nested node back at the root the project is flat again, so
+    //every file of it carries the stamp an older build can still open.
+    region->moveNode(child, nullptr, 0);
+    flushSaves(rootData.get());
+
+    checkEveryFileVersion(projectRootDir, kFlatVersion);
 }

@@ -538,3 +538,73 @@ TEST_CASE("cwRegionTreeModel removes a nested node's rows and brings them back o
     CHECK(model.rowCount(folderIndex) == 1);
     CHECK(model.trip(model.index(0, 0, folderIndex)) == folderTrip);
 }
+
+TEST_CASE("cwRegionTreeModel follows a node moved to another parent",
+          "[cwRegionTreeModel][MoveNode]") {
+    //A move reaches the model as the remove/insert pair it has always handled,
+    //so the row lands under the new parent and every index still resolves to the
+    //same objects.
+    //
+    //No QAbstractItemModelTester here, for the reason the removal test above
+    //leaves one out: removeChildRows() announces the subtree's rows while the
+    //data still holds them, which the tester reads as a rowCount that failed to
+    //shrink.
+    cwCavingRegion region;
+
+    cwCave* folder = new cwCave();
+    folder->setName(QStringLiteral("Kentucky field seasons"));
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Fisher Ridge"));
+
+    cwTrip* caveTrip = new cwTrip();
+    caveTrip->setName(QStringLiteral("Entrance Series"));
+    cave->addTrip(caveTrip);
+
+    region.addCave(folder);
+    region.addCave(cave);
+
+    cwRegionTreeModel model;
+    model.setCavingRegion(&region);
+
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    REQUIRE(model.rowCount(QModelIndex()) == 2);
+
+    QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
+    QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+
+    region.moveNode(cave, folder, 0);
+
+    //The trip row goes out with the node row and comes back under the new
+    //parent — the same pairs a remove and an insert have always emitted.
+    CHECK(removed.count() == 2);
+    CHECK(inserted.count() == 2);
+
+    REQUIRE(model.rowCount(QModelIndex()) == 1);
+    const QModelIndex folderIndex = model.index(0, 0, QModelIndex());
+    CHECK(model.node(folderIndex) == folder);
+
+    REQUIRE(model.rowCount(folderIndex) == 1);
+    const QModelIndex movedIndex = model.index(0, 0, folderIndex);
+    //The same object, at the new index — the move keeps identities.
+    CHECK(model.cave(movedIndex) == cave);
+    CHECK(model.index(cave) == movedIndex);
+    CHECK(model.parent(movedIndex) == folderIndex);
+
+    REQUIRE(model.rowCount(movedIndex) == 1);
+    CHECK(model.trip(model.index(0, 0, movedIndex)) == caveTrip);
+
+    SECTION("undo puts the row back at its old place") {
+        undoStack.undo();
+
+        REQUIRE(model.rowCount(QModelIndex()) == 2);
+        const QModelIndex restoredIndex = model.index(1, 0, QModelIndex());
+        CHECK(model.cave(restoredIndex) == cave);
+        CHECK(model.index(cave) == restoredIndex);
+        CHECK(model.rowCount(model.index(0, 0, QModelIndex())) == 0);
+        CHECK(model.rowCount(restoredIndex) == 1);
+        CHECK(model.trip(model.index(0, 0, restoredIndex)) == caveTrip);
+    }
+}

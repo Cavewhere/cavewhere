@@ -327,3 +327,79 @@ TEST_CASE("compressPendingJobs: a chained run collapses even beside an interrupt
     REQUIRE(d.m_pendingJobs.at(1).oldPath == QStringLiteral("/proj/X"));
     REQUIRE(d.m_pendingJobs.at(1).path == QStringLiteral("/proj/Z"));
 }
+
+TEST_CASE("compressPendingJobs: a node moved twice becomes one directory move",
+          "[cwSaveLoad][JobCompression][MoveNode]") {
+    //Two moves of the same node before the queue drains: the node's directory
+    //goes from where it was saved straight to where it ends up, so the
+    //intermediate parent's nodes/ directory is never written at all.
+    cwSaveLoadPrivate d;
+    d.m_pendingJobs = {
+        makeMove(objectA(), kTagDefault,
+                 "/proj/data/Side Cave",
+                 "/proj/data/Folder/nodes/Side Cave", Kind::Directory),
+        makeMove(objectA(), kTagDefault,
+                 "/proj/data/Folder/nodes/Side Cave",
+                 "/proj/data/Other/nodes/Side Cave", Kind::Directory),
+    };
+
+    d.compressPendingJobs();
+
+    REQUIRE(d.m_pendingJobs.size() == 1);
+    CHECK(d.m_pendingJobs.at(0).kind == Kind::Directory);
+    CHECK(d.m_pendingJobs.at(0).oldPath == QStringLiteral("/proj/data/Side Cave"));
+    CHECK(d.m_pendingJobs.at(0).path == QStringLiteral("/proj/data/Other/nodes/Side Cave"));
+}
+
+TEST_CASE("compressPendingJobs: a descriptor rename between two directory moves breaks the run",
+          "[cwSaveLoad][JobCompression][MoveNode]") {
+    //A move that deduplicates the node's name queues the directory move and the
+    //descriptor rename inside it; a second move before the queue drains adds
+    //another directory move. Collapsing the two directory moves onto the later
+    //index would run the rename first, against a directory that has not been
+    //made yet — it fails, mkpaths a stray empty directory, and leaves the node's
+    //own directory holding two descriptors, which the loader refuses.
+    cwSaveLoadPrivate d;
+    d.m_pendingJobs = {
+        makeMove(objectA(), kTagDefault,
+                 "/proj/data/C",
+                 "/proj/data/F/nodes/C 2", Kind::Directory),
+        makeMove(objectA(), kTagDefault,
+                 "/proj/data/F/nodes/C 2/C.cwcave",
+                 "/proj/data/F/nodes/C 2/C 2.cwcave", Kind::File),
+        makeMove(objectA(), kTagDefault,
+                 "/proj/data/F/nodes/C 2",
+                 "/proj/data/C 2", Kind::Directory),
+    };
+
+    d.compressPendingJobs();
+
+    REQUIRE(d.m_pendingJobs.size() == 3);
+    CHECK(d.m_pendingJobs.at(0).kind == Kind::Directory);
+    CHECK(d.m_pendingJobs.at(0).oldPath == QStringLiteral("/proj/data/C"));
+    CHECK(d.m_pendingJobs.at(0).path == QStringLiteral("/proj/data/F/nodes/C 2"));
+    CHECK(d.m_pendingJobs.at(1).kind == Kind::File);
+    CHECK(d.m_pendingJobs.at(2).kind == Kind::Directory);
+    CHECK(d.m_pendingJobs.at(2).oldPath == QStringLiteral("/proj/data/F/nodes/C 2"));
+    CHECK(d.m_pendingJobs.at(2).path == QStringLiteral("/proj/data/C 2"));
+}
+
+TEST_CASE("compressPendingJobs: a directory move between two file moves breaks the run",
+          "[cwSaveLoad][JobCompression][MoveNode]") {
+    //The mirror of the case above: the second rename names the descriptor in
+    //the directory the move carried, so it can only run after that move.
+    cwSaveLoadPrivate d;
+    d.m_pendingJobs = {
+        makeMove(objectA(), kTagDefault, "/proj/data/C/C.cwcave", "/proj/data/C/Cx.cwcave", Kind::File),
+        makeMove(objectA(), kTagDefault, "/proj/data/C", "/proj/data/F/nodes/C", Kind::Directory),
+        makeMove(objectA(), kTagDefault,
+                 "/proj/data/F/nodes/C/Cx.cwcave",
+                 "/proj/data/F/nodes/C/Cy.cwcave", Kind::File),
+    };
+
+    d.compressPendingJobs();
+
+    REQUIRE(d.m_pendingJobs.size() == 3);
+    CHECK(d.m_pendingJobs.at(0).path == QStringLiteral("/proj/data/C/Cx.cwcave"));
+    CHECK(d.m_pendingJobs.at(2).oldPath == QStringLiteral("/proj/data/F/nodes/C/Cx.cwcave"));
+}

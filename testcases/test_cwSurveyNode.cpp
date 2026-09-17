@@ -456,3 +456,115 @@ TEST_CASE("cwTrip::parentNode is the storage and parentCave the shim", "[SurveyN
     CHECK(nodeSpy.count() == 1);
     CHECK(caveSpy.count() == 1);
 }
+
+TEST_CASE("MoveNodeCommand restores the parent, row and name it left", "[SurveyNode]")
+{
+    QUndoStack undoStack;
+
+    cwCave first;
+    first.setName(QStringLiteral("First"));
+    first.setUndoStack(&undoStack);
+
+    cwCave second;
+    second.setName(QStringLiteral("Second"));
+    second.setUndoStack(&undoStack);
+
+    cwCave* alpha = makeNode(QStringLiteral("Alpha"));
+    cwCave* beta = makeNode(QStringLiteral("Beta"));
+    cwCave* gamma = makeNode(QStringLiteral("Gamma"));
+    first.addNode(alpha);
+    first.addNode(beta);
+    first.addNode(gamma);
+
+    cwTrip* betaTrip = makeTrip(beta, QStringLiteral("Topo 1"));
+
+    SECTION("a move to another parent is one undo step") {
+        const int beforeMove = undoStack.count();
+
+        second.insertNode(0, beta);
+
+        CHECK(undoStack.count() == beforeMove + 1);
+        CHECK(beta->parentNode() == &second);
+        CHECK(second.indexOfNode(beta) == 0);
+        CHECK(first.childNodes() == QList<cwSurveyNode*>({alpha, gamma}));
+        CHECK(beta->trip(0) == betaTrip);
+        CHECK_FALSE(first.childNameSet().contains(QStringLiteral("Beta")));
+        CHECK(second.childNameSet().contains(QStringLiteral("Beta")));
+
+        undoStack.undo();
+
+        //Back at the parent AND the row it left, which is what an insert
+        //command's undo cannot do.
+        CHECK(beta->parentNode() == &first);
+        CHECK(first.childNodes() == QList<cwSurveyNode*>({alpha, beta, gamma}));
+        CHECK(second.childNodeCount() == 0);
+        CHECK(beta->trip(0) == betaTrip);
+        CHECK(first.childNameSet().contains(QStringLiteral("Beta")));
+        CHECK_FALSE(second.childNameSet().contains(QStringLiteral("Beta")));
+
+        undoStack.redo();
+
+        CHECK(beta->parentNode() == &second);
+        CHECK(second.indexOfNode(beta) == 0);
+        CHECK(first.childNodes() == QList<cwSurveyNode*>({alpha, gamma}));
+    }
+
+    SECTION("the new siblings' names win, and undo gives the old name back") {
+        cwCave* collision = makeNode(QStringLiteral("Beta"));
+        second.addNode(collision);
+
+        second.addNode(beta);
+
+        CHECK(collision->name() == QStringLiteral("Beta"));
+        CHECK(beta->name() != QStringLiteral("Beta"));
+        const QString dedupedName = beta->name();
+        CHECK(second.childNameSet().contains(dedupedName));
+
+        undoStack.undo();
+
+        CHECK(beta->name() == QStringLiteral("Beta"));
+        CHECK(first.childNameSet().contains(QStringLiteral("Beta")));
+        CHECK_FALSE(second.childNameSet().contains(dedupedName));
+    }
+
+    SECTION("a move says so, and never says the subtree was deleted") {
+        cwSignalSpy beginMove(beta, &cwSurveyNode::beginMoveNode);
+        cwSignalSpy moved(beta, &cwSurveyNode::nodeMoved);
+        cwSignalSpy deleted(&first, &cwSurveyNode::nodesDeleted);
+
+        second.addNode(beta);
+
+        CHECK(beginMove.count() == 1);
+        CHECK(moved.count() == 1);
+        CHECK(deleted.count() == 0);
+
+        undoStack.undo();
+
+        CHECK(beginMove.count() == 2);
+        CHECK(moved.count() == 2);
+        CHECK(deleted.count() == 0);
+    }
+
+    SECTION("a move within one parent reorders the rows") {
+        first.insertNode(2, alpha);
+
+        CHECK(first.childNodes() == QList<cwSurveyNode*>({beta, gamma, alpha}));
+        CHECK(alpha->parentNode() == &first);
+
+        undoStack.undo();
+
+        CHECK(first.childNodes() == QList<cwSurveyNode*>({alpha, beta, gamma}));
+    }
+
+    SECTION("a node refuses to land inside its own subtree") {
+        cwCave* child = makeNode(QStringLiteral("Child"));
+        beta->addNode(child);
+
+        const int beforeMove = undoStack.count();
+        child->insertNode(0, beta);
+
+        CHECK(undoStack.count() == beforeMove);
+        CHECK(beta->parentNode() == &first);
+        CHECK(child->parentNode() == beta);
+    }
+}

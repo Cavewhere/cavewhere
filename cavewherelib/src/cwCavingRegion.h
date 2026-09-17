@@ -129,6 +129,20 @@ public:
     //! or \a kind is outside cwSurveyNode::Kind.
     Q_INVOKABLE cwSurveyNode* addNode(cwSurveyNode* parent, cwSurveyNode::Kind kind);
 
+    //! Moves \a node under \a newParent (the root when null) at \a row, as one
+    //! undo step that undo puts back.
+    //!
+    //! \a row is the destination index once the node is off its old place, so a
+    //! move within one parent counts rows as if the node were already gone; it
+    //! is clamped to the sibling list. The node object and its whole subtree
+    //! keep their identities, so the project's per-object save state stays keyed
+    //! correctly and one directory move on disk is what the move costs.
+    //!
+    //! Does nothing when \a node is null, is the root, belongs to another
+    //! region, is listed by no parent (an insert is the verb for that), would
+    //! land inside its own subtree, or already sits at that place.
+    Q_INVOKABLE void moveNode(cwSurveyNode* node, cwSurveyNode* newParent, int row);
+
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
     Q_INVOKABLE QVariant data(const QModelIndex &index, int role) const;
     QHash<int, QByteArray> roleNames() const;

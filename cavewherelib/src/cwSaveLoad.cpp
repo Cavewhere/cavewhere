@@ -1997,6 +1997,14 @@ void cwSaveLoad::restampProjectIfVersionChanged()
         return;
     }
 
+    if (!d->m_movingNodes.isEmpty()) {
+        //Halfway through a move the node is off the tree, so stampVersion would
+        //answer for a shape the project never has — and the rewrite it triggers
+        //cannot reach the subtree traveling with the node. The nodeMoved
+        //handler asks again once the node is back on the tree.
+        return;
+    }
+
     const int version = stampVersion(region);
     if (version == d->stampedVersion) {
         return;
@@ -3886,10 +3894,18 @@ void cwSaveLoad::connectTreeModel()
             auto index = d->m_regionTreeModel->index(i, 0, parent);
             auto object = index.data(cwRegionTreeModel::ObjectRole).value<QObject*>();
 
+            //A move announces the whole subtree's rows as removed and then
+            //re-inserts them, so every one of these rows would otherwise be
+            //read as a deletion — taking the trips' directories and the note
+            //images with it. One Directory Move, queued from
+            //parentNodeChanged, is what carries them instead.
+            if (d->isInsideMovingNode(object)) {
+                continue;
+            }
+
             switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
             case cwRegionTreeModel::CaveType: {
                 auto cave = d->m_regionTreeModel->cave(index);
-                // auto caveDir = dir(cave);
                 removeDirectory(cave);
                 break;
             }
@@ -4670,6 +4686,25 @@ void cwSaveLoad::connectCave(cwCave *cave)
     };
     connect(cave, &cwCave::kindChanged, this, saveCaveAndRestamp);
     connect(cave, &cwCave::sourceChanged, this, saveCaveAndRestamp);
+
+    //A move reaches the tree model as a row removal and a row insertion, and a
+    //row removal is otherwise this node's directory being deleted (§6.5). The
+    //node says which of the two is happening, and the Move itself is queued from
+    //parentNodeChanged — inside the insert, while the object state still names
+    //the old directory and dirPrivate() already names the new one.
+    connect(cave, &cwCave::beginMoveNode, this, [cave, this]() {
+        d->m_movingNodes.insert(cave);
+    });
+    connect(cave, &cwCave::parentNodeChanged, this, [cave, this]() {
+        d->moveDirectory(this, cave);
+    });
+    connect(cave, &cwCave::nodeMoved, this, [cave, this]() {
+        d->m_movingNodes.remove(cave);
+        //The node is back on the tree, so the shape the stamp answers for is
+        //final: a move that nests the last flat node, or frees the last nested
+        //one, changes the format the whole project needs (§6.8).
+        restampProjectIfVersionChanged();
+    });
 
     // connectCave runs after the cave's data is loaded, so watching modelReset
     // is safe here (the load-time setFixStations()/setEquates() reset fires

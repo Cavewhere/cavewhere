@@ -376,6 +376,23 @@ void cwSurveyNode::addNode(cwSurveyNode* node)
   */
 void cwSurveyNode::addNodes(const QList<cwSurveyNode*>& nodes)
 {
+    //A node another parent lists is a move, and a move is its own command, so a
+    //batch holding one is appended node by node inside a macro rather than as a
+    //single insert. Every production caller (the loader, an import) hands over
+    //fresh nodes and takes the batch path below.
+    const bool holdsAMove = std::any_of(nodes.begin(), nodes.end(),
+                                        [](const cwSurveyNode* node) {
+        return node != nullptr && node->isListedByParent();
+    });
+    if(holdsAMove) {
+        beginUndoMacro(QStringLiteral("Add %1 nodes").arg(nodes.size()));
+        for(cwSurveyNode* node : nodes) {
+            insertNode(m_childNodes.size(), node);
+        }
+        endUndoMacro();
+        return;
+    }
+
     QList<cwSurveyNode*> inserting;
     inserting.reserve(nodes.size());
 
@@ -411,16 +428,6 @@ bool cwSurveyNode::prepareChildForInsert(cwSurveyNode* node, cwSanitizedNameSet&
     //externallyBacked()) would run forever. addNode() is callable from QML.
     if(ancestorsOrSelf().contains(node)) { return false; }
 
-    //Reparent the node, if already under another node
-    if(cwSurveyNode* oldParent = node->parentNode()) {
-        const int index = oldParent->m_childNodes.indexOf(node);
-        if(index >= 0) {
-            //The node is moving, not being deleted — every id in its subtree
-            //lives on here, so the old parent must stay quiet about them.
-            oldParent->removeNodeInternal(index);
-        }
-    }
-
     // Auto-rename to avoid filesystem path collisions in .cwproj layout. The
     // node is not in this list yet, so setName()'s guard won't fire.
     const QString deduped = siblingNames.deduplicateName(node->name());
@@ -439,6 +446,13 @@ bool cwSurveyNode::prepareChildForInsert(cwSurveyNode* node, cwSanitizedNameSet&
   */
 void cwSurveyNode::insertNode(int row, cwSurveyNode* node)
 {
+    if(node == nullptr) { return; }
+
+    if(node->isListedByParent()) {
+        moveNodeHere(row, node);
+        return;
+    }
+
     if(row < 0 || row > m_childNodes.size()) { return; }
 
     //A throwaway copy: the insert command is what writes m_childNames.
@@ -446,6 +460,25 @@ void cwSurveyNode::insertNode(int row, cwSurveyNode* node)
     if(!prepareChildForInsert(node, siblingNames)) { return; }
 
     pushUndo(new InsertNodeCommand(this, node, row));
+}
+
+void cwSurveyNode::moveNodeHere(int row, cwSurveyNode* node)
+{
+    //A node may not take on itself or one of its own ancestors, for the reason
+    //prepareChildForInsert() gives.
+    if(ancestorsOrSelf().contains(node)) { return; }
+
+    cwSurveyNode* oldParent = node->parentNode();
+    const int oldRow = oldParent->indexOfNode(node);
+
+    //row counts the sibling list the node has already left, so a move within one
+    //parent has one row fewer to land on.
+    const int lastRow = m_childNodes.size() - (oldParent == this ? 1 : 0);
+    const int destination = qBound(0, row, lastRow);
+
+    if(oldParent == this && destination == oldRow) { return; }
+
+    pushUndo(new MoveNodeCommand(node, this, destination));
 }
 
 /**
@@ -1127,6 +1160,63 @@ void cwSurveyNode::RemoveNodeCommand::redo() {
 
 void cwSurveyNode::RemoveNodeCommand::undo() {
     insertNodes();
+}
+
+cwSurveyNode::MoveNodeCommand::MoveNodeCommand(cwSurveyNode* node,
+                                               cwSurveyNode* newParent,
+                                               int newRow) :
+    NodePtr(node),
+    OldParentPtr(node->parentNode()),
+    NewParentPtr(newParent),
+    Remove(node->parentNode(),
+           node->parentNode()->indexOfNode(node),
+           node->parentNode()->indexOfNode(node)),
+    Insert(newParent, node, newRow),
+    OldName(node->name())
+{
+    setText(QStringLiteral("Move %1").arg(node->name()));
+}
+
+void cwSurveyNode::MoveNodeCommand::renameWhileUnlisted(const cwSanitizedNameSet& siblingNames,
+                                                        const QString& desiredName)
+{
+    NodePtr->m_name = siblingNames.deduplicateName(desiredName);
+}
+
+void cwSurveyNode::MoveNodeCommand::redo()
+{
+    emit NodePtr->beginMoveNode();
+
+    const QString previousName = NodePtr->name();
+
+    Remove.redo();
+    renameWhileUnlisted(NewParentPtr->childNameSet(), previousName);
+    Insert.redo();
+
+    //The insert registered the new name and refreshed the subtree's keywords,
+    //so all that is left is to say the name moved.
+    if(NodePtr->name() != previousName) {
+        emit NodePtr->nameChanged();
+    }
+
+    emit NodePtr->nodeMoved();
+}
+
+void cwSurveyNode::MoveNodeCommand::undo()
+{
+    emit NodePtr->beginMoveNode();
+
+    const QString previousName = NodePtr->name();
+
+    Insert.undo();
+    renameWhileUnlisted(OldParentPtr->childNameSet(), OldName);
+    Remove.undo();
+
+    if(NodePtr->name() != previousName) {
+        emit NodePtr->nameChanged();
+    }
+
+    emit NodePtr->nodeMoved();
 }
 
 /**

@@ -646,6 +646,34 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(filter.rowCount() == 0);
     }
 
+    SECTION("a node moved to another parent keeps its identity and its subtree") {
+        //The move is one undo step made of the remove/insert pair the model
+        //already follows, so nothing here is new model code.
+        region.moveNode(crawlSection, beta, 0);
+
+        REQUIRE(model.rowCount(upperIndex) == 1);
+        CHECK(model.objectFor(model.index(0, cwSurveyTreeModel::Name, upperIndex)) == topo2);
+
+        REQUIRE(model.rowCount(betaIndex) == 2);
+        const QModelIndex movedIndex = model.index(0, cwSurveyTreeModel::Name, betaIndex);
+        CHECK(model.objectFor(movedIndex) == crawlSection);
+        CHECK(model.indexOf(crawlSection) == movedIndex);
+        CHECK(model.parent(movedIndex) == betaIndex);
+        CHECK(model.objectFor(model.index(1, cwSurveyTreeModel::Name, betaIndex)) == surveyB);
+
+        //The subtree traveled with it
+        REQUIRE(model.rowCount(movedIndex) == 1);
+        CHECK(model.objectFor(model.index(0, cwSurveyTreeModel::Name, movedIndex)) == topo3);
+
+        undoStack.undo();
+
+        REQUIRE(model.rowCount(betaIndex) == 1);
+        const QModelIndex restoredIndex = model.index(0, cwSurveyTreeModel::Name, upperIndex);
+        CHECK(model.objectFor(restoredIndex) == crawlSection);
+        CHECK(model.indexOf(crawlSection) == restoredIndex);
+        CHECK(model.rowCount(restoredIndex) == 1);
+    }
+
     SECTION("a column sort orders siblings by value and -1 puts back each node's own order") {
         cwSurveyTreeFilterModel filter;
         filter.setSourceModel(&model);

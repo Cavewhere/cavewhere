@@ -12,6 +12,7 @@
 
 //Our includes
 #include "LoadProjectHelper.h"
+#include "SurveyTreeTestHelper.h"
 #include "TestHelper.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
@@ -60,16 +61,7 @@ struct TreeFixture {
     cwCave* siblingCave = nullptr;
 };
 
-inline cwCave* addNode(cwCavingRegion* region,
-                cwSurveyNode* parent,
-                cwSurveyNode::Kind kind,
-                const QString& name)
-{
-    auto* node = qobject_cast<cwCave*>(region->addNode(parent, kind));
-    REQUIRE(node != nullptr);
-    node->setName(name);
-    return node;
-}
+using SurveyTreeTestHelper::addNode;
 
 inline TreeFixture buildTree(cwRootData* rootData)
 {

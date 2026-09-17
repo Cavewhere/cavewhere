@@ -382,6 +382,14 @@ Monad::ResultBase cwSaveLoadPrivate::Job::moveOrMergeDirectory(const QString& so
     }
 
     if (!QFileInfo::exists(destinationPath)) {
+        // A move to another parent lands in a nodes/ directory that may hold no
+        // other child yet, and a rename needs its destination's parent to exist.
+        const auto ensureParentResult =
+                ensureDirectoryExists(QFileInfo(destinationPath).absolutePath());
+        if (ensureParentResult.hasError()) {
+            return ensureParentResult;
+        }
+
         if (!cwSaveLoadPrivate::fsRenameDir(sourcePath, destinationPath)) {
             return Monad::ResultBase(QStringLiteral("Failed to move %1 -> %2").arg(sourcePath, destinationPath));
         }
@@ -1079,8 +1087,100 @@ void cwSaveLoadPrivate::seedStatePathFromLoaded(cwSaveLoad* context, const QObje
     state.currentPath = normalizedCurrentPath;
 }
 
+bool cwSaveLoadPrivate::isInsideMovingNode(const QObject* object) const
+{
+    if (m_movingNodes.isEmpty() || object == nullptr) {
+        return false;
+    }
+
+    const auto nodeOfTrip = [](const cwTrip* trip) -> const cwSurveyNode* {
+        return trip == nullptr ? nullptr : trip->parentNode();
+    };
+
+    const cwSurveyNode* node = qobject_cast<const cwSurveyNode*>(object);
+    if (node == nullptr) {
+        if (const auto* trip = qobject_cast<const cwTrip*>(object)) {
+            node = nodeOfTrip(trip);
+        } else if (const auto* note = qobject_cast<const cwNote*>(object)) {
+            node = nodeOfTrip(note->parentTrip());
+        } else if (const auto* lidarNote = qobject_cast<const cwNoteLiDAR*>(object)) {
+            node = nodeOfTrip(lidarNote->parentTrip());
+        } else if (const auto* sketch = qobject_cast<const cwSketch*>(object)) {
+            node = nodeOfTrip(sketch->parentTrip());
+        }
+    }
+
+    for (; node != nullptr; node = node->parentNode()) {
+        if (m_movingNodes.contains(node)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void cwSaveLoadPrivate::moveDirectory(cwSaveLoad* context, const cwCave* node)
+{
+    if (context == nullptr || node == nullptr) {
+        return;
+    }
+
+    // One Directory Move, never a Remove followed by a write: the node's
+    // directory holds its trips, its note images and its external-centerline
+    // copies, and only the move carries all of them across intact.
+    addFileSystemJob(Job {node, Job::Kind::Directory, Job::Action::Move}, context);
+
+    // A move can also rename the node, when its new siblings already hold its
+    // name, and then the descriptor inside the directory the job just carried
+    // still has the old basename. This is the same pair renameDirectoryAndFile
+    // queues, and it costs nothing when the name did not move: the file job
+    // early-outs on a destination equal to the state's current path.
+    addFileSystemJob(Job {node, Job::Kind::File, Job::Action::Move}, context);
+
+    dropLoadedPathsUnder(node);
+}
+
+void cwSaveLoadPrivate::dropLoadedPathsUnder(const cwSurveyNode* node)
+{
+    if (node == nullptr) {
+        return;
+    }
+
+    const auto dropLoadedPath = [this](const QObject* object) {
+        const auto it = m_objectStates.find(object);
+        if (it != m_objectStates.end()) {
+            it->loadedPath.clear();
+        }
+    };
+
+    node->walk([&dropLoadedPath](const cwSurveyNode* descendant) {
+        dropLoadedPath(descendant);
+
+        for (const cwTrip* trip : descendant->trips()) {
+            dropLoadedPath(trip);
+
+            for (const cwNote* note : trip->notes()->notes()) {
+                dropLoadedPath(note);
+            }
+
+            for (const QObject* lidarNote : trip->notesLiDAR()->notes()) {
+                dropLoadedPath(lidarNote);
+            }
+
+            for (const QObject* sketch : trip->notesSketch()->notes()) {
+                dropLoadedPath(sketch);
+            }
+        }
+    });
+}
+
 void cwSaveLoadPrivate::resetObjectStates(cwSaveLoad* context) {
     m_objectStates.clear();
+
+    //A new project keeps none of the old one's moves. The set holds bare
+    //addresses, so an entry left behind could be inherited by whatever object
+    //the allocator next places there and make a real deletion look like a move.
+    m_movingNodes.clear();
 
     auto addObjects = [this, context](auto objects) {
         for(const auto object : objects) {
@@ -1375,15 +1475,35 @@ void cwSaveLoadPrivate::collapseSequentialMoves(const QList<int>& indices, QSet<
 {
     for (Job::Kind kind : {Job::Kind::File, Job::Kind::Directory}) {
         QList<int> moveIndices;
+        QList<int> otherKindMoveIndices;
         for (int idx : indices) {
-            if (m_pendingJobs[idx].action == Job::Action::Move
-                    && m_pendingJobs[idx].kind == kind) {
+            const Job& job = m_pendingJobs.at(idx);
+            if (job.action != Job::Action::Move) {
+                continue;
+            }
+            if (job.kind == kind) {
                 moveIndices.append(idx);
+            } else {
+                otherKindMoveIndices.append(idx);
             }
         }
         if (moveIndices.size() < 2) {
             continue;
         }
+
+        // A move of the other kind queued between two of these reads a path
+        // this run wrote: a rename of the descriptor inside a directory the
+        // first move made, or a file move inside a directory the first one
+        // carried. The survivor sits at the run's last index, so collapsing
+        // across one would put that job ahead of the move it depends on.
+        const auto otherKindMoveBetween = [&otherKindMoveIndices](int lower, int upper) {
+            for (int idx : otherKindMoveIndices) {
+                if (idx > lower && idx < upper) {
+                    return true;
+                }
+            }
+            return false;
+        };
 
         // A run of moves collapses into its last job only while each one starts
         // where the one before it ended. An ancestor directory move queued
@@ -1402,8 +1522,10 @@ void cwSaveLoadPrivate::collapseSequentialMoves(const QList<int>& indices, QSet<
 
         int runStart = 0;
         for (int i = 1; i < moveIndices.size(); ++i) {
-            if (m_pendingJobs.at(moveIndices.at(i - 1)).path
-                    != m_pendingJobs.at(moveIndices.at(i)).oldPath) {
+            const int previous = moveIndices.at(i - 1);
+            const int current = moveIndices.at(i);
+            if (m_pendingJobs.at(previous).path != m_pendingJobs.at(current).oldPath
+                    || otherKindMoveBetween(previous, current)) {
                 collapseRun(runStart, i - 1);
                 runStart = i;
             }

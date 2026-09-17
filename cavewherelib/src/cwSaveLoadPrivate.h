@@ -548,6 +548,41 @@ struct cwSaveLoadPrivate {
 
     void watchObjectLifetime(const QObject* object, cwSaveLoad* context);
 
+    // The nodes currently between cwSurveyNode::beginMoveNode and nodeMoved.
+    // A move reaches the tree model as a row removal followed by a row
+    // insertion, and a row removal is what makes cwSaveLoad delete a node's
+    // directory; this is how the two are told apart, so a move costs one
+    // Directory Move and the subtree's trips, note images and attachments are
+    // never deleted and rewritten.
+    QSet<const QObject*> m_movingNodes;
+
+    //! True when \a object is a node currently moving, or sits under one. The
+    //! whole subtree's rows are announced as removed and re-inserted by a move,
+    //! and a removed row is otherwise a deletion: the trip's directory and the
+    //! note's image file would go with it.
+    bool isInsideMovingNode(const QObject* object) const;
+
+    //! Queues the one Directory Move a node's change of parent costs, from
+    //! where the node was saved to where its new parent puts it, plus the file
+    //! rename a name the new siblings already held forces.
+    //!
+    //! Call it while cwSurveyNode::parentNodeChanged is being delivered: the
+    //! node already hangs under its new parent, so dirPrivate() answers the new
+    //! directory, while the object state still holds the old one.
+    void moveDirectory(cwSaveLoad* context, const cwCave* node);
+
+    //! Drops loadedPath for \a node and every node, trip, note, LiDAR note and
+    //! sketch below it, because the Move carried that whole directory away and
+    //! cleanupStaleLoadedPaths() has nothing left there to remove.
+    //!
+    //! currentPath is deliberately left to the Move job, which re-points every
+    //! state under the old directory by string prefix — keeping each file's
+    //! basename, which is what a filesystem move does. Recomputing it from the
+    //! live objects instead would claim a descriptor is already named after a
+    //! node the move just renamed, and the rename that follows would then find
+    //! nothing to move.
+    void dropLoadedPathsUnder(const cwSurveyNode* node);
+
     static LoadedPathIndex buildLoadedPathIndex(const cwCavingRegionData& loadedRegion);
 
     void seedStatePathFromLoaded(cwSaveLoad* context, const QObject* objectId, const QString& absolutePath);
@@ -633,6 +668,10 @@ struct cwSaveLoadPrivate {
     void dropWritesSupersededByRemove(const QList<int>& indices, QSet<int>& indicesToDrop) const;
 
     // Rule 3: Collapse sequential Moves for the same object and kind (A→B + B→C becomes A→C).
+    // A run ends where the chain does, and also where a Move of the other kind
+    // sits between two of them — that job reads a path this run wrote, and the
+    // survivor keeps the last index, so collapsing across it would run ahead of
+    // the move it depends on.
     void collapseSequentialMoves(const QList<int>& indices, QSet<int>& indicesToDrop);
 
     void compressPendingJobs();

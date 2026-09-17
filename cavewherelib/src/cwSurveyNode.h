@@ -203,6 +203,16 @@ public:
 
     Q_INVOKABLE void addNode(cwSurveyNode* node);
     void addNodes(const QList<cwSurveyNode*>& nodes);
+
+    //! Places \a node at \a row among this node's children.
+    //!
+    //! A node no parent lists is inserted. A node another parent already lists
+    //! MOVES here as one undo step (MoveNodeCommand): undo puts it back under
+    //! its old parent, at its old row and under its old name, and the node and
+    //! its whole subtree keep their QObject identities throughout. \a row is
+    //! the destination index once the node is off its old place, so moving
+    //! within one parent counts rows as if the node were already gone; it is
+    //! clamped to the sibling list rather than refused.
     void insertNode(int row, cwSurveyNode* node);
     Q_INVOKABLE void removeNode(int row);
     Q_INVOKABLE void clearNodes();
@@ -299,6 +309,16 @@ signals:
     void sourceChanged();
 
     void parentNodeChanged();
+
+    //! This node is about to leave one parent for another as a single move.
+    //! The beginRemoveNodes/removedNodes and beginInsertNodes/insertedNodes
+    //! pairs still carry it out, so a view needs nothing new — this pair is for
+    //! a consumer that would otherwise read the removal as a deletion, such as
+    //! cwSaveLoad, which deletes a removed node's directory.
+    void beginMoveNode();
+
+    //! The move is done: the node hangs under its new parent.
+    void nodeMoved();
 
     void childNodeCountChanged();
 
@@ -452,9 +472,13 @@ private:
     //! path, where the node's ids live on under their new parent.
     void removeNodeInternal(int row);
 
-    //! The shared front half of insertNode() and addNodes(): cycle refusal,
-    //! the move off the old parent, and the sibling-unique rename.
+    //! The shared front half of insertNode() and addNodes() for a node no
+    //! parent lists yet: cycle refusal and the sibling-unique rename.
     bool prepareChildForInsert(cwSurveyNode* node, cwSanitizedNameSet& siblingNames);
+
+    //! insertNode()'s branch for a node another parent already lists: the
+    //! cycle and no-op refusals, then one MoveNodeCommand.
+    void moveNodeHere(int row, cwSurveyNode* node);
 
     void addTripNullHelper();
 
@@ -536,6 +560,35 @@ private:
         RemoveNodeCommand(cwSurveyNode* parentNode, int beginIndex, int endIndex);
         virtual void redo();
         virtual void undo();
+    };
+
+    //! One node's move to another parent, or to another row of the same parent,
+    //! as a single undo step.
+    //!
+    //! Composed of the remove and insert commands the tree already uses, run
+    //! back to back, so every consumer sees the signal pairs it always has and
+    //! no model learns a new shape. What the composition adds is the undo: the
+    //! node returns to the parent, row and name it left, rather than being
+    //! removed a second time.
+    class MoveNodeCommand : public QUndoCommand {
+    public:
+        MoveNodeCommand(cwSurveyNode* node, cwSurveyNode* newParent, int newRow);
+        virtual void redo();
+        virtual void undo();
+
+    private:
+        //! Writes \a desiredName, deduplicated against \a siblingNames, onto
+        //! the node while no sibling set holds it — so the name is a plain
+        //! assignment and the insert that follows is what registers it.
+        void renameWhileUnlisted(const cwSanitizedNameSet& siblingNames,
+                                 const QString& desiredName);
+
+        cwSurveyNode* NodePtr;
+        cwSurveyNode* OldParentPtr;
+        cwSurveyNode* NewParentPtr;
+        RemoveNodeCommand Remove;
+        InsertNodeCommand Insert;
+        QString OldName;
     };
 
 };

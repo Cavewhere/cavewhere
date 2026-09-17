@@ -295,6 +295,27 @@ cwSurveyNode* cwCavingRegion::addNode(cwSurveyNode* parent, cwSurveyNode::Kind k
     return node;
 }
 
+void cwCavingRegion::moveNode(cwSurveyNode* node, cwSurveyNode* newParent, int row)
+{
+    if(node == nullptr || node->isRoot()) { return; }
+
+    cwSurveyNode* destination = newParent == nullptr ? m_root : newParent;
+    if(node->parentRegion() != this || destination->parentRegion() != this) {
+        //A node from another tree is not this region's to move.
+        return;
+    }
+
+    if(!node->isListedByParent()) {
+        //Nothing holds the node, so there is nothing to move it from. An insert
+        //is the verb for that.
+        return;
+    }
+
+    //insertNode routes an already-listed node through MoveNodeCommand, and
+    //refuses a destination inside the node's own subtree.
+    destination->insertNode(row, node);
+}
+
 /**
   \brief Adds a cave to the region
   */
