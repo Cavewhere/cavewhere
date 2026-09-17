@@ -25,6 +25,7 @@ class cwKeywordModel;
 #include "cwSanitizedNameSet.h"
 #include "cwSurveyNetwork.h"
 #include "cwCaveData.h"
+#include "cwSurveyNodeKind.h"
 #include "cwFixStationModel.h"
 #include "cwSiblingLabelCache.h"
 
@@ -65,7 +66,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
     Q_PROPERTY(cwEquateModel* equates READ equates CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
-    Q_PROPERTY(Kind kind READ kind WRITE setKind NOTIFY kindChanged)
+    Q_PROPERTY(cwSurveyNodeKind::Kind kind READ kind WRITE setKind NOTIFY kindChanged)
     Q_PROPERTY(bool isReadOnly READ isReadOnly NOTIFY sourceChanged)
     Q_PROPERTY(bool isSourced READ isSourced NOTIFY sourceChanged)
     Q_PROPERTY(bool isSourceRoot READ isSourceRoot NOTIFY sourceChanged)
@@ -82,19 +83,9 @@ public:
     };
     Q_ENUM(Roles)
 
-    //! What a node is called and drawn as. Display and reconcile only: no
-    //! behavior in this class branches on it. Native nodes are Cave or Folder;
-    //! the rest mirror one level of an attached survey file.
-    enum class Kind {
-        Cave,
-        Folder,
-        CompassProject,
-        CompassFile,
-        WallsBook,
-        SurvexFile,
-        SurvexBlock
-    };
-    Q_ENUM(Kind)
+    //! What a node is called and drawn as, defined in cwSurveyNodeKind.h so
+    //! cwCaveData can carry it too.
+    using Kind = cwSurveyNodeKind::Kind;
 
     //! Constructor tag for the region's root node. Root-ness is fixed at birth,
     //! so no setter can turn an ordinary node into a second root.

@@ -990,24 +990,26 @@ QString cwSaveLoadPrivate::normalizedAbsolutePath(const QString& path)
 cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const cwCavingRegionData& loadedRegion)
 {
     LoadedPathIndex index;
-    for (const cwCaveData& caveData : loadedRegion.caves) {
-        if (caveData.id.isNull()) {
-            continue;
+
+    const auto indexNode = [&index](const cwCaveData& caveData, const QStringList& parentPath, auto&& self) -> void {
+        const QStringList nodePath = QStringList(parentPath) << caveData.name;
+
+        if (!caveData.id.isNull()) {
+            index.nodePathById.insert(caveData.id, nodePath);
         }
-        index.caveNameById.insert(caveData.id, caveData.name);
 
         for (const cwTripData& tripData : caveData.trips) {
             if (tripData.id.isNull()) {
                 continue;
             }
-            index.tripPartsById.insert(tripData.id, LoadedTripPathParts {caveData.name, tripData.name});
+            index.tripPartsById.insert(tripData.id, LoadedTripPathParts {nodePath, tripData.name});
 
             for (const cwNoteData& noteData : tripData.noteModel.notes) {
                 if (noteData.id.isNull()) {
                     continue;
                 }
                 index.notePartsById.insert(noteData.id,
-                                           LoadedNotePathParts {caveData.name, tripData.name, noteData.name});
+                                           LoadedNotePathParts {nodePath, tripData.name, noteData.name});
             }
 
             for (const cwNoteLiDARData& noteData : tripData.noteLiDARModel.notes) {
@@ -1015,7 +1017,7 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
                     continue;
                 }
                 index.lidarPartsById.insert(noteData.id,
-                                            LoadedLiDARPathParts {caveData.name, tripData.name, noteData.name});
+                                            LoadedNotePathParts {nodePath, tripData.name, noteData.name});
             }
 
             for (const cwSketchData& sketchData : tripData.sketchModel.notes) {
@@ -1023,9 +1025,17 @@ cwSaveLoadPrivate::LoadedPathIndex cwSaveLoadPrivate::buildLoadedPathIndex(const
                     continue;
                 }
                 index.sketchPartsById.insert(sketchData.id,
-                                             LoadedSketchPathParts {caveData.name, tripData.name, sketchData.name});
+                                             LoadedNotePathParts {nodePath, tripData.name, sketchData.name});
             }
         }
+
+        for (const cwCaveData& childData : caveData.nodes) {
+            self(childData, nodePath, self);
+        }
+    };
+
+    for (const cwCaveData& caveData : loadedRegion.caves) {
+        indexNode(caveData, QStringList(), indexNode);
     }
 
     return index;
@@ -1114,18 +1124,28 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
             : QDir(context->projectRootDir().absoluteFilePath(dataRootName));
     const LoadedPathIndex loadedPathIndex = buildLoadedPathIndex(loadedRegion);
 
+    //Every saved object sits under its node's directory, with a tail that says
+    //what kind of object it is.
+    const auto pathUnderNode = [&baseDataRootDir](const QStringList& nodePath, const QString& tail) {
+        return baseDataRootDir.filePath(QDir(cwSaveLoad::relativeNodeDir(nodePath)).filePath(tail));
+    };
+
+    const auto pathInTrip = [](const QString& tripName, const QString& tail) {
+        return QDir(QStringLiteral("trips")).filePath(
+                    QDir(cwSaveLoad::sanitizeFileName(tripName)).filePath(tail));
+    };
+
     for (cwCave* cave : m_regionTreeModel->all<cwCave*>(QModelIndex(), &cwRegionTreeModel::cave)) {
         if (cave == nullptr || cave->id().isNull()) {
             continue;
         }
-        const auto caveNameIt = loadedPathIndex.caveNameById.constFind(cave->id());
-        if (caveNameIt == loadedPathIndex.caveNameById.constEnd()) {
+        const auto nodePathIt = loadedPathIndex.nodePathById.constFind(cave->id());
+        if (nodePathIt == loadedPathIndex.nodePathById.constEnd()) {
             continue;
         }
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(caveNameIt.value());
-        const QString caveFileName = cwSaveLoad::sanitizeFileName(caveNameIt.value() + QStringLiteral(".cwcave"));
-        seedStatePathFromLoaded(context, cave, baseDataRootDir.filePath(QDir(caveDirName).filePath(caveFileName)));
+        const QString caveFileName = cwSaveLoad::sanitizeFileName(nodePathIt.value().last() + QStringLiteral(".cwcave"));
+        seedStatePathFromLoaded(context, cave, pathUnderNode(nodePathIt.value(), caveFileName));
     }
 
     for (cwTrip* trip : m_regionTreeModel->all<cwTrip*>(QModelIndex(), &cwRegionTreeModel::trip)) {
@@ -1137,67 +1157,41 @@ void cwSaveLoadPrivate::seedObjectStatesFromLoadedData(cwSaveLoad* context,
             continue;
         }
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
         const QString tripFileName = cwSaveLoad::sanitizeFileName(partsIt->tripName + QStringLiteral(".cwtrip"));
-        seedStatePathFromLoaded(context, trip, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                   QDir(QStringLiteral("trips")).filePath(
-                                                                       QDir(tripDirName).filePath(tripFileName)))));
+        seedStatePathFromLoaded(context, trip,
+                                pathUnderNode(partsIt->nodePath, pathInTrip(partsIt->tripName, tripFileName)));
     }
 
-    for (cwNote* note : m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note)) {
-        if (note == nullptr || note->id().isNull()) {
-            continue;
-        }
-        const auto partsIt = loadedPathIndex.notePartsById.constFind(note->id());
-        if (partsIt == loadedPathIndex.notePartsById.constEnd()) {
-            continue;
-        }
+    //A 2D note, a LiDAR note and a sketch all live in their trip's notes/
+    //directory and differ only in file suffix.
+    const auto seedNotesDirObjects = [&](const QHash<QUuid, LoadedNotePathParts>& partsById,
+                                         const auto& objects,
+                                         const QString& fileSuffix) {
+        for (auto* object : objects) {
+            if (object == nullptr || object->id().isNull()) {
+                continue;
+            }
+            const auto partsIt = partsById.constFind(object->id());
+            if (partsIt == partsById.constEnd()) {
+                continue;
+            }
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
-        const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote"));
-        seedStatePathFromLoaded(context, note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                   QDir(QStringLiteral("trips")).filePath(
-                                                                       QDir(tripDirName).filePath(
-                                                                           QDir(QStringLiteral("notes")).filePath(noteFileName))))));
-    }
-
-    for (cwNoteLiDAR* note : m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR)) {
-        if (note == nullptr || note->id().isNull()) {
-            continue;
+            const QString fileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + fileSuffix);
+            const QString notePath = QDir(QStringLiteral("notes")).filePath(fileName);
+            seedStatePathFromLoaded(context, object,
+                                    pathUnderNode(partsIt->nodePath, pathInTrip(partsIt->tripName, notePath)));
         }
-        const auto partsIt = loadedPathIndex.lidarPartsById.constFind(note->id());
-        if (partsIt == loadedPathIndex.lidarPartsById.constEnd()) {
-            continue;
-        }
+    };
 
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
-        const QString noteFileName = cwSaveLoad::sanitizeFileName(partsIt->noteName + QStringLiteral(".cwnote3d"));
-        seedStatePathFromLoaded(context, note, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                   QDir(QStringLiteral("trips")).filePath(
-                                                                       QDir(tripDirName).filePath(
-                                                                           QDir(QStringLiteral("notes")).filePath(noteFileName))))));
-    }
-
-    for (cwSketch* sketch : m_regionTreeModel->all<cwSketch*>(QModelIndex(), &cwRegionTreeModel::sketch)) {
-        if (sketch == nullptr || sketch->id().isNull()) {
-            continue;
-        }
-        const auto partsIt = loadedPathIndex.sketchPartsById.constFind(sketch->id());
-        if (partsIt == loadedPathIndex.sketchPartsById.constEnd()) {
-            continue;
-        }
-
-        const QString caveDirName = cwSaveLoad::sanitizeFileName(partsIt->caveName);
-        const QString tripDirName = cwSaveLoad::sanitizeFileName(partsIt->tripName);
-        const QString sketchFileName = cwSaveLoad::sanitizeFileName(partsIt->sketchName + QStringLiteral(".cwsketch"));
-        seedStatePathFromLoaded(context, sketch, baseDataRootDir.filePath(QDir(caveDirName).filePath(
-                                                                     QDir(QStringLiteral("trips")).filePath(
-                                                                         QDir(tripDirName).filePath(
-                                                                             QDir(QStringLiteral("notes")).filePath(sketchFileName))))));
-    }
+    seedNotesDirObjects(loadedPathIndex.notePartsById,
+                        m_regionTreeModel->all<cwNote*>(QModelIndex(), &cwRegionTreeModel::note),
+                        QStringLiteral(".cwnote"));
+    seedNotesDirObjects(loadedPathIndex.lidarPartsById,
+                        m_regionTreeModel->all<cwNoteLiDAR*>(QModelIndex(), &cwRegionTreeModel::noteLiDAR),
+                        QStringLiteral(".cwnote3d"));
+    seedNotesDirObjects(loadedPathIndex.sketchPartsById,
+                        m_regionTreeModel->all<cwSketch*>(QModelIndex(), &cwRegionTreeModel::sketch),
+                        QStringLiteral(".cwsketch"));
 }
 
 QString cwSaveLoadPrivate::cleanupPathForDescriptor(const QString& absoluteDescriptorPath)
@@ -1396,13 +1390,34 @@ void cwSaveLoadPrivate::collapseSequentialMoves(const QList<int>& indices, QSet<
                 moveIndices.append(idx);
             }
         }
-        if (moveIndices.size() > 1) {
-            m_pendingJobs[moveIndices.last()].oldPath =
-                    m_pendingJobs[moveIndices.first()].oldPath;
-            for (int i = 0; i < moveIndices.size() - 1; ++i) {
+        if (moveIndices.size() < 2) {
+            continue;
+        }
+
+        // A run of moves collapses into its last job only while each one starts
+        // where the one before it ended. An ancestor directory move queued
+        // between two of them already carried this object somewhere else, so
+        // the earlier oldPath names nothing and collapsing onto it would leave
+        // the real directory — trips and note images included — behind.
+        const auto collapseRun = [&](int first, int last) {
+            if (last <= first) {
+                return;
+            }
+            m_pendingJobs[moveIndices[last]].oldPath = m_pendingJobs[moveIndices[first]].oldPath;
+            for (int i = first; i < last; ++i) {
                 indicesToDrop.insert(moveIndices[i]);
             }
+        };
+
+        int runStart = 0;
+        for (int i = 1; i < moveIndices.size(); ++i) {
+            if (m_pendingJobs.at(moveIndices.at(i - 1)).path
+                    != m_pendingJobs.at(moveIndices.at(i)).oldPath) {
+                collapseRun(runStart, i - 1);
+                runStart = i;
+            }
         }
+        collapseRun(runStart, moveIndices.size() - 1);
     }
 }
 

@@ -103,6 +103,18 @@ message Equate {
     repeated StationHandle stations = 1;
 }
 
+// What a survey node is called and drawn as. Absent on an older file means
+// NODE_CAVE, which is what every node in a flat project is.
+enum SurveyNodeKind {
+    NODE_CAVE = 0;
+    NODE_FOLDER = 1;
+    NODE_COMPASS_PROJECT = 2;
+    NODE_COMPASS_FILE = 3;
+    NODE_WALLS_BOOK = 4;
+    NODE_SURVEX_FILE = 5;
+    NODE_SURVEX_BLOCK = 6;
+}
+
 message Cave {
     optional FileVersion fileVersion = 9;
     optional string name = 8;
@@ -130,6 +142,13 @@ message Cave {
     // Within-cave equate ties (a station tied to another station in the same
     // cave). Cross-cave ties live on the region (Project.equates).
     repeated Equate equates = 13;
+
+    // Survey-tree fields. A node's child nodes live in <nodeDir>/nodes/, each
+    // with its own .cwcave; these scalars say what the node is.
+    optional SurveyNodeKind kind = 14;  // absent = NODE_CAVE
+    optional bool read_only = 15;       // absent = false
+    optional string source_id = 16;     // ExternalSource that owns this node; absent = native
+    optional string source_path = 17;   // where the node sits inside its source's scan; empty on the source root
 }
 
 message Trip {
@@ -152,6 +171,10 @@ message Trip {
     // Scope prefix for a native-prefixed (Scope) trip. Empty/absent for flat
     // native trips and Attached trips (whose scope is derived from the trip id).
     optional string station_prefix = 11;
+
+    // Where a derived trip sits inside its source's scan. Absent on a native
+    // trip, including a native trip under a derived node.
+    optional string source_path = 12;
 }
 
 //This is a legacy message, do not use, use StationShot instead

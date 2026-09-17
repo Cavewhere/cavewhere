@@ -177,9 +177,14 @@ TEST_CASE("cwSaveLoad writes file version metadata for saved files", "[cwSaveLoa
     REQUIRE(project->saveAs(projectPath));
     project->waitSaveToFinish();
 
-    auto checkFileVersion = [](const auto& proto) {
+    //A project with no hierarchy is stamped with the flat format's version, so
+    //it still opens in a build that predates the survey tree.
+    const int expectedVersion = cwSaveLoad::stampVersion(project->cavingRegion());
+    CHECK(expectedVersion == 9);
+
+    auto checkFileVersion = [expectedVersion](const auto& proto) {
         REQUIRE(proto.has_fileversion());
-        CHECK(proto.fileversion().version() == cwRegionIOTask::protoVersion());
+        CHECK(proto.fileversion().version() == expectedVersion);
         CHECK(proto.fileversion().cavewhereversion() == CavewhereVersion.toStdString());
     };
 

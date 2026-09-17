@@ -66,6 +66,7 @@
 #include <QFile>
 #include <QDateTime>
 #include <QQueue>
+#include <QMetaEnum>
 #include <QDirIterator>
 
 #ifdef CW_WITH_PDF_SUPPORT
@@ -99,12 +100,119 @@
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <variant>
 #include <type_traits>
 
 using namespace Monad;
 
 namespace {
+
+//! The FileVersion a project with no hierarchy is stamped with: the newest
+//! format a build that predates the survey tree can read and save.
+constexpr int kFlatProjectVersion = 9;
+
+//! The directory a trip's notes live in.
+const QLatin1String kNotesDirName("notes");
+
+//! The directory an attached survey file is copied into.
+const QLatin1String kExternalCenterlineDirName("external-centerline");
+
+//! The directory a node's child nodes live in, a sibling of trips/.
+const QLatin1String kNodesDirName("nodes");
+
+//! The directory a node's trips live in.
+const QLatin1String kTripsDirName("trips");
+
+//! Where a directory sits in a .cwproj's layout. Position is the only thing
+//! that says whether a directory called "trips" holds a node's surveys or is a
+//! node the user named that, so a descriptor scan decides what to descend into
+//! by the role it reached a directory through, never by the bare name.
+enum class ScanRole {
+    DataRoot,   //!< The project's data root; its children are survey nodes.
+    Node,       //!< A survey node's own directory.
+    NodesList,  //!< A node's nodes/ directory; its children are survey nodes.
+    TripsList,  //!< A node's trips/ directory; its children are trips.
+    Trip,       //!< A trip's own directory.
+    Unknown     //!< A directory the layout does not name; descended, never pruned.
+};
+
+//! The role a child directory of \a parentRole named \a name is reached
+//! through, or nothing when the scan prunes it. Content directories (notes/,
+//! external-centerline/ and, for the node scan, trips/) hold no descriptor the
+//! scan wants, and a copied Compass project alone puts hundreds of files under
+//! external-centerline/. \a scanTrips says whether the caller is looking for
+//! trip descriptors and so has to walk into trips/.
+std::optional<ScanRole> childScanRole(ScanRole parentRole, const QString& name, bool scanTrips)
+{
+    const auto named = [&name](QLatin1String dirName) {
+        return name.compare(dirName, Qt::CaseInsensitive) == 0;
+    };
+
+    switch (parentRole) {
+    case ScanRole::DataRoot:
+    case ScanRole::NodesList:
+        return ScanRole::Node;
+    case ScanRole::Node:
+        if (named(kNodesDirName)) {
+            return ScanRole::NodesList;
+        }
+        if (named(kTripsDirName)) {
+            return scanTrips ? std::optional(ScanRole::TripsList) : std::nullopt;
+        }
+        if (named(kExternalCenterlineDirName)) {
+            return std::nullopt;
+        }
+        return ScanRole::Unknown;
+    case ScanRole::TripsList:
+        return ScanRole::Trip;
+    case ScanRole::Trip:
+        if (named(kNotesDirName) || named(kExternalCenterlineDirName)) {
+            return std::nullopt;
+        }
+        return ScanRole::Unknown;
+    case ScanRole::Unknown:
+        return ScanRole::Unknown;
+    }
+    return ScanRole::Unknown;
+}
+
+//! The Kind a saved kind field names, Cave for a value this build has no name
+//! for — a newer file's node still loads as an ordinary cave.
+cwSurveyNodeKind::Kind toSurveyNodeKind(int protoKind)
+{
+    const bool known = QMetaEnum::fromType<cwSurveyNodeKind::Kind>().valueToKey(protoKind) != nullptr;
+    return known ? static_cast<cwSurveyNodeKind::Kind>(protoKind) : cwSurveyNodeKind::Kind::Cave;
+}
+
+//! The version to stamp into one object's own file. Every file of a project
+//! carries the same stamp, so each of these walks up to the region and asks
+//! cwSaveLoad::stampVersion. An object no region holds — a trip serialized for a
+//! git merge, say — carries no hierarchy of its own and takes the flat stamp.
+int stampVersionFor(const cwCave* cave)
+{
+    return cwSaveLoad::stampVersion(cave != nullptr ? cave->parentRegion() : nullptr);
+}
+
+int stampVersionFor(const cwTrip* trip)
+{
+    return trip != nullptr ? stampVersionFor(trip->parentCave()) : kFlatProjectVersion;
+}
+
+int stampVersionFor(const cwNote* note)
+{
+    return note != nullptr ? stampVersionFor(note->parentTrip()) : kFlatProjectVersion;
+}
+
+int stampVersionFor(const cwNoteLiDAR* note)
+{
+    return note != nullptr ? stampVersionFor(note->parentTrip()) : kFlatProjectVersion;
+}
+
+int stampVersionFor(const cwSketch* sketch)
+{
+    return sketch != nullptr ? stampVersionFor(sketch->parentTrip()) : kFlatProjectVersion;
+}
 
 QDir projectRootDirForFile(const QString& projectFileName)
 {
@@ -364,20 +472,6 @@ QSet<QString> cavewhereTrackedExtensions()
     return trackedExtensions;
 }
 
-QQuickGit::LfsPolicy cavewhereLfsPolicy()
-{
-    QQuickGit::LfsPolicy policy;
-    const auto alwaysEligible = [](const QString&, const QByteArray*) {
-        return true;
-    };
-
-    for (const QString& extension : cavewhereTrackedExtensions()) {
-        policy.setRule(extension, alwaysEligible);
-    }
-
-    return policy;
-}
-
 bool hasRemoteConfigured(const QQuickGit::GitRepository* repository)
 {
     return repository != nullptr && !repository->remotes().isEmpty();
@@ -634,6 +728,20 @@ QUuid repairedTopLevelId(const QUuid& candidateId,
 
 } // namespace (anonymous helpers above — repairedTopLevelId, etc.)
 
+QQuickGit::LfsPolicy cavewhereLfsPolicy()
+{
+    QQuickGit::LfsPolicy policy;
+    const auto alwaysEligible = [](const QString&, const QByteArray*) {
+        return true;
+    };
+
+    for (const QString& extension : cavewhereTrackedExtensions()) {
+        policy.setRule(extension, alwaysEligible);
+    }
+
+    return policy;
+}
+
 void regenerateNoteSubtreeIds(cwNoteData& note)
 {
     note.id = QUuid::createUuid();
@@ -684,6 +792,9 @@ void regenerateCaveSubtreeIds(cwCaveData& cave)
     for (cwTripData& trip : cave.trips) {
         regenerateTripSubtreeIds(trip);
     }
+    for (cwCaveData& child : cave.nodes) {
+        regenerateCaveSubtreeIds(child);
+    }
 }
 
 void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
@@ -706,9 +817,13 @@ void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
         return false;
     };
 
-    for (cwCaveData& cave : loadData.region.caves) {
+    //Ids are unique across the whole project, so the walk covers every node of
+    //the tree: a hand-copied directory under a parent's nodes/ duplicates ids
+    //just as a copied top-level cave does, and an unrepaired duplicate lets one
+    //node's loaded path stand in for the other's.
+    const auto repairNode = [&](cwCaveData& cave, auto&& self) -> void {
         if (detectDuplicate(cave.id, seenCaveIds, [&]{ regenerateCaveSubtreeIds(cave); })) {
-            continue;
+            return;
         }
 
         cave.id = repairedTopLevelId(cave.id, seenCaveIds, loadData.identityRepair);
@@ -737,12 +852,20 @@ void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
                 sketch.id = repairedTopLevelId(sketch.id, seenSketchIds, loadData.identityRepair);
             }
         }
+
+        for (cwCaveData& child : cave.nodes) {
+            self(child, self);
+        }
+    };
+
+    for (cwCaveData& cave : loadData.region.caves) {
+        repairNode(cave, repairNode);
     }
 }
 
 void cwSaveLoad::repairNestedScrapIds(ProjectLoadData& loadData)
 {
-    for (cwCaveData& cave : loadData.region.caves) {
+    const auto repairNode = [](cwCaveData& cave, ProjectLoadData& loadData, auto&& self) -> void {
         for (cwTripData& trip : cave.trips) {
             for (cwNoteData& note : trip.noteModel.notes) {
                 for (cwScrapData& scrap : note.scraps) {
@@ -765,6 +888,14 @@ void cwSaveLoad::repairNestedScrapIds(ProjectLoadData& loadData)
                 }
             }
         }
+
+        for (cwCaveData& child : cave.nodes) {
+            self(child, loadData, self);
+        }
+    };
+
+    for (cwCaveData& cave : loadData.region.caves) {
+        repairNode(cave, loadData, repairNode);
     }
 }
 
@@ -780,18 +911,26 @@ void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
         names.insert(name);
     };
 
-    // Caves within the region
-    {
-        cwSanitizedNameSet caveNames;
-        for (cwCaveData& cave : loadData.region.caves) {
-            dedup(caveNames, cave.name, [](const QString& old, const QString& fixed) {
-                return QStringLiteral("Cave \"%1\" renamed to \"%2\" to avoid a name collision on disk.").arg(old, fixed);
+    //Sibling nodes share a directory, so their names have to differ after
+    //sanitizing at every depth: a node's children collide with each other under
+    //its nodes/, not with its trips, which live in a separate trips/.
+    const auto dedupSiblingNodes = [&](QList<cwCaveData>& siblings, const QString& parentName) {
+        cwSanitizedNameSet nodeNames;
+        for (cwCaveData& node : siblings) {
+            dedup(nodeNames, node.name, [&](const QString& old, const QString& fixed) {
+                if (parentName.isEmpty()) {
+                    return QStringLiteral("Cave \"%1\" renamed to \"%2\" to avoid a name collision on disk.").arg(old, fixed);
+                }
+                return QStringLiteral("Survey node \"%1\" in \"%2\" renamed to \"%3\" to avoid a name collision on disk.").arg(old, parentName, fixed);
             });
         }
-    }
+    };
 
-    // Trips and notes within each cave
-    for (cwCaveData& cave : loadData.region.caves) {
+    dedupSiblingNodes(loadData.region.caves, QString());
+
+    const auto repairNode = [&](cwCaveData& cave, auto&& self) -> void {
+        dedupSiblingNodes(cave.nodes, cave.name);
+
         cwSanitizedNameSet tripNames;
         for (cwTripData& trip : cave.trips) {
             dedup(tripNames, trip.name, [&](const QString& old, const QString& fixed) {
@@ -821,6 +960,14 @@ void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
                 });
             }
         }
+
+        for (cwCaveData& child : cave.nodes) {
+            self(child, self);
+        }
+    };
+
+    for (cwCaveData& cave : loadData.region.caves) {
+        repairNode(cave, repairNode);
     }
 }
 
@@ -1342,6 +1489,7 @@ void cwSaveLoad::newProject()
         initializeRepositoryForCurrentFile();
 
         saveProject(tempDir, region);
+        seedStampedVersion();
 
         //Connect all for watching for saves
         connectTreeModel();
@@ -1457,6 +1605,11 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
                     d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
 
+                    //What is on disk is what the project was just loaded from,
+                    //so the rewrite pass starts from the file version the load
+                    //saw rather than from a previously opened project's.
+                    seedStampedVersion();
+
                     // Clear the undo stack so old objects from
                     // clearCaves()/addCaves() commands are freed.
                     if (auto* undoStack = d->m_regionTreeModel->cavingRegion()->undoStack()) {
@@ -1523,7 +1676,17 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescri
     const bool persistNotes = persistAllDescriptors || persistNoteDescriptors;
     const bool persistLiDARNotes = persistAllDescriptors || persistLiDARNoteDescriptors;
 
-    for (cwCave* cave : region->caves()) {
+    //Every node of the tree, not only the root's own children: a nested node
+    //whose on-disk name has drifted needs its rename enqueued before
+    //cleanupStaleLoadedPaths runs at the end of this same function, or that
+    //cleanup removes its directory with nothing having moved the content out.
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        auto* cave = qobject_cast<cwCave*>(node);
+        if (cave == nullptr) {
+            continue;
+        }
+
         d->enqueueRenameIfNeeded(this, cave);
         if (persistAllDescriptors) {
             save(cave);
@@ -1830,11 +1993,76 @@ void cwSaveLoad::saveProject(const QDir &dir, const cwCavingRegion *region)
     saveProtoMessage(toProtoProject(region), region);
 }
 
+void cwSaveLoad::seedStampedVersion()
+{
+    auto region = d->m_regionTreeModel->cavingRegion();
+    d->stampedVersion = region == nullptr ? -1 : stampVersion(region);
+}
+
+void cwSaveLoad::restampProjectIfVersionChanged()
+{
+    auto region = d->m_regionTreeModel->cavingRegion();
+    if (region == nullptr) {
+        return;
+    }
+
+    const int version = stampVersion(region);
+    if (version == d->stampedVersion) {
+        return;
+    }
+
+    if (!d->saveEnabled || d->projectFileName.isEmpty()) {
+        //The version moved but nothing can be written yet, so it stays
+        //unrecorded and the next call that can write does the rewrite.
+        return;
+    }
+
+    d->stampedVersion = version;
+
+    //Every file of a project carries the same FileVersion, so the whole project
+    //is rewritten the moment the format it needs changes — the first hierarchy
+    //appearing, or the last of it going away. That keeps the stamp an honest
+    //answer to "can the previous build open this?" instead of a record of what
+    //each file happened to be written beside.
+    saveProject(projectRootDir(), region);
+
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    for (cwSurveyNode* node : nodes) {
+        if (auto cave = qobject_cast<cwCave*>(node)) {
+            save(cave);
+        }
+    }
+
+    const QList<cwTrip*> trips = region->rootNode()->allTrips();
+    for (cwTrip* trip : trips) {
+        save(trip);
+
+        const QList<cwNote*> notes = trip->notes()->notes();
+        for (cwNote* note : notes) {
+            save(note);
+        }
+
+        const QList<QObject*> lidarNotes = trip->notesLiDAR()->notes();
+        for (QObject* note : lidarNotes) {
+            if (auto lidar = qobject_cast<cwNoteLiDAR*>(note)) {
+                save(lidar);
+            }
+        }
+
+        const QList<QObject*> sketches = trip->notesSketch()->notes();
+        for (QObject* sketch : sketches) {
+            if (auto sketchObject = qobject_cast<cwSketch*>(sketch)) {
+                save(sketchObject);
+            }
+        }
+    }
+}
+
 std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavingRegion *region)
 {
     auto protoProject = std::make_unique<CavewhereProto::Project>();
     auto fileVersion = protoProject->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersion(region));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     if (region != nullptr) {
@@ -1889,7 +2117,7 @@ void cwSaveLoad::saveCavingRegion(const cwCavingRegion *region)
 std::unique_ptr<CavewhereProto::CavingRegion> cwSaveLoad::toProtoCavingRegion(const cwCavingRegion *region)
 {
     auto protoRegion = std::make_unique<CavewhereProto::CavingRegion>();
-    protoRegion->set_version(cwRegionIOTask::protoVersion());
+    protoRegion->set_version(stampVersion(region));
     cwProtoUtils::saveString(protoRegion->mutable_cavewhereversion(), CavewhereVersion);
     cwProtoUtils::saveString(protoRegion->mutable_name(), region->name());
     return protoRegion;
@@ -1919,7 +2147,7 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
 {
     auto protoCave = std::make_unique<CavewhereProto::Cave>();
     auto fileVersion = protoCave->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(cave));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     *(protoCave->mutable_name()) = cave->name().toStdString();
     if (!cave->id().isNull()) {
@@ -1942,6 +2170,22 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
         cwProtoUtils::saveEquate(protoCave->add_equates(), equate);
     }
 
+    //Survey-tree scalars. Each is written only when it differs from the default
+    //a file without it means, so a flat project's .cwcave is byte-identical to
+    //what the previous format wrote.
+    if (cave->kind() != cwSurveyNode::Kind::Cave) {
+        protoCave->set_kind(static_cast<CavewhereProto::SurveyNodeKind>(cave->kind()));
+    }
+    if (cave->isReadOnly()) {
+        protoCave->set_read_only(true);
+    }
+    if (!cave->sourceId().isNull()) {
+        *(protoCave->mutable_source_id()) = uuidToProtoString(cave->sourceId()).toStdString();
+    }
+    if (!cave->sourcePath().isEmpty()) {
+        *(protoCave->mutable_source_path()) = cave->sourcePath().toStdString();
+    }
+
     return protoCave;
 }
 
@@ -1950,7 +2194,7 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     //Copy trip data into proto, on the main thread
     auto protoTrip = std::make_unique<CavewhereProto::Trip>();
     auto fileVersion = protoTrip->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(trip));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoTrip->mutable_name()) = trip->name().toStdString();
@@ -1979,6 +2223,10 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
 
     if (!trip->stationPrefix().isEmpty()) {
         *(protoTrip->mutable_station_prefix()) = trip->stationPrefix().toStdString();
+    }
+
+    if (!trip->sourcePath().isEmpty()) {
+        *(protoTrip->mutable_source_path()) = trip->sourcePath().toStdString();
     }
 
     return protoTrip;
@@ -2422,7 +2670,7 @@ std::unique_ptr<CavewhereProto::Note> cwSaveLoad::toProtoNote(const cwNote *note
     //Copy trip data into proto, on the main thread
     auto protoNote = std::make_unique<CavewhereProto::Note>();
     auto fileVersion = protoNote->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(note));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     cwProtoUtils::saveImage(protoNote->mutable_image(), note->image());
@@ -2453,7 +2701,7 @@ std::unique_ptr<CavewhereProto::NoteLiDAR> cwSaveLoad::toProtoNoteLiDAR(const cw
     //Copy trip data into proto, on the main thread
     auto protoNote = std::make_unique<CavewhereProto::NoteLiDAR>();
     auto fileVersion = protoNote->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(note));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     *(protoNote->mutable_name()) = note->name().toStdString();
@@ -2488,7 +2736,7 @@ std::unique_ptr<CavewhereProto::Sketch> cwSaveLoad::toProtoSketch(const cwSketch
 {
     auto protoSketch = std::make_unique<CavewhereProto::Sketch>();
     auto fileVersion = protoSketch->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    fileVersion->set_version(stampVersionFor(sketch));
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
 
     cwProtoUtils::saveSketch(protoSketch.get(), sketch->data());
@@ -2511,7 +2759,9 @@ std::unique_ptr<CavewhereProto::LazLayer> cwSaveLoad::toProtoLazLayer(const cwLa
 {
     auto proto = std::make_unique<CavewhereProto::LazLayer>();
     auto fileVersion = proto->mutable_fileversion();
-    fileVersion->set_version(cwRegionIOTask::protoVersion());
+    //A GIS layer belongs to the project rather than to a node, so it holds no
+    //hierarchy and takes the flat stamp whatever the survey tree looks like.
+    fileVersion->set_version(kFlatProjectVersion);
     cwProtoUtils::saveString(fileVersion->mutable_cavewhereversion(), CavewhereVersion);
     if (!layer->id().isNull()) {
         *(proto->mutable_id()) = uuidToProtoString(layer->id()).toStdString();
@@ -2695,11 +2945,22 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
     saveProject(dir, &region);
 
 
-    //Go through all the caves
+    //Go through the whole node tree, pre-order: a node's own files, then its
+    //trips, then the nodes/ directory below it.
+    const auto saveNode = [this, makeDir, saveTrips](const QDir& nodeDir, const cwCave* node, auto&& self) -> void {
+        makeDir(nodeDir);
+        save(node);
+        saveTrips(nodeDir, node);
+        for(const cwSurveyNode* child : node->childNodes()) {
+            auto childCave = qobject_cast<const cwCave*>(child);
+            if(childCave != nullptr) {
+                self(nodeDirHelper(nodeDir, childCave), childCave, self);
+            }
+        }
+    };
+
     for(const auto cave : project->cavingRegion()->caves()) {
-        const QDir caveDir = makeDir(caveDirHelper(dataRootDir, cave));
-        save(cave);
-        saveTrips(caveDir, cave);
+        saveNode(caveDirHelper(dataRootDir, cave), cave, saveNode);
     }
 
     return AsyncFuture::observe(pendingJobsFinished())
@@ -2747,23 +3008,89 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                 return a.absoluteFilePath() < b.absoluteFilePath();
             };
 
-            // Find all caves (*.cwcave)
-            QFileInfoList caveFiles;
-            QDirIterator it(regionDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-            while (it.hasNext()) {
-                it.next();
-                QDir caveDir(it.filePath());
+            // Every descriptor of one suffix under the data root, pruning the
+            // content directories the layout puts a node's or a trip's payload
+            // in. The prune is positional (childScanRole), so a node or trip the
+            // user happened to name "trips" or "notes" is still walked into.
+            const auto scanForFiles = [](const QDir& rootDir,
+                                         const QString& suffix,
+                                         bool scanTrips)
+            {
+                QFileInfoList found;
+                const auto walk = [&](const QDir& dir, ScanRole role, auto&& self) -> void {
+                    const QFileInfoList entries = dir.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot);
+                    for (const QFileInfo& entry : entries) {
+                        if (entry.isDir()) {
+                            const auto childRole = childScanRole(role, entry.fileName(), scanTrips);
+                            if (childRole.has_value()) {
+                                self(QDir(entry.absoluteFilePath()), *childRole, self);
+                            }
+                            continue;
+                        }
+                        if (entry.suffix().compare(suffix, Qt::CaseInsensitive) == 0) {
+                            found.append(entry);
+                        }
+                    }
+                };
+                walk(rootDir, ScanRole::DataRoot, walk);
+                return found;
+            };
 
-                QFileInfoList files = caveDir.entryInfoList(QStringList() << "*.cwcave", QDir::Files);
-                if (!files.isEmpty()) {
-                    caveFiles.append(files);
-                }
-            }
+            const auto parentDirPathOf = [](const QString& path) {
+                return QDir::cleanPath(QFileInfo(path).absoluteDir().absolutePath());
+            };
 
+            // A node and its children are separate files, so the tree is grown
+            // out of these entries and folded into cwCaveData::nodes at the end:
+            // a cwCaveData* into a QList would dangle the moment the list grew.
+            struct NodeEntry {
+                cwCaveData data;
+                QList<NodeEntry*> children;
+            };
+
+            std::vector<std::unique_ptr<NodeEntry>> nodeEntries;
+            QHash<QString, NodeEntry*> nodeByDir;
+            QList<NodeEntry*> rootEntries;
+
+            const QString regionDirPath = QDir::cleanPath(regionDir.absolutePath());
+
+            QFileInfoList caveFiles = scanForFiles(regionDir, QStringLiteral("cwcave"), false);
+
+            // Sorted by absolute path, so a parent — whose directory is a prefix
+            // of its children's — is always placed before its children.
             std::sort(caveFiles.begin(), caveFiles.end(), filePathLess);
 
             for (const QFileInfo &caveFileInfo : caveFiles) {
                 const QString cavePath = caveFileInfo.absoluteFilePath();
+                const QString caveDirPath = QDir::cleanPath(caveFileInfo.absoluteDir().absolutePath());
+
+                if (nodeByDir.contains(caveDirPath)) {
+                    loadData.errors.append(cwError(
+                                               QStringLiteral("Ignoring \"%1\": its directory already holds another survey node.")
+                                               .arg(cavePath),
+                                               cwError::Fatal));
+                    continue;
+                }
+
+                // The loader never guesses a parent: a descriptor sits either in
+                // the data root or in a node's nodes/ directory, and anything
+                // else is reported and skipped.
+                NodeEntry* parentEntry = nullptr;
+                const QString parentPath = parentDirPathOf(caveDirPath);
+                if (parentPath != regionDirPath) {
+                    const bool inNodesDir = QFileInfo(parentPath).fileName().compare(kNodesDirName, Qt::CaseInsensitive) == 0;
+                    const auto parentIt = inNodesDir ? nodeByDir.constFind(parentDirPathOf(parentPath))
+                                                     : nodeByDir.constEnd();
+                    if (parentIt == nodeByDir.constEnd()) {
+                        loadData.errors.append(cwError(
+                                                   QStringLiteral("Ignoring \"%1\": it is not in the project's data root or in a survey node's \"nodes\" directory.")
+                                                   .arg(cavePath),
+                                                   cwError::Fatal));
+                        continue;
+                    }
+                    parentEntry = parentIt.value();
+                }
+
                 auto caveProtoResult = loadMessage<CavewhereProto::Cave>(cavePath);
                 if (caveProtoResult.hasError()) {
                     loadData.errors.append(cwError(
@@ -2793,6 +3120,19 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                         ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
                         : cwUnits::Meters;
 
+                if (caveProto.has_kind()) {
+                    cave.kind = toSurveyNodeKind(caveProto.kind());
+                }
+                if (caveProto.has_read_only()) {
+                    cave.readOnly = caveProto.read_only();
+                }
+                if (caveProto.has_source_id()) {
+                    cave.sourceId = cwProtoUtils::toUuid(caveProto.source_id());
+                }
+                if (caveProto.has_source_path()) {
+                    cave.sourcePath = QString::fromStdString(caveProto.source_path());
+                }
+
                 cave.fixStations.reserve(caveProto.fixstations_size());
                 for (const auto& protoFix : caveProto.fixstations()) {
                     cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
@@ -2803,117 +3143,171 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                     cave.equates.append(cwProtoUtils::fromProtoEquate(protoEquate));
                 }
 
-                // Load all trips for this cave
-                QDir caveDir = caveFileInfo.absoluteDir();
-                QDir tripsDir(caveDir.filePath("trips"));
-                if (tripsDir.exists()) {
-                    QFileInfoList tripFiles;
-                    QDirIterator tripIt(tripsDir.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
-                    while (tripIt.hasNext()) {
-                        tripIt.next();
-                        QDir tripDir(tripIt.filePath());
+                nodeEntries.push_back(std::make_unique<NodeEntry>());
+                NodeEntry* entry = nodeEntries.back().get();
+                entry->data = std::move(cave);
+                nodeByDir.insert(caveDirPath, entry);
+                if (parentEntry != nullptr) {
+                    parentEntry->children.append(entry);
+                } else {
+                    rootEntries.append(entry);
+                }
+            }
 
-                        QFileInfoList dirTripFiles = tripDir.entryInfoList(QStringList() << "*.cwtrip",
-                                                                           QDir::Files,
-                                                                           QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
-                        tripFiles.append(dirTripFiles);
+            const auto loadTripData = [&loadData, &filePathLess](const QFileInfo& tripFileInfo) -> std::optional<cwTripData> {
+                const QString tripPath = tripFileInfo.absoluteFilePath();
+                auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
+
+                if (tripProtoResult.hasError()) {
+                    loadData.errors.append(cwError(
+                                               QStringLiteral("Could not load trip \"%1\": %2")
+                                               .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
+                                               cwError::Fatal));
+                    return std::nullopt;
+                }
+
+                const auto& tripProto = tripProtoResult.value();
+                auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
+                if (tripVersionWarning) {
+                    loadData.errors.append(*tripVersionWarning);
+                }
+
+                cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
+
+                QDir tripDir = tripFileInfo.absoluteDir();
+
+                auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
+                        auto&& loadProtoFunc,
+                        auto&& convertFunc,
+                        auto& destinationList)
+                {
+                    QDir notesDir = tripDir.filePath("notes");
+                    if (!notesDir.exists()) {
+                        return;
                     }
 
-                    std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
-
-                    for (const QFileInfo &tripFileInfo : tripFiles) {
-                        const QString tripPath = tripFileInfo.absoluteFilePath();
-                        auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
-
-                        if (tripProtoResult.hasError()) {
+                    QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix),
+                                                                 QDir::Files,
+                                                                 QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
+                    std::sort(files.begin(), files.end(), filePathLess);
+                    for (const QFileInfo& fileInfo : files) {
+                        const QString notePath = fileInfo.absoluteFilePath();
+                        auto protoResult = loadProtoFunc(notePath);
+                        if (protoResult.hasError()) {
                             loadData.errors.append(cwError(
-                                                       QStringLiteral("Could not load trip \"%1\": %2")
-                                                       .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
+                                                       QStringLiteral("Could not load \"%1\": %2")
+                                                       .arg(fileInfo.fileName(), protoResult.errorMessage()),
                                                        cwError::Fatal));
                             continue;
                         }
 
-                        const auto& tripProto = tripProtoResult.value();
-                        auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
-                        if (tripVersionWarning) {
-                            loadData.errors.append(*tripVersionWarning);
+                        auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
+                        if (versionWarning) {
+                            loadData.errors.append(*versionWarning);
                         }
 
-                        cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
-
-                        QDir tripDir = tripFileInfo.absoluteDir();
-
-                        auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
-                                auto&& loadProtoFunc,
-                                auto&& convertFunc,
-                                auto& destinationList)
-                        {
-                            QDir notesDir = tripDir.filePath("notes");
-                            if (!notesDir.exists()) {
-                                return;
-                            }
-
-                            QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix),
-                                                                         QDir::Files,
-                                                                         QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
-                            std::sort(files.begin(), files.end(), filePathLess);
-                            for (const QFileInfo& fileInfo : files) {
-                                const QString notePath = fileInfo.absoluteFilePath();
-                                auto protoResult = loadProtoFunc(notePath);
-                                if (protoResult.hasError()) {
-                                    loadData.errors.append(cwError(
-                                                               QStringLiteral("Could not load \"%1\": %2")
-                                                               .arg(fileInfo.fileName(), protoResult.errorMessage()),
-                                                               cwError::Fatal));
-                                    continue;
-                                }
-
-                                auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
-                                if (versionWarning) {
-                                    loadData.errors.append(*versionWarning);
-                                }
-
-                                destinationList.append(convertFunc(protoResult.value(), notePath));
-                            }
-                        };
-
-                        //Load 2D notes
-                        loadObjectsFromNotesDir(QStringLiteral("cwnote"),
-                                                [](const QString& path) {
-                            return loadMessage<CavewhereProto::Note>(path);
-                        },
-                        [](const CavewhereProto::Note& proto, const QString& path) {
-                            return cwSaveLoad::noteDataFromProtoNote(proto, path);
-                        },
-                        trip.noteModel.notes);
-
-                        //Load 3D lidar notes
-                        loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
-                                                [](const QString& path) {
-                            return loadMessage<CavewhereProto::NoteLiDAR>(path);
-                        },
-                        [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
-                            return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
-                        },
-                        trip.noteLiDARModel.notes);
-
-                        //Load sketches
-                        loadObjectsFromNotesDir(QStringLiteral("cwsketch"),
-                                                [](const QString& path) {
-                            return loadMessage<CavewhereProto::Sketch>(path);
-                        },
-                        [](const CavewhereProto::Sketch& proto, const QString& path) {
-                            return cwSaveLoad::sketchDataFromProtoSketch(proto, path);
-                        },
-                        trip.sketchModel.notes);
-
-                        cave.trips.append(trip);
+                        destinationList.append(convertFunc(protoResult.value(), notePath));
                     }
+                };
+
+                //Load 2D notes
+                loadObjectsFromNotesDir(QStringLiteral("cwnote"),
+                                        [](const QString& path) {
+                    return loadMessage<CavewhereProto::Note>(path);
+                },
+                [](const CavewhereProto::Note& proto, const QString& path) {
+                    return cwSaveLoad::noteDataFromProtoNote(proto, path);
+                },
+                trip.noteModel.notes);
+
+                //Load 3D lidar notes
+                loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
+                                        [](const QString& path) {
+                    return loadMessage<CavewhereProto::NoteLiDAR>(path);
+                },
+                [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
+                    return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
+                },
+                trip.noteLiDARModel.notes);
+
+                //Load sketches
+                loadObjectsFromNotesDir(QStringLiteral("cwsketch"),
+                                        [](const QString& path) {
+                    return loadMessage<CavewhereProto::Sketch>(path);
+                },
+                [](const CavewhereProto::Sketch& proto, const QString& path) {
+                    return cwSaveLoad::sketchDataFromProtoSketch(proto, path);
+                },
+                trip.sketchModel.notes);
+
+                return trip;
+            };
+
+            // Every trip descriptor, matched to the node that holds it. A
+            // .cwtrip whose nearest node ancestor is not its own trips/ parent
+            // is an orphan (a peer moved the node while this side added the
+            // trip): it attaches to that nearest node and is reported, so no
+            // survey is ever dropped on load.
+            QFileInfoList tripFiles = scanForFiles(regionDir,
+                                                   QStringLiteral("cwtrip"),
+                                                   true);
+            std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
+
+            for (const QFileInfo& tripFileInfo : tripFiles) {
+                NodeEntry* owner = nullptr;
+                bool inOwnTripsDir = false;
+                QString candidate = QDir::cleanPath(tripFileInfo.absoluteDir().absolutePath());
+                QString segmentBelow;
+                while (candidate.startsWith(regionDirPath)) {
+                    const auto ownerIt = nodeByDir.constFind(candidate);
+                    if (ownerIt != nodeByDir.constEnd()) {
+                        owner = ownerIt.value();
+                        inOwnTripsDir = segmentBelow.compare(kTripsDirName, Qt::CaseInsensitive) == 0;
+                        break;
+                    }
+                    if (candidate == regionDirPath) {
+                        break;
+                    }
+                    segmentBelow = QFileInfo(candidate).fileName();
+                    candidate = parentDirPathOf(candidate);
                 }
 
-                loadData.region.caves.append(cave);
+                if (owner == nullptr) {
+                    loadData.errors.append(cwError(
+                                               QStringLiteral("Ignoring \"%1\": it belongs to no survey node.")
+                                               .arg(tripFileInfo.absoluteFilePath()),
+                                               cwError::Fatal));
+                    continue;
+                }
+
+                auto tripData = loadTripData(tripFileInfo);
+                if (!tripData.has_value()) {
+                    continue;
+                }
+
+                if (!inOwnTripsDir) {
+                    loadData.errors.append(cwError(
+                                               QStringLiteral("Trip \"%1\" was found outside a \"trips\" directory and was loaded into \"%2\".")
+                                               .arg(tripFileInfo.absoluteFilePath(), owner->data.name),
+                                               cwError::Warning));
+                }
+
+                owner->data.trips.append(tripData.value());
             }
 
+            const auto foldNodeTree = [](NodeEntry* entry, auto&& self) -> cwCaveData {
+                cwCaveData data = std::move(entry->data);
+                data.nodes.reserve(entry->children.size());
+                for (NodeEntry* child : entry->children) {
+                    data.nodes.append(self(child, self));
+                }
+                return data;
+            };
+
+            loadData.region.caves.reserve(rootEntries.size());
+            for (NodeEntry* rootEntry : rootEntries) {
+                loadData.region.caves.append(foldNodeTree(rootEntry, foldNodeTree));
+            }
             repairTopLevelIds(loadData);
             repairNestedScrapIds(loadData);
             repairNameCollisions(loadData);
@@ -3060,6 +3454,10 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
 
     if (tripProto.has_station_prefix()) {
         tripData.stationPrefix = QString::fromStdString(tripProto.station_prefix());
+    }
+
+    if (tripProto.has_source_path()) {
+        tripData.sourcePath = QString::fromStdString(tripProto.source_path());
     }
 
     return tripData;
@@ -3392,6 +3790,7 @@ void cwSaveLoad::connectTreeModel()
     //Connect when region has changed
     connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsInserted,
             this, [this](const QModelIndex &parent, int first, int last) {
+        bool nodeInserted = false;
         for(int i = first; i <= last; i++) {
             auto index = d->m_regionTreeModel->index(i, 0, parent);
             switch(index.data(cwRegionTreeModel::TypeRole).toInt()) {
@@ -3399,6 +3798,7 @@ void cwSaveLoad::connectTreeModel()
                 auto cave = d->m_regionTreeModel->cave(index);
                 connectCave(cave);
                 save(cave);
+                nodeInserted = true;
                 break;
             }
             case cwRegionTreeModel::TripType: {
@@ -3434,6 +3834,25 @@ void cwSaveLoad::connectTreeModel()
             default:
                 break;
             }
+        }
+
+        //Only a node can move the format the project needs, so the walk
+        //stampVersion does stays off the note and scrap rows a load pours in.
+        if (nodeInserted) {
+            restampProjectIfVersionChanged();
+        }
+    });
+
+    connect(d->m_regionTreeModel, &cwRegionTreeModel::rowsRemoved,
+            this, [this](const QModelIndex& parent, int, int) {
+        //Only a node's disappearance can move the format the project needs. The
+        //removed rows are already gone by now, so the cheap test is the parent:
+        //a trip removal shares it and costs one short-circuiting stampVersion
+        //walk, while the note and scrap rows a load pours out are skipped.
+        const bool underNode = !parent.isValid()
+                || parent.data(cwRegionTreeModel::TypeRole).toInt() == cwRegionTreeModel::CaveType;
+        if (underNode) {
+            restampProjectIfVersionChanged();
         }
     });
 
@@ -4252,6 +4671,14 @@ void cwSaveLoad::connectCave(cwCave *cave)
     connect(cave->length(), &cwUnitValue::unitChanged, this, saveCave);
     connect(cave->depth(), &cwUnitValue::unitChanged, this, saveCave);
     connect(cave, &cwCave::externalCenterlineChanged, this, saveCave);
+    //A node's kind or source is part of what decides the project's file format,
+    //so these rewrite the whole project when they move it (§6.8).
+    const auto saveCaveAndRestamp = [saveCave, this]() {
+        saveCave();
+        restampProjectIfVersionChanged();
+    };
+    connect(cave, &cwCave::kindChanged, this, saveCaveAndRestamp);
+    connect(cave, &cwCave::sourceChanged, this, saveCaveAndRestamp);
 
     // connectCave runs after the cave's data is loaded, so watching modelReset
     // is safe here (the load-time setFixStations()/setEquates() reset fires
@@ -4685,6 +5112,49 @@ QString cwSaveLoad::sanitizeFileName(QString input) {
     return cwNameUtils::sanitizeFileName(std::move(input));
 }
 
+QString cwSaveLoad::relativeNodeDir(const QStringList& nodePath)
+{
+    QString relativeDir;
+    for (const QString& name : nodePath) {
+        if (!relativeDir.isEmpty()) {
+            relativeDir += QLatin1Char('/') + kNodesDirName + QLatin1Char('/');
+        }
+        relativeDir += sanitizeFileName(name);
+    }
+    return relativeDir;
+}
+
+int cwSaveLoad::stampVersion(const cwCavingRegion* region)
+{
+    if (region == nullptr) {
+        return kFlatProjectVersion;
+    }
+
+    const cwSurveyNode* root = region->rootNode();
+    if (root == nullptr) {
+        return kFlatProjectVersion;
+    }
+
+    //Stops at the first node that needs the tree format: this runs once per
+    //file a save writes, so it walks no more of the region than it has to. A
+    //child of a node that is not the root is already at depth two.
+    const auto holdsHierarchy = [](const cwSurveyNode* node, auto&& self) -> bool {
+        const QList<cwSurveyNode*> children = node->childNodes();
+        for (const cwSurveyNode* child : children) {
+            const bool needsTree = !node->isRoot()
+                    || child->kind() != cwSurveyNode::Kind::Cave
+                    || child->isReadOnly()
+                    || child->isSourced();
+            if (needsTree || self(child, self)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    return holdsHierarchy(root, holdsHierarchy) ? cwRegionIOTask::protoVersion() : kFlatProjectVersion;
+}
+
 
 QString cwSaveLoad::lastDirectoryForProjectFile(const QString& filePath)
 {
@@ -4771,10 +5241,14 @@ QString cwSaveLoad::absolutePathPrivate(const cwCave* cave) const
 
 QDir cwSaveLoad::dirPrivate(const cwCave* cave) const
 {
-    if (cave->parentRegion()) {
-        return caveDirHelper(dataRootDir(), cave);
+    if (cave == nullptr || cave->parentRegion() == nullptr) {
+        return QDir();
     }
-    return QDir();
+
+    //cwSurveyNode::path() is the walk up to the root, and relativeNodeDir turns
+    //it into the nodes/ layout: the root's own children are the data root's
+    //directories, and everything deeper sits in its parent's nodes/.
+    return QDir(dataRootDir().absoluteFilePath(relativeNodeDir(cave->path())));
 }
 
 QString cwSaveLoad::fileNamePrivate(const cwTrip* trip) const
@@ -4945,6 +5419,11 @@ QDir cwSaveLoad::caveDirHelper(const QDir &projectDir, const cwCave *cave)
 {
     QString caveDirName = sanitizeFileName(cave->name());
     return QDir(projectDir.absoluteFilePath(caveDirName));
+}
+
+QDir cwSaveLoad::nodeDirHelper(const QDir &parentNodeDir, const cwCave *node)
+{
+    return QDir(parentNodeDir.absoluteFilePath(kNodesDirName + QLatin1Char('/') + sanitizeFileName(node->name())));
 }
 
 QDir cwSaveLoad::tripDirHelper(const QDir &caveDir, const cwTrip *trip)
@@ -5655,6 +6134,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                          : QStringLiteral("projection-only"));
         } else {
             region->setData(loadData.region);
+            seedStampedVersion();
             modelMutated = true;
             // Full-reload fallback applies merged commit content from disk directly into
             // the model. Unless identity repair is required, there is nothing to persist.

@@ -12,6 +12,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwUnits.h"
 #include "cwFixStation.h"
+#include "cwSurveyNodeKind.h"
 
 struct cwCaveData {
     QString name;
@@ -23,6 +24,15 @@ struct cwCaveData {
     QList<cwFixStation> fixStations;
     cwExternalCenterline externalCenterline;
     QList<cwEquate> equates;
+
+    //! This node's child nodes, in row order. Each is saved under
+    //! <nodeDir>/nodes/<name>/, so the list is the persisted shape of the tree.
+    QList<cwCaveData> nodes;
+
+    cwSurveyNodeKind::Kind kind = cwSurveyNodeKind::Kind::Cave;
+    bool readOnly = false;
+    QUuid sourceId;
+    QString sourcePath;
 };
 
 #endif // CWCAVEDATA_H

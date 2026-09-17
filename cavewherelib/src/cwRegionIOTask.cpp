@@ -53,9 +53,13 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion* region)
  */
 int cwRegionIOTask::protoVersion()
 {
+    //Version 10 adds the survey tree: child nodes under <nodeDir>/nodes/ and the
+    //Cave kind/read_only/source fields. A project with no hierarchy is still
+    //stamped 9 by cwSaveLoad::stampVersion, so it opens in a build that predates
+    //the tree.
     //Version 9 fixes proto typos (backCompasssCalibration -> backCompassCalibration,
     //NoteTranformation -> NoteTransformation, Depercated -> Deprecated)
-    return 9;
+    return 10;
 }
 
 /**
@@ -75,7 +79,8 @@ QString cwRegionIOTask::toVersion(int protoVersion)
         {6, "2025.3"},
         {7, "2025.3-dev"},
         {8, "2026-dev"},
-        {9, "2026.4"}
+        {9, "2026.4"},
+        {10, "2026.4-dev"}
     };
 
     return protoToVersionString.value(protoVersion, "Unknown Version");

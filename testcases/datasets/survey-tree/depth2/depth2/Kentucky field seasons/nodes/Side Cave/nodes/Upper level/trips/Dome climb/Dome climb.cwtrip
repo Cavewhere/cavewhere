@@ -1,0 +1,50 @@
+{
+ "date": {
+  "year": 2026,
+  "month": 9,
+  "day": 16
+ },
+ "tripCalibration": {
+  "correctedCompassBacksight": false,
+  "correctedClinoBacksight": false,
+  "tapeCalibration": 0,
+  "frontCompassCalibration": 0,
+  "frontClinoCalibration": 0,
+  "backClinoCalibration": 0,
+  "declination": 0,
+  "distanceUnit": "Meters",
+  "frontSights": true,
+  "backSights": true,
+  "correctedCompassFrontsight": false,
+  "correctedClinoFrontsight": false,
+  "backCompassCalibration": 0,
+  "autoDeclination": true
+ },
+ "chunks": [
+  {
+   "leg": [
+    {
+     "id": "b1ee6c50-8cb6-4823-808c-c1c3f4e2dacb",
+     "name": "D1"
+    },
+    {
+     "id": "417b224d-aa7d-44a9-91c9-fc002f976fba",
+     "distance": "10",
+     "compass": "45",
+     "clino": "-5"
+    },
+    {
+     "id": "05fbdff9-ed26-41ac-9a3e-cabf68ea5e66",
+     "name": "D2"
+    }
+   ],
+   "id": "f316392c-145e-4090-9861-521a2102e095"
+  }
+ ],
+ "name": "Dome climb",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "id": "e5e9c566-9bc0-48d5-bcb6-447f263dd15e"
+}

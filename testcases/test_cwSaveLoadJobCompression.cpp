@@ -284,3 +284,46 @@ TEST_CASE("stateFor drops the entry when its object is destroyed",
         CHECK(!d.m_objectStates.contains(address));
     }
 }
+
+TEST_CASE("compressPendingJobs: a move an ancestor rename interrupted stays its own job",
+          "[cwSaveLoad][JobCompression]") {
+    cwSaveLoadPrivate d;
+
+    //Node B is renamed, its parent A is renamed (which rewrites B's path), and
+    //then B is renamed again. B's two moves no longer chain — the second starts
+    //where the parent's rename left it — so collapsing them onto the first
+    //oldPath would point the surviving job at a directory that has moved, and
+    //B's trips and note images would stay behind in it.
+    d.m_pendingJobs = {
+        makeMove(objectB(), kTagDefault, "/proj/A/nodes/B", "/proj/A/nodes/B2", Kind::Directory),
+        makeMove(objectA(), kTagDefault, "/proj/A", "/proj/A2", Kind::Directory),
+        makeMove(objectB(), kTagDefault, "/proj/A2/nodes/B2", "/proj/A2/nodes/B3", Kind::Directory),
+    };
+
+    d.compressPendingJobs();
+
+    REQUIRE(d.m_pendingJobs.size() == 3);
+    REQUIRE(d.m_pendingJobs.at(0).oldPath == QStringLiteral("/proj/A/nodes/B"));
+    REQUIRE(d.m_pendingJobs.at(0).path == QStringLiteral("/proj/A/nodes/B2"));
+    REQUIRE(d.m_pendingJobs.at(2).oldPath == QStringLiteral("/proj/A2/nodes/B2"));
+    REQUIRE(d.m_pendingJobs.at(2).path == QStringLiteral("/proj/A2/nodes/B3"));
+}
+
+TEST_CASE("compressPendingJobs: a chained run collapses even beside an interrupted one",
+          "[cwSaveLoad][JobCompression]") {
+    cwSaveLoadPrivate d;
+    d.m_pendingJobs = {
+        makeMove(objectA(), kTagDefault, "/proj/A", "/proj/B", Kind::Directory),
+        makeMove(objectA(), kTagDefault, "/proj/B", "/proj/C", Kind::Directory),
+        makeMove(objectA(), kTagDefault, "/proj/X", "/proj/Y", Kind::Directory),
+        makeMove(objectA(), kTagDefault, "/proj/Y", "/proj/Z", Kind::Directory),
+    };
+
+    d.compressPendingJobs();
+
+    REQUIRE(d.m_pendingJobs.size() == 2);
+    REQUIRE(d.m_pendingJobs.at(0).oldPath == QStringLiteral("/proj/A"));
+    REQUIRE(d.m_pendingJobs.at(0).path == QStringLiteral("/proj/C"));
+    REQUIRE(d.m_pendingJobs.at(1).oldPath == QStringLiteral("/proj/X"));
+    REQUIRE(d.m_pendingJobs.at(1).path == QStringLiteral("/proj/Z"));
+}

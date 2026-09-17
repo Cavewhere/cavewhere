@@ -28,6 +28,10 @@ struct cwTripData {
     cwExternalCenterline externalCenterline;
     QString stationPrefix;
 
+    //! Where a derived trip sits inside its source's scan, empty on a native
+    //! trip.
+    QString sourcePath;
+
     //! Snapshot of cwTrip::externalStations() so a worker pass (the line-plot
     //! solve, the floating-survey search) sees an attachment's station names
     //! without touching the live trip. Derived scan output, so it is filled by

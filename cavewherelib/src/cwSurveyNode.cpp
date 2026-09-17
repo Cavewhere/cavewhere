@@ -12,6 +12,7 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
+#include "cwCave.h"
 #include "cwData.h"
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
@@ -1183,7 +1184,6 @@ bool cwSurveyNode::validate(const cwEquate& equate) const
 
 cwCaveData cwSurveyNode::data() const
 {
-    //Todo load trips
     return {
         m_name,
         cwData::toDataList<cwTripData>(m_trips),
@@ -1193,7 +1193,12 @@ cwCaveData cwSurveyNode::data() const
         static_cast<cwUnits::LengthUnit>(depth()->unit()),
         m_fixStations->fixStations(),
         m_externalCenterline,
-        m_equates->equates()
+        m_equates->equates(),
+        cwData::toDataList<cwCaveData>(m_childNodes),
+        m_kind,
+        m_readOnly,
+        m_sourceId,
+        m_sourcePath
     };
 }
 
@@ -1201,14 +1206,28 @@ void cwSurveyNode::setData(const cwCaveData &data)
 {
     setName(data.name);
     setId(data.id);
+    setKind(data.kind);
+    setReadOnly(data.readOnly);
+    setSourceId(data.sourceId);
+    setSourcePath(data.sourcePath);
     length()->setUnit(data.lengthUnit);
     depth()->setUnit(data.depthUnit);
     setExternalCenterline(data.externalCenterline);
 
+    clearNodes();
     clearTrips();
 
     m_fixStations->setFixStations(data.fixStations);
     m_equates->setEquates(data.equates);
+
+    //Each child is filled in before it is inserted, so the whole subtree exists
+    //by the time this node says a row appeared — the way a trip is filled in
+    //before addTrip() announces it.
+    for(const auto& nodeData : data.nodes) {
+        auto node = new cwCave();
+        node->setData(nodeData);
+        addNode(node);
+    }
 
     //Insert all trips
     for(const auto& tripData : data.trips) {

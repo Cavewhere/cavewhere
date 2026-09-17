@@ -72,6 +72,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
     Q_PROPERTY(QString stationPrefix READ stationPrefix WRITE setStationPrefix NOTIFY stationPrefixChanged)
+    Q_PROPERTY(QString sourcePath READ sourcePath NOTIFY sourcePathChanged)
     Q_PROPERTY(QString scopePrefix READ scopePrefix NOTIFY scopeChanged)
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
@@ -100,6 +101,13 @@ public:
 
     QString stationPrefix() const { return m_stationPrefix; }
     void setStationPrefix(const QString& stationPrefix);
+
+    //! Where this trip sits inside its source's scan ("BLOWING3.DAT/OF50-87"),
+    //! empty on a native trip — including a native trip under a derived node.
+    //! Persisted so a derived trip keeps its identity across a save; the
+    //! reconcile pass that fills it arrives with external sources.
+    QString sourcePath() const { return m_sourcePath; }
+    void setSourcePath(const QString& sourcePath);
 
     //! The station names this trip's attached external centerline declares, in
     //! the trip's own namespace — canonical and sorted, the same spelling
@@ -325,6 +333,8 @@ signals:
     void externalCenterlineChanged();
     void stationPrefixChanged();
 
+    void sourcePathChanged();
+
     //! Fired when the scan-time harvest replaced this trip's externalStations().
     //! A consumer that also cares when cavern's complaint changes wants
     //! externalStationsErrorChanged() as well — the two fields move
@@ -412,6 +422,7 @@ protected:
     QUuid Id;
     cwExternalCenterline m_externalCenterline;
     QString m_stationPrefix;
+    QString m_sourcePath;
     QStringList m_externalStations;
     QString m_externalStationsError;
 

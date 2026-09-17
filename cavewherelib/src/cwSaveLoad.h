@@ -104,6 +104,9 @@ class GitRepository;
 class Account;
 }
 
+//QQuickGit includes
+#include "LfsPolicy.h"
+
 //Monad includes
 #include <Monad/Result.h>
 
@@ -119,6 +122,10 @@ class Account;
 #include <QUndoStack>
 #include <functional>
 #include <optional>
+
+//! Which files a CaveWhere project stores in git LFS: the raster, PDF, mesh and
+//! point-cloud formats a survey carries, matched by extension at any depth.
+CAVEWHERE_LIB_EXPORT QQuickGit::LfsPolicy cavewhereLfsPolicy();
 
 class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
 {
@@ -221,6 +228,21 @@ public:
     static Monad::Result<cwLazLayerData> loadLazLayer(const QByteArray& content, const QString& filename);
 
     static QString sanitizeFileName(QString input);
+
+    //! The data-root-relative directory a node with \a nodePath (the names from
+    //! the root down, the root's own excluded) is saved in:
+    //! "Kentucky field seasons/nodes/Side Cave/nodes/Upper level". Every path
+    //! segment is sanitized, so this is the one place the nodes/ layout is
+    //! spelled out — the loader, the writer and the sync handlers all compose
+    //! node directories through it.
+    static QString relativeNodeDir(const QStringList& nodePath);
+
+    //! The FileVersion stamped into every file of \a region's project: the tree
+    //! format's version when the project holds hierarchy (a node at depth two or
+    //! deeper, a kind other than Cave, a read-only node, or a sourced node), and
+    //! the flat format's otherwise, so a flat project saved by this build still
+    //! opens in one that predates the tree.
+    static int stampVersion(const cwCavingRegion* region);
 
     // Load-time repair helpers (exposed for testing)
     static void repairTopLevelIds(ProjectLoadData& loadData);
@@ -468,6 +490,9 @@ private:
     QPointer<cwRemoteAuthProvider> m_authProvider;
 
     void saveProject(const QDir& dir, const cwCavingRegion* region);
+
+    void seedStampedVersion();
+    void restampProjectIfVersionChanged();
     std::unique_ptr<CavewhereProto::Project> toProtoProject(const cwCavingRegion* region);
     QDir projectRootDir() const;
 
@@ -555,6 +580,7 @@ private:
     QFuture<void> completeSaveJobs();
 
     static QDir caveDirHelper(const QDir& projectDir, const cwCave *cave);
+    static QDir nodeDirHelper(const QDir& parentNodeDir, const cwCave* node);
     static QDir tripDirHelper(const QDir& caveDir, const cwTrip* trip);
     static QDir noteDirHelper(const QDir& tripDir);
     static QDir externalCenterlineDirHelper(const QDir& ownerDir);

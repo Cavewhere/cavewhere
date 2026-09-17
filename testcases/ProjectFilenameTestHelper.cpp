@@ -87,11 +87,14 @@ QString ProjectFilenameTestHelper::absolutePath(const cwCave* cave)
 
 QDir ProjectFilenameTestHelper::dir(const cwCave* cave)
 {
-    if (cave->parentRegion() && cave->parentRegion()->parentProject()) {
-        QDir projDir = projectDir(cave->parentRegion()->parentProject());
-        return caveDirHelper(projDir, cave);
+    if (cave->parentRegion() == nullptr || cave->parentRegion()->parentProject() == nullptr) {
+        return QDir();
     }
-    return QDir();
+
+    //Mirrors cwSaveLoad::dirPrivate: a node lives in its parent's nodes/
+    //directory, and the root's own children are the data root's directories.
+    const QDir dataRootDir = projectDir(cave->parentRegion()->parentProject());
+    return QDir(dataRootDir.absoluteFilePath(cwSaveLoad::relativeNodeDir(cave->path())));
 }
 
 QString ProjectFilenameTestHelper::fileName(const cwTrip* trip)
@@ -204,12 +207,6 @@ QDir ProjectFilenameTestHelper::dir(const cwNoteLiDAR* note)
         return noteDirHelper(dir(note->parentTrip()));
     }
     return QDir();
-}
-
-QDir ProjectFilenameTestHelper::caveDirHelper(const QDir& projectDir, const cwCave* cave)
-{
-    QString caveDirName = sanitizeFileName(cave->name());
-    return QDir(projectDir.absoluteFilePath(caveDirName));
 }
 
 QDir ProjectFilenameTestHelper::tripDirHelper(const QDir& caveDir, const cwTrip* trip)

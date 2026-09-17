@@ -276,6 +276,15 @@ void cwTrip::setStationPrefix(const QString& stationPrefix)
     emit externallyBackedChanged();
 }
 
+void cwTrip::setSourcePath(const QString& sourcePath)
+{
+    if (m_sourcePath == sourcePath) {
+        return;
+    }
+    m_sourcePath = sourcePath;
+    emit sourcePathChanged();
+}
+
 void cwTrip::setExternalStations(const QStringList& stations)
 {
     if (m_externalStations == stations) {
@@ -815,6 +824,7 @@ cwTripData cwTrip::data() const
         Id,
         m_externalCenterline,
         m_stationPrefix,
+        m_sourcePath,
         m_externalStations
     };
 }
@@ -826,6 +836,7 @@ void cwTrip::setData(const cwTripData &data)
     setDate(data.date);
     setExternalCenterline(data.externalCenterline);
     setStationPrefix(data.stationPrefix);
+    setSourcePath(data.sourcePath);
     //externalStations is deliberately not restored. It is scan output, and every
     //cwTripData that reaches this setter either came off disk — where the field
     //is never serialized, so it is empty — or was just taken from this same

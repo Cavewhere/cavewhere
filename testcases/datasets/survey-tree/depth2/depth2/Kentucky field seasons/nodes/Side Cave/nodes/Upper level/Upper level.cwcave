@@ -1,0 +1,11 @@
+{
+ "lengthUnit": "Meters",
+ "depthUnit": "Meters",
+ "name": "Upper level",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "id": "a35e63c8-2c8e-4728-89e8-24aa2da7a444",
+ "kind": "NODE_FOLDER"
+}

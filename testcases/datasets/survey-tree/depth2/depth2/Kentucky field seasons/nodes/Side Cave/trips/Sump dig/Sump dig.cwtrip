@@ -1,0 +1,50 @@
+{
+ "date": {
+  "year": 2026,
+  "month": 9,
+  "day": 16
+ },
+ "tripCalibration": {
+  "correctedCompassBacksight": false,
+  "correctedClinoBacksight": false,
+  "tapeCalibration": 0,
+  "frontCompassCalibration": 0,
+  "frontClinoCalibration": 0,
+  "backClinoCalibration": 0,
+  "declination": 0,
+  "distanceUnit": "Meters",
+  "frontSights": true,
+  "backSights": true,
+  "correctedCompassFrontsight": false,
+  "correctedClinoFrontsight": false,
+  "backCompassCalibration": 0,
+  "autoDeclination": true
+ },
+ "chunks": [
+  {
+   "leg": [
+    {
+     "id": "b18cb9f5-c36c-44e5-ae47-df7e9a3faf3e",
+     "name": "C1"
+    },
+    {
+     "id": "2c068c4d-826b-41d0-a8b5-6cc3b3b05236",
+     "distance": "10",
+     "compass": "45",
+     "clino": "-5"
+    },
+    {
+     "id": "ab534c37-0b27-4746-983e-b7c21f43cdfe",
+     "name": "C2"
+    }
+   ],
+   "id": "dca9496a-213b-4f79-bf34-04fad393374d"
+  }
+ ],
+ "name": "Sump dig",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-682-g3e0c437b"
+ },
+ "id": "ac230ed9-303e-4bfd-a251-fd10a442e39e"
+}

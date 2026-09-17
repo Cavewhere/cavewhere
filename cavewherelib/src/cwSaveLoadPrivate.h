@@ -195,35 +195,29 @@ struct cwSaveLoadPrivate {
         QString loadedPath;
     };
 
+    //! A loaded object's path, as the names it was saved under: nodePath is the
+    //! node names from the root down (the root's own excluded), the same list
+    //! cwSurveyNode::path() yields, which cwSaveLoad::relativeNodeDir turns into
+    //! a directory.
     struct LoadedTripPathParts {
-        QString caveName;
+        QStringList nodePath;
         QString tripName;
     };
 
+    //! A 2D note, a LiDAR note and a sketch all live in their trip's notes/
+    //! directory and differ only in file suffix, so one shape names all three.
     struct LoadedNotePathParts {
-        QString caveName;
+        QStringList nodePath;
         QString tripName;
         QString noteName;
-    };
-
-    struct LoadedLiDARPathParts {
-        QString caveName;
-        QString tripName;
-        QString noteName;
-    };
-
-    struct LoadedSketchPathParts {
-        QString caveName;
-        QString tripName;
-        QString sketchName;
     };
 
     struct LoadedPathIndex {
-        QHash<QUuid, QString> caveNameById;
+        QHash<QUuid, QStringList> nodePathById;
         QHash<QUuid, LoadedTripPathParts> tripPartsById;
         QHash<QUuid, LoadedNotePathParts> notePartsById;
-        QHash<QUuid, LoadedLiDARPathParts> lidarPartsById;
-        QHash<QUuid, LoadedSketchPathParts> sketchPartsById;
+        QHash<QUuid, LoadedNotePathParts> lidarPartsById;
+        QHash<QUuid, LoadedNotePathParts> sketchPartsById;
     };
 
     //Where the objects are currently being saved
@@ -254,6 +248,12 @@ struct cwSaveLoadPrivate {
 
     bool isTemporary = true;
     bool saveEnabled = true;
+
+    //! The FileVersion the project's files were last written with, -1 before the
+    //! first look. Every file of a project carries the same stamp, so when
+    //! cwSaveLoad::stampVersion moves — the first hierarchy appears, or the last
+    //! of it goes away — the whole project is rewritten.
+    int stampedVersion = -1;
     QStringList m_ownedTempDirs; // QTemporaryDir paths owned by this project, cleaned up on retire/destroy
     bool newProjectCalled = false;
 

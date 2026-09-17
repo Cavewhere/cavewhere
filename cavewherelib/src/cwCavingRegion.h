@@ -127,10 +127,6 @@ public:
     //! "<Kind> N" and deduplicated against its siblings, as one undo step.
     //! Returns the new node, or nullptr when \a parent belongs to another region
     //! or \a kind is outside cwSurveyNode::Kind.
-    //!
-    //! Only the root's own children are saved until W3 teaches the file format
-    //! about nodes: a node created under a cave lives in memory for the session
-    //! and is absent from the project the next time it is opened.
     Q_INVOKABLE cwSurveyNode* addNode(cwSurveyNode* parent, cwSurveyNode::Kind kind);
 
     Q_INVOKABLE int rowCount(const QModelIndex &parent = QModelIndex()) const;
