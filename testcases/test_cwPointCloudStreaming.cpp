@@ -1254,11 +1254,14 @@ namespace {
     //! spends that surplus to make the density continuous, so the tile now
     //! draws at the spacing the cut aims for and measures 0.0051 over holes of
     //! one to six pixels — still half a percent of the footprint, and the
-    //! price of the density step falling by a factor of twenty. Measured, with
-    //! slack for the pixel rounding a different rasterizer would do.
-    constexpr double kTileMaxHoleFraction = 0.006;
+    //! price of the density step falling by a factor of twenty. Sampling every
+    //! cell at its own level took the native-density leaves out of the tile,
+    //! which the old numbers had leaned on: the worst hole is 0.0059 and the
+    //! step between levels 0.0038. Measured, with slack for the pixel rounding
+    //! a different rasterizer would do.
+    constexpr double kTileMaxHoleFraction = 0.0066;
     constexpr int kTileMaxHoleSidePx = 6;
-    constexpr double kTileMaxHoleFractionJump = 0.0026;
+    constexpr double kTileMaxHoleFractionJump = 0.0042;
 
     //! Where a failed case writes its frame, when it is set
     const char* const kFrameDumpEnvironmentVariable = "CAVEWHERE_HOLE_METRIC_DUMP_DIR";
@@ -4896,4 +4899,172 @@ TEST_CASE("A split tile holds its seam density frame to frame",
     INFO("union flicker " << unionFlicker << ", split flicker " << splitFlicker);
     CHECK(unionFlicker <= kMaxSeamFlicker);
     CHECK(splitFlicker <= kMaxSeamFlicker);
+}
+
+namespace {
+
+    //! A ground plane as coarse as the root's own sample spacing, with one
+    //! dense patch on it: few enough points that the cell holding it stays
+    //! under the sampler's leaf threshold, fine enough that its spacing is
+    //! levels off what that cell's level promises.
+    constexpr double kOversizeGroundSide = 32.0;
+    constexpr double kOversizeGroundStep = 0.25;
+    constexpr double kOversizePatchSide = 0.2;
+    constexpr double kOversizePatchStep = 0.005;
+
+    //! Off the root's mid planes, so the ground lands inside cells rather than
+    //! on their faces
+    constexpr float kOversizeGroundHeight = 5.0f;
+
+    //! Close enough that the cut refines all the way onto the patch
+    constexpr float kOversizeOrthoHeight = 2.0f;
+
+    //! How far a sprite may outrun the points it covers. Sprites are sized off
+    //! the node floor, so a floor this much wider than the spacing the node
+    //! really holds draws the patch at multiples of its true footprint.
+    constexpr double kMaxFloorOverMeasuredSpacing = 2.0;
+
+    //! A node holding fewer points than this has too few neighbors for a
+    //! stable median
+    constexpr qsizetype kMinPointsForSpacing = 64;
+
+    //! The pairwise walk is quadratic, and a sample is enough for a median
+    constexpr qsizetype kSpacingSampleCount = 200;
+
+    QVector<QVector3D> oversizeGridPatch(const QVector3D& corner, double side, double step)
+    {
+        const int perAxis = int(side / step) + 1;
+
+        QVector<QVector3D> points;
+        points.reserve(qsizetype(perAxis) * perAxis);
+        for (int row = 0; row < perAxis; row++) {
+            for (int column = 0; column < perAxis; column++) {
+                points.append(corner + QVector3D(float(column * step), float(row * step), 0.0f));
+            }
+        }
+        return points;
+    }
+
+    //! The points of @a node, dequantized out of the mirror the cloud has
+    //! resident
+    QVector<QVector3D> nodePoints(const PointCloudFixture& fixture, int node)
+    {
+        const QByteArray bytes = Access::nodeBytes(fixture.backend(), node);
+        const QBox3D bounds = fixture.manifest().nodeBounds(node);
+
+        QVector<QVector3D> points;
+        for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
+             offset += cw::octree::kBytesPerPoint) {
+            const char* axes = bytes.constData() + offset;
+            constexpr int kAxisBytes = int(sizeof(quint16));
+            const cw::octree::QuantizedPoint quantized{
+                qFromLittleEndian<quint16>(axes),
+                qFromLittleEndian<quint16>(axes + kAxisBytes),
+                qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
+                0};
+            points.append(cw::octree::dequantize(quantized, bounds));
+        }
+        return points;
+    }
+
+    //! The median nearest-neighbor distance among a sample of @a points: the
+    //! spacing really drawn, whatever level the manifest calls it.
+    double medianNearestNeighbor(const QVector<QVector3D>& points)
+    {
+        if (points.size() < 2) {
+            return 0.0;
+        }
+
+        const qsizetype stride = std::max<qsizetype>(1, points.size() / kSpacingSampleCount);
+
+        QVector<double> nearest;
+        for (qsizetype i = 0; i < points.size(); i += stride) {
+            double best = std::numeric_limits<double>::max();
+            for (qsizetype j = 0; j < points.size(); j++) {
+                if (i != j) {
+                    best = std::min(best, double((points.at(j) - points.at(i)).length()));
+                }
+            }
+            nearest.append(best);
+        }
+
+        std::sort(nearest.begin(), nearest.end());
+        return nearest.at(nearest.size() / 2);
+    }
+
+    //! The deepest drawn node whose cube covers (@a x, @a y), or -1
+    int deepestDrawnNodeCovering(const cwPointOctreeManifest& manifest,
+                                 const QVector<int>& drawnNodes, float x, float y)
+    {
+        int deepest = -1;
+        for (int node : drawnNodes) {
+            const QBox3D bounds = manifest.nodeBounds(node);
+            if (x < bounds.minimum().x() || x > bounds.maximum().x()
+                || y < bounds.minimum().y() || y > bounds.maximum().y()) {
+                continue;
+            }
+
+            if (deepest < 0 || manifest.nodes.at(node).level > manifest.nodes.at(deepest).level) {
+                deepest = node;
+            }
+        }
+        return deepest;
+    }
+}
+
+TEST_CASE("A dense patch draws sprites sized for the spacing it holds",
+          "[PointCloudStreaming][OversizeSprite]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    QTemporaryDir directory {
+        QDir::temp().filePath(QStringLiteral("cwOversizeSprite-%1-XXXXXX")
+                                  .arg(QCoreApplication::applicationPid()))
+    };
+    REQUIRE(directory.isValid());
+
+    const QVector3D patchCorner(float(kOversizeGroundSide * 0.3),
+                                float(kOversizeGroundSide * 0.3), kOversizeGroundHeight);
+
+    QVector<QVector3D> points = oversizeGridPatch(QVector3D(0.0f, 0.0f, kOversizeGroundHeight),
+                                                  kOversizeGroundSide, kOversizeGroundStep);
+    points += oversizeGridPatch(patchCorner, kOversizePatchSide, kOversizePatchStep);
+
+    const OctreeCache cache = buildOctreeCache(directory.path(),
+                                               QStringLiteral("oversize-sprite"), points);
+    REQUIRE(cache.source.manifest->nodes.size() > 1);
+
+    PointCloudFixture fixture(rhi.get(), cache, kTargetDimension);
+    fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
+    fixture.synchronize();
+
+    cwRenderBudgets budgets = fixture.budgets();
+    //What the app's "unlimited" spinbox asks for
+    budgets.pointBudget = qint64(cw::budgets::kMaxPointBudgetMillions)
+                          * cw::budgets::kPointsPerMillion;
+    fixture.setBudgets(budgets);
+
+    const QVector3D patchCenter = patchCorner
+                                  + QVector3D(float(kOversizePatchSide * 0.5),
+                                              float(kOversizePatchSide * 0.5), 0.0f);
+    fixture.setViewOffset(patchCenter - fixture.center());
+    fixture.setOrthoHeight(kOversizeOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const int patchNode = deepestDrawnNodeCovering(fixture.manifest(),
+                                                   Access::drawnNodes(fixture.backend()),
+                                                   patchCenter.x(), patchCenter.y());
+    REQUIRE(patchNode >= 0);
+
+    const QVector<QVector3D> patchPoints = nodePoints(fixture, patchNode);
+    REQUIRE(patchPoints.size() >= kMinPointsForSpacing);
+
+    const double measured = medianNearestNeighbor(patchPoints);
+    REQUIRE(measured > 0.0);
+    const double floorSpacing = nodeFloorSpacing(fixture, patchNode);
+
+    INFO("level " << fixture.manifest().nodes.at(patchNode).level << " draws "
+         << patchPoints.size() << " points at " << measured << " m under a "
+         << floorSpacing << " m sprite floor");
+    CHECK(floorSpacing <= kMaxFloorOverMeasuredSpacing * measured);
 }

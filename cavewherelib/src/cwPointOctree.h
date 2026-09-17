@@ -20,7 +20,7 @@
 namespace cw::octree {
 
     //Bumping this invalidates every cached manifest and node at once
-    constexpr int kFormatGeneration = 2;
+    constexpr int kFormatGeneration = 3;
 
     //Points per node edge; spacing = nodeSize / kSampleGridResolution
     constexpr int kSampleGridResolution = 128;

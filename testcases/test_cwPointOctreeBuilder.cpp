@@ -844,7 +844,7 @@ TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
     REQUIRE(manifest.nodes.size() > 1);
 
     //The generation is part of every id, so an older cache is never read back
-    REQUIRE(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree2")));
+    REQUIRE(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree3")));
 
     const cwDiskCacher cacher {QDir(request.cacheRootPath)};
     for(int i = 0; i < manifest.nodes.size(); i++) {
@@ -1684,9 +1684,11 @@ TEST_CASE("cwPointOctreeBuilder: a cell over the chunk cap splits a level deeper
 
     verifyOctree(capped.manifest, capped.request, sourcePoints);
 
-    //The cap splits cells that one subtree node held, so the octree gains the
-    //level the split put those chunks at
-    REQUIRE(deepestLevel(capped.manifest) == deepestLevel(uncapped.manifest) + 1);
+    //The cap splits cells that one chunk held, so the octree carries the
+    //level the split put those chunks at; how far below that the tree goes is
+    //the density's call, since every cell samples at its own level
+    REQUIRE(nodesAtLevel(capped.manifest, kSplitChunkDepth + 1) > 0);
+    REQUIRE(deepestLevel(capped.manifest) > kSplitChunkDepth);
 
     //The root holds one point per occupied cell of its own sample grid, and the
     //split moves no point into another of those cells
@@ -1824,8 +1826,7 @@ TEST_CASE("cwPointOctreeBuilder: a cell still over the cap after a split splits 
 
     //Each round puts its chunks a level deeper, so the octree carries the
     //levels the rounds added
-    REQUIRE(deepestLevel(capped.manifest)
-            >= deepestLevel(uncapped.manifest) + kManyRoundExtraLevels);
+    REQUIRE(deepestLevel(capped.manifest) >= kTwoLevelChunkDepth + kManyRoundExtraLevels);
 
     //Pass C now walks chunk roots at several levels, and it walks them the same
     //way however many workers pass A ran on

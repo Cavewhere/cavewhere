@@ -195,12 +195,25 @@ QVector<SampledNode> buildSubtree(QVector<QVector3D> points,
 {
     QVector<SampledNode> nodes;
 
-    if(points.size() <= leafMaxPoints || root.level >= kMaxLevel) {
+    if(root.level >= kMaxLevel) {
         nodes.append(SampledNode{root, std::move(points)});
         return nodes;
     }
 
     const QBox3D bounds = cellBounds(root, rootMin, rootSize);
+
+    //A cell under the leaf threshold still samples at its own level, so the
+    //points it draws sit at the spacing its level promises; whatever the grid
+    //leaves behind splits into children like any other cell.
+    QVector<QVector3D> ownSample;
+    const bool sampledFirst = points.size() <= leafMaxPoints;
+    if(sampledFirst) {
+        ownSample = gridSample(bounds, kSampleGridResolution, points);
+        if(points.isEmpty()) {
+            nodes.append(SampledNode{root, std::move(ownSample)});
+            return nodes;
+        }
+    }
 
     std::array<QVector<QVector3D>, kChildCount> childPoints;
     const qsizetype childGuess = points.size() / kChildCount + 1;
@@ -230,7 +243,7 @@ QVector<SampledNode> buildSubtree(QVector<QVector3D> points,
         sampleSources.append(&childNodes[octant].first().points);
     }
 
-    nodes.append(SampledNode{root, sampleUp(bounds, sampleSources)});
+    nodes.append(SampledNode{root, sampledFirst ? std::move(ownSample) : sampleUp(bounds, sampleSources)});
 
     for(int octant = 0; octant < kChildCount; octant++) {
         QVector<SampledNode>& subtree = childNodes[octant];

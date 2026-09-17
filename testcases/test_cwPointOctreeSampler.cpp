@@ -507,3 +507,104 @@ TEST_CASE("The same cloud builds the same tree twice", "[PointOctree][PointOctre
 
     CHECK(sameTree(first, second));
 }
+
+namespace {
+    //A flat ground grid, as coarse as the root's own sample spacing
+    constexpr double kGroundSide = 64.0;
+    constexpr double kGroundStep = 0.5;
+
+    //Off the root's mid planes, so the plane lands inside cells instead of on their faces
+    constexpr float kGroundHeight = 13.0f;
+
+    //A dense patch, fine enough that a shallow cell holding it is levels off its own spacing
+    constexpr double kPatchSide = 0.4;
+    constexpr double kPatchStep = 0.01;
+
+    //Small enough that the patch cell stays under it, so the sampler leaves the patch whole
+    constexpr int kSpacingLeafMaxPoints = 2000;
+
+    //A node holding fewer points than this has too few neighbors for a stable median
+    constexpr qsizetype kMinPointsForSpacing = 64;
+
+    //The pairwise walk is quadratic, and a sample is enough for a median
+    constexpr qsizetype kSpacingSampleCount = 200;
+
+    /**
+     * How far the median nearest-neighbor spacing of a node's own points may
+     * fall below the spacing its level promises. A grid sample keeps one point
+     * per cell, and two winners in neighboring cells can sit closer together
+     * than a cell, so the floor is a fraction rather than the spacing itself.
+     */
+    constexpr double kMinSpacingFraction = 0.5;
+
+    QVector<QVector3D> gridPatch(const QVector3D& corner, double side, double step)
+    {
+        const int perAxis = int(side / step) + 1;
+
+        QVector<QVector3D> points;
+        points.reserve(qsizetype(perAxis) * perAxis);
+        for(int row = 0; row < perAxis; row++) {
+            for(int column = 0; column < perAxis; column++) {
+                points.append(corner + QVector3D(float(column * step), float(row * step), 0.0f));
+            }
+        }
+        return points;
+    }
+
+    //! The median nearest-neighbor distance among a sample of @a points: the
+    //! spacing the node really holds, whatever level the tree calls it.
+    double medianNearestNeighbor(const QVector<QVector3D>& points)
+    {
+        if(points.size() < 2) {
+            return 0.0;
+        }
+
+        const qsizetype stride = std::max<qsizetype>(1, points.size() / kSpacingSampleCount);
+
+        QVector<double> nearest;
+        for(qsizetype i = 0; i < points.size(); i += stride) {
+            double best = std::numeric_limits<double>::max();
+            for(qsizetype j = 0; j < points.size(); j++) {
+                if(i != j) {
+                    best = std::min(best, double((points.at(j) - points.at(i)).length()));
+                }
+            }
+            nearest.append(best);
+        }
+
+        std::sort(nearest.begin(), nearest.end());
+        return nearest.at(nearest.size() / 2);
+    }
+}
+
+TEST_CASE("Every node holds points spaced for its own level",
+          "[PointOctree][PointOctreeSampler][OversizeSprite]") {
+    const QVector3D rootMin(0.0f, 0.0f, 0.0f);
+    const double rootSize = kGroundSide;
+
+    QVector<QVector3D> points = gridPatch(QVector3D(0.0f, 0.0f, kGroundHeight),
+                                          kGroundSide, kGroundStep);
+    points += gridPatch(QVector3D(float(kGroundSide * 0.3), float(kGroundSide * 0.3),
+                                  kGroundHeight),
+                        kPatchSide, kPatchStep);
+
+    const QVector<SampledNode> nodes = buildSubtree(points, Cell{0, 0, 0, 0}, rootMin, rootSize,
+                                                    kSpacingLeafMaxPoints);
+
+    cwPointOctreeManifest manifest;
+    manifest.rootMin = rootMin;
+    manifest.rootSize = rootSize;
+
+    for(const SampledNode& node : nodes) {
+        if(node.points.size() < kMinPointsForSpacing) {
+            continue;
+        }
+
+        const double measured = medianNearestNeighbor(node.points);
+        const double promised = manifest.spacing(node.cell.level);
+
+        INFO("level " << node.cell.level << " holds " << node.points.size()
+             << " points at " << measured << " m, its level promises " << promised << " m");
+        CHECK(measured >= kMinSpacingFraction * promised);
+    }
+}
