@@ -45,6 +45,8 @@
 //Our includes
 #include "cwAppearanceOverride.h"
 #include "cwDiskCacher.h"
+#include "cwLazClipOperation.h"
+#include "cwLazLoader.h"
 #include "cwPointCloudAppearance.h"
 #include "cwPointCloudClod.h"
 #include "cwPointOctree.h"
@@ -473,18 +475,29 @@ namespace {
 
         //! A second cloud over the same cache in the same scene, so the two
         //! share the frame's point and byte budgets
-        void addSecondCloud()
+        void addSecondCloud() { addSecondCloud(m_cache); }
+
+        //! A second cloud over an octree of its own, which is how the app draws
+        //! two LAZ layers: one scene, one budget, a governor apiece.
+        void addSecondCloud(const OctreeCache& cache)
         {
             m_secondRender = std::make_unique<RenderCloud>();
             m_secondRender->setScene(&m_scene);
-            m_secondRender->setOctree(m_cache.source);
+            m_secondRender->setOctree(cache.source);
             m_secondBackend = static_cast<cwRHIPointCloud*>(m_secondRender->createRHIObject());
             frameRenderer()->registerRenderObject(m_secondRender->renderObjectId(),
                                                   m_secondBackend);
+            synchronizeSecond();
+        }
+
+        void synchronizeSecond()
+        {
             m_secondBackend->synchronize({m_secondRender.get(), &m_renderer});
         }
 
         const cwRHIPointCloud& secondBackend() const { return *m_secondBackend; }
+
+        cwRenderPointCloud& secondRender() { return *m_secondRender; }
 
         cwRenderObjectId secondObjectId() const { return m_secondRender->renderObjectId(); }
 
@@ -1545,6 +1558,55 @@ namespace {
         return heights;
     }
 
+    //! An octree and the shift that slid it into the frame it is drawn in.
+    struct ShiftedOctree {
+        OctreeCache cache;
+        //! What the cloud was slid by, in the source file's own meters
+        QVector3D shift;
+    };
+
+    //! Builds the octree of @a lazPath under @a cacheRoot and slides it by
+    //! @a shift, so everything cut out of one tile shares a frame. An unset
+    //! @a shift slides the cloud onto its own bounding-box center.
+    //!
+    //! A tile's own coordinates run to millions of meters, where a float holds
+    //! a quarter of a meter — coarser than a pixel at the scales these cases
+    //! measure. Node payloads are quantized against bounds derived from
+    //! rootMin, so sliding rootMin slides the whole cloud onto the origin
+    //! without touching a single cached byte.
+    ShiftedOctree buildShiftedOctree(const QString& cacheRoot, const QString& lazPath,
+                                     std::optional<QVector3D> shift)
+    {
+        //An empty frame CS leaves the points in the file's own meters
+        const cwPointOctreeBuilder::Request request {
+            .path = lazPath,
+            .cacheRootPath = cacheRoot
+        };
+
+        QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
+        future.waitForFinished();
+        REQUIRE(future.resultCount() == 1);
+        const cwPointOctreeBuilder::Result result = future.result();
+        REQUIRE_FALSE(result.hasError());
+
+        auto manifest = std::make_shared<cwPointOctreeManifest>(result.value());
+
+        ShiftedOctree shifted;
+        shifted.shift = shift.value_or((manifest->bboxMin + manifest->bboxMax) * 0.5f);
+        manifest->rootMin -= shifted.shift;
+        manifest->bboxMin -= shifted.shift;
+        manifest->bboxMax -= shifted.shift;
+
+        for (const cwPointOctreeNode& node : std::as_const(manifest->nodes)) {
+            shifted.cache.largestNodeBytes = std::max(shifted.cache.largestNodeBytes,
+                                                      node.byteSize);
+        }
+        shifted.cache.center = QVector3D();
+        shifted.cache.source = cwPointOctreeSource(cacheRoot, lazPath,
+                                                   manifest->fingerprint, manifest);
+        return shifted;
+    }
+
     //! The octree of a real LAZ tile, built once per process. The file is a
     //! 1 km USGS lidar tile — USGS_LPC_WY_FEMA_East_2019_D19_w1145n2340.laz,
     //! 5.5 M points, downloaded from the USGS 3DEP lidar catalog — and it is
@@ -1556,6 +1618,9 @@ namespace {
                                       .arg(QCoreApplication::applicationPid()))
         };
         OctreeCache cache;
+        //! Where the tile sat in its own Albers meters before the recenter, so
+        //! anything clipped out of the file can be shifted onto the same frame
+        QVector3D originalCenter;
         qint64 buildMilliseconds = 0;
         bool built = false;
     };
@@ -1576,40 +1641,14 @@ namespace {
 
         REQUIRE(tile.directory.isValid());
 
-        //An empty frame CS leaves the tile in its own Albers meters
-        const cwPointOctreeBuilder::Request request {
-            .path = lazPath,
-            .cacheRootPath = tile.directory.path()
-        };
-
         QElapsedTimer timer;
         timer.start();
-        QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
-        future.waitForFinished();
+        const ShiftedOctree shifted = buildShiftedOctree(tile.directory.path(), lazPath,
+                                                         std::nullopt);
         tile.buildMilliseconds = timer.elapsed();
 
-        REQUIRE(future.resultCount() == 1);
-        const cwPointOctreeBuilder::Result result = future.result();
-        REQUIRE_FALSE(result.hasError());
-
-        auto manifest = std::make_shared<cwPointOctreeManifest>(result.value());
-
-        // The tile's own coordinates run to 2.3 million meters, where a float
-        // holds a quarter of a meter — coarser than a pixel at the scales the
-        // sweep measures. Node payloads are quantized against bounds derived
-        // from rootMin, so sliding rootMin slides the whole cloud onto the
-        // origin without touching a single cached byte.
-        const QVector3D center = (manifest->bboxMin + manifest->bboxMax) * 0.5f;
-        manifest->rootMin -= center;
-        manifest->bboxMin -= center;
-        manifest->bboxMax -= center;
-
-        for (const cwPointOctreeNode& node : std::as_const(manifest->nodes)) {
-            tile.cache.largestNodeBytes = std::max(tile.cache.largestNodeBytes, node.byteSize);
-        }
-        tile.cache.center = QVector3D();
-        tile.cache.source = cwPointOctreeSource(tile.directory.path(), lazPath,
-                                                manifest->fingerprint, manifest);
+        tile.cache = shifted.cache;
+        tile.originalCenter = shifted.shift;
         tile.built = true;
         return tile;
     }
@@ -1795,6 +1834,347 @@ namespace {
                          .arg(tile.buildMilliseconds)
                          .arg(tile.cache.source.manifest->pointCount));
         return tile.cache;
+    }
+
+    //! The seam fixture. The tile is 1 km across, so a 600 m view sits wholly
+    //! inside it: every pixel has data under it, and the split line — the
+    //! tile's own x center — lands on the frame's center column. At 2000 px
+    //! the cut the camera asks for runs past a million points, so the budget
+    //! binds and each cloud's governor has something to do.
+    constexpr float kSeamOrthoHeight = 600.0f;
+    constexpr int kSeamSettleFrames = 30;
+    constexpr int kSeamStripWidthPx = 32;
+
+    //! A sprite this narrow clamps to the shader's one-pixel floor, so the lit
+    //! share of a strip counts drawn points rather than how far a sprite
+    //! reaches. At the default coverage the seam strips both read 0.99 and a
+    //! density step between the halves has nowhere to show.
+    constexpr float kSeamThinSpacingCoverage = 0.08f;
+
+    //! Wide enough that coverage * sseThresholdPx runs past a pixel at the
+    //! thresholds the seam camera settles on, so the sprite size each cloud's
+    //! own inflation asks for reaches the strips too — which the thin coverage
+    //! above flattens against the one-pixel floor. Still far from the 0.99 the
+    //! default coverage saturates at.
+    constexpr float kSeamWideSpacingCoverage = 0.4f;
+
+    //! How far the two halves' shared edge may sit from x = 0. The strips are
+    //! measured against the frame's center column, so a clip CS that puts the
+    //! split line anywhere else measures terrain instead of a seam.
+    constexpr float kMaxSplitLineOffsetMeters = 2.0f;
+
+    //! How many frames of the settle window the two governors may spend at
+    //! different inflations, with the camera already still. Six today, all of
+    //! them in the opening of the window.
+    constexpr int kMaxInflationTransientFrames = 6;
+
+    //! Meters of slack on each rectangle's outer edges, so the two halves
+    //! together hold every point of the tile
+    constexpr double kSeamClipPadMeters = 10.0;
+
+    //! The tile is a USGS 3DEP product on the national Albers grid. The clip
+    //! writes its output with no header offset — the project's local frame is
+    //! what it is built for — and a northing of 2.34 million meters overruns
+    //! the int32 a LAZ encodes at millimeter scale. So the output CS is that
+    //! same Albers with its false origin moved onto the tile's center: an
+    //! exact translation, which lands the halves around zero and puts them in
+    //! the frame the union tile's recenter leaves behind.
+    const char* const kSeamSourceCS = "EPSG:5070";
+
+    //! True when @a sourceCS names the grid seamOutputCS() is built from. A
+    //! 3DEP tile in UTM would clip to a frame nowhere near the union's, so the
+    //! tile the environment variable names is checked rather than assumed.
+    bool isConusAlbers(const QString& sourceCS)
+    {
+        return sourceCS.contains(QStringLiteral("5070"))
+               || sourceCS.contains(QStringLiteral("Albers"), Qt::CaseInsensitive)
+               || sourceCS.contains(QStringLiteral("aea"));
+    }
+
+    QString seamOutputCS(const QVector3D& center)
+    {
+        return QStringLiteral("+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 "
+                              "+x_0=%1 +y_0=%2 +datum=NAD83 +units=m +no_defs")
+            .arg(-double(center.x()), 0, 'f', 3)
+            .arg(-double(center.y()), 0, 'f', 3);
+    }
+
+    //! How far the split scene's left-right lit difference may sit from the
+    //! union's, and how far either strip may sit from the union's own strip.
+    //! The union is one cloud over the whole tile, so its seam is the reference
+    //! a split tile has to match. Measured: the union lights 0.1068 of the left
+    //! strip and 0.1089 of the right — a difference of 0.0022, which is the
+    //! terrain either side of the split line and not a seam — and the split
+    //! tile lights 0.1361 and 0.1143, a difference of 0.0219. The bounds are
+    //! the union's own numbers with room for the rasterizer.
+    constexpr double kMaxSeamLitDifference = 0.005;
+    constexpr double kMaxSeamStripDifference = 0.005;
+
+    //! The same bounds at the wide coverage, where a sprite covers more than
+    //! one pixel and every strip lights a larger share — the union lights
+    //! 0.2393 of the left strip and 0.2418 of the right, a difference of
+    //! 0.0025, so the bound keeps the same margin over the union as the thin
+    //! one above. The split tile lights 0.2692 and 0.2337.
+    constexpr double kMaxWideSeamLitDifference = 0.006;
+    constexpr double kMaxWideSeamStripDifference = 0.006;
+
+    //! What a seam measurement at one spacing coverage is allowed to be off by.
+    struct SeamCoverageCase {
+        float spacingCoverage;
+        double maxDifference;      //!< split's left-right step against the union's
+        double maxStripDifference; //!< either strip against the union's own
+    };
+
+    //! How far the left-right lit difference may move from one frame to the
+    //! next once the camera is still. The union holds it at 0.0022 for all
+    //! thirty frames and never moves; the split tile swings 0.0402.
+    constexpr double kMaxSeamFlicker = 0.002;
+
+    //! A rectangle in the clip's world XY, wound counterclockwise.
+    QList<QVector3D> rectanglePolygon(double minX, double maxX, double minY, double maxY)
+    {
+        return {QVector3D(float(minX), float(minY), 0.0f),
+                QVector3D(float(maxX), float(minY), 0.0f),
+                QVector3D(float(maxX), float(maxY), 0.0f),
+                QVector3D(float(minX), float(maxY), 0.0f)};
+    }
+
+    //! Writes the points of @a lazPath inside @a polygon to @a outputPath, the
+    //! way the clip tool cuts a layer out of a tile.
+    void clipHalf(const QString& lazPath, const QString& outputPath,
+                  const QList<QVector3D>& polygon, const QString& outputCS)
+    {
+        cwLazClipSource source;
+        source.sourcePath = lazPath;
+        source.sourceCSOverride = QString::fromLatin1(kSeamSourceCS);
+
+        cwLazClipOperation::Request request;
+        request.sources.append(source);
+        request.polygonWorldXYZ = polygon;
+        request.outputWktCS = outputCS;
+        request.mode = cwLazClipOperation::Mode::Keep;
+        request.outputPath = outputPath;
+
+        QFuture<cwLazClipOperation::Result> future = cwLazClipOperation::run(request);
+        future.waitForFinished();
+        REQUIRE(future.resultCount() == 1);
+        const cwLazClipOperation::Result result = future.result();
+        INFO(result.errorMessage().toStdString());
+        REQUIRE_FALSE(result.hasError());
+        REQUIRE(result.value().pointsWritten > 0);
+    }
+
+    //! The same tile cut into a west and an east half, each with an octree of
+    //! its own — the two-layer scene the seam shows up in. Built once per
+    //! process, like the tile it comes from.
+    struct SplitTileCache {
+        QTemporaryDir directory {
+            QDir::temp().filePath(QStringLiteral("cwSeamSplit-%1-XXXXXX")
+                                      .arg(QCoreApplication::applicationPid()))
+        };
+        OctreeCache west;
+        OctreeCache east;
+        qint64 buildMilliseconds = 0;
+        bool built = false;
+    };
+
+    const SplitTileCache& splitTileCache()
+    {
+        static SplitTileCache split;
+        static bool attempted = false;
+        if (attempted) {
+            return split;
+        }
+        attempted = true;
+
+        const TileCache& tile = usgsTileCache();
+        if (!tile.built) {
+            return split;
+        }
+
+        REQUIRE(split.directory.isValid());
+
+        //The clip tests containment in its output CS, which the false origin
+        //puts on the tile's own center — the same frame the union is recentered
+        //into. So the split line is x = 0.
+        const cwPointOctreeManifest& manifest = *tile.cache.source.manifest;
+        constexpr double kSplitX = 0.0;
+        const double minX = double(manifest.bboxMin.x()) - kSeamClipPadMeters;
+        const double maxX = double(manifest.bboxMax.x()) + kSeamClipPadMeters;
+        const double minY = double(manifest.bboxMin.y()) - kSeamClipPadMeters;
+        const double maxY = double(manifest.bboxMax.y()) + kSeamClipPadMeters;
+
+        const QString lazPath = QString::fromLocal8Bit(qgetenv(kTileLazEnvironmentVariable));
+
+        const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(lazPath);
+        REQUIRE(probe.valid);
+        INFO("the seam cases clip in Conus Albers; this tile names "
+             << probe.sourceCS.toStdString());
+        REQUIRE(isConusAlbers(probe.sourceCS));
+
+        const QDir directory(split.directory.path());
+        const QString westPath = directory.filePath(QStringLiteral("seam-west.laz"));
+        const QString eastPath = directory.filePath(QStringLiteral("seam-east.laz"));
+
+        //The clip's output CS has already taken the horizontal recenter out,
+        //so only the elevation shift is left for the manifests
+        const QString outputCS = seamOutputCS(tile.originalCenter);
+        const QVector3D shift(0.0f, 0.0f, tile.originalCenter.z());
+
+        QElapsedTimer timer;
+        timer.start();
+        clipHalf(lazPath, westPath, rectanglePolygon(minX, kSplitX, minY, maxY), outputCS);
+        clipHalf(lazPath, eastPath, rectanglePolygon(kSplitX, maxX, minY, maxY), outputCS);
+
+        split.west = buildShiftedOctree(split.directory.path(), westPath, shift).cache;
+        split.east = buildShiftedOctree(split.directory.path(), eastPath, shift).cache;
+
+        const cwPointOctreeManifest& westManifest = *split.west.source.manifest;
+        const cwPointOctreeManifest& eastManifest = *split.east.source.manifest;
+
+        //The halves have to land in the union's own frame, or the clip's CS is
+        //not the one the tile is written on
+        for (const cwPointOctreeManifest* halfManifest : {&westManifest, &eastManifest}) {
+            const float slack = float(kSeamClipPadMeters);
+            REQUIRE(halfManifest->bboxMin.x() >= manifest.bboxMin.x() - slack);
+            REQUIRE(halfManifest->bboxMax.x() <= manifest.bboxMax.x() + slack);
+            REQUIRE(halfManifest->bboxMin.y() >= manifest.bboxMin.y() - slack);
+            REQUIRE(halfManifest->bboxMax.y() <= manifest.bboxMax.y() + slack);
+        }
+
+        //The strips are measured against the frame's center column, which the
+        //camera puts on x = 0, so the cut has to land there
+        REQUIRE(std::abs(westManifest.bboxMax.x()) <= kMaxSplitLineOffsetMeters);
+        REQUIRE(std::abs(eastManifest.bboxMin.x()) <= kMaxSplitLineOffsetMeters);
+
+        //Every point of the tile lands in exactly one half, so a point on the
+        //shared edge that the clip keeps twice — or drops — shows up here
+        //rather than as density at the one column the strips sample
+        REQUIRE(westManifest.pointCount + eastManifest.pointCount == manifest.pointCount);
+        split.buildMilliseconds = timer.elapsed();
+        split.built = true;
+        return split;
+    }
+
+    //! The split tile, or a skip when the union tile itself is unavailable.
+    const SplitTileCache& splitTileCacheOrSkip()
+    {
+        const SplitTileCache& split = splitTileCache();
+        if (!split.built) {
+            SKIP("Set CAVEWHERE_HOLE_METRIC_LAZ to a USGS lidar tile to measure the "
+                 "seam between two clipped layers");
+        }
+        writeCsvLine(QStringLiteral("seamBuild,%1,%2,%3")
+                         .arg(split.buildMilliseconds)
+                         .arg(split.west.source.manifest->pointCount)
+                         .arg(split.east.source.manifest->pointCount));
+        return split;
+    }
+
+    //! A seam scene at the seam camera under the starved point budget: @a cache
+    //! alone for the union, or @a second alongside it for the split tile, with
+    //! both clouds drawn at @a spacingCoverage.
+    std::unique_ptr<PointCloudFixture> seamFixture(QRhi* rhi, const OctreeCache& cache,
+                                                   const OctreeCache* second,
+                                                   float spacingCoverage)
+    {
+        auto fixture = std::make_unique<PointCloudFixture>(rhi, cache, kStarvedTargetDimension);
+        fixture->render().setSpacingCoverage(spacingCoverage);
+        fixture->synchronize();
+
+        if (second != nullptr) {
+            fixture->addSecondCloud(*second);
+            fixture->secondRender().setSpacingCoverage(spacingCoverage);
+            fixture->synchronizeSecond();
+        }
+
+        cwRenderBudgets budgets = fixture->budgets();
+        budgets.pointBudget = kStarvedPointBudget;
+        fixture->setBudgets(budgets);
+        fixture->setOrthoHeight(kSeamOrthoHeight);
+        return fixture;
+    }
+
+    //! Holds the seam camera until the cut stops moving, then for the settle
+    //! window, so a measurement reads a still scene.
+    void settleSeam(PointCloudFixture& fixture)
+    {
+        fixture.renderUntilQuiet();
+        for (int frame = 0; frame < kSeamSettleFrames; frame++) {
+            fixture.renderFrame();
+        }
+    }
+
+    //! The lit share of a pair of kSeamStripWidthPx strips, left and right.
+    struct StripLit {
+        double left = 0.0;
+        double right = 0.0;
+
+        double difference() const { return left - right; }
+    };
+
+    //! Two pairs of strips over one frame: the seam pair, either side of the
+    //! frame's center column where the camera puts the split line, and a
+    //! control pair at the quarter columns, deep inside one half apiece.
+    //!
+    //! The control pair separates the two things that can move a strip. The
+    //! octree builder centers each cloud's root cube on that cloud's own
+    //! bounds, so a half's sample grid sits a quarter of a root cell off the
+    //! union's — a whole-layer density step, which the control pair sees. A
+    //! step the governors make at the split line shows up in the seam pair
+    //! alone.
+    struct SeamStrips {
+        StripLit seam;
+        StripLit control;
+    };
+
+    SeamStrips seamStrips(const PointCloudFixture& fixture)
+    {
+        const PixelMask lit = litMask(fixture);
+        const QSize size = lit.size;
+        REQUIRE_FALSE(size.isEmpty());
+
+        const auto share = [&](int firstColumn) {
+            qsizetype count = 0;
+            for (int y = 0; y < size.height(); y++) {
+                for (int x = firstColumn; x < firstColumn + kSeamStripWidthPx; x++) {
+                    count += lit.at(x, y) ? 1 : 0;
+                }
+            }
+            return double(count) / double(qsizetype(kSeamStripWidthPx) * size.height());
+        };
+
+        constexpr int kQuarters = 4;
+        const int seamColumn = size.width() / 2;
+        const int quarterColumn = size.width() / kQuarters;
+
+        return SeamStrips{
+            StripLit{share(seamColumn - kSeamStripWidthPx), share(seamColumn)},
+            StripLit{share(quarterColumn), share((kQuarters - 1) * quarterColumn)}
+        };
+    }
+
+    //! One CSV line of a strip pair.
+    void writeStripLine(const QString& kind, const QString& variant, float spacingCoverage,
+                        const StripLit& strips)
+    {
+        writeCsvLine(QStringLiteral("seamStrip,%1,%2,%3,%4,%5,%6")
+                         .arg(kind)
+                         .arg(variant)
+                         .arg(double(spacingCoverage), 0, 'f', 2)
+                         .arg(strips.left, 0, 'f', 6)
+                         .arg(strips.right, 0, 'f', 6)
+                         .arg(strips.difference(), 0, 'f', 6));
+    }
+
+    //! The widest move of @a values between neighboring frames.
+    double largestStep(const QVector<double>& values)
+    {
+        double largest = 0.0;
+        for (int i = 1; i < values.size(); i++) {
+            largest = std::max(largest, std::abs(values.at(i) - values.at(i - 1)));
+        }
+        return largest;
     }
 
     //! The thinning fixture: a plane sampled at exactly the cell size of the
@@ -4327,4 +4707,180 @@ TEST_CASE("Zooming out under a one million point budget records the starved floo
          << " m, widest inflation " << widestInflation << ", capped frames " << cappedFrames
          << " of " << records.size());
     CHECK(worst.holeFraction >= 0.0);
+}
+
+// Passes today, so it is the regression guard: the two governors take six
+// frames to agree after the camera settles, and this pins both the length of
+// that transient and the agreement that follows it.
+TEST_CASE("Two layers sharing a budget settle at the same inflation",
+          "[PointCloudStreaming][TileSeam]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const SplitTileCache& split = splitTileCacheOrSkip();
+
+    const std::unique_ptr<PointCloudFixture> fixture =
+        seamFixture(rhi.get(), split.west, &split.east, kSeamThinSpacingCoverage);
+    fixture->renderUntilQuiet();
+
+    writeCsvLine(QStringLiteral("seamCsv,frame,westInflation,eastInflation,"
+                                "westThresholdPx,eastThresholdPx"));
+
+    constexpr int kSettledFrame = kSeamSettleFrames / 3;
+    int disagreeingFrames = 0;
+
+    for (int frame = 0; frame < kSeamSettleFrames; frame++) {
+        fixture->renderFrame();
+
+        const double westInflation = Access::sseInflation(fixture->backend());
+        const double eastInflation = Access::sseInflation(fixture->secondBackend());
+        const double westThreshold =
+            double(Access::liveAppearanceUniform(fixture->backend()).sseThresholdPx);
+        const double eastThreshold =
+            double(Access::liveAppearanceUniform(fixture->secondBackend()).sseThresholdPx);
+
+        writeCsvLine(QStringLiteral("seamCsv,%1,%2,%3,%4,%5")
+                         .arg(frame)
+                         .arg(westInflation, 0, 'f', 6)
+                         .arg(eastInflation, 0, 'f', 6)
+                         .arg(westThreshold, 0, 'f', 6)
+                         .arg(eastThreshold, 0, 'f', 6));
+
+        if (westInflation != eastInflation) {
+            disagreeingFrames++;
+        }
+
+        if (frame >= kSettledFrame) {
+            INFO("frame " << frame << " west " << westInflation << " east " << eastInflation);
+            CHECK(westInflation == eastInflation);
+        }
+    }
+
+    //The two governors disagree while they climb — the sprite size the shader
+    //asks for comes from each cloud's own inflation, so the seam is visible for
+    //exactly these frames. A longer transient is a regression.
+    INFO("the governors disagreed on " << disagreeingFrames << " frames of "
+         << kSeamSettleFrames);
+    CHECK(disagreeingFrames <= kMaxInflationTransientFrames);
+}
+
+// Fails today: the two halves draw the seam at two densities, because the cut
+// and the sprite size on each side come from that cloud's own budget share and
+// its own inflation.
+TEST_CASE("A split tile draws the seam at the same density as the union",
+          "[PointCloudStreaming][TileSeam][!shouldfail]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& tile = usgsTileCacheOrSkip();
+    const SplitTileCache& split = splitTileCacheOrSkip();
+
+    //The thin coverage counts drawn points; the wide one lets the sprite size
+    //each inflation asks for past the shader's one-pixel floor
+    const SeamCoverageCase coverages[] = {
+        {kSeamThinSpacingCoverage, kMaxSeamLitDifference, kMaxSeamStripDifference},
+        {kSeamWideSpacingCoverage, kMaxWideSeamLitDifference, kMaxWideSeamStripDifference}
+    };
+
+    for (const SeamCoverageCase& coverage : coverages) {
+        INFO("spacing coverage " << coverage.spacingCoverage);
+
+        //Eviction weighs the process-wide memory ledger, so each scene is
+        //measured with the others gone
+        const auto measure = [&](const OctreeCache& first, const OctreeCache* second,
+                                 const QString& variant) {
+            const std::unique_ptr<PointCloudFixture> fixture =
+                seamFixture(rhi.get(), first, second, coverage.spacingCoverage);
+            fixture->setReadbackEnabled(true);
+            settleSeam(*fixture);
+
+            //The governor inflates until the cut fits, so a settled frame reads
+            //the binding budget as an inflation past one rather than as a
+            //capped cut
+            REQUIRE(Access::sseInflation(fixture->backend()) > 1.0);
+
+            dumpFrame(*fixture, QStringLiteral("seam-%1").arg(variant));
+            return seamStrips(*fixture);
+        };
+
+        const SeamStrips unionStrips = measure(tile, nullptr, QStringLiteral("union"));
+        const SeamStrips splitStrips =
+            measure(split.west, &split.east, QStringLiteral("split"));
+        //The same two halves with the east one drawn first: a step that follows
+        //draw order swaps with it, a step that follows the ground stays put
+        const SeamStrips swappedStrips =
+            measure(split.east, &split.west, QStringLiteral("split-swapped"));
+
+        writeStripLine(QStringLiteral("seam"), QStringLiteral("union"),
+                       coverage.spacingCoverage, unionStrips.seam);
+        writeStripLine(QStringLiteral("seam"), QStringLiteral("split"),
+                       coverage.spacingCoverage, splitStrips.seam);
+        writeStripLine(QStringLiteral("seam"), QStringLiteral("splitSwapped"),
+                       coverage.spacingCoverage, swappedStrips.seam);
+        writeStripLine(QStringLiteral("control"), QStringLiteral("union"),
+                       coverage.spacingCoverage, unionStrips.control);
+        writeStripLine(QStringLiteral("control"), QStringLiteral("split"),
+                       coverage.spacingCoverage, splitStrips.control);
+        writeStripLine(QStringLiteral("control"), QStringLiteral("splitSwapped"),
+                       coverage.spacingCoverage, swappedStrips.control);
+
+        //One cloud spans the split line, so the union is the reference the
+        //split tile has to match
+        CHECK(std::abs(unionStrips.seam.difference()) <= coverage.maxDifference);
+
+        CHECK(std::abs(splitStrips.seam.difference() - unionStrips.seam.difference())
+              <= coverage.maxDifference);
+        CHECK(std::abs(splitStrips.seam.left - unionStrips.seam.left)
+              <= coverage.maxStripDifference);
+        CHECK(std::abs(splitStrips.seam.right - unionStrips.seam.right)
+              <= coverage.maxStripDifference);
+
+        //Away from the split line the halves draw whatever their own root cube
+        //and budget share give them, so a failure here is a whole-layer step
+        //rather than a seam
+        CHECK(std::abs(splitStrips.control.left - unionStrips.control.left)
+              <= coverage.maxStripDifference);
+        CHECK(std::abs(splitStrips.control.right - unionStrips.control.right)
+              <= coverage.maxStripDifference);
+    }
+}
+
+// Fails today when the two governors step out of phase: one side changes sprite
+// size on a frame the other holds, and the seam flickers.
+TEST_CASE("A split tile holds its seam density frame to frame",
+          "[PointCloudStreaming][TileSeam][!shouldfail]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& tile = usgsTileCacheOrSkip();
+    const SplitTileCache& split = splitTileCacheOrSkip();
+
+    //Each scene is measured on its own, since eviction weighs the process-wide
+    //memory ledger
+    const auto flicker = [&](const OctreeCache& first, const OctreeCache* second,
+                             const QString& variant) {
+        const std::unique_ptr<PointCloudFixture> fixture =
+            seamFixture(rhi.get(), first, second, kSeamThinSpacingCoverage);
+        fixture->setReadbackEnabled(true);
+        fixture->renderUntilQuiet();
+
+        QVector<double> differences;
+        for (int frame = 0; frame < kSeamSettleFrames; frame++) {
+            fixture->renderFrame();
+            const StripLit seam = seamStrips(*fixture).seam;
+            differences.append(seam.difference());
+            writeCsvLine(QStringLiteral("seamFlicker,%1,%2,%3,%4,%5")
+                             .arg(variant)
+                             .arg(frame)
+                             .arg(seam.left, 0, 'f', 6)
+                             .arg(seam.right, 0, 'f', 6)
+                             .arg(seam.difference(), 0, 'f', 6));
+        }
+        return largestStep(differences);
+    };
+
+    const double unionFlicker = flicker(tile, nullptr, QStringLiteral("union"));
+    const double splitFlicker =
+        flicker(split.west, &split.east, QStringLiteral("split"));
+
+    INFO("union flicker " << unionFlicker << ", split flicker " << splitFlicker);
+    CHECK(unionFlicker <= kMaxSeamFlicker);
+    CHECK(splitFlicker <= kMaxSeamFlicker);
 }
