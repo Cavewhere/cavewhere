@@ -428,9 +428,12 @@ MainWindowTest {
                           setLengthButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARTransformEditor->setLengthButton")
                           return setLengthButton !== null
                       })
-            mouseClick(setLengthButton)
-
             let scaleInteraction = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction")
+
+            //The tool starts in the unit the trip is surveyed in, not always meters
+            scaleInteraction.note.parentTrip().calibration.distanceUnit = Units.Feet
+
+            mouseClick(setLengthButton)
             tryVerify(() => {
                 if (!scaleInteraction.visible) {
                     mouseClick(setLengthButton)
@@ -444,17 +447,24 @@ MainWindowTest {
             tryVerify(() => { return scaleInteraction.measuredValue > 1.0 })
             let measured = scaleInteraction.measuredValue
 
+            let unitLabel = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction->scaleLengthInput->unitInput->unitLabel")
+            tryVerify(() => { return unitLabel.text.trim() === Units.lengthUnitName(Units.Feet) },
+                      5000,
+                      "scale length reads in the trip's feet")
+
             let lengthInput = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction->scaleLengthInput->coreTextInput")
             mouseClick(lengthInput)
 
-            keyClick(49, 0) //1
-            keyClick(48, 0) //0
-            keyClick(16777220, 0) //Return
+            keyClick(Qt.Key_1)
+            keyClick(Qt.Key_0)
+            keyClick(Qt.Key_Return)
 
             let applyButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId->noteLiDARScaleInteraction->apply")
             mouseClick(applyButton)
 
-            let expectedScale = measured / 10.0
+            //10 ft of real length, converted to the meters the scale is stored in
+            const kMetersPerFoot = 0.3048
+            let expectedScale = measured / (10.0 * kMetersPerFoot)
 
             tryVerify(() => {
                           return Math.abs(noteTransform.scale - expectedScale) < 0.0001
@@ -465,6 +475,7 @@ MainWindowTest {
                           let denominator = noteTransform.scaleDenominator
                           return numerator.unit === Units.LengthUnitless &&
                                   Math.abs(numerator.value - measured) < 0.0001 &&
+                                  denominator.unit === Units.Feet &&
                                   Math.abs(denominator.value - 10.0) < 0.0001
                       })
         }

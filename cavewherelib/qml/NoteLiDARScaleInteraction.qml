@@ -29,10 +29,19 @@ NoteLiDARTwoPointInteraction {
 
     readonly property NoteLiDARTransformation noteTransform: note ? note.noteTransformation : null
 
+    //Reset on each activation instead of binding: picking a unit in the input
+    //writes realWorldLength.unit, which would break a binding
+    onActivated: realWorldLength.unit = tripDistanceUnit()
+
     Length {
         id: realWorldLength
         unit: Units.Meters
         value: 1.0
+    }
+
+    function tripDistanceUnit() {
+        const trip = note ? note.parentTrip() : null
+        return trip ? trip.calibration.distanceUnit : Units.Meters
     }
 
     function measurementCalculator(firstPoint, secondPoint)  {
