@@ -151,7 +151,7 @@ TEST_CASE("cwSaveLoad restores a deleted node's whole subtree when the delete is
     const QDir dataRoot = rootData->project()->dataRootDir();
     const QDir caveDir = ProjectFilenameTestHelper::dir(fixture.cave);
     REQUIRE(caveDir.absolutePath()
-            == dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2").arg(kFolderName, kCaveName)));
+            == dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2").arg(kFolderName, kCaveName)));
 
     fixture.noteImageName = fixture.trip->notes()->notes().first()->image().path();
     const QString noteImagePath =

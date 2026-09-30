@@ -53,7 +53,7 @@ void cwRegionIOTask::copyRegionTo(cwCavingRegion* region)
  */
 int cwRegionIOTask::protoVersion()
 {
-    //Version 10 adds the survey tree: child nodes under <nodeDir>/nodes/ and the
+    //Version 10 adds the survey tree: child nodes under <nodeDir>/sub/ and the
     //Cave kind/read_only/source fields. A project with no hierarchy is still
     //stamped 9 by cwSaveLoad::stampVersion, so it opens in a build that predates
     //the tree.

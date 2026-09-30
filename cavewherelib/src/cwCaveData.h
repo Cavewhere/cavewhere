@@ -27,7 +27,7 @@ struct cwCaveData {
     QList<cwEquate> equates;
 
     //! This node's child nodes, in row order. Each is saved under
-    //! <nodeDir>/nodes/<name>/, so the list is the persisted shape of the tree.
+    //! <nodeDir>/sub/<name>/, so the list is the persisted shape of the tree.
     QList<cwCaveData> nodes;
 
     cwSurveyNodeKind::Kind kind = cwSurveyNodeKind::Kind::Cave;

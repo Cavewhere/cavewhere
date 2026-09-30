@@ -231,8 +231,8 @@ public:
 
     //! The data-root-relative directory a node with \a nodePath (the names from
     //! the root down, the root's own excluded) is saved in:
-    //! "Kentucky field seasons/nodes/Side Cave/nodes/Upper level". Every path
-    //! segment is sanitized, so this is the one place the nodes/ layout is
+    //! "Kentucky field seasons/sub/Side Cave/sub/Upper level". Every path
+    //! segment is sanitized, so this is the one place the sub/ layout is
     //! spelled out — the loader, the writer and the sync handlers all compose
     //! node directories through it.
     static QString relativeNodeDir(const QStringList& nodePath);

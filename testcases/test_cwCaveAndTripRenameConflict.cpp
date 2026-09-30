@@ -318,7 +318,7 @@ TEST_CASE("Local trip rename wins on concurrent rename-rename conflict",
 // the mirrored direction of the author-side case in
 // test_cwSurveyNodeSyncMergeHandler.cpp.
 //
-// base:   Kentucky field seasons/nodes/Side Cave
+// base:   Kentucky field seasons/sub/Side Cave
 // local:  the peer renames it → "Peer Side Cave"
 // remote: the author renamed it → "Author Side Cave" and pushed first
 // action: the peer syncs. Which name wins is the merge policy's business; what this
@@ -364,14 +364,14 @@ TEST_CASE("Depth-2 node rename/rename leaves one winning directory in the peer's
 
     const QDir peerRepoRoot = QFileInfo(clones->peerProject()->filename()).absoluteDir();
     const QDir peerDataRoot(peerRepoRoot.absoluteFilePath(kProjectName));
-    const QDir peerNodesDir(peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes")));
+    const QDir peerSubDir(peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub")));
 
-    CHECK(QFileInfo::exists(peerNodesDir.absoluteFilePath(
+    CHECK(QFileInfo::exists(peerSubDir.absoluteFilePath(
         winningName + QChar('/') + winningName + QStringLiteral(".cwcave"))));
-    CHECK_FALSE(QFileInfo::exists(peerNodesDir.absoluteFilePath(losingName)));
+    CHECK_FALSE(QFileInfo::exists(peerSubDir.absoluteFilePath(losingName)));
 
     //The sibling subtree the cleanup must not touch.
-    const QDir peerSiblingDir(peerNodesDir.absoluteFilePath(kSiblingCaveName));
+    const QDir peerSiblingDir(peerSubDir.absoluteFilePath(kSiblingCaveName));
     CHECK(peerSiblingDir.exists());
     CHECK(noteImageFiles(peerSiblingDir, kSiblingTripName).size() == 1);
 }
@@ -416,7 +416,7 @@ TEST_CASE("An ancestor rename merges with a concurrent descendant trip edit",
     //The descendant subtree traveled with the renamed ancestor, note image included.
     const QDir dataRoot = clones->authorDataRoot();
     const QDir siblingDir(dataRoot.absoluteFilePath(
-        kPeerFolder + QStringLiteral("/nodes/") + kSiblingCaveName));
+        kPeerFolder + QStringLiteral("/sub/") + kSiblingCaveName));
     CHECK(siblingDir.exists());
     CHECK(noteImageFiles(siblingDir, kAuthorTripName).size() == 1);
 
@@ -450,12 +450,12 @@ TEST_CASE("A peer's node move keeps the moved subtree and a locally added trip",
 
     auto clones = makeTwoClones(false);
 
-    //--- Peer moves Kentucky field seasons/nodes/Sibling Cave up to the data root ---
+    //--- Peer moves Kentucky field seasons/sub/Sibling Cave up to the data root ---
     //Sibling Cave carries a trip with a note image: after the move that image exists
     //nowhere else, so deleting the moved directory would destroy the only copy.
     const QDir peerDataRoot(clones->cloneRepository.directory().absoluteFilePath(kProjectName));
     const QString movedFrom =
-        peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes/") + kSiblingCaveName);
+        peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub/") + kSiblingCaveName);
     const QString movedTo = peerDataRoot.absoluteFilePath(kSiblingCaveName);
     REQUIRE(QFileInfo::exists(movedFrom));
     REQUIRE(QDir().rename(movedFrom, movedTo));
@@ -633,7 +633,7 @@ TEST_CASE("A peer's node delete merges with a local edit inside that node",
     const QUuid authorSiblingId = authorSibling->id();
     const QDir dataRoot = clones->authorDataRoot();
     const QByteArray originalImageBytes =
-        noteImageBytes(QDir(dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes/")
+        noteImageBytes(QDir(dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub/")
                                                       + kSiblingCaveName)),
                        kSiblingTripName);
     REQUIRE_FALSE(originalImageBytes.isEmpty());
@@ -661,7 +661,7 @@ TEST_CASE("A peer's node delete merges with a local edit inside that node",
     INFO("Note images: " << noteImages.join(QStringLiteral(", ")).toStdString());
     REQUIRE(noteImages.size() == 1);
     const QByteArray restoredImageBytes =
-        noteImageBytes(QDir(dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes/")
+        noteImageBytes(QDir(dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub/")
                                                       + kSiblingCaveName)),
                        kSiblingTripName);
     CHECK(restoredImageBytes == originalImageBytes);
@@ -715,9 +715,9 @@ TEST_CASE("A peer's delete of an ancestor loses to a local edit three levels dow
 
     const QDir dataRoot = clones->authorDataRoot();
     const QString folderDir = kFolderName;
-    const QString siblingDir = folderDir + QStringLiteral("/nodes/") + kSiblingCaveName;
+    const QString siblingDir = folderDir + QStringLiteral("/sub/") + kSiblingCaveName;
     const QString sectionDir =
-        folderDir + QStringLiteral("/nodes/") + kSideCaveName + QStringLiteral("/nodes/") + kSectionName;
+        folderDir + QStringLiteral("/sub/") + kSideCaveName + QStringLiteral("/sub/") + kSectionName;
     const QByteArray originalSectionImage =
         noteImageBytes(QDir(dataRoot.absoluteFilePath(sectionDir)), kSectionTripName);
     const QByteArray originalSiblingImage =
@@ -850,7 +850,7 @@ TEST_CASE("A discarded merge result leaves no half-restored files behind",
     //in the tree, and the next load would resurrect it.
     const bool siblingInModel = childNamed(folderOf(authorRegion), kSiblingCaveName) != nullptr;
     const QDir siblingDir(clones->authorDataRoot().absoluteFilePath(
-        kFolderName + QStringLiteral("/nodes/") + kSiblingCaveName));
+        kFolderName + QStringLiteral("/sub/") + kSiblingCaveName));
     const bool siblingDescriptorOnDisk =
         !siblingDir.entryList({QStringLiteral("*.cwcave")}, QDir::Files).isEmpty();
     CHECK(siblingInModel == siblingDescriptorOnDisk);
@@ -939,10 +939,10 @@ TEST_CASE("A peer's node move merges with a local rename of the same node",
 {
     auto clones = makeTwoClones(false);
 
-    //--- The peer moves Kentucky field seasons/nodes/Side Cave to the data root ---
+    //--- The peer moves Kentucky field seasons/sub/Side Cave to the data root ---
     const QDir peerDataRoot(clones->cloneRepository.directory().absoluteFilePath(kProjectName));
     const QString movedFrom =
-        peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes/") + kSideCaveName);
+        peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub/") + kSideCaveName);
     const QString movedTo = peerDataRoot.absoluteFilePath(kSideCaveName);
     REQUIRE(QFileInfo::exists(movedFrom));
     REQUIRE(QDir().rename(movedFrom, movedTo));
@@ -1004,7 +1004,7 @@ TEST_CASE("A depth-3 section survives a rename conflict and an ancestor rename",
 
         const QDir baseSectionDir(
             QDir(QFileInfo(clones->peerProject()->filename()).absolutePath())
-                .absoluteFilePath(QStringLiteral("%1/%2/nodes/%3/nodes/%4")
+                .absoluteFilePath(QStringLiteral("%1/%2/sub/%3/sub/%4")
                                       .arg(kProjectName, kFolderName, kSideCaveName, kSectionName)));
         const QByteArray baseImageBytes = noteImageBytes(baseSectionDir, kSectionTripName);
 
@@ -1036,20 +1036,20 @@ TEST_CASE("A depth-3 section survives a rename conflict and an ancestor rename",
 
         const QDir peerRepoRoot = QFileInfo(clones->peerProject()->filename()).absoluteDir();
         const QDir peerDataRoot(peerRepoRoot.absoluteFilePath(kProjectName));
-        const QDir sectionParentNodesDir(peerDataRoot.absoluteFilePath(
-            QStringLiteral("%1/nodes/%2/nodes").arg(kFolderName, kSideCaveName)));
+        const QDir sectionParentSubDir(peerDataRoot.absoluteFilePath(
+            QStringLiteral("%1/sub/%2/sub").arg(kFolderName, kSideCaveName)));
 
-        CHECK(QFileInfo::exists(sectionParentNodesDir.absoluteFilePath(
+        CHECK(QFileInfo::exists(sectionParentSubDir.absoluteFilePath(
             QStringLiteral("%1/%1.cwcave").arg(winningName))));
-        const QDir losingSectionDir(sectionParentNodesDir.absoluteFilePath(losingName));
+        const QDir losingSectionDir(sectionParentSubDir.absoluteFilePath(losingName));
         INFO("Left in the losing section directory: "
              << losingSectionDir.entryList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot)
                     .join(QStringLiteral(", ")).toStdString());
-        CHECK_FALSE(QFileInfo::exists(sectionParentNodesDir.absoluteFilePath(losingName)));
+        CHECK_FALSE(QFileInfo::exists(sectionParentSubDir.absoluteFilePath(losingName)));
 
         //The depth-3 trip's note image has exactly one copy, hydrated rather than left as
         //an LFS pointer by the winning directory's move.
-        const QDir winningSectionDir(sectionParentNodesDir.absoluteFilePath(winningName));
+        const QDir winningSectionDir(sectionParentSubDir.absoluteFilePath(winningName));
         CHECK(noteImageFiles(winningSectionDir, kSectionTripName).size() == 1);
         CHECK(noteImageBytes(winningSectionDir, kSectionTripName) == baseImageBytes);
 
@@ -1096,7 +1096,7 @@ TEST_CASE("A depth-3 section survives a rename conflict and an ancestor rename",
 
         const QDir dataRoot = clones->authorDataRoot();
         const QDir sectionDir(dataRoot.absoluteFilePath(
-            QStringLiteral("%1/nodes/%2/nodes/%3").arg(kPeerFolder, kSideCaveName, kSectionName)));
+            QStringLiteral("%1/sub/%2/sub/%3").arg(kPeerFolder, kSideCaveName, kSectionName)));
         CHECK(sectionDir.exists());
         CHECK(noteImageFiles(sectionDir, kAuthorTripName).size() == 1);
     }

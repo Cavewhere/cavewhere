@@ -386,7 +386,7 @@ Monad::ResultBase cwSaveLoadPrivate::Job::moveOrMergeDirectory(const QString& so
     }
 
     if (!QFileInfo::exists(destinationPath)) {
-        // A move to another parent lands in a nodes/ directory that may hold no
+        // A move to another parent lands in a sub/ directory that may hold no
         // other child yet, and a rename needs its destination's parent to exist.
         const auto ensureParentResult =
                 ensureDirectoryExists(QFileInfo(destinationPath).absolutePath());

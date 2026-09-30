@@ -179,7 +179,7 @@ TEST_CASE("cwSaveLoad moves a node's directory rather than deleting it",
 
     const QDir newCaveDir = ProjectFilenameTestHelper::dir(fixture.cave);
     CHECK(newCaveDir.absolutePath()
-          == dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes/") + kCaveName));
+          == dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub/") + kCaveName));
 
     //The whole directory traveled: descriptor, trip, note image and attachment,
     //byte for byte, and nothing was left at the old path.
@@ -295,7 +295,7 @@ TEST_CASE("cwSaveLoad moves a depth-2 node to the root and back",
           == dataRoot.absoluteFilePath(kSectionName));
     CHECK(relativeFiles(QDir(dataRoot.absoluteFilePath(kSectionName))) == sectionFiles);
     CHECK_FALSE(QFileInfo::exists(
-                    dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2/nodes")
+                    dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2/sub")
                                               .arg(kFolderName, kCaveName))
                     + QStringLiteral("/") + kSectionName));
     CHECK(region->caveCount() == 2);
@@ -305,7 +305,7 @@ TEST_CASE("cwSaveLoad moves a depth-2 node to the root and back",
     flushSaves(rootData.get());
 
     CHECK(ProjectFilenameTestHelper::dir(section).absolutePath()
-          == dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2/nodes/%3")
+          == dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2/sub/%3")
                                        .arg(kFolderName, kCaveName, kSectionName)));
     CHECK(relativeFiles(ProjectFilenameTestHelper::dir(section)) == sectionFiles);
     CHECK_FALSE(QFileInfo::exists(dataRoot.absoluteFilePath(kSectionName)));
@@ -377,7 +377,7 @@ TEST_CASE("cwSaveLoad moves a node twice before the queue drains",
     //that only passed through it.
     CHECK_FALSE(QFileInfo::exists(oldCaveDir.absolutePath()));
     CHECK_FALSE(QFileInfo::exists(
-                    dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2").arg(kFolderName, dedupedName))));
+                    dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2").arg(kFolderName, dedupedName))));
     CHECK(QFileInfo::exists(ProjectFilenameTestHelper::absolutePath(twin)));
 
     CHECK(reloadedNodePaths(projectFile) == nodePaths(region));
@@ -412,7 +412,7 @@ TEST_CASE("cwSaveLoad orders a rename and a move queued in one turn",
         const QDir finalDir = ProjectFilenameTestHelper::dir(fixture.cave);
         CHECK(fixture.cave->name() == name);
         CHECK(finalDir.absolutePath()
-              == dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2").arg(kFolderName, name)));
+              == dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2").arg(kFolderName, name)));
 
         QStringList expectedFiles = filesBefore;
         expectedFiles.replaceInStrings(kCaveName + QStringLiteral(".cwcave"),
@@ -530,7 +530,7 @@ TEST_CASE("cwSaveLoad restores a deduplicated descriptor name when the move is u
     CHECK(fixture.cave->name() == dedupedName);
     const QDir redoneDir = ProjectFilenameTestHelper::dir(fixture.cave);
     CHECK(redoneDir.absolutePath()
-          == dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2").arg(kFolderName, dedupedName)));
+          == dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2").arg(kFolderName, dedupedName)));
     QStringList expectedFiles = filesBefore;
     expectedFiles.replaceInStrings(kCaveName + QStringLiteral(".cwcave"),
                                    dedupedName + QStringLiteral(".cwcave"));
@@ -568,13 +568,13 @@ TEST_CASE("cwSaveLoad moves a node beside a sibling whose name differs only in f
 
     //Two nodes whose names sanitize to the same file name still get a directory
     //each, and each of those holds its own descriptor.
-    const QDir nodesDir(dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes")));
-    const QStringList nodeDirs = nodesDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    INFO("Directories under nodes/: " << nodeDirs.join(QStringLiteral(", ")).toStdString());
+    const QDir subDir(dataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub")));
+    const QStringList nodeDirs = subDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    INFO("Directories under sub/: " << nodeDirs.join(QStringLiteral(", ")).toStdString());
     CHECK(nodeDirs.size() == 2);
     for (const QString& nodeDir : nodeDirs) {
         INFO("Node directory " << nodeDir.toStdString());
-        CHECK(QFileInfo::exists(nodesDir.absoluteFilePath(
+        CHECK(QFileInfo::exists(subDir.absoluteFilePath(
                                     QStringLiteral("%1/%1.cwcave").arg(nodeDir))));
     }
 
@@ -645,7 +645,7 @@ TEST_CASE("cwSaveLoad carries attachments of a nested node through a move",
     const QDir dataRoot = rootData->project()->dataRootDir();
     const QDir movedCaveDir = ProjectFilenameTestHelper::dir(fixture.cave);
     CHECK(movedCaveDir.absolutePath()
-          == dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2").arg(kFolderName, kCaveName)));
+          == dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2").arg(kFolderName, kCaveName)));
 
     //The attachment travels with its owner, and the owner-relative path the
     //model stores still names it at the new location.

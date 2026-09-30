@@ -57,12 +57,12 @@ inline const QString kPeerSection = QStringLiteral("Peer Upper level");
 //! The depth-2 project both sides of every case below start from:
 //!
 //!   Kentucky field seasons          (Folder)
-//!     nodes/Side Cave               (Cave)
-//!     nodes/Sibling Cave            (Cave, one trip carrying a note image)
+//!     sub/Side Cave                 (Cave)
+//!     sub/Sibling Cave              (Cave, one trip carrying a note image)
 //!
 //! With a section asked for, Side Cave gains one more level:
 //!
-//!     nodes/Side Cave/nodes/Upper level   (Folder, one trip carrying a note image)
+//!     sub/Side Cave/sub/Upper level (Folder, one trip carrying a note image)
 struct TreeFixture {
     cwCave* folder = nullptr;
     cwCave* sideCave = nullptr;

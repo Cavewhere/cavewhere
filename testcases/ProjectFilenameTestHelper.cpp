@@ -91,7 +91,7 @@ QDir ProjectFilenameTestHelper::dir(const cwCave* cave)
         return QDir();
     }
 
-    //Mirrors cwSaveLoad::dirPrivate: a node lives in its parent's nodes/
+    //Mirrors cwSaveLoad::dirPrivate: a node lives in its parent's sub/
     //directory, and the root's own children are the data root's directories.
     const QDir dataRootDir = projectDir(cave->parentRegion()->parentProject());
     return QDir(dataRootDir.absoluteFilePath(cwSaveLoad::relativeNodeDir(cave->path())));

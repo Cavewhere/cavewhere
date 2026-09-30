@@ -118,7 +118,7 @@ const QLatin1String kNotesDirName("notes");
 const QLatin1String kExternalCenterlineDirName("external-centerline");
 
 //! The directory a node's child nodes live in, a sibling of trips/.
-const QLatin1String kNodesDirName("nodes");
+const QLatin1String kSubNodeDirName("sub");
 
 //! The directory a node's trips live in.
 const QLatin1String kTripsDirName("trips");
@@ -128,12 +128,12 @@ const QLatin1String kTripsDirName("trips");
 //! node the user named that, so a descriptor scan decides what to descend into
 //! by the role it reached a directory through, never by the bare name.
 enum class ScanRole {
-    DataRoot,   //!< The project's data root; its children are survey nodes.
-    Node,       //!< A survey node's own directory.
-    NodesList,  //!< A node's nodes/ directory; its children are survey nodes.
-    TripsList,  //!< A node's trips/ directory; its children are trips.
-    Trip,       //!< A trip's own directory.
-    Unknown     //!< A directory the layout does not name; descended, never pruned.
+    DataRoot,     //!< The project's data root; its children are survey nodes.
+    Node,         //!< A survey node's own directory.
+    SubNodeList,  //!< A node's sub/ directory; its children are survey nodes.
+    TripsList,    //!< A node's trips/ directory; its children are trips.
+    Trip,         //!< A trip's own directory.
+    Unknown       //!< A directory the layout does not name; descended, never pruned.
 };
 
 //! The role a child directory of \a parentRole named \a name is reached
@@ -150,11 +150,11 @@ std::optional<ScanRole> childScanRole(ScanRole parentRole, const QString& name, 
 
     switch (parentRole) {
     case ScanRole::DataRoot:
-    case ScanRole::NodesList:
+    case ScanRole::SubNodeList:
         return ScanRole::Node;
     case ScanRole::Node:
-        if (named(kNodesDirName)) {
-            return ScanRole::NodesList;
+        if (named(kSubNodeDirName)) {
+            return ScanRole::SubNodeList;
         }
         if (named(kTripsDirName)) {
             return scanTrips ? std::optional(ScanRole::TripsList) : std::nullopt;
@@ -863,7 +863,7 @@ void cwSaveLoad::repairTopLevelIds(ProjectLoadData& loadData)
     };
 
     //Ids are unique across the whole project, so the walk covers every node of
-    //the tree: a hand-copied directory under a parent's nodes/ duplicates ids
+    //the tree: a hand-copied directory under a parent's sub/ duplicates ids
     //just as a copied top-level cave does, and an unrepaired duplicate lets one
     //node's loaded path stand in for the other's.
     const auto repairNode = [&](cwCaveData& cave, auto&& self) -> void {
@@ -958,7 +958,7 @@ void cwSaveLoad::repairNameCollisions(ProjectLoadData& loadData)
 
     //Sibling nodes share a directory, so their names have to differ after
     //sanitizing at every depth: a node's children collide with each other under
-    //its nodes/, not with its trips, which live in a separate trips/.
+    //its sub/, not with its trips, which live in a separate trips/.
     const auto dedupSiblingNodes = [&](QList<cwCaveData>& siblings, const QString& parentName) {
         cwSanitizedNameSet nodeNames;
         for (cwCaveData& node : siblings) {
@@ -3024,7 +3024,7 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
 
 
     //Go through the whole node tree, pre-order: a node's own files, then its
-    //trips, then the nodes/ directory below it.
+    //trips, then the sub/ directory below it.
     const auto saveNode = [this, makeDir, saveTrips](const QDir& nodeDir, const cwCave* node, auto&& self) -> void {
         makeDir(nodeDir);
         save(node);
@@ -3177,18 +3177,18 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                 }
 
                 // The loader never guesses a parent: a descriptor sits either in
-                // the data root or in a node's nodes/ directory, and anything
+                // the data root or in a node's sub/ directory, and anything
                 // else is reported and skipped.
                 NodeEntry* parentEntry = nullptr;
                 const QString parentPath = parentDirPathOf(caveDirPath);
                 if (parentPath != regionDirPath) {
-                    const bool inNodesDir = QFileInfo(parentPath).fileName().compare(kNodesDirName, Qt::CaseInsensitive) == 0;
-                    const auto parentIt = inNodesDir ? nodeByDir.constFind(parentDirPathOf(parentPath))
-                                                     : nodeByDir.constEnd();
+                    const bool inSubNodeDir = QFileInfo(parentPath).fileName().compare(kSubNodeDirName, Qt::CaseInsensitive) == 0;
+                    const auto parentIt = inSubNodeDir ? nodeByDir.constFind(parentDirPathOf(parentPath))
+                                                       : nodeByDir.constEnd();
                     if (parentIt == nodeByDir.constEnd()) {
                         loadData.errors.append(cwError(
-                                                   QStringLiteral("Ignoring \"%1\": it is not in the project's data root or in a survey node's \"nodes\" directory.")
-                                                   .arg(cavePath),
+                                                   QStringLiteral("Ignoring \"%1\": it is not in the project's data root or in a survey node's \"%2\" directory.")
+                                                   .arg(cavePath, kSubNodeDirName),
                                                    cwError::Fatal));
                         continue;
                     }
@@ -5255,7 +5255,7 @@ QString cwSaveLoad::relativeNodeDir(const QStringList& nodePath)
     QString relativeDir;
     for (const QString& name : nodePath) {
         if (!relativeDir.isEmpty()) {
-            relativeDir += QLatin1Char('/') + kNodesDirName + QLatin1Char('/');
+            relativeDir += QLatin1Char('/') + kSubNodeDirName + QLatin1Char('/');
         }
         relativeDir += sanitizeFileName(name);
     }
@@ -5400,8 +5400,8 @@ QDir cwSaveLoad::dirPrivate(const cwCave* cave) const
     }
 
     //cwSurveyNode::path() is the walk up to the root, and relativeNodeDir turns
-    //it into the nodes/ layout: the root's own children are the data root's
-    //directories, and everything deeper sits in its parent's nodes/.
+    //it into the sub/ layout: the root's own children are the data root's
+    //directories, and everything deeper sits in its parent's sub/.
     return QDir(dataRootDir().absoluteFilePath(relativeNodeDir(cave->path())));
 }
 
@@ -5577,7 +5577,7 @@ QDir cwSaveLoad::caveDirHelper(const QDir &projectDir, const cwCave *cave)
 
 QDir cwSaveLoad::nodeDirHelper(const QDir &parentNodeDir, const cwCave *node)
 {
-    return QDir(parentNodeDir.absoluteFilePath(kNodesDirName + QLatin1Char('/') + sanitizeFileName(node->name())));
+    return QDir(parentNodeDir.absoluteFilePath(kSubNodeDirName + QLatin1Char('/') + sanitizeFileName(node->name())));
 }
 
 QDir cwSaveLoad::tripDirHelper(const QDir &caveDir, const cwTrip *trip)

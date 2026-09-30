@@ -69,8 +69,8 @@ constexpr int kFlatVersion = 9;
 //!
 //!   Fisher Ridge                      (Cave, two trips, one note image)
 //!   Kentucky field seasons            (Folder)
-//!     nodes/Side Cave                 (Cave, one trip)
-//!       nodes/Upper level             (Folder — a Section)
+//!     sub/Side Cave                   (Cave, one trip)
+//!       sub/Upper level               (Folder — a Section)
 //!         trips/Dome climb
 //!   Side Cave                         (Cave, a second top-level node of that name)
 struct TreeFixture {
@@ -252,7 +252,7 @@ void compareNodeData(const cwCaveData& expected, const cwCaveData& actual)
 
 }
 
-TEST_CASE("cwSaveLoad writes a node tree as nested nodes directories", "[cwSaveLoad][NodeTree]")
+TEST_CASE("cwSaveLoad writes a node tree as nested sub directories", "[cwSaveLoad][NodeTree]")
 {
     auto rootData = std::make_unique<cwRootData>();
     const TreeFixture fixture = buildTree(rootData.get(), true);
@@ -264,24 +264,41 @@ TEST_CASE("cwSaveLoad writes a node tree as nested nodes directories", "[cwSaveL
     const QDir dataRoot = rootData->project()->dataRootDir();
     REQUIRE(dataRoot.exists());
 
-    //§6.1: nodes/ is a sibling of trips/, all the way down.
+    //§6.1: sub/ is a sibling of trips/, all the way down.
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Fisher Ridge/Fisher Ridge.cwcave"))));
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Fisher Ridge/trips/Entrance survey/Entrance survey.cwtrip"))));
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/Kentucky field seasons.cwcave"))));
-    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/nodes/Side Cave/Side Cave.cwcave"))));
-    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/nodes/Side Cave/trips/Sump dig/Sump dig.cwtrip"))));
-    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/nodes/Side Cave/nodes/Upper level/Upper level.cwcave"))));
-    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/nodes/Side Cave/nodes/Upper level/trips/Dome climb/Dome climb.cwtrip"))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/sub/Side Cave/Side Cave.cwcave"))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/sub/Side Cave/trips/Sump dig/Sump dig.cwtrip"))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/sub/Side Cave/sub/Upper level/Upper level.cwcave"))));
+    CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/sub/Side Cave/sub/Upper level/trips/Dome climb/Dome climb.cwtrip"))));
 
     //A second top-level node may carry the same name as a nested one.
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Side Cave/Side Cave.cwcave"))));
 
-    //The depth-one bug: a node added under a cave is written only under nodes/.
+    //Every child-node directory is named sub/; the pre-release nodes/ name is gone.
+    QStringList subNodeDirs;
+    QStringList legacyNodesDirs;
+    QDirIterator dirs(dataRoot.absolutePath(), QDir::Dirs | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    while (dirs.hasNext()) {
+        const QFileInfo dirInfo = dirs.nextFileInfo();
+        if (dirInfo.fileName().compare(QStringLiteral("sub"), Qt::CaseInsensitive) == 0) {
+            subNodeDirs.append(dataRoot.relativeFilePath(dirInfo.absoluteFilePath()));
+        } else if (dirInfo.fileName().compare(QStringLiteral("nodes"), Qt::CaseInsensitive) == 0) {
+            legacyNodesDirs.append(dataRoot.relativeFilePath(dirInfo.absoluteFilePath()));
+        }
+    }
+    INFO("sub/ directories: " << subNodeDirs.join(QStringLiteral(", ")).toStdString());
+    INFO("nodes/ directories: " << legacyNodesDirs.join(QStringLiteral(", ")).toStdString());
+    CHECK(subNodeDirs.size() == 2);
+    CHECK(legacyNodesDirs.isEmpty());
+
+    //The depth-one bug: a node added under a cave is written only under sub/.
     CHECK_FALSE(QFileInfo::exists(dataRoot.absoluteFilePath(kSectionName)));
-    CHECK_FALSE(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Side Cave/nodes/Upper level"))));
+    CHECK_FALSE(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Side Cave/sub/Upper level"))));
 
     CHECK(ProjectFilenameTestHelper::absolutePath(fixture.section)
-          == dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/nodes/Side Cave/nodes/Upper level/Upper level.cwcave")));
+          == dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/sub/Side Cave/sub/Upper level/Upper level.cwcave")));
 
     //A project with hierarchy is stamped with the tree format's version.
     checkEveryFileVersion(QFileInfo(projectFile).absoluteDir(), cwRegionIOTask::protoVersion());
@@ -390,7 +407,7 @@ TEST_CASE("cwSaveLoad reports a misplaced node descriptor and loads the rest", "
     secondFile.close();
 
     //A descriptor in a directory that is neither the data root nor a node's
-    //nodes/ child is reported too.
+    //sub/ child is reported too.
     const QString orphanDirPath = dataRoot.absoluteFilePath(QStringLiteral("Fisher Ridge/somewhere else"));
     REQUIRE(QDir().mkpath(orphanDirPath));
     REQUIRE(QFile::copy(secondDescriptor, QDir(orphanDirPath).absoluteFilePath(QStringLiteral("Orphan.cwcave"))));
@@ -477,9 +494,9 @@ TEST_CASE("cwSaveLoad loads a node the user named after a layout directory", "[c
     const QDir dataRoot = rootData->project()->dataRootDir();
     REQUIRE(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Trips/Trips.cwcave"))));
     REQUIRE(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Trips/trips/notes/notes.cwtrip"))));
-    REQUIRE(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Trips/nodes/Notes/Notes.cwcave"))));
+    REQUIRE(QFileInfo::exists(dataRoot.absoluteFilePath(QStringLiteral("Trips/sub/Notes/Notes.cwcave"))));
     REQUIRE(QFileInfo::exists(dataRoot.absoluteFilePath(
-                                  QStringLiteral("Trips/nodes/Notes/trips/external-centerline/external-centerline.cwtrip"))));
+                                  QStringLiteral("Trips/sub/Notes/trips/external-centerline/external-centerline.cwtrip"))));
 
     auto loadedRoot = std::make_unique<cwRootData>();
     addTokenManager(loadedRoot->project());
@@ -510,9 +527,9 @@ TEST_CASE("cwSaveLoad repairs duplicate ids and names in a copied nested node", 
     //The by-hand duplicate the depth-one repair already covers, made one level
     //deeper: every id below the copied directory arrives twice.
     const QDir dataRoot = rootData->project()->dataRootDir();
-    const QDir nestedSource(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/nodes/Side Cave")));
+    const QDir nestedSource(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/sub/Side Cave")));
     REQUIRE(nestedSource.exists());
-    copyDirectory(nestedSource, QDir(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/nodes/Side Cave copy"))));
+    copyDirectory(nestedSource, QDir(dataRoot.absoluteFilePath(QStringLiteral("Kentucky field seasons/sub/Side Cave copy"))));
 
     auto loadedRoot = std::make_unique<cwRootData>();
     addTokenManager(loadedRoot->project());
@@ -589,13 +606,13 @@ TEST_CASE("cavewhereLfsPolicy classifies a note image the same at any depth", "[
     const QString depthOne =
             QStringLiteral("Fisher Ridge/trips/Entrance survey/notes/Note.png");
     const QString depthThree =
-            QStringLiteral("Kentucky field seasons/nodes/Side Cave/nodes/Upper level/trips/Dome climb/notes/Note.png");
+            QStringLiteral("Kentucky field seasons/sub/Side Cave/sub/Upper level/trips/Dome climb/notes/Note.png");
 
     CHECK(policy.isEligible(depthOne));
     CHECK(policy.isEligible(depthThree) == policy.isEligible(depthOne));
 
     const QString descriptorAtDepthThree =
-            QStringLiteral("Kentucky field seasons/nodes/Side Cave/nodes/Upper level/Upper level.cwcave");
+            QStringLiteral("Kentucky field seasons/sub/Side Cave/sub/Upper level/Upper level.cwcave");
     CHECK_FALSE(policy.isEligible(descriptorAtDepthThree));
 }
 
@@ -741,14 +758,14 @@ void checkNestedChildSurvivesReload(const QString& parentName)
 
 }
 
-TEST_CASE("cwSaveLoad loads a nested child whose parent sorts after its nodes directory",
+TEST_CASE("cwSaveLoad loads a nested child whose parent sorts after its sub directory",
           "[cwSaveLoad][NodeTree]")
 {
     //The loader places a parent before its children by sorting descriptors on
     //their absolute path, which holds only while the parent's own file name
-    //sorts before "nodes". Every name whose first character sorts after "n"
+    //sorts before "sub". Every name whose first character sorts after "s"
     //breaks that, and the child's whole subtree is then re-parented on open.
-    SECTION("a parent whose name starts after n")
+    SECTION("a parent whose name starts after s")
     {
         checkNestedChildSurvivesReload(QStringLiteral("zeta"));
     }
@@ -760,7 +777,7 @@ TEST_CASE("cwSaveLoad loads a nested child whose parent sorts after its nodes di
 
     SECTION("a parent named like the layout directory but longer")
     {
-        checkNestedChildSurvivesReload(QStringLiteral("notes"));
+        checkNestedChildSurvivesReload(QStringLiteral("subway"));
     }
 
     SECTION("a parent whose name starts with a non-ASCII letter")
@@ -883,17 +900,17 @@ TEST_CASE("cwSaveLoad renames a loaded node at depth two and depth three",
     flushSaves(rootData.get());
 
     const QString renamedCaveDir =
-            QStringLiteral("%1/nodes/%2").arg(kFolderName, kRenamedCave);
+            QStringLiteral("%1/sub/%2").arg(kFolderName, kRenamedCave);
     CHECK_FALSE(QFileInfo::exists(
-                    dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/%2").arg(kFolderName, kSideCaveName))));
+                    dataRoot.absoluteFilePath(QStringLiteral("%1/sub/%2").arg(kFolderName, kSideCaveName))));
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
                                 QStringLiteral("%1/%2.cwcave").arg(renamedCaveDir, kRenamedCave))));
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
                                 QStringLiteral("%1/trips/%2/%2.cwtrip").arg(renamedCaveDir, kSideCaveTripName))));
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
-                                QStringLiteral("%1/nodes/%2/%2.cwcave").arg(renamedCaveDir, kRenamedSection))));
+                                QStringLiteral("%1/sub/%2/%2.cwcave").arg(renamedCaveDir, kRenamedSection))));
     CHECK(QFileInfo::exists(dataRoot.absoluteFilePath(
-                                QStringLiteral("%1/nodes/%2/trips/%3/%3.cwtrip")
+                                QStringLiteral("%1/sub/%2/trips/%3/%3.cwtrip")
                                 .arg(renamedCaveDir, kRenamedSection, kSectionTripName))));
     CHECK(relativeFiles(dataRoot).size() == fileCountBefore);
 
@@ -1074,10 +1091,10 @@ TEST_CASE("cwSaveLoad reports what it cannot place and loads the rest of the tre
         CHECK(childNamed(loadedRegion->rootNode(), kSideCaveName) != nullptr);
     }
 
-    SECTION("a descriptor sitting directly in a nodes directory")
+    SECTION("a descriptor sitting directly in a sub directory")
     {
         const QString loosePath =
-                dataRoot.absoluteFilePath(QStringLiteral("%1/nodes/Loose.cwcave").arg(kFolderName));
+                dataRoot.absoluteFilePath(QStringLiteral("%1/sub/Loose.cwcave").arg(kFolderName));
         REQUIRE(QFile::copy(dataRoot.absoluteFilePath(QStringLiteral("Side Cave/Side Cave.cwcave")),
                             loosePath));
 
@@ -1093,10 +1110,10 @@ TEST_CASE("cwSaveLoad reports what it cannot place and loads the rest of the tre
         CHECK(childNamed(loadedFolder, kSideCaveName) != nullptr);
     }
 
-    SECTION("an empty nodes directory")
+    SECTION("an empty sub directory")
     {
         REQUIRE(QDir().mkpath(dataRoot.absoluteFilePath(
-                                  kFisherRidgeName + QStringLiteral("/nodes"))));
+                                  kFisherRidgeName + QStringLiteral("/sub"))));
 
         const QStringList messages = loadReport(loadedRoot);
         INFO("Errors: " << messages.join(QStringLiteral(" | ")).toStdString());
@@ -1104,9 +1121,9 @@ TEST_CASE("cwSaveLoad reports what it cannot place and loads the rest of the tre
         CHECK(loadedRoot->project()->cavingRegion()->caveCount() == 3);
     }
 
-    SECTION("a plain file named after the nodes directory")
+    SECTION("a plain file named after the sub directory")
     {
-        QFile strayFile(dataRoot.absoluteFilePath(kFisherRidgeName + QStringLiteral("/nodes")));
+        QFile strayFile(dataRoot.absoluteFilePath(kFisherRidgeName + QStringLiteral("/sub")));
         REQUIRE(strayFile.open(QIODevice::WriteOnly));
         strayFile.write("not a directory");
         strayFile.close();
@@ -1184,7 +1201,7 @@ TEST_CASE("cwSaveLoad renames the data root of a nested project",
     CHECK(newDataRoot.dirName() == kRenamedRegion);
     CHECK(relativeFiles(newDataRoot) == filesBefore);
     CHECK(QFileInfo::exists(newDataRoot.absoluteFilePath(
-                                QStringLiteral("%1/nodes/%2/nodes/%3/%3.cwcave")
+                                QStringLiteral("%1/sub/%2/sub/%3/%3.cwcave")
                                 .arg(kFolderName, kSideCaveName, kSectionName))));
 
     auto loadedRoot = std::make_unique<cwRootData>();
@@ -1300,9 +1317,9 @@ TEST_CASE("cwSaveLoad renames a nested node in a Save As copy and leaves the sou
     flushSaves(rootData.get());
 
     CHECK(QFileInfo::exists(copyDataRoot.absoluteFilePath(
-                                QStringLiteral("%1/nodes/%2/%2.cwcave").arg(kFolderName, kRenamedCave))));
+                                QStringLiteral("%1/sub/%2/%2.cwcave").arg(kFolderName, kRenamedCave))));
     CHECK_FALSE(QFileInfo::exists(copyDataRoot.absoluteFilePath(
-                                      QStringLiteral("%1/nodes/%2").arg(kFolderName, kSideCaveName))));
+                                      QStringLiteral("%1/sub/%2").arg(kFolderName, kSideCaveName))));
     CHECK(relativeFiles(sourceDataRoot) == sourceFilesBefore);
 
     auto loadedSource = std::make_unique<cwRootData>();

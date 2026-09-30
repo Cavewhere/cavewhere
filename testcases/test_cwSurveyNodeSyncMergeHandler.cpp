@@ -65,7 +65,7 @@ TEST_CASE("A peer's depth-2 node rename lands on the live node with that id",
     const QDir dataRoot = clones->authorDataRoot();
     const QDir folderDir(dataRoot.absoluteFilePath(kFolderName));
     CHECK(QFileInfo::exists(folderDir.absoluteFilePath(
-        QStringLiteral("nodes/") + kPeerSideCave + QChar('/') + kPeerSideCave
+        QStringLiteral("sub/") + kPeerSideCave + QChar('/') + kPeerSideCave
         + QStringLiteral(".cwcave"))));
 }
 
@@ -103,20 +103,20 @@ TEST_CASE("Depth-2 orphan cleanup removes only the losing node's directory",
 
     const QDir dataRoot = clones->authorDataRoot();
     const QDir folderDir(dataRoot.absoluteFilePath(kFolderName));
-    const QDir nodesDir(folderDir.absoluteFilePath(QStringLiteral("nodes")));
+    const QDir subDir(folderDir.absoluteFilePath(QStringLiteral("sub")));
 
     //The winner keeps its directory and descriptor.
-    CHECK(QFileInfo::exists(nodesDir.absoluteFilePath(
+    CHECK(QFileInfo::exists(subDir.absoluteFilePath(
         kAuthorSideCave + QChar('/') + kAuthorSideCave + QStringLiteral(".cwcave"))));
 
     //The loser's own directory is gone.
-    CHECK_FALSE(QFileInfo::exists(nodesDir.absoluteFilePath(kPeerSideCave)));
+    CHECK_FALSE(QFileInfo::exists(subDir.absoluteFilePath(kPeerSideCave)));
 
     //Nothing above it was taken with it: the ancestor, the sibling node, its trip,
     //and its note image are all still on disk.
     CHECK(folderDir.exists());
     CHECK(QFileInfo::exists(folderDir.absoluteFilePath(kFolderName + QStringLiteral(".cwcave"))));
-    const QDir siblingDir(nodesDir.absoluteFilePath(kSiblingCaveName));
+    const QDir siblingDir(subDir.absoluteFilePath(kSiblingCaveName));
     CHECK(siblingDir.exists());
     CHECK(QFileInfo::exists(
         siblingDir.absoluteFilePath(kSiblingCaveName + QStringLiteral(".cwcave"))));
@@ -136,10 +136,10 @@ TEST_CASE("Orphan cleanup spares a moved node's only directory",
 {
     auto clones = makeTwoClones(false);
 
-    //--- Peer moves Kentucky field seasons/nodes/Side Cave up to the data root ---
+    //--- Peer moves Kentucky field seasons/sub/Side Cave up to the data root ---
     const QDir peerDataRoot(clones->cloneRepository.directory().absoluteFilePath(kProjectName));
     const QString movedFrom =
-        peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/nodes/") + kSideCaveName);
+        peerDataRoot.absoluteFilePath(kFolderName + QStringLiteral("/sub/") + kSideCaveName);
     const QString movedTo = peerDataRoot.absoluteFilePath(kSideCaveName);
     REQUIRE(QFileInfo::exists(movedFrom));
     REQUIRE(QDir().rename(movedFrom, movedTo));

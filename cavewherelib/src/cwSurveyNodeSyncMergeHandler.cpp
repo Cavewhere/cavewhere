@@ -116,7 +116,7 @@ std::optional<std::pair<QUuid, cwCaveData>> loadBaseCaveDataForPath(const QDir& 
 }
 
 //! The node's directory relative to the repository root, e.g.
-//! "DataRoot/Kentucky field seasons/nodes/Side Cave".
+//! "DataRoot/Kentucky field seasons/sub/Side Cave".
 QString relativeNodeDirectory(const QString& dataRootName, const cwSurveyNode* node)
 {
     const QString nodeDir = cwSaveLoad::relativeNodeDir(node->path());

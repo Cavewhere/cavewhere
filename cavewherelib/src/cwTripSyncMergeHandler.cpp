@@ -95,7 +95,7 @@ std::optional<std::pair<QUuid, cwTripData>> loadBaseTripDataForCandidatePaths(
 }
 
 //! Every changed node descriptor's own directory, relative to the repository root
-//! (e.g. "DataRoot/Kentucky field seasons/nodes/Side Cave").
+//! (e.g. "DataRoot/Kentucky field seasons/sub/Side Cave").
 QStringList nodeDirectoryCandidatesFromChangedNodePaths(const QStringList& changedPaths)
 {
     QSet<QString> nodeDirs;
