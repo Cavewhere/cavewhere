@@ -14,6 +14,9 @@
 #include "cwExternalSourceSettings.h"
 #include "cwSaveLoad.h"
 #include "cwStation.h"
+#include "cwSurveyNoteLiDARModel.h"
+#include "cwSurveyNoteModel.h"
+#include "cwSurveyNoteSketchModel.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwTrip.h"
@@ -198,11 +201,25 @@ private:
 };
 
 /**
+ * True when \a trip carries survey data the user entered: chunks, or notes
+ * of any kind (scanned pages and the scraps on them, LiDAR scans,
+ * sketches). A window holding any of it outlives its block: the source
+ * derives the window, and what the user put in it is theirs.
+ */
+bool holdsNativeContent(const cwTrip* trip)
+{
+    return trip->chunkCount() > 0
+           || trip->notes()->hasNotes()
+           || trip->notesLiDAR()->hasNotes()
+           || trip->notesSketch()->hasNotes();
+}
+
+/**
  * Brings the cave's windows in line with what the scan found: a block
  * that already has a trip windowing it keeps that trip, a block with no
  * trip gets one, a station-bearing file root gets the one whole-cave
- * window (empty stationPrefix), and a chunk-less window the file no
- * longer accounts for is removed. A window the user put chunks in is
+ * window (empty stationPrefix), and an empty window the file no longer
+ * accounts for is removed. A window the user put chunks or notes in is
  * survey data and stays, orphaned prefix and all. Fresh attach is the
  * degenerate case where no window exists yet, so attach and replace run
  * the same reconcile. Returns the trips it created, in block order, the
@@ -234,7 +251,7 @@ QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
     // accounts for only while the root bears stations.
     for (int i = cave->tripCount() - 1; i >= 0; --i) {
         const cwTrip* trip = cave->trip(i);
-        if (trip->chunkCount() > 0) {
+        if (holdsNativeContent(trip)) {
             continue;
         }
         const QString prefix = trip->stationPrefix();
@@ -338,9 +355,9 @@ QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
 
 /**
  * Removes the windows a cave-level detach leaves nothing behind for:
- * every chunk-less trip of the cave, which under an attached cave is
- * exactly its windows - the blocks' and the whole cave's alike. A
- * window the user put chunks in is real survey data and stays.
+ * every empty trip of the cave, which under an attached cave is exactly
+ * its windows - the blocks' and the whole cave's alike. A window the
+ * user put chunks or notes in is real survey data and stays.
  *
  * removeTrip() is the boundary on purpose - it emits tripsDeleted(),
  * which is what clears each trip's breadcrumb and wakes the manager.
@@ -350,7 +367,7 @@ QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
 void removeEmptyScopeTrips(cwCave* cave)
 {
     for (int i = cave->tripCount() - 1; i >= 0; --i) {
-        if (cave->trip(i)->chunkCount() == 0) {
+        if (!holdsNativeContent(cave->trip(i))) {
             cave->removeTrip(i);
         }
     }
@@ -569,7 +586,7 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
 
 /**
  * The whole detach, owner-generic: drop the breadcrumb, cascade away a
- * cave's chunk-less Scope trips, clear the model, and remove the
+ * cave's empty Scope trips, clear the model, and remove the
  * attachment dir through the job queue.
  */
 QFuture<Monad::ResultBase> detachOwner(const OwnerTarget& owner,

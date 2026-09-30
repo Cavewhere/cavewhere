@@ -19,12 +19,14 @@
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotGeometry.h"
 #include "cwLinePlotManager.h"
+#include "cwNoteLiDAR.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwSignalSpy.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
 
@@ -36,11 +38,13 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
+#include <QPointer>
 #include <QTemporaryDir>
 #include <QVector3D>
 
 // Std
 #include <algorithm>
+#include <functional>
 #include <memory>
 
 namespace {
@@ -191,6 +195,59 @@ int vertexCountOf(const cwLinePlotGeometry::Result& geometry, const cwTrip* trip
 // fractions of a centimeter off the tape totals cavern reports.
 constexpr double kSolvedLengthMarginMeters = 0.05;
 
+// survex_blocks.svx cut back to its doghill block: big-passage and east,
+// the two windows below it, leave the source together.
+const QByteArray kDoghillOnlySource(
+    "*begin doghill\n"
+    "*fix d1 0 0 0\n"
+    "*data normal from to tape compass clino\n"
+    "d1 d2 10.0 0 0\n"
+    "*end doghill\n");
+
+void addLiDARScan(cwTrip* trip)
+{
+    trip->notesLiDAR()->addNotes({new cwNoteLiDAR()});
+}
+
+//! Replaces a fresh cave's attachment with doghill alone and checks that
+//! east, which holds what \a addNativeContent put on it, outlives its block
+//! while big-passage, which holds nothing, goes with its own. \a checkKept
+//! then inspects east while the project that owns it is still alive.
+void checkReplaceKeepsEast(const QString& projectFileBase,
+                           const std::function<void(cwTrip*)>& addNativeContent,
+                           const std::function<void(cwTrip*)>& checkKept)
+{
+    auto fixture = makeProjectWithFreshCave(projectFileBase);
+    cwCave* cave = freshCaveOf(fixture.get());
+    attachCaveThroughManager(fixture.get(), cave, blocksFixture());
+    drainPipelines(fixture.get());
+
+    cwTrip* east = tripForPrefix(cave, kEast);
+    REQUIRE(east != nullptr);
+    REQUIRE(east->chunkCount() == 0);
+    const QUuid eastId = east->id();
+    addNativeContent(east);
+    REQUIRE(tripForPrefix(cave, kBigPassage) != nullptr);
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString source =
+        writeSurvey(sourceDir, QStringLiteral("doghill-only.svx"), kDoghillOnlySource);
+
+    auto future = managerOf(fixture.get())->replaceCenterline(cave, source);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture.get());
+
+    cwTrip* kept = tripForPrefix(cave, kEast);
+    REQUIRE(kept != nullptr);
+    CHECK(kept->id() == eastId);
+    CHECK(tripForPrefix(cave, kBigPassage) == nullptr);
+    CHECK(tripForPrefix(cave, kDoghill) != nullptr);
+    CHECK(cave->tripCount() == 2);
+    checkKept(kept);
+}
+
 } // namespace
 
 TEST_CASE("cave attach creates one Scope trip per station-bearing block",
@@ -338,6 +395,8 @@ TEST_CASE("cave detach removes the Scope trips, the copies, and the breadcrumb",
     REQUIRE(QDir(attachmentDir).exists());
 
     int survivingTripCount = 0;
+    QPointer<cwTrip> expectedSurvivor;
+    std::function<bool(const cwTrip*)> survivorKeepsContent = [](const cwTrip*) { return true; };
 
     SECTION("every Scope trip is chunk-less") {
         survivingTripCount = 0;
@@ -350,11 +409,33 @@ TEST_CASE("cave detach removes the Scope trips, the copies, and the breadcrumb",
         survivingTripCount = 1;
     }
 
+    SECTION("a Scope trip holding a note survives") {
+        cwTrip* east = tripForPrefix(cave, kEast);
+        REQUIRE(east != nullptr);
+        addNoteWithScrap(east, QStringLiteral("e1"));
+        survivingTripCount = 1;
+        expectedSurvivor = east;
+        survivorKeepsContent = [](const cwTrip* trip) { return trip->notes()->hasNotes(); };
+    }
+
+    SECTION("a Scope trip holding a LiDAR scan survives") {
+        cwTrip* east = tripForPrefix(cave, kEast);
+        REQUIRE(east != nullptr);
+        addLiDARScan(east);
+        survivingTripCount = 1;
+        expectedSurvivor = east;
+        survivorKeepsContent = [](const cwTrip* trip) { return trip->notesLiDAR()->hasNotes(); };
+    }
+
     auto future = managerOf(fixture.get())->detachCenterline(cave);
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     CHECK_FALSE(future.result().hasError());
 
     CHECK(cave->tripCount() == survivingTripCount);
+    if (expectedSurvivor) {
+        CHECK(cave->trips().contains(expectedSurvivor.data()));
+        CHECK(survivorKeepsContent(expectedSurvivor));
+    }
     CHECK(cave->externalCenterline().isEmpty());
     CHECK(fixture->settings()->breadcrumbPath(cave->id()).isEmpty());
     CHECK_FALSE(QDir(attachmentDir).exists());
@@ -980,4 +1061,64 @@ TEST_CASE("cave detach removes the whole-cave window too", "[Attach][Cave]")
     CHECK(fixture->project->cavingRegion()->caves().contains(cave));
 
     drainPipelines(fixture.get());
+}
+
+TEST_CASE("cave replace keeps a chunk-less scope trip that holds a note",
+          "[Attach][Cave]")
+{
+    cwNote* note = nullptr;
+    checkReplaceKeepsEast(QStringLiteral("cave-replace-keeps-note"),
+                          [&note](cwTrip* trip) { note = addNoteWithScrap(trip, QStringLiteral("e1")); },
+                          [&note](cwTrip* kept) {
+                              REQUIRE(kept->notes()->rowCount() == 1);
+                              CHECK(kept->notes()->notes().first() == note);
+                          });
+}
+
+TEST_CASE("cave replace keeps a chunk-less scope trip that holds a LiDAR scan",
+          "[Attach][Cave][NoteLiDAR]")
+{
+    checkReplaceKeepsEast(QStringLiteral("cave-replace-keeps-lidar"),
+                          [](cwTrip* trip) { addLiDARScan(trip); },
+                          [](cwTrip* kept) { CHECK(kept->notesLiDAR()->rowCount() == 1); });
+}
+
+TEST_CASE("cave reload keeps a scope trip's notes and scraps", "[Attach][Cave][Reload]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-reload-keeps-note"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    auto manager = managerOf(fixture.get());
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString source = writeSurvey(sourceDir, QStringLiteral("blocks.svx"),
+                                       fileContents(blocksFixture()));
+    attachCaveThroughManager(fixture.get(), cave, source);
+    drainPipelines(fixture.get());
+
+    cwTrip* east = tripForPrefix(cave, kEast);
+    REQUIRE(east != nullptr);
+    const QUuid eastId = east->id();
+    cwNote* note = addNoteWithScrap(east, QStringLiteral("e1"));
+    cwScrap* scrap = note->scrap(0);
+
+    // Reload with the block the note windows gone from the source, the one
+    // case where a reload decides whether the trip under the note stays.
+    overwriteFile(source, kDoghillOnlySource);
+    REQUIRE(manager->canReloadFromSource(cave));
+
+    auto future = manager->reloadFromSource(cave);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture.get());
+
+    cwTrip* kept = tripForPrefix(cave, kEast);
+    REQUIRE(kept != nullptr);
+    CHECK(kept->id() == eastId);
+    REQUIRE(kept->notes()->rowCount() == 1);
+    CHECK(kept->notes()->notes().first() == note);
+    REQUIRE(note->scraps().size() == 1);
+    CHECK(note->scrap(0) == scrap);
+    REQUIRE(scrap->numberOfStations() == 1);
+    CHECK(scrap->station(0).name() == QStringLiteral("e1"));
 }

@@ -162,7 +162,8 @@ public:
     // verb is for a cave created for this file — while replace runs on a
     // cave whose trips are the Scope trips a previous attach created and
     // reconciles them against the new block set. Detach cascades the
-    // chunk-less Scope trips away and leaves an empty Native cave.
+    // empty Scope trips away and leaves a Native cave holding only the
+    // trips the user put chunks or notes in.
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     attachCenterline(cwCave* cave, const QString& sourcePath);
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>

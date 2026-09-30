@@ -24,12 +24,16 @@
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
+#include "cwNote.h"
+#include "cwNoteStation.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "cwScrap.h"
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
 
 // Test helpers
@@ -291,6 +295,25 @@ inline cwTrip* addEmptyTrip(cwCave* cave, const QString& name)
     trip->setName(name);
     cave->addTrip(trip);
     return trip;
+}
+
+//! Puts a one-scrap note on \a trip, the scrap anchored at \a stationName.
+inline cwNote* addNoteWithScrap(cwTrip* trip, const QString& stationName)
+{
+    // A saved note names its image by path, so the project can write it.
+    cwNote* note = new cwNote();
+    note->setName(QStringLiteral("page.png"));
+    cwImage image;
+    image.setPath(QStringLiteral("page.png"));
+    note->setImage(image);
+    trip->notes()->addNotes({note});
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+    cwNoteStation noteStation;
+    noteStation.setName(stationName);
+    noteStation.setPositionOnNote(QPointF(0.5, 0.5));
+    scrap->addStation(noteStation);
+    return note;
 }
 
 inline cwTrip* addAttachedTrip(cwCave* cave,

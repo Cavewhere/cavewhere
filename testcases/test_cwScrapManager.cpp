@@ -26,6 +26,11 @@
 #include "cwImageUtils.h"
 #include "cwCavingRegion.h"
 #include "cwScrap.h"
+#include "cwNoteStation.h"
+#include "cwNoteTranformation.h"
+#include "cwStationPositionLookup.h"
+#include "cwExternalCenterlineManager.h"
+#include "ExternalCenterlineTestHelpers.h"
 
 //Qt includes
 #include <QFile>
@@ -504,4 +509,160 @@ TEST_CASE("V6 conversion with correct EXIF coords does not modify", "[cwScrapMan
     const QPointF station0 = scrap->stations().at(0).positionOnNote();
     CHECK(station0.x() == Catch::Approx(0.621).margin(0.005));
     CHECK(station0.y() == Catch::Approx(0.339).margin(0.005));
+}
+
+namespace {
+
+// A page one thousand pixels square at one hundred pixels per meter, so a
+// scrap station's note position turns into paper meters.
+constexpr int kAttachedNotePixels = 1000;
+constexpr int kAttachedNoteDotsPerMeter = 100;
+
+// Where the scrap marks a1, a2, and a3 on the page (note y runs up): a2 due
+// north of a1 and a3 due east of a2, the way the survey below runs.
+const QPointF kA1OnNote(0.2, 0.3);
+const QPointF kA2OnNote(0.2, 0.8);
+const QPointF kA3OnNote(0.7, 0.8);
+
+constexpr double kScaleTolerance = 1e-3;
+constexpr float kPositionToleranceMeters = 0.01f;
+
+//! One survey block, a1 fixed at the origin, a1-a2 due north, a2-a3 due east.
+QByteArray threeStationSurvey(const QByteArray& a1a2Tape, bool withA3)
+{
+    QByteArray survey(
+        "*begin s\n"
+        "*fix a1 0 0 0\n"
+        "*data normal from to tape compass clino\n");
+    survey += "a1 a2 " + a1a2Tape + " 0 0\n";
+    if (withA3) {
+        survey += "a2 a3 10.0 90 0\n";
+    }
+    survey += "*end s\n";
+    return survey;
+}
+
+struct AttachedScrapSetup {
+    std::unique_ptr<SavedProjectFixture> fixture;
+    QString source;
+    cwScrap* scrap = nullptr;
+};
+
+//! A saved project whose trip is attached to a three-station source kept
+//! outside the project, carrying one note with a scrap anchored at every
+//! station.
+AttachedScrapSetup makeAttachedScrap(const QString& projectFileBase)
+{
+    requireAutomaticUpdatesEnabled();
+    AttachedScrapSetup setup;
+    setup.fixture = makeSavedProject(projectFileBase,
+                                     QStringLiteral("ScrapCave"),
+                                     QStringLiteral("ScrapTrip"));
+    SavedProjectFixture* fixture = setup.fixture.get();
+
+    setup.source = QDir(fixture->tempDir.path()).filePath(QStringLiteral("source/s.svx"));
+    REQUIRE(QDir().mkpath(QFileInfo(setup.source).absolutePath()));
+    overwriteFile(setup.source, threeStationSurvey("10.0", true));
+    attachThroughManager(fixture, fixture->trip, setup.source);
+    drainPipelines(fixture);
+
+    // A saved note names its image by path, so the project can write it.
+    cwNote* note = new cwNote();
+    note->setName(QStringLiteral("page.png"));
+    cwImage image;
+    image.setPath(QStringLiteral("page.png"));
+    image.setOriginalSize(QSize(kAttachedNotePixels, kAttachedNotePixels));
+    image.setOriginalDotsPerMeter(kAttachedNoteDotsPerMeter);
+    note->setImage(image);
+    fixture->trip->notes()->addNotes({note});
+
+    setup.scrap = new cwScrap();
+    note->addScrap(setup.scrap);
+    const QList<QPair<QString, QPointF>> anchors {
+        {QStringLiteral("s.a1"), kA1OnNote},
+        {QStringLiteral("s.a2"), kA2OnNote},
+        {QStringLiteral("s.a3"), kA3OnNote},
+    };
+    for (const auto& anchor : anchors) {
+        cwNoteStation noteStation;
+        noteStation.setName(anchor.first);
+        noteStation.setPositionOnNote(anchor.second);
+        setup.scrap->addStation(noteStation);
+    }
+    drainPipelines(fixture);
+    fixture->rootData->scrapManager()->waitForFinish();
+    return setup;
+}
+
+void reloadAndSettle(SavedProjectFixture* fixture)
+{
+    auto future = managerOf(fixture)->reloadFromSource(fixture->trip);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture);
+    fixture->rootData->scrapManager()->waitForFinish();
+}
+
+bool nearPosition(const QVector3D& actual, const QVector3D& expected)
+{
+    return (actual - expected).length() < kPositionToleranceMeters;
+}
+
+} // namespace
+
+TEST_CASE("a scrap on an attached trip re-morphs after Reload moves its stations",
+          "[cwScrapManager][Attach]")
+{
+    auto setup = makeAttachedScrap(QStringLiteral("scrap-reload-moves"));
+    SavedProjectFixture* fixture = setup.fixture.get();
+    cwTrip* trip = fixture->trip;
+
+    REQUIRE(nearPosition(trip->solvedStationPositions().position(QStringLiteral("s.a2")),
+                         QVector3D(0.0f, 10.0f, 0.0f)));
+    const double scaleBefore = setup.scrap->noteTransformation()->scale();
+    REQUIRE(scaleBefore > 0.0);
+
+    // a2 moves ten meters further north and a3 follows it.
+    overwriteFile(setup.source, threeStationSurvey("20.0", true));
+    reloadAndSettle(fixture);
+
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    CHECK(nearPosition(lookup.position(QStringLiteral("s.a2")), QVector3D(0.0f, 20.0f, 0.0f)));
+    CHECK(nearPosition(lookup.position(QStringLiteral("s.a3")), QVector3D(10.0f, 20.0f, 0.0f)));
+
+    // The page did not change, so a survey that grew recomputes a smaller
+    // paper-to-cave scale: the scrap's anchors followed the reload.
+    const double scaleAfter = setup.scrap->noteTransformation()->scale();
+    CHECK(scaleAfter > 0.0);
+    CHECK(scaleAfter < scaleBefore * (1.0 - kScaleTolerance));
+    CHECK(setup.scrap->numberOfStations() == 3);
+}
+
+TEST_CASE("a scrap whose station left the source keeps its other anchors and reports the missing one",
+          "[cwScrapManager][Attach]")
+{
+    auto setup = makeAttachedScrap(QStringLiteral("scrap-station-left"));
+    SavedProjectFixture* fixture = setup.fixture.get();
+    cwTrip* trip = fixture->trip;
+
+    REQUIRE(trip->solvedStationPositions().hasPosition(QStringLiteral("s.a3")));
+    const double scaleBefore = setup.scrap->noteTransformation()->scale();
+    REQUIRE(scaleBefore > 0.0);
+
+    overwriteFile(setup.source, threeStationSurvey("10.0", false));
+    reloadAndSettle(fixture);
+
+    // The scrap still names all three stations; a3 is the one the solve
+    // has no position for, and a1-a2 alone carry the note transform.
+    REQUIRE(setup.scrap->numberOfStations() == 3);
+    CHECK(setup.scrap->station(2).name() == QStringLiteral("s.a3"));
+    const cwStationPositionLookup lookup = trip->solvedStationPositions();
+    CHECK(lookup.hasPosition(QStringLiteral("s.a1")));
+    CHECK(lookup.hasPosition(QStringLiteral("s.a2")));
+    CHECK_FALSE(lookup.hasPosition(QStringLiteral("s.a3")));
+
+    // The page draws a1-a2 and a2-a3 to the same scale, so the transform the
+    // remaining anchors compute matches the one all three computed.
+    CHECK(setup.scrap->noteTransformation()->scale()
+          == Catch::Approx(scaleBefore).epsilon(kScaleTolerance));
 }

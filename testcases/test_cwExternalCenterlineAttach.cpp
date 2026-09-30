@@ -18,11 +18,13 @@
 #include "cwExternalSourceStatusModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwLinePlotManager.h"
+#include "cwNoteLiDAR.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwSignalSpy.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurveyNoteLiDARModel.h"
 #include "cwTeam.h"
 #include "cwTeamMember.h"
 #include "cwTrip.h"
@@ -1091,6 +1093,40 @@ TEST_CASE("replace swaps the closure, GCs the dropped deps, and re-solves",
     CHECK(report.success());
     CHECK(report.entryFile() == QStringLiteral("survex_simple.svx"));
     CHECK(report.ownerId() == ownerId);
+}
+
+TEST_CASE("replace keeps the notes on an attached trip", "[Attach][Replace]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("replace-keeps-notes"));
+    auto manager = managerOf(fixture.get());
+    cwTrip* trip = fixture->trip;
+
+    attachThroughManager(fixture.get(), trip,
+                         datasetExternalCenterlinePath(QStringLiteral("survex_simple.svx")));
+    drainPipelines(fixture.get());
+
+    cwNote* note = addNoteWithScrap(trip, QStringLiteral("simple.a1"));
+    cwScrap* scrap = note->scrap(0);
+    cwNoteLiDAR* scan = new cwNoteLiDAR();
+    trip->notesLiDAR()->addNotes({scan});
+
+    // A source that shares no station with the first: the notes are the
+    // trip's survey data whatever the new file names.
+    auto future = manager->replaceCenterline(
+        trip, datasetExternalCenterlinePath(QStringLiteral("survex_nested.svx")));
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture.get());
+
+    REQUIRE(fixture->cave->trips().contains(trip));
+    CHECK(trip->externalCenterline().entryFile() == QStringLiteral("survex_nested.svx"));
+    REQUIRE(trip->notes()->rowCount() == 1);
+    CHECK(trip->notes()->notes().first() == note);
+    REQUIRE(note->scraps().size() == 1);
+    CHECK(note->scrap(0) == scrap);
+    CHECK(scrap->numberOfStations() == 1);
+    REQUIRE(trip->notesLiDAR()->rowCount() == 1);
+    CHECK(trip->notesLiDAR()->notes().first() == scan);
 }
 
 TEST_CASE("replace overwrites an edit to the project copy that kept its size",
