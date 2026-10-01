@@ -169,24 +169,28 @@ void cwLeadModel::fullModelReset()
    beginResetModel();
 
    //Remove all the scraps
-   foreach(cwScrap* scrap, ScrapToOffset.keys()) {
+   const QList<cwScrap*> oldScraps = ScrapToOffset.keys();
+   for(cwScrap* scrap : oldScraps) {
        removeScrap(scrap);
    }
 
    //Add all the scraps
-   foreach(cwTrip* trip, cave()->trips()) {
-       foreach(cwNote* note, trip->notes()->notes()) {
-           foreach(cwScrap* scrap, note->scraps()) {
+   const QList<cwTrip*> trips = cave()->allTrips();
+   for(cwTrip* trip : trips) {
+       const QList<cwNote*> notes = trip->notes()->notes();
+       for(cwNote* note : notes) {
+           const QList<cwScrap*> scraps = note->scraps();
+           for(cwScrap* scrap : scraps) {
                addScrap(scrap);
            }
        }
    }
 
-   if(cave()->tripCount() > 0
-           && !cave()->trip(0)->chunks().isEmpty()
-           && cave()->trip(0)->chunks().first()->stationCount() > 0)
+   if(!trips.isEmpty()
+           && !trips.first()->chunks().isEmpty()
+           && trips.first()->chunks().first()->stationCount() > 0)
    {
-        QString firstStation = cave()->trip(0)->chunks().first()->station(0).name();
+        QString firstStation = trips.first()->chunks().first()->station(0).name();
         setReferanceStation(firstStation);
    }
 
@@ -391,13 +395,13 @@ void cwLeadModel::scrapDeleted(QObject *scrapObj)
  * @param end
  *
  * This is called when the region tree model inserts scraps. This will only add scraps that
- * are in the current cave.
+ * are in the current cave, at any depth below it.
  */
 void cwLeadModel::insertScraps(QModelIndex parent, int begin, int end)
 {
     if(RegionTreeModel->isNote(parent)) {
         cwNote* note = RegionTreeModel->note(parent);
-        if(note->parentCave() == cave()) {
+        if(holdsNote(note)) {
             for(int i = begin; i <= end; i++) {
                 cwScrap* scrap = note->scrap(i);
                 addScrap(scrap);
@@ -419,13 +423,22 @@ void cwLeadModel::removeScraps(QModelIndex parent, int begin, int end)
 {
     if(RegionTreeModel->isNote(parent)) {
         cwNote* note = RegionTreeModel->note(parent);
-        if(note->parentCave() == cave()) {
+        if(holdsNote(note)) {
             for(int i = begin; i <= end; i++) {
                 cwScrap* scrap = note->scrap(i);
                 removeScrap(scrap);
             }
         }
     }
+}
+
+/**
+ * True when \a note belongs to a trip at or below the current cave.
+ */
+bool cwLeadModel::holdsNote(const cwNote* note) const
+{
+    const cwSurveyNode* node = note->parentTrip() != nullptr ? note->parentTrip()->parentNode() : nullptr;
+    return node != nullptr && cave() != nullptr && cave()->lowestCommonAncestor(node) == cave();
 }
 
 /**

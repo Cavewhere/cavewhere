@@ -24,7 +24,8 @@ cwCompassExportCaveTask::cwCompassExportCaveTask(QObject *parent) :
 }
 
 /**
-  Writes all the trips to the data stream
+  Writes every trip at or below the cave to the data stream. Compass has no
+  nested surveys, so a child node's trips join the cave's file.
   */
 bool cwCompassExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave, const QString& /*globalCS*/) {
     //Haven't done anything
@@ -34,9 +35,9 @@ bool cwCompassExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &c
     cavePtr->setData(cave);
 
     //Go throug all the trips and save them
-    for(int i = 0; i < cavePtr->tripCount(); i++) {
-        cwTrip* trip = cavePtr->trip(i);
-        writeTrip(stream, trip);
+    const QList<cwTrip*> trips = cavePtr->allTrips();
+    for(cwTrip* trip : trips) {
+        writeTrip(stream, trip, cavePtr->name());
         TotalProgress += trip->numberOfStations();
         stream << compassNewLine();
     }
@@ -47,8 +48,8 @@ bool cwCompassExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &c
 /**
   Writes a signle trip to the stream
   */
-void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
-    writeHeader(stream, trip);
+void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip, const QString& caveName) {
+    writeHeader(stream, trip, caveName);
 
     //Make sure the trip has data
     if(trip->chunkCount() <= 1) {
@@ -78,14 +79,11 @@ void cwCompassExportCaveTask::writeTrip(QTextStream& stream, cwTrip* trip) {
 }
 
 /**
-  Writes the compass file header to a file
+  Writes the compass file header to a file. \a caveName is the exported cave's,
+  which a trip in a child node shares.
   */
-void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip) {
-    cwCave* cave = trip->parentCave();
-
-    Q_ASSERT(cave != nullptr);
-
-    writeData(stream, "Cave Name", -80, cave->name());
+void cwCompassExportCaveTask::writeHeader(QTextStream& stream, cwTrip* trip, const QString& caveName) {
+    writeData(stream, "Cave Name", -80, caveName);
     stream << compassNewLine();
 
     stream << "SURVEY NAME: ";

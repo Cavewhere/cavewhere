@@ -93,10 +93,10 @@ cwSurveyDataArtifact::Trip::Trip(const cwTrip *trip) {
 
 cwSurveyDataArtifact::Cave::Cave(const cwCave *cave) {
     name = cave->name();
-    int tripCount = cave->tripCount();
-    trips.reserve(tripCount);
-    for (int i = 0; i < tripCount; ++i) {
-        trips.append(Trip(cave->trip(i)));
+    const QList<cwTrip*> caveTrips = cave->allTrips();
+    trips.reserve(caveTrips.size());
+    for (const cwTrip* trip : caveTrips) {
+        trips.append(Trip(trip));
     }
 
     // Validate fixes on the main thread, before the snapshot is moved into

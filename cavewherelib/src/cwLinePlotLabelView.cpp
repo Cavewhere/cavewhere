@@ -8,7 +8,7 @@
 //Our includes
 #include "cwLinePlotLabelView.h"
 #include "cwCavingRegion.h"
-#include "cwCave.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
@@ -33,25 +33,16 @@ Sets region
 void cwLinePlotLabelView::setRegion(cwCavingRegion* region) {
     if(Region != region) {
         if(Region != nullptr) {
-            disconnect(Region, &cwCavingRegion::insertedCaves, this, &cwLinePlotLabelView::addCaves);
-            disconnect(Region, &cwCavingRegion::beginRemoveCaves, this, &cwLinePlotLabelView::removeCaves);
-
-            for(cwCave* cave : Region->caves()) {
-                disconnectCave(cave);
-            }
+            Region->rootNode()->walk([this](const cwSurveyNode* node) {
+                disconnectNode(node);
+            });
         }
 
         Region = region;
         clear();
 
         if(Region != nullptr) {
-            connect(Region, &cwCavingRegion::insertedCaves, this, &cwLinePlotLabelView::addCaves);
-            connect(Region, &cwCavingRegion::beginRemoveCaves, this, &cwLinePlotLabelView::removeCaves);
-
-            if(Region->hasCaves()) {
-                //Add all the caves
-                addCaves(0, Region->caveCount() - 1);
-            }
+            addNode(Region->rootNode());
         }
         emit regionChanged();
     }
@@ -78,75 +69,100 @@ void cwLinePlotLabelView::setKeywordItemModel(cwKeywordItemModel* keywordItemMod
 }
 
 /**
- * @brief cwLinePlotLabelView::addCaves
- * @param begin - The index of the first cave that's added to the Region
- * @param end - The index of the last cave that's added to the region
+ * @brief cwLinePlotLabelView::addNode
+ * @param node - A node that just joined the region, or the region's root
  *
- * Connects each new cave and adds a label group for each of its trips.
+ * Connects the node and every node below it, and adds a label group for each of
+ * their trips.
  */
-void cwLinePlotLabelView::addCaves(int begin, int end) {
-    for(int i = begin; i <= end; i++) {
-        cwCave* cave = Region->cave(i);
-        connectCave(cave);
-
-        for(cwTrip* trip : cave->trips()) {
+void cwLinePlotLabelView::addNode(const cwSurveyNode* node) {
+    node->walk([this](const cwSurveyNode* subtreeNode) {
+        connectNode(subtreeNode);
+        const QList<cwTrip*> trips = subtreeNode->trips();
+        for(cwTrip* trip : trips) {
             addTrip(trip);
         }
-    }
+    });
 }
 
 /**
- * @brief cwLinePlotLabelView::removeCaves
- * @param begin
- * @param end
+ * @brief cwLinePlotLabelView::removeNode
+ * @param node - A node about to leave the region
  *
- * Removes the label groups for every trip in the caves between begin and end.
+ * Removes the label groups for every trip at or below the node.
  */
-void cwLinePlotLabelView::removeCaves(int begin, int end)
+void cwLinePlotLabelView::removeNode(const cwSurveyNode* node)
 {
-    for(int i = end; i >= begin; i--) {
-        cwCave* cave = Region->cave(i);
-        disconnectCave(cave);
-
-        for(cwTrip* trip : cave->trips()) {
+    node->walk([this](const cwSurveyNode* subtreeNode) {
+        disconnectNode(subtreeNode);
+        const QList<cwTrip*> trips = subtreeNode->trips();
+        for(cwTrip* trip : trips) {
             removeTrip(trip);
         }
-    }
+    });
 }
 
 /**
- * @brief cwLinePlotLabelView::caveTripsInserted
+ * @brief cwLinePlotLabelView::nodesInserted
  *
- * A cave gained trips; add a label group for each new trip.
+ * A node gained child nodes; label every trip in each new subtree.
  */
-void cwLinePlotLabelView::caveTripsInserted(int begin, int end) {
-    cwCave* cave = static_cast<cwCave*>(sender());
+void cwLinePlotLabelView::nodesInserted(int begin, int end) {
+    const cwSurveyNode* parentNode = static_cast<cwSurveyNode*>(sender());
     for(int i = begin; i <= end; i++) {
-        addTrip(cave->trip(i));
+        addNode(parentNode->childNode(i));
     }
 }
 
 /**
- * @brief cwLinePlotLabelView::caveTripsRemoved
+ * @brief cwLinePlotLabelView::nodesRemoved
  *
- * A cave is about to lose trips; tear down their label groups while the trips
+ * A node is about to lose child nodes; tear down the label groups of each
+ * subtree while its trips are still valid.
+ */
+void cwLinePlotLabelView::nodesRemoved(int begin, int end) {
+    const cwSurveyNode* parentNode = static_cast<cwSurveyNode*>(sender());
+    for(int i = end; i >= begin; i--) {
+        removeNode(parentNode->childNode(i));
+    }
+}
+
+/**
+ * @brief cwLinePlotLabelView::tripsInserted
+ *
+ * A node gained trips; add a label group for each new trip.
+ */
+void cwLinePlotLabelView::tripsInserted(int begin, int end) {
+    const cwSurveyNode* node = static_cast<cwSurveyNode*>(sender());
+    for(int i = begin; i <= end; i++) {
+        addTrip(node->trip(i));
+    }
+}
+
+/**
+ * @brief cwLinePlotLabelView::tripsRemoved
+ *
+ * A node is about to lose trips; tear down their label groups while the trips
  * are still valid.
  */
-void cwLinePlotLabelView::caveTripsRemoved(int begin, int end) {
-    cwCave* cave = static_cast<cwCave*>(sender());
+void cwLinePlotLabelView::tripsRemoved(int begin, int end) {
+    const cwSurveyNode* node = static_cast<cwSurveyNode*>(sender());
     for(int i = begin; i <= end; i++) {
-        removeTrip(cave->trip(i));
+        removeTrip(node->trip(i));
     }
 }
 
 /**
  * @brief cwLinePlotLabelView::updateStations
  *
- * A cave's station positions changed; rebuild the labels for every trip in it.
+ * A node's station positions changed; rebuild the labels for each of its own
+ * trips. Every node gets its own positions, so a child node's trips are rebuilt
+ * when the child's signal fires.
  */
 void cwLinePlotLabelView::updateStations() {
-    cwCave* cave = static_cast<cwCave*>(sender());
-    for(cwTrip* trip : cave->trips()) {
+    const cwSurveyNode* node = static_cast<cwSurveyNode*>(sender());
+    const QList<cwTrip*> trips = node->trips();
+    for(cwTrip* trip : trips) {
         auto it = m_groups.find(trip);
         if(it != m_groups.end()) {
             it.value()->setLabels(labels(trip));
@@ -192,24 +208,24 @@ void cwLinePlotLabelView::removeTrip(cwTrip* trip) {
 }
 
 /**
- * @brief cwLinePlotLabelView::connectCave
- * @param cave
+ * @brief cwLinePlotLabelView::connectNode
+ * @param node
  */
-void cwLinePlotLabelView::connectCave(cwCave *cave) {
-    connect(cave, &cwCave::stationPositionPositionChanged, this, &cwLinePlotLabelView::updateStations);
-    connect(cave, &cwCave::insertedTrips, this, &cwLinePlotLabelView::caveTripsInserted);
-    connect(cave, &cwCave::beginRemoveTrips, this, &cwLinePlotLabelView::caveTripsRemoved);
+void cwLinePlotLabelView::connectNode(const cwSurveyNode *node) {
+    connect(node, &cwSurveyNode::stationPositionPositionChanged, this, &cwLinePlotLabelView::updateStations);
+    connect(node, &cwSurveyNode::insertedTrips, this, &cwLinePlotLabelView::tripsInserted);
+    connect(node, &cwSurveyNode::beginRemoveTrips, this, &cwLinePlotLabelView::tripsRemoved);
+    connect(node, &cwSurveyNode::insertedNodes, this, &cwLinePlotLabelView::nodesInserted);
+    connect(node, &cwSurveyNode::beginRemoveNodes, this, &cwLinePlotLabelView::nodesRemoved);
 }
 
 /**
- * @brief cwLinePlotLabelView::disconnectCave
- * @param cave
+ * @brief cwLinePlotLabelView::disconnectNode
+ * @param node
  */
-void cwLinePlotLabelView::disconnectCave(cwCave *cave)
+void cwLinePlotLabelView::disconnectNode(const cwSurveyNode *node)
 {
-    disconnect(cave, &cwCave::stationPositionPositionChanged, this, &cwLinePlotLabelView::updateStations);
-    disconnect(cave, &cwCave::insertedTrips, this, &cwLinePlotLabelView::caveTripsInserted);
-    disconnect(cave, &cwCave::beginRemoveTrips, this, &cwLinePlotLabelView::caveTripsRemoved);
+    disconnect(node, nullptr, this, nullptr);
 }
 
 /**

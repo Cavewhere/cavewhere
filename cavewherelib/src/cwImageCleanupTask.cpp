@@ -103,20 +103,17 @@ QSet<int> cwImageCleanupTask::extractAllValidImageIds()
 {
     QSet<int> ids;
 
-    foreach(cwCave* cave, Region->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            foreach(cwNote* note, trip->notes()->notes()) {
-                cwImage image = note->image();
-                QSet<int> imageIds = imageToSet(image);
-                ids = ids.unite(imageIds);
+    const QList<cwTrip*> trips = Region->rootNode()->allTrips();
+    for(cwTrip* trip : trips) {
+        const QList<cwNote*> notes = trip->notes()->notes();
+        for(cwNote* note : notes) {
+            cwImage image = note->image();
+            QSet<int> imageIds = imageToSet(image);
+            ids = ids.unite(imageIds);
 
-                foreach(cwScrap* scrap, note->scraps()) {
-                    //FIXME: Remove this class
-                    // image = scrap->triangulationData().croppedImage();
-                    // imageIds = imageToSet(image);
-                    // ids = ids.unite(imageIds);
-                }
-            }
+            //FIXME: Remove this class
+            // for each scrap in note->scraps():
+            //     ids.unite(imageToSet(scrap->triangulationData().croppedImage()));
         }
     }
 

@@ -95,7 +95,7 @@ private:
     QPointer<cwCavingRegion> CavingRegion; //!<
 
     // Cached gate state. Recomputed by recomputeCanExport() whenever the
-    // region's cave/trip set changes, any cave/trip's externalCenterline
+    // region's node/trip set changes, any node/trip's externalCenterline
     // changes, or a trip's stationPrefix changes. Defaults to true
     // (pure-Native projects export normally).
     bool m_canExport = true;
@@ -115,14 +115,14 @@ private:
     cwTrip* currentTrip() const;
 
     // Tears down and re-establishes every signal connection used to drive
-    // recomputeCanExport(): region cave-insert/remove, per-cave
-    // trip-insert/remove, per-cave / per-trip externalCenterlineChanged, and
-    // per-trip stationPrefixChanged.
-    // Cheap (a handful of caves and trips in normal projects) and run only
+    // recomputeCanExport(): the root node's subtreeChanged, per-node /
+    // per-trip externalCenterlineChanged, and per-trip stationPrefixChanged,
+    // at every depth.
+    // Cheap (a handful of nodes and trips in normal projects) and run only
     // on structural changes.
     void rewireExternalCenterlineTracking();
 
-    // Walks every cave (and its trips) in the current region; updates
+    // Walks every node (and its trips) in the current region; updates
     // m_canExport / m_exportDisabledReason and emits canExportChanged()
     // only when the gate flips. Cheap and idempotent.
     void recomputeCanExport();

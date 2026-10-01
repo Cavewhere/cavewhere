@@ -211,6 +211,31 @@ TEST_CASE("Attaching a cave added after region setup is still tracked",
     CHECK(manager.canExport() == false);
 }
 
+TEST_CASE("Attaching a trip in a depth-2 node added after region setup is still tracked",
+          "[Export][Disable]")
+{
+    // The gate reads the whole tree, so a Section inserted under a cave, and a
+    // trip inserted under that Section, are tracked like a cave's own trips.
+    cwCavingRegion region;
+    cwCave* cave = addCaveWithOneShot(region, QStringLiteral("GrowingCave"));
+
+    cwSurveyExportManager manager;
+    manager.setCavingRegion(&region);
+    REQUIRE(manager.canExport() == true);
+
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Upper"));
+    cave->addNode(section);
+
+    cwTrip* lateTrip = new cwTrip();
+    lateTrip->setName(QStringLiteral("Late"));
+    section->addTrip(lateTrip);
+    REQUIRE(manager.canExport() == true);
+
+    lateTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
+    CHECK(manager.canExport() == false);
+}
+
 TEST_CASE("Trip with a stationPrefix refuses export; clearing it re-enables",
           "[Export][Disable]")
 {

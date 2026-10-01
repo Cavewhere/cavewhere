@@ -25,7 +25,8 @@ cwChipdataExportCaveTask::cwChipdataExportCaveTask(QObject *parent) :
 }
 
 /**
-  Writes all the trips to the data stream
+  Writes every trip at or below the cave to the data stream. Chipdata has no
+  nested surveys, so a child node's trips join the cave's file.
   */
 bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &cave, const QString& /*globalCS*/) {
     //Haven't done anything
@@ -35,8 +36,9 @@ bool cwChipdataExportCaveTask::writeCave(QTextStream& stream, const cwCaveData &
     cavePtr->setData(cave);
 
     //Go throug all the trips and save them
-    for(int i = 0; i < cavePtr->tripCount(); i++) {
-        cwTrip* trip = cavePtr->trip(i);
+    const QList<cwTrip*> trips = cavePtr->allTrips();
+    for(int i = 0; i < trips.size(); i++) {
+        cwTrip* trip = trips.at(i);
         writeTrip(stream, trip, i == 0 ? cavePtr->name() : QString());
         TotalProgress += trip->numberOfStations();
     }

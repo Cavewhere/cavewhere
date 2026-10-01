@@ -553,15 +553,13 @@ cwSurveyNetwork cwCaptureViewport::buildCenterlineNetwork() const
         return network;
     }
 
-    const QList<cwCave*> caves = region->caves();
-    for(cwCave* cave : caves) {
-        if(cave == nullptr) {
-            continue;
-        }
-
-        const cwSurveyNetwork caveNetwork = cave->network();
-        const cwStationPositionLookup stationLookup = cave->stationPositionLookup();
-        const QStringList stations = caveNetwork.stations();
+    //Each node's network holds only its own trips' shots, so every node is
+    //read, keyed node-locally the way its position lookup is.
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    for(const cwSurveyNode* node : nodes) {
+        const cwSurveyNetwork nodeNetwork = node->network();
+        const cwStationPositionLookup stationLookup = node->stationPositionLookup();
+        const QStringList stations = nodeNetwork.stations();
         for(const QString& station : stations) {
             if(stationLookup.hasPosition(station)) {
                 network.setPosition(station, stationLookup.position(station));
@@ -569,7 +567,7 @@ cwSurveyNetwork cwCaptureViewport::buildCenterlineNetwork() const
         }
 
         for(const QString& station : stations) {
-            const QStringList neighbors = caveNetwork.neighbors(station);
+            const QStringList neighbors = nodeNetwork.neighbors(station);
             for(const QString& neighbor : neighbors) {
                 network.addShot(station, neighbor);
             }

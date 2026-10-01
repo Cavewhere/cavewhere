@@ -162,6 +162,30 @@ TEST_CASE("A native floating chunk becomes a row named the same way",
     CHECK(handles.at(1).tail() == QStringLiteral("z2"));
 }
 
+TEST_CASE("A floating chunk in a depth-2 trip becomes a row named by its node",
+          "[FloatingSurveyModel]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwCave* section = addChildNode(cave, QStringLiteral("Upper"), cwSurveyNode::Kind::Cave);
+    addNativeTripWithShot(section, QStringLiteral("Main"),
+                          QStringLiteral("A1"), QStringLiteral("A2"));
+    cwTrip* stray = addNativeTripWithShot(section, QStringLiteral("Stray"),
+                                          QStringLiteral("Z1"), QStringLiteral("Z2"));
+
+    cwLinePlotManager manager;
+    solveRegion(manager, region, {});
+
+    // The run checks each node's chunks as their own block, so the record names
+    // the Section, which the region's top level does not hold.
+    const cwFloatingSurveyModel* model = manager.floatingSurveyModel();
+    REQUIRE(model->rowCount() == 1);
+    CHECK(roleAt(model, 0, cwFloatingSurveyModel::CaveIdRole).toUuid() == section->id());
+    CHECK(stringAt(model, 0, cwFloatingSurveyModel::CaveNameRole) == section->name());
+    CHECK(stringAt(model, 0, cwFloatingSurveyModel::TripNameRole) == stray->name());
+    CHECK(model->isFloating(stray->id()));
+}
+
 TEST_CASE("Renaming a cave re-renders its floating rows before the re-solve lands",
           "[FloatingSurveyModel]")
 {

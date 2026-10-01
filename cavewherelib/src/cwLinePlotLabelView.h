@@ -18,7 +18,7 @@
 #include "cwGlobals.h"
 #include "cwKeywordItemRegistry.h"
 class cwCavingRegion;
-class cwCave;
+class cwSurveyNode;
 class cwTrip;
 class cwLabel3dGroup;
 class cwKeywordItemModel;
@@ -56,8 +56,11 @@ private:
     QHash<cwTrip*, cwLabel3dGroup*> m_groups;
     cwKeywordItemRegistry<cwTrip*> m_keywordRegistry;
 
-    void connectCave(cwCave* cave);
-    void disconnectCave(cwCave* cave);
+    void connectNode(const cwSurveyNode* node);
+    void disconnectNode(const cwSurveyNode* node);
+
+    void addNode(const cwSurveyNode* node);
+    void removeNode(const cwSurveyNode* node);
 
     void addTrip(cwTrip* trip);
     void removeTrip(cwTrip* trip);
@@ -69,10 +72,10 @@ private:
     void clear();
 
 private slots:
-    void addCaves(int begin, int end);
-    void removeCaves(int begin, int end);
-    void caveTripsInserted(int begin, int end);
-    void caveTripsRemoved(int begin, int end);
+    void nodesInserted(int begin, int end);
+    void nodesRemoved(int begin, int end);
+    void tripsInserted(int begin, int end);
+    void tripsRemoved(int begin, int end);
     void updateStations();
 
 };

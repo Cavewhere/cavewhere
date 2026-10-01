@@ -383,10 +383,9 @@ void cwNoteLiDARManager::handleRegionReset()
     }
 
     // Connect all existing trips
-    for (cwCave* cave : m_regionModel->cavingRegion()->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            connectTrip(trip);
-        }
+    const QList<cwTrip*> trips = m_regionModel->cavingRegion()->rootNode()->allTrips();
+    for (cwTrip* trip : trips) {
+        connectTrip(trip);
     }
 }
 
@@ -748,16 +747,10 @@ void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
 
 QList<cwTrip*> cwNoteLiDARManager::allTrips(cwRegionTreeModel* regionModel)
 {
-    QList<cwTrip*> out;
     if (regionModel == nullptr || regionModel->cavingRegion() == nullptr) {
-        return out;
+        return {};
     }
-    for (cwCave* cave : regionModel->cavingRegion()->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            out.append(trip);
-        }
-    }
-    return out;
+    return regionModel->cavingRegion()->rootNode()->allTrips();
 }
 
 NotePtrList cwNoteLiDARManager::notesFromModel(cwSurveyNoteLiDARModel* model)

@@ -65,10 +65,15 @@ bool cwCaveExporterTask::checkData() {
 }
 
 /**
-  \brief Checks if the cave has trips in it before running
+  \brief Checks if the cave has trips in it, at any depth, before running
   */
 bool cwCaveExporterTask::checkData(const cwCaveData& cave) {
-    if(cave.trips.size() <= 0) {
+    bool hasTrips = !cave.trips.isEmpty();
+    walkCaveDataTree(cave.nodes, [&hasTrips](const cwCaveData& node, const QStringList&) {
+        hasTrips = hasTrips || !node.trips.isEmpty();
+    });
+
+    if(!hasTrips) {
         Errors.append(QString("No trips to do loop closure in %1").arg(cave.name));
         return false;
     }

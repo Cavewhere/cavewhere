@@ -178,30 +178,28 @@ void cwFloatingSurveyModel::rebuildRows()
     QList<Row> rows;
 
     if (!m_region.isNull() && !m_results.isEmpty()) {
-        QHash<QUuid, cwCave*> caveById;
+        //A run checks every node's chunks as their own block, so a record's
+        //caveId names the node holding the trip, at whatever depth.
+        QHash<QUuid, const cwSurveyNode*> nodeById;
         QHash<QUuid, cwTrip*> tripById;
-        //Bound to const locals: caves() and trips() return by value, so
-        //iterating the temporary directly detaches a list the region still
-        //shares.
-        const QList<cwCave*> caves = m_region->caves();
-        for (cwCave* cave : caves) {
-            caveById.insert(cave->id(), cave);
-            const QList<cwTrip*> trips = cave->trips();
+        m_region->rootNode()->walk([&nodeById, &tripById](const cwSurveyNode* node) {
+            nodeById.insert(node->id(), node);
+            const QList<cwTrip*> trips = node->trips();
             for (cwTrip* trip : trips) {
                 tripById.insert(trip->id(), trip);
             }
-        }
+        });
 
         for (const cwFindFloatingSurveys::Result& result : m_results) {
-            cwCave* cave = caveById.value(result.caveId);
+            const cwSurveyNode* node = nodeById.value(result.caveId);
             cwTrip* trip = tripById.value(result.tripId);
-            if (cave == nullptr || trip == nullptr) {
+            if (node == nullptr || trip == nullptr) {
                 continue; //named by a run the region has since moved past
             }
 
             rows.append(Row{result.caveId,
                             result.tripId,
-                            cave->name(),
+                            node->name(),
                             trip->name(),
                             triggerOf(result.trigger),
                             localStations(trip, result.stations)});

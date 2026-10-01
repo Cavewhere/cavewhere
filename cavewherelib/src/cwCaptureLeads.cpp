@@ -235,50 +235,43 @@ void cwCaptureLeads::rebuildGeometry()
     };
 
     QVector<LeadDrawData> draws;
-    const QList<cwCave*> caves = m_region->caves();
-    for(cwCave* cave : caves) {
-        if(cave == nullptr) {
+    const QList<cwTrip*> trips = m_region->rootNode()->allTrips();
+    for(cwTrip* trip : trips) {
+        if(trip == nullptr || trip->notes() == nullptr) {
             continue;
         }
 
-        const QList<cwTrip*> trips = cave->trips();
-        for(cwTrip* trip : trips) {
-            if(trip == nullptr || trip->notes() == nullptr) {
+        const QList<cwNote*> notes = trip->notes()->notes();
+        for(cwNote* note : notes) {
+            if(note == nullptr) {
                 continue;
             }
 
-            const QList<cwNote*> notes = trip->notes()->notes();
-            for(cwNote* note : notes) {
-                if(note == nullptr) {
+            const QList<cwScrap*> scraps = note->scraps();
+            for(cwScrap* scrap : scraps) {
+                if(scrap == nullptr) {
                     continue;
                 }
 
-                const QList<cwScrap*> scraps = note->scraps();
-                for(cwScrap* scrap : scraps) {
-                    if(scrap == nullptr) {
+                const QList<cwLead> leads = scrap->leads();
+                const QVector<QVector3D> leadPositions = scrap->leadPositions();
+                const int leadCount = leads.size();
+
+                for(int i = 0; i < leadCount; i++) {
+                    const cwLead& lead = leads.at(i);
+                    if(lead.completed()) {
                         continue;
                     }
 
-                    const QList<cwLead> leads = scrap->leads();
-                    const QVector<QVector3D> leadPositions = scrap->leadPositions();
-                    const int leadCount = leads.size();
-
-                    for(int i = 0; i < leadCount; i++) {
-                        const cwLead& lead = leads.at(i);
-                        if(lead.completed()) {
-                            continue;
-                        }
-
-                        if(i >= leadPositions.size()) {
-                            continue;
-                        }
-
-                        LeadDrawData entry;
-                        entry.markerPos = projectToPaper(leadPositions.at(i));
-                        entry.text = formatLeadText(lead);
-                        entry.hasLeader = false;
-                        draws.append(entry);
+                    if(i >= leadPositions.size()) {
+                        continue;
                     }
+
+                    LeadDrawData entry;
+                    entry.markerPos = projectToPaper(leadPositions.at(i));
+                    entry.text = formatLeadText(lead);
+                    entry.hasLeader = false;
+                    draws.append(entry);
                 }
             }
         }

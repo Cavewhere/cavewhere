@@ -8,7 +8,7 @@
 
 #include "cwSurveyChunkSignaler.h"
 #include "cwCavingRegion.h"
-#include "cwCave.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwSurveyChunk.h"
 #include "cwTripCalibration.h"
@@ -41,19 +41,13 @@ void cwSurveyChunkSignaler::setRegion(cwCavingRegion* region) {
     }
 
     if(!Region.isNull()) {
-        disconnect(Region.data(), nullptr, this, nullptr);
-        disconnectCaves(Region.data());
+        disconnectNode(Region->rootNode());
     }
 
     Region = region;
 
     if(!Region.isNull()) {
-        //Connect all signal from the region
-        connect(Region.data(), &cwCavingRegion::insertedCaves, this, &cwSurveyChunkSignaler::connectAddedCaves);
-        connect(Region.data(), &cwCavingRegion::beginRemoveCaves, this, &cwSurveyChunkSignaler::disconnectRemovedCaves);
-
-        //Connect all sub data
-        connectCaves(Region);
+        connectNode(Region->rootNode());
     }
 
     emit regionChanged();
@@ -65,8 +59,9 @@ void cwSurveyChunkSignaler::setRegion(cwCavingRegion* region) {
  * @param reciever
  * @param slot
  *
- * This adds a connection dynamically to all the caves in the region. If more caves are added to the
- * region the connection is added to the newly added cave.
+ * This adds a connection dynamically to every survey node in the region at
+ * every depth: caves, and the nodes nested under them. A node added later, at
+ * any depth, gets the connection too.
  */
 void cwSurveyChunkSignaler::addConnectionToCaves(const char *signal, QObject *reciever, const char *slot)
 {
@@ -75,8 +70,8 @@ void cwSurveyChunkSignaler::addConnectionToCaves(const char *signal, QObject *re
     Q_ASSERT(!CaveConnections.contains(connection));
 
     if(!Region.isNull()) {
-        foreach(cwCave* cave, Region->caves()) {
-            connection.connect(cave);
+        for(cwSurveyNode* node : Region->rootNode()->allNodes()) {
+            connection.connect(node);
         }
     }
 
@@ -89,8 +84,8 @@ void cwSurveyChunkSignaler::addConnectionToCaves(const char *signal, QObject *re
  * @param reciever
  * @param slot
  *
- * This adds a connection dynamically to all the trips in the region. If more trips or caves are added to the
- * region the connection created for each additional trip.
+ * This adds a connection dynamically to all the trips in the region, at every
+ * depth. A trip added later, or a node added with trips, gets the connection too.
  */
 void cwSurveyChunkSignaler::addConnectionToTrips(const char *signal,
                                                  QObject *reciever,
@@ -101,10 +96,8 @@ void cwSurveyChunkSignaler::addConnectionToTrips(const char *signal,
     Q_ASSERT(!TripConnections.contains(connection));
 
     if(!Region.isNull()) {
-        foreach(cwCave* cave, Region->caves()) {
-            foreach(cwTrip* trip, cave->trips()) {
-                connection.connect(trip);
-            }
+        for(cwTrip* trip : Region->rootNode()->allTrips()) {
+            connection.connect(trip);
         }
     }
 
@@ -118,10 +111,8 @@ void cwSurveyChunkSignaler::addConnectionToTripCalibrations(const char *signal, 
     Q_ASSERT(!TripCalibrationConnections.contains(connection));
 
     if(!Region.isNull()) {
-        foreach(cwCave* cave, Region->caves()) {
-            foreach(cwTrip* trip, cave->trips()) {
-                connection.connect(trip->calibrations());
-            }
+        for(cwTrip* trip : Region->rootNode()->allTrips()) {
+            connection.connect(trip->calibrations());
         }
     }
 
@@ -134,7 +125,7 @@ void cwSurveyChunkSignaler::addConnectionToTripCalibrations(const char *signal, 
  * @param reciever
  * @param slot
  *
- * This adds a connection dynamically to all the cwSurveyChunk in the region. If more cwSurveyChunk, trips, or caves are added to the
+ * This adds a connection dynamically to all the cwSurveyChunk in the region. If more cwSurveyChunk, trips, or nodes are added to the
  * region the connection created for each additional cwSurveyChunk.
  */
 void cwSurveyChunkSignaler::addConnectionToChunks(const char *signal, QObject *reciever, const char *slot)
@@ -144,11 +135,9 @@ void cwSurveyChunkSignaler::addConnectionToChunks(const char *signal, QObject *r
     Q_ASSERT(!ChunkConnections.contains(connection));
 
     if(!Region.isNull()) {
-        foreach(cwCave* cave, Region->caves()) {
-            foreach(cwTrip* trip, cave->trips()) {
-                foreach(cwSurveyChunk* chunk, trip->chunks()) {
-                    connection.connect(chunk);
-                }
+        for(cwTrip* trip : Region->rootNode()->allTrips()) {
+            for(cwSurveyChunk* chunk : trip->chunks()) {
+                connection.connect(chunk);
             }
         }
     }
@@ -157,35 +146,28 @@ void cwSurveyChunkSignaler::addConnectionToChunks(const char *signal, QObject *r
 }
 
 /**
- * @brief cwSurveyChunkSignaler::connectCaves
- * @param region
- *
- * Connects all the caves in the region
- */
-void cwSurveyChunkSignaler::connectCaves(cwCavingRegion *region)
-{
-    foreach(cwCave* cave, region->caves()) {
-        connectCave(cave);
+  \brief Connects \a node, its trips, and every node below it.
+
+  The region's root takes the structural connections only: the user-added node
+  connections are for caves and the nodes under them, and the root is neither.
+  */
+void cwSurveyChunkSignaler::connectNode(cwSurveyNode* node) {
+    connect(node, &cwSurveyNode::insertedNodes, this, &cwSurveyChunkSignaler::connectAddedNodes);
+    connect(node, &cwSurveyNode::beginRemoveNodes, this, &cwSurveyChunkSignaler::disconnectRemovedNodes);
+    connect(node, &cwSurveyNode::insertedTrips, this, &cwSurveyChunkSignaler::connectAddedTrips);
+    connect(node, &cwSurveyNode::beginRemoveTrips, this, &cwSurveyChunkSignaler::disconnectRemovedTrips);
+    if(!node->isRoot()) {
+        connectAll(node, CaveConnections); //Connect to all user added connections
     }
-}
 
-/**
-  \brief Connects a cave
-  */
-void cwSurveyChunkSignaler::connectCave(cwCave* cave) {
-    connect(cave, &cwCave::insertedTrips, this, &cwSurveyChunkSignaler::connectAddedTrips);
-    connect(cave, &cwCave::beginRemoveTrips, this, &cwSurveyChunkSignaler::disconnectRemovedTrips);
-    connectAll(cave, CaveConnections); //Connect to all user added connections
-    connectTrips(cave);
-}
-
-/**
-  \brief Connects all the trips in the cave to this object
-  */
-void cwSurveyChunkSignaler::connectTrips(cwCave* cave) {
-    for(int i = 0; i < cave->tripCount(); i++) {
-        cwTrip* trip = cave->trip(i);
+    const QList<cwTrip*> trips = node->trips();
+    for(cwTrip* trip : trips) {
         connectTrip(trip);
+    }
+
+    const QList<cwSurveyNode*> children = node->childNodes();
+    for(cwSurveyNode* child : children) {
+        connectNode(child);
     }
 }
 
@@ -218,44 +200,27 @@ void cwSurveyChunkSignaler::connectChunk(cwSurveyChunk* chunk) {
 }
 
 /**
- * @brief cwSurveyChunkSignaler::disconnectCaves
- * @param region
+ * @brief cwSurveyChunkSignaler::disconnectNode
+ * @param node
  *
- * Disconnects all the caves in the region — the inverse of connectCaves,
- * used when the signaler switches away from a region that stays alive.
+ * The inverse of connectNode: disconnects \a node, its trips, and every node
+ * below it.
  */
-void cwSurveyChunkSignaler::disconnectCaves(cwCavingRegion *region)
+void cwSurveyChunkSignaler::disconnectNode(cwSurveyNode *node)
 {
-    foreach(cwCave* cave, region->caves()) {
-        disconnectCave(cave);
+    disconnect(node, nullptr, this, nullptr);
+    if(!node->isRoot()) {
+        disconnectAll(node, CaveConnections);
     }
-}
 
-/**
- * @brief cwSurveyChunkSignaler::disconnectCave
- * @param cave
- */
-void cwSurveyChunkSignaler::disconnectCave(cwCave *cave)
-{
-    disconnect(cave, nullptr, this, nullptr);
-    disconnectAll(cave, CaveConnections);
-
-    if(cave->hasTrips()) {
-        disconnectTrips(cave, 0, cave->tripCount() - 1);
-    }
-}
-
-/**
- * @brief cwSurveyChunkSignaler::disconnectTrips
- * @param cave
- * @param beginIndex
- * @param endIndex
- */
-void cwSurveyChunkSignaler::disconnectTrips(cwCave *cave, int beginIndex, int endIndex)
-{
-    for(int i = beginIndex; i <= endIndex; i++) {
-        cwTrip* trip = cave->trip(i);
+    const QList<cwTrip*> trips = node->trips();
+    for(cwTrip* trip : trips) {
         disconnectTrip(trip);
+    }
+
+    const QList<cwSurveyNode*> children = node->childNodes();
+    for(cwSurveyNode* child : children) {
+        disconnectNode(child);
     }
 }
 
@@ -308,28 +273,30 @@ void cwSurveyChunkSignaler::disconnectSurveyChunk(cwSurveyChunk *chunk)
  */
 void cwSurveyChunkSignaler::connectAll(QObject *sender, const QList<cwSurveyChunkSignaler::Connection> &connections) const
 {
-    foreach(Connection connection, connections) {
+    for(const Connection& connection : connections) {
         connection.connect(sender);
     }
 }
 
 void cwSurveyChunkSignaler::disconnectAll(QObject *sender, const QList<cwSurveyChunkSignaler::Connection> &connections) const
 {
-    foreach(Connection connection, connections) {
+    for(const Connection& connection : connections) {
         connection.disconnect(sender);
     }
 }
 
 /**
- * @brief cwSurveyChunkSignaler::connectAddedCaves
+ * @brief cwSurveyChunkSignaler::connectAddedNodes
  * @param beginIndex
  * @param endIndex
  */
-void cwSurveyChunkSignaler::connectAddedCaves(int beginIndex, int endIndex)
+void cwSurveyChunkSignaler::connectAddedNodes(int beginIndex, int endIndex)
 {
+    Q_ASSERT(qobject_cast<cwSurveyNode*>(sender()) != nullptr);
+    const cwSurveyNode* parentNode = static_cast<cwSurveyNode*>(sender());
+
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwCave* cave = Region->cave(i);
-        connectCave(cave);
+        connectNode(parentNode->childNode(i));
     }
 }
 
@@ -340,14 +307,12 @@ void cwSurveyChunkSignaler::connectAddedCaves(int beginIndex, int endIndex)
  */
 void cwSurveyChunkSignaler::connectAddedTrips(int beginIndex, int endIndex)
 {
-    Q_ASSERT(dynamic_cast<cwCave*>(sender()) != nullptr);
-    cwCave* cave = static_cast<cwCave*>(sender());
+    Q_ASSERT(qobject_cast<cwSurveyNode*>(sender()) != nullptr);
+    const cwSurveyNode* node = static_cast<cwSurveyNode*>(sender());
 
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwTrip* trip = cave->trip(i);
-        connectTrip(trip);
+        connectTrip(node->trip(i));
     }
-
 }
 
 /**
@@ -367,15 +332,17 @@ void cwSurveyChunkSignaler::connectAddedChunks(int beginIndex, int endIndex)
 }
 
 /**
- * @brief cwSurveyChunkSignaler::disconnectRemovedCaves
+ * @brief cwSurveyChunkSignaler::disconnectRemovedNodes
  * @param beginIndex
  * @param endIndex
  */
-void cwSurveyChunkSignaler::disconnectRemovedCaves(int beginIndex, int endIndex)
+void cwSurveyChunkSignaler::disconnectRemovedNodes(int beginIndex, int endIndex)
 {
+    Q_ASSERT(qobject_cast<cwSurveyNode*>(sender()) != nullptr);
+    const cwSurveyNode* parentNode = static_cast<cwSurveyNode*>(sender());
+
     for(int i = beginIndex; i <= endIndex; i++) {
-        cwCave* cave = Region->cave(i);
-        disconnectCave(cave);
+        disconnectNode(parentNode->childNode(i));
     }
 }
 
@@ -386,9 +353,12 @@ void cwSurveyChunkSignaler::disconnectRemovedCaves(int beginIndex, int endIndex)
  */
 void cwSurveyChunkSignaler::disconnectRemovedTrips(int beginIndex, int endIndex)
 {
-    Q_ASSERT(dynamic_cast<cwCave*>(sender()) != nullptr);
-    cwCave* cave = static_cast<cwCave*>(sender());
-    disconnectTrips(cave, beginIndex, endIndex);
+    Q_ASSERT(qobject_cast<cwSurveyNode*>(sender()) != nullptr);
+    const cwSurveyNode* node = static_cast<cwSurveyNode*>(sender());
+
+    for(int i = beginIndex; i <= endIndex; i++) {
+        disconnectTrip(node->trip(i));
+    }
 }
 
 /**

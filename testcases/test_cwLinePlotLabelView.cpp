@@ -312,3 +312,62 @@ TEST_CASE("cwLinePlotLabelView shows station labels for an externally attached t
     CHECK(labelTexts.contains(QStringLiteral("simple.a2")));
     CHECK(labelTexts.contains(QStringLiteral("simple.a3")));
 }
+
+// A trip two levels down hangs from a Section rather than from the region's
+// cave list, so the view has to follow node and trip inserts at every depth to
+// label it.
+TEST_CASE("cwLinePlotLabelView labels the trips of a depth-2 node",
+          "[cwLinePlotLabelView]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Alpha"));
+
+    cwLinePlotManager plotManager;
+    plotManager.setRegion(&region);
+    plotManager.waitToFinish();
+
+    cwKeywordItemModel keywordModel;
+
+    QQmlEngine engine;
+    const char* rootQml =
+        "import QtQuick\n"
+        "import cavewherelib\n"
+        "Item {\n"
+        "  width: 200; height: 200\n"
+        "  LinePlotLabelView { objectName: \"labelView\" }\n"
+        "}\n";
+
+    QQmlComponent component(&engine);
+    component.setData(QByteArray(rootQml), QUrl());
+    std::unique_ptr<QObject> root(component.create());
+    REQUIRE(root != nullptr);
+
+    auto labelView = root->findChild<cwLinePlotLabelView*>("labelView");
+    REQUIRE(labelView != nullptr);
+
+    labelView->setKeywordItemModel(&keywordModel);
+    labelView->setRegion(&region);
+    REQUIRE(keywordModel.rowCount() == 0);
+
+    cwCave* section = new cwCave();
+    section->setName(QStringLiteral("Upper"));
+    addNativeTripWithShot(section, QStringLiteral("First"),
+                          QStringLiteral("a1"), QStringLiteral("a2"));
+    cave->addNode(section);
+    plotManager.waitToFinish();
+    REQUIRE_FALSE(plotManager.hasSolveError());
+
+    REQUIRE(keywordModel.rowCount() == 1);
+    QStringList labelTexts;
+    for (const cwLabel3dItem& label : groupForKeywordItem(keywordModel.item(0))->labels()) {
+        labelTexts.append(label.text());
+    }
+    labelTexts.sort();
+    CHECK(labelTexts == QStringList({QStringLiteral("a1"), QStringLiteral("a2")}));
+
+    addNativeTripWithShot(section, QStringLiteral("Second"),
+                          QStringLiteral("a2"), QStringLiteral("a3"));
+    plotManager.waitToFinish();
+    REQUIRE_FALSE(plotManager.hasSolveError());
+    CHECK(keywordModel.rowCount() == 2);
+}

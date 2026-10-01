@@ -477,10 +477,9 @@ void cwSketchManager::handleRegionReset()
     if (m_regionModel.isNull() || m_regionModel->cavingRegion() == nullptr) {
         return;
     }
-    for (cwCave* cave : m_regionModel->cavingRegion()->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            connectTrip(trip);
-        }
+    const QList<cwTrip*> trips = m_regionModel->cavingRegion()->rootNode()->allTrips();
+    for (cwTrip* trip : trips) {
+        connectTrip(trip);
     }
 }
 

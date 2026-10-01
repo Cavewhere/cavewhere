@@ -314,12 +314,13 @@ void cwScrapManager::updateAllScraps() {
     }
 
     //Get all the scraps for the whole region
-    foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
-        foreach(cwTrip* trip, cave->trips()) {
-            foreach(cwNote* note, trip->notes()->notes()) {
-                for(cwScrap* scrap : note->scraps()) {
-                    DirtyScraps.insert(scrap);
-                }
+    const QList<cwTrip*> trips = RegionModel->cavingRegion()->rootNode()->allTrips();
+    for(cwTrip* trip : trips) {
+        const QList<cwNote*> notes = trip->notes()->notes();
+        for(cwNote* note : notes) {
+            const QList<cwScrap*> scraps = note->scraps();
+            for(cwScrap* scrap : scraps) {
+                DirtyScraps.insert(scrap);
             }
         }
     }
@@ -425,17 +426,17 @@ bool cwScrapManager::isScrapGeometryValid(const cwScrap *scrap) const
 void cwScrapManager::handleRegionReset()
 {
     if(RegionModel->cavingRegion() != nullptr) {
-        foreach(cwCave* cave, RegionModel->cavingRegion()->caves()) {
-            foreach(cwTrip* trip, cave->trips()) {
-                foreach(cwNote* note, trip->notes()->notes()) {
-                    scrapInsertedHelper(note, 0, note->scraps().size() - 1);
-                }
-                if(auto* sketchModel = trip->notesSketch()) {
-                    for(QObject* obj : sketchModel->notes()) {
-                        if(auto* sketch = qobject_cast<cwSketch*>(obj)) {
-                            connectSketch(sketch);
-                            sketchInsertedHelper(sketch);
-                        }
+        const QList<cwTrip*> trips = RegionModel->cavingRegion()->rootNode()->allTrips();
+        for(cwTrip* trip : trips) {
+            const QList<cwNote*> notes = trip->notes()->notes();
+            for(cwNote* note : notes) {
+                scrapInsertedHelper(note, 0, note->scraps().size() - 1);
+            }
+            if(auto* sketchModel = trip->notesSketch()) {
+                for(QObject* obj : sketchModel->notes()) {
+                    if(auto* sketch = qobject_cast<cwSketch*>(obj)) {
+                        connectSketch(sketch);
+                        sketchInsertedHelper(sketch);
                     }
                 }
             }

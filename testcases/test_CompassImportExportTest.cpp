@@ -24,6 +24,7 @@
 
 //Our includes
 #include "TestHelper.h"
+#include "ExternalCenterlineTestHelpers.h"
 
 //Qt includes
 #include <QFile>
@@ -270,6 +271,35 @@ TEST_CASE("Export compass handles UP/DOWN clino values - ISSUE #121", "[Compass]
     CHECK(clinoByFrom.value("S2") == -90.0);
     CHECK(clinoByFrom.value("S3") == 90.0);
     CHECK(clinoByFrom.value("S4") == -90.0);
+}
+
+// Compass has no nested surveys, so a trip in a child node is written into its
+// cave's file under the cave's name.
+TEST_CASE("Export compass writes the trips of a depth-2 node", "[Compass]") {
+    auto cave = std::make_unique<cwCave>();
+    cave->setName("Outer");
+
+    cwCave* section = addChildNode(cave.get(), QStringLiteral("Upper"), cwSurveyNode::Kind::Cave);
+    addNativeTripWithShot(section, QStringLiteral("SectionTrip"),
+                          QStringLiteral("B1"), QStringLiteral("B2"));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString exportFile = QDir(tempDir.path()).filePath("nested.dat");
+
+    auto exportToCompass = std::make_unique<cwCompassExportCaveTask>();
+    exportToCompass->setData(cave->data());
+    exportToCompass->setOutputFile(exportFile);
+    exportToCompass->start();
+    exportToCompass->waitToFinish();
+
+    QFile exportedFile(exportFile);
+    REQUIRE(exportedFile.open(QFile::ReadOnly | QFile::Text));
+    const QString contents = QString::fromUtf8(exportedFile.readAll());
+
+    CHECK(contents.startsWith(QStringLiteral("Outer")));
+    CHECK(contents.contains(QStringLiteral("SURVEY NAME: SectionTrip")));
+    CHECK(contents.contains(QStringLiteral("B1")));
 }
 
 TEST_CASE("Test 15 char format is okay", "[Compass]") {

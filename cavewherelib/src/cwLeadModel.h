@@ -18,6 +18,7 @@
 #include "cwRegionTreeModel.h"
 // class cwRegionTreeModel;
 class cwCave;
+class cwNote;
 #include "cwScrap.h"
 
 /**
@@ -92,6 +93,7 @@ private:
 
     void removeScrap(cwScrap* scrap);
     void addScrap(cwScrap* scrap);
+    bool holdsNote(const cwNote* note) const;
 
     void updateOffsets(cwScrap* startScrap);
     QString nearestStation(cwScrap* scrap, int leadIndex) const;

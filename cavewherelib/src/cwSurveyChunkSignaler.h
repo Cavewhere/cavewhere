@@ -15,7 +15,7 @@
 
 //Cavewhere includes
 class cwCavingRegion;
-class cwCave;
+class cwSurveyNode;
 class cwTrip;
 class cwSurveyChunk;
 #include "cwGlobals.h"
@@ -23,8 +23,8 @@ class cwSurveyChunk;
 /**
  * @brief The cwSurveyChunkSignaler class
  *
- * This class saves the programmer typing when trying to connect to all the caves, trips, or
- * cwSurveyChunks in a cwCavingRegion. This is usually to listen for when data changes. For examlpe
+ * This class saves the programmer typing when trying to connect to all the survey nodes, trips, or
+ * cwSurveyChunks in a cwCavingRegion, at every depth of its node tree. This is usually to listen for when data changes. For examlpe
  * the cwLinePlotManager class re-runs the line plot when survey data changes. Calling addConnectionTo*()
  * will setup a signal slot connection between caves, trips, or chunks in the caving region. Recieving
  * slot can use QObject::sender() to figure out what object emited the signal.
@@ -80,16 +80,12 @@ private:
    QList<Connection> ChunkConnections;
    QList<Connection> TripCalibrationConnections;
 
-   void connectCaves(cwCavingRegion* region);
-   void disconnectCaves(cwCavingRegion* region);
-   void connectCave(cwCave* cave);
-   void connectTrips(cwCave* cave);
+   void connectNode(cwSurveyNode* node);
    void connectTrip(cwTrip* trip);
    void connectChunks(cwTrip* trip);
    void connectChunk(cwSurveyChunk* chunk);
 
-   void disconnectCave(cwCave* cave);
-   void disconnectTrips(cwCave* cave, int beginIndex, int endIndex);
+   void disconnectNode(cwSurveyNode* node);
    void disconnectTrip(cwTrip* trip);
    void disconnectSurveyChunks(cwTrip* trip, int beginIndex, int endIndex);
    void disconnectSurveyChunk(cwSurveyChunk* chunk);
@@ -98,11 +94,11 @@ private:
    void disconnectAll(QObject* sender, const QList<Connection>& connections) const;
 
 private slots:
-   void connectAddedCaves(int beginIndex, int endIndex);
+   void connectAddedNodes(int beginIndex, int endIndex);
    void connectAddedTrips(int beginIndex, int endIndex);
    void connectAddedChunks(int beginIndex, int endIndex);
 
-   void disconnectRemovedCaves(int beginIndex, int endIndex);
+   void disconnectRemovedNodes(int beginIndex, int endIndex);
    void disconnectRemovedTrips(int beginIndex, int endIndex);
    void disconnectRemovedChunks(int beginIndex, int endIndex);
 
