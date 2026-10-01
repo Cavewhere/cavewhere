@@ -158,7 +158,7 @@ public:
         QHash<QString, QUuid> caveByLabel;
         QHash<QUuid, QHash<QString, QUuid>> tripsByCave;
         for (const cwCaveData& cave : region.caves) {
-            const QString caveLabel = cwStation::canonicalKey(labels.caveLabel(cave.id));
+            const QString caveLabel = cwStation::canonicalKey(labels.label(cave.id));
             if (caveLabel.isEmpty()) {
                 continue; //unlabeled, so nothing cavern echoed back can name it
             }

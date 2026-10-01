@@ -166,7 +166,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
         // Network keys are region-wide ("fisher_ridge.topo1.<tail>"); the
         // cave-local lookup strips this cave prefix, so external scopes bridge
         // through it.
-        const QString cavePrefix = scopeLabels.cavePrefix(cave.id);
+        const QString cavePrefix = scopeLabels.prefix(cave.id);
         const QHash<QUuid, QString>& tripLabels = scopeLabels.tripLabels(cave.id);
 
         double minDepth = std::numeric_limits<double>::max();

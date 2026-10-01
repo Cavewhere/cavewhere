@@ -289,6 +289,16 @@ inline cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)
     return cave;
 }
 
+//! Puts a \a kind node named \a name under \a parent, below the region's caves.
+inline cwCave* addChildNode(cwSurveyNode* parent, const QString& name, cwSurveyNode::Kind kind)
+{
+    cwCave* child = new cwCave();
+    child->setName(name);
+    child->setKind(kind);
+    parent->addNode(child);
+    return child;
+}
+
 inline cwTrip* addEmptyTrip(cwCave* cave, const QString& name)
 {
     cwTrip* trip = new cwTrip();

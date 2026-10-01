@@ -10,17 +10,24 @@
 
 //Our includes
 #include "cwCaveExporterTask.h"
+#include "cwScopeLabels.h"
 #include "cwSurvexExporterRegion.h"
+#include "cwSurvexExporterUtils.h"
 class cwSurvexExporterTripTask;
 class cwCave;
 class cwStationHandle;
 
 // Qt includes
+#include <QHash>
+#include <QList>
+#include <QSet>
 #include <QStringList>
 #include <QTextStream>
+#include <QUuid>
 
 // Std includes
 #include <functional>
+#include <optional>
 
 class cwSurvexExporterCaveTask : public cwCaveExporterTask
 {
@@ -28,34 +35,79 @@ class cwSurvexExporterCaveTask : public cwCaveExporterTask
 public:
     explicit cwSurvexExporterCaveTask(QObject *parent = 0);
 
+    //! One driver's snapshot, indexed once per export: the labels every block
+    //! and operand share, which nodes emit a block, and the node or trip each
+    //! container id names. writeNode and operand read the index, so neither
+    //! walks the tree per node or per operand.
+    class DriverTree
+    {
+    public:
+        //! \a nodes are the snapshot's top-level nodes and \a labels the pool
+        //! built from that same snapshot.
+        DriverTree(const QList<cwCaveData>& nodes,
+                   const cwScopeLabels& labels,
+                   const QSet<QUuid>& excludedExternalOwners = {});
+        Q_DISABLE_COPY_MOVE(DriverTree)
+
+        const cwScopeLabels& labels() const { return m_labels; }
+        const QSet<QUuid>& excludedExternalOwners() const { return m_excludedExternalOwners; }
+
+        //! True when \a nodeId's subtree gives cavern something to read: a
+        //! station, or an *include the driver does not exclude. A fix counts
+        //! through its station, since a fix is valid only on one of the node's
+        //! own stations. Cavern fatals with "No survey data" on a driver that
+        //! declares only empty scopes, so a node without any is left out.
+        bool emits(const QUuid& nodeId) const { return m_emittingNodeIds.contains(nodeId); }
+
+        //! The station name cavern knows \a handle by from region scope: every
+        //! label from the top-level node down to the handle's node, then a Trip
+        //! handle's trip scope, then the tail.
+        //!
+        //! Empty when the driver opens no scope for the handle: its container is
+        //! in no node of the tree, sits inside an excluded owner or below a
+        //! sourced root's own level, or is a node that emits nothing. Cavern
+        //! does not reject an unknown equate operand — it creates the station —
+        //! so the caller drops the whole tie instead.
+        QString operand(const cwStationHandle& handle) const;
+
+    private:
+        struct Owner {
+            const cwCaveData* node = nullptr;
+            const cwTripData* trip = nullptr;
+            bool hasScope = false;
+        };
+
+        //! Holds the buffer the Owner pointers point into.
+        const QList<cwCaveData> m_nodes;
+        const cwScopeLabels m_labels;
+        const QSet<QUuid> m_excludedExternalOwners;
+        QSet<QUuid> m_emittingNodeIds;
+        QHash<QUuid, Owner> m_nodeOwners;
+        QHash<QUuid, Owner> m_tripOwners;
+
+        bool index(const cwCaveData& node, bool scopeClosedAbove);
+    };
+
+    //! The single-cave export: \a cave and its subtree, standing alone, labeled
+    //! by cwScopeLabels::forNode.
     bool writeCave(QTextStream& stream, const cwCaveData &cave, const QString& globalCS = QString());
+
+    // Writes \a node as "*begin <label>", its fixes, its own trips, then each
+    // child node the same way, then its "*end" — one block per native node, so
+    // a station's cavern name is its node's label path. A sourced root writes
+    // its *include and nothing below it. A node that emits nothing
+    // (DriverTree::emits) writes nothing at all. \a node is one of \a tree's
+    // top-level nodes.
+    bool writeNode(QTextStream& stream,
+                   const cwCaveData& node,
+                   const DriverTree& tree,
+                   const QString& globalCS = QString());
 
     // Per-call options forwarded from cwSurvexExporterRegion. The
     // attachment-dir maps drive *include emission for caves and trips
-    // whose externalCenterline is set. Set once before the writeCave
+    // whose externalCenterline is set. Set once before the writeNode
     // loop; cleared by passing a default-constructed value.
     void setExportOptions(const cwSurvexExporterRegion::Options& options);
-
-    // Render one equate handle as a station name relative to `cave`'s
-    // "*begin" block: a NativeCave handle as its bare tail, a Trip handle as
-    // "<scopePrefix><tail>". Returns an empty string when the handle names a
-    // container that is not this cave (a Trip whose trip is absent, or a
-    // NativeCave whose containerId is another cave), so the caller can drop
-    // the malformed tie. Shared with the region exporter, which prepends
-    // the owning cave's own label to qualify the same operand across caves.
-    //
-    // `tripLabels` must be the pool writeCave opened its "*begin" blocks from
-    // (cwScopeLabels::tripLabels for this cave) — an operand deriving its own
-    // answer could name a scope the file never opened.
-    //
-    // `excludedExternalOwners` drops a tie naming an owner the driver left
-    // out (cwSurvexExporterRegion::Options): cavern creates an unknown equate
-    // operand rather than rejecting it, so such a tie would fabricate a
-    // station under the excluded owner's label.
-    static QString equateOperand(const cwStationHandle& handle,
-                                 const cwCaveData& cave,
-                                 const QHash<QUuid, QString>& tripLabels,
-                                 const QSet<QUuid>& excludedExternalOwners = {});
 
     // Emit one "*equate <a> <b> ..." line from pre-rendered operands. An empty
     // operand (an unresolvable handle) drops the whole tie; operands are
@@ -64,8 +116,8 @@ public:
     static void writeEquateLine(QTextStream& stream, const QStringList& operands);
 
     // Emit one "*equate" line per structurally-valid tie in `equates`, rendering
-    // each handle with `renderOperand` — cave-relative (equateOperand) for
-    // cave-scope emission, fully qualified for region-scope. Each line is handed
+    // each handle with `renderOperand` — relative to the enclosing node for a
+    // node's own equates, fully qualified at region scope. Each line is handed
     // to writeEquateLine, so invalid ties and unrenderable handles drop
     // uniformly. Shared by the cave and region exporters, which differ only in
     // the renderer.
@@ -74,10 +126,28 @@ public:
                              const std::function<QString(const cwStationHandle&)>& renderOperand);
 
 private:
+    //! What a node's block hands down to the blocks nested in it.
+    struct Inherited {
+        //! Some enclosing block already fixes a station, so this one adds no
+        //! fallback fix: a second anchor would pin a connected survey twice.
+        bool anchored = false;
+        //! The nearest enclosing fix's declination, for a node with none.
+        std::optional<cwSurvexExporterUtils::DeclinationContext> declination;
+    };
+
     cwSurvexExporterTripTask* TripExporter;
     cwSurvexExporterRegion::Options ExportOptions;
 
-    void writeFixStations(QTextStream& stream, const cwCaveData& cave, const QString& globalCS);
+    bool writeNodeBlock(QTextStream& stream,
+                        const cwCaveData& node,
+                        const DriverTree& tree,
+                        const QString& globalCS,
+                        const Inherited& inherited);
+
+    // Returns true when this writes a fix — one of the node's own, or the
+    // fallback on its first station when nothing above is anchored.
+    bool writeFixStations(QTextStream& stream, const cwCaveData& node, const QString& globalCS,
+                          bool anchoredAbove);
 
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
     // joining the owner's attachment dir with the project-relative

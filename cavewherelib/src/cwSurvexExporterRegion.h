@@ -11,7 +11,6 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
-#include "cwScopeLabels.h"
 
 #include <QHash>
 #include <QSet>
@@ -21,9 +20,11 @@
 /**
  * \brief Writes a survex (.svx) file for the entire caving region.
  *
- * Iterates the region's caves and emits a *begin / *end block per cave using
- * cwSurvexExporterCaveTask::writeCave under the hood. Pure compute on the
- * provided value-snapshot \a region; safe to call from any thread.
+ * Walks the region's node tree and emits a nested *begin / *end block per
+ * native node (cwSurvexExporterCaveTask::writeNode), then every region equate
+ * fully qualified at region scope. Labels come from one cwScopeLabels built
+ * from \a region. Pure compute on the provided value-snapshot \a region; safe
+ * to call from any thread.
  */
 class CAVEWHERE_LIB_EXPORT cwSurvexExporterRegion
 {
@@ -77,23 +78,12 @@ public:
      * A trip owner is told why through the file-error banner (containment)
      * or the missing-copy banner; a cave owner reads the reason from its
      * attached-centerlines row.
-     *
-     * \c scopeLabels carries the survey label every \c *begin block in the file
-     * opens with. Filled by \c exportRegion itself rather than by the caller: a
-     * cave label has to be unique across the whole region (see cwCavernNaming),
-     * which is a question only the region exporter can answer. A cave the pool
-     * does not name falls back to its own sanitized name when a \c *begin block
-     * is written for it, which is correct for the single-cave exporter, where
-     * there are no siblings to collide with. A cross-cave \c *equate operand
-     * takes no such fallback — it drops the tie rather than name a scope whose
-     * uniqueness nothing established.
      */
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
         QHash<QUuid, double> tripInjectedDeclinations;
         QSet<QUuid> excludedExternalOwners;
-        cwScopeLabels scopeLabels;
     };
 
     cwSurvexExporterRegion() = delete;

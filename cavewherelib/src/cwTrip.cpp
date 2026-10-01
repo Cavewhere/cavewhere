@@ -33,7 +33,7 @@ namespace {
     // The single scope-prefix policy, shared by the instance accessor and the
     // cwTripData snapshot overload so the UI-thread and worker-thread scope
     // decisions can never diverge: an external centerline scopes to the trip's
-    // label among its cave's trips, else a non-empty station prefix scopes to
+    // label among its node's trips, else a non-empty station prefix scopes to
     // "<prefix>.", else unscoped.
     //
     // The label arrives as a callable because only the first branch needs it:
@@ -305,7 +305,7 @@ void cwTrip::setExternalStationsError(const QString& error)
 
 QString cwTrip::scopePrefix() const
 {
-    //A trip's label is only unique among the trips of its cave, so the cave owns
+    //A trip's label is only unique among the trips of its node, so the node owns
     //the assignment and this is a lookup in the map it keeps.
     const auto label = [this]() -> QString {
         const cwSurveyNode* node = parentNode();

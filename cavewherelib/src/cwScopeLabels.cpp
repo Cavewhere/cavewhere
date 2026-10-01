@@ -7,7 +7,7 @@
 
 namespace {
 
-//! Answered for a cave the pool never saw, so tripLabels() can hand back a
+//! Answered for a node the pool never saw, so tripLabels() can hand back a
 //! reference without the caller checking first.
 const QHash<QUuid, QString> kNoTripLabels;
 
@@ -25,51 +25,93 @@ QList<cwCavernNaming::ScopeEntry> tripEntries(const QList<cwTripData>& trips)
 
 cwScopeLabels::cwScopeLabels(const cwCavingRegionData& region)
 {
-    QList<cwCavernNaming::ScopeEntry> caveEntries;
-    caveEntries.reserve(region.caves.size());
-    for (const cwCaveData& cave : region.caves) {
-        caveEntries.append({cave.id, cave.name});
-    }
-
-    m_caveLabels = cwCavernNaming::scopeLabels(caveEntries);
-
-    m_caveIdsByLabel.reserve(m_caveLabels.size());
-    for (auto iter = m_caveLabels.constBegin(); iter != m_caveLabels.constEnd(); ++iter) {
-        m_caveIdsByLabel.insert(iter.value(), iter.key());
-    }
-
-    m_tripLabelsByCave.reserve(region.caves.size());
-    for (const cwCaveData& cave : region.caves) {
-        m_tripLabelsByCave.insert(cave.id, cwCavernNaming::scopeLabels(tripEntries(cave.trips)));
-    }
+    addSiblings(QUuid(), QString(), region.caves);
 }
 
-cwScopeLabels cwScopeLabels::forCave(const cwCaveData& cave)
+cwScopeLabels cwScopeLabels::forNode(const cwCaveData& node)
 {
     cwScopeLabels labels;
-    labels.m_tripLabelsByCave.insert(cave.id, cwCavernNaming::scopeLabels(tripEntries(cave.trips)));
+    labels.addSiblings(QUuid(), QString(), {node});
     return labels;
 }
 
-QString cwScopeLabels::caveLabel(const QUuid& caveId) const
+void cwScopeLabels::addSiblings(const QUuid& parentId, const QString& parentPrefix,
+                                const QList<cwCaveData>& siblings)
 {
-    return m_caveLabels.value(caveId);
+    QList<cwCavernNaming::ScopeEntry> entries;
+    entries.reserve(siblings.size());
+    for (const cwCaveData& sibling : siblings) {
+        entries.append({sibling.id, sibling.name});
+    }
+
+    const QHash<QUuid, QString> labels = cwCavernNaming::scopeLabels(entries);
+    for (const cwCaveData& sibling : siblings) {
+        addNode(parentId, parentPrefix, sibling, labels.value(sibling.id));
+    }
 }
 
-QString cwScopeLabels::cavePrefix(const QUuid& caveId) const
+void cwScopeLabels::addNode(const QUuid& parentId, const QString& parentPrefix,
+                            const cwCaveData& node, const QString& label)
 {
-    return cwCavernNaming::scopePrefix(caveLabel(caveId));
+    const QString prefix = parentPrefix + cwCavernNaming::scopePrefix(label);
+    m_nodeLabels.insert(node.id, label);
+    m_prefixes.insert(node.id, prefix);
+    m_childIdsByLabel[parentId].insert(label.toLower(), node.id);
+    m_tripLabelsByNode.insert(node.id, cwCavernNaming::scopeLabels(tripEntries(node.trips)));
+    addSiblings(node.id, prefix, node.nodes);
 }
 
-QUuid cwScopeLabels::caveId(const QString& caveLabel) const
+QString cwScopeLabels::label(const QUuid& nodeId) const
 {
-    return m_caveIdsByLabel.value(caveLabel);
+    return m_nodeLabels.value(nodeId);
 }
 
-const QHash<QUuid, QString>& cwScopeLabels::tripLabels(const QUuid& caveId) const
+QString cwScopeLabels::prefix(const QUuid& nodeId) const
 {
-    const auto iter = m_tripLabelsByCave.constFind(caveId);
-    if (iter == m_tripLabelsByCave.constEnd()) {
+    return m_prefixes.value(nodeId);
+}
+
+QUuid cwScopeLabels::childId(const QUuid& parentId, const QString& label) const
+{
+    return m_childIdsByLabel.value(parentId).value(label.toLower());
+}
+
+QUuid cwScopeLabels::nodeId(const QStringList& labelPath) const
+{
+    QUuid current;
+    for (const QString& segment : labelPath) {
+        current = childId(current, segment);
+        if (current.isNull()) {
+            return QUuid();
+        }
+    }
+    return current;
+}
+
+cwScopeLabels::Resolution cwScopeLabels::resolve(const QString& scopedName) const
+{
+    Resolution resolution{QUuid(), scopedName};
+
+    for (;;) {
+        const QString head = cwCavernNaming::scopeHeadOf(resolution.remainder);
+        if (head.isEmpty()) {
+            return resolution;
+        }
+
+        const QUuid child = childId(resolution.nodeId, head);
+        if (child.isNull()) {
+            return resolution;
+        }
+
+        resolution.nodeId = child;
+        resolution.remainder = cwCavernNaming::removeScopeHead(resolution.remainder);
+    }
+}
+
+const QHash<QUuid, QString>& cwScopeLabels::tripLabels(const QUuid& nodeId) const
+{
+    const auto iter = m_tripLabelsByNode.constFind(nodeId);
+    if (iter == m_tripLabelsByNode.constEnd()) {
         return kNoTripLabels;
     }
     return iter.value();

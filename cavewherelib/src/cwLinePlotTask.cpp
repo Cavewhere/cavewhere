@@ -444,7 +444,7 @@ private:
                 continue;
             }
 
-            const QUuid caveId = ScopeLabels.caveId(caveLabel);
+            const QUuid caveId = ScopeLabels.nodeId({caveLabel});
             if (caveId.isNull() || !InternalCaveByUuid.contains(caveId)) {
                 qDebug() << "Cavern emitted station with unknown cave scope:" << caveLabel << LOCATION;
                 continue;
@@ -616,7 +616,7 @@ private:
             // one: a trip label is an ordinary survey name, so nothing about
             // "topo1.a1" marks it as scoped except that this cave has a trip
             // labeled topo1.
-            const QString cavePrefix = ScopeLabels.cavePrefix(cave->id());
+            const QString cavePrefix = ScopeLabels.prefix(cave->id());
             const QSet<QString> externalTripLabels = externalTripLabelsFor(cave);
 
             for (const QString& scopedStation : regionNetwork.stations()) {

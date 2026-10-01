@@ -146,8 +146,8 @@ public:
 
     //! Snapshot overload: the same policy computed from a cwTripData, so the
     //! worker-thread geometry pass shares this one source of truth. Takes the
-    //! labels cwScopeLabels assigned for the whole cave — an external trip's
-    //! label is unique only among its cave's trips — so an emitter that already
+    //! labels cwScopeLabels assigned for the trip's node — an external trip's
+    //! label is unique only among its node's trips — so an emitter that already
     //! holds that pool (the survex exporter's "*begin" loop, its equate
     //! operands, the geometry pass) names the very same scope it opened rather
     //! than deriving a second answer that then has to agree.

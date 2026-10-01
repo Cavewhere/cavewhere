@@ -7,7 +7,6 @@
 
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
-#include "cwCavernNaming.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporterUtils.h"
 #include "cwTrip.h"
@@ -19,6 +18,7 @@
 #include <QStringList>
 
 //Std includes
+#include <algorithm>
 #include <functional>
 
 namespace {
@@ -33,24 +33,61 @@ QString driverIncludePathFor(const QString& attachmentDir, const QString& entryF
     return QFileInfo(joined).absoluteFilePath();
 }
 
+bool chunksHoldStations(const cwTripData& trip)
+{
+    return std::any_of(trip.chunks.cbegin(), trip.chunks.cend(),
+                       [](const cwSurveyChunkData& chunk) { return !chunk.stations.isEmpty(); });
+}
+
 } // namespace
 
-// Render one equate handle as a station name relative to the enclosing
-// "*begin <cave>" block, so a bare "*equate" at cave scope resolves it.
-// A NativeCave station sits directly at cave scope — the native trip's
-// "*begin" is anonymous, adding no naming level — so the operand is the
-// bare tail. A Trip station carries its trip's scope prefix
-// ("<tripLabel>." for an externally-attached trip, "<stationPrefix>." for a
-// native-prefixed trip), matching how the trip loop names those stations.
-// Returns an empty string when a handle names a container that is not this
-// cave — a Trip handle whose trip is absent, or a NativeCave handle whose
-// containerId is another cave — so the caller can drop the malformed equate
-// rather than emit a name that silently mis-ties to a like-named local
-// station (the same membership check cwCave::validate performs).
-QString cwSurvexExporterCaveTask::equateOperand(const cwStationHandle& handle,
-                                                const cwCaveData& cave,
-                                                const QHash<QUuid, QString>& tripLabels,
-                                                const QSet<QUuid>& excludedExternalOwners)
+cwSurvexExporterCaveTask::DriverTree::DriverTree(const QList<cwCaveData>& nodes,
+                                                 const cwScopeLabels& labels,
+                                                 const QSet<QUuid>& excludedExternalOwners) :
+    m_nodes(nodes),
+    m_labels(labels),
+    m_excludedExternalOwners(excludedExternalOwners)
+{
+    for (const cwCaveData& node : m_nodes) {
+        index(node, false);
+    }
+}
+
+// Returns whether \a node emits. A container under an excluded owner has no
+// scope, and neither does one below a sourced root's own level: the root is
+// one *include, and nothing beneath it is a block.
+bool cwSurvexExporterCaveTask::DriverTree::index(const cwCaveData& node, bool scopeClosedAbove)
+{
+    const bool scopeClosed = scopeClosedAbove || m_excludedExternalOwners.contains(node.id);
+    const bool sourced = !node.externalCenterline.isEmpty();
+
+    m_nodeOwners.insert(node.id, {&node, nullptr, !scopeClosed});
+
+    bool ownTripsHoldData = false;
+    for (const cwTripData& trip : node.trips) {
+        m_tripOwners.insert(trip.id, {&node, &trip, !scopeClosed});
+        const bool tripHoldsData = trip.externalCenterline.isEmpty()
+                                       ? chunksHoldStations(trip)
+                                       : !m_excludedExternalOwners.contains(trip.id);
+        ownTripsHoldData = ownTripsHoldData || tripHoldsData;
+    }
+
+    bool childEmits = false;
+    for (const cwCaveData& child : node.nodes) {
+        childEmits = index(child, scopeClosed || sourced) || childEmits;
+    }
+
+    // A sourced root is its *include alone (§7.1): its trips are windows on the
+    // included file and its children are never blocks.
+    const bool emits = sourced ? !m_excludedExternalOwners.contains(node.id)
+                               : ownTripsHoldData || childEmits;
+    if (emits) {
+        m_emittingNodeIds.insert(node.id);
+    }
+    return emits;
+}
+
+QString cwSurvexExporterCaveTask::DriverTree::operand(const cwStationHandle& handle) const
 {
     // A tie to an owner whose attachment was excluded names a scope the
     // driver never opened. Cavern does not reject an unknown operand — it
@@ -58,27 +95,31 @@ QString cwSurvexExporterCaveTask::equateOperand(const cwStationHandle& handle,
     // process_equate) — so emitting the tie would fabricate a station under
     // the excluded owner's label, at the other operand's coordinate, and the
     // decode would route it back to the very survey that was left out.
-    // containerId is the trip id for a Trip handle and the cave id for a
+    // containerId is the trip id for a Trip handle and the node id for a
     // NativeCave one, and the excluded set holds both kinds.
-    if (excludedExternalOwners.contains(handle.containerId())) {
+    if (m_excludedExternalOwners.contains(handle.containerId())) {
         return QString();
     }
 
-    switch (handle.scope()) {
-    case cwStationHandle::NativeCave:
-        if (handle.containerId() != cave.id) {
-            return QString();
-        }
-        return handle.tail();
-    case cwStationHandle::Trip:
-        for (const cwTripData& trip : cave.trips) {
-            if (trip.id == handle.containerId()) {
-                return cwTrip::scopePrefix(trip, tripLabels) + handle.tail();
-            }
-        }
+    const QHash<QUuid, Owner>& owners =
+        handle.scope() == cwStationHandle::Trip ? m_tripOwners : m_nodeOwners;
+    const auto ownerIt = owners.constFind(handle.containerId());
+    if (ownerIt == owners.constEnd() || !ownerIt->hasScope || !emits(ownerIt->node->id)) {
         return QString();
     }
-    return QString();
+
+    const Owner& owner = ownerIt.value();
+    const QString nodePrefix = m_labels.prefix(owner.node->id);
+    if (nodePrefix.isEmpty()) {
+        return QString();
+    }
+
+    if (owner.trip == nullptr) {
+        return nodePrefix + handle.tail();
+    }
+    return nodePrefix
+           + cwTrip::scopePrefix(*owner.trip, m_labels.tripLabels(owner.node->id))
+           + handle.tail();
 }
 
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
@@ -86,8 +127,6 @@ cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
 {
     TripExporter = new cwSurvexExporterTripTask(this);
     TripExporter->setParentSurvexExporter(this);
-
-//    connect(TripExporter, SIGNAL(progressed(int)), SIGNAL(progressed(int)));
 }
 
 void cwSurvexExporterCaveTask::setExportOptions(const cwSurvexExporterRegion::Options& options)
@@ -95,91 +134,97 @@ void cwSurvexExporterCaveTask::setExportOptions(const cwSurvexExporterRegion::Op
     ExportOptions = options;
 }
 
-/**
-  \brief Writes the cave data to the stream
-  */
-bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& cave, const QString& globalCS) {
+bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& cave, const QString& globalCS)
+{
+    // A single-cave export has no region and no siblings, so the cave stands
+    // alone under its own sanitized name.
+    const QList<cwCaveData> nodes = {cave};
+    const DriverTree tree(nodes, cwScopeLabels::forNode(cave), ExportOptions.excludedExternalOwners);
 
-    // checkData rejects caves with zero trips; a cave-level external
-    // attachment is *defined* by having zero native trips, so the
-    // externalCenterline branch runs before the gate. Trip-level
-    // attachments still go through the gate because their cave has at
-    // least one trip (the attached one).
-    if (cave.externalCenterline.isEmpty() && !checkData(cave)) {
-        if(isRunning()) {
+    if (!tree.emits(cave.id)) {
+        // An excluded cave-level attachment is skipped, not failed: the
+        // attachment is what is missing, and the reason is already on its row.
+        const bool excludedAttachment = !cave.externalCenterline.isEmpty();
+        if (excludedAttachment) {
+            return true;
+        }
+        Errors.append(QStringLiteral("No survey data to export in %1").arg(cave.name));
+        if (isRunning()) {
             stop();
         }
         return false;
     }
 
-    // The region exporter assigns the scopes, because cave-label uniqueness
-    // spans the region. A single-cave export has no region and no siblings, so
-    // the cave stands alone: its own sanitized name, and trip labels assigned
-    // from its own trips, which need no region to be unique.
-    const QString assignedCaveName = ExportOptions.scopeLabels.caveLabel(cave.id);
-    const bool standalone = assignedCaveName.isEmpty();
+    return writeNode(stream, nodes.first(), tree, globalCS);
+}
 
-    const cwScopeLabels scopeLabels =
-        standalone ? cwScopeLabels::forCave(cave) : ExportOptions.scopeLabels;
-    const QString caveName =
-        standalone ? cwCavernNaming::sanitizeToCavernIdentifier(cave.name) : assignedCaveName;
+bool cwSurvexExporterCaveTask::writeNode(QTextStream& stream,
+                                         const cwCaveData& node,
+                                         const DriverTree& tree,
+                                         const QString& globalCS)
+{
+    TotalProgress = 0;
+    return writeNodeBlock(stream, node, tree, globalCS, Inherited());
+}
 
-    // An excluded cave-level attachment emits nothing at all, not even an
-    // empty *begin / *end pair: cavern fatals with "No survey data" on a
-    // driver that declares only empty scopes, so a project whose one cave
-    // is an excluded attachment would lose the whole solve rather than the
-    // one survey. Skipping the *include through writeExternalInclude's
-    // failure path instead would abort the entire region export.
-    if (!cave.externalCenterline.isEmpty()
-        && ExportOptions.excludedExternalOwners.contains(cave.id)) {
+bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
+                                              const cwCaveData& node,
+                                              const DriverTree& tree,
+                                              const QString& globalCS,
+                                              const Inherited& inherited)
+{
+    // An empty block is worse than none: cavern fatals with "No survey data"
+    // on a driver that declares only empty scopes, so a project whose one
+    // cave is an excluded attachment would lose the whole solve rather than
+    // the one survey.
+    if (!tree.emits(node.id)) {
         return true;
     }
 
-    stream << "*begin " << caveName << " ;" << cave.name << Qt::endl << Qt::endl;
+    const cwScopeLabels& labels = tree.labels();
+    const QString label = labels.label(node.id);
+    stream << "*begin " << label << " ;" << node.name << Qt::endl << Qt::endl;
+    const auto writeEnd = [&stream, &label, &node]() {
+        stream << "*end " << label << " ; End of " << node.name << Qt::endl << Qt::endl;
+    };
 
-    // Cave-level external attachment: skip fix stations, calibrations,
-    // and the trip loop. The included file carries its own *cs, *fix,
-    // and *begin/*end structure; emitting our own would either silently
-    // shadow theirs (no-op) or fight them (cavern error). Per master
-    // plan §6, native + external are not mixed inside the same cave
-    // body.
-    if (!cave.externalCenterline.isEmpty()) {
-        if (!writeExternalInclude(stream, cave.id,
+    // Sourced root: skip fix stations, calibrations, trips and child nodes.
+    // The included file carries its own *cs, *fix, and *begin/*end structure;
+    // emitting our own would either silently shadow theirs (no-op) or fight
+    // them (cavern error). Per master plan §6, native + external are not
+    // mixed inside the same node body.
+    if (!node.externalCenterline.isEmpty()) {
+        if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
-                                  cave.externalCenterline.entryFile(),
-                                  cave.name)) {
+                                  node.externalCenterline.entryFile(),
+                                  node.name)) {
             return false;
         }
-        stream << "*end " << caveName << " ; End of " << cave.name << Qt::endl;
+        writeEnd();
         return true;
     }
 
-    writeFixStations(stream, cave, globalCS);
+    Inherited here;
+    here.anchored = writeFixStations(stream, node, globalCS, inherited.anchored)
+                    || inherited.anchored;
+    here.declination = cwSurvexExporterUtils::makeDeclinationContext(node.fixStations, globalCS);
+    if (!here.declination.has_value()) {
+        here.declination = inherited.declination;
+    }
 
-    const auto declinationContext = cwSurvexExporterUtils::makeDeclinationContext(
-        cave.fixStations, globalCS);
+    const QHash<QUuid, QString>& tripLabels = labels.tripLabels(node.id);
 
-    //Haven't done anything
-    TotalProgress = 0;
-
-    const QHash<QUuid, QString>& tripLabels = scopeLabels.tripLabels(cave.id);
-
-    //Go throug all the trips and save them
-    for(int i = 0; i < cave.trips.size(); i++) {
-        const cwTripData& tripData = cave.trips.at(i);
-
+    for (const cwTripData& tripData : node.trips) {
         // Trip-level external attachment: wrap the *include in
         // *begin <tripLabel> / *end <tripLabel> so the included file's
-        // own *begin / *end stay isolated from this cave's namespace
+        // own *begin / *end stay isolated from this node's namespace
         // (master plan §6, "Native vs. external trip wrapping is
         // asymmetric — on purpose"). Stations from the included file
-        // resolve to <caveLabel>.<tripLabel>.<file-tail>.
+        // resolve to <nodePrefix><tripLabel>.<file-tail>.
         if (!tripData.externalCenterline.isEmpty()) {
-            // Excluded attachments emit nothing at all — unlike the
-            // cave-level branch above, whose *begin is already on the
-            // stream by the time exclusion is known and so has to be
-            // closed. The trip contributes no stations either way.
-            if (ExportOptions.excludedExternalOwners.contains(tripData.id)) {
+            // Excluded attachments emit nothing at all. The trip
+            // contributes no stations either way.
+            if (tree.excludedExternalOwners().contains(tripData.id)) {
                 continue;
             }
 
@@ -208,31 +253,40 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 
         auto trip = std::make_unique<cwTrip>();
         trip->setData(tripData);
-        TripExporter->writeTrip(stream, trip.get(), declinationContext);
+        TripExporter->writeTrip(stream, trip.get(), here.declination);
         TotalProgress += trip->numberOfStations();
         stream << Qt::endl;
     }
 
-    // Cave-level ties emit here, after every native station and every
-    // *begin <tripLabel> sibling is declared, so both operands are in scope
-    // (master plan §C4). Cavern merges the tied stations to one position;
-    // the decode side then keys both cave-local names to that shared point.
-    writeEquates(stream, cave.equates,
-                 [this, &cave, &tripLabels](const cwStationHandle& handle) {
-                     return equateOperand(handle, cave, tripLabels,
-                                          ExportOptions.excludedExternalOwners);
+    for (const cwCaveData& child : node.nodes) {
+        if (!writeNodeBlock(stream, child, tree, globalCS, here)) {
+            return false;
+        }
+    }
+
+    // The node's own ties emit last, once every scope they can name inside the
+    // block — trip wrappers and child nodes — is declared. An operand is the
+    // region-scope name with this node's prefix taken off; one that does not
+    // start with it names a station outside this block, so the tie is dropped.
+    const QString nodePrefix = labels.prefix(node.id);
+    writeEquates(stream, node.equates,
+                 [&tree, &nodePrefix](const cwStationHandle& handle) {
+                     const QString qualified = tree.operand(handle);
+                     if (!qualified.startsWith(nodePrefix)) {
+                         return QString();
+                     }
+                     return qualified.mid(nodePrefix.size());
                  });
 
-    stream << "*end " << caveName << " ; End of " << cave.name << Qt::endl;
-
+    writeEnd();
     return true;
 }
 
 /**
  * Emit a bare `*equate` line per valid tie in `equates`, rendering each handle
- * with `renderOperand`. Cave-scope emission passes equateOperand (operands
- * relative to the enclosing "*begin <cave>"); region-scope passes a fully-
- * qualified renderer. No `*export`/`*infer` is needed — a cross-scope `*equate`
+ * with `renderOperand`. A node's own equates pass DriverTree::operand() with
+ * the node's prefix taken off; region scope passes it as is. No `*export`/`*infer`
+ * is needed — a cross-scope `*equate`
  * inside the enclosing block resolves both sibling scopes on its own.
  * Structurally-invalid equates, and any whose handle the renderer cannot
  * resolve, are dropped silently (writeEquateLine); station *existence* is not
@@ -289,18 +343,20 @@ void cwSurvexExporterCaveTask::writeEquateLine(QTextStream& stream, const QStrin
 }
 
 /**
- * Emit the *cs / *fix block for the cave. Validates the snapshot's
- * fixStations against the actual station names; rejected fixes are dropped
- * silently here (the user-facing exporter — cwSurvexExporterRule — runs
- * the same validation at snapshot time and surfaces errors on the cave).
- * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists so
- * un-fixed caves still resolve in cavern.
+ * Emit the *cs / *fix block for the node. Validates the snapshot's
+ * fixStations against the node's own station names; rejected fixes are
+ * dropped silently here (the user-facing exporter — cwSurvexExporterRule —
+ * runs the same validation at snapshot time and surfaces errors on the cave).
+ * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists and no
+ * enclosing block is anchored, so each un-fixed top-level survey still
+ * resolves in cavern.
  */
-void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &cave, const QString& globalCS)
+bool cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &node,
+                                                const QString& globalCS, bool anchoredAbove)
 {
     QSet<QString> stationNamesLower;
     QString firstValidStation;
-    for (const cwTripData& trip : cave.trips) {
+    for (const cwTripData& trip : node.trips) {
         for (const cwSurveyChunkData& chunk : trip.chunks) {
             for (const cwStation& station : chunk.stations) {
                 if (station.isValid()) {
@@ -315,12 +371,14 @@ void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCav
 
     QStringList errors;
     const QList<cwFixStation> validFixes = cwSurvexExporterUtils::validateFixStations(
-        cave.fixStations, stationNamesLower, errors);
+        node.fixStations, stationNamesLower, errors);
     for (const QString& message : std::as_const(errors)) {
         Errors.append(message);
     }
 
-    cwSurvexExporterUtils::writeFixStations(stream, validFixes, firstValidStation, globalCS);
+    const QString fallbackStation = anchoredAbove ? QString() : firstValidStation;
+    cwSurvexExporterUtils::writeFixStations(stream, validFixes, fallbackStation, globalCS);
+    return !validFixes.isEmpty() || !fallbackStation.isEmpty();
 }
 
 bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,

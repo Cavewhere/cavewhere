@@ -39,6 +39,8 @@
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwSurvexExporterRegion.h"
+#include "cwCavernRunner.h"
+#include "cwSurvex3DFileReader.h"
 #include "cwTrip.h"
 
 // Test helpers
@@ -48,9 +50,14 @@
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QRegularExpression>
+#include <QSet>
 #include <QString>
 #include <QTemporaryDir>
 #include <QUuid>
+
+// Std
+#include <algorithm>
 
 namespace {
 
@@ -94,12 +101,12 @@ QString tripScopePrefix(const cwTrip* trip)
 //! The survey label this cave's *begin block carries, as the exporter assigns it
 QString caveLabel(const cwCavingRegion& region, const cwCave* cave)
 {
-    return cwScopeLabels(region.data()).caveLabel(cave->id());
+    return cwScopeLabels(region.data()).label(cave->id());
 }
 
 QString caveScopePrefix(const cwCavingRegion& region, const cwCave* cave)
 {
-    return cwScopeLabels(region.data()).cavePrefix(cave->id());
+    return cwScopeLabels(region.data()).prefix(cave->id());
 }
 
 // Runs the driver export the worker would run and returns the emitted .svx text.
@@ -132,6 +139,61 @@ QString regionDriverText(const cwCavingRegion& region,
     QFile file(outputPath);
     REQUIRE(file.open(QFile::ReadOnly));
     return QString::fromUtf8(file.readAll());
+}
+
+//! Every scope the driver opens, as a dotted label path from the region down:
+//! "*begin a" then "*begin b" opens "a" and "a.b". An anonymous "*begin" (a
+//! native trip, or the region itself) adds no naming level.
+QSet<QString> openedScopes(const QString& driver)
+{
+    static const QRegularExpression beginLine(QStringLiteral("^\\*begin(?:\\s+([^\\s;]+))?"));
+    static const QRegularExpression endLine(QStringLiteral("^\\*end\\b"));
+
+    QSet<QString> scopes;
+    QStringList stack; //one entry per open block, empty for an anonymous one
+    for (const QString& rawLine : driver.split(QLatin1Char('\n'))) {
+        const QString line = rawLine.trimmed();
+        const QRegularExpressionMatch begin = beginLine.match(line);
+        if (begin.hasMatch()) {
+            stack.append(begin.captured(1));
+            QStringList path;
+            for (const QString& label : std::as_const(stack)) {
+                if (!label.isEmpty()) {
+                    path.append(label);
+                }
+            }
+            if (!begin.captured(1).isEmpty()) {
+                scopes.insert(path.join(QLatin1Char('.')));
+            }
+        } else if (endLine.match(line).hasMatch() && !stack.isEmpty()) {
+            stack.removeLast();
+        }
+    }
+    return scopes;
+}
+
+//! Runs cavern on the driver at \a driverPath and reads back every station's
+//! position, keyed by its full cavern name.
+cwStationPositionLookup solveDriver(const QString& driverPath)
+{
+    const QString threeDPath = driverPath + QStringLiteral(".3d");
+    const auto ran = cwCavernRunner::run(driverPath, threeDPath);
+    INFO("cavern: " << ran.errorMessage().toStdString());
+    REQUIRE_FALSE(ran.hasError());
+    cwSurvex3DFileReader reader;
+    return reader.readStationPositions(threeDPath);
+}
+
+void checkCoincident(const cwStationPositionLookup& lookup, const QString& first, const QString& second)
+{
+    INFO(first.toStdString() << " == " << second.toStdString());
+    REQUIRE(lookup.hasPosition(first));
+    REQUIRE(lookup.hasPosition(second));
+    const QVector3D a = lookup.position(first);
+    const QVector3D b = lookup.position(second);
+    CHECK(a.x() == Catch::Approx(b.x()).margin(0.001));
+    CHECK(a.y() == Catch::Approx(b.y()).margin(0.001));
+    CHECK(a.z() == Catch::Approx(b.z()).margin(0.001));
 }
 
 } // namespace
@@ -429,4 +491,133 @@ TEST_CASE("A region equate ties three caves' stations coincident in one line",
     CHECK(posA.x() == Catch::Approx(posC.x()).margin(0.001));
     CHECK(posA.y() == Catch::Approx(posC.y()).margin(0.001));
     CHECK(posA.z() == Catch::Approx(posC.z()).margin(0.001));
+}
+
+TEST_CASE("A region equate qualifies native-node and trip handles at any depth",
+          "[Equate][Emission]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("dome-attach"));
+    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_simple.svx")));
+
+    // Kentucky field seasons (Folder) > Side Cave > Upper level (Section), and a
+    // top-level Fisher Ridge. Each operand has to carry every label from the top
+    // down: a region-scope *equate resolves names from the region itself.
+    cwCavingRegion region;
+    cwCave* fisherRidge = addEmptyCave(region, QStringLiteral("Fisher Ridge"));
+    addNativeTripWithShot(fisherRidge, QStringLiteral("Entrance"),
+                          QStringLiteral("f1"), QStringLiteral("f2"), 10.0);
+    cwCave* folder = addChildNode(region.rootNode(), QStringLiteral("Kentucky field seasons"),
+                                  cwSurveyNode::Kind::Folder);
+    cwCave* sideCave = addChildNode(folder, QStringLiteral("Side Cave"), cwSurveyNode::Kind::Cave);
+    addNativeTripWithShot(sideCave, QStringLiteral("Sump dig"),
+                          QStringLiteral("s1"), QStringLiteral("s2"), 10.0, QStringLiteral("90.0"));
+    cwCave* section = addChildNode(sideCave, QStringLiteral("Upper level"),
+                                   cwSurveyNode::Kind::Folder);
+    addNativeTripWithShot(section, QStringLiteral("Upper survey"),
+                          QStringLiteral("u1"), QStringLiteral("u2"), 10.0, QStringLiteral("180.0"));
+    cwTrip* domeClimb = addAttachedTrip(section, QStringLiteral("Dome climb"));
+
+    region.equates()->appendEquate(cwEquate({nativeHandle(section, QStringLiteral("u1")),
+                                             nativeHandle(fisherRidge, QStringLiteral("f2"))}));
+    region.equates()->appendEquate(cwEquate({tripHandle(domeClimb, QStringLiteral("simple.a1")),
+                                             nativeHandle(sideCave, QStringLiteral("s2"))}));
+
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs.insert(domeClimb->id(), attachDir);
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, options, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    const QString nativeNodeLine = QStringLiteral(
+        "*equate kentucky_field_seasons.side_cave.upper_level.u1 fisher_ridge.f2");
+    const QString tripLine = QStringLiteral(
+        "*equate kentucky_field_seasons.side_cave.upper_level.dome_climb.simple.a1"
+        " kentucky_field_seasons.side_cave.s2");
+    CHECK(driver.contains(nativeNodeLine));
+    CHECK(driver.contains(tripLine));
+
+    // Both sit at region scope, after the deepest block they name has closed.
+    const int folderEnd = driver.indexOf(QStringLiteral("*end kentucky_field_seasons"));
+    REQUIRE(folderEnd >= 0);
+    CHECK(folderEnd < driver.indexOf(nativeNodeLine));
+    CHECK(folderEnd < driver.indexOf(tripLine));
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkCoincident(solved, QStringLiteral("kentucky_field_seasons.side_cave.upper_level.u1"),
+                    QStringLiteral("fisher_ridge.f2"));
+    checkCoincident(solved,
+                    QStringLiteral("kentucky_field_seasons.side_cave.upper_level.dome_climb.simple.a1"),
+                    QStringLiteral("kentucky_field_seasons.side_cave.s2"));
+}
+
+TEST_CASE("Every region equate operand names a scope the driver opens",
+          "[Equate][Emission]")
+{
+    // The region equate path once qualified its operands with one scheme while
+    // the "*begin" lines used another, so the operands named scopes the file
+    // never opened — and cavern does not reject such a name, it creates the
+    // station. Colliding sanitized names and a trip-scope handle are where two
+    // derivations of a label would part ways.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwSurvexExporterRegion::Options options;
+    QList<cwTrip*> attachedTrips;
+    for (const QString& caveName : {QStringLiteral("Big Cave"), QStringLiteral("Big-Cave")}) {
+        cwCave* cave = addEmptyCave(region, caveName);
+        addNativeTripWithShot(cave, QStringLiteral("Native"),
+                              QStringLiteral("1"), QStringLiteral("2"), 10.0);
+        cwTrip* attached = addAttachedTrip(cave, QStringLiteral("Topo 1"));
+        const QString attachDir = tempSubdir(tempRoot, cwCavernNaming::sanitizeToCavernIdentifier(caveName)
+                                                           + QStringLiteral("_2"));
+        seedAttachment(attachDir, fixturePath(QStringLiteral("survex_simple.svx")));
+        options.tripAttachmentDirs.insert(attached->id(), attachDir);
+        attachedTrips.append(attached);
+    }
+    cwCave* bigCave = region.cave(0);
+    cwCave* bigCaveTwin = region.cave(1);
+
+    region.equates()->appendEquate(cwEquate({tripHandle(attachedTrips.at(1), QStringLiteral("simple.a2")),
+                                             nativeHandle(bigCave, QStringLiteral("2"))}));
+    region.equates()->appendEquate(cwEquate({tripHandle(attachedTrips.at(0), QStringLiteral("simple.a3")),
+                                             nativeHandle(bigCaveTwin, QStringLiteral("2"))}));
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = regionDriverText(region, options, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    const QSet<QString> scopes = openedScopes(driver);
+    CHECK(scopes.contains(QStringLiteral("big_cave.topo_1")));
+    CHECK(scopes.contains(QStringLiteral("big_cave_2.topo_1")));
+
+    CHECK(driver.contains(QStringLiteral("*equate big_cave_2.topo_1.simple.a2 big_cave.2")));
+    CHECK(driver.contains(QStringLiteral("*equate big_cave.topo_1.simple.a3 big_cave_2.2")));
+
+    // Every operand on every *equate line sits inside a scope the driver opens.
+    const QString equateKeyword = QStringLiteral("*equate");
+    int equateLineCount = 0;
+    for (const QString& rawLine : driver.split(QLatin1Char('\n'))) {
+        const QString line = rawLine.trimmed();
+        if (!line.startsWith(equateKeyword)) {
+            continue;
+        }
+        ++equateLineCount;
+        const QStringList operands = line.mid(equateKeyword.size()).split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        for (const QString& operand : operands) {
+            INFO("operand: " << operand.toStdString());
+            const bool insideOpenedScope = std::any_of(scopes.cbegin(), scopes.cend(),
+                                                       [&operand](const QString& scope) {
+                                                           return operand.startsWith(scope + QLatin1Char('.'));
+                                                       });
+            CHECK(insideOpenedScope);
+        }
+    }
+    CHECK(equateLineCount == 2);
+
+    const cwStationPositionLookup solved = solveDriver(driverPath);
+    checkCoincident(solved, QStringLiteral("big_cave_2.topo_1.simple.a2"), QStringLiteral("big_cave.2"));
+    checkCoincident(solved, QStringLiteral("big_cave.topo_1.simple.a3"), QStringLiteral("big_cave_2.2"));
 }
