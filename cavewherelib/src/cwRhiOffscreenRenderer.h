@@ -60,7 +60,7 @@ public:
     ~cwRhiOffscreenRenderer();
 
     // Single-owner render-thread type holding GPU resources, a back-ref to the
-    // scene, and raw-owning read-back results. Copying or moving any of that would
+    // scene, and the in-flight job list. Copying or moving any of that would
     // duplicate or strand ownership, so forbid both explicitly.
     Q_DISABLE_COPY_MOVE(cwRhiOffscreenRenderer)
 
@@ -79,13 +79,13 @@ public:
     // while hasPendingWork(), so the queue drains fully across frames. Render-thread only.
     void drainPending(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
 
-    // Finish any straggler promises (so their QFutures can't hang when the QRhi is
-    // torn down mid-flight), reclaim the read-backs their completion lambdas would
-    // have freed, then release the offscreen GPU resources. Called from ~cwRhiScene
-    // BEFORE the pipeline cache is freed, because the offscreen targets' rpDescs key
-    // pipelines that must be evicted first. Idempotent: the destructor calls it
-    // again as a backstop, so cleanup can't be lost if the explicit call is ever
-    // dropped, and a second call is a no-op.
+    // Finish the promises of queued and in-flight jobs, so their QFutures resolve even
+    // when the backend drops a pending read-back, then release the offscreen GPU
+    // resources. In-flight read-back results stay with the backend, whose completion
+    // frees them. Called from ~cwRhiScene BEFORE the pipeline cache is freed, because
+    // the offscreen targets' rpDescs key pipelines that must be evicted first.
+    // Idempotent: the destructor calls it again as a backstop, so cleanup can't be lost
+    // if the explicit call is ever dropped, and a second call is a no-op.
     void shutdown();
 
 private:
@@ -124,27 +124,7 @@ private:
         bool valid() const { return color != nullptr; }
     };
 
-    // A read-back recorded but not yet completed. One read-back fans out to one or more
-    // jobs (single-tile path: one; atlas path: one per tile). We track only weak refs to
-    // those jobs plus the raw QRhiReadbackResult the completion lambda owns — the per-job
-    // sub-rects live solely in that lambda, which does the slicing. The lambda holds the
-    // only strong refs to every job, so a still-lockable job is the signal it has not run;
-    // shutdown() finishes those promises and reclaims the result. Render-thread only.
-    struct InflightOffscreenReadback {
-        QRhiReadbackResult* result = nullptr;
-        QList<std::weak_ptr<cwOffscreenRenderJob>> jobs;
-
-        // True once the completion lambda has run. It owned the only strong refs to every
-        // job and releases them together when destroyed, so they expire as one — checking
-        // any job is enough. jobs is never empty (recordReadbackFanout asserts it), so this
-        // never reports an unfired read-back as completed (which would leak its result).
-        bool completed() const
-        {
-            return jobs.constFirst().expired();
-        }
-    };
-
-    // The queue and in-flight read-back list are unsynchronized; their safety rests
+    // The queue and in-flight job list are unsynchronized; their safety rests
     // on every mutator running on the one render thread (enqueue is reached from
     // cwRhiScene::synchroize while the GUI thread is blocked, drainPending from
     // render()). This records the first render-thread to touch them and asserts every
@@ -202,7 +182,7 @@ private:
                           const cwOffscreenAtlasGrid& grid, int sampleCount);
 
     // Record a single texture read-back that fulfils every job in @a jobs from its
-    // matching @a subRects slice on completion; tracks it for shutdown() fan-out. The
+    // matching @a subRects slice on completion; tracks the jobs for shutdown(). The
     // lists are parallel and equal length.
     void recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTexture* readbackTexture,
                               const QList<std::shared_ptr<cwOffscreenRenderJob>>& jobs,
@@ -244,7 +224,10 @@ private:
     // effect was last initialized against so a target rebuild re-inits it.
     cwRhiFrameRenderer::EdlOffscreen m_edl;
     ResidencyGate m_residencyGate;
-    QList<InflightOffscreenReadback> m_inflightReadbacks;
+    // Jobs whose read-back is recorded but not yet completed. The completion lambda
+    // holds the only strong refs, so a job expires once its read-back completes.
+    // Render-thread only.
+    QList<std::weak_ptr<cwOffscreenRenderJob>> m_inflightJobs;
     // Render-thread counter held by shared_ptr so a read-back completion lambda can
     // decrement it without capturing `this` (the renderer may be torn down before
     // the read-back fires).
