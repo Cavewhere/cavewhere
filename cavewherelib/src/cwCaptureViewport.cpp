@@ -34,9 +34,6 @@
 #include "cwGlobals.h"
 #include "cwScaleBarItem.h"
 #include "cwCavingRegion.h"
-#include "cwCave.h"
-#include "cwSurveyNetwork.h"
-#include "cwStationPositionLookup.h"
 #include "cwConcurrent.h"
 #include "cwLabelPlacementControl.h"
 
@@ -715,47 +712,6 @@ void cwCaptureViewport::deleteSceneItems()
     m_scaleBar = nullptr;
 }
 
-cwSurveyNetwork cwCaptureViewport::buildCenterlineNetwork() const
-{
-    cwSurveyNetwork network;
-
-    if(m_sceneManager.isNull()) {
-        return network;
-    }
-
-    cwCavingRegion* region = m_sceneManager->cavingRegion();
-    if(region == nullptr) {
-        return network;
-    }
-
-    const QList<cwCave*> caves = region->caves();
-    for(cwCave* cave : caves) {
-        if(cave == nullptr) {
-            continue;
-        }
-
-        const cwSurveyNetwork caveNetwork = cave->network();
-        const cwStationPositionLookup stationLookup = cave->stationPositionLookup();
-        const QStringList stations = caveNetwork.stations();
-        for(const QString& station : stations) {
-            if(stationLookup.hasPosition(station)) {
-                network.setPosition(station, stationLookup.position(station));
-            }
-        }
-
-        for(const QString& station : stations) {
-            const QStringList neighbors = caveNetwork.neighbors(station);
-            for(const QString& neighbor : neighbors) {
-                network.addShot(station, neighbor);
-            }
-        }
-    }
-
-    qDebug() << "Build network station empty:" << network.isEmpty();
-
-    return network;
-}
-
 cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const
 {
     if(parent == nullptr) {
@@ -767,7 +723,9 @@ cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup*
     centerline->setCamera(CaptureCamera);
     centerline->setViewport(viewport());
     centerline->setImageScale(imageScale);
-    centerline->setNetwork(buildCenterlineNetwork());
+    if(!m_sceneManager.isNull()) {
+        centerline->setNetworks(cwCaptureCenterline::caveNetworks(m_sceneManager->cavingRegion()));
+    }
     centerline->setDotsVisible(m_centerlineDotsVisible);
     centerline->setLegsVisible(m_centerlineLegsVisible);
     centerline->setLabelsVisible(m_centerlineLabelsVisible);

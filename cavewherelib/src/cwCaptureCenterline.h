@@ -19,6 +19,8 @@
 #include "cwLabelPlacementControl.h"
 #include "cwSurveyNetwork.h"
 
+class cwCavingRegion;
+
 class CAVEWHERE_LIB_EXPORT cwCaptureCenterline : public cwCaptureLabelItem
 {
 public:
@@ -29,7 +31,10 @@ public:
 
     explicit cwCaptureCenterline(QGraphicsItem* parent = nullptr);
 
-    void setNetwork(const cwSurveyNetwork& network);
+    // One network per cave, each holding its stations' positions and shots.
+    static QList<cwSurveyNetwork> caveNetworks(const cwCavingRegion* region);
+
+    void setNetworks(const QList<cwSurveyNetwork>& networks);
 
     bool dotsVisible() const { return m_dotsVisible; }
     void setDotsVisible(bool visible);
@@ -71,7 +76,7 @@ protected:
     void rebuildGeometry() override;
 
 private:
-    cwSurveyNetwork m_network;
+    QList<cwSurveyNetwork> m_networks;
     QVector<QLineF> m_lines;
     QVector<LabelDrawData> m_stationData;
     QPen m_linePen;

@@ -24,7 +24,6 @@ class cwCamera;
 class cwCaptureCenterline;
 class cwCaptureLeads;
 class cwCaptureLeadLines;
-class cwSurveyNetwork;
 #include "cwFutureManagerToken.h"
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
@@ -194,7 +193,6 @@ private:
     //! Re-hook the export scale bar to the current project's unitSystemChanged
     //! (so FollowProject refreshes live, #470/R3) and refresh it now.
     void updateScaleBarForRegion();
-    cwSurveyNetwork buildCenterlineNetwork() const;
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeadLines* createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const;

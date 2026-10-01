@@ -3,9 +3,12 @@
 
 //Our includes
 #include "cwCamera.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
 #include "cwCaptureCenterline.h"
 #include "cwCaptureLabelPlacer.h"
 #include "cwProjection.h"
+#include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
 
 //Qt includes
@@ -17,6 +20,9 @@
 #include <QRectF>
 #include <QSet>
 #include <QVector3D>
+
+//Std includes
+#include <algorithm>
 
 namespace {
 
@@ -90,7 +96,7 @@ struct CenterlineFixture
         centerline.setViewport(TestViewport);
         centerline.setExportDpi(TestExportDpi);
         centerline.setLabelFont(font);
-        centerline.setNetwork(makeNetwork());
+        centerline.setNetworks({makeNetwork()});
     }
 
     cwCamera camera;
@@ -248,4 +254,85 @@ TEST_CASE("cwCaptureCenterline keeps its geometry while parts are hidden",
     // The viewport, not the item, decides what is a placement obstacle.
     CHECK(centerline.stationPositions() == positions);
     CHECK(centerline.lines() == lines);
+}
+
+TEST_CASE("cwCaptureCenterline keeps caves that share station names apart",
+          "[cwCaptureCenterline]")
+{
+    // Two caves, both starting at "a1", laid side by side in the viewport.
+    // Cave 1 spans x 10..30 and cave 2 spans x 70..90, so any leg crossing
+    // the 30..70 gap joins the two caves.
+    constexpr qreal CaveGapLeft = 30.0;
+    constexpr qreal CaveGapRight = 70.0;
+    constexpr float StationY = 50.0f;
+    constexpr float Cave1A1X = 10.0f;
+    constexpr float Cave2A1X = 90.0f;
+    constexpr qreal PositionTolerance = 1e-3;
+
+    auto addCave = [](cwCavingRegion& region,
+                      const QList<QPair<QString, float>>& stations) {
+        cwSurveyNetwork network;
+        cwStationPositionLookup lookup;
+        for(int i = 0; i < stations.size(); i++) {
+            lookup.setPosition(stations.at(i).first,
+                               QVector3D(stations.at(i).second, StationY, 0.0f));
+            if(i > 0) {
+                network.addShot(stations.at(i - 1).first, stations.at(i).first);
+            }
+        }
+        auto* cave = new cwCave();
+        cave->setSurveyNetwork(network);
+        cave->setStationPositionLookup(lookup);
+        region.addCave(cave);
+    };
+
+    cwCavingRegion region;
+    addCave(region, {{"a1", Cave1A1X}, {"a2", 20.0f}, {"a3", 30.0f}});
+    addCave(region, {{"a1", Cave2A1X}, {"b2", 80.0f}, {"b3", 70.0f}});
+
+    cwCamera camera;
+    camera.setViewport(TestViewport);
+    cwProjection projection;
+    projection.setOrtho(0.0, TestViewport.width(), 0.0, TestViewport.height(),
+                        -1.0, 1.0);
+    camera.setProjection(projection);
+
+    cwCaptureCenterline centerline;
+    centerline.setCamera(&camera);
+    centerline.setViewport(TestViewport);
+    centerline.setExportDpi(TestExportDpi);
+    centerline.setLabelFont(makeFixtureFont());
+    centerline.setNetworks(cwCaptureCenterline::caveNetworks(&region));
+
+    // Every leg stays on its own side of the gap.
+    const QVector<QLineF> lines = centerline.lines();
+    CHECK(lines.size() == 4);
+    for(const QLineF& line : lines) {
+        INFO("Leg from x=" << line.x1() << " to x=" << line.x2());
+        const qreal left = qMin(line.x1(), line.x2());
+        const qreal right = qMax(line.x1(), line.x2());
+        CHECK((right <= CaveGapLeft || left >= CaveGapRight));
+    }
+
+    // Each cave keeps its own "a1" dot and label.
+    const QVector<QPointF> positions = centerline.stationPositions();
+    CHECK(positions.size() == 6);
+    // Every station sits on one row, so x alone identifies it.
+    auto hasStationAtX = [&](qreal x) {
+        return std::any_of(positions.begin(), positions.end(), [&](const QPointF& position) {
+            return qAbs(position.x() - x) < PositionTolerance;
+        });
+    };
+    CHECK(hasStationAtX(Cave1A1X));
+    CHECK(hasStationAtX(Cave2A1X));
+
+    const auto requests = centerline.buildLabelRequests();
+    int a1Labels = 0;
+    for(const auto& request : requests) {
+        if(request.text == QStringLiteral("a1")) {
+            ++a1Labels;
+        }
+    }
+    CHECK(requests.size() == 6);
+    CHECK(a1Labels == 2);
 }
