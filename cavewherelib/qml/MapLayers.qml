@@ -276,12 +276,6 @@ ColumnLayout {
                 }
             }
 
-            QC.CheckBox {
-                id: scaleBarCheckBoxId
-                text: "Scale Bar"
-                checked: true
-            }
-
             RowLayout {
                 enabled: scaleBarCheckBoxId.checked
 
@@ -299,6 +293,12 @@ ColumnLayout {
             }
 
             QC.CheckBox {
+                id: scaleBarCheckBoxId
+                text: "Scale Bar"
+                checked: true
+            }
+
+            QC.CheckBox {
                 id: leadsCheckBoxId
                 objectName: "leadsCheckBox"
                 text: "Leads"
@@ -308,13 +308,20 @@ ColumnLayout {
             QC.GroupBox {
                 id: centerlineGroupBoxId
                 objectName: "centerlineGroupBox"
-                title: "Centerline"
+                title: "Survey"
 
                 ColumnLayout {
                     QC.CheckBox {
                         id: centerlineDotsCheckBoxId
                         objectName: "centerlineDotsCheckBox"
-                        text: "Dots"
+                        text: "Stations"
+                        checked: true
+                    }
+
+                    QC.CheckBox {
+                        id: centerlineLabelsCheckBoxId
+                        objectName: "centerlineLabelsCheckBox"
+                        text: "Station Labels"
                         checked: true
                     }
 
@@ -322,13 +329,6 @@ ColumnLayout {
                         id: centerlineLegsCheckBoxId
                         objectName: "centerlineLegsCheckBox"
                         text: "Legs"
-                        checked: true
-                    }
-
-                    QC.CheckBox {
-                        id: centerlineLabelsCheckBoxId
-                        objectName: "centerlineLabelsCheckBox"
-                        text: "Labels"
                         checked: true
                     }
                 }
