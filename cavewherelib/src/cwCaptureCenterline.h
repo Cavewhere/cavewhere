@@ -31,6 +31,15 @@ public:
 
     void setNetwork(const cwSurveyNetwork& network);
 
+    bool dotsVisible() const { return m_dotsVisible; }
+    void setDotsVisible(bool visible);
+
+    bool legsVisible() const { return m_legsVisible; }
+    void setLegsVisible(bool visible);
+
+    bool labelsVisible() const { return m_labelsVisible; }
+    void setLabelsVisible(bool visible);
+
     // Builds one placement request per named station (sorted top-to-bottom,
     // left-to-right by rebuildGeometry; text measured with the scaled label
     // font). Runs on the export worker thread; the optional control's
@@ -39,7 +48,8 @@ public:
     // skip measurement without changing placements (see the struct's
     // comment); a default-constructed viewport disables that cull. Feed the
     // returned requests to cwCaptureLabelPlacer::placeAll and hand the
-    // matching slice of its results to applyPlacements.
+    // matching slice of its results to applyPlacements. Returns no requests
+    // while labels are hidden.
     QVector<cwCaptureLabelPlacer::LabelRequest> buildLabelRequests(
         const cwLabelPlacementControl& control = {},
         const cwCaptureLabelPlacer::PlacementViewport& viewport = {});
@@ -68,6 +78,9 @@ private:
     QPen m_stationPen;
     QBrush m_stationBrush;
     qreal m_baseStationRadius;
+    bool m_dotsVisible = true;
+    bool m_legsVisible = true;
+    bool m_labelsVisible = true;
 };
 
 #endif // CWCAPTURECENTERLINE_H

@@ -224,6 +224,8 @@ if(BUILD_TESTING)
             testlib/MockAuthProvider.h
             testlib/SvgOverlapAnalyzer.cpp
             testlib/SvgOverlapAnalyzer.h
+            testlib/CaptureLayerInspector.cpp
+            testlib/CaptureLayerInspector.h
             testlib/OffscreenRenderTester.cpp
             testlib/OffscreenRenderTester.h
             testlib/WindowGrabber.cpp

@@ -67,27 +67,59 @@ QSet<QString> names(const QVector<cwCaptureLabelPlacer::LabelRequest>& requests)
     return result;
 }
 
+QFont makeFixtureFont()
+{
+    QFont font;
+    font.setPointSizeF(FixtureFontPointSize);
+    return font;
+}
+
+// A centerline over makeNetwork(), seen through an ortho camera that maps the
+// network's world (x, y) onto TestViewport 1:1.
+struct CenterlineFixture
+{
+    CenterlineFixture()
+    {
+        camera.setViewport(TestViewport);
+        cwProjection projection;
+        projection.setOrtho(0.0, TestViewport.width(), 0.0, TestViewport.height(),
+                            -1.0, 1.0);
+        camera.setProjection(projection);
+
+        centerline.setCamera(&camera);
+        centerline.setViewport(TestViewport);
+        centerline.setExportDpi(TestExportDpi);
+        centerline.setLabelFont(font);
+        centerline.setNetwork(makeNetwork());
+    }
+
+    cwCamera camera;
+    QFont font = makeFixtureFont();
+    cwCaptureCenterline centerline;
+};
+
+QVector<cwCaptureLabelPlacer::Placement> placeEvery(
+    const QVector<cwCaptureLabelPlacer::LabelRequest>& requests)
+{
+    QVector<cwCaptureLabelPlacer::Placement> placements;
+    placements.reserve(requests.size());
+    for(int i = 0; i < requests.size(); i++) {
+        cwCaptureLabelPlacer::Placement placement;
+        placement.placed = true;
+        placement.labelRect = QRectF(10.0 * (i + 1), 5.0, 8.0, 4.0);
+        placements.append(placement);
+    }
+    return placements;
+}
+
 } // namespace
 
 TEST_CASE("cwCaptureCenterline buildLabelRequests culls off-viewport stations before measuring",
           "[cwCaptureCenterline]")
 {
-    cwCamera camera;
-    camera.setViewport(TestViewport);
-    cwProjection projection;
-    projection.setOrtho(0.0, TestViewport.width(), 0.0, TestViewport.height(),
-                        -1.0, 1.0);
-    camera.setProjection(projection);
-
-    QFont fixtureFont;
-    fixtureFont.setPointSizeF(FixtureFontPointSize);
-
-    cwCaptureCenterline centerline;
-    centerline.setCamera(&camera);
-    centerline.setViewport(TestViewport);
-    centerline.setExportDpi(TestExportDpi);
-    centerline.setLabelFont(fixtureFont);
-    centerline.setNetwork(makeNetwork());
+    CenterlineFixture fixture;
+    cwCaptureCenterline& centerline = fixture.centerline;
+    const QFont& fixtureFont = fixture.font;
 
     const QRectF viewportBounds = centerline.boundingRect();
     REQUIRE(viewportBounds == QRectF(0.0, 0.0, 100.0, 100.0));
@@ -146,14 +178,8 @@ TEST_CASE("cwCaptureCenterline buildLabelRequests culls off-viewport stations be
     // applyPlacements maps results through the culled request list back to
     // the right stations: each placed rect lands on its request's station and
     // the culled station stays unlabeled.
-    QVector<cwCaptureLabelPlacer::Placement> placements;
-    placements.reserve(culledRequests.size());
-    for(int i = 0; i < culledRequests.size(); i++) {
-        cwCaptureLabelPlacer::Placement placement;
-        placement.placed = true;
-        placement.labelRect = QRectF(10.0 * (i + 1), 5.0, 8.0, 4.0);
-        placements.append(placement);
-    }
+    const QVector<cwCaptureLabelPlacer::Placement> placements =
+        placeEvery(culledRequests);
     centerline.applyPlacements(placements);
 
     const auto placedLabels = centerline.placedLabels();
@@ -167,4 +193,59 @@ TEST_CASE("cwCaptureCenterline buildLabelRequests culls off-viewport stations be
         CHECK(placedByName.value(culledRequests.at(i).text)
               == placements.at(i).labelRect);
     }
+}
+
+TEST_CASE("cwCaptureCenterline defaults every part to visible",
+          "[cwCaptureCenterline]")
+{
+    const cwCaptureCenterline centerline;
+    CHECK(centerline.dotsVisible());
+    CHECK(centerline.legsVisible());
+    CHECK(centerline.labelsVisible());
+}
+
+TEST_CASE("cwCaptureCenterline builds no label requests while labels are hidden",
+          "[cwCaptureCenterline]")
+{
+    CenterlineFixture fixture;
+    cwCaptureCenterline& centerline = fixture.centerline;
+
+    REQUIRE(centerline.labelsVisible());
+    const auto visibleRequests = centerline.buildLabelRequests();
+    REQUIRE_FALSE(visibleRequests.isEmpty());
+    centerline.applyPlacements(placeEvery(visibleRequests));
+    REQUIRE(centerline.placedLabels().size() == visibleRequests.size());
+
+    centerline.setLabelsVisible(false);
+    CHECK_FALSE(centerline.labelsVisible());
+    CHECK(centerline.buildLabelRequests().isEmpty());
+
+    // The request index from the visible build is cleared, so the empty slice
+    // matches it, and the earlier placements are dropped.
+    centerline.applyPlacements({});
+    CHECK(centerline.placedLabels().isEmpty());
+
+    centerline.setLabelsVisible(true);
+    CHECK(names(centerline.buildLabelRequests()) == names(visibleRequests));
+}
+
+TEST_CASE("cwCaptureCenterline keeps its geometry while parts are hidden",
+          "[cwCaptureCenterline]")
+{
+    CenterlineFixture fixture;
+    cwCaptureCenterline& centerline = fixture.centerline;
+
+    const QVector<QPointF> positions = centerline.stationPositions();
+    const QVector<QLineF> lines = centerline.lines();
+    REQUIRE_FALSE(positions.isEmpty());
+    REQUIRE_FALSE(lines.isEmpty());
+
+    centerline.setDotsVisible(false);
+    centerline.setLegsVisible(false);
+    CHECK_FALSE(centerline.dotsVisible());
+    CHECK_FALSE(centerline.legsVisible());
+
+    // The viewport, not the item, decides what is a placement obstacle.
+    CHECK(centerline.stationPositions() == positions);
+    CHECK(centerline.lines() == lines);
 }

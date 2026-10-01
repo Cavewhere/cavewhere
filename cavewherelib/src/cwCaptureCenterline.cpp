@@ -45,6 +45,33 @@ void cwCaptureCenterline::setNetwork(const cwSurveyNetwork& network)
     rebuildGeometry();
 }
 
+void cwCaptureCenterline::setDotsVisible(bool visible)
+{
+    if(m_dotsVisible == visible) {
+        return;
+    }
+    m_dotsVisible = visible;
+    update();
+}
+
+void cwCaptureCenterline::setLegsVisible(bool visible)
+{
+    if(m_legsVisible == visible) {
+        return;
+    }
+    m_legsVisible = visible;
+    update();
+}
+
+void cwCaptureCenterline::setLabelsVisible(bool visible)
+{
+    if(m_labelsVisible == visible) {
+        return;
+    }
+    m_labelsVisible = visible;
+    update();
+}
+
 qreal cwCaptureCenterline::stationDotRadius() const
 {
     return m_baseStationRadius * m_paperPxToLocal;
@@ -85,39 +112,45 @@ void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsIte
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setClipRect(m_boundingRect);
 
-    painter->setPen(m_linePen);
-    painter->setBrush(Qt::NoBrush);
-    painter->drawLines(m_lines);
-
-    const qreal stationRadius = stationDotRadius();
-
-    painter->setPen(m_stationPen);
-    painter->setBrush(m_stationBrush);
-    for(const auto& station : std::as_const(m_stationData)) {
-        if(!m_boundingRect.contains(station.anchor)) {
-            continue;
-        }
-        painter->drawEllipse(station.anchor, stationRadius, stationRadius);
+    if(m_legsVisible) {
+        painter->setPen(m_linePen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawLines(m_lines);
     }
 
-    painter->setPen(m_labelPen);
-    const QFont renderFont = scaledLabelFont();
-    painter->setFont(renderFont);
-    const QFontMetricsF paintMetrics(renderFont);
-    for(const auto& station : std::as_const(m_stationData)) {
-        if(!m_boundingRect.contains(station.anchor)) {
-            continue;
+    if(m_dotsVisible) {
+        const qreal stationRadius = stationDotRadius();
+
+        painter->setPen(m_stationPen);
+        painter->setBrush(m_stationBrush);
+        for(const auto& station : std::as_const(m_stationData)) {
+            if(!m_boundingRect.contains(station.anchor)) {
+                continue;
+            }
+            painter->drawEllipse(station.anchor, stationRadius, stationRadius);
         }
-        if(station.labelRect.isEmpty()) {
-            continue;
+    }
+
+    if(m_labelsVisible) {
+        painter->setPen(m_labelPen);
+        const QFont renderFont = scaledLabelFont();
+        painter->setFont(renderFont);
+        const QFontMetricsF paintMetrics(renderFont);
+        for(const auto& station : std::as_const(m_stationData)) {
+            if(!m_boundingRect.contains(station.anchor)) {
+                continue;
+            }
+            if(station.labelRect.isEmpty()) {
+                continue;
+            }
+            // The placer reserved a rect tightly sized to glyph ink; draw at the
+            // baseline-left point that puts the painter's own tight ink rect at
+            // labelRect's top-left.
+            const QRectF tight = paintMetrics.tightBoundingRect(station.text);
+            painter->drawText(
+                cwCaptureLabelPlacer::baselineForGlyphInkRect(station.labelRect, tight),
+                station.text);
         }
-        // The placer reserved a rect tightly sized to glyph ink; draw at the
-        // baseline-left point that puts the painter's own tight ink rect at
-        // labelRect's top-left.
-        const QRectF tight = paintMetrics.tightBoundingRect(station.text);
-        painter->drawText(
-            cwCaptureLabelPlacer::baselineForGlyphInkRect(station.labelRect, tight),
-            station.text);
     }
 
     painter->restore();
@@ -180,10 +213,20 @@ QVector<cwCaptureLabelPlacer::LabelRequest> cwCaptureCenterline::buildLabelReque
     const cwLabelPlacementControl& control,
     const cwCaptureLabelPlacer::PlacementViewport& viewport)
 {
-    // Note: station dots are seeded into the placer's obstacle set by
-    // cwCaptureViewport before the placer is finalized, so this method does
-    // NOT call addObstacleRect or finalize.
-    return buildRequests(m_stationData, control, viewport);
+    if(m_labelsVisible) {
+        // Note: station dots are seeded into the placer's obstacle set by
+        // cwCaptureViewport before the placer is finalized, so this method does
+        // NOT call addObstacleRect or finalize.
+        return buildRequests(m_stationData, control, viewport);
+    }
+
+    // Hidden labels place nothing. Clear the index so the empty placement
+    // slice applyPlacements receives matches it, and drop any earlier rects.
+    clearRequestIndex();
+    for(auto& station : m_stationData) {
+        station.resetPlacement();
+    }
+    return {};
 }
 
 void cwCaptureCenterline::applyPlacements(

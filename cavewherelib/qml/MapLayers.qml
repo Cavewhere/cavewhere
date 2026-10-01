@@ -304,6 +304,35 @@ ColumnLayout {
                 text: "Leads"
                 checked: false
             }
+
+            QC.GroupBox {
+                id: centerlineGroupBoxId
+                objectName: "centerlineGroupBox"
+                title: "Centerline"
+
+                ColumnLayout {
+                    QC.CheckBox {
+                        id: centerlineDotsCheckBoxId
+                        objectName: "centerlineDotsCheckBox"
+                        text: "Dots"
+                        checked: true
+                    }
+
+                    QC.CheckBox {
+                        id: centerlineLegsCheckBoxId
+                        objectName: "centerlineLegsCheckBox"
+                        text: "Legs"
+                        checked: true
+                    }
+
+                    QC.CheckBox {
+                        id: centerlineLabelsCheckBoxId
+                        objectName: "centerlineLabelsCheckBox"
+                        text: "Labels"
+                        checked: true
+                    }
+                }
+            }
         }
 
         states: [
@@ -376,6 +405,27 @@ ColumnLayout {
                         checked: layerProperties.layerObject.leadsVisible
                         onCheckedChanged: {
                             layerProperties.layerObject.leadsVisible = leadsCheckBoxId.checked
+                        }
+                    }
+
+                    centerlineDotsCheckBoxId {
+                        checked: layerProperties.layerObject.centerlineDotsVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.centerlineDotsVisible = centerlineDotsCheckBoxId.checked
+                        }
+                    }
+
+                    centerlineLegsCheckBoxId {
+                        checked: layerProperties.layerObject.centerlineLegsVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.centerlineLegsVisible = centerlineLegsCheckBoxId.checked
+                        }
+                    }
+
+                    centerlineLabelsCheckBoxId {
+                        checked: layerProperties.layerObject.centerlineLabelsVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.centerlineLabelsVisible = centerlineLabelsCheckBoxId.checked
                         }
                     }
                 }
