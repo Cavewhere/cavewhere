@@ -219,10 +219,9 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
         }
 
         if (item->pipelineNeedsUpdate) {
-            // Live-only pre-build so createShaderResourceBindings has a
-            // pipelineRecord; gather() is the authoritative build (the offscreen
-            // path never comes through here). Key on this item's pass entry —
-            // see ResourceUpdateData::perPassRenderData.
+            // Live-only pre-build; gather() is the authoritative build (the
+            // offscreen path never comes through here). Key on this item's pass
+            // entry — see ResourceUpdateData::perPassRenderData.
             Q_ASSERT(data.perPassRenderData);
             const auto pass = toRenderPass(item->material.renderPass);
             const RenderData& routed = (*data.perPassRenderData)[static_cast<size_t>(pass)];
@@ -1046,10 +1045,9 @@ void cwRhiTexturedItems::Item::purgePipelinesFor(QRhiRenderPassDescriptor* descr
 void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdateData& data,
                                                              const SharedItemData& sharedData)
 {
-    if (!pipelineRecord || !pipelineRecord->pipeline) {
-        return;
-    }
-
+    // Rebuilt whether or not a pipeline record exists: the bindings are
+    // pass-independent, and a purge nulls the record while the texture or
+    // uniform buffer these bindings reference can still be replaced.
     QRhi* rhi = data.renderData.cb->rhi();
     auto* renderer = data.renderData.renderer;
 
@@ -1091,7 +1089,8 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
     srb = rhi->newShaderResourceBindings();
     srb->setBindings(bindings.cbegin(), bindings.cend());
     srb->create();
-    Q_ASSERT(!pipelineRecord->layout || pipelineRecord->layout->isLayoutCompatible(srb));
+    Q_ASSERT(!pipelineRecord || !pipelineRecord->layout
+             || pipelineRecord->layout->isLayoutCompatible(srb));
 }
 
 QByteArray cwRhiTexturedItems::Item::buildPerDrawUniformPayload() const
