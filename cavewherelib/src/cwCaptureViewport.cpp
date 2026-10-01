@@ -298,9 +298,11 @@ void cwCaptureViewport::capture()
                                                     originalProj);
 
     // Hide the gradient/grid/line-plot so the rendered tiles are transparent-backed,
-    // but keep point clouds visible so they appear in the export (EDL-lit, as in the
-    // live view). Per-tile visibility override (not a global toggle), so the live 3D
-    // view stays interactive and undisturbed throughout the export.
+    // and hide the 3D station-label/lead billboards because the export redraws them
+    // as 2D overlays. Keep point clouds visible so they appear in the export
+    // (EDL-lit, as in the live view). Per-tile visibility override (not a global
+    // toggle), so the live 3D view stays interactive and undisturbed throughout the
+    // export.
     const QSet<cwRenderObjectId> hiddenObjectIds =
         m_sceneManager.isNull() ? QSet<cwRenderObjectId>{}
                                 : m_sceneManager->captureHiddenObjectIds();

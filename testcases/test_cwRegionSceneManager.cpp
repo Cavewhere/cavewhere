@@ -11,6 +11,8 @@
 #include <QVector3D>
 
 #include "cwRegionSceneManager.h"
+#include "cwRenderBillboards.h"
+#include "cwScene.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderGridPlane.h"
 #include "cwSignalSpy.h"
@@ -61,4 +63,12 @@ TEST_CASE("cwRegionSceneManager snaps the grid plane to the lowest cave depth",
         linePlot->setGeometry({ QVector3D(0.0f, 0.0f, -10.0f) });
         CHECK(geometrySpy.count() == 1);
     }
+}
+
+TEST_CASE("cwRegionSceneManager hides 3D billboards from map export tiles",
+          "[cwRegionSceneManager]")
+{
+    cwRegionSceneManager sceneManager;
+    const QSet<cwRenderObjectId> hidden = sceneManager.captureHiddenObjectIds();
+    CHECK(hidden.contains(sceneManager.scene()->billboardLayer()->renderObjectId()));
 }
