@@ -24,8 +24,8 @@
  * (cwEquate). A handle names a station by the scope it lives in plus the
  * tail (the station name relative to that scope), never by a fully-qualified
  * flat string. That keeps the tie valid when a trip is re-parented or a
- * cave/trip is renamed, and lets one handle type serve both the cwCave
- * (within-cave) and cwCavingRegion (cross-cave) equate homes.
+ * cave/trip is renamed, and lets one handle type name a station in any node
+ * of the region's one equate list.
  *
  * containerId is always populated (option A in the plan):
  *   - NativeCave: containerId is the owning cave's id; the station is a bare

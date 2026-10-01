@@ -18,16 +18,13 @@
 #include "cwGlobals.h"
 
 /**
- * QAbstractListModel of cwEquate rows. One is owned by each cwCave (within-cave
- * ties) and one by the cwCavingRegion (cross-cave ties); the two are identical
- * - the difference is only which handles the owner accepts (see
- * cwCave::validate). Rows are added/removed as whole equates; individual
- * station handles are not edited in place at this stage (no equate UX yet -
- * that is commit 6).
+ * QAbstractListModel of cwEquate rows. The cwCavingRegion owns the one list
+ * holding every tie in the project, within one node or across nodes. Rows are
+ * added/removed as whole equates; individual station handles are not edited in
+ * place at this stage (no equate UX yet - that is commit 6).
  *
- * The persistence layer marks the owner dirty off this model's row and reset
- * signals, exactly as cwFixStationModel does for a cave, so a handle added or
- * removed here reaches disk.
+ * The persistence layer saves the project file off this model's row signals,
+ * so a handle added or removed here reaches disk.
  */
 class CAVEWHERE_LIB_EXPORT cwEquateModel : public QAbstractListModel
 {

@@ -478,7 +478,7 @@ TEST_CASE("An excluded owner's ties are dropped rather than left dangling",
         setupNativeAndAttached(tempRoot, region, QStringLiteral("survex_simple.svx"));
 
     // Tie the attached trip to the native cave's A1, then exclude the trip.
-    setup.cave->equates()->appendEquate(cwEquate({
+    region.equates()->appendEquate(cwEquate({
         cwStationHandle(cwStationHandle::Trip, setup.attached->id(),
                         QStringLiteral("simple.a1")),
         cwStationHandle(cwStationHandle::NativeCave, setup.cave->id(),
@@ -506,7 +506,7 @@ TEST_CASE("An excluded owner's ties are dropped rather than left dangling",
 TEST_CASE("A cross-cave tie into an excluded owner is dropped too",
           "[ExternalCenterline][Containment]")
 {
-    // The cave-scope drop above and this one share the excluded set, so an
+    // The within-cave drop above and this one share the excluded set, so an
     // owner excluded for a missing in-project copy is dropped from a region
     // tie by the same code the containment case exercises.
     QTemporaryDir tempRoot;
@@ -536,7 +536,7 @@ TEST_CASE("A cross-cave tie into an excluded owner is dropped too",
         cwSurvexExporterRegion::exportRegion(region.data(), outputPath, options);
     REQUIRE_FALSE(result.hasError());
 
-    // Same fabrication risk as the cave-scope tie, one scope out: cavern would
+    // Same fabrication risk as the within-cave tie, one scope out: cavern would
     // create the named station under the excluded owner's label rather than
     // reject the operand.
     const QByteArray driver = fileContents(outputPath);

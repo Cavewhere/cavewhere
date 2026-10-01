@@ -54,7 +54,6 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     m_stationPositionLookupStale(false),
     m_id(QUuid::createUuid()),
     m_gridConvergence(new cwGridConvergence(this)),
-    m_equates(new cwEquateModel(this)),
     m_keywordModel(new cwKeywordModel(this)),
     m_isRoot(isRoot)
 {
@@ -1300,7 +1299,6 @@ cwCaveData cwSurveyNode::data() const
         static_cast<cwUnits::LengthUnit>(depth()->unit()),
         m_fixStations->fixStations(),
         m_externalCenterline,
-        m_equates->equates(),
         cwData::toDataList<cwCaveData>(m_childNodes),
         m_kind,
         m_readOnly,
@@ -1325,7 +1323,6 @@ void cwSurveyNode::setData(const cwCaveData &data)
     clearTrips();
 
     m_fixStations->setFixStations(data.fixStations);
-    m_equates->setEquates(data.equates);
 
     //Each child is filled in before it is inserted, so the whole subtree exists
     //by the time this node says a row appeared — the way a trip is filled in

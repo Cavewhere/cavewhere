@@ -46,10 +46,9 @@ message Project {
     optional ProjectMetadata metadata = 3;
     optional string id = 4; // UUID, stable across renames
 
-    // Region-level (cross-cave) equate ties: a station in one cave tied to a
-    // station in another. Within-cave ties live on each Cave instead. Held on
-    // the region top-level file (the Project message) because the new
-    // directory format stores each cave in its own file and has no separate
+    // Every equate tie in the project, within one node or across nodes. Held
+    // on the region top-level file (the Project message) because the
+    // directory format stores each node in its own file and has no separate
     // CavingRegion message on disk.
     repeated Equate equates = 5;
 }
@@ -139,9 +138,11 @@ message Cave {
     // Native caves; present (and entry_file set) for Attached/Scope.
     optional ExternalCenterline external_centerline = 12;
 
-    // Within-cave equate ties (a station tied to another station in the same
-    // cave). Cross-cave ties live on the region (Project.equates).
-    repeated Equate equates = 13;
+    // Legacy, read only: within-node equate ties as files written before every
+    // tie moved to Project.equates. The loader appends them to the region list;
+    // the writer never sets this field, so the next save of the node drops it.
+    // json_name keeps the key those files carry.
+    repeated Equate legacy_equates = 13 [json_name = "equates"];
 
     // Survey-tree fields. A node's child nodes live in <nodeDir>/sub/, each
     // with its own .cwcave; these scalars say what the node is.

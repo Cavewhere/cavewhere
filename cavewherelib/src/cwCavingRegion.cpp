@@ -496,18 +496,16 @@ bool cwCavingRegion::tieStations(const cwStationHandle& first,
         return false;
     }
 
-    const bool withinOneCave = (firstCave == secondCave);
-    if (withinOneCave && !firstCave->validate(equate)) {
+    const bool withinOneNode = (firstCave == secondCave);
+    if (withinOneNode && !firstCave->validate(equate)) {
         return false;
     }
-
-    cwEquateModel* home = withinOneCave ? firstCave->equates() : m_equates;
 
     //A tie is a fact about two stations, so declaring it twice says nothing
     //more. Checked by membership rather than by equality: an equate that
     //already ties these two along with a third still says what the caller
     //asked for.
-    const QList<cwEquate>& declared = home->equates();
+    const QList<cwEquate>& declared = m_equates->equates();
     const bool alreadyTied = std::any_of(declared.cbegin(), declared.cend(),
                                          [&first, &second](const cwEquate& existing) {
         const QList<cwStationHandle> stations = existing.stations();
@@ -517,7 +515,7 @@ bool cwCavingRegion::tieStations(const cwStationHandle& first,
         return true;
     }
 
-    home->appendEquate(equate);
+    m_equates->appendEquate(equate);
     return true;
 }
 

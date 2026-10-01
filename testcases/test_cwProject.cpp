@@ -8,6 +8,9 @@ using namespace Catch;
 #include "cwProject.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
+#include "cwStationHandle.h"
 #include "cwTrip.h"
 #include "TestHelper.h"
 #include "cwImageProvider.h"
@@ -11893,6 +11896,26 @@ TEST_CASE("New project region name is a friendly mountain name", "[cwProject][ne
     CHECK(parts.size() == 2);
     CHECK_FALSE(parts.value(0).isEmpty());
     CHECK_FALSE(parts.value(1).isEmpty());
+}
+
+TEST_CASE("A new project starts with no equate ties", "[cwProject][newProject]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    auto region = project->cavingRegion();
+
+    region->addCave();
+    const QUuid caveId = region->cave(0)->id();
+    region->equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, caveId, QStringLiteral("1")),
+        cwStationHandle(cwStationHandle::NativeCave, caveId, QStringLiteral("2"))
+    }));
+    REQUIRE(region->equates()->count() == 1);
+
+    // The ties name stations of the caves the old project held, so they go with
+    // those caves.
+    project->newProject();
+    CHECK(region->caveCount() == 0);
+    CHECK(region->equates()->count() == 0);
 }
 
 TEST_CASE("Temp project first save to directory initializes dataRoot from basename", "[cwProject][saveAs]") {

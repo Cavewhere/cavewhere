@@ -7,28 +7,11 @@
 
 #include "cwSurvexExporterRegion.h"
 #include "cwLinePlotErrorCodes.h"
-#include "cwStationHandle.h"
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterUtils.h"
 
 #include <QFile>
 #include <QTextStream>
-
-namespace {
-
-// Emit each region equate as a fully-qualified "*equate" at region scope,
-// after every node's "*begin" block has been declared and closed. Cavern
-// merges the tied stations to one coordinate; the decode then routes each
-// qualified name back to its node.
-void writeRegionEquates(QTextStream& stream, const cwCavingRegionData& region,
-                        const cwSurvexExporterCaveTask::DriverTree& tree)
-{
-    cwSurvexExporterCaveTask::writeEquates(
-        stream, region.equates,
-        [&tree](const cwStationHandle& handle) { return tree.operand(handle); });
-}
-
-} // namespace
 
 Monad::ResultBase
 cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
@@ -77,8 +60,10 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     }
 
     // Region equates emit here, after every block is declared and closed, so
-    // every fully-qualified operand is in scope.
-    writeRegionEquates(stream, region, tree);
+    // every fully-qualified operand is in scope. Cavern merges the tied
+    // stations to one coordinate; the decode then routes each qualified name
+    // back to its node.
+    cwSurvexExporterCaveTask::writeEquates(stream, region.equates, tree);
 
     stream << "*end" << Qt::endl;
     stream.flush();

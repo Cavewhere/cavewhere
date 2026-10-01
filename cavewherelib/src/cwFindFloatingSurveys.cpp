@@ -81,31 +81,24 @@ class ScopeTies
 public:
     ScopeTies(const cwCavingRegionData& region, const ScopeIndex& index)
     {
-        const auto tie = [this, &index](const QList<cwEquate>& equates) {
-            for (const cwEquate& equate : equates) {
-                if (!equate.isValid()) {
-                    continue; //cannot tie anything; the exporter drops it too
-                }
-                //Hub on the first operand that resolves, not on operand zero: a
-                //handle naming a container this region no longer holds resolves
-                //to nothing, and hubbing on it would silently tie none of the
-                //operands that are perfectly good.
-                ScopeKey hub;
-                for (const cwStationHandle& station : equate.stations()) {
-                    const ScopeKey scope = index.scopeOf(station);
-                    if (hub.isNull()) {
-                        hub = scope;
-                    } else {
-                        join(hub, scope);
-                    }
+        for (const cwEquate& equate : region.equates) {
+            if (!equate.isValid()) {
+                continue; //cannot tie anything; the exporter drops it too
+            }
+            //Hub on the first operand that resolves, not on operand zero: a
+            //handle naming a container this region no longer holds resolves
+            //to nothing, and hubbing on it would silently tie none of the
+            //operands that are perfectly good.
+            ScopeKey hub;
+            for (const cwStationHandle& station : equate.stations()) {
+                const ScopeKey scope = index.scopeOf(station);
+                if (hub.isNull()) {
+                    hub = scope;
+                } else {
+                    join(hub, scope);
                 }
             }
-        };
-
-        for (const cwCaveData& cave : region.caves) {
-            tie(cave.equates);
         }
-        tie(region.equates);
     }
 
     bool connected(const ScopeKey& first, const ScopeKey& second) const

@@ -1241,8 +1241,9 @@ void cwProject::newProject() {
         disconnectSaveLoad(m_saveLoad);
     }
 
-    //Clear all the caves
+    //Clear all the caves, and the ties that name their stations
     Region->clearCaves();
+    Region->equates()->setEquates({});
     Region->lazLayers()->clear();
     if(UndoStack) {
         UndoStack->clear();

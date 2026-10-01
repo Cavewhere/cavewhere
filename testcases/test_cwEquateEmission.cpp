@@ -8,16 +8,12 @@
 // Commits 4 & 5 of plans/EXTERNAL_FILE_EQUATES_AND_SCOPING.html: cave-level
 // and region-level *equate emission.
 //
-// A cwCave equate renders as a bare *equate line at cave scope inside the
-// driver, with cave-relative operands — a NativeCave handle as its tail, a
-// Trip handle as "<scopePrefix><tail>". The solve then merges the tied
-// stations to one coordinate, which is the payoff: a native station and an
-// externally-attached station drawn coincident.
-//
-// A cwCavingRegion equate renders at region scope, after both caves' *begin
-// siblings close, with fully-qualified operands (the owning cave's own label
-// prepended to the same cave-relative rendering). A cross-cave tie draws
-// stations in two different caves coincident across the cave boundary.
+// Every equate lives in the region's one list (C4.3 of
+// plans/SURVEY_TREE_PLAN.html) and renders at region scope, after every
+// node's *begin block closes, with fully-qualified operands: the node's label
+// path, then a Trip handle's scope prefix, then the tail. A tie inside one cave
+// draws a native station and an externally-attached one coincident; a
+// cross-cave tie does the same across the cave boundary.
 
 // Catch
 #include <catch2/catch_approx.hpp>
@@ -38,7 +34,9 @@
 #include "cwStationHandle.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
+#include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterRegion.h"
+#include "cwSurveyExportManager.h"
 #include "cwCavernRunner.h"
 #include "cwSurvex3DFileReader.h"
 #include "cwTrip.h"
@@ -47,19 +45,26 @@
 #include "ExternalCenterlineTestHelpers.h"
 
 // Qt
+#include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QHash>
 #include <QRegularExpression>
 #include <QSet>
 #include <QString>
 #include <QTemporaryDir>
+#include <QTextStream>
 #include <QUuid>
 
 // Std
 #include <algorithm>
 
 namespace {
+
+// The cave export runs as a background task; this bounds the wait for its file.
+constexpr qint64 kExportTimeoutMs = 10000;
+constexpr int kExportPollMs = 10;
 
 // A one-shot native trip (station `fromName` -> `toName`, level, along the
 // given `compass` bearing). It carries no fix, so the exporter fallback-fixes
@@ -198,7 +203,7 @@ void checkCoincident(const cwStationPositionLookup& lookup, const QString& first
 
 } // namespace
 
-TEST_CASE("Cave equate emits a bare *equate line at cave scope", "[Equate][Emission]")
+TEST_CASE("A within-cave equate emits fully qualified after the cave block closes", "[Equate][Emission]")
 {
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
@@ -218,10 +223,10 @@ TEST_CASE("Cave equate emits a bare *equate line at cave scope", "[Equate][Emiss
     // A cross-scope tie (native 1 == the external centerline's simple.a1)
     // and a within-native tie (1 == 2), so both operand renderings are
     // exercised in one driver.
-    cave->equates()->appendEquate(cwEquate({nativeHandle(cave, QStringLiteral("1")),
-                                            tripHandle(attached, QStringLiteral("simple.a1"))}));
-    cave->equates()->appendEquate(cwEquate({nativeHandle(cave, QStringLiteral("1")),
-                                            nativeHandle(cave, QStringLiteral("2"))}));
+    region.equates()->appendEquate(cwEquate({nativeHandle(cave, QStringLiteral("1")),
+                                             tripHandle(attached, QStringLiteral("simple.a1"))}));
+    region.equates()->appendEquate(cwEquate({nativeHandle(cave, QStringLiteral("1")),
+                                             nativeHandle(cave, QStringLiteral("2"))}));
 
     cwSurvexExporterRegion::Options options;
     options.tripAttachmentDirs.insert(attached->id(), attachDir);
@@ -229,28 +234,26 @@ TEST_CASE("Cave equate emits a bare *equate line at cave scope", "[Equate][Emiss
     const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
     const QString driver = driverTextFor(region, options, driverPath);
 
-    const QString crossScopeLine =
-        QStringLiteral("*equate 1 %1simple.a1").arg(tripScopePrefix(attached));
-    const QString nativeLine = QStringLiteral("*equate 1 2");
+    const QString cavePrefix = caveScopePrefix(region, cave);
+    const QString crossScopeLine = QStringLiteral("*equate ") + cavePrefix + QStringLiteral("1 ")
+                                   + cavePrefix + tripScopePrefix(attached) + QStringLiteral("simple.a1");
+    const QString nativeLine = QStringLiteral("*equate ") + cavePrefix + QStringLiteral("1 ")
+                               + cavePrefix + QStringLiteral("2");
+    INFO("driver:\n" << driver.toStdString());
     CHECK(driver.contains(crossScopeLine));
     CHECK(driver.contains(nativeLine));
 
-    // The ties must sit inside the cave block: after the trip wrapper that
-    // declares the external stations, before the cave's *end. Otherwise a
-    // cave-relative operand names a station that is out of scope.
+    // The ties sit at region scope, after the cave's *end, where every
+    // fully-qualified operand is in scope.
     const QString caveEnd = QStringLiteral("*end %1").arg(caveLabel(region, cave));
-    const int tripBeginIndex =
-        driver.indexOf(QStringLiteral("*begin ") + tripScopeLabel(attached));
     const int equateIndex = driver.indexOf(QStringLiteral("*equate"));
     const int caveEndIndex = driver.indexOf(caveEnd);
-    REQUIRE(tripBeginIndex >= 0);
     REQUIRE(equateIndex >= 0);
     REQUIRE(caveEndIndex >= 0);
-    CHECK(tripBeginIndex < equateIndex);
-    CHECK(equateIndex < caveEndIndex);
+    CHECK(caveEndIndex < equateIndex);
 }
 
-TEST_CASE("Structurally invalid or out-of-cave equates emit nothing", "[Equate][Emission]")
+TEST_CASE("Structurally invalid or unresolvable equates emit nothing", "[Equate][Emission]")
 {
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
@@ -260,18 +263,18 @@ TEST_CASE("Structurally invalid or out-of-cave equates emit nothing", "[Equate][
     addNativeTripWithShot(cave, QStringLiteral("Native"),
                           QStringLiteral("1"), QStringLiteral("2"), 10.0);
 
-    // A Trip handle naming a trip that is not in this cave cannot be
-    // rendered cave-relative, so the whole equate is dropped rather than
-    // emitting a name cavern can't resolve.
+    // A Trip handle naming a trip that is in no node cannot be rendered, so
+    // the whole equate is dropped rather than emitting a name cavern would
+    // invent a station for.
     const QUuid strangerTripId = QUuid::createUuid();
-    cave->equates()->appendEquate(
+    region.equates()->appendEquate(
         cwEquate({nativeHandle(cave, QStringLiteral("1")),
                   cwStationHandle(cwStationHandle::Trip, strangerTripId, QStringLiteral("x"))}));
 
     // A station tied only to itself is structurally invalid (one distinct
     // endpoint), so writeEquates drops it at the isValid() guard before any
     // operand is rendered.
-    cave->equates()->appendEquate(
+    region.equates()->appendEquate(
         cwEquate({nativeHandle(cave, QStringLiteral("1")),
                   nativeHandle(cave, QStringLiteral("1"))}));
 
@@ -282,7 +285,7 @@ TEST_CASE("Structurally invalid or out-of-cave equates emit nothing", "[Equate][
     CHECK_FALSE(driver.contains(QStringLiteral("*equate")));
 }
 
-TEST_CASE("A cave equate draws a native and an external station coincident",
+TEST_CASE("A within-cave equate draws a native and an external station coincident",
           "[Equate][Emission]")
 {
     QTemporaryDir tempRoot;
@@ -305,8 +308,8 @@ TEST_CASE("A cave equate draws a native and an external station coincident",
     // first-station fallback, the external file via its own *fix A1), so
     // the equate is what identifies the two stations — a broken operand
     // would make cavern report simple.a1 as undefined instead of solving.
-    cave->equates()->appendEquate(cwEquate({nativeHandle(cave, QStringLiteral("1")),
-                                            tripHandle(attached, QStringLiteral("simple.a1"))}));
+    region.equates()->appendEquate(cwEquate({nativeHandle(cave, QStringLiteral("1")),
+                                             tripHandle(attached, QStringLiteral("simple.a1"))}));
 
     cwLinePlotManager manager;
     QHash<QUuid, QString> tripDirs;
@@ -335,6 +338,75 @@ TEST_CASE("A cave equate draws a native and an external station coincident",
     REQUIRE(lookup.hasPosition(QStringLiteral("2")));
     const QVector3D twoPos = lookup.position(QStringLiteral("2"));
     CHECK((twoPos - nativePos).length() == Catch::Approx(10.0).margin(0.01));
+}
+
+TEST_CASE("A single-cave export carries the ties that stay inside the cave",
+          "[Equate][Emission]")
+{
+    cwCavingRegion region;
+    cwCave* alpha = addEmptyCave(region, QStringLiteral("Alpha"));
+    cwCave* bravo = addEmptyCave(region, QStringLiteral("Bravo"));
+    addNativeTripWithShot(alpha, QStringLiteral("First"),
+                          QStringLiteral("1"), QStringLiteral("2"), 10.0);
+    addNativeTripWithShot(bravo, QStringLiteral("Other"),
+                          QStringLiteral("7"), QStringLiteral("8"), 10.0);
+
+    region.equates()->appendEquate(cwEquate({nativeHandle(alpha, QStringLiteral("1")),
+                                             nativeHandle(alpha, QStringLiteral("2"))}));
+    region.equates()->appendEquate(cwEquate({nativeHandle(alpha, QStringLiteral("2")),
+                                             nativeHandle(bravo, QStringLiteral("7"))}));
+
+    cwSurvexExporterCaveTask exporter;
+    exporter.setEquates(region.equates()->equates());
+    QString text;
+    QTextStream stream(&text);
+    REQUIRE(exporter.writeCave(stream, alpha->data()));
+    stream.flush();
+
+    // The exported file stands alone, so the tie into Bravo names a scope it
+    // never opens and is left out; the tie inside Alpha follows Alpha's block.
+    const QString alphaLabel = cwScopeLabels::forNode(alpha->data()).label(alpha->id());
+    const QString insideLine = QStringLiteral("*equate %1.1 %1.2").arg(alphaLabel);
+    CHECK(text.count(QStringLiteral("*equate")) == 1);
+    REQUIRE(text.contains(insideLine));
+    CHECK(text.indexOf(QStringLiteral("*end ") + alphaLabel) < text.indexOf(insideLine));
+}
+
+TEST_CASE("The cave export menu takes the ties from the cave's own region",
+          "[Equate][Emission]")
+{
+    cwCavingRegion region;
+    cwCave* alpha = addEmptyCave(region, QStringLiteral("Alpha"));
+    addNativeTripWithShot(alpha, QStringLiteral("First"),
+                          QStringLiteral("1"), QStringLiteral("2"), 10.0);
+    region.equates()->appendEquate(cwEquate({nativeHandle(alpha, QStringLiteral("1")),
+                                             nativeHandle(alpha, QStringLiteral("2"))}));
+
+    // The manager's region is a property of its own, which can be cleared
+    // while the cave stays chosen.
+    cwSurveyExportManager manager;
+    manager.setCave(alpha);
+    manager.setCavingRegion(nullptr);
+    REQUIRE(manager.cave() == alpha);
+
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString outPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("alpha.svx"));
+    manager.exportSurvexCave(outPath);
+
+    const QString alphaLabel = cwScopeLabels::forNode(alpha->data()).label(alpha->id());
+    const QString insideLine = QStringLiteral("*equate %1.1 %1.2").arg(alphaLabel);
+    QElapsedTimer timer;
+    timer.start();
+    QString text;
+    while (!text.contains(insideLine) && timer.elapsed() < kExportTimeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kExportPollMs);
+        QFile file(outPath);
+        if (file.open(QIODevice::ReadOnly)) {
+            text = QString::fromUtf8(file.readAll());
+        }
+    }
+    CHECK(text.contains(insideLine));
 }
 
 TEST_CASE("A region equate emits a fully-qualified *equate at region scope",

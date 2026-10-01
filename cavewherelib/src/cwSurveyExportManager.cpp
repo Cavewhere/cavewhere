@@ -101,8 +101,13 @@ void cwSurveyExportManager::exportSurvexCave(QString filename) {
         cwSurvexExporterCaveTask* exportTask = new cwSurvexExporterCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(cave->data());
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        //The cave's own region, not the manager's: the two are set separately
+        //and only the cave's region holds ties that name its stations.
+        if (const cwCavingRegion* region = cave->parentRegion()) {
+            exportTask->setEquates(region->equates()->equates());
+        }
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }

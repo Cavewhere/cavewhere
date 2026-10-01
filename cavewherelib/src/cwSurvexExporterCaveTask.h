@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwCaveExporterTask.h"
+#include "cwEquate.h"
 #include "cwScopeLabels.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwSurvexExporterUtils.h"
@@ -26,7 +27,6 @@ class cwStationHandle;
 #include <QUuid>
 
 // Std includes
-#include <functional>
 #include <optional>
 
 class cwSurvexExporterCaveTask : public cwCaveExporterTask
@@ -89,8 +89,13 @@ public:
     };
 
     //! The single-cave export: \a cave and its subtree, standing alone, labeled
-    //! by cwScopeLabels::forNode.
+    //! by cwScopeLabels::forNode, followed by the ties from setEquates() whose
+    //! stations all sit in that subtree.
     bool writeCave(QTextStream& stream, const cwCaveData &cave, const QString& globalCS = QString());
+
+    //! The region's equates, for writeCave. Ties that reach outside the
+    //! exported cave are left out of its file.
+    void setEquates(const QList<cwEquate>& equates);
 
     // Writes \a node as "*begin <label>", its fixes, its own trips, then each
     // child node the same way, then its "*end" — one block per native node, so
@@ -115,15 +120,13 @@ public:
     // survive, since cavern rejects a self-equate.
     static void writeEquateLine(QTextStream& stream, const QStringList& operands);
 
-    // Emit one "*equate" line per structurally-valid tie in `equates`, rendering
-    // each handle with `renderOperand` — relative to the enclosing node for a
-    // node's own equates, fully qualified at region scope. Each line is handed
-    // to writeEquateLine, so invalid ties and unrenderable handles drop
-    // uniformly. Shared by the cave and region exporters, which differ only in
-    // the renderer.
+    // Emit one "*equate" line per structurally-valid tie in `equates`, each
+    // handle rendered fully qualified by tree.operand(). Each line is handed to
+    // writeEquateLine, so invalid ties and unrenderable handles drop uniformly.
+    // Shared by the cave and region exporters.
     static void writeEquates(QTextStream& stream,
                              const QList<cwEquate>& equates,
-                             const std::function<QString(const cwStationHandle&)>& renderOperand);
+                             const DriverTree& tree);
 
 private:
     //! What a node's block hands down to the blocks nested in it.
@@ -137,6 +140,7 @@ private:
 
     cwSurvexExporterTripTask* TripExporter;
     cwSurvexExporterRegion::Options ExportOptions;
+    QList<cwEquate> m_equates;
 
     bool writeNodeBlock(QTextStream& stream,
                         const cwCaveData& node,

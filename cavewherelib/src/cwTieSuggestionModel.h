@@ -46,8 +46,8 @@ class cwTrip;
  * comparing whole would find nothing for exactly the surveys that float.
  *
  * Candidates come from the trip's own cave only. Tying to another cave is a
- * different gesture with a different home (cwCavingRegion::equates), and it is
- * never what stops a survey floating in the cave it belongs to.
+ * different gesture, and it is never what stops a survey floating in the cave
+ * it belongs to.
  */
 class CAVEWHERE_LIB_EXPORT cwTieSuggestionModel : public QAbstractListModel
 {

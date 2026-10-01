@@ -15,7 +15,6 @@ class cwKeywordModel;
 #include "cwGridConvergence.h"
 #include "cwErrorModel.h"
 #include "cwEquate.h"
-#include "cwEquateModel.h"
 #include "cwExternalCenterline.h"
 #include "cwLength.h"
 #include "cwStation.h"
@@ -64,7 +63,6 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(cwFixStationModel* fixStations READ fixStations CONSTANT)
     Q_PROPERTY(cwGridConvergence* gridConvergence READ gridConvergence CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
-    Q_PROPERTY(cwEquateModel* equates READ equates CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
     Q_PROPERTY(cwSurveyNodeKind::Kind kind READ kind WRITE setKind NOTIFY kindChanged)
     Q_PROPERTY(bool isReadOnly READ isReadOnly NOTIFY sourceChanged)
@@ -132,15 +130,10 @@ public:
     //! ancestor attached — is what places this node's stations.
     bool externallyBacked() const;
 
-    //! Within-node equate ties, traveling with the node. Cross-node ties live
-    //! on cwCavingRegion instead.
-    cwEquateModel* equates() const { return m_equates; }
-
-    //! A within-node equate is only accepted here if it is structurally valid
-    //! (cwEquate::isValid) and every handle resolves into this node: a
-    //! NativeCave handle's containerId equals this node's id, and a Trip
-    //! handle's containerId is one of this node's trips. Cross-node ties do not
-    //! satisfy this and belong on the region instead.
+    //! True when \a equate is structurally valid (cwEquate::isValid) and every
+    //! handle resolves into this node: a NativeCave handle's containerId equals
+    //! this node's id, and a Trip handle's containerId is one of this node's
+    //! trips. The tie itself lives in the region's list (cwCavingRegion::equates).
     bool validate(const cwEquate& equate) const;
 
     cwKeywordModel* keywordModel() const { return m_keywordModel; }
@@ -421,8 +414,6 @@ private:
     cwGridConvergence* m_gridConvergence;
 
     cwExternalCenterline m_externalCenterline;
-
-    cwEquateModel* m_equates;
 
     cwKeywordModel* m_keywordModel = nullptr;
     void updateKeywords();

@@ -149,7 +149,7 @@ TEST_CASE("harvested station names never trigger a save",
     CHECK(QFileInfo(tripFile).lastModified() != mtimeBefore);
 }
 
-TEST_CASE("cave and region equates round-trip through save/load",
+TEST_CASE("within-cave and cross-cave equates round-trip through the region list",
           "[SaveLoad][scope][equate]")
 {
     auto fixture = makeSavedProject(QStringLiteral("equate-roundtrip"));
@@ -173,7 +173,7 @@ TEST_CASE("cave and region equates round-trip through save/load",
         cwStationHandle(cwStationHandle::Trip, trip0Id, QStringLiteral("1"))
     });
     REQUIRE(fixture->cave->validate(caveEquate));
-    fixture->cave->equates()->appendEquate(caveEquate);
+    region->equates()->appendEquate(caveEquate);
 
     // Cross-cave tie on the region: a station in cave0 equated to one in cave1.
     const cwEquate regionEquate({
@@ -196,22 +196,10 @@ TEST_CASE("cave and region equates round-trip through save/load",
     auto loadedRegion = freshRoot->project()->cavingRegion();
     REQUIRE(loadedRegion->caveCount() == 2);
 
-    // Cave-level equate survives on its owning cave (matched by id, not order).
-    cwCave* loadedCave0 = loadedRegion->cave(0)->id() == cave0Id
-            ? loadedRegion->cave(0) : loadedRegion->cave(1);
-    cwCave* loadedCave1 = loadedCave0 == loadedRegion->cave(0)
-            ? loadedRegion->cave(1) : loadedRegion->cave(0);
-    REQUIRE(loadedCave0->equates()->count() == 1);
-    const cwEquate loadedCaveEquate = loadedCave0->equates()->equateAt(0);
-    CHECK(loadedCaveEquate == caveEquate);
-
-    // The within-cave tie must land only on its owning cave, not fan onto the
-    // other cave (which would still leave both region/cave counts at 1).
-    CHECK(loadedCave1->equates()->count() == 0);
-
-    // Region-level (cross-cave) equate survives on the region.
-    REQUIRE(loadedRegion->equates()->count() == 1);
-    CHECK(loadedRegion->equates()->equateAt(0) == regionEquate);
+    // Both ties come back in the region's list, in the order they were made.
+    REQUIRE(loadedRegion->equates()->count() == 2);
+    CHECK(loadedRegion->equates()->equateAt(0) == caveEquate);
+    CHECK(loadedRegion->equates()->equateAt(1) == regionEquate);
 
     Q_UNUSED(secondTrip);
 }
@@ -227,7 +215,7 @@ TEST_CASE("Loading a project does not re-save the project file",
     // half-built region — the exact bug that truncated legacy .cw conversions.
     // The trigger must therefore watch only rowsInserted/rowsRemoved, never
     // modelReset. Assert the project file's mtime is unchanged after a clean
-    // load of a project that has both cave-level and region-level equates.
+    // load of a project whose region list holds a within-cave and a cross-cave tie.
     auto fixture = makeSavedProject(QStringLiteral("equate-load-stable"));
 
     auto region = fixture->project->cavingRegion();
@@ -239,7 +227,7 @@ TEST_CASE("Loading a project does not re-save the project file",
     const QUuid trip0Id = fixture->trip->id();
     const QUuid cave1Id = secondCave->id();
 
-    fixture->cave->equates()->appendEquate(cwEquate({
+    region->equates()->appendEquate(cwEquate({
         cwStationHandle(cwStationHandle::NativeCave, cave0Id, QStringLiteral("1")),
         cwStationHandle(cwStationHandle::Trip, trip0Id, QStringLiteral("1"))
     }));
@@ -272,7 +260,7 @@ TEST_CASE("Loading a project does not re-save the project file",
     // The loaded equates must still be intact...
     auto loadedRegion = loaderRoot->project()->cavingRegion();
     REQUIRE(loadedRegion->caveCount() == 2);
-    CHECK(loadedRegion->equates()->count() == 1);
+    CHECK(loadedRegion->equates()->count() == 2);
 
     // ...and the load must not have touched the project file on disk.
     const QDateTime mtimeAfterLoad = QFileInfo(projectFile).lastModified();

@@ -179,15 +179,16 @@ private:
     void rerunIfAnyNodeIsStale(cwCavingRegion* region);
     void connectFixStations(cwSurveyNode* node);
 
-    //! Hooks the fix stations and equates of every node in the tree. Safe to
-    //! repeat: each connection is unique, so the subtreeChanged handler can call
-    //! it after every insert without stacking re-solves.
+    //! Hooks the fix stations of every node in the tree. Safe to repeat: each
+    //! connection is unique, so the subtreeChanged handler can call it after
+    //! every insert without stacking re-solves.
     void connectNodeInputs();
 
-    //! Re-solve when an equate list changes. An equate is a survey input like a
-    //! shot or a fix — it is what joins two scopes cavern would otherwise leave
-    //! in separate frames — so declaring one has to reach the plot the same way
-    //! entering a shot does, or a tie the user just made stays invisible.
+    //! Re-solve when the region's equate list changes. An equate is a survey
+    //! input like a shot or a fix — it is what joins two scopes cavern would
+    //! otherwise leave in separate frames — so declaring one has to reach the
+    //! plot the same way entering a shot does, or a tie the user just made
+    //! stays invisible.
     void connectEquates(cwEquateModel* equates);
 
     void setCaveStationLookupAsStale(bool isStale);

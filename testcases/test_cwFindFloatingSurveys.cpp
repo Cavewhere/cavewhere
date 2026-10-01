@@ -225,7 +225,7 @@ TEST_CASE("An equate that ties an attached centerline in stops it floating",
 
     // The tie the suggester will eventually create on the user's behalf. It is
     // the whole loop this signal drives: float -> tie -> silence.
-    setup.cave->equates()->appendEquate(cwEquate({
+    region.equates()->appendEquate(cwEquate({
         cwStationHandle(cwStationHandle::NativeCave, setup.cave->id(), QStringLiteral("A2")),
         cwStationHandle(cwStationHandle::Trip, setup.attached->id(),
                         QStringLiteral("simple.a1"))}));

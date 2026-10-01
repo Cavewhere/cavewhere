@@ -175,7 +175,7 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     }
 
     // A trip or node added or removed at any depth changes what cavern reads,
-    // and a node added anywhere brings fix stations and equates to hook.
+    // and a node added anywhere brings fix stations to hook.
     connect(Region->rootNode(), &cwSurveyNode::subtreeChanged, this, [this]() {
         connectNodeInputs();
         runSurvex();
@@ -192,10 +192,9 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     SurveySignaler->setRegion(Region);
 
-    // Hook fix-station and equate edits on every existing node; the
-    // subtreeChanged handler above hooks the ones added later. The region's own
-    // equates are cross-node ties and belong to no node, so they are hooked
-    // here too.
+    // Hook fix-station edits on every existing node; the subtreeChanged handler
+    // above hooks the ones added later. Every equate sits in the region's one
+    // list, hooked once here.
     connectEquates(Region->equates());
     connectNodeInputs();
 
@@ -232,7 +231,6 @@ void cwLinePlotManager::connectNodeInputs() {
     if (Region == nullptr) { return; }
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         connectFixStations(node);
-        connectEquates(node->equates());
     }
 }
 

@@ -7,7 +7,6 @@
 #include <QUuid>
 
 //Our includes
-#include "cwEquate.h"
 #include "cwExternalCenterline.h"
 #include "cwTripData.h"
 #include "cwStationPositionLookup.h"
@@ -24,7 +23,6 @@ struct cwCaveData {
     cwUnits::LengthUnit depthUnit = cwUnits::Meters;
     QList<cwFixStation> fixStations;
     cwExternalCenterline externalCenterline;
-    QList<cwEquate> equates;
 
     //! This node's child nodes, in row order. Each is saved under
     //! <nodeDir>/sub/<name>/, so the list is the persisted shape of the tree.

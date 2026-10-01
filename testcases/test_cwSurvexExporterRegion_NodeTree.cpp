@@ -285,13 +285,14 @@ TEST_CASE("The single-cave export nests the cave's sections", "[Exporter][NodeTr
     addNativeTripWithShot(sideCave, QStringLiteral("Sump dig"), QStringLiteral("s1"), QStringLiteral("s2"));
     cwCave* section = addChildNode(sideCave, QStringLiteral("Upper level"), cwSurveyNode::Kind::Folder);
     addNativeTripWithShot(section, QStringLiteral("Upper survey"), QStringLiteral("u1"), QStringLiteral("u2"));
-    sideCave->equates()->appendEquate(cwEquate({nativeHandle(section, QStringLiteral("u1")),
-                                                nativeHandle(sideCave, QStringLiteral("s2"))}));
+    region.equates()->appendEquate(cwEquate({nativeHandle(section, QStringLiteral("u1")),
+                                             nativeHandle(sideCave, QStringLiteral("s2"))}));
 
     QString driver;
     {
         QTextStream stream(&driver);
         cwSurvexExporterCaveTask exporter;
+        exporter.setEquates(region.equates()->equates());
         CHECK(exporter.writeCave(stream, sideCave->data()));
     }
     INFO("driver:\n" << driver.toStdString());
@@ -305,8 +306,8 @@ TEST_CASE("The single-cave export nests the cave's sections", "[Exporter][NodeTr
         QStringLiteral("*begin ; Upper survey"),
         QStringLiteral("*end"),
         QStringLiteral("*end upper_level ; End of Upper level"),
-        QStringLiteral("*equate upper_level.u1 s2"),
         QStringLiteral("*end side_cave ; End of Side Cave"),
+        QStringLiteral("*equate side_cave.upper_level.u1 side_cave.s2"),
     };
     CHECK(skeleton(driver) == expected);
 }

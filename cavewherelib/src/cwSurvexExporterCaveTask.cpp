@@ -19,7 +19,6 @@
 
 //Std includes
 #include <algorithm>
-#include <functional>
 
 namespace {
 
@@ -155,7 +154,20 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         return false;
     }
 
-    return writeNode(stream, nodes.first(), tree, globalCS);
+    if (!writeNode(stream, nodes.first(), tree, globalCS)) {
+        return false;
+    }
+
+    // Ties emit after the cave's block closes, fully qualified, as the region
+    // driver does. A tie reaching outside this cave renders no operand there,
+    // so writeEquateLine drops it.
+    writeEquates(stream, m_equates, tree);
+    return true;
+}
+
+void cwSurvexExporterCaveTask::setEquates(const QList<cwEquate>& equates)
+{
+    m_equates = equates;
 }
 
 bool cwSurvexExporterCaveTask::writeNode(QTextStream& stream,
@@ -264,30 +276,15 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         }
     }
 
-    // The node's own ties emit last, once every scope they can name inside the
-    // block — trip wrappers and child nodes — is declared. An operand is the
-    // region-scope name with this node's prefix taken off; one that does not
-    // start with it names a station outside this block, so the tie is dropped.
-    const QString nodePrefix = labels.prefix(node.id);
-    writeEquates(stream, node.equates,
-                 [&tree, &nodePrefix](const cwStationHandle& handle) {
-                     const QString qualified = tree.operand(handle);
-                     if (!qualified.startsWith(nodePrefix)) {
-                         return QString();
-                     }
-                     return qualified.mid(nodePrefix.size());
-                 });
-
     writeEnd();
     return true;
 }
 
 /**
  * Emit a bare `*equate` line per valid tie in `equates`, rendering each handle
- * with `renderOperand`. A node's own equates pass DriverTree::operand() with
- * the node's prefix taken off; region scope passes it as is. No `*export`/`*infer`
- * is needed — a cross-scope `*equate`
- * inside the enclosing block resolves both sibling scopes on its own.
+ * fully qualified with DriverTree::operand(). No `*export`/`*infer` is needed —
+ * a cross-scope `*equate` inside the enclosing block resolves both sibling
+ * scopes on its own.
  * Structurally-invalid equates, and any whose handle the renderer cannot
  * resolve, are dropped silently (writeEquateLine); station *existence* is not
  * checked here (deferred to the equate UX, master plan §1.2), matching the
@@ -296,7 +293,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
 void cwSurvexExporterCaveTask::writeEquates(
     QTextStream& stream,
     const QList<cwEquate>& equates,
-    const std::function<QString(const cwStationHandle&)>& renderOperand)
+    const DriverTree& tree)
 {
     for (const cwEquate& equate : equates) {
         if (!equate.isValid()) {
@@ -307,7 +304,7 @@ void cwSurvexExporterCaveTask::writeEquates(
         QStringList operands;
         operands.reserve(handles.size());
         for (const cwStationHandle& handle : handles) {
-            operands.append(renderOperand(handle));
+            operands.append(tree.operand(handle));
         }
 
         writeEquateLine(stream, operands);

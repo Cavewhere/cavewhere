@@ -297,11 +297,11 @@ TEST_CASE("Acting on a suggestion ends the float", "[TieSuggestionModel]")
 
     // The whole loop the feature exists for, in one call: the survey that
     // nothing joined to its cave is joined to it, and stops being reported as
-    // adrift. Everything in between — which home the equate went in, the survex
+    // adrift. Everything in between — the equate it records, the survex
     // it renders to, the run it triggers — is what the row hides from the view
     // that shows it.
     REQUIRE(model.tieAt(0));
-    CHECK(setup.cave->equates()->count() == 1);
+    CHECK(region.equates()->count() == 1);
 
     manager.waitToFinish();
     REQUIRE_FALSE(manager.hasSolveError());
@@ -325,7 +325,7 @@ TEST_CASE("A row that names nothing ties nothing", "[TieSuggestionModel]")
     // outlive the row it was built for by a frame.
     CHECK_FALSE(model.tieAt(-1));
     CHECK_FALSE(model.tieAt(model.rowCount()));
-    CHECK(cave->equates()->count() == 0);
+    CHECK(region.equates()->count() == 0);
 }
 
 TEST_CASE("More matches than a person can read are cut off and said to be",

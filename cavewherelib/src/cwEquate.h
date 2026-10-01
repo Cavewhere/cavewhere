@@ -23,9 +23,9 @@
  * the tie and lets emission render a bare *equate line at the right scope
  * (commits 4/5).
  *
- * Value type (copyable, equality-comparable). It lives either in a cwCave's
- * equate list (within-cave ties) or the cwCavingRegion's list (cross-cave
- * ties); the handle carries its own scope, so the same type serves both homes.
+ * Value type (copyable, equality-comparable). Every equate lives in the
+ * cwCavingRegion's one list; each handle carries its own scope, so a tie
+ * within one node and a tie across nodes are the same type.
  */
 class CAVEWHERE_LIB_EXPORT cwEquate
 {

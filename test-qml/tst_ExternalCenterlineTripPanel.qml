@@ -666,11 +666,11 @@ MainWindowTest {
 
             const connectButton = findChild(banner, "tieSuggestionConnectButton")
             verify(connectButton !== null, "tieSuggestionConnectButton must exist")
-            compare(cave.equates.count, 0, "nothing is tied until the user says so")
+            compare(RootData.region.equates.count, 0, "nothing is tied until the user says so")
 
             mouseClick(connectButton)
 
-            compare(cave.equates.count, 1, "the click records exactly one tie")
+            compare(RootData.region.equates.count, 1, "the click records exactly one tie")
             tryVerify(() => !banner.visible, 15000,
                       "the tied attachment is no longer floating")
             tryVerify(() => stationsList.count > 0, 15000,
@@ -743,14 +743,14 @@ MainWindowTest {
 
             const connectButton = findChild(banner, "tieSuggestionConnectButton")
             verify(connectButton !== null, "tieSuggestionConnectButton must exist")
-            compare(cave.equates.count, 0, "nothing is tied until the user says so")
+            compare(RootData.region.equates.count, 0, "nothing is tied until the user says so")
 
             mouseClick(connectButton)
 
-            // One click is the whole gesture: the equate lands on the cave, the
+            // One click is the whole gesture: the equate lands in the region, the
             // plot re-solves because of it, and the banner that asked for the
             // tie takes itself down. Nothing else on this page has to be touched.
-            compare(cave.equates.count, 1, "the click records exactly one tie")
+            compare(RootData.region.equates.count, 1, "the click records exactly one tie")
             tryVerify(() => !banner.visible, 15000,
                       "the tied attachment is no longer floating")
         }

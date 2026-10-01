@@ -24,8 +24,8 @@
 //Our includes
 class cwCave;
 class cwProject;
-class cwEquateModel;
 #include "cwCavingRegionData.h"
+#include "cwEquateModel.h"
 #include "cwGeoReference.h"
 #include "cwLazLayerModel.h"
 #include "cwSurveyNode.h"
@@ -77,8 +77,9 @@ public:
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
     void setFutureManagerToken(const cwFutureManagerToken& token);
 
-    //! Cross-cave equate ties (two caves that physically connect). Within-cave
-    //! ties live on each cwCave instead.
+    //! Every equate tie in the project, wherever its stations sit: within one
+    //! node, across nodes, or across caves. The exporter emits each one at
+    //! region scope with fully qualified operands.
     cwEquateModel* equates() const { return m_equates; }
 
     //! The cave holding the container a handle names, or nullptr when no cave in
@@ -86,11 +87,9 @@ public:
     //! handle names a trip, and exactly one cave lists that trip.
     cwCave* caveFor(const cwStationHandle& handle) const;
 
-    //! Record that two stations are one physical point, in the home the pair
-    //! belongs to: both in one cave puts the tie on that cave, one in each puts
-    //! it on this region. The two homes take the same cwEquate — the handles
-    //! carry their own scope — so the choice is only about what the tie travels
-    //! with, and it is not the caller's to make.
+    //! Record that two stations are one physical point, as an equate in this
+    //! region's list. A pair inside one node must also pass that node's
+    //! cwSurveyNode::validate.
     //!
     //! Returns true once the region declares the tie, including when it already
     //! did. False means the pair cannot be tied at all: a handle naming no

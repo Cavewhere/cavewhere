@@ -474,6 +474,10 @@ struct cwSaveLoadPrivate {
 
     RemoteApplyGuardState remoteApplyGuard;
     bool pendingIdentityRepairSave = false;
+    //! Nodes whose file still carries legacy within-node equates that the load
+    //! moved into the region list. The first save that touches the project file
+    //! or one of these nodes writes both, so a tie lives in exactly one file.
+    QSet<QUuid> legacyEquateNodeIds;
     std::optional<cwSaveLoad::SyncReport> lastSyncReport;
     QList<cwError> lastLoadErrors;
     int lastLoadMaxFileVersion = 0;
@@ -777,6 +781,14 @@ struct cwSaveLoadPrivate {
 
             if constexpr (std::is_same_v<T, cwCave>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoCave(object), object);
+                //Dropping the node's copy of a migrated tie is safe only once
+                //the project file holds it. This node is already written, so
+                //the project save rewrites only the others. A node off the
+                //region has no list to write and stays flagged for later.
+                const cwCavingRegion* region = object->parentRegion();
+                if (region != nullptr && legacyEquateNodeIds.remove(object->id())) {
+                    context->saveProject(context->projectRootDir(), region);
+                }
             } else if constexpr (std::is_same_v<T, cwTrip>) {
                 saveProtoMessage(context, cwSaveLoad::toProtoTrip(object), object);
             } else if constexpr (std::is_same_v<T, cwNote>) {
