@@ -23,11 +23,12 @@
 
 namespace {
 
-// Cave station positions keyed by canonical station name, built once per cave
-// so each trip can resolve the world position of any station it references.
-QHash<QString, QVector3D> caveStationPositions(const cwCaveData& cave)
+// A node's station positions keyed by canonical station name, built once per
+// node so each of its trips can resolve the world position of any station it
+// references.
+QHash<QString, QVector3D> nodeStationPositions(const cwCaveData& node)
 {
-    const QMap<QString, QVector3D> positions = cave.stationPositionModel.positions();
+    const QMap<QString, QVector3D> positions = node.stationPositionModel.positions();
     QHash<QString, QVector3D> out;
     out.reserve(positions.size());
     for (auto iter = positions.constBegin(); iter != positions.constEnd(); ++iter) {
@@ -36,37 +37,53 @@ QHash<QString, QVector3D> caveStationPositions(const cwCaveData& cave)
     return out;
 }
 
-// Depth/length extent for one emitted scope, folded back into the cave totals
-// by the caller.
+// Depth/length extent for one emitted scope, folded into its node's totals and
+// from there into every ancestor's.
 struct ScopeExtent {
     double minDepth = std::numeric_limits<double>::max();
     double maxDepth = -std::numeric_limits<double>::max();
     double length = 0.0;
     bool hasDepth = false;
+
+    void includeDepth(double z)
+    {
+        minDepth = qMin(minDepth, z);
+        maxDepth = qMax(maxDepth, z);
+        hasDepth = true;
+    }
+
+    void absorb(const ScopeExtent& other)
+    {
+        length += other.length;
+        if (other.hasDepth) {
+            includeDepth(other.minDepth);
+            includeDepth(other.maxDepth);
+        }
+    }
 };
 
-// Emit line segments for an external-centerline scope (a trip or cave attached
+// Emit line segments for an external-centerline scope (a trip or node attached
 // to an external file), whose shot topology lives only in the solved survey
 // network. `scopePrefix` selects the scope's stations from the region-wide
 // network (e.g. "fisher_ridge.topo1."); coordinates are resolved through the
-// cave-local position lookup — network keys carry the "fisher_ridge." cave
-// prefix that the lookup strips, so `cavePrefix` bridges the two.
+// node-local position lookup — network keys carry the node prefix
+// ("fisher_ridge.") that the lookup strips, so `nodePrefix` bridges the two.
 // Both prefix comparisons are case-insensitive: a Scope trip windows by its
 // `stationPrefix` as authored (which may carry uppercase), while cavern's
 // labels agree with that case only by luck — it lowercases the Survex names it
 // reads and preserves the case of Compass and Walls ones (measured:
 // `cave0.AB1`, `cave0:XY:P1`).
-// `caveScopePrefixes` holds every scope prefix of the same cave (empty entries
+// `nodeScopePrefixes` holds every scope prefix of the same node (empty entries
 // for its native trips): a nested block's stations also carry the parent's
 // prefix, so a scope hands a station claimed by a longer sibling prefix to that
 // deeper scope, and each leg gets exactly one owner.
-// `emitted` is the cave's undirected leg set, shared across the cave's scopes so
+// `emitted` is the node's undirected leg set, shared across the node's scopes so
 // a tie leg reachable from both sides of a scope boundary is drawn once, by the
 // first trip that reaches it.
 ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
-                                     const QString& cavePrefix,
+                                     const QString& nodePrefix,
                                      const QString& scopePrefix,
-                                     const QStringList& caveScopePrefixes,
+                                     const QStringList& nodeScopePrefixes,
                                      const QHash<QString, QVector3D>& stationPositions,
                                      QVector<QVector3D>& points,
                                      QSet<QString>& emitted)
@@ -75,8 +92,8 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
 
     const auto resolveNetworkStation = [&](const QString& networkKey, QVector3D* out) -> bool {
         QString local = networkKey;
-        if (local.startsWith(cavePrefix, Qt::CaseInsensitive)) {
-            local = local.sliced(cavePrefix.size());
+        if (local.startsWith(nodePrefix, Qt::CaseInsensitive)) {
+            local = local.sliced(nodePrefix.size());
         }
         const auto it = stationPositions.constFind(cwStation::canonicalKey(local));
         if (it == stationPositions.constEnd()) {
@@ -86,11 +103,11 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
         return true;
     };
 
-    // Owned by a deeper scope of this cave, which emits it instead. Strictly
+    // Owned by a deeper scope of this node, which emits it instead. Strictly
     // longer: two scopes sharing a prefix would otherwise hand every station to
     // each other and draw nothing.
-    const auto ownedByInnerScope = [&caveScopePrefixes, &scopePrefix](const QString& station) {
-        return std::any_of(caveScopePrefixes.cbegin(), caveScopePrefixes.cend(),
+    const auto ownedByInnerScope = [&nodeScopePrefixes, &scopePrefix](const QString& station) {
+        return std::any_of(nodeScopePrefixes.cbegin(), nodeScopePrefixes.cend(),
                            [&](const QString& inner) {
                                return inner.size() > scopePrefix.size()
                                    && station.startsWith(inner, Qt::CaseInsensitive);
@@ -128,9 +145,8 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
             }
             emitted.insert(undirectedKey);
 
-            extent.minDepth = qMin(extent.minDepth, qMin((double)from.z(), (double)to.z()));
-            extent.maxDepth = qMax(extent.maxDepth, qMax((double)from.z(), (double)to.z()));
-            extent.hasDepth = true;
+            extent.includeDepth(from.z());
+            extent.includeDepth(to.z());
             // The solved network carries no per-shot distance-included flag, so
             // every leg counts toward length (unlike the native chunk path,
             // which honors shot.isDistanceIncluded()).
@@ -144,6 +160,162 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
     return extent;
 }
 
+// Emits the line segments of \a node's own trips — never its child nodes' —
+// and returns their extent.
+ScopeExtent emitOwnTrips(const cwCaveData& node,
+                         const cwScopeLabels& scopeLabels,
+                         const cwSurveyNetwork& network,
+                         cwLinePlotGeometry::Result& result)
+{
+    const QHash<QString, QVector3D> stationPositions = nodeStationPositions(node);
+
+    // Network keys are region-wide ("fisher_ridge.topo1.<tail>"); the node's
+    // lookup strips this node's prefix, so external scopes bridge through it.
+    const QString nodePrefix = scopeLabels.prefix(node.id);
+    const QHash<QUuid, QString>& tripLabels = scopeLabels.tripLabels(node.id);
+
+    ScopeExtent nodeExtent;
+
+    // Each trip's network-wide scope prefix, empty for a native trip.
+    // Gathered before the trip loop so every scope also sees its siblings'
+    // and can hand its nested blocks' stations to the deeper scope that
+    // owns them.
+    QStringList tripScopePrefixes;
+    tripScopePrefixes.reserve(node.trips.size());
+    for (const cwTripData& trip : node.trips) {
+        if (cwTrip::windowsWholeCave(trip, node)) {
+            // The whole-cave window's scope is the node itself, so it windows
+            // on the node prefix alone. ownedByInnerScope then hands each of the
+            // node's blocks to its own window: every sibling prefix is strictly
+            // longer than this one.
+            tripScopePrefixes.append(nodePrefix);
+            continue;
+        }
+        const QString tripScope = cwTrip::scopePrefix(trip, tripLabels);
+        tripScopePrefixes.append(tripScope.isEmpty() ? QString() : nodePrefix + tripScope);
+    }
+
+    // Undirected de-dup: each in-scope station lists its neighbors, so every
+    // leg would otherwise be emitted twice (once from each endpoint) — and a
+    // tie leg across a scope boundary once more from the neighboring scope.
+    // Shared by the node's scopes, keyed by scope-agnostic network keys.
+    QSet<QString> emittedNodeLegs;
+
+    const auto resolve = [&stationPositions](const QString& stationName, QVector3D* out) -> bool {
+        auto posIt = stationPositions.constFind(cwStation::canonicalKey(stationName));
+        if (posIt == stationPositions.constEnd()) {
+            return false;
+        }
+        *out = posIt.value();
+        return true;
+    };
+
+    for (int tripIndex = 0; tripIndex < node.trips.size(); tripIndex++) {
+        const cwTripData& trip = node.trips.at(tripIndex);
+
+        // Every trip gets a running id (== index into tripUuids /
+        // tripVertexRanges) in walk order, even ones that emit no geometry, so
+        // both tables stay a dense total-trip-count list.
+        result.tripUuids.append(trip.id);
+        const int vertexStart = result.points.size();
+
+        // A scoped trip (externally-attached) has no chunk topology of its
+        // own; its shots live only in the solved network. Emit those segments
+        // and skip the chunk walk entirely.
+        const QString& scopePrefix = tripScopePrefixes.at(tripIndex);
+        if (!scopePrefix.isEmpty()) {
+            nodeExtent.absorb(emitNetworkScopeGeometry(
+                network, nodePrefix, scopePrefix, tripScopePrefixes,
+                stationPositions, result.points, emittedNodeLegs));
+
+            const int vertexCount = result.points.size() - vertexStart;
+            result.tripVertexRanges.append(cwLinePlotGeometry::VertexRange{vertexStart, vertexCount});
+            continue;
+        }
+
+        for (const cwSurveyChunkData& chunk : trip.chunks) {
+            if (chunk.stations.size() < 2) {
+                continue;
+            }
+
+            // Empty leading stations (bug #435) have no position —
+            // bootstrap from the first station that has a solved position.
+            int startIndex = 0;
+            QVector3D previousPoint;
+            bool havePrevious = false;
+            while (startIndex < chunk.stations.size()) {
+                if (resolve(chunk.stations.at(startIndex).name(), &previousPoint)) {
+                    havePrevious = true;
+                    break;
+                }
+                startIndex++;
+            }
+            if (!havePrevious || startIndex >= chunk.stations.size() - 1) {
+                continue;
+            }
+
+            nodeExtent.includeDepth(previousPoint.z());
+
+            for (int stationIndex = startIndex + 1;
+                 stationIndex < chunk.stations.size();
+                 stationIndex++) {
+                const cwShot& shot = chunk.shots.at(stationIndex - 1);
+
+                QVector3D currentPoint;
+                if (!resolve(chunk.stations.at(stationIndex).name(), &currentPoint)) {
+                    // Unresolved station — skip the shot; the next resolved
+                    // station bridges back to previousPoint, exactly as the
+                    // shared-vertex path did.
+                    continue;
+                }
+
+                if (shot.isDistanceIncluded()) {
+                    nodeExtent.includeDepth(currentPoint.z());
+                    nodeExtent.length += QVector3D(currentPoint - previousPoint).length();
+                }
+
+                // Per-shot de-share: emit both endpoints as this shot's own
+                // vertices (a station shared with the prior shot is
+                // duplicated), so the pair [2i, 2i+1] is one segment.
+                result.points.append(previousPoint);
+                result.points.append(currentPoint);
+
+                previousPoint = currentPoint;
+            }
+        }
+
+        const int vertexCount = result.points.size() - vertexStart;
+        result.tripVertexRanges.append(cwLinePlotGeometry::VertexRange{vertexStart, vertexCount});
+    }
+
+    return nodeExtent;
+}
+
+// Emits \a node's trips, then each child's subtree, records the node's folded
+// length and depth, and returns that subtree extent for the parent to fold.
+ScopeExtent emitSubtree(const cwCaveData& node,
+                        const cwScopeLabels& scopeLabels,
+                        const cwSurveyNetwork& network,
+                        cwLinePlotGeometry::Result& result)
+{
+    ScopeExtent subtreeExtent = emitOwnTrips(node, scopeLabels, network, result);
+    for (const cwCaveData& child : node.nodes) {
+        subtreeExtent.absorb(emitSubtree(child, scopeLabels, network, result));
+    }
+
+    // Always a real measurement: a node that resolved no centerline is length
+    // 0 and depth 0, which is what an empty node measures. The value travels
+    // straight to the node's length()/depth(), so an "unset" marker would
+    // render as one.
+    result.nodeLengthAndDepths.insert(
+        node.id,
+        subtreeExtent.hasDepth
+            ? cwLinePlotGeometry::LengthAndDepth(subtreeExtent.length,
+                                                 subtreeExtent.maxDepth - subtreeExtent.minDepth)
+            : cwLinePlotGeometry::LengthAndDepth(0.0, 0.0));
+    return subtreeExtent;
+}
+
 } // namespace
 
 Monad::Result<cwLinePlotGeometry::Result>
@@ -152,156 +324,12 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
 {
     Result result;
 
-    const int caveCount = region.caves.size();
-    result.cavesLengthAndDepths.resize(caveCount);
-
     // The same labels the exporter wrote, rebuilt from the same ordered
     // snapshot rather than carried across the boundary (see cwCavernNaming).
     const cwScopeLabels scopeLabels(region);
 
-    for (int caveIndex = 0; caveIndex < caveCount; caveIndex++) {
-        const cwCaveData& cave = region.caves.at(caveIndex);
-        const QHash<QString, QVector3D> stationPositions = caveStationPositions(cave);
-
-        // Network keys are region-wide ("fisher_ridge.topo1.<tail>"); the
-        // cave-local lookup strips this cave prefix, so external scopes bridge
-        // through it.
-        const QString cavePrefix = scopeLabels.prefix(cave.id);
-        const QHash<QUuid, QString>& tripLabels = scopeLabels.tripLabels(cave.id);
-
-        double minDepth = std::numeric_limits<double>::max();
-        double maxDepth = -std::numeric_limits<double>::max();
-        double length = 0.0;
-        bool hasDepth = false;
-
-        // Each trip's network-wide scope prefix, empty for a native trip.
-        // Gathered before the trip loop so every scope also sees its siblings'
-        // and can hand its nested blocks' stations to the deeper scope that
-        // owns them.
-        QStringList tripScopePrefixes;
-        tripScopePrefixes.reserve(cave.trips.size());
-        for (const cwTripData& trip : cave.trips) {
-            if (cwTrip::windowsWholeCave(trip, cave)) {
-                // The whole-cave window's scope is the cave itself, so it
-                // windows on the cave prefix alone. ownedByInnerScope then hands
-                // each of the cave's blocks to its own window: every sibling
-                // prefix is strictly longer than this one.
-                tripScopePrefixes.append(cavePrefix);
-                continue;
-            }
-            const QString tripScope = cwTrip::scopePrefix(trip, tripLabels);
-            tripScopePrefixes.append(tripScope.isEmpty() ? QString() : cavePrefix + tripScope);
-        }
-
-        // Undirected de-dup: each in-scope station lists its neighbors, so every
-        // leg would otherwise be emitted twice (once from each endpoint) — and a
-        // tie leg across a scope boundary once more from the neighboring scope.
-        // Shared by the cave's scopes, keyed by scope-agnostic network keys.
-        QSet<QString> emittedCaveLegs;
-
-        for (int tripIndex = 0; tripIndex < cave.trips.size(); tripIndex++) {
-            const cwTripData& trip = cave.trips.at(tripIndex);
-
-            // Every trip gets a running id (== index into tripUuids /
-            // tripVertexRanges) in iteration order, even ones that emit no
-            // geometry, so both tables stay a dense total-trip-count list.
-            result.tripUuids.append(trip.id);
-            const int vertexStart = result.points.size();
-
-            const auto resolve = [&](const QString& stationName, QVector3D* out) -> bool {
-                auto posIt = stationPositions.constFind(cwStation::canonicalKey(stationName));
-                if (posIt == stationPositions.constEnd()) {
-                    return false;
-                }
-                *out = posIt.value();
-                return true;
-            };
-
-            // A scoped trip (externally-attached) has no chunk topology of its
-            // own; its shots live only in the solved network. Emit those segments
-            // and skip the chunk walk entirely.
-            const QString& scopePrefix = tripScopePrefixes.at(tripIndex);
-            if (!scopePrefix.isEmpty()) {
-                const ScopeExtent extent = emitNetworkScopeGeometry(
-                    network, cavePrefix, scopePrefix, tripScopePrefixes,
-                    stationPositions, result.points, emittedCaveLegs);
-                if (extent.hasDepth) {
-                    minDepth = qMin(minDepth, extent.minDepth);
-                    maxDepth = qMax(maxDepth, extent.maxDepth);
-                    length += extent.length;
-                    hasDepth = true;
-                }
-
-                const int vertexCount = result.points.size() - vertexStart;
-                result.tripVertexRanges.append(VertexRange{vertexStart, vertexCount});
-                continue;
-            }
-
-            for (const cwSurveyChunkData& chunk : trip.chunks) {
-                if (chunk.stations.size() < 2) {
-                    continue;
-                }
-
-                // Empty leading stations (bug #435) have no position —
-                // bootstrap from the first station that has a solved position.
-                int startIndex = 0;
-                QVector3D previousPoint;
-                bool havePrevious = false;
-                while (startIndex < chunk.stations.size()) {
-                    if (resolve(chunk.stations.at(startIndex).name(), &previousPoint)) {
-                        havePrevious = true;
-                        break;
-                    }
-                    startIndex++;
-                }
-                if (!havePrevious || startIndex >= chunk.stations.size() - 1) {
-                    continue;
-                }
-
-                minDepth = qMin(minDepth, (double)previousPoint.z());
-                maxDepth = qMax(maxDepth, (double)previousPoint.z());
-                hasDepth = true;
-
-                for (int stationIndex = startIndex + 1;
-                     stationIndex < chunk.stations.size();
-                     stationIndex++) {
-                    const cwShot& shot = chunk.shots.at(stationIndex - 1);
-
-                    QVector3D currentPoint;
-                    if (!resolve(chunk.stations.at(stationIndex).name(), &currentPoint)) {
-                        // Unresolved station — skip the shot; the next resolved
-                        // station bridges back to previousPoint, exactly as the
-                        // shared-vertex path did.
-                        continue;
-                    }
-
-                    if (shot.isDistanceIncluded()) {
-                        minDepth = qMin(minDepth, (double)currentPoint.z());
-                        maxDepth = qMax(maxDepth, (double)currentPoint.z());
-                        length += QVector3D(currentPoint - previousPoint).length();
-                    }
-
-                    // Per-shot de-share: emit both endpoints as this shot's own
-                    // vertices (a station shared with the prior shot is
-                    // duplicated), so the pair [2i, 2i+1] is one segment.
-                    result.points.append(previousPoint);
-                    result.points.append(currentPoint);
-
-                    previousPoint = currentPoint;
-                }
-            }
-
-            const int vertexCount = result.points.size() - vertexStart;
-            result.tripVertexRanges.append(VertexRange{vertexStart, vertexCount});
-        }
-
-        // Always a real measurement: a cave that resolved no centerline is
-        // length 0 and depth 0, which is what an empty cave measures. The
-        // value travels straight to cave->length()/depth(), so an "unset"
-        // marker would render as one.
-        result.cavesLengthAndDepths[caveIndex] = hasDepth
-            ? cwLinePlotGeometry::CaveLengthAndDepth(length, maxDepth - minDepth)
-            : cwLinePlotGeometry::CaveLengthAndDepth(0.0, 0.0);
+    for (const cwCaveData& cave : region.caves) {
+        emitSubtree(cave, scopeLabels, network, result);
     }
 
     result.points.squeeze();

@@ -20,6 +20,7 @@
 #include "cwCavingRegion.h"
 #include "cwCavingRegionData.h"
 #include "cwScopeLabels.h"
+#include "cwSignalSpy.h"
 #include "cwTrip.h"
 #include "cwTripData.h"
 
@@ -339,4 +340,85 @@ TEST_CASE("The live caches and the snapshot pool agree at every depth",
         CHECK(node->tripScopeLabels() == snapshot.tripLabels(node->id()));
     }
     CHECK(snapshot.label(sectionTwin->id()) == QStringLiteral("upper_level_2"));
+}
+
+TEST_CASE("A child node takes a label apart from every trip beside it",
+          "[cwScopeLabels][scope]")
+{
+    // A node's trips and its child nodes each open a "*begin <label>" block in
+    // the same scope, so one label on both would merge their stations in cavern
+    // and hand the trip's stations to the child on decode. Trips claim their
+    // labels first, so a trip's label depends only on its sibling trips.
+    cwCaveData sideCave = caveData(QStringLiteral("Side Cave"), {QStringLiteral("Dome climb")});
+    sideCave.nodes.append(caveData(QStringLiteral("Dome-climb")));
+    const QUuid tripId = sideCave.trips.at(0).id;
+    const QUuid childId = sideCave.nodes.at(0).id;
+
+    const cwScopeLabels labels(regionData({sideCave}));
+
+    CHECK(labels.tripLabels(sideCave.id).value(tripId) == QStringLiteral("dome_climb"));
+    CHECK(labels.label(childId) == QStringLiteral("dome_climb_2"));
+    CHECK(labels.prefix(childId) == QStringLiteral("side_cave.dome_climb_2."));
+
+    SECTION("so a trip's station decodes into the trip's own node") {
+        const cwScopeLabels::Resolution resolution =
+            labels.resolve(QStringLiteral("side_cave.dome_climb.a1"));
+        CHECK(resolution.nodeId == sideCave.id);
+        CHECK(resolution.remainder == QStringLiteral("dome_climb.a1"));
+    }
+
+    SECTION("and the child keeps its station tail") {
+        const cwScopeLabels::Resolution resolution =
+            labels.resolve(QStringLiteral("side_cave.dome_climb_2.a1"));
+        CHECK(resolution.nodeId == childId);
+        CHECK(resolution.remainder == QStringLiteral("a1"));
+    }
+}
+
+TEST_CASE("The live caches move a child's label when a trip beside it takes it",
+          "[cwScopeLabels][scope]")
+{
+    cwCavingRegion region;
+
+    cwCave* sideCave = new cwCave();
+    sideCave->setName(QStringLiteral("Side Cave"));
+    region.rootNode()->addNode(sideCave);
+
+    cwCave* child = new cwCave();
+    child->setName(QStringLiteral("Dome climb"));
+    sideCave->addNode(child);
+
+    REQUIRE(sideCave->childScopeLabels().value(child->id()) == QStringLiteral("dome_climb"));
+
+    cwSignalSpy childLabelsSpy(sideCave, &cwSurveyNode::childScopeLabelsChanged);
+
+    cwTrip* trip = new cwTrip();
+    trip->setName(QStringLiteral("Dome climb"));
+    sideCave->addTrip(trip);
+
+    CHECK(childLabelsSpy.count() == 1);
+    CHECK(sideCave->tripScopeLabels().value(trip->id()) == QStringLiteral("dome_climb"));
+    CHECK(sideCave->childScopeLabels().value(child->id()) == QStringLiteral("dome_climb_2"));
+    CHECK_FALSE(sideCave->childScopeLabels().contains(trip->id()));
+
+    const cwScopeLabels snapshot(region.data());
+    CHECK(sideCave->childScopeLabels().value(child->id()) == snapshot.label(child->id()));
+    CHECK(sideCave->tripScopeLabels() == snapshot.tripLabels(sideCave->id()));
+
+    SECTION("and give it back when the trip is renamed away") {
+        trip->setName(QStringLiteral("Sump dig"));
+
+        CHECK(childLabelsSpy.count() == 2);
+        CHECK(sideCave->childScopeLabels().value(child->id()) == QStringLiteral("dome_climb"));
+    }
+
+    SECTION("and keep a node with no children quiet when its trips change") {
+        cwSignalSpy leafChildLabelsSpy(child, &cwSurveyNode::childScopeLabelsChanged);
+
+        cwTrip* leafTrip = new cwTrip();
+        leafTrip->setName(QStringLiteral("Sump dig"));
+        child->addTrip(leafTrip);
+
+        CHECK(leafChildLabelsSpy.count() == 0);
+    }
 }

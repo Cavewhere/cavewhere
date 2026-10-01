@@ -183,14 +183,6 @@ cwLinePlotGeometry::Result geometryOf(SavedProjectFixture* fixture)
     return result.value();
 }
 
-//! How many vertices the geometry pass gave \a trip.
-int vertexCountOf(const cwLinePlotGeometry::Result& geometry, const cwTrip* trip)
-{
-    const qsizetype tripIndex = geometry.tripUuids.indexOf(trip->id());
-    REQUIRE(tripIndex >= 0);
-    return geometry.tripVertexRanges.at(tripIndex).count;
-}
-
 // Solved positions are floats, so a length assembled from them drifts by
 // fractions of a centimeter off the tape totals cavern reports.
 constexpr double kSolvedLengthMarginMeters = 0.05;
@@ -830,13 +822,10 @@ TEST_CASE("A Compass cave draws through its one whole-cave window",
     CHECK(vertexCountOf(geometry, window) == 8);
 
     // 31 ft of tape: a Compass .dat spells distances in decimal feet.
-    const int caveIndex = fixture->project->cavingRegion()->indexOf(cave);
-    REQUIRE(caveIndex >= 0);
-    REQUIRE(geometry.cavesLengthAndDepths.size() > caveIndex);
-    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).length()
-          == Catch::Approx(9.45).margin(kSolvedLengthMarginMeters));
-    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).depth()
-          == Catch::Approx(1.07).margin(kSolvedLengthMarginMeters));
+    REQUIRE(geometry.nodeLengthAndDepths.contains(cave->id()));
+    const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(cave->id());
+    CHECK(measured.length() == Catch::Approx(9.45).margin(kSolvedLengthMarginMeters));
+    CHECK(measured.depth() == Catch::Approx(1.07).margin(kSolvedLengthMarginMeters));
 
     drainPipelines(fixture.get());
 }
@@ -871,12 +860,10 @@ TEST_CASE("A Walls cave splits between its whole-cave window and its prefix wind
     CHECK(vertexCountOf(geometry, window) == 4);
     CHECK(vertexCountOf(geometry, xy) == 4);
 
-    const int caveIndex = fixture->project->cavingRegion()->indexOf(cave);
-    REQUIRE(caveIndex >= 0);
-    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).length()
-          == Catch::Approx(32.0).margin(kSolvedLengthMarginMeters));
-    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).depth()
-          == Catch::Approx(3.0).margin(kSolvedLengthMarginMeters));
+    REQUIRE(geometry.nodeLengthAndDepths.contains(cave->id()));
+    const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(cave->id());
+    CHECK(measured.length() == Catch::Approx(32.0).margin(kSolvedLengthMarginMeters));
+    CHECK(measured.depth() == Catch::Approx(3.0).margin(kSolvedLengthMarginMeters));
 
     drainPipelines(fixture.get());
 }
@@ -908,12 +895,10 @@ TEST_CASE("A Survex file with shots outside every block windows the root too",
     CHECK(vertexCountOf(geometry, window) == 4);
     CHECK(vertexCountOf(geometry, side) == 4);
 
-    const int caveIndex = fixture->project->cavingRegion()->indexOf(cave);
-    REQUIRE(caveIndex >= 0);
-    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).length()
-          == Catch::Approx(25.0).margin(kSolvedLengthMarginMeters));
-    CHECK(geometry.cavesLengthAndDepths.at(caveIndex).depth()
-          == Catch::Approx(2.0).margin(kSolvedLengthMarginMeters));
+    REQUIRE(geometry.nodeLengthAndDepths.contains(cave->id()));
+    const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(cave->id());
+    CHECK(measured.length() == Catch::Approx(25.0).margin(kSolvedLengthMarginMeters));
+    CHECK(measured.depth() == Catch::Approx(2.0).margin(kSolvedLengthMarginMeters));
 
     drainPipelines(fixture.get());
 }

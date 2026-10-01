@@ -413,7 +413,7 @@ TEST_CASE("A region equate draws stations in two caves coincident",
     REQUIRE_FALSE(manager.hasSolveError());
 
     // The tie crosses the cave boundary: each qualified operand decodes back
-    // into its own cave's lookup (splitLookupByCave), so the coincidence check
+    // into its own cave's lookup (splitLookupByNode), so the coincidence check
     // reads "2" from Alpha and "y" from Beta.
     const cwStationPositionLookup& lookupA = caveA->stationPositionLookup();
     const cwStationPositionLookup& lookupB = caveB->stationPositionLookup();

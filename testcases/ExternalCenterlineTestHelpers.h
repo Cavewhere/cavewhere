@@ -23,6 +23,7 @@
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
+#include "cwLinePlotGeometry.h"
 #include "cwLinePlotManager.h"
 #include "cwNote.h"
 #include "cwNoteStation.h"
@@ -338,15 +339,17 @@ inline cwTrip* addAttachedTrip(cwCave* cave,
 inline cwTrip* addNativeTripWithShot(cwCave* cave,
                                     const QString& name,
                                     const QString& fromName,
-                                    const QString& toName)
+                                    const QString& toName,
+                                    const cwDistanceReading& distance = cwDistanceReading(QStringLiteral("10.0")),
+                                    const cwClinoReading& clino = cwClinoReading(QStringLiteral("0.0")))
 {
     cwTrip* trip = addEmptyTrip(cave, name);
     cwSurveyChunk* chunk = new cwSurveyChunk();
     trip->addChunk(chunk);
     cwShot shot;
-    shot.setDistance(cwDistanceReading(QStringLiteral("10.0")));
+    shot.setDistance(distance);
     shot.setCompass(cwCompassReading(QStringLiteral("0.0")));
-    shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+    shot.setClino(clino);
     chunk->appendShot(cwStation(fromName), cwStation(toName), shot);
     return trip;
 }
@@ -395,6 +398,14 @@ inline void solveRegion(cwLinePlotManager& manager,
     manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
+}
+
+//! How many vertices the geometry pass gave \a trip.
+inline int vertexCountOf(const cwLinePlotGeometry::Result& geometry, const cwTrip* trip)
+{
+    const qsizetype tripIndex = geometry.tripUuids.indexOf(trip->id());
+    REQUIRE(tripIndex >= 0);
+    return geometry.tripVertexRanges.at(tripIndex).count;
 }
 
 //! The survey label an externally-attached trip's *begin block carries, which is

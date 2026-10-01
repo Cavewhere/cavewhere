@@ -18,7 +18,7 @@ class cwCavingRegion;
 #include "cwLinePlotGeometry.h"
 class cwScrap;
 class cwTrip;
-class cwCave;
+class cwSurveyNode;
 
 
 //Qt includes
@@ -125,8 +125,8 @@ public:
     /**
      * @brief The CaveStationData class
      *
-     * Identifies the caves, trips, and scraps whose station positions changed
-     * by their stable cwCave/cwTrip/cwScrap::id() UUID rather than a raw
+     * Identifies the nodes, trips, and scraps whose station positions changed
+     * by their stable cwSurveyNode/cwTrip/cwScrap::id() UUID rather than a raw
      * pointer. Only value-type identity crosses the worker boundary; the
      * manager resolves each UUID back to the live object on the main thread.
      *
@@ -156,6 +156,7 @@ public:
         cwSurveyNetwork regionNetwork() const;
         bool hasRegionNetworkChanged() const;
 
+        // Keyed by cwSurveyNode::id(), one entry per node at any depth.
         QHash<QUuid, LinePlotCaveData> Caves;
         QSet<QUuid> Trips;
         QSet<QUuid> Scraps;
@@ -245,12 +246,12 @@ public:
     /**
      * @brief The StationCaveLookup class
      *
-     * Stores a lookup for all the stations and scraps in a cave.  This will a station to multiple
-     * trips / scraps
+     * Stores a lookup for all the stations and scraps in one node's own trips.
+     * It maps a station to multiple trips / scraps
      */
     class StationTripScrapLookup {
     public:
-        StationTripScrapLookup(cwCave* cave);
+        explicit StationTripScrapLookup(cwSurveyNode* node);
         StationTripScrapLookup() { }
 
         // Trip UUIDs, and (tripId, scrapId) pairs, of every trip/scrap that

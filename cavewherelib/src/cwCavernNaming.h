@@ -28,7 +28,7 @@
  * them - which is what lets the worker thread decode what the exporter wrote.
  *
  * Every producer (the survex exporter, the line-plot driver) and every consumer
- * (splitLookupByCave, the cave-network mirror, the cwTrip solved-station
+ * (splitLookupByNode, the node-network mirror, the cwTrip solved-station
  * accessors, the geometry/label enumeration) shares these functions so the
  * encode and decode sides can never drift.
  */

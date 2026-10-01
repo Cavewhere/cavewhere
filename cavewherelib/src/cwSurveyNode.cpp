@@ -530,7 +530,9 @@ const QHash<QUuid, QString>& cwSurveyNode::tripScopeLabels() const
 
 const QHash<QUuid, QString>& cwSurveyNode::childScopeLabels() const
 {
-    return m_childScopeLabels.labels(m_childNodes);
+    //Child blocks open in the same scope as the trip blocks, so the trips claim
+    //their labels first and the children take labels apart from them.
+    return m_childScopeLabels.labels(m_childNodes, m_trips);
 }
 
 void cwSurveyNode::invalidateTripScopeLabels()
@@ -541,6 +543,17 @@ void cwSurveyNode::invalidateTripScopeLabels()
     //is in place before nameChanged reaches here.
     m_tripScopeLabels.invalidate();
     emit tripScopeLabelsChanged();
+    invalidateChildScopeLabelsAfterTripChange();
+}
+
+void cwSurveyNode::invalidateChildScopeLabelsAfterTripChange()
+{
+    //A trip label can push a child off the label it held. Pulsed only when there
+    //are children to move, so a flat node's trip edits stay as quiet as before.
+    m_childScopeLabels.invalidate();
+    if(!m_childNodes.isEmpty()) {
+        emit childScopeLabelsChanged();
+    }
 }
 
 void cwSurveyNode::invalidateChildScopeLabels()
@@ -902,12 +915,14 @@ void cwSurveyNode::InsertRemoveTrip::insertTrips() {
     //and a cache still marked fresh would answer it from the trip list as it
     //stood before this insert.
     node->m_tripScopeLabels.invalidate();
+    node->m_childScopeLabels.invalidate();
 
     emit node->endInsertRows();
     emit node->insertedTrips(BeginIndex, EndIndex);
 
     //Pulsed last, so a consumer woken by it reads a node whose trip list is settled.
     emit node->tripScopeLabelsChanged();
+    node->invalidateChildScopeLabelsAfterTripChange();
     emit node->tripCountChanged();
     emit node->subtreeChanged();
 }
@@ -934,11 +949,13 @@ void cwSurveyNode::InsertRemoveTrip::removeTrips() {
     OwnsTrips = true;
 
     node->m_tripScopeLabels.invalidate();
+    node->m_childScopeLabels.invalidate();
 
     emit node->endRemoveRows();
     emit node->removedTrips(BeginIndex, EndIndex);
 
     emit node->tripScopeLabelsChanged();
+    node->invalidateChildScopeLabelsAfterTripChange();
     emit node->tripCountChanged();
     emit node->subtreeChanged();
 }

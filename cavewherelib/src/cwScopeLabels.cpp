@@ -11,12 +11,13 @@ namespace {
 //! reference without the caller checking first.
 const QHash<QUuid, QString> kNoTripLabels;
 
-QList<cwCavernNaming::ScopeEntry> tripEntries(const QList<cwTripData>& trips)
+template <typename Data>
+QList<cwCavernNaming::ScopeEntry> scopeEntries(const QList<Data>& siblings)
 {
     QList<cwCavernNaming::ScopeEntry> entries;
-    entries.reserve(trips.size());
-    for (const cwTripData& trip : trips) {
-        entries.append({trip.id, trip.name});
+    entries.reserve(siblings.size());
+    for (const Data& sibling : siblings) {
+        entries.append({sibling.id, sibling.name});
     }
     return entries;
 }
@@ -25,26 +26,25 @@ QList<cwCavernNaming::ScopeEntry> tripEntries(const QList<cwTripData>& trips)
 
 cwScopeLabels::cwScopeLabels(const cwCavingRegionData& region)
 {
-    addSiblings(QUuid(), QString(), region.caves);
+    addSiblings(QUuid(), QString(), region.caves, {});
 }
 
 cwScopeLabels cwScopeLabels::forNode(const cwCaveData& node)
 {
     cwScopeLabels labels;
-    labels.addSiblings(QUuid(), QString(), {node});
+    labels.addSiblings(QUuid(), QString(), {node}, {});
     return labels;
 }
 
 void cwScopeLabels::addSiblings(const QUuid& parentId, const QString& parentPrefix,
-                                const QList<cwCaveData>& siblings)
+                                const QList<cwCaveData>& siblings,
+                                const QList<cwTripData>& siblingTrips)
 {
-    QList<cwCavernNaming::ScopeEntry> entries;
-    entries.reserve(siblings.size());
-    for (const cwCaveData& sibling : siblings) {
-        entries.append({sibling.id, sibling.name});
-    }
-
-    const QHash<QUuid, QString> labels = cwCavernNaming::scopeLabels(entries);
+    //A node's trips and child nodes open their blocks in one scope, so they draw
+    //from one pool. Trips claim first, which keeps a trip's label a function of
+    //its sibling trips alone.
+    const QHash<QUuid, QString> labels =
+        cwCavernNaming::scopeLabels(scopeEntries(siblingTrips) + scopeEntries(siblings));
     for (const cwCaveData& sibling : siblings) {
         addNode(parentId, parentPrefix, sibling, labels.value(sibling.id));
     }
@@ -57,8 +57,8 @@ void cwScopeLabels::addNode(const QUuid& parentId, const QString& parentPrefix,
     m_nodeLabels.insert(node.id, label);
     m_prefixes.insert(node.id, prefix);
     m_childIdsByLabel[parentId].insert(label.toLower(), node.id);
-    m_tripLabelsByNode.insert(node.id, cwCavernNaming::scopeLabels(tripEntries(node.trips)));
-    addSiblings(node.id, prefix, node.nodes);
+    m_tripLabelsByNode.insert(node.id, cwCavernNaming::scopeLabels(scopeEntries(node.trips)));
+    addSiblings(node.id, prefix, node.nodes, node.trips);
 }
 
 QString cwScopeLabels::label(const QUuid& nodeId) const

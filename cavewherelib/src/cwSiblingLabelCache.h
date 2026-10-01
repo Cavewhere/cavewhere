@@ -37,14 +37,32 @@ public:
     template <typename ChildList>
     const QHash<QUuid, QString>& labels(const ChildList& children) const
     {
+        return labels(children, ChildList());
+    }
+
+    //! The same, with \a claimed labeled ahead of \a children in one pool and
+    //! left out of the answer: \a children take labels apart from every
+    //! \a claimed one, which keeps the labels it already had.
+    template <typename ChildList, typename ClaimedList>
+    const QHash<QUuid, QString>& labels(const ChildList& children,
+                                        const ClaimedList& claimed) const
+    {
         if(m_stale) {
             QList<cwCavernNaming::ScopeEntry> entries;
-            entries.reserve(children.size());
+            entries.reserve(claimed.size() + children.size());
+            for(const auto* entry : claimed) {
+                entries.append({entry->id(), entry->name()});
+            }
             for(const auto* child : children) {
                 entries.append({child->id(), child->name()});
             }
 
-            m_labels = cwCavernNaming::scopeLabels(entries);
+            const QHash<QUuid, QString> pool = cwCavernNaming::scopeLabels(entries);
+            m_labels.clear();
+            m_labels.reserve(children.size());
+            for(const auto* child : children) {
+                m_labels.insert(child->id(), pool.value(child->id()));
+            }
             m_stale = false;
         }
         return m_labels;

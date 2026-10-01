@@ -5,6 +5,7 @@
 #include "cwGlobals.h"
 struct cwCaveData;
 struct cwCavingRegionData;
+struct cwTripData;
 
 //Qt includes
 #include <QHash>
@@ -19,9 +20,9 @@ struct cwCavingRegionData;
  * Every native node is its own "*begin <label>" block, nested the way the tree
  * nests, so a station's cavern name is its node's label path, then the trip
  * scope, then the tail: <cave>.<section>.<tripLabel>.<tail>. cwCavernNaming
- * assigns a label per sibling set — a node among its parent's child nodes, a
- * trip among its node's trips — which makes every label a pure function of an
- * ordered snapshot. That is what lets the exporter, the line-plot worker and the
+ * assigns a label per sibling set — a trip among its node's trips, a node among
+ * its parent's trips and child nodes — which makes every label a pure function
+ * of an ordered snapshot. That is what lets the exporter, the line-plot worker and the
  * geometry pass agree on a name without carrying a map across the thread
  * boundary between them; this is that derivation done once and passed along.
  *
@@ -49,8 +50,8 @@ public:
     //! collide with, and its subtree is labeled the way a region would label it.
     static cwScopeLabels forNode(const cwCaveData& node);
 
-    //! The label \a nodeId's "*begin" block carries, unique among its siblings,
-    //! or empty when this pool assigned none.
+    //! The label \a nodeId's "*begin" block carries, unique among its sibling
+    //! nodes and its parent's trips, or empty when this pool assigned none.
     QString label(const QUuid& nodeId) const;
 
     //! Every label from the top-level node down to \a nodeId, each followed by
@@ -82,7 +83,8 @@ private:
     QHash<QUuid, QHash<QUuid, QString>> m_tripLabelsByNode;
 
     void addSiblings(const QUuid& parentId, const QString& parentPrefix,
-                     const QList<cwCaveData>& siblings);
+                     const QList<cwCaveData>& siblings,
+                     const QList<cwTripData>& siblingTrips);
     void addNode(const QUuid& parentId, const QString& parentPrefix,
                  const cwCaveData& node, const QString& label);
     QUuid childId(const QUuid& parentId, const QString& label) const;

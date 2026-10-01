@@ -13,6 +13,7 @@
 #include "cwCavingRegionData.h"
 #include "cwSurveyNetwork.h"
 
+#include <QHash>
 #include <QVector>
 #include <QVector3D>
 #include <QUuid>
@@ -20,14 +21,16 @@
 /**
  * \brief Generate the 3D line-plot geometry for a caving region.
  *
- * Iterates the region's caves, trips and survey chunks; produces a vector of
- * station positions laid out as a non-indexed line list and per-cave
- * length/depth values.
+ * Walks the region's survey tree pre-order — each node's own trips, then its
+ * child nodes — and produces a vector of station positions laid out as a
+ * non-indexed line list and per-node length/depth values. A node's length and
+ * depth fold over its whole subtree: a Folder's length is the sum of its
+ * caves', and its depth spans from the highest station below it to the lowest.
  *
  * A trip attached to an external centerline owns no cwSurveyChunk — its shot
  * topology exists only in the solved survey network. For those scopes the
  * segments are read from `network` instead (coordinates still come from the
- * cave's position lookup, so both paths share the world-origin-relative
+ * node's position lookup, so both paths share the world-origin-relative
  * space). Pass an empty network when there are no external scopes.
  *
  * Vertices are de-shared per shot: each drawn shot owns its own two endpoint
@@ -38,16 +41,16 @@
  *
  * Each leg has exactly one owner. A nested external scope's stations also
  * carry its parent scope's prefix, so a station claimed by a longer scope
- * prefix in the same cave belongs to that innermost scope; a leg tying two
- * scopes together is drawn by whichever of them the cave reaches first. Per-cave
+ * prefix in the same node belongs to that innermost scope; a leg tying two
+ * scopes together is drawn by whichever of them the node reaches first. Per-node
  * length and depth therefore count each leg once, as does per-trip visibility.
  *
  * Each trip's vertices are emitted contiguously; tripVertexRanges[i] gives the
  * [start, count) span of running trip i, and tripUuids[i] maps that running id
  * back to a stable cwTripData::id so callers can re-attach it to a live trip
  * without relying on list position. A running id is assigned to every trip in
- * cave->trip iteration order, even trips that emit no geometry (count 0), so
- * both tables are the total trip count.
+ * the walk's order, even trips that emit no geometry (count 0), so both tables
+ * are the total trip count.
  *
  * Pure compute — no file I/O, no Qt object machinery. Caller invokes from
  * any thread; only reads the const region snapshot.
@@ -57,10 +60,10 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotGeometry
 public:
     cwLinePlotGeometry() = delete;
 
-    class CaveLengthAndDepth {
+    class LengthAndDepth {
     public:
-        CaveLengthAndDepth() : Depth(0.0), Length(0.0) {}
-        CaveLengthAndDepth(double length, double depth) : Depth(depth), Length(length) {}
+        LengthAndDepth() : Depth(0.0), Length(0.0) {}
+        LengthAndDepth(double length, double depth) : Depth(depth), Length(length) {}
 
         double length() const { return Length; }
         double depth() const { return Depth; }
@@ -82,7 +85,7 @@ public:
         QVector<QVector3D> points;              // 2 per drawn shot (non-indexed line list)
         QVector<VertexRange> tripVertexRanges;  // running trip id -> span in points
         QVector<QUuid> tripUuids;               // running trip id -> stable cwTripData::id
-        QVector<CaveLengthAndDepth> cavesLengthAndDepths;
+        QHash<QUuid, LengthAndDepth> nodeLengthAndDepths; // every node, keyed by cwCaveData::id
     };
 
     static Monad::Result<Result> generate(const cwCavingRegionData& region,

@@ -180,7 +180,8 @@ public:
     //! costs a lookup rather than a walk over every sibling.
     const QHash<QUuid, QString>& tripScopeLabels() const;
 
-    //! The same, for this node's child nodes.
+    //! The same, for this node's child nodes, which also take labels apart from
+    //! every trip label here, since both open blocks in this node's scope.
     const QHash<QUuid, QString>& childScopeLabels() const;
 
     //! The node holding this one, nullptr for the region's root node and for a
@@ -331,7 +332,8 @@ signals:
     void tripScopeLabelsChanged();
 
     //! The same, for this node's child nodes: one was added, removed, or
-    //! renamed, so another child's collision suffix may have moved.
+    //! renamed, or a trip here took a label a child held, so a child's
+    //! collision suffix may have moved.
     void childScopeLabelsChanged();
 
     //! A label at or below this node moved. The aggregate of
@@ -439,6 +441,7 @@ private:
 
     cwSiblingLabelCache m_childScopeLabels;
     void invalidateChildScopeLabels();
+    void invalidateChildScopeLabelsAfterTripChange();
 
     void wireScopeLabelAggregate();
 

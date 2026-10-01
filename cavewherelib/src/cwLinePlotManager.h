@@ -10,7 +10,7 @@
 
 //Our includes
 class cwCavingRegion;
-class cwCave;
+class cwSurveyNode;
 class cwTrip;
 class cwSurveyChunk;
 class cwShot;
@@ -130,7 +130,8 @@ public:
     void waitToFinish();
 
 signals:
-    void stationPositionInCavesChanged(QList<cwCave*>);
+    //! Carries every node whose solve result moved, at any depth.
+    void stationPositionInCavesChanged(QList<cwSurveyNode*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
     void automaticUpdateChanged();
@@ -175,8 +176,13 @@ private:
 
     bool AutomaticUpdate = true;
 
-    void connectCaves(cwCavingRegion* region);
-    void connectFixStations(cwCave* cave);
+    void rerunIfAnyNodeIsStale(cwCavingRegion* region);
+    void connectFixStations(cwSurveyNode* node);
+
+    //! Hooks the fix stations and equates of every node in the tree. Safe to
+    //! repeat: each connection is unique, so the subtreeChanged handler can call
+    //! it after every insert without stacking re-solves.
+    void connectNodeInputs();
 
     //! Re-solve when an equate list changes. An equate is a survey input like a
     //! shot or a fix — it is what joins two scopes cavern would otherwise leave
@@ -185,7 +191,7 @@ private:
     void connectEquates(cwEquateModel* equates);
 
     void setCaveStationLookupAsStale(bool isStale);
-    void updateUnconnectedChunkErrors(cwCave *cave, const cwLinePlotTask::LinePlotCaveData& caveData);
+    void updateUnconnectedChunkErrors(cwSurveyNode* node, const cwLinePlotTask::LinePlotCaveData& nodeData);
     void clearUnconnectedChunkErrors();
 
     void updateLinePlot(cwLinePlotTask::LinePlotResultData results);

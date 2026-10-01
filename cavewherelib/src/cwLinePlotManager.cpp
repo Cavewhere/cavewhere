@@ -39,15 +39,17 @@
 #include <QFuture>
 #include <QSet>
 
+#include <algorithm>
+
 namespace {
 
-// The worker identifies changed caves/trips/scraps by UUID. Resolve those
+// The worker identifies changed nodes/trips/scraps by UUID. Resolve those
 // UUIDs back to the live objects in `region`, dropping any that were deleted
 // while the solve was running. Walking the live hierarchy (rather than a flat
 // id->object map) also guarantees a trip/scrap is only kept when its owning
-// cave survived.
+// node survived.
 struct ResolvedResults {
-    QHash<cwCave*, cwLinePlotTask::LinePlotCaveData> caves;
+    QHash<cwSurveyNode*, cwLinePlotTask::LinePlotCaveData> nodes;
     QSet<cwTrip*> trips;
     QSet<cwScrap*> scraps;
 };
@@ -56,14 +58,14 @@ ResolvedResults resolveResultsToLive(const cwCavingRegion* region,
                                      const cwLinePlotTask::LinePlotResultData& results)
 {
     ResolvedResults resolved;
-    for (cwCave* cave : region->caves()) {
-        const auto caveIt = results.Caves.constFind(cave->id());
-        if (caveIt == results.Caves.constEnd()) {
+    for (cwSurveyNode* node : region->rootNode()->allNodes()) {
+        const auto nodeIt = results.Caves.constFind(node->id());
+        if (nodeIt == results.Caves.constEnd()) {
             continue;
         }
-        resolved.caves.insert(cave, caveIt.value());
+        resolved.nodes.insert(node, nodeIt.value());
 
-        for (cwTrip* trip : cave->trips()) {
+        for (cwTrip* trip : node->trips()) {
             if (!results.Trips.contains(trip->id())) {
                 continue;
             }
@@ -172,9 +174,12 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
         return;
     }
 
-    //Connect all signal from the region
-    connect(Region, SIGNAL(insertedCaves(int,int)), SLOT(runSurvex()));
-    connect(Region, SIGNAL(removedCaves(int,int)), SLOT(runSurvex()));
+    // A trip or node added or removed at any depth changes what cavern reads,
+    // and a node added anywhere brings fix stations and equates to hook.
+    connect(Region->rootNode(), &cwSurveyNode::subtreeChanged, this, [this]() {
+        connectNodeInputs();
+        runSurvex();
+    });
 
     // globalCoordinateSystem feeds the *cs out / *cs lines on the survex
     // export, so the line plot needs to re-run when the user changes the
@@ -187,24 +192,14 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     SurveySignaler->setRegion(Region);
 
-    // Hook fix-station and equate edits on every existing cave, plus any future
-    // caves. The region's own equates are cross-cave ties and belong to no cave,
-    // so they are hooked once here.
+    // Hook fix-station and equate edits on every existing node; the
+    // subtreeChanged handler above hooks the ones added later. The region's own
+    // equates are cross-node ties and belong to no node, so they are hooked
+    // here too.
     connectEquates(Region->equates());
-    for (cwCave* cave : Region->caves()) {
-        connectFixStations(cave);
-        connectEquates(cave->equates());
-    }
-    connect(Region, &cwCavingRegion::insertedCaves, this, [this](int begin, int end) {
-        for (int i = begin; i <= end && i < Region->caveCount(); ++i) {
-            cwCave* cave = Region->cave(i);
-            connectFixStations(cave);
-            connectEquates(cave->equates());
-        }
-    });
+    connectNodeInputs();
 
-    //Connect all sub data
-    connectCaves(Region);
+    rerunIfAnyNodeIsStale(Region);
 
     // Recompute the external-centerline watch set + missing-source probe.
     // Done after the per-cave/trip connects so any subsequent attach/detach
@@ -215,24 +210,30 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     updateLinePlot(cwLinePlotTask::LinePlotResultData());
 }
 
-void cwLinePlotManager::connectFixStations(cwCave* cave) {
-    if (!cave) { return; }
-    auto* model = cave->fixStations();
+void cwLinePlotManager::connectFixStations(cwSurveyNode* node) {
+    if (!node) { return; }
+    auto* model = node->fixStations();
     if (!model) { return; }
-    const auto rerun = [this](){ runSurvex(); };
-    connect(model, &cwFixStationModel::dataChanged,  this, rerun);
-    connect(model, &cwFixStationModel::rowsInserted, this, rerun);
-    connect(model, &cwFixStationModel::rowsRemoved,  this, rerun);
-    connect(model, &cwFixStationModel::modelReset,   this, rerun);
+    connect(model, &cwFixStationModel::dataChanged,  this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+    connect(model, &cwFixStationModel::rowsInserted, this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+    connect(model, &cwFixStationModel::rowsRemoved,  this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+    connect(model, &cwFixStationModel::modelReset,   this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
 }
 
 void cwLinePlotManager::connectEquates(cwEquateModel* equates) {
     if (!equates) { return; }
-    const auto rerun = [this](){ runSurvex(); };
-    connect(equates, &cwEquateModel::dataChanged,  this, rerun);
-    connect(equates, &cwEquateModel::rowsInserted, this, rerun);
-    connect(equates, &cwEquateModel::rowsRemoved,  this, rerun);
-    connect(equates, &cwEquateModel::modelReset,   this, rerun);
+    connect(equates, &cwEquateModel::dataChanged,  this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+    connect(equates, &cwEquateModel::rowsInserted, this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+    connect(equates, &cwEquateModel::rowsRemoved,  this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+    connect(equates, &cwEquateModel::modelReset,   this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
+}
+
+void cwLinePlotManager::connectNodeInputs() {
+    if (Region == nullptr) { return; }
+    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+        connectFixStations(node);
+        connectEquates(node->equates());
+    }
 }
 
 void cwLinePlotManager::setRenderLinePlot(cwRenderLinePlot* linePlot) {
@@ -275,10 +276,8 @@ void cwLinePlotManager::reconcileTripKeywordItems(
 
     // Resolve UUIDs to live trips by identity (never by list position).
     QHash<QUuid, cwTrip*> liveByUuid;
-    for (cwCave* cave : Region->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            liveByUuid.insert(trip->id(), trip);
-        }
+    for (cwTrip* trip : Region->rootNode()->allTrips()) {
+        liveByUuid.insert(trip->id(), trip);
     }
 
     QSet<cwTrip*> present;
@@ -399,20 +398,15 @@ void cwLinePlotManager::waitToFinish()
 }
 
 /**
-  \brief Connects all the caves in the region to this object
+  \brief Re-solves when any node in the region holds a stale station lookup
   */
-void cwLinePlotManager::connectCaves(cwCavingRegion* region) {
-    bool caveIsStale = false;
+void cwLinePlotManager::rerunIfAnyNodeIsStale(cwCavingRegion* region) {
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    const bool anyNodeIsStale = std::any_of(nodes.cbegin(), nodes.cend(), [](const cwSurveyNode* node) {
+        return node->isStationPositionLookupStale();
+    });
 
-    for(int i = 0; i < region->caveCount(); i++) {
-        cwCave* cave = region->cave(i);
-
-        if(cave->isStationPositionLookupStale()) {
-            caveIsStale = true;
-        }
-    }
-
-    if(caveIsStale) {
+    if(anyNodeIsStale) {
         runSurvex();
     }
 }
@@ -420,14 +414,14 @@ void cwLinePlotManager::connectCaves(cwCavingRegion* region) {
 /**
  * @brief cwLinePlotManager::markCaveStationsAsStale
  *
- * This will go through all the caves in the region and mark them as stale
- * This is useful, to make sure that the cave data is upto date. If the user
+ * This will go through every node in the region and mark it as stale
+ * This is useful, to make sure that the node data is up to date. If the user
  * closes cavewhere before the line plot is re-processed.
  */
 void cwLinePlotManager::setCaveStationLookupAsStale(bool isStale)
 {
-    foreach(cwCave* cave, Region->caves()) {
-        cave->setStationPositionLookupStale(isStale);
+    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+        node->setStationPositionLookupStale(isStale);
     }
 }
 
@@ -437,14 +431,14 @@ void cwLinePlotManager::setCaveStationLookupAsStale(bool isStale)
  * This will clear all the survey chunk errors and add survey chunk error's that exist. Currently
  * the only errors that is added to the whole survey chunk, are unconnected survey chunk error.
  */
-void cwLinePlotManager::updateUnconnectedChunkErrors(cwCave* cave,
-                                                     const cwLinePlotTask::LinePlotCaveData& caveData)
+void cwLinePlotManager::updateUnconnectedChunkErrors(cwSurveyNode* node,
+                                                     const cwLinePlotTask::LinePlotCaveData& nodeData)
 {
 
     //Append unconnected errors
-    if(caveData.unconnectedChunkError().size() > 0) {
-        foreach(auto errorResult, caveData.unconnectedChunkError()) {
-            cwErrorModel* model = cave->trip(errorResult.TripIndex)->chunk(errorResult.SurveyChunkIndex)->errorModel();
+    if(nodeData.unconnectedChunkError().size() > 0) {
+        for (const auto& errorResult : nodeData.unconnectedChunkError()) {
+            cwErrorModel* model = node->trip(errorResult.TripIndex)->chunk(errorResult.SurveyChunkIndex)->errorModel();
             model->errors()->append(errorResult.Error);
             UnconnectedChunks.append(model->errors());
         }
@@ -495,11 +489,11 @@ void cwLinePlotManager::runSurvex() {
         // loops escape together without a flag-per-level check (per
         // CLAUDE.md "Never use goto").
         const auto hasAnySolvableInput = [this]() {
-            for (cwCave* cave : Region->caves()) {
-                if (!cave->externalCenterline().isEmpty()) {
+            for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+                if (!node->externalCenterline().isEmpty()) {
                     return true;
                 }
-                for (cwTrip* trip : cave->trips()) {
+                for (cwTrip* trip : node->trips()) {
                     if (!trip->externalCenterline().isEmpty()) {
                         return true;
                     }
@@ -663,14 +657,14 @@ void cwLinePlotManager::publishPerCaveErrors(const cwLinePlotTask::LinePlotResul
     // Clear stale entries from the previous run before re-publishing the
     // current set; the unconnected-chunk error list is per-pipeline-run.
     clearUnconnectedChunkErrors();
-    // Walk the live caves and resolve each by id() to the worker's UUID-keyed
-    // result, skipping any cave deleted while the solve was running.
-    for (cwCave* cave : Region->caves()) {
-        const auto it = results.Caves.constFind(cave->id());
+    // Walk the live nodes and resolve each by id() to the worker's UUID-keyed
+    // result, skipping any node deleted while the solve was running.
+    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+        const auto it = results.Caves.constFind(node->id());
         if (it == results.Caves.constEnd()) {
             continue;
         }
-        updateUnconnectedChunkErrors(cave, it.value());
+        updateUnconnectedChunkErrors(node, it.value());
     }
 }
 
@@ -687,24 +681,24 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     // any cave/trip/scrap deleted before the task finished.
     const ResolvedResults resolved = resolveResultsToLive(Region, results);
 
-    //Update all the positions for all the caves that need to be updated
+    //Update all the positions for all the nodes that need to be updated
     //Also update the length and depth information
-    for(const auto& [cave, caveData] : resolved.caves.asKeyValueRange()) {
-        if(caveData.hasStationPositionsChanged()) {
-            cave->setStationPositionLookup(caveData.stationPositions());
+    for(const auto& [node, nodeData] : resolved.nodes.asKeyValueRange()) {
+        if(nodeData.hasStationPositionsChanged()) {
+            node->setStationPositionLookup(nodeData.stationPositions());
         }
 
-        if(caveData.hasNetworkChanged()) {
-            cave->setSurveyNetwork(caveData.network());
+        if(nodeData.hasNetworkChanged()) {
+            node->setSurveyNetwork(nodeData.network());
         }
 
-        if(caveData.hasDepthLengthChanged()) {
-            //Update the cave's depth and length
-            double length = cwUnits::convert(caveData.length(), cwUnits::Meters, (cwUnits::LengthUnit)cave->length()->unit());
-            double depth = cwUnits::convert(caveData.depth(), cwUnits::Meters, (cwUnits::LengthUnit)cave->depth()->unit());
+        if(nodeData.hasDepthLengthChanged()) {
+            //Update the node's depth and length
+            double length = cwUnits::convert(nodeData.length(), cwUnits::Meters, (cwUnits::LengthUnit)node->length()->unit());
+            double depth = cwUnits::convert(nodeData.depth(), cwUnits::Meters, (cwUnits::LengthUnit)node->depth()->unit());
 
-            cave->length()->setValue(length);
-            cave->depth()->setValue(depth);
+            node->length()->setValue(length);
+            node->depth()->setValue(depth);
         }
     }
 
@@ -734,10 +728,10 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
             QtFuture::makeReadyValueFuture(Monad::Result<cwSurveyNetwork>(newNetwork)));
     }
 
-    //Mark all caves as up todate
+    //Mark all nodes as up todate
     setCaveStationLookupAsStale(false);
 
-    emit stationPositionInCavesChanged(resolved.caves.keys());
+    emit stationPositionInCavesChanged(resolved.nodes.keys());
     emit stationPositionInTripsChanged(cw::toList(resolved.trips));
     emit stationPositionInScrapsChanged(cw::toList(resolved.scraps));
 

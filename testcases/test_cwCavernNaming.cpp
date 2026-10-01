@@ -194,8 +194,8 @@ TEST_CASE("A scoped station name splits back into scope and remainder",
 
     SECTION("only the first segment is the scope") {
         // A nested external scope and a dotted tail both live in the
-        // remainder; splitLookupByCave peels one cave level and hands the rest
-        // to the cave-local lookup untouched.
+        // remainder; splitLookupByNode peels one node level per label and hands
+        // the rest to the node-local lookup untouched.
         CHECK(scopeHeadOf(QStringLiteral("fisher_ridge.a1")) == QStringLiteral("fisher_ridge"));
         CHECK(removeScopeHead(QStringLiteral("fisher_ridge.a1")) == QStringLiteral("a1"));
 

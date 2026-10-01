@@ -28,6 +28,7 @@
 #include "cwDebug.h"
 #include "cwLength.h"
 #include "cwErrorModel.h"
+#include "cwData.h"
 
 // Qt includes
 #include <QElapsedTimer>
@@ -50,17 +51,16 @@ cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     NetworkChanged(false)
 {
 }
-cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
+cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* node)
 {
     // Keys are matched against the changed-station names reported by
-    // setStationAsChanged, which are the cave-local lookup keys. For an
+    // setStationAsChanged, which are the node-local lookup keys. For an
     // externally-attached trip those retain the trip scope
     // ("<tripLabel>.<tail>") while chunk / note / scrap stations carry only the
     // tail, so every key inserted here is scoped to match (a no-op for a native
     // trip). Resolved once per trip rather than per station: cwTrip::scopePrefix
     // has to look at the trip's siblings to know its label.
-    for(int tripIndex = 0; tripIndex < cave->tripCount(); tripIndex++) {
-        cwTrip* trip = cave->trip(tripIndex);
+    for(cwTrip* trip : node->trips()) {
         const QUuid tripId = trip->id();
         const bool external = !trip->externalCenterline().isEmpty();
         //Native-prefixed (Scope) trips are deliberately left unscoped here:
@@ -125,8 +125,8 @@ struct cwLinePlotTask::LinePlotWorker {
         // Prepare working copy of region data
         Region.setData(InputData.regionData);
 
-        initializeCaveLabels();
-        initializeCaveStationLookups();
+        initializeScopeLabels();
+        initializeNodeStationLookups();
 
         if (!checkForErrors(result)) {
             return result;
@@ -165,7 +165,7 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
         applyWorldOriginOffset(parsed.lookup, InputData.regionData.worldOrigin);
-        updateStationPositionForCaves(parsed.lookup, result);
+        updateStationPositionForNodes(parsed.lookup, result);
         result.setRegionNetwork(parsed.network);
 
         // The other half of the floating-survey answer. An attached centerline
@@ -185,8 +185,8 @@ struct cwLinePlotTask::LinePlotWorker {
         result.setTripVertexRanges(geometry.tripVertexRanges);
         result.setTripUuids(geometry.tripUuids);
 
-        updateDepthLength(geometry.cavesLengthAndDepths, result);
-        updateCaveNetworks(result);
+        updateDepthLength(geometry.nodeLengthAndDepths, result);
+        updateNodeNetworks(result);
 
         return result;
     }
@@ -194,46 +194,50 @@ struct cwLinePlotTask::LinePlotWorker {
 private:
     cwLinePlotTask::Input InputData;
     cwCavingRegion Region;
-    // All cave-keyed bookkeeping uses cwCave::id() rather than an integer
-    // position: the driver scopes every station under its cave's label, so
+    // Every node of Region's tree, pre-order, gathered once: the region's caves
+    // and every node below them. Each solves into a lookup of its own.
+    QList<cwSurveyNode*> Nodes;
+    // All node-keyed bookkeeping uses cwSurveyNode::id() rather than an integer
+    // position: the driver scopes every station under its node's label path, so
     // indexes have no representation in the cavern output; UUIDs do. The
-    // result likewise identifies changed caves/trips/scraps by id(), so the
+    // result likewise identifies changed nodes/trips/scraps by id(), so the
     // worker never holds a pointer into the main-thread-owned objects.
-    QHash<QUuid, cwStationPositionLookup> CaveStationLookups;
+    QHash<QUuid, cwStationPositionLookup> NodeStationLookups;
     QHash<QUuid, cwLinePlotTask::StationTripScrapLookup> TripLookups;
-    // Index from cave UUID to the worker-internal cwCave* owned by Region.
-    // Built once in initializeCaveStationLookups() so the rest of the worker
-    // can stay UUID-keyed.
-    QHash<QUuid, cwCave*> InternalCaveByUuid;
-    // The survey label each cave's and trip's "*begin" carries. The exporter
+    // Index from node UUID to the worker-internal node owned by Region. Built
+    // once in initializeNodeStationLookups() so the rest of the worker can stay
+    // UUID-keyed.
+    QHash<QUuid, cwSurveyNode*> InternalNodeById;
+    // The survey label each node's and trip's "*begin" carries. The exporter
     // assigns the same labels from the same ordered snapshot, so this is not a
     // map handed across a boundary — it is the same pure function evaluated on
-    // both sides, which is what lets the decode below recover cwCave::id() from
+    // both sides, which is what lets the decode below recover a node's id from
     // a name cavern echoed back.
     cwScopeLabels ScopeLabels;
 
-    void initializeCaveLabels()
+    void initializeScopeLabels()
     {
-        // Caller contract: cave.id must be non-null - the manager satisfies
-        // this via cwCavingRegion::data(); synthetic callers
+        // Caller contract: every node id must be non-null - the manager
+        // satisfies this via cwCavingRegion::data(); synthetic callers
         // (cwTripLinePlotTask) generate a UUID before building Input.
-        for (const cwCaveData& cave : std::as_const(InputData.regionData.caves)) {
-            Q_ASSERT(!cave.id.isNull());
-        }
+        walkCaveDataTree(InputData.regionData.caves,
+                         []([[maybe_unused]] const cwCaveData& node, const QStringList&) {
+                             Q_ASSERT(!node.id.isNull());
+                         });
 
         ScopeLabels = cwScopeLabels(InputData.regionData);
     }
 
-    // The labels of this cave's externally-attached trips, which are the only
-    // scopes the exporter opens inside a cave block. A native-prefixed (Scope)
-    // trip is deliberately absent: its stations come from chunks, which the
-    // exporter emits unscoped.
-    QSet<QString> externalTripLabelsFor(cwCave* cave) const
+    // The labels of this node's externally-attached trips, which are the only
+    // trip scopes the exporter opens inside a node block. A native-prefixed
+    // (Scope) trip is deliberately absent: its stations come from chunks, which
+    // the exporter emits unscoped.
+    QSet<QString> externalTripLabelsFor(const cwSurveyNode* node) const
     {
-        const QHash<QUuid, QString>& labels = ScopeLabels.tripLabels(cave->id());
+        const QHash<QUuid, QString>& labels = ScopeLabels.tripLabels(node->id());
 
         QSet<QString> externalLabels;
-        for (const cwTrip* trip : cave->trips()) {
+        for (const cwTrip* trip : node->trips()) {
             if (!trip->externalCenterline().isEmpty()) {
                 externalLabels.insert(labels.value(trip->id()));
             }
@@ -241,25 +245,24 @@ private:
         return externalLabels;
     }
 
-    void initializeCaveStationLookups()
+    void initializeNodeStationLookups()
     {
-        const int numCaves = Region.caveCount();
-        CaveStationLookups.reserve(numCaves);
-        InternalCaveByUuid.reserve(numCaves);
+        Nodes = Region.rootNode()->allNodes();
+        NodeStationLookups.reserve(Nodes.size());
+        InternalNodeById.reserve(Nodes.size());
 
-        for (int i = 0; i < numCaves; i++) {
-            cwCave* cave = Region.cave(i);
-            const QUuid id = cave->id();
-            InternalCaveByUuid.insert(id, cave);
-            CaveStationLookups.insert(id, cave->stationPositionLookup());
+        for (cwSurveyNode* node : std::as_const(Nodes)) {
+            const QUuid id = node->id();
+            InternalNodeById.insert(id, node);
+            NodeStationLookups.insert(id, node->stationPositionLookup());
         }
     }
 
     bool exportSurvex(const QString& svxPath, cwLinePlotTask::LinePlotResultData& result)
     {
-        // exportRegion assigns the cave labels itself, from the same ordered
-        // snapshot initializeCaveLabels() reads, which is what lets the decode
-        // below recover a cave from a name cavern echoed back. The
+        // exportRegion assigns the scope labels itself, from the same ordered
+        // snapshot initializeScopeLabels() reads, which is what lets the decode
+        // below recover a node from a name cavern echoed back. The
         // attachment-dir maps come straight from the Input the caller built.
         cwSurvexExporterRegion::Options exportOptions;
         exportOptions.caveAttachmentDirs = InputData.caveAttachmentDirs;
@@ -339,23 +342,28 @@ private:
         int unconnectedChunkCount = 0;
         QStringList offendingCaveNames;
 
-        for (int i = 0; i < Region.caveCount(); i++) {
-            cwCave* cave = Region.cave(i);
+        for (cwSurveyNode* node : std::as_const(Nodes)) {
+            // Each node is its own *begin block, so its chunks join only each
+            // other: a child node's trips are checked as that child. Built from
+            // the node's own trips, since node->data() would copy its subtree.
+            cwCaveData nodeSnapshot;
+            nodeSnapshot.id = node->id();
+            nodeSnapshot.name = node->name();
+            nodeSnapshot.trips = cwData::toDataList<cwTripData>(node->trips());
 
-            const cwCaveData caveSnapshot = cave->data();
             const Monad::Result<QList<cwFindUnconnectedSurveyChunks::Result>> unconnectedResult =
-                cwFindUnconnectedSurveyChunks::find(caveSnapshot);
+                cwFindUnconnectedSurveyChunks::find(nodeSnapshot);
             if (unconnectedResult.hasError()) {
                 continue;
             }
             const QList<cwFindUnconnectedSurveyChunks::Result> errorResults = unconnectedResult.value();
             if (!errorResults.isEmpty()) {
-                cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataFor(cave->id(), result);
-                caveData.setUnconnectedChunkError(errorResults);
+                cwLinePlotTask::LinePlotCaveData& nodeData = createLinePlotCaveDataFor(node->id(), result);
+                nodeData.setUnconnectedChunkError(errorResults);
                 unconnectedChunkCount += errorResults.size();
-                offendingCaveNames.append(cave->name());
+                offendingCaveNames.append(node->name());
                 result.FloatingSurveys.append(
-                    cwFindFloatingSurveys::fromUnconnectedChunks(caveSnapshot, errorResults));
+                    cwFindFloatingSurveys::fromUnconnectedChunks(nodeSnapshot, errorResults));
             }
         }
 
@@ -376,41 +384,67 @@ private:
         return true;
     }
 
-    // Returns the result entry for caveId, creating an empty one on first
-    // access. caveId always comes from Region.cave(i)->id() or from a cavern
-    // prefix already checked against InternalCaveByUuid, so it is always valid.
-    cwLinePlotTask::LinePlotCaveData& createLinePlotCaveDataFor(const QUuid& caveId,
+    // Returns the result entry for nodeId, creating an empty one on first
+    // access. nodeId always comes from a node in Nodes or from a cavern prefix
+    // already checked against InternalNodeById, so it is always valid.
+    cwLinePlotTask::LinePlotCaveData& createLinePlotCaveDataFor(const QUuid& nodeId,
                                                                cwLinePlotTask::LinePlotResultData& result)
     {
-        return result.Caves[caveId];
+        return result.Caves[nodeId];
     }
 
-    void addEmptyStationLookup(const QUuid& caveId, cwLinePlotTask::LinePlotResultData& result)
+    void addEmptyStationLookup(const QUuid& nodeId, cwLinePlotTask::LinePlotResultData& result)
     {
-        if (!result.Caves.contains(caveId)) {
-            result.Caves.insert(caveId, cwLinePlotTask::LinePlotCaveData());
+        if (!result.Caves.contains(nodeId)) {
+            result.Caves.insert(nodeId, cwLinePlotTask::LinePlotCaveData());
         }
     }
 
     void indexStations()
     {
         TripLookups.clear();
-        TripLookups.reserve(Region.caveCount());
+        TripLookups.reserve(Nodes.size());
 
-        for (int i = 0; i < Region.caveCount(); i++) {
-            cwCave* cave = Region.cave(i);
-            TripLookups.insert(cave->id(), cwLinePlotTask::StationTripScrapLookup(cave));
+        for (cwSurveyNode* node : std::as_const(Nodes)) {
+            TripLookups.insert(node->id(), cwLinePlotTask::StationTripScrapLookup(node));
         }
     }
 
+    // The node a cavern name belongs to, and the nodes above it up to the
+    // region's caves, deepest first. Empty when no node wears the name's leading
+    // scope.
+    //
+    // resolve() walks the label path as deep as the labels reach. The walk stops
+    // at a node with an attachment of its own: that node is one *include, its
+    // children are never blocks (§7.1), so a deeper label match there is a
+    // coincidence of names, and the station belongs to the attached node.
+    QList<const cwSurveyNode*> owningChain(const QString& scopedName) const
+    {
+        const cwScopeLabels::Resolution resolution = ScopeLabels.resolve(scopedName);
+
+        QList<const cwSurveyNode*> chain;
+        const cwSurveyNode* node = InternalNodeById.value(resolution.nodeId, nullptr);
+        while (node != nullptr && !node->isRoot()) {
+            if (!node->externalCenterline().isEmpty()) {
+                chain.clear();
+            }
+            chain.append(node);
+            node = node->parentNode();
+        }
+        return chain;
+    }
+
     // Parses cavern-emitted scoped station names of the form
-    //   "<caveLabel>.<station-name>"
-    // back into a per-cave position lookup keyed by cwCave::id(). Stations
-    // whose leading scope is not one of this region's cave labels are dropped
-    // (they would not match any cave in the region; this keeps
-    // splitLookupByCave robust against accidental orphan prefixes without
+    //   "<nodeLabel>.<nodeLabel>...<station-name>"
+    // back into one position lookup per node, keyed by the node's id. A
+    // station lands in its deepest matching node's slice and in every
+    // ancestor's, keyed in each by the name below that node: a node's slice is
+    // its subtree, as a cave's lookup has always held every one of its trips'
+    // stations. Stations whose leading scope is not one of this region's cave
+    // labels are dropped (they would not match any node in the region; this
+    // keeps the split robust against accidental orphan prefixes without
     // poisoning the whole result).
-    QHash<QUuid, cwStationPositionLookup> splitLookupByCave(
+    QHash<QUuid, cwStationPositionLookup> splitLookupByNode(
         const cwStationPositionLookup& stationPostions) const
     {
         // Round positions to millimetre precision to absorb cavern's
@@ -418,8 +452,8 @@ private:
         constexpr int kPositionPrecisionDigits = 3;
         const double positionFactor = std::pow(10.0, kPositionPrecisionDigits);
 
-        QHash<QUuid, cwStationPositionLookup> caveStations;
-        caveStations.reserve(InternalCaveByUuid.size());
+        QHash<QUuid, cwStationPositionLookup> nodeStations;
+        nodeStations.reserve(InternalNodeById.size());
 
         const QMap<QString, QVector3D> positions = stationPostions.positions();
         for (auto iter = positions.constBegin(); iter != positions.constEnd(); ++iter) {
@@ -434,47 +468,45 @@ private:
             position.setY(float(std::round(double(position.y()) * positionFactor) / positionFactor));
             position.setZ(float(std::round(double(position.z()) * positionFactor) / positionFactor));
 
-            // Cave labels are lowercase by construction, but cavern echoes back
-            // whatever case the included file used for a nested scope, so match
-            // the leading scope case-insensitively.
-            const QString caveLabel = cwCavernNaming::scopeHeadOf(name).toLower();
-            if (caveLabel.isEmpty()) {
-                qDebug() << "Cavern station name carries no cave scope:" << name
-                         << "This is a bug!" << LOCATION;
+            // Node labels are lowercase by construction, but cavern echoes back
+            // whatever case the included file used for a nested scope, so
+            // resolve() matches each segment case-insensitively.
+            const QList<const cwSurveyNode*> chain = owningChain(name);
+            if (chain.isEmpty()) {
+                qDebug() << "Cavern emitted station with unknown node scope:" << name << LOCATION;
                 continue;
             }
 
-            const QUuid caveId = ScopeLabels.nodeId({caveLabel});
-            if (caveId.isNull() || !InternalCaveByUuid.contains(caveId)) {
-                qDebug() << "Cavern emitted station with unknown cave scope:" << caveLabel << LOCATION;
-                continue;
-            }
-
-            //Walls' empty-name quirk can put a bare "<caveLabel>." (or one with
+            //Walls' empty-name quirk can put a bare "<nodeLabel>." (or one with
             //only spaces after the separator) in the .3d, and neither
             //setPosition nor cwStation::canonicalKey trims, so an unguarded tail
             //would pollute the lookup with a blank key that no chunk station can
             //ever match.
-            const QString tail = cwCavernNaming::removeScopeHead(name);
+            const QString tail = name.sliced(ScopeLabels.prefix(chain.first()->id()).size());
             if (tail.trimmed().isEmpty()) {
-                qDebug() << "Cavern station name has no station under its cave scope:"
+                qDebug() << "Cavern station name has no station under its node scope:"
                          << name << LOCATION;
                 continue;
             }
 
-            cwStationPositionLookup& lookup = caveStations[caveId];
-            lookup.setPosition(tail, position);
+            // A prefix is the label path down to its node, and resolve()
+            // consumed exactly those segments, so each slice's key is the name
+            // with that node's prefix length cut off — in the case cavern used.
+            for (const cwSurveyNode* node : chain) {
+                const QString key = name.sliced(ScopeLabels.prefix(node->id()).size());
+                nodeStations[node->id()].setPosition(key, position);
+            }
         }
 
-        return caveStations;
+        return nodeStations;
     }
 
-    void setStationAsChanged(const QUuid& caveId, const QString& stationName,
+    void setStationAsChanged(const QUuid& nodeId, const QString& stationName,
                              cwLinePlotTask::LinePlotResultData& result)
     {
-        addEmptyStationLookup(caveId, result);
+        addEmptyStationLookup(nodeId, result);
 
-        const cwLinePlotTask::StationTripScrapLookup lookup = TripLookups.value(caveId);
+        const cwLinePlotTask::StationTripScrapLookup lookup = TripLookups.value(nodeId);
         const QString upperName = stationName.toUpper();
 
         for (const QUuid& tripId : lookup.trips(upperName)) {
@@ -488,21 +520,20 @@ private:
         }
     }
 
-    void updateInteralCaveStationLookups(const QHash<QUuid, cwStationPositionLookup>& caveStations,
-                                         cwLinePlotTask::LinePlotResultData& result)
+    void updateInternalNodeStationLookups(const QHash<QUuid, cwStationPositionLookup>& nodeStations,
+                                          cwLinePlotTask::LinePlotResultData& result)
     {
-        // Iterate Region by index so caves with no positions in `caveStations`
-        // (e.g. a cave whose entire centerline failed to solve) still get
+        // Iterate every node so nodes with no positions in `nodeStations`
+        // (e.g. a node whose entire centerline failed to solve) still get
         // their stale lookup cleared and the result populated.
-        for (int i = 0; i < Region.caveCount(); i++) {
-            cwCave* cave = Region.cave(i);
-            const QUuid caveId = cave->id();
+        for (const cwSurveyNode* node : std::as_const(Nodes)) {
+            const QUuid nodeId = node->id();
 
-            const cwStationPositionLookup newLookup = caveStations.value(caveId);
-            const cwStationPositionLookup oldLookup = CaveStationLookups.value(caveId);
+            const cwStationPositionLookup newLookup = nodeStations.value(nodeId);
+            const cwStationPositionLookup oldLookup = NodeStationLookups.value(nodeId);
 
             if (newLookup.positions().size() != oldLookup.positions().size()) {
-                addEmptyStationLookup(caveId, result);
+                addEmptyStationLookup(nodeId, result);
             }
 
             const QMap<QString, QVector3D> newPositions = newLookup.positions();
@@ -513,30 +544,29 @@ private:
                 const QVector3D newPoint = it.value();
                 if (oldPositions.contains(stationName)) {
                     if (oldPositions.value(stationName) != newPoint) {
-                        setStationAsChanged(caveId, stationName, result);
+                        setStationAsChanged(nodeId, stationName, result);
                     }
                 } else {
-                    setStationAsChanged(caveId, stationName, result);
+                    setStationAsChanged(nodeId, stationName, result);
                 }
             }
 
-            CaveStationLookups[caveId] = newLookup;
+            NodeStationLookups[nodeId] = newLookup;
         }
     }
 
-    void updateExteralCaveStationLookups(cwLinePlotTask::LinePlotResultData& result)
+    void updateExternalNodeStationLookups(cwLinePlotTask::LinePlotResultData& result)
     {
-        for (int i = 0; i < Region.caveCount(); i++) {
-            cwCave* internalCave = Region.cave(i);
-            const QUuid caveId = internalCave->id();
-            if (!result.Caves.contains(caveId)) {
+        for (cwSurveyNode* internalNode : std::as_const(Nodes)) {
+            const QUuid nodeId = internalNode->id();
+            if (!result.Caves.contains(nodeId)) {
                 continue;
             }
 
-            const cwStationPositionLookup updatedLookup = CaveStationLookups.value(caveId);
-            cwLinePlotTask::LinePlotCaveData& caveData = result.Caves[caveId];
-            caveData.setStationPositions(updatedLookup);
-            internalCave->setStationPositionLookup(updatedLookup);
+            const cwStationPositionLookup updatedLookup = NodeStationLookups.value(nodeId);
+            cwLinePlotTask::LinePlotCaveData& nodeData = result.Caves[nodeId];
+            nodeData.setStationPositions(updatedLookup);
+            internalNode->setStationPositionLookup(updatedLookup);
         }
     }
 
@@ -559,43 +589,44 @@ private:
         }
     }
 
-    void updateStationPositionForCaves(const cwStationPositionLookup& stationPostions,
+    void updateStationPositionForNodes(const cwStationPositionLookup& stationPostions,
                                        cwLinePlotTask::LinePlotResultData& result)
     {
         indexStations();
 
-        const QHash<QUuid, cwStationPositionLookup> caveStationLookups = splitLookupByCave(stationPostions);
+        const QHash<QUuid, cwStationPositionLookup> nodeStationLookups = splitLookupByNode(stationPostions);
 
-        updateInteralCaveStationLookups(caveStationLookups, result);
-        updateExteralCaveStationLookups(result);
+        updateInternalNodeStationLookups(nodeStationLookups, result);
+        updateExternalNodeStationLookups(result);
     }
 
-    void updateDepthLength(const QVector<cwLinePlotGeometry::CaveLengthAndDepth>& lengths,
+    void updateDepthLength(const QHash<QUuid, cwLinePlotGeometry::LengthAndDepth>& lengths,
                            cwLinePlotTask::LinePlotResultData& result)
     {
-        Q_ASSERT(Region.caveCount() == lengths.size());
-
-        for (int i = 0; i < Region.caveCount(); i++) {
-            cwCave* cave = Region.cave(i);
-            cwLinePlotTask::LinePlotCaveData& caveData = createLinePlotCaveDataFor(cave->id(), result);
-            //Always a real measurement — 0/0 means the cave resolved no
-            //centerline, so it copies through to the live cave as-is.
-            caveData.setLength(lengths.at(i).length());
-            caveData.setDepth(lengths.at(i).depth());
+        for (const cwSurveyNode* node : std::as_const(Nodes)) {
+            const QUuid nodeId = node->id();
+            Q_ASSERT(lengths.contains(nodeId));
+            cwLinePlotTask::LinePlotCaveData& nodeData = createLinePlotCaveDataFor(nodeId, result);
+            //Always a real measurement — 0/0 means the node resolved no
+            //centerline, so it copies through to the live node as-is.
+            const cwLinePlotGeometry::LengthAndDepth measured = lengths.value(nodeId);
+            nodeData.setLength(measured.length());
+            nodeData.setDepth(measured.depth());
         }
     }
 
-    void updateCaveNetworks(cwLinePlotTask::LinePlotResultData& result)
+    void updateNodeNetworks(cwLinePlotTask::LinePlotResultData& result)
     {
         // The solved region network carries every scope's topology, including
         // externally-attached trips that own no cwSurveyChunk. Keyed
-        // "<caveLabel>.<tail>" (native) and "<caveLabel>.<tripLabel>.<tail>" (external).
+        // "<nodePrefix><tail>" (native) and "<nodePrefix><tripLabel>.<tail>"
+        // (external), where nodePrefix is the label path down to the node.
         const cwSurveyNetwork regionNetwork = result.regionNetwork();
 
-        auto createNetwork = [&regionNetwork, this](cwCave* cave) {
+        auto createNetwork = [&regionNetwork, this](const cwSurveyNode* node) {
             cwSurveyNetwork network;
 
-            for (cwTrip* trip : cave->trips()) {
+            for (cwTrip* trip : node->trips()) {
                 for (cwSurveyChunk* chunk : trip->chunks()) {
                     const QList<cwStation> stations = chunk->stations();
                     for (int i = 0; i < stations.size() - 1; i++) {
@@ -607,49 +638,48 @@ private:
             // An externally-attached trip owns no chunk, so the loop above adds
             // none of its adjacency. Its solved topology exists only in the
             // region network; copy each edge that touches a trip scope into the
-            // cave network under the cave-local scope ("<tripLabel>.<tail>", the
-            // same keying splitLookupByCave gives the position lookup) so the
+            // node network under the node-local scope ("<tripLabel>.<tail>", the
+            // same keying splitLookupByNode gives the position lookup) so the
             // note-editing sites can resolve external neighbors. Native-to-native
             // edges are left to the chunk loop above.
             //
             // Which names are external is a membership question, not a spelling
             // one: a trip label is an ordinary survey name, so nothing about
-            // "topo1.a1" marks it as scoped except that this cave has a trip
+            // "topo1.a1" marks it as scoped except that this node has a trip
             // labeled topo1.
-            const QString cavePrefix = ScopeLabels.prefix(cave->id());
-            const QSet<QString> externalTripLabels = externalTripLabelsFor(cave);
+            const QString nodePrefix = ScopeLabels.prefix(node->id());
+            const QSet<QString> externalTripLabels = externalTripLabelsFor(node);
 
             for (const QString& scopedStation : regionNetwork.stations()) {
-                if (!scopedStation.startsWith(cavePrefix)) {
+                if (!scopedStation.startsWith(nodePrefix)) {
                     continue;
                 }
-                const QString caveLocalStation = scopedStation.mid(cavePrefix.size());
-                if (!externalTripLabels.contains(cwCavernNaming::scopeHeadOf(caveLocalStation))) {
+                const QString nodeLocalStation = scopedStation.mid(nodePrefix.size());
+                if (!externalTripLabels.contains(cwCavernNaming::scopeHeadOf(nodeLocalStation))) {
                     continue; //native station, already covered by the chunk loop
                 }
                 for (const QString& scopedNeighbor : regionNetwork.neighbors(scopedStation)) {
-                    const QString caveLocalNeighbor = scopedNeighbor.startsWith(cavePrefix)
-                            ? scopedNeighbor.mid(cavePrefix.size())
+                    const QString nodeLocalNeighbor = scopedNeighbor.startsWith(nodePrefix)
+                            ? scopedNeighbor.mid(nodePrefix.size())
                             : scopedNeighbor;
-                    network.addShot(caveLocalStation, caveLocalNeighbor);
+                    network.addShot(nodeLocalStation, nodeLocalNeighbor);
                 }
             }
 
             return network;
         };
 
-        const QList<cwCave*> caves = Region.caves();
-        for (cwCave* cave : caves) {
-            const cwSurveyNetwork network = createNetwork(cave);
-            if (network == cave->network()) {
+        for (const cwSurveyNode* node : std::as_const(Nodes)) {
+            const cwSurveyNetwork network = createNetwork(node);
+            if (network == node->network()) {
                 continue;
             }
-            const QUuid caveId = cave->id();
-            result.Caves[caveId].setNetwork(network);
+            const QUuid nodeId = node->id();
+            result.Caves[nodeId].setNetwork(network);
 
-            const auto changedStations = cwSurveyNetwork::changedStations(cave->network(), network);
+            const auto changedStations = cwSurveyNetwork::changedStations(node->network(), network);
             for (const auto& station : changedStations) {
-                setStationAsChanged(caveId, station, result);
+                setStationAsChanged(nodeId, station, result);
             }
         }
     }
@@ -679,17 +709,15 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
         // cwTripCalibration and isn't part of the worker snapshot. Owners
         // missing from fileOwnsDeclination stay uninjected — same outcome
         // as a file that owns its declination.
-        for (cwCave* cave : region->caves()) {
-            for (cwTrip* trip : cave->trips()) {
-                if (trip->externalCenterline().isEmpty()) {
-                    continue;
-                }
-                if (fileOwnsDeclination.value(trip->id(), true)) {
-                    continue;
-                }
-                input.tripInjectedDeclinations.insert(trip->id(),
-                                                      trip->calibrations()->declination());
+        for (cwTrip* trip : region->rootNode()->allTrips()) {
+            if (trip->externalCenterline().isEmpty()) {
+                continue;
             }
+            if (fileOwnsDeclination.value(trip->id(), true)) {
+                continue;
+            }
+            input.tripInjectedDeclinations.insert(trip->id(),
+                                                  trip->calibrations()->declination());
         }
     }
     return input;

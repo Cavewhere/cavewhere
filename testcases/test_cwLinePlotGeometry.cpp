@@ -311,9 +311,10 @@ TEST_CASE("cwLinePlotGeometry gives each leg of nested Scope trips one owner",
     }
 
     SECTION("cave length counts each leg once") {
-        REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
-        CHECK(geometry.cavesLengthAndDepths.at(0).length() == Catch::Approx(17.0));
-        CHECK(geometry.cavesLengthAndDepths.at(0).depth() == Catch::Approx(0.0));
+        REQUIRE(geometry.nodeLengthAndDepths.size() == 1);
+        const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
+        CHECK(measured.length() == Catch::Approx(17.0));
+        CHECK(measured.depth() == Catch::Approx(0.0));
     }
 }
 
@@ -340,9 +341,10 @@ TEST_CASE("cwLinePlotGeometry measures a cave that resolved nothing as zero",
     const cwLinePlotGeometry::Result geometry = result.value();
 
     CHECK(geometry.points.isEmpty());
-    REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
-    CHECK(geometry.cavesLengthAndDepths.at(0).length() == 0.0);
-    CHECK(geometry.cavesLengthAndDepths.at(0).depth() == 0.0);
+    REQUIRE(geometry.nodeLengthAndDepths.size() == 1);
+    const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
+    CHECK(measured.length() == 0.0);
+    CHECK(measured.depth() == 0.0);
 }
 
 TEST_CASE("cwLinePlotGeometry draws an attached cave through its whole-cave window",
@@ -394,9 +396,10 @@ TEST_CASE("cwLinePlotGeometry draws an attached cave through its whole-cave wind
     CHECK(countPositions(geometry.points, a2Position) == 2);
     CHECK(countPositions(geometry.points, a3Position) == 1);
 
-    REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
-    CHECK(geometry.cavesLengthAndDepths.at(0).length() == Catch::Approx(18.0));
-    CHECK(geometry.cavesLengthAndDepths.at(0).depth() == Catch::Approx(0.0));
+    REQUIRE(geometry.nodeLengthAndDepths.size() == 1);
+    const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
+    CHECK(measured.length() == Catch::Approx(18.0));
+    CHECK(measured.depth() == Catch::Approx(0.0));
 }
 
 TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block windows",
@@ -463,7 +466,8 @@ TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block win
     CHECK(countPositions(geometry.points, p2Position) == 1);
 
     // And the cave length counts each leg once.
-    REQUIRE(geometry.cavesLengthAndDepths.size() == 1);
-    CHECK(geometry.cavesLengthAndDepths.at(0).length() == Catch::Approx(26.0));
-    CHECK(geometry.cavesLengthAndDepths.at(0).depth() == Catch::Approx(0.0));
+    REQUIRE(geometry.nodeLengthAndDepths.size() == 1);
+    const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
+    CHECK(measured.length() == Catch::Approx(26.0));
+    CHECK(measured.depth() == Catch::Approx(0.0));
 }
