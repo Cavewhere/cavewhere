@@ -17,6 +17,8 @@ GridLayout {
     property bool editable: false
 
     readonly property int valueWidth: 210
+    readonly property int descriptionViewMaxHeight: 160
+    readonly property int descriptionEditHeight: 90
     readonly property int statusDotSize: 7
 
     columns: 2
@@ -48,8 +50,11 @@ GridLayout {
     }
 
     Caption { text: "Description" }
+    // Layout properties must sit on the Loader: the GridLayout sizes the
+    // Loader and ignores attached Layout properties on its item.
     QQ.Loader {
         Layout.fillWidth: true
+        Layout.preferredWidth: editForm.valueWidth
         Layout.alignment: Qt.AlignTop
         sourceComponent: editForm.editable ? descriptionEditComponent : descriptionViewComponent
     }
@@ -138,35 +143,60 @@ GridLayout {
         }
     }
 
+    // Customizes the style's own scroll bar through the attached properties;
+    // replacing the bar would drop the placement the style gives it. Fusion
+    // overlays its bar on the content, so pad the right edge to keep the text
+    // clear of it.
+    component DescriptionScrollView: QC.ScrollView {
+        id: scrollView
+
+        rightPadding: padding + effectiveScrollBarWidth
+
+        QC.ScrollBar.vertical.objectName: "descriptionScrollBar"
+        QC.ScrollBar.vertical.policy: scrollView.contentHeight > scrollView.availableHeight
+                                      ? QC.ScrollBar.AlwaysOn
+                                      : QC.ScrollBar.AsNeeded
+    }
+
     QQ.Component {
         id: descriptionViewComponent
-        QC.Label {
-            objectName: "description"
-            Layout.fillWidth: true
-            Layout.preferredWidth: editForm.valueWidth
-            wrapMode: QQ.Text.WordWrap
-            font.pixelSize: Theme.fontSizeBody
-            font.italic: lead.description.length === 0
-            color: lead.description.length === 0 ? Theme.textSubtle : Theme.text
-            text: lead.description.length === 0 ? "No description" : lead.description
+        DescriptionScrollView {
+            id: descriptionView
+
+            implicitWidth: editForm.valueWidth
+            implicitHeight: Math.min(descriptionLabel.implicitHeight, editForm.descriptionViewMaxHeight)
+            contentWidth: availableWidth
+
+            QC.Label {
+                id: descriptionLabel
+                objectName: "description"
+                width: descriptionView.availableWidth
+                wrapMode: QQ.Text.WordWrap
+                font.pixelSize: Theme.fontSizeBody
+                font.italic: lead.description.length === 0
+                color: lead.description.length === 0 ? Theme.textSubtle : Theme.text
+                text: lead.description.length === 0 ? "No description" : lead.description
+            }
         }
     }
 
     QQ.Component {
         id: descriptionEditComponent
-        QC.TextArea {
-            objectName: "description"
-            Layout.fillWidth: true
-            Layout.preferredWidth: editForm.valueWidth
-            implicitHeight: 90
-            placeholderText: "Lead's description"
-            wrapMode: QQ.TextEdit.Wrap
+        DescriptionScrollView {
+            implicitWidth: editForm.valueWidth
+            implicitHeight: editForm.descriptionEditHeight
 
-            // Two-way bound: the binding tracks the model, the handler writes
-            // edits back. Typing doesn't break the binding, so no extra re-sync
-            // is needed.
-            text: lead.description
-            onTextChanged: lead.description = text
+            QC.TextArea {
+                objectName: "description"
+                placeholderText: "Lead's description"
+                wrapMode: QQ.TextEdit.Wrap
+
+                // Two-way bound: the binding tracks the model, the handler writes
+                // edits back. Typing doesn't break the binding, so no extra re-sync
+                // is needed.
+                text: lead.description
+                onTextChanged: lead.description = text
+            }
         }
     }
 }

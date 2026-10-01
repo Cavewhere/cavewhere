@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import QtQuick.Controls as QC
 import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
@@ -17,6 +18,10 @@ MainWindowTest {
         // several test processes in parallel, so CPU starvation can stretch a
         // single click->select cycle well past the usual 2-5s budgets.
         readonly property int leadSelectTimeout: 10000
+
+        // Narrower than this and a long lead description wraps to a word or two
+        // per line.
+        readonly property int minimumDescriptionWidth: 150
 
         function init() {
             // Dismiss any leftover text editor from a previous test
@@ -428,6 +433,91 @@ MainWindowTest {
             }, 1000, "completed checkbox should appear and be editable in edit mode")
             verify(findChild(quoteBox, "widthText") !== null, "width input should appear")
             verify(findChild(quoteBox, "heightText") !== null, "height input should appear")
+        }
+
+        function longDescription(sentenceCount) {
+            return Array(sentenceCount).fill("The passage continues past a breakdown pile into a low crawl.").join(" ")
+        }
+
+        function verifyDescriptionScrolls(container) {
+            let scrollBar = null
+            tryVerify(() => {
+                scrollBar = findChild(container, "descriptionScrollBar")
+                return scrollBar !== null
+            }, 5000, "a long description should have a vertical scroll bar")
+            tryVerify(() => scrollBar.size > 0 && scrollBar.size < 1, 5000,
+                      "scroll bar should show only part of a long description")
+            compare(scrollBar.policy, QC.ScrollBar.AlwaysOn,
+                    "scroll bar should stay visible while the description overflows")
+
+            let scrollView = scrollBar.parent
+            let description = findChild(scrollView, "description")
+            let barLeft = scrollBar.mapToItem(scrollView, 0, 0).x
+            fuzzyCompare(barLeft + scrollBar.width, scrollView.width, 1,
+                         "scroll bar should sit on the right edge of the description")
+            verify(scrollBar.height > scrollView.height / 2,
+                   "scroll bar should span the description, got " + scrollBar.height
+                   + " of " + scrollView.height)
+            let textRight = description.mapToItem(scrollView, description.width, 0).x
+            verify(textRight <= barLeft + 1,
+                   "description text should end before the scroll bar, " + textRight + " > " + barLeft)
+        }
+
+        function test_longDescriptionWrapsInView3D() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let unopened = null
+            tryVerify(() => {
+                unopened = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderer->leadPoint2_1")
+                return unopened !== null
+            }, leadsTestCase.leadSelectTimeout, "lead marker should exist")
+            unopened.scrap.setLeadData(Scrap.LeadDesciption, unopened.pointIndex, longDescription(3))
+            let {leadPoint, quoteBox} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
+
+            let description = findChild(quoteBox, "description")
+            tryVerify(() => description.text.length > 100, 5000, "description should show the long text")
+            tryVerify(() => description.lineCount > 1, 5000, "a long description should wrap")
+            verify(description.width >= minimumDescriptionWidth,
+                   "description should keep a readable width, got " + description.width)
+
+            // Editing the description while the popup is open re-wraps it at the
+            // same width instead of squeezing or widening the popup.
+            leadPoint.scrap.setLeadData(Scrap.LeadDesciption, leadPoint.pointIndex, longDescription(5))
+            tryVerify(() => description.lineCount > 1, 5000, "an edited long description should wrap")
+            verify(description.width >= minimumDescriptionWidth,
+                   "edited description should keep a readable width, got " + description.width)
+            verify(description.width < description.implicitWidth,
+                   "edited description should stay narrower than its unwrapped text")
+        }
+
+        function test_longDescriptionScrollsInView3D() {
+            TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            RootData.futureManagerModel.waitForFinished();
+
+            let {leadPoint, quoteBox} = openLeadPopup("rootId->viewPage->SplitView->renderer->leadPoint2_1")
+            leadPoint.scrap.setLeadData(Scrap.LeadDesciption, leadPoint.pointIndex, longDescription(40))
+
+            verifyDescriptionScrolls(quoteBox)
+
+            let editButton = findChild(quoteBox, "leadEditButton")
+            mouseClick(editButton)
+            tryVerify(() => quoteBox.editMode, 1000, "edit button should enter edit mode")
+            // The Loader deletes the read-only view later, so wait for the
+            // editor before searching, or findChild can return the stale bar.
+            tryVerify(() => findChild(quoteBox, "description") instanceof QC.TextArea, 1000,
+                      "description should become editable in edit mode")
+            verifyDescriptionScrolls(quoteBox)
+        }
+
+        function test_longDescriptionScrollsInLeadEditor() {
+            let {scrap, leadIndex} = addNewLeadToScrap();
+            scrap.setLeadData(Scrap.LeadDesciption, leadIndex, longDescription(40))
+
+            let leadEditor = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->noteArea->leadEditor");
+            let description = findChild(leadEditor, "description")
+            tryVerify(() => description.text.length > 100, 5000, "description should show the long text")
+            verifyDescriptionScrolls(leadEditor)
         }
 
         // #516: editing a lead's fields through the shared LeadInfoForm commits
