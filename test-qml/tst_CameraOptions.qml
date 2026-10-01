@@ -48,10 +48,19 @@ MainWindowTest {
 
         // The scene geometry (line plot, scraps) registers into the intersecter
         // asynchronously after load, growing the scene bounding box and thus the
-        // framed view. Reset until the framed zoom stops changing, so a captured
-        // reference reset is stable. Leaves the view at a settled framed reset.
+        // framed view. Until the first geometry publishes, a reset has nothing
+        // to frame and snaps to the camera's default zoom, so first reset until
+        // a framed zoom comes back, then until the framed zoom stops changing,
+        // so a captured reference reset is stable. Leaves the view at a settled
+        // framed reset.
         function settleFraming(turnTableInteraction, resetViewButton) {
-            let previous = Number.NaN;
+            const unframedZoom = turnTableInteraction.camera.defaultZoomScale;
+            tryVerify(() => {
+                clickResetAndWait(resetViewButton);
+                return turnTableInteraction.camera.zoomScale !== unframedZoom;
+            });
+
+            let previous = turnTableInteraction.camera.zoomScale;
             for (let i = 0; i < 15; i++) {
                 clickResetAndWait(resetViewButton);
                 let current = turnTableInteraction.camera.zoomScale;

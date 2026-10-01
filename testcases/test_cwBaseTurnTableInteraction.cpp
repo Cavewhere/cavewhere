@@ -286,6 +286,7 @@ void checkResetFallsBackToDefaultPose(Fixture& f)
     f.interaction.setAzimuth(75.0);
     f.interaction.setPitch(45.0);
 
+    QSignalSpy finished(&f.interaction, &cwBaseTurnTableInteraction::animationFinished);
     f.interaction.resetView();
 
     CHECK(f.interaction.azimuth() == Approx(0.0));
@@ -294,6 +295,10 @@ void checkResetFallsBackToDefaultPose(Fixture& f)
     QMatrix4x4 expected;
     expected.translate(QVector3D(0.0f, 0.0f, kDefaultViewZ));
     CHECK(matricesNearlyEqual(f.camera.viewMatrix(), expected));
+
+    // The snap still reports completion, so a reset is always observable.
+    CHECK(finished.wait(kAnimationFirstTickTimeoutMs));
+    CHECK(finished.count() == 1);
 }
 
 } // namespace
