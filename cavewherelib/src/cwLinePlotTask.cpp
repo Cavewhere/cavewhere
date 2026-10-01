@@ -7,7 +7,6 @@
 
 // Our includes
 #include "cwLinePlotTask.h"
-#include "cwCavernNaming.h"
 #include "cwScopeLabels.h"
 #include "cwConcurrent.h"
 #include "cwSurvexExporterRegion.h"
@@ -54,18 +53,13 @@ cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
 cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* node)
 {
     // Keys are matched against the changed-station names reported by
-    // setStationAsChanged, which are the node-local lookup keys. For an
-    // externally-attached trip those retain the trip scope
-    // ("<tripLabel>.<tail>") while chunk / note / scrap stations carry only the
-    // tail, so every key inserted here is scoped to match (a no-op for a native
-    // trip). Resolved once per trip rather than per station: cwTrip::scopePrefix
-    // has to look at the trip's siblings to know its label.
+    // setStationAsChanged, which are node-local cavern names. Every key here is
+    // spelled the way the exporter spells it: the trip's scope prefix, then the
+    // station name. Resolved once per trip rather than per station:
+    // cwTrip::scopePrefix has to look at the trip's siblings to know its label.
     for(cwTrip* trip : node->trips()) {
         const QUuid tripId = trip->id();
-        const bool external = !trip->externalCenterline().isEmpty();
-        //Native-prefixed (Scope) trips are deliberately left unscoped here:
-        //their stations come from chunks, which the exporter emits unprefixed.
-        const QString tripScope = external ? trip->scopePrefix() : QString();
+        const QString tripScope = trip->scopePrefix();
 
         foreach(cwSurveyChunk* surveyChunk, trip->chunks()) {
             foreach(cwStation station, surveyChunk->stations()) {
@@ -85,19 +79,17 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* nod
             }
         }
 
-        // An external trip owns no chunk, so nothing above mapped it into
-        // MapStationToTrip. Its LiDAR-carpet notes still need the trip flagged
-        // when their tie-in stations move (a scrap already propagates to its
-        // parent trip in setStationAsChanged, so scraps need no extra mapping).
-        if(external) {
-            foreach(QObject* obj, trip->notesLiDAR()->notes()) {
-                auto* lidarNote = qobject_cast<cwNoteLiDAR*>(obj);
-                if(lidarNote == nullptr) {
-                    continue;
-                }
-                foreach(const cwNoteLiDARStation& noteStation, lidarNote->stations()) {
-                    MapStationToTrip.insert((tripScope + noteStation.name()).toUpper(), tripId);
-                }
+        // A LiDAR-carpet note flags its trip when its tie-in stations move,
+        // which matters for a trip whose stations come from a file rather than
+        // chunks (a scrap already propagates to its parent trip in
+        // setStationAsChanged, so scraps need no extra mapping).
+        foreach(QObject* obj, trip->notesLiDAR()->notes()) {
+            auto* lidarNote = qobject_cast<cwNoteLiDAR*>(obj);
+            if(lidarNote == nullptr) {
+                continue;
+            }
+            foreach(const cwNoteLiDARStation& noteStation, lidarNote->stations()) {
+                MapStationToTrip.insert((tripScope + noteStation.name()).toUpper(), tripId);
             }
         }
     }
@@ -226,23 +218,6 @@ private:
                          });
 
         ScopeLabels = cwScopeLabels(InputData.regionData);
-    }
-
-    // The labels of this node's externally-attached trips, which are the only
-    // trip scopes the exporter opens inside a node block. A native-prefixed
-    // (Scope) trip is deliberately absent: its stations come from chunks, which
-    // the exporter emits unscoped.
-    QSet<QString> externalTripLabelsFor(const cwSurveyNode* node) const
-    {
-        const QHash<QUuid, QString>& labels = ScopeLabels.tripLabels(node->id());
-
-        QSet<QString> externalLabels;
-        for (const cwTrip* trip : node->trips()) {
-            if (!trip->externalCenterline().isEmpty()) {
-                externalLabels.insert(labels.value(trip->id()));
-            }
-        }
-        return externalLabels;
     }
 
     void initializeNodeStationLookups()
@@ -410,26 +385,37 @@ private:
         }
     }
 
-    // The node a cavern name belongs to, and the nodes above it up to the
-    // region's caves, deepest first. Empty when no node wears the name's leading
-    // scope.
+    // The node a cavern name belongs to, or null when no node wears the name's
+    // leading scope.
     //
-    // resolve() walks the label path as deep as the labels reach. The walk stops
-    // at a node with an attachment of its own: that node is one *include, its
-    // children are never blocks (§7.1), so a deeper label match there is a
-    // coincidence of names, and the station belongs to the attached node.
+    // The deepest node resolve() reaches, except that the topmost attached node
+    // on that path owns everything beneath it: that node is one *include and
+    // its children are never blocks (§7.1, the rule DriverTree::index applies
+    // in cwSurvexExporterCaveTask), so a deeper label match there is a
+    // coincidence of names.
+    const cwSurveyNode* owningNode(const QString& scopedName) const
+    {
+        const cwSurveyNode* deepest =
+            InternalNodeById.value(ScopeLabels.resolve(scopedName).nodeId, nullptr);
+
+        const cwSurveyNode* owner = deepest;
+        for (const cwSurveyNode* node = deepest; node != nullptr && !node->isRoot();
+             node = node->parentNode()) {
+            if (!node->externalCenterline().isEmpty()) {
+                owner = node;
+            }
+        }
+        return owner;
+    }
+
+    // The owning node and the nodes above it up to the region's caves, deepest
+    // first. Empty when no node owns the name.
     QList<const cwSurveyNode*> owningChain(const QString& scopedName) const
     {
-        const cwScopeLabels::Resolution resolution = ScopeLabels.resolve(scopedName);
-
         QList<const cwSurveyNode*> chain;
-        const cwSurveyNode* node = InternalNodeById.value(resolution.nodeId, nullptr);
-        while (node != nullptr && !node->isRoot()) {
-            if (!node->externalCenterline().isEmpty()) {
-                chain.clear();
-            }
+        for (const cwSurveyNode* node = owningNode(scopedName); node != nullptr && !node->isRoot();
+             node = node->parentNode()) {
             chain.append(node);
-            node = node->parentNode();
         }
         return chain;
     }
@@ -618,14 +604,15 @@ private:
     void updateNodeNetworks(cwLinePlotTask::LinePlotResultData& result)
     {
         // The solved region network carries every scope's topology, including
-        // externally-attached trips that own no cwSurveyChunk. Keyed
-        // "<nodePrefix><tail>" (native) and "<nodePrefix><tripLabel>.<tail>"
-        // (external), where nodePrefix is the label path down to the node.
+        // trips whose stations come from a file and own no cwSurveyChunk. Keys
+        // are cavern names: the node's label path, then the trip's scope
+        // prefix, then the tail.
         const cwSurveyNetwork regionNetwork = result.regionNetwork();
 
         auto createNetwork = [&regionNetwork, this](const cwSurveyNode* node) {
             cwSurveyNetwork network;
 
+            // Chunks contribute the stations cavern never placed.
             for (cwTrip* trip : node->trips()) {
                 for (cwSurveyChunk* chunk : trip->chunks()) {
                     const QList<cwStation> stations = chunk->stations();
@@ -635,29 +622,17 @@ private:
                 }
             }
 
-            // An externally-attached trip owns no chunk, so the loop above adds
-            // none of its adjacency. Its solved topology exists only in the
-            // region network; copy each edge that touches a trip scope into the
-            // node network under the node-local scope ("<tripLabel>.<tail>", the
-            // same keying splitLookupByNode gives the position lookup) so the
-            // note-editing sites can resolve external neighbors. Native-to-native
-            // edges are left to the chunk loop above.
-            //
-            // Which names are external is a membership question, not a spelling
-            // one: a trip label is an ordinary survey name, so nothing about
-            // "topo1.a1" marks it as scoped except that this node has a trip
-            // labeled topo1.
+            // Every solved edge of a station this node owns, keyed node-locally
+            // (the same keying splitLookupByNode gives the position lookup), so
+            // the note-editing sites resolve a station's neighbors whatever
+            // spells it. addShot is idempotent, so an edge the chunk loop
+            // already added is added once.
             const QString nodePrefix = ScopeLabels.prefix(node->id());
-            const QSet<QString> externalTripLabels = externalTripLabelsFor(node);
-
             for (const QString& scopedStation : regionNetwork.stations()) {
-                if (!scopedStation.startsWith(nodePrefix)) {
+                if (!scopedStation.startsWith(nodePrefix) || owningNode(scopedStation) != node) {
                     continue;
                 }
                 const QString nodeLocalStation = scopedStation.mid(nodePrefix.size());
-                if (!externalTripLabels.contains(cwCavernNaming::scopeHeadOf(nodeLocalStation))) {
-                    continue; //native station, already covered by the chunk loop
-                }
                 for (const QString& scopedNeighbor : regionNetwork.neighbors(scopedStation)) {
                     const QString nodeLocalNeighbor = scopedNeighbor.startsWith(nodePrefix)
                             ? scopedNeighbor.mid(nodePrefix.size())

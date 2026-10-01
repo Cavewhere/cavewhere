@@ -542,6 +542,25 @@ QByteArray threeStationSurvey(const QByteArray& a1a2Tape, bool withA3)
     return survey;
 }
 
+//! A note sized like a real page (so note positions map to paper meters)
+//! holding one empty scrap, added to \a trip the way the note editor adds one. A saved note
+//! names its image by path, so the project can write it.
+cwScrap* addEmptySizedScrap(cwTrip* trip)
+{
+    cwNote* note = new cwNote();
+    note->setName(QStringLiteral("page.png"));
+    cwImage image;
+    image.setPath(QStringLiteral("page.png"));
+    image.setOriginalSize(QSize(kAttachedNotePixels, kAttachedNotePixels));
+    image.setOriginalDotsPerMeter(kAttachedNoteDotsPerMeter);
+    note->setImage(image);
+    trip->notes()->addNotes({note});
+
+    cwScrap* scrap = new cwScrap();
+    note->addScrap(scrap);
+    return scrap;
+}
+
 struct AttachedScrapSetup {
     std::unique_ptr<SavedProjectFixture> fixture;
     QString source;
@@ -566,18 +585,7 @@ AttachedScrapSetup makeAttachedScrap(const QString& projectFileBase)
     attachThroughManager(fixture, fixture->trip, setup.source);
     drainPipelines(fixture);
 
-    // A saved note names its image by path, so the project can write it.
-    cwNote* note = new cwNote();
-    note->setName(QStringLiteral("page.png"));
-    cwImage image;
-    image.setPath(QStringLiteral("page.png"));
-    image.setOriginalSize(QSize(kAttachedNotePixels, kAttachedNotePixels));
-    image.setOriginalDotsPerMeter(kAttachedNoteDotsPerMeter);
-    note->setImage(image);
-    fixture->trip->notes()->addNotes({note});
-
-    setup.scrap = new cwScrap();
-    note->addScrap(setup.scrap);
+    setup.scrap = addEmptySizedScrap(fixture->trip);
     const QList<QPair<QString, QPointF>> anchors {
         {QStringLiteral("s.a1"), kA1OnNote},
         {QStringLiteral("s.a2"), kA2OnNote},
@@ -665,4 +673,227 @@ TEST_CASE("a scrap whose station left the source keeps its other anchors and rep
     // remaining anchors compute matches the one all three computed.
     CHECK(setup.scrap->noteTransformation()->scale()
           == Catch::Approx(scaleBefore).epsilon(kScaleTolerance));
+}
+
+namespace {
+
+// The scale a two-station scrap computes when its stations sit half as far
+// apart on the page as they do in the cave.
+constexpr double kHalfScale = 0.5;
+constexpr double kQuarterScale = 0.25;
+constexpr double kMetersPerFoot = 0.3048;
+
+// Where a scrap marks the Walls fixture's P1 and P2 (P2 due east of P1).
+const QPointF kP1OnNote(0.2, 0.3);
+const QPointF kP2OnNote(0.8, 0.3);
+
+//! Adds a station the way cwBaseNoteStationInteraction::addPoint does (the
+//! neighbor guess, else the trip's first known station), then types
+//! \a typedName into it the way NoteStation.qml commits an edit.
+void addStationLikeTheEditor(cwScrap* scrap, QPointF notePosition, const QString& typedName)
+{
+    cwNoteStation selected;
+    if (scrap->numberOfStations() > 0) {
+        selected = scrap->station(scrap->numberOfStations() - 1);
+    }
+
+    QString name = scrap->guessNeighborStationName(selected, notePosition);
+    if (name.isEmpty()) {
+        const QList<cwTrip::KnownStation> known = scrap->parentTrip()->knownStations();
+        name = known.isEmpty() ? QStringLiteral("Station Name") : known.first().name;
+    }
+
+    cwNoteStation added;
+    added.setName(name);
+    added.setPositionOnNote(notePosition);
+    scrap->addStation(added);
+    scrap->setStationData(cwScrap::StationName, scrap->numberOfStations() - 1, typedName);
+}
+
+QStringList knownNames(const cwTrip* trip)
+{
+    QStringList names;
+    for (const cwTrip::KnownStation& known : trip->knownStations()) {
+        names.append(known.name);
+    }
+    return names;
+}
+
+void settleScraps(SavedProjectFixture* fixture)
+{
+    drainPipelines(fixture);
+    fixture->rootData->scrapManager()->waitForFinish();
+    drainPipelines(fixture);
+}
+
+std::unique_ptr<SavedProjectFixture> makeProjectWithEmptyCave(const QString& projectFileBase,
+                                                             cwCave** cave)
+{
+    auto fixture = makeSavedProject(projectFileBase,
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    *cave = addEmptyCave(*fixture->project->cavingRegion(), QStringLiteral("AttachedCave"));
+    fixture->project->waitSaveToFinish();
+    QCoreApplication::processEvents();
+    return fixture;
+}
+
+cwTrip* wholeCaveWindowOf(const cwCave* cave)
+{
+    for (cwTrip* trip : cave->trips()) {
+        if (trip->windowsWholeCave()) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+// The trip-level attach path, which keeps computing alongside the cave-level
+// attaches below.
+TEST_CASE("auto-calculate computes the note transform for a scrap made before the attach's first solve lands",
+          "[cwScrapManager][Attach][NoteTransform]")
+{
+    requireAutomaticUpdatesEnabled();
+    auto fixture = makeSavedProject(QStringLiteral("note-auto-trip-before"),
+                                    QStringLiteral("ScrapCave"),
+                                    QStringLiteral("ScrapTrip"));
+    const QString source = QDir(fixture->tempDir.path()).filePath(QStringLiteral("source/s.svx"));
+    REQUIRE(QDir().mkpath(QFileInfo(source).absolutePath()));
+    overwriteFile(source, threeStationSurvey("10.0", true));
+    attachThroughManager(fixture.get(), fixture->trip, source);
+
+    cwScrap* scrap = addEmptySizedScrap(fixture->trip);
+    addStationLikeTheEditor(scrap, kA1OnNote, QStringLiteral("s.a1"));
+    addStationLikeTheEditor(scrap, kA2OnNote, QStringLiteral("s.a2"));
+    settleScraps(fixture.get());
+
+    REQUIRE(fixture->trip->solvedStationPositions().hasPosition(QStringLiteral("s.a2")));
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
+}
+
+TEST_CASE("auto-calculate computes the note transform on the whole-cave window of a Compass cave attach",
+          "[cwScrapManager][Attach][NoteTransform]")
+{
+    requireAutomaticUpdatesEnabled();
+    cwCave* cave = nullptr;
+    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-compass-cave"), &cave);
+    attachThroughManager(fixture.get(), cave, fixturePath(QStringLiteral("compass_solvable.dat")));
+    settleScraps(fixture.get());
+
+    cwTrip* window = wholeCaveWindowOf(cave);
+    REQUIRE(window != nullptr);
+    INFO("known stations: " << knownNames(window).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(window->solvedStationPositions().hasPosition(QStringLiteral("S1")));
+    REQUIRE(window->solvedStationPositions().hasPosition(QStringLiteral("S2")));
+    CHECK(window->solvedNetwork().neighbors(QStringLiteral("S1")).contains(QStringLiteral("s2"),
+                                                                         Qt::CaseInsensitive));
+
+    // S1-S2 runs ten feet north (Compass lengths are feet); the page draws it
+    // five meters long.
+    cwScrap* scrap = addEmptySizedScrap(window);
+    addStationLikeTheEditor(scrap, kA1OnNote, QStringLiteral("S1"));
+    addStationLikeTheEditor(scrap, kA2OnNote, QStringLiteral("S2"));
+    settleScraps(fixture.get());
+
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(kHalfScale / kMetersPerFoot).epsilon(kScaleTolerance));
+}
+
+TEST_CASE("auto-calculate computes the note transform on a Scope trip of a Walls cave attach",
+          "[cwScrapManager][Attach][NoteTransform]")
+{
+    requireAutomaticUpdatesEnabled();
+    cwCave* cave = nullptr;
+    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-walls-cave"), &cave);
+    attachThroughManager(fixture.get(), cave,
+                         fixturePath(QStringLiteral("walls_prefixed/walls_prefixed.wpj")));
+    settleScraps(fixture.get());
+
+    cwTrip* xy = tripForPrefix(cave, QStringLiteral("XY"));
+    REQUIRE(xy != nullptr);
+    INFO("known stations: " << knownNames(xy).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(xy->solvedStationPositions().hasPosition(QStringLiteral("P1")));
+    REQUIRE(xy->solvedStationPositions().hasPosition(QStringLiteral("P2")));
+    CHECK(xy->solvedNetwork().neighbors(QStringLiteral("P1")).contains(QStringLiteral("p2"),
+                                                                      Qt::CaseInsensitive));
+
+    // P1-P2 runs twelve meters east; the page draws it six meters long.
+    cwScrap* scrap = addEmptySizedScrap(xy);
+    addStationLikeTheEditor(scrap, kP1OnNote, QStringLiteral("P1"));
+    addStationLikeTheEditor(scrap, kP2OnNote, QStringLiteral("P2"));
+    settleScraps(fixture.get());
+
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
+}
+
+TEST_CASE("auto-calculate computes the note transform on a Scope trip of a Survex cave attach",
+          "[cwScrapManager][Attach][NoteTransform]")
+{
+    requireAutomaticUpdatesEnabled();
+    cwCave* cave = nullptr;
+    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-survex-cave"), &cave);
+    attachThroughManager(fixture.get(), cave, fixturePath(QStringLiteral("survex_blocks.svx")));
+    settleScraps(fixture.get());
+
+    cwTrip* east = tripForPrefix(cave, QStringLiteral("doghill.big-passage.east"));
+    REQUIRE(east != nullptr);
+    INFO("known stations: " << knownNames(east).join(QStringLiteral(", ")).toStdString());
+    REQUIRE(east->solvedStationPositions().hasPosition(QStringLiteral("e1")));
+    REQUIRE(east->solvedStationPositions().hasPosition(QStringLiteral("e2")));
+    CHECK(east->solvedNetwork().neighbors(QStringLiteral("e1")).contains(QStringLiteral("e2"),
+                                                                        Qt::CaseInsensitive));
+
+    // e1-e2 runs three meters; the page draws it one and a half meters long.
+    const QPointF e1OnNote(0.2, 0.3);
+    const QPointF e2OnNote(0.2, 0.45);
+    cwScrap* scrap = addEmptySizedScrap(east);
+    addStationLikeTheEditor(scrap, e1OnNote, QStringLiteral("e1"));
+    addStationLikeTheEditor(scrap, e2OnNote, QStringLiteral("e2"));
+    settleScraps(fixture.get());
+
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
+}
+
+TEST_CASE("a scrap on a Scope trip of a Walls cave attach re-morphs after Reload moves its stations",
+          "[cwScrapManager][Attach][NoteTransform]")
+{
+    requireAutomaticUpdatesEnabled();
+    cwCave* cave = nullptr;
+    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-walls-reload"), &cave);
+    const QString sourceDir = tempSubdir(fixture->tempDir, QStringLiteral("walls-source"));
+    const QString project = seedAttachment(sourceDir,
+                                           fixturePath(QStringLiteral("walls_prefixed/walls_prefixed.wpj")));
+    seedAttachment(sourceDir, fixturePath(QStringLiteral("walls_prefixed/ROOT.SRV")));
+    const QString prefixed = seedAttachment(sourceDir,
+                                            fixturePath(QStringLiteral("walls_prefixed/PREFIXED.SRV")));
+    attachThroughManager(fixture.get(), cave, project);
+    settleScraps(fixture.get());
+
+    cwTrip* xy = tripForPrefix(cave, QStringLiteral("XY"));
+    REQUIRE(xy != nullptr);
+    cwScrap* scrap = addEmptySizedScrap(xy);
+    addStationLikeTheEditor(scrap, kP1OnNote, QStringLiteral("P1"));
+    addStationLikeTheEditor(scrap, kP2OnNote, QStringLiteral("P2"));
+    settleScraps(fixture.get());
+    REQUIRE(scrap->noteTransformation()->scale()
+            == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
+
+    // P1-P2 doubles to twenty-four meters while the page stays the same.
+    overwriteFile(prefixed,
+                  "#PREFIX XY\n"
+                  "#DATE 2025-01-02\n"
+                  "#UNITS D=Meters A=Degrees V=Degrees DECL=0\n"
+                  "P1\tP2\t24.0\t90\t0\n");
+    auto future = managerOf(fixture.get())->reloadFromSource(cave);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    REQUIRE_FALSE(future.result().hasError());
+    settleScraps(fixture.get());
+
+    CHECK(scrap->noteTransformation()->scale()
+          == Catch::Approx(kQuarterScale).epsilon(kScaleTolerance));
 }
