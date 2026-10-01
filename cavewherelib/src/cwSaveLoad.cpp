@@ -1617,7 +1617,6 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
     //Disconnect all connections
     disconnectTreeModel();
     d->pendingIdentityRepairSave = false;
-    d->legacyEquateNodeIds.clear();
 
     auto oldJobs = saveFlushImpl();
 
@@ -1670,7 +1669,6 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     emit dataRootChanged();
 
                     d->m_regionTreeModel->cavingRegion()->setData(loadData.region);
-                    d->legacyEquateNodeIds = loadData.legacyEquateNodeIds;
 
                     //What is on disk is what the project was just loaded from,
                     //so the rewrite pass starts from the file version the load
@@ -2058,26 +2056,6 @@ void cwSaveLoad::saveProject(const QDir &dir, const cwCavingRegion *region)
 {
     Q_UNUSED(dir);
     saveProtoMessage(toProtoProject(region), region);
-    rewriteLegacyEquateNodes(region);
-}
-
-void cwSaveLoad::rewriteLegacyEquateNodes(const cwCavingRegion* region)
-{
-    //The project file now holds every migrated tie, so the nodes that still
-    //carry their old copy are rewritten without it. Otherwise a tie the user
-    //removed comes back from the node file on the next open.
-    if (region == nullptr || d->legacyEquateNodeIds.isEmpty()) {
-        return;
-    }
-
-    const QSet<QUuid> nodeIds = std::exchange(d->legacyEquateNodeIds, {});
-    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
-    for (const cwSurveyNode* node : nodes) {
-        const auto* cave = qobject_cast<const cwCave*>(node);
-        if (cave != nullptr && nodeIds.contains(cave->id())) {
-            d->saveObject(this, cave);
-        }
-    }
 }
 
 void cwSaveLoad::seedStampedVersion()
@@ -3258,19 +3236,6 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                 cave.fixStations.reserve(caveProto.fixstations_size());
                 for (const auto& protoFix : caveProto.fixstations()) {
                     cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
-                }
-
-                //A node file written before every tie moved to the region list
-                //still carries its own (field 13). They join the region list,
-                //once each: the project file may already hold one of them.
-                for (const auto& protoEquate : caveProto.legacy_equates()) {
-                    const cwEquate equate = cwProtoUtils::fromProtoEquate(protoEquate);
-                    if (!loadData.region.equates.contains(equate)) {
-                        loadData.region.equates.append(equate);
-                    }
-                }
-                if (caveProto.legacy_equates_size() > 0) {
-                    loadData.legacyEquateNodeIds.insert(cave.id);
                 }
 
                 nodeEntries.push_back(std::make_unique<NodeEntry>());
@@ -6337,7 +6302,6 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                          : QStringLiteral("projection-only"));
         } else {
             region->setData(loadData.region);
-            d->legacyEquateNodeIds = loadData.legacyEquateNodeIds;
             seedStampedVersion();
             modelMutated = true;
             // Full-reload fallback applies merged commit content from disk directly into

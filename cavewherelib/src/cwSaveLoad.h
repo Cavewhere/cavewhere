@@ -119,9 +119,7 @@ class Account;
 #include <QFuture>
 #include <QHash>
 #include <QPointer>
-#include <QSet>
 #include <QUndoStack>
-#include <QUuid>
 #include <functional>
 #include <optional>
 
@@ -155,9 +153,6 @@ public:
         IdentityRepairData identityRepair;
         QList<cwError> errors;
         int maxFileVersion = 0; //!< Highest fileVersion seen across all entities during load
-        //! Nodes whose file still carries legacy within-node equates (Cave
-        //! field 13), already moved into region.equates.
-        QSet<QUuid> legacyEquateNodeIds;
     };
 
     struct SyncReport {
@@ -495,7 +490,6 @@ private:
     QPointer<cwRemoteAuthProvider> m_authProvider;
 
     void saveProject(const QDir& dir, const cwCavingRegion* region);
-    void rewriteLegacyEquateNodes(const cwCavingRegion* region);
 
     void seedStampedVersion();
     void restampProjectIfVersionChanged();

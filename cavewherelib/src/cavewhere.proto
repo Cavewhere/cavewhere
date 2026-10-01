@@ -138,18 +138,12 @@ message Cave {
     // Native caves; present (and entry_file set) for Attached/Scope.
     optional ExternalCenterline external_centerline = 12;
 
-    // Legacy, read only: within-node equate ties as files written before every
-    // tie moved to Project.equates. The loader appends them to the region list;
-    // the writer never sets this field, so the next save of the node drops it.
-    // json_name keeps the key those files carry.
-    repeated Equate legacy_equates = 13 [json_name = "equates"];
-
     // Survey-tree fields. A node's child nodes live in <nodeDir>/sub/, each
     // with its own .cwcave; these scalars say what the node is.
-    optional SurveyNodeKind kind = 14;  // absent = NODE_CAVE
-    optional bool read_only = 15;       // absent = false
-    optional string source_id = 16;     // ExternalSource that owns this node; absent = native
-    optional string source_path = 17;   // where the node sits inside its source's scan; empty on the source root
+    optional SurveyNodeKind kind = 13;  // absent = NODE_CAVE
+    optional bool read_only = 14;       // absent = false
+    optional string source_id = 15;     // ExternalSource that owns this node; absent = native
+    optional string source_path = 16;   // where the node sits inside its source's scan; empty on the source root
 }
 
 message Trip {
