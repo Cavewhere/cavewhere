@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as QC
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -154,7 +155,37 @@ MainWindowTest {
                 verify(WindowGrabber.grabToFile(page, "style-gallery-" + mode.name + "-dialog").length > 0)
                 page.closePopups()
                 tryVerify(() => !dialog.visible)
+
+                screenshotTextEditingMenu(page, mode)
             }
+        }
+
+        // The right-click menu of a text field, drawn into the window so the
+        // grab holds it. It is made on first use and keeps its first palette,
+        // so it takes its parent again for each mode.
+        function screenshotTextEditingMenu(page, mode) {
+            const field = findChild(page, "galleryTextField")
+            verify(field !== null, "galleryTextField should exist")
+            const flickable = findChild(page, "styleGalleryScrollView").contentItem
+            const fieldTop = field.mapToItem(flickable.contentItem, 0, 0).y
+            flickable.contentY = Math.max(0, Math.min(fieldTop - flickable.height / 4,
+                                                      flickable.contentHeight - flickable.height))
+            tryCompare(flickable, "moving", false)
+
+            const menu = field.QC.ContextMenu.menu
+            verify(menu !== null, "the text field should carry a context menu")
+            menu.popupType = QC.Popup.Item
+            const menuParent = menu.parent
+            menu.parent = null
+            menu.parent = menuParent
+            field.forceActiveFocus()
+            field.select(0, 2)
+            menu.popup(field, field.width / 2, field.height / 2)
+            tryVerify(() => menu.opened, 5000, "the text editing menu should finish opening")
+            verify(WindowGrabber.grabToFile(page, "style-gallery-" + mode.name + "-text-menu").length > 0)
+            menu.close()
+            tryVerify(() => !menu.visible)
+            flickable.contentY = 0
         }
     }
 }

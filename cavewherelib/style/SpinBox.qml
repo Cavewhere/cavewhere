@@ -39,6 +39,10 @@ T.SpinBox {
         readOnly: !control.editable
         validator: control.validator
         inputMethodHints: control.inputMethodHints
+
+        T.ContextMenu.menu: StyleTextEditingMenu {
+            editor: control.contentItem
+        }
     }
 
     // Each zone sits one border width inside the field's outline. A zone is

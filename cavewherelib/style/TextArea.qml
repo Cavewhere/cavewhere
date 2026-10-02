@@ -25,6 +25,10 @@ T.TextArea {
     placeholderTextColor: Theme.fieldPlaceholder
     opacity: control.enabled ? 1 : Theme.disabledOpacity
 
+    T.ContextMenu.menu: StyleTextEditingMenu {
+        editor: control
+    }
+
     PlaceholderText {
         id: placeholder
         x: control.leftPadding

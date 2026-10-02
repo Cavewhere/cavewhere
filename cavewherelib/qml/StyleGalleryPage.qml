@@ -329,7 +329,10 @@ StandardPage {
                         spacing: Theme.flowSpacing
 
                         QC.TextField { placeholderText: "Station name" }
-                        QC.TextField { text: "A42" }
+                        QC.TextField {
+                            objectName: "galleryTextField"
+                            text: "A42"
+                        }
                         QC.TextField { text: "Read only"; readOnly: true }
                         QC.TextField { text: "Disabled"; enabled: false }
                     }

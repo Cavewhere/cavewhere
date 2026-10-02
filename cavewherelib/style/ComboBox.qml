@@ -76,6 +76,10 @@ T.ComboBox {
         selectionColor: Theme.highlight
         selectedTextColor: control.palette.text
         verticalAlignment: QQ.Text.AlignVCenter
+
+        T.ContextMenu.menu: StyleTextEditingMenu {
+            editor: control.contentItem
+        }
     }
 
     background: StyleFieldPanel {
