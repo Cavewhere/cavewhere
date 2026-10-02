@@ -430,13 +430,15 @@ StandardPage {
                         QC.Label {
                             id: tipLabelId
                             text: "Hover for a tip"
-                            // Shown only while the label and the tip above it lie
-                            // inside the viewport; a tip on the overlay ignores clipping.
+                            // Shown only while the page is on screen and the label and
+                            // the tip above it lie inside the viewport; a tip on the
+                            // overlay ignores clipping and outlives a page switch.
                             QC.ToolTip.visible: {
                                 const flick = galleryScrollViewId.contentItem as QQ.Flickable
                                 // Reading the flow's height re-runs this as cards reflow.
                                 const y = tipLabelId.mapToItem(cardFlowId, 0, 0).y + 0 * cardFlowId.height
-                                return y - tipLabelId.height >= flick.contentY
+                                return galleryPage.visible
+                                        && y - tipLabelId.height >= flick.contentY
                                         && y + tipLabelId.height <= flick.contentY + flick.height
                             }
                             QC.ToolTip.text: "A one-line tip"

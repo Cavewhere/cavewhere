@@ -127,10 +127,13 @@ QQ.Item {
             id: linkbarBackgroundRect
 
             Layout.fillWidth: true
+            Layout.topMargin: Theme.linkBarVerticalMargin
+            Layout.bottomMargin: Theme.linkBarVerticalMargin
             implicitHeight: sizeItemId.height + 10
             border.width: 1
-            border.color: Theme.sidebar.divider
-            color: Theme.surfaceMuted
+            border.color: Theme.fieldBorder
+            color: Theme.linkBar
+            radius: Theme.panelRadius
 
             LinkBarItem {
                 id: sizeItemId
@@ -164,7 +167,8 @@ QQ.Item {
 
                 QQ.Rectangle {
                     anchors.fill: parent
-                    color: Theme.surface
+                    color: Theme.linkBar
+                    radius: Theme.panelRadius
                 }
             }
 

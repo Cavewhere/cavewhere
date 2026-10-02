@@ -134,9 +134,14 @@ QtObject {
     // Sidebar dimensions per tier
     readonly property int sidebarWidthFull: 80
     readonly property int sidebarWidthCompact: 50
+    // A page button other than the current one, until the pointer reaches it
+    readonly property real sidebarIdleOpacity: 0.5
+    // Room above and below the link bar, so its rounded outline clears the
+    // window edge and the divider under the bar
+    readonly property int linkBarVerticalMargin: 4
 
     // Per-page tool rail: icon-only buttons, sized so two fit across the wide
-    // sidebar, grouped inside a card that lifts them off the dark gradient.
+    // sidebar, grouped inside a card that lifts them off the sidebar.
     readonly property int toolRailButtonSize: 30
     readonly property int toolRailSpacing: 4
     readonly property int toolRailPanelInset: 3
@@ -416,23 +421,11 @@ QtObject {
         readonly property color gridLineColor: dark ? "#585a5e" : "#000000"
     }
 
-    // Sidebar-specific palette (original colors retained)
+    // Sidebar: a flat panel in the page color with a hairline right edge
     readonly property QtObject sidebar: QtObject {
         readonly property color background: theme.background
-        readonly property color gradientTop: "#1b2331"
-        readonly property color gradientBottom: dark ? theme.surface : "#616469"
         readonly property color panel: theme.surface
-        readonly property color divider: theme.divider //"#141414"
-        readonly property color hoverStart: "#00d1d1d1"
-        readonly property color hoverMid: "#96b5b5b5"
-        readonly property color hoverMidHover: "#32b5b5b5"
-        readonly property color toggledStart: "#ffffff"
-        readonly property color toggledMid: "#000000"
-        readonly property color toggledEnd: "#c8c0c0c0"
-        readonly property color text: "#ffffff"
-        readonly property color textActive: "#000000"
-        readonly property color textStroke: "#aaaaaa"
-        readonly property color borderActive: "#313131"
-        readonly property color borderHover: "#ffffff"
+        readonly property color divider: theme.border
+        readonly property color text: theme.text
     }
 }

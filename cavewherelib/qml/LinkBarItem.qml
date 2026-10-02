@@ -22,8 +22,8 @@ QQ.Item {
             implicitWidth: nameTextId.width + 6
             implicitHeight: nameTextId.height + 6
 
-            color: buttonId.containsMouse ? Theme.highlight : Theme.tag
-            radius: 3
+            color: buttonId.containsMouse ? Theme.highlight : Theme.linkBarChip
+            radius: Theme.controlRadius
 
             QC.Label {
                 id: nameTextId

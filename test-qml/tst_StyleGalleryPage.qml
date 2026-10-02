@@ -157,7 +157,36 @@ MainWindowTest {
                 tryVerify(() => !dialog.visible)
 
                 screenshotTextEditingMenu(page, mode)
+                screenshotMainWindow(mode)
             }
+        }
+
+        // The app's frame around a cave page: the sidebar with Data current and
+        // the pointer resting on View, and the link bar's chips.
+        function screenshotMainWindow(mode) {
+            if (RootData.region.caveCount === 0) {
+                TestHelper.loadProjectFromFile(RootData.project,
+                    TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))
+                tryVerify(() => RootData.region.caveCount > 0, 10000, "the demo cave should load")
+            }
+            const address = "Source/Data/Cave=" + RootData.region.cave(0).name
+            RootData.pageSelectionModel.currentPageAddress = address
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName !== "styleGalleryPage",
+                      5000, "should land on the cave page")
+
+            const dataButton = findChild(rootId.mainWindow, "dataButton")
+            verify(dataButton !== null && dataButton.troggled, "Data should be the current sidebar page")
+            const viewButton = findChild(rootId.mainWindow, "viewButton")
+            verify(viewButton !== null, "viewButton should exist")
+            mouseMove(viewButton, viewButton.width / 2, viewButton.height / 2)
+            const viewFace = findChild(viewButton, "buttonFace")
+            verify(viewFace !== null, "the View button should have a face")
+            tryVerify(() => Qt.colorEqual(viewFace.color, Theme.hoverOverlay),
+                      5000, "the View button should show its hover face")
+
+            verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-main-window").length > 0)
+            mouseMove(rootId.mainWindow, rootId.mainWindow.width - 1, rootId.mainWindow.height - 1)
         }
 
         // The right-click menu of a text field, drawn into the window so the
