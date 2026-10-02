@@ -22,13 +22,13 @@ QQ.Item {
             implicitWidth: nameTextId.width + 6
             implicitHeight: nameTextId.height + 6
 
-            color: buttonId.containsMouse ? Theme.palette.highlight : Theme.tag
+            color: buttonId.containsMouse ? Theme.highlight : Theme.tag
             radius: 3
 
             QC.Label {
                 id: nameTextId
                 objectName: "linkBarItemText"
-                color: buttonId.containsMouse ? Theme.palette.highlightedText : Theme.palette.text
+                color: Theme.text
                 anchors.centerIn: parent
             }
 

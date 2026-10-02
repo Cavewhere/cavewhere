@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls as QC
 import cavewherelib
 
 pragma Singleton
@@ -10,27 +9,28 @@ QtObject {
     // Track the color scheme: the Appearance setting first, the OS second
     readonly property bool dark: RootData.settings.appearanceSettings.dark
 
-    // Base palette hook using the active system palette
+    // Shows the application palette on the Colors page. Tokens below are fixed
+    // values; none of them reads this object.
     readonly property SystemPalette palette: SystemPalette { colorGroup: SystemPalette.Active }
 
     // Core surfaces/text
-    readonly property color background: palette.window
-    readonly property color surface: dark ? "#1f232a" : "#ffffff"
-    readonly property color surfaceMuted: dark ? "#292d35" : "#f6f6f6"
-    readonly property color surfaceRaised: dark ? "#242933" : "#f0f0f0"
+    readonly property color background: dark ? "#313131" : "#F2F2F2"
+    readonly property color surface: dark ? "#3A3A3A" : "#FFFFFF"
+    readonly property color surfaceMuted: dark ? "#2B2B2B" : "#E9E9E9"
+    readonly property color surfaceRaised: dark ? "#454545" : "#FFFFFF"
     // readonly property color sidebar: dark ? "#141414" : "#f4f4f4"
-    readonly property color text: palette.text
-    readonly property color textSecondary: dark ? "#cdd2db" : "#33363a"
-    readonly property color textSubtle: dark ? "#9fa6b1" : "#616469"
-    readonly property color textInverse: dark ? "#111318" : "#f5f5f5"
-    readonly property color textLink: dark ? "#85c1f4" : "#1d4d77"
+    readonly property color text: dark ? "#FFFFFF" : "#1E1E1E"
+    readonly property color textSecondary: dark ? "#C9C9C9" : "#555555"
+    readonly property color textSubtle: dark ? "#A8A8A8" : "#6A6A6A"
+    readonly property color textInverse: dark ? "#232323" : "#FFFFFF"
+    readonly property color textLink: dark ? "#38BDD9" : "#086A86"
     // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell),
     // legible on the page background in both themes — danger is a fill, not text.
     readonly property color errorText: dark ? "#f47067" : "#cf222e"
 
     // Accents & states
-    readonly property color accent: palette.accent
-    readonly property color accentMuted: "#8AC6FF"
+    readonly property color accent: dark ? "#38BDD9" : "#1493B3"
+    readonly property color accentMuted: dark ? "#2A8FA6" : "#8FD3E4"
     readonly property color success: dark ? "#76e596" : "#4caf50"
     readonly property color warning: dark ? "#6b643e" : "#FF9C14"
     // A warning-toned card: a tinted ground, its outline, and text that reads on
@@ -39,10 +39,10 @@ QtObject {
     readonly property color warningBorder: dark ? "#8a8250" : "#e0a64b"
     readonly property color warningText: dark ? "#f0d9a0" : "#7a4b00"
     readonly property color danger: dark ? "#6f312e" : "#FF6736"
-    readonly property color info: dark ? "#1f3f61" : "#85c1f4"
-    readonly property color highlight: dark ? "#314f78" : "#a5cdff"
-    readonly property color hover: Qt.lighter(highlight, dark ? 1.4 : 1.15)
-    readonly property color icon: palette.buttonText
+    readonly property color info: dark ? "#12405F" : "#D1F5FA"
+    readonly property color highlight: dark ? "#1E5261" : "#C5E6EF"
+    readonly property color hover: dark ? "#424242" : "#E4E4E4"
+    readonly property color icon: text
     readonly property color tag: dark ? "#656565" : border
 
     // Splays: wall shots that hang off a station instead of joining the
@@ -67,9 +67,9 @@ QtObject {
     readonly property real splayEntryGlyphSpan: 0.45
 
     // Lines and outlines
-    readonly property color border: dark ? "#4a4f58" : "#d3d3d3"
-    readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"
-    readonly property color divider: dark ? "#2c3138" : "#d8d8d8"
+    readonly property color border: dark ? "#4C4C4C" : "#D2D2D2"
+    readonly property color borderSubtle: dark ? "#424242" : "#E0E0E0"
+    readonly property color divider: dark ? "#454545" : "#D8D8D8"
 
     // Sketch palette. Cave maps are paper-first; dark mode uses tuned
     // light grays rather than a literal color inversion.
@@ -156,7 +156,7 @@ QtObject {
     // Task progress ring: the one busy mark, shared by the sidebar footer and
     // the phone status chip. The track is the part not yet done, so it has to
     // read as a groove behind the arc rather than as a second arc.
-    readonly property color progressRingTrack: dark ? "#3f4652" : "#c9ced6"
+    readonly property color progressRingTrack: track
     // Smaller than fontSizeCaption: the count sits inside the ring, whose inner
     // opening is only about two thirds of the mark.
     readonly property int progressRingCountFontSize: Math.round(9 * fontScale)
@@ -219,15 +219,104 @@ QtObject {
 
     // Utility
     readonly property color transparent: "#00000000"
-    readonly property color shadow: dark ? "#33000000" : "#22000000"
-    readonly property color focusRing: dark ? "#b0d3ff" : "#5a9bff"
+    readonly property color shadow: dark ? "#6B000000" : "#29000000"
+    readonly property color focusRing: dark ? "#38BDD9" : "#0A7391"
+
+    // ---- BEGIN style tokens (direction D, Karst Soft) ----
+    // Surfaces
+    readonly property color canvas: dark ? "#565656" : "#C9CBCD"
+    readonly property color chrome: dark ? "#232323" : "#DADCDE"
+    readonly property color chromeText: dark ? "#FFFFFF" : "#1E1E1E"
+    readonly property color rowAlternate: dark ? "#3A3A3A" : "#E7E7E7"
+
+    // Buttons
+    readonly property color buttonSurface: dark ? "#454545" : "#FFFFFF"
+    readonly property color buttonBorder: dark ? "#606060" : "#C2C2C2"
+    readonly property color buttonHover: dark ? "#505050" : "#F0F0F0"
+    readonly property color buttonHoverBorder: dark ? "#767676" : "#A8A8A8"
+    readonly property color buttonPressed: dark ? "#2A2A2A" : "#DEDEDE"
+    readonly property color buttonPressedBorder: dark ? "#606060" : "#A8A8A8"
+    readonly property color buttonChecked: dark ? "#626262" : "#D6D6D6"
+    readonly property color buttonCheckedBorder: dark ? "#A6A6A6" : "#858585"
+    readonly property color buttonPrimary: dark ? "#FFFFFF" : "#2B2B2B"
+    readonly property color buttonPrimaryHover: dark ? "#DADADA" : "#4A4A4A"
+    readonly property color buttonPrimaryText: dark ? "#232323" : "#FFFFFF"
+    readonly property color buttonShadow: dark ? "#4D000000" : "#14000000"
+
+    // Fields: TextField, TextArea, ComboBox, SpinBox
+    readonly property color fieldSurface: dark ? "#262626" : "#FFFFFF"
+    readonly property color fieldBorder: dark ? "#606060" : "#C2C2C2"
+    readonly property color fieldPlaceholder: dark ? "#9A9A9A" : "#8A8A8A"
+    readonly property color hoverOverlay: dark ? "#14FFFFFF" : "#12000000"
+
+    // Indicators: CheckBox, RadioButton, Switch, Slider
+    readonly property color controlBorder: dark ? "#939393" : "#858585"
+    readonly property color checkFill: dark ? "#FFFFFF" : "#2B2B2B"
+    readonly property color checkMark: dark ? "#232323" : "#FFFFFF"
+    readonly property color track: dark ? "#565656" : "#C4C4C4"
+    readonly property color scrollHandle: dark ? "#9E9E9E" : "#8C8C8C"
+
+    // Popups: Menu, ComboBox list, Dialog, ToolTip
+    readonly property color popupSurface: dark ? "#3A3A3A" : "#FFFFFF"
+    readonly property color popupBorder: dark ? "#606060" : "#C2C2C2"
+    readonly property color popupSelected: dark ? "#565656" : "#E4E4E4"
+    readonly property color popupShadow: dark ? "#6B000000" : "#29000000"
+    readonly property color toolTipSurface: dark ? "#FFFFFF" : "#2B2B2B"
+    readonly property color toolTipText: dark ? "#232323" : "#FFFFFF"
+    readonly property color overlayScrim: dark ? "#66000000" : "#40000000" // behind a modal popup
+
+    // Tabs
+    readonly property color tabStrip: dark ? "#232323" : "#DADCDE"
+    readonly property color tabText: dark ? "#A8A8A8" : "#6A6A6A"
+
+    // Progress sweep: ProgressBar and BusyIndicator
+    readonly property color progressStart: dark ? "#70EBC9" : "#03A899"
+    readonly property color progressMid: dark ? "#2EE8E3" : "#2EC4D6"
+    readonly property color progressEnd: dark ? "#38BDD9" : "#4096CF"
+    readonly property color progressLead: dark ? "#FFFFFF" : "#0A3659"
+
+    // Link bar
+    readonly property color linkBar: dark ? "#262626" : "#FFFFFF"
+    readonly property color linkBarChip: dark ? "#454545" : "#E4E4E4"
+
+    // Metrics, in logical pixels
+    readonly property int controlRadius: 6
+    readonly property int panelRadius: 8
+    readonly property int indicatorRadius: 4
+    readonly property int controlHeight: 28
+    readonly property int controlVerticalPadding: 4
+    readonly property int buttonHorizontalPadding: 14
+    readonly property int fieldHorizontalPadding: 10
+    readonly property int controlSpacing: 6
+    readonly property int indicatorSize: 16
+    readonly property int switchWidth: 34
+    readonly property int switchHeight: 18
+    readonly property int sliderHandleSize: 16
+    readonly property int sliderTrackHeight: 2
+    readonly property int progressBarHeight: 5
+    readonly property int scrollBarThickness: 8
+    readonly property int scrollBarPadding: 2
+    readonly property int focusRingWidth: 2
+    readonly property int focusRingOffset: 2
+    readonly property int menuItemHorizontalPadding: 12
+    readonly property int menuItemVerticalPadding: 3
+    readonly property int menuIndicatorColumn: 14
+    readonly property int popupPadding: 3
+    readonly property int popupShadowBlur: dark ? 14 : 8
+    readonly property int popupShadowOffset: dark ? 4 : 2
+    // Room around a popup's surface for its shadow. Popups set all four
+    // insets to minus this value; StylePopupPanel draws inside it.
+    readonly property int popupShadowMargin: 18
+    readonly property real disabledOpacity: 0.4
+    readonly property real uncheckedToggleOpacity: 0.7
+    // ---- END style tokens ----
 
     // Legacy values mapped from the previous Theme.js
-    readonly property color floatingWidgetColor: dark ? "#2b3038" : "#DDDDDD"
+    readonly property color floatingWidgetColor: dark ? "#3A3A3A" : "#FFFFFF"
     readonly property color floatingWidgetRaisedColor: dark
         ? Qt.lighter(floatingWidgetColor, 1.3)
         : Qt.darker(floatingWidgetColor, 1.12)
-    readonly property real floatingWidgetRadius: 3
+    readonly property real floatingWidgetRadius: controlRadius
     readonly property color errorBackground: danger
 
     // View (3D scene) radial background gradient + grid lines
@@ -239,10 +328,10 @@ QtObject {
 
     // Sidebar-specific palette (original colors retained)
     readonly property QtObject sidebar: QtObject {
-        readonly property color background: palette.window
+        readonly property color background: theme.background
         readonly property color gradientTop: "#1b2331"
         readonly property color gradientBottom: dark ? theme.surface : "#616469"
-        readonly property color panel: palette.window
+        readonly property color panel: theme.surface
         readonly property color divider: theme.divider //"#141414"
         readonly property color hoverStart: "#00d1d1d1"
         readonly property color hoverMid: "#96b5b5b5"
@@ -255,5 +344,31 @@ QtObject {
         readonly property color textStroke: "#aaaaaa"
         readonly property color borderActive: "#313131"
         readonly property color borderHover: "#ffffff"
+    }
+
+    // Pushes the tokens into the application palette, so every window, popup,
+    // fallback control, and palette-driven module (QQuickGit) inherits them.
+    readonly property ApplicationPalette applicationPalette: ApplicationPalette {
+        window: theme.background
+        windowText: theme.text
+        base: theme.fieldSurface
+        alternateBase: theme.rowAlternate
+        text: theme.text
+        button: theme.buttonSurface
+        buttonText: theme.text
+        brightText: theme.textInverse
+        highlight: theme.highlight
+        highlightedText: theme.text
+        placeholderText: theme.fieldPlaceholder
+        toolTipBase: theme.toolTipSurface
+        toolTipText: theme.toolTipText
+        link: theme.textLink
+        accent: theme.accent
+        light: theme.buttonHover
+        midlight: theme.border
+        mid: theme.border
+        dark: theme.controlBorder
+        shadow: "#000000"
+        disabledText: Qt.rgba(theme.text.r, theme.text.g, theme.text.b, theme.disabledOpacity)
     }
 }
