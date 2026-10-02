@@ -46,10 +46,10 @@ QQ.Item {
     //cell's tap calls the move off
     property bool acceptsSplayMove: false
 
-    //How the cell's background reads: shots alternate in bands, a station cell
-    //is split between the bands of the shots above and below it, and a splay
-    //cell takes the accent that keeps a cluster reading as a group. Which of
-    //the three a cell is follows from its column, so the model answers it
+    //How the cell's background reads: shots alternate in bands, station cells
+    //take one flat fill, and a splay cell takes the accent that keeps a cluster
+    //reading as a group. Which of the three a cell is follows from its column,
+    //so the model answers it
     readonly property bool stationCell: cell.chunk !== null
                                         && cell.model !== null
                                         && cell.model.isStationCell(cell.cellRole)
@@ -60,21 +60,30 @@ QQ.Item {
                                       && cell.model !== null
                                       && cell.model.isSplayCell(cell.cellRole)
 
-    //A station's lower half takes the band of the shot below it, and the last
-    //station of a chunk has none. The trailing blank station and shot come and
-    //go as rows of the view, so its count re-runs the lookup
-    readonly property bool shotBelow: cell.stationCell
-                                      && cell.view !== null
-                                      && cell.view.count > 0
-                                      && cell.model.modelRowForCellRole(cell.chunk,
-                                                                        cell.indexInChunk,
-                                                                        SurveyEditorCellIndex.ShotDistanceCell) >= 0
+    //The shot or station of the cell's chunk that holds the keyboard, or -1.
+    //A splay row's index is the station it hangs from, so focus in a splay
+    //selects its station
+    readonly property bool focusInChunk: cell.chunk !== null
+                                         && cell.model !== null
+                                         && cell.model.focusedRowIndex.chunk === cell.chunk
+    readonly property int selectedShotIndex: cell.focusInChunk
+                                             && cell.model.isShotCell(cell.model.focusedRole)
+                                             ? cell.model.focusedRowIndex.indexInChunk : -1
+    readonly property int selectedStationIndex: cell.focusInChunk
+                                                && (cell.model.isStationCell(cell.model.focusedRole)
+                                                    || cell.model.isSplayCell(cell.model.focusedRole))
+                                                ? cell.model.focusedRowIndex.indexInChunk : -1
 
-    //The shots whose bands a station cell's halves take. The first station has
-    //no shot above it and the last none below, so each takes its one neighbor
-    readonly property int upperShotIndex: Math.max(cell.indexInChunk - 1, 0)
-    readonly property int lowerShotIndex: cell.shotBelow ? cell.indexInChunk
-                                                         : Math.max(cell.indexInChunk - 1, 0)
+    readonly property bool stationSelected: (cell.stationCell || cell.splayCell)
+                                            && cell.selectedStationIndex === cell.indexInChunk
+
+    //A selected shot reaches into the lower half of its from station's cells
+    //and the upper half of its to station's, the halves its own cells cover
+    readonly property bool lowerHalfSelected: cell.stationCell
+                                              && cell.selectedShotIndex === cell.indexInChunk
+    readonly property bool upperHalfSelected: cell.stationCell
+                                              && cell.selectedShotIndex >= 0
+                                              && cell.selectedShotIndex === cell.indexInChunk - 1
 
     //Hovering a remove action strikes through every cell the removal takes
     //with it, whether or not the cell holds a reading
@@ -114,23 +123,16 @@ QQ.Item {
     signal rightTapped()
     signal tabPressed()
 
-    //! True when shot \a shotIndex of the cell's chunk holds the keyboard
-    function isCurrentShot(shotIndex: int): bool {
-        if(cell.model === null || cell.chunk === null || cell.model.focusedRow < 0) {
-            return false
+    //! The fill a cell takes at rest: shots alternate by shot, a splay takes
+    //! its accent, and a station one flat fill
+    function restFill(): QQ.color {
+        if(cell.shotCell) {
+            return cell.indexInChunk % 2 === 0 ? Theme.background : Theme.rowAlternate
         }
-        return cell.model.isShotCell(cell.model.focusedRole)
-                && cell.model.modelRowForCellRole(cell.chunk,
-                                                  shotIndex,
-                                                  SurveyEditorCellIndex.ShotDistanceCell) === cell.model.focusedRow
-    }
-
-    //! The band shot \a shotIndex draws across the station and shot columns
-    function shotFill(shotIndex: int): QQ.color {
-        if(cell.isCurrentShot(shotIndex)) {
-            return Theme.rowCurrent
+        if(cell.splayCell) {
+            return Theme.splaySurface
         }
-        return shotIndex % 2 === 0 ? Theme.background : Theme.rowAlternate
+        return Theme.background
     }
 
     function shouldHaveFocus(): bool {
@@ -304,33 +306,27 @@ QQ.Item {
         }
     }
 
-    //A shot's band and a splay's accent fill the cell. A station cell is split
-    //at its middle so each shot reads as one stripe across both kinds of column
     QQ.Rectangle {
         id: backgroundId
+        objectName: "cellFill"
         anchors.fill: parent
-        visible: cell.shotCell || cell.splayCell
-        color: cell.splayCell ? Theme.splaySurface : cell.shotFill(cell.indexInChunk)
+        visible: cell.stationCell || cell.shotCell || cell.splayCell
+        color: {
+            const selected = cell.shotCell ? cell.selectedShotIndex === cell.indexInChunk
+                                           : cell.stationSelected
+            return selected ? Theme.rowCurrent : cell.restFill()
+        }
     }
 
     QQ.Rectangle {
-        id: upperHalfId
+        id: selectedShotHalfId
+        objectName: "cellSelectedShotHalf"
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.top: parent.top
+        y: cell.upperHalfSelected ? 0 : parent.height / 2
         height: parent.height / 2
-        visible: cell.stationCell
-        color: cell.shotFill(cell.upperShotIndex)
-    }
-
-    QQ.Rectangle {
-        id: lowerHalfId
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.top: upperHalfId.bottom
-        anchors.bottom: parent.bottom
-        visible: cell.stationCell
-        color: cell.shotFill(cell.lowerShotIndex)
+        visible: cell.upperHalfSelected || cell.lowerHalfSelected
+        color: Theme.rowCurrent
     }
 
     QQ.Rectangle {

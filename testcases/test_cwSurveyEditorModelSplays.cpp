@@ -1699,3 +1699,29 @@ TEST_CASE("Retiring a trip forgets which clusters were open", "[cwSurveyEditorMo
     fixture.checkRowCount(6);
     CHECK_FALSE(fixture.rowData(3, cwSurveyEditorModel::StationSplaysExpandedRole).toBool());
 }
+
+TEST_CASE("The focused row names the station, shot, or splay it shows",
+          "[cwSurveyEditorModel][SplayShot]") {
+    SplayFixture fixture;
+    fixture.model.toggleSplaysExpanded(fixture.stationRow(1));
+    fixture.checkRowCount(10);
+
+    //title, a1, shot, a2, s1, s2, s3, blank, shot, a3
+    const int a1ShotRow = 2;
+    const int a2Row = 3;
+    const int secondSplayRow = 5;
+
+    CHECK(fixture.model.focusedRowIndex() == cwSurveyEditorRowIndex());
+
+    fixture.model.setFocusedCell(fixture.model.cellIndex(a1ShotRow, cwSurveyEditorCellIndex::ShotCompassCell));
+    CHECK(fixture.model.focusedRowIndex()
+          == cwSurveyEditorRowIndex(fixture.chunk, 0, cwSurveyEditorRowIndex::ShotRow));
+
+    fixture.model.setFocusedCell(fixture.model.cellIndex(a2Row, cwSurveyEditorCellIndex::StationLeftCell));
+    CHECK(fixture.model.focusedRowIndex() == fixture.stationRow(1));
+
+    //A splay row's index is the station it hangs from
+    fixture.model.setFocusedCell(fixture.model.cellIndex(secondSplayRow, cwSurveyEditorCellIndex::SplayClinoCell));
+    CHECK(fixture.model.focusedRowIndex()
+          == cwSurveyEditorRowIndex(fixture.chunk, 1, 1, cwSurveyEditorRowIndex::SplayRow));
+}

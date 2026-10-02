@@ -1289,6 +1289,15 @@ int cwSurveyEditorModel::focusedRole() const
     return static_cast<int>(m_focusedCellRole);
 }
 
+cwSurveyEditorRowIndex cwSurveyEditorModel::focusedRowIndex() const
+{
+    const int row = focusedRow();
+    if(m_trip.isNull() || row < 0 || row >= rowCount()) {
+        return {};
+    }
+    return toRowIndex(row);
+}
+
 void cwSurveyEditorModel::setFocusedCell(const cwSurveyEditorCellIndex& cell)
 {
     if(!isCellValid(cell)) {

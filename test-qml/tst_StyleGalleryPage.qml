@@ -191,8 +191,10 @@ MainWindowTest {
             mouseMove(rootId.mainWindow, rootId.mainWindow.width - 1, rootId.mainWindow.height - 1)
         }
 
-        // A trip page's survey editor: the shot bands, and one shot holding the
-        // keyboard so its tint and the focused cell's highlight show together.
+        // A trip page's survey editor in three states: at rest, with only the
+        // shots banded; one shot holding the keyboard, tinted with its arrow;
+        // and a station with an open splay cluster holding it, tinted along
+        // with its splays.
         function screenshotTripPage(mode) {
             const cave = RootData.region.cave(0)
             verify(cave.rowCount() > 0, "the demo cave should have a trip")
@@ -200,7 +202,8 @@ MainWindowTest {
             verify(trip.chunkCount > 0, "the demo trip should have survey data")
             const chunk = trip.chunk(0)
             const shotIndex = 2
-            verify(chunk.shotCount > shotIndex, "the demo chunk should have enough shots")
+            const splayStation = shotIndex + 2
+            verify(chunk.stationCount > splayStation, "the demo chunk should have enough stations")
 
             RootData.pageSelectionModel.currentPageAddress =
                     "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
@@ -215,22 +218,69 @@ MainWindowTest {
             }, 5000, "the survey editor should be reachable")
             const model = view.model
 
-            const shotRow = model.toModelRow(model.rowIndex(chunk, shotIndex, SurveyEditorRowIndex.ShotRow))
-            verify(shotRow >= 0, "the shot should have a model row")
-            model.setFocusedCell(model.cellIndex(shotRow, SurveyEditorCellIndex.ShotCompassCell))
+            // The demo data has no splays, so one station takes the a4 set once
+            const stationRowIndex = model.rowIndex(chunk, splayStation, SurveyEditorRowIndex.StationRow)
+            let stationItem = null
+            tryVerify(() => {
+                view.positionViewAtIndex(model.toModelRow(stationRowIndex), ListView.Center)
+                stationItem = view.itemAtIndex(model.toModelRow(stationRowIndex))
+                return stationItem !== null
+            }, 5000, "the splay station should have a row")
+            if (stationItem.stationSplayCount === 0) {
+                for (const splay of TestHelper.a4SplayReadings()) {
+                    TestHelper.addStationSplay(chunk, splayStation, splay.distance, splay.compass, splay.clino)
+                }
+            }
+            tryVerify(() => view.itemAtIndex(model.toModelRow(stationRowIndex)).stationSplayCount > 0,
+                      5000, "the splay station should carry splays")
+            if (!view.itemAtIndex(model.toModelRow(stationRowIndex)).stationSplaysExpanded) {
+                model.toggleSplaysExpanded(stationRowIndex)
+            }
+            tryVerify(() => view.itemAtIndex(model.toModelRow(stationRowIndex)).stationSplaysExpanded,
+                      5000, "the splay cluster should be open")
+
+            const shotRow = () => model.toModelRow(model.rowIndex(chunk, shotIndex, SurveyEditorRowIndex.ShotRow))
+            verify(shotRow() >= 0, "the shot should have a model row")
 
             // The page above the table is the list's header, so centering the
-            // focused shot scrolls the table up into the window.
-            view.positionViewAtIndex(model.focusedRow, ListView.Center)
-            tryCompare(view, "moving", false)
+            // shot scrolls the table up into the window.
+            const centerOnShot = () => {
+                view.positionViewAtIndex(shotRow(), ListView.Center)
+                tryCompare(view, "moving", false)
+            }
 
+            // The editor keeps its focus from the previous mode, so the keyboard
+            // moves to another chunk to leave this one at rest
+            if (trip.chunkCount < 2) {
+                trip.addNewChunk()
+            }
+            const restRow = model.toModelRow(model.rowIndex(trip.chunk(trip.chunkCount - 1), 0,
+                                                            SurveyEditorRowIndex.StationRow))
+            model.setFocusedCell(model.cellIndex(restRow, SurveyEditorCellIndex.StationNameCell))
+            tryVerify(() => model.focusedRowIndex.chunk !== chunk, 5000,
+                      "the keyboard should sit outside the chunk, leaving it at rest")
+            centerOnShot()
+            verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-trip-page-rest").length > 0)
+
+            model.setFocusedCell(model.cellIndex(shotRow(), SurveyEditorCellIndex.ShotCompassCell))
+            centerOnShot()
             let cell = null
             tryVerify(() => {
                 cell = findChild(view, "dataBox." + model.focusedRow + "." + SurveyEditorCellIndex.ShotCompassCell)
                 return cell !== null && cell.highlightVisible
             }, 5000, "the shot's compass cell should hold the keyboard")
-
+            tryVerify(() => findChild(view.itemAtIndex(shotRow()), "shotArrow") !== null,
+                      5000, "the selected shot should show its arrow")
             verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-trip-page").length > 0)
+
+            const stationRow = model.toModelRow(stationRowIndex)
+            model.setFocusedCell(model.cellIndex(stationRow, SurveyEditorCellIndex.StationLeftCell))
+            centerOnShot()
+            tryVerify(() => {
+                cell = findChild(view, "dataBox." + model.focusedRow + "." + SurveyEditorCellIndex.StationLeftCell)
+                return cell !== null && cell.highlightVisible
+            }, 5000, "the station's left cell should hold the keyboard")
+            verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-trip-page-station").length > 0)
         }
 
         // The right-click menu of a text field, drawn into the window so the

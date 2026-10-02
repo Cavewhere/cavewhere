@@ -34,6 +34,10 @@ class CAVEWHERE_LIB_EXPORT cwSurveyEditorModel : public QAbstractListModel
     Q_PROPERTY(int focusedRow READ focusedRow NOTIFY focusedRowChanged)
     Q_PROPERTY(int focusedRole READ focusedRole NOTIFY focusedRoleChanged)
 
+    //The station, shot, or splay the focused row stands for. A focused row
+    //moves only when the rows above it change, which moves its row number too
+    Q_PROPERTY(cwSurveyEditorRowIndex focusedRowIndex READ focusedRowIndex NOTIFY focusedRowChanged)
+
     //A move waiting for the user to pick the station it lands on. All three
     //answer for the same pending move, so they change together
     Q_PROPERTY(bool splayMoveActive READ splayMoveActive NOTIFY splayMoveChanged)
@@ -143,6 +147,7 @@ public:
     Q_INVOKABLE bool isFocusedCell(const cwSurveyEditorCellIndex& cell) const;
     int focusedRow() const;
     int focusedRole() const;
+    cwSurveyEditorRowIndex focusedRowIndex() const;
     Q_INVOKABLE void setFocusedCell(const cwSurveyEditorCellIndex& cell);
     Q_INVOKABLE void dumpModel();
     Q_INVOKABLE void focusOnLastChunk();
