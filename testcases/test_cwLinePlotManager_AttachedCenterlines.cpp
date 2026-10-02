@@ -18,6 +18,11 @@
 #include "cwLength.h"
 #include "cwLinePlotManager.h"
 #include "cwCavernNaming.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
+#include "cwError.h"
+#include "cwErrorModel.h"
+#include "cwStationHandle.h"
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
@@ -338,4 +343,69 @@ TEST_CASE("Nested Scope trips count each leg once in the cave's length",
 
     REQUIRE_FALSE(manager.hasSolveError());
     CHECK(cave->length()->value() == Catch::Approx(34.0).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("A cave-level Compass attach with an untied survey warns on its node",
+          "[LinePlotManager][Attach]")
+{
+    // compass_untied.dat holds two surveys, S1-S3 and U1-U3, that share no
+    // station. Cavern fixes S1 and drops the U survey, naming only U1.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    QHash<QUuid, QString> caveDirs;
+    cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Untied"),
+                                     QStringLiteral("compass_untied.dat"), {},
+                                     tempRoot, caveDirs);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const std::optional<cwError> entry = unconnectedStationsEntry(cave->errorModel());
+    REQUIRE(entry.has_value());
+    CHECK(entry->type() == cwError::Warning);
+    CHECK(entry->message() == QStringLiteral("3 stations in compass_untied.dat are not tied to the cave"));
+    CHECK(entry->detail() == QStringLiteral("u1, u2, u3"));
+}
+
+TEST_CASE("Tying an attached file's dropped survey in clears its warning on the next solve",
+          "[LinePlotManager][Attach]")
+{
+    // survex_two_parts.svx holds PartA and PartB with nothing between them.
+    // Cavern fixes PartA and drops PartB until an equate joins the two.
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    QHash<QUuid, QString> caveDirs;
+    cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Two parts"),
+                                     QStringLiteral("survex_two_parts.svx"), {},
+                                     tempRoot, caveDirs);
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    const std::optional<cwError> entry = unconnectedStationsEntry(cave->errorModel());
+    REQUIRE(entry.has_value());
+    CHECK(entry->message() == QStringLiteral("3 stations in survex_two_parts.svx are not tied to the cave"));
+    CHECK(entry->detail() == QStringLiteral("partb.b1, partb.b2, partb.b3"));
+
+    region.equates()->appendEquate(
+        cwEquate({cwStationHandle(cwStationHandle::NativeCave, cave->id(), QStringLiteral("parta.a3")),
+                  cwStationHandle(cwStationHandle::NativeCave, cave->id(), QStringLiteral("partb.b1"))}));
+    manager.waitToFinish();
+    INFO("cavern log after the tie:\n" << manager.cavernLog().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    CHECK(cave->stationPositionLookup().hasPosition(QStringLiteral("partb.b3")));
+    CHECK_FALSE(unconnectedStationsEntry(cave->errorModel()).has_value());
 }

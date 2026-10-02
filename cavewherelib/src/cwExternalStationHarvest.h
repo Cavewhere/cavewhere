@@ -64,6 +64,19 @@ namespace cwExternalStationHarvest {
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<QStringList> harvest(const QString& entryFile);
 
+/**
+ * Returns the station names of every component of \a entryFile that holds one
+ * of \a seedStations, canonicalized and sorted like harvest().
+ *
+ * Each seed is fixed at the origin, so cavern places the seed's component
+ * whether or not anything else ties it in. Seeds are named in the file's own
+ * namespace. With a seed in every component it reaches, this reads the names
+ * of the surveys a region solve dropped as hanging, which harvest() alone
+ * cannot.
+ */
+CAVEWHERE_LIB_EXPORT Monad::Result<QStringList> harvestComponents(const QString& entryFile,
+                                                                  const QStringList& seedStations);
+
 } // namespace cwExternalStationHarvest
 
 #endif // CWEXTERNALSTATIONHARVEST_H

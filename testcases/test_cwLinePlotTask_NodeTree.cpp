@@ -18,6 +18,8 @@
 #include "cwCavingRegion.h"
 #include "cwEquate.h"
 #include "cwEquateModel.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
@@ -385,6 +387,91 @@ TEST_CASE("The depth-2 fixture loads and solves with every trip drawn",
     for (const cwTrip* trip : trips) {
         INFO("trip: " << trip->name().toStdString());
         CHECK(vertexCountOf(geometry, trip) > 0);
+    }
+
+    rootData->project()->waitSaveToFinish();
+}
+
+TEST_CASE("The depth-2 fixture's unconnected surveys warn on their trips",
+          "[LinePlotManager][NodeTree]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir workingRoot(QDir(tempDir.path()).absoluteFilePath(QStringLiteral("depth2")));
+    copyDirectory(QDir(testcasesDatasetSourcePath(QStringLiteral("survey-tree/depth2"))), workingRoot);
+
+    auto rootData = std::make_unique<cwRootData>();
+    addTokenManager(rootData->project());
+    rootData->project()->loadOrConvert(workingRoot.absoluteFilePath(QStringLiteral("depth2.cwproj")));
+    rootData->project()->waitLoadToFinish();
+
+    cwCavingRegion* region = rootData->project()->cavingRegion();
+    cwCave* fisherRidge = childNamed(region->rootNode(), QStringLiteral("Fisher Ridge"));
+    cwCave* folder = childNamed(region->rootNode(), QStringLiteral("Kentucky field seasons"));
+    REQUIRE(fisherRidge != nullptr);
+    REQUIRE(folder != nullptr);
+    cwCave* sideCave = childNamed(folder, QStringLiteral("Side Cave"));
+    REQUIRE(sideCave != nullptr);
+    cwCave* section = childNamed(sideCave, QStringLiteral("Upper level"));
+    REQUIRE(section != nullptr);
+    REQUIRE(section->trips().size() == 1);
+    cwTrip* upperSurvey = section->trips().first();
+
+    cwTrip* entranceSurvey = tripNamed(fisherRidge, QStringLiteral("Entrance survey"));
+    cwTrip* crystalCrawl = tripNamed(fisherRidge, QStringLiteral("Crystal crawl"));
+    REQUIRE(entranceSurvey != nullptr);
+    REQUIRE(crystalCrawl != nullptr);
+
+    cwLinePlotManager* manager = rootData->linePlotManager();
+    manager->waitToFinish();
+    INFO("solve error: " << manager->solveErrorMessage().toStdString());
+
+    SECTION("The unconnected Entrance survey warns on its trip and rolls up to Fisher Ridge")
+    {
+        const std::optional<cwError> entry = unconnectedStationsEntry(entranceSurvey->errorModel());
+        REQUIRE(entry.has_value());
+        CHECK(entry->type() == cwError::Warning);
+        CHECK(entry->message() == QStringLiteral("2 stations in Entrance survey are not tied to the cave"));
+        CHECK(entry->detail() == QStringLiteral("a1, a2"));
+        CHECK_FALSE(unconnectedStationsEntry(crystalCrawl->errorModel()).has_value());
+        CHECK_FALSE(unconnectedStationsEntry(fisherRidge->errorModel()).has_value());
+
+        // The node counts its trips' warnings, so silencing the trip's entry
+        // takes exactly one off the node.
+        cwErrorListModel* entranceErrors = entranceSurvey->errorModel()->errors();
+        const int nodeWarnings = fisherRidge->errorModel()->warningCount();
+        const int row = entranceErrors->indexOf(*entry);
+        REQUIRE(row >= 0);
+        REQUIRE(entranceErrors->setData(entranceErrors->index(row), true,
+                                        static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole)));
+        CHECK(fisherRidge->errorModel()->warningCount() == nodeWarnings - 1);
+    }
+
+    SECTION("Tying the surveys in clears each warning on the next solve")
+    {
+        // Joining Fisher Ridge lets cavern run, and cavern then drops the
+        // Section, which nothing ties to its Cave yet.
+        SurveyTreeTestHelper::addShot(crystalCrawl, QStringLiteral("A2"), QStringLiteral("B1"));
+        manager->waitToFinish();
+        INFO("cavern log:\n" << manager->cavernLog().toStdString());
+        REQUIRE_FALSE(manager->hasSolveError());
+        CHECK_FALSE(unconnectedStationsEntry(entranceSurvey->errorModel()).has_value());
+
+        const std::optional<cwError> sectionEntry = unconnectedStationsEntry(upperSurvey->errorModel());
+        REQUIRE(sectionEntry.has_value());
+        CHECK(sectionEntry->message()
+              == QStringLiteral("2 stations in %1 are not tied to the cave").arg(upperSurvey->name()));
+        CHECK(sectionEntry->detail() == QStringLiteral("d1, d2"));
+
+        region->equates()->appendEquate(cwEquate({nativeHandle(section, QStringLiteral("D1")),
+                                                  nativeHandle(sideCave, QStringLiteral("C2"))}));
+        manager->waitToFinish();
+        REQUIRE_FALSE(manager->hasSolveError());
+        CHECK_FALSE(unconnectedStationsEntry(upperSurvey->errorModel()).has_value());
+        for (const cwTrip* trip : region->rootNode()->allTrips()) {
+            INFO("trip: " << trip->name().toStdString());
+            CHECK_FALSE(unconnectedStationsEntry(trip->errorModel()).has_value());
+        }
     }
 
     rootData->project()->waitSaveToFinish();

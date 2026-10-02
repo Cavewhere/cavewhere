@@ -228,6 +228,23 @@ public:
         // result no run filled in asserts nothing.
         bool ExternalScopesChecked = false;
 
+        //! The stations of one trip or attached file that cavern could not tie
+        //! to its cave. \a ownerId is the trip's id, or the node's for a
+        //! file attached to the node itself; \a stations are owner-local and
+        //! may repeat.
+        struct HangingStations {
+            QUuid ownerId;
+            QStringList stations;
+
+            bool operator==(const HangingStations& other) const = default;
+        };
+
+        //! Every owner holding stations cavern dropped because nothing ties
+        //! them to a fixed point, plus the fixed points of attached files that
+        //! no survey uses. Filled by the post-solve pass, so it is meaningful
+        //! only when ExternalScopesChecked is true.
+        QList<HangingStations> Hanging;
+
         //! A result asserting "there is nothing, and I looked" — what the
         //! manager publishes to wipe state on setRegion, and what a region with
         //! nothing solvable in it produces. Distinct from a default-constructed

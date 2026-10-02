@@ -34,6 +34,8 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
 #include "cwLinePlotTripVisibility.h"
+#include "cwNameUtils.h"
+#include "cwStation.h"
 #include "asyncfuture.h"
 
 #include <QDateTime>
@@ -639,6 +641,10 @@ void cwLinePlotManager::publishResults(const cwLinePlotTask::LinePlotResultData&
                         results.CavernWarningCount);
     publishPerCaveErrors(results);
     publishFloatingSurveys(results.FloatingSurveys, results.ExternalScopesChecked);
+    if (results.ExternalScopesChecked) {
+        m_hangingStations = results.Hanging;
+    }
+    publishUnconnectedStationWarnings();
 }
 
 /**
@@ -674,6 +680,70 @@ void cwLinePlotManager::publishFloatingSurveys(QList<cwFindFloatingSurveys::Resu
     m_floatingSurveys = std::move(floatingSurveys);
     m_floatingSurveyModel->setResults(m_floatingSurveys);
     emit floatingSurveysChanged();
+}
+
+void cwLinePlotManager::publishUnconnectedStationWarnings()
+{
+    if (Region == nullptr) {
+        return;
+    }
+
+    QHash<QUuid, QStringList> stationsByOwner;
+    for (const auto& hanging : std::as_const(m_hangingStations)) {
+        stationsByOwner[hanging.ownerId].append(hanging.stations);
+    }
+
+    // A floating record names its stations cave-locally; the trip's own scope
+    // comes off so every owner lists its stations in its own namespace.
+    QHash<QUuid, const cwTrip*> tripsById;
+    for (const cwTrip* trip : Region->rootNode()->allTrips()) {
+        tripsById.insert(trip->id(), trip);
+    }
+    for (const cwFindFloatingSurveys::Result& floating : std::as_const(m_floatingSurveys)) {
+        const cwTrip* trip = tripsById.value(floating.tripId);
+        if (trip == nullptr) {
+            continue;
+        }
+        const QString scope = cwStation::canonicalKey(trip->scopePrefix());
+        QStringList& stations = stationsByOwner[floating.tripId];
+        for (const QString& station : floating.stations) {
+            stations.append(station.startsWith(scope) ? station.sliced(scope.size()) : station);
+        }
+    }
+
+    const auto publish = [&stationsByOwner](cwErrorModel* model, const QUuid& ownerId,
+                                            const QString& ownerName) {
+        if (model == nullptr) {
+            return;
+        }
+        QSet<QString> uniqueStations;
+        for (const QString& station : stationsByOwner.value(ownerId)) {
+            uniqueStations.insert(cwStation::canonicalKey(station));
+        }
+        QStringList stations(uniqueStations.cbegin(), uniqueStations.cend());
+        std::sort(stations.begin(), stations.end(), cwNameUtils::naturalLess);
+
+        QString message;
+        if (stations.size() == 1) {
+            message = QStringLiteral("1 station in %1 is not tied to the cave").arg(ownerName);
+        } else if (stations.size() > 1) {
+            message = QStringLiteral("%1 stations in %2 are not tied to the cave")
+                          .arg(QString::number(stations.size()), ownerName);
+        }
+        model->errors()->setTypedWarning(cwErrorTypeId::UnconnectedStations, message,
+                                         stations.join(QStringLiteral(", ")));
+    };
+
+    const auto displayName = [](const cwExternalCenterline& centerline, const QString& name) {
+        return centerline.isEmpty() ? name : QFileInfo(centerline.entryFile()).fileName();
+    };
+
+    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+        publish(node->errorModel(), node->id(), displayName(node->externalCenterline(), node->name()));
+        for (cwTrip* trip : node->trips()) {
+            publish(trip->errorModel(), trip->id(), displayName(trip->externalCenterline(), trip->name()));
+        }
+    }
 }
 
 void cwLinePlotManager::publishCavernOutput(QString cavernLog,

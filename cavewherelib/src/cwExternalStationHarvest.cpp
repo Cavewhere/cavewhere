@@ -83,6 +83,12 @@ QString withoutDriverNoise(const QString& logText, const QString& workingDirecto
 
 Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entryFile)
 {
+    return harvestComponents(entryFile, {});
+}
+
+Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QString& entryFile,
+                                                                       const QStringList& seedStations)
+{
     const QString absoluteEntry = QFileInfo(entryFile).absoluteFilePath();
 
     if(!QFileInfo::exists(absoluteEntry)) {
@@ -118,10 +124,21 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
                                 LinePlotErrorCode::ExportFailed);
         }
 
-        //Exactly one line: no *fix, no *cs and no *begin. A *fix or a *cs would
-        //defeat netskel's implicit origin fix, and a *begin would add a naming
-        //level the region solve doesn't have.
+        //No *cs and no named *begin: a *cs would defeat netskel's implicit
+        //origin fix, and a named *begin would add a naming level the region
+        //solve doesn't have. A *fix takes the place of the implicit fix only
+        //for the components the caller seeds. The seeds are spelled as cavern
+        //reported them, so they keep their case — Compass names are
+        //case-sensitive — inside an unnamed block that keeps *case from
+        //reaching the include.
         QTextStream stream(&driver);
+        if(!seedStations.isEmpty()) {
+            stream << "*begin" << Qt::endl << "*case preserve" << Qt::endl;
+            for(const QString& station : seedStations) {
+                stream << "*fix " << station << " 0 0 0" << Qt::endl;
+            }
+            stream << "*end" << Qt::endl;
+        }
         stream << "*include \"" << absoluteEntry << "\"" << Qt::endl;
 
         //A driver that only partly reached the disk is still valid Survex — an

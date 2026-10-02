@@ -32,6 +32,7 @@ enum class cwErrorTypeId : int {
     FixStationDomain = 597,    //!< issue #596: a fix outside its CS's valid domain
     FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
     AttachedFixWithoutCS = 599, //!< an attached file fixes stations with no input CS in a georeferenced project
+    UnconnectedStations = 600,  //!< a trip's or attached file's stations that the solve could not tie to the cave
 };
 
 /**
@@ -54,6 +55,7 @@ class CAVEWHERE_LIB_EXPORT cwError
     Q_PROPERTY(bool suppressed READ suppressed WRITE setSupressed)
     Q_PROPERTY(int errorTypeId READ errorTypeId WRITE setErrorTypeId)
     Q_PROPERTY(QString message READ message WRITE setMessage)
+    Q_PROPERTY(QString detail READ detail WRITE setDetail)
     Q_PROPERTY(ErrorType type READ type WRITE setType)
 
 public:
@@ -81,6 +83,11 @@ public:
 
     QString message() const;
     void setMessage(QString message);
+
+    //! Supporting text a view shows beneath the message, such as the station
+    //! names a warning counts. Empty when the message says everything.
+    QString detail() const;
+    void setDetail(QString detail);
 
     bool operator==(const cwError& error) const;
     bool operator!=(const cwError& error) const;

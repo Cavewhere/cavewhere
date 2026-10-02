@@ -163,6 +163,11 @@ private:
     QList<cwFindFloatingSurveys::Result> m_floatingSurveys;
     cwFloatingSurveyModel* m_floatingSurveyModel;
 
+    // The last post-solve answer for which stations cavern dropped, kept like
+    // the floating surveys' external half so a run that stops before the
+    // post-solve pass leaves it standing.
+    QList<cwLinePlotTask::LinePlotResultData::HangingStations> m_hangingStations;
+
     std::optional<cwLinePlotTask::SolveError> m_lastSolveError;
     QString m_lastCavernLog;
     QString m_lastLoopClosureStats;
@@ -252,6 +257,12 @@ private:
     void publishAttachedFixWarnings(const QSet<QUuid>& ownersWithBareFixes);
     void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
                                 bool externalScopesChecked);
+
+    //! Writes one UnconnectedStations warning on each trip, and each node with
+    //! an attached file, holding stations that are not tied to the cave, and
+    //! clears it everywhere else. Reads the floating surveys and the hanging
+    //! stations, the same solve result the floating-survey banner shows.
+    void publishUnconnectedStationWarnings();
 
 private slots:
     void runSurvex();

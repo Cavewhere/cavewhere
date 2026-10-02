@@ -29,6 +29,7 @@
 #include "cwLength.h"
 #include "cwErrorModel.h"
 #include "cwData.h"
+#include "cwExternalStationHarvest.h"
 
 // Qt includes
 #include <QElapsedTimer>
@@ -40,9 +41,11 @@
 #include <QDir>
 #include <QUuid>
 #include <QPromise>
+#include <QRegularExpression>
 #include <QtGlobal>
 #include <cmath>
 #include <functional>
+#include <optional>
 
 cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     DepthLengthChanged(false),
@@ -187,6 +190,7 @@ struct cwLinePlotTask::LinePlotWorker {
                                                       parsed.network,
                                                       ScopeLabels));
         result.ExternalScopesChecked = true;
+        result.Hanging = findHangingStations(result.CavernLog, parsed.lookup);
 
         if (IsCanceled()) {
             return result;
@@ -452,6 +456,150 @@ private:
             chain.append(node);
         }
         return chain;
+    }
+
+    // Where a hanging station's warning lands, and how to read the rest of its
+    // survey. A file owner (an attached node or trip) names its stations in
+    // the file's own namespace, below filePrefix; a native station names no
+    // file owner and is routed to its trips by name instead.
+    struct HangingOwner {
+        QUuid ownerId;
+        QString filePrefix;
+        QString entryFile;
+        QString fileLocalName;
+    };
+
+    std::optional<HangingOwner> fileOwnerOf(const QString& scopedName) const
+    {
+        const cwSurveyNode* node = owningNode(scopedName);
+        if (node == nullptr) {
+            return std::nullopt;
+        }
+        const QString nodePrefix = ScopeLabels.prefix(node->id());
+        const QString tail = scopedName.sliced(nodePrefix.size());
+
+        if (!node->externalCenterline().isEmpty()) {
+            return HangingOwner{node->id(), nodePrefix,
+                                QDir(InputData.caveAttachmentDirs.value(node->id()))
+                                    .filePath(node->externalCenterline().entryFile()),
+                                tail};
+        }
+
+        const QHash<QUuid, QString>& tripLabels = ScopeLabels.tripLabels(node->id());
+        for (const cwTrip* trip : node->trips()) {
+            if (trip->externalCenterline().isEmpty()) {
+                continue;
+            }
+            const QString tripScope = tripLabels.value(trip->id()) + QLatin1Char('.');
+            if (tail.startsWith(tripScope, Qt::CaseInsensitive)) {
+                return HangingOwner{trip->id(), nodePrefix + tripScope,
+                                    QDir(InputData.tripAttachmentDirs.value(trip->id()))
+                                        .filePath(trip->externalCenterline().entryFile()),
+                                    tail.sliced(tripScope.size())};
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Cavern drops every survey no fixed point reaches (netartic.c warning 45)
+    // and names one station of each such component on a line of its own,
+    // "<file>:<line>: info: <station>". The label is localized, so the
+    // line is recognized by its shape — a message that is one bare station
+    // name — and by that station having no position in the .3d. The unused-fix
+    // match (listpos.c warning 73) reads cavern's English text, so it finds
+    // unused fixes only when cavern's messages are in English.
+    //
+    // A native station routes to its node's native trips, and each reports the
+    // chunk stations the .3d left out; the hasPosition filter is what keeps a
+    // tied component of the same node off the list. A file reports the
+    // components its named stations seed, read back by solving the file alone
+    // with those stations fixed: cavern names only one station per component.
+    QList<cwLinePlotTask::LinePlotResultData::HangingStations> findHangingStations(
+        const QString& cavernLog,
+        const cwStationPositionLookup& solved) const
+    {
+        static const QRegularExpression stationLine(
+            QStringLiteral(R"(^.+:\d+(?::\d+)?: [^:]+: (\S+)\s*$)"));
+        static const QRegularExpression unusedFixLine(
+            QStringLiteral("Unused fixed point “([^”]+)”"));
+
+        QHash<QUuid, QStringList> stationsByOwner;
+        QHash<QUuid, QStringList> seedsByOwner;
+        QHash<QUuid, HangingOwner> fileOwners;
+        QSet<const cwSurveyNode*> nativeNodesRouted;
+
+        const auto routeNative = [&](const QString& scopedName) {
+            const cwSurveyNode* node = owningNode(scopedName);
+            if (node == nullptr || nativeNodesRouted.contains(node)) {
+                return;
+            }
+            nativeNodesRouted.insert(node);
+            const QString nodePrefix = ScopeLabels.prefix(node->id());
+            for (const cwTrip* trip : node->trips()) {
+                if (!trip->externalCenterline().isEmpty()) {
+                    continue;
+                }
+                const QString tripPrefix = nodePrefix + trip->scopePrefix();
+                for (const cwSurveyChunk* chunk : trip->chunks()) {
+                    for (const cwStation& station : chunk->stations()) {
+                        if (station.isValid() && !solved.hasPosition(tripPrefix + station.name())) {
+                            stationsByOwner[trip->id()].append(station.name());
+                        }
+                    }
+                }
+            }
+        };
+
+        const QStringList lines = cavernLog.split(QLatin1Char('\n'));
+        for (const QString& line : lines) {
+            const QRegularExpressionMatch unusedFix = unusedFixLine.match(line);
+            if (unusedFix.hasMatch()) {
+                if (const auto owner = fileOwnerOf(unusedFix.captured(1))) {
+                    stationsByOwner[owner->ownerId].append(owner->fileLocalName);
+                }
+                continue;
+            }
+
+            const QRegularExpressionMatch match = stationLine.match(line);
+            if (!match.hasMatch()) {
+                continue;
+            }
+            const QString name = match.captured(1);
+            if (solved.hasPosition(name)) {
+                continue;
+            }
+            if (const auto owner = fileOwnerOf(name)) {
+                fileOwners.insert(owner->ownerId, *owner);
+                seedsByOwner[owner->ownerId].append(owner->fileLocalName);
+            } else {
+                routeNative(name);
+            }
+        }
+
+        for (auto it = seedsByOwner.constBegin(); it != seedsByOwner.constEnd(); ++it) {
+            const HangingOwner& owner = fileOwners.value(it.key());
+            QStringList& stations = stationsByOwner[it.key()];
+            stations.append(it.value());
+            if (IsCanceled()) {
+                continue;
+            }
+            const auto components =
+                cwExternalStationHarvest::harvestComponents(owner.entryFile, it.value());
+            if (components.hasError()) {
+                continue;
+            }
+            for (const QString& station : components.value()) {
+                if (!solved.hasPosition(owner.filePrefix + station)) {
+                    stations.append(station);
+                }
+            }
+        }
+
+        QList<cwLinePlotTask::LinePlotResultData::HangingStations> hanging;
+        for (auto it = stationsByOwner.constBegin(); it != stationsByOwner.constEnd(); ++it) {
+            hanging.append({it.key(), it.value()});
+        }
+        return hanging;
     }
 
     // Parses cavern-emitted scoped station names of the form

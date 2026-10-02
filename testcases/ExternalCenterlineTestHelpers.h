@@ -19,6 +19,9 @@
 // Cavewhere
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
@@ -61,6 +64,7 @@
 // Std
 #include <functional>
 #include <memory>
+#include <optional>
 
 // Watcher events flow through OS notifications and worker scans settle
 // on the next event-loop spins. Tests poll a predicate against this
@@ -424,6 +428,19 @@ inline QString tripScopeLabel(const cwTrip* trip)
 inline QVariant roleAt(const QAbstractItemModel* model, int row, int role)
 {
     return model->data(model->index(row, 0), role);
+}
+
+//! The UnconnectedStations entry in \a model's own list, if the last solve
+//! wrote one.
+inline std::optional<cwError> unconnectedStationsEntry(const cwErrorModel* model)
+{
+    const QList<cwError> errors = model->errors()->toList();
+    for (const cwError& error : errors) {
+        if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::UnconnectedStations)) {
+            return error;
+        }
+    }
+    return std::nullopt;
 }
 
 #endif // EXTERNALCENTERLINETESTHELPERS_H

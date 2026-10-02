@@ -34,6 +34,7 @@ public:
         ErrorTypeIdRole,
         MessageRole,
         ErrorTypeRole,
+        DetailRole,
     };
 
     cwErrorListModel(QObject* parent = nullptr);
@@ -71,11 +72,13 @@ public:
     void append(const cwError& error);
     void append(const QList<cwError>& errors);
 
-    //! Sets the one Warning row that \a errorTypeId owns to \a message, adding
-    //! it when absent and removing it when \a message is empty. The row is
-    //! found by its id rather than by value, so a user's suppression survives a
-    //! change of text.
-    void setTypedWarning(cwErrorTypeId errorTypeId, const QString& message);
+    //! Sets the one Warning row that \a errorTypeId owns to \a message and
+    //! \a detail, adding it when absent and removing it when \a message is
+    //! empty. The row is found by its id rather than by value, so a user's
+    //! suppression survives a change of text.
+    void setTypedWarning(cwErrorTypeId errorTypeId,
+                         const QString& message,
+                         const QString& detail = QString());
 
     QHash<int, QByteArray> roleNames() const;
 
