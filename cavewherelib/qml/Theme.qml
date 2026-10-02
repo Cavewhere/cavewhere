@@ -334,9 +334,26 @@ QtObject {
     readonly property int menuItemHorizontalPadding: 12
     readonly property int menuItemVerticalPadding: 3
     readonly property int menuIndicatorColumn: 14
+    // A menu's side padding keeps its rows inside the surface's border.
+    readonly property int menuHorizontalPadding: 1
+    readonly property int menuMinimumWidth: 100
+    // How far a submenu slides back over the menu that opened it.
+    readonly property int menuOverlap: 2
+    readonly property int menuBarHeight: 24
+    readonly property int menuBarItemHorizontalPadding: 10
     readonly property int popupPadding: 3
     // Space between a combo box and the list it opens.
     readonly property int popupGap: 2
+    // Around the content of a plain popup, a dialog, and its button row.
+    readonly property int dialogPadding: 12
+    readonly property int dialogButtonSpacing: 8
+    readonly property int toolTipVerticalPadding: 5
+    readonly property int toolTipHorizontalPadding: 9
+    // Closest a tooltip comes to the window edge, and its gap above its parent.
+    readonly property int toolTipMargin: 6
+    readonly property int toolTipGap: 4
+    // A drawer's slide, in drawer lengths per second.
+    readonly property real drawerSlideVelocity: 5
     readonly property int popupShadowBlur: dark ? 14 : 8
     readonly property int popupShadowOffset: dark ? 4 : 2
     // Room around a popup's surface for its shadow. Popups set all four
