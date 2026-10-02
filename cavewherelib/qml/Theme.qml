@@ -295,10 +295,20 @@ QtObject {
     readonly property int fieldHorizontalPadding: 10
     readonly property int controlSpacing: 6
     readonly property int indicatorSize: 16
+    // The check and dash glyph inside a check box.
+    readonly property int indicatorGlyphSize: 14
+    readonly property int radioDotSize: 6
     readonly property int switchWidth: 34
     readonly property int switchHeight: 18
+    // Gap between the switch's pill edge and its thumb.
+    readonly property int switchThumbInset: 2
     readonly property int sliderHandleSize: 16
     readonly property int sliderTrackHeight: 2
+    // A slider's implicit size: length along the groove, thickness across it.
+    readonly property int sliderLength: 150
+    readonly property int sliderThickness: 18
+    // The switch thumb's slide.
+    readonly property int toggleAnimationDuration: 150
     readonly property int progressBarHeight: 5
     readonly property int scrollBarThickness: 8
     readonly property int scrollBarPadding: 2
