@@ -27,6 +27,8 @@ StandardPage {
     readonly property int quoteTipHeight: 30
     readonly property int quoteTipInset: 30
     readonly property int legacyGroupContentHeight: 40
+    readonly property int contextButtonSize: 20
+    readonly property int verticalTabsWidth: 160
 
     // The cards are drawn by hand so the gallery's own frame stays put while
     // GroupBox and Frame are restyled.
@@ -201,8 +203,19 @@ StandardPage {
                             checkable: true
                             checked: true
                         }
+                        QC.ToolButton { text: "Tool" }
+                        QC.ToolButton {
+                            icon.source: "qrc:/twbs-icons/icons/trash.svg"
+                            enabled: false
+                        }
                         QC.RoundButton { icon.source: "qrc:/twbs-icons/icons/plus.svg" }
                         RoundButton { icon.source: "qrc:/twbs-icons/icons/search.svg" }
+                        RoundButton {
+                            icon.source: "qrc:/twbs-icons/icons/caret-down-fill.svg"
+                            implicitWidth: galleryPage.contextButtonSize
+                            implicitHeight: galleryPage.contextButtonSize
+                            radius: 0
+                        }
                     }
 
                     QC.DialogButtonBox {
@@ -240,6 +253,13 @@ StandardPage {
                         QC.TabButton { text: "Trips" }
                         QC.TabButton { text: "Notes" }
                         QC.TabButton { text: "Leads" }
+                    }
+
+                    // Tab buttons outside a tab bar, as on the Settings page.
+                    TabViewVertical {
+                        Layout.preferredWidth: galleryPage.verticalTabsWidth
+                        Layout.preferredHeight: contentHeight
+                        model: ["General", "Appearance", "Units"]
                     }
                 }
 

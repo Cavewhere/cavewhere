@@ -290,6 +290,8 @@ QtObject {
     readonly property int controlHeight: 28
     readonly property int controlVerticalPadding: 4
     readonly property int buttonHorizontalPadding: 14
+    // Tool and round buttons on every side; tab buttons vertically.
+    readonly property int compactButtonPadding: 6
     readonly property int fieldHorizontalPadding: 10
     readonly property int controlSpacing: 6
     readonly property int indicatorSize: 16
