@@ -293,6 +293,18 @@ QtObject {
     // Tool and round buttons on every side; tab buttons vertically.
     readonly property int compactButtonPadding: 6
     readonly property int fieldHorizontalPadding: 10
+    readonly property int textAreaVerticalPadding: 7
+    // Implicit widths: a text field, and the narrower combo and spin boxes.
+    readonly property int fieldWidth: 160
+    readonly property int compactFieldWidth: 120
+    // The chevron column at the right of a spin box, and its glyphs.
+    readonly property int spinIndicatorWidth: 18
+    readonly property int spinChevronSize: 8
+    // The chevron on a combo box and beside a submenu.
+    readonly property int chevronSize: 12
+    // A row in a list or menu: its implicit height and highlight corners.
+    readonly property int listRowHeight: 24
+    readonly property int rowRadius: 4
     readonly property int controlSpacing: 6
     readonly property int indicatorSize: 16
     // The check and dash glyph inside a check box.
@@ -312,12 +324,19 @@ QtObject {
     readonly property int progressBarHeight: 5
     readonly property int scrollBarThickness: 8
     readonly property int scrollBarPadding: 2
+    readonly property int scrollIndicatorThickness: 4
+    readonly property real scrollHandleOpacity: 0.55
+    // A scroll indicator stays visible this long after scrolling stops, then fades.
+    readonly property int scrollFadeDelay: 450
+    readonly property int scrollFadeDuration: 200
     readonly property int focusRingWidth: 2
     readonly property int focusRingOffset: 2
     readonly property int menuItemHorizontalPadding: 12
     readonly property int menuItemVerticalPadding: 3
     readonly property int menuIndicatorColumn: 14
     readonly property int popupPadding: 3
+    // Space between a combo box and the list it opens.
+    readonly property int popupGap: 2
     readonly property int popupShadowBlur: dark ? 14 : 8
     readonly property int popupShadowOffset: dark ? 4 : 2
     // Room around a popup's surface for its shadow. Popups set all four
