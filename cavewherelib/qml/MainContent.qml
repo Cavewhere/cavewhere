@@ -242,6 +242,13 @@ QQ.Item {
     }
 
     QQ.Component {
+        id: styleGalleryPageComponent
+        StyleGalleryPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
         id: remoteRepositoryPageComponent
         RemoteRepositoryPage {
             anchors.fill: parent
@@ -291,6 +298,7 @@ QQ.Item {
         RootData.pageSelectionModel.registerPage(null, "About", aboutPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Settings", settingsPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Colors", colorsPageComponent)
+        RootData.pageSelectionModel.registerPage(null, "Style Gallery", styleGalleryPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Remote Settings", remoteManagementPageComponent)
         RootData.pageSelectionModel.registerPage(null, "History", gitHistoryPageComponent)
         RootData.pageSelectionModel.registerPage(null, "Cavern", cavernOutputPageComponent)
