@@ -36,7 +36,7 @@ QQ.Item {
         anchors.right: parent.right
         anchors.rightMargin: linkBarId.layoutSize >= Theme.LayoutSize.Wide ? 5 : 0
 
-        spacing: 0
+        spacing: Theme.linkBarButtonSpacing
 
         LinkBarModel {
             id: linkBarModel
@@ -214,11 +214,6 @@ QQ.Item {
             }
         }
 
-        QQ.Item {
-            implicitWidth: 5
-            implicitHeight: 1
-        }
-
         // Only at Narrow: at Medium and above the sidebar footer says all this,
         // and better. The breadcrumb beside it is Layout.fillWidth, so this is
         // the thing that gives up room for the chip.
@@ -326,6 +321,7 @@ QQ.Item {
         }
 
         DiscordChatButton {
+            objectName: "discordButton"
             visible: linkBarId.layoutSize >= Theme.LayoutSize.Wide
             implicitWidth: sizeItemId.height
             implicitHeight: implicitWidth

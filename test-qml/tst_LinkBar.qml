@@ -146,5 +146,19 @@ MainWindowTest {
             compare(crumb.color, undefined, "the breadcrumb area draws no fill")
             compare(findButtonWithText(linkBar(), "..."), null)
         }
+
+        function test_rightButtonsShareTheGap() {
+            let bar = linkBar()
+            tryVerify(function() { return bar.layoutSize >= Theme.LayoutSize.Wide })
+            let sync = findChild(bar, "syncButton")
+            let discord = findChild(bar, "discordButton")
+            verify(sync !== null && discord !== null)
+            tryVerify(function() { return discord.visible })
+            compare(sync.x + sync.width + Theme.linkBarButtonSpacing, discord.x)
+            let crumb = breadcrumb()
+            let chip = findChild(bar, "taskStatusChip")
+            let next = chip.visible ? chip : sync
+            verify(next.x - (crumb.x + crumb.width) >= Theme.linkBarButtonSpacing)
+        }
     }
 }

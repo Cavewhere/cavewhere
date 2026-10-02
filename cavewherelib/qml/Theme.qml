@@ -146,6 +146,8 @@ QtObject {
     // Room above and below the link bar, so its outline clears the
     // window edge and the divider under the bar
     readonly property int linkBarVerticalMargin: 4
+    // Gap between neighbors in the link bar row
+    readonly property int linkBarButtonSpacing: 6
     // Page buttons: the icon sits tight to its label, and the pair keeps clear
     // of the selected and hovered outline on every side
     readonly property int sidebarButtonContentSpacing: 1
