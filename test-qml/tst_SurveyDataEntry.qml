@@ -1070,7 +1070,18 @@ MainWindowTest {
             tryVerify(() => { return station1Cell.errorModel.fatalCount === 1 })
             verify(station1Cell.errorModel.warningCount === 0)
             tryVerify(() => { return chunk.errorModel.fatalCount === 1 && chunk.errorModel.warningCount === 0 })
-            tryVerify(() => { return trip.errorModel.fatalCount === 1 && trip.errorModel.warningCount === 0 })
+            // The cleared shot leaves the chunk in two pieces, which the solve
+            // reports on the trip beside the chunk's fatal.
+            tryVerify(() => { return trip.errorModel.fatalCount === 1 && trip.errorModel.warningCount === 1 })
+            let tripErrors = trip.errorModel.errors
+            let tripWarning = -1
+            for (let i = 0; i < tripErrors.count; ++i) {
+                if (tripErrors.data(tripErrors.index(i, 0), ErrorListModel.ErrorTypeRole) === CwError.Warning) {
+                    tripWarning = i
+                }
+            }
+            verify(tripWarning >= 0)
+            verify(tripErrors.data(tripErrors.index(tripWarning, 0), ErrorListModel.MessageRole).endsWith("are not tied to the cave"))
 
             let errors = station1Cell.errorModel.errors
             verify(errors.count === 1)

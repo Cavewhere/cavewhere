@@ -358,7 +358,9 @@ MainWindowTest {
                     "the source line is on the cave page itself")
 
             const summary = findChild(cavePage, "externalCaveSummary")
-            const flickable = findChild(cavePage, "cavePageWideFlickable")
+            // The Flickable carries no objectName of its own: one would sit in
+            // every "rootId->cavePage->..." chain the other tests walk.
+            const flickable = findChild(cavePage, "cavePageVerticalScrollBar").parent
             verify(summary !== null && flickable !== null)
             const top = summary.mapToItem(flickable, 0, 0).y
             verify(top >= 0 && top < flickable.height,

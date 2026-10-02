@@ -429,7 +429,6 @@ StandardPage {
     // auto-anchor under Qt 6.11 macOS — the bar ends up at (0,0).
     QQ.Flickable {
         id: wideFlickableId
-        objectName: "cavePageWideFlickable"
         visible: !cavePageArea.isNarrow
         anchors.fill: parent
         clip: true
