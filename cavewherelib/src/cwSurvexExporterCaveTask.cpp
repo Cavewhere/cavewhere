@@ -97,22 +97,32 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
         return true;
     }
 
-    cwSurvexExporterUtils::CsScope csScope(sidecars());
-    writeFixStations(stream, cave, globalCS, csScope);
+    // Every fix cavern can read names its own *cs, and cavern takes a *cs only
+    // under a *cs out — before a *fix it reports "The input projection is set
+    // but the output projection isn't", after one "fixed before CS command
+    // first used". With no output system no fix can be written, so the cave
+    // hangs off the fallback *fix like one that was never fixed. In the line
+    // plot that is a project whose every fix failed the local frame's anchor
+    // gate (cwLocalProjectionManager), such as a lone transposed digit.
+    const QList<cwFixStation> fixStations =
+        globalCS.isEmpty() ? QList<cwFixStation>() : cave.fixStations;
 
-    const bool anyTripUsesAuto = !cave.fixStations.isEmpty()
+    cwSurvexExporterUtils::CsScope csScope(sidecars());
+    writeFixStations(stream, cave, fixStations, globalCS, csScope);
+
+    const bool anyTripUsesAuto = !fixStations.isEmpty()
                                  && std::any_of(cave.trips.begin(), cave.trips.end(),
                                                 [](const cwTripData& trip) {
                                                     return trip.calibrations.autoDeclination();
                                                 });
     const bool autoDeclinationInScope =
-        cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, cave.fixStations,
+        cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, fixStations,
                                                         anyTripUsesAuto, csScope);
 
     // One convergence for the whole cave: it is a property of the grid at the
     // cave's location, and every trip inside is solved on the same grid.
     const double gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(
-        cwSurvexExporterUtils::makeDeclinationContext(cave.fixStations), globalCS);
+        cwSurvexExporterUtils::makeDeclinationContext(fixStations), globalCS);
 
     //Haven't done anything
     TotalProgress = 0;
@@ -151,13 +161,15 @@ bool cwSurvexExporterCaveTask::writeCave(QTextStream& stream, const cwCaveData& 
 }
 
 /**
- * Emit the *cs / *fix block for the cave. Validates the snapshot's
- * fixStations against the actual station names; rejected fixes are dropped
+ * Emit the *cs / *fix block for the cave. Validates \a fixStations
+ * against the cave's actual station names; rejected fixes are dropped
  * from the output and their reasons appended to Errors.
  * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists so
  * un-fixed caves still resolve in cavern.
  */
-void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &cave, const QString& globalCS,
+void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &cave,
+                                               const QList<cwFixStation>& fixStations,
+                                               const QString& globalCS,
                                                cwSurvexExporterUtils::CsScope& scope)
 {
     QSet<QString> stationNamesLower;
@@ -177,7 +189,7 @@ void cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCav
 
     QStringList errors;
     const QList<cwFixStation> validFixes = cwSurvexExporterUtils::validateFixStations(
-        cave.fixStations, stationNamesLower, errors);
+        fixStations, stationNamesLower, errors);
     for (const QString& message : std::as_const(errors)) {
         Errors.append(message);
     }

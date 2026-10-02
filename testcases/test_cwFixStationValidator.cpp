@@ -716,6 +716,35 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain",
     CHECK(goodCave->errorModel()->warningCount() == 0);
 }
 
+TEST_CASE("revalidate flags a lone domain-bad fix on a project with no frame",
+          "[cwFixStationValidator][issue660]")
+{
+    // A fix its own CS can't hold may not anchor the local frame (#660), so a
+    // project whose only fix is a typo stays ungeoreferenced. Part A needs no
+    // frame, and this is the fix it exists to report.
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    REQUIRE(region.geoReference()->state() == cwGeoReference::Ungeoreferenced);
+
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(warningText(cave).contains(
+        QStringLiteral("Fix station \"B\" has a coordinate outside the valid range for its "
+                       "coordinate system")));
+    CHECK(region.fixStationValidator()->outlierCount() == 1);
+    CHECK(region.fixStationValidator()->firstOutlierCave() == cave);
+
+    // Correcting it anchors the frame and clears the warning.
+    cave->fixStations()->setData(cave->fixStations()->index(0), 478000.0,
+                                 cwFixStationModel::EastingRole);
+    CHECK(region.geoReference()->state() == cwGeoReference::Anchored);
+    CHECK(cave->errorModel()->warningCount() == 0);
+    CHECK(region.fixStationValidator()->outlierCount() == 0);
+}
+
 TEST_CASE("revalidate flags a distant in-domain cave",
           "[cwFixStationValidator]")
 {

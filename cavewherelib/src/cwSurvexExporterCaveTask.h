@@ -39,7 +39,8 @@ private:
     cwSurvexExporterTripTask* TripExporter;
     cwSurvexExporterRegion::Options ExportOptions;
 
-    void writeFixStations(QTextStream& stream, const cwCaveData& cave, const QString& globalCS,
+    void writeFixStations(QTextStream& stream, const cwCaveData& cave,
+                          const QList<cwFixStation>& fixStations, const QString& globalCS,
                           cwSurvexExporterUtils::CsScope& scope);
 
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
