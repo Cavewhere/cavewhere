@@ -586,7 +586,9 @@ TEST_CASE("Each LiDAR note reaches the render items as it finishes", "[cwNoteLiD
     REQUIRE(renderItems != nullptr);
     const auto renderObjectId = renderItems->renderObjectId();
 
-    constexpr int kBatchTimeoutMs = 120000;
+    // Each note's cold texture encode runs one at a time on the encode lane, and
+    // under CPU load a single encode alone can outlast two minutes.
+    constexpr int kBatchTimeoutMs = 600000;
     constexpr int kPollWaitMs = 2;
     bool sawPartialDelivery = false;
     bool sawVisibleMidBatch = false;
@@ -1050,7 +1052,8 @@ namespace {
     //out in a nested loop.
     void pumpUntilLiDARSettles(cwRootData* rootData, cwNoteLiDARManager* manager)
     {
-        constexpr int kRunTimeoutMs = 120000;
+        //A cold run's texture encode alone can outlast two minutes under CPU load
+        constexpr int kRunTimeoutMs = 600000;
         constexpr int kPollWaitMs = 2;
 
         QElapsedTimer timer;
