@@ -322,10 +322,27 @@ QtObject {
     // The switch thumb's slide.
     readonly property int toggleAnimationDuration: 150
     readonly property int progressBarHeight: 5
+    readonly property int progressBarWidth: 150
+    // Where the mid and end colors sit along the progress sweep, 0 to 1.
+    readonly property real progressMidPosition: 0.62
+    readonly property real progressEndPosition: 0.86
+    // An indeterminate bar: its share of the track and one pass across it.
+    readonly property real progressIndeterminateFraction: 0.35
+    readonly property int progressSlideDuration: 1600
+    // Group boxes and frames: the padding around their content.
+    readonly property int containerPadding: 9
+    readonly property int groupBoxHorizontalPadding: 11
+    // Between a group box title and the content below it.
+    readonly property int groupBoxTitleSpacing: 5
+    // A split view handle, and the wider strip that grabs it.
+    readonly property int splitHandleThickness: 5
+    readonly property int splitHandleGrabThickness: 11
     readonly property int scrollBarThickness: 8
     readonly property int scrollBarPadding: 2
+    readonly property int scrollBarMinimumLength: 24
     readonly property int scrollIndicatorThickness: 4
     readonly property real scrollHandleOpacity: 0.55
+    readonly property real scrollHandleHoverOpacity: 0.8
     // A scroll indicator stays visible this long after scrolling stops, then fades.
     readonly property int scrollFadeDelay: 450
     readonly property int scrollFadeDuration: 200
