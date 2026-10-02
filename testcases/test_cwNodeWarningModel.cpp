@@ -88,8 +88,8 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
 
     SECTION("a warning that names one of its trips opens the trip")
     {
-        errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
-                                QStringLiteral("trip.svx fixes stations without a coordinate system"),
+        errors->setTypedWarning(cwErrorTypeId::UnconnectedStations,
+                                QStringLiteral("2 stations in trip.svx are not tied to the cave"),
                                 QString(), trip->id());
         REQUIRE(model.count() == 1);
         CHECK(targetAt(model, 0) == Target::TripPage);
@@ -98,9 +98,19 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
 
     SECTION("a warning that names nothing is listed with no target")
     {
-        errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS, QStringLiteral("Plain"));
+        errors->setTypedWarning(cwErrorTypeId::UnconnectedStations, QStringLiteral("Plain"));
         REQUIRE(model.count() == 1);
         CHECK(targetAt(model, 0) == Target::NoTarget);
+    }
+
+    SECTION("an attached file's bare fix opens the Fix Stations page with no row")
+    {
+        errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
+                                QStringLiteral("a.svx fixes stations without a coordinate system."));
+        REQUIRE(model.count() == 1);
+        CHECK(targetAt(model, 0) == Target::FixStationRow);
+        CHECK(roleAt(model, 0, cwNodeWarningModel::FixStationRowRole).toInt() == -1);
+        CHECK(tripAt(model, 0) == nullptr);
     }
 
     SECTION("a suppressed warning leaves the list, and returns when unsuppressed")

@@ -14,8 +14,9 @@ import cavewherelib
 
 // A survey node's warnings on its page, one line per warning (see
 // NodeWarningModel for which ones). Tapping a line opens where the warning is
-// fixed: a fix-station row, a trip's page, or this node's own source line,
-// which lives on the hosting page and so is raised as sourceLineRequested().
+// fixed: a fix-station row (or the Fix Stations page with no row, for row -1),
+// a trip's page, or this node's own source line, which lives on the hosting
+// page and so is raised as sourceLineRequested().
 //
 // The host owns visibility and width: it shows the banner while count > 0 and
 // gives it the width to wrap in. The banner only starts hidden, so it never

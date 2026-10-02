@@ -191,22 +191,28 @@ struct SeededTripMetadata {
 };
 
 /**
- * One station the closure fixes, and whether an input coordinate system is in
- * force for its coordinate. A fix with one reads its coordinate in that system;
- * one without reads it in whatever system the driver puts in scope around the
- * file's *include.
+ * One station the closure fixes: its name and coordinate as the file writes
+ * them, and the input coordinate system in force for that coordinate. A fix
+ * with one reads its coordinate in that system; one without reads it in
+ * whatever system the driver puts in scope around the file's *include.
  *
  * Per format:
- *   Survex  - a *fix, with a *cs (not *cs out) in force in its block.
- *   Compass - a station fixed on a .mak '#' line ("name[m,x,y,z]"), with a
- *             datum ('&') and a UTM zone ('$', or a base location's '@') in
- *             force, or a *cs around the .mak's *include. A .dat fixes nothing.
+ *   Survex  - a *fix, with the *cs (not *cs out) in force in its block, named
+ *             as the file writes it ("EPSG:32616").
+ *   Compass - a station fixed on a .mak '#' line ("name[m,x,y,z]", whose
+ *             bracket is the coordinate), with a datum ('&') and a UTM zone
+ *             ('$', or a base location's '@') in force, or a *cs around the
+ *             .mak's *include. A .dat fixes nothing.
  *   Walls   - a #FIX in a .srv, with a .REF georeference in force on its .wpj
  *             entry. A .srv attached on its own has none.
  */
 struct ScannedFix {
     QString station;
-    bool hasCoordinateSystem = false;
+    QString coordinate;
+    //! Empty when no input coordinate system is in force.
+    QString coordinateSystem;
+
+    bool hasCoordinateSystem() const { return !coordinateSystem.isEmpty(); }
 
     bool operator==(const ScannedFix& other) const = default;
 };
@@ -290,7 +296,7 @@ struct ScanResult {
     bool hasFixWithoutCoordinateSystem() const
     {
         return std::any_of(fixes.cbegin(), fixes.cend(), [](const ScannedFix& fix) {
-            return !fix.hasCoordinateSystem;
+            return !fix.hasCoordinateSystem();
         });
     }
 

@@ -25,6 +25,12 @@
 #include "cwLinePlotManager.h"
 #include "cwCavernNaming.h"
 #include "cwLinePlotTask.h"
+#include "cwNodeWarningModel.h"
+#include "cwFixStationDiagnosticsModel.h"
+#include "cwSurvexExporterCaveTask.h"
+#include "cwScopeLabels.h"
+#include "cwCoordinateTransform.h"
+#include "cwGeoPoint.h"
 #include "cwNote.h"
 #include "cwNoteLiDAR.h"
 #include "cwNoteLiDARStation.h"
@@ -55,6 +61,8 @@
 #include <QRegularExpression>
 #include <QString>
 #include <QTemporaryDir>
+#include <QTextStream>
+#include <QVector3D>
 #include <QUuid>
 
 // Std
@@ -1318,13 +1326,18 @@ TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
     CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
     CHECK(attachedFixWarnings(project.beside).isEmpty());
 
-    // A click on the warning opens the file it names: the cave's own.
-    const QList<cwError> attachedErrors = project.attached->errorModel()->errors()->toList();
-    const auto warning = std::find_if(attachedErrors.cbegin(), attachedErrors.cend(), [](const cwError& error) {
-        return error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFixWithoutCS);
-    });
-    REQUIRE(warning != attachedErrors.cend());
-    CHECK(warning->targetId() == project.attached->id());
+    CHECK(warnings.first().contains(QStringLiteral("fixes d1 without a coordinate system; add one "
+                                                   "to the file or remove that fix.")));
+
+    // A click on the warning opens the node's Fix Stations page with no row
+    // picked, where the file's own fixes are listed.
+    cwNodeWarningModel warningModel;
+    warningModel.setNode(project.attached);
+    REQUIRE(warningModel.rowCount() == 1);
+    const QModelIndex warningIndex = warningModel.index(0);
+    CHECK(warningModel.data(warningIndex, cwNodeWarningModel::TargetRole).toInt()
+          == static_cast<int>(cwNodeWarningModel::Target::FixStationRow));
+    CHECK(warningModel.data(warningIndex, cwNodeWarningModel::FixStationRowRole).toInt() == -1);
 
     SECTION("the warning clears when the project loses its frame")
     {
@@ -1429,7 +1442,6 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         const QStringList warnings = attachedFixWarnings(host);
         REQUIRE(warnings.size() == 1);
         CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
-        CHECK(warnings.first().contains(QStringLiteral("the project's")));
         CHECK(attachedFixWarnings(beside).isEmpty());
     }
 
@@ -1458,6 +1470,302 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         const QStringList warnings = attachedFixWarnings(beside);
         REQUIRE(warnings.size() == 1);
         CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
-        CHECK(warnings.first().contains(QStringLiteral("fixed stations around it")));
     }
+}
+
+namespace {
+
+// A local transverse Mercator centered near Boulder, the frame the placed
+// file's stations are read back in.
+const QString kBoulderFrameCS = QStringLiteral(
+    "+proj=tmerc +lat_0=40.0254 +lon_0=-105.2581 +k=1 +x_0=0 +y_0=0 "
+    "+datum=WGS84 +units=m +no_defs +type=crs");
+const QString kUtm13N = QStringLiteral("EPSG:32613");
+constexpr double kPlacedEasting = 478000.0;
+constexpr double kPlacedNorthing = 4430000.0;
+constexpr double kPlacedElevation = 1655.0;
+constexpr double kPlacedMarginMeters = 0.05;
+
+cwFixStation placingFix(const QString& stationName)
+{
+    cwFixStation fix;
+    fix.setStationName(stationName);
+    fix.setInputCS(kUtm13N);
+    fix.setCoordinate(kPlacedEasting, kPlacedNorthing, kPlacedElevation);
+    return fix;
+}
+
+//! Where the placing fix lands in kBoulderFrameCS.
+QVector3D placedPosition()
+{
+    const auto point = cwCoordinateTransform::transformPoint(
+        kUtm13N, kBoulderFrameCS, cwGeoPoint(kPlacedEasting, kPlacedNorthing, kPlacedElevation));
+    REQUIRE(point.has_value());
+    return QVector3D(float(point->x), float(point->y), float(point->z));
+}
+
+void checkPlaced(const cwStationPositionLookup& lookup, const QString& station)
+{
+    INFO("station " << station.toStdString());
+    REQUIRE(lookup.hasPosition(station));
+    const QVector3D expected = placedPosition();
+    const QVector3D actual = lookup.position(station);
+    CHECK(actual.x() == Catch::Approx(expected.x()).margin(kPlacedMarginMeters));
+    CHECK(actual.y() == Catch::Approx(expected.y()).margin(kPlacedMarginMeters));
+    CHECK(actual.z() == Catch::Approx(expected.z()).margin(kPlacedMarginMeters));
+}
+
+QStringList unconnectedWarnings(const cwErrorModel* errorModel)
+{
+    return errorModel->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::UnconnectedStations)});
+}
+
+//! survex_blocks.svx copied into \a attachDir, minus its own *fix line when
+//! \a keepOwnFix is false, so the copy fixes nothing. Returns the copy's path.
+QString seedBlocks(const QString& attachDir, bool keepOwnFix)
+{
+    seedAttachment(attachDir, fixturePath(QStringLiteral("survex_blocks.svx")));
+    const QString path = QDir(attachDir).absoluteFilePath(QStringLiteral("survex_blocks.svx"));
+    if (!keepOwnFix) {
+        QFile file(path);
+        REQUIRE(file.open(QFile::ReadOnly));
+        QString body = QString::fromUtf8(file.readAll());
+        file.close();
+        REQUIRE(body.contains(QStringLiteral("*fix d1 0 0 0\n")));
+        body.remove(QStringLiteral("*fix d1 0 0 0\n"));
+        REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate));
+        file.write(body.toUtf8());
+    }
+    return path;
+}
+
+//! The driver text from \a writeNode up to the first *include line.
+QString driverUpToInclude(const QString& driver, const QString& includePath)
+{
+    const qsizetype include = driver.indexOf(QStringLiteral("*include \"%1\"").arg(includePath));
+    REQUIRE(include >= 0);
+    return driver.left(include);
+}
+
+} // namespace
+
+TEST_CASE("A node fix on a station of an attached file with no fix of its own places the file",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, false);
+
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d1")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    // The harvest names the file's stations on the node, which is what lets
+    // the driver keep a fix on one of them.
+    CHECK(attached->externalStations().contains(QStringLiteral("doghill.d1")));
+    CHECK(attached->attachedFixes().isEmpty());
+
+    // Written in the node's block ahead of the *include, so the name resolves
+    // to the file's own doghill.d1 inside it.
+    const QString beforeInclude = driverUpToInclude(driver, includePath);
+    const QString nodeLabel = cwScopeLabels(region.data()).label(attached->id());
+    const qsizetype nodeBegin = beforeInclude.indexOf(QStringLiteral("*begin %1 ").arg(nodeLabel));
+    REQUIRE(nodeBegin >= 0);
+    CHECK(beforeInclude.indexOf(QStringLiteral("*fix doghill.d1 478000."), nodeBegin)
+          > nodeBegin);
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    checkPlaced(attached->stationPositionLookup(), QStringLiteral("doghill.d1"));
+    CHECK(attachedFixWarnings(attached).isEmpty());
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+}
+
+TEST_CASE("A node fix on a station of a trip-attached file with no fix of its own places the file",
+          "[Attach][Trip][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, false);
+
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
+    cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+    cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    const QString tripScope = attached->scopePrefix();
+    REQUIRE_FALSE(tripScope.isEmpty());
+    host->fixStations()->appendFixStation(placingFix(tripScope + QStringLiteral("doghill.d1")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    // In the node's block, ahead of the trip's own *begin, under the trip's
+    // scope: the *fix names the station the trip-wrapped *include declares.
+    const QString beforeInclude = driverUpToInclude(driver, includePath);
+    const qsizetype fixAt = beforeInclude.indexOf(
+        QStringLiteral("*fix %1doghill.d1 478000.").arg(tripScope));
+    const qsizetype tripBegin =
+        beforeInclude.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+    REQUIRE(fixAt >= 0);
+    REQUIRE(tripBegin >= 0);
+    CHECK(fixAt < tripBegin);
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    checkPlaced(host->stationPositionLookup(), tripScope + QStringLiteral("doghill.d1"));
+    CHECK(attachedFixWarnings(host).isEmpty());
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+    CHECK(unconnectedWarnings(host->errorModel()).isEmpty());
+}
+
+TEST_CASE("A node fix on a station the attached file fixes itself is refused",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    seedBlocks(attachDir, true);
+
+    cwCavingRegion region;
+    region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+
+    const QString station = GENERATE(QStringLiteral("doghill.d1"), QStringLiteral("doghill.d2"));
+    INFO("the node fixes " << station.toStdString());
+    attached->fixStations()->appendFixStation(placingFix(station));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    // The file's own fix is listed for the Fix Stations page, as written.
+    const QList<cwAttachedFix> fileFixes = attached->attachedFixes();
+    REQUIRE(fileFixes.size() == 1);
+    CHECK(fileFixes.first() == cwAttachedFix{QStringLiteral("d1"), QStringLiteral("0 0 0"),
+                                             QString(), QStringLiteral("survex_blocks.svx")});
+
+    // Either way cavern sees one fix per station, so the solve runs, and the
+    // file's bare fix keeps its warning: d1 is still anchored by it.
+    REQUIRE_FALSE(manager.hasSolveError());
+    const QStringList warnings = attachedFixWarnings(attached);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first() == QStringLiteral("survex_blocks.svx fixes d1 without a coordinate "
+                                             "system; add one to the file or remove that fix."));
+
+    const cwFixStationDiagnosticsModel* diagnostics = attached->fixStationDiagnostics();
+    const QString stationError =
+        diagnostics->data(diagnostics->index(0), cwFixStationDiagnosticsModel::StationErrorRole)
+            .toString();
+    const QStringList referenceWarnings = attached->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::FixStationReference)});
+
+    if (station == QStringLiteral("doghill.d1")) {
+        // Cavern would fail the whole run on a second fix of d1 at other
+        // coordinates, so the node's fix is dropped and the row says why.
+        CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.d1 478000.")));
+        const QString collision = QStringLiteral(
+            "survex_blocks.svx already fixes doghill.d1; remove that fix from the file or fix "
+            "another station");
+        CHECK(stationError == collision);
+        REQUIRE(referenceWarnings.size() == 1);
+        CHECK(referenceWarnings.first().contains(collision));
+    } else {
+        // Another station of the file is free to fix.
+        CHECK(driver.contains(QStringLiteral("*fix doghill.d2 478000.")));
+        CHECK(stationError.isEmpty());
+        CHECK(referenceWarnings.isEmpty());
+    }
+}
+
+TEST_CASE("A node fix naming a station its attached file lacks or fixes itself is dropped",
+          "[Attach][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    seedBlocks(attachDir, true);
+
+    cwCavingRegion region;
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    attached->setExternalStations({QStringLiteral("doghill.d1"), QStringLiteral("doghill.d2")});
+    attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.nope")));
+    attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d2")));
+
+    cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+    cwTrip* trip = addEmptyTrip(host, QStringLiteral("Attached"));
+    trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    trip->setExternalStations({QStringLiteral("doghill.d1")});
+    // A file-qualified name without the trip's scope is a name the node's
+    // block does not have.
+    host->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d1")));
+    const QString tripFix = trip->scopePrefix() + QStringLiteral("doghill.d1");
+    host->fixStations()->appendFixStation(placingFix(tripFix));
+
+    cwSurvexExporterRegion::Options options;
+    options.caveAttachmentDirs.insert(attached->id(), attachDir);
+    options.tripAttachmentDirs.insert(trip->id(), attachDir);
+    // The stations each file fixes itself, as the scan's harvest reports them.
+    options.externalFixedStations.insert(attached->id(), {QStringLiteral("doghill.d2")});
+    options.externalFixedStations.insert(trip->id(), {QStringLiteral("doghill.d1")});
+
+    const cwCavingRegionData regionData = region.data();
+    const cwSurvexExporterCaveTask::DriverTree tree(regionData.caves, cwScopeLabels(regionData));
+    cwSurvexExporterCaveTask task;
+    task.setExportOptions(options);
+
+    QString driver;
+    QTextStream stream(&driver);
+    for (const cwCaveData& node : regionData.caves) {
+        REQUIRE(task.writeNode(stream, node, tree));
+    }
+    stream.flush();
+    INFO("driver:\n" << driver.toStdString());
+
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.nope")));
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.d1")));
+    const QStringList errors = task.errors();
+    CHECK(errors.contains(QStringLiteral("Fix references unknown station: \"doghill.nope\"")));
+    CHECK(errors.contains(QStringLiteral("Fix references unknown station: \"doghill.d1\"")));
+
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix doghill.d2")));
+    CHECK_FALSE(driver.contains(QStringLiteral("*fix %1").arg(tripFix)));
+    CHECK(errors.contains(QStringLiteral(
+        "survex_blocks.svx already fixes doghill.d2; remove that fix from the file or fix "
+        "another station")));
+    CHECK(errors.contains(QStringLiteral(
+        "survex_blocks.svx already fixes %1; remove that fix from the file or fix another "
+        "station").arg(tripFix)));
 }

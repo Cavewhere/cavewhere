@@ -32,6 +32,11 @@ struct cwCaveData {
     bool readOnly = false;
     QUuid sourceId;
     QString sourcePath;
+
+    //! Snapshot of cwSurveyNode::externalStations() so the driver export can
+    //! check a fix against the node's attached file. Derived scan output, never
+    //! persisted.
+    QStringList externalStations;
 };
 
 /**

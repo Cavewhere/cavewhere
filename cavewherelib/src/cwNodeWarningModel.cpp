@@ -180,6 +180,14 @@ void cwNodeWarningModel::rebuild()
 cwNodeWarningModel::Entry cwNodeWarningModel::nodeEntry(const cwError& error) const
 {
     Entry entry{error.message(), error.detail()};
+
+    // The Fix Stations page lists the file's own fixes below the node's, so
+    // the entry opens that page with no row picked.
+    if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFixWithoutCS)) {
+        entry.target = Target::FixStationRow;
+        return entry;
+    }
+
     const QUuid targetId = error.targetId();
     if (targetId.isNull()) {
         return entry;

@@ -107,6 +107,9 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
             const QVector3D position = toVector3D(pt);
             out.lookup.setPosition(name, position);
             out.network.setPosition(name, position);
+            if (pimg->flags & img_SFLAG_FIXED) {
+                out.fixedStations.append(cwStation::canonicalKey(name));
+            }
 
             // First label wins at a given coordinate; later duplicates/aliases
             // are ignored for endpoint resolution but still get their own

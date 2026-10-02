@@ -64,6 +64,22 @@ namespace cwExternalStationHarvest {
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<QStringList> harvest(const QString& entryFile);
 
+//! What harvestWithFixes() reads from one file.
+struct Stations {
+    //! The same names harvest() returns.
+    QStringList names;
+    //! The subset of names the file fixes itself, canonical and in .3d order.
+    //! The origin cavern invents for a file with no fix is excluded.
+    QStringList fixedNames;
+};
+
+/**
+ * harvest(), plus the stations \a entryFile fixes itself. A driver fix on one
+ * of those collides with the file's own: cavern raises error 46 when the two
+ * coordinates differ, whichever comes first.
+ */
+CAVEWHERE_LIB_EXPORT Monad::Result<Stations> harvestWithFixes(const QString& entryFile);
+
 /**
  * Returns the station names of every component of \a entryFile that holds one
  * of \a seedStations, canonicalized and sorted like harvest().

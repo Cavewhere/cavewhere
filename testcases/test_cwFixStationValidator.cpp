@@ -12,7 +12,9 @@
 #include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
+#include "cwExternalCenterline.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 #include "cwFixStationValidator.h"
 #include "cwGeoPoint.h"
@@ -1020,6 +1022,7 @@ TEST_CASE("each fix-station warning targets the first fix it names",
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    network.addShot(QStringLiteral("A2"), QStringLiteral("A3"));
     cave->setSurveyNetwork(network);
 
     const auto targetOf = [cave](cwErrorTypeId errorTypeId) {
@@ -1049,7 +1052,77 @@ TEST_CASE("each fix-station warning targets the first fix it names",
 
     // Correcting the first broken name moves the target to the next one.
     cave->fixStations()->setData(cave->fixStations()->index(2),
-                                 QStringLiteral("A1"),
+                                 QStringLiteral("A3"),
                                  cwFixStationModel::StationNameRole);
     CHECK(targetOf(cwErrorTypeId::FixStationReference) == fixIdAt(3));
+}
+
+TEST_CASE("a second fix on one station flags the later row",
+          "[cwFixStationValidator][reference]")
+{
+    // The export keeps the first of two fixes on a station and drops the
+    // second, so the second is the row the page and the node warning name.
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave->setSurveyNetwork(network);
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    CHECK(cave->errorModel()->warningCount() == 0);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("a1 "), QStringLiteral("EPSG:32613"), 478010.0, 4430000.0, 1655.0));
+
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(warningText(cave).contains(QStringLiteral("Station \"a1\" is fixed twice")));
+    const QList<cwError> errors = cave->errorModel()->errors()->toList();
+    REQUIRE(errors.size() == 1);
+    CHECK(errors.first().targetId() == cave->fixStations()->fixStationAt(1).id());
+
+    const cwFixStationDiagnosticsModel* diagnostics = cave->fixStationDiagnostics();
+    const auto stationError = [diagnostics](int row) {
+        return diagnostics->data(diagnostics->index(row),
+                                 cwFixStationDiagnosticsModel::StationErrorRole).toString();
+    };
+    CHECK(stationError(0).isEmpty());
+    CHECK(stationError(1).contains(QStringLiteral("already fixes \"a1\"")));
+
+    // Removing the first row leaves the second the only fix on the station.
+    cave->fixStations()->removeAt(0);
+    CHECK(cave->errorModel()->warningCount() == 0);
+    CHECK(stationError(0).isEmpty());
+}
+
+TEST_CASE("a fix on a station an attached file fixes itself is flagged",
+          "[cwFixStationValidator][reference]")
+{
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("doghill.d1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    CHECK(cave->errorModel()->warningCount() == 0);
+
+    // As the attach scan's harvest reports the file's own *fix.
+    cave->setFileFixedStations({{cave->id(), {QStringLiteral("doghill.d1")}}});
+
+    const QString collision = QStringLiteral(
+        "survex_blocks.svx already fixes doghill.d1; remove that fix from the file or fix "
+        "another station");
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(warningText(cave).contains(collision));
+    const cwFixStationDiagnosticsModel* diagnostics = cave->fixStationDiagnostics();
+    CHECK(diagnostics->data(diagnostics->index(0), cwFixStationDiagnosticsModel::StationErrorRole)
+              .toString() == collision);
+
+    // A file that stops fixing the station frees it for the node's fix.
+    cave->setFileFixedStations({});
+    CHECK(cave->errorModel()->warningCount() == 0);
 }

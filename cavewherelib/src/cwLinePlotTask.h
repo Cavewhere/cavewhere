@@ -88,6 +88,11 @@ public:
         // rest of the region solvable.
         QSet<QUuid> excludedExternalOwners;
 
+        // Per cave or trip owner, the stations its file fixes itself, in the
+        // file's namespace. The driver drops a node fix on one of them, which
+        // cavern would otherwise reject with error 46.
+        QHash<QUuid, QStringList> externalFixedStations;
+
         // The previous solve's derived state, keyed by cwSurveyNode::id() for
         // every node of the tree. The worker
         // diffs its fresh solve against these to decide which stations actually
@@ -271,10 +276,14 @@ public:
         // or whose in-project copy is gone from disk. The driver writes no
         // *include for them (see Input).
         QSet<QUuid> excludedExternalOwners;
-        // Owners (cave or trip) whose file fixes a station with no input
-        // coordinate system of its own. Read on the main thread when the
-        // solve starts, to warn about them in a georeferenced project.
-        QSet<QUuid> ownersWithBareFixes;
+        // Per owner (cave or trip) whose file fixes stations with no input
+        // coordinate system of their own, those stations as the file writes
+        // them. Read on the main thread when the solve starts, to warn about
+        // them in a georeferenced project.
+        QHash<QUuid, QStringList> bareFixedStations;
+        // Owners whose file fixes stations itself, and those stations (see
+        // Input::externalFixedStations).
+        QHash<QUuid, QStringList> externalFixedStations;
     };
 
     static Input buildInput(const cwCavingRegion* region,

@@ -570,7 +570,7 @@ QFuture<void> cwLinePlotManager::doRun() {
             }
 
             const auto externalInputs = m_externalCenterlineManager->solveInputs();
-            publishAttachedFixWarnings(externalInputs.ownersWithBareFixes);
+            publishAttachedFixWarnings(externalInputs.bareFixedStations);
             auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
             auto future = cwLinePlotTask::run(std::move(input));
 
@@ -806,66 +806,39 @@ void cwLinePlotManager::publishPerCaveErrors(const cwLinePlotTask::LinePlotResul
     }
 }
 
-void cwLinePlotManager::publishAttachedFixWarnings(const QSet<QUuid>& ownersWithBareFixes)
+void cwLinePlotManager::publishAttachedFixWarnings(const QHash<QUuid, QStringList>& bareFixedStations)
 {
     if (Region == nullptr) {
         return;
     }
 
-    const cwGeoReference* geoReference = Region->geoReference();
-    const bool georeferenced = geoReference->hasCoordinateSystem();
-    const QString projectSystem = geoReference->datumName().isEmpty()
-                                      ? QStringLiteral("the project's coordinate system")
-                                      : QStringLiteral("the project's %1 system")
-                                            .arg(geoReference->datumName());
+    const bool georeferenced = Region->geoReference()->hasCoordinateSystem();
 
-    // The driver opens the *include under the nearest fix *cs above it, so
-    // the project's system is the one used only when no such fix exists.
-    const auto fixSystemInScope = [](const cwSurveyNode* scope) {
-        for (; scope != nullptr; scope = scope->parentNode()) {
-            for (const cwFixStation& fix : scope->fixStations()->fixStations()) {
-                if (!fix.inputCS().trimmed().isEmpty()) {
-                    return true;
-                }
-            }
+    const auto addWarning = [&](QStringList& messages, const QUuid& ownerId,
+                                const cwExternalCenterline& centerline) {
+        const auto stations = bareFixedStations.constFind(ownerId);
+        if (stations == bareFixedStations.constEnd()) {
+            return;
         }
-        return false;
-    };
-
-    const auto warningFor = [&](const cwExternalCenterline& centerline,
-                                const cwSurveyNode* enclosingNode) {
-        const QString system = fixSystemInScope(enclosingNode)
-                                   ? QStringLiteral("the coordinate system of the fixed stations around it")
-                                   : projectSystem;
-        return QStringLiteral("%1 fixes stations without a coordinate system; they are "
-                              "placed in %2.")
-            .arg(QFileInfo(centerline.entryFile()).fileName(), system);
+        messages.append(QStringLiteral("%1 fixes %2 without a coordinate system; add one to the "
+                                       "file or remove that fix.")
+                            .arg(QFileInfo(centerline.entryFile()).fileName(),
+                                 stations.value().join(QStringLiteral(", "))));
     };
 
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         QStringList messages;
-        // The file a click on the warning opens: the first one it names.
-        QUuid firstOwnerId;
-        const auto addWarning = [&](const QUuid& ownerId, const QString& message) {
-            messages.append(message);
-            if (firstOwnerId.isNull()) {
-                firstOwnerId = ownerId;
-            }
-        };
         if (georeferenced) {
-            if (ownersWithBareFixes.contains(node->id())) {
-                addWarning(node->id(), warningFor(node->externalCenterline(), node->parentNode()));
-            }
+            addWarning(messages, node->id(), node->externalCenterline());
             for (const cwTrip* trip : node->trips()) {
-                if (ownersWithBareFixes.contains(trip->id())) {
-                    addWarning(trip->id(), warningFor(trip->externalCenterline(), node));
-                }
+                addWarning(messages, trip->id(), trip->externalCenterline());
             }
         }
         if (node->errorModel() != nullptr) {
+            // cwNodeWarningModel opens the node's Fix Stations page for this
+            // type, where the file's own fixes are listed.
             node->errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
-                                                          messages.join(QLatin1Char('\n')),
-                                                          QString(), firstOwnerId);
+                                                          messages.join(QLatin1Char('\n')));
         }
     }
 }

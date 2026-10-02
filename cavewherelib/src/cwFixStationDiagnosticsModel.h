@@ -95,7 +95,9 @@ public:
         //! drops: the name matches no station in the owning cave's network, or
         //! there is no name at all. A cave whose network hasn't been computed yet
         //! never flags a *named* fix (nothing to check against); an empty name is
-        //! flagged regardless.
+        //! flagged regardless. A sound name is still flagged when the export
+        //! drops the fix for its station: an attached file fixes the station
+        //! itself, or an earlier row already fixes it.
         StationErrorRole,
         //! Read-only QStringList: the datum codes the row's coordinate could
         //! sensibly be on, WGS84 first, for the picker's datum combo to offer.
@@ -152,10 +154,15 @@ private:
     //! Emit dataChanged over every row for the given derived roles.
     void refreshRoles(const QList<int>& roles);
 
-    //! StationErrorRole's message for one fix, resolved against m_node's network.
-    //! Empty when the reference is Ok; distinct messages
-    //! for an Unknown name and a missing one.
-    QString stationErrorMessage(const cwFixStation& fix) const;
+    //! StationErrorRole's message for one row, resolved against m_node's
+    //! network, then against the node's other fixes on the same station.
+    //! Empty when the row is fine; distinct messages for an Unknown name, a
+    //! missing one, a station an attached file fixes, and a duplicate row.
+    QString stationErrorMessage(int row) const;
+
+    //! The conflict half of stationErrorMessage(): empty when no other fix
+    //! claims the row's station.
+    QString stationConflictMessage(const QList<cwFixStation>& fixes, int row) const;
 
     //! The source row's fix, or null when there is no source model or the index
     //! is out of range.

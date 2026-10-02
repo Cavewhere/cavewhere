@@ -327,6 +327,16 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
     return kept;
 }
 
+QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations)
+{
+    QSet<QString> keys;
+    keys.reserve(stations.size());
+    for (const QString& station : stations) {
+        keys.insert(cwStation::canonicalKey(scope + station));
+    }
+    return keys;
+}
+
 void writeFixStations(QTextStream& stream,
                       const QList<cwFixStation>& fixes,
                       const QString& fallbackFirstStation,

@@ -21,6 +21,7 @@
 #include "cwTripCalibration.h"
 
 //Qt includes
+#include <QFileInfo>
 #include <QSet>
 #include <QThread>
 #include <QUuid>
@@ -1292,6 +1293,41 @@ bool cwSurveyNode::validate(const cwEquate& equate) const
     return true;
 }
 
+void cwSurveyNode::setAttachedFixes(const QList<cwAttachedFix>& fixes)
+{
+    if (m_attachedFixes == fixes) {
+        return;
+    }
+    m_attachedFixes = fixes;
+    emit attachedFixesChanged();
+}
+
+void cwSurveyNode::setFileFixedStations(const QHash<QUuid, QStringList>& stationsByOwner)
+{
+    if (m_fileFixedStations == stationsByOwner) {
+        return;
+    }
+    m_fileFixedStations = stationsByOwner;
+    emit attachedFixesChanged();
+}
+
+QHash<QString, QString> cwSurveyNode::fileFixedStations() const
+{
+    QHash<QString, QString> stations;
+    const auto addOwner = [&](const QUuid& ownerId, const QString& scope,
+                              const cwExternalCenterline& centerline) {
+        const QString fileName = QFileInfo(centerline.entryFile()).fileName();
+        for (const QString& station : m_fileFixedStations.value(ownerId)) {
+            stations.insert(cwStation::canonicalKey(scope + station), fileName);
+        }
+    };
+    addOwner(id(), QString(), m_externalCenterline);
+    for (const cwTrip* trip : trips()) {
+        addOwner(trip->id(), trip->scopePrefix(), trip->externalCenterline());
+    }
+    return stations;
+}
+
 cwCaveData cwSurveyNode::data() const
 {
     return {
@@ -1307,7 +1343,8 @@ cwCaveData cwSurveyNode::data() const
         m_kind,
         m_readOnly,
         m_sourceId,
-        m_sourcePath
+        m_sourcePath,
+        m_externalStations
     };
 }
 

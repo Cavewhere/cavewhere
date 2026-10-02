@@ -18,6 +18,7 @@
 #include "cwFixStationDiagnostics.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
+#include "cwStation.h"
 
 //Qt includes
 #include <QStringList>
@@ -358,22 +359,45 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
             continue;
         }
         const cwSurveyNetwork network = node->network();
+        const QHash<QString, QString> fileFixedStations = node->fileFixedStations();
+        const QList<cwFixStation>& fixes = node->fixStations()->fixStations();
         QStringList unknownNames;
         int emptyCount = 0;
+        QStringList collisions;
+        QStringList duplicateNames;
         QUuid firstBrokenFix;
-        for (const cwFixStation& fix : node->fixStations()->fixStations()) {
-            const auto reference = cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network);
-            if (reference != cwFixStationDiagnostics::StationReference::Ok && firstBrokenFix.isNull()) {
-                firstBrokenFix = fix.id();
-            }
-            switch (reference) {
+        for (qsizetype row = 0; row < fixes.size(); ++row) {
+            const cwFixStation& fix = fixes.at(row);
+            const QString station = fix.stationName().trimmed();
+            const auto markBroken = [&]() {
+                if (firstBrokenFix.isNull()) {
+                    firstBrokenFix = fix.id();
+                }
+            };
+            switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network)) {
             case cwFixStationDiagnostics::StationReference::Unknown:
-                unknownNames.append(QStringLiteral("\"%1\"").arg(fix.stationName().trimmed()));
-                break;
+                markBroken();
+                unknownNames.append(QStringLiteral("\"%1\"").arg(station));
+                continue;
             case cwFixStationDiagnostics::StationReference::Empty:
+                markBroken();
                 ++emptyCount;
-                break;
+                continue;
             case cwFixStationDiagnostics::StationReference::Ok:
+                break;
+            }
+            switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations)) {
+            case cwFixStationDiagnostics::StationConflict::FixedByFile:
+                markBroken();
+                collisions.append(cwFixStationDiagnostics::fileFixCollisionMessage(
+                                      fileFixedStations.value(cwStation::canonicalKey(station)), station)
+                                  + QLatin1Char('.'));
+                break;
+            case cwFixStationDiagnostics::StationConflict::Duplicate:
+                markBroken();
+                duplicateNames.append(QStringLiteral("\"%1\"").arg(station));
+                break;
+            case cwFixStationDiagnostics::StationConflict::None:
                 break;
             }
         }
@@ -398,6 +422,12 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
                 : QStringLiteral("%1 fix stations have no station name — they are ignored until "
                                  "you enter the survey stations they fix.")
                       .arg(emptyCount));
+        }
+        parts.append(collisions);
+        if (!duplicateNames.isEmpty()) {
+            parts.append(namedCaveWarning(duplicateNames,
+                QStringLiteral("Station %1 is fixed twice — only the first fix counts."),
+                QStringLiteral("Stations %1 are fixed twice — only the first fix of each counts.")));
         }
         if (parts.isEmpty()) {
             continue;
@@ -455,6 +485,9 @@ void cwFixStationValidator::syncNodeConnections()
         // The survey network decides which fix references are broken, so a
         // recompute (a station appearing/disappearing) must re-attribute.
         connect(node, &cwSurveyNode::surveyNetworkChanged,
+                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
+        // So do the stations the node's attached files fix themselves.
+        connect(node, &cwSurveyNode::attachedFixesChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         m_connectedNodes.insert(node);
     }

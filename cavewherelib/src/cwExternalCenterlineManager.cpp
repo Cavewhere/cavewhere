@@ -387,7 +387,8 @@ cwLinePlotTask::ExternalCenterlineInputs cwExternalCenterlineManager::solveInput
              m_tripAttachmentDirs,
              m_fileOwnsDeclination,
              std::move(excluded),
-             m_ownersWithBareFixes };
+             bareFixedStations(),
+             m_ownerFixedStations };
 }
 
 void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
@@ -661,20 +662,31 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     const QString containmentError = containmentErrorFor(escaping);
                     result.containmentErrors.insert(owner.ownerId, containmentError);
                     row.error = containmentError;
-                } else if (owner.ownerKind == kTripOwnerKind) {
+                } else {
                     // Station names, from cavern reading this one attachment on its
                     // own — the region solve can't supply them for exactly the
-                    // attachments that need tying in, since it drops a survey
-                    // nothing fixes. A cave attachment stays out of the harvest:
-                    // its Scope trips read their station names from the solved
-                    // network, which does carry a solved cave.
-                    const auto harvest = cwExternalStationHarvest::harvest(projectEntry);
+                    // attachments that need tying in or placing, since it drops a
+                    // survey nothing fixes. A cave attachment's names are what its
+                    // node's own fix stations are checked against. One cavern run
+                    // per owner, cave or trip.
+                    const auto harvest = cwExternalStationHarvest::harvestWithFixes(projectEntry);
                     if (harvest.hasError()) {
-                        result.tripHarvestErrors.insert(
-                            owner.ownerId,
-                            withProjectRelativePaths(harvest.errorMessage(), owner.dataRootDir));
+                        const QString harvestError =
+                            withProjectRelativePaths(harvest.errorMessage(), owner.dataRootDir);
+                        if (owner.ownerKind == kTripOwnerKind) {
+                            result.tripHarvestErrors.insert(owner.ownerId, harvestError);
+                        } else {
+                            // The row is a cave owner's only surface (see above),
+                            // and without names every fix on the cave's file
+                            // stations is dropped as unknown.
+                            row.error = harvestError;
+                        }
                     } else {
-                        result.tripStations.insert(owner.ownerId, harvest.value());
+                        result.ownerStations.insert(owner.ownerId, harvest.value().names);
+                        if (!harvest.value().fixedNames.isEmpty()) {
+                            result.ownerFixedStations.insert(owner.ownerId,
+                                                             harvest.value().fixedNames);
+                        }
                     }
                 }
 
@@ -693,8 +705,8 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     }
                     result.fileOwnsDeclination.insert(
                         owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
-                    if (scan.value().hasFixWithoutCoordinateSystem()) {
-                        result.ownersWithBareFixes.insert(owner.ownerId);
+                    if (!scan.value().fixes.isEmpty()) {
+                        result.ownerFixes.insert(owner.ownerId, scan.value().fixes);
                     }
                     row.depCount = scan.value().dependencies.size();
                     row.warningCount = scan.value().warnings.size();
@@ -754,12 +766,14 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     const bool missingCopiesChangedNow = result.missingCopies != m_missingCopies;
     const bool solveNow = m_solveOnScanApply
         || result.fileOwnsDeclination != m_fileOwnsDeclination
-        || result.ownersWithBareFixes != m_ownersWithBareFixes
+        || result.ownerFixes != m_ownerFixes
+        || result.ownerFixedStations != m_ownerFixedStations
         || result.containmentErrors != m_containmentErrors
         || missingCopiesChangedNow;
     m_solveOnScanApply = false;
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
-    m_ownersWithBareFixes = std::move(result.ownersWithBareFixes);
+    m_ownerFixes = std::move(result.ownerFixes);
+    m_ownerFixedStations = std::move(result.ownerFixedStations);
     // An owner entering or leaving the excluded set changes the driver the
     // same way a declination flag does — its *include just vanished or
     // reappeared — so both halves of that set swap ahead of the solve
@@ -769,7 +783,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
 
     // Ahead of the solve request, so the solve that follows snapshots the
     // fresh names rather than the previous scan's.
-    applyHarvestToTrips(result);
+    applyHarvest(result);
 
     m_lastScanRows = result.rows;
     m_attachedCenterlinesModel->setRows(std::move(result.rows));
@@ -791,15 +805,32 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     }
 }
 
-void cwExternalCenterlineManager::applyHarvestToTrips(const ExternalScanResult& result)
+void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
 {
     if (m_region.isNull()) {
         return;
     }
 
-    for (cwCave* cave : m_region->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            trip->setExternalStations(result.tripStations.value(trip->id()));
+    for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
+        node->setExternalStations(result.ownerStations.value(node->id()));
+
+        QList<cwAttachedFix> attachedFixes;
+        QHash<QUuid, QStringList> fileFixedStations;
+        const auto addOwner = [&](const QUuid& ownerId, const cwExternalCenterline& centerline) {
+            const QString fileName = QFileInfo(centerline.entryFile()).fileName();
+            for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
+                attachedFixes.append({fix.station, fix.coordinate, fix.coordinateSystem, fileName});
+            }
+            const auto fixed = m_ownerFixedStations.constFind(ownerId);
+            if (fixed != m_ownerFixedStations.constEnd()) {
+                fileFixedStations.insert(ownerId, fixed.value());
+            }
+        };
+        addOwner(node->id(), node->externalCenterline());
+
+        for (cwTrip* trip : node->trips()) {
+            addOwner(trip->id(), trip->externalCenterline());
+            trip->setExternalStations(result.ownerStations.value(trip->id()));
             // A containment failure skipped the harvest, so the two are
             // never both present; naming it first keeps that explicit.
             const QString containmentError = result.containmentErrors.value(trip->id());
@@ -808,7 +839,27 @@ void cwExternalCenterlineManager::applyHarvestToTrips(const ExternalScanResult& 
                     ? result.tripHarvestErrors.value(trip->id())
                     : containmentError);
         }
+
+        node->setAttachedFixes(attachedFixes);
+        node->setFileFixedStations(fileFixedStations);
     }
+}
+
+QHash<QUuid, QStringList> cwExternalCenterlineManager::bareFixedStations() const
+{
+    QHash<QUuid, QStringList> stations;
+    for (auto it = m_ownerFixes.constBegin(); it != m_ownerFixes.constEnd(); ++it) {
+        QStringList bare;
+        for (const cwExternalCenterlineScanner::ScannedFix& fix : it.value()) {
+            if (!fix.hasCoordinateSystem()) {
+                bare.append(fix.station);
+            }
+        }
+        if (!bare.isEmpty()) {
+            stations.insert(it.key(), bare);
+        }
+    }
+    return stations;
 }
 
 cwExternalSourceStatusModel::Row

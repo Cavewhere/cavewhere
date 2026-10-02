@@ -10,6 +10,7 @@
 //Our includes
 #include "cwFixStation.h"
 #include "cwGeoPoint.h"
+#include "cwStation.h"
 #include "cwSurveyNetwork.h"
 
 namespace cwFixStationDiagnostics {
@@ -61,6 +62,31 @@ StationReference classifyStationReference(const QString& stationName,
     return network.hasStation(trimmedName)
         ? StationReference::Ok
         : StationReference::Unknown;
+}
+
+StationConflict classifyStationConflict(const QList<cwFixStation>& fixes, qsizetype row,
+                                        const QHash<QString, QString>& fileFixedStations)
+{
+    const QString key = cwStation::canonicalKey(fixes.at(row).stationName().trimmed());
+    if (key.isEmpty()) {
+        return StationConflict::None;
+    }
+    if (fileFixedStations.contains(key)) {
+        return StationConflict::FixedByFile;
+    }
+    for (qsizetype earlier = 0; earlier < row; ++earlier) {
+        if (cwStation::canonicalKey(fixes.at(earlier).stationName().trimmed()) == key) {
+            return StationConflict::Duplicate;
+        }
+    }
+    return StationConflict::None;
+}
+
+QString fileFixCollisionMessage(const QString& fileName, const QString& station)
+{
+    return QStringLiteral("%1 already fixes %2; remove that fix from the file or fix another "
+                          "station")
+        .arg(fileName, station);
 }
 
 }

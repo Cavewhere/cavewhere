@@ -68,4 +68,34 @@ CAVEWHERE_LIB_EXPORT size_t qHash(const cwExternalCenterline& value, size_t seed
 
 Q_DECLARE_METATYPE(cwExternalCenterline)
 
+/**
+ * A station an attached survey file fixes itself, as the attach scan read it
+ * (cwExternalCenterlineScanner::ScannedFix), plus the attached file that
+ * carries it. A node's Fix Stations page lists these read-only beside the
+ * node's own fixes, since a node fix on one of them is refused.
+ */
+class CAVEWHERE_LIB_EXPORT cwAttachedFix
+{
+    Q_GADGET
+    QML_VALUE_TYPE(cwAttachedFix)
+    //! The station as the file writes it.
+    Q_PROPERTY(QString station MEMBER station FINAL)
+    //! The coordinate text as the file writes it.
+    Q_PROPERTY(QString coordinate MEMBER coordinate FINAL)
+    //! The input coordinate system in force for the fix, empty when none.
+    Q_PROPERTY(QString coordinateSystem MEMBER coordinateSystem FINAL)
+    //! The attached entry file's name.
+    Q_PROPERTY(QString fileName MEMBER fileName FINAL)
+
+public:
+    QString station;
+    QString coordinate;
+    QString coordinateSystem;
+    QString fileName;
+
+    bool operator==(const cwAttachedFix& other) const = default;
+};
+
+Q_DECLARE_METATYPE(cwAttachedFix)
+
 #endif // CWEXTERNALCENTERLINE_H

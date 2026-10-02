@@ -16,6 +16,7 @@
 #include <QHash>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QUuid>
 
 /**
@@ -83,12 +84,18 @@ public:
      * A trip owner is told why through the file-error banner (containment)
      * or the missing-copy banner; a cave owner reads the reason from its
      * attached-centerlines row.
+     *
+     * \c externalFixedStations maps a cave or trip owner to the stations its
+     * file fixes itself, in the file's namespace. A node fix naming one of
+     * them is dropped with an error rather than written: cavern rejects a
+     * second fix at different coordinates (error 46) and fails the whole run.
      */
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
         QHash<QUuid, double> tripInjectedDeclinations;
         QSet<QUuid> excludedExternalOwners;
+        QHash<QUuid, QStringList> externalFixedStations;
         OutputCSPolicy outputCSPolicy = OutputCSPolicy::Shareable;
     };
 

@@ -139,9 +139,10 @@ private:
     };
 
     //! Per-node FixStationReference warning: the fixes whose station name
-    //! matches no station in that node's survey network, joined into one
-    //! warning. Nodes with no broken reference are absent from the map (their
-    //! warning clears).
+    //! matches no station in that node's survey network, has none, names a
+    //! station an attached file fixes itself, or repeats an earlier row's
+    //! station, joined into one warning. Nodes with no broken reference are
+    //! absent from the map (their warning clears).
     QHash<cwSurveyNode*, NodeWarning> referenceWarnings() const;
 
     //! Set (or, with an empty message, clear) the node's Warning row for one of

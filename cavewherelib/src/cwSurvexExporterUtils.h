@@ -297,6 +297,12 @@ QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
                                         QStringList& errors);
 
 /**
+ * The validateFixStations keys of \a stations, each named under \a scope
+ * (an empty scope, or a trip's scopePrefix such as "trip1.").
+ */
+QSet<QString> scopedStationKeys(const QString& scope, const QStringList& stations);
+
+/**
  * Emit the per-cave *cs / *fix block.
  *
  * - When fixes is non-empty: group by inputCS, emitting `*cs <inputCS>`

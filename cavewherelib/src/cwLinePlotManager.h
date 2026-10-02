@@ -252,9 +252,11 @@ private:
     //! Decided with the same fact as *cs out — whether the project has a
     //! frame — so it is set as each solve starts. Each node gets one
     //! AttachedFixWithoutCS warning naming the attached files (its own or its
-    //! trips') that fix a station with no input coordinate system, and every
-    //! other node has it cleared.
-    void publishAttachedFixWarnings(const QSet<QUuid>& ownersWithBareFixes);
+    //! trips') that fix a station with no input coordinate system, with those
+    //! stations, and every other node has it cleared. It stays while the bare
+    //! fix does: the driver drops a node fix on that station, and a node fix
+    //! on another one leaves the file anchored twice.
+    void publishAttachedFixWarnings(const QHash<QUuid, QStringList>& bareFixedStations);
     void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
                                 bool externalScopesChecked);
 

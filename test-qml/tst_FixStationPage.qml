@@ -177,6 +177,24 @@ MainWindowTest {
             tryVerify(() => !help.visible, 2000, "help box should hide once a fix is added")
         }
 
+        function test_aPlainOpenPicksNoRow() {
+            RootData.region.addCave()
+            const cave = RootData.region.cave(RootData.region.caveCount - 1)
+            cave.name = "PR4Cave"
+            cave.fixStations.addFixStation("A1")
+            cave.fixStations.addFixStation("A2")
+
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage")
+
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
+            verify(tableView !== null, "fixStationTableView must exist")
+            tryCompare(tableView, "count", 2)
+            compare(tableView.currentIndex, -1)
+        }
+
         function test_editCellsThroughModel() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
@@ -1531,6 +1549,49 @@ MainWindowTest {
 
             cave.fixStations.removeAt(0)
             tryCompare(link, "text", "1")
+        }
+    }
+
+    ExternalCenterlineTestCase {
+        name: "FixStationPageAttachedFixes"
+        when: windowShown
+
+        function init() {
+            RootData.project.newProject()
+            RootData.pageSelectionModel.currentPageAddress = "View"
+        }
+
+        function cleanup() {
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            RootData.project.newProject()
+        }
+
+        // The attached file's own *fix is listed under the node's rows,
+        // read-only, with its coordinate, its system, and the file.
+        function test_attachedFileFixesAreListedReadOnly() {
+            const cave = makeSavedCaveAttach("fix-station-attached-fixes",
+                                             "external-centerlines/survex_blocks.svx")
+            tryVerify(() => cave.attachedFixes.length === 1, 20000, "the scan lists the file's fix")
+
+            RootData.pageSelectionModel.currentPageAddress =
+                "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage")
+            const page = RootData.pageView.currentPageItem
+
+            const station = findChild(page, "attachedFixStation.0")
+            verify(station !== null, "the file's fix is listed")
+            tryVerify(() => station.visible, 5000, "the file's fix is on screen")
+            compare(station.text, "d1")
+            compare(findChild(page, "attachedFixCoordinate.0").text, "0 0 0")
+            compare(findChild(page, "attachedFixSystem.0").text, "none")
+            compare(findChild(page, "attachedFixFile.0").text, "survex_blocks.svx")
+
+            // A label, not an editor, and not a row of the node's own fixes.
+            verify(station.editText === undefined, "the row is read-only")
+            compare(cave.fixStations.count, 0)
+            compare(findChild(page, "fixStationTableView").count, 0)
         }
     }
 }

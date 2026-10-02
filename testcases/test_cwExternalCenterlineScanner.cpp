@@ -1526,7 +1526,7 @@ QList<ScannedFix> scannedFixes(const QString& entryFile)
 
 } // namespace
 
-TEST_CASE("scanSurvex records whether each *fix has an input *cs in force", "[Scanner][Attach]")
+TEST_CASE("scanSurvex records each *fix's coordinate and the input *cs in force", "[Scanner][Attach]")
 {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -1535,7 +1535,7 @@ TEST_CASE("scanSurvex records whether each *fix has an input *cs in force", "[Sc
     {
         const QList<ScannedFix> fixes =
             scannedFixes(datasetExternalCenterlinePath(QStringLiteral("survex_blocks.svx")));
-        CHECK(fixes == QList<ScannedFix>{{QStringLiteral("d1"), false}});
+        CHECK(fixes == QList<ScannedFix>{{QStringLiteral("d1"), QStringLiteral("0 0 0"), QString()}});
     }
 
     SECTION("*cs scopes to its *begin block, and *cs out names no input system")
@@ -1551,10 +1551,11 @@ TEST_CASE("scanSurvex records whether each *fix has an input *cs in force", "[Sc
                                                              "*end deeper\n"
                                                              "*end inner\n"
                                                              "*fix after 0 0 0\n"));
-        CHECK(scannedFixes(path) == QList<ScannedFix>{{QStringLiteral("root"), false},
-                                                      {QStringLiteral("a"), true},
-                                                      {QStringLiteral("b"), true},
-                                                      {QStringLiteral("after"), false}});
+        const QString utm16 = QStringLiteral("EPSG:32616");
+        CHECK(scannedFixes(path) == QList<ScannedFix>{{QStringLiteral("root"), QStringLiteral("0 0 0"), QString()},
+                                                      {QStringLiteral("a"), QStringLiteral("1 2 3"), utm16},
+                                                      {QStringLiteral("b"), QStringLiteral("1 2 3"), utm16},
+                                                      {QStringLiteral("after"), QStringLiteral("0 0 0"), QString()}});
     }
 
     SECTION("a file with no *fix records none")
@@ -1563,7 +1564,7 @@ TEST_CASE("scanSurvex records whether each *fix has an input *cs in force", "[Sc
     }
 }
 
-TEST_CASE("scanCompass records .mak fixes and whether a datum and zone are in force",
+TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
           "[Scanner][Attach]")
 {
     QTemporaryDir tempDir;
@@ -1578,8 +1579,10 @@ TEST_CASE("scanCompass records .mak fixes and whether a datum and zone are in fo
                               "&North American 1983;\n"
                               "$16;\n"
                               "#cave.dat,B1[M,580661.57,4113846.34,219];\n"));
-        CHECK(scannedFixes(makPath) == QList<ScannedFix>{{QStringLiteral("A1"), false},
-                                                         {QStringLiteral("B1"), true}});
+        CHECK(scannedFixes(makPath)
+              == QList<ScannedFix>{{QStringLiteral("A1"), QStringLiteral("m,0,0,0"), QString()},
+                                   {QStringLiteral("B1"), QStringLiteral("M,580661.57,4113846.34,219"),
+                                    QStringLiteral("North American 1983, UTM zone 16N")}});
     }
 
     SECTION("a base location's zone stands in for a missing zone line")
@@ -1589,7 +1592,9 @@ TEST_CASE("scanCompass records .mak fixes and whether a datum and zone are in fo
             QByteArrayLiteral("@580661.57,4113846.34,219,16,0.549;\n"
                               "&North American 1983;\n"
                               "#cave.dat,A1[m,580661.57,4113846.34,219];\n"));
-        CHECK(scannedFixes(makPath) == QList<ScannedFix>{{QStringLiteral("A1"), true}});
+        CHECK(scannedFixes(makPath)
+              == QList<ScannedFix>{{QStringLiteral("A1"), QStringLiteral("m,580661.57,4113846.34,219"),
+                                    QStringLiteral("North American 1983, UTM zone 16N")}});
     }
 
     SECTION("a lone .dat fixes nothing")
@@ -1598,16 +1603,19 @@ TEST_CASE("scanCompass records .mak fixes and whether a datum and zone are in fo
     }
 }
 
-TEST_CASE("scanWalls records #FIX lines and whether their .wpj carries a .REF",
+TEST_CASE("scanWalls records #FIX lines and the system their .wpj's .REF names",
           "[Scanner][Attach]")
 {
     const QList<ScannedFix> georeferenced =
         scannedFixes(testcasesDatasetSourcePath(QStringLiteral("walls/georef_cave.wpj")));
-    CHECK(georeferenced == QList<ScannedFix>{{QStringLiteral("A1"), true},
-                                             {QStringLiteral("A3"), true}});
+    const QString nad83Utm16 = QStringLiteral("NAD83, UTM zone 16N");
+    const QString a1 = QStringLiteral("580661.570 4113846.340 219");
+    const QString a3 = QStringLiteral("W86:5:29.254 N37:10:3.195 219");
+    CHECK(georeferenced == QList<ScannedFix>{{QStringLiteral("A1"), a1, nad83Utm16},
+                                             {QStringLiteral("A3"), a3, nad83Utm16}});
 
     const QList<ScannedFix> alone =
         scannedFixes(testcasesDatasetSourcePath(QStringLiteral("walls/GEOREF.SRV")));
-    CHECK(alone == QList<ScannedFix>{{QStringLiteral("A1"), false},
-                                     {QStringLiteral("A3"), false}});
+    CHECK(alone == QList<ScannedFix>{{QStringLiteral("A1"), a1, QString()},
+                                     {QStringLiteral("A3"), a3, QString()}});
 }

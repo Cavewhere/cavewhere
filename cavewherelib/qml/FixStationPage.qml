@@ -40,7 +40,7 @@ StandardPage {
     // rows, same role names — only the derived warnings are extra.
     readonly property FixStationDiagnosticsModel diagnosticsModel: cave ? cave.fixStationDiagnostics : null
 
-    // The row to select and scroll to, or -1. A page selection property: a
+    // The row to select and scroll to, or -1 for none. A page selection property: a
     // link into the page (a node warning naming a fix) sets it through the
     // page, and a row the user picks writes it back, so the same link works
     // again after the user has moved on.
@@ -103,7 +103,7 @@ StandardPage {
     }
 
     // Only a row the user picks is written back to the page: the view's own
-    // currentIndex changes (the first row it selects as the model fills) would
+    // currentIndex changes (a row removed above the current one) would
     // race a link that is opening the page on another row.
     function pickRow(row: int): void {
         tableView.currentIndex = row
@@ -113,10 +113,10 @@ StandardPage {
     }
 
     onCurrentFixRowChanged: {
+        tableView.currentIndex = fixStationPage.currentFixRow
         if (fixStationPage.currentFixRow < 0) {
             return
         }
-        tableView.currentIndex = fixStationPage.currentFixRow
         // The rows may not be laid out yet when the page opens on a link.
         Qt.callLater(() => tableView.positionViewAtIndex(tableView.currentIndex, QQ.ListView.Contain))
     }
@@ -376,10 +376,83 @@ StandardPage {
 
                 model: fixStationPage.diagnosticsModel
                 columnModel: columnModelId
+                // No row is picked until a link or the user picks one; a
+                // ListView would otherwise select the first row as it fills.
+                currentIndex: -1
 
                 implicitWidth: fixStationPage.isNarrow ? 0 : columnModelId.totalWidth
 
                 delegate: fixStationPage.isNarrow ? narrowDelegateComponent : wideDelegateComponent
+            }
+        }
+
+        // The fixes the node's attached files carry themselves, read-only: they
+        // show what anchors each file, and why a fix above on one of those
+        // stations is refused. Laid out under the table's columns.
+        ColumnLayout {
+            visible: attachedFixesId.count > 0
+            spacing: Theme.tightSpacing
+            Layout.fillWidth: true
+
+            QC.Label {
+                text: "Fixed by attached files"
+                font.bold: true
+            }
+
+            QQ.Repeater {
+                id: attachedFixesId
+
+                model: fixStationPage.cave ? fixStationPage.cave.attachedFixes : []
+
+                delegate: QQ.Flow {
+                    id: attachedFixRowId
+
+                    required property int index
+                    required property cwAttachedFix modelData
+
+                    spacing: fixStationPage.isNarrow ? Theme.flowSpacing : 0
+                    Layout.fillWidth: true
+
+                    QC.Label {
+                        objectName: "attachedFixStation." + attachedFixRowId.index
+                        width: fixStationPage.isNarrow ? implicitWidth : stationColumn.columnWidth
+                        elide: QC.Label.ElideRight
+                        textFormat: QC.Label.PlainText
+                        font.bold: fixStationPage.isNarrow
+                        text: attachedFixRowId.modelData.station
+                    }
+
+                    QC.Label { visible: fixStationPage.isNarrow; text: "·"; color: Theme.textSubtle }
+
+                    QC.Label {
+                        objectName: "attachedFixSystem." + attachedFixRowId.index
+                        width: fixStationPage.isNarrow ? implicitWidth : csColumn.columnWidth
+                        elide: QC.Label.ElideRight
+                        textFormat: QC.Label.PlainText
+                        text: attachedFixRowId.modelData.coordinateSystem !== ""
+                              ? attachedFixRowId.modelData.coordinateSystem
+                              : "none"
+                    }
+
+                    QC.Label { visible: fixStationPage.isNarrow; text: "·"; color: Theme.textSubtle }
+
+                    QC.Label {
+                        objectName: "attachedFixCoordinate." + attachedFixRowId.index
+                        width: fixStationPage.isNarrow ? implicitWidth : coordinateColumn.columnWidth
+                        elide: QC.Label.ElideRight
+                        textFormat: QC.Label.PlainText
+                        text: attachedFixRowId.modelData.coordinate
+                    }
+
+                    QC.Label { visible: fixStationPage.isNarrow; text: "·"; color: Theme.textSubtle }
+
+                    QC.Label {
+                        objectName: "attachedFixFile." + attachedFixRowId.index
+                        textFormat: QC.Label.PlainText
+                        color: Theme.textSubtle
+                        text: attachedFixRowId.modelData.fileName
+                    }
+                }
             }
         }
     }

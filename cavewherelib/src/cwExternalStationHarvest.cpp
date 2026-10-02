@@ -9,6 +9,7 @@
 #include "cwExternalStationHarvest.h"
 #include "cwCavernRunner.h"
 #include "cwLinePlotErrorCodes.h"
+#include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurvex3DFileReader.h"
 #include "cwSurvexExporterUtils.h"
@@ -18,14 +19,16 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTextStream>
 
 namespace {
 
-Monad::Result<QStringList> harvestError(const QString& message, LinePlotErrorCode code)
+Monad::Result<cwExternalStationHarvest::Stations> harvestError(const QString& message,
+                                                                LinePlotErrorCode code)
 {
-    return Monad::Result<QStringList>(message, static_cast<int>(code));
+    return Monad::Result<cwExternalStationHarvest::Stations>(message, static_cast<int>(code));
 }
 
 /**
@@ -81,13 +84,18 @@ QString withoutDriverNoise(const QString& logText, const QString& workingDirecto
 
 } // namespace
 
-Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entryFile)
+namespace {
+
+Monad::Result<QStringList> namesOf(const Monad::Result<cwExternalStationHarvest::Stations>& result)
 {
-    return harvestComponents(entryFile, {});
+    if(result.hasError()) {
+        return Monad::Result<QStringList>(result.errorMessage(), result.errorCode());
+    }
+    return result.value().names;
 }
 
-Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QString& entryFile,
-                                                                       const QStringList& seedStations)
+Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
+                                                      const QStringList& seedStations)
 {
     const QString absoluteEntry = QFileInfo(entryFile).absoluteFilePath();
 
@@ -155,14 +163,15 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QSt
     const auto cavernResult =
         cwCavernRunner::run(driverPath, directory.filePath(QStringLiteral("harvest.3d")));
     if(cavernResult.hasError()) {
-        return Monad::Result<QStringList>(
+        return Monad::Result<cwExternalStationHarvest::Stations>(
             withoutDriverNoise(cavernResult.errorMessage(), workingDirectory.path()),
             cavernResult.errorCode());
     }
 
     cwSurvex3DFileReader reader;
-    const cwStationPositionLookup lookup =
-        reader.readNetworkAndLookup(cavernResult.value().output3dPath).lookup;
+    const cwSurvex3DFileReader::NetworkAndLookup read =
+        reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+    const cwStationPositionLookup& lookup = read.lookup;
 
     //cwSurvex3DFileReader only warns when it can't read a .3d and hands back an
     //empty lookup, which would leave this function reporting success with no
@@ -178,5 +187,36 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QSt
 
     //cwStationPositionLookup canonicalizes on insert and keeps its stations in
     //a QMap, so its keys are already canonical and sorted.
-    return QStringList(lookup.positions().keys());
+    cwExternalStationHarvest::Stations stations;
+    stations.names = lookup.positions().keys();
+    // A seed's *fix is the driver's, not the file's.
+    QSet<QString> seedKeys;
+    for(const QString& seed : seedStations) {
+        seedKeys.insert(cwStation::canonicalKey(seed));
+    }
+    for(const QString& fixed : read.fixedStations) {
+        if(!seedKeys.contains(fixed)) {
+            stations.fixedNames.append(fixed);
+        }
+    }
+    return stations;
+}
+
+} // namespace
+
+Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entryFile)
+{
+    return namesOf(run(entryFile, {}));
+}
+
+Monad::Result<cwExternalStationHarvest::Stations>
+cwExternalStationHarvest::harvestWithFixes(const QString& entryFile)
+{
+    return run(entryFile, {});
+}
+
+Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QString& entryFile,
+                                                                       const QStringList& seedStations)
+{
+    return namesOf(run(entryFile, seedStations));
 }

@@ -15,6 +15,7 @@
 
 //Qt includes
 #include <QString>
+#include <QStringList>
 
 /**
  * Reads cavern's .3d output into a position lookup and a survey network.
@@ -30,6 +31,10 @@ public:
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
         cwSplayTipsByStation splayTips;
+        //! Canonical names of the stations the data fixes with *fix (or a
+        //! format's own fix). The origin cavern invents for a survey with no
+        //! fix is excluded.
+        QStringList fixedStations;
     };
 
     // Parses a .3d file once, returning the survey network (station names,

@@ -161,6 +161,7 @@ private:
     };
 
     WrittenFixes writeFixStations(QTextStream& stream, const cwCaveData& node,
+                                  const DriverTree& tree,
                                   const QString& globalCS, bool anchoredAbove,
                                   cwSurvexExporterUtils::CsScope& scope);
 

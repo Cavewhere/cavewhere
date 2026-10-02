@@ -17,6 +17,7 @@ class cwTrip;
 #include "cwAttachedCenterlinesModel.h"
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineReport.h"
+#include "cwExternalCenterlineScanner.h"
 #include "cwExternalSourceAttentionRow.h"
 #include "cwExternalSourceSettings.h"
 #include "cwExternalSourceStatusModel.h"
@@ -381,15 +382,18 @@ private:
         // missing files) without re-statting on the main thread.
         QStringList existingWatchedFiles;
         QHash<QUuid, bool> fileOwnsDeclination;
-        // Owners whose file fixes at least one station with no input
-        // coordinate system of its own (ScanResult::fixes).
-        QSet<QUuid> ownersWithBareFixes;
-        // Station names harvested from each trip owner's in-project entry
-        // file, and cavern's complaint when that harvest failed. An owner
-        // appears in at most one of them; an owner in neither had no
-        // in-project entry to read.
-        QHash<QUuid, QStringList> tripStations;
+        // Every station each owner's file fixes itself (ScanResult::fixes),
+        // for owners whose file fixes any.
+        QHash<QUuid, QList<cwExternalCenterlineScanner::ScannedFix>> ownerFixes;
+        // Station names harvested from each owner's (cave or trip) in-project
+        // entry file, and, for a trip owner, cavern's complaint when that
+        // harvest failed. A trip owner appears in at most one of them; an
+        // owner in neither had no in-project entry to read.
+        QHash<QUuid, QStringList> ownerStations;
         QHash<QUuid, QString> tripHarvestErrors;
+        // The harvested names each owner's file fixes itself, for owners
+        // whose file fixes any (cwExternalStationHarvest::Stations).
+        QHash<QUuid, QStringList> ownerFixedStations;
         // Owners (cave or trip) whose in-project entry file depends on a
         // path outside the project's data root, with the reason. Such an
         // owner is dropped from the solve entirely — see B7 in
@@ -493,10 +497,11 @@ private:
     // the consumer. Rebuilt wholesale on every recompute.
     QHash<QUuid, bool> m_fileOwnsDeclination;
 
-    // Owners whose file fixes a station with no input coordinate system,
-    // from the most recent recompute; handed to each solve through
-    // solveInputs(). Rebuilt wholesale on every recompute.
-    QSet<QUuid> m_ownersWithBareFixes;
+    // The fixes each owner's file carries, as the scan read them and as
+    // cavern names them, from the most recent recompute; handed to each
+    // solve through solveInputs(). Rebuilt wholesale on every recompute.
+    QHash<QUuid, QList<cwExternalCenterlineScanner::ScannedFix>> m_ownerFixes;
+    QHash<QUuid, QStringList> m_ownerFixedStations;
 
     // RAII completion guard for one owner operation, shared (via
     // shared_ptr) by the operation's completion and canceled
@@ -678,11 +683,17 @@ private:
     // one was requested or the declination flags changed.
     void applyScanResult(ExternalScanResult result);
 
-    // Pushes the scan's harvested station names and harvest errors onto the
-    // live trips. Walks the whole region rather than the result's keys, so a
-    // trip that was detached (or whose entry file vanished) since the last
-    // scan is cleared instead of keeping names it no longer owns.
-    void applyHarvestToTrips(const ExternalScanResult& result);
+    // Pushes the scan's harvested station names onto the live nodes and
+    // trips, the harvest errors onto the trips, and the files' own fixes
+    // onto the node that lists them. Walks the whole region rather than the
+    // result's keys, so an owner that was detached (or whose entry file
+    // vanished) since the last scan is cleared instead of keeping names it
+    // no longer owns.
+    void applyHarvest(const ExternalScanResult& result);
+
+    // Per owner whose file fixes stations with no input coordinate system,
+    // those stations as the file writes them (from m_ownerFixes).
+    QHash<QUuid, QStringList> bareFixedStations() const;
 
     // How ownerId's remembered source, fingerprinted as `stored` when it
     // was copied, compares with that source on disk now. Reads the disk,

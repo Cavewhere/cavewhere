@@ -24,6 +24,7 @@
 
 //Std includes
 #include <array>
+#include <cstdlib>
 
 namespace {
 
@@ -478,9 +479,9 @@ struct ScanState {
     // index 0 is the file root, which starts in Survex's default
     // normal style
     QList<bool> passageStyles = QList<bool>{false};
-    // per open scope, whether an input *cs is in force; index 0 is the
-    // file root. Cavern scopes *cs to its *begin block like *data.
-    QList<bool> coordinateSystemInForce = QList<bool>{false};
+    // per open scope, the input *cs in force, empty for none; index 0 is
+    // the file root. Cavern scopes *cs to its *begin block like *data.
+    QStringList coordinateSystems = QStringList{QString()};
     // every station the closure fixes, in walk order
     QList<cwExternalCenterlineScanner::ScannedFix> fixes;
     // set when the entry file itself carries shot data
@@ -499,8 +500,8 @@ struct ScanState {
     // force, handed from the project walk to the .srv about to be
     // scanned
     WallsPrefixLevels pendingWallsPrefix;
-    // whether that same entry carries a .REF georeference
-    bool pendingWallsGeoreferenced = false;
+    // the system that same entry's .REF georeference names, empty for none
+    QString pendingWallsCoordinateSystem;
 };
 
 // inProgress is exactly the recursion stack, so a depth of one means
@@ -577,7 +578,7 @@ void pushSurvexBlock(ScanState& state, const QString& name)
     // A *data directive inside a block reverts at its *end, so each
     // scope starts from the enclosing scope's style.
     state.passageStyles.append(state.passageStyles.constLast());
-    state.coordinateSystemInForce.append(state.coordinateSystemInForce.constLast());
+    state.coordinateSystems.append(state.coordinateSystems.constLast());
 
     OpenBlock open;
     if (!name.isEmpty()) {
@@ -607,8 +608,8 @@ void popSurvexBlock(ScanState& state)
     if (state.passageStyles.size() > 1) {
         state.passageStyles.removeLast();
     }
-    if (state.coordinateSystemInForce.size() > 1) {
-        state.coordinateSystemInForce.removeLast();
+    if (state.coordinateSystems.size() > 1) {
+        state.coordinateSystems.removeLast();
     }
 }
 
@@ -640,9 +641,10 @@ void scanCompassFile(const QString& filePath, ScanState& state);
 void scanWallsFile(const QString& filePath, ScanState& state);
 void scanByFormat(const QString& filePath, ScanState& state);
 
-void recordFix(ScanState& state, const QString& station, bool hasCoordinateSystem)
+void recordFix(ScanState& state, const QString& station, const QString& coordinate,
+               const QString& coordinateSystem)
 {
-    state.fixes.append({station, hasCoordinateSystem});
+    state.fixes.append({station, coordinate, coordinateSystem});
 }
 
 void recordWarning(ScanState& state, const QString& message)
@@ -769,12 +771,13 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             const bool setsInput =
                 csMatch.captured(1).compare(QLatin1String("out"), Qt::CaseInsensitive) != 0;
             if (setsInput) {
-                state.coordinateSystemInForce.last() = true;
+                state.coordinateSystems.last() = line.mid(csMatch.capturedStart(1)).trimmed();
             }
             continue;
         }
         if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
-            recordFix(state, fixMatch.captured(1), state.coordinateSystemInForce.constLast());
+            recordFix(state, fixMatch.captured(1), line.mid(fixMatch.capturedEnd(1)).trimmed(),
+                      state.coordinateSystems.constLast());
             continue;
         }
 
@@ -901,24 +904,35 @@ void collectCompassStations(const QString& text, ScanState& state)
     }
 }
 
-// A station fixed on a .mak '#' line: ",<name>[" after the file name.
+// A station fixed on a .mak '#' line: ",<name>[<coordinate>]" after the file
+// name.
 const QRegularExpression& compassMakFixRegex()
 {
     static const QRegularExpression regex(
-        QStringLiteral(R"RX(,\s*([^,;\[\s]+)\s*\[)RX"));
+        QStringLiteral(R"RX(,\s*([^,;\[\s]+)\s*\[([^\]]*)\])RX"));
     return regex;
 }
 
+//! A UTM system's name: "<datum>, UTM zone <zone><N|S>", positive zones north.
+QString utmSystemName(const QString& datum, int zone)
+{
+    const QString zoneText = QStringLiteral("%1%2").arg(std::abs(zone)).arg(
+        zone < 0 ? QLatin1Char('S') : QLatin1Char('N'));
+    return datum.isEmpty() ? QStringLiteral("UTM zone %1").arg(zoneText)
+                           : QStringLiteral("%1, UTM zone %2").arg(datum, zoneText);
+}
+
 /**
- * Whether a .mak names an input system for its fixes, the way cavern reads
- * one: each datum ('&') or UTM zone ('$') line replaces the system with the
- * one the pair names, or with none until both are set, and a base location ('@', whose fourth field is a zone)
- * supplies one at the next '#' line when nothing else has. Until the .mak
- * writes any of them, the system in force around the .mak stands.
+ * The input system a .mak names for its fixes, the way cavern reads one: each
+ * datum ('&') or UTM zone ('$') line replaces the system with the one the pair
+ * names, or with none until both are set, and a base location ('@', whose
+ * fourth field is a zone) supplies one at the next '#' line when nothing else
+ * has. Until the .mak writes any of them, the system in force around the .mak
+ * stands. Empty while none is in force.
  */
 struct CompassMakCoordinateSystem {
-    bool inForce = false;
-    bool hasDatum = false;
+    QString name;
+    QString datum;
     int zone = 0;
     int baseLocationZone = 0;
 
@@ -933,19 +947,27 @@ struct CompassMakCoordinateSystem {
 
     void applyBaseLocation()
     {
-        inForce = inForce || (hasDatum && baseLocationZone != 0);
+        if (name.isEmpty() && !datum.isEmpty() && baseLocationZone != 0) {
+            name = utmSystemName(datum, baseLocationZone);
+        }
     }
 
     void setDatum(const QString& text)
     {
-        hasDatum = !text.trimmed().isEmpty();
-        inForce = hasDatum && zone != 0;
+        datum = text.trimmed();
+        updateName();
     }
 
     void setZone(const QString& text)
     {
         zone = text.trimmed().toInt();
-        inForce = hasDatum && zone != 0;
+        updateName();
+    }
+
+private:
+    void updateName()
+    {
+        name = !datum.isEmpty() && zone != 0 ? utmSystemName(datum, zone) : QString();
     }
 };
 
@@ -992,7 +1014,7 @@ void scanCompassFile(const QString& filePath, ScanState& state)
             const QDir baseDir = QFileInfo(canonical).absoluteDir();
             const QRegularExpression& regex = compassMakReferenceRegex();
             CompassMakCoordinateSystem coordinateSystem;
-            coordinateSystem.inForce = state.coordinateSystemInForce.constLast();
+            coordinateSystem.name = state.coordinateSystems.constLast();
             const QStringList lines = decoded.text.split(QLatin1Char('\n'));
             for (const QString& rawLine : lines) {
                 const QString line = rawLine.trimmed();
@@ -1037,7 +1059,9 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                 coordinateSystem.applyBaseLocation();
                 auto fixMatches = compassMakFixRegex().globalMatch(line);
                 while (fixMatches.hasNext()) {
-                    recordFix(state, fixMatches.next().captured(1), coordinateSystem.inForce);
+                    const QRegularExpressionMatch fixMatch = fixMatches.next();
+                    recordFix(state, fixMatch.captured(1), fixMatch.captured(2).trimmed(),
+                              coordinateSystem.name);
                 }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
@@ -1150,7 +1174,7 @@ void recordWallsDate(ScanState& state, const QString& path, const QDate& date)
  */
 void collectWallsStations(const QString& canonical,
                           WallsPrefixLevels prefix,
-                          bool georeferenced,
+                          const QString& coordinateSystem,
                           ScanState& state)
 {
     bool sawStation = false;
@@ -1162,7 +1186,9 @@ void collectWallsStations(const QString& canonical,
         }
         if (line.startsWith(QLatin1Char('#'))) {
             if (const auto fixMatch = wallsFixRegex().match(line); fixMatch.hasMatch()) {
-                recordFix(state, fixMatch.captured(1), georeferenced);
+                recordFix(state, fixMatch.captured(1),
+                          stripCommentAndWhitespace(line.mid(fixMatch.capturedEnd(1))),
+                          coordinateSystem);
                 continue;
             }
             if (const auto dateMatch = wallsDateRegex().match(line);
@@ -1277,7 +1303,10 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
         // not from the .srv, so hand them to the scan about to read
         // that file.
         state.pendingWallsPrefix = wallsPrefixFromOptions(child->allOptions());
-        state.pendingWallsGeoreferenced = !child->reference().isNull();
+        const dewalls::GeoReferencePtr reference = child->reference();
+        state.pendingWallsCoordinateSystem = reference.isNull()
+            ? QString()
+            : utmSystemName(reference->datumName, reference->zone);
         scanByFormat(absolutePath, state);
     }
 }
@@ -1327,10 +1356,10 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         state.inProgress.insert(canonical);
         state.dependencies.append(canonical);
         const WallsPrefixLevels prefix = state.pendingWallsPrefix;
-        const bool georeferenced = state.pendingWallsGeoreferenced;
+        const QString coordinateSystem = state.pendingWallsCoordinateSystem;
         state.pendingWallsPrefix = WallsPrefixLevels();
-        state.pendingWallsGeoreferenced = false;
-        collectWallsStations(canonical, prefix, georeferenced, state);
+        state.pendingWallsCoordinateSystem.clear();
+        collectWallsStations(canonical, prefix, coordinateSystem, state);
     }
 
     state.inProgress.remove(canonical);

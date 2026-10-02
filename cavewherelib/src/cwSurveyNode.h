@@ -76,6 +76,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(int childNodeCount READ childNodeCount NOTIFY childNodeCountChanged)
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
+    Q_PROPERTY(QList<cwAttachedFix> attachedFixes READ attachedFixes NOTIFY attachedFixesChanged FINAL)
 
 public:
     enum Roles {
@@ -127,6 +128,34 @@ public:
 
     cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
     void setExternalCenterline(const cwExternalCenterline& value);
+
+    //! The station names this node's own attached file declares, in the file's
+    //! namespace ("doghill.d1"), canonical and sorted. Learned at scan time by
+    //! cwExternalStationHarvest, so a fix on this node can name a station of a
+    //! file the region solve has not placed yet. Empty for a node with no
+    //! attachment of its own, and for now for any node below the top level,
+    //! whose attachment the scan does not reach yet (survey tree W5). Derived
+    //! state: rebuilt by every external-centerline scan, never persisted, and
+    //! never a save trigger.
+    QStringList externalStations() const { return m_externalStations; }
+    void setExternalStations(const QStringList& stations) { m_externalStations = stations; }
+
+    //! The fixes the files attached to this node and to its trips carry
+    //! themselves, as the attach scan read them, for the Fix Stations page to
+    //! list read-only. Derived like externalStations().
+    QList<cwAttachedFix> attachedFixes() const { return m_attachedFixes; }
+    void setAttachedFixes(const QList<cwAttachedFix>& fixes);
+
+    //! Per owner (this node or one of its trips), the stations its attached
+    //! file fixes itself, named as cavern names them in that file
+    //! ("doghill.d1"). Derived like externalStations().
+    void setFileFixedStations(const QHash<QUuid, QStringList>& stationsByOwner);
+
+    //! The stations a node fix may not name because an attached file fixes
+    //! them itself, keyed by cwStation::canonicalKey() of the name a fix on
+    //! this node uses (a trip's file stations under its scopePrefix()), each
+    //! with the attached file's name.
+    QHash<QString, QString> fileFixedStations() const;
 
     //! True when an external survey file — this node's own attachment, or one an
     //! ancestor attached — is what places this node's stations.
@@ -363,6 +392,9 @@ signals:
     //! every trip at once and a harvest does not.
     void tripExternalStationsChanged();
 
+    //! attachedFixes() or the stations behind fileFixedStations() changed.
+    void attachedFixesChanged();
+
     void stationPositionPositionChanged();
     void surveyNetworkChanged();
 
@@ -428,6 +460,9 @@ private:
     cwGridConvergence* m_gridConvergence;
 
     cwExternalCenterline m_externalCenterline;
+    QStringList m_externalStations;
+    QList<cwAttachedFix> m_attachedFixes;
+    QHash<QUuid, QStringList> m_fileFixedStations;
 
     cwKeywordModel* m_keywordModel = nullptr;
     void updateKeywords();

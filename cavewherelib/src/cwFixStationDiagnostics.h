@@ -9,6 +9,8 @@
 #define CWFIXSTATIONDIAGNOSTICS_H
 
 //Qt includes
+#include <QHash>
+#include <QList>
 #include <QString>
 
 //Our includes
@@ -64,6 +66,27 @@ enum class StationReference {
 
 CAVEWHERE_LIB_EXPORT StationReference classifyStationReference(const QString& stationName,
                                                               const cwSurveyNetwork& network);
+
+//! Why the export drops a fix whose station name is fine on its own.
+enum class StationConflict {
+    None,        //!< nothing else fixes the station
+    FixedByFile, //!< an attached file fixes the station itself
+    Duplicate    //!< an earlier row of the same node fixes the station
+};
+
+//! How row \a row of \a fixes conflicts with the other fixes on its station.
+//! \a fileFixedStations is cwSurveyNode::fileFixedStations(). Follows the
+//! export: a file's own fix wins over every row, and of two rows the first
+//! wins.
+CAVEWHERE_LIB_EXPORT StationConflict classifyStationConflict(
+    const QList<cwFixStation>& fixes, qsizetype row,
+    const QHash<QString, QString>& fileFixedStations);
+
+//! Why a fix on \a station is dropped when the attached file \a fileName fixes
+//! that station itself. Shared by the export's error and the Fix Stations
+//! page, so both say the same thing.
+CAVEWHERE_LIB_EXPORT QString fileFixCollisionMessage(const QString& fileName,
+                                                     const QString& station);
 
 }
 

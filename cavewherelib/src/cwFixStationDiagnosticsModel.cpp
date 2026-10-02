@@ -16,10 +16,12 @@
 #include "cwFixStationModel.h"
 #include "cwGeoPoint.h"
 #include "cwLocalProjection.h"
+#include "cwStation.h"
 
 //Std includes
 #include <optional>
 
+using cwFixStationDiagnostics::StationConflict;
 using cwFixStationDiagnostics::StationReference;
 
 namespace {
@@ -128,6 +130,17 @@ cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwSurveyNode* node) :
     connect(m_node, &cwSurveyNode::surveyNetworkChanged, this, [this] {
         refreshRoles({StationErrorRole});
     });
+    // So does an attached file starting or stopping to fix a station, and a
+    // row arriving or leaving above a duplicate.
+    connect(m_node, &cwSurveyNode::attachedFixesChanged, this, [this] {
+        refreshRoles({StationErrorRole});
+    });
+    connect(m_fixStations, &QAbstractItemModel::rowsInserted, this, [this] {
+        refreshRoles({StationErrorRole});
+    });
+    connect(m_fixStations, &QAbstractItemModel::rowsRemoved, this, [this] {
+        refreshRoles({StationErrorRole});
+    });
 }
 
 cwFixStationDiagnosticsModel::~cwFixStationDiagnosticsModel() = default;
@@ -170,13 +183,13 @@ void cwFixStationDiagnosticsModel::augmentSourceChange(const QModelIndex& topLef
         // Same two inputs as the coordinate verdict, and it reads that verdict.
         derived.append(DatumEnabledRole);
     }
+    if (!derived.isEmpty()) {
+        emit dataChanged(mapFromSource(topLeft), mapFromSource(bottomRight), derived);
+    }
+    // A renamed row can start or stop duplicating any other row.
     if (roles.contains(cwFixStationModel::StationNameRole)) {
-        derived.append(StationErrorRole);
+        refreshRoles({StationErrorRole});
     }
-    if (derived.isEmpty()) {
-        return;
-    }
-    emit dataChanged(mapFromSource(topLeft), mapFromSource(bottomRight), derived);
 }
 
 void cwFixStationDiagnosticsModel::refreshRoles(const QList<int>& roles)
@@ -188,17 +201,36 @@ void cwFixStationDiagnosticsModel::refreshRoles(const QList<int>& roles)
     emit dataChanged(index(0, 0), index(rows - 1, 0), roles);
 }
 
-QString cwFixStationDiagnosticsModel::stationErrorMessage(const cwFixStation& fix) const
+QString cwFixStationDiagnosticsModel::stationErrorMessage(int row) const
 {
+    const QList<cwFixStation>& fixes = m_fixStations->fixStations();
+    const cwFixStation& fix = fixes.at(row);
     switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(),
                                                              m_node->network())) {
     case StationReference::Ok:
-        return QString();
+        return stationConflictMessage(fixes, row);
     case StationReference::Empty:
         return tr("This fix has no station name — enter the survey station it fixes.");
     case StationReference::Unknown:
         return tr("No survey station named \"%1\" in this cave — check the name.")
             .arg(fix.stationName().trimmed());
+    }
+    return QString();
+}
+
+QString cwFixStationDiagnosticsModel::stationConflictMessage(const QList<cwFixStation>& fixes,
+                                                            int row) const
+{
+    const QString station = fixes.at(row).stationName().trimmed();
+    const QHash<QString, QString> fileFixedStations = m_node->fileFixedStations();
+    switch (cwFixStationDiagnostics::classifyStationConflict(fixes, row, fileFixedStations)) {
+    case StationConflict::None:
+        return QString();
+    case StationConflict::FixedByFile:
+        return cwFixStationDiagnostics::fileFixCollisionMessage(
+            fileFixedStations.value(cwStation::canonicalKey(station)), station);
+    case StationConflict::Duplicate:
+        return tr("A fix above already fixes \"%1\" — this one is ignored.").arg(station);
     }
     return QString();
 }
@@ -246,7 +278,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case DomainErrorRole:            return domainErrorMessage(*fix);
     case CoordinateErrorRole:        return coordinateErrorMessage(*fix);
     case CoordinateOrderUnknownRole: return fix->state() == cwFixStation::NoSystem;
-    case StationErrorRole:           return stationErrorMessage(*fix);
+    case StationErrorRole:           return stationErrorMessage(index.row());
     case AvailableDatumsRole:        return availableDatums(*fix);
     case DatumEnabledRole:           return datumEnabled(*fix);
     default:                         break;
