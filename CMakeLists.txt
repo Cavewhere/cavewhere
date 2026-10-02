@@ -356,6 +356,10 @@ if(BUILD_TESTING)
         cavewherelib
     )
 
+    if(TARGET CaveWhereStyleplugin)
+        target_link_libraries(cavewhere-qml-test PRIVATE CaveWhereStyleplugin)
+    endif()
+
     # Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
     qt_import_qml_plugins(cavewhere-qml-test)
 
@@ -396,6 +400,10 @@ target_link_libraries(CaveWhere
     cavewherelib
     MarkScope
 )
+
+if(TARGET CaveWhereStyleplugin)
+    target_link_libraries(CaveWhere PRIVATE CaveWhereStyleplugin)
+endif()
 
 if(TARGET cavern)
     add_dependencies(CaveWhere cavern)

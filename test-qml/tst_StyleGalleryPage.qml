@@ -43,6 +43,10 @@ MainWindowTest {
             RootData.settings.appearanceSettings.colorScheme = mode.scheme
             const page = gotoGallery()
             tryVerify(() => Theme.dark === mode.dark, 5000, "Theme.dark should follow " + mode.name)
+            // The application palette reaches items one event-loop turn after Theme flips.
+            tryVerify(() => Qt.colorEqual(page.palette.windowText, Theme.text)
+                            && Qt.colorEqual(page.palette.base, Theme.fieldSurface),
+                      5000, "the application palette should reach the page in " + mode.name)
             return page
         }
 
@@ -57,6 +61,32 @@ MainWindowTest {
                     verify(findChild(page, cardName) !== null, cardName + " should exist in " + mode.name)
                 }
             }
+        }
+
+        function findButton(item, text) {
+            for (let i = 0; i < item.children.length; ++i) {
+                const child = item.children[i]
+                if (child.highlighted !== undefined && child.text === text) {
+                    return child
+                }
+                const found = findButton(child, text)
+                if (found !== null) {
+                    return found
+                }
+            }
+            return null
+        }
+
+        function test_styleIsCaveWhere() {
+            const page = gotoGallery()
+            const card = findChild(page, "cardButtons")
+            verify(card !== null, "cardButtons should exist")
+
+            const button = findButton(card, "Export")
+            verify(button !== null, "cardButtons should hold the plain Export button")
+            verify(button.background !== null, "the button should have a background")
+            compare(button.background.radius, Theme.controlRadius,
+                    "the button background should come from CaveWhereStyle")
         }
 
         function test_popupsOpen() {
