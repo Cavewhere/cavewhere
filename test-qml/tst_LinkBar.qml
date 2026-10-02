@@ -160,5 +160,16 @@ MainWindowTest {
             let next = chip.visible ? chip : sync
             verify(next.x - (crumb.x + crumb.width) >= Theme.linkBarButtonSpacing)
         }
+
+        function test_syncPopupSitsInsideWindowRightEdge() {
+            let popup = findChild(rootId.QQ.Window.window.contentItem, "reconnectPopup")
+            verify(popup !== null)
+            popup.open()
+            tryVerify(function() { return popup.opened })
+            const window = rootId.QQ.Window.window
+            compare(popup.x + popup.width, window.width - 5)
+            popup.close()
+            tryVerify(function() { return !popup.opened })
+        }
     }
 }

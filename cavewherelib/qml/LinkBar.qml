@@ -244,7 +244,7 @@ QQ.Item {
             needsInstallation: RootData.remote.gitHubIntegration.needsInstallation
 
             // Right-aligned popup positioning anchored below this button
-            readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
+            readonly property int _popupRightEdge: syncButtonId.QQ.Window.width - 5
             readonly property int _popupY: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
 
             onSyncRequested: {
@@ -280,6 +280,7 @@ QQ.Item {
 
             ReconnectPopup {
                 id: reconnectPopupId
+                objectName: "reconnectPopup"
                 parent: QC.Overlay.overlay
                 gitHub: RootData.remote.gitHubIntegration
                 x: syncButtonId._popupRightEdge - width
