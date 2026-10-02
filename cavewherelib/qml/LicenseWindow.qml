@@ -9,6 +9,7 @@ Window {
     height: 600
     visible: !RootData.license.hasReadLicenseAgreement
     color: Theme.surfaceMuted
+    palette: ThemePalette {}
     title: "License Agreement"
 
     modality: Qt.WindowModal

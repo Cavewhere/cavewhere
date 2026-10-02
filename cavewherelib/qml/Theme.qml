@@ -9,7 +9,7 @@ QtObject {
     // Track the color scheme: the Appearance setting first, the OS second
     readonly property bool dark: RootData.settings.appearanceSettings.dark
 
-    // Shows the application palette on the Colors page. Tokens below are fixed
+    // Shows the system palette on the Colors page. Tokens below are fixed
     // values; none of them reads this object.
     readonly property SystemPalette palette: SystemPalette { colorGroup: SystemPalette.Active }
 
@@ -24,8 +24,10 @@ QtObject {
     readonly property color textSubtle: dark ? "#A8A8A8" : "#6A6A6A"
     readonly property color textInverse: dark ? "#232323" : "#FFFFFF"
     readonly property color textLink: dark ? "#38BDD9" : "#086A86"
-    // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell),
-    // legible on the page background in both themes — danger is a fill, not text.
+    readonly property color textDisabled: Qt.rgba(text.r, text.g, text.b, disabledOpacity)
+    // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell)
+    // or a destructive button's label, legible on the page and on a button face
+    // in both themes — danger is a fill, not text.
     readonly property color errorText: dark ? "#f47067" : "#cf222e"
 
     // Accents & states
@@ -261,6 +263,8 @@ QtObject {
     readonly property color popupBorder: dark ? "#606060" : "#C2C2C2"
     readonly property color popupSelected: dark ? "#565656" : "#E4E4E4"
     readonly property color popupShadow: dark ? "#6B000000" : "#29000000"
+    // The palette's shadow role, which the fallback style draws its edges with.
+    readonly property color paletteShadow: "#000000"
     readonly property color toolTipSurface: dark ? "#FFFFFF" : "#2B2B2B"
     readonly property color toolTipText: dark ? "#232323" : "#FFFFFF"
     readonly property color overlayScrim: dark ? "#66000000" : "#40000000" // behind a modal popup
@@ -344,31 +348,5 @@ QtObject {
         readonly property color textStroke: "#aaaaaa"
         readonly property color borderActive: "#313131"
         readonly property color borderHover: "#ffffff"
-    }
-
-    // Pushes the tokens into the application palette, so every window, popup,
-    // fallback control, and palette-driven module (QQuickGit) inherits them.
-    readonly property ApplicationPalette applicationPalette: ApplicationPalette {
-        window: theme.background
-        windowText: theme.text
-        base: theme.fieldSurface
-        alternateBase: theme.rowAlternate
-        text: theme.text
-        button: theme.buttonSurface
-        buttonText: theme.text
-        brightText: theme.textInverse
-        highlight: theme.highlight
-        highlightedText: theme.text
-        placeholderText: theme.fieldPlaceholder
-        toolTipBase: theme.toolTipSurface
-        toolTipText: theme.toolTipText
-        link: theme.textLink
-        accent: theme.accent
-        light: theme.buttonHover
-        midlight: theme.border
-        mid: theme.border
-        dark: theme.controlBorder
-        shadow: "#000000"
-        disabledText: Qt.rgba(theme.text.r, theme.text.g, theme.text.b, theme.disabledOpacity)
     }
 }

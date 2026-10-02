@@ -5,4 +5,5 @@ T.ApplicationWindow {
     id: window
 
     color: Theme.background
+    palette: ThemePalette {}
 }

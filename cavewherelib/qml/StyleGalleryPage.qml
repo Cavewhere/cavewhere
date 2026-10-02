@@ -188,7 +188,7 @@ StandardPage {
                         QC.Button { text: "Down"; down: true }
                         QC.Button { text: "Checked"; checkable: true; checked: true }
                         QC.Button { text: "Disabled"; enabled: false }
-                        QC.Button { text: "Delete"; palette.buttonText: Theme.danger }
+                        QC.Button { text: "Delete"; palette.buttonText: Theme.errorText }
                     }
 
                     QQ.Flow {

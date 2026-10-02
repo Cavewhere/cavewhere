@@ -18,6 +18,18 @@ Rectangle {
     width: 1200
     height: 700
 
+    // The application gets this from the style's ApplicationWindow; the test
+    // window is a plain view, so the harness hands it the same palette.
+    ThemePalette {
+        id: themePaletteId
+    }
+
+    Window.onWindowChanged: {
+        if (Window.window !== null) {
+            Window.window.palette = themePaletteId
+        }
+    }
+
     TestcaseRecorder {
         id: recorderId
         rootItem: mainWindow

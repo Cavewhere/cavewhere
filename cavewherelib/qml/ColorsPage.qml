@@ -118,7 +118,7 @@ QC.ScrollView {
             function onDarkChanged() { layout.refreshModels() }
         }
 
-        // The application palette applies on a queued call, after darkChanged
+        // The system palette follows the scheme after darkChanged
         QQ.Connections {
             target: Theme.palette
             function onPaletteChanged() { layout.refreshModels() }

@@ -39,14 +39,27 @@ MainWindowTest {
             return RootData.pageView.currentPageItem
         }
 
+        // The test window is a plain view, where an existing menu or dialog keeps
+        // the palette it was created with; taking its parent again makes it read
+        // the window's palette. The application's window type updates popups live.
+        function adoptWindowPalette(page, popupName) {
+            const popup = findChild(page, popupName)
+            verify(popup !== null, popupName + " should exist")
+            const popupParent = popup.parent
+            popup.parent = null
+            popup.parent = popupParent
+        }
+
         function setMode(mode) {
             RootData.settings.appearanceSettings.colorScheme = mode.scheme
             const page = gotoGallery()
             tryVerify(() => Theme.dark === mode.dark, 5000, "Theme.dark should follow " + mode.name)
-            // The application palette reaches items one event-loop turn after Theme flips.
             tryVerify(() => Qt.colorEqual(page.palette.windowText, Theme.text)
                             && Qt.colorEqual(page.palette.base, Theme.fieldSurface),
-                      5000, "the application palette should reach the page in " + mode.name)
+                      5000, "the Theme palette should reach the page in " + mode.name)
+            for (const popupName of ["galleryMenu", "galleryDialog"]) {
+                adoptWindowPalette(page, popupName)
+            }
             return page
         }
 
