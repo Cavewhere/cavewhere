@@ -86,7 +86,7 @@ QC.ScrollView {
         property int sortIndex: 0 // 0 = name, 1 = color
         // The color tokens of Theme.qml's style block, in the order they appear there
         readonly property list<string> styleColorKeys: [
-            "canvas", "chrome", "chromeText", "rowAlternate",
+            "canvas", "chrome", "chromeText", "rowAlternate", "rowCurrent",
             "buttonSurface", "buttonBorder", "buttonHover", "buttonHoverBorder",
             "buttonPressed", "buttonPressedBorder", "buttonChecked", "buttonCheckedBorder",
             "buttonPrimary", "buttonPrimaryHover", "buttonPrimaryText", "buttonShadow",

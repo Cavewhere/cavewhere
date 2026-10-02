@@ -584,20 +584,15 @@ MainWindowTest {
             // Move the toggle's handle to the Perspective end too, so the shot is
             // self-consistent (a handle stuck at Orthognal while the Field of View
             // row shows would read as a bug). ToggleSlider.sliderPos is read-only —
-            // computed from the internal button's x — so nudge the button image,
-            // which also drives progress back through the normal binding.
+            // computed from the internal thumb's x — so nudge the thumb, which
+            // also drives progress back through the normal binding.
             let slider = findByName(panel, "projectionSlider");
             verify(slider, "found the projection slider");
             let toggle = findByName(slider, "slider");
             verify(toggle, "found the toggle inside the projection slider");
-            let kids = toggle.children;
-            for (let i = 0; kids && i < kids.length; ++i) {
-                if (kids[i].source !== undefined
-                        && String(kids[i].source).indexOf("buttonSlider") !== -1) {
-                    kids[i].x = toggle.sliderRange;
-                    break;
-                }
-            }
+            let thumb = findByName(toggle, "toggleSliderThumb");
+            verify(thumb, "found the toggle's thumb");
+            thumb.x = toggle.sliderRange;
             tryVerify(function() { return toggle.sliderPos >= 1.0; }, 2000,
                       "the projection toggle reached the Perspective end");
 

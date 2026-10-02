@@ -621,6 +621,24 @@ StandardPage {
                         }
                     }
 
+                    RowLayout {
+                        spacing: Theme.controlSpacing
+
+                        QC.Label {
+                            text: "Orthogonal"
+                        }
+
+                        ToggleSlider {
+                            objectName: "galleryToggleSlider"
+                            leftText: "     "
+                            rightText: "     "
+                        }
+
+                        QC.Label {
+                            text: "Perspective"
+                        }
+                    }
+
                     HelpArea {
                         id: labelHelpId
                         Layout.fillWidth: true

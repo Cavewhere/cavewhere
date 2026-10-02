@@ -29,9 +29,8 @@ QQ.Item {
     required property int cellRole
 
     //Which station or shot of the chunk the cell belongs to, for the
-    //alternating background
+    //alternating bands
     required property int indexInChunk
-    readonly property bool evenRow: cell.indexInChunk % 2 === 0
 
     //The chunk the row belongs to. A recycled delegate holds no chunk between
     //rows, and a cell with nothing behind it draws no background
@@ -47,9 +46,9 @@ QQ.Item {
     //cell's tap calls the move off
     property bool acceptsSplayMove: false
 
-    //How the cell's background reads: a station cell gets the gradient that
-    //ties a station to the shots around it, a shot cell a flat fill, and a
-    //splay cell the accent that keeps a cluster reading as a group. Which of
+    //How the cell's background reads: shots alternate in bands, a station cell
+    //is split between the bands of the shots above and below it, and a splay
+    //cell takes the accent that keeps a cluster reading as a group. Which of
     //the three a cell is follows from its column, so the model answers it
     readonly property bool stationCell: cell.chunk !== null
                                         && cell.model !== null
@@ -60,6 +59,22 @@ QQ.Item {
     readonly property bool splayCell: cell.chunk !== null
                                       && cell.model !== null
                                       && cell.model.isSplayCell(cell.cellRole)
+
+    //A station's lower half takes the band of the shot below it, and the last
+    //station of a chunk has none. The trailing blank station and shot come and
+    //go as rows of the view, so its count re-runs the lookup
+    readonly property bool shotBelow: cell.stationCell
+                                      && cell.view !== null
+                                      && cell.view.count > 0
+                                      && cell.model.modelRowForCellRole(cell.chunk,
+                                                                        cell.indexInChunk,
+                                                                        SurveyEditorCellIndex.ShotDistanceCell) >= 0
+
+    //The shots whose bands a station cell's halves take. The first station has
+    //no shot above it and the last none below, so each takes its one neighbor
+    readonly property int upperShotIndex: Math.max(cell.indexInChunk - 1, 0)
+    readonly property int lowerShotIndex: cell.shotBelow ? cell.indexInChunk
+                                                         : Math.max(cell.indexInChunk - 1, 0)
 
     //Hovering a remove action strikes through every cell the removal takes
     //with it, whether or not the cell holds a reading
@@ -98,6 +113,25 @@ QQ.Item {
     signal tapped()
     signal rightTapped()
     signal tabPressed()
+
+    //! True when shot \a shotIndex of the cell's chunk holds the keyboard
+    function isCurrentShot(shotIndex: int): bool {
+        if(cell.model === null || cell.chunk === null || cell.model.focusedRow < 0) {
+            return false
+        }
+        return cell.model.isShotCell(cell.model.focusedRole)
+                && cell.model.modelRowForCellRole(cell.chunk,
+                                                  shotIndex,
+                                                  SurveyEditorCellIndex.ShotDistanceCell) === cell.model.focusedRow
+    }
+
+    //! The band shot \a shotIndex draws across the station and shot columns
+    function shotFill(shotIndex: int): QQ.color {
+        if(cell.isCurrentShot(shotIndex)) {
+            return Theme.rowCurrent
+        }
+        return shotIndex % 2 === 0 ? Theme.background : Theme.rowAlternate
+    }
 
     function shouldHaveFocus(): bool {
         //A recycled delegate re-evaluates this with its model already gone
@@ -270,39 +304,39 @@ QQ.Item {
         }
     }
 
-    QQ.Gradient {
-        id: stationGradientId
-
-        QQ.GradientStop {
-            position: cell.evenRow ? 1.0 : 0.0
-            color: Theme.surfaceRaised
-        }
-        QQ.GradientStop {
-            position: cell.evenRow ? 0.4 : 0.6
-            color: Theme.surface
-        }
-    }
-
-    //A station's gradient, a shot's flat fill and a splay's accent are the same
-    //rectangle, since a cell is only ever one of the three, and a gradient
-    //overrides the color
+    //A shot's band and a splay's accent fill the cell. A station cell is split
+    //at its middle so each shot reads as one stripe across both kinds of column
     QQ.Rectangle {
         id: backgroundId
         anchors.fill: parent
-        visible: cell.stationCell || cell.shotCell || cell.splayCell
-        color: {
-            if(cell.splayCell) {
-                return Theme.splaySurface
-            }
-            return cell.evenRow ? Theme.surfaceRaised : Theme.surface
-        }
-        gradient: cell.stationCell ? stationGradientId : null
+        visible: cell.shotCell || cell.splayCell
+        color: cell.splayCell ? Theme.splaySurface : cell.shotFill(cell.indexInChunk)
+    }
+
+    QQ.Rectangle {
+        id: upperHalfId
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: parent.height / 2
+        visible: cell.stationCell
+        color: cell.shotFill(cell.upperShotIndex)
+    }
+
+    QQ.Rectangle {
+        id: lowerHalfId
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: upperHalfId.bottom
+        anchors.bottom: parent.bottom
+        visible: cell.stationCell
+        color: cell.shotFill(cell.lowerShotIndex)
     }
 
     QQ.Rectangle {
         id: borderId
         anchors.fill: parent
-        border.color: Theme.borderSubtle
+        border.color: Theme.border
         border.width: 1
         color: Theme.transparent
     }

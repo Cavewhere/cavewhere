@@ -3,6 +3,7 @@ import QtQuick.Controls as QC
 import QtTest
 import cavewherelib
 import cw.TestLib
+import QmlTestRecorder
 
 MainWindowTest {
     id: rootId
@@ -158,6 +159,7 @@ MainWindowTest {
 
                 screenshotTextEditingMenu(page, mode)
                 screenshotMainWindow(mode)
+                screenshotTripPage(mode)
             }
         }
 
@@ -187,6 +189,48 @@ MainWindowTest {
 
             verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-main-window").length > 0)
             mouseMove(rootId.mainWindow, rootId.mainWindow.width - 1, rootId.mainWindow.height - 1)
+        }
+
+        // A trip page's survey editor: the shot bands, and one shot holding the
+        // keyboard so its tint and the focused cell's highlight show together.
+        function screenshotTripPage(mode) {
+            const cave = RootData.region.cave(0)
+            verify(cave.rowCount() > 0, "the demo cave should have a trip")
+            const trip = cave.trip(0)
+            verify(trip.chunkCount > 0, "the demo trip should have survey data")
+            const chunk = trip.chunk(0)
+            const shotIndex = 2
+            verify(chunk.shotCount > shotIndex, "the demo chunk should have enough shots")
+
+            RootData.pageSelectionModel.currentPageAddress =
+                    "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "tripPage",
+                      5000, "should land on the trip page")
+
+            let view = null
+            tryVerify(() => {
+                view = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->surveyEditor->view")
+                return view !== null && view.model !== null
+            }, 5000, "the survey editor should be reachable")
+            const model = view.model
+
+            const shotRow = model.toModelRow(model.rowIndex(chunk, shotIndex, SurveyEditorRowIndex.ShotRow))
+            verify(shotRow >= 0, "the shot should have a model row")
+            model.setFocusedCell(model.cellIndex(shotRow, SurveyEditorCellIndex.ShotCompassCell))
+
+            // The page above the table is the list's header, so centering the
+            // focused shot scrolls the table up into the window.
+            view.positionViewAtIndex(model.focusedRow, ListView.Center)
+            tryCompare(view, "moving", false)
+
+            let cell = null
+            tryVerify(() => {
+                cell = findChild(view, "dataBox." + model.focusedRow + "." + SurveyEditorCellIndex.ShotCompassCell)
+                return cell !== null && cell.highlightVisible
+            }, 5000, "the shot's compass cell should hold the keyboard")
+
+            verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-trip-page").length > 0)
         }
 
         // The right-click menu of a text field, drawn into the window so the

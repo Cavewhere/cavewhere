@@ -59,10 +59,6 @@
         <file>icons/Information20x20.png</file>
         <file>icons/moreArrowWhite.png</file>
         <file>icons/moreArrowDown.png</file>
-        <file>icons/toggleSlider/greenSliderBackground.png</file>
-        <file>icons/toggleSlider/graySliderBackGround.png</file>
-        <file>icons/toggleSlider/buttonSlider.png</file>
-        <file>icons/toggleSlider/blueSliderBackground.png</file>
         <file>docs/FileFormatDocumentation.txt</file>
         <file>src/qt.proto</file>
         <file>src/cavewhere.proto</file>

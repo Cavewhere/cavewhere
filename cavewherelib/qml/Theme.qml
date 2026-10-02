@@ -235,6 +235,9 @@ QtObject {
     readonly property color chrome: dark ? "#232323" : "#DADCDE"
     readonly property color chromeText: dark ? "#FFFFFF" : "#1E1E1E"
     readonly property color rowAlternate: dark ? "#3A3A3A" : "#E7E7E7"
+    // The shot that holds the keyboard in the survey editor: a faint band,
+    // fainter than highlight, which marks the focused cell inside it.
+    readonly property color rowCurrent: dark ? "#2B4048" : "#E2F2F6"
 
     // Buttons
     readonly property color buttonSurface: dark ? "#454545" : "#FFFFFF"
