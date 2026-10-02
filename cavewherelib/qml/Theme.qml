@@ -172,6 +172,12 @@ QtObject {
     // reads as a thinner mark than the row's own bar.
     readonly property int taskDetailBarHeight: 4
 
+    // Error popover: the messages a survey tree row's error badges stand for.
+    // Wide enough for a fix-station message to wrap onto two lines, not five.
+    readonly property int errorPopoverWidth: Math.round(320 * fontScale)
+    // Long enough for the pointer to cross from the badge onto the card.
+    readonly property int errorPopoverHoverCloseDelay: 300
+
     // Icon sizes
     readonly property int iconSizeButton: 16
     readonly property int iconSizeSmall: 24

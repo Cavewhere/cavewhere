@@ -742,5 +742,124 @@ MainWindowTest {
             compare(treeRowNames(tree), ["Alpha Cave", "Beta Cave", "Trip A", "Trip B"],
                     "and its trips are still the rows under it")
         }
+
+        // --- C4c.2: the row's badges read out their messages ---
+
+        function addUtm13NFix(cave, name, easting) {
+            cave.fixStations.addFixStation()
+            const index = cave.fixStations.index(cave.fixStations.count - 1)
+            cave.fixStations.setData(index, name, FixStationModel.StationNameRole)
+            cave.fixStations.setData(index, "EPSG:32613", FixStationModel.InputCSRole)
+            cave.fixStations.setData(index, easting, FixStationModel.EastingRole)
+            cave.fixStations.setData(index, 4430000.0, FixStationModel.NorthingRole)
+            cave.fixStations.setData(index, 1655.0, FixStationModel.ElevationRole)
+        }
+
+        function errorIconBar(page, rowObjectName) {
+            let bar = null
+            tryVerify(() => {
+                          const row = findChild(page, rowObjectName)
+                          bar = row === null ? null : findChild(row, "errorIconBar")
+                          return bar !== null
+                      }, 5000, rowObjectName + " must carry its error badges")
+            return bar
+        }
+
+        // The message labels the open popover lists, by their text.
+        function popoverMessages(popover) {
+            const messages = []
+            const visit = (item) => {
+                if(item.objectName === "errorMessage" && item.visible) {
+                    messages.push(item.text)
+                }
+                for(let i = 0; i < item.children.length; i++) {
+                    visit(item.children[i])
+                }
+            }
+            visit(popover.contentItem)
+            return messages
+        }
+
+        function test_nodeWarningBadgeOpensItsMessages() {
+            const warned = addCave("Warned Cave", 0)
+            addCave("Clean Cave", 0)
+
+            //One fix in its domain gives the project a frame, and a transposed
+            //leading digit puts the second outside UTM 13N's valid range.
+            addUtm13NFix(warned, "anchor", 478000.0)
+            addUtm13NFix(warned, "BAD", 1478000.0)
+            tryVerify(() => warned.errorModel.warningCount > 0, 5000,
+                      "the out-of-domain fix warns on its cave")
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
+            tree.surveyTree.sortColumn = -1
+            tryVerify(() => treeRowNames(tree).join() === "Warned Cave,Clean Cave",
+                      5000, "the caves keep the order they were added in")
+
+            const warnedBar = errorIconBar(page, "caveDelegate0")
+            const cleanBar = errorIconBar(page, "caveDelegate1")
+
+            tryVerify(() => findChild(warnedBar, "warningBadge").visible, 5000,
+                      "a node with a warning shows the warning badge")
+            verify(!findChild(warnedBar, "noErrorBadge").visible)
+
+            verify(!findChild(cleanBar, "warningBadge").visible,
+                   "a node without a warning has no warning badge")
+            verify(!findChild(cleanBar, "fatalBadge").visible,
+                   "and no fatal badge")
+            verify(findChild(cleanBar, "noErrorBadge").visible,
+                   "it keeps the good icon instead")
+
+            const popover = findChild(warnedBar, "errorPopover")
+            verify(popover !== null, "the badges carry a popover")
+            verify(!popover.opened)
+
+            mouseClick(warnedBar)
+            tryVerify(() => popover.opened, 5000, "a tap opens the messages")
+            verify(warnedBar.pinned, "and pins them open")
+            tryVerify(() => popover.activeFocus, 5000, "a pinned popover takes focus for Escape")
+
+            let messages = []
+            tryVerify(() => {
+                          messages = popoverMessages(popover)
+                          return messages.length > 0
+                      }, 5000, "the popover lists the node's messages")
+            verify(messages.some(message => message.indexOf("BAD") >= 0),
+                   "the list names the offending station: " + messages.join(" | "))
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !popover.opened, 5000, "Escape closes the popover")
+            verify(!warnedBar.pinned)
+
+            mouseClick(warnedBar)
+            tryVerify(() => popover.opened, 5000, "a second tap opens it again")
+            mouseClick(page, page.width / 2, page.height - Theme.treeRowHeight)
+            tryVerify(() => !popover.opened, 5000, "a press elsewhere closes the popover")
+
+            const cleanPopover = findChild(cleanBar, "errorPopover")
+            mouseClick(cleanBar)
+            verify(!cleanPopover.opened, "a node without a message has nothing to open")
+        }
+
+        function test_hoveringTheBadgePeeksTheMessagesOpen() {
+            const warned = addCave("Warned Cave", 0)
+            addUtm13NFix(warned, "anchor", 478000.0)
+            addUtm13NFix(warned, "BAD", 1478000.0)
+            tryVerify(() => warned.errorModel.warningCount > 0, 5000,
+                      "the out-of-domain fix warns on its cave")
+
+            const page = gotoDataMainPage()
+            const bar = errorIconBar(page, "caveDelegate0")
+            const popover = findChild(bar, "errorPopover")
+
+            mouseMove(bar)
+            tryVerify(() => popover.opened, 5000, "hovering the badges peeks the popover open")
+            verify(!bar.pinned, "a peek does not pin it")
+
+            mouseMove(page, page.width / 2, page.height - Theme.treeRowHeight)
+            tryVerify(() => !popover.opened, 5000, "leaving the badges closes the peek")
+        }
     }
 }
