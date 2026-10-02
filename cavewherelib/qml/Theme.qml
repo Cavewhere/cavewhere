@@ -7,8 +7,8 @@ pragma Singleton
 QtObject {
     id: theme
 
-    // Track the OS/application color scheme
-    readonly property bool dark: Qt.application.styleHints.colorScheme === Qt.Dark
+    // Track the color scheme: the Appearance setting first, the OS second
+    readonly property bool dark: RootData.settings.appearanceSettings.dark
 
     // Base palette hook using the active system palette
     readonly property SystemPalette palette: SystemPalette { colorGroup: SystemPalette.Active }

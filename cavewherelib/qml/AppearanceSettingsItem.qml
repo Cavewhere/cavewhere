@@ -6,6 +6,42 @@ import cavewherelib
 ColumnLayout {
     spacing: 20
 
+    // ── Color Scheme ────────────────────────────────────────────────────────
+
+    QC.GroupBox {
+        title: "Color scheme"
+
+        QC.ButtonGroup { id: colorSchemeGroup }
+
+        RowLayout {
+            spacing: 12
+
+            QC.RadioButton {
+                objectName: "systemSchemeRadioButton"
+                text: "System"
+                checked: RootData.settings.appearanceSettings.colorScheme === AppearanceSettings.System
+                QC.ButtonGroup.group: colorSchemeGroup
+                onClicked: RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.System
+            }
+
+            QC.RadioButton {
+                objectName: "lightSchemeRadioButton"
+                text: "Light"
+                checked: RootData.settings.appearanceSettings.colorScheme === AppearanceSettings.Light
+                QC.ButtonGroup.group: colorSchemeGroup
+                onClicked: RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Light
+            }
+
+            QC.RadioButton {
+                objectName: "darkSchemeRadioButton"
+                text: "Dark"
+                checked: RootData.settings.appearanceSettings.colorScheme === AppearanceSettings.Dark
+                QC.ButtonGroup.group: colorSchemeGroup
+                onClicked: RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Dark
+            }
+        }
+    }
+
     // ── Font Family ─────────────────────────────────────────────────────────
 
     QC.GroupBox {

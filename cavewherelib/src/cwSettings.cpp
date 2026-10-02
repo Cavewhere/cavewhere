@@ -3,6 +3,7 @@
 #include "cwJobSettings.h"
 #include "cwPDFSettings.h"
 #include "cwFontSettings.h"
+#include "cwAppearanceSettings.h"
 #include "cwSketchSettings.h"
 #include "cwRenderingSettings.h"
 #include "cwUnitSettings.h"
@@ -30,6 +31,7 @@ void cwSettings::initialize()
     cwJobSettings::initialize();
     cwPDFSettings::initialize();
     cwFontSettings::initialize();
+    cwAppearanceSettings::initialize();
     cwSketchSettings::initialize();
     cwRenderingSettings::initialize();
     cwUnitSettings::initialize();
@@ -50,6 +52,10 @@ cwPDFSettings* cwSettings::pdfSettings() const {
 
 cwFontSettings* cwSettings::fontSettings() const {
     return cwFontSettings::instance();
+}
+
+cwAppearanceSettings* cwSettings::appearanceSettings() const {
+    return cwAppearanceSettings::instance();
 }
 
 cwSketchSettings* cwSettings::sketchSettings() const {

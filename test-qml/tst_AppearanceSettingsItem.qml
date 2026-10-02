@@ -40,6 +40,31 @@ MainWindowTest {
 
         function cleanup() {
             resetToDefaults()
+            RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.System
+        }
+
+        // ── Color scheme ─────────────────────────────────────────────────────
+
+        function findSchemeButton(name) {
+            return ObjectFinder.findObjectByChain(rootId, "rootId->appearanceSettings->GroupBox->" + name)
+        }
+
+        function test_darkSchemeMakesThemeDark() {
+            let btn = findSchemeButton("darkSchemeRadioButton")
+            verify(btn !== null, "darkSchemeRadioButton not found")
+            mouseClick(btn)
+            compare(RootData.settings.appearanceSettings.colorScheme, AppearanceSettings.Dark)
+            tryVerify(() => Theme.dark)
+        }
+
+        function test_lightSchemeMakesThemeLight() {
+            RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Dark
+            tryVerify(() => Theme.dark)
+            let btn = findSchemeButton("lightSchemeRadioButton")
+            verify(btn !== null, "lightSchemeRadioButton not found")
+            mouseClick(btn)
+            compare(RootData.settings.appearanceSettings.colorScheme, AppearanceSettings.Light)
+            tryVerify(() => !Theme.dark)
         }
 
         // ── Font family ──────────────────────────────────────────────────────
