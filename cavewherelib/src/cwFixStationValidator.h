@@ -70,7 +70,9 @@ public:
     struct FixCandidate {
         cwSurveyNode* node = nullptr;
         QUuid fixId;
-        cwGeoPoint global;  //!< reprojected into the project's local projection
+        //! Reprojected into the project's local projection; the origin for a
+        //! domain outlier, which is judged without the frame.
+        cwGeoPoint global;
         //! Whether the fix's raw coordinate is plausible for its own input CS
         //! (Part A). A domain-bad fix is a certain outlier on its own, and Part
         //! B leaves it alone so one bad coordinate raises one warning.
@@ -101,8 +103,10 @@ public:
     //! changes any one verdict.
     static Classification classifyCandidates(const QList<FixCandidate>& candidates);
 
-    //! Gather every cave's fix stations, reproject into the project's frame, and
-    //! classify. The region-bound wrapper over classifyCandidates().
+    //! Gather every node's fix stations, reproject into the project's frame, and
+    //! classify. The region-bound wrapper over classifyCandidates(). Domain
+    //! outliers are found with or without a frame; the distance check runs only
+    //! once the project is georeferenced.
     Classification currentClassification() const;
 
     QString warningMessage() const { return m_warningMessage; }

@@ -10,6 +10,7 @@
 #include "cwClinoReading.h"
 #include "cwCompassReading.h"
 #include "cwDistanceReading.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwGridConvergence.h"
 #include "cwShot.h"
 #include "cwStation.h"
@@ -262,12 +263,19 @@ QString verticalClinoText(const cwClinoReading& reading)
 // (cwFixStation::refresh() zeroes them before it branches), so exporting one
 // would anchor the station at the origin and move the whole cave there.
 // Dropping it with a message is the only honest option — a coordinate we can't
-// read is not a coordinate at 0, 0, 0.
+// read is not a coordinate at 0, 0, 0. A Valid fix outside its own system's
+// domain is dropped too: cwLocalProjectionManager leaves it out of the frame, so
+// writing it would put a *cs in a solve whose *cs out the frame never named.
 QString fixUnusableReason(const cwFixStation& fix)
 {
     switch (fix.state()) {
     case cwFixStation::Valid:
-        return QString();
+        if (cwFixStationDiagnostics::isDomainValid(fix)) {
+            return QString();
+        }
+        return QStringLiteral("Fix on station \"%1\" has a coordinate outside the valid range "
+                              "for its coordinate system")
+            .arg(fix.stationName());
     case cwFixStation::Empty:
         return QStringLiteral("Fix on station \"%1\" has no coordinate")
             .arg(fix.stationName());

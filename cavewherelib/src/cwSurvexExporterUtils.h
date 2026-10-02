@@ -13,6 +13,7 @@
 //Our includes
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwGeoPoint.h"
 #include "cwSurvexCS.h"
 
@@ -168,11 +169,15 @@ enum class OutputCSPolicy {
 };
 
 //! The CS a fix can contribute to a file that leaves the project: the WGS84 UTM
-//! zone containing it, or a projected CS as it stands. A fix that places
-//! nothing contributes nothing — cwFixStation::hasPlacedCoordinate.
+//! zone containing it, or a projected CS as it stands. Only a fix the export
+//! writes contributes: one that places a coordinate
+//! (cwFixStation::hasPlacedCoordinate) inside its system's domain
+//! (cwFixStationDiagnostics::isDomainValid).
 inline QString shareableCSForFix(const cwFixStation& fix)
 {
-    if (!fix.hasPlacedCoordinate()) {
+    const bool isWritten = fix.hasPlacedCoordinate()
+        && cwFixStationDiagnostics::isDomainValid(fix);
+    if (!isWritten) {
         return QString();
     }
     // Empty for a system PROJ can't read, and for one it can read but whose
@@ -278,6 +283,9 @@ QString fixUnusableReason(const cwFixStation& fix);
  * - A fix whose coordinate can't be read — no CS to read it under, unreadable
  *   text, or no text at all — is dropped with what's wrong with it. Its
  *   components are 0, so writing it would silently relocate the cave.
+ * - A fix whose coordinate lies outside its own CS's domain
+ *   (cwFixStationDiagnostics::isDomainValid) is dropped, matching the
+ *   project frame, which leaves the same fix out.
  */
 QList<cwFixStation> validateFixStations(const QList<cwFixStation>& fixes,
                                         const QSet<QString>& stationNamesLower,

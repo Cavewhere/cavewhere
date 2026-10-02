@@ -69,7 +69,7 @@ MainWindowTest {
         }
 
         // One good fix, so the project has a frame. A domain-invalid fix can't
-        // anchor one, and the validator judges no fix until there is one.
+        // anchor one, and the distance check runs only once there is a frame.
         function addAnchorFix() {
             addUtm13NFix("anchor", 478000.0, 4430000.0, 1655.0)
         }

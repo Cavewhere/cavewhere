@@ -716,6 +716,30 @@ TEST_CASE("revalidate flags a fix outside its CS's valid domain",
     CHECK(goodCave->errorModel()->warningCount() == 0);
 }
 
+TEST_CASE("revalidate flags a fix outside its CS's valid domain with no project frame",
+          "[cwFixStationValidator]")
+{
+    // The only fix is out of its zone, so the project frame leaves it out and the
+    // project has none. The survex export drops the fix as well, so Part A is
+    // the one place that says why; it needs no frame to say it. Nothing is
+    // off-screen, though, so the render-view summary stays quiet.
+    cwCavingRegion region;
+
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("B"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+
+    REQUIRE_FALSE(region.geoReference()->hasCoordinateSystem());
+    REQUIRE(cave->errorModel()->warningCount() == 1);
+    CHECK(warningText(cave).contains(
+        QStringLiteral("Fix station \"B\" has a coordinate outside the valid range for its "
+                       "coordinate system")));
+    CHECK(region.fixStationValidator()->warningMessage().isEmpty());
+    CHECK(region.fixStationValidator()->outlierCount() == 0);
+}
+
 TEST_CASE("revalidate flags a distant in-domain cave",
           "[cwFixStationValidator]")
 {

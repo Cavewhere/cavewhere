@@ -17,7 +17,9 @@
 #include "cwShot.h"
 #include "cwStation.h"
 #include "cwSurveyChunk.h"
+#include "cwErrorModel.h"
 #include "cwExporterTask.h"
+#include "cwFixStationDiagnostics.h"
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwSurvexExporterTripTask.h"
@@ -401,6 +403,81 @@ TEST_CASE("Survex region export: a fix the validator drops gives the block no lo
     manager.setRegion(fixture.region.get());
     manager.waitToFinish();
     CHECK_FALSE(manager.hasSolveError());
+}
+
+TEST_CASE("Survex region export: an out-of-domain fix on a real station gives the block no location",
+          "[cwSurvexExporter][cwSurvexExporter_Auto]")
+{
+    // a1 is in the survey, but its easting has a transposed leading digit, ~1000
+    // km east of UTM 13N. The project frame leaves the fix out, so the export
+    // must too: written, it would bring a *cs into a solve with no *cs out.
+    auto fixture = buildUnfixedFixture(QStringLiteral("OutOfDomainCave"),
+                                       QStringLiteral("OutOfDomainTrip"));
+    REQUIRE(fixture.calibration->autoDeclination());
+    const cwFixStation outOfDomain = makeFix(QStringLiteral("a1"), kUtmZ13N,
+                                             1478000.0, 4430000.0, 1655.0);
+    REQUIRE(outOfDomain.state() == cwFixStation::Valid);
+    REQUIRE_FALSE(cwFixStationDiagnostics::isDomainValid(outOfDomain));
+    fixture.cave->fixStations()->appendFixStation(outOfDomain);
+
+    const QString output = exportRegion(fixture.region.get());
+    INFO(output.toStdString());
+
+    const qsizetype fallbackAt = output.indexOf(QStringLiteral("*fix a1 0 0 0"));
+    REQUIRE(fallbackAt >= 0);
+    CHECK_FALSE(output.contains(QStringLiteral("*fix a1 1478000")));
+    CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
+    CHECK(output.indexOf(QStringLiteral("*cs "), fallbackAt) < 0);
+    CHECK_FALSE(output.contains(QStringLiteral("*cs out")));
+
+    // The export says why it dropped the fix.
+    cwSurvexExporterCaveTask task;
+    QByteArray taskOutput;
+    QBuffer buffer(&taskOutput);
+    REQUIRE(buffer.open(QIODevice::WriteOnly));
+    {
+        QTextStream stream(&buffer);
+        REQUIRE(task.writeCave(stream, fixture.cave->data(), QString()));
+    }
+    CHECK(task.errors().join(QChar(' ')).contains(
+        QStringLiteral("Fix on station \"a1\" has a coordinate outside the valid range")));
+
+    cwLinePlotManager manager;
+    manager.setRegion(fixture.region.get());
+    manager.waitToFinish();
+    CHECK_FALSE(manager.hasSolveError());
+
+    // The project has no frame, and the cave page still names the dropped fix.
+    CHECK_FALSE(fixture.region->geoReference()->hasCoordinateSystem());
+    CHECK(fixture.cave->errorModel()->toStringList().join(QChar(' ')).contains(
+        QStringLiteral("Fix station \"a1\" has a coordinate outside the valid range for its "
+                       "coordinate system")));
+}
+
+TEST_CASE("Survex region export: a fix inside its domain is written as entered",
+          "[cwSurvexExporter][cwSurvexExporter_Auto]")
+{
+    auto fixture = buildBoulderUtmFixture();
+    REQUIRE(cwFixStationDiagnostics::isDomainValid(
+        fixture.cave->fixStations()->fixStationAt(0)));
+
+    const QString output = exportRegion(fixture.region.get());
+    INFO(output.toStdString());
+
+    const qsizetype csAt = output.indexOf(QStringLiteral("*cs EPSG:32613"));
+    const qsizetype fixAt = output.indexOf(QStringLiteral("*fix a1 478000"));
+    REQUIRE(csAt >= 0);
+    REQUIRE(fixAt >= 0);
+    CHECK(csAt < fixAt);
+    CHECK_FALSE(output.contains(QStringLiteral("*fix a1 0 0 0")));
+    CHECK(output.count(QStringLiteral("*declination auto")) == 1);
+
+    cwLinePlotManager manager;
+    manager.setRegion(fixture.region.get());
+    manager.waitToFinish();
+    CHECK_FALSE(manager.hasSolveError());
+    CHECK_FALSE(fixture.cave->errorModel()->toStringList().join(QChar(' ')).contains(
+        QStringLiteral("outside the valid range")));
 }
 
 TEST_CASE("cwSurvexExporterTripTask: writeTrip under an enclosing *declination auto writes no declination line",

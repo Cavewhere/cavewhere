@@ -135,11 +135,7 @@ cwFixStationValidator::classifyCandidates(const QList<FixCandidate>& candidates)
 cwFixStationValidator::Classification
 cwFixStationValidator::currentClassification() const
 {
-    // Without a project frame there is no origin to measure a distance from,
-    // and fixes entered in different input CSs would be compared as raw
-    // coordinates — degrees against meters. Skip classification entirely until
-    // the project is georeferenced.
-    if (m_region == nullptr || !m_region->geoReference()->hasCoordinateSystem()) {
+    if (m_region == nullptr) {
         return {};
     }
     return classifyCandidates(gatherCandidates());
@@ -176,24 +172,32 @@ cwFixStationValidator::gatherCandidates() const
                 continue;
             }
 
-            const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
-
             // Part A: does the raw coordinate even belong to its own CS? This is
-            // independent of the project's frame, so it still judges the fix the
-            // frame was derived from — the one Part B always measures at zero.
-            const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix);
+            // independent of the project's frame, so it also judges a fix the
+            // frame and the survex export both leave out.
+            if (!cwFixStationDiagnostics::isDomainValid(fix)) {
+                candidates.append(FixCandidate{node, fix.id(), cwGeoPoint(), false});
+                continue;
+            }
 
-            // currentClassification() guarantees frameCS is non-empty. The
-            // memoizing form matters here: frameCS is the derived local
+            // Part B needs a frame: without one there is no origin to measure a
+            // distance from, and fixes entered in different input CSs would be
+            // compared as raw coordinates — degrees against meters.
+            if (frameCS.isEmpty()) {
+                continue;
+            }
+
+            // The memoizing form matters here: frameCS is the derived local
             // projection, which no fix's inputCS ever equals, so every fix in
             // every node needs a real transform — and revalidate() runs on each
             // fix-station edit and each solve.
+            const cwGeoPoint p(fix.easting(), fix.northing(), fix.elevation());
             const std::optional<cwGeoPoint> global =
                 cwCoordinateTransform::transformPoint(inputCS, frameCS, p);
             if (!global.has_value()) {
                 continue;
             }
-            candidates.append(FixCandidate{node, fix.id(), *global, domainValid});
+            candidates.append(FixCandidate{node, fix.id(), *global, true});
         }
     }
     return candidates;
@@ -291,23 +295,29 @@ void cwFixStationValidator::revalidate()
     // Region-wide summary for the render-view overlay. A domain-bad fix is the
     // most certain error, so it names the culprit first; otherwise the first
     // distance outlier in region order (both lists follow the tree's pre-order). The
-    // message stays generic so it covers either kind.
+    // message stays generic so it covers either kind. Without a frame nothing is
+    // off-screen: the cave sits at the fallback origin and the per-node warning
+    // says everything.
+    const bool hasFrame = m_region != nullptr && m_region->geoReference()->hasCoordinateSystem();
     cwSurveyNode* firstOffender = nullptr;
-    for (const auto& c : classification.domainOutliers) {
-        if (c.node != nullptr) {
-            firstOffender = c.node;
-            break;
-        }
-    }
-    if (firstOffender == nullptr) {
-        for (const auto& c : classification.outliers) {
+    int total = 0;
+    if (hasFrame) {
+        for (const auto& c : classification.domainOutliers) {
             if (c.node != nullptr) {
                 firstOffender = c.node;
                 break;
             }
         }
+        if (firstOffender == nullptr) {
+            for (const auto& c : classification.outliers) {
+                if (c.node != nullptr) {
+                    firstOffender = c.node;
+                    break;
+                }
+            }
+        }
+        total = int(classification.domainOutliers.size() + classification.outliers.size());
     }
-    const int total = int(classification.domainOutliers.size() + classification.outliers.size());
     QString summary;
     if (firstOffender != nullptr) {
         summary = QStringLiteral("Part of your survey is off-screen — a fix-station "
