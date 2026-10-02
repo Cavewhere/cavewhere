@@ -57,6 +57,8 @@ public:
 
 signals:
     void scaleChanged();
+    //! The scale's stored units or values moved, ratio or not — see cwScale::dataChanged()
+    void scaleDataChanged();
     void northUpChanged();
     void scaleObjectChanged();
     void matrixChanged();

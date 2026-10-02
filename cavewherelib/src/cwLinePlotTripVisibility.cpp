@@ -11,28 +11,21 @@
 
 cwLinePlotTripVisibility::cwLinePlotTripVisibility(cwTrip* trip,
                                                    QObject* parent)
-    : QObject(parent),
+    : cwVisibilityProxy(parent),
       m_trip(trip)
 {
 }
 
-void cwLinePlotTripVisibility::setTarget(cwRenderLinePlot* linePlot, int vertexStart, int vertexCount)
+void cwLinePlotTripVisibility::setTarget(cwRenderLinePlot* linePlot,
+                                         cwLinePlotGeometry::VertexRange range)
 {
     m_linePlot = linePlot;
-    m_vertexStart = vertexStart;
-    m_vertexCount = vertexCount;
+    m_range = range;
 }
 
-void cwLinePlotTripVisibility::setVisible(bool visible)
+void cwLinePlotTripVisibility::applyVisible(bool visible)
 {
-    if(m_visible == visible) {
-        return;
-    }
-
-    m_visible = visible;
     if(m_linePlot) {
-        m_linePlot->setRangeVisible(m_vertexStart, m_vertexCount, visible);
+        m_linePlot->setRangeVisible(m_range.start, m_range.count, visible);
     }
-
-    emit visibleChanged();
 }

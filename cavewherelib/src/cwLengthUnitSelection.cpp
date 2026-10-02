@@ -7,9 +7,6 @@
 
 #include "cwLengthUnitSelection.h"
 
-//Qt includes
-#include <QSettings>
-
 //Std includes
 #include <array>
 
@@ -53,23 +50,9 @@ cwUnits::LengthUnit cwLengthUnitSelection::coerceToSet(cwUnits::LengthUnit unit)
 
 void cwLengthUnitSelection::setUnit(cwUnits::LengthUnit unit)
 {
-    // setUnit is the explicit-choice path (the popup / an index pick): it both
-    // applies the unit and persists it, so a stored value marks a deliberate
-    // user choice. Seeds and loads go through applyUnit() and never persist.
-    const cwUnits::LengthUnit coerced = coerceToSet(unit);
-    if (m_unit == coerced) {
-        return;
-    }
-    m_unit = coerced;
-    if (!m_settingsKey.isEmpty()) {
-        QSettings settings;
-        settings.setValue(m_settingsKey, int(m_unit));
-    }
-    emit unitChanged();
-}
-
-void cwLengthUnitSelection::applyUnit(cwUnits::LengthUnit unit)
-{
+    // The one place the current unit changes — both the project-driven seed and
+    // the popup pick land here. Nothing is persisted: the selection is in-memory,
+    // so it always re-follows the project's unit system on the next change.
     const cwUnits::LengthUnit coerced = coerceToSet(unit);
     if (m_unit == coerced) {
         return;
@@ -99,47 +82,6 @@ void cwLengthUnitSelection::setIndex(int index)
 QString cwLengthUnitSelection::name() const
 {
     return cwUnits::unitName(m_unit);
-}
-
-void cwLengthUnitSelection::setSettingsKey(const QString& key)
-{
-    if (m_settingsKey == key) {
-        return;
-    }
-    m_settingsKey = key;
-    emit settingsKeyChanged();
-    loadFromSettings();
-}
-
-void cwLengthUnitSelection::setDefaultUnit(cwUnits::LengthUnit unit)
-{
-    m_defaultUnit = coerceToSet(unit);
-    // A persisted value is a deliberate user choice and always wins. Otherwise
-    // apply the default *without* persisting, so the selection stays "unset" and
-    // keeps following later project changes until the user explicitly picks.
-    if (!m_settingsKey.isEmpty()) {
-        QSettings settings;
-        if (settings.contains(m_settingsKey)) {
-            return;
-        }
-    }
-    applyUnit(m_defaultUnit);
-}
-
-void cwLengthUnitSelection::loadFromSettings()
-{
-    if (m_settingsKey.isEmpty()) {
-        return;
-    }
-    // A stored value is the user's choice; absent one, fall back to the default.
-    // Neither path persists (applyUnit) — only an explicit setUnit writes the key.
-    QSettings settings;
-    if (settings.contains(m_settingsKey)) {
-        // applyUnit clamps an unlisted/corrupt value to metres.
-        applyUnit(static_cast<cwUnits::LengthUnit>(settings.value(m_settingsKey).toInt()));
-    } else {
-        applyUnit(m_defaultUnit);
-    }
 }
 
 double cwLengthUnitSelection::fromMeters(double meters) const

@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "cwLazClipOperation.h"
+#include "cwGeoPoint.h"
 
 //Qt includes
 #include <QByteArray>
@@ -152,11 +153,6 @@ OutputFormat chooseOutputFormat(const QList<U8>& formats,
     return out;
 }
 
-bool isFinite(const cwGeoPoint& p)
-{
-    return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
-}
-
 bool isFinite(const QList<QVector3D>& poly)
 {
     for (const QVector3D& p : poly) {
@@ -222,9 +218,6 @@ Monad::Result<qint64> clipOneSource(const cwLazClipSource& src,
     cwCoordinateTransform transform(sourceCS, request.outputWktCS);
     const bool hasTransform = !transform.isIdentity();
 
-    const double ox = request.worldOrigin.x;
-    const double oy = request.worldOrigin.y;
-    const double oz = request.worldOrigin.z;
     const QMatrix4x4& view = request.viewMatrix;
     const bool keep = (request.mode == cwLazClipOperation::Mode::Keep);
 
@@ -243,9 +236,9 @@ Monad::Result<qint64> clipOneSource(const cwLazClipSource& src,
     // global == output-CS coords (post-transform); writes the kept point.
     // srcPoint carries the full source attribute record into outPoint;
     // LASpoint::operator= bridges legacy↔extended formats, then only XYZ is
-    // re-encoded against the output header (reprojected + worldOrigin-anchored).
+    // re-encoded against the output header (reprojected into the output CS).
     auto testAndWrite = [&](double gx, double gy, double gz, const LASpoint& srcPoint) {
-        const QVector3D v(float(gx - ox), float(gy - oy), float(gz - oz));
+        const QVector3D v{float(gx), float(gy), float(gz)};
         const QVector3D eye = view.map(v);
         const QPointF eyeXY(double(eye.x()), double(eye.y()));
         // BBox prefilter — 4 comparisons vs O(V) containsPoint. Big win
@@ -426,11 +419,10 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
                     EmptyOutputPath));
                 return;
             }
-            if (!isFinite(request.worldOrigin)
-                || !isFinite(request.polygonWorldXYZ)
+            if (!isFinite(request.polygonWorldXYZ)
                 || !isFinite(request.viewMatrix)) {
                 promise.addResult(Result(
-                    QStringLiteral("Polygon, worldOrigin, or viewMatrix contains non-finite values."),
+                    QStringLiteral("Polygon or viewMatrix contains non-finite values."),
                     NonFiniteInput));
                 return;
             }
@@ -458,12 +450,10 @@ QFuture<cwLazClipOperation::Result> cwLazClipOperation::run(const Request& reque
             header.x_scale_factor = kOutputScale;
             header.y_scale_factor = kOutputScale;
             header.z_scale_factor = kOutputScale;
-            // Anchor encoded coords on worldOrigin so the int32 range stays
-            // centered on relevant data even when CS coords are large (e.g.
-            // UTM eastings).
-            header.x_offset = request.worldOrigin.x;
-            header.y_offset = request.worldOrigin.y;
-            header.z_offset = request.worldOrigin.z;
+            // No header offset: the output is in the project's local
+            // projection, whose coordinates are already meters from the
+            // project's own anchor, so the int32 range is centered on the data
+            // without one.
             header.point_data_format = outputFormat.format;
             header.point_data_record_length = outputFormat.recordLength;
             // Must precede set_geo_ogc_wkt below: that call grows

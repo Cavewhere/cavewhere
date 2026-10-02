@@ -11,90 +11,92 @@ related: [save-a-project.md, project-formats.md]
 ## Why / when you need this
 
 CaveWhere holds **one project at a time**. Opening a cave means putting down the
-one you have, so every route into a project passes through the same question first
-— what about the work that's already open? That's why New and Open both stop and
-ask you before they do anything.
+one you have, so New and Open stop and ask about the work already open. Open from
+Online and Open from Link ask later, after the download.
 
 ## Start a new project
 
 **File → New** (`Ctrl+N`) puts the current project away and gives you a fresh one.
-
-The new project is real and already on disk, but it's temporary and unnamed — see
-[Your project already exists](save-a-project.md#your-project-already-exists) for
-what that means and why saving it early is worth the ten seconds.
+It's real and already on disk, but temporary; see
+[Your project already exists](save-a-project.md#your-project-already-exists).
 
 ## Open a project
 
 **File → Open…** (`Ctrl+O`) brings up a file picker filtered to
 **CaveWhere Project (`*.cwproj` `*.cw`)**.
 
-Both formats — and old `.cw` files going back to CaveWhere v6 — open through this
-one dialog, and CaveWhere works out what it's looking at by reading the file rather
-than trusting its extension. That matters for `.cw`, which is used by two
-completely different formats: a modern
-[bundle](project-formats.md#bundle-cw) and a
-[legacy database](project-formats.md#legacy-cw-files-v6-and-older). You don't have
-to know which one you have.
+A `.cwproj` gets taken at its word: the extension decides it. A `.cw` gets read
+instead, because that one extension covers two unrelated formats. CaveWhere opens
+it as a zip first, and if that works you have a modern
+[bundle](project-formats.md#bundle-cw). If not, it opens the file as a SQLite
+database and looks for an `ObjectData` table, which marks a
+[legacy project](project-formats.md#legacy-cw-files-v6-and-older) from CaveWhere v6
+or older. Fail both tests, or hand it a zero-byte file, and you get:
+
+> Couldn't open '…/Phake Cave.cw' because it has a unknown file type. Is it corrupted!?
 
 **Pick the `.cwproj` file, not the folder.** A directory project is a folder with
-the project file inside it, so the folder itself isn't what you select — open it
-and choose the `.cwproj` within. (The folder and the file share a name, which makes
-this less confusing in practice than it sounds.)
+the project file inside, so open the folder and choose the `.cwproj` within.
 
-If you open an old `.cw`, read
-[Legacy `.cw` files](project-formats.md#legacy-cw-files-v6-and-older) before you
-save it. The conversion is automatic and silent, and the first save changes the
-file's format while keeping its name.
+Before you open a legacy `.cw`, know what the first save does to it. CaveWhere
+unpacks the old database into a temporary folder, then writes back over the
+original path, so the file keeps its name and quietly becomes a bundle. I recommend
+copying the original somewhere else first. If the `.cw` is read-only, the
+write-back is off and Save falls through to Save As.
 
 ## Reopen a recent project
 
-CaveWhere keeps a list of the projects you've opened, saved, or downloaded. Get to
-it by clicking **Source** in the breadcrumb trail at the top of the window — it's
-the page that sits above **Data**, so from anywhere in your survey data, **Source**
-is one click up.
+CaveWhere keeps a list of the projects you've opened, saved, or downloaded. Click
+**Source** in the breadcrumb to reach it; **Source** sits above **Data**, so from
+your survey data it's one click up.
 
-![The Source page. The breadcrumb at the top reads "Source"; below it an "+ Add" button, and one entry listed as a blue link reading "Phake Cave 3000.cw" with that file's full path in smaller text underneath.](../images/project-recent-projects.png)
-*The recent projects list. Entries are labelled by file name — extension and all —
-rather than by the project name you set on the Data page.*
+![The Source page: an "+ Add" button, and one entry as a blue link reading "Phake Cave 3000.cw" with its full path underneath.](../images/project-recent-projects.png)
+*The recent projects list, one entry per project.*
 
-Each entry is a link labelled with the project's **file name**, with the file's
-full path underneath. Click the name to open it. Right-click the path for **Show in
-Finder** (**Show in Explorer** on Windows) if what you actually want is the file
-itself — to copy it, back it up, or send it to someone.
+Each entry, like the one above, is a link carrying the project's **file name**,
+extension and all, not the project name you set on the Data page. The full path
+sits underneath. Click the name to open it; right-click the path for **Show in
+Finder**, **Explorer**, or **File Manager**.
 
-The list maintains itself. Projects are added when you open, save, or download one,
-and entries whose files have gone missing are cleaned out the next time CaveWhere
-starts. Until you've opened anything, the page says so: *"No caving areas created
-or opened yet."*
+New entries go on the end, so the list reads oldest first and reopening a cave
+never floats it back to the top. Nothing removes a single entry either: the only
+pruning happens at startup, when CaveWhere drops every entry whose file has gone
+missing. Until you open something, the page says
+*"No caving areas created or opened yet."*
 
-The **Add** button on that page repeats the same three routes into a project — **New
-Project**, **Open**, and **Online Project** — so you can do everything from here
-without going back to the File menu.
+If clicking an entry does nothing, the file moved or vanished after startup. That
+warning goes to the console rather than to you.
+
+The **Add** button repeats the same 3 routes: **New Project**, **Open**, and
+**Online Project**.
 
 ## Open a project from online
 
-**File → Open from Online…** (`Ctrl+Shift+O`) downloads a project shared by your
-team rather than opening one from your disk, and **File → Open from Link…** opens
-one from a link someone sent you. Both belong to CaveWhere's collaboration
-features — see [Open a Shared Project](../collaboration/open-a-shared-project.md).
+**File → Open from Online…** (`Ctrl+Shift+O`) jumps to the Remote page;
+**File → Open from Link…** takes a link someone sent you. Neither asks about your
+open project on the way in. The download runs first, and the question arrives only
+once a cloned repository sits waiting. See
+[Open a Shared Project](../collaboration/open-a-shared-project.md).
 
 ## What happens to the project you had open
 
-Whichever route you take, CaveWhere deals with the open project first, and what it
-asks depends on where that project stands:
+For New, Open, and recent entries, CaveWhere settles the open project first, and
+what it asks depends on where that project stands:
 
-- **Nothing unsaved** — it doesn't ask. It just switches.
-- **A saved project with unsaved changes** — **Discard**, **Cancel**, or **Save**
-  (plus **Save & Sync** if the project has a remote).
-- **A temporary project that has never been saved** — **Delete**, **Cancel**, or
-  **Save**. There's no Discard, because there's no earlier save to return to;
-  **Delete** removes the project along with its temporary folder.
-- **A brand-new empty project** — it doesn't ask either. Nothing has been put in it.
+- **Nothing unsaved.** It doesn't ask, it just switches.
+- **A saved project with unsaved changes.** **Discard**, **Cancel**, or **Save**,
+  plus **Save & Sync** when the project has a remote.
+- **A temporary project that has never been saved.** **Delete**, **Cancel**, or
+  **Save**, under *"This project lives in a temporary folder. Save to move it
+  somewhere permanent"*. No Discard, because no earlier save exists to return to.
+- **A brand-new empty project.** It doesn't ask either.
 
-[When you quit](save-a-project.md#when-you-quit) covers these buttons in full; they
-are the same ones you get on the way out of the app.
+One case skips the question and costs you work: a project written by a newer
+CaveWhere than yours. This build reads and writes file version 9, shipped as
+2026.4; anything above that opens read-only. Because it can't be saved, CaveWhere
+never prompts, and whatever you typed goes when the next project loads.
 
 ## Next steps
 
-- [Save a Project](save-a-project.md) — the first save, and what Save is really for.
-- [Choose a Project Format](project-formats.md) — directory versus bundle.
+- [Save a Project](save-a-project.md): the first save, and what it really does.
+- [Choose a Project Format](project-formats.md): directory versus bundle.

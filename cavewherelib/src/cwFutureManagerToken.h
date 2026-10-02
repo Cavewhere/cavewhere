@@ -22,6 +22,15 @@ public:
 
     void addJob(const cwFuture& job);
 
+    // Convenience overload for the common one-shot registration: wraps `future`
+    // into a cwFuture(QFuture<void>(future), name) and enqueues it. Accepts any
+    // QFuture<T> since job progress is result-agnostic (tracked as void).
+    template <typename T>
+    void addJob(const QFuture<T>& future, const QString& name)
+    {
+        addJob(cwFuture(QFuture<void>(future), name));
+    }
+
     bool operator==(const cwFutureManagerToken& token) const;
     bool operator!=(const cwFutureManagerToken& token) const;
 

@@ -3,6 +3,8 @@
 #include "cwRHIObject.h"
 #include "cwRhiItemRenderer.h"
 #include "cwEDLEffect.h"
+#include "cwFrustum.h"
+#include "cwRenderCullingStats.h"
 #include "cwRenderingSettings.h"
 
 #include <algorithm>
@@ -275,6 +277,15 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
         m_rhiNeedResourceUpdate.clear();
     }
 
+    // Streamed uploads ride this frame's batch, sharing one budget across every
+    // object so a frame's upload cost is bounded whatever the scene holds.
+    qint64 remainingUploadBytes = m_budgets.uploadBudgetBytesPerFrame;
+    m_hasPendingStreamingWork = false;
+    for(auto object : std::as_const(m_rhiObjects)) {
+        m_hasPendingStreamingWork = object->streamResources(resourceUpdateData, remainingUploadBytes)
+                                    || m_hasPendingStreamingWork;
+    }
+
     std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
 
     gatherScene(passBatches, perPassRenderData);
@@ -307,6 +318,8 @@ cwRhiFrameRenderer::ClipSpaceCamera cwRhiFrameRenderer::stampCamera(
     renderData.projectionMatrix = clip.projectionCorrected;
     renderData.viewProjectionMatrix = clip.viewProjection;
     renderData.devicePixelRatio = devicePixelRatio;
+    renderData.viewportSize = viewportSize;
+    renderData.budgets = m_budgets;
 
     // The same camera into the global-UBO slot geometry binds on the GPU. One full
     // struct write per slot (the UBO is tiny); the per-field dirty-flag gating the
@@ -540,6 +553,16 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                             const cwRHIObject::PerPassRenderData& perPassRenderData,
                             const cwSceneGatherOptions& options)
 {
+    m_frameCounter++;
+
+    // All per-pass copies share one camera (buildPerPassRenderData copies a
+    // single base and only re-stamps the target), so one frustum covers every
+    // pass this job gathers.
+    const cwFrustum frustum = cwFrustum::fromViewProjection(
+        perPassRenderData[0].viewProjectionMatrix);
+
+    cwRenderCullingStats::Counts cullingStats;
+
     quint32 objectOrder = 0;
     for (auto object : std::as_const(m_rhiObjects)) {
         // Snapshot gate ANDed with the per-job overlay. Objects carry their own
@@ -551,12 +574,25 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
             continue;
         }
 
+        ++cullingStats.objectsTotal;
+
+        // objectOrder still advances, as on the visibility path above, so draw
+        // order stays stable as the camera moves.
+        const std::optional<QBox3D> bounds = object->worldBounds();
+        if (bounds.has_value() && !frustum.intersects(bounds.value())) {
+            ++cullingStats.objectsCulled;
+            ++objectOrder;
+            continue;
+        }
+
         for (cwRHIObject::RenderPass pass : kPassOrder) {
             const int passIndex = static_cast<int>(pass);
             auto& batches = passBatches[passIndex];
             const cwRHIObject::GatherContext context {
                 &perPassRenderData[passIndex], pass, objectOrder,
                 &m_visibility,
+                &frustum,
+                &cullingStats,
                 options.appearanceSlotForObject.value(object, 0)
             };
             object->gather(context, batches);
@@ -564,6 +600,8 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
 
         ++objectOrder;
     }
+
+    cwRenderCullingStats::instance()->publish(cullingStats);
 }
 
 void cwRhiFrameRenderer::drainBatches(QRhiCommandBuffer* cb,

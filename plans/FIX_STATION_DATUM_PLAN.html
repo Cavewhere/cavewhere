@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fix-station datum plan</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --border: #d5dae1;
+    --text: #1d2430;
+    --text-2: #5b6673;
+    --accent: #2f6fdb;
+    --accent-soft: #e3edfb;
+    --good: #2e8b57;
+    --warn: #b7791f;
+    --danger: #c0392b;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 24px 96px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 12px; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+  h3 { font-size: 17px; margin: 26px 0 8px; }
+  h4 { font-size: 15px; margin: 18px 0 6px; }
+  p, li { color: var(--text); }
+  .meta { color: var(--text-2); margin-bottom: 24px; }
+  code, .mono { font-family: var(--mono); font-size: 0.92em; }
+  code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table.doc { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  table.doc th, table.doc td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; font-size: 14px; }
+  table.doc th { background: var(--surface-2); }
+  .callout { border-left: 4px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--radius) var(--radius) 0; padding: 10px 14px; margin: 14px 0; }
+  .callout.warn { border-left-color: var(--warn); background: #fbf3e3; }
+
+  /* ============ prototype ============ */
+  .proto {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+    box-shadow: 0 8px 28px rgba(20, 30, 50, 0.10);
+    margin: 18px 0 8px;
+    overflow: hidden;
+    user-select: none;
+  }
+  .proto-titlebar {
+    display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(#fafbfc, #eceef1);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+  }
+  .proto-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .proto-title { flex: 1; text-align: center; color: var(--text-2); font-size: 13px; }
+  .proto-tabs { display: flex; gap: 2px; background: var(--surface-2); border-bottom: 1px solid var(--border); padding: 6px 10px 0; }
+  .proto-tab {
+    padding: 6px 16px; font-size: 13px; color: var(--text-2);
+    border: 1px solid transparent; border-bottom: none;
+    border-radius: 7px 7px 0 0; cursor: default;
+  }
+  .proto-tab.active { background: var(--surface); border-color: var(--border); color: var(--text); font-weight: 600; }
+  .proto-tab.pick-live { color: var(--accent); font-weight: 600; }
+  .proto-body { min-height: 430px; position: relative; }
+  .screen { display: none; padding: 18px; }
+  .screen.visible { display: block; }
+
+  .hint {
+    color: var(--text-2); font-size: 13px; margin: 8px 0 0;
+  }
+
+  /* --- widgets --- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: linear-gradient(#fdfdfe, #eef0f3);
+    border: 1px solid #c3cad4; border-radius: 6px;
+    padding: 4px 12px; font-size: 13px; color: var(--text);
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:active { background: var(--surface-2); }
+  .btn.primary { background: linear-gradient(#4a84e6, #2f6fdb); border-color: #2a63c4; color: #fff; }
+  .btn.icon-only { padding: 4px 8px; }
+  .sel {
+    background: linear-gradient(#fdfdfe, #eef0f3);
+    border: 1px solid #c3cad4; border-radius: 6px;
+    padding: 3px 8px; font-size: 13px; color: var(--text);
+    font-family: inherit;
+  }
+  .sel.secondary { font-size: 12px; color: var(--text-2); border-color: #d5dae1; padding: 2px 6px; }
+  .field {
+    background: #fff; border: 1px solid #c3cad4; border-radius: 6px;
+    padding: 4px 8px; font-family: var(--mono); font-size: 13px; color: var(--text);
+    min-width: 0;
+  }
+  .chip {
+    display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px;
+    background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border);
+  }
+  .chip.datum { background: var(--accent-soft); color: var(--accent); border-color: #bcd3f4; }
+  .groupbox {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px 16px; margin-bottom: 14px; background: var(--surface);
+  }
+  .groupbox > .gb-title { font-size: 12px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px; }
+
+  /* --- fix row --- */
+  .fixrow-head, .fixrow {
+    display: grid;
+    grid-template-columns: 64px 210px 1fr 148px 44px;
+    gap: 10px; align-items: center; padding: 6px 4px;
+  }
+  .fixrow-head { color: var(--text-2); font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); }
+  .fixrow { border-bottom: 1px solid #edf0f3; border-radius: 6px; }
+  .fixrow.flash { animation: rowflash 1.6s ease-out; }
+  @keyframes rowflash {
+    0% { background: #d9ecdc; }
+    100% { background: transparent; }
+  }
+  .cs-cell { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .coord-cell { display: flex; flex-direction: column; gap: 3px; }
+  .elev-cell { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+
+  /* --- view screen --- */
+  .screen-view { padding: 0 !important; }
+  .pick-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: #223047; color: #edf2fa;
+    padding: 10px 16px; font-size: 14px;
+  }
+  .pick-banner .crosshair-ico { font-size: 17px; }
+  .pick-banner .esc { margin-left: auto; }
+  .kbd {
+    font-family: var(--mono); font-size: 12px; background: #35465f; color: #dbe5f3;
+    border: 1px solid #4c6080; border-bottom-width: 2px; border-radius: 5px; padding: 1px 7px;
+  }
+  .terrain {
+    position: relative; height: 372px; overflow: hidden; cursor: crosshair;
+    background:
+      radial-gradient(340px 250px at 68% 42%, rgba(60,70,60,0.55), rgba(0,0,0,0) 70%),
+      radial-gradient(240px 190px at 30% 65%, rgba(70,80,66,0.5), rgba(0,0,0,0) 70%),
+      radial-gradient(200px 160px at 84% 78%, rgba(52,60,52,0.45), rgba(0,0,0,0) 70%),
+      radial-gradient(150px 120px at 46% 22%, rgba(88,98,84,0.5), rgba(0,0,0,0) 70%),
+      linear-gradient(135deg, #9aa48f 0%, #7d886f 38%, #6b765f 62%, #59644f 100%);
+  }
+  .terrain::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background:
+      repeating-linear-gradient(115deg, rgba(255,255,255,0.045) 0 2px, rgba(0,0,0,0) 2px 9px);
+  }
+  .sinkhole {
+    position: absolute; width: 84px; height: 62px; border-radius: 50%;
+    left: 58%; top: 44%; transform: translate(-50%, -50%);
+    background: radial-gradient(closest-side, rgba(18,22,18,0.72), rgba(30,36,30,0.35) 62%, rgba(0,0,0,0));
+    box-shadow: inset 4px 6px 12px rgba(0,0,0,0.35);
+  }
+  .sinkhole-label {
+    position: absolute; left: 58%; top: 30%; transform: translateX(-50%);
+    color: #f2f6ee; font-size: 11px; text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+    pointer-events: none;
+  }
+  svg.lineplot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .station-dot { position: absolute; transform: translate(-50%, -50%); pointer-events: none; }
+  .station-dot .dot { width: 9px; height: 9px; border-radius: 50%; background: #ff5544; border: 1.5px solid #fff; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+  .station-dot .lbl { color: #ffe9e5; font-size: 11px; font-family: var(--mono); text-shadow: 0 1px 3px rgba(0,0,0,0.8); margin-top: 2px; }
+  .pick-marker {
+    position: absolute; transform: translate(-50%, -50%); pointer-events: none;
+    width: 26px; height: 26px; border: 2px solid #7df0a0; border-radius: 50%;
+    box-shadow: 0 0 10px rgba(90, 240, 150, 0.8);
+    animation: pickpulse 0.55s ease-out;
+  }
+  @keyframes pickpulse {
+    0% { transform: translate(-50%, -50%) scale(2.1); opacity: 0.2; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  }
+
+  /* --- survey editor / popup --- */
+  .survey-sheet { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; position: relative; min-height: 330px; }
+  .survey-table { border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
+  .survey-table th, .survey-table td { border: 1px solid #c9cfd8; background: #fff; padding: 4px 12px; }
+  .survey-table th { background: #e7eaee; font-family: inherit; font-weight: 600; font-size: 12px; }
+  .stationbox { position: relative; }
+  .fix-flag { color: var(--accent); cursor: default; }
+  .popupcard {
+    position: absolute; left: 240px; top: 34px; width: 400px; z-index: 3;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 14px 34px rgba(20,30,50,0.22); padding: 14px 16px;
+  }
+  .popupcard h5 { margin: 0 0 10px; font-size: 14px; }
+  .popup-grid { display: grid; grid-template-columns: 92px 1fr; gap: 8px 10px; align-items: center; font-size: 13px; }
+  .popup-grid .lab { color: var(--text-2); }
+  .popup-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .gone-note {
+    border: 1px dashed var(--warn); background: #fbf3e3; color: #6d4c12;
+    border-radius: var(--radius); padding: 10px 12px; font-size: 13px; margin-top: 12px;
+  }
+
+  /* --- coordinate picker popup mock --- */
+  .cpp-card {
+    width: 430px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 10px 26px rgba(20,30,50,0.18); padding: 13px 15px; margin: 12px 0;
+  }
+  .cpp-head { display: flex; align-items: center; font-weight: 700; font-size: 14px; }
+  .cpp-head .x { margin-left: auto; color: var(--text-2); cursor: default; }
+  .cpp-sec-h { color: var(--text-2); font-weight: 700; font-size: 12.5px; margin: 10px 0 4px; }
+  .cpp-val { display: flex; gap: 6px; align-items: center; }
+  .cpp-val .field { flex: 1; }
+  .clipboard-demo {
+    margin-top: 10px; font-size: 13px; color: var(--text-2);
+  }
+  .clipboard-demo .mono { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; display: inline-block; margin-left: 6px; }
+
+  /* --- toast --- */
+  .toast {
+    position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+    background: #223047; color: #edf2fa; font-size: 13px;
+    border-radius: 8px; padding: 8px 16px; box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+    opacity: 0; transition: opacity 0.25s; pointer-events: none; white-space: nowrap; z-index: 5;
+  }
+  .toast.show { opacity: 1; }
+
+  .plan-status { font-size: 13px; }
+  .plan-status td { padding: 2px 10px 2px 0; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Fix-station datum plan</h1>
+<p class="meta">Branch <code>fixed_1</code> · plan drafted 2026-08-13, reworked for the pick interaction 2026-08-14 · status: <strong>nothing implemented</strong>.
+Markdown source: <code>plans/FIX_STATION_DATUM_PLAN.md</code> (this file is canonical; the .md mirrors it without the prototype).</p>
+
+<p>Let a fix station be placed by clicking the LiDAR terrain — coordinate, datum, and
+elevation reference written in one atomic edit — with the datum defaulted from context
+everywhere a coordinate is typed by hand.</p>
+
+<!-- ================================================================ -->
+<h2 id="prototype">0 · Interactive UX prototype</h2>
+
+<p>Everything below is clickable. It walks the exact flows the plan commits to, so the
+review is of the interaction, not a description of it. Three things to try:</p>
+<ol>
+  <li><strong>Pick from the Fix Station page</strong> — press the ⌖ button on row <code>a1</code>.
+      The app jumps to the 3D view with a banner; click the sinkhole (the dark
+      depression) to place the station, or press <span class="kbd">Esc</span> to cancel.
+      Notice the cave's line plot sits ~4 m off the sinkhole — that offset is the phone
+      GPS error the pick corrects.</li>
+  <li><strong>Pick from the Fixed Station popup</strong> — switch to the “Survey editor”
+      tab, open the fix popup on <code>a1</code>, and press its ⌖ button. Same view flow;
+      note what the v1 return looks like (the popup is <em>not</em> reopened — a decision
+      to react to).</li>
+  <li><strong>The copy path and the demoted datum combo</strong> — the third tab shows the
+      reworked <code>CoordinatePickerPopup</code> (datum named in the header, copy is
+      numbers-only) and the secondary datum combo on a coordinate row.</li>
+</ol>
+
+<div class="proto" id="proto">
+  <div class="proto-titlebar">
+    <span class="proto-dot" style="background:#f26d60"></span>
+    <span class="proto-dot" style="background:#f2be4f"></span>
+    <span class="proto-dot" style="background:#5fc463"></span>
+    <span class="proto-title">CaveWhere — prototype</span>
+  </div>
+  <div class="proto-tabs">
+    <div class="proto-tab" data-tab="fixpage">Data · Fix Stations</div>
+    <div class="proto-tab" data-tab="survey">Data · Survey editor</div>
+    <div class="proto-tab" data-tab="copypath">Picker popup &amp; datum combo</div>
+    <div class="proto-tab" data-tab="view" id="viewTab">View</div>
+  </div>
+
+  <div class="proto-body">
+
+    <!-- ============ Fix Station page ============ -->
+    <div class="screen" id="screen-fixpage">
+      <div class="groupbox">
+        <div class="gb-title">Fix stations — Test Cave</div>
+        <div class="fixrow-head">
+          <div>Station</div><div>Coordinate system</div><div>Coordinate</div><div>Elevation ref</div><div></div>
+        </div>
+        <div class="fixrow" id="row-a1">
+          <div class="mono">a1</div>
+          <div class="cs-cell">
+            <select class="sel" disabled><option>Lat/Lon</option></select>
+            <select class="sel secondary" id="rowDatum">
+              <option>WGS84</option>
+              <option>NAD83(2011)</option>
+              <option>NAD83(CSRS)</option>
+              <option>ETRS89</option>
+            </select>
+          </div>
+          <div class="coord-cell">
+            <span class="field" id="rowCoord">40.01234567, -105.27654321, 1655.2m</span>
+            <span class="chip" id="rowSource">entered by hand (phone GPS)</span>
+          </div>
+          <div class="elev-cell">
+            <select class="sel secondary" id="rowElevRef" title="Recorded for the day CaveWhere can convert between them. No conversion happens yet.">
+              <option>—</option>
+              <option>Mean sea level</option>
+              <option>Ellipsoid (GPS)</option>
+            </select>
+          </div>
+          <div>
+            <button class="btn icon-only" id="pickBtnPage" title="Pick from 3D view">⌖</button>
+          </div>
+        </div>
+        <p class="hint">The ⌖ button is the new interaction. The small datum combo is the demoted
+        C6 control — secondary styling, preset from context, rarely touched.</p>
+      </div>
+      <button class="btn" id="resetBtn">↺ Reset prototype</button>
+    </div>
+
+    <!-- ============ Survey editor + popup ============ -->
+    <div class="screen" id="screen-survey">
+      <div class="survey-sheet" id="surveySheet">
+        <table class="survey-table">
+          <tr><th>Station</th><th>Distance</th><th>Compass</th><th>Clino</th></tr>
+          <tr><td class="stationbox">a1 <span class="fix-flag" id="fixFlag" title="Fixed station">📌</span></td><td rowspan="2">10.0</td><td rowspan="2">0.0</td><td rowspan="2">0.0</td></tr>
+          <tr><td>a2</td></tr>
+          <tr><td>a3</td><td>12.3</td><td>85.0</td><td>-2.0</td></tr>
+        </table>
+        <p class="hint">Click the 📌 on <code>a1</code> to open the Fixed Station popup.</p>
+
+        <div class="popupcard" id="fixPopup" style="display:none">
+          <h5>Fixed station — a1</h5>
+          <div class="popup-grid">
+            <span class="lab">System</span>
+            <span class="cs-cell">
+              <select class="sel" disabled><option>Lat/Lon</option></select>
+              <select class="sel secondary" id="popupDatum"><option>WGS84</option><option>NAD83(2011)</option></select>
+            </span>
+            <span class="lab">Coordinate</span>
+            <span class="cs-cell">
+              <span class="field" id="popupCoord">40.01234567, -105.27654321, 1655.2m</span>
+              <button class="btn icon-only" id="pickBtnPopup" title="Pick from 3D view">⌖</button>
+            </span>
+            <span class="lab">Elevation ref</span>
+            <span><select class="sel secondary" id="popupElevRef"><option>—</option><option>Mean sea level</option><option>Ellipsoid (GPS)</option></select></span>
+          </div>
+          <div class="popup-actions">
+            <button class="btn" id="popupClose">Close</button>
+          </div>
+        </div>
+
+        <div class="gone-note" id="popupGoneNote" style="display:none">
+          <strong>v1 decision on display:</strong> after a popup-initiated pick returns, the popup is
+          <em>not</em> reopened — the write went through the model, and the 📌 row now carries the new
+          values (hover it). Reopen by clicking 📌 again. If this feels wrong in practice,
+          restoring the popup is the listed follow-up.
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 3D view ============ -->
+    <div class="screen screen-view" id="screen-view">
+      <div class="pick-banner" id="pickBanner" style="display:none">
+        <span class="crosshair-ico">⌖</span>
+        <span>Click the terrain to place <strong class="mono" id="bannerStation">a1</strong></span>
+        <span class="esc"><span class="kbd">Esc</span> cancels</span>
+      </div>
+      <div class="terrain" id="terrain">
+        <span class="sinkhole"></span>
+        <span class="sinkhole-label">entrance sinkhole (LiDAR hillshade)</span>
+        <svg class="lineplot" viewBox="0 0 940 372" preserveAspectRatio="none">
+          <polyline id="plotLine" points="513,196 468,229 430,215 388,246 352,238 310,268 265,258"
+                    fill="none" stroke="#ff5544" stroke-width="2.5" opacity="0.9"/>
+        </svg>
+        <span class="station-dot" id="stationDot" style="left:513px; top:196px;">
+          <div class="dot"></div><div class="lbl">a1</div>
+        </span>
+        <span class="pick-marker" id="pickMarker" style="display:none"></span>
+      </div>
+      <p class="hint" style="padding: 8px 16px 14px">The red line plot is the cave, anchored at the
+      phone fix — sitting ~4 m northeast of the sinkhole it belongs in. In pick mode the
+      cursor is a crosshair; outside pick mode this is the normal turn-table view.</p>
+    </div>
+
+    <!-- ============ copy path + datum combo ============ -->
+    <div class="screen" id="screen-copypath">
+      <div class="groupbox">
+        <div class="gb-title">CoordinatePickerPopup — after C5</div>
+        <div class="cpp-card">
+          <div class="cpp-head">Picked coordinates <span class="x">×</span></div>
+          <div class="cpp-sec-h" id="cppHeader">NAD83(2011) (lat, lon, elevation)</div>
+          <div class="cpp-val">
+            <span class="field" id="cppValue">40.01230801, -105.27650115, 1652.1m</span>
+            <button class="btn" id="cppCopy">Copy</button>
+          </div>
+          <div class="clipboard-demo">Clipboard after Copy:<span class="mono" id="clipShow">—</span></div>
+        </div>
+        <p class="hint">The header names the datum the numbers are in (the context default —
+        here the LAZ tile's NAD83(2011)); the copied text stays numbers-only. With fixes
+        defaulting to the same context datum, paste is consistent by construction.</p>
+      </div>
+
+      <div class="groupbox">
+        <div class="gb-title">The demoted datum combo (C6) — CSPicker after rework</div>
+        <div class="cs-cell" style="gap:8px">
+          <select class="sel" id="demoMode">
+            <option>Lat/Lon</option>
+            <option>UTM</option>
+            <option>Custom...</option>
+          </select>
+          <select class="sel secondary" id="demoDatum">
+            <option>NAD83(2011)</option>
+            <option>WGS84</option>
+            <option>NAD83(CSRS)</option>
+            <option>ETRS89</option>
+          </select>
+          <span id="demoUtm" style="display:none" class="cs-cell">
+            <input class="field" style="width:46px" value="13">
+            <select class="sel"><option>N</option><option>S</option></select>
+          </span>
+          <span class="chip datum" id="demoChip">committed: EPSG:6318</span>
+        </div>
+        <p class="hint" id="demoHint">Mode label is plain “Lat/Lon” (no more hardcoded “(WGS84)”).
+        The datum combo is preset from the context default and visually secondary. In UTM mode
+        the datum list is filtered to datums whose UTM series covers the chosen zone; NAD83(CSRS)
+        is Lat/Lon-only in v1.</p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+  </div>
+</div>
+
+<p class="hint">Prototype shorthand: the coordinate written by a pick uses the same fake
+transform everywhere (1&nbsp;px ≈ 0.5&nbsp;m), and “moved 4.2&nbsp;m” is computed from the
+click. Colors and exact widget styling are schematic — the real build uses Theme.qml tokens.</p>
+
+<!-- ================================================================ -->
+<h2>1 · The problem</h2>
+
+<p>Every fix station entered through the UI is interpreted as WGS84, and the UI says so
+out loud:</p>
+<ul>
+  <li><code>CSPicker.qml:89</code> labels the mode “Lat/Lon (WGS84)” and picking it commits
+      <code>EPSG:4326</code> (<code>CSPicker.qml:58</code>).</li>
+  <li>UTM mode commits WGS84 UTM zones only (<code>utmZoneToEpsg</code> →
+      <code>EPSG:326xx/327xx</code>).</li>
+  <li><code>parseCS</code> (<code>cwCoordinateTransform.cpp</code>, anonymous namespace)
+      recognizes exactly those spellings; any other geographic or projected CRS reads as
+      <code>Custom</code>.</li>
+</ul>
+
+<p>Since the plate-fixed datum work (commit <code>88296c36</code>), the <em>derived frame</em>
+adopts NAD83(2011)/ETRS89/etc. (<code>kPlateFixedRegions</code>,
+<code>cwLocalProjection.cpp:80</code>). The input side still assumes WGS84. Whether that is
+wrong depends on the coordinate's source: a phone GPS genuinely reports WGS84; a published
+benchmark or USGS datasheet is NAD83(2011) (~1.5&nbsp;m off in CONUS when read as WGS84);
+LiDAR tiles carry their full compound WKT and land correctly — so a NAD83 fix read as WGS84
+sits 1.5&nbsp;m off <em>relative to the tiles</em>, several LiDAR pixels.</p>
+
+<h3>1.1 The driving use case</h3>
+<ol>
+  <li>The user fixes the entrance from their phone (WGS84). The frame derives, plate-fixed.</li>
+  <li>They add a LAZ tile (NAD83(2011) + NAVD88). It lands correctly.</li>
+  <li>The cave sits ~3–5&nbsp;m off the terrain — phone GPS error, which dwarfs the datum
+      shift. They want to drag the entrance onto the sinkhole they can see in the hillshade.</li>
+</ol>
+
+<div class="callout">
+Today that adjustment is a transcription loop: pick the point with
+<code>CoordinatePicker</code>, copy “lat, lon, elevation” out of
+<code>CoordinatePickerPopup</code>, paste into the fix. The loop happens to be
+datum-consistent today <em>because everything is WGS84</em> — and the moment fixes default
+to the context datum, pasting WGS84-picked numbers into a NAD83-defaulted fix becomes a
+silent 1.5&nbsp;m error. Copying a datum label alongside the numbers still leaves a human
+matching two combo boxes. The real fix is removing the transcription: a pick interaction
+that writes the fix directly.
+</div>
+
+<!-- ================================================================ -->
+<h2>2 · Decisions</h2>
+
+<p><strong>Made 2026-08-13:</strong></p>
+<ol>
+  <li><strong>Datum default is context-derived</strong>: the loaded LiDAR layer's datum if
+      one is loaded, else the frame's plate-fixed datum, else WGS84. Always overridable.</li>
+  <li><strong>Vertical is metadata only this round</strong>: record ellipsoidal-vs-MSL on
+      the fix and display it; <code>z</code> still passes through every transform untouched.
+      Geoid-grid transforms are a follow-up plan with its own grid-distribution problem.
+      This fits the existing invariant at <code>cwLocalProjection.cpp:122</code>
+      (<code>horizontalCrs</code>): a compound CRS's vertical half must never reach a
+      transform.</li>
+  <li><strong>The datum lives in each fix's <code>inputCS</code></strong>
+      (e.g. <code>EPSG:6318</code> instead of <code>EPSG:4326</code>). No project-level
+      datum field.</li>
+</ol>
+
+<p><strong>Made 2026-08-14:</strong></p>
+<ol start="4">
+  <li><strong>The centerpiece is a fix-station pick interaction, entered from the fix
+      surfaces</strong> (Option B): a “Pick from 3D view” button on the Fix Station page and
+      the Fixed Station popup, modeled on the Map page's “Add Layer” flow
+      (<code>MapLayers.qml:34</code> — activate a view-parented tool, then
+      <code>gotoPageByName(null, "View")</code>).</li>
+  <li><strong>The datum combo is demoted</strong>: still shipped (typed coordinates from
+      datasheets need it) but last in the sequence and visually secondary.</li>
+  <li><strong><code>CoordinatePickerPopup</code> names the datum of the numbers it shows,
+      and the copied text stays numbers-only</strong> — no datum suffix in the clipboard.</li>
+</ol>
+
+<!-- ================================================================ -->
+<h2>3 · Design</h2>
+
+<h3>3.1 The datum table (<code>cwCoordinateTransform.cpp</code>)</h3>
+
+<p>One static table, same philosophy as <code>kPlateFixedRegions</code> (“depends only on
+the shipped binary, never on which proj.db a machine has”):</p>
+
+<pre><code>struct GeographicDatum {
+    const char* geographicCode;   // "EPSG:4326", "EPSG:6318", ...
+    const char* displayName;      // "WGS84", "NAD83(2011)", ...
+    int utmNorthBase;             // EPSG code minus zone for north zones, 0 = none
+    int utmSouthBase;             //   same for south zones
+    int utmZoneMin, utmZoneMax;   // zones the datum's UTM series covers
+};</code></pre>
+
+<p>Rows: WGS84 first, then the eight datums <code>kPlateFixedRegions</code> can produce.
+Candidate UTM series (each code <strong>must be verified against proj.db by a test</strong>
+before shipping — these are from memory):</p>
+
+<table class="doc">
+<tr><th>Datum</th><th>Geographic</th><th>UTM north</th><th>UTM south</th></tr>
+<tr><td>WGS84</td><td>EPSG:4326</td><td>32600+zone (1–60)</td><td>32700+zone (1–60)</td></tr>
+<tr><td>NAD83(2011)</td><td>EPSG:6318</td><td>6329+zone (1–19)</td><td>—</td></tr>
+<tr><td>NAD83(CSRS)</td><td>EPSG:4617</td><td>non-linear — omit UTM in v1</td><td>—</td></tr>
+<tr><td>Mexico ITRF2008</td><td>EPSG:6365</td><td>verify (11–16)</td><td>—</td></tr>
+<tr><td>ETRS89</td><td>EPSG:4258</td><td>25800+zone (28–38)</td><td>—</td></tr>
+<tr><td>JGD2011</td><td>EPSG:6668</td><td>verify (51–55)</td><td>—</td></tr>
+<tr><td>GDA2020</td><td>EPSG:7844</td><td>—</td><td>verify MGA2020 (46–59)</td></tr>
+<tr><td>NZGD2000</td><td>EPSG:4167</td><td>—</td><td>verify (58–60)</td></tr>
+</table>
+
+<p>A datum whose series can't be verified, or that has no linear series (NAD83(CSRS)),
+carries <code>utmNorthBase = 0</code> — Lat/Lon only.</p>
+
+<p><code>cwCoordinateSystem</code> (the QML singleton) grows: <code>parseCS</code> datum
+awareness (pure string/integer matching, cheap enough for binding paths),
+<code>datumFor(cs)</code>, <code>datumDisplayName(datumCode)</code>,
+<code>datumList()</code> / <code>utmDatumList(zone, north)</code>, a three-arg
+<code>utmZoneToEpsg(zone, north, datumCode)</code> (the two-arg form stays and means
+WGS84), and <code>latLonCS(datumCode)</code>.</p>
+
+<h3>3.2 Datum extraction from an arbitrary CS</h3>
+
+<p><code>static QString cwCoordinateTransform::geographicDatumFor(const QString&amp; cs)</code>:
+<code>proj_create</code> → compound? take the horizontal half →
+<code>proj_crs_get_geodetic_crs</code> → <code>proj_identify</code> against EPSG → match
+against the table → the table's geographic code, else <code>""</code>. Cached per-thread
+like <code>nameFor</code> — it runs from QML bindings.</p>
+
+<h3>3.3 The context default</h3>
+
+<p><code>Q_INVOKABLE QString cwCavingRegion::defaultFixDatum() const</code> (or on
+<code>cwGeoReference</code>, whichever reads cleaner — the region owns both inputs):</p>
+<ol>
+  <li>First <strong>enabled</strong> <code>lazLayers()</code> row whose <code>sourceCS</code>
+      yields a table datum via <code>geographicDatumFor</code> → that datum.</li>
+  <li>Else the frame: <code>geoReference()-&gt;localCoordinateSystem()</code> through the
+      same extraction.</li>
+  <li>Else WGS84.</li>
+</ol>
+<p>With a notify driven by the layer model's rows/enabled changes and the frame's change
+signal. (If the notify wiring gets heavy, v1 may resolve on demand — the value only matters
+at commit and pick time.)</p>
+
+<h3>3.4 The pick interaction (the centerpiece)</h3>
+
+<p><strong>Entry.</strong> A “Pick from 3D view” button (crosshair icon) on the coordinate
+row of both surfaces — <code>FixStationPage.qml</code> (wide and narrow delegates) and
+<code>FixStationPopup.qml</code>. Clicking it records the target and jumps to the view,
+exactly like <code>MapLayers.qml:34</code>:</p>
+
+<pre><code>onClicked: {
+    fixStationPickRequest.begin(caveId, stationId)   // shared handle
+    RootData.pageSelectionModel.gotoPageByName(null, "View")
+}</code></pre>
+
+<p><strong>The request handle.</strong> A small C++ QObject (working name
+<code>cwFixStationPickRequest</code>, owned by <code>cwRootData</code>) holding
+<code>{caveUuid, stationId, active}</code> with a <code>begin()</code> /
+<code>cancel()</code> / <code>commit(...)</code> surface. It is the cross-page state: the
+initiating surface writes it, the view-side tool binds to <code>active</code>. The popup
+case needs no popup restore — the write goes through the model, and the popup simply isn't
+reopened (v1).</p>
+
+<p><strong>The tool.</strong> A view-parented QML tool (working name
+<code>FixStationPickTool.qml</code>) instantiated where the view's other tools live, sitting
+at <code>view.zOverlay</code> (clickable chrome must claim that layer — the
+LeadView/LinePlotLabelView input-eating rule). Active when the request is. It reuses the
+existing <code>CoordinatePicker</code> C++ item (<code>cwCoordinatePicker</code> — ray-cast
+plus frame→geographic transforms) rather than growing a new picker. While active: a
+<code>HelpQuoteBox</code>-style banner — <em>“Click the terrain to place &lt;station&gt;.
+Esc cancels.”</em> — and Esc/away-navigation cancels the request.</p>
+
+<p><strong>The write.</strong> On pick, one atomic edit through
+<code>cwFixStationModel</code>:</p>
+<ul>
+  <li><strong>coordinate</strong>: the picked point expressed in the context datum
+      (<code>defaultFixDatum()</code>), lat/lon at the popup's existing 8-decimal precision
+      plus elevation. Numerically this is the same PROJ pipeline inverted, so the round trip
+      is essentially exact regardless of datum — the datum choice here is about consistency
+      with the tiles, not error.</li>
+  <li><strong>inputCS</strong>: the context datum's geographic code.</li>
+  <li><strong>elevationReference</strong>: <code>MeanSeaLevel</code> when the picked
+      geometry's source declares a vertical datum (the LAZ compound WKT), else
+      <code>Unknown</code>. The metadata field gets set <em>truthfully by the machine</em>,
+      not by asking.</li>
+</ul>
+<p>Then <code>RootData.pageSelectionModel.back()</code> returns the user to where they
+started, and the row shows its new values.</p>
+
+<p><strong>Not written in v1</strong>: variances. A LiDAR pick (~0.5&nbsp;m) deserves a
+tighter variance than a phone fix (~5&nbsp;m) and the solve would use it — noted as a
+follow-up, not baked in.</p>
+
+<h3>3.5 <code>CoordinatePickerPopup</code> (the copy path)</h3>
+
+<p>The popup reports its lat/lon in the <strong>context default datum</strong> and names
+that datum in the section header (today the header hardcodes “WGS84” and the numbers are
+always WGS84 — after this, a paste into a context-defaulted fix is consistent by
+construction). The copied string remains numbers-only — <code>lat, lon,
+elevation+unit</code> — with no datum suffix. The elevation-only fallback section is
+unchanged.</p>
+
+<h3>3.6 Elevation reference metadata</h3>
+<ul>
+  <li>Proto: new field on <code>FixStation</code> (next free tag — 4, 5, 6, 10 are
+      reserved; verify the coordinate field's tag before picking):
+      <code>optional ElevationReference elevationReference</code> with
+      <code>ELEVATION_REFERENCE_UNKNOWN&nbsp;=&nbsp;0 / ELLIPSOID / MEAN_SEA_LEVEL</code>.</li>
+  <li><code>cwFixStation</code>: enum + accessors; <code>cwFixStationModel</code> role; rows
+      default to <code>Unknown</code> (existing projects load as <code>Unknown</code> for
+      free).</li>
+  <li>UI: a small combo beside the elevation field in both surfaces — “Elevation ref: — /
+      Mean sea level / Ellipsoid (GPS)”. Display and storage only; the tooltip says plainly
+      that no conversion happens yet.</li>
+  <li>Survex export ignores it (<code>*fix</code> has no vertical datum concept).</li>
+</ul>
+
+<h3>3.7 The datum combo (demoted)</h3>
+
+<p><code>CSPicker.qml</code> still gets it — typed coordinates from datasheets need a way to
+say NAD83(2011) — but last in the sequence and visually secondary:</p>
+<ul>
+  <li>Mode label “Lat/Lon (WGS84)” → “Lat/Lon”.</li>
+  <li>A compact datum combo in Lat/Lon and UTM modes, preset from a new
+      <code>property string defaultDatum</code> the host binds to
+      <code>defaultFixDatum()</code> (CSPicker stays region-ignorant). UTM's list holds only
+      datums whose series covers the chosen zone/hemisphere; switching zone out of the
+      series falls back to WGS84.</li>
+  <li><code>CSComboBox.qml</code>'s resolved label names the datum when it isn't WGS84.</li>
+  <li>A <code>Custom</code> value hides the combo (unchanged behavior).</li>
+</ul>
+
+<!-- ================================================================ -->
+<h2>4 · Not in this phase</h2>
+<ul>
+  <li>Geoid/vertical transforms, grid shipping or PROJ network — follow-up plan.</li>
+  <li>Variances written by the pick — follow-up.</li>
+  <li>Restoring <code>FixStationPopup</code> after a popup-initiated pick returns.</li>
+  <li>NAD83(CSRS) UTM zone codes (non-linear series) — Lat/Lon only.</li>
+  <li>NATRF2022 or any datum beyond the <code>kPlateFixedRegions</code> set.</li>
+  <li>A project-level datum setting (decided against — per-fix <code>inputCS</code> only).</li>
+  <li>Reinterpreting existing fixes: a stored <code>EPSG:4326</code> row stays WGS84; no
+      migration, no prompt.</li>
+</ul>
+
+<!-- ================================================================ -->
+<h2>5 · Commit sequence</h2>
+
+<p>Each commit builds green and runs its gate before the next starts.</p>
+<ol>
+  <li><strong>C1 — Datum table and parsing.</strong> §3.1 + §3.2. Tests: every table code
+      resolves in proj.db to the expected name (the verification gate for the from-memory
+      codes); <code>latLonCS</code>/<code>utmZoneToEpsg</code> → <code>parseCS</code> round
+      trips; <code>geographicDatumFor</code> on a LAZ-style compound WKT, a derived frame's
+      WKT2, and garbage. Gate: <code>cavewhere-test "[cwCoordinateSystem]"</code> plus
+      <code>[cwSurvexExporterRegion_OutputCS]</code> (the exporter consumes inputCS).</li>
+  <li><strong>C2 — Context default.</strong> §3.3. Tests: each rung of the ladder and the
+      enabled-flag filter. Gate: the new tag + <code>[cwLocalProjection]</code>.</li>
+  <li><strong>C3 — Elevation reference metadata.</strong> §3.6 model half: proto field,
+      <code>cwFixStation</code> accessors, model role, serialization round trip. (Before the
+      interaction, which writes it.) Gate: <code>[cwFixStation]</code> tags.</li>
+  <li><strong>C4 — The pick interaction.</strong> §3.4: request handle, view tool, the
+      atomic write, back-navigation. Tests: C++ for the commit path (pick point →
+      coordinate/inputCS/elevationReference written, in a region with and without a LAZ
+      layer); QML for the button → request → tool-active → simulated pick → row updated
+      flow, and Esc cancel. Screenshot for the commit body.</li>
+  <li><strong>C5 — Picker popup datum.</strong> §3.5. QML tests: header names the context
+      datum; copied text carries no datum. Gate: the popup's existing QML tests.</li>
+  <li><strong>C6 — The datum combo (demoted).</strong> §3.7 + the elevation-reference combo
+      UI from §3.6. QML tests: NAD83(2011) default commits <code>EPSG:6318</code>;
+      overriding to WGS84 commits <code>EPSG:4326</code>; UTM datum list filters by zone;
+      Custom hides the combo. Screenshot.</li>
+</ol>
+
+<p>Final gate: both suites, sequentially (never concurrently — #638), with
+<code>ASAN_OPTIONS=detect_container_overflow=0</code>.</p>
+
+<!-- ================================================================ -->
+<h2>6 · Risks</h2>
+<ul>
+  <li><strong>The UTM EPSG bases are from memory.</strong> C1's proj.db test is the gate; a
+      wrong base fails loudly there and the fix is one integer.</li>
+  <li><strong><code>parseCS</code> is in binding paths.</strong> Keep it table-driven; the
+      PROJ-backed <code>geographicDatumFor</code> is the only new proj.db toucher and it is
+      cached.</li>
+  <li><strong>Cross-page tool plumbing.</strong> The Add Layer flow proves the pattern
+      (<code>SelectExportAreaTool</code> + <code>gotoPageByName</code>), but the request
+      handle adds a cancel path Add Layer lacks — navigating away, Esc, and a second
+      <code>begin()</code> while active all need to leave exactly one consistent state.
+      C4's QML tests cover all three.</li>
+  <li><strong>Picking the cave instead of the terrain.</strong> The ray-cast hits whatever
+      geometry is nearest — including the line plot. v1 accepts the nearest hit (the user
+      zooms to the entrance; the terrain dominates the click target); if it proves annoying,
+      a “terrain-only” filter on the intersector is the follow-up.</li>
+  <li><strong>Exports.</strong> <code>EPSG:6318</code> etc. are ordinary authority codes —
+      the Shareable policy (<code>944cf986</code>) passes them through untouched, and the
+      WorkingFrame driver never sees inputCS. C1's gate runs the exporter tags to prove
+      it.</li>
+  <li><strong>Diagnostics.</strong> <code>cwFixStationDiagnostics::domainCheck</code>
+      resolves the fix's effective CS — new geographic codes must behave like 4326 there;
+      C6 adds one test.</li>
+</ul>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- state ----
+  var baseLat = 40.01234567;
+  var baseLon = -105.27654321;
+  var baseElev = 1655.2;
+  // Station a1's on-screen anchor in the view (px) and the fake scale.
+  var stationPx = { x: 513, y: 196 };
+  var metersPerPx = 0.5;
+
+  var pick = {
+    active: false,
+    origin: null   // "fixpage" | "survey"
+  };
+
+  var tabs = document.querySelectorAll(".proto-tab");
+  var screens = {
+    fixpage: document.getElementById("screen-fixpage"),
+    survey: document.getElementById("screen-survey"),
+    copypath: document.getElementById("screen-copypath"),
+    view: document.getElementById("screen-view")
+  };
+  var currentTab = "fixpage";
+
+  function showTab(name) {
+    currentTab = name;
+    tabs.forEach(function (t) { t.classList.toggle("active", t.dataset.tab === name); });
+    Object.keys(screens).forEach(function (k) {
+      screens[k].classList.toggle("visible", k === name);
+    });
+    // Leaving the view while a pick is live cancels the request (the plan's
+    // away-navigation rule).
+    if (pick.active && name !== "view") {
+      cancelPick(true);
+    }
+  }
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () { showTab(t.dataset.tab); });
+  });
+
+  // ---- toast ----
+  var toastEl = document.getElementById("toast");
+  var toastTimer = null;
+  function toast(msg, ms) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, ms || 3200);
+  }
+
+  // ---- pick flow ----
+  var banner = document.getElementById("pickBanner");
+  var viewTab = document.getElementById("viewTab");
+  var terrain = document.getElementById("terrain");
+  var pickMarker = document.getElementById("pickMarker");
+  var stationDot = document.getElementById("stationDot");
+  var plotLine = document.getElementById("plotLine");
+  var basePlotPoints = plotLine.getAttribute("points");
+
+  function beginPick(origin) {
+    pick.active = true;
+    pick.origin = origin;
+    banner.style.display = "flex";
+    viewTab.classList.add("pick-live");
+    showTab("view");
+    toast("Pick mode — the request handle carries {cave, a1} across the page jump");
+  }
+
+  function cancelPick(silent) {
+    if (!pick.active) { return; }
+    pick.active = false;
+    banner.style.display = "none";
+    viewTab.classList.remove("pick-live");
+    if (!silent) {
+      showTab(pick.origin === "survey" ? "survey" : "fixpage");
+      toast("Pick canceled — nothing written");
+    }
+    pick.origin = null;
+  }
+
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && pick.active) { cancelPick(false); }
+  });
+
+  document.getElementById("pickBtnPage").addEventListener("click", function () {
+    beginPick("fixpage");
+  });
+  document.getElementById("pickBtnPopup").addEventListener("click", function () {
+    document.getElementById("fixPopup").style.display = "none";
+    beginPick("survey");
+  });
+
+  terrain.addEventListener("click", function (ev) {
+    if (!pick.active) { return; }
+    var rect = terrain.getBoundingClientRect();
+    var x = ev.clientX - rect.left;
+    var y = ev.clientY - rect.top;
+
+    // Fake geographic conversion: px offset from the station's anchor.
+    var dxM = (x - stationPx.x) * metersPerPx;          // east+
+    var dyM = (stationPx.y - y) * metersPerPx;          // north+
+    var movedM = Math.sqrt(dxM * dxM + dyM * dyM);
+    var newLat = baseLat + dyM / 111320.0;
+    var newLon = baseLon + dxM / (111320.0 * Math.cos(baseLat * Math.PI / 180));
+    var newElev = baseElev - 3.1; // picked off the NAVD88 terrain
+
+    // Marker pulse at the click.
+    pickMarker.style.left = x + "px";
+    pickMarker.style.top = y + "px";
+    pickMarker.style.display = "block";
+
+    // Snap the plot + station onto the pick (the solve re-anchors the cave).
+    var ddx = x - stationPx.x, ddy = y - stationPx.y;
+    var shifted = basePlotPoints.split(" ").map(function (pt) {
+      var p = pt.split(",");
+      return (parseFloat(p[0]) + ddx) + "," + (parseFloat(p[1]) + ddy);
+    }).join(" ");
+    plotLine.setAttribute("points", shifted);
+    stationDot.style.left = x + "px";
+    stationDot.style.top = y + "px";
+
+    var coordText = newLat.toFixed(8) + ", " + newLon.toFixed(8) + ", " + newElev.toFixed(1) + "m";
+
+    var origin = pick.origin;
+    pick.active = false;
+    pick.origin = null;
+
+    setTimeout(function () {
+      banner.style.display = "none";
+      viewTab.classList.remove("pick-live");
+
+      // The atomic write: coordinate + inputCS (context datum) + elevation ref.
+      document.getElementById("rowCoord").textContent = coordText;
+      document.getElementById("rowDatum").value = "NAD83(2011)";
+      document.getElementById("rowElevRef").value = "Mean sea level";
+      document.getElementById("rowSource").textContent = "placed from LiDAR pick";
+      document.getElementById("popupCoord").textContent = coordText;
+      document.getElementById("popupDatum").value = "NAD83(2011)";
+      document.getElementById("popupElevRef").value = "Mean sea level";
+      document.getElementById("fixFlag").title =
+        "Fixed station — " + coordText + " (NAD83(2011), mean sea level)";
+
+      // pageSelectionModel.back()
+      if (origin === "survey") {
+        showTab("survey");
+        document.getElementById("popupGoneNote").style.display = "block";
+      } else {
+        showTab("fixpage");
+        var row = document.getElementById("row-a1");
+        row.classList.remove("flash");
+        void row.offsetWidth; // restart the animation
+        row.classList.add("flash");
+      }
+      toast("a1 placed from LiDAR — moved " + movedM.toFixed(1) +
+            " m · NAD83(2011) · elevation ref: mean sea level");
+    }, 480);
+  });
+
+  // ---- survey popup ----
+  document.getElementById("fixFlag").addEventListener("click", function () {
+    document.getElementById("fixPopup").style.display = "block";
+    document.getElementById("popupGoneNote").style.display = "none";
+  });
+  document.getElementById("popupClose").addEventListener("click", function () {
+    document.getElementById("fixPopup").style.display = "none";
+  });
+
+  // ---- copy path ----
+  document.getElementById("cppCopy").addEventListener("click", function () {
+    var v = document.getElementById("cppValue").textContent;
+    document.getElementById("clipShow").textContent = v;
+    toast("Copied numbers only — the datum stays in the header, not the clipboard");
+  });
+
+  // ---- demoted datum combo ----
+  var demoMode = document.getElementById("demoMode");
+  var demoDatum = document.getElementById("demoDatum");
+  var demoUtm = document.getElementById("demoUtm");
+  var demoChip = document.getElementById("demoChip");
+  var latLonCodes = {
+    "WGS84": "EPSG:4326", "NAD83(2011)": "EPSG:6318",
+    "NAD83(CSRS)": "EPSG:4617", "ETRS89": "EPSG:4258"
+  };
+  var utmCodes = { // zone 13 north, for the demo
+    "WGS84": "EPSG:32613", "NAD83(2011)": "EPSG:6342"
+  };
+  function refreshDemo() {
+    var mode = demoMode.value;
+    var isUtm = mode === "UTM";
+    demoUtm.style.display = isUtm ? "inline-flex" : "none";
+    demoDatum.style.display = mode === "Custom..." ? "none" : "inline-block";
+    // UTM filters the datum list: only datums whose series covers zone 13 N.
+    Array.prototype.forEach.call(demoDatum.options, function (opt) {
+      opt.hidden = isUtm && !(opt.value in utmCodes);
+    });
+    if (isUtm && !(demoDatum.value in utmCodes)) { demoDatum.value = "WGS84"; }
+    if (mode === "Custom...") {
+      demoChip.textContent = "committed: (CSCustomDialog opens)";
+    } else if (isUtm) {
+      demoChip.textContent = "committed: " + utmCodes[demoDatum.value];
+    } else {
+      demoChip.textContent = "committed: " + latLonCodes[demoDatum.value];
+    }
+  }
+  demoMode.addEventListener("change", refreshDemo);
+  demoDatum.addEventListener("change", refreshDemo);
+  refreshDemo();
+
+  // ---- reset ----
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    document.getElementById("rowCoord").textContent = "40.01234567, -105.27654321, 1655.2m";
+    document.getElementById("rowDatum").value = "WGS84";
+    document.getElementById("rowElevRef").value = "—";
+    document.getElementById("rowSource").textContent = "entered by hand (phone GPS)";
+    document.getElementById("popupCoord").textContent = "40.01234567, -105.27654321, 1655.2m";
+    document.getElementById("popupDatum").value = "WGS84";
+    document.getElementById("popupElevRef").value = "—";
+    document.getElementById("popupGoneNote").style.display = "none";
+    plotLine.setAttribute("points", basePlotPoints);
+    stationDot.style.left = stationPx.x + "px";
+    stationDot.style.top = stationPx.y + "px";
+    pickMarker.style.display = "none";
+    cancelPick(true);
+    toast("Prototype reset");
+  });
+
+  showTab("fixpage");
+})();
+</script>
+</body>
+</html>

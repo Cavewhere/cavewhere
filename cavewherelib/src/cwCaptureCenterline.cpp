@@ -6,15 +6,14 @@
 
 // Our includes
 #include "cwCaptureCenterline.h"
-#include "cwCamera.h"
 #include "cwCaptureLabelPlacer.h"
+#include "cwSurveyNode.h"
+#include "cwCavingRegion.h"
 
 // Qt includes
 #include <QFontMetricsF>
 #include <QPainter>
-#include <QPainterPath>
 #include <QtGlobal>
-#include <QtMath>
 
 // Std includes
 #include <algorithm>
@@ -27,74 +26,78 @@ constexpr qreal BaseStationRadius = 2.0;
 }
 
 cwCaptureCenterline::cwCaptureCenterline(QGraphicsItem* parent)
-    : QGraphicsItem(parent)
-    , m_camera(nullptr)
+    : cwCaptureLabelItem(parent)
     , m_linePen(LineColor)
     , m_stationPen(ForegroundColor)
     , m_stationBrush(ForegroundColor)
-    , m_labelPen(ForegroundColor)
-    , m_imageScale(1.0)
     , m_baseStationRadius(BaseStationRadius)
 {
     m_linePen.setWidthF(cwCaptureCenterline::LinePenWidthPaperPx);
     m_stationPen.setWidthF(cwCaptureCenterline::LinePenWidthPaperPx);
+    m_labelPen.setColor(ForegroundColor);
     m_labelFont.setPointSizeF(LabelFontPointSize);
-    setFlag(QGraphicsItem::ItemClipsToShape, true);
 }
 
-void cwCaptureCenterline::setNetwork(const cwSurveyNetwork& network)
+QList<cwSurveyNetwork> cwCaptureCenterline::caveNetworks(const cwCavingRegion* region)
 {
-    if(m_network == network) {
-        return;
+    if(region == nullptr) {
+        return {};
     }
-    m_network = network;
+
+    QList<cwSurveyNetwork> networks;
+    // Every node in the tree carries its own solve, so nested nodes' centerlines
+    // reach the export as well as the top-level caves'.
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    networks.reserve(nodes.size());
+    for(const cwSurveyNode* node : nodes) {
+        cwSurveyNetwork network = node->network();
+        const cwStationPositionLookup stationLookup = node->stationPositionLookup();
+        const QStringList stations = network.stations();
+        for(const QString& station : stations) {
+            if(stationLookup.hasPosition(station)) {
+                network.setPosition(station, stationLookup.position(station));
+            }
+        }
+
+        networks.append(network);
+    }
+
+    return networks;
+}
+
+void cwCaptureCenterline::setNetworks(const QList<cwSurveyNetwork>& networks)
+{
+    // cwSurveyNetwork::operator== compares topology only, so always rebuild to
+    // pick up moved stations.
+    m_networks = networks;
     rebuildGeometry();
 }
 
-void cwCaptureCenterline::setCamera(cwCamera* camera)
+void cwCaptureCenterline::setDotsVisible(bool visible)
 {
-    if(m_camera == camera) {
+    if(m_dotsVisible == visible) {
         return;
     }
-    m_camera = camera;
-    rebuildGeometry();
+    m_dotsVisible = visible;
+    update();
 }
 
-void cwCaptureCenterline::setViewport(const QRect& viewport)
+void cwCaptureCenterline::setLegsVisible(bool visible)
 {
-    if(m_viewport == viewport) {
+    if(m_legsVisible == visible) {
         return;
     }
-    prepareGeometryChange();
-    m_viewport = viewport;
-    m_boundingRect = QRectF(QPointF(0.0, 0.0), QSizeF(m_viewport.size()) * m_imageScale);
-    rebuildGeometry();
+    m_legsVisible = visible;
+    update();
 }
 
-void cwCaptureCenterline::setImageScale(double scale)
+void cwCaptureCenterline::setLabelsVisible(bool visible)
 {
-    if(qFuzzyCompare(m_imageScale, scale)) {
+    if(m_labelsVisible == visible) {
         return;
     }
-    prepareGeometryChange();
-    m_imageScale = scale;
-    m_boundingRect = QRectF(QPointF(0.0, 0.0), QSizeF(m_viewport.size()) * m_imageScale);
-    rebuildGeometry();
-}
-
-void cwCaptureCenterline::setExportDpi(int dpi)
-{
-    m_exportDpi = qMax(1, dpi);
-}
-
-void cwCaptureCenterline::setPlacer(cwCaptureLabelPlacer* placer)
-{
-    m_placer = placer;
-}
-
-void cwCaptureCenterline::setPaperPxToLocal(double scale)
-{
-    m_paperPxToLocal = qMax(0.0, scale);
+    m_labelsVisible = visible;
+    update();
 }
 
 qreal cwCaptureCenterline::stationDotRadius() const
@@ -107,14 +110,9 @@ QVector<QPointF> cwCaptureCenterline::stationPositions() const
     QVector<QPointF> positions;
     positions.reserve(m_stationData.size());
     for(const auto& station : m_stationData) {
-        positions.append(station.position);
+        positions.append(station.anchor);
     }
     return positions;
-}
-
-QFont cwCaptureCenterline::scaledLabelFont() const
-{
-    return cwCaptureLabelPlacer::scaledFont(m_labelFont, m_exportDpi);
 }
 
 QVector<QPair<QString, QRectF>> cwCaptureCenterline::placedLabels() const
@@ -123,22 +121,10 @@ QVector<QPair<QString, QRectF>> cwCaptureCenterline::placedLabels() const
     labels.reserve(m_stationData.size());
     for(const auto& station : m_stationData) {
         if(!station.labelRect.isEmpty()) {
-            labels.append({station.name, station.labelRect});
+            labels.append({station.text, station.labelRect});
         }
     }
     return labels;
-}
-
-QRectF cwCaptureCenterline::boundingRect() const
-{
-    return m_boundingRect;
-}
-
-QPainterPath cwCaptureCenterline::shape() const
-{
-    QPainterPath path;
-    path.addRect(m_boundingRect);
-    return path;
 }
 
 void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget)
@@ -154,39 +140,45 @@ void cwCaptureCenterline::paint(QPainter* painter, const QStyleOptionGraphicsIte
     painter->setRenderHint(QPainter::Antialiasing, true);
     painter->setClipRect(m_boundingRect);
 
-    painter->setPen(m_linePen);
-    painter->setBrush(Qt::NoBrush);
-    painter->drawLines(m_lines);
-
-    const qreal stationRadius = stationDotRadius();
-
-    painter->setPen(m_stationPen);
-    painter->setBrush(m_stationBrush);
-    for(const auto& station : std::as_const(m_stationData)) {
-        if(!m_boundingRect.contains(station.position)) {
-            continue;
-        }
-        painter->drawEllipse(station.position, stationRadius, stationRadius);
+    if(m_legsVisible) {
+        painter->setPen(m_linePen);
+        painter->setBrush(Qt::NoBrush);
+        painter->drawLines(m_lines);
     }
 
-    painter->setPen(m_labelPen);
-    const QFont renderFont = scaledLabelFont();
-    painter->setFont(renderFont);
-    const QFontMetricsF paintMetrics(renderFont);
-    for(const auto& station : std::as_const(m_stationData)) {
-        if(!m_boundingRect.contains(station.position)) {
-            continue;
+    if(m_dotsVisible) {
+        const qreal stationRadius = stationDotRadius();
+
+        painter->setPen(m_stationPen);
+        painter->setBrush(m_stationBrush);
+        for(const auto& station : std::as_const(m_stationData)) {
+            if(!m_boundingRect.contains(station.anchor)) {
+                continue;
+            }
+            painter->drawEllipse(station.anchor, stationRadius, stationRadius);
         }
-        if(station.labelRect.isEmpty()) {
-            continue;
+    }
+
+    if(m_labelsVisible) {
+        painter->setPen(m_labelPen);
+        const QFont renderFont = scaledLabelFont();
+        painter->setFont(renderFont);
+        const QFontMetricsF paintMetrics(renderFont);
+        for(const auto& station : std::as_const(m_stationData)) {
+            if(!m_boundingRect.contains(station.anchor)) {
+                continue;
+            }
+            if(station.labelRect.isEmpty()) {
+                continue;
+            }
+            // The placer reserved a rect tightly sized to glyph ink; draw at the
+            // baseline-left point that puts the painter's own tight ink rect at
+            // labelRect's top-left.
+            const QRectF tight = paintMetrics.tightBoundingRect(station.text);
+            painter->drawText(
+                cwCaptureLabelPlacer::baselineForGlyphInkRect(station.labelRect, tight),
+                station.text);
         }
-        // The placer reserved a rect tightly sized to glyph ink; draw at the
-        // baseline-left point that puts the painter's own tight ink rect at
-        // labelRect's top-left.
-        const QRectF tight = paintMetrics.tightBoundingRect(station.name);
-        painter->drawText(
-            cwCaptureLabelPlacer::baselineForGlyphInkRect(station.labelRect, tight),
-            station.name);
     }
 
     painter->restore();
@@ -196,104 +188,80 @@ void cwCaptureCenterline::rebuildGeometry()
 {
     m_lines.clear();
     m_stationData.clear();
+    clearRequestIndex();
 
     if(m_camera == nullptr
-       || m_viewport.width() <= 0 || m_viewport.height() <= 0
-       || m_network.isEmpty()) {
+       || m_viewport.width() <= 0 || m_viewport.height() <= 0) {
         update();
         return;
     }
 
-    const QStringList stationNames = m_network.stations();
-    QHash<QString, QPointF> stationPoints;
-    stationPoints.reserve(stationNames.size());
+    // Each network is drawn on its own, so a station name shared by two caves
+    // stays two stations.
+    for(const cwSurveyNetwork& network : std::as_const(m_networks)) {
+        const QStringList stationNames = network.stations();
+        QHash<QString, QPointF> stationPoints;
+        stationPoints.reserve(stationNames.size());
 
-    for(const QString& station : stationNames) {
-        if(!m_network.hasPosition(station)) {
-            continue;
-        }
-
-        const QVector3D position3d = m_network.position(station);
-        const QPointF projected = m_camera->project(position3d);
-        const QPointF localPoint = (projected - m_viewport.topLeft()) * m_imageScale;
-
-        stationPoints.insert(station, localPoint);
-        m_stationData.append({station, localPoint, QRectF()});
-    }
-
-    for(const QString& station : stationNames) {
-        auto stationIt = stationPoints.constFind(station);
-        if(stationIt == stationPoints.constEnd()) {
-            continue;
-        }
-
-        const QStringList neighbors = m_network.neighbors(station);
-        for(const QString& neighbor : neighbors) {
-            if(station.compare(neighbor) >= 0) {
+        for(const QString& station : stationNames) {
+            if(!network.hasPosition(station)) {
                 continue;
             }
 
-            auto neighborIt = stationPoints.constFind(neighbor);
-            if(neighborIt == stationPoints.constEnd()) {
+            const QPointF localPoint = projectToLocal(network.position(station));
+            stationPoints.insert(station, localPoint);
+            m_stationData.append({station, localPoint, QRectF()});
+        }
+
+        for(const QString& station : stationNames) {
+            auto stationIt = stationPoints.constFind(station);
+            if(stationIt == stationPoints.constEnd()) {
                 continue;
             }
 
-            m_lines.append(QLineF(*stationIt, *neighborIt));
+            const QStringList neighbors = network.neighbors(station);
+            for(const QString& neighbor : neighbors) {
+                if(station.compare(neighbor) >= 0) {
+                    continue;
+                }
+
+                auto neighborIt = stationPoints.constFind(neighbor);
+                if(neighborIt == stationPoints.constEnd()) {
+                    continue;
+                }
+
+                m_lines.append(QLineF(*stationIt, *neighborIt));
+            }
         }
     }
+
+    std::sort(m_stationData.begin(), m_stationData.end(), anchorOrder);
 
     update();
 }
 
-void cwCaptureCenterline::placeStationLabels()
+QVector<cwCaptureLabelPlacer::LabelRequest> cwCaptureCenterline::buildLabelRequests(
+    const cwLabelPlacementControl& control,
+    const cwCaptureLabelPlacer::PlacementViewport& viewport)
 {
-    if(m_placer == nullptr || m_stationData.isEmpty()) {
-        return;
+    if(m_labelsVisible) {
+        // Note: station dots are seeded into the placer's obstacle set by
+        // cwCaptureViewport before the placer is finalized, so this method does
+        // NOT call addObstacleRect or finalize.
+        return buildRequests(m_stationData, control, viewport);
     }
 
-    // Use the same scaled font for placement that paint() uses, so the
-    // placer's reserved rect matches the painter's rendered glyph rect.
-    const QFont placementFont = scaledLabelFont();
-
-    // Stable order: top-to-bottom, left-to-right. Deterministic placements
-    // across rebuilds and across exports.
-    std::sort(m_stationData.begin(), m_stationData.end(),
-              [](const StationDrawData& a, const StationDrawData& b) {
-                  if(a.position.y() != b.position.y()) {
-                      return a.position.y() < b.position.y();
-                  }
-                  return a.position.x() < b.position.x();
-              });
-
-    // Note: station dots are seeded into the placer's obstacle set by
-    // cwCaptureViewport before the placer is finalized, so this method does
-    // NOT call addObstacleRect or finalize.
-
-    for(StationDrawData& station : m_stationData) {
-        if(station.name.isEmpty()) {
-            continue;
-        }
-
-        QPainterPath path;
-        path.addText(QPointF(0.0, 0.0), placementFont, station.name);
-        const QRectF tightInk = path.boundingRect();
-        if(tightInk.isEmpty()) {
-            continue;
-        }
-
-        cwCaptureLabelPlacer::LabelRequest req{
-            station.name,
-            station.position,
-            tightInk.size()
-        };
-        const cwCaptureLabelPlacer::Placement p = m_placer->placeLabel(req);
-        if(p.placed) {
-            // Painter draws at labelRect.topLeft() with AlignLeft|AlignTop;
-            // its glyph baseline lands at top + ascent. Adjust the rect so
-            // that the rect's TOP is the glyph's ink top (not baseline-
-            // ascent). Specifically: placer returned a rect tightly sized to
-            // glyph ink; that already matches what the painter renders.
-            station.labelRect = p.labelRect;
-        }
+    // Hidden labels place nothing. Clear the index so the empty placement
+    // slice applyPlacements receives matches it, and drop any earlier rects.
+    clearRequestIndex();
+    for(auto& station : m_stationData) {
+        station.resetPlacement();
     }
+    return {};
+}
+
+void cwCaptureCenterline::applyPlacements(
+    const QVector<cwCaptureLabelPlacer::Placement>& placements)
+{
+    applyPlacementsTo(m_stationData, placements);
 }

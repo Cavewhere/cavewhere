@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Splay rows — DataBox treatments</title>
+<style>
+  /* Tokens copied from Theme.qml so the mock matches the app */
+  :root {
+    --page: #f5f5f4;
+    --surface: #ffffff;
+    --surface-raised: #f0f0f0;
+    --surface-muted: #f6f6f6;
+    --border: #d3d3d3;
+    --border-subtle: #e4e4e4;
+    --text: #1c1c1a;
+    --text-subtle: #616469;
+    --splay-surface: #f7f1e3;
+    --splay-border: #8a6d3b;
+    --splay-text: #8a6d3b;
+    --highlight: #a5cdff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #16181d;
+      --surface: #1f232a;
+      --surface-raised: #242933;
+      --surface-muted: #292d35;
+      --border: #4a4f58;
+      --border-subtle: #353a42;
+      --text: #e6e9ee;
+      --text-subtle: #9fa6b1;
+      --splay-surface: #322a1a;
+      --splay-border: #c9a35e;
+      --splay-text: #c9a35e;
+      --highlight: #314f78;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font: 15px/1.5 -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 20px 30px 6px; }
+  header h1 { margin: 0 0 6px; font-size: 22px; }
+  header p { margin: 0 0 4px; color: var(--text-subtle); max-width: 84ch; }
+  main { padding: 0 30px 80px; }
+  section { margin-top: 42px; }
+  section > h2 { font-size: 17px; margin: 0 0 4px; }
+  section > p { margin: 0 0 14px; color: var(--text-subtle); max-width: 84ch; }
+  section > p b { color: var(--text); }
+
+  .editor {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: inline-block;
+  }
+  .cell {
+    position: absolute;
+    border: 1px solid var(--border-subtle);
+    display: flex; align-items: center; justify-content: center;
+    font: 14px -apple-system, "Segoe UI", sans-serif;
+  }
+  .cell.grad-a { background: linear-gradient(to bottom, var(--surface) 40%, var(--surface-raised) 100%); }
+  .cell.grad-b { background: linear-gradient(to top, var(--surface) 40%, var(--surface-raised) 100%); }
+  .cell.shot-a { background: var(--surface-raised); }
+  .cell.shot-b { background: var(--surface); }
+  .cell.station-name { font-weight: 600; justify-content: flex-start; padding-left: 8px; }
+
+  .coltitle {
+    position: absolute;
+    display: flex; align-items: flex-end; justify-content: center;
+    font-size: 12px; color: var(--text-subtle); padding-bottom: 3px;
+  }
+
+  .chip {
+    position: absolute;
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--splay-border); color: var(--splay-text); background: var(--splay-surface);
+    border-radius: 999px; padding: 2px 10px; font-size: 12px;
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  .chip .tri { font-size: 9px; display: inline-block; transition: transform .12s; }
+  .chip.open .tri { transform: rotate(90deg); }
+
+  /* Variant 1: current implementation — flat band */
+  .band {
+    position: absolute; left: 0;
+    background: var(--splay-surface);
+    display: flex; align-items: center;
+  }
+  .band .name { position: absolute; font-size: 11px; color: var(--splay-text); }
+  .band .val { position: absolute; text-align: center; font-size: 12px; color: var(--text); }
+
+  /* DataBox-styled splay cells */
+  .splaycell {
+    position: absolute;
+    border: 1px solid var(--border-subtle);
+    background: var(--splay-surface);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--text);
+  }
+  .splaytag {
+    position: absolute;
+    display: flex; align-items: center; justify-content: flex-end;
+    font-size: 11px; color: var(--splay-text); padding-right: 8px;
+  }
+  .rail { position: absolute; background: var(--splay-border); width: 2px; }
+  .minihead {
+    position: absolute;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
+    color: var(--splay-text);
+  }
+
+  /* Variant: popover */
+  .popover {
+    position: absolute; z-index: 5;
+    background: var(--surface);
+    border: 1px solid var(--splay-border);
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    padding: 8px;
+  }
+  .popover table { border-collapse: collapse; }
+  .popover th {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--splay-text); font-weight: 600; padding: 2px 8px; text-align: right;
+  }
+  .popover td {
+    border: 1px solid var(--border-subtle); background: var(--splay-surface);
+    font-size: 12px; padding: 3px 10px; text-align: right; min-width: 52px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Splay rows — DataBox treatments</h1>
+  <p>The first prototype was drawn as an HTML table, so its full-width tinted bands looked fine
+     there — but the real editor is a grid of bordered DataBoxes and the bands read as pasted-in.
+     Each mock below reproduces the actual editor (Theme tokens, 50&nbsp;px rows, 1&nbsp;px
+     shared borders, shot boxes straddling row boundaries) and varies only the splay treatment.
+     Chips are clickable in every variant. A2 (6 splays) starts open.</p>
+</header>
+
+<main id="main"></main>
+
+<script>
+"use strict";
+
+// Geometry mirroring SurveyEditorColumnTitles.qml
+const COL = { station: [0, 110], dist: [109, 72], comp: [180, 72], clino: [251, 72],
+              l: [322, 52], r: [373, 52], u: [424, 52], d: [475, 52] };
+const ROW_H = 50, TITLE_H = 26, EDITOR_W = 660, CHIP_X = 534;
+
+const stations = [
+  { name: "A1", lrud: [1.2, 0.8, 3.1, 0.4], splays: [] },
+  { name: "A2", lrud: [2.1, 1.4, 2.6, 0.9],
+    splays: [[4.5,20,15],[2.2,110,0],[1.9,200,-6],[3.8,290,3],[2.4,340,45],[1.6,155,-30]] },
+  { name: "A3", lrud: [0.6, 2.2, 4.0, 1.1], splays: [] },
+  { name: "A4", lrud: [1.8, 1.8, 1.9, 0.6],
+    splays: [[5.1,15,8],[3.3,100,-4],[2.7,190,1],[4.2,275,12],[1.9,60,-22],[2.5,130,35],[3.0,310,-8],[1.2,225,4]] },
+  { name: "A5", lrud: [0.9, 0.5, 2.2, 0.3], splays: [] },
+];
+const shots = [
+  [8.23, 271.5, -4.0], [12.61, 265.0, 2.5], [6.15, 291.0, -12.0], [9.87, 254.5, 1.0],
+];
+
+const f1 = v => v.toFixed(1), f2 = v => v.toFixed(2);
+
+function div(parent, cls, x, y, w, h, text) {
+  const e = document.createElement("div");
+  e.className = cls;
+  e.style.left = x + "px"; e.style.top = y + "px";
+  e.style.width = w + "px"; e.style.height = h + "px";
+  if (text !== undefined) { e.textContent = text; }
+  parent.appendChild(e);
+  return e;
+}
+
+// One splay value row rendered as DataBox-style cells under Dist/Az/Incl.
+function splayBoxRow(ed, splay, y, h, extraCls) {
+  const cls = "splaycell" + (extraCls ? " " + extraCls : "");
+  div(ed, cls, COL.dist[0],  y, COL.dist[1],  h, f2(splay[0]));
+  div(ed, cls, COL.comp[0],  y, COL.comp[1],  h, f1(splay[1]));
+  div(ed, cls, COL.clino[0], y, COL.clino[1], h, f1(splay[2]));
+}
+
+// variant.clusterHeight(n) -> px; variant.renderCluster(ed, station, yTop, i)
+function buildEditor(container, variant, open) {
+  container.innerHTML = "";
+  const ed = document.createElement("div");
+  ed.className = "editor";
+  container.appendChild(ed);
+
+  // Column titles
+  for (const [key, label] of [["station","Station"],["dist","Distance"],["comp","Compass"],
+                              ["clino","Clino"],["l","L"],["r","R"],["u","U"],["d","D"]]) {
+    div(ed, "coltitle", COL[key][0], 0, COL[key][1], TITLE_H, label);
+  }
+
+  // Row layout: station rows accumulate y; an open cluster adds height under its station.
+  const yTop = [];
+  let y = TITLE_H;
+  stations.forEach((st, i) => {
+    yTop.push(y);
+    y += ROW_H;
+    if (open.has(i) && st.splays.length) { y += variant.clusterHeight(st.splays.length); }
+  });
+  ed.style.width = EDITOR_W + "px";
+  ed.style.height = (y + ROW_H * 0.5) + "px";
+
+  stations.forEach((st, i) => {
+    const g = i % 2 === 0 ? "grad-a" : "grad-b";
+    div(ed, "cell station-name " + g, COL.station[0], yTop[i], COL.station[1], ROW_H, st.name);
+    [COL.l, COL.r, COL.u, COL.d].forEach(([x, w], k) =>
+      div(ed, "cell " + g, x, yTop[i], w, ROW_H, f1(st.lrud[k])));
+
+    if (st.splays.length) {
+      const chip = div(ed, "chip" + (open.has(i) ? " open" : ""), CHIP_X, yTop[i] + 14, null, null);
+      chip.style.width = "auto"; chip.style.height = "auto";
+      chip.innerHTML = `<span class="tri">▶</span>${st.splays.length}`;
+      chip.onclick = () => { open.has(i) ? open.delete(i) : open.add(i); buildEditor(container, variant, open); };
+      if (open.has(i)) { variant.renderCluster(ed, st, yTop[i] + ROW_H, i); }
+    }
+
+    // Shot boxes straddle the boundary below this station (dropped below an open cluster)
+    if (i < shots.length) {
+      const clusterH = open.has(i) && st.splays.length ? variant.clusterHeight(st.splays.length) : 0;
+      const sy = yTop[i] + ROW_H + clusterH - ROW_H * 0.5;
+      const sg = i % 2 === 0 ? "shot-a" : "shot-b";
+      div(ed, "cell " + sg, COL.dist[0],  sy, COL.dist[1],  ROW_H, f2(shots[i][0]));
+      div(ed, "cell " + sg, COL.comp[0],  sy, COL.comp[1],  ROW_H, f1(shots[i][1]));
+      div(ed, "cell " + sg, COL.clino[0], sy, COL.clino[1], ROW_H, f1(shots[i][2]));
+    }
+  });
+  return ed;
+}
+
+const variants = [
+{
+  id: "current",
+  title: "A — Current implementation (baseline)",
+  blurb: "What's on the branch today: a full-width tinted band per splay with floating labels. \
+Kept here for comparison — the bands ignore the grid's borders, so they read as a different \
+material than the rest of the editor.",
+  clusterHeight: n => n * 24,
+  renderCluster(ed, st, y0) {
+    st.splays.forEach((s, k) => {
+      const y = y0 + k * 24;
+      const band = div(ed, "band", 0, y, EDITOR_W, 24);
+      const nm = document.createElement("span");
+      nm.className = "name"; nm.style.left = "20px"; nm.textContent = "splay";
+      band.appendChild(nm);
+      [[COL.dist, f2(s[0])], [COL.comp, f1(s[1])], [COL.clino, f1(s[2])]].forEach(([[x, w], t]) => {
+        const v = document.createElement("span");
+        v.className = "val"; v.style.left = x + "px"; v.style.width = w + "px"; v.textContent = t;
+        band.appendChild(v);
+      });
+    });
+  }
+},
+{
+  id: "databox",
+  title: "B — DataBox cells",
+  blurb: "Each splay reading is a bordered, tan-filled cell sharing the grid's 1 px borders, \
+sitting exactly under the Distance/Compass/Clino columns. The rest of the row stays editor \
+background. A muted <b>s1…sN</b> tag sits in the station column gutter. The splays become part \
+of the grid instead of a band across it.",
+  clusterHeight: n => n * 27 + 6,
+  renderCluster(ed, st, y0) {
+    st.splays.forEach((s, k) => {
+      const y = y0 + 3 + k * 27;
+      div(ed, "splaytag", 0, y, COL.station[1] - 8, 28, "s" + (k + 1));
+      splayBoxRow(ed, s, y, 28);
+    });
+  }
+},
+{
+  id: "rail",
+  title: "C — DataBox cells + accent rail",
+  blurb: "Same DataBox cells as B, plus a 2 px rail in the splay accent color running down the \
+station column's edge, tying the cluster to the station it hangs from — helpful when A4's eight \
+rows push the next station off-screen and you forget whose splays you're looking at.",
+  clusterHeight: n => n * 27 + 6,
+  renderCluster(ed, st, y0, i) {
+    const n = st.splays.length;
+    div(ed, "rail", COL.station[0] + 12, y0, 2, this.clusterHeight(n));
+    st.splays.forEach((s, k) => {
+      const y = y0 + 3 + k * 27;
+      div(ed, "splaytag", 20, y, COL.station[1] - 28, 28, st.name + " · s" + (k + 1));
+      splayBoxRow(ed, s, y, 28);
+    });
+  }
+},
+{
+  id: "header",
+  title: "D — DataBox cells + mini header",
+  blurb: "B plus a small caption row over the cluster naming the columns in splay color. Redundant \
+with the main column titles when the cluster is short, but self-describing when a long cluster \
+scrolls the titles away. Costs 18 px per open cluster.",
+  clusterHeight: n => n * 27 + 18 + 6,
+  renderCluster(ed, st, y0) {
+    div(ed, "minihead", COL.dist[0],  y0 + 2, COL.dist[1],  16, "Dist");
+    div(ed, "minihead", COL.comp[0],  y0 + 2, COL.comp[1],  16, "Az");
+    div(ed, "minihead", COL.clino[0], y0 + 2, COL.clino[1], 16, "Incl");
+    st.splays.forEach((s, k) => splayBoxRow(ed, s, y0 + 18 + 3 + k * 27, 28));
+  }
+},
+{
+  id: "popover",
+  title: "E — Popover (no inline rows)",
+  blurb: "The divergent option: rows never move. Clicking the chip opens a floating panel of \
+DataBox-styled readings next to the station. The table stays compact and the shot-row shift \
+logic goes away — but splays stop being glanceable next to their neighbors, and the panel \
+needs dismissal/positioning rules a ListView row never does.",
+  clusterHeight: () => 0,
+  renderCluster(ed, st, y0) {
+    const pop = document.createElement("div");
+    pop.className = "popover";
+    pop.style.left = (CHIP_X - 40) + "px";
+    pop.style.top = (y0 - 8) + "px";
+    pop.innerHTML = "<table><tr><th>Dist</th><th>Az</th><th>Incl</th></tr>" +
+      st.splays.map(s => `<tr><td>${f2(s[0])}</td><td>${f1(s[1])}</td><td>${f1(s[2])}</td></tr>`).join("") +
+      "</table>";
+    ed.appendChild(pop);
+  }
+},
+];
+
+const main = document.getElementById("main");
+variants.forEach(v => {
+  const sec = document.createElement("section");
+  sec.innerHTML = `<h2>${v.title}</h2><p>${v.blurb}</p>`;
+  const holder = document.createElement("div");
+  sec.appendChild(holder);
+  main.appendChild(sec);
+  buildEditor(holder, v, new Set([1]));
+});
+</script>
+</body>
+</html>

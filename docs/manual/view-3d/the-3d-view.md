@@ -3,140 +3,139 @@ title: The 3D View
 summary: Navigate the 3D cave model, aim the camera, and control what's shown with layers.
 problem: See your survey as a 3D cave and aim the view to answer where passages go and where the leads are.
 keywords: [3d view, navigation, turntable, camera, azimuth, vertical angle, plan, profile, projection, compass, scale bar, layers, keyword]
-related: [layers-and-keywords.md, perspective-and-field-of-view.md, ../concepts/why-cavewhere.md, ../concepts/glossary.md]
+related: [layers-and-keywords.md, perspective-and-field-of-view.md, ../measurement/measure-distance-and-bearing.md, ../getting-started/why-cavewhere.md, ../concepts/glossary.md]
 ---
 
 # The 3D View
 
 ## Why / when you need this
 
-The 3D view is where CaveWhere earns its name. The moment you enter survey data,
-the [shots](../concepts/glossary.md#shot) appear here as a 3D
-[line plot](../concepts/glossary.md#loop-closure) you can orbit, zoom, and look
-at from any angle — so you can see where the cave is actually heading, which
+The 3D view is where CaveWhere earns its name. Type a shot into a trip and it
+lands here in the [line plot](../concepts/glossary.md#loop-closure), which you
+can orbit and zoom from any angle. Look and you see where the cave heads, which
 passages line up, and where the [leads](../concepts/glossary.md#lead) point
-before you plan the next trip. This is the *living map* CaveWhere is built
-around: it updates as you survey. (For the bigger picture, see
-[Why CaveWhere](../concepts/why-cavewhere.md).)
+before you plan the next trip. It updates as you survey, the argument
+[Why CaveWhere](../getting-started/why-cavewhere.md) makes at length.
 
-![The CaveWhere 3D view: the survey line plot and carpeted passage outlines at center, the View panel on the right, and the compass and scale bar in the scene.](../images/view-3d-overview.png)
-*The 3D view. The red survey line plot runs through the carpeted passage
-outlines; the compass rose (lower right) and scale bar (bottom) orient and size
-the scene; the View panel on the right aims the camera.*
+![The 3D view: a carpeted survey plot at center under blue lead markers, the View panel on the right, the compass and scale bar at bottom right.](../images/view-3d-overview.png)
+*The 3D view in plan, looking straight down. The compass sits at the bottom
+right with the scale bar to its left; the View panel on the right aims the
+camera.*
 
 ## Open the 3D view
 
-Click **View** in the left navigation rail. CaveWhere opens the current region's
-3D model. If nothing appears, you either have no survey data yet or the caves
-aren't [georeferenced](../concepts/glossary.md#georeferencing) into the same
-space — enter or fix some shots first.
+Click **View**, the cube icon in the left navigation rail. CaveWhere
+opens the current region's 3D model. Nothing there? Either you have no survey
+data yet, or the caves aren't
+[georeferenced](../concepts/glossary.md#georeferencing) into the same space.
+Enter or fix some shots first.
 
 ## Move around: orbit, pan, and zoom
 
-The 3D view is a *turntable*: the cave sits on an imaginary rotating table and
-you look at it from the outside. With a mouse:
+The cave sits on an imaginary turntable and you look at it from the outside.
+With a mouse:
 
-- **Orbit** (rotate around the cave) — **right-drag**.
-- **Pan** (slide the view without rotating) — **left-drag**.
-- **Zoom** — the **mouse wheel** or **trackpad scroll**.
+- **Orbit** (rotate around the cave): **right-drag**. Every 2 pixels of drag
+  turns the view 1°.
+- **Pan** (slide the view without rotating): **left-drag**.
+- **Zoom**: the **mouse wheel** or a **trackpad scroll**.
 
-On a touchscreen or trackpad, **drag with one finger to orbit** and **pinch to
-zoom and pan**. Use these free gestures to explore; use the View panel below
-when you need an *exact* angle for a screenshot or a map.
+On a touchscreen, one finger drags to orbit and a pinch zooms and pans.
+
+Orbiting does not spin around a fixed center. Right-press picks whatever sits
+under the cursor and orbits *that*: an exact hit within 4 mm of the pointer, or
+20 mm of reach for a scrap or centerline you nearly caught. Miss everything and
+the old pivot stays put, so a stray click on empty sky will not teleport the
+view. Sometimes the pivot lands wrong anyway; press again somewhere better.
 
 ## Aim the camera precisely: the View panel
 
-Free-hand orbiting is great for exploring but hard to reproduce. The **View**
-tab of the side panel sets the camera to exact, repeatable angles — the same way
-every time — which is what you want before exporting a view or comparing two
-trips.
+Free-hand orbiting explores well but does not repeat. The **View** tab below
+sets exact angles, what you want before exporting a view or comparing 2 trips.
 
-![The View panel highlighted, showing Reset, Azimuth, Vertical Angle, and Projection controls.](../images/view-3d-camera-controls.png)
-*The View panel aims the camera by exact angle rather than by dragging.*
+![The View panel ringed in orange: Reset, the Azimuth group with North grayed out at 0.0°, Animate's Start and 10 s Duration, Vertical Angle at 90.0° with Plan grayed, and the Projection switch.](../images/view-3d-camera-controls.png)
+*Every control that aims the camera. North and Plan are gray because the view
+already holds 0.0° and 90.0°.*
 
-- **Reset** returns the camera to a default framing of the whole cave — the fast
-  way back when you've orbited yourself into a corner.
-- **Azimuth** is the compass heading you're looking along. The **N / E / S / W**
-  buttons snap to the cardinal directions, or type a value in the degree field.
-  Setting azimuth to North gives you a map-style view oriented like a paper map.
-  The **lock** keeps the heading fixed while you change other settings.
-- **Vertical Angle** tilts between looking straight down and looking from the
-  side. **Plan** (90°) is the straight-down, map-like view; **Profile** (0°) is
-  a side-on elevation that shows how the cave climbs and drops. These are the two
-  angles cave maps are traditionally drawn at, which is why they get dedicated
+- **Reset** animates back over 1 second and frames the *visible* geometry with
+  an 8% margin. Hide half the project in **Layers** and Reset frames the half
+  left showing, not the whole cave.
+- **Azimuth** is the compass heading you look along, 0.0° to 360.0°. The
+  **North**, **East**, **South**, and **West** buttons swing there over 200 ms;
+  the button for the heading you already hold is grayed out. Or type a number.
+  The **lock** freezes the heading so orbit drags can't move it.
+- **Animate**, inside the Azimuth group, spins the heading in an endless loop.
+  **Start** begins it; **Duration** sets the seconds per turn, 10 by default.
+- **Vertical Angle** tilts between -90.0° and 90.0°. **Plan** snaps to 90°,
+  straight down; **Profile** to 0°, a side-on elevation, and each grays out at
+  its own angle. Cave maps are conventionally drawn at those 2 angles, hence the
   buttons.
-- **Projection** toggles between **Orthogonal** and **Perspective**. Orthogonal
-  keeps distant passages the same size as near ones — the whole view is drawn at
-  a single, constant scale with no perspective foreshortening. That is exactly
-  how a finished cave map works, and it is what "map-like work" means here:
-
-    - The **scale bar** applies everywhere in the frame, so you can judge a
-      distance in the far part of the cave the same as the near part.
-    - Passage widths and lengths stay in **true proportion** to each other,
-      instead of near passages looking bigger just because they're closer to the
-      camera.
-    - A **Plan** or **Profile** view in orthogonal projection matches the
-      convention printed cave maps are drawn in, so it reads — and exports — like
-      a map rather than a photograph.
-
-  **Perspective**, by contrast, makes near things larger and far things smaller,
-  which looks more natural and gives a sense of depth — use it for presentation
-  and getting your bearings, not for measuring. In perspective a **Field of View**
-  setting appears to widen or narrow the lens — see
+- **Projection** is a switch running from Orthogonal (spelled "Orthognal" on
+  screen) to **Perspective**. Orthogonal draws the whole frame at one constant
+  scale, the way a printed map works. Perspective makes near passages larger
+  than far ones. Drag the handle and the 2 blend live, though the switch
+  settles onto whichever end is nearer the moment you let go. Perspective adds
+  a **Field of View** row: see
   [Perspective and Field of View](perspective-and-field-of-view.md).
-- **Animate** spins the view over the number of seconds you set in **Duration** —
-  a quick fly-around for showing the cave to others.
+
+I recommend leaving the view orthogonal and switching to perspective only to
+show the cave to somebody. Measuring and map export both want the constant
+scale.
 
 ## Read the scene: compass and scale bar
 
-Two aids are drawn into the scene itself:
+The **compass rose** at the bottom right tumbles with the camera, so its N, S,
+E, and W labels tell you which way you are facing after an orbit. The rose is a
+readout and nothing else: it isn't clickable. To face north, use the Azimuth
+buttons.
 
-- The **compass rose** (lower right) shows which way is north for the current
-  camera, so you always know your orientation even after orbiting.
-- The **scale bar** (bottom) shows real-world distance at the current zoom, so
-  you can judge how big a passage or a gap actually is.
+The **scale bar** sits to the compass's left, and only in orthogonal
+projection. It rounds each cell to 1, 2, or 5 times a power of ten and draws 5
+cells, the first split into quarters. That increment may change under you as
+you zoom, so read the number, not the bar's width. Right-click the bar for a
+**Metric** / **Imperial** menu, in which the entry matching the project's own
+units is tagged *Project Default*.
 
-Both update live as you move the camera.
+Perspective has no single scale to print. A bar meaning 50 m in the foreground
+would mean something else at the back of the cave, so CaveWhere hides the bar
+until you switch back.
 
-**Station names** are drawn right beside their points in the line plot, so you
-can read which station is which without leaving the 3D view. CaveWhere declutters
-them for you: where stations crowd together, or when you zoom out, it drops the
-overlapping labels rather than printing an unreadable pile — and keeps the labels
-already on screen steady as you move, so they don't flicker on and off. That's
-why not every station is labelled at once; zoom in on a busy area and more names
-appear. The labels ride with the survey line, so hiding a trip's `Line Plot` in
-the [Layers](layers-and-keywords.md) tab hides its station names along with it.
+CaveWhere draws **station names** beside their points in the plot. Where
+stations crowd together, or when you zoom out, it drops the overlapping labels
+rather than print an unreadable pile, and holds the ones already on screen
+steady so they don't flicker.
 
-The scale bar appears **only in orthogonal projection**. In perspective there is
-no single scale to show — near passages are drawn larger than far ones, so a bar
-that means "50 m" in the foreground would mean something different in the
-background. Rather than show a misleading measurement, CaveWhere hides the scale
-bar until you switch back to orthogonal (see [Projection](#aim-the-camera-precisely-the-view-panel)).
+Not every station carries a name at once; zoom into a busy corner and more
+appear. The labels ride the survey line, so hiding a trip's `Line Plot` in
+[Layers](layers-and-keywords.md) hides its station names along with it. The
+only switch for the labels themselves sits in
+**File > Debug > Station Labels Visible**, an odd home for it.
 
 ## Focus on part of the cave: layers
 
 A big project quickly becomes too much to look at all at once. The **Layers**
-tab filters the scene by [keyword](../concepts/glossary.md#keyword), so you can
-show only the parts you're working on and hide the rest — the same idea as
-layers in a drawing program, but driven by the tags on your caves, trips, and
-notes.
+tab filters the scene by [keyword](../concepts/glossary.md#keyword) instead of
+by a hand-built list of layers.
 
-![The Layers tab, listing checkable keyword values under a Type column, each with a count, and an "Also Include" button.](../images/view-3d-layers.png)
+![The Layers tab with Type chosen, listing Lead, Line Plot, Plan, and Others with a count and a checkbox each, and an Also Include button.](../images/view-3d-layers.png)
 *The Layers tab groups the scene by keyword; untick a value to hide it.*
 
-Pick a key (here, **Type**) and CaveWhere lists its values, each with a count.
-Untick a value — say **Plan** — to hide those objects; tick it to bring them
-back. You can narrow further by drilling down through more keys, and combine
-independent selections with **Also Include**. See
-[Focus the View with Keyword Layers](layers-and-keywords.md) for the full filter
-— the AND columns that drill down and the OR groups that add selections together.
+Pick a key (**Type**, shown above) and CaveWhere lists its values with a count:
+`Lead (2)`, `Line Plot (2)`, `Plan (4)`, `Others (0)`. Untick one to hide those
+objects, tick it to bring them back. **Also Include** adds a second,
+independent selection. See
+[Focus the View with Keyword Layers](layers-and-keywords.md) for drilling down
+through AND columns and combining groups with OR.
 
 ## Where to go next
 
-- New to the terms used here (station, shot, lead, line plot)? See the
-  [glossary](../concepts/glossary.md).
-- Want the reasoning behind the always-current 3D map? Read
-  [Why CaveWhere](../concepts/why-cavewhere.md).
-- Measuring distances and bearings in the view, georeferencing, and rendering
-  settings each get their own chapter as the manual grows (see
-  [the manual index](../index.md)).
+- The floating toolbar at the bottom left holds **Pick**, **Clip**, and
+  **Measure**. Measure reports the
+  [distance and bearing](../measurement/measure-distance-and-bearing.md)
+  between 2 points, and Clip trims a
+  [point cloud](../point-clouds/clip-a-point-cloud.md). Each one takes over
+  left-click until you click it off again.
+- The blue `?` balloons floating over the plot are
+  [leads](../leads/track-and-export-leads.md).
+- Unsure of a term? The [glossary](../concepts/glossary.md) covers station,
+  shot, lead, and line plot.

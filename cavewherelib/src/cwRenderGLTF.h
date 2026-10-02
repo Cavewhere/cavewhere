@@ -25,6 +25,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderGLTF : public cwRenderTexturedItems
     QML_NAMED_ELEMENT(RenderGLTF)
 
     Q_PROPERTY(QString gltfFilePath READ gltfFilePath WRITE setGLTFFilePath NOTIFY gltfFilePathChanged)
+    Q_PROPERTY(QString dataRootPath READ dataRootPath WRITE setDataRootPath NOTIFY dataRootPathChanged)
     Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged FINAL)
     Q_PROPERTY(QMatrix4x4 modelMatrix READ modelMatrix WRITE setModelMatrix NOTIFY modelMatrixChanged BINDABLE bindableModelMatrix)
     Q_PROPERTY(Status status READ status NOTIFY statusChanged)
@@ -44,6 +45,12 @@ public:
     explicit cwRenderGLTF(QObject *parent = nullptr);
 
     QString gltfFilePath() const { return m_gltfFilePath; }
+
+    //The project's data root, whose .cw_cache holds the model's compressed
+    //textures. Read when a load starts; empty leaves the model on uncompressed
+    //textures.
+    QString dataRootPath() const { return m_dataRootPath; }
+    void setDataRootPath(const QString& dataRootPath);
 
     cwFutureManagerToken futureManagerToken() const;
     void setFutureManagerToken(const cwFutureManagerToken &newFutureManagerToken);
@@ -71,6 +78,7 @@ public slots:
 
 signals:
     void gltfFilePathChanged();
+    void dataRootPathChanged();
     void modelMatrixChanged();
 
     void futureManagerTokenChanged();
@@ -94,6 +102,7 @@ private:
     //                            const QMatrix4x4& modelMatrix);
 
     QString m_gltfFilePath;
+    QString m_dataRootPath;
 
     QVector<uint32_t> m_items;
 

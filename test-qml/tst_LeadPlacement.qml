@@ -20,14 +20,34 @@ MainWindowTest {
         name: "LeadPlacement"
         when: windowShown
 
-        function test_exportSvgWithLeads() {
+        function hasRhi() {
             // The export render path needs a live QRhi; the headless offscreen QPA has none.
             let renderer = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->viewPage->SplitView->renderer");
-            if (!OffscreenRenderTester.windowHasRhi(renderer)) {
-                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
-                return;
-            }
+            return OffscreenRenderTester.windowHasRhi(renderer)
+        }
 
+        function mapPage() {
+            return ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage")
+        }
+
+        function cleanup() {
+            // Layers outlive a project reload, so remove them to give each test
+            // a fresh captureItem0. A skipped (headless) test has no manager.
+            let mapPageItem = mapPage()
+            let manager = mapPageItem ? findChild(mapPageItem, "screenCaptureManager") : null
+            if (!manager) {
+                return
+            }
+            while (manager.numberOfCaptures > 0) {
+                let capture = manager.data(manager.index(0), CaptureManager.LayerObjectRole)
+                manager.removeCaptureViewport(capture)
+            }
+        }
+
+        // Loads Phake Cave 3000, adds one map layer around the cave and selects
+        // it so its properties (incl. leadsVisible) are bound. Returns the
+        // layer's map item (captureItem0).
+        function setupLayer() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
 
             // Wait for scrap triangulation / image upload futures to drain so
@@ -80,20 +100,18 @@ MainWindowTest {
             mouseClick(captureItem0)
             tryVerify(() => { return captureItem0.selected === true })
 
-            // Enable the Leads option directly on the capture viewport
-            captureItem0.captureItem.leadsVisible = true
-            verify(captureItem0.captureItem.leadsVisible === true)
+            return captureItem0
+        }
 
-            // Export SVG to the per-test temp directory. Open it after for
-            // visual inspection.
-            let outPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl()) + "/cavewhere_lead_placement.svg"
+        function exportSvg(fileName) {
+            let outPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl()) + "/" + fileName
             let outUrl  = TestHelper.toLocalUrl(outPath)
             TestHelper.removeFile(outUrl)
             verify(!TestHelper.fileExists(outUrl))
 
-            let mapPage = ObjectFinder.findObjectByChain(mainWindow, "rootId->mapPage")
-            let screenCaptureManager = findChild(mapPage, "screenCaptureManager")
+            let screenCaptureManager = findChild(mapPage(), "screenCaptureManager")
             captureManagerFinished.target = screenCaptureManager
+            captureManagerFinished.clear()
             screenCaptureManager.filename = outUrl
             screenCaptureManager.fileType = CaptureManager.SVG
             screenCaptureManager.capture()
@@ -101,6 +119,25 @@ MainWindowTest {
 
             verify(TestHelper.fileExists(outUrl));
             verify(TestHelper.fileSize(outUrl) > 0);
+            return outUrl
+        }
+
+        function test_exportSvgWithLeads() {
+            if (!hasRhi()) {
+                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
+                return;
+            }
+
+            let captureItem0 = setupLayer()
+
+            // Enable the Leads option directly on the capture viewport
+            captureItem0.captureItem.leadsVisible = true
+            verify(captureItem0.captureItem.leadsVisible === true)
+
+            // Export SVG to the per-test temp directory. Open it after for
+            // visual inspection.
+            let outUrl = exportSvg("cavewhere_lead_placement.svg")
+            let outPath = RootData.urlToLocal(outUrl)
 
             console.log("[LeadPlacement] wrote", outPath, "size=", TestHelper.fileSize(outUrl))
 
@@ -175,6 +212,40 @@ MainWindowTest {
                    "Labels overlap leader lines: " + leaderBad.join(", "))
             verify(leaderCrossings.length === 0,
                    "Leader lines cross each other: " + leaderCrossings.length + " pairs")
+        }
+
+        function test_leadsToggleAfterExport() {
+            if (!hasRhi()) {
+                skip("no QRhi on this platform (headless offscreen); run with a GPU-backed platform");
+                return;
+            }
+
+            // Leads stay off (the default) for the first preview.
+            let captureItem0 = setupLayer()
+            let viewport = captureItem0.captureItem
+            compare(viewport.leadsVisible, false)
+
+            tryVerify(() => { return CaptureLayerInspector.previewPlaced(viewport) }, 20000,
+                      "the preview's label placement finished")
+
+            // Hidden leads take no space: the preview builds no leads item.
+            compare(CaptureLayerInspector.previewLeads(viewport).count, 0)
+
+            exportSvg("cavewhere_leads_toggle_after_export.svg")
+
+            let leadsCheckBox = findChild(mapPage(), "leadsCheckBox")
+            verify(leadsCheckBox !== null, "found leadsCheckBox")
+            mouseClick(leadsCheckBox)
+            tryCompare(viewport, "leadsVisible", true)
+
+            // The toggle reaches the preview, not the hidden export group.
+            tryVerify(() => { return CaptureLayerInspector.previewLeads(viewport).visibleCount === 1 }, 20000,
+                      "the preview shows its leads after the export")
+
+            mouseClick(leadsCheckBox)
+            tryCompare(viewport, "leadsVisible", false)
+            tryVerify(() => { return CaptureLayerInspector.previewLeads(viewport).count === 0 }, 20000,
+                      "turning Leads off removes the preview's leads item")
         }
     }
 }

@@ -1,0 +1,5 @@
+; Bare Splays Keep The Station's LRUDs
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0 lrud=to
+D1	D2	5.0	0	0	*1,2,3,4*
+D2	--	1.5	90	-10

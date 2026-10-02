@@ -1,9 +1,9 @@
 ---
 title: Export a Map
-summary: Compose a map on the Map page from one or more captured views, set the paper size, scale, and resolution, and export to PNG, JPG, TIF, SVG, or PDF.
+summary: Compose a map on the Map page from captured views, set the paper size, scale, margins, and DPI, and export to PNG, JPG, TIF, SVG, or PDF.
 problem: Turn the 3D cave into a printable or shareable picture — a map at a real paper scale, not survey data.
 keywords: [map, export, image, PNG, PDF, SVG, JPG, TIF, paper size, scale, resolution, DPI, print, layer]
-related: [../view-3d/the-3d-view.md, export-surveys.md]
+related: [../view-3d/the-3d-view.md, ../view-3d/perspective-and-field-of-view.md, export-surveys.md]
 ---
 
 # Export a Map
@@ -11,95 +11,107 @@ related: [../view-3d/the-3d-view.md, export-surveys.md]
 ## Why / when you need this
 
 Sometimes you don't want the *data*, you want a *picture*: a map to print, a
-figure for a trip report, an image to post. The **Map** page composes one from
-the 3D cave and exports it as an image or PDF — and, because a cave map is
-usually printed at a stated scale ("1:500"), it lets you lay the cave out on a
-real paper size at a real scale rather than just taking a screenshot.
+figure for a trip report, an image to post. A cave map gets printed at a stated
+scale, "1:500" or the like, so the **Map** page lays the cave on real paper at a
+real scale instead of grabbing the screen.
 
 ## The idea: layers on a sheet of paper
 
-A map here is one or more **layers** arranged on a **paper sheet**. Each layer is
-a rectangular capture of the 3D view — a piece of the cave, taken from the
-camera angle the view had when you captured it. You place, scale, and rotate
-those layers on the page, set the paper size, and export the sheet.
+A map here is one or more **layers** on a **paper sheet**. Each layer is a
+rectangular capture of the 3D view, frozen at the camera angle you took it from.
+Place, scale, and rotate them on the page, set the paper size, export. CaveWhere
+names them **Capture 1**, **Capture 2**, and so on in the **Layers** list.
 
-That structure is why the Map page has a paper preview on one side and options on
-the other: you're composing a page, not grabbing the screen.
-
-![The Map page: a white paper preview on the left, and on the right the Layers list with an Add Layer button, the File type and Export controls, and the Paper Size options with resolution in DPI.](../images/export-map.png)
-*The Map page. The paper sheet is on the left; the layers, file type, paper size,
-and resolution are on the right.*
+![The Map page: a paper preview on the left, and on the right the Layers list, the File type and Export controls, and Paper Size.](../images/export-map.png)
+*Paper on the left, layers and options on the right.*
 
 ## Aim the 3D view first
 
-Because a layer captures the cave *from the current camera angle*, set up the
-[3D view](../view-3d/the-3d-view.md) the way you want the map to look before you
-capture — a plan map wants the view looking straight down in orthographic
-projection, a profile wants it side-on. The layer freezes that orientation.
+A layer captures the cave from whatever the camera is doing right then, so set
+the [3D view](../view-3d/the-3d-view.md) up first. A plan map wants the view
+straight down in
+[orthogonal projection](../view-3d/perspective-and-field-of-view.md), one
+constant scale everywhere; a profile wants it side-on. Capture in Perspective
+and no scale you type afterward makes it measurable.
 
 ## Add a layer
 
-On the Map page, click **Add Layer**. CaveWhere switches to the **View** page
-with a selection tool active and the prompt *"Select the area to add a map
-layer."* Click and drag a rectangle over the part of the cave you want, then
-click **Done**. The captured area becomes a layer on the paper, and you're
-returned to the Map page.
+Click **Add Layer**. CaveWhere jumps to the **View** page with the selection
+tool armed and this prompt hanging off the **Select Area** button, see below:
 
-![The View page after clicking Add Layer: the 3D cave with a Select Area button in the corner and a prompt reading "Select the area to add a map layer".](../images/map-add-layer.png)
-*Add Layer drops you on the 3D view to draw the area you want on the map. Aim the
-view the way the map should look first — the layer captures it from here.*
+> Select the area to add a map layer
 
-Add more layers the same way to build a multi-part map — an overview plus a
-detail inset, for instance.
+Drag a rectangle over the part of the cave you want, then click **Done**. The
+capture lands on the paper and you're back on the Map page.
+
+![The View page after clicking Add Layer: the 3D cave with a Select Area button and the prompt "Select the area to add a map layer".](../images/map-add-layer.png)
+*Add Layer drops you on the 3D view to draw the area you want.*
+
+Repeat for a detail inset. Right-click a layer and pick **Remove** to drop it.
 
 ## Adjust a layer
 
-Select a layer in the **Layers** list to edit it. Its properties include:
+Select a layer in the **Layers** list; the properties box stays hidden until you
+do.
 
-- **Scale** — the map scale, written as *On Paper = In Cave* and shown as
-  "1:_N_". This is the number that makes it a map rather than a snapshot: set it
-  and the layer is drawn so a given distance on paper equals a real distance
-  underground.
-- **Size**, **Position**, and **Rotation** on the page. You can also drag and
-  rotate the layer directly in the paper preview.
-- **Scale Bar** — on by default, so a printed map carries its own scale.
-- **Leads** — off by default; turn it on to include
+- **Scale**, written *On Paper* = *In Cave*, with the ratio beside it. Put 1 in
+  against 50 ft and you get **1:600**. Mismatched units turn the readout red
+  with *Weird scaling units*; a scale that comes out zero or infinite reads
+  *Invalid scale (check DPI)*.
+- **Size**, **Position**, and **Rotation**, in inches and degrees. Dragging the
+  layer in the preview edits them too.
+- **Scale Bar**, on by default, with a **Units:** menu offering *Project
+  Default*, *Metric*, and *Imperial*.
+- **Leads**, off by default. Turn it on to draw
   [lead markers](../view-3d/the-3d-view.md) on this layer.
 
 ## Set the paper and resolution
 
-The **Paper Size** options set the sheet:
-
-- **Letter, Legal, A4**, or **Custom Size** (type your own width and height).
-- **Orientation** — Portrait or Landscape (for the fixed sizes).
-- **Margins** on each edge.
-- **Resolution** in DPI — 100 to 600, defaulting to **300**, which is a normal
-  print resolution. Higher DPI means a sharper, larger file.
+- **Letter** (8.5 × 11 in), **Legal** (8.5 × 14 in), **A4** (8.27 × 11.69 in),
+  or **Custom Size**, which unlocks the width and height fields. All inches.
+- **Orientation**, Portrait or Landscape. Custom Size hides the switch; swap the
+  2 numbers yourself.
+- **Margins - inches**, starting at 1 in on each edge, with an **All** box that
+  sets all 4 at once. These are not just whitespace: CaveWhere draws a border
+  rectangle on the margin line, and it prints.
+- **Resolution** in DPI, stepping by 100 from 100 to 600, starting at **300**.
 
 ## Export
 
-Pick the **File type** and click **Export**, then choose where to save. CaveWhere
-renders the sheet and opens the finished file in your system's default viewer.
+Pick a **File type**, click **Export**, and choose where to save. The list opens
+on **JPG**, so change it first. CaveWhere renders the sheet and, if the write
+succeeds, hands the file to your default viewer.
 
-In practice, most cavers export **SVG** or **PDF** and redraw the map in a vector
-editor like **Inkscape** or **Adobe Illustrator**. CaveWhere lays the cave out to
-scale and the drawing program is where the finished cartography happens — the
-export is a faithful base to trace over, not usually the final map. The raster
-formats are for when you want a finished image directly.
+**Memory Required**, below the button, counts one image at paper size times DPI,
+4 bytes a pixel: Letter at 300 DPI is 2550 × 3300 pixels, about 32 MB; at 600
+DPI, 128 MB. Doubling DPI quadruples it, and 40 × 40 in at 600 DPI asks 2.1 GB.
+The `?` beside the readout warns:
 
-The formats fall into two groups:
+> Using more memory than what's on computer my cause your computer to hang!
+> CaveWhere may temporarily use equal or double the amount of disk space
+> required by the memory required
 
-| Type | Good for |
-|------|----------|
-| **PNG** | A lossless image with a transparent background. The usual choice for the web or for dropping into a document. |
-| **JPG** | A smaller image with a white background; fine for a photo-like export, lossy. |
-| **TIF** | A lossless image with a transparent background, for print workflows that expect TIFF. |
-| **SVG** | A vector page that scales without pixelation — the format to open in Inkscape or Illustrator for redrawing. |
-| **PDF** | A print-ready vector page at the paper size and margins you set — send it to a printer, or open it in a vector editor to redraw. |
+Free disk is the real constraint: that buffer is a memory-mapped temp file. A
+render too big to place fails into an error dialog rather than hanging, though
+the final write still copies it all into RAM. Only 32-bit builds disable
+**Export**, at 1 GB. With no layers you get an empty sheet carrying its page
+outline and margin frame.
+
+I recommend exporting **SVG** or **PDF** and finishing the cartography in
+Inkscape or Adobe Illustrator. The raster formats are for a finished image
+straight out.
+
+| Type | What you get |
+|------|--------------|
+| **PNG** | Lossless raster, transparent background. Usual choice for the web. |
+| **JPG** | Lossy raster on a white background; smaller file, photo-like. |
+| **TIF** | Lossless raster, transparent background, for print workflows wanting TIFF. |
+| **SVG** | Vector page, no pixelation. Open it in Inkscape or Illustrator. |
+| **PDF** | Vector page at your exact paper size, ready for a printer. |
 
 ## Next steps
 
-- [The 3D View](../view-3d/the-3d-view.md) — aim the camera and pick the
-  projection before you capture a layer.
-- [Export Surveys to Other Programs](export-surveys.md) — export the survey
+- [Perspective and Field of View](../view-3d/perspective-and-field-of-view.md):
+  pick the projection before you capture a layer.
+- [Export Surveys to Other Programs](export-surveys.md): export the survey
   *data* instead of a picture.

@@ -26,12 +26,13 @@ class cwCave;
 class cwProject;
 #include "cwCavingRegionData.h"
 #include "cwEquateModel.h"
+#include "cwFixStationValidator.h"
 #include "cwGeoReference.h"
+#include "cwLocalProjectionManager.h"
 #include "cwLazLayerModel.h"
 #include "cwSurveyNode.h"
 #include "cwUndoer.h"
 #include "cwGlobals.h"
-#include "cwGeoPoint.h"
 #include "cwFutureManagerToken.h"
 #include "cwUnits.h"
 
@@ -44,8 +45,11 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged BINDABLE bindableName)
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
+    Q_PROPERTY(cwFixStationValidator* fixStationValidator READ fixStationValidator CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
+    Q_PROPERTY(cwLocalProjectionManager* localProjection READ localProjection CONSTANT)
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
+    Q_PROPERTY(QString defaultFixDatum READ defaultFixDatum NOTIFY defaultFixDatumChanged)
     Q_PROPERTY(cwEquateModel* equates READ equates CONSTANT)
 
 public:
@@ -63,18 +67,46 @@ public:
     void setName(const QString& name) { m_name = name; }
     QBindable<QString> bindableName() { return &m_name; }
 
-    // The geo-reference (CS + worldOrigin) is owned here but is the single home
-    // for that state: consumers read and write it through region.geoReference,
-    // not through the region itself. The region only retains the responsibilities
-    // that genuinely need its other data — the LAZ push (it owns lazLayers) and
-    // the cave-based recomputeWorldOrigin() below.
+    // The geo-reference (the project's local projection) is owned here but is
+    // the single home for that state: consumers read it through
+    // region.geoReference, not through the region itself. The region only
+    // retains the responsibility that genuinely needs its other data — pushing
+    // the frame into lazLayers, which it owns.
     cwGeoReference* geoReference() const { return m_geoReference; }
 
-    //! Recompute the worldOrigin from the caves' fix stations and write it into
-    //! geoReference(). Lives here because it reads the region's caves.
-    Q_INVOKABLE void recomputeWorldOrigin();
+    //! Detects fix stations whose coordinate is a data-entry error (far from the
+    //! rest of the survey). Owned here because the check is region-scoped, but
+    //! the geometry/attribution logic lives in the validator, not the region.
+    cwFixStationValidator* fixStationValidator() const { return m_fixStationValidator; }
 
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
+
+    //! Drives the local projection through its lifecycle, and is where the user
+    //! recenters it from. Owned here because the policy needs the region's caves
+    //! and layers; read through region.localProjection, not through the region.
+    cwLocalProjectionManager* localProjection() const { return m_localProjectionManager; }
+
+    //! The datum a coordinate typed into this project is most likely on, as a
+    //! geographic code from cwCoordinateSystem's datum table. Read by every
+    //! surface that offers a datum, so that the answer comes from what the
+    //! project already holds rather than from a hardcoded WGS84.
+    //!
+    //! The first enabled GIS layer that names a datum wins, because a fix is
+    //! usually being placed against the terrain those tiles draw and a datum
+    //! shift shows up as the cave sitting beside the sinkhole it belongs in.
+    //! Without a layer the frame answers, since it inherited its datum from
+    //! whatever georeferenced the project. With neither, WGS84 — what a phone
+    //! reports.
+    //!
+    //! Answered on demand rather than cached: it is asked at commit and pick
+    //! time, and the PROJ lookup behind it is memoized per thread.
+    Q_INVOKABLE QString defaultFixDatum() const;
+
+    //! The system defaultFixDatum() reads its answer off — the enabled GIS
+    //! layer that names a datum, else the frame — and empty when neither does,
+    //! which is the case the datum answers with the WGS84 fallback.
+    QString defaultFixSourceCS() const;
+
     void setFutureManagerToken(const cwFutureManagerToken& token);
 
     //! Every equate tie in the project, wherever its stations sit: within one
@@ -176,6 +208,12 @@ signals:
     void nameChanged();
     void unitSystemChanged();
 
+    //! Something defaultFixDatum() reads changed — a layer arrived, left, was
+    //! enabled or disabled or renamed its system, or the frame moved. Coarse on
+    //! purpose: it reports the inputs moving rather than the answer changing,
+    //! which keeps the PROJ-backed resolve on the reader's side of the signal.
+    void defaultFixDatumChanged();
+
     void beginInsertCaves(int begin, int end);
     void insertedCaves(int begin, int end);
 
@@ -218,6 +256,10 @@ private:
     cwGeoReference* m_geoReference = nullptr;
 
     cwLazLayerModel* m_lazLayers = nullptr;
+
+    cwFixStationValidator* m_fixStationValidator = nullptr;
+
+    cwLocalProjectionManager* m_localProjectionManager = nullptr;
 
     cwEquateModel* m_equates = nullptr;
 

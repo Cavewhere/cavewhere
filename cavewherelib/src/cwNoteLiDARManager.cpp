@@ -7,6 +7,7 @@
 
 // This header
 #include "cwNoteLiDARManager.h"
+#include "cwProgressNode.h"
 
 // Qt
 #include <QAbstractItemModel>
@@ -26,13 +27,13 @@
 #include "cwTriangulateLiDARTask.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwGridConvergence.h"
 #include "cwTrip.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwNoteLiDAR.h"
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
 #include "asyncfuture.h"
-#include "cwUniqueConnectionChecker.h"
 #include "cwDiskCacher.h"
 #include "cwCacheImageProvider.h"
 #include "cwKeywordItemModel.h"
@@ -43,9 +44,15 @@
 // Async
 #include "asyncfuture.h"
 
+// Std
+#include <algorithm>
+
 using NotePtrList = QList<cwNoteLiDAR*>;
 
 namespace {
+
+//What the task list calls a LiDAR run
+const QString kLiDARJobName = QStringLiteral("Triangulating LiDAR notes");
 
 cwDiskCacher::Key iconCacheKey(const cwProject* project, const cwNoteLiDAR* note)
 {
@@ -117,19 +124,43 @@ QString cacheUrlForKey(const cwDiskCacher::Key& key)
 
 }
 
+// A dirty note is only worth triangulating once it is still attached to a
+// cave/trip, has stations, and its cave centerline is solved. Shared by
+// updateState() and the run path.
+bool cwNoteLiDARManager::DirtyNote::isRunnable() const
+{
+    return note != nullptr
+        && !trip.isNull()
+        && !cave.isNull()
+        && note->rowCount() > 0
+        && !cave->stationPositionLookup().positions().isEmpty();
+}
+
 cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :
     QObject(parent),
-    m_restarter(this)
+    m_restarter(this),
+    m_connectionRegistry(this)
 {
-    m_restarter.onFutureChanged([this]() {
-        m_futureManagerToken.addJob({ m_restarter.future(), "Triangulating LiDAR notes" });
-    });
 }
 
 cwNoteLiDARManager::~cwNoteLiDARManager()
 {
+    //See cwUpdatable::beginTeardown().
+    beginTeardown();
+
+    //Cancel without waiting: the batch triangulates cwTriangulateLiDARInData
+    //value copies (note stations, model matrix, station lookup, network, glTF
+    //path), so a worker that outlives this manager touches nothing that died
+    //with it. The result continuation is bound with context(this) and is
+    //dropped here. This line finishes the outer future; the cancel the worker
+    //itself sees comes from ~Restarter, which cancels the inner future
+    //synchronously as m_restarter is destroyed.
     m_restarter.future().cancel();
-    waitForFinish();
+
+    //The row would otherwise outlive the run that feeds it
+    if (m_progressRoot) {
+        m_progressRoot->cancel();
+    }
 }
 
 void cwNoteLiDARManager::setProject(cwProject* project)
@@ -153,7 +184,7 @@ void cwNoteLiDARManager::setProject(cwProject* project)
             if (auto* note = qobject_cast<cwNoteLiDAR*>(object)) {
                 updateIconFromCache(note);
                 markDirty(note);
-                runIfNeeded();
+                notifyDirty();
                 return;
             }
 
@@ -180,6 +211,8 @@ void cwNoteLiDARManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)
                    this, &cwNoteLiDARManager::regionRowsInserted);
         disconnect(m_regionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                    this, &cwNoteLiDARManager::regionRowsAboutToBeRemoved);
+        disconnect(m_regionModel.data(), &cwRegionTreeModel::modelReset,
+                   this, &cwNoteLiDARManager::handleRegionReset);
     }
 
     m_regionModel = regionTreeModel;
@@ -189,6 +222,10 @@ void cwNoteLiDARManager::setRegionTreeModel(cwRegionTreeModel* regionTreeModel)
                 this, &cwNoteLiDARManager::regionRowsInserted);
         connect(m_regionModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved,
                 this, &cwNoteLiDARManager::regionRowsAboutToBeRemoved);
+        // A model reset (project load / git checkout) replaces every row without
+        // per-row signals, so re-walk the reloaded trips. Mirrors cwScrapManager.
+        connect(m_regionModel.data(), &cwRegionTreeModel::modelReset,
+                this, &cwNoteLiDARManager::handleRegionReset);
         handleRegionReset();
     }
 }
@@ -200,17 +237,12 @@ void cwNoteLiDARManager::setLinePlotManager(cwLinePlotManager* linePlotManager)
     }
 
     if (m_linePlotManager != nullptr) {
-        // If you have a specific LiDAR-centered signal, connect/disconnect it here.
-        // Example (adjust to your actual signal):
-        // disconnect(m_linePlotManager, &cwLinePlotManager::stationPositionInLiDARChanged,
-        //            this, &cwNoteLiDARManager::stationPositionsChangedForCave);
         disconnect(m_linePlotManager, nullptr, this, nullptr);
     }
 
     m_linePlotManager = linePlotManager;
 
     if (m_linePlotManager != nullptr) {
-        // Example hookup (commented until such a signal exists):
         connect(m_linePlotManager, &cwLinePlotManager::stationPositionInTripsChanged,
                 this, [this](const QList<cwTrip*>& trips) {
 
@@ -222,7 +254,7 @@ void cwNoteLiDARManager::setLinePlotManager(cwLinePlotManager* linePlotManager)
                         }
                     }
 
-                    runIfNeeded();
+                    notifyDirty();
         });
     }
 }
@@ -270,32 +302,24 @@ bool cwNoteLiDARManager::keepRenderGeometry() const
     return m_keepRenderGeometry;
 }
 
-bool cwNoteLiDARManager::automaticUpdate() const
+cwUpdatable::State cwNoteLiDARManager::doUpdateState() const
 {
-    return m_automaticUpdate;
+    // Dirty takes priority over Working: a note (re)dirtied but not yet handed to
+    // a batch (m_workPending) reports Dirty even while an earlier batch runs, so
+    // whoever is driving runs the pipeline again once that batch is over. Once
+    // dispatched, a running batch reports Working until it completes.
+    // See cwUpdatable::State.
+    const bool runnableDirty =
+        std::any_of(m_dirtyNotes.begin(), m_dirtyNotes.end(),
+                    [](const DirtyNote& dirty) { return dirty.isRunnable(); });
+    if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
+    if(isRunning())                    { return cwUpdatable::State::Working; }
+    return cwUpdatable::State::Clean;
 }
 
-void cwNoteLiDARManager::setAutomaticUpdate(bool automaticUpdate)
+QFuture<void> cwNoteLiDARManager::doRun()
 {
-    if (m_automaticUpdate == automaticUpdate) {
-        return;
-    }
-    m_automaticUpdate = automaticUpdate;
-    emit automaticUpdateChanged();
-    runIfNeeded();
-}
-
-void cwNoteLiDARManager::updateAllLiDAR()
-{
-    if (m_regionModel.isNull() || m_regionModel->cavingRegion() == nullptr) {
-        return;
-    }
-
-    const NotePtrList all = collectAllNotes(m_regionModel);
-    for (cwNoteLiDAR* note : all) {
-        markDirty(note);
-    }
-    runIfNeeded();
+    return runBatch();
 }
 
 void cwNoteLiDARManager::updateLiDARForCave(cwCave* cave)
@@ -303,7 +327,8 @@ void cwNoteLiDARManager::updateLiDARForCave(cwCave* cave)
     if (cave == nullptr) {
         return;
     }
-    for (cwTrip* trip : cave->trips()) {
+    const QList<cwTrip*> trips = cave->allTrips();
+    for (cwTrip* trip : trips) {
         updateLiDARForTrip(trip);
     }
 }
@@ -318,7 +343,7 @@ void cwNoteLiDARManager::updateLiDARForTrip(cwTrip* trip)
             markDirty(note);
         }
     }
-    runIfNeeded();
+    notifyDirty();
 }
 
 void cwNoteLiDARManager::waitForFinish()
@@ -449,7 +474,7 @@ void cwNoteLiDARManager::liDARRowsInserted(const QModelIndex& parent, int begin,
         }
     }
 
-    runIfNeeded();
+    notifyDirty();
 }
 
 void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, int begin, int end)
@@ -460,6 +485,8 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
     if (model == nullptr) {
         return;
     }
+
+    const cwUpdatable::State previousState = updateState();
 
     for (int i = begin; i <= end; i++) {
         const QModelIndex idx = model->index(i, 0);
@@ -478,13 +505,8 @@ void cwNoteLiDARManager::liDARRowsAboutToBeRemoved(const QModelIndex& parent, in
             disconnect(note, nullptr, this, nullptr);
         }
     }
-}
 
-// ---------------------- Centerline trigger ----------------------
-
-void cwNoteLiDARManager::stationPositionsChangedForCave(cwCave* cave)
-{
-    updateLiDARForCave(cave);
+    announceStateChange(previousState);
 }
 
 // ---------------------- Bookkeeping ----------------------
@@ -493,9 +515,22 @@ void cwNoteLiDARManager::noteDestroyed(QObject* noteObj)
 {
     if (auto* note = static_cast<cwNoteLiDAR*>(noteObj)) {
         m_deletedNotes.insert(note);
-        m_dirtyNotes.remove(note);
+        //Whether this note was pending, not a state comparison across the removal:
+        //destroyed() is emitted by ~QObject, so ~cwNoteLiDAR has already run and
+        //reading the note — which updateState() would do while it is still in the
+        //dirty set — is a use-after-free.
+        const bool wasPending = m_dirtyNotes.remove(note) > 0;
         removeKeywordItemForNote(note);
         m_noteToRender.remove(note);
+
+        //Only once the pipeline has actually left Dirty. Still Dirty means nothing
+        //changed, and announcing it would have the coordinator dispatch a batch
+        //from inside a note's destructor — mapNoteToInData() reads each surviving
+        //note's trip and cave, which on this path are the ancestors being torn
+        //down. The state read is safe now that the dying note has left the set.
+        if (wasPending && updateState() != cwUpdatable::State::Dirty) {
+            emit updateStateChanged();
+        }
     }
 }
 
@@ -510,6 +545,7 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     }
 
     const cwTrip* trip = note->parentTrip();
+    const cwCave* cave = trip ? trip->parentCave() : nullptr;
 
     // Note stations resolve against the trip's own solved data (see
     // mapScrapToTriangulateInData): native passes the cave lookup/network
@@ -523,6 +559,12 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
         cwNoteLiDARTransformationData data = note->noteTransformation()->data();
         data.north = cwNoteTranformation::northAdjustedForDeclination(data.north,
                                                                       trip->calibrations()->declination());
+        // Add back the grid convergence the store side
+        // (cwNoteLiDAR::updateNoteTransformion) subtracted, so the note north
+        // matches the grid-aligned plotted stations (0.0 without a projected
+        // CS). See issue #628.
+        const double convergence = cwGridConvergence::angleForCave(cave);
+        data.north = cwNoteTranformation::northAdjustedForDeclination(data.north, -convergence);
         cwNoteLiDARTransformation adjustedTransform;
         adjustedTransform.setData(data);
         modelMatrix = adjustedTransform.matrix();
@@ -538,6 +580,7 @@ cwTriangulateLiDARInData cwNoteLiDARManager::mapNoteToInData(const cwNoteLiDAR* 
     // GLTF path (if the note exposes one via filename())
     const QString path = (project && note) ? project->absolutePath(note, note->filename()) : QString();
     in.setGltfFilename(path);
+    in.setDataRootPath(project ? project->dataRootDir().path() : QString());
 
     return in;
 }
@@ -549,41 +592,42 @@ void cwNoteLiDARManager::markDirty(cwNoteLiDAR* note)
     }
 
     // connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
-    m_dirtyNotes.insert(note);
+    //Overwrites any earlier entry, so a re-mark refreshes the cached ancestors.
+    m_dirtyNotes.insert(note, DirtyNote{note, note->parentTrip(), note->parentCave()});
+    m_workPending = true;
 }
 
-void cwNoteLiDARManager::runIfNeeded()
+void cwNoteLiDARManager::notifyDirty()
 {
-    if (!m_automaticUpdate) {
-        return;
-    }
-    runBatch();
+    emit updateStateChanged();
+    runIfStandalone();
 }
 
-void cwNoteLiDARManager::runBatch()
+QFuture<void> cwNoteLiDARManager::runBatch()
 {
     if (m_dirtyNotes.isEmpty()) {
-        return;
+        return currentRun();
     }
 
     // Snapshot and clear “deleted” guard
     NotePtrList notes;
     notes.reserve(m_dirtyNotes.size());
-    for (cwNoteLiDAR* note : std::as_const(m_dirtyNotes)) {
-        if (note != nullptr
-            && note->parentTrip() != nullptr
-            && note->parentCave() != nullptr
-            && note->rowCount() > 0 //Make sure there's stations
-            && !note->parentCave()->stationPositionLookup().positions().isEmpty() //Station lookup must be populated
-            )
-        {
-            notes.append(note);
+    for (const DirtyNote& dirty : std::as_const(m_dirtyNotes)) {
+        if (dirty.isRunnable()) {
+            notes.append(dirty.note);
         }
     }
 
-    if (notes.isEmpty()) {        
-        return;
+    if (notes.isEmpty()) {
+        return currentRun();
     }
+
+    // Dispatching now covers the current dirty set: drop the pending marker and
+    // enter Working. A note dirtied after this re-sets m_workPending (markDirty),
+    // flipping back to Dirty so the pipeline is run again.
+    m_workPending = false;
+    const QFuture<void> batch = beginRun();
+    emit updateStateChanged();
 
     // Prepare inputs
     auto inputs = cw::transform(notes, [this](const cwNoteLiDAR* note) {
@@ -592,59 +636,53 @@ void cwNoteLiDARManager::runBatch()
 
     // Wrap in restarter so subsequent calls coalesce
     m_restarter.restart([this, notes, inputs]() {
-        auto future = cwTriangulateLiDARTask::triangulate(inputs);
+        //One tree, and one row, per run. A restart abandons the previous run's
+        //row rather than letting it hang around unfed.
+        if (m_progressRoot) {
+            m_progressRoot->cancel();
+        }
+
+        //The loop knows its count, so hint it. Nothing below here declares
+        //anything.
+        const cwProgressNodePtr progressRoot = cwProgressNode::createRoot(kLiDARJobName);
+        progressRoot->expectChildren(notes.size());
+        m_progressRoot = progressRoot;
+
+        if (m_futureManagerToken.isValid()) {
+            m_futureManagerToken.addJob(cwFuture(progressRoot->future(), kLiDARJobName, progressRoot));
+        }
+
+        auto future = cwTriangulateLiDARTask::triangulate(inputs, progressRoot);
+
+        // Replacing the watcher destroys the previous run's, so a restarted
+        // batch delivers only its own results.
+        m_deliveredNotes.clear();
+        m_batchWatcher = std::make_unique<QFutureWatcher<LiDARNoteResult>>();
+
+        QFutureWatcher<LiDARNoteResult>* watcher = m_batchWatcher.get();
+        connect(watcher, &QFutureWatcher<LiDARNoteResult>::resultReadyAt,
+                this, [this, notes, watcher](int index) {
+                    m_deliveredNotes.insert(index);
+                    deliverNote(notes.at(index), watcher->resultAt(index), index);
+                });
+        watcher->setFuture(future);
 
         return AsyncFuture::observe(future)
             .context(this,
-                     [this, notes, future]() {
+                     [this, notes, future, watcher, progressRoot]() {
                          Q_ASSERT(notes.size() == future.resultCount());
 
-                         //Update the rendering scene
-                         for(int i = 0; i < future.resultCount(); i++) {
-                             auto note = notes.at(i);
-                             if(m_deletedNotes.contains(note)) {
-                                 //Note deleted, just skip the result
-                                 continue;
-                             }
-
-                             auto result = future.resultAt(i);
-                             if(result.hasError()) {
-                                 qWarning() << "Warning: Note triangle at i:" << i << result.errorMessage();
-                                 continue;
-                             }
-
-                             QVector<cwRenderTexturedItems::Item> items = future.resultAt(i).value();
-
-                             if (m_keepRenderGeometry) {
-                                 for (auto& item : items) {
-                                     item.storeGeometry = true;
+                         //Deliver whatever resultReadyAt hasn't reported yet. A
+                         //superseded run has already had its watcher replaced,
+                         //and its results are stale.
+                         if(m_batchWatcher.get() == watcher) {
+                             for(int i = 0; i < future.resultCount(); i++) {
+                                 if(!m_deliveredNotes.contains(i)) {
+                                     deliverNote(notes.at(i), future.resultAt(i), i);
                                  }
                              }
-
-                             auto addItems = [this, note](const QVector<cwRenderTexturedItems::Item>& items) {
-                                 QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
-                                     return m_render->addItem(item);
-                                 });
-
-                                 m_noteToRender[note] = newIds;
-                             };
-
-                             if(m_noteToRender.contains(note)) {
-                                 //Update the existing note
-                                 auto renderIds = m_noteToRender.value(note);
-
-                                 //For now just remove all the old ids
-                                 //not very efficient
-                                 for(auto id : renderIds) {
-                                     m_render->removeItem(id);
-                                 }
-
-                                 addItems(items);
-                             } else {
-                                 addItems(items);
-                             }
-
-                             addKeywordItemForNote(note);
+                             m_deliveredNotes.clear();
+                             m_batchWatcher.reset();
                          }
 
                          // Remove processed from dirty, clear deleted set entries
@@ -656,9 +694,90 @@ void cwNoteLiDARManager::runBatch()
                          }
                          m_deletedNotes.clear();
 
+                         // Batch done: leave Working (updateState reflects the
+                         // notes just removed from m_dirtyNotes — Clean, or Dirty
+                         // if an edit arrived mid-batch).
+                         finishBatch();
+
+                         progressRoot->finish();
+                         if (m_progressRoot == progressRoot) {
+                             m_progressRoot.reset();
+                         }
+
                          emit liDARNotesUpdated(notes);
                      }).future();
     });
+
+    return batch;
+}
+
+void cwNoteLiDARManager::deliverNote(cwNoteLiDAR* note,
+                                     const LiDARNoteResult& result,
+                                     int index)
+{
+    if (m_deletedNotes.contains(note)) {
+        //Note deleted, just skip the result
+        return;
+    }
+
+    if (result.hasError()) {
+        qWarning() << "Warning: Note triangle at i:" << index << result.errorMessage();
+        return;
+    }
+
+    QVector<cwRenderTexturedItems::Item> items = result.value();
+
+    if (m_keepRenderGeometry) {
+        for (auto& item : items) {
+            item.storeGeometry = true;
+        }
+    }
+
+    const QVector<uint32_t> oldIds = m_noteToRender.value(note);
+
+    if (oldIds.size() == items.size() && !items.isEmpty()) {
+        // Re-triangulation from a declination or transform edit
+        // produces the same number of items with new geometry.
+        // Update them in place: reusing the render ids lets
+        // cwRenderTexturedItems coalesce repeated edits onto a
+        // stable id and skips the picker/visibility churn of
+        // tearing every item down and re-adding it. The ids are
+        // unchanged, so the note's keyword/visibility binding
+        // still holds and needs no rebind.
+        for (int itemIndex = 0; itemIndex < items.size(); ++itemIndex) {
+            m_render->updateItem(oldIds.at(itemIndex), items.at(itemIndex));
+        }
+    } else {
+        // First build, or the item count changed (e.g. the note's
+        // GLB was replaced): tear down the old items and add fresh
+        // ones, then rebind the keyword item to the new ids.
+        for (uint32_t id : oldIds) {
+            m_render->removeItem(id);
+        }
+
+        const QVector<uint32_t> newIds = cw::transform(items, [this](const cwRenderTexturedItems::Item& item) {
+            return m_render->addItem(item);
+        });
+        m_noteToRender[note] = newIds;
+
+        addKeywordItemForNote(note);
+    }
+}
+
+void cwNoteLiDARManager::announceStateChange(cwUpdatable::State previousState)
+{
+    if (updateState() != previousState) {
+        emit updateStateChanged();
+    }
+}
+
+void cwNoteLiDARManager::finishBatch()
+{
+    if (!isRunning()) {
+        return;
+    }
+    endRun();
+    emit updateStateChanged();
 }
 
 // ---------------------- Trip wiring helpers ----------------------
@@ -670,23 +789,21 @@ void cwNoteLiDARManager::connectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
-        if(!m_connectionChecker.add(model)) {
-            return;
+        const bool added = m_connectionRegistry.add(model, [this, model]{
+            connect(model, &QAbstractItemModel::rowsInserted,
+                    this, &cwNoteLiDARManager::liDARRowsInserted);
+            connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
+                    this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
+
+            // Existing notes
+            for (cwNoteLiDAR* note : notesFromModel(model)) {
+                connectNote(note);
+            }
+        });
+
+        if (added) {
+            notifyDirty();
         }
-
-
-        connect(model, &QAbstractItemModel::rowsInserted,
-                this, &cwNoteLiDARManager::liDARRowsInserted);
-        connect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
-                this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
-
-        // Existing notes
-        const auto notes = notesFromModel(model);
-        for (cwNoteLiDAR* note : notes) {
-            connectNote(note);
-        }
-
-        runIfNeeded();
     }
 }
 
@@ -697,46 +814,49 @@ void cwNoteLiDARManager::disconnectTrip(cwTrip* trip)
     }
 
     if (auto* model = trip->notesLiDAR()) {
-        m_connectionChecker.remove(model);
-        disconnect(model, &QAbstractItemModel::rowsInserted,
-                   this, &cwNoteLiDARManager::liDARRowsInserted);
-        disconnect(model, &QAbstractItemModel::rowsAboutToBeRemoved,
-                   this, &cwNoteLiDARManager::liDARRowsAboutToBeRemoved);
+        const cwUpdatable::State previousState = updateState();
+
+        // remove() tears down the model↔this row connections wholesale (equivalent to
+        // the two specific disconnects this replaced).
+        m_connectionRegistry.remove(model);
 
         for (cwNoteLiDAR* note : notesFromModel(model)) {
-            m_connectionChecker.remove(note);
-
-            disconnect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed);
+            m_connectionRegistry.remove(note);
+            // The note's transformation is a second source object, so it isn't covered
+            // by the note's own wholesale disconnect above.
             disconnect(note->noteTransformation(), nullptr, this, nullptr);
-            disconnect(note, nullptr, this, nullptr);
             m_deletedNotes.insert(note);
             m_dirtyNotes.remove(note);
             removeKeywordItemForNote(note);
             m_noteToRender.remove(note);
         }
+
+        announceStateChange(previousState);
     }
 }
 
 void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
 {
-    if(!m_connectionChecker.add(note)) {
+    const bool added = m_connectionRegistry.add(note, [this, note]{
+        auto handleNoteChange = [note, this]() {
+            markDirty(note);
+            notifyDirty();
+        };
+
+        connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
+        connect(note->noteTransformation(), &cwNoteLiDARTransformation::matrixChanged, this, handleNoteChange);
+        connect(note, &cwNoteLiDAR::dataChanged, this, [handleNoteChange](QModelIndex, QModelIndex, QVector<int>) { handleNoteChange(); });
+        connect(note, &cwNoteLiDAR::rowsInserted, this, handleNoteChange);
+        connect(note, &cwNoteLiDAR::rowsRemoved, this, handleNoteChange);
+        connect(note, &cwNoteLiDAR::filenameChanged, this, [this, note, handleNoteChange]() {
+            updateIconFromCache(note);
+            handleNoteChange();
+        });
+    });
+
+    if (!added) {
         return;
     }
-
-    auto handleNoteChange = [note, this]() {
-        markDirty(note);
-        runIfNeeded();
-    };
-
-    connect(note, &QObject::destroyed, this, &cwNoteLiDARManager::noteDestroyed, Qt::UniqueConnection);
-    connect(note->noteTransformation(), &cwNoteLiDARTransformation::matrixChanged, this, handleNoteChange);
-    bool connected = connect(note, &cwNoteLiDAR::dataChanged, this, [handleNoteChange](QModelIndex, QModelIndex, QVector<int>) { handleNoteChange(); });
-    connect(note, &cwNoteLiDAR::rowsInserted, this, handleNoteChange);
-    connect(note, &cwNoteLiDAR::rowsRemoved, this, handleNoteChange);
-    connect(note, &cwNoteLiDAR::filenameChanged, this, [this, note, handleNoteChange]() {
-        updateIconFromCache(note);
-        handleNoteChange();
-    });
 
     addKeywordItemForNote(note);
     markDirty(note);
@@ -744,14 +864,6 @@ void cwNoteLiDARManager::connectNote(cwNoteLiDAR *note)
 }
 
 // ---------------------- Utilities ----------------------
-
-QList<cwTrip*> cwNoteLiDARManager::allTrips(cwRegionTreeModel* regionModel)
-{
-    if (regionModel == nullptr || regionModel->cavingRegion() == nullptr) {
-        return {};
-    }
-    return regionModel->cavingRegion()->rootNode()->allTrips();
-}
 
 NotePtrList cwNoteLiDARManager::notesFromModel(cwSurveyNoteLiDARModel* model)
 {
@@ -774,17 +886,6 @@ NotePtrList cwNoteLiDARManager::notesFromModel(cwSurveyNoteLiDARModel* model)
         }
     }
 
-    return out;
-}
-
-NotePtrList cwNoteLiDARManager::collectAllNotes(cwRegionTreeModel* regionModel)
-{
-    NotePtrList out;
-    for (cwTrip* trip : allTrips(regionModel)) {
-        if (auto* model = trip->notesLiDAR()) {
-            out.append(notesFromModel(model));
-        }
-    }
     return out;
 }
 

@@ -5,12 +5,15 @@
 #include "cwScene.h"
 #include "cwRhiPipelineSet.h"
 #include "cwRenderObjectId.h"
+#include "cwRenderCullingStats.h"
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 
 #include <rhi/qrhi.h>
 #include <array>
 #include <functional>
+#include <optional>
+#include <QBox3D>
 #include <QMatrix4x4>
 #include <QSize>
 #include <QVector>
@@ -21,6 +24,30 @@ class cwRhiFrameRenderer;
 class cwRenderObject;
 class cwAppearanceSlotted;
 class cwVisibilitySnapshot;
+class cwFrustum;
+
+namespace cw::budgets {
+    constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
+
+    // Mirrors the cwRenderingSettings defaults so a frame renderer running
+    // without that singleton (tests, tools) still streams sensibly.
+    constexpr qint64 kDefaultGpuBudgetBytes = 1536 * kBytesPerMegabyte;
+    constexpr qint64 kDefaultCpuBudgetBytes = 512 * kBytesPerMegabyte;
+    constexpr qint64 kDefaultUploadBudgetBytesPerFrame = 8 * kBytesPerMegabyte;
+    constexpr double kDefaultScreenSpaceErrorPx = 1.5;
+}
+
+/**
+ * The streaming budget knobs, read from cwRenderingSettings at the sync barrier
+ * and stamped onto every RenderData alongside the camera, so the render thread
+ * never reaches back across the barrier for them.
+ */
+struct cwRenderBudgets {
+    qint64 gpuBudgetBytes = cw::budgets::kDefaultGpuBudgetBytes;
+    qint64 cpuBudgetBytes = cw::budgets::kDefaultCpuBudgetBytes;
+    qint64 uploadBudgetBytesPerFrame = cw::budgets::kDefaultUploadBudgetBytesPerFrame;
+    double screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
+};
 
 class cwRHIObject {
 
@@ -57,6 +84,12 @@ public:
         QMatrix4x4 projectionMatrix;       //!< clip-space corrected
         QMatrix4x4 viewProjectionMatrix;   //!< clip-space corrected
         float devicePixelRatio = 1.0f;
+        // Physical pixel size of the target this job draws into — the live
+        // viewport for the live frame, the job's output size offscreen. Mip
+        // selection needs the physical height, which no other field carries.
+        QSize viewportSize;
+        // This frame's streaming budgets, stamped with the camera.
+        cwRenderBudgets budgets;
     };
 
     //For rendering
@@ -119,6 +152,16 @@ public:
         // happened in gatherScene, so most gather()s never touch it. Null is
         // treated as everything-visible.
         const cwVisibilitySnapshot* visibility = nullptr;
+        // The frame's view frustum, built by gatherScene from this job's camera.
+        // Objects with sub-item granularity cull their own items against it;
+        // whole objects were already culled in gatherScene. Null means cull
+        // nothing, mirroring the visibility field's null-means-visible contract.
+        const cwFrustum* frustum = nullptr;
+        // The frame's culled-versus-total tally, owned by gatherScene and
+        // published once the frame is gathered. Objects with sub-item
+        // granularity add their own item counts here. Null means don't count,
+        // mirroring the frustum field's null-means-cull-nothing contract.
+        cwRenderCullingStats::Counts* cullingStats = nullptr;
         // Per-object appearance slot this render job selects (0 = the live
         // appearance in slot 0; higher slots = a per-job override the offscreen
         // renderer acquired and uploaded for this object before gathering). The
@@ -193,6 +236,28 @@ public:
     virtual void synchronize(const SynchronizeData& data) = 0;
     virtual void updateResources(const ResourceUpdateData& data) = 0;
 
+    // Spend up to @a remainingUploadBytes of this frame's upload budget draining
+    // whatever this object has streaming in, decrementing it by what was taken.
+    // Called once per live frame, right after updateResources, so streamed
+    // uploads ride the frame's shared resource batch. Returns true while work
+    // remains — loads in flight or levels still to upload — which makes the
+    // scene re-arm another frame.
+    virtual bool streamResources(ResourceUpdateData&, qint64&) { return false; }
+
+    // True when this object holds the detail @a jobRenderData's camera and output
+    // size call for. Offscreen jobs (map/plot exports, captures) ask before
+    // dispatching, so an export renders at its own quality instead of baking in
+    // whatever mips the live camera left resident. An object that streams detail
+    // issues the loads it is missing here and reports false until they land; the
+    // offscreen renderer leaves the job queued and asks again on a later frame.
+    //
+    // An export's desired levels may push residency past
+    // cwRenderBudgets::gpuBudgetBytes while the job waits. That overshoot is
+    // accepted for the job's duration: the eviction planner already gives back
+    // detail the live camera cannot see, and the excess unwinds once the live
+    // camera's coarser selection demotes what the export pulled in.
+    virtual bool residencyReady(const RenderData&) { return true; }
+
     //Gather render objects
     virtual bool gather(const GatherContext& context,
                         QVector<PipelineBatch>& batches) {
@@ -214,6 +279,15 @@ public:
     // callback runs, so subclasses may rely on it being non-null in
     // initialize/synchronize/updateResources/gather.
     void setFrameRenderer(cwRhiFrameRenderer* frame) { m_frame = frame; }
+
+    // This object's axis-aligned bounding box in world space, used by
+    // cwRhiFrameRenderer::gatherScene to skip objects the camera cannot see.
+    // The box must be conservative — err large, and inflate it by whatever the
+    // shaders add around the vertices (sprite radius, line width) — because a
+    // box smaller than what the object draws makes geometry vanish at some
+    // camera angles. nullopt, the default, means "never cull me": backgrounds,
+    // overlays, billboards, the grid, and the compass keep drawing every frame.
+    virtual std::optional<QBox3D> worldBounds() const { return std::nullopt; }
 
     // True when this object draws into the PointCloud pass with real geometry.
     // cwRhiScene polls this before gathering to decide whether to engage the

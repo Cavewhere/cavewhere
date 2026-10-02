@@ -20,6 +20,7 @@
 #include "cwEquateModel.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
+#include "cwGeoReference.h"
 #include "cwLength.h"
 #include "cwLinePlotGeometry.h"
 #include "cwLinePlotManager.h"
@@ -28,6 +29,7 @@
 #include "cwStationHandle.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 
 // Test helpers
 #include "ExternalCenterlineTestHelpers.h"
@@ -50,6 +52,13 @@ constexpr double kDropLength = 10.0;
 constexpr double kStraightDown = -90.0;
 // survex_simple.svx: A1-A2 10 m, A2-A3 8.5 m, both level, fixed at the origin.
 constexpr double kSimpleFixtureLength = 18.5;
+// The frame the solve reports in, and the system the fixes are entered in: a
+// transverse Mercator with no scale distortion at its origin, so lengths read
+// off solved positions are survey lengths, and positions stay small enough
+// for the float lookup to hold them to the millimeter.
+const QString kFrameCS = QStringLiteral(
+    "+proj=tmerc +lat_0=37.1832 +lon_0=-84.0947 +k=1 +x_0=0 +y_0=0 "
+    "+datum=WGS84 +units=m +no_defs +type=crs");
 // The Folder and Fisher Ridge are fixed away from the origin survex_simple.svx
 // fixes itself at: the .3d names a leg's endpoints by coordinate, so two surveys
 // sharing a point would trade legs in the solved network.
@@ -66,6 +75,7 @@ cwFixStation fixAt(const QString& station, double easting, double northing)
 {
     cwFixStation fix;
     fix.setStationName(station);
+    fix.setInputCS(kFrameCS);
     fix.setEasting(easting);
     fix.setNorthing(northing);
     return fix;
@@ -105,6 +115,7 @@ struct NodeTree {
 NodeTree buildNodeTree(cwCavingRegion& region, const QTemporaryDir& tempRoot)
 {
     NodeTree tree;
+    region.geoReference()->restore(cwGeoReference::Frozen, kFrameCS, {}, QString());
     tree.folder = addChildNode(region.rootNode(), QStringLiteral("Kentucky field seasons"),
                                cwSurveyNode::Kind::Folder);
     tree.folder->fixStations()->appendFixStation(fixAt(QStringLiteral("k1"), 0.0, kFolderNorthing));
@@ -134,6 +145,13 @@ NodeTree buildNodeTree(cwCavingRegion& region, const QTemporaryDir& tempRoot)
                                              nativeHandle(tree.sideCave, QStringLiteral("s2"))}));
     region.equates()->appendEquate(cwEquate({nativeHandle(tree.sideCave, QStringLiteral("s1")),
                                              nativeHandle(tree.folder, QStringLiteral("k2"))}));
+
+    // A fixed, dated trip would otherwise turn its shots by the IGRF
+    // declination, and the .3d stores positions to the centimeter, so a turned
+    // 10 m shot reads back a few millimeters off its length.
+    for (cwTrip* trip : std::as_const(tree.trips)) {
+        trip->calibrations()->setAutoDeclination(false);
+    }
     return tree;
 }
 

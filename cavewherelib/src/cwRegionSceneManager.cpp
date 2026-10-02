@@ -8,6 +8,7 @@
 
 #include "cwRegionSceneManager.h"
 #include "cwScene.h"
+#include "cwRenderBillboards.h"
 #include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderRadialGradient.h"
@@ -90,6 +91,9 @@ QSet<cwRenderObjectId> cwRegionSceneManager::captureHiddenObjectIds() const
     return {
         m_background->renderObjectId(),
         m_linePlot->renderObjectId(),
-        m_plane->renderObjectId()
+        m_plane->renderObjectId(),
+        // 3D station labels and lead markers. The export draws its own as 2D
+        // vector overlays (cwCaptureCenterline, cwCaptureLeads).
+        scene()->billboardLayer()->renderObjectId()
     };
 }

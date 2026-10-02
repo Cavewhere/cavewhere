@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan — Sync job progress (duplicate jobs + flat progress)</title>
+<style>
+  :root {
+    --bg: #1d2127;
+    --panel: #262b33;
+    --panel2: #2d333d;
+    --ink: #e6e9ee;
+    --muted: #9aa4b2;
+    --accent: #5aa9e6;
+    --good: #6ccb7a;
+    --bad: #e06c6c;
+    --warn: #e0b14c;
+    --border: #3a414c;
+    --code: #1a1e24;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 0 80px;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 32px 40px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #20252c, #1d2127);
+  }
+  header h1 { margin: 0 0 6px; font-size: 24px; }
+  header .sub { color: var(--muted); font-size: 14px; }
+  header .tag {
+    display: inline-block; margin-top: 12px; margin-right: 6px; padding: 3px 10px;
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 12px; font-size: 12px; color: var(--accent);
+  }
+  main { max-width: 1000px; margin: 0 auto; padding: 0 40px; }
+  section { margin-top: 34px; }
+  h2 {
+    font-size: 19px; margin: 0 0 14px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  h3 { font-size: 15px; margin: 22px 0 8px; color: var(--accent); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 6px 0; }
+  code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; background: var(--code);
+    padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--code); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px; overflow-x: auto;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.5;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin: 14px 0;
+  }
+  .cols { display: flex; gap: 16px; flex-wrap: wrap; }
+  .cols > .panel { flex: 1; min-width: 280px; }
+  .bad-h { color: var(--bad); }
+  .good-h { color: var(--good); }
+  .warn-h { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .file { color: var(--accent); font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 13px; }
+  .del { color: var(--bad); }
+  .add { color: var(--good); }
+  .note {
+    border-left: 3px solid var(--accent); padding: 8px 14px; margin: 14px 0;
+    background: var(--panel2); border-radius: 0 6px 6px 0;
+  }
+  .warn-note { border-left-color: var(--warn); }
+  .step-num {
+    display: inline-block; width: 24px; height: 24px; line-height: 24px;
+    text-align: center; background: var(--accent); color: #0c1116;
+    border-radius: 50%; font-weight: 700; font-size: 13px; margin-right: 8px;
+  }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--border); }
+  .pill.s1 { color: var(--good); }
+  .pill.s2 { color: var(--warn); }
+  .pill.done { color: var(--good); border-color: var(--good); }
+  kbd { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sync job progress — duplicate jobs &amp; flat progress bar</h1>
+  <div class="sub">CaveWhere · cwProject / cwSaveLoad sync orchestration · asyncfuture Restarter · operation queue</div>
+  <div class="tag">Status: root cause confirmed · verifying test written (failing by design) · design chosen</div>
+  <div class="tag">Scope: cavewhere (cwProject, cwSaveLoad) + asyncfuture (submodule, own fork)</div>
+</header>
+
+<main>
+
+<section>
+  <h2>1. Goal</h2>
+  <p>
+    Clicking <strong>Sync</strong> misbehaves in two ways, both surfaced while manually testing the
+    <a>#545</a> LFS-pull-progress fix:
+  </p>
+  <ul>
+    <li><span class="pill s2">Bug 1</span> &nbsp;<strong>Duplicate jobs.</strong> One Sync click shows
+        <strong>three</strong> identical <code>"Syncing"</code> rows in the future-manager UI on a real GitHub
+        (https) remote — two on a <code>file://</code> remote.</li>
+    <li><span class="pill s2">Bug 2</span> &nbsp;<strong>Flat progress.</strong> The <code>"Syncing"</code> row's
+        progress bar never moves, even though the underlying <code>pullRebaseOrMerge()</code> / <code>push()</code>
+        (and the restored #545 LFS hydration) report byte progress.</li>
+  </ul>
+  <p>Both trace to a single structural fact: <em>the future registered as the <code>"Syncing"</code> job is
+    the wrong future</em> — it is re-created at every async gate, and every producer along the path completes
+    with a <strong>value</strong>, which severs progress.</p>
+</section>
+
+<section>
+  <h2>2. Root cause (confirmed by trace)</h2>
+
+  <h3>2a. Bug 1 — one <code>addJob</code> per async gate</h3>
+  <p><code>cwProject::sync()</code> runs through up to three async gates, and <em>each</em> reassigns the
+     <code>SyncFuture</code> member and calls <code>FutureToken.addJob(SyncFuture, "Syncing")</code> with a
+     fresh future. <code>cwFutureManagerModel::addJob</code> appends one row per call
+     (<span class="file">cwFutureManagerModel.cpp:65-68</span>), and the earlier deferreds stay alive until the
+     next stage completes — so the rows coexist.</p>
+  <table>
+    <tr><th>#</th><th>Gate</th><th>Site</th><th>Fires when</th></tr>
+    <tr><td>1</td><td>Credentials</td><td><span class="file">cwProject.cpp:515</span></td><td>https remote (<code>requiresProviderCredentials()</code>) + creds not loaded</td></tr>
+    <tr><td>2</td><td>Install check</td><td><span class="file">cwProject.cpp:548</span></td><td>provider <code>supportsInstallationCheck()</code> (GitHub)</td></tr>
+    <tr><td>3</td><td>Sync operation</td><td><span class="file">cwProject.cpp:477</span> (<code>beginSyncOperation</code>)</td><td>always</td></tr>
+  </table>
+
+  <h3>2b. Bug 2 — progress is severed at the operation queue (the first boundary)</h3>
+  <p>Chain of custody, pull → job. Progress survives steps 1–2, then dies at the very first queue hop:</p>
+  <table>
+    <tr><th>Stage</th><th>Progress?</th><th>Why</th></tr>
+    <tr><td>1. <code>repo-&gt;pullRebaseOrMerge()</code> future <span class="file">cwSaveLoad.cpp:4925</span></td>
+        <td class="good-h">✓ has it</td><td>the <code>setProgress</code> / <code>QFutureInterface</code> path from #545</td></tr>
+    <tr><td>2. SyncProject op <code>run()</code> = <code>observe(pullFuture).context(...)</code></td>
+        <td class="good-h">✓ survives</td><td><code>observe().context()</code> mirrors source progress (fork README)</td></tr>
+    <tr><td>3. <strong>Operation queue</strong> <span class="file">cwSaveLoadPrivate.cpp:749</span></td>
+        <td class="bad-h">✗ SEVER #1</td><td><code>op-&gt;deferred.complete(result)</code> completes with a <strong>ResultBase value</strong>. The <code>observe(opFuture).context(...)</code> at <span class="file">:741</span> fires only on <em>finish</em> and its progress-mirroring chain future is discarded. So every phase future (<code>syncPrepareFuture</code>, <code>reconcileFuture</code>, <code>finalizeFuture</code>) carries no progress.</td></tr>
+    <tr><td>4. <code>syncDeferred-&gt;complete(attemptResult)</code> <span class="file">cwSaveLoad.cpp:5013</span></td>
+        <td class="bad-h">✗ SEVER #2</td><td>value completion again (already dead by here)</td></tr>
+    <tr><td>5. <code>beginSyncOperation</code>: <code>observe(operationFuture).context(...)</code></td>
+        <td class="muted">✗ moot</td><td>mirrors a source that now has no progress</td></tr>
+  </table>
+
+  <div class="note">
+    <strong>Key mechanic:</strong> <code>AsyncFuture::Deferred::complete(QFuture&lt;T&gt;)</code> ends in
+    <code>track(future)</code> (<span class="file">asyncfuture.h:598</span>) — completing a deferred <em>with a
+    future</em> forwards progress; completing it <em>with a value</em> does not. The three sever points are all
+    <code>complete(&lt;value&gt;)</code> calls.
+  </div>
+
+  <h3>2c. Two things the trace ruled out</h3>
+  <ul>
+    <li><strong>The <code>Deferred&lt;void&gt;</code> gap is not on this path.</strong> Every manual deferred that
+        severs here is a <code>Deferred&lt;Monad::ResultBase&gt;</code> — the generic template, which already has
+        <code>setProgressValue</code>/<code>setProgressRange</code>/<code>track</code>
+        (<span class="file">asyncfuture.h:1556-1567</span>). The void <code>SyncFuture</code> is an
+        <code>observe().context()</code> chain that auto-mirrors, so its void-ness is fine. Adding progress to the
+        <code>Deferred&lt;void&gt;</code> specialization (<span class="file">asyncfuture.h:1578-1621</span>) is a
+        legitimate symmetry fix but is <strong>not required</strong> for this bug — left as an optional follow-up.</li>
+    <li><strong>QQuickGit's <code>QFutureInterface</code> progress is fine and stays.</strong> The pull/push futures
+        already carry progress; we do not rewrite that plumbing.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>3. Design decisions</h2>
+  <div class="cols">
+    <div class="panel">
+      <h3 class="good-h">Chosen</h3>
+      <ul>
+        <li><strong>Single job (Bug 1):</strong> register exactly one <code>"Syncing"</code> job for the whole
+            gated sync in <code>cwProject</code>; remove the per-gate <code>addJob</code> calls.</li>
+        <li><strong>Queue-wide progress forwarding (Bug 2, linchpin):</strong> in <code>runNextOperation</code>,
+            <code>op-&gt;deferred.track(opFuture)</code> forwards the active op's live progress into its deferred
+            <em>without</em> completing — the existing <code>observe().context()</code> callback still
+            value-completes with the (cancellation-rewritten) result. Lights up progress for
+            <em>all</em> operations (SaveFlush / Bundle / Import too), not just sync.</li>
+        <li><strong>Restarter for the attempt (aggregation):</strong> drive the sync attempt/retry loop through
+            <code>AsyncFuture::Restarter&lt;ResultBase&gt;</code>. Its <code>future()</code>
+            <code>track()</code>s whichever inner attempt is in-flight (<span class="file">asyncfuture.h:2006</span>),
+            so one progress bar follows the live phase and re-points cleanly across retries.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3 class="warn-h">Confirmed mechanics</h3>
+      <ul>
+        <li><code>Deferred&lt;ResultBase&gt;::track()</code> exists &amp; forwards progress only
+            (<span class="file">asyncfuture.h:470</span>).</li>
+        <li><code>Restarter(context)</code> · <code>restart(fn)</code> · <code>future()</code> ·
+            <code>onFutureChanged(cb)</code> · <code>onResult(ctx, cb)</code>
+            (<span class="file">asyncfuture.h:1819-2075</span>).</li>
+        <li>Each restart <em>burst</em> installs a fresh <code>outerDeferred</code> and fires
+            <code>onFutureChanged</code> — the intended re-registration hook.</li>
+        <li>Cancel flows outer→inner (<span class="file">asyncfuture.h:2026-2032</span>): a cancelled job stops the
+            worker via <code>QPromise::isCanceled()</code>.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note warn-note">
+    <strong>Open design question — retry re-registration.</strong> Sync retries are triggered by an attempt
+    <em>finishing</em> with a retryable error (push-rejected / epoch-changed), not by cancellation. With Restarter,
+    each retry is a fresh <code>restart()</code> burst → new <code>outerDeferred</code> → <code>onFutureChanged</code>.
+    If we re-register on every <code>onFutureChanged</code> we get one row <em>per attempt</em> (sequential, not
+    simultaneous — still a strict win over today's 3 concurrent rows, and only on the uncommon retry path). If we
+    register once and never re-register, the row vanishes when an attempt completes mid-retry. <strong>Decision to
+    lock in Phase 3:</strong> register once at click; on <code>onFutureChanged</code> re-point the single job's
+    watched future rather than adding a new row (may need a small <code>cwFutureManagerToken</code>/model affordance
+    to "replace the future of an existing job"). Revisit if that affordance is heavier than expected.
+  </div>
+</section>
+
+<section>
+  <h2>4. Commit sequence</h2>
+
+  <p><span class="step-num">1</span><strong>Verifying test (done).</strong>
+     <span class="pill done">DONE</span></p>
+  <ul>
+    <li><span class="file">testcases/test_cwProjectSyncJobs.cpp</span> — one <code>sync()</code> on a
+        <code>file://</code> remote + <code>MockAuthProvider(installed=true)</code>; counts <code>"Syncing"</code>
+        rows inserted. Currently fails <code>2 == 1</code>, proving Bug 1. Becomes the Bug-1 regression guard.</li>
+  </ul>
+
+  <p><span class="step-num">2</span><strong>Queue-wide progress forwarding.</strong> <span class="pill s1">cavewhere</span></p>
+  <ul>
+    <li><span class="file">cwSaveLoadPrivate.cpp</span> <code>runNextOperation</code> (~749): add
+        <code>op-&gt;deferred.track(opFuture)</code> after <code>opFuture = op-&gt;run()</code>, leaving the
+        value-completion callback intact.</li>
+    <li>Test: an op whose <code>run()</code> reports a progress range surfaces that range/value on the future
+        returned by <code>enqueueOperation</code>. Assert via a <code>QFutureWatcher</code> on the phase future
+        (watch <code>progressMaximum()</code> / <code>progressValueChanged</code>).</li>
+  </ul>
+
+  <p><span class="step-num">3</span><strong>Restarter-based sync attempt + single job.</strong> <span class="pill s1">cavewhere</span></p>
+  <ul>
+    <li><span class="file">cwSaveLoad.cpp</span> <code>sync()</code>: replace the manual
+        <code>syncDeferred</code> + <code>scheduleAttempt</code> tail with a
+        <code>Restarter&lt;ResultBase&gt;</code>; each attempt is a <code>restart(runAttempt)</code>. Return
+        <code>restarter.future()</code> (kept alive for the sync's lifetime).</li>
+    <li><span class="file">cwProject.cpp</span>: register <strong>one</strong> <code>"Syncing"</code> job at the
+        top of <code>sync()</code>; drop the <code>addJob</code> calls in the credential gate (515), install gate
+        (548), and <code>beginSyncOperation</code> (477). Re-point that job's future on
+        <code>onFutureChanged</code> (per the open question above).</li>
+    <li>Tests: <code>test_cwProjectSyncJobs</code> now passes (== 1). Add a progress-propagation test: sync against
+        a local remote that reports progress → the single <code>"Syncing"</code> job's
+        <code>progressMaximum() &gt; 0</code> and value advances.</li>
+  </ul>
+
+  <p><span class="step-num">4</span><strong>(Optional) <code>Deferred&lt;void&gt;</code> symmetry fix.</strong> <span class="pill s2">asyncfuture</span></p>
+  <ul>
+    <li>Mirror <code>setProgressValue</code>/<code>setProgressRange</code> from the generic template into the
+        <code>Deferred&lt;void&gt;</code> specialization. Not required by this bug; do it as a standalone lib
+        commit for symmetry if convenient.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>5. Tests</h2>
+  <ul>
+    <li><span class="file">test_cwProjectSyncJobs.cpp</span> — <strong>exactly one</strong> <code>"Syncing"</code>
+        job per <code>sync()</code> (Bug 1 guard; written, currently red).</li>
+    <li>New operation-queue progress test (Phase 2) — a queued op's reported progress reaches the phase future.</li>
+    <li>New sync progress-propagation test (Phase 3) — the single job's <code>progressMaximum</code>/value advance
+        during a progress-reporting sync.</li>
+    <li>Regression: existing install-gate tests (<span class="file">test_cwProject.cpp:13344+</span>) and the
+        clone→edit→sync roundtrip still pass; retry-path tests
+        (<span class="file">test_cwSaveLoad.cpp</span> sync retry) still pass.</li>
+    <li>asyncfuture suite green if Phase 4 is taken.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>6. Risks</h2>
+  <ul>
+    <li><strong>Blast radius of the queue change.</strong> <code>enqueueOperation</code> backs SaveFlush,
+        LoadProject, BundlePackage, ImportFiles, SyncProject, ReconcileExternal, RepairSave. Adding
+        <code>track()</code> is additive (progress only, no completion change), but every op type must be
+        re-verified green.</li>
+    <li><strong>Restarter semantics vs. finish-triggered retries.</strong> Restarter is built around
+        cancel-and-restart; our retries are finish-and-restart. Confirm the burst path
+        (<code>activeInner</code> not running → fresh <code>outerDeferred</code>) behaves correctly when the
+        previous attempt finished with an error, and that stale-generation guards (<code>deliver()</code>) don't
+        drop the real result.</li>
+    <li><strong>Job re-point affordance.</strong> Keeping a single row while <code>future()</code> changes per
+        burst may need a small addition to <code>cwFutureManagerModel</code>/<code>cwFutureManagerToken</code>.
+        Gauge cost before committing to Phase 3's approach.</li>
+    <li><strong>#545 still uncommitted.</strong> The pull-progress fix this work builds on is unpushed across the
+        QQuickGit submodule; sequence the gitlink bumps deliberately.</li>
+  </ul>
+</section>
+
+</main>
+</body>
+</html>

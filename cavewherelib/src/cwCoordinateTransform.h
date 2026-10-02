@@ -14,6 +14,7 @@
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
 #include <memory>
+#include <optional>
 
 //Our includes
 #include "cwGeoPoint.h"
@@ -58,8 +59,104 @@ public:
     static QStringList commonProjectedCSList();
     static bool isValidCS(const QString& cs);
     static bool isGeographic(const QString& cs);
+
+    /**
+     * Transform a point between two systems, memoizing the built transforms
+     * per thread (same pattern and cap as isValidCS). Building one costs
+     * proj_create_crs_to_crs — a proj.db query and a pipeline build, the most
+     * expensive PROJ call there is — while callers like
+     * cwLocalProjectionManager ask this on every keystroke in a coordinate
+     * field.
+     *
+     * Empty when either system is empty, the two can't be related, or the
+     * result's x/y isn't finite — an unanswerable question must not read as an
+     * answer. z passes through untouched by the finiteness check.
+     */
+    static std::optional<cwGeoPoint> transformPoint(const QString& sourceCS,
+                                                    const QString& destCS,
+                                                    const cwGeoPoint& point);
+
+    /**
+     * Which horizontal components of `point` (in cs's own axis order and units)
+     * fall outside cs's declared area of use — i.e. whether it inverse-projects
+     * to a geographic location within the CRS's valid domain, widened by a small
+     * margin. `eastingValid`/`northingValid` are true when the corresponding axis
+     * (longitude for the easting, latitude for the northing) is inside, so a
+     * caller can tint just the offending cell; an axis goes false only when PROJ
+     * can evaluate the CRS and places the point well outside that domain — the
+     * signature of a transposed digit, wrong UTM zone, or wrong hemisphere.
+     *
+     * Both stay true — never flags — when cs is empty or unparseable or its area
+     * of use is unknown, so an un-checkable CS defers to the cluster rule rather
+     * than crying wolf. z is not part of the domain test, so elevation is never
+     * reported.
+     *
+     * Callers judging a *fix station* should go through
+     * cwFixStationDiagnostics::domainCheck instead, which resolves the fix's
+     * effective CS first — that resolution is the rule, and skipping it judges a
+     * fix under the wrong CS.
+     *
+     * Attribution is best-effort: a coordinate whose inverse projection wraps
+     * (a northing far past the pole flips the longitude ~180°) can't be blamed
+     * on one axis, so both are reported invalid rather than the wrong one.
+     */
+    struct DomainCheck {
+        bool eastingValid = true;
+        bool northingValid = true;
+
+        //! Whether the point is plausible on both axes.
+        bool isValid() const { return eastingValid && northingValid; }
+    };
+    static DomainCheck domainCheck(const QString& cs, const cwGeoPoint& point);
+
     static QString utmZoneToEpsg(int zone, bool north);
     static QString nameFor(const QString& cs);
+
+    /**
+     * The geographic CRS from cwCoordinateSystem's datum table that \a cs is
+     * expressed on ("EPSG:6318" for anything on NAD83(2011)), or "" when PROJ
+     * can't read \a cs or its datum is one the table doesn't name.
+     *
+     * A compound CRS — what a lidar tile declares — contributes only its
+     * horizontal half, the same rule cwLocalProjection follows, so a tile's WKT
+     * answers with the datum its easting and northing are on. A derived frame's
+     * WKT2 answers with the datum it was built over.
+     *
+     * PROJ-backed (proj_identify against EPSG) and cached per thread like
+     * nameFor, because QML bindings ask it. Callers that only need to read a
+     * code the table itself spells want cwCoordinateSystem::datumFor, which is
+     * pure string matching.
+     */
+    static QString geographicDatumFor(const QString& cs);
+
+    /**
+     * Derive a *projected* coordinate system usable as the region's global
+     * (output) CS from a single fix's input CS and coordinate. survex/cavern
+     * only emits projected output, so a geographic input can't seed the global
+     * CS directly:
+     *   - inputCS already valid and projected -> returned unchanged.
+     *   - inputCS geographic -> the WGS84 UTM zone containing the fix.
+     *   - inputCS empty/invalid, or nothing projected can be derived -> "".
+     * `point` is in inputCS's own axis order and units.
+     */
+    static QString deriveProjectedOutputCS(const QString& inputCS, const cwGeoPoint& point);
+
+    /**
+     * \a cs respelled without a `"` in it, which is what a format that quotes a
+     * system — survex's `*cs CUSTOM "..."` — can carry inline.
+     *
+     * PROJ is asked to identify the system first, so a WKT that names a
+     * catalogued CRS comes back as the authority code it already carries
+     * ("EPSG:6318"), which is both the shortest and the most faithful spelling.
+     * A system PROJ recognizes with no confidence falls back to its PROJ string
+     * ("+proj=tmerc ..."), which every reader solves; that spelling drops what a
+     * modern datum knows beyond its ellipsoid, so it moves the cave by up to a
+     * couple of meters against the original WKT.
+     *
+     * Empty when PROJ can't read \a cs, and when the PROJ string would carry a
+     * quote of its own — both leave the caller its original spelling.
+     */
+    static QString quoteFreeCS(const QString& cs);
 
     /**
      * Set the directories PROJ searches for proj.db and grid-shift files.
@@ -99,6 +196,11 @@ public:
 
     /**
      * Picker modes. Custom is the escape hatch that opens the CSCustomDialog.
+     *
+     * Local is what a blank CS string reads as. The picker doesn't offer it —
+     * every surface that picks a system is a fix station, and a fix station
+     * always has one — but modeFor() still has to name the blank a hand-edited
+     * file can carry.
      */
     enum Mode { Local, LatLon, UTM, Custom };
     Q_ENUM(Mode)
@@ -111,8 +213,6 @@ public:
 
     /**
      * True iff cs parses as a geographic CRS (lat/long), e.g. EPSG:4326.
-     * Used by the picker to keep geographic systems out of region-level
-     * globalCS — survex's cavern only emits projected output.
      */
     Q_INVOKABLE static bool isGeographic(const QString& cs);
 
@@ -124,14 +224,104 @@ public:
     Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north);
 
     /**
-     * Round-trip a CS string back to a picker mode (Local / LatLon / UTM /
-     * Custom). Splitting the parse into three Q_INVOKABLEs lets QML bind
-     * each slice as a strict-typed property. utmZoneFor returns -1 and
-     * utmNorthFor returns true when mode is not UTM.
+     * The UTM code for \a zone and hemisphere on \a datumCode's own series, e.g.
+     * ("EPSG:6318", 16, north) → "EPSG:6345" (NAD83(2011) / UTM zone 16N).
+     * Returns "" when the datum isn't in the table or its series stops short of
+     * the zone — NAD83(2011) has no southern series and no zone past 19, and
+     * NAD83(CSRS)'s codes aren't consecutive so it carries no series at all.
+     * Pure table arithmetic, like the two-argument form it generalizes.
+     */
+    Q_INVOKABLE static QString utmZoneToEpsg(int zone, bool north, const QString& datumCode);
+
+    /**
+     * The geographic (lat/long) CRS for \a datumCode, which for a code the table
+     * names is the code itself, and "" for one it doesn't. QML picks a datum by
+     * code and asks this for the CS to commit.
+     */
+    Q_INVOKABLE static QString latLonCS(const QString& datumCode);
+
+    /**
+     * Every datum the table names, WGS84 first, as geographic codes.
+     * utmDatumList narrows that to the datums whose UTM series reaches \a zone
+     * on the given hemisphere, so a UTM picker offers only codes it can build.
+     */
+    Q_INVOKABLE static QStringList datumList();
+    Q_INVOKABLE static QStringList utmDatumList(int zone, bool north);
+
+    /**
+     * The system \a mode names on \a datumCode, built from \a zone and the
+     * hemisphere the picker shows. This is the one place that decides what a
+     * datum outside the mode's reach commits to, and the fallback is per mode:
+     * UTM falls back to the WGS84 zone — the one series covering all sixty —
+     * whenever the datum's series stops short of the zone or the table doesn't
+     * name the datum at all, while Lat/Lon falls back to plain WGS84.
+     *
+     * Empty for Local and Custom, which carry no datum of their own — Custom's
+     * datum lives inside the CRS its dialog picked — and for a UTM zone outside
+     * 1..60, where not even WGS84 builds anything.
+     *
+     * Pairs with datumChoices: the codes that list offers are exactly the ones
+     * this builds without falling back.
+     */
+    Q_INVOKABLE static QString csFor(Mode mode, int zone, bool north, const QString& datumCode);
+
+    /**
+     * The datums \a mode can build from, narrowed out of \a available — every
+     * code in it that csFor answers with a system of that datum's own. UTM keeps
+     * the datums whose series reaches \a zone on the given hemisphere; Lat/Lon
+     * keeps the ones the table names; Local and Custom keep none, having no
+     * datum to pick.
+     *
+     * Order follows \a available, so a caller's WGS84-first list stays
+     * WGS84-first.
+     */
+    Q_INVOKABLE static QStringList datumChoices(Mode mode, int zone, bool north,
+                                                const QStringList& available);
+
+    /**
+     * The plate-fixed datum worth recommending over \a current, out of the
+     * \a available list a bounds check narrowed to where the coordinate lands:
+     * the first entry past WGS84, and "" when no plate-fixed frame reaches.
+     *
+     * Only a row still on WGS84 gets one, so \a current naming any other datum
+     * answers "". Past WGS84 the row names a datum of its own, and \a available
+     * carries that datum whether the bounds check chose it or not — recommending
+     * from the list would read a mid-ocean row's own ETRS89 back to it as the
+     * frame for where it sits.
+     */
+    Q_INVOKABLE static QString recommendedDatum(const QStringList& available,
+                                                const QString& current);
+
+    /**
+     * The short label for a datum code ("NAD83(2011)" for "EPSG:6318"), or ""
+     * for a code the table doesn't name. Shipped with the binary rather than
+     * read from proj.db, so every machine shows the same words.
+     */
+    Q_INVOKABLE static QString datumDisplayName(const QString& datumCode);
+
+    /**
+     * The part of the world a datum serves ("North America (USA)" for
+     * "EPSG:6318"), or "" for a code the table doesn't name. The picker leads
+     * its dropdown rows with this, because the region is what tells a caver
+     * which acronym is theirs.
+     */
+    Q_INVOKABLE static QString datumRegionName(const QString& datumCode);
+
+    /**
+     * Round-trip a CS string back to a picker mode. Splitting the parse into four
+     * Q_INVOKABLEs lets QML bind each slice as a strict-typed property.
+     * utmZoneFor returns -1 and utmNorthFor returns true when mode is not UTM;
+     * datumFor returns "" for a mode with no datum (Local, Custom).
+     *
+     * The parse is pure string and integer matching against the datum table — no
+     * PROJ call — because these run in binding paths. A system the table doesn't
+     * spell reads as Custom even when PROJ knows it well; cwCoordinateTransform::
+     * geographicDatumFor is the one that asks PROJ.
      */
     Q_INVOKABLE static Mode modeFor(const QString& cs);
     Q_INVOKABLE static int  utmZoneFor(const QString& cs);
     Q_INVOKABLE static bool utmNorthFor(const QString& cs);
+    Q_INVOKABLE static QString datumFor(const QString& cs);
 
     /**
      * Human-readable description for a CS (e.g. "OSGB36 / British National

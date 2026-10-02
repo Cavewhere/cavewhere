@@ -19,5 +19,5 @@ PointItem {
         pointItem.selected = true
     }
 
-    visible: scrapItem === null ? false : scrapItem.selected
+    visible: pointItem.inFrustum && (scrapItem === null ? false : scrapItem.selected)
 }

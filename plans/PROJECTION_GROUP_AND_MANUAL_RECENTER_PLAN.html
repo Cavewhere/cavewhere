@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Projection Group Box and Manual Recenter Plan</title>
+<style>
+    body { font-family: -apple-system, "Segoe UI", sans-serif; max-width: 60em;
+           margin: 2em auto; padding: 0 1em; line-height: 1.5; color: #222; }
+    h1 { border-bottom: 2px solid #2a6; padding-bottom: 0.2em; }
+    h2 { border-bottom: 1px solid #ccc; padding-bottom: 0.15em; margin-top: 2em; }
+    code, pre { font-family: "SF Mono", Menlo, monospace; background: #f4f4f4; }
+    code { padding: 0.1em 0.3em; border-radius: 3px; }
+    pre { padding: 0.8em; border-radius: 5px; overflow-x: auto; line-height: 1.35; }
+    .trap { background: #fff3f0; border-left: 4px solid #d43; padding: 0.6em 1em; margin: 1em 0; }
+    .trap::before { content: "TRAP — "; font-weight: bold; color: #d43; }
+    .decision { background: #f0f7ff; border-left: 4px solid #36c; padding: 0.6em 1em; margin: 1em 0; }
+    .decision::before { content: "DECIDED — "; font-weight: bold; color: #36c; }
+    .done-check { background: #f0fff2; border-left: 4px solid #2a6; padding: 0.6em 1em; margin: 1em 0; }
+    table { border-collapse: collapse; margin: 1em 0; }
+    th, td { border: 1px solid #bbb; padding: 0.35em 0.7em; text-align: left; }
+    th { background: #eee; }
+    figure { margin: 1.5em 0; text-align: center; }
+    figcaption { font-size: 0.9em; color: #555; margin-top: 0.4em; }
+</style>
+</head>
+<body>
+
+<h1>Projection Group Box and Manual Recenter</h1>
+
+<p><b>Parent plan:</b> <code>plans/LDP_AUTO_COORDINATE_SYSTEM_PLAN.html</code> (the LDP
+lifecycle, decisions D4, D8, D20, §16). This plan builds on the completed P4 step 5
+read-only frame display (commit <code>221b3e6d</code>): two user-facing features and one
+derive-time policy change, in four phases:</p>
+
+<ol>
+    <li><b>Phase 1 — Projection group box.</b> Restructure the Project info box on
+        <code>DataMainPage.qml</code> so Units, Location, Centered&nbsp;on, Datum, and
+        Elevations read as one visual group; make the datum rows always visible once the
+        project is georeferenced; add a "Centered on:" attribution row that names the
+        anchor station and its cave.</li>
+    <li><b>Phases 2–3 — Manual recenter.</b> In edit mode, the Location row gains a
+        "Recenter…" control that opens a picker listing the project's fix stations
+        (grouped by cave, "A42 — Roppel Cave") plus a "Center of data" option. Picking a
+        station re-anchors the frame on it; picking Center of data freezes the frame at
+        the component-wise median of all georeferenced inputs.</li>
+    <li><b>Phase 4 — plate-fixed frame datum.</b> When the anchor's coordinate system
+        resolves to the WGS84 datum ensemble (what the UI stamps on every typed
+        lat/long), derive the frame on the plate-fixed datum customary at that location
+        instead — NAD83(2011) in the US, ETRS89 in Europe, GDA2020 in Australia — via a
+        small curated location table. Declared non-WGS84 systems are untouched. Most of
+        those datums can only be spelled as WKT, so the phase also teaches the survex
+        exporter to write a <code>.prj</code> sidecar (§7.5); that is the larger half of
+        the work.</li>
+</ol>
+
+<h2>1. Settled design decisions</h2>
+
+<div class="decision">The datum is <b>never pickable</b> (D4 stands). Recentering keeps
+whatever datum the chosen anchor's coordinate system declares — mixed-datum effects are
+~1–1.5 m, below the accuracy of the workflow, and CaveWhere ships PROJ grids so
+transforms are machine-independent. No datum UI is added by this plan.</div>
+
+<div class="decision">Picking a fix station uses the <b>existing Anchored state</b> via
+<code>cwLocalProjectionManager::anchorTo(Input)</code> — no new lifecycle state, no
+proto/persistence change. The chosen station becomes the anchor: small later corrections
+to it leave the frame alone, a &gt;50 km correction re-derives, deleting it hands off to
+Frozen — all existing behavior. Picking Center of data uses the existing
+<code>cwGeoReference::recenter()</code> path to Frozen.</div>
+
+<div class="decision">A station whose pick would put the median of the project's
+georeferenced data more than 50 km from the new origin is <b>disabled in the picker</b>
+with a short explanation. No fourth "user-pinned" state. (The Anchored state never
+auto-recenters, so D20 would not literally undo such a pick — but a frame 50+ km from
+the data is a bad frame, which is the same reason <code>kAnchorThresholdMeters</code>
+exists.)</div>
+
+<div class="decision">A WGS84-labeled anchor gets a <b>plate-fixed frame datum by
+lookup</b> (2026-08-08, after the RTK discussion). WGS84's modern realizations are
+Earth-fixed, so the ground — cave, benchmarks, lidar — drifts through them with the
+plate at ~2 cm/yr (~0.8 m over 40 years), while national datums like NAD83(2011) and
+ETRS89 are plate-fixed and hold still. RTK and lidar data arrive in those national
+frames, so a plate-fixed frame also makes their transforms slop-free, where crossing
+into a WGS84 frame costs the ~1–2 m ensemble ambiguity. The location can't tell us what
+datum a <i>measurement</i> is in — but the <i>frame's</i> datum is CaveWhere's own
+choice, and "WGS84" on an anchor is a label of convenience (the CS picker stamps
+<code>EPSG:4326</code> on every typed lat/long), never a deliberate frame preference.
+This is a derive-time default only — <b>not</b> the rejected "datum upgrade" event:
+no new lifecycle event, no persisted flag, and stored frames never move on their
+own.
+<p><b>Amended 2026-08-11, restored 2026-08-12.</b> For one day this shipped as North
+America only, because a frame carrying any of these datums can only be spelled as WKT
+and survex could not read a WKT coordinate system. Survex submodule commit
+<code>68a001eb</code> adds <code>*cs custom @FILENAME</code>, so the frame now travels
+in a <code>.prj</code> file beside the <code>.svx</code> and the reasoning above ships
+at full reach. §7.5 has the mechanism and its one cost.</p></div>
+
+<div class="decision">The "Centered on:" row shows only in the Anchored state, resolved
+live from the persisted anchor id — so it survives save/load and follows renames. A
+Frozen frame (auto- or manual center-of-data) has no anchor and shows no attribution
+row; the Location row still gives its coordinates.</div>
+
+<h2>2. Current code facts (verified)</h2>
+
+<table>
+<tr><th>Fact</th><th>Where</th></tr>
+<tr><td><code>cwGeoReference</code> exposes <code>state</code>, <code>hasOrigin</code>,
+    <code>originLatitude/Longitude</code>, <code>datumName</code>,
+    <code>verticalDatum</code>, <code>hasCoordinateSystem</code> to QML as
+    <code>region.geoReference</code>. <code>anchor()</code> (kind + persisted
+    <code>QUuid</code>) is C++-only.</td>
+    <td><code>cwGeoReference.h:47-97</code></td></tr>
+<tr><td><code>recenter(localCS)</code> = <code>freezeTo(localCS)</code>, which has
+    <b>no state guard</b> — callable from Anchored, refuses only an empty string. No
+    <code>cwGeoReference</code> changes are needed.</td>
+    <td><code>cwGeoReference.cpp:28-48</code></td></tr>
+<tr><td><code>cwLocalProjectionManager</code> is owned by <code>cwCavingRegion</code>
+    (<code>m_localProjectionManager</code>), and was not exposed to QML. Its API is
+    almost entirely private. Phase 2 exposes the manager itself as
+    <code>region.localProjection</code>, alongside the region's existing
+    <code>geoReference</code>/<code>lazLayers</code>/<code>fixStationValidator</code>
+    properties.</td>
+    <td><code>cwCavingRegion.h:143</code>, <code>cwLocalProjectionManager.h</code></td></tr>
+<tr><td><code>anchorTo(const Input&amp;)</code> already does the full bookkeeping:
+    derives via <code>cwLocalProjection::deriveFrom</code>, calls
+    <code>geoReference-&gt;anchorTo</code>, updates <code>m_lastAnchor</code> and
+    <code>m_anchorSeen</code>. Reuse it verbatim for station picks.</td>
+    <td><code>cwLocalProjectionManager.cpp:322-334</code></td></tr>
+<tr><td><code>maybeRecenter()</code> shows the Frozen-move bookkeeping
+    (<code>recenter</code> + <code>m_lastAnchor = anchor()</code> +
+    <code>m_anchorSeen = false</code>) and the median recipe:
+    <code>localPointOf</code> per input, <code>cwMedian(std::move(xs))</code>
+    component-wise (from <code>cwMath.h</code>), horizontal only.</td>
+    <td><code>cwLocalProjectionManager.cpp:252-320</code></td></tr>
+<tr><td><code>gatherFixInputs()</code> holds the filter for a usable station:
+    <code>fix.state() == cwFixStation::Valid</code> and
+    <code>cwCoordinateTransform::isValidCS(fix.inputCS().trimmed())</code>. The
+    candidate list must apply the same filter.</td>
+    <td><code>cwLocalProjectionManager.cpp:166-195</code></td></tr>
+<tr><td><code>kAnchorThresholdMeters = 50000.0</code> and
+    <code>horizontalMagnitude()</code> are file-local to
+    <code>cwLocalProjectionManager.cpp</code> — new manager code in that file can use
+    them directly.</td>
+    <td><code>cwLocalProjectionManager.cpp:30-38</code></td></tr>
+<tr><td><code>cwFixStationModel::fixedStationsChanged()</code> fires whenever a fixed
+    station is added, removed, replaced, or renamed — the one signal attribution needs
+    per cave. The manager's <code>syncCaveConnections()</code> is the existing pattern
+    for keeping per-cave connections in sync off
+    <code>cwCavingRegion::caveCountChanged</code>.</td>
+    <td><code>cwFixStationModel.h:115-124</code></td></tr>
+<tr><td>Signal order: <code>localCoordinateSystemChanged</code> (frame string moved →
+    LAZ re-decode via <code>cwLazLayerModel::reloadAll</code>) fires <b>before</b>
+    <code>localProjectionChanged</code> (describers). Recentering rides these for free —
+    do not add any explicit reload call.</td>
+    <td><code>cwGeoReference.h:174-186</code>, <code>cwCavingRegion.cpp:52-55</code></td></tr>
+<tr><td>The current QML rows live in <code>DataMainPage.qml:97-293</code>
+    (<code>regionInfoBox</code>): Units row with <code>EditToggleButton</code> /
+    <code>UnitSystemComboBox</code>, GIS Sources link, then the projection column with
+    Location / Datum / Elevations rows and <code>projectionHelpArea</code>. Datum and
+    Elevations rows are currently <code>visible:</code>-gated on a non-empty string.</td>
+    <td><code>DataMainPage.qml</code></td></tr>
+</table>
+
+<h2>3. Target UI</h2>
+
+<figure>
+<svg viewBox="0 0 640 330" width="640" height="330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="13">
+    <rect x="10" y="10" width="620" height="310" rx="6" fill="#f2f2f2" stroke="#999"/>
+    <text x="26" y="36" font-weight="bold" font-size="14">Project</text>
+    <rect x="545" y="20" width="70" height="24" rx="4" fill="#fff" stroke="#888"/>
+    <text x="580" y="36" text-anchor="middle" fill="#555">Edit</text>
+
+    <text x="26" y="66">GIS Sources:  <tspan fill="#2a6cc4" text-decoration="underline">2</tspan></text>
+
+    <!-- sub-group -->
+    <rect x="20" y="82" width="600" height="222" rx="6" fill="#fbfbfb" stroke="#aaa"/>
+    <text x="34" y="106" font-weight="bold" fill="#444">Coordinate System</text>
+
+    <text x="34" y="134">Units:</text>
+    <text x="150" y="134">Metric</text>
+
+    <text x="34" y="162">Location:</text>
+    <text x="150" y="162">36.912345, -84.512345</text>
+    <rect x="330" y="146" width="96" height="22" rx="4" fill="#fff" stroke="#888"/>
+    <text x="378" y="161" text-anchor="middle" fill="#555">Recenter…</text>
+    <text x="440" y="161" font-size="11" fill="#888">(edit mode only)</text>
+
+    <text x="34" y="190">Centered on:</text>
+    <text x="150" y="190">A42 — Roppel Cave</text>
+
+    <text x="34" y="218">Datum:</text>
+    <text x="150" y="218">North American Datum 1983</text>
+
+    <text x="34" y="246">Elevations:</text>
+    <text x="150" y="246" fill="#777" font-style="italic">Not declared by your data</text>
+
+    <text x="34" y="284" font-size="11" fill="#888">Help area (existing projectionHelpArea, updated prose)</text>
+</svg>
+<figcaption>The Project box after Phase 1 + 3. One bordered sub-group holds every
+projection fact; GIS Sources (a navigation link, not a setting) stays outside it. The
+Recenter… button appears only in edit mode on a georeferenced project.</figcaption>
+</figure>
+
+<figure>
+<svg viewBox="0 0 640 250" width="640" height="250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="12">
+    <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+        <path d="M0,0 L7,3 L0,6 z" fill="#555"/></marker></defs>
+    <rect x="10" y="80" width="150" height="60" rx="6" fill="#eef4ff" stroke="#36c"/>
+    <text x="85" y="105" text-anchor="middle">RecenterPopup</text>
+    <text x="85" y="122" text-anchor="middle" font-size="10" fill="#555">station / center of data</text>
+
+    <rect x="230" y="20" width="200" height="52" rx="6" fill="#fff" stroke="#888"/>
+    <text x="330" y="38" text-anchor="middle" font-size="11">region.localProjection<tspan x="330" dy="13">.recenterOnStation(id)</tspan></text>
+    <text x="330" y="66" text-anchor="middle" font-size="10" fill="#555">manager: anchorTo(Input) → Anchored</text>
+
+    <rect x="230" y="150" width="200" height="52" rx="6" fill="#fff" stroke="#888"/>
+    <text x="330" y="168" text-anchor="middle" font-size="11">region.localProjection<tspan x="330" dy="13">.recenterOnDataCenter()</tspan></text>
+    <text x="330" y="196" text-anchor="middle" font-size="10" fill="#555">manager: median → recenter() → Frozen</text>
+
+    <rect x="480" y="80" width="150" height="70" rx="6" fill="#f0fff2" stroke="#2a6"/>
+    <text x="555" y="103" text-anchor="middle">cwGeoReference</text>
+    <text x="555" y="120" text-anchor="middle" font-size="10" fill="#555">localCoordinateSystemChanged</text>
+    <text x="555" y="134" text-anchor="middle" font-size="10" fill="#555">→ LAZ re-decode, then describers</text>
+
+    <line x1="160" y1="95" x2="230" y2="50" stroke="#555" marker-end="url(#arr)"/>
+    <line x1="160" y1="125" x2="230" y2="170" stroke="#555" marker-end="url(#arr)"/>
+    <line x1="430" y1="46" x2="490" y2="90" stroke="#555" marker-end="url(#arr)"/>
+    <line x1="430" y1="176" x2="490" y2="140" stroke="#555" marker-end="url(#arr)"/>
+</svg>
+<figcaption>Both picks funnel into the existing single writer
+(<code>setLocalProjection</code>); re-decode and display updates ride the existing
+signals. Nothing new listens, nothing new persists.</figcaption>
+</figure>
+
+<h2>4. Phase 1 — Projection group box and attribution</h2>
+
+<h3>4.1 C++: <code>anchorDescription</code> on cwCavingRegion</h3>
+
+<p>Add to <code>cwCavingRegion</code>:</p>
+
+<pre>Q_PROPERTY(QString anchorDescription READ anchorDescription NOTIFY anchorDescriptionChanged)
+
+//! What the frame is centered on, for display: "A42 — Roppel Cave" when the
+//! anchor is a fix station, the layer's name when it is a GIS layer, and ""
+//! when there is no anchor (Ungeoreferenced or Frozen). Resolved live from the
+//! persisted anchor id, so it follows renames and survives save/load.
+QString anchorDescription() const { return m_anchorDescription; }
+</pre>
+
+<p>Implementation: a private <code>updateAnchorDescription()</code> slot that reads
+<code>m_geoReference-&gt;anchor()</code>, resolves it, and follows the standard setter
+pattern (compare, assign, emit). Resolution:</p>
+
+<ul>
+    <li><code>Anchor::FixStation</code>: loop over <code>m_caves</code>, then each
+        <code>cave-&gt;fixStations()-&gt;fixStations()</code> (use a <code>const</code>
+        reference to the list — never non-const <code>operator[]</code>), match
+        <code>fix.id()</code>; result
+        <code>QStringLiteral("%1 — %2").arg(fix.stationName(), cave-&gt;name())</code>.
+        Note the separator is an em dash with spaces, matching the mockup.</li>
+    <li><code>Anchor::LazLayer</code>: loop <code>m_lazLayers</code> rows via
+        <code>layerAt(row)</code>, match <code>layer-&gt;id()</code>; result
+        <code>layer-&gt;name()</code>.</li>
+    <li>No match yet (project still loading its layers) or <code>Anchor::None</code>:
+        empty string.</li>
+</ul>
+
+<p>Wiring, in the cwCavingRegion constructor next to the existing
+<code>recomputeConvergence</code> connections (<code>cwCavingRegion.cpp:43-56</code>):</p>
+
+<pre>connect(m_geoReference, &amp;cwGeoReference::localProjectionChanged,
+        this, &amp;cwCavingRegion::updateAnchorDescription);
+connect(this, &amp;cwCavingRegion::caveCountChanged,
+        this, &amp;cwCavingRegion::updateAnchorDescription);      // resync below also runs
+connect(m_lazLayers, &amp;QAbstractItemModel::dataChanged,
+        this, &amp;cwCavingRegion::updateAnchorDescription);      // layer renames
+connect(m_lazLayers, &amp;QAbstractItemModel::rowsInserted,
+        this, &amp;cwCavingRegion::updateAnchorDescription);      // rescan lands the layer
+</pre>
+
+<p>Per-cave connections (station renames, cave renames): mirror the manager's
+<code>syncCaveConnections()</code> pattern — read it first
+(<code>cwLocalProjectionManager.cpp</code>, called from the
+<code>caveCountChanged</code> lambda at line 47). On every
+<code>caveCountChanged</code>, reconnect all caves:
+<code>cave-&gt;fixStations()-&gt;fixedStationsChanged</code> and the cave's name-change
+signal → <code>updateAnchorDescription</code>. Check how <code>cwCave</code> announces
+a rename before wiring it (search <code>cwCave.h</code> for its name property's NOTIFY
+signal) — use function-pointer <code>connect</code> syntax, and use
+<code>Qt::UniqueConnection</code> or disconnect-first, whichever the manager's pattern
+uses.</p>
+
+<div class="trap">Deleted-anchor timing: <code>fixedStationsChanged</code> can fire
+before the manager has run <code>evaluate()</code> and moved the state to Frozen, so
+<code>updateAnchorDescription()</code> may momentarily resolve nothing while the state
+still says Anchored. Returning "" in that gap is correct — the follow-up
+<code>localProjectionChanged</code> settles it. Do not assert that an Anchored state
+always resolves.</div>
+
+<h3>4.2 QML: restructure regionInfoBox</h3>
+
+<p>In <code>DataMainPage.qml</code>, inside <code>infoColumnId</code>:</p>
+
+<ol>
+    <li>Keep the header row (Project + <code>EditToggleButton</code>) and the GIS
+        Sources row where they are.</li>
+    <li>Wrap Units, Location, Centered&nbsp;on, Datum, Elevations, and the existing
+        <code>projectionHelpArea</code> in one bordered sub-group: a
+        <code>QQ.Rectangle</code> with a heading label
+        (<code>qsTr("Coordinate System")</code>, bold). Colors and radii come from
+        <code>Theme.qml</code> — read it and pick existing tokens (the outer box already
+        uses <code>Theme.borderSubtle</code>; the sub-group needs a contrasting fill
+        plus a 1px border token). <b>Never hardcode hex values.</b> If no suitable
+        token exists, add one to <code>Theme.qml</code> with a name describing its role,
+        not its color.</li>
+    <li>Move the Units row into the sub-group unchanged (it keeps its
+        <code>editMode</code> combo behavior).</li>
+    <li>Add the Centered on row after Location:
+<pre>RowLayout {
+    Layout.fillWidth: true
+    spacing: Theme.delegatePadding
+    visible: RootData.region.geoReference.state === GeoReference.Anchored
+             &amp;&amp; RootData.region.anchorDescription !== ""
+
+    QC.Label { text: qsTr("Centered on:") }
+
+    QC.Label {
+        objectName: "projectionAnchorValue"
+        text: RootData.region.anchorDescription
+    }
+
+    QQ.Item { Layout.fillWidth: true }
+}</pre>
+        Check how the <code>GeoReference</code> enum is reachable from QML (the type is
+        registered as <code>QML_NAMED_ELEMENT(GeoReference)</code>; the import is
+        already available in this file via <code>cavewherelib</code>).</li>
+    <li>Change the Datum and Elevations rows from string-gated to state-gated:
+        <code>visible: RootData.region.geoReference.hasCoordinateSystem</code>. Give
+        each value a fallback so the row is honest instead of vanishing:
+        Datum → <code>qsTr("Unknown")</code> when <code>datumName</code> is empty;
+        Elevations → <code>qsTr("Not declared by your data")</code> when
+        <code>verticalDatum</code> is empty. Style the fallback with the theme's muted
+        text color token (find it in <code>Theme.qml</code>) and italics.</li>
+    <li>Follow the QML item body ordering convention from CLAUDE.md, and keep the
+        existing comments' reasoning intact — update them where the behavior changed
+        (the rows no longer disappear).</li>
+</ol>
+
+<h3>4.3 Phase 1 tests</h3>
+
+<p>Extend <code>test-qml/tst_DataMainPage_Georeference.qml</code> (read it first — it
+already builds a project with a UTM-16N fix station through <code>MainWindowTest</code>
+and finds rows by <code>objectName</code>):</p>
+
+<ul>
+    <li>Georeferenced project: <code>projectionAnchorValue</code> shows
+        <code>"&lt;station&gt; — &lt;cave name&gt;"</code> for the fixture's station and
+        cave; the Elevations row is visible and shows the placeholder text.</li>
+    <li>Rename the cave through the model, <code>tryCompare</code> the attribution row
+        text follows.</li>
+    <li>Ungeoreferenced project: Datum/Elevations/Centered-on rows are all hidden
+        (Location keeps its existing "Not georeferenced" text).</li>
+</ul>
+
+<p>C++ side: a <code>[cwCavingRegion]</code> (or existing georeference-tagged) test that
+anchors on a station and checks <code>anchorDescription()</code>, then renames the
+station and checks the notify fired — use <code>SignalSpyChecker</code>, never a member
+counter.</p>
+
+<h2>5. Phase 2 — recenter backend (C++, no UI)</h2>
+
+<h3>5.1 Manager: public recenter API</h3>
+
+<p>The manager keeps only what needs its private lifecycle state and its view of the
+whole project. Building the picker's rows is the model's job (5.2); what the manager
+publishes are the two actions and the three facts the model needs to do it:</p>
+
+<pre>//! The frame's reach, which is the same rule that decides a station is worth
+//! centering on and that an origin has ended up somewhere the project isn't.
+//! kAnchorThresholdMeters stays private in the .cpp.
+static bool isWithinReach(const cwGeoPoint&amp; center, const cwGeoPoint&amp; point);
+
+//! Built on first access; a project that never opens the picker never pays for it.
+cwRecenterCandidateModel* recenterCandidates();
+
+//! The component-wise median of every input the frame can place, in the frame's
+//! own coordinates. Empty with no frame, or nothing the frame can place.
+std::optional&lt;cwGeoPoint&gt; dataCenter() const;
+
+//! Where \a fix sits in the project's frame. Empty when the fix has no
+//! coordinate the frame can read — folding "not a usable fix" and "can't be
+//! transformed" together, because neither is a station you can center on.
+std::optional&lt;cwGeoPoint&gt; localPointOfFix(const cwFixStation&amp; fix) const;
+
+//! Re-anchor the frame on the station \a stationId, making it the input the
+//! lifecycle follows from now on. Refuses (returns false) an unknown id, an
+//! unusable station, and an ineligible one — the picker grays those out, and
+//! the project may have changed between showing the list and the click.
+Q_INVOKABLE bool recenterOnStation(const QUuid&amp; stationId);
+
+//! Freeze the frame at dataCenter() — the same point maybeRecenter() steers to,
+//! applied because the user asked rather than because the data drifted.
+Q_INVOKABLE bool recenterOnDataCenter();
+</pre>
+
+<p><b><code>dataCenter()</code> implementation.</b> For every input from
+<code>gatherInputs()</code> (stations <i>and</i> layers), <code>localPointOf(input)</code>;
+skip inputs that don't transform; median x and median y via <code>cwMedian</code>
+(<code>cwMath.h</code>). Empty when nothing transforms — which also covers "no frame",
+since <code>localPointOf</code> answers nothing without one. <code>maybeRecenter()</code>
+loses its own copy of the median and calls this, after its veto scan.</p>
+
+<p><b><code>localPointOfFix()</code></b> is <code>usableFixStation(fix)</code> (the
+file-local Valid + <code>isValidCS</code> filter, shared with
+<code>gatherFixInputs()</code> so the two can't drift) then
+<code>localPointOf(inputOf(fix))</code>. Extracting <code>inputOf()</code> as the one
+place a fix becomes an <code>Input</code> is what keeps the picker and the lifecycle
+reading a station the same way.</p>
+
+<p><b><code>recenterOnStation()</code>:</b> take a fresh <code>dataCenter()</code>, find
+the station, refuse unless <code>isWithinReach(center, local)</code>
+— the same predicate the model draws its rows with, so the check and the display can't
+disagree — then call the existing private <code>anchorTo(inputOf(fix))</code>, which
+already derives, writes, and maintains
+<code>m_lastAnchor</code>/<code>m_anchorSeen</code>. It deliberately does <b>not</b>
+refresh the model: an action that mutates what the picker is displaying is a surprise,
+and re-deriving the one station's eligibility is cheaper than rebuilding every row.</p>
+
+<p><b><code>recenterOnDataCenter()</code>:</b> compute the median as above, then follow
+the tail of <code>maybeRecenter()</code> exactly
+(<code>cwLocalProjectionManager.cpp:307-319</code>): <code>deriveFrom(localCS,
+median)</code>, refuse an empty result, <code>geoReference-&gt;recenter(candidate)</code>,
+<code>m_lastAnchor = geoReference-&gt;anchor(); m_anchorSeen = false;</code>. Do
+<b>not</b> copy the two early-return guards from the top of
+<code>maybeRecenter()</code>:</p>
+
+<div class="trap">The "something within 50 km of the origin" veto and the "median already
+within 50 km" termination check in <code>maybeRecenter()</code> exist so the
+<i>automatic</i> path only moves a frame that is provably wrong. The manual path is the
+user explicitly asking — with those guards copied in, "Center of data" would silently do
+nothing in the most common case (origin on the first station, data nearby), which is
+precisely the situation the button exists for.</div>
+
+<div class="trap">Deriving from the median keeps the current frame's datum
+(<code>deriveFrom(localCS, …)</code> — the median is in the frame's own coordinates), so
+"Center of data" never changes datum. Picking a <i>station</i> re-derives on the
+station's CS, so it adopts that station's datum — that is the existing anchor rule, not
+a bug; the datum display simply follows. Leave both as they fall out of the existing
+calls.</div>
+
+<div class="trap">A recenter re-decodes every LAZ layer (it rides
+<code>localCoordinateSystemChanged</code> → <code>reloadAll</code>). That is intended
+and already asynchronous; add no progress plumbing and no extra reload call.</div>
+
+<h3>5.2 The candidate model, and the QML surface</h3>
+
+<p>The region owns the manager; it does not wrap it. It gains one property, exactly
+like the four subsystem properties it already exposes:</p>
+
+<pre>Q_PROPERTY(cwLocalProjectionManager* localProjection READ localProjection CONSTANT)
+</pre>
+
+<p>and the manager becomes the QML-facing object — <code>QML_NAMED_ELEMENT</code> +
+<code>QML_UNCREATABLE</code>, the way <code>cwFixStationValidator</code> is:</p>
+
+<pre>Q_PROPERTY(cwRecenterCandidateModel* recenterCandidates READ recenterCandidates CONSTANT FINAL)
+</pre>
+
+<p><code>cwRecenterCandidateModel</code> is a new
+<code>QAbstractListModel</code> (<code>cwRecenterCandidateModel.h/.cpp</code>, picked up
+by the source glob) with roles <code>stationId</code>, <code>stationName</code>,
+<code>caveName</code>, <code>eligible</code> — the same shape every other list in this
+codebase crosses to QML in. It owns the question the picker is asking, not just the rows
+that answer it:</p>
+
+<pre>struct cwRecenterCandidate { QUuid stationId; QString stationName;
+                             QString caveName; bool eligible = false; };
+
+cwRecenterCandidateModel(cwLocalProjectionManager* manager, cwCavingRegion* region);
+
+//! Rebuild against the project as it stands. It reprojects the project's inputs.
+Q_INVOKABLE void refresh();
+</pre>
+
+<p><code>refresh()</code> takes <code>manager-&gt;dataCenter()</code>, walks the region's
+caves, and keeps every station <code>manager-&gt;localPointOfFix()</code> can place,
+marking it with <code>manager::isWithinReach()</code>. It runs in the constructor, so the model is
+correct the moment the property is first read, and the popup calls it again in its
+<code>onOpened</code>.</p>
+
+<div class="decision">Eligibility is <code>isWithinReach(center, station)</code> — a
+horizontal distance against the 50 km threshold, both points in the <i>current</i> frame. It stands in for
+"how far the data would sit from the origin of the would-be new frame": recentering moves
+the origin onto the station, and tmerc distortion over these distances (≤ ~11 ppm at
+30 km) is noise against a 50 km threshold — so one median and one subtraction per station
+replaces deriving a candidate frame and re-transforming every input per station.</div>
+
+<div class="trap">The rows are deliberately <b>not</b> kept current between opens — no
+connections to the fix-station models. Eligibility reprojects every station in the
+project, and nothing is displaying the list between opens, so recomputing it per
+keystroke would be real work for nobody. <code>refresh()</code> on open is the contract;
+a test that appends a station and expects the count to follow is asserting the wrong
+thing.</div>
+
+<div class="trap">No <code>QVariantList</code>/<code>QVariantMap</code>, and no
+pass-through invokables on <code>cwCavingRegion</code>. Untyped rows violate the QML
+rules in CLAUDE.md, and a region that forwards calls to a subsystem it owns is a facade
+the region's existing design deliberately avoids — consumers read
+<code>region.geoReference</code>, <code>region.lazLayers</code>,
+<code>region.fixStationValidator</code>, and now
+<code>region.localProjection</code>.</div>
+
+<h3>5.3 Phase 2 tests (C++, tag them so they run as a subset)</h3>
+
+<p>Extend the existing manager test file (find it: <code>grep -rl
+cwLocalProjectionManager testcases/</code>), new SECTIONs or a new
+<code>TEST_CASE</code> tagged <code>[cwLocalProjectionManager][cwRecenter]</code>.
+Model the fixtures on the existing ones in that file (they already build regions with
+fix stations in known CRSs). Cases:</p>
+
+<ol>
+    <li><b>Recenter on a station:</b> two stations A and B a few km apart, frame
+        anchored on A (first). <code>recenterOnStation(B.id)</code> → returns true,
+        state Anchored, <code>anchor().id == B.id</code>, origin latitude/longitude
+        within ~1e-6° of B's geographic position, and
+        <code>localCoordinateSystemChanged</code> fired exactly once
+        (<code>SignalSpyChecker</code>).</li>
+    <li><b>Lifecycle follows the new anchor:</b> after recentering on B, edit A by a
+        small amount → frame untouched; delete B → frame goes Frozen (the existing
+        hand-off), proving the pick joined the normal lifecycle.</li>
+    <li><b>Center of data:</b> stations at known offsets;
+        <code>recenterOnDataCenter()</code> → true, state Frozen,
+        <code>anchor()</code> invalid, origin at the component-wise median.
+        <b>Test-geometry trap (from D20):</b> with symmetric inputs the median sits
+        where a mean would too, so a wrong statistic can't fail — use an asymmetric
+        set (e.g. three stations where median ≠ mean by a testable margin) so the
+        assertion can actually catch a regression.</li>
+    <li><b>Eligibility:</b> a cluster near the origin plus one station &gt; 50 km out:
+        that station's candidate has <code>eligible == false</code>, and
+        <code>recenterOnStation()</code> on it returns false leaving the frame
+        byte-identical. The clustered stations are eligible.</li>
+    <li><b>Refusals:</b> unknown id → false; ungeoreferenced project →
+        <code>recenterCandidates()</code> empty and both actions false.</li>
+    <li><b>Datum follows the pick:</b> A declared on EPSG:32616, B on EPSG:26916, a
+        couple of km apart so only the declared datum differs → after
+        <code>recenterOnStation(B.id)</code>, <code>datumName()</code> contains "North
+        American Datum 1983". Its mirror: after <code>recenterOnDataCenter()</code> on a
+        mixed-datum project, the datum is unchanged.</li>
+    <li><b>The rows are a snapshot:</b> read <code>recenterCandidates()</code>, append a
+        station, the count holds; <code>refresh()</code> and it follows. This is what
+        pins the deliberate staleness — without it, someone "fixes" the model by wiring
+        it to the fix-station models.</li>
+</ol>
+
+<div class="trap">Axis order. Everywhere in these tests, <code>cwGeoPoint</code> is
+x-first (x = easting/longitude). <code>originLatitude()</code> is <code>m_origin-&gt;y</code>.
+When computing expected origins by hand, a transposed pair usually still "looks
+plausible" — assert against coordinates whose latitude and longitude bands don't
+overlap (the existing tst_DataMainPage_Georeference fixture was chosen for exactly
+this: lat ≈ 37, lon ≈ −84).</div>
+
+<div class="trap">Tests must survive concurrent processes: temp projects use
+<code>QTemporaryDir</code>/pid-suffixed names, as the existing fixtures in this file
+already do. Run with <code>ASAN_OPTIONS=detect_container_overflow=0</code> on macOS
+Debug.</div>
+
+<h2>6. Phase 3 — recenter UI</h2>
+
+<h3>6.1 RecenterPopup.qml (new file, auto-registered by the CMake glob)</h3>
+
+<p>Read <code>FixStationPopup.qml</code> and <code>ChooseTripComponentDialog.qml</code>
+first and copy whichever popup base and sizing idiom they share (the codebase has an
+established popup pattern — match it rather than inventing one). Content:</p>
+
+<ul>
+    <li>Title: <code>qsTr("Recenter the projection")</code>. One explanatory
+        <code>BodyText</code> line: recentering moves the map projection's origin; the
+        cave's coordinates change, the cave itself does not move, and point clouds
+        reload once.</li>
+    <li>First row: <b>Center of data</b> — always enabled when the popup is open;
+        calls <code>RootData.region.localProjection
+            .recenterOnDataCenter()</code>, then closes.</li>
+    <li>Then the stations from
+        <code>RootData.region.localProjection.recenterCandidates</code> (refreshed in the
+        popup's <code>onOpened</code>), a <code>ListView</code> with
+        <code>section.property</code> on <code>caveName</code> so stations group under
+        their cave. Each row shows the station name; the row for the current anchor is
+        marked (compare against the attribution, or pass the anchor id in — mark it
+        "current" and disable it). Ineligible rows are disabled with muted text and an
+        explanation reachable without hovering (a caption line under the name:
+        <code>qsTr("More than 50 km from the middle of your data")</code>) — tooltips
+        are mouse-only and this must work on touch.</li>
+    <li>Row activation → <code>recenterOnStation(stationId)</code> → close. Use
+        <code>TapHandler</code>, not <code>MouseArea</code>. All text via
+        <code>QC.Label</code>/<code>BodyText</code>; all colors/sizes from
+        <code>Theme</code>; strict typed properties (the candidate list is consumed as
+        the ListView model, its fields read through <code>modelData</code> in the
+        delegate with <code>required property</code> declarations if the pattern in
+        neighboring files supports it — follow whatever
+        <code>ChooseTripComponentDialog.qml</code> does with list models).</li>
+</ul>
+
+<h3>6.2 DataMainPage.qml: entry point</h3>
+
+<p>In the Location row, after the value label:</p>
+
+<pre>QC.Button {
+    objectName: "recenterButton"
+    visible: regionInfoBox.editMode
+             &amp;&amp; RootData.region.geoReference.hasCoordinateSystem
+    text: qsTr("Recenter…")
+    onClicked: recenterPopupId.open()
+}</pre>
+
+<p>(Match the button component actually used elsewhere on this page — if the page uses
+a styled button component instead of a raw <code>QC.Button</code>, use that.) The popup
+instance lives at the bottom of the page's children per the item-ordering convention.
+Update <code>projectionHelpArea</code>'s prose: it currently says the center is shown
+rather than chosen; it now needs a sentence that edit mode can recenter onto a fix
+station or the middle of the data, and that the datum still comes from the data.</p>
+
+<h3>6.3 Phase 3 tests (QML)</h3>
+
+<p>Extend <code>tst_DataMainPage_Georeference.qml</code>:</p>
+
+<ul>
+    <li>Edit mode off → no <code>recenterButton</code>; on (click
+        <code>regionSettingsEditButton</code>) with a georeferenced project → visible.</li>
+    <li>Two-station fixture: open the popup, click station B's row,
+        <code>tryCompare</code> the Location row against B's formatted coordinates and
+        the Centered-on row against "B — &lt;cave&gt;". <code>tryVerify</code>, never
+        fixed <code>wait()</code>.</li>
+    <li>Ungeoreferenced project in edit mode → button hidden.</li>
+</ul>
+
+<h2>7. Phase 4 — plate-fixed frame datum for WGS84-labeled anchors</h2>
+
+<p>Independent of Phases 1–3; it can land before or after them. Most of this phase
+lives in <code>cavewherelib/src/cwLocalProjection.cpp</code> plus tests and docs; §7.5
+adds the <code>.prj</code> sidecar to <code>cwSurvexCS.cpp</code> and its five
+callers.</p>
+
+<div class="decision">2026-08-12, after the survex submodule gained
+<code>*cs custom @FILENAME</code> (<code>68a001eb</code>). <b>The frame is stored in
+whichever spelling keeps its datum — a proj string where PROJ has a
+<code>+datum=</code> keyword, WKT everywhere else — and survex is handed the WKT
+through a <code>.prj</code> file beside the <code>.svx</code>. The table hands out the
+real national datums worldwide.</b>
+
+<p>This supersedes the 2026-08-11 decision one paragraph down, which restricted the
+table to NAD83 in North America. That restriction existed only because a WKT frame
+could not survive the trip through survex, and that is now fixed rather than worked
+around.</p>
+
+<p><b>Superseded on 2026-08-11:</b> <i>the stored frame stays a proj string, so the
+table hands out only NAD83, and only in North America.</i> The chain that forced it:
+<code>proj_as_proj_string</code> has <code>+datum=</code> keywords for a fixed handful
+of datums and <i>silently drops</i> anything else rather than failing, so a frame on
+NAD83(2011) came back as <code>+proj=tmerc … +ellps=GRS80</code> and
+<code>datumName()</code> read "Unknown based on GRS 1980 ellipsoid". Keeping the datum
+meant storing WKT, and survex's string reader had no escape syntax, so a WKT frame took
+cavern down. Kept here because the measurement below is still the reason the two
+spellings exist at all.</p>
+
+<p>Measured, not assumed — a <code>[cwProbeSpellable]</code> test ran every candidate
+through <code>derive()</code> and checked whether the result came back as
+<code>+proj=…</code> or as WKT:</p>
+
+<pre>EPSG:4269  NAD83                        => PROJSTRING  'North American Datum 1983'
+EPSG:4267  NAD27                        => PROJSTRING  'North American Datum 1927'
+EPSG:6318  NAD83(2011)                  => WKT
+EPSG:4617  NAD83(CSRS)                  => WKT
+EPSG:6365  Mexico ITRF2008              => WKT
+EPSG:4258  ETRS89                       => WKT
+EPSG:7844  GDA2020                      => WKT
+EPSG:4283  GDA94                        => WKT
+EPSG:4167  NZGD2000                     => WKT
+EPSG:6668  JGD2011                      => WKT
+</pre>
+
+<p>That split is now a <i>fact about spelling</i> rather than a limit on the feature.
+Two of the ten frames stay short and readable; the other eight are stored as WKT and
+carry their datum intact. What the phase buys is the same everywhere: a cave keeps the
+coordinates it was surveyed on, instead of a frame that slides ~2 cm a year under the
+continent. A second benefit still falls out in North America — a typed lat/long and a
+declared NAD83 UTM zone now derive frames on datums a meter apart rather than
+disagreeing by the WGS84 ensemble's ambiguity.</p>
+
+<p><b>The cost moved rather than vanished.</b> It is now an export-compatibility cost,
+priced in §7.5: an exported <code>.svx</code> whose frame is WKT needs its
+<code>.prj</code> beside it and needs survex 1.4.23 or newer to process. The
+proj-string spelling is kept wherever it is lossless precisely so the common North
+American case keeps producing a single self-contained file that older survex reads.</p></div>
+
+<h3>7.1 The rule</h3>
+
+<p>In <code>cwLocalProjection::derive()</code>, after
+<code>resolveGeodeticFrame(datumCS)</code> succeeds: if the resolved base's datum is the
+<b>WGS84 ensemble</b>, look up the plate-fixed datum for (<code>latitude</code>,
+<code>longitude</code>). If the lookup answers and its CS resolves, re-derive the frame
+on that base — transforming the origin point across — and otherwise keep WGS84 exactly
+as today. Anchors on any other datum (declared NAD83, ETRS89, a state plane, a specific
+WGS84 realization like G2139) are untouched.</p>
+
+<p>Detection: <code>proj_crs_get_datum_forced(context, base)</code> →
+<code>proj_get_name(datum)</code> equals <code>"World Geodetic System 1984"</code>.
+That string is what the forced call answers for the ensemble (already verified in the
+step-5 work); a specific realization answers its own longer name and is deliberately
+left alone — someone who typed a realization meant it.</p>
+
+<div class="trap">The trigger is the resolved <i>datum</i>, never the CS string. The
+WGS84 label arrives as <code>EPSG:4326</code> from the CS picker
+(<code>CSPicker.qml:58</code> commits <code>CoordinateSystem.wgs84()</code>), as
+<code>EPSG:326xx</code> for WGS84 UTM zones, as an empty string (test/API paths — the
+existing empty→<code>cwCoordinateTransform::Wgs84</code> fallback runs first and then
+this rule fires on its result), and as WKT from some imports. Matching on the datum
+name catches all spellings with one rule.</div>
+
+<h3>7.2 The lookup table</h3>
+
+<p>A file-local function in the anonymous namespace of
+<code>cwLocalProjection.cpp</code>:</p>
+
+<pre>//! The plate-fixed geodetic CRS customary where (\a latitude, \a longitude)
+//! is, or "" where no entry covers it — the caller then keeps WGS84. A static
+//! table rather than a PROJ database query, so the answer depends only on the
+//! shipped binary, never on which proj.db a machine has.
+QString plateFixedDatumFor(double latitude, double longitude);
+</pre>
+
+<p>Backed by a <code>constexpr</code> array of coarse bounding boxes, first match wins
+(order entries most-specific first). Every EPSG code and its forced datum name below
+was <b>verified against the vendored PROJ</b> on 2026-08-11, with a throwaway
+<code>[cwProbeDatumNames]</code> test that called
+<code>cwLocalProjection::datumName("EPSG:xxxx")</code> and printed the answer. The
+right-hand column is that answer verbatim — none of them is spelled the way its CRS
+is, so a test may never guess one:</p>
+
+<table>
+<tr><th>Region (coarse bbox, degrees)</th><th>CRS</th><th>Code</th><th>Forced datum name (verified)</th></tr>
+<tr><td>Conterminous US, lat 24.5–49.5, lon −125–−66.5</td><td rowspan="5">NAD83(2011)</td><td rowspan="5">EPSG:6318</td><td rowspan="5"><code>NAD83 (National Spatial Reference System 2011)</code></td></tr>
+<tr><td>Alaska west of the Yukon border, lat 51–72, lon −173–−141</td></tr>
+<tr><td>The Alaskan panhandle, lat 54.5–60.5, lon −141–−129.5</td></tr>
+<tr><td>Hawaii, lat 18–23, lon −161–−154</td></tr>
+<tr><td>Puerto Rico and the Virgin Islands, lat 17.5–18.6, lon −68–−64.5</td></tr>
+<tr><td>Canada, lat 41.5–84, lon −141–−52</td><td>NAD83(CSRS)</td><td>EPSG:4617</td><td><code>NAD83 Canadian Spatial Reference System</code></td></tr>
+<tr><td>Mexico, lat 14–33, lon −118–−86</td><td>Mexico ITRF2008</td><td>EPSG:6365</td><td><code>Mexico ITRF2008</code></td></tr>
+<tr><td>Europe, four boxes: lat 36–72 lon −12–−1; lat 37.5–72 lon −1–12; lat 34–42 lon 12–26; lat 42–72 lon 12–40</td><td>ETRS89</td><td>EPSG:4258</td><td><code>European Terrestrial Reference System 1989</code></td></tr>
+<tr><td>Japan, lat 24–46, lon 122–154</td><td>JGD2011</td><td>EPSG:6668</td><td><code>Japanese Geodetic Datum 2011</code></td></tr>
+<tr><td>Australia, lat −44–−9, lon 112–154</td><td>GDA2020</td><td>EPSG:7844</td><td><code>Geocentric Datum of Australia 2020</code></td></tr>
+<tr><td>New Zealand, lat −48–−33, lon 166–179</td><td>NZGD2000</td><td>EPSG:4167</td><td><code>New Zealand Geodetic Datum 2000</code></td></tr>
+<tr><td>Everywhere else</td><td colspan="3">"" — keep WGS84</td></tr>
+</table>
+
+<p>Fourteen boxes over ten regions, first match wins, most specific first. Only the
+five US entries and the four European ones share a CRS; the rest each name their own
+national frame, which is the arrangement the 2026-08-11 scope cut had collapsed and the
+survex fix restores. Alaska takes two boxes so its main one stops at the 141st
+meridian, the border it shares with the Yukon: one box out to −129 would reach
+Whitehorse and most of the Yukon, inland Canada rather than a shared border strip.
+Europe takes four boxes because ETRS89 stops where Europe does:
+they are drawn to leave out North Africa and Anatolia, which sit on plates of their own
+and would otherwise be labeled with a datum that says nothing true about them.</p>
+
+<p>Nine of the ten resolve to a datum PROJ has no <code>+datum=</code> keyword for, so
+nine of the ten produce a WKT frame and, on export, a <code>.prj</code> sidecar. That is
+the expected outcome, not a warning sign — those are the frames whose datum a proj
+string would have thrown away.</p>
+
+<p>The same probe confirmed the detection rule from both sides:
+<code>EPSG:4326</code> and <code>EPSG:32616</code> (a WGS84 UTM zone) both answer
+<code>World Geodetic System 1984</code> exactly, while <code>EPSG:9057</code>
+(WGS84 G1762) answers <code>World Geodetic System 1984 (G1762)</code> — so a
+whole-string match substitutes for the ensemble and leaves realizations alone.</p>
+
+<ul>
+    <li>Bboxes are deliberately coarse; on a US/Canada border overlap the first match
+        wins and the two frames differ by centimeters — harmless. Do not try to encode
+        precise borders.</li>
+    <li>The WGS84 lat/long is used directly for the bbox test (the ~1.4 m datum offset
+        can never flip a continental bounding box).</li>
+    <li>These national frames get replaced on decade scales (NAD83 → NATRF2022 is
+        coming). A stale table only affects <i>newly derived</i> frames — stored frames
+        never re-derive — so updating an entry later is safe and expected.</li>
+</ul>
+
+<h3>7.3 Implementation shape in derive()</h3>
+
+<pre>// after resolveGeodeticFrame(datumCS) succeeds:
+double lat0 = latitude;
+double lon0 = longitude;
+if (/* forced datum name of frame->base == "World Geodetic System 1984" */) {
+    const QString plateCS = plateFixedDatumFor(latitude, longitude);
+    if (!plateCS.isEmpty()) {
+        if (auto plateFrame = resolveGeodeticFrame(plateCS)) {
+            // transform (longitude, latitude) x-first from the WGS84 base to
+            // plateFrame->base via toGeographicTransform-style normalized
+            // crs-to-crs; on success adopt plateFrame and the transformed
+            // lat0/lon0, on any failure keep the WGS84 frame untouched
+        }
+    }
+}
+// tmerc conversion, cartesian CS, projected CRS as today, using the adopted
+// frame->base and lat0/lon0
+</pre>
+
+<p>Two shapes make this fit the file rather than sit on top of it. The plate CS is
+resolved <b>in the frame's own context</b> — with the existing
+<code>horizontalCrs()</code> and <code>geodeticBase()</code> helpers rather than
+<code>resolveGeodeticFrame()</code>, which would mint a second context — because
+<code>proj_create_crs_to_crs_from_pj</code> can only relate two CRSes created in one.
+And <code>toGeographicTransform()</code> is reused for the origin hop, with its
+parameters renamed from <code>(horizontal, base)</code> to
+<code>(source, geographic)</code>: it was already just a normalized crs-to-crs, and
+generalizing its doc beats a second copy of the normalize dance.</p>
+
+<h3>7.3b The tail of derive() keeps the datum</h3>
+
+<p><b>Take the proj-string spelling only when it reads the same datum back out; store
+WKT otherwise.</b> This is the check that was built on 2026-08-11 and backed out the
+same day, and it is now the right rule as well as the obvious one — the only reason to
+back it out was that WKT frames crashed cavern, and §7.5 removes that.</p>
+
+<pre>const QString frameDatum = forcedDatumName(context.get(), base.get());
+const char* projString = proj_as_proj_string(context.get(), projected.get(), PJ_PROJ_5, nullptr);
+if (projString != nullptr &amp;&amp; *projString != '\0') {
+    const QString spelling = QString::fromUtf8(projString);
+    if (cwLocalProjection::datumName(spelling) == frameDatum) {
+        return spelling;   // lossless — keep the short readable form
+    }
+}
+// otherwise fall through to the existing WKT export
+</pre>
+
+<p>The comparison has to run through <code>datumName()</code> on the <i>rendered</i>
+string rather than trusting <code>proj_as_proj_string</code>'s return, because the
+failure being caught is a silent drop: PROJ returns a perfectly well-formed string that
+happens to name no datum. Round-tripping it is the only way to see that.
+<code>forcedDatumName()</code> is the same helper §7.3 extracts for the ensemble
+check, so this adds no new PROJ machinery.</p>
+
+<div class="done-check"><b>This closes a pre-existing gap</b> that the 2026-08-11 draft
+had to record as out of scope. Typing <code>EPSG:6318</code> into a fix row today
+derives <code>+proj=tmerc … +ellps=GRS80</code>, and the Datum row reads "Unknown based
+on GRS 1980 ellipsoid" — a frame naming no datum, from a user who declared one
+explicitly. With the check reinstated that frame comes out as WKT and keeps
+<code>NAD83 (National Spatial Reference System 2011)</code>. It is worth a test of its
+own (§7.4), because it is reachable without the lookup table being involved at all.</div>
+
+<h3>7.5 Handing the frame to survex: the <code>.prj</code> sidecar</h3>
+
+<div class="decision">2026-08-12. <b>A WKT frame is written to a <code>.prj</code> file
+beside the <code>.svx</code> and referenced as <code>*cs out CUSTOM
+@&lt;name&gt;.prj</code>.</b> The proj-string spelling stays inline as today wherever
+it is lossless, so the North American common case still produces one self-contained
+file. This replaces the 2026-08-11 decision to leave <code>cwSurvexCS.cpp</code>
+alone.</div>
+
+<p>The enabling change is in the vendored survex submodule, commit
+<code>68a001eb</code> "cavern: Allow *cs custom to read the CRS from a file", written
+after the ticket in <code>doc/</code> — <code>*cs custom @FILENAME</code> reads the
+coordinate system from its own file, which lets it be WKT or PROJJSON. Landing in
+survex 1.4.23.</p>
+
+<p>What the mechanism guarantees, read out of <code>read_cs_from_file()</code>
+(<code>survex/src/commands.c:2460</code>) and <code>doc/datafile.rst:537</code>:</p>
+
+<ul>
+    <li><b>The path is relative to the file containing the <code>*cs</code></b>
+        (<code>path_from_fnm(file.filename)</code>), so a sidecar written next to the
+        <code>.svx</code> resolves with a bare filename and nothing has to know an
+        absolute path.</li>
+    <li><b>A <code>.prj</code> extension is assumed</b> when the name as given doesn't
+        exist, via <code>fopen_portable(..., EXT_PRJ, ...)</code>.</li>
+    <li><b>The file may be pretty-printed.</b> Lines are joined with a single space and
+        leading/trailing blanks on each line are dropped — safe because neither WKT nor
+        PROJJSON allows a newline inside a quoted name. So the sidecar can be written
+        with PROJ's default <code>MULTILINE=YES</code> output, which is also what makes
+        it a drop-in ESRI <code>.prj</code>.</li>
+    <li><b>A UTF-8 BOM is skipped</b> (PROJ rejects a description that starts with
+        one).</li>
+    <li><b>Quoting:</b> <code>@"My Cave.prj"</code> and <code>"@My Cave.prj"</code> both
+        work, so a name with spaces is expressible. CaveWhere should still emit a name
+        with no spaces.</li>
+    <li><b>A missing file is a hard error</b> — <i>Couldn't open file "…"</i>, then
+        <i>The input projection is set but the output projection isn't</i>, exit 1 and
+        no <code>.3d</code>. A sidecar that fails to write can therefore never be
+        mistaken for a successful ungeoreferenced solve.</li>
+</ul>
+
+<div class="done-check"><b>Verified end to end on 2026-08-12</b>, with CaveWhere's own
+build of cavern (<code>build/&lt;preset&gt;/survex/cavern</code>) on a
+<code>*cs out CUSTOM @mammoth.prj</code> file whose sidecar is the multi-line WKT2 for
+a tmerc LDP on EPSG:6318: zero errors, <code>.3d</code> written, and
+<code>dump3d</code> shows the CS line carrying
+<code>DATUM["NAD83 (National Spatial Reference System 2011)"…]</code>. Running cavern
+by hand needs <code>SURVEXLIB</code> pointed at the build directory (for
+<code>en.msg</code>) and <code>PROJ_DATA</code> at a <code>proj.db</code>; neither
+matters in-process, where CaveWhere already sets both up.</div>
+
+<h4>What changes in CaveWhere</h4>
+
+<p><code>cwSurvexCS::toSurvexCS()</code> currently decides between two spellings, and
+gains a third:</p>
+
+<table>
+<tr><th>Frame</th><th>Written as</th><th>Sidecar</th></tr>
+<tr><td>Bare name (<code>EPSG:6318</code>, <code>UTM16N</code>)</td><td><code>*cs out EPSG:6318</code></td><td>none</td></tr>
+<tr><td>Proj string</td><td><code>*cs out CUSTOM "+proj=tmerc …"</code></td><td>none</td></tr>
+<tr><td>WKT</td><td><code>*cs out CUSTOM @&lt;stem&gt;.prj</code></td><td><code>&lt;stem&gt;.prj</code> beside the <code>.svx</code>, one per unique CS string (see the trap below)</td></tr>
+</table>
+
+<p>The existing <code>isBareName()</code> test already separates row 1 from the rest.
+Rows 2 and 3 split on whether the string starts with <code>+</code> — or, more honestly,
+on whether it contains a <code>"</code>, since that is the actual property that decides
+whether it can go inline.</p>
+
+<div class="trap"><b>The need for a sidecar is per CS string, not per file — a
+<code>.svx</code> can need more than one.</b> <code>toSurvexCS()</code> serves both
+<code>*cs</code> writes, and the <i>input</i> side can carry user WKT too:
+<code>CsScope::ensure</code> (<code>cwSurvexExporterUtils.cpp:73</code>) writes each fix
+row's typed CS verbatim, and PROJ parses pasted WKT, so such a row validates as
+<code>Valid</code> and reaches export (today it crashes cavern exactly like the
+historical trap below). On the Shareable policy the <i>output</i> CS is
+<code>shareableCSForFix()</code>'s "a projected CS as it stands" — again the fix's typed
+string — so <code>*cs out</code> can carry user WKT with <code>derive()</code> uninvolved.
+A single fixed stem would then collide: frame = WKT LDP plus one fix row holding WKT of
+a different CRS → two writes to <code>region.prj</code>, last writer wins, and cavern
+reads one CRS for both roles — a silently wrong georeference, the exact failure class
+this phase removes. So: <b>one sidecar per unique CS string</b>, deterministic stems
+(<code>region.prj</code> for the first, <code>region-2.prj</code>, … for later distinct
+strings), and dedup so a repeated CS reuses its file.</div>
+
+<div class="trap"><b><code>writeCsLine()</code> has no idea where it is writing.</b> Its
+signature is <code>writeCsLine(QTextStream&amp;, const QString&amp; cs, bool
+isOutput)</code> — a stream and nothing else — so it cannot place a file next to the
+one being written. All five call sites
+(<code>cwSurvexExporterRule.cpp:137</code>, <code>cwSurvexExporterCaveTask.cpp:202</code>,
+<code>cwSurvexExporterUtils.cpp:73</code> and <code>:150</code>,
+<code>cwSurvexExporterRegion.cpp:42</code>) need the destination passed down, and each
+of those sits at the end of a chain that was written when a stream was all that was
+needed. Because the dedup and numbering above need somewhere to live, thread a small
+<b>sidecar-writer context</b> (output directory + stem + seen-CS map) rather than a bare
+path string — <code>CsScope</code> is constructed in several places and can carry it.
+The threading is shallow at the task level: every standalone exporter task already
+knows its destination via <code>cwExporterTask::setOutputFile</code>, and
+<code>cwSurvexExporterRegion::writeRegion</code> has <code>outputPath</code> in scope at
+its call site; the depth is in the Rule path's static <code>writeRegion → writeCave →
+Utils</code> chain. <b>This is the real cost of the phase and it is bigger than the
+lookup table it enables</b> — plan it as its own commit, ahead of the table (§9).</div>
+
+<p>The first sidecar's stem should follow the <code>.svx</code> being written
+(<code>region.svx</code> → <code>region.prj</code>), which keeps it obvious to a human,
+makes it a valid ESRI <code>.prj</code> for the same data, and means a second export
+into the same directory overwrites its own sidecar rather than accumulating files.</p>
+
+<p><b>Atomicity on the Rule path.</b> <code>cwSurvexExporterRule::updatePipeline</code>
+writes its <code>.svx</code> through a <code>QSaveFile</code> and only
+<code>commit()</code>s at the end; a sidecar written as a plain file could land beside a
+<code>.svx</code> whose commit then fails. Write each sidecar via its own
+<code>QSaveFile</code> and commit it only after the <code>.svx</code> commits.</p>
+
+<p><b>The internal loop-closure path needs no special handling.</b>
+<code>cwLinePlotTask</code> writes <code>region.svx</code> into a
+<code>QTemporaryDir</code> (<code>cwLinePlotTask.cpp:175-186</code>) and runs cavern on
+it; the sidecar lands in that same directory and is removed with it. The temporary
+directory already owns the <code>.3d</code>, <code>.log</code> and <code>.err</code>
+files, so one more is free.</p>
+
+<h4>Export compatibility — the one genuine cost</h4>
+
+<p>An exported <code>.svx</code> with a WKT frame is now <b>two files</b>, and it needs
+survex 1.4.23 or newer. Older survex reports <i>Unknown coordinate system</i> and
+refuses. Three things keep that from being a regression:</p>
+
+<ul>
+    <li>Wherever the proj string is lossless it is still used, so North American
+        projects keep producing a single file that any survex reads.</li>
+    <li>The alternative was not "a working single file" — it was a frame with no datum
+        in it, quietly transforming every <code>*fix</code> through a datum-sized shift.
+        Two files that are right beat one file that is wrong.</li>
+    <li>Nothing that already exists changes. Stored frames never re-derive (§1), so a
+        project georeferenced before this phase keeps exporting exactly what it does
+        today.</li>
+</ul>
+
+<p>Worth telling the user in the export UI when a sidecar is produced, so the two files
+travel together. Not in this phase — noted in §10.</p>
+
+<h4>Historical: the crash this replaces</h4>
+
+<div class="trap"><b>Before <code>68a001eb</code>, a WKT frame crashed cavern.</b>
+<code>toSurvexCS()</code> wrote any non-bare CS as <code>*cs out CUSTOM
+"&lt;string&gt;"</code>, and survex read it with <code>read_string()</code>, which has
+no escape syntax — so the first <code>"</code> inside the payload ended the string,
+cavern took <code>PROJCRS[</code> as the whole coordinate system, and then read the
+remaining WKT lines as survey data. <code>tst_MarkStationFixed</code> went from 18
+passed to SIGABRT ("pointer being freed was not allocated", inside
+<code>cavern_run</code>) the moment the substitution reached its Colorado fixture on
+<code>EPSG:32613</code>. The faulting free was never pinned down and does not need to
+be. <b>Keep <code>tst_MarkStationFixed.qml</code> in this phase's test list</b> — it is
+the canary that caught this, and it exercises the export path end to end.</div>
+
+<p>The rest of the <code>*cs</code> contract, still true and still worth having written
+down:</p>
+
+<ul>
+    <li><b>Accepted forms:</b> <code>EPSG:&lt;n&gt;</code>, <code>ESRI:&lt;n&gt;</code>,
+        <code>CUSTOM "&lt;proj string&gt;"</code>, <code>CUSTOM @&lt;file&gt;</code>,
+        and the named ones — <code>UTM&lt;zone&gt;[N|S]</code>, <code>LAT-LONG</code>,
+        <code>LONG-LAT</code>, <code>LOCAL</code>, <code>OSGB:&lt;XX&gt;</code>,
+        <code>S-MERC</code>, <code>EUR79Z30</code>,
+        <code>JTSK</code>/<code>IJTSK</code>/<code>…03</code>.</li>
+    <li><b>Inline, everything except <code>"</code> and the line ending is fine</b> —
+        spaces, <code>+ = ,</code>, even <code>;</code> (the comment character is only
+        honored on the unquoted path). Unquoted, the string also stops at the first
+        blank. <b>No length limit</b> either way; survex's <code>string</code> grows on
+        demand.</li>
+    <li><b>Cavern validates what it is given:</b> <code>proj_create(PJ_DEFAULT_CTX,
+        proj_str)</code>, then for <code>out</code> it rejects a geographic 2D or 3D
+        CRS as "unsuitable for output" (<code>commands.c:2781</code>) — output has to
+        be eastings and northings in meters. The LDP is a projected CRS in meters, so
+        it passes; note this is the same <code>PJ_DEFAULT_CTX</code> that
+        <code>cwCoordinateTransform::setProjSearchPaths()</code> already sets search
+        paths on for exactly this reason.</li>
+    <li><b><code>*cs out</code> takes effect once</b> — later ones are silently
+        ignored, by design, so two datasets can be combined.</li>
+    <li>Because cavern hands the string straight to <code>proj_create</code>, anything
+        PROJ reads works. A URN needs no sidecar at all —
+        <code>*cs out CUSTOM urn:ogc:def:crs:EPSG::6346</code> processes cleanly on
+        stock survex 1.4.15, since it contains neither a space nor a quote. Not useful
+        for an LDP, which has no authority code, but it is the proof that the parser was
+        always the only obstacle.</li>
+</ul>
+
+<div class="trap">Failure direction is the opposite of the declared-CS rule.
+<code>derive()</code> refuses a declared CS PROJ can't read, because the data is on a
+datum we failed to identify. The plate lookup is CaveWhere's <i>own suggestion</i> —
+if its CS doesn't resolve or the point transform fails, fall back to the WGS84 frame
+silently; never return "" because of it. A refusal here would break georeferencing for
+users the table was supposed to quietly help.</div>
+
+<div class="trap">Axis order, again. The crs-to-crs transform must be
+<code>proj_normalize_for_visualization</code>-ed (see
+<code>toGeographicTransform()</code>'s comment), and after it the coordinate is x-first:
+<code>xy.x</code> is the longitude, <code>xy.y</code> the latitude —
+<code>proj_create_conversion_transverse_mercator</code> then takes latitude first.
+Transposing here centers the frame in the wrong hemisphere; the tests below use a
+point whose latitude and longitude bands don't overlap so a transpose cannot
+pass.</div>
+
+<p>Transforming the origin point (rather than reusing the WGS84 numbers as-is) keeps
+two documented invariants exact: the frame's origin is the anchor's position <i>on the
+frame's own datum</i>, and <code>origin()</code> reads back the point
+<code>derive()</code> was handed. The moved distance is the ~1.4 m ensemble offset —
+irrelevant to centering, load-bearing for the docs' honesty.</p>
+
+<p>How far it actually moves depends on the machine. Without a NAD83 transformation
+grid installed PROJ answers this hop with a <i>ballpark</i> transformation — a shift
+of exactly zero — so the origin comes back byte-identical to what was typed, and the
+frame differs from today's only in the datum it names. That is PROJ's best available
+answer rather than a failure, and taking it is right: refusing would cost the
+substitution entirely. It is also why the §7.4 tolerance is a range and not an
+expected distance, and why no test may assert that the origin <i>moved</i>.</p>
+
+<h3>7.4 Ripples to check, and Phase 4 tests</h3>
+
+<ul>
+    <li><b>Existing tests that assert a WGS84 frame.</b> The sweep was run on
+        2026-08-11; this is what it found, so it need not be re-derived.
+        <ul>
+            <li><code>test_cwLocalProjection.cpp</code> — <b>three</b> cases break, not
+                two. The two that are <i>about</i> the WGS84 default ("a WGS84 anchor
+                gives a WGS84 frame", and <code>datumName</code>'s "a WGS84 frame"), and
+                also <b>"derives a transverse Mercator on the anchor"</b>, which reads
+                <code>+proj=tmerc</code>, <code>+lat_0</code>, <code>+k</code>,
+                <code>+x_0</code> and <code>+type=crs</code> out of the frame — none of
+                which a WKT frame contains. The 2026-08-11 sweep found only two because
+                the NAD83-only table left the Kentucky fixture spellable; with EPSG:6318
+                in the table it is not.
+                <br>All three move to an open-ocean fixture:
+                <code>kOpenOceanLatitude = 5.0</code>,
+                <code>kOpenOceanLongitude = -150.0</code>. Open ocean is a table miss, so
+                the frame stays WGS84, stays a proj string, and the tmerc assertions keep
+                asserting what they were written to assert. A separate case (7 below)
+                covers the tmerc parameters surviving into WKT.</li>
+            <li>Two <code>origin()</code> sections also move to open ocean. They assert
+                to <code>1e-9</code> degrees, which only survives at the Kentucky
+                fixture because this machine has no NAD83 grid and PROJ ballparks the
+                hop to a zero shift — a machine <i>with</i> the grids would fail them.
+                A test must not depend on which grids are installed.</li>
+            <li><code>test_cwGeoReference.cpp:292,325</code> — <b>unaffected.</b> They
+                build the frame from a literal <code>kLocalCS</code> rather than
+                calling <code>derive()</code>.</li>
+            <li><code>test_cwLocalProjectionManager.cpp:782</code> — this is the
+                cross-commit case flagged at the end of §9, and it does need the fix
+                promised there.</li>
+            <li><code>test-qml/</code> — <code>tst_DataMainPage_Georeference.qml</code>
+                uses EPSG:26916 and is unaffected. <code>tst_MarkStationFixed.qml</code>
+                is the one that went down under the WKT draft (§7.5); it must come back
+                green, and it is the phase's canary either way.</li>
+        </ul></li>
+    <li><b>Recenter interaction (Phases 2–3):</b> a recenter-on-station pick re-derives
+        through the same <code>derive()</code>, so picking a WGS84-labeled station in
+        the US now lands the frame on NAD83(2011) — including in a pre-existing project
+        whose stored frame was WGS84. That is fine: the pick is an explicit frame move
+        with a full re-decode anyway. "Center of data" derives from the frame's own CS,
+        whose datum is by then plate-fixed (or a legacy WGS84 that stays WGS84 — stored
+        frames are never migrated).</li>
+    <li><b>New tests</b> (<code>test_cwLocalProjection.cpp</code>, tag
+        <code>[cwLocalProjection]</code>):
+        <ol>
+            <li>Kentucky lat/long, empty CS → the frame's <code>datumName</code> is
+                <code>NAD83 (National Spatial Reference System 2011)</code>. Assert the
+                datum name, never the spelling — the spelling is WKT here, and which
+                form PROJ picks is §7.3b's business, not this test's.</li>
+            <li>Same point via <code>EPSG:32616</code> (WGS84 UTM) → same substitution.
+                This is the one that proves the trigger is the resolved datum and not
+                the CS string, since nothing about "EPSG:32616" says WGS84.</li>
+            <li>Same point via <code>EPSG:26916</code> (declared NAD83 UTM) → plain
+                <code>North American Datum 1983</code>, exactly as today (regression:
+                declared systems untouched).
+                <div class="trap">Cases 1 and 3 now answer <i>different</i> datum names
+                for the same ground — NAD83(2011) from a typed lat/long, NAD83 from a
+                declared NAD83 UTM zone. That is correct (a declared datum is always
+                inherited verbatim) and it is a real reversal: the 2026-08-11 draft
+                advertised these agreeing as a benefit of the scope cut, which only held
+                because the table was handing out plain NAD83. Both are plate-fixed and
+                differ by ~1–2 m, so nothing about the phase's purpose changes — but the
+                test must assert two different strings, and no doc may claim they
+                match.</div></li>
+            <li>Mid-Pacific point (e.g. 5°N, −150°), empty CS → WGS84 kept (table
+                miss). Pick the fixture's latitude and longitude from bands that
+                cannot overlap, so a transposed pair is a latitude no place on Earth
+                has.</li>
+            <li>A European point → <code>European Terrestrial Reference System
+                1989</code>. This is the case the 2026-08-11 scope cut had asserting the
+                opposite (WGS84 kept); it is now the proof that the table reaches past
+                North America.</li>
+            <li><code>origin()</code> of a substituted frame round-trips to the typed
+                point within a loose tolerance (~3e-5°, the datum-shift slop) —
+                <i>never</i> asserting that it moved; see the ballpark note in §7.3.</li>
+            <li><b>A WKT frame is still an LDP.</b> At the Kentucky point, the frame
+                parses and <code>origin()</code> reads back the anchor, and its
+                projection method is transverse Mercator with unit scale and no false
+                easting or northing — asserted through PROJ rather than by string
+                matching, since the <code>+proj=tmerc</code> assertions moved to open
+                ocean. Without this, nothing checks that the recipe in the class doc
+                still holds for nine of the ten table entries.</li>
+            <li>A named WGS84 realization is left alone: <code>EPSG:9057</code> at the
+                Kentucky point still answers a datum name containing
+                <code>G1762</code>. This is the other half of the datum-not-string
+                trigger and the table's §7.1 promise, and nothing else covers it.</li>
+            <li><b>Every table entry keeps its datum.</b> For a point inside each of the
+                fourteen boxes, <code>datumName()</code> of the derived frame equals the
+                table's expected name. This is the test that fails if PROJ's database
+                changes underfoot or someone mistypes a code, and it replaces the
+                2026-08-11 "all frames are one line with no quote" test, whose invariant
+                the sidecar retires.</li>
+            <li><b>A declared unspellable CS keeps its datum too</b> —
+                <code>EPSG:6318</code> typed into <code>deriveFrom()</code> answers
+                <code>NAD83 (National Spatial Reference System 2011)</code> rather than
+                "Unknown based on GRS 1980 ellipsoid". This is §7.3b's gap closing, and
+                it is reachable with the lookup table uninvolved.</li>
+            <li><b>The export round-trips through cavern.</b> Export a project whose
+                frame is WKT, then confirm the <code>.svx</code> carries
+                <code>*cs out CUSTOM @&lt;stem&gt;.prj</code>, that
+                <code>&lt;stem&gt;.prj</code> exists beside it, and that cavern
+                processes the pair without error. A unit test on
+                <code>toSurvexCS()</code> alone would pass while the sidecar never got
+                written — the file on disk is the assertion that matters. A second case
+                exports a WKT frame plus a fix row holding WKT of a different CRS and
+                asserts <i>two</i> sidecars with distinct stems, each holding its own
+                CRS — the collision the §7.5 trap describes, and the dedup path's only
+                coverage.</li>
+        </ol></li>
+    <li><b>Docs in this phase:</b> update the <code>derive()</code>/class doc comments
+        in <code>cwLocalProjection.h</code> (they currently say the datum is pinned
+        from the anchor, full stop), the <code>projectionHelpArea</code> datum sentence,
+        and the manual's datum paragraph — the new truth is: a declared datum is
+        inherited; a plain lat/long gets the national plate-fixed datum for where the
+        cave is, because those ride the continent while WGS84 slides under it at
+        ~2 cm/yr. "The national datum for where your cave is" is now accurate and is the
+        phrasing to use; name one or two examples (<code>NAD83 (National Spatial
+        Reference System 2011)</code> in the US, ETRS89 in Europe) rather than reciting
+        §7.2's ten rows. Run <code>humanize</code> over the manual prose. Also refresh
+        <code>docs/manual/llms.txt</code>, which states the old rule twice.
+        <br>The manual page sits at its 1697-word ceiling, so the datum bullet's new
+        sentences must be paid for on the same page. Three donors, all of them
+        restatement: the "Centered on" bullet's "so it always names the station as you
+        have it now" repeats "It follows renames"; the picker paragraph's "and catches
+        a wrong-zone fix" repeats the Location bullet; and "Your data still decides the
+        datum" at the end of "Move the center" is exactly what the rewritten datum
+        bullet now says.</li>
+</ul>
+
+<h2>8. Documentation (part of Phase 3)</h2>
+
+<ul>
+    <li><code>docs/manual/georeferencing/georeference-a-cave.md</code> — the "Where the
+        project landed" section: the rows are always shown once georeferenced
+        (including the Elevations placeholder), the new Centered-on row, and a short
+        new subsection on recentering: why you would (true north lines up best near the
+        center; pick the station in the middle of the part of the cave you care about),
+        what happens (coordinates re-project, clouds reload once, nothing physically
+        moves), and that far-away stations are grayed out. The datum sentence ("none of
+        them is a picker…") stays true and stays.</li>
+    <li><code>docs/manual/llms.txt</code> — refresh this page's summary line if the
+        page's scope line changed.</li>
+    <li>Run the <code>humanize</code> skill over any new manual prose before
+        committing.</li>
+</ul>
+
+<h2>9. Order of work and commits</h2>
+
+<table>
+<tr><th>#</th><th>Commit</th><th>Contents</th><th>Gate</th></tr>
+<tr><td>1</td><td>"Group the projection facts and name the frame's anchor"</td>
+    <td>§4 (C++ property + wiring, QML group box, always-visible rows, tests, manual
+        touch-up for the rows)</td>
+    <td>Tagged C++ subset + full QML suite green; screenshot of the box for the commit
+        message</td></tr>
+<tr><td>2</td><td>"Let the projection recenter on a chosen station or the data's middle"</td>
+    <td>§5 (manager API, region invokables, C++ tests)</td>
+    <td><code>cavewhere-test "[cwLocalProjectionManager]"</code> green plus the new
+        <code>[cwRecenter]</code> cases</td></tr>
+<tr><td>3</td><td>"Add the Recenter picker to the project page"</td>
+    <td>§6 + §8 (popup, entry button, QML tests, manual)</td>
+    <td>Both full suites green; screenshot of the popup</td></tr>
+<tr><td>4</td><td>"Write the frame's coordinate system to a .prj sidecar"</td>
+    <td>§7.5 only — the survex submodule bump to <code>68a001eb</code>, the third branch
+        in <code>toSurvexCS()</code>, and the sidecar-writer context (directory + stem +
+        seen-CS dedup) threaded through <code>writeCsLine()</code>'s five call sites. No
+        table, no
+        <code>derive()</code> change: this commit is pure plumbing and is verifiable on
+        its own by handing the exporter a WKT frame.</td>
+    <td>Both full suites green, <code>tst_MarkStationFixed.qml</code> explicitly, plus
+        the cavern round-trip case from §7.4. Note the submodule bump in the commit
+        message.</td></tr>
+<tr><td>5</td><td>"Derive frames on the local plate-fixed datum"</td>
+    <td>§7.1–7.4 (lookup table, derive() substitution, the §7.3b datum-preserving tail,
+        tests, doc-comment and manual updates)</td>
+    <td><code>cavewhere-test "[cwLocalProjection]"</code> green, then both full suites.
+        <code>tst_MarkStationFixed.qml</code> must be run explicitly — a targeted
+        georeferencing sweep misses it.</td></tr>
+</table>
+
+<div class="trap"><b>4 before 5, and the order is load-bearing.</b> Commit 5 is what
+first makes <code>derive()</code> produce a WKT frame; if the sidecar isn't already in
+place, the exporter writes <code>*cs out CUSTOM "PROJCRS["…</code> and cavern goes down
+the way it did on 2026-08-11. Landing 4 first also means the plumbing gets reviewed on
+its own, without a datum table in the diff.</div>
+
+<p><b>Dependencies and parallelism.</b> The only hard edges are 3 ← 1 (the button and
+the attribution row live in the restructured box), 3 ← 2 (the invokables it calls), and
+5 ← 4 (the trap above). Commit 4 depends on nothing at all — it touches only the survex
+exporter. Two agents can run in three waves: <b>{1 ∥ 2}, then {3 ∥ 4}, then {5}</b>.
+Soft overlaps to manage rather than dependencies: commits 1, 3, and 5 all touch
+<code>projectionHelpArea</code> and the manual page — so keep 5 out of the first wave
+(it would collide with 1's restructure of that block), and run it after 3 for zero merge
+friction. Whichever of 2 and 5 lands second must re-read Phase 2's "datum follows the
+pick" test: once Phase 4 is in, a WGS84-labeled fixture no longer produces a WGS84
+frame, so the test's starting datum must be chosen to still prove the claim (start from
+a declared CS, or assert the datum changed to the picked station's).</p>
+
+<p>Build/test commands (build dir is <code>build/Qt_6_11_1_for_macOS-Debug</code>):</p>
+
+<pre>cmake --build build/Qt_6_11_1_for_macOS-Debug --target cavewhere-test cavewhere-qml-test
+ASAN_OPTIONS=detect_container_overflow=0 ./build/Qt_6_11_1_for_macOS-Debug/cavewhere-test \
+    "[cwLocalProjectionManager]" -d yes 2>&amp;1 | tee "$TMPDIR/cavewhere-test-recenter.log"
+./build/Qt_6_11_1_for_macOS-Debug/cavewhere-qml-test --platform offscreen \
+    -input test-qml/tst_DataMainPage_Georeference.qml 2>&amp;1 | tee "$TMPDIR/cavewhere-qml-recenter.log"
+</pre>
+
+<div class="done-check">Known pre-existing failures to leave alone, never re-attribute:
+the <code>test_cwProject.cpp:2679</code> save-flush flake in full runs, the two
+<code>tst_ResponsiveLayout</code> autoUpdateLabel failures, the keychain flakes, and the
+ASAN data race in <code>test_cwDiskCacher.cpp</code>. Full-suite baseline before this
+plan: C++ 1824 cases / 1 known flake; QML 900 passed / 0 failed / 82 skipped.</div>
+
+<h2>10. Out of scope, on purpose</h2>
+
+<ul>
+    <li>Any datum picker, horizontal or vertical (D4; discussed and re-affirmed
+        2026-08-08 — with shipped PROJ grids the frame datum choice is ~1 m of
+        absolute placement that the align-to-lidar workflow cancels, and loop closure
+        is datum-independent at the millimeter level).</li>
+    <li>A "datum upgrade" event when lidar joins a stations-first project (considered,
+        rejected for the same reason). Phase 4 is <i>not</i> this event: it changes
+        what a new frame derives to, never moves a stored frame, and adds no state.
+        Likewise, no migration of existing WGS84-framed projects.</li>
+    <li>Typing coordinates as the center (D8), undo/redo of a recenter, and recentering
+        an ungeoreferenced project.</li>
+    <li>Attribution for Frozen frames ("centered on the middle of your data") — no
+        persisted record exists and none is added.</li>
+    <li>Telling the user, in the export UI, that a <code>.prj</code> sidecar was written
+        and travels with the <code>.svx</code> (§7.5). Worth doing — a survex export is
+        the one place where a second file can be left behind by accident — but it is
+        export-UI work, not frame work, and none of the export dialogs currently report
+        what they wrote.</li>
+    <li>Reading a <code>.prj</code> sidecar back on <i>import</i>. Survex files
+        CaveWhere imports may now carry <code>*cs custom @file</code>;
+        <code>cwSurvexCS</code>'s parser doesn't know the form and will treat it as an
+        unrecognized system, which is the same outcome as any other CS it can't read.
+        Worth its own look once files in the wild start using it.</li>
+</ul>
+
+</body>
+</html>

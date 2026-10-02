@@ -11,13 +11,16 @@
 //Our includes
 #include "cwTask.h"
 #include "cwImage.h"
+#include "cwDiskCacher.h"
 #include "cwImageProvider.h"
 #include "cwGlobals.h"
 #include "cwTextureUploadTask.h"
 #include "cwTrackedImage.h"
+#include "cwProgressNode.h"
 
 //Qt includes
 #include <QRectF>
+#include <QSize>
 #include <QString>
 #include <QDir>
 
@@ -29,6 +32,18 @@ class CAVEWHERE_LIB_EXPORT cwCropImageTask : public QObject
     Q_OBJECT
 
 public:
+    /**
+     * What one crop produces: the PNG crop written to the image cache, the key
+     * of the UASTC .ktx2 entry encoded from the same pixels, and the crop's
+     * size after the oversized-crop clamp. compressedKey's id is empty when the
+     * encode failed, and callers then stay on the uncompressed image.
+     */
+    struct Result {
+        cwTrackedImagePtr image;
+        cwDiskCacher::Key compressedKey;
+        QSize croppedSize;
+    };
+
     cwCropImageTask(QObject* parent = nullptr);
 
     //Inputs
@@ -37,7 +52,11 @@ public:
     void setFormatType(cwTextureUploadTask::Format format);
     void setDataRootDir(const QDir& dataRootDir);
 
-    QFuture<cwTrackedImagePtr> crop();
+    //The node this crop hangs its progress children off. Null leaves the crop
+    //untracked, which is how every caller outside a tracked run uses it.
+    void setProgressParent(cwProgressNodePtr parent);
+
+    QFuture<Result> crop();
 
 protected:
     virtual void runTask();
@@ -48,6 +67,7 @@ private:
     QRectF CropRect;
     cwTextureUploadTask::Format Format = cwTextureUploadTask::Unknown;
     QDir DataRootDir;
+    cwProgressNodePtr m_progressParent;
 
     //Output
     cwImage CroppedImage;

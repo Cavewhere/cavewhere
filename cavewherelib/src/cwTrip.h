@@ -201,6 +201,7 @@ public:
     cwSurveyNoteSketchModel* notesSketch() const;
     cwKeywordModel* keywordModel() const;
     cwKeywordModel* linePlotKeywordModel();
+    cwKeywordModel* splaysKeywordModel();
 
     void addShotToLastChunk(const cwStation& fromStation, const cwStation& toStation, const cwShot& shot);
     void removeChunks(int begin, int end);
@@ -418,6 +419,13 @@ protected:
     //line plot geometry's and the station labels' keyword items both reference
     //this, so the "this is line plot" identity is owned by the trip.
     cwKeywordModel* m_linePlotKeywordModel = nullptr;
+
+    //Lazily created keyword model that identifies this trip's splay shots
+    //(Type="Splays") and inherits the trip's keywords via an extension, the
+    //splay counterpart of m_linePlotKeywordModel.
+    cwKeywordModel* m_splaysKeywordModel = nullptr;
+
+    cwKeywordModel* identityKeywordModel(cwKeywordModel*& model, const QString& type);
 
     QUuid Id;
     cwExternalCenterline m_externalCenterline;

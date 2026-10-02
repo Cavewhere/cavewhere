@@ -145,7 +145,7 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
 
     cwSurvex3DFileReader reader;
     const cwStationPositionLookup lookup =
-        reader.readStationPositions(cavernResult.value().output3dPath);
+        reader.readNetworkAndLookup(cavernResult.value().output3dPath).lookup;
 
     //cwSurvex3DFileReader only warns when it can't read a .3d and hands back an
     //empty lookup, which would leave this function reporting success with no

@@ -22,6 +22,7 @@ class CaveWhereConan(ConanFile):
     ("xxhash/[>=0.8.3]"),
     ("tinygltf/[>=2.9.0 <2.10]"),
     ("minizip-ng/[>=4.0.7]"),
+    ("ktx/[>=4.3 <5]"),
     ("laslib/[>=2.0.2]")
     ]
 
@@ -65,7 +66,7 @@ class CaveWhereConan(ConanFile):
 
         # Or add a new requirement!
         if not self.options.system_qt:
-            self.requires("qt/6.10.1")
+            self.requires("qt/6.11.1")
             self.requires("xkbcommon/[>=1.6.0]", override=True)
             self.requires("sqlite3/[>=3.45.0]") #, override=True) #override seems to use system's sqlite3 and causes issues
         else:
@@ -95,6 +96,11 @@ class CaveWhereConan(ConanFile):
 
         self.options["openssl"].shared = True
 
+        # libktx ships the writer and the Basis encoder/transcoder in the
+        # library itself; the command line tools only add an fmt dependency
+        # and a max-C++17 build constraint, so leave them out.
+        self.options["ktx"].tools = False
+
         if self.settings.os == "Android":
             # On Android, Conan-built OpenSSL is only used for the static libs
             # that libssh2/libgit2/qtkeychain link into the app binary. Qt's
@@ -117,6 +123,8 @@ class CaveWhereConan(ConanFile):
             self.options["qt"].qttools = True
             self.options["qt"].qttranslations = True
             self.options["qt"].qtimageformats = True
+            # Technology Preview module in 6.11; provides Qt6::CanvasPainter
+            self.options["qt"].qtcanvaspainter = True
             self.options["qt"].with_libjpeg = "libjpeg"
             self.options["qt"].with_dbus = True
 

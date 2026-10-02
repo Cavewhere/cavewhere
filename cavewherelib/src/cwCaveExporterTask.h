@@ -12,8 +12,6 @@
 #include "cwExporterTask.h"
 #include "cwGlobals.h"
 #include "cwCaveData.h"
-class cwCave;
-
 
 //Qt includes
 #include <QTextStream>
@@ -32,6 +30,10 @@ protected:
     int TotalProgress;
 
     virtual void runTask();
+
+    //! Emits whatever a cave exported on its own needs ahead of the cave body,
+    //! and returns the output coordinate system that body should assume.
+    virtual QString writeStandaloneHeader(QTextStream& /*stream*/) { return QString(); }
 
     bool checkData();
     bool checkData(const cwCaveData& cave);

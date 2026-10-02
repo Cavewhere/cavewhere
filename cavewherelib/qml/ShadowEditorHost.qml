@@ -72,7 +72,7 @@ QQ.MouseArea {
 
         editorItem.field = field
 
-        editorItem.textInput.text = field.text
+        editorItem.textInput.text = field.editText
         editorItem.textInput.font = field.font
         editorLoader.visible = true
         editorItem.textInput.forceActiveFocus()

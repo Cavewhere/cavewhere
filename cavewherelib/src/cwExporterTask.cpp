@@ -21,7 +21,16 @@ cwTask(object)
 void cwExporterTask::setOutputFile(QString outputFile) {
     if(!isRunning()) {
         OutputFileName = outputFile;
+        OwnSidecars.setSurvexFile(outputFile);
     }
+}
+
+void cwExporterTask::setSidecarWriter(cwSurvexCS::SidecarWriter* sidecars) {
+    SharedSidecars = sidecars;
+}
+
+cwSurvexCS::SidecarWriter& cwExporterTask::sidecars() {
+    return SharedSidecars != nullptr ? *SharedSidecars : OwnSidecars;
 }
 
 /**
@@ -81,7 +90,7 @@ bool cwExporterTask::openOutputFile() {
     bool canWrite = OutputFile->open(QIODevice::WriteOnly);
     if(!canWrite) {
         //File is bad
-        Errors.append(QString("Open file %1").arg(OutputFileName));
+        Errors.append(QStringLiteral("Open file %1").arg(OutputFileName));
         stop();
     } else {
         //File is good
@@ -97,5 +106,14 @@ void cwExporterTask::closeOutputFile() {
     if(OutputFile->isOpen()) {
         OutputStream->flush();
         OutputFile->close();
+    }
+
+    //A shared writer belongs to whoever handed it in, and is written once the
+    //whole file is.
+    if(SharedSidecars == nullptr) {
+        const QString error = OwnSidecars.write();
+        if(!error.isEmpty()) {
+            Errors.append(error);
+        }
     }
 }

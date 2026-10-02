@@ -1,161 +1,180 @@
 ---
 title: Work with LiDAR Notes
-summary: Import a .glb scan as a note, tell CaveWhere which way is up, set north and scale, and tie the scan to survey stations.
-problem: Bring a 3D scan of a passage into the cave model as a second record alongside the sketch, and give it the up, north, and scale it arrives without.
+summary: Import a .glb scan as a note, set its up direction, north, and scale, and tie it to survey stations.
+problem: Bring a 3D scan of a passage into the cave model and give it the up, north, and scale it arrives without.
 keywords: [lidar, glb, gltf, 3d scan, scan, polycam, scaniverse, up, north, azimuth, scale, station, photogrammetry]
 related: [add-a-note.md, ../scraps/carpeting.md, ../concepts/glossary.md]
 ---
 
 # Work with LiDAR Notes
 
-![A LiDAR note open in CaveWhere: a photo-textured 3D scan of a cave passage — breakdown, mud and flowstone all visible — floating against the viewer's pale background, with the collapsed LiDAR Note Transform panel in the top-left corner.](../images/notes-lidar-note.png)
-*A LiDAR note is a 3D scan of a passage, attached to a trip like any other note.
-It keeps the photographic texture of the rock, and you orbit it rather than
-reading it flat.*
+![A LiDAR note open in CaveWhere: a photo-textured 3D scan of a cave passage, breakdown and mud and flowstone against a pale blue background. The toolbar top-right holds Carpet and Add and nothing else.](../images/notes-lidar-note.png)
+*A LiDAR note attaches to a trip like any other note. You orbit it rather than
+read it flat.*
 
 ## Why you need this
 
-A **LiDAR note** is a 3D scan of a passage — usually shot on a phone — brought
+A **LiDAR note** is a 3D scan of a passage, usually shot on a phone, brought
 into CaveWhere as a note.
 
-It is not a replacement for sketching, and it won't out-draw a good sketcher. A
-scan records **surfaces**, and it records them very well — it will capture a
-breakdown pile in more detail than anyone would sit and draw. What it cannot
-record is everything that isn't a surface. **Airflow doesn't appear in a scan**,
-and neither does which of the three ways on is the one worth pushing, where the
-water goes, or which features in front of you actually matter. A sketch is a set
-of judgements about exactly those things; a scan makes none.
+It doesn't replace sketching. A scan records **surfaces**, and it records them
+very well: a breakdown pile in more detail than anyone would sit and draw.
+Everything else goes unrecorded. **Airflow does not appear in a scan.** Neither
+does which lead deserves pushing or where the water goes. A sketch is a set of
+judgments about exactly those things; a scan makes none.
 
-What a scan adds is **another dimension of survey data, recorded next to the
-sketch**, and that's useful in ways drawing isn't. Back on the surface you can
-hold the sketch up against the scan and see what got missed, mis-shaped, or
-mis-scaled while you were cold and hurrying. And someone still learning to sketch
-can compare what they drew against the passage as it actually is — feedback that
-is otherwise very hard to get once you're out of the cave.
+A scan does add a second record: back on the surface you hold sketch against
+scan and see what got missed or mis-scaled while you were cold and hurrying.
 
-The catch is that a scan arrives knowing nothing about your cave. It has its own
-idea of which way is up, no idea where north is, and — depending on the capture
-app — possibly no idea how big it is. It is a shape floating in its own space.
-This page is about telling CaveWhere those three things, after which the scan
-[carpets](../concepts/glossary.md#carpeting) into the model the same way a
-sketched [scrap](../concepts/glossary.md#scrap) does: pinned to the survey by
-stations you place on it.
+The catch: a scan knows nothing about your cave. It carries its own idea of
+which way is up, no idea where north lies, and (depending on the capture app) no
+idea how big it is. Tell CaveWhere those 3 things and the scan
+[carpets](../concepts/glossary.md#carpeting) into the model like a sketched
+[scrap](../concepts/glossary.md#scrap) does, though under
+[fixed settings you can't tune](../scraps/carpeting.md).
 
 ## Import a scan
 
-LiDAR notes come in through the same door as everything else — **Add → Notes or
-3D Model** — and the file picker accepts them alongside images. See
-[Add Notes to a Trip](add-a-note.md).
+LiDAR notes come in through the same door as [every other
+note](add-a-note.md), **Add → Notes or 3D Model**. The picker that opens, titled
+*Load Images or LiDAR scans*, lists your image formats and `*.glb` in one
+filter.
 
-CaveWhere reads **`.glb`** (binary glTF), and will open **any polygonal glTF
-model** — it doesn't have to have come from a LiDAR sensor.
+**CaveWhere takes exactly one 3D format: `.glb`, binary glTF.** The check reads
+the suffix and ignores case, so `SCAN.GLB` imports fine. A `.gltf` selected
+beside it gets dropped without a word. Convert it first.
 
-**PolyCam is the best-supported source.** Its scans arrive already the right way
-up and already life-size, so in the usual case you import one and there is nothing
-to set. Other sources vary, and **photogrammetry models are the ones to watch**:
-they often come in with the wrong up direction, and they usually need their scale
-set by hand, because photogrammetry reconstructs shape from photographs and has no
-way of knowing how big the real thing was. Both are fixable below — up first,
-then scale.
+Any polygonal glTF opens, LiDAR sensor or not, but the loader only understands
+triangle meshes: a glTF of points or lines comes in untyped, and what lands on
+screen is not your model. CaveWhere reads only the base color texture, so the
+photograph carries all the shading you see.
 
-One file becomes one LiDAR note, named after the file. Opening it shows the scan
-in a 3D view you can orbit, rather than a flat page, and CaveWhere grabs a
-thumbnail of it for the gallery on first view.
+**PolyCam and Scaniverse need the least work.** Their scans arrive the right way
+up, and a true LiDAR scan is life-size already, so an import usually needs
+nothing set. **Photogrammetry needs the most work**: nothing in a set of
+photographs says which way was up or how big the real thing was, so set both by
+hand, up first, then scale.
 
-Everything below lives in the **LiDAR Note Transform** panel on that view.
+Each file becomes one LiDAR note named after the file, extension included.
+CaveWhere copies the `.glb` into the project's notes folder and stores only the
+file name, so moving the original breaks nothing, but your project carries the
+full bytes of every scan. Opening a note shows the scan in an orthographic 3D
+view you orbit.
 
-![The LiDAR Note Transform panel over a 3D scan, showing Auto Calculate, the North row, the Up mode dropdown, and the scale row.](../images/notes-lidar-transform.png)
-*The LiDAR Note Transform panel. Up comes first: north and scale are applied
-after the scan has been stood upright.*
+Everything below lives in the **LiDAR Note Transform** panel.
+
+![The LiDAR Note Transform panel over a 3D scan. A ticked Auto Calculate box wraps the North row, which reads 0.0; below it the Up dropdown reads "+Y is up (PolyCam)", and a Scale row reads "In Model 1 in = In Cave 1 in = 1:1".](../images/notes-lidar-transform.png)
+*The panel on a fresh import. Up comes first: north and scale apply after the
+scan stands upright.*
 
 ## Tell CaveWhere which way is up
 
-**Do this first.** CaveWhere applies the up rotation *before* it rotates the scan
-to north or rescales it, so getting up wrong makes the other two meaningless.
+**Do this first.** The transform runs the up rotation, then the spin about Z
+that sets north, then the uniform scale. Get up wrong and the other 2 mean
+nothing.
 
-The **Up** dropdown names the axis in the scan that points at the sky:
+The **Up** dropdown holds 7 entries, each naming the axis in the scan that
+points at the sky. The panel above shows the default.
 
-- **+Y is up (PolyCam)** — the default, and what PolyCam and Scaniverse produce.
-  If you scanned with either, you're already done.
-- **−Y is up**, **+Z is up**, **−Z is up**, **+X is up**, **−X is up** — pick the
-  one matching your capture app when you know which axis it uses.
-- **Custom** — when you don't know, when the scan was taken at an angle, or when
-  it's a photogrammetry model that came in lying on its side. Choosing Custom
-  reveals an **arrow tool**: click two points that you know run vertically in the
-  real passage — a drip line, the edge of a pit — and CaveWhere tilts the scan to
-  match.
+- **+Y is up (PolyCam)**, the default, and what PolyCam and Scaniverse produce.
+  Nothing to do here.
+- **-Y is up**, **+Z is up**, **-Z is up**, **+X is up**, **-X is up**, for when
+  you know the axis your capture app uses. Each applies a fixed 90° or 180°
+  rotation; +Z is CaveWhere's own up and rotates nothing.
+- **Custom**, for when you do not know, or when the scan came in at an angle or
+  lying on its side.
 
-Custom mode also shows four **read-only** numbers labelled *Custom up rotation
-(xyzw)*. They are the rotation the arrow tool worked out, exposed so you can see
-it. You don't have to understand or edit them — the app's own help says as much:
-stay in Custom, drag the arrow tool, and the fields keep themselves up to date.
+Custom reveals an **arrow tool**: click 2 points you know run vertically in the
+real passage (a drip line, the edge of a pit) and CaveWhere rotates that
+direction onto +Z on the second click. It also switches Up to Custom for you,
+and its button appears only while Up already reads Custom.
 
 ## Set north
 
-With **Auto Calculate** ticked — it is by default — CaveWhere works north out
-from the survey itself, by comparing the stations you've placed on the scan
-against their real positions. That needs **at least two stations** on the note,
-so place those first and north tends to solve itself.
+**Auto Calculate**, ticked by default as shown above, works north out from the
+survey, comparing the stations you placed on the scan against their surveyed
+positions, averaged over every shot it finds.
 
-The checkbox sits around the North row alone, and that's exactly what it governs:
-on a LiDAR note **Auto Calculate means auto-calculate north**. It doesn't touch up
-or scale.
+Two conditions, and the second one bites.
 
-When it can't, untick **Auto Calculate** and either type the angle in **North**
-or use the **north tool**: click two points along something whose bearing you
-know — the arrow you drew on your notes, or a passage you shot down — and enter
-that bearing when asked for the **arrow's azimuth**. Ticking Auto Calculate back
-on hides the tool and returns the field to read-only.
+- The note needs **at least 2 stations**. Below that, CaveWhere gives up.
+- At least 2 of them need a **shot between them in your survey data**.
+  CaveWhere pairs note stations only when the survey network lists them as
+  neighbors, so 2 stations at opposite ends of the cave yield no north.
+
+The answer comes back in plan view: the calculation flattens Z on the surveyed
+positions and the scan alike, ignoring how much the passage climbs. CaveWhere
+then corrects it by the trip's
+[declination](../survey-data/declination.md), so editing declination on the
+trip swings north on the scan too.
+
+The checkbox wraps the North row alone: on a LiDAR note, **Auto Calculate means
+auto-calculate north**.
+
+When auto fails, untick it. That unlocks the **North** field (one decimal place)
+and reveals the **north tool**. Type the bearing straight in, or click 2 points
+along something whose bearing you know (the arrow you drew on your notes, a
+passage you shot down). CaveWhere then asks *What is azimuth of the
+arrow?* and takes 0.0 to 360.0, subtracting it from the direction it measured.
+Tick Auto Calculate back on and the field locks again.
 
 ## Check the scale
 
-**Scale is never worked out for you here.** This is the one place a LiDAR note
-differs from a [scrap](../concepts/glossary.md#scrap), where Auto Calculate
-derives the scale from the stations. On a LiDAR note, Auto Calculate covers
-**north and nothing else** — the scale is whatever the model came with, until you
-change it. That's deliberate rather than an omission: a scan is supposed to arrive
-life-size already.
+**Nothing works the scale out for you here.** Here a LiDAR note parts company
+with a [scrap](../concepts/glossary.md#scrap), whose Auto Calculate derives
+scale from the stations. The LiDAR code works out a transform carrying both,
+writes back the north, and drops the scale. Whatever the model came with
+survives until you change it, because a scan should arrive life-size.
 
-So a true LiDAR scan is usually right as it stands, because the sensor measures
-real distances — the panel's own advice is that **LiDAR notes should typically be
-1:1**, and you can leave the scale alone.
+A true LiDAR scan usually does, because the sensor measures real distances. The
+panel says as much in its help:
 
-**Photogrammetry is the exception, and it needs the scale set by hand.** A model
-reconstructed from photographs has a perfectly good *shape* but no idea of its
-*size*: nothing in a set of pictures says whether that passage is two metres wide
-or twenty. The same applies to any capture app that exports in pixels or some
-other non-metric unit.
+> LiDAR notes should typically be **1:1**. If your source is already metrically
+> correct, leave scale at 1. Adjust only if your capture app exported in pixels
+> or non-metric units.
 
-Either way the fix is the scale tool: click two points on the scan and enter the
-**actual distance** between them — a shot length you measured, or anything else
-in the scan whose real size you know. CaveWhere compares that against the distance
-in the model and works the scale out. The row is labelled **In Model** rather than
-*On Paper*, because there is no paper — and for the same reason a LiDAR note has
-no [DPI](note-resolution.md). A model is measured in its own units; a photograph
-of a page is measured in pixels.
+**I recommend taking that literally on any phone scan.** Leave the scale at 1:1,
+as in the panel above, and reach for the tool only once the passage comes out
+visibly the wrong size against your shots. Correcting a sensor that already
+measured in meters adds an error the survey never had.
+
+Photogrammetry stays the exception: photographs give a model its *shape* and
+nothing of its *size*.
+
+The scale tool fixes either case. Click 2 points and enter the **actual
+distance** between them (meters unless you change the unit): a shot length you
+measured, or anything whose real size you know. The model side goes in unitless,
+since a model carries numbers, not units. Hence the row reading **In Model** and
+**In Cave** rather than *On Paper*, and hence no [DPI](note-resolution.md) on a
+LiDAR note.
 
 ## Place stations on the scan
 
-Stations are what tie the scan to the survey, exactly as they tie a scrap to it.
-Click **Carpet** to get the tools, then choose **Station** and click on the scan
-where each surveyed station sits. Name each one to match the station name in your
-survey data: **the name is the whole link** — CaveWhere matches a station on the
-note to a station in the survey by name and nothing else, so a typo silently
-unhooks it.
+Stations tie the scan to the survey exactly as they tie a scrap to it. Click
+**Carpet** for the tools, choose **Station**, then click the scan where each
+surveyed station sits. Each click casts a ray at the model, so one landing on
+the background adds nothing.
 
-![The LiDAR note with the carpet toolbar's Station button highlighted. The Add group holds Station alone — there are no Scrap or Lead buttons beside it — and the LiDAR Note Transform panel sits over the scan.](../images/notes-lidar-station.png)
-*The **Station** tool on a LiDAR note. The Add group holds Station and nothing
-else, because a scan has no outline to trace.*
+**Every station you place arrives named `Station Name`.** That placeholder
+matches nothing in your survey, so rename each one as you go. The name carries
+the whole link: CaveWhere ties a note station to a survey station by name and
+nothing else, case-insensitively, the same rule the survey table follows. A typo
+unhooks the station silently.
 
-**Two stations is the practical minimum** — that's what Auto Calculate needs
-before it can work north out. It will not work the *scale* out from them, though;
-that stays yours to set.
+A note without stations still opens and orbits perfectly well, but it never
+reaches the 3D view. CaveWhere skips any LiDAR note carrying no stations when it
+builds render geometry, and it waits on the cave's station positions. A scan
+imported before the survey plots may stay invisible until it catches up. The
+stations show only while you sit in carpet mode, which keeps them from getting
+dragged or deleted during a read.
 
 ## What LiDAR notes don't have
 
-- **No scraps and no leads.** The Scrap and Lead tools are hidden on a LiDAR
-  note. A scan already *is* the passage shape, so there's no outline to trace —
-  which is the whole point. Mark leads on a sketched note instead.
+- **No scraps and no leads.** The Scrap and Lead tools stay hidden, so the Add
+  group holds Station alone. A scan already *is* the passage shape, so nothing
+  needs tracing, which is rather the point. Mark leads on a sketched note
+  instead.
 - **No DPI**, for the reason given above.
-- **No Rotate button.** You orbit the 3D view instead, and the up/north controls
-  handle real orientation.
+- **No Rotate button.** The toolbar drops to 2 buttons, Carpet and Add, as in
+  the first screenshot. You orbit the 3D view instead, and the up and north
+  controls handle real orientation.

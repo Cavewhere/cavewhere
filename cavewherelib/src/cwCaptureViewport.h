@@ -11,6 +11,8 @@
 
 //Qt includes
 #include <QObject>
+#include <QFuture>
+#include <QFutureWatcher>
 #include <QGraphicsItemGroup>
 #include <QPointer>
 #include <QSizeF>
@@ -22,7 +24,7 @@ class cwCamera;
 class cwCaptureCenterline;
 class cwCaptureLeads;
 class cwCaptureLeadLines;
-class cwSurveyNetwork;
+#include "cwFutureManagerToken.h"
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
 #include "cw3dRegionViewer.h"
@@ -30,8 +32,9 @@ class cwSurveyNetwork;
 #include "cwCaptureItem.h"
 #include "cwUnits.h"
 #include "cwRegionSceneManager.h"
+#include "CaveWhereLibExport.h"
 
-class cwCaptureViewport : public cwCaptureItem
+class CAVEWHERE_LIB_EXPORT cwCaptureViewport : public cwCaptureItem
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(CaptureViewport)
@@ -47,6 +50,9 @@ class cwCaptureViewport : public cwCaptureItem
     Q_PROPERTY(double cameraPitch READ cameraPitch WRITE setCameraPitch NOTIFY cameraPitchChanged)
     Q_PROPERTY(bool scaleBarVisible READ scaleBarVisible WRITE setScaleBarVisible NOTIFY scaleBarVisibleChanged)
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
+    Q_PROPERTY(bool centerlineDotsVisible READ centerlineDotsVisible WRITE setCenterlineDotsVisible NOTIFY centerlineDotsVisibleChanged)
+    Q_PROPERTY(bool centerlineLegsVisible READ centerlineLegsVisible WRITE setCenterlineLegsVisible NOTIFY centerlineLegsVisibleChanged)
+    Q_PROPERTY(bool centerlineLabelsVisible READ centerlineLabelsVisible WRITE setCenterlineLabelsVisible NOTIFY centerlineLabelsVisibleChanged)
     Q_PROPERTY(cwUnits::ScaleBarUnitMode scaleBarUnitMode READ scaleBarUnitMode WRITE setScaleBarUnitMode NOTIFY scaleBarUnitModeChanged)
 
 public:
@@ -59,6 +65,17 @@ public:
 
     cwRegionSceneManager *sceneManager() const;
     void setSceneManager(cwRegionSceneManager *newSceneManager);
+
+    // Handle the export label-placement job registers with, so the app's job
+    // list surfaces its progress and offers a cancel. Set by cwCaptureManager.
+    void setFutureManagerToken(cwFutureManagerToken token);
+
+    // Cancels an in-flight capture run. During the tile phase the tile chain
+    // notices the request at the next tile boundary; during label placement
+    // the worker-thread future is canceled. Either way the run ends by
+    // emitting captureCanceled() instead of finishedCapture(). Does nothing
+    // when no capture is running.
+    void cancelCapture();
 
     int resolution() const;
     void setResolution(int resolution);
@@ -98,6 +115,15 @@ public:
     bool leadsVisible() const;
     void setLeadsVisible(bool visible);
 
+    bool centerlineDotsVisible() const;
+    void setCenterlineDotsVisible(bool visible);
+
+    bool centerlineLegsVisible() const;
+    void setCenterlineLegsVisible(bool visible);
+
+    bool centerlineLabelsVisible() const;
+    void setCenterlineLabelsVisible(bool visible);
+
     cwUnits::ScaleBarUnitMode scaleBarUnitMode() const;
     void setScaleBarUnitMode(cwUnits::ScaleBarUnitMode mode);
 
@@ -110,6 +136,7 @@ signals:
     void viewportChanged();
     void viewChanged();
     void finishedCapture();
+    void captureCanceled();
     void previewItemChanged();
     void fullResolutionItemChanged();
     void transformOriginChanged();
@@ -118,6 +145,9 @@ signals:
     void positionAfterScaleChanged();
     void scaleBarVisibleChanged();
     void leadsVisibleChanged();
+    void centerlineDotsVisibleChanged();
+    void centerlineLegsVisibleChanged();
+    void centerlineLabelsVisibleChanged();
     void scaleBarUnitModeChanged();
 
     void sceneManagerChanged();
@@ -137,7 +167,6 @@ private:
     double CameraPitch; //!<
 
     bool CapturingImages;
-    bool CaptureRequested; //A capture() arrived while one was in flight; re-run when it finishes
     QSize TileSize;
 
     //Scene state information
@@ -158,19 +187,60 @@ private:
     QSize calcCroppedTileSize(QSize tileSize, QSize imageSize, int row, int column) const;
 
     void setImageScale(double scale);
-    void finishCapture();
     void updateTransformForItem(QGraphicsItem* item, double scale) const;
     void updateBoundingBox();
     void deleteSceneItems();
     //! Re-hook the export scale bar to the current project's unitSystemChanged
     //! (so FollowProject refreshes live, #470/R3) and refresh it now.
     void updateScaleBarForRegion();
-    cwSurveyNetwork buildCenterlineNetwork() const;
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeadLines* createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const;
+    // Runs the label-placement stage (distance-transform build + per-label
+    // placement) on a worker thread and, on the GUI thread when it finishes,
+    // builds the leader lines and emits finishedCapture() (or captureCanceled()
+    // if it was aborted). Returns immediately; does not block the GUI.
     void placeLabelsAfterTiles(QGraphicsItemGroup* parent, double imageScale);
 
+    // Re-runs label placement on the existing preview tiles, so a centerline
+    // option change keeps the layer's size and position on the paper. Defers
+    // to the end of an in-flight run.
+    void relabelPreview();
+    void relabelPreviewIfPending();
+    void deletePreviewLabelItems();
+
+    void setLabelOption(bool& option, bool visible, void (cwCaptureViewport::*changed)());
+
+    // In-flight worker-thread label placement (see placeLabelsAfterTiles).
+    // Held so it can be canceled on cancelCapture()/destruction. Canceling a
+    // finished/default future is a no-op.
+    QFuture<void> m_labelPlacementFuture;
+    // Drives the GUI-thread continuation off QFutureWatcher::finished, which
+    // fires only once the worker has actually unwound. Its canceled signal
+    // fires as soon as cancel() is called — while the worker is still running
+    // — so nothing may key off it (see the continuation-contract test in
+    // test_cwLabelPlacementThreading.cpp).
+    QFutureWatcher<void> m_labelPlacementWatcher;
+    // The tile-rendering phase's job-list future (see capture()). Backed by a
+    // GUI-thread cwPhaseJob owned by the run; held here so cancelCapture()
+    // can resolve the job-list entry immediately instead of at the next tile
+    // boundary, and so deleteSceneItems() can resolve it on destruction.
+    // Canceling a finished/default future is a no-op.
+    QFuture<void> m_tileGrabFuture;
+    // Set by cancelCapture() so the tile-grab chain (which polls it per tile)
+    // can end the run at the next tile boundary. Reset by capture().
+    bool m_cancelRequested = false;
+    // Whether the in-flight run is a preview, snapshotted when the run starts.
+    // The live previewCapture() flag can be flipped mid-run (the manager sets
+    // it to false right before requesting the export), so mid-run code must
+    // use this snapshot, not the live flag.
+    bool m_runIsPreview = false;
+    // Set when capture() is requested while a preview run is still in flight:
+    // the preview is canceled and, once it has fully stopped, capture() is
+    // re-run in the caller's mode. Cleared by cancelCapture() so an explicit
+    // cancel also drops the queued restart.
+    bool m_captureAgainWhenDone = false;
+    cwFutureManagerToken m_futureManagerToken;
 
 private slots:
     // void capturedImage(QImage image, int id);
@@ -184,6 +254,16 @@ private:
     cwCaptureLeads* LeadsItem;
     cwCaptureLeadLines* LeadLinesItem;
     bool m_leadsVisible = false;
+    bool m_centerlineDotsVisible = true;
+    bool m_centerlineLegsVisible = true;
+    bool m_centerlineLabelsVisible = true;
+    // Set when a centerline option changes while a run is in flight; the
+    // preview's labels are re-placed once that run ends (see relabelPreview).
+    bool m_relabelPreviewWhenDone = false;
+    // Whether the in-flight run only re-places the preview's labels. When such
+    // a run is canceled or superseded, its label items stay hidden, so the
+    // preview is relabeled again once the next run ends.
+    bool m_runIsRelabel = false;
 };
 
 /**
@@ -253,6 +333,18 @@ inline bool cwCaptureViewport::scaleBarVisible() const {
 
 inline bool cwCaptureViewport::leadsVisible() const {
     return m_leadsVisible;
+}
+
+inline bool cwCaptureViewport::centerlineDotsVisible() const {
+    return m_centerlineDotsVisible;
+}
+
+inline bool cwCaptureViewport::centerlineLegsVisible() const {
+    return m_centerlineLegsVisible;
+}
+
+inline bool cwCaptureViewport::centerlineLabelsVisible() const {
+    return m_centerlineLabelsVisible;
 }
 
 inline cwUnits::ScaleBarUnitMode cwCaptureViewport::scaleBarUnitMode() const {

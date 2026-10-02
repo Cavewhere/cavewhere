@@ -21,7 +21,6 @@ add_subdirectory(cavewhere/cavewherelib)
 add_subdirectory(cavewhere/asyncfuture)
 add_subdirectory(cavewhere/QMath3d)
 add_subdirectory(cavewhere/monad)
-add_subdirectory(cavewhere/QuickQanava)
 add_subdirectory(cavewhere/dewalls)
 add_subdirectory(cavewhere/MarkScope)
 

@@ -1,0 +1,65 @@
+; Splay forms that a0-a34.svx doesn't cover. Each *begin is one case, and the
+; tests find it by the block's name.
+
+; Anonymous stations spelled out, plus a leg whose anonymous end comes first
+*begin anon
+  *data normal from to tape compass clino
+  b1 b2 10.00 90.0 0.0
+  b1 .. 1.00 100.0 5.0
+  b2 . 2.00 110.0 6.0
+  b2 ... 3.00 120.0 7.0
+  .. b2 4.00 130.0 8.0
+*end
+
+; Nothing to hang the leg on
+*begin bothanon
+  *data normal from to tape compass clino
+  c1 c2 10.00 90.0 0.0
+  .. .. 1.00 100.0 5.0
+*end
+
+; *flags splay between two named stations keeps both names
+*begin namedsplay
+  *data normal from to tape compass clino
+  d1 d2 10.00 90.0 0.0
+  *flags splay
+  d2 d3 5.00 200.0 10.0
+  *flags not splay
+  d3 d4 6.00 210.0 11.0
+*end
+
+; *flags not splay must leave an active duplicate alone
+*begin flagorder
+  *data normal from to tape compass clino
+  *flags duplicate
+  e1 e2 10.00 90.0 0.0
+  *flags not splay
+  e2 e3 11.00 91.0 1.0
+  *flags not duplicate
+  e3 e4 12.00 92.0 2.0
+*end
+
+; Plumbed splays, one of them written anonymous-end-first
+*begin anonplumb
+  *data normal from to tape compass clino
+  g1 g2 10.00 90.0 0.0
+  g2 -  1.50 -     up
+  -  g2 2.50 -     up
+*end
+
+; Station names CaveWhere can't use
+*begin badname
+  *data normal from to tape compass clino
+  f1 f2 10.00 90.0 0.0
+  f2.x - 1.00 100.0 5.0
+  f3.y f4 9.00 80.0 1.0
+*end
+
+; Splays whose stations never show up in a leg. h9 is written before h3 so the
+; order they're reported in can't be the order they were read in.
+*begin orphan
+  *data normal from to tape compass clino
+  h1 h2 10.00 90.0 0.0
+  h9 - 1.00 100.0 5.0
+  h3 - 2.00 200.0 -5.0
+*end

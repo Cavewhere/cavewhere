@@ -57,9 +57,10 @@ CoordinatePicker {
         visible: pickerId.hasPick
         z: 1
 
-        QQ.Item {
+        PositionItem {
             id: markerAnchorId
-            property QQ.vector3d position3D: pickerId.scenePoint
+            position3D: pickerId.scenePoint
+            visible: markerAnchorId.inFrustum
 
             QQ.Rectangle {
                 x: -width / 2
@@ -76,5 +77,15 @@ CoordinatePicker {
         }
     }
 
-    QQ.Keys.onEscapePressed: pickerId.deactivate()
+    // A window-context Shortcut instead of Keys.onEscapePressed, like the
+    // measurement and clip tools: the latter needs this item to hold focus, and
+    // GLTerrainRenderer takes focus back the moment the pointer enters the view
+    // (so hold-P + wheel works without a click) — which is exactly what aiming a
+    // pick does. Live only while the picker is armed.
+    QQ.Shortcut {
+        sequences: ["Escape"]
+        enabled: pickerId.visible
+        context: Qt.WindowShortcut
+        onActivated: pickerId.deactivate()
+    }
 }

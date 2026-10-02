@@ -1,0 +1,6 @@
+; Corrected Backsight Only Splays
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0 typeab=c typevb=c
+F1	F2	5.0	0	0
+; only a backsight was read, and this trip's backsights read like foresights
+F1	--	3.0	/270	/10

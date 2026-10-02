@@ -22,6 +22,14 @@ Item {
         name: "DeepLinkConfirmDialog"
         when: windowShown
 
+        // Each test gets its own empty clone destination, so a clone is
+        // judged by the network result instead of leftovers in the user's
+        // documents folder. createTempSubdir() is unique per call and per
+        // process, so concurrent test runs stay independent.
+        function init() {
+            RootData.recentProjectModel.defaultRepositoryDir = TestHelper.tempDirectoryUrl()
+        }
+
         function cleanup() {
             dialogId.close()
             openRequestedSpy.clear()

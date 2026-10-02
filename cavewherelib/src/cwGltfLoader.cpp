@@ -2,18 +2,40 @@
 #include "cwGeometry.h"
 
 // tinygltf
+// stb_image is compiled out: every image goes through storeEncodedImageData()
+// below, which keeps the encoded bytes instead of decoding them, so a build with
+// stb linked in could only hide an accidental eager decode.
+#define TINYGLTF_NO_STB_IMAGE
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
 // Qt
 #include <QtGlobal>
-#include <QFileInfo>
+#include <QBuffer>
 #include <QColorSpace>
+#include <QFileInfo>
+#include <QImageReader>
+
+// Std
+#include <algorithm>
 
 // Local helpers kept in the same namespace
 namespace cw::gltf {
+
+namespace {
+    //What "Loading glTF" hangs off itself: the parse, the mesh walk and the
+    //texture decode
+    constexpr int kLoadSteps = 3;
+
+    //How many meshes the texture loop below has anything to do for
+    qsizetype texturedMeshCount(const QVector<MeshCPU>& meshes)
+    {
+        return std::count_if(meshes.cbegin(), meshes.cend(), [](const MeshCPU& mesh) {
+            return mesh.material.baseColorTextureIndex >= 0;
+        });
+    }
+}
 
 // ---------- Helpers: attribute/index plumbing ----------
 
@@ -43,18 +65,6 @@ static AttributeView attributeView(const tinygltf::Model& model,
     view.normalized = accessor.normalized;
 
     return view;
-}
-
-static QRhiCommandBuffer::IndexFormat toRhiIndexFormat(int gltfComponentType)
-{
-    if (gltfComponentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
-        return QRhiCommandBuffer::IndexUInt16;
-    }
-    if (gltfComponentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
-        return QRhiCommandBuffer::IndexUInt32;
-    }
-    // UNSIGNED_BYTE not supported by QRhi: convert to 16-bit when encountered.
-    return QRhiCommandBuffer::IndexUInt16;
 }
 
 // ---------- CPU builders ----------
@@ -317,6 +327,51 @@ static cwGeometry buildGeometryFromPrimitive(const tinygltf::Model& model,
     return geometry;
 }
 
+/**
+ * tinygltf's image loader, replacing the stb default. It keeps the encoded PNG
+ * or JPEG bytes and reads only the header for the dimensions, so loading a .glb
+ * costs no full-resolution RGBA copy. Callers that want pixels ask
+ * TextureCPU::toImage() for them.
+ */
+static bool storeEncodedImageData(tinygltf::Image* image,
+                                  const int imageIndex,
+                                  std::string* error,
+                                  std::string* warning,
+                                  int requestedWidth,
+                                  int requestedHeight,
+                                  const unsigned char* bytes,
+                                  int size,
+                                  void* userData)
+{
+    Q_UNUSED(error)
+    Q_UNUSED(requestedWidth)
+    Q_UNUSED(requestedHeight)
+    Q_UNUSED(userData)
+
+    image->as_is = true;
+    image->image.assign(bytes, bytes + size);
+
+    QByteArray encoded = QByteArray::fromRawData(reinterpret_cast<const char*>(bytes), size);
+    QBuffer buffer(&encoded);
+    QImageReader reader(&buffer);
+    const QSize headerSize = reader.size();
+
+    if (!headerSize.isValid()) {
+        if (warning != nullptr) {
+            *warning += "Can't read the header of image[" + std::to_string(imageIndex)
+                        + "]; its size stays unknown\n";
+        }
+        // The bytes are kept anyway: a decode may still succeed where the header
+        // read failed.
+        return true;
+    }
+
+    image->width = headerSize.width();
+    image->height = headerSize.height();
+
+    return true;
+}
+
 static TextureCPU loadTextureCPU(const tinygltf::Model& model,
                                  int textureIndex,
                                  bool isSRGB)
@@ -337,18 +392,8 @@ static TextureCPU loadTextureCPU(const tinygltf::Model& model,
     tex.width = img.width;
     tex.height = img.height;
     tex.isSRGB = isSRGB;
-
-    // Ensure RGBA8
-    if (img.pixel_type == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
-        // tinygltf ensures 4 components by default for most loaders; if not, convert here
-        const size_t expected = static_cast<size_t>(img.width) * static_cast<size_t>(img.height) * 4;
-        if (img.image.size() == expected) {
-            tex.pixels = QByteArray(reinterpret_cast<const char*>(img.image.data()),
-                                    static_cast<int>(img.image.size()));
-        } else {
-            // Fallback conversion could be placed here.
-        }
-    }
+    tex.encodedPixels = QByteArray(reinterpret_cast<const char*>(img.image.data()),
+                                   static_cast<qsizetype>(img.image.size()));
 
     return tex;
 }
@@ -444,9 +489,15 @@ SceneCPU Loader::loadGltf(const QString &filePath)
     return loadGltf(filePath, LoadOptions{});
 }
 
-SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
+SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options,
+                          const cwProgressScope& parent)
 {
+    cwProgressScope loading(parent, QStringLiteral("Loading glTF"));
+    loading.expectChildren(kLoadSteps);
+
     tinygltf::TinyGLTF loader;
+    loader.SetImageLoader(&storeEncodedImageData, nullptr);
+
     tinygltf::Model model;
     std::string error;
     std::string warning;
@@ -454,11 +505,18 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
     SceneCPU scene;
 
     bool ok = false;
-    if (filePath.endsWith(".glb", Qt::CaseInsensitive)) {
-        ok = loader.LoadBinaryFromFile(&model, &error, &warning, filePath.toStdString());
-    } else {
-        ok = loader.LoadASCIIFromFile(&model, &error, &warning, filePath.toStdString());
+    {
+        //tinygltf reads the whole file in one call and says nothing on the way,
+        //so the parse stays an opaque leaf
+        cwProgressScope parsing(loading, QStringLiteral("Parsing"));
+
+        if (filePath.endsWith(".glb", Qt::CaseInsensitive)) {
+            ok = loader.LoadBinaryFromFile(&model, &error, &warning, filePath.toStdString());
+        } else {
+            ok = loader.LoadASCIIFromFile(&model, &error, &warning, filePath.toStdString());
+        }
     }
+
     if (!ok) {
         return scene;
     }
@@ -471,19 +529,31 @@ SceneCPU Loader::loadGltf(const QString &filePath, const LoadOptions& options)
         roots = QVector<int>(scene.nodes.begin(), scene.nodes.end());
     }
 
-    for (int n : std::as_const(roots)) {
-        gatherMeshesRecursive(model, n, QMatrix4x4(), scene.meshes, options.requestedLayout);
+    {
+        cwProgressScope collecting(loading, QStringLiteral("Collecting meshes"));
+        collecting.setTotal(roots.size());
+
+        for (int n : std::as_const(roots)) {
+            gatherMeshesRecursive(model, n, QMatrix4x4(), scene.meshes, options.requestedLayout);
+            collecting.advance();
+        }
     }
 
     // CPU: collect textures actually referenced by materials (here we provision array sized to textures count)
     scene.textures.resize(static_cast<int>(model.textures.size()));
 
-    // Load only the textures we actually need (baseColor here; extend as desired)
-    for (const MeshCPU& mesh : std::as_const(scene.meshes)) {
-        if (mesh.material.baseColorTextureIndex >= 0) {
-            const int ti = mesh.material.baseColorTextureIndex;
-            if (scene.textures[ti].width == 0) {
-                scene.textures[ti] = loadTextureCPU(model, ti, /*isSRGB*/ true);
+    {
+        cwProgressScope decoding(loading, QStringLiteral("Decoding textures"));
+        decoding.setTotal(texturedMeshCount(scene.meshes));
+
+        // Load only the textures we actually need (baseColor here; extend as desired)
+        for (const MeshCPU& mesh : std::as_const(scene.meshes)) {
+            if (mesh.material.baseColorTextureIndex >= 0) {
+                const int ti = mesh.material.baseColorTextureIndex;
+                if (scene.textures.at(ti).encodedPixels.isEmpty()) {
+                    scene.textures[ti] = loadTextureCPU(model, ti, /*isSRGB*/ true);
+                }
+                decoding.advance();
             }
         }
     }
@@ -523,39 +593,39 @@ void SceneCPU::dump() const
         const TextureCPU& tex = textures[ti];
         qDebug() << "  Texture" << ti
                  << " size=" << tex.width << "x" << tex.height
-                 << " bytes=" << tex.pixels.size()
+                 << " encodedBytes=" << tex.encodedPixels.size()
                  << " isSRGB=" << tex.isSRGB;
     }
 }
 
 
+QImage baseColorImage(const SceneCPU& scene, const MaterialCPU& material)
+{
+    const int index = material.baseColorTextureIndex;
+    if (index < 0 || index >= scene.textures.size()) {
+        return {};
+    }
+    return scene.textures.at(index).toImage();
+}
+
 QImage TextureCPU::toImage() const
 {
-    if (width <= 0 || height <= 0) {
+    if (encodedPixels.isEmpty()) {
         return {};
     }
 
-    const qsizetype expectedSize = qsizetype(width) * qsizetype(height) * 4;
-    if (pixels.size() < expectedSize) {
+    // A fresh decode per call, retaining nothing: a caller that wants the pixels
+    // twice holds on to the QImage.
+    QImage image = QImage::fromData(encodedPixels);
+    if (image.isNull()) {
         return {};
     }
 
-    QImage image(width, height, QImage::Format_RGBA8888);
-    const int dstStride = image.bytesPerLine();
-    const int srcStride = width * 4;
-
-    if (dstStride == srcStride) {
-        std::memcpy(image.bits(), pixels.constData(), size_t(expectedSize));
-    } else {
-        const unsigned char* src = reinterpret_cast<const unsigned char*>(pixels.constData());
-        unsigned char* dst = image.bits();
-        for (int y = 0; y < height; y++) {
-            std::memcpy(dst + y * dstStride, src + y * srcStride, size_t(srcStride));
-        }
+    if (image.format() != QImage::Format_RGBA8888) {
+        image = image.convertToFormat(QImage::Format_RGBA8888);
     }
 
     image.setColorSpace(isSRGB ? QColorSpace::SRgb : QColorSpace::SRgbLinear);
-
 
     return image;
 }

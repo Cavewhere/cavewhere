@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Splay editor upgrade — commit plan</title>
+<style>
+  :root {
+    --bg: #f5f5f4; --paper: #ffffff; --ink: #1c1c1a; --muted: #7a7a74;
+    --line: #d8d8d2; --accent: #2e6fb0; --accent-soft: #e3eefb;
+    --splay: #8a6d3b; --splay-soft: #f7f1e3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191917; --paper: #232320; --ink: #e8e8e2; --muted: #9a9a90;
+      --line: #3a3a34; --accent: #6aa5dd; --accent-soft: #1e304a;
+      --splay: #c9a35e; --splay-soft: #322a1a;
+    }
+  }
+  body {
+    margin: 0 auto; max-width: 92ch; padding: 30px 24px 100px;
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.55 -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  h2 { font-size: 19px; margin: 44px 0 8px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  p, li { max-width: 88ch; }
+  .lead { color: var(--muted); }
+  .commit {
+    display: inline-block; background: var(--accent-soft); color: var(--accent);
+    border-radius: 4px; padding: 1px 8px; font-size: 13px; font-weight: 600;
+    vertical-align: 2px; margin-right: 6px;
+  }
+  code {
+    font: 13px ui-monospace, "SF Mono", Menlo, monospace;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 3px; padding: 0 4px;
+  }
+  .test {
+    background: var(--paper); border: 1px solid var(--line); border-left: 3px solid var(--accent);
+    border-radius: 4px; padding: 10px 14px; margin: 10px 0;
+  }
+  .test b:first-child { color: var(--accent); }
+  .callout {
+    background: var(--splay-soft); border: 1px solid var(--splay);
+    border-radius: 4px; padding: 10px 14px; margin: 14px 0; color: var(--ink);
+  }
+  ul { padding-left: 22px; }
+  li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Splay editor upgrade — commit plan</h1>
+<p class="lead">Eight commits taking the survey table's splay display (phase 5 of
+<code>plans/SPLAY_SHOTS_PLAN.html</code>) to a full editor: a real Splays column, delete, move,
+in-place editing, and manual entry. Groundwork for digital survey on mobile, where splays arrive
+over Bluetooth from a DistoX/BRIC and the common failures are splays on the wrong station, bad
+shots to delete, and a dead connection forcing manual entry. Each commit builds, passes its
+tests, and is exercisable in the app on its own.</p>
+
+<p class="lead">Approved look and feel: <code>plans/SPLAY_ROW_DATABOX_PROTOTYPES.html</code>
+(variant C — DataBox cells + accent rail) and the interactive
+<code>plans/SPLAY_EDIT_INTERACTIONS_PROTOTYPE.html</code> (chip-in-cell, menus, pick-a-target
+move, RemoveAskBox on delete-all, tab flow).</p>
+
+<div class="callout"><b>Decisions already made.</b> Multi-select is deferred — operations are
+per-splay or whole-cluster. Off-by-one "move to prev/next" items are dropped — "Move to…"
+pick-a-target is the single move path. "Delete all N splays" goes through
+<code>RemoveAskBox</code>; single "Remove splay" is immediate. Undo integration is deferred —
+the challenge guards the only bulk-destructive action. Moves stay within the current trip
+(any chunk); cross-trip moves, swipe-to-delete, and live Bluetooth capture are later work.</div>
+
+<h2><span class="commit">Commit 1</span> Splays column becomes a real cell</h2>
+<p>Restyle from the floating chip to variant C, and give splays a home in the editor's focus
+model. This is the visual foundation the later commits hang menus and editing off of.</p>
+<ul>
+  <li><b><code>cwSurveyChunk::DataRole</code></b> gains <code>StationSplaysRole</code> (appended;
+      it is a UI navigation role, so no proto changes). <code>cwSurveyChunk::isStationRole</code>
+      treats it as a station role.</li>
+  <li><b><code>cwSurveyEditorModel::nextCellIndex</code></b>: Tab/arrow chain on station rows
+      extends D → Splays cell → onward to the shot/next station exactly as D flows today.
+      The cell is focusable on every station row, with or without splays.</li>
+  <li><b><code>SurveyEditorColumnTitles.qml</code></b>: real column geometry —
+      <code>splaysX</code>/<code>splaysWidth</code> — replacing the ad-hoc chip position, plus the
+      header label (already present) moving onto the shared geometry.</li>
+  <li><b>New <code>SplaysBox.qml</code></b>: a lightweight cell (station-gradient background,
+      1&nbsp;px <code>Theme.borderSubtle</code> border, focus ring wired to
+      <code>focusedRow</code>/<code>focusedRole</code> like <code>DataBox</code>, but with no
+      editor, error model, or remove preview). Contains the chip (count + triangle) when
+      <code>stationSplayCount &gt; 0</code>, empty otherwise. Click or Enter/Space toggles
+      expansion via the existing <code>toggleSplaysExpanded</code>.</li>
+  <li><b>Splay row restyle</b> in <code>DrySurveyComponent.qml</code>: the full-width tinted band
+      becomes three bordered <code>Theme.splaySurface</code> cells under Distance/Compass/Clino
+      (28&nbsp;px, sharing the grid's 1&nbsp;px borders), the 2&nbsp;px
+      <code>Theme.splayBorder</code> rail down the station column edge, and the
+      <code>A2 · s3</code> tag. Still read-only.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: <code>nextCell</code> cases for the extended chain
+(D → Splays → next row; skipped roles stay skipped) in
+<code>test_cwSurveyEditorModelSplays.cpp</code>. QML: <code>tst_SplayRows.qml</code> updated for
+the new cell (chip found inside <code>SplaysBox</code>, keyboard toggle).
+<b>By hand:</b> import a Survex file with splays, tab across a station row into the Splays cell,
+expand with Enter, check the variant-C look in light and dark.</div>
+
+<div class="callout"><b>Landed</b> as <code>dd3b288e</code>. Review of the commit surfaced two
+refactors that must precede editable splay cells, inserted below as commits 2 and 3: SplaysBox
+copies DataBox's focus protocol and chrome wholesale (and misses DataBox's re-sync on
+<code>view.onCurrentIndexChanged</code>), and <code>StationSplaysRole</code> living in
+<code>cwSurveyChunk::DataRole</code> is a seam — the editor's cell vocabulary borrowing the
+chunk's data vocabulary, which the splay reading cells cannot fit at all.</div>
+
+<h2><span class="commit">Commit 2</span> Shared <code>SurveyEditorCell</code> base (QML refactor)</h2>
+<p>Extract the focus protocol and cell chrome that <code>SplaysBox</code> duplicated from
+<code>DataBox</code> into one base, before commit 7 would create a third copy. Pure refactor —
+no behavior change beyond the one fix it absorbs.</p>
+<ul>
+  <li><b>New <code>SurveyEditorCell.qml</code></b>: <code>model</code>, <code>view</code>,
+      <code>listViewIndex</code>, <code>dataRole</code>, <code>indexInChunk</code>,
+      <code>calibration</code> (→ <code>frontSights</code>/<code>backSights</code>), the focus
+      protocol (<code>shouldHaveFocus</code>/<code>syncFocusState</code>/<code>takeFocus</code>/
+      <code>moveFocus</code>, tab handling, model <code>Connections</code>, sync hooks), and the
+      chrome layers (station gradient, 1&nbsp;px border, focus highlight). Input via
+      <code>TapHandler</code>, with a <code>tapped</code> seam for subtypes.</li>
+  <li><b><code>DataBox</code></b> layers on the editor (<code>GlobalShadowTextInput</code> dance,
+      error loader, remove preview, right-click); <b><code>SplaysBox</code></b> layers on the chip
+      and Enter/Space toggle.</li>
+  <li><b>Absorbed fix</b>: <code>SplaysBox</code> gains DataBox's re-sync on
+      <code>view.onCurrentIndexChanged</code> (the ListView steals focus onto the row delegate;
+      without the re-sync a focused Splays cell goes keyboard-dead when the current index moves).</li>
+  <li><b>Also here</b>: split the station-rename branch out of the model's shared
+      <code>chunkDataChange</code> lambda so <code>errorsChanged</code> on a station name stops
+      redundantly re-emitting <code>SplayStationNameRole</code> for the rows under it.</li>
+</ul>
+<div class="test"><b>Tests.</b> Existing suites are the gate — <code>tst_SplayRows</code>,
+<code>tst_SurveyDataEntry</code>, <code>tst_MarkStationFixed</code> — plus an offscreen
+screenshot compare against the commit-1 render (pixel-identical expected). <b>By hand:</b>
+focus a Splays cell, scroll the table, confirm the keyboard toggle still works.</div>
+
+<h2><span class="commit">Commit 3</span> Editor-level <code>CellRole</code> (C++ refactor)</h2>
+<p>Give the editor its own cell vocabulary instead of borrowing the chunk's data vocabulary.
+The forcing function is commit 7: a splay reading cell can never be a
+<code>cwSurveyChunk::DataRole</code> because <code>chunk-&gt;data(role, index)</code> has no
+splay index.</p>
+<ul>
+  <li><b><code>cwSurveyEditorCellIndex</code></b> gains <code>enum CellRole</code>
+      (<code>Q_ENUM</code>, QML-exposed): reading enumerators mirroring the chunk roles at
+      identical numeric values — so the ~100 existing <code>cellIndex(...)</code> call sites and
+      QML int coercions keep working — plus editor-only cells, starting with
+      <code>StationSplaysCell</code>.</li>
+  <li><b>Write boundary</b>: <code>toChunkRole(CellRole)</code> returning an optional, used in
+      <code>setDataAt</code> — editor-only cells answer empty, replacing the
+      <code>isReadingCell</code> guard.</li>
+  <li><b>Retire <code>StationSplaysRole</code></b> from <code>cwSurveyChunk::DataRole</code>
+      (with its <code>checkForError</code> case), and delete the wrong-if-ever-reached
+      <code>toModelRole(StationSplaysRole) → StationSplayCountRole</code> mapping.</li>
+</ul>
+<div class="test"><b>Tests.</b> Existing <code>[cwSurveyEditorModel]</code> and
+<code>[SplayShot]</code> suites, with the splay-cell cases retargeted at
+<code>CellRole</code>. <b>By hand:</b> tab across a station row into the Splays cell and back —
+unchanged behavior is the proof.</div>
+
+<h2><span class="commit">Commit 4</span> Chunk mutation API (no UI)<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>All splay mutations in one C++-only commit, so every UI commit after this is thin wiring.</p>
+<ul>
+  <li><b><code>cwSurveyChunk</code></b>:
+      <code>appendStationSplay(int stationIndex, const cwShotMeasurement&amp;)</code>,
+      <code>removeStationSplay(int stationIndex, int splayIndex)</code>,
+      <code>clearStationSplays(int stationIndex)</code>, and
+      <code>setStationSplayData(DataRole, int stationIndex, int splayIndex, const QVariant&amp;)</code>
+      for the three reading fields. Each emits <code>stationSplaysChanged(stationIndex)</code>,
+      which the phase-5 model reconciliation already turns into exact row inserts/removes.</li>
+  <li><b>Move</b> as a static helper
+      <code>cwSurveyChunk::moveStationSplays(cwSurveyChunk* from, int fromStation, cwSurveyChunk* to, int toStation, const QList&lt;int&gt;&amp; splayIndices)</code>
+      — remove from the source (descending), append to the target, one
+      <code>stationSplaysChanged</code> per side. Cross-chunk works because both sides just
+      re-emit; same-station moves are a no-op.</li>
+  <li>Dirty-project marking rides the existing chunk-change plumbing — verify a mutation marks
+      the project modified.</li>
+</ul>
+<div class="test"><b>Tests.</b> <code>[cwSurveyChunk]</code> cases for each op (bounds, signals,
+empty results) and <code>[cwSurveyEditorModel]</code> reconciliation cases: remove-one,
+clear-while-expanded (cluster collapses), move between stations with both clusters open, move
+across chunks. <b>By hand:</b> nothing visible yet — this commit is proven by its tests.</div>
+
+<h2><span class="commit">Commit 5</span> Delete UI<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<ul>
+  <li><b>Splay row menu</b>: a ⋯ button at the end of each splay row plus right-click via
+      <code>ContextMenuArea</code>, with "Remove splay" acting immediately through a new model
+      invokable <code>removeSplayAt(cwSurveyEditorRowIndex)</code>.</li>
+  <li><b>Cluster menu</b> on the Splays cell (⋯ beside the chip plus right-click):
+      "Delete all N splays" routes through a <code>RemoveAskBox</code> owned by
+      <code>SurveyEditor.qml</code> — same pattern as <code>CavePage.qml:943</code> — with
+      <code>removeName</code> = "all N splays from A4". Confirming calls
+      <code>clearSplaysAt(rowIndex)</code>. <code>RemoveAskBox</code>'s int
+      <code>indexToRemove</code> is too narrow for a row index, so the box gains an optional
+      var payload (or the menu closes over the row index when connecting
+      <code>remove()</code>) — smallest change that fits, decided in-code.</li>
+  <li>A cluster emptied by deletion collapses (model already does this) and the chip disappears,
+      leaving the empty cell.</li>
+</ul>
+<div class="test"><b>Tests.</b> QML: delete one splay (row count drops, tags renumber), delete
+all (challenge appears, Cancel leaves data intact, Remove clears and collapses).
+<b>By hand:</b> import splays, prune a bad shot, delete a whole cluster, watch the 3D plot drop
+the splays live.</div>
+
+<h2><span class="commit">Commit 6</span> Move UI — pick-a-target<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<ul>
+  <li><b>Menu items</b>: "Move to…" (row menu) and "Move all to…" (cluster menu) arm a pending
+      move.</li>
+  <li><b>Pending-move state lives on <code>cwSurveyEditorModel</code></b>:
+      <code>startSplayMove(rowIndex, allSplays)</code>, <code>cancelSplayMove()</code>,
+      <code>commitSplayMove(targetRowIndex)</code>, and a <code>splayMoveActive</code> property.
+      Putting it in the model keeps delegates stateless across ListView recycling — the same
+      reason expansion state lives there.</li>
+  <li><b>QML</b>: while active, <code>StationBox</code> shows a target outline
+      (<code>Theme.splayBorder</code>) and the source station dims; clicking a station box
+      commits instead of focusing; a banner above the table names the move
+      ("Click a station to move 6 splays from A2 — Esc cancels"); Esc and clicking anything
+      other than a station cancels. The target's cluster expands so the landing is visible.</li>
+  <li>Targets are any station in the trip, across chunks. The source station is excluded.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: <code>startSplayMove</code>/<code>commitSplayMove</code>
+across chunks, cancel restores nothing-pending. QML: full pick flow — arm, click target,
+tryVerify rows appear under the target; Esc cancels. <b>By hand:</b> the headline scenario —
+a cluster downloaded to the wrong station moved to its neighbor in three taps
+(⋯ → Move all to… → tap station).</div>
+
+<h2><span class="commit">Commit 7</span> Editable splay cells<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>The biggest commit: splay readings join the editing model, which is what makes correcting a
+mistyped DistoX value or finishing a partial manual entry possible.</p>
+<ul>
+  <li><b><code>cwSurveyEditorCellIndex::CellRole</code></b> (from commit 3) gains
+      <code>SplayDistanceCell</code>, <code>SplayCompassCell</code>,
+      <code>SplayClinoCell</code> — editor-only cells; the chunk enum stays untouched. The model
+      serves
+      <code>cwSurveyEditorBoxData</code> for splay cells (reading populated from
+      <code>cwShotMeasurement</code>; empty error model for now), so the QML can reuse the
+      DataBox machinery: <code>GlobalShadowTextInput</code> editing, validators, focus sync,
+      typing-starts-editing.</li>
+  <li><b><code>setDataAt</code></b> routes splay cells to
+      <code>setStationSplayData</code> from commit 4. The cell index stays
+      <code>(modelRow, CellRole)</code> — the model row already pins chunk, station, and splay
+      index through <code>cwSurveyEditorRowIndex</code>.</li>
+  <li><b>New <code>SplayDataBox.qml</code></b> layers on the <code>SurveyEditorCell</code> base
+      from commit 2 — the editing machinery plus a splay-surface background, with no
+      remove-preview or error UI. Validators: the existing distance/compass/clino validators.</li>
+  <li><b><code>nextCellIndex</code></b>: Tab flows distance → compass → clino → next splay row;
+      arrows move within the cluster and out of it vertically. Splays are single-reading, so
+      front/back-sight branching stays off this path.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: <code>setDataAt</code> for each splay role (value lands in
+the chunk, <code>dataChanged</code> emitted), <code>nextCell</code> chains within and out of a
+cluster, validator rejection leaves the reading untouched. QML: click a reading, type a new
+value, Tab, tryCompare the committed text; arrow navigation across rows.
+<b>By hand:</b> correct a reading and watch the splay swing in the 3D plot.</div>
+
+<h2><span class="commit">Commit 8</span> Add splays — blank entry row and empty-cell entry<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<ul>
+  <li><b>Blank entry row</b>: every expanded cluster shows one trailing virtual splay row
+      (dashed styling, <code>IsVirtualRole</code> true, <code>splayIndex == count</code> — the
+      same virtual-row idiom as the chunk's trailing empty station). Committing a value in any
+      of its cells calls <code>appendStationSplay</code>; reconciliation turns the virtual row
+      into data and grows a fresh blank underneath, so focus keeps flowing during rapid entry.</li>
+  <li><b>Tab exits through an empty blank row</b>: from the blank row's clino cell with the row
+      still empty, Tab lands on the next station's <code>StationNameRole</code> — the cluster is
+      a pass-through in <code>nextCellIndex</code>, matching how the table tabs today.</li>
+  <li><b>Empty-cell entry point</b>: clicking (or pressing Enter on) a Splays cell with zero
+      splays expands the station to just the blank row and focuses its distance cell — manual
+      entry when the Bluetooth link dies is: tab to Splays, Enter, type. The chip appears when
+      the first splay commits. The cell shows a subtle "+" hover hint.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: virtual row lifecycle (present when expanded, converts on
+commit, exactly one blank), tab-through-empty reaching the next station name, entry on a
+zero-splay station. QML: end-to-end manual entry — empty cell, Enter, type three readings with
+Tab, tryVerify the new data row plus fresh blank; tab through empty and tryCompare focus on the
+next station's box. <b>By hand:</b> enter a full station of splays without touching the mouse.</div>
+
+<h2>Watch-outs across all commits</h2>
+<ul>
+  <li><b>ObjectFinder chains</b>: new items may take objectNames, but existing intermediate
+      items stay unnamed (<code>tst_MarkStationFixed</code> and <code>tst_SplayRows</code> share
+      <code>SurveyTableTestHelper.qml</code>).</li>
+  <li><b>Delegate recycling</b>: any new state (pending move, expansion, focus) lives in the
+      model, never in delegates.</li>
+  <li><b>Splay construction in QML tests</b> goes through <code>TestHelper.addStationSplay</code>
+      (<code>cwShotMeasurement</code> is a value struct outside QML).</li>
+  <li><b>Shot-box shift</b>: commit 8's always-present blank row changes an open cluster's
+      height; <code>shotBoxShift</code> and <code>clusterHeight</code> math stay driven by the
+      model's row count, never by a parallel formula in QML.</li>
+  <li><b>Chip loader</b>: keep the count-gated <code>Loader</code> economy from phase 5 — most
+      stations have zero splays and should keep instantiating nothing beyond the bare cell.</li>
+  <li>Run <code>[SplayShot]</code>, <code>[cwSurveyChunk]</code>,
+      <code>[cwSurveyEditorModel]</code> plus <code>tst_SplayRows</code>,
+      <code>tst_SurveyDataEntry</code>, <code>tst_MarkStationFixed</code> before each push.</li>
+</ul>
+
+<h2>Follow-up series — manual review + open refactors</h2>
+<p>Scope agreed 2026-08-11: all seven manual-review follow-ups
+(<code>plans/SPLAY_EDITOR_REVIEW_NOTES.md</code>, "Manual review follow-ups") plus open ranked
+refactors 1, 3, 4, 5, 6, 7, and 8 from
+<code>plans/SPLAY_EDITOR_REVIEW_DIGEST.html</code>. Refactor 2 (Escape arbitration) stays
+deferred. Refactor 3 (Up skips the cluster) is absorbed into the keyboard-navigation commit;
+refactors 6–8 are perf items gated on a QML profile before any fix lands.</p>
+
+<h2><span class="commit">Commit 9</span> Move/remove UI polish<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-ups 1, 2, 5, 7 — small QML/model changes in the same interaction area.</p>
+<ul>
+  <li><b>"Remove", not "Delete"</b> (f1): the cluster menu item and its challenge read
+      "Remove all N splays", matching <code>RemoveAskBox</code>'s own verb.</li>
+  <li><b>Move lands collapsed</b> (f2): <code>commitSplayMove</code> stops expanding the target
+      cluster; the chip's count updating is the confirmation.</li>
+  <li><b>Chip-only expand</b> (f5): clicking the Splays cell outside the chip leaves the cluster
+      as it is; only the chip itself toggles expansion.</li>
+  <li><b>Inset move-target outline</b> (f7): every <code>Theme.splayBorder</code> stroke stays
+      within the station cell's own bounds so the neighboring distance cell has nothing to clip —
+      today the outline reaches the cell edge and the clip leaves rendering artifacts.</li>
+</ul>
+<div class="test"><b>Tests.</b> QML: menu/challenge text says "Remove all N splays"; commit a
+move and tryVerify the target stays collapsed while its chip count grows; click the Splays cell
+beside the chip and verify no expansion. <b>By hand:</b> arm a move and check the target outline
+against the distance cell edge — no clipped strokes.</div>
+
+<h2><span class="commit">Commit 10</span> Keyboard navigation through the cluster<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-ups 3 + 4, absorbing open refactor 3 (Up from a shot cell skips the cluster — the
+missing inverse of the Down path).</p>
+<ul>
+  <li><b>Column-preserving Up/Down</b> (f3): from a splay's distance, compass, or clino cell the
+      arrows land on the same reading column of the row above/below — splay to splay, blank
+      entry row, and out onto the shot rows in both directions. This closes refactor 3's
+      asymmetry: Up from a shot cell below an open cluster enters the cluster's last row instead
+      of skipping to the previous shot.</li>
+  <li><b>Tab / shift-tab walk the cluster</b> (f4): Tab on an expanded station's Splays cell
+      enters the first splay's distance cell; shift-tab on the next station's name cell lands on
+      the last splay's clino cell.</li>
+</ul>
+<div class="test"><b>Tests.</b> The acceptance property: every Tab has a shift-tab that returns
+exactly to its starting cell, and every Down an Up — drive the full traversal over an expanded
+cluster in both directions and compare cell-for-cell. Cover both-sight-groups-off shot rows
+(the commit-7 fallback path). <b>By hand:</b> arrow and tab through a real imported cluster
+without touching the mouse.</div>
+
+<h2><span class="commit">Commit 11</span> Round "+" entry button<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-up 6.</p>
+<ul>
+  <li>The "+" entry hint becomes a much bigger round button, ideally with an SVG icon. Commit 5
+      chose text glyphs over SVG for offscreen-test rendering reasons — first verify whether
+      that constraint is real here (render the button in <code>cavewhere-qml-test
+      --platform offscreen</code>); fall back to a drawn glyph in a round button if SVG
+      genuinely fails offscreen.</li>
+  <li>Sizing and colors through <code>Theme.qml</code> tokens; keep the count-gated
+      <code>Loader</code> economy — zero-splay stations still instantiate only the hint.</li>
+</ul>
+<div class="test"><b>Tests.</b> Existing entry-hint gating tests keep passing (hidden on
+virtual trailing station, shown on real zero-splay station); click the button and enter a splay.
+<b>By hand:</b> eyeball size/alignment in light and dark mode.</div>
+
+<h2><span class="commit">Commit 12</span> <code>addsChunkOnSpace</code> shape<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Open refactor 4.</p>
+<ul>
+  <li>Replace the <code>addsChunkOnSpace</code> property checked inside
+      <code>DataBox.addNewChunk()</code> with honest shapes: either the model answers "does this
+      cell belong to the chunk?" from the cell role, or <code>SplayDataBox</code> overrides
+      <code>addNewChunk()</code> and the property disappears. Either way the guard moves out of
+      the action-named function so a caller is refused loudly or not at all.</li>
+</ul>
+<div class="test"><b>Tests.</b> Space on a shot cell still starts a new chunk; Space on a splay
+cell still does nothing — existing tags plus one case per moved guard.</div>
+
+<h2><span class="commit">Commit 13</span> Column ends and abandoned entry rows<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-ups 8 + 9 (added 2026-08-12) — two behavior fixes to the entry/navigation flow,
+landed before the behavior-neutral commits so the perf pass profiles the final interactions.</p>
+<ul>
+  <li><b>Up from the trip's first splay goes nowhere</b> (f8): delete commit 10's head-of-table
+      <code>clusterCell()</code> fallback in <code>cwSurveyEditorModel::nextCellIndex</code> —
+      when a splay reading cell is the top of its column, Up returns an invalid cell index and
+      the caret stays put, exactly like Down at the bottom of the table. This resolves the
+      position-dependent Splays-cell round trip flagged in commit 10's review: it now closes
+      nowhere, consistently.</li>
+  <li><b>An abandoned blank splay entry row disappears</b> (f9): open the entry row (via the
+      "+" button or by expanding), then click away without entering any data — the blank
+      entry-row delegates go away, matching how a fresh chunk hides its trailing empty shot and
+      station rows when focus leaves. Entering any reading keeps the row; only a fully blank,
+      unfocused entry row retracts. State lives in the model (never delegates), riding the
+      existing expansion/focus plumbing.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: Up from the first station's first splay cells returns an
+invalid index for all three columns; the former fallback case is retired. QML: open the entry
+row, click a cell elsewhere, tryVerify the blank row's delegates are gone; type a distance
+first and verify the row stays. <b>By hand:</b> press Up on the very first splay of a trip;
+start an entry, click away, watch the blank row retract.</div>
+
+<h2><span class="commit">Commit 14</span> Splay box data carries its cell role<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Open refactor 5.</p>
+<ul>
+  <li>A splay's <code>cwSurveyEditorBoxData</code> stops pairing a <code>SplayRow</code> with a
+      shot <code>chunkDataRole</code>: carry the cell role in the box data (or leave the splay's
+      <code>chunkDataRole</code> unset) so a future component reused across shot and splay rows
+      can't build a shot cell index for a splay row and hit a silent
+      <code>setDataAt</code> no-op. Audit the <code>ShotMenu.qml</code> /
+      <code>StationMenu.qml</code> <code>cellIndex(listViewIndex, dataValue.chunkDataRole)</code>
+      idiom (17 sites) against the new shape.</li>
+</ul>
+<div class="test"><b>Tests.</b> <code>[cwSurveyEditorModel]</code> case: box data for a splay
+cell exposes the splay cell role and no shot role; existing menu tests keep passing.</div>
+
+<h2><span class="commit">Commit 15</span> "Press Enter to add" hint on the focused Splays cell<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Follow-up 10 (added 2026-08-12). During keyboard data entry, tabbing onto the Splays cell
+gives no cue that Enter opens the entry row — the "+" only appears on hover, which a
+keyboard-driven surveyor never sees.</p>
+<ul>
+  <li>When the Splays cell has keyboard focus and zero splays, show a <b>"Press Enter to add"</b>
+      hint styled like <code>StationBox</code>'s guess hint (bold <code>Theme.textSubtle</code>
+      "Press Tab" label, <code>StationBox.qml:146</code>) — same voice, same look, so the two
+      entry cues read as one system.</li>
+  <li><b>Decision in-code</b>: whether the hover-only round "+" button survives alongside the
+      focus hint or is replaced by it (one affordance for both mouse and keyboard). Philip's
+      lean: maybe replace the "+" with this. Whichever wins, keep the count-gated
+      <code>Loader</code> economy and the <code>clusterHasControls</code> predicate honest, and
+      remember commit 11's collision note: the cell's fallback tap rule is "no control handled
+      this tap".</li>
+</ul>
+<div class="test"><b>Tests.</b> QML: focus the zero-splay Splays cell by keyboard (tab from D)
+and tryVerify the hint appears; press Enter and verify the entry row opens; a station with
+splays never shows the hint. If the "+" is replaced, retire its hover tests rather than
+skipping them. <b>By hand:</b> enter a fresh trip with the keyboard only — station, readings,
+tab to Splays, read the cue, Enter, type a splay.</div>
+
+<h2><span class="commit">Commit 16</span> Entry cues on every real station<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Bug found by hand after commit 15 (follow-up 11, 2026-08-12): the "+" button and the
+"Press Enter to add" hint only appear on stations 0 and 1 of a chunk — station 2 and higher
+never show either cue, and Enter does nothing for them.</p>
+<ul>
+  <li><b>Failing test first — prove the bug before touching production code.</b> QML: build a
+      chunk, type through the virtual rows to create a third station, keyboard-focus (and
+      hover) its zero-splay Splays cell, and assert the hint and "+" appear — this must fail
+      against the current code. Add the C++ half at the model layer: when typing a name turns
+      the virtual trailing station real, the model must emit <code>dataChanged</code> covering
+      <code>IsVirtualRole</code> for that row (assert via the fixture's signal tally).</li>
+  <li><b>Prime suspect</b>: stations 0 and 1 exist from chunk birth; every later station begins
+      life as the virtual trailing row. <code>IsVirtualRole</code>
+      (<code>cwSurveyEditorModel.cpp:407</code>) computes the right answer on a fresh read, but
+      if no <code>dataChanged</code> announces the virtual→real transition, the delegate's
+      <code>required property bool isVirtual</code> keeps its stale <code>true</code> and
+      <code>offersEntry</code> (which requires <code>!isVirtual</code>) never turns on. Fix at
+      the model's emission site, not by re-deriving state in QML.</li>
+  <li>Audit the same transition for the other <code>isVirtual</code> consumers
+      (<code>DrySurveyComponent</code>'s <code>blankRow</code>, shot rows) — a missing
+      emission there has the same stale-delegate shape.</li>
+</ul>
+<div class="test"><b>Tests.</b> The two failing-first tests above, then green. Keep commit 15's
+cue tests passing unchanged. <b>By hand:</b> enter a fresh trip, add stations until the chunk
+has four, and check every real zero-splay station shows both cues.</div>
+
+<h2><span class="commit">Commit 17</span> Profiled performance pass<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Open refactors 6, 7, 8 — <b>profile first, fix only what the profile confirms.</b></p>
+<ul>
+  <li><b>Profile</b>: run <code>qmlprofiler</code> (or QML profiler via Qt Creator) on a
+      splay-heavy trip — scroll the table with several expanded clusters, hover across rows,
+      recycle delegates. Record the findings in the review notes before touching code.</li>
+  <li><b>Candidate fixes</b>, applied per confirmation:
+      (6) <code>data()</code> copies a <code>cwShotMeasurement</code> per splay cell read — a
+      file-scope <code>const cwShotMeasurement kBlankSplay;</code> lets the ternary bind a
+      <code>const&amp;</code>;
+      (7) <code>SplaysBox</code>'s <code>HoverHandler</code> runs on every Splays cell —
+      <code>enabled: splaysBox.splayCount === 0</code> keeps the hint and drops the cost;
+      (8) every real splay row builds a live <code>QC.Menu</code> inside
+      <code>ContextMenuArea</code> — defer behind a right-tap-flipped
+      <code>Loader { active: false }</code> like <code>StationMenu.qml</code>.</li>
+</ul>
+<div class="test"><b>Tests.</b> Behavior-neutral commit: full <code>tst_SplayRows</code> plus
+the targeted C++ splay tags. The profile before/after numbers go in the commit body and the
+review notes.</div>
+
+<h2><span class="commit">Commit 18</span> Splay error model<span style="color:#2e7d32; font-size:0.8em;"> — done</span></h2>
+<p>Open refactor 1 — the largest behavioral gap left: a splay with a garbage reading gets no
+red box and no error list, while the identical reading on a shot row does. Design work, last in
+the series.</p>
+<ul>
+  <li>Splay errors live on the chunk, beside the shot and station cell errors it already keeps,
+      keyed by station, splay, and reading. <code>cwShotMeasurement</code> stays the value struct
+      it is, and a splay's error model is parented to the chunk's, so it rolls up into the trip's
+      error list the way a shot's does. <code>cwSurveyChunk::splayErrorsAt</code> answers one
+      reading's errors and <code>splayErrorsChanged</code> announces a cluster's.</li>
+  <li>The rules are the shot rows': the column's validator has to take the reading, and a splay
+      off a named station has to carry all three — except a vertical splay's compass, which a
+      shot row lets go too. The entry row holds no splay yet, so it's error free, and a trip
+      with front sights off says nothing about a splay's angles.</li>
+  <li><code>cwSurveyEditorModel::data()</code> builds splay cells' box data with the error-model
+      constructor instead of the three-argument no-error one
+      (<code>cwSurveyEditorModel.cpp:558</code>).</li>
+  <li><code>SplayDataBox</code> grows back the error UI <code>DataBox</code> already has: red
+      box, error text, and inclusion in the trip's error list/navigation. It comes from
+      <code>DataBox</code> unchanged once the box data carries an error model.</li>
+  <li>Carried from commit 14: a default constructed <code>cwSurveyEditorBoxIndex</code> named
+      <code>StationNameCell</code>. <code>CellRole</code> gained an <code>InvalidCell</code>
+      sentinel, both index types default to it, and the reads that branch on cell identity
+      (<code>toRowType</code>, <code>isCellValid</code>, <code>isFocusedCell</code>) answer it
+      instead of asserting.</li>
+</ul>
+<div class="test"><b>Tests.</b> C++: invalid splay reading produces the same error object a
+shot reading does; blank entry row stays error-free. QML: type garbage into a splay distance,
+tryVerify the red box; fix it, tryVerify it clears. <b>By hand:</b> error navigation visits
+splay errors.</div>
+
+</body>
+</html>

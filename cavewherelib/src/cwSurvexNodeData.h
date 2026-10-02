@@ -6,6 +6,8 @@
 #include <QMap>
 #include <QSet>
 #include "cwSurvexLRUDChunk.h"
+#include "cwSplayBuffer.h"
+#include "cwStation.h"
 
 class cwSurvexNodeData : public QObject
 {
@@ -26,6 +28,10 @@ public:
 
 private:
     QList<cwSurvexLRUDChunk> LRUDChunks;
+
+    //Holds the block's splays until its chunks are complete
+    cwSplayBuffer Splays;
+
     QList<QStringList> EqualStations;  //Each entry hold a list of station names's that are the same.
     QSet<QString> ExportStations; //Holds a station name that is exported for equates
 

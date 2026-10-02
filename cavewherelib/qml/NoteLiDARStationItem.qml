@@ -6,7 +6,6 @@ PointItem {
 
     required property NoteLiDAR note
     required property string name
-    property QQ.vector3d position3D: Qt.vector3d(0, 0, 0)
     // Re-resolved when note rebinds; the validator below relaxes to
     // the scope station grammar while the owning trip is scoped.
     readonly property Trip parentTrip: note !== null ? note.parentTrip() : null

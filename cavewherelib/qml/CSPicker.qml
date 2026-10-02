@@ -1,0 +1,341 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+pragma ComponentBehavior: Bound
+
+import QtQuick as QQ
+import QtQuick.Controls as QC
+import cavewherelib
+
+// The coordinate-system picker controls — mode combo, plus the UTM zone spinbox
+// and N/S hemisphere combo — and nothing else. It is deliberately presentation-
+// free: no resolved-name label, no EPSG line. CSComboBox wraps it to add the
+// compact inline label used by fix-station rows. Laid out in a QQ.Flow so a host
+// narrower than the controls wraps the trailing controls onto a second line
+// instead of overflowing; a host at least oneLineWidth wide (a fix-station cell)
+// keeps them on one line.
+QQ.Item {
+    id: rootId
+
+    property string value: ""
+
+    //! The datum codes this picker may offer, WGS84 first. The fix surfaces bind
+    //! cwFixStationDiagnosticsModel's AvailableDatumsRole, which filters the
+    //! table down to the datums plausible for where the row's coordinate lands;
+    //! the default keeps any other host offering the whole table.
+    property list<string> availableDatums: CoordinateSystem.datumList()
+
+    //! Whether the datum may be changed. The fix surfaces clear it until the row
+    //! has a coordinate: the datum says what existing numbers mean, so there is
+    //! nothing to reinterpret before they are typed. Only the datum combo locks
+    //! — mode, zone and hemisphere stay live.
+    property bool datumEnabled: true
+
+    readonly property int currentMode: CoordinateSystem.modeFor(rootId.value)
+
+    // Whether the zone and hemisphere controls apply.
+    readonly property bool showsUtm: rootId.currentMode === CoordinateSystem.UTM
+
+    // What the controls are on: the value's own datum whenever it names one, so
+    // a stored row keeps saying what it stores. A value that names none — a
+    // blank system, or a Custom CRS on its way to Lat/Lon — reads as WGS84, and
+    // stays there until the user picks something else.
+    readonly property string currentDatum: {
+        const own = CoordinateSystem.datumFor(rootId.value)
+        return own !== "" ? own : CoordinateSystem.wgs84()
+    }
+
+    //! The plate-fixed datum worth recommending for this row, which
+    //! cwCoordinateSystem decides from the list the bounds check narrowed and
+    //! the datum the controls show. A row whose datum stopped fitting its
+    //! coordinate hears that from the warning beside it instead.
+    readonly property string recommendedDatum:
+        CoordinateSystem.recommendedDatum(rootId.availableDatums, rootId.currentDatum)
+
+    //! What the datum combo explains about itself. Locked, it says what to do
+    //! first; unlocked, it says what a datum is, and names the frame this part
+    //! of the world holds still against when there is one.
+    readonly property string datumToolTipText: {
+        if (!rootId.datumEnabled) {
+            return qsTr("Enter a coordinate to choose its datum")
+        }
+        const explanation = qsTr("The datum is the reference frame the numbers are measured in — the same point lands a meter or two apart on different datums. Use the one your source states; a GPS reading is WGS84.")
+        if (rootId.recommendedDatum === "") {
+            return explanation
+        }
+        return explanation + " " + qsTr("For a lasting fix, %1 holds better: it moves with the continent, so the coordinate stays put while WGS84 drifts about 2 cm a year.")
+            .arg(CoordinateSystem.datumDisplayName(rootId.recommendedDatum))
+    }
+
+    // The width the visible controls need on a single line, summed generically
+    // from the Flow's children (their explicit/implicit widths and spacing) so
+    // adding or hiding a control needs no edit here. Drives implicitWidth so an
+    // unconstrained host gets one line; a narrower host wraps.
+    readonly property real oneLineWidth: {
+        let w = 0
+        let count = 0
+        const kids = flowId.children
+        for (let i = 0; i < kids.length; i++) {
+            const c = kids[i]
+            if (!c.visible) {
+                continue
+            }
+            w += c.width
+            count += 1
+        }
+        return count > 0 ? w + (count - 1) * flowId.spacing : 0
+    }
+
+    signal committed(string newCS)
+
+    implicitWidth: rootId.oneLineWidth
+    implicitHeight: flowId.implicitHeight
+
+    // Commits the system \a mode names on \a datumCode, built from the zone and
+    // hemisphere on screen. cwCoordinateSystem::csFor decides it, fallback
+    // included, and answers "" for a mode that names no system of its own.
+    function commitCS(mode: int, datumCode: string): void {
+        const cs = CoordinateSystem.csFor(mode, zoneSpinId.value, hemiComboId.north, datumCode)
+        if (cs !== "") {
+            rootId.committed(cs)
+        }
+    }
+
+    function commitMode(mode) {
+        if (mode === CoordinateSystem.Custom) {
+            customDialogLoader.active = true
+            customDialogLoader.item.open()
+            return
+        }
+        // Keep the row on the datum the controls show, so editing a zone or a
+        // hemisphere moves only the zone.
+        rootId.commitCS(mode, rootId.currentDatum)
+    }
+
+    QQ.Flow {
+        id: flowId
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: 6
+
+        QC.ComboBox {
+            id: modeComboId
+            objectName: "csModePicker"
+
+            readonly property var modes: [
+                CoordinateSystem.LatLon,
+                CoordinateSystem.UTM,
+                CoordinateSystem.Custom
+            ]
+
+            // The datum is the combo beside this one, so the mode names only
+            // the shape of the coordinate.
+            model: [qsTr("Lat/Lon"), qsTr("UTM"), qsTr("Custom...")]
+
+            function modeAt(index) {
+                return modes[index]
+            }
+
+            // -1, not 0, when this host doesn't offer the value's mode — the
+            // combo then shows nothing rather than naming a system the row is
+            // not on. Reachable from a hand-edited file: a fix-station row
+            // carrying the blank CS that Local used to mean.
+            function indexForMode(mode) {
+                return modes.indexOf(mode)
+            }
+
+            currentIndex: indexForMode(rootId.currentMode)
+
+            onActivated: (index) => {
+                const mode = modeAt(index)
+                if (mode === rootId.currentMode && mode !== CoordinateSystem.Custom) {
+                    return
+                }
+                rootId.commitMode(mode)
+            }
+        }
+
+        QC.SpinBox {
+            id: zoneSpinId
+            objectName: "csUtmZone"
+            visible: rootId.showsUtm
+            width: Theme.csZoneFieldWidth
+            // The native macOS style sizes a SpinBox shorter than a ComboBox (24
+            // vs 32); QQ.Flow top-aligns a row, so the shorter box would ride
+            // high. Match the mode combo's height to center all three. A no-op in
+            // Fusion/Basic, where the two controls are already the same height.
+            height: modeComboId.height
+            from: 1
+            to: 60
+            value: {
+                const z = CoordinateSystem.utmZoneFor(rootId.value)
+                return z > 0 ? z : 16
+            }
+            editable: true
+            onValueModified: {
+                if (rootId.showsUtm) {
+                    rootId.commitMode(CoordinateSystem.UTM)
+                }
+            }
+        }
+
+        QC.ComboBox {
+            id: hemiComboId
+            objectName: "csUtmHemisphere"
+
+            // Index 0 is "N", so the model's order is the hemisphere. The one
+            // place that mapping is spelled out.
+            readonly property bool north: hemiComboId.currentIndex === 0
+
+            visible: rootId.showsUtm
+            width: Theme.csHemisphereFieldWidth
+            model: ["N", "S"]
+            currentIndex: CoordinateSystem.utmNorthFor(rootId.value) ? 0 : 1
+            onActivated: {
+                if (rootId.showsUtm) {
+                    rootId.commitMode(CoordinateSystem.UTM)
+                }
+            }
+        }
+
+        // Last in the row and quieter than the controls before it: the datum is
+        // the answer most rows never change, and a wrong one moves a fix by a
+        // meter or two rather than by a zone.
+        //
+        // The combo is wrapped because a disabled control reports no hover of
+        // its own, and the locked state is exactly when it has something to
+        // say. The wrapper stays enabled and carries the hover and the tooltip.
+        QQ.Item {
+            // Custom carries its datum inside the CRS the dialog picked, and
+            // Local has none, so only Lat/Lon and UTM ask for one.
+            visible: rootId.currentMode === CoordinateSystem.LatLon || rootId.showsUtm
+            implicitWidth: Theme.csDatumFieldWidth
+            implicitHeight: modeComboId.height
+
+            QQ.HoverHandler {
+                id: datumSlotHoverId
+            }
+
+            QC.ToolTip {
+                objectName: "csDatumToolTip"
+                text: rootId.datumToolTipText
+                delay: Theme.toolTipDelay
+                // The handler rides the wrapper because a disabled control
+                // reports no hover of its own; the wrapper is the combo's own
+                // geometry, so it answers for both states.
+                visible: datumSlotHoverId.hovered && !datumComboId.popup.visible
+            }
+
+            QC.ComboBox {
+                id: datumComboId
+                objectName: "csDatum"
+
+                // Every entry names a system the current mode, zone and
+                // hemisphere can build on that datum — the same policy commitCS
+                // commits through, so the two agree on what a zone edit did.
+                readonly property list<string> datumCodes:
+                    CoordinateSystem.datumChoices(rootId.currentMode,
+                                                  zoneSpinId.value,
+                                                  hemiComboId.north,
+                                                  rootId.availableDatums)
+
+                //! What one popup row needs: the widest label as the style lays it
+                //! out, and at least the closed control's own width.
+                readonly property real popupRowWidth:
+                    Math.max(datumComboId.width, datumRowProbeId.implicitWidth)
+
+                anchors.fill: parent
+                enabled: rootId.datumEnabled
+                font.pixelSize: Theme.fontSizeSmall
+                // The rows lead with the region because that, rather than the
+                // acronym, is what tells a caver which datum is theirs. The closed
+                // control keeps the short name, so the field stays as narrow as the
+                // table column it sits in.
+                model: datumComboId.datumCodes.map(
+                           (code) => CoordinateSystem.datumRegionName(code) + " · "
+                                     + CoordinateSystem.datumDisplayName(code))
+                // WGS84 leads the table, so index 0 is what a datum outside this
+                // list commits to.
+                currentIndex: Math.max(0, datumComboId.datumCodes.indexOf(rootId.currentDatum))
+                displayText: CoordinateSystem.datumDisplayName(
+                                 datumComboId.datumCodes[datumComboId.currentIndex] ?? "")
+
+                // A ComboBox popup is as wide as its control, which would elide
+                // every region-led row. Both the rows and the popup take the width
+                // the probe below measures.
+                popup.width: datumComboId.popupRowWidth
+                             + datumComboId.popup.leftPadding
+                             + datumComboId.popup.rightPadding
+
+                delegate: QC.ItemDelegate {
+                    id: datumItemId
+
+                    required property int index
+                    required property string modelData
+
+                    width: datumComboId.popupRowWidth
+                    highlighted: datumComboId.highlightedIndex === datumItemId.index
+
+                    contentItem: QC.Label {
+                        objectName: "csDatumItemLabel." + datumItemId.index
+                        text: datumItemId.modelData
+                        font.pixelSize: Theme.fontSizeSmall
+                        elide: QQ.Text.ElideRight
+                        verticalAlignment: QQ.Text.AlignVCenter
+                    }
+                }
+
+                onActivated: (index) => rootId.commitCS(rootId.currentMode,
+                                                        datumComboId.datumCodes[index])
+            }
+        }
+    }
+
+    QQ.FontMetrics {
+        id: datumFontMetricsId
+        font.pixelSize: Theme.fontSizeSmall
+    }
+
+    // A row of the popup's own kind, off the Flow and out of sight, carrying the
+    // longest label: its implicitWidth is what the style needs for that row,
+    // padding included, which is the one number the popup and its rows share.
+    QC.ItemDelegate {
+        id: datumRowProbeId
+
+        visible: false
+        font.pixelSize: Theme.fontSizeSmall
+        text: {
+            let widest = ""
+            let widestWidth = 0
+            for (const label of datumComboId.model) {
+                const labelWidth = datumFontMetricsId.advanceWidth(label)
+                if (labelWidth > widestWidth) {
+                    widestWidth = labelWidth
+                    widest = label
+                }
+            }
+            return widest
+        }
+    }
+
+    // Lazy: each fix-station row instantiates a picker, so we defer
+    // CSCustomDialog (and its CRSSearchModel, which loads ~7000 EPSG rows
+    // from proj.db on first use) until the user actually picks "Custom...".
+    QQ.Loader {
+        id: customDialogLoader
+        active: false
+        sourceComponent: customDialogComponent
+    }
+
+    QQ.Component {
+        id: customDialogComponent
+        CSCustomDialog {
+            onAccepted: (cs) => rootId.committed(cs)
+        }
+    }
+}

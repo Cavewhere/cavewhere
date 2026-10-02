@@ -17,11 +17,17 @@
 #include "cwTrip.h"
 
 //Std includes
+#include <algorithm>
 #include <limits>
+#include <utility>
 
 cwLeadModel::cwLeadModel(QObject *parent) : QAbstractListModel(parent)
 {
-
+    //Derived from the model's own change signals, so every lead added, lead
+    //removed and cave switch announces the count from one place.
+    connect(this, &QAbstractItemModel::rowsInserted, this, &cwLeadModel::countChanged);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, &cwLeadModel::countChanged);
+    connect(this, &QAbstractItemModel::modelReset, this, &cwLeadModel::countChanged);
 }
 
 cwLeadModel::~cwLeadModel()
@@ -37,10 +43,8 @@ cwLeadModel::~cwLeadModel()
 int cwLeadModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
-    if(OffsetToScrap.isEmpty()) { return 0; }
-    int offset = OffsetToScrap.lastKey();
-    cwScrap* scrap = OffsetToScrap.last();
-    return offset + scrap->numberOfLeads();
+    updateRows();
+    return m_firstRows.constLast();
 }
 
 /**
@@ -68,12 +72,9 @@ QVariant cwLeadModel::data(const QModelIndex &index, int role) const
 
     if(!index.isValid()) { return QVariant(); }
 
-    auto scrapIndex = scrapAndIndex(index);
-    cwScrap* scrap = scrapIndex.first;
-    int leadIndex = scrapIndex.second;
+    const auto [scrap, leadIndex] = scrapAndIndex(index);
 
-    Q_ASSERT(leadIndex >= 0);
-    Q_ASSERT(leadIndex < scrap->numberOfLeads());
+    if(scrap == nullptr) { return QVariant(); }
 
     if(role < (int)cwScrap::LeadNumberOfRoles) {
         return scrap->leadData((cwScrap::LeadDataRole)role, leadIndex);
@@ -119,12 +120,9 @@ bool cwLeadModel::setData(const QModelIndex &index, const QVariant &value, int r
 {
     if(!index.isValid()) { return false; }
 
-    auto scrapIndex = scrapAndIndex(index);
-    cwScrap* scrap = scrapIndex.first;
-    int leadIndex = scrapIndex.second;
+    const auto [scrap, leadIndex] = scrapAndIndex(index);
 
-    Q_ASSERT(leadIndex >= 0);
-    Q_ASSERT(leadIndex < scrap->numberOfLeads());
+    if(scrap == nullptr) { return false; }
 
     switch(role) {
     case LeadCompleted:
@@ -169,10 +167,11 @@ void cwLeadModel::fullModelReset()
    beginResetModel();
 
    //Remove all the scraps
-   const QList<cwScrap*> oldScraps = ScrapToOffset.keys();
-   for(cwScrap* scrap : oldScraps) {
-       removeScrap(scrap);
+   for(cwScrap* scrap : std::as_const(m_scraps)) {
+       disconnect(scrap, nullptr, this, nullptr);
    }
+   m_scraps.clear();
+   invalidateRows();
 
    //Add all the scraps
    const QList<cwTrip*> trips = cave()->allTrips();
@@ -181,7 +180,7 @@ void cwLeadModel::fullModelReset()
        for(cwNote* note : notes) {
            const QList<cwScrap*> scraps = note->scraps();
            for(cwScrap* scrap : scraps) {
-               addScrap(scrap);
+               attachScrap(scrap);
            }
        }
    }
@@ -202,72 +201,138 @@ void cwLeadModel::fullModelReset()
  * @brief cwLeadModel::removeScrap
  * @param scrap
  *
- * This is a helper function that will remove a scrap to the leadModel. This will disconnect the
- * scrap from the model, and remove it from the offset database.
+ * Removes scrap from the leadModel, announcing the rows that its leads occupied.
  */
 void cwLeadModel::removeScrap(cwScrap *scrap)
 {
-    removeScrapFromOffsetDatabase(scrap);
-    disconnect(scrap, 0, this, 0);
+    const int firstRow = firstRowOf(scrap);
+    const int leadCount = scrap->numberOfLeads();
+
+    if(firstRow < 0 || leadCount == 0) {
+        detachScrap(scrap);
+        return;
+    }
+
+    beginRemoveRows(QModelIndex(), firstRow, firstRow + leadCount - 1);
+    detachScrap(scrap);
+    endRemoveRows();
 }
 
 /**
  * @brief cwLeadModel::addScrap
  * @param scrap
  *
- * This is helper function that will add scrap to the leadModel. This will connect the scrap
- * to the model and update offset database.
+ * Adds scrap to the leadModel, announcing the rows for the leads it arrives with.
+ * Loading a project and undoing a scrap removal both hand over a scrap that
+ * already holds leads.
  */
 void cwLeadModel::addScrap(cwScrap *scrap)
 {
-    Q_ASSERT(!ScrapToOffset.contains(scrap));
+    //fullModelReset() walks the cave and insertScraps() listens to the region
+    //tree, so the same scrap can arrive twice. The one the model holds stays put.
+    if(m_scraps.contains(scrap)) { return; }
 
-    if(scrap->numberOfLeads() > 0) {
-        addScrapToOffsetDatabase(scrap);
+    const int leadCount = scrap->numberOfLeads();
+
+    if(leadCount == 0) {
+        attachScrap(scrap);
+        return;
     }
+
+    const int firstRow = rowCount();
+
+    beginInsertRows(QModelIndex(), firstRow, firstRow + leadCount - 1);
+    attachScrap(scrap);
+    endInsertRows();
+}
+
+/**
+ * @brief cwLeadModel::detachScrap
+ * @param scrap
+ *
+ * Drops scrap from the row order and disconnects it. Taking it out of m_scraps
+ * slides the scraps after it up by however many leads it held.
+ *
+ * This only uses scrap as a lookup key, which is all scrapDeleted() allows.
+ */
+void cwLeadModel::detachScrap(cwScrap *scrap)
+{
+    m_scraps.removeOne(scrap);
+    invalidateRows();
+    disconnect(scrap, nullptr, this, nullptr);
+}
+
+/**
+ * @brief cwLeadModel::attachScrap
+ * @param scrap
+ *
+ * Puts scrap at the end of the row order and connects it to the model.
+ *
+ * attachScrap() and detachScrap() say nothing about rows, so callers that
+ * change the row count go through addScrap() and removeScrap() instead.
+ */
+void cwLeadModel::attachScrap(cwScrap *scrap)
+{
+    Q_ASSERT(!m_scraps.contains(scrap));
+
+    m_scraps.append(scrap);
+    invalidateRows();
 
     connect(scrap, &cwScrap::leadsBeginInserted, this, &cwLeadModel::beginInsertLeads);
     connect(scrap, &cwScrap::leadsInserted, this, &cwLeadModel::endInsertLeads);
-    connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::beginRemoveLeads);
+    connect(scrap, &cwScrap::leadsBeginRemoved, this, &cwLeadModel::beginRemoveLeads);
     connect(scrap, &cwScrap::leadsRemoved, this, &cwLeadModel::endRemoveLeads);
     connect(scrap, &cwScrap::leadsReset, this, &cwLeadModel::fullModelReset);
     connect(scrap, &cwScrap::leadsDataChanged, this, [this, scrap](int begin, int end, const QList<int>& roles) {
         leadDataUpdated(scrap, begin, end, roles);
     });
-    connect(scrap, &cwScrap::triangulationDataChanged, this, [this, scrap]() {
-        if(scrap->leads().isEmpty()) {
-            leadDataUpdated(scrap, 0, scrap->leads().size(), {cwScrap::LeadPosition});
-        }
-    });
     connect(scrap, &cwScrap::destroyed, this, &cwLeadModel::scrapDeleted);
 }
 
 /**
- * @brief cwLeadModel::updateOffsets
- * @param startScrap
+ * @brief cwLeadModel::invalidateRows
  *
- * This updates all the offset's after startScrap
+ * Called whenever the scraps, or the leads in them, stop matching m_firstRows.
  */
-void cwLeadModel::updateOffsets(cwScrap *startScrap)
+void cwLeadModel::invalidateRows()
 {
-    Q_UNUSED(startScrap);
+    m_firstRows.clear();
+}
 
-    // Recompute every scrap's offset as the running sum of the preceding scraps'
-    // lead counts, preserving the current scrap order (OffsetToScrap is sorted by
-    // offset). This is correct whether startScrap's lead count merely changed or
-    // the scrap was already removed from the database (its last lead deleted) —
-    // the previous lowerBound(startScrap) lookup asserted in the latter case.
-    const QList<cwScrap*> ordered = OffsetToScrap.values();
+/**
+ * @brief cwLeadModel::updateRows
+ *
+ * Makes each scrap's first row the running sum of the lead counts before it, then
+ * appends the total. A rebuilt m_firstRows always holds that total, so an empty one
+ * means it needs rebuilding.
+ */
+void cwLeadModel::updateRows() const
+{
+    if(!m_firstRows.isEmpty()) { return; }
 
-    OffsetToScrap.clear();
-    ScrapToOffset.clear();
+    m_firstRows.reserve(m_scraps.size() + 1);
 
-    int offset = 0;
-    for(cwScrap* scrap : ordered) {
-        OffsetToScrap.insert(offset, scrap);
-        ScrapToOffset.insert(scrap, offset);
-        offset += scrap->numberOfLeads();
+    int firstRow = 0;
+    for(const cwScrap* scrap : m_scraps) {
+        m_firstRows.append(firstRow);
+        firstRow += scrap->numberOfLeads();
     }
+
+    m_firstRows.append(firstRow);
+}
+
+/**
+ * @brief cwLeadModel::firstRowOf
+ * @param scrap
+ * @return The row of scrap's first lead, or -1 if the model isn't holding scrap
+ */
+int cwLeadModel::firstRowOf(cwScrap *scrap) const
+{
+    const int scrapIndex = m_scraps.indexOf(scrap);
+    if(scrapIndex < 0) { return -1; }
+
+    updateRows();
+    return m_firstRows.at(scrapIndex);
 }
 
 /**
@@ -275,39 +340,27 @@ void cwLeadModel::updateOffsets(cwScrap *startScrap)
  * @param begin
  * @param end
  *
- * Called when a scrap adds leads
+ * Called before a scrap adds leads
  */
 void cwLeadModel::beginInsertLeads(int begin, int end)
 {
     Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
     cwScrap* scrap = static_cast<cwScrap*>(sender());
 
-    addScrapToOffsetDatabase(scrap);
+    const int firstRow = firstRowOf(scrap);
+    Q_ASSERT(firstRow >= 0);
 
-    Q_ASSERT(ScrapToOffset.contains(scrap));
-
-    int offset = ScrapToOffset.value(scrap);
-    int offsetBegin = offset + begin;
-    int offsetEnd = offset + end;
-
-    beginInsertRows(QModelIndex(), offsetBegin, offsetEnd);
+    beginInsertRows(QModelIndex(), firstRow + begin, firstRow + end);
 }
 
 /**
- * @brief cwLeadModel::insertLeads
- * @param begin
- * @param end
+ * @brief cwLeadModel::endInsertLeads
+ *
+ * Called once a scrap holds its new leads
  */
-void cwLeadModel::endInsertLeads(int begin, int end)
+void cwLeadModel::endInsertLeads()
 {
-    Q_UNUSED(begin);
-    Q_UNUSED(end);
-
-    Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
-    cwScrap* scrap = static_cast<cwScrap*>(sender());
-
-    updateOffsets(scrap);
-
+    invalidateRows();
     endInsertRows();
 }
 
@@ -315,39 +368,28 @@ void cwLeadModel::endInsertLeads(int begin, int end)
  * @brief cwLeadModel::beginRemoveLeads
  * @param begin
  * @param end
+ *
+ * Called before a scrap removes leads
  */
 void cwLeadModel::beginRemoveLeads(int begin, int end)
 {
     Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
     cwScrap* scrap = static_cast<cwScrap*>(sender());
-    Q_ASSERT(ScrapToOffset.contains(scrap));
 
-    int offset = ScrapToOffset.value(scrap);
-    int offsetBegin = offset + begin;
-    int offsetEnd = offset + end;
+    const int firstRow = firstRowOf(scrap);
+    Q_ASSERT(firstRow >= 0);
 
-    beginRemoveRows(QModelIndex(), offsetBegin, offsetEnd);
+    beginRemoveRows(QModelIndex(), firstRow + begin, firstRow + end);
 }
 
 /**
  * @brief cwLeadModel::endRemoveLeads
- * @param begin
- * @param end
+ *
+ * Called once a scrap has let go of its leads
  */
-void cwLeadModel::endRemoveLeads(int begin, int end)
+void cwLeadModel::endRemoveLeads()
 {
-    Q_UNUSED(begin);
-    Q_UNUSED(end);
-
-    Q_ASSERT(qobject_cast<cwScrap*>(sender())  != nullptr);
-    cwScrap* scrap = static_cast<cwScrap*>(sender());
-
-    if(scrap->numberOfLeads() == 0) {
-        removeScrapFromOffsetDatabase(scrap);
-    }
-
-    updateOffsets(scrap);
-
+    invalidateRows();
     endRemoveRows();
 }
 
@@ -359,33 +401,35 @@ void cwLeadModel::endRemoveLeads(int begin, int end)
  */
 void cwLeadModel::leadDataUpdated(cwScrap* scrap, int begin, int end, const QList<int>& roles)
 {
-    if (!ScrapToOffset.contains(scrap) || begin > end) {
+    const int firstRow = firstRowOf(scrap);
+
+    if(firstRow < 0 || begin > end) {
         return;
     }
 
-    int offset = ScrapToOffset.value(scrap);
-    int offsetBegin = offset + begin;
-    int offsetEnd = offset + end;
-
-    emit dataChanged(index(offsetBegin), index(offsetEnd), roles);
+    emit dataChanged(index(firstRow + begin), index(firstRow + end), roles);
 }
 
 /**
  * @brief cwLeadModel::scrapDeleted
  * @param scrapObj
  *
- * Called when a scrap is deleted.
+ * Called when a scrap is deleted. The region tree model announces scrap removal
+ * for cave, trip, note and scrap deletion alike, so removeScraps() handles those
+ * while the scrap is still whole. This detaches quietly for the rest: a scrap
+ * dying with its parent, and cwNote::setScraps(), which announces a scrapsReset()
+ * that the region tree model leaves alone.
  *
  * Note: this is connected to QObject::destroyed(QObject*), which fires from
  * inside ~QObject() after the cwScrap-derived vtable has been reset. That
  * means qobject_cast<cwScrap*>(scrapObj) returns nullptr here even though
  * the pointer is genuinely a cwScrap* — only static_cast is valid, and only
- * for use as a hash key (no member access).
+ * as a lookup key (no member access).
  */
 void cwLeadModel::scrapDeleted(QObject *scrapObj)
 {
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
-    removeScrap(scrap);
+    detachScrap(scrap);
 }
 
 /**
@@ -399,8 +443,8 @@ void cwLeadModel::scrapDeleted(QObject *scrapObj)
  */
 void cwLeadModel::insertScraps(QModelIndex parent, int begin, int end)
 {
-    if(RegionTreeModel->isNote(parent)) {
-        cwNote* note = RegionTreeModel->note(parent);
+    if(m_regionTreeModel->isNote(parent)) {
+        cwNote* note = m_regionTreeModel->note(parent);
         if(holdsNote(note)) {
             for(int i = begin; i <= end; i++) {
                 cwScrap* scrap = note->scrap(i);
@@ -421,8 +465,8 @@ void cwLeadModel::insertScraps(QModelIndex parent, int begin, int end)
  */
 void cwLeadModel::removeScraps(QModelIndex parent, int begin, int end)
 {
-    if(RegionTreeModel->isNote(parent)) {
-        cwNote* note = RegionTreeModel->note(parent);
+    if(m_regionTreeModel->isNote(parent)) {
+        cwNote* note = m_regionTreeModel->note(parent);
         if(holdsNote(note)) {
             for(int i = begin; i <= end; i++) {
                 cwScrap* scrap = note->scrap(i);
@@ -469,21 +513,27 @@ QString cwLeadModel::nearestStation(cwScrap *scrap, int leadIndex) const
 /**
  * @brief cwLeadModel::scrapAndIndex
  * @param index - The index that the scrap and local index will be converted to
- * @return A pair, made up of the scrap (first) and local index of the lead (second)
+ * @return A pair, made up of the scrap (first) and local index of the lead
+ * (second), or a null scrap if index is past the last lead
  */
 QPair<cwScrap *, int> cwLeadModel::scrapAndIndex(QModelIndex index) const
 {
-    auto iter = OffsetToScrap.lowerBound(index.row());
-    if(iter == OffsetToScrap.end() || iter.key() > index.row()) {
-        iter--;
+    updateRows();
+
+    if(index.row() < 0 || index.row() >= m_firstRows.constLast()) {
+        return QPair<cwScrap*, int>(nullptr, -1);
     }
 
-    Q_ASSERT(iter.key() <= index.row());
+    //The last scrap that starts at or before the row. Scraps without leads
+    //repeat their neighbor's first row, and upper_bound lands past that run,
+    //so backing up one always reaches the scrap that owns the row. The row is
+    //below the total, so upper_bound stops at the total at the latest.
+    const auto iter = std::upper_bound(m_firstRows.constBegin(), m_firstRows.constEnd(), index.row());
+    const int scrapIndex = static_cast<int>(iter - m_firstRows.constBegin()) - 1;
 
-    cwScrap* scrap = iter.value();
-    int leadIndex = index.row() - iter.key();
+    Q_ASSERT(scrapIndex >= 0);
 
-    return QPair<cwScrap*, int>(scrap, leadIndex);
+    return QPair<cwScrap*, int>(m_scraps.at(scrapIndex), index.row() - m_firstRows.at(scrapIndex));
 }
 
 /**
@@ -510,54 +560,11 @@ double cwLeadModel::leadDistance(cwScrap *scrap, int leadIndex) const
 }
 
 /**
- * @brief cwLeadModel::addScrapToOffsetDatabase
- * @param scrap
- *
- * This tries to add the scrap to the offset database
- *
- * If the scrap doesn't have any leads, this does nothing
- */
-void cwLeadModel::addScrapToOffsetDatabase(cwScrap *scrap)
-{
-    if(!ScrapToOffset.contains(scrap)) {
-        int lastOffset = 0;
-        int lastNumberOfLeads = 0;
-
-        if(!OffsetToScrap.isEmpty()) {
-            lastOffset = OffsetToScrap.lastKey();
-            lastNumberOfLeads = OffsetToScrap.last()->numberOfLeads();
-        }
-
-        int offset = lastOffset + lastNumberOfLeads;
-
-        OffsetToScrap.insert(offset, scrap);
-        ScrapToOffset.insert(scrap, offset);
-    }
-}
-
-/**
- * @brief cwLeadModel::removeScrapFromOffsetDatabase
- * @param scrap
- *
- * This tries to remove the scrap from the offset database
- */
-void cwLeadModel::removeScrapFromOffsetDatabase(cwScrap *scrap)
-{
-    if(ScrapToOffset.contains(scrap)) {
-        int offset = ScrapToOffset.value(scrap);
-        Q_ASSERT(OffsetToScrap.contains(offset));
-
-        ScrapToOffset.remove(scrap);
-        OffsetToScrap.remove(offset);
-    }
-}
-
-/**
 * @brief cwLeadModel::regionModel
 * @return
 */
 cwRegionTreeModel* cwLeadModel::regionModel() const {
-    return RegionTreeModel;
+    return m_regionTreeModel;
 }
 
 /**
@@ -565,16 +572,16 @@ cwRegionTreeModel* cwLeadModel::regionModel() const {
 * @param regionModel
 */
 void cwLeadModel::setRegionTreeModel(cwRegionTreeModel* regionModel) {
-    if(RegionTreeModel != regionModel) {
-        if(!RegionTreeModel.isNull()) {
-            disconnect(RegionTreeModel.data(), 0, this, 0);
+    if(m_regionTreeModel != regionModel) {
+        if(!m_regionTreeModel.isNull()) {
+            disconnect(m_regionTreeModel.data(), 0, this, 0);
         }
 
-        RegionTreeModel = regionModel;
+        m_regionTreeModel = regionModel;
 
-        if(!RegionTreeModel.isNull()) {
-            connect(RegionTreeModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadModel::insertScraps);
-            connect(RegionTreeModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadModel::removeScraps);
+        if(!m_regionTreeModel.isNull()) {
+            connect(m_regionTreeModel.data(), &cwRegionTreeModel::rowsInserted, this, &cwLeadModel::insertScraps);
+            connect(m_regionTreeModel.data(), &cwRegionTreeModel::rowsAboutToBeRemoved, this, &cwLeadModel::removeScraps);
         }
 
         fullModelReset();
@@ -587,7 +594,7 @@ void cwLeadModel::setRegionTreeModel(cwRegionTreeModel* regionModel) {
 * @return
 */
 cwCave* cwLeadModel::cave() const {
-    return Cave;
+    return m_cave;
 }
 
 /**
@@ -595,8 +602,8 @@ cwCave* cwLeadModel::cave() const {
 * @param cave
 */
 void cwLeadModel::setCave(cwCave* cave) {
-    if(Cave != cave) {
-        Cave = cave;
+    if(m_cave != cave) {
+        m_cave = cave;
         fullModelReset();
         emit caveChanged();
     }
@@ -610,8 +617,8 @@ void cwLeadModel::setCave(cwCave* cave) {
 * is only line of sight.
 */
 void cwLeadModel::setReferanceStation(QString referanceStation) {
-    if(ReferanceStation != referanceStation) {
-        ReferanceStation = referanceStation;
+    if(m_referanceStation != referanceStation) {
+        m_referanceStation = referanceStation;
 
         if(rowCount() > 0) {
             QModelIndex first = index(0);

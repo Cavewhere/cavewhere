@@ -40,9 +40,11 @@
 
 namespace {
 
-constexpr double kSideCaveEasting = 100.0;
-constexpr double kSideCaveNorthing = 200.0;
-constexpr double kSideCaveElevation = 30.0;
+// A point inside UTM zone 13N, the system Side Cave's fix is entered in.
+const QString kSideCaveCS = QStringLiteral("EPSG:32613");
+constexpr double kSideCaveEasting = 478000.0;
+constexpr double kSideCaveNorthing = 4430000.0;
+constexpr double kSideCaveElevation = 1655.0;
 
 cwStationHandle nativeHandle(const cwSurveyNode* node, const QString& tail)
 {
@@ -88,6 +90,20 @@ QStringList skeleton(const QString& driver)
     return lines;
 }
 
+//! Puts a *cs line at the top of the seeded copy of an included file. Side
+//! Cave's fix makes the driver name a *cs out, and cavern refuses a *fix with
+//! no input system under one — survex_blocks.svx fixes d1 bare, and OMEGA2's
+//! block sits outside the *cs Side Cave's own fix brings into scope.
+void declareInputCS(const QString& includePath)
+{
+    QFile file(includePath);
+    REQUIRE(file.open(QFile::ReadOnly));
+    const QByteArray body = file.readAll();
+    file.close();
+    REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate));
+    file.write(QStringLiteral("*cs %1\n").arg(kSideCaveCS).toUtf8() + body);
+}
+
 //! The §7.1 tree, native part plus one sourced root:
 //!
 //!   Kentucky field seasons            Folder
@@ -114,9 +130,8 @@ SevenOneTree buildSevenOneTree(cwCavingRegion& region, const QTemporaryDir& temp
 
     cwFixStation fix;
     fix.setStationName(QStringLiteral("s1"));
-    fix.setEasting(kSideCaveEasting);
-    fix.setNorthing(kSideCaveNorthing);
-    fix.setElevation(kSideCaveElevation);
+    fix.setInputCS(kSideCaveCS);
+    fix.setCoordinate(kSideCaveEasting, kSideCaveNorthing, kSideCaveElevation);
     tree.sideCave->fixStations()->appendFixStation(fix);
     addNativeTripWithShot(tree.sideCave, QStringLiteral("Sump dig"),
                           QStringLiteral("s1"), QStringLiteral("s2"));
@@ -136,6 +151,7 @@ SevenOneTree buildSevenOneTree(cwCavingRegion& region, const QTemporaryDir& temp
     addEmptyTrip(tree.omega2, QStringLiteral("Window"));
     const QString omegaDir = tempSubdir(tempRoot, QStringLiteral("omega2"));
     tree.omega2Include = seedAttachment(omegaDir, fixturePath(QStringLiteral("survex_blocks.svx")));
+    declareInputCS(tree.omega2Include);
     tree.options.caveAttachmentDirs.insert(tree.omega2->id(), omegaDir);
 
     region.equates()->appendEquate(cwEquate({tripHandle(tree.domeClimb, QStringLiteral("simple.a1")),
@@ -164,9 +180,11 @@ TEST_CASE("Every native node exports as its own nested *begin block", "[Exporter
     // sits on, and a second anchor would pin a connected survey twice.
     const QStringList expected = {
         QStringLiteral("*begin  ;All the caves"),
+        QStringLiteral("*cs out EPSG:32613"),
         QStringLiteral("*begin kentucky_field_seasons ;Kentucky field seasons"),
         QStringLiteral("*begin side_cave ;Side Cave"),
-        QStringLiteral("*fix s1 100.000000 200.000000 30.000000"),
+        QStringLiteral("*cs EPSG:32613"),
+        QStringLiteral("*fix s1 478000.000000000 4430000.000000000 1655.000000000"),
         QStringLiteral("*begin ; Sump dig"),
         QStringLiteral("*end"),
         QStringLiteral("*begin upper_level ;Upper level"),
@@ -208,7 +226,7 @@ TEST_CASE("A nested tree solves with every station under its node's label path",
     REQUIRE_FALSE(ran.hasError());
 
     cwSurvex3DFileReader reader;
-    const cwStationPositionLookup solved = reader.readStationPositions(threeDPath);
+    const cwStationPositionLookup solved = reader.readNetworkAndLookup(threeDPath).lookup;
 
     for (const QString& name : {QStringLiteral("kentucky_field_seasons.side_cave.s1"),
                                 QStringLiteral("kentucky_field_seasons.side_cave.s2"),

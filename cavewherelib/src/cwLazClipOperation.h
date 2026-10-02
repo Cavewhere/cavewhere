@@ -20,7 +20,6 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
-#include "cwGeoPoint.h"
 
 /// One on-disk LAZ/LAS source to clip. The worker reopens the file and
 /// streams it point-by-point — a multi-GB cloud never lands in memory in
@@ -35,8 +34,8 @@ struct CAVEWHERE_LIB_EXPORT cwLazClipSource {
  * Polygon-clips a set of on-disk LAZ point clouds into one output .laz.
  *
  * Each source is reopened via LASreader and streamed: a point is reprojected
- * from its source CS to @c outputWktCS, shifted to worldOrigin-relative
- * coords, then projected through @c viewMatrix to eye space for a 2D
+ * from its source CS to @c outputWktCS, then projected through @c viewMatrix
+ * to eye space for a 2D
  * containment test in eye XY — pan-invariant (translation cancels) and
  * ortho-zoom-invariant (projection matrix not consulted). Streaming, not an
  * in-memory snapshot, keeps a huge cloud off the heap and preserves the full
@@ -46,7 +45,7 @@ struct CAVEWHERE_LIB_EXPORT cwLazClipSource {
  * output point format is the richest among the sources and every source point
  * upconverts into it (LASpoint::operator= bridges legacy↔extended), so no
  * intensity/RGB/GPS-time/return/classification data is lost. Only the XYZ is
- * re-encoded (reprojected + re-anchored on worldOrigin). Custom extra-byte
+ * re-encoded (reprojected into @c outputWktCS). Custom extra-byte
  * attributes survive only when the sources share one schema.
  *
  * Threading: one worker on cwConcurrent's pool. LASreader, LASwriter and
@@ -84,13 +83,12 @@ public:
 
     struct Request {
         QList<cwLazClipSource> sources;
-        // worldOrigin-relative; same frame as the LAZ geometry.
+        // In outputWktCS, the same frame as the LAZ geometry.
         QList<QVector3D> polygonWorldXYZ;
         // Frozen camera view at commit time. Worker projects both polygon
         // vertices and each LAZ point through this matrix for the 2D
         // eye-XY containment test.
         QMatrix4x4 viewMatrix;
-        cwGeoPoint worldOrigin;
         // Written into the output's OGC WKT VLR; empty string skips it.
         QString outputWktCS;
         Mode mode = Mode::Keep;

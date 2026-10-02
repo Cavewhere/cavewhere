@@ -15,6 +15,7 @@ Item {
     property alias rWidth: rLabelId.width
     property alias uWidth: uLabelId.width
     property alias dWidth: dLabelId.width
+    property alias splaysWidth: splaysLabelId.width
     property int shotOffset: 0
 
     property real columnOffset: 1
@@ -28,6 +29,21 @@ Item {
     property real dataRowHeight: 50
     property real dataRowHalfHeight: dataRowHeight * 0.5
     property real shotRowY: -dataRowHeight * 0.5
+
+    //Splay rows are read-only, so they sit tighter than the boxes above them.
+    //Their cells are a pixel taller so the cluster shares the grid's overlapping
+    //1 px borders the way the boxes above it do
+    property real splayRowHeight: 27
+    property real splayCellHeight: splayRowHeight + columnOffset
+
+    //Where a splay row's rail and its "A1 · s1" tag sit in the station column
+    property real splayRailX: 12
+    property real splayRailWidth: 2
+    property real splayTagIndent: 20
+    property real splayTagRightMargin: 8
+
+    //The gap between the last reading of a splay row and the ⋯ that acts on it
+    property real splayMenuIndent: 6
 
     //For displaying chunk error message correctly
     property alias chunk: chunkErrorId.chunk
@@ -102,6 +118,12 @@ Item {
         TitleLabel {
             id: dLabelId
             text: "D"
+            Layout.fillWidth: true
+        }
+
+        TitleLabel {
+            id: splaysLabelId
+            text: "Splays"
             Layout.fillWidth: true
         }
     }

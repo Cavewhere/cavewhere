@@ -33,6 +33,7 @@ class CAVEWHERE_LIB_EXPORT cwLeadModel : public QAbstractListModel
     Q_OBJECT
     QML_NAMED_ELEMENT(LeadModel)
 
+    Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
     Q_PROPERTY(cwRegionTreeModel* regionModel READ regionModel WRITE setRegionTreeModel NOTIFY regionModelChanged)
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(QString referanceStation READ referanceStation WRITE setReferanceStation NOTIFY referanceStationChanged)
@@ -74,6 +75,7 @@ public:
     QHash<int, QByteArray> roleNames() const;
 
 signals:
+    void countChanged();
     void regionModelChanged();
     void caveChanged();
     void referanceStationChanged();
@@ -81,13 +83,19 @@ signals:
 public slots:
 
 private:
-    QPointer<cwRegionTreeModel> RegionTreeModel; //!<
-    QPointer<cwCave> Cave;
+    QPointer<cwRegionTreeModel> m_regionTreeModel; //!<
+    QPointer<cwCave> m_cave;
 
-    QMap<cwScrap*, int> ScrapToOffset;
-    QMap<int, cwScrap*> OffsetToScrap;
+    //! Every scrap connected to the model, in row order. Each contributes as many
+    //! rows as it holds leads, so a scrap without leads is still a member.
+    QList<cwScrap*> m_scraps;
 
-    QString ReferanceStation; //!< For calculating the distance to the leads
+    //! Where each scrap's leads start, followed by the total row count. Rebuilt from
+    //! m_scraps on demand, and empty for as long as it needs rebuilding, so m_scraps
+    //! stays the one place the row order is recorded.
+    mutable QList<int> m_firstRows;
+
+    QString m_referanceStation; //!< For calculating the distance to the leads
 
     void fullModelReset();
 
@@ -95,21 +103,24 @@ private:
     void addScrap(cwScrap* scrap);
     bool holdsNote(const cwNote* note) const;
 
-    void updateOffsets(cwScrap* startScrap);
+    void detachScrap(cwScrap* scrap);
+    void attachScrap(cwScrap* scrap);
+
+    void invalidateRows();
+    void updateRows() const;
+    int firstRowOf(cwScrap* scrap) const;
+
     QString nearestStation(cwScrap* scrap, int leadIndex) const;
 
     QPair<cwScrap*, int> scrapAndIndex(QModelIndex index) const;
 
     double leadDistance(cwScrap* scrap, int leadIndex) const;
 
-    void addScrapToOffsetDatabase(cwScrap* scrap);
-    void removeScrapFromOffsetDatabase(cwScrap* scrap);
-
 private slots:
     void beginInsertLeads(int begin, int end);
-    void endInsertLeads(int begin, int end);
+    void endInsertLeads();
     void beginRemoveLeads(int begin, int end);
-    void endRemoveLeads(int begin, int end);
+    void endRemoveLeads();
     void leadDataUpdated(cwScrap *scrap, int begin, int end, const QList<int>& roles);
     void scrapDeleted(QObject* scrapObj);
     void insertScraps(QModelIndex parent, int begin, int end);
@@ -123,7 +134,7 @@ private slots:
 * @return The station that
 */
 inline QString cwLeadModel::referanceStation() const {
-    return ReferanceStation;
+    return m_referanceStation;
 }
 
 #endif // CWLEADMODEL_H

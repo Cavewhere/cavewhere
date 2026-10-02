@@ -19,8 +19,10 @@ QC.Label {
 
     QQ.MouseArea {
         id: textMouseArea
+        objectName: "labelWithHelpMouseArea"
         anchors.fill: parent
         hoverEnabled: true
+        cursorShape: Qt.PointingHandCursor
 
         onClicked: {
             label.helpArea.visible = !label.helpArea.visible

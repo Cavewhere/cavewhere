@@ -6,9 +6,9 @@
 #include "cwErrorListModel.h"
 #include "cwFixStationModel.h"
 #include "cwFixStation.h"
-#include "cwCavingRegion.h"
 #include "cwGeoPoint.h"
 #include "cwDeclination.h"
+#include "cwUnits.h"
 
 #include "Monad/Result.h"
 
@@ -254,20 +254,27 @@ void cwTripCalibration::rewireCaveSignals()
 
 Monad::Result<double> cwTripCalibration::resolveAuto() const
 {
-    if (!m_parentTrip || !m_wiredCave || !m_wiredCave->fixStations()
-        || m_wiredCave->fixStations()->count() == 0) {
+    if (!m_parentTrip || !m_wiredCave || !m_wiredCave->fixStations()) {
         return Monad::Result<double>(QStringLiteral("No fix station available"));
     }
 
-    const cwFixStation fix = m_wiredCave->fixStations()->fixStationAt(0);
-    QString sourceCS = fix.inputCS().trimmed();
-    if (sourceCS.isEmpty()) {
-        if (auto* region = m_wiredCave->parentRegion()) {
-            sourceCS = region->geoReference()->globalCoordinateSystem().trimmed();
+    // The first fix that actually gives a location, not simply the first row.
+    // "Mark Station as Fixed" creates a row that carries a coordinate system
+    // before it carries a coordinate, and reading its components anyway would
+    // resolve IGRF at (0, 0) — the Gulf of Guinea — and silently rotate every
+    // trip in the cave. Only a Valid fix has components at all; the rest read 0.
+    const cwFixStationModel* fixModel = m_wiredCave->fixStations();
+    for (int i = 0; i < fixModel->count(); ++i) {
+        const cwFixStation fix = fixModel->fixStationAt(i);
+        const QString sourceCS = fix.inputCS().trimmed();
+        if (sourceCS.isEmpty() || fix.state() != cwFixStation::Valid) {
+            continue;
         }
+        const cwGeoPoint location(fix.easting(), fix.northing(), fix.elevation());
+        return cwDeclination::compute(location, sourceCS, m_parentTrip->date());
     }
-    const cwGeoPoint location(fix.easting(), fix.northing(), fix.elevation());
-    return cwDeclination::compute(location, sourceCS, m_parentTrip->date());
+
+    return Monad::Result<double>(QStringLiteral("No fix station available"));
 }
 
 void cwTripCalibration::refreshResolved()
@@ -313,11 +320,11 @@ void cwTripCalibration::updateWarnings(const Monad::Result<double>& autoResult)
         const double diff = std::abs(manual - computed);
         if (diff >= 0.5) {
             newWarning = QStringLiteral(
-                "Manual declination %1° differs from computed %2° by %3°. "
+                "Manual declination %1 differs from computed %2 by %3. "
                 "Verify it's still correct.")
-                .arg(manual, 0, 'f', 1)
-                .arg(computed, 0, 'f', 1)
-                .arg(diff, 0, 'f', 1);
+                .arg(cwUnits::formatAngle(manual),
+                     cwUnits::formatAngle(computed),
+                     cwUnits::formatAngle(diff));
         }
     }
 

@@ -2,16 +2,10 @@
 
 //CaveWhere includes
 #include "cwCave.h"
-#include "cwSurveyDataArtifact.h"
-#include "cwSurveyNetworkBuilderRule.h"
-#include "cwSurvey2DGeometryRule.h"
-#include "cwMatrix4x4Artifact.h"
 #include "PenLineModelSerializer.h"
 #include "GitRepository.h"
 
 //Qt includes
-#include <QScreen>
-#include <QGuiApplication>
 #include <QSurfaceFormat>
 #include <QSaveFile>
 #include <QStandardPaths>
@@ -32,7 +26,6 @@ RootData::RootData(QObject *parent) :
     m_centerlinePainterModel = new CenterlinePainterModel(this);
     m_penLineModel = new PenLineModel(this);
     createCurrentTrip();
-    createGeometry2DPipeline();
 
     // 1) Ask Qt where the desktop folder is
     QString desktopDir = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
@@ -111,55 +104,6 @@ void RootData::createCurrentTrip()
     cavingRegion()->addCave(cave);
 
     m_currentTrip = trip;
-}
-
-//For testing
-void RootData::createGeometry2DPipeline()
-{
-    // Create a survey data artifact and set the region
-    cwSurveyDataArtifact* surveyData = new cwSurveyDataArtifact(this);
-    surveyData->setRegion(cavingRegion());
-
-    cwSurveyNetworkBuilderRule* networkBuilderRule = new cwSurveyNetworkBuilderRule(this);
-    networkBuilderRule->setSurveyData(surveyData);
-
-    cwSurvey2DGeometryRule* geometryRule = new cwSurvey2DGeometryRule(this);
-    auto matrixArtifact = new cwMatrix4x4Artifact(geometryRule);
-
-    //1:250 scales
-    QScreen *screen = QGuiApplication::primaryScreen();
-    qDebug() << "Device pixel ratio: " << screen->physicalDotsPerInch();
-    qDebug() << "FIXME! geometry pipeline is still in testing mode!!!";
-
-
-    //1:250
-    const double footToMeter = 0.3048;
-    // const double footToMeter = 1.0; //Operate in feet
-    const double meterToInch = 1.0 / footToMeter * 12.0;
-
-    const double mapScale = 250.0; //1:250
-
-    //Map in inches
-    double toMapInches = meterToInch/mapScale;
-
-    //To pixels on screen
-    double toScreen = toMapInches * screen->physicalDotsPerInch();
-
-    QMatrix4x4 scaleMatrix;
-    scaleMatrix.scale(toScreen);
-
-    //Qt, postive y is down.
-    QMatrix4x4 flipMatrix;
-    scaleMatrix.scale(1.0, -1.0, 1.0);
-
-    matrixArtifact->setMatrix4x4(scaleMatrix * flipMatrix);
-
-    geometryRule->setSurveyNetwork(networkBuilderRule->surveyNetworkArtifact());
-    geometryRule->setViewMatrix(matrixArtifact);
-
-    //This is why you artifacts, it because you can interchange rules and the connections
-    //still work.
-    m_centerlinePainterModel->setSurvey2DGeometry(geometryRule->survey2DGeometry());
 }
 
 int RootData::sampleCount() const

@@ -263,7 +263,7 @@ Item {
                                             keywordSelection.clearSelection();
                                             keywordSelection.setSelected(keywordSelection.index(index, 0), true);
                                             keywordList.anchorIndex = index;
-                                            keywordContextMenu.popup(point.scenePosition);
+                                            keywordContextMenu.popup(rowId, point.position);
                                         }
                                     }
 

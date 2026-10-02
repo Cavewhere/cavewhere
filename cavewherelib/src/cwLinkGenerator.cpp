@@ -17,6 +17,11 @@
 #include "cwPage.h"
 
 
+namespace {
+//! Must match the sub-page CavePage.qml registers in registerSubPages().
+constexpr QLatin1String kFixStationsPageName("Fix Stations");
+}
+
 cwLinkGenerator::cwLinkGenerator(QObject *parent) : QObject(parent)
 {
 
@@ -51,6 +56,25 @@ QString cwLinkGenerator::caveLink(cwCave *cave)
            + cwPageSelectionModel::seperator()
            + QStringLiteral("Cave=")
            + cave->name();
+}
+
+/**
+ * @brief cwLinkGenerator::fixStationsLink
+ * @param cave
+ * @return The address of the cave's Fix Stations sub-page.
+ *
+ * CavePage.qml registers that sub-page only once the cave page itself is
+ * current, so this address names a page that may not exist yet.
+ * cwPageSelectionModel::setCurrentPageAddress() handles that: it walks the
+ * parent addresses first, and visiting the cave page is what registers the
+ * sub-page the last step then finds.
+ */
+QString cwLinkGenerator::fixStationsLink(cwCave *cave)
+{
+    if(cave == nullptr) { return QString(); }
+    return caveLink(cave)
+           + cwPageSelectionModel::seperator()
+           + kFixStationsPageName;
 }
 
 /**

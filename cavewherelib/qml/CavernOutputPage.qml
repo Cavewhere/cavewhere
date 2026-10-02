@@ -15,8 +15,6 @@ StandardPage {
                                         ? linePlotManager.cavernLog : ""
     readonly property string loopClosureStats: linePlotManager !== null
                                                ? linePlotManager.loopClosureStats : ""
-    readonly property string solveErrorMessage: linePlotManager !== null
-                                                ? linePlotManager.solveErrorMessage : ""
 
     ColumnLayout {
         anchors.fill: parent
@@ -57,16 +55,12 @@ StandardPage {
                 objectName: "rerunSolveButton"
                 enabled: root.linePlotManager !== null
                 text: qsTr("Solve")
-                onClicked: root.linePlotManager.rerunSurvex()
+                onClicked: {
+                    // Mark, then drive — see cwUpdateCoordinator::updateNow().
+                    root.linePlotManager.markNeedsUpdate()
+                    RootData.updateCoordinator.updateNow(root.linePlotManager)
+                }
             }
-        }
-
-        QC.Label {
-            objectName: "errorMessageLabel"
-            Layout.fillWidth: true
-            visible: root.hasError
-            wrapMode: QC.Label.WordWrap
-            text: root.solveErrorMessage
         }
 
         ColumnLayout {

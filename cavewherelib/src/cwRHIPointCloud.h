@@ -11,6 +11,7 @@
 // Our includes
 #include "cwAppearanceSlotted.h"
 #include "cwRHIObject.h"
+#include "cwRenderMemoryLedger.h"
 #include "cwRenderPointCloud.h"
 #include "cwRhiFrameRenderer.h"
 
@@ -31,6 +32,13 @@ public:
     void updateResources(const ResourceUpdateData& data) override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
     bool usesPointCloudPass() const override;
+
+    // The loaded cloud's bounds, inflated by the sprite radius. cwLazLoader
+    // derives bboxMin/bboxMax from the very vertices it writes into the vertex
+    // buffer, and PointCloud.vert multiplies those vertices by the
+    // view-projection alone — no model matrix — so the box is already world
+    // space. nullopt until the first non-empty geometry arrives.
+    std::optional<QBox3D> worldBounds() const override;
     cwAppearanceSlotted* appearanceSlots() override { return this; }
 
     // cwAppearanceSlotted: unpack a cwPointCloudAppearance from the opaque payload
@@ -72,6 +80,11 @@ private:
     QRhiVertexInputLayout m_inputLayout;
     QVector<QRhiBuffer*> m_vertexBuffers;
     QVector<qsizetype> m_vertexBufferCapacities;
+    cwLedgeredBytes m_vertexBufferBytes {cwRenderMemoryLedger::Category::PointCloudGeometry,
+                                         cwRenderMemoryLedger::Residency::Gpu};
+    // Vertices the buffers hold — the geometry's vertex count, or fewer when a
+    // buffer was truncated to the quint32 QRhiBuffer size limit.
+    qint64 m_uploadedVertexCount = 0;
     // Per-cloud uniform block (binding 1): world-space sprite radius in meters,
     // one aligned slot per appearance slot, bound with a dynamic offset so an
     // offscreen job can render the cloud at an overridden radius without disturbing

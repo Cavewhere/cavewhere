@@ -59,7 +59,8 @@ public:
         QQuickItem* content = nullptr;
         QVector3D worldPosition;
         SizeMode sizeMode = SizeMode::ScreenConstant;
-        float depthBias = 0.0f;   // world units to offset toward the eye
+        float depthBias = 0.0f;   // world units to offset along the line of sight,
+                                  // toward the viewer (cwBillboardSightLine)
     };
 
     // Per-billboard data snapshotted on the GUI thread (during synchronize, when
@@ -118,6 +119,33 @@ private:
     QPointer<QQuickWindow> m_window;
     uint32_t m_nextId = 1;
     std::unordered_map<cwBillboardId, Entry> m_billboards;
+};
+
+// The camera's line of sight, resolved once per frame so biasing each billboard
+// costs no matrix work.
+//
+// Which line it is depends on the projection: under perspective it runs from the
+// billboard to the eye point, but under a parallel projection every billboard
+// shares one direction — the view axis — and the eye point is an arbitrary point
+// on it (the turntable parks it ~50 m from the pivot at any cave size). Offsetting
+// orthographic labels toward that point is what made them drown in the scraps,
+// issue #645. Either way the offset is screen-invariant.
+//
+// Pure (no QRhi), so it's unit-tested directly.
+class CAVEWHERE_LIB_EXPORT cwBillboardSightLine
+{
+public:
+    cwBillboardSightLine(const QMatrix4x4& view, const QMatrix4x4& projection);
+
+    // Shifts @a worldPosition toward the viewer by @a depthBias world units, so
+    // nearby geometry (a scrap surface the station sits on, the centerline) doesn't
+    // draw over the billboard's content.
+    QVector3D biasedPosition(const QVector3D& worldPosition, float depthBias) const;
+
+private:
+    QVector3D m_towardViewer;  // orthographic: the direction every billboard shares
+    QVector3D m_eye;           // perspective: the point every billboard aims at
+    bool m_orthographic;
 };
 
 // Sorts billboard render slots back-to-front (farthest from the eye first) by the

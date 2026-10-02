@@ -19,6 +19,21 @@ class cwErrorData;
 #include "cwGlobals.h"
 
 /**
+ * Stable, cross-version identifiers for the cwErrors whose user suppression must
+ * survive their message text changing between releases (see cwError::errorTypeId).
+ * Allocate every new id here, never as a bare literal at the use site, so two
+ * features cannot silently collide on the same value. The numeric values are
+ * serialized with the project's suppression state, so they must never be reused
+ * or renumbered. 0 is the default "no stable identity" for transient errors.
+ */
+enum class cwErrorTypeId : int {
+    None = 0,
+    FixStationOutlier = 596,   //!< issue #596: a fix far from the survey cluster
+    FixStationDomain = 597,    //!< issue #596: a fix outside its CS's valid domain
+    FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
+};
+
+/**
  * @brief The cwError class
  *
  * The error supports generic errors created by users while entering data. For example

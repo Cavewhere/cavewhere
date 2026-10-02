@@ -25,6 +25,9 @@ class cwCave;
 #include <QVariant>
 #include <QQmlEngine>
 
+//Std includes
+#include <tuple>
+
 class CAVEWHERE_LIB_EXPORT cwSurveyChunk : public QObject {
     Q_OBJECT
     QML_NAMED_ELEMENT(SurveyChunk)
@@ -104,9 +107,24 @@ public:
     Q_INVOKABLE cwStation station(int index) const;
     Q_INVOKABLE QList<int> indicesOfStation(QString stationName) const;
 
+    QList<cwShotMeasurement> stationSplays(int index) const;
+    int stationSplayCount(int index) const;
+    const cwShotMeasurement& stationSplayAt(int index, int splayIndex) const;
+    void setStationSplays(int index, const QList<cwShotMeasurement>& splays);
+
+    void appendStationSplay(int index, const cwShotMeasurement& splay);
+    void removeStationSplay(int index, int splayIndex);
+    void clearStationSplays(int index);
+    void setStationSplayData(cwSurveyChunk::DataRole role, int index, int splayIndex, const QVariant& data);
+
+    static void moveStationSplays(cwSurveyChunk* from, int fromStation,
+                                  cwSurveyChunk* to, int toStation,
+                                  const QList<int>& splayIndices);
+
     Q_INVOKABLE cwShot shot(int index) const;
 
     Q_INVOKABLE cwErrorModel* errorsAt(int index, DataRole role) const;
+    Q_INVOKABLE cwErrorModel* splayErrorsAt(int index, int splayIndex, DataRole role) const;
     Q_INVOKABLE QVariant data(DataRole role, int index) const;
 
     cwSurveyChunkData data() const;
@@ -130,11 +148,16 @@ signals:
 
     void dataChanged(cwSurveyChunk::DataRole mainRole, int index);
 
+    void stationSplaysChanged(int index);
+
     // void connectedChanged();
 
     // void connectedStateChanged();
 
     void errorsChanged(cwSurveyChunk::DataRole mainRole, int index);
+
+    //! One or more of the splays on station \a index gained or lost an error
+    void splayErrorsChanged(int index);
 
     void shotCountChanged();
     void stationCountChanged();
@@ -176,6 +199,28 @@ private:
         int Role;
     };
 
+    //! Which reading of which splay of which station an error belongs to
+    class SplayCellIndex {
+
+    public:
+        SplayCellIndex() : Index(-1), SplayIndex(-1), Role(-1) {}
+        SplayCellIndex(int index, int splayIndex, int role)
+            : Index(index), SplayIndex(splayIndex), Role(role) {}
+
+        bool operator<(const SplayCellIndex& other) const {
+            return std::tie(Index, SplayIndex, Role)
+                   < std::tie(other.Index, other.SplayIndex, other.Role);
+        }
+
+        int station() const { return Index; }
+        int splay() const { return SplayIndex; }
+
+    private:
+        int Index;
+        int SplayIndex;
+        int Role;
+    };
+
     cwSurveyChunkData d;
     // QUuid m_id;
     // QList<cwStation> Stations;
@@ -183,12 +228,18 @@ private:
 
     cwErrorModel* ErrorModel;
     QMap<CellIndex, cwErrorModel*> CellErrorModels;
+    QMap<SplayCellIndex, cwErrorModel*> SplayCellErrorModels;
 
     cwTrip* ParentTrip;
 
 
     bool shotIndexCheck(int index) const { return index >= 0 && index < d.shots.count();  }
     bool stationIndexCheck(int index) const { return index >= 0 && index < d.stations.count(); }
+    bool splayIndexCheck(int index, int splayIndex) const {
+        return stationIndexCheck(index)
+               && splayIndex >= 0
+               && splayIndex < d.stations.at(index).splayCount();
+    }
 
     void remove(int stationIndex, int shotIndex);
     int index(int index, Direction direction);
@@ -204,6 +255,12 @@ private:
     void checkForError(DataRole role, int index, bool emitSignal = true);
     void checkForStationError(int index);
     void checkForShotError(int index);
+    void checkForSplayErrors(int index);
+    bool updateSplayErrors(int index);
+    bool checkForSplayError(int index, int splayIndex, DataRole role);
+    bool removeSplayErrorsFrom(int index, int firstSplayIndex);
+    void announceStationSplaysChanged(int index);
+    QList<cwError> checkSplayDataError(cwSurveyChunk::DataRole role, int index, int splayIndex) const;
     QList<cwError> checkLRUDError(cwSurveyChunk::DataRole role, int index) const;
     QList<cwError> checkDataError(cwSurveyChunk::DataRole role, int index) const;
     QList<cwError> checkWithTolerance(cwSurveyChunk::DataRole frontSightRole, cwSurveyChunk::DataRole backSightRole, int index, double tolerance = 2.0, QString units = "°") const;

@@ -10,8 +10,8 @@
 #include "CenterlinePainterModel.h"
 
 //CaveWhere includes
-#include "cavewhere/cavewherelib/src/cwSurvey2DGeometryArtifact.h"
-#include "cwSurvey2DGeometryArtifact.h"
+#include "cavewhere/cavewherelib/src/cwSurvey2DGeometrySource.h"
+#include "cwSurvey2DGeometrySource.h"
 #include "cwSurvey2DGeometry.h"
 #include "cwAsyncFuture.h"
 
@@ -26,10 +26,10 @@ using namespace cwSketch;
 using namespace Catch;
 
 TEST_CASE("CenterlinePainterModel builds exactly three paths with correct strokes", "[CenterlinePainterModel]") {
-    // 1) Instantiate model and geometry artifact
+    // 1) Instantiate model and geometry source
     cwSketch::CenterlinePainterModel centerlinePainterModel;
-    cwSurvey2DGeometryArtifact geometryArtifact;
-    centerlinePainterModel.setSurvey2DGeometry(&geometryArtifact);
+    cwSurvey2DGeometrySource geometrySource;
+    centerlinePainterModel.setSurvey2DGeometry(&geometrySource);
 
     // 2) Prepare a minimal geometry: one shot line, two stations
     cwSurvey2DGeometry geometry;
@@ -48,7 +48,7 @@ TEST_CASE("CenterlinePainterModel builds exactly three paths with correct stroke
     auto future = AsyncFuture::observe(&centerlinePainterModel, &CenterlinePainterModel::modelReset).future();
 
     // Inject geometry result synchronously
-    geometryArtifact.setGeometryResult(QtFuture::makeReadyValueFuture(Result(geometry)));
+    geometrySource.setGeometryResult(QtFuture::makeReadyValueFuture(Result(geometry)));
 
     REQUIRE(cwAsyncFuture::waitForFinished(future)); //, 2000));
 

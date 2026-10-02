@@ -18,29 +18,29 @@ CenterlinePainterModel::CenterlinePainterModel(QObject *parent)
     : AbstractPainterPathModel(parent)
 {}
 
-cwSurvey2DGeometryArtifact* CenterlinePainterModel::survey2DGeometry() const
+cwSurvey2DGeometrySource* CenterlinePainterModel::survey2DGeometry() const
 {
-    return m_geometryArtifact;
+    return m_geometrySource;
 }
 
-void CenterlinePainterModel::setSurvey2DGeometry(cwSurvey2DGeometryArtifact* geometry)
+void CenterlinePainterModel::setSurvey2DGeometry(cwSurvey2DGeometrySource* geometry)
 {
-    if (m_geometryArtifact == geometry) {
+    if (m_geometrySource == geometry) {
         return;
     }
 
-    if (m_geometryArtifact) {
-        disconnect(m_geometryArtifact,
-                   &cwSurvey2DGeometryArtifact::geometryResultChanged,
+    if (m_geometrySource) {
+        disconnect(m_geometrySource,
+                   &cwSurvey2DGeometrySource::geometryResultChanged,
                    this,
                    &CenterlinePainterModel::updateModel);
     }
 
-    m_geometryArtifact = geometry;
+    m_geometrySource = geometry;
 
-    if (m_geometryArtifact) {
-        connect(m_geometryArtifact,
-                &cwSurvey2DGeometryArtifact::geometryResultChanged,
+    if (m_geometrySource) {
+        connect(m_geometrySource,
+                &cwSurvey2DGeometrySource::geometryResultChanged,
                 this,
                 &CenterlinePainterModel::updateModel);
     }
@@ -61,9 +61,9 @@ AbstractPainterPathModel::Path CenterlinePainterModel::path(const QModelIndex &i
 
 void CenterlinePainterModel::updateModel()
 {
-    if (m_geometryArtifact) {
+    if (m_geometrySource) {
         // pull the future and wait for it
-        auto future = m_geometryArtifact->geometryResult();
+        auto future = m_geometrySource->geometryResult();
 
         auto convertToPainterPaths = [](const auto result)->QFuture<Result<QVector<Path>>> {
             const cwSurvey2DGeometry geometry = result.value();

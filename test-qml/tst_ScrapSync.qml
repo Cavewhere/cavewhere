@@ -686,10 +686,12 @@ MainWindowTest {
                 scaleOnPaperUnit: scaleOnPaperInput.unitValue.unit,
                 scaleOnPaperVisible: scaleOnPaperInput.valueVisible,
                 scaleOnPaperReadOnly: scaleOnPaperInput.valueReadOnly,
+                scaleOnPaperUnitReadOnly: scaleOnPaperUnitInput.readOnly,
                 scaleInCaveValue: roundToDigits(scaleInCaveInput.unitValue.value, 2),
                 scaleInCaveUnit: scaleInCaveInput.unitValue.unit,
                 scaleInCaveVisible: scaleInCaveInput.valueVisible,
                 scaleInCaveReadOnly: scaleInCaveInput.valueReadOnly,
+                scaleInCaveUnitReadOnly: scaleInCaveUnitInput.readOnly,
                 azimuthVisible: azimuthRow.visible,
                 direction: null,
                 directionText: null,
@@ -721,10 +723,15 @@ MainWindowTest {
                 scaleOnPaperUnit: state.scaleNumeratorUnit,
                 scaleOnPaperVisible: !autoScale || state.scaleNumeratorUnit !== Units.LengthUnitless,
                 scaleOnPaperReadOnly: autoScale,
+                //An auto-calculated scale resolves its units from the trip's survey
+                //unit on every recompute, so the unit picker is read-only alongside
+                //the value
+                scaleOnPaperUnitReadOnly: autoScale,
                 scaleInCaveValue: state.scaleDenominatorValue,
                 scaleInCaveUnit: state.scaleDenominatorUnit,
                 scaleInCaveVisible: !autoScale || state.scaleDenominatorUnit !== Units.LengthUnitless,
                 scaleInCaveReadOnly: autoScale,
+                scaleInCaveUnitReadOnly: autoScale,
                 azimuthVisible: typeIsProjected,
                 direction: typeIsProjected ? state.direction : null,
                 directionText: typeIsProjected ? projectedProfileDirectionText(state.direction) : null,

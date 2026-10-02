@@ -10,6 +10,7 @@
 
 //Qt includes
 #include <rhi/qrhi.h>
+#include <QDebug>
 #include <QThread>
 
 //Std includes
@@ -102,31 +103,17 @@ void cwRhiOffscreenRenderer::shutdown()
     // consumers don't hang.
     m_queue.clear();
 
-    // Read-backs recorded but not yet completed will never fire now the QRhi is
-    // going away, so their completion lambdas (the only other owner) would leave the
-    // promise unfinished and the QFuture hung, and the QRhiReadbackResult they own
-    // leaked. A lambda that already ran released its holder (weak ref expired) and
-    // freed its result, so skip those — no double finish, no double free. A live weak
-    // ref means the lambda has not run: finish the promise and reclaim the read-back
-    // it would have deleted.
-    for (const auto& inflight : std::as_const(m_inflightReadbacks)) {
-        bool lambdaPending = false;
-        for (const auto& weakJob : inflight.jobs) {
-            if (auto job = weakJob.lock()) {
-                job->promise.finish();
-                lambdaPending = true; // a lockable job means the lambda has not run
-            }
-        }
-        // Only a not-yet-fired read-back still owns its result; a completed one's lambda
-        // already freed it (and all its jobs have expired, so we took none of them).
-        if (lambdaPending) {
-            delete inflight.result;
+    // An in-flight read-back belongs to the backend until it completes: the QRhi writes
+    // into its QRhiReadbackResult and runs the completion lambda, which frees the result,
+    // in a later frame or, on Metal and Vulkan, while the QRhi is destroyed. D3D12 drops
+    // pending read-backs at destruction, so the waiting promises are finished here; the
+    // lambda skips jobs that are already finished.
+    for (const auto& weakJob : std::as_const(m_inflightJobs)) {
+        if (auto job = weakJob.lock()) {
+            job->promise.finish();
         }
     }
-    m_inflightReadbacks.clear();
-    // The reclaimed lambdas will never run their `--(*counter)`, so the counter would stay
-    // elevated forever; zero it so hasPendingWork() reflects the now-empty state.
-    *m_outstandingReadbacks = 0;
+    m_inflightJobs.clear();
 
     // Tear down the offscreen targets before the scene's pipeline cache (caller
     // ordering) so pipelines keyed on their rpDescs are released first.
@@ -263,6 +250,72 @@ bool cwRhiOffscreenRenderer::dropLeadingNonRenderable()
     return false; // front is a real render job
 }
 
+bool cwRhiOffscreenRenderer::ResidencyGate::shouldDispatch(const cwOffscreenRenderJob* job,
+                                                           bool ready, bool& gaveUp)
+{
+    gaveUp = false;
+
+    if (ready) {
+        m_job = nullptr;
+        m_deferrals = 0;
+        return true;
+    }
+
+    if (job != m_job) {
+        m_job = job;
+        m_deferrals = 0;
+    }
+
+    m_deferrals++;
+    if (m_deferrals < kMaxResidencyDeferralFrames) {
+        return false;
+    }
+
+    gaveUp = true;
+    m_job = nullptr;
+    m_deferrals = 0;
+    return true;
+}
+
+bool cwRhiOffscreenRenderer::shouldDispatchLeadingJob(QRhi* rhi)
+{
+    const std::shared_ptr<cwOffscreenRenderJob>& job = m_queue.first();
+    const cwOffscreenRenderParameters& p = job->parameters;
+
+    // The job's camera in the same clip-space form the render itself will stamp,
+    // so mip selection here matches what the render draws with.
+    const cwRhiFrameRenderer::ClipSpaceCamera clip =
+        cwRhiFrameRenderer::clipSpaceCorrectedCamera(rhi, p.projectionMatrix, p.viewMatrix);
+
+    cwRHIObject::RenderData jobRenderData{nullptr, nullptr, cwSceneUpdate::Flag::None};
+    jobRenderData.viewMatrix = p.viewMatrix;
+    jobRenderData.projectionMatrix = clip.projectionCorrected;
+    jobRenderData.viewProjectionMatrix = clip.viewProjection;
+    jobRenderData.devicePixelRatio = p.devicePixelRatio;
+    jobRenderData.viewportSize = p.outputSize;
+    jobRenderData.budgets = m_frame.budgets();
+
+    bool ready = true;
+    for (cwRHIObject* object : std::as_const(m_frame.renderObjects())) {
+        if (p.hiddenObjectIds.contains(object->renderObjectId())) {
+            continue;
+        }
+        // Every object is asked even once one has reported unready, so the whole
+        // scene's loads are in flight by the next frame.
+        ready = object->residencyReady(jobRenderData) && ready;
+    }
+
+    bool gaveUp = false;
+    const bool dispatch = m_residencyGate.shouldDispatch(job.get(), ready, gaveUp);
+    if (gaveUp) {
+        qWarning() << "Offscreen render job of size" << p.outputSize
+                   << "waited" << ResidencyGate::kMaxResidencyDeferralFrames
+                   << "frames for texture residency; rendering with the detail"
+                      " already loaded.";
+    }
+    return dispatch;
+}
+
 void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer)
 {
     assertRenderThread();
@@ -274,16 +327,21 @@ void cwRhiOffscreenRenderer::drainPending(QRhiCommandBuffer* cb, cwRhiItemRender
         return;
     }
 
-    // Drop entries whose read-back has since completed (the lambda freed its own
-    // result), keeping the in-flight list bounded. shutdown() walks whatever remains
-    // to finish stragglers and reclaim their results.
-    m_inflightReadbacks.removeIf(
-        [](const InflightOffscreenReadback& inflight) { return inflight.completed(); });
+    // Drop jobs whose read-back has since completed (the lambda released them), keeping
+    // the in-flight list bounded. shutdown() finishes whatever remains.
+    m_inflightJobs.removeIf(
+        [](const std::weak_ptr<cwOffscreenRenderJob>& job) { return job.expired(); });
 
     // Skip past any leading non-renderable jobs (resolving them) so the batch config below
     // is read from a real render job.
     while (dropLeadingNonRenderable()) { }
     if (m_queue.isEmpty()) {
+        return;
+    }
+
+    // Not ready: leave the job queued and return — hasPendingWork() still holds, so
+    // render() re-arms another frame and the streaming drain runs in it.
+    if (!shouldDispatchLeadingJob(rhi)) {
         return;
     }
 
@@ -543,21 +601,16 @@ void cwRhiOffscreenRenderer::recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTex
                                                   const QList<QRect>& subRects)
 {
     Q_ASSERT(jobs.size() == subRects.size());
-    Q_ASSERT(!jobs.isEmpty()); // InflightOffscreenReadback::completed() relies on this
     QRhi* rhi = cb->rhi();
 
-    // The completion runs on the render thread; it holds every job (shared_ptr) and the
-    // outstanding-count (shared_ptr<int>) so neither a torn-down scene nor a destroyed
-    // caller can dangle. Weak copies are tracked so shutdown() can finish the promises if
-    // the QRhi is destroyed before this fires.
+    // The completion runs on the render thread, possibly after this renderer is gone; it
+    // holds every job (shared_ptr) and the outstanding-count (shared_ptr<int>) rather than
+    // `this`, and owns the read-back result. Weak copies of the jobs let shutdown() finish
+    // their promises if the backend drops the read-back instead of completing it.
     auto* readback = new QRhiReadbackResult;
-    InflightOffscreenReadback inflight;
-    inflight.result = readback;
-    inflight.jobs.reserve(jobs.size());
     for (const auto& job : std::as_const(jobs)) {
-        inflight.jobs.append(job); // weak ref for shutdown(); the lambda holds the strong ref
+        m_inflightJobs.append(job);
     }
-    m_inflightReadbacks.append(inflight);
 
     auto counter = m_outstandingReadbacks;
     ++(*counter);
@@ -570,13 +623,17 @@ void cwRhiOffscreenRenderer::recordReadbackFanout(QRhiCommandBuffer* cb, QRhiTex
         // still finishes (with no result) so no future hangs.
         const QImage image = readbackView(*readback);
         for (int i = 0; i < holders.size(); ++i) {
+            QPromise<QImage>& promise = holders.at(i)->promise;
+            if (promise.future().isFinished()) {
+                continue; // shutdown() resolved it while the read-back was in flight
+            }
             if (!image.isNull()) {
                 const QRect r = rects.at(i);
                 // Null sub-rect = the whole image (single-tile path); else slice the cell.
                 // Either branch deep-copies, since the read-back buffer is transient.
-                holders.at(i)->promise.addResult(r.isNull() ? image.copy() : image.copy(r));
+                promise.addResult(r.isNull() ? image.copy() : image.copy(r));
             }
-            holders.at(i)->promise.finish();
+            promise.finish();
         }
         --(*counter);
         delete readback;

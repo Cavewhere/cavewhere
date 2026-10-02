@@ -36,9 +36,6 @@
 #include "cwSettings.h"
 #include "cwFontSettings.h"
 
-//QuickQanave includes
-#include <QuickQanava>
-
 //std includes
 #include <memory>
 
@@ -151,10 +148,19 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    // Fusion is the only built-in style that supports dark palettes on Windows and Linux.
-    // The native Windows Vista style always ignores the dark palette (Qt 6.5 blog).
-    // macOS native style handles dark mode correctly on its own.
-#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+    // Fusion is the only built-in style that supports dark palettes on Windows and
+    // Linux — the native Windows Vista style always ignores the dark palette (Qt 6.5
+    // blog). macOS handles dark mode natively too, but its style is a native-drawn
+    // one whose controls refuse customization: replacing a part (a GroupBox's label,
+    // say) is unsupported and silently mispositions it, so a control that reads
+    // correctly everywhere else breaks on macOS alone. One style across the desktops
+    // keeps the layout answers the same on each of them, and matches what the QML
+    // tests run.
+    //
+    // The phones keep their platform default. Fusion is drawn on desktop metrics —
+    // touch targets sized for a mouse — and this same main.cpp builds the Android and
+    // iOS targets, where the style module isn't linked in to resolve anyway.
+#if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
     QApplication::setStyle(QStyleFactory::create("Fusion")); // Qt Widgets
     QQuickStyle::setStyle("Fusion");                          // Qt Quick Controls
 #endif
@@ -212,10 +218,6 @@ int main(int argc, char *argv[])
     // Add the macOS Resources directory to the QML import search path
     QString resourcePath = QCoreApplication::applicationDirPath() + "/../Resources/qml";
     applicationEngine->addImportPath(resourcePath);
-    applicationEngine->addImportPath(":/"); //This enable QuickQanava to load in qml correctly
-
-    //Initilize QuickQanava
-    QuickQanava::initialize(applicationEngine);
 
     QQmlContext* context = applicationEngine->rootContext();
 

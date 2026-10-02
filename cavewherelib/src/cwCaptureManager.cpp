@@ -39,6 +39,14 @@
 #include <memory>
 #include <functional>
 
+namespace {
+// Qt's TIFF handler treats any non-zero compression as LZW (zero writes
+// uncompressed strips). Uncompressed page-sized exports are huge — a sparse
+// map is mostly transparent zeros — and classic TIFF (the only flavor Qt
+// writes) caps the file at 4 GB, which an uncompressed whole-cave page blows.
+constexpr int TiffLzwCompression = 1;
+}
+
 cwCaptureManager::cwCaptureManager(QObject *parent) :
     QAbstractListModel(parent),
     Resolution(300.0),
@@ -73,11 +81,6 @@ cwCaptureManager::cwCaptureManager(QObject *parent) :
     borderPen.setWidthF(.05);
     borderPen.setJoinStyle(Qt::MiterJoin);
     BorderRectangle->setPen(borderPen);
-
-    connect(this, &cwCaptureManager::paperSizeChanged,
-            this, &cwCaptureManager::memoryRequiredChanged);
-    connect(this, &cwCaptureManager::resolutionChanged,
-            this, &cwCaptureManager::memoryRequiredChanged);
 }
 
 /**
@@ -233,27 +236,74 @@ void cwCaptureManager::setFileType(FileType fileType) {
 /**
  * @brief cwCaptureManager::capture
  *
- * Executes the screen capture
+ * Executes the screen capture, running each capture viewport in sequence and
+ * saving the result once all have finished.
  *
- * If the screen screen capture is already running, this does nothing
+ * If a capture run is already in flight, this does nothing — starting a
+ * second run would stack duplicate handlers on the same viewport.
  */
 void cwCaptureManager::capture()
 {
+    if(m_capturing) { return; }
+    m_capturing = true;
+
     NumberOfImagesProcessed = 0;
+    m_canceled = false;
 
     //Lamba needs to be a shared pointer because it's recursive
     auto next = std::make_shared<std::function<void ()>>();
 
     //Because capturing in async, we need to call this in steps
     *next = [this, next]() {
+        if(m_canceled) {
+            //Aborted mid-run (see cancel()); stop without saving. The
+            //in-flight viewport has fully stopped (this runs from its final
+            //signal), so a new run may start.
+            m_capturing = false;
+            return;
+        }
+
         if(NumberOfImagesProcessed < Captures.size()) {
             auto capture = Captures.at(NumberOfImagesProcessed);
-            connect(capture, &cwCaptureViewport::finishedCapture, this, [this, next]() {
+
+            //A capture emits exactly one of finishedCapture / captureCanceled
+            //— unless it is deleted mid-run, which emits destroyed instead.
+            //All three are single-shot and clear each other so no stale
+            //handler survives into the next capture() run.
+            connect(capture, &cwCaptureViewport::finishedCapture, this, [this, next, capture]() {
+                disconnect(capture, &cwCaptureViewport::captureCanceled, this, nullptr);
+                disconnect(capture, &QObject::destroyed, this, nullptr);
                 NumberOfImagesProcessed++;
 
                 //Call the next capture, recursive (sorta)
                 (*next)();
             }, Qt::SingleShotConnection);
+            connect(capture, &cwCaptureViewport::captureCanceled, this, [this, capture]() {
+                disconnect(capture, &cwCaptureViewport::finishedCapture, this, nullptr);
+                disconnect(capture, &QObject::destroyed, this, nullptr);
+                //Reached either via cancel() (m_canceled already set) or a
+                //direct future-manager-UI cancel of the placement job. Only
+                //announce the abort once. The viewport has fully stopped, so
+                //a new run may start.
+                m_capturing = false;
+                if(!m_canceled) {
+                    m_canceled = true;
+                    emit canceledCapture();
+                }
+            }, Qt::SingleShotConnection);
+            connect(capture, &QObject::destroyed, this, [this]() {
+                //The in-flight capture was deleted mid-run (e.g. the user
+                //removed the layer while exporting; removeCaptureViewport
+                //doesn't block that). It can never emit a terminal signal now
+                //— unwind the run here or m_capturing would latch true
+                //forever, silently disabling every later capture().
+                m_capturing = false;
+                if(!m_canceled) {
+                    m_canceled = true;
+                    emit canceledCapture();
+                }
+            }, Qt::SingleShotConnection);
+
             capture->setPreviewCapture(false);
             capture->capture();
         } else if(NumberOfImagesProcessed == Captures.size()) {
@@ -269,6 +319,44 @@ void cwCaptureManager::capture()
 
     //Queue the first capture
     (*next)();
+}
+
+void cwCaptureManager::cancel()
+{
+    if(!m_capturing || m_canceled) {
+        //Nothing in flight (or already canceled) — stay silent rather than
+        //announcing a canceled capture that never existed.
+        return;
+    }
+    m_canceled = true;
+
+    //Cancel the in-flight capture's worker-thread placement (if any). Canceling
+    //an idle/finished capture is a no-op, so canceling them all is safe.
+    for(cwCaptureViewport* capture : std::as_const(Captures)) {
+        capture->cancelCapture();
+    }
+
+    emit canceledCapture();
+}
+
+cwFutureManagerToken cwCaptureManager::futureManagerToken() const
+{
+    return m_futureManagerToken;
+}
+
+void cwCaptureManager::setFutureManagerToken(cwFutureManagerToken token)
+{
+    if(m_futureManagerToken == token) {
+        return;
+    }
+    m_futureManagerToken = token;
+
+    //Propagate to every capture so each registers its own placement job.
+    for(cwCaptureViewport* capture : std::as_const(Captures)) {
+        capture->setFutureManagerToken(token);
+    }
+
+    emit futureManagerTokenChanged();
 }
 
 /**
@@ -292,6 +380,7 @@ void cwCaptureManager::addCaptureViewport(cwCaptureViewport *capture)
 
     capture->setName(QString("Capture %1").arg(Captures.size() + 1));
     capture->setParent(this);
+    capture->setFutureManagerToken(m_futureManagerToken);
     QQmlEngine::setObjectOwnership(capture, QQmlEngine::CppOwnership);
 
     beginInsertRows(QModelIndex(), rowCount(), rowCount());
@@ -336,6 +425,11 @@ void cwCaptureManager::removeCaptureViewport(cwCaptureViewport *capture)
 
     groupModel()->removeCapture(capture);
 
+    //Start unwinding any in-flight run now so the viewport's destructor —
+    //which blocks on the placement worker — waits as briefly as possible.
+    //If this was the manager's in-flight capture, its destroyed signal (hooked
+    //single-shot in capture()) unwinds the manager run.
+    capture->cancelCapture();
     capture->deleteLater();
 }
 
@@ -452,7 +546,7 @@ void cwCaptureManager::saveCaptures()
         foreach(cwCaptureViewport* capture, Captures) {
             // Defensive: a capture whose full-resolution render never completed has a
             // null Item. Skipping it yields an incomplete export rather than a crash;
-            // the capture()/finishCapture() coordination should keep this from happening.
+            // the capture-run coordination in cwCaptureViewport should keep this from happening.
             if(capture->fullResolutionItem() == nullptr) {
                 qWarning() << "cwCaptureManager::saveCaptures: capture has no full-resolution item; skipping export layer" << LOCATION;
                 continue;
@@ -486,6 +580,10 @@ void cwCaptureManager::saveCaptures()
  */
 void cwCaptureManager::saveScene()
 {
+    //The capture queue is done; whatever the save outcome (including the
+    //error paths below), the run is over and a new capture() may start.
+    m_capturing = false;
+
     QSizeF imageSize = paperSize() * resolution();
     QRectF imageRect = QRectF(QPointF(), imageSize);
     QRectF sceneRect = QRectF(QPointF(), paperSize()); //Scene->itemsBoundingRect();
@@ -508,10 +606,16 @@ void cwCaptureManager::saveScene()
         QPainter painter(&outputImage);
         Scene->render(&painter, imageRect, sceneRect);
 
-        //This preforms a deep copy in memory!
+        //QImageWriter streams from the mapped image — PNG passes ARGB32 scan
+        //lines straight to libpng, TIFF/JPEG convert in bounded chunks — so
+        //the page is never duplicated in memory (verified against the Qt 6.11
+        //handler sources and measured with a 2 GiB disk-backed image).
         QImageWriter imageWriter;
         imageWriter.setFileName(filename().toLocalFile());
         imageWriter.setFormat(fileTypeToExtention(type).toLocal8Bit());
+        if(type == TIF) {
+            imageWriter.setCompression(TiffLzwCompression);
+        }
         bool success = imageWriter.write(outputImage);
         if(!success) {
             throw std::runtime_error(QString("%1 driver had an issue saving the final image and had the following error:\"%2\"").arg(type).arg(imageWriter.errorString()).toStdString());
@@ -762,13 +866,6 @@ QStringList cwCaptureManager::fileTypes() const {
 }
 
 /**
-* Returns the memory required by the capture manager
-*/
-double cwCaptureManager::memoryRequired() const {
-    return requiredSizeInBytes() / (1024.0 * 1024.0);
-}
-
-/**
  * Returns the require image size in bytes
  */
 qint64 cwCaptureManager::requiredSizeInBytes() const
@@ -814,21 +911,3 @@ QString cwCaptureManager::fileTypeToExtention(cwCaptureManager::FileType type) c
     return QString("");
 }
 
-/**
-* Return the memory limit in MB
-*
-* For 32Bit systems this is 2.0GB
-* For 64bit systems this returns -1, no limit
-*/
-double cwCaptureManager::memoryLimit() const {
-
-    auto isBuild32Bit = []() {
-        static bool b = !QSysInfo::buildCpuArchitecture().contains(QLatin1String("64"));
-        return b;
-    };
-
-    if(isBuild32Bit()) {
-        return 1.0 * 1024.0;
-    }
-    return -1.0;
-}

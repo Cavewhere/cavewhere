@@ -16,6 +16,7 @@
 #include "cwDebug.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwFixStationModel.h"
 #include "cwTrip.h"
 #include "cwExternalCenterline.h"
 #include "cwGlobals.h"
@@ -31,6 +32,17 @@
 #include <QDebug>
 
 namespace {
+
+// A fix may live on any node enclosing the trip, so a trip exported on its own
+// reads the fixes of its whole ancestor chain, nearest node first.
+QList<cwFixStation> enclosingFixStations(const cwTrip* trip)
+{
+    QList<cwFixStation> fixes;
+    for (const cwSurveyNode* node = trip->parentNode(); node != nullptr; node = node->parentNode()) {
+        fixes.append(node->fixStations()->fixStations());
+    }
+    return fixes;
+}
 
 // User-facing reason surfaced via exportDisabledReason and qWarning()ed by the
 // programmatic-caller guard inside each export function. Wording locked by
@@ -72,7 +84,7 @@ void cwSurveyExportManager::exportSurvexRegion(QString filename) {
 
     const cwCavingRegionData regionData = cavingRegion()->data();
     auto future = cwConcurrent::run([regionData, filename]() {
-        return cwSurvexExporterRegion::exportRegion(regionData, filename);
+        return cwSurvexExporterRegion::exportRegion(regionData, filename, {});
     });
 
     AsyncFuture::observe(future).context(this, [filename](Monad::ResultBase result) {
@@ -129,8 +141,9 @@ void cwSurveyExportManager::exportSurvexTrip(QString filename) {
         cwSurvexExporterTripTask* exportTask = new cwSurvexExporterTripTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(trip->data());
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        exportTask->setCaveFixStations(enclosingFixStations(trip));
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }
@@ -153,8 +166,8 @@ void cwSurveyExportManager::exportCaveToCompass(QString filename) {
         cwCompassExportCaveTask* exportTask = new cwCompassExportCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(cave->data());
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }
@@ -177,8 +190,8 @@ void cwSurveyExportManager::exportCaveToChipdata(QString filename) {
         cwChipdataExportCaveTask* exportTask = new cwChipdataExportCaveTask();
         exportTask->setOutputFile(filename);
         exportTask->setData(cave->data());
-        connect(exportTask, SIGNAL(finished()), SLOT(exporterFinished()));
-        connect(exportTask, SIGNAL(stopped()), SLOT(exporterFinished()));
+        connect(exportTask, &cwTask::finished, this, &cwSurveyExportManager::exporterFinished);
+        connect(exportTask, &cwTask::stopped, this, &cwSurveyExportManager::exporterFinished);
         exportTask->start();
     }
 }

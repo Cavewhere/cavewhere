@@ -1,0 +1,8 @@
+; Backsight Only Splays
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0
+E1	E2	5.0	0	0
+; only a backsight was read, and this trip's backsights are uncorrected
+E1	--	3.0	/270	/10
+; turning this one around wraps the azimuth past 360 and leaves the clino at zero
+E1	--	4.0	/180	/0

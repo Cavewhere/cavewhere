@@ -1,7 +1,7 @@
 ---
 title: Export Surveys to Other Programs
-summary: Write a trip, a cave, or the whole region out to Survex, Compass, or Chipdata, and what each format keeps and drops.
-problem: Hand your survey to someone who uses another program, or run it through external tools.
+summary: Write a trip, cave, or region out to Survex, Compass, or Chipdata, and what each format keeps and drops.
+problem: Hand your survey to someone who uses another program.
 keywords: [export, survex, compass, chipdata, svx, dat, station names, uppercase, round-trip]
 related: [import-surveys.md, ../survey-data/calibration.md, export-a-map.md]
 ---
@@ -11,105 +11,103 @@ related: [import-surveys.md, ../survey-data/calibration.md, export-a-map.md]
 ## Why / when you need this
 
 CaveWhere isn't the only program a cave passes through. You might send a survey
-to a collaborator who reduces data in Survex, hand a club its cave back in the
-Compass format its archive uses, or run the raw shots through a tool that reads
-one of these formats. Export writes your survey out so another program can read
-it.
-
-Export is a one-way copy to a file — your project is untouched, and you keep
-working in CaveWhere exactly as before. (To move a *whole project* between
-CaveWhere's own formats, that's [Save As](../projects-and-files/save-a-project.md),
-not export.)
+to a collaborator who reduces data in Survex, or hand a club its cave back in
+Compass format. Export writes a copy out and leaves your project alone. (To
+move a *whole project* between CaveWhere's formats, use
+[Save As](../projects-and-files/save-a-project.md).)
 
 ## Where export lives
 
-Export is on the **Data** page and on each **cave** page, as the **Export**
-button beside Import. Like import, it's **desktop-only** — hidden on mobile
-builds.
+The **Export** button sits on the **Data** page beside **Import**, and on each
+**cave** page beside **Import Survex**. Both are desktop-only, hidden on mobile.
 
-The button opens a menu of formats and scopes:
+![The Export menu open on a cave page, listing Survex, Compass, and Chipdata, each with a submenu arrow.](../images/export-menu.png)
+*The 3 formats, each with a submenu arrow.*
 
-![The Export menu open on a cave page, showing the Survex, Compass, and Chipdata submenus.](../images/export-menu.png)
-*The Export menu. Survex, Compass, and Chipdata each open a submenu of scopes;
-Survex offers trip, cave, and region, the others a single cave.*
-
-| Format | Scopes offered | File |
-|--------|----------------|------|
+| Format | Scopes | File |
+|--------|--------|------|
 | **Survex** | Current trip · Current cave · Region (all caves) | `.svx` |
 | **Compass** | Current cave | `.dat` |
 | **Chipdata** | Current cave | *(you name it)* |
 
-Which scopes are available depends on what's selected: the **Current cave** and
-**Current trip** items grey out when nothing is selected, and **Current trip** is
-offered on the cave page, where a trip row is selected in the trip table.
+**Current cave** and **Current trip** carry the name they would write, as in
+**Current cave - Phake Cave 3000**, and gray out when that name is empty. The
+test reads the *name*, not the selection, so an unnamed cave grays itself out.
+**Current trip** also wants the wide cave-page layout with a trip row selected.
+**Region (all caves)** is a plain item that never grays.
 
-After you pick a scope, a file dialog asks where to save. That's the whole
-interaction — CaveWhere writes the file and there's no confirmation dialog
-afterward; the export is done when the file appears where you saved it.
+A save dialog follows, filtered to `Survex (*.svx)`, `Compass (*.dat)` or
+`Chipdata (*.*)`. Type a name with no suffix and CaveWhere appends `.svx` or
+`.dat`; Chipdata gets neither, so type the whole filename.
 
 ## Survex keeps the most
 
-The Survex exporter is the highest-fidelity of the three, because CaveWhere's own
-survey model maps cleanly onto Survex. It writes:
+A `.svx` carries the shots (front sights, back sights or both, plumbs as
+`UP` / `DOWN`), the [calibration](../survey-data/calibration.md) corrections to
+2 decimals, and the units. It also writes the date, LRUD in a `*data passage`
+block, and `*flags duplicate` around any shot you
+[left out of the length total](../survey-data/enter-survey-data.md).
+Corrections come out negated: Survex signs them the opposite way.
 
-- The shots, with front sights, back sights, or both, and plumbed legs as
-  `UP` / `DOWN`.
-- The **[calibration](../survey-data/calibration.md)** — tape, compass, and clino
-  corrections and the units.
-- The **[declination](../survey-data/declination.md)**, as `*declination auto`
-  when the trip uses automatic declination, or the value when it's manual.
-- The **team**, though only roles Survex recognizes survive; a free-text role
-  CaveWhere allows but Survex doesn't is dropped.
-- LRUD, dates, and a `duplicate` flag on any shot you
-  [excluded from the length total](../survey-data/enter-survey-data.md).
+**Current trip writes an empty file right now.** A refactor dropped the line
+handing trip data to the writer, so the exporter runs on a blank trip: you get a
+`*date` and a `*data normal` line and no shots. Export the cave instead.
 
-One thing to know: only the **Region (all caves)** export writes the output
-coordinate system (`*cs`). A single-cave or single-trip `.svx` carries the
-survey but not the coordinate system it's georeferenced into — export the whole
-region if you need that.
+Team members go out as `*team` lines, but only recognized roles survive: `tape`,
+`notes`, `explorer`, `dog`. CaveWhere's filter holds 35 of the 36 Survex takes,
+so free-text roles and `gps` drop without a word.
+
+[Declination](../survey-data/declination.md) writes as `*declination auto` only
+when the trip runs on automatic declination *and* the cave has a fixed station
+with a coordinate system, since Survex needs a point to run IGRF at. Otherwise
+out goes the *manual* value, and a manual 0.0 writes no line at all.
+
+Only **Region (all caves)** writes `*cs out`, the output coordinate system. A
+single georeferenced cave sends its `*cs` lines out without one, which the
+code's own comment expects cavern to reject. With a station fixed, I recommend
+exporting the region and deleting the extra caves.
 
 ## Compass changes station names
 
-The Compass exporter writes a `.dat` file, and the one behavior to understand
-before you rely on it is that **it uppercases every station name**. A station
-called `a1` in CaveWhere is written as `A1` in the Compass file.
+Compass export uppercases every station name: enter `a1` and the `.dat` says
+`A1`. Compass reads those as 2 stations where CaveWhere reads one, so a
+case-mixed survey would split in two. The price: a round-trip
+won't give your spelling back. Names also get cut to the 12-character Compass
+field, and spaces come out of the survey name.
 
-This is deliberate, and it's about a real difference between the two programs:
-**Compass treats `a1` and `A1` as two different stations; CaveWhere treats them
-as the same one.** To keep CaveWhere's case-insensitive names from silently
-splitting into two stations in Compass, the exporter forces them all to one case.
-
-The consequence to remember is that **a round-trip through Compass doesn't
-preserve the original casing**: export `a1`, and re-importing the Compass file
-gives you back `A1`. The survey is the same; the spelling of the station names
-isn't. Names are also truncated to Compass's 12-character limit, and spaces are
-stripped from the survey name.
-
-The Compass exporter writes the survey data file (`.dat`) only — not a `.mak`
-project file.
+Declination lands in the header as a plain number to 2 decimals. Missing
+readings, LRUD and backsights alike, go out as -999,
+the Compass null. An empty trip gets a placeholder shot from `New1` to `New2`,
+since Compass will not open an empty survey. CaveWhere writes the `.dat` only,
+never a `.mak`.
 
 ## Chipdata is the leanest
 
-Chipdata export writes a cave in the Chipdata format. It's the most limited of
-the three, so reach for it only if that's specifically what you need:
+- Names cut to **5 characters**, and each line prints *to* before *from*.
+- **No declination and no calibration corrections**, only the units and
+  corrected-backsight flags.
+- Chunks that fail validation get skipped without telling you.
 
-- Station names are truncated to **5 characters**.
-- **No declination or calibration values are written** — only the units and the
-  corrected-sight flags. If the receiving program needs the corrections, Chipdata
-  won't carry them.
-- The file dialog doesn't add an extension, so type the full filename you want.
+Reach for Chipdata only when asked.
 
 ## What export doesn't tell you
 
-Export runs in the background and, unlike a Compass *import*, doesn't show a job
-in the sidebar or a progress bar — a survey export is quick, and the file simply
-appears when it's done. There's no completion notice. If you exported and want to
-be sure, open the file: a Survex `.svx` and a Compass `.dat` are both plain text
-you can read.
+Anything at all. Export runs as a background task with no job in the sidebar, no
+progress bar, no completion notice and, worse, no error. A file that will not
+open for writing files `Open file <name>` in an error list nothing reads, then
+deletes itself. A separate guard covers projects holding external centerline
+attachments:
+
+> Cannot export — this project contains external centerline attachments. Use
+> your original .svx / .dat / .mak / .wpj / .srv files (in each cave or trip's
+> external-centerline/ subdir inside the project) to share.
+
+Nothing binds that guard to a menu item, so the items stay live, the dialog
+opens, and the export quietly declines. Open the file afterward: `.svx` and
+`.dat` are plain text, and a stub with no shots means nothing landed.
 
 ## Next steps
 
-- [Import Surveys from Other Programs](import-surveys.md) — the reverse trip, and
-  the note on names that a round-trip doesn't preserve.
-- [Export a Map](export-a-map.md) — export a *picture* of the cave (PNG,
-  PDF, SVG) rather than its survey data.
+- [Import Surveys from Other Programs](import-surveys.md), the reverse trip.
+- [Export a Map](export-a-map.md), which writes a *picture* of the cave as PNG,
+  JPG, TIF, SVG or PDF.

@@ -1,0 +1,33 @@
+; Trimmed copy of a TopoDroid v6.3.20 export (Nimbus cave, 2025.05.05).
+; Splays are written as legs to the anonymous station "-", not with *flags splay.
+; a3 is an orphan here exactly as it is in the full export: the leg that names it
+; lives in the previous survey file, so its splays have nothing to hang on.
+
+*begin
+  *date 2025.04.29
+  *team "Philip Schuchardt, Jordon Trebett, Katie Graham"
+  *units tape meters
+  *units compass degrees
+  *units clino degrees
+  *alias station - ..
+  *flags not splay
+  *data normal from to tape compass clino
+  a3 - 1.14 275.1 83.3
+  a3 - 1.09 289.6 82.4
+  a3 - 1.10 283.1 85.4
+    a0 a4   24.07 95.9 -50.0
+  a4 - 5.88 124.1 4.6
+  a4 - 5.42 118.8 2.9
+  a4 - 8.96 150.9 17.5
+    a4 a5   10.52 52.2 -31.5
+  a5 - 7.56 307.7 18.6
+    a4 a6   7.57 307.5 18.7
+  a5 - 2.51 343.4 16.9
+  *flags not splay
+
+*data passage station left right up down ignoreall
+a4          1.2         .6          .3          .4
+a5          .4          1.2         .5          .1
+a6          -           -           -           -
+
+*end

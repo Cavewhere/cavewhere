@@ -186,7 +186,7 @@ cwStationPositionLookup solveDriver(const QString& driverPath)
     INFO("cavern: " << ran.errorMessage().toStdString());
     REQUIRE_FALSE(ran.hasError());
     cwSurvex3DFileReader reader;
-    return reader.readStationPositions(threeDPath);
+    return reader.readNetworkAndLookup(threeDPath).lookup;
 }
 
 void checkCoincident(const cwStationPositionLookup& lookup, const QString& first, const QString& second)

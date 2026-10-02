@@ -21,7 +21,8 @@ cwTreeImportDataNode::cwTreeImportDataNode(QObject* parent) :
     Type(NoImport),
     Team(new cwTeam(this)),
     Calibration(new cwTripCalibration(this)),
-    IncludeDistance(true)
+    IncludeDistance(true),
+    Splay(false)
 {
 }
 

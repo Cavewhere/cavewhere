@@ -23,14 +23,17 @@ class cwErrorListModel;
 class cwExternalCenterlineManager;
 class cwKeywordItem;
 class cwKeywordItemModel;
+class cwKeywordModel;
 class cwLinePlotTripVisibility;
 
 #include "cwFloatingSurveyModel.h"
+#include "cwKeywordItemRegistry.h"
 #include "cwLinePlotTask.h"
 #include "cwSurveyNetwork.h"
-#include "cwSurveyNetworkArtifact.h"
+#include "cwSurveyNetworkSource.h"
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
+#include "cwUpdatable.h"
 
 //Qt includes
 #include <QHash>
@@ -45,14 +48,13 @@ class cwLinePlotTripVisibility;
 //Std includes
 #include <optional>
 
-class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject, public cwUpdatableBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(LinePlotManager)
 
-    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
     Q_PROPERTY(cwFloatingSurveyModel* floatingSurveyModel READ floatingSurveyModel CONSTANT FINAL)
-    Q_PROPERTY(cwSurveyNetworkArtifact* surveyNetworkArtifact READ surveyNetworkArtifact CONSTANT)
+    Q_PROPERTY(cwSurveyNetworkSource* surveyNetworkSource READ surveyNetworkSource CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
@@ -87,32 +89,30 @@ public:
     // attachment dirs, attached-centerlines model, stale/missing owners).
     // Owned by the manager: its solveNeeded() chains into runSurvex and
     // each solve's buildInput reads its dirs + declination flags.
-    // cwRootData will expose this object directly to QML (commit 9).
+    // cwRootData exposes it to QML as externalCenterlineManager.
     cwExternalCenterlineManager* externalCenterlineManager() const { return m_externalCenterlineManager; }
 
     void setRegion(cwCavingRegion* region);
     Q_INVOKABLE void setRenderLinePlot(cwRenderLinePlot* linePlot);
     void setFutureManagerToken(cwFutureManagerToken token);
 
-    // Registers one keyword item per trip so the centerline participates in
-    // keyword visibility filtering (trip / year / date / cave / caver). Items
+    // Registers keyword items per trip — Type="Line Plot" for the centerline
+    // and Type="Splays" for the splay tail — so both participate in keyword
+    // visibility filtering (type / trip / year / date / cave / caver). Items
     // are (re)created on each solve in updateLinePlot(). Mirrors the scrap and
     // note managers.
     void setKeywordItemModel(cwKeywordItemModel* keywordItemModel);
 
-    bool automaticUpdate() const;
-    void setAutomaticUpdate(bool automaticUpdate);
-
-    // Region-wide survey network artifact, updated whenever the line-plot
+    // Region-wide survey network source, updated whenever the line-plot
     // pipeline completes. Shared across every consumer (sketches today; future
     // 2D views). Always non-null after construction; its future may be
     // unstarted until the first line plot finishes.
-    cwSurveyNetworkArtifact* surveyNetworkArtifact() const { return m_surveyNetworkArtifact; }
+    cwSurveyNetworkSource* surveyNetworkSource() const { return m_surveyNetworkSource; }
 
     // Region-wide qualified survey network ("<caveLabel>.<tripLabel>.<station>"
     // keys) parsed from cavern's .3d output on the most recent solve. Empty
     // until the first solve completes. A plain snapshot accessor with no change
-    // signal of its own: surveyNetworkArtifact() is the channel consumers watch,
+    // signal of its own: surveyNetworkSource() is the channel consumers watch,
     // and a trip's solved stations are pulsed by cwTrip::solvedStationsChanged.
     cwSurveyNetwork regionNetwork() const { return m_lastPublishedNetwork; }
 
@@ -134,14 +134,20 @@ signals:
     void stationPositionInCavesChanged(QList<cwSurveyNode*>);
     void stationPositionInTripsChanged(QList<cwTrip*>);
     void stationPositionInScrapsChanged(QList<cwScrap*>);
-    void automaticUpdateChanged();
+    void updateStateChanged();
     void cavernOutputChanged();
     void floatingSurveysChanged();
 
 public slots:
-    void rerunSurvex();
+    //Marks the line plot dirty without running anything. Public so a "Solve"
+    //button can pair it with cwUpdateCoordinator::updateNow(this), where the
+    //mark-then-drive split is explained.
+    void markNeedsUpdate();
 
 private:
+    cwUpdatable::State doUpdateState() const override;
+    QFuture<void> doRun() override;
+
     QPointer<cwCavingRegion> Region; //The main
     QList<QPointer<cwErrorListModel>> UnconnectedChunks; //Current unconnected chunks
 
@@ -151,7 +157,7 @@ private:
 
     cwSurveyChunkSignaler* SurveySignaler;
 
-    cwSurveyNetworkArtifact* m_surveyNetworkArtifact;
+    cwSurveyNetworkSource* m_surveyNetworkSource;
     cwSurveyNetwork m_lastPublishedNetwork;
 
     QList<cwFindFloatingSurveys::Result> m_floatingSurveys;
@@ -167,14 +173,28 @@ private:
 
     cwExternalCenterlineManager* m_externalCenterlineManager = nullptr;
 
-    // Per-trip centerline keyword visibility. One keyword item per trip, keyed
-    // by the live cwTrip*. The visibility proxy (reachable via item->object())
-    // owns the running id and pushes toggles straight to the render object, so
-    // the manager keeps no flag array or running-id map of its own.
-    QPointer<cwKeywordItemModel> m_keywordItemModel;
-    QHash<cwTrip*, QPointer<cwKeywordItem>> m_tripKeywordEntries;
+    // Per-trip line-plot keyword visibility, keyed by the live cwTrip* plus
+    // the kind. Each trip carries a centerline item (Type="Line Plot") and,
+    // when the trip has splay geometry, a splays item (Type="Splays"); the two
+    // visibility proxies (reachable via item->object()) address disjoint
+    // vertex ranges and push keyword toggles straight to the render object, so
+    // the manager keeps no flag array or running-id map of its own. The
+    // registry owns the add/remove/delete mechanics.
+    enum class TripKeywordKind : quint8 { Centerline, Splays };
+    cwKeywordItemRegistry<QPair<cwTrip*, TripKeywordKind>> m_keywordRegistry;
 
-    bool AutomaticUpdate = true;
+    // Trips with registered items, so a trip that is destroyed or leaves the
+    // solved geometry releases its items and destroyed() connection exactly
+    // once.
+    QSet<cwTrip*> m_trackedTrips;
+
+    bool m_needsUpdate = false;
+
+    // Ends the run (Working -> Clean, or -> Dirty if re-edited mid-solve) and
+    // emits updateStateChanged so the coordinator re-evaluates its staleness
+    // aggregate. Finishing the run's future is what releases anyone waiting on
+    // the solve, so every completion path has to reach here.
+    void finishSolving();
 
     void rerunIfAnyNodeIsStale(cwCavingRegion* region);
     void connectFixStations(cwSurveyNode* node);
@@ -202,15 +222,17 @@ private:
     // items to match, re-binds each trip's visibility proxy to its new vertex
     // span, and re-seeds the render object's hidden trips. Identity (UUID)
     // keyed, so it is immune to list-order drift; trips deleted mid-solve simply
-    // fail to resolve and are skipped. tripVertexRanges is parallel to
-    // tripUuids (both running-id indexed).
+    // fail to resolve and are skipped. tripVertexRanges and
+    // tripSplayVertexRanges are parallel to tripUuids (all running-id indexed).
     void reconcileTripKeywordItems(const QVector<QUuid>& tripUuids,
-                                   const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges);
-    void removeTripKeywordEntry(cwTrip* trip);
+                                   const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges,
+                                   const QVector<cwLinePlotGeometry::VertexRange>& tripSplayVertexRanges);
+    void removeTripKeywordItems(cwTrip* trip);
 
-    // Tears down every keyword entry synchronously (for manager destruction /
-    // model swap); removeTripKeywordEntry drops a single entry via deleteLater.
-    void clearTripKeywordEntries();
+    // Registry factory: builds one keyword item whose keywords extend
+    // `keywordModel` (a trip-owned identity model) and whose object is a fresh
+    // visibility proxy for `trip`. The registry adds it to the model.
+    cwKeywordItem* makeTripKeywordItem(cwTrip* trip, cwKeywordModel* keywordModel);
 
     void publishResults(const cwLinePlotTask::LinePlotResultData& results);
     void publishCavernOutput(QString cavernLog,
@@ -231,8 +253,13 @@ private slots:
 //This needs to be here for moc to generate correctly and we can forward declare cwRenderLinePlot
 #include "cwRenderLinePlot.h"
 
-inline bool cwLinePlotManager::automaticUpdate() const {
-    return AutomaticUpdate;
+inline cwUpdatable::State cwLinePlotManager::doUpdateState() const {
+    // Dirty takes priority over Working: a survey edit that arrives mid-solve
+    // isn't covered by the solve in flight, so it reports Dirty and the driver
+    // runs it again. See cwUpdatable::State.
+    if(m_needsUpdate) { return cwUpdatable::State::Dirty; }
+    if(isRunning())   { return cwUpdatable::State::Working; }
+    return cwUpdatable::State::Clean;
 }
 
 #endif // CWLINEPLOTMANAGER_H

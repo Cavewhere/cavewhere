@@ -37,7 +37,7 @@ list of buttons teaches nothing about *when* or *why* to use them.
   does mechanically.
 
 Where the app's own help text explains only *how*, add the *why*. See
-[why-cavewhere.md](concepts/why-cavewhere.md) for the product-level version of
+[why-cavewhere.md](getting-started/why-cavewhere.md) for the product-level version of
 this, and the release notes (`release_notes/2026.4.md`) for harvestable
 rationale on the headline features.
 

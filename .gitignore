@@ -49,5 +49,9 @@ clone-test/
 # Generated manual HTML view (source of truth is the .md files)
 docs/manual/_site/
 
+# Python bytecode from the scripts/ helpers and their tests
+__pycache__/
+*.pyc
+
 # Claude Code
 .claude/settings.local.json

@@ -31,10 +31,7 @@ ColumnLayout {
             objectName: "addLayerButton"
             text: " Add Layer"
             icon.source: "qrc:/twbs-icons/icons/layers.svg"
-            onClicked: {
-                selectionTool.activate()
-                RootData.pageSelectionModel.gotoPageByName(null, "View");
-            }
+            onClicked: ViewTools.arm(ViewTools.selectExportArea)
         }
 
         HelpQuoteBox {
@@ -279,12 +276,6 @@ ColumnLayout {
                 }
             }
 
-            QC.CheckBox {
-                id: scaleBarCheckBoxId
-                text: "Scale Bar"
-                checked: true
-            }
-
             RowLayout {
                 enabled: scaleBarCheckBoxId.checked
 
@@ -302,10 +293,45 @@ ColumnLayout {
             }
 
             QC.CheckBox {
+                id: scaleBarCheckBoxId
+                text: "Scale Bar"
+                checked: true
+            }
+
+            QC.CheckBox {
                 id: leadsCheckBoxId
                 objectName: "leadsCheckBox"
                 text: "Leads"
                 checked: false
+            }
+
+            QC.GroupBox {
+                id: centerlineGroupBoxId
+                objectName: "centerlineGroupBox"
+                title: "Survey"
+
+                ColumnLayout {
+                    QC.CheckBox {
+                        id: centerlineDotsCheckBoxId
+                        objectName: "centerlineDotsCheckBox"
+                        text: "Stations"
+                        checked: true
+                    }
+
+                    QC.CheckBox {
+                        id: centerlineLabelsCheckBoxId
+                        objectName: "centerlineLabelsCheckBox"
+                        text: "Station Labels"
+                        checked: true
+                    }
+
+                    QC.CheckBox {
+                        id: centerlineLegsCheckBoxId
+                        objectName: "centerlineLegsCheckBox"
+                        text: "Legs"
+                        checked: true
+                    }
+                }
             }
         }
 
@@ -379,6 +405,27 @@ ColumnLayout {
                         checked: layerProperties.layerObject.leadsVisible
                         onCheckedChanged: {
                             layerProperties.layerObject.leadsVisible = leadsCheckBoxId.checked
+                        }
+                    }
+
+                    centerlineDotsCheckBoxId {
+                        checked: layerProperties.layerObject.centerlineDotsVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.centerlineDotsVisible = centerlineDotsCheckBoxId.checked
+                        }
+                    }
+
+                    centerlineLegsCheckBoxId {
+                        checked: layerProperties.layerObject.centerlineLegsVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.centerlineLegsVisible = centerlineLegsCheckBoxId.checked
+                        }
+                    }
+
+                    centerlineLabelsCheckBoxId {
+                        checked: layerProperties.layerObject.centerlineLabelsVisible
+                        onCheckedChanged: {
+                            layerProperties.layerObject.centerlineLabelsVisible = centerlineLabelsCheckBoxId.checked
                         }
                     }
                 }

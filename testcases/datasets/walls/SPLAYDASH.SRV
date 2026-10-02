@@ -1,0 +1,5 @@
+; Dashed Station Names
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0
+B-1	B-2	5.0	0	0
+B-2	B-3	4.0	90	0

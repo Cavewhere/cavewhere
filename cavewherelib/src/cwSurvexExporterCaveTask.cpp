@@ -8,7 +8,9 @@
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterTripTask.h"
+#include "cwSurvexExporter.h"
 #include "cwSurvexExporterUtils.h"
+#include "cwSurvexCS.h"
 #include "cwTrip.h"
 
 //Qt includes
@@ -36,6 +38,23 @@ bool chunksHoldStations(const cwTripData& trip)
 {
     return std::any_of(trip.chunks.cbegin(), trip.chunks.cend(),
                        [](const cwSurveyChunkData& chunk) { return !chunk.stations.isEmpty(); });
+}
+
+// True when a native trip written inside \a node's block uses auto
+// declination. A sourced node's trips are windows on its *include, never
+// written, so the walk stops there.
+bool subtreeUsesAutoDeclination(const cwCaveData& node)
+{
+    if (!node.externalCenterline.isEmpty()) {
+        return false;
+    }
+    const bool ownTripUsesAuto = std::any_of(node.trips.cbegin(), node.trips.cend(),
+                                             [](const cwTripData& trip) {
+                                                 return trip.externalCenterline.isEmpty()
+                                                        && trip.calibrations.autoDeclination();
+                                             });
+    return ownTripUsesAuto
+           || std::any_of(node.nodes.cbegin(), node.nodes.cend(), subtreeUsesAutoDeclination);
 }
 
 } // namespace
@@ -176,14 +195,18 @@ bool cwSurvexExporterCaveTask::writeNode(QTextStream& stream,
                                          const QString& globalCS)
 {
     TotalProgress = 0;
-    return writeNodeBlock(stream, node, tree, globalCS, Inherited());
+    // Each top-level block starts with no input *cs in scope: the region
+    // block above names only *cs out.
+    const cwSurvexExporterUtils::CsScope csScope(sidecars());
+    return writeNodeBlock(stream, node, tree, globalCS, Inherited(), csScope);
 }
 
 bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                                               const cwCaveData& node,
                                               const DriverTree& tree,
                                               const QString& globalCS,
-                                              const Inherited& inherited)
+                                              const Inherited& inherited,
+                                              const cwSurvexExporterUtils::CsScope& enclosingScope)
 {
     // An empty block is worse than none: cavern fatals with "No survey data"
     // on a driver that declares only empty scopes, so a project whose one
@@ -206,6 +229,9 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     // them (cavern error). Per master plan §6, native + external are not
     // mixed inside the same node body.
     if (!node.externalCenterline.isEmpty()) {
+        if (inherited.autoDeclinationInScope) {
+            cwSurvexExporterUtils::writeDeclinationReset(stream);
+        }
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
@@ -216,12 +242,29 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         return true;
     }
 
-    Inherited here;
-    here.anchored = writeFixStations(stream, node, globalCS, inherited.anchored)
-                    || inherited.anchored;
-    here.declination = cwSurvexExporterUtils::makeDeclinationContext(node.fixStations, globalCS);
-    if (!here.declination.has_value()) {
-        here.declination = inherited.declination;
+    // Cavern scopes *cs to its *begin block and copies the enclosing one in,
+    // so this block starts with whatever system its parent left in force.
+    cwSurvexExporterUtils::CsScope csScope(enclosingScope);
+
+    Inherited here = inherited;
+    const WrittenFixes written = writeFixStations(stream, node, globalCS, inherited.anchored, csScope);
+    here.anchored = written.anchored || inherited.anchored;
+
+    // A node with a location of its own declares `*declination auto` for its
+    // whole subtree and sets the grid convergence below it. A node without one
+    // inherits both from the nearest located ancestor. The location comes from
+    // the fixes just written: a dropped fix's *cs would land after the fallback
+    // *fix, which cavern rejects ("fixed before CS command first used").
+    const auto ownLocation = cwSurvexExporterUtils::makeDeclinationContext(written.kept);
+    if (ownLocation.has_value()) {
+        if (cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, written.kept,
+                                                             subtreeUsesAutoDeclination(node),
+                                                             csScope)) {
+            here.autoDeclinationInScope = true;
+        }
+        // One convergence for the whole block: it is a property of the grid at
+        // the node's location, and every trip inside is solved on the same grid.
+        here.gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(ownLocation, globalCS);
     }
 
     const QHash<QUuid, QString>& tripLabels = labels.tripLabels(node.id);
@@ -249,9 +292,13 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
             const auto declinationIt =
                 ExportOptions.tripInjectedDeclinations.constFind(tripData.id);
             if (declinationIt != ExportOptions.tripInjectedDeclinations.constEnd()) {
-                cwSurvexExporterUtils::writeCalibration(stream,
-                                                        QStringLiteral("DECLINATION"),
-                                                        declinationIt.value());
+                cwSurvexExporterUtils::writeDeclinationCalibration(stream,
+                                                                   /*autoDeclination*/ false,
+                                                                   declinationIt.value(),
+                                                                   here.autoDeclinationInScope,
+                                                                   here.gridConvergence);
+            } else if (here.autoDeclinationInScope) {
+                cwSurvexExporterUtils::writeDeclinationReset(stream);
             }
             if (!writeExternalInclude(stream, tripData.id,
                                       ExportOptions.tripAttachmentDirs,
@@ -263,15 +310,13 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
             continue;
         }
 
-        auto trip = std::make_unique<cwTrip>();
-        trip->setData(tripData);
-        TripExporter->writeTrip(stream, trip.get(), here.declination);
-        TotalProgress += trip->numberOfStations();
+        TripExporter->writeTrip(stream, tripData, here.autoDeclinationInScope, here.gridConvergence);
+        TotalProgress += cwSurvexExporter::stationCount(tripData);
         stream << Qt::endl;
     }
 
     for (const cwCaveData& child : node.nodes) {
-        if (!writeNodeBlock(stream, child, tree, globalCS, here)) {
+        if (!writeNodeBlock(stream, child, tree, globalCS, here, csScope)) {
             return false;
         }
     }
@@ -342,14 +387,15 @@ void cwSurvexExporterCaveTask::writeEquateLine(QTextStream& stream, const QStrin
 /**
  * Emit the *cs / *fix block for the node. Validates the snapshot's
  * fixStations against the node's own station names; rejected fixes are
- * dropped silently here (the user-facing exporter — cwSurvexExporterRule —
- * runs the same validation at snapshot time and surfaces errors on the cave).
+ * dropped from the output and their reasons appended to Errors.
  * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists and no
  * enclosing block is anchored, so each un-fixed top-level survey still
  * resolves in cavern.
  */
-bool cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &node,
-                                                const QString& globalCS, bool anchoredAbove)
+cwSurvexExporterCaveTask::WrittenFixes
+cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &node,
+                                           const QString& globalCS, bool anchoredAbove,
+                                           cwSurvexExporterUtils::CsScope& scope)
 {
     QSet<QString> stationNamesLower;
     QString firstValidStation;
@@ -374,8 +420,25 @@ bool cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCav
     }
 
     const QString fallbackStation = anchoredAbove ? QString() : firstValidStation;
-    cwSurvexExporterUtils::writeFixStations(stream, validFixes, fallbackStation, globalCS);
-    return !validFixes.isEmpty() || !fallbackStation.isEmpty();
+    cwSurvexExporterUtils::writeFixStations(stream, validFixes, fallbackStation, globalCS, scope);
+    return { validFixes, !validFixes.isEmpty() || !fallbackStation.isEmpty() };
+}
+
+QString cwSurvexExporterCaveTask::writeStandaloneHeader(QTextStream& stream)
+{
+    // Survex requires *cs out whenever any *cs appears, and the cave block is
+    // about to emit one for its fixes. Exported from the region this comes from
+    // the region writer; exported on its own, the cave has to name it itself or
+    // cavern rejects the *fix outright. Any node in the cave's subtree can carry
+    // that fix.
+    const QString outputCS = cwSurvexExporterUtils::shareableCSForNodes(QList<cwCaveData>{Cave});
+    if (outputCS.isEmpty()) {
+        return QString();
+    }
+
+    cwSurvexCS::writeCsLine(stream, sidecars(), outputCS, true);
+    stream << Qt::endl;
+    return outputCS;
 }
 
 bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,

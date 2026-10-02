@@ -116,16 +116,6 @@ function(cavewhere_setup_apple_bundle target)
             COMMENT "Copying qmldir and cavewherelib.qmltypes to Resources/qml."
         )
 
-        # Copy the QuickQanava qml plugin
-        set(QuickQanavaPluginDir ${CMAKE_BINARY_DIR}/QuickQanava/src/QuickQanava)
-        set(QuickQanava_BUNDLE $<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/Resources/qml/QuickQanava)
-
-        add_custom_command(TARGET CaveWhere POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy ${QuickQanavaPluginDir}/qmldir ${QuickQanava_BUNDLE}/qmldir
-            COMMAND ${CMAKE_COMMAND} -E copy ${QuickQanavaPluginDir}/QuickQanava.qmltypes ${QuickQanava_BUNDLE}/QuickQanava.qmltypes
-            COMMENT "Copying qmldir and QuickQanava.qmltypes to Resources/qml."
-        )
-
         # Create a symbolic link in Resources/qml pointing to the dylib in Plugins/quick
         add_custom_command(TARGET CaveWhere POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E create_symlink ../../../Plugins/quick/$<TARGET_FILE_NAME:cavewherelibplugin> ${BUNDLE_QML_DIR}/$<TARGET_FILE_NAME:cavewherelibplugin>

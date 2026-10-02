@@ -5,7 +5,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-QQ.Item {
+PositionItem {
     id: pointId
     objectName: "leadPoint" + scrapId + "_" + pointIndex
 
@@ -13,7 +13,6 @@ QQ.Item {
     property int pointIndex; //The index in the item list
     property int scrapId; //enable the testcase to work correctly
     property bool selected: false
-    property QQ.vector3d position3D;
     required property SelectionManager selectionManager; //Injected by cwLeadView
     required property LeadView leadView; //Injected by cwLeadView
 

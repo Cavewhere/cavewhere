@@ -80,12 +80,25 @@ public:
     static QString unitName(cwUnits::LengthUnit unit);
     static cwUnits::LengthUnit toLengthUnit(QString unitString);
 
-    //! A length in \a meters, converted to \a unit and rendered at \a decimals
-    //! places with the unit suffix (e.g. "196.85 ft"). With \a signedValue a
-    //! positive value gets an explicit '+'; a value that rounds to zero carries
-    //! no sign (a rounded -0 renders a clean "0.00 <unit>").
+    //! The decimals a measured length is shown at in \a unit — enough to read to
+    //! about a millimeter, whichever unit it is shown in. Drives the measurement
+    //! readout, its clipboard copy, and the coordinate picker's elevation; the
+    //! cave-length stats round to their own coarser precision.
+    Q_INVOKABLE static constexpr int lengthDecimals(cwUnits::LengthUnit unit);
+
+    //! A length in \a meters, converted to \a unit and rendered at that unit's
+    //! lengthDecimals() with the unit suffix (e.g. "196.85 ft"). With
+    //! \a signedValue a positive value gets an explicit '+'; a value that rounds
+    //! to zero carries no sign (a rounded -0 renders a clean "0.000 m").
     static QString formatLength(double meters, cwUnits::LengthUnit unit,
-                                bool signedValue = false, int decimals = 2);
+                                bool signedValue = false);
+
+    //! An angle in \a degrees rendered at \a decimals places with the degree
+    //! sign (e.g. "0.4°"). A value that rounds to zero carries no sign: a
+    //! reading a hair below its reference direction renders "0.0°" rather than
+    //! "-0.0°", where the minus is noise the digits can't back up. Shared by
+    //! every angle readout so they agree on that.
+    Q_INVOKABLE static QString formatAngle(double degrees, int decimals = 1);
 
     //! The unit new survey shots default to for \a system (metres / feet).
     static constexpr cwUnits::LengthUnit surveyUnit(cwUnits::UnitSystem system);
@@ -101,6 +114,12 @@ public:
     //! (m / ft) below one large unit, the large unit (km / mi) at or above it.
     //! Drives the cave-length stat and both scale bars.
     static constexpr cwUnits::LengthUnit magnitudeUnit(double meters, cwUnits::UnitSystem system);
+    //! The unit a length measured on paper is shown in for \a system
+    //! (centimeters / inches) — the on-paper half of a paper scale, whose
+    //! in-cave half is whatever unit the survey was recorded in.
+    static constexpr cwUnits::LengthUnit paperUnit(cwUnits::UnitSystem system);
+    //! The system \a unit belongs to. Unitless has no system and reads Metric.
+    static constexpr cwUnits::UnitSystem unitSystem(cwUnits::LengthUnit unit);
     //! The display name of a unit system ("Metric" / "Imperial").
     static QString unitName(cwUnits::UnitSystem system);
     //! The unit-system names in enum order — a combobox model.
@@ -190,6 +209,26 @@ inline constexpr double cwUnits::convert(double value,
     return convert(value, LengthUnitsToMeters[from], LengthUnitsToMeters[to]);
 }
 
+inline constexpr int cwUnits::lengthDecimals(cwUnits::LengthUnit unit)
+{
+    switch(unit) {
+    case Millimeters:
+        return 0;
+    case Centimeters:
+        return 1;
+    case Inches:
+    case Feet:
+    case Yards:
+    case LengthUnitless:
+        return 2;
+    case Meters:
+    case Kilometers:
+    case Miles:
+        return 3;
+    }
+    return 2;
+}
+
 inline constexpr cwUnits::LengthUnit cwUnits::smallLengthUnit(cwUnits::UnitSystem system)
 {
     return system == Imperial ? Feet : Meters;
@@ -216,6 +255,29 @@ inline constexpr cwUnits::LengthUnit cwUnits::magnitudeUnit(double meters, cwUni
     // 1.0 of the large unit (e.g. 999 m stays "999 m", 1000 m becomes "1 km").
     const cwUnits::LengthUnit large = largeLengthUnit(system);
     return qAbs(meters) >= LengthUnitsToMeters[large] ? large : smallLengthUnit(system);
+}
+
+inline constexpr cwUnits::LengthUnit cwUnits::paperUnit(cwUnits::UnitSystem system)
+{
+    return system == Imperial ? Inches : Centimeters;
+}
+
+inline constexpr cwUnits::UnitSystem cwUnits::unitSystem(cwUnits::LengthUnit unit)
+{
+    switch(unit) {
+    case Inches:
+    case Feet:
+    case Yards:
+    case Miles:
+        return Imperial;
+    case Meters:
+    case Millimeters:
+    case Centimeters:
+    case Kilometers:
+    case LengthUnitless:
+        return Metric;
+    }
+    return Metric;
 }
 
 inline constexpr double cwUnits::convert(double value,

@@ -27,8 +27,9 @@
  * holds no value: it is just the chosen unit plus the conversion and naming a
  * view needs. It offers a curated subset of cwUnits::LengthUnit (metres,
  * kilometres, feet, miles) so a UnitCombo can bind `names` as its model and
- * drive the choice by `index`. When `settingsKey` is set, the choice is loaded
- * from and saved to that QSettings key, so it persists across sessions.
+ * drive the choice by `index`. The choice is in-memory only — the owner drives
+ * it from the project's unit system, and a view may override it for the session
+ * without anything being persisted.
  *
  * This is the single source of truth for the curated length-unit set that
  * feeds an index-based selector's model via unitNames().
@@ -47,8 +48,6 @@ class CAVEWHERE_LIB_EXPORT cwLengthUnitSelection : public QObject
     Q_PROPERTY(QStringList names READ names CONSTANT)
     // The suffix of the currently selected unit (e.g. "m", "ft").
     Q_PROPERTY(QString name READ name NOTIFY unitChanged)
-    // When non-empty, the selection is loaded from and saved to this QSettings key.
-    Q_PROPERTY(QString settingsKey READ settingsKey WRITE setSettingsKey NOTIFY settingsKeyChanged)
 
 public:
     explicit cwLengthUnitSelection(QObject* parent = nullptr);
@@ -67,14 +66,6 @@ public:
     QStringList names() const { return unitNames(); }
     QString name() const;
 
-    QString settingsKey() const { return m_settingsKey; }
-    void setSettingsKey(const QString& key);
-
-    //! The unit used when nothing is persisted yet — the owner sets it from the
-    //! project's unit system so a fresh selection follows Metric/Imperial. A
-    //! persisted choice always wins, so this never overrides the user.
-    void setDefaultUnit(cwUnits::LengthUnit unit);
-
     //! The magnitude converted from canonical metres into the selected unit.
     Q_INVOKABLE double fromMeters(double meters) const;
     //! The inverse: a magnitude in the selected unit back to canonical metres.
@@ -90,21 +81,14 @@ public:
 
 signals:
     void unitChanged();
-    void settingsKeyChanged();
 
 private:
-    //! Clamp a unit to the curated set, falling back to Meters — so a future or
-    //! corrupt settings value can't wedge the selection on an unlisted unit.
+    //! Clamp a unit to the curated set, falling back to Meters — so an out-of-set
+    //! value (e.g. from the writable `unit` property) can't wedge the selection
+    //! on an unlisted unit.
     static cwUnits::LengthUnit coerceToSet(cwUnits::LengthUnit unit);
-    //! Set the unit without persisting — the path for seeds (setDefaultUnit) and
-    //! loads. Only setUnit() writes the settings key, so a stored value always
-    //! marks a deliberate user choice.
-    void applyUnit(cwUnits::LengthUnit unit);
-    void loadFromSettings();
 
     cwUnits::LengthUnit m_unit = cwUnits::Meters;
-    cwUnits::LengthUnit m_defaultUnit = cwUnits::Meters;
-    QString m_settingsKey;
 };
 
 #endif // CWLENGTHUNITSELECTION_H

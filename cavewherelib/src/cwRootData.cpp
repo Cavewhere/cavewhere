@@ -27,7 +27,6 @@
 #include "cwLazLayersSceneNode.h"
 #include "cwScene.h"
 #include "cwGeometryItersecter.h"
-#include "cwTaskManagerModel.h"
 #include "cwPageSelectionModel.h"
 #include "cwSettings.h"
 #include "cwRemoteServices.h"
@@ -57,9 +56,6 @@
 #include "GitRepository.h"
 #include "LfsBatchClient.h"
 
-//QuickQanave includes
-#include <QuickQanava>
-
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     m_account(new QQuickGit::Account(this)),
@@ -70,8 +66,7 @@ cwRootData::cwRootData(QObject *parent) :
 {
     cwSettings::initialize(); //Init's a singleton
 
-    //Task Manager, allows the users to see running tasks
-    TaskManagerModel = new cwTaskManagerModel(this);
+    //Tracks running jobs, allows the users to see them
     FutureManagerModel = new cwFutureManagerModel(this);
     m_keywordItemModel = new cwKeywordItemModel(this);
     m_keywordFilterPipelineModel = new cwKeywordFilterPipelineModel(this);
@@ -80,7 +75,6 @@ cwRootData::cwRootData(QObject *parent) :
     //Create the project, this saves and load data
     Project = new cwProject(this);
     Project->setGitAccount(m_account);
-    // Project->setTaskManager(TaskManagerModel);
     Project->setFutureManagerToken(FutureManagerModel);
     m_recentProjectModel->setProject(Project);
     // Auto-add to recent list on save (covers save-as path changes).
@@ -213,17 +207,16 @@ cwRootData::cwRootData(QObject *parent) :
     // imageUpdater->setFutureToken(FutureManagerModel->token());
     // imageUpdater->setRegionTreeModel(RegionTreeModel);
 
-    auto updateAutomaticUpdate = [this]()
-    {
-        bool autoUpdate = cwJobSettings::instance()->automaticUpdate();
-        LinePlotManager->setAutomaticUpdate(autoUpdate);
-        ScrapManager->setAutomaticUpdate(autoUpdate);
-    };
-
-    updateAutomaticUpdate();
-
-    connect(cwJobSettings::instance(), &cwJobSettings::automaticUpdateChanged,
-            this, updateAutomaticUpdate);
+    // The coordinator owns the auto-update policy and the staleness aggregate;
+    // the managers are pure cwUpdatable mechanism. add() flushes each manager if
+    // it is already dirty (e.g. the line plot marked by setRegion above) and
+    // automatic update is on.
+    UpdateCoordinator = new cwUpdateCoordinator(this);
+    //Scraps and LiDAR notes both consume the line plot's station positions, so a
+    //solve dirties them and they must run after it.
+    UpdateCoordinator->add(LinePlotManager);
+    UpdateCoordinator->add(ScrapManager, {LinePlotManager});
+    UpdateCoordinator->add(NoteLiDARManager, {LinePlotManager});
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.
@@ -519,18 +512,19 @@ void cwRootData::shutdown()
     }
     m_shuttingDown = true;
 
+    //The user-facing exit path, and the earlier of the two: this drains tasks and
+    //futures asynchronously behind the shutdown screen, so stop the coordinator
+    //before that rather than in shutdownBlocking(), which only runs later from
+    //~cwRootData. See cwUpdateCoordinator::beginShutdown().
+    updateCoordinator()->beginShutdown();
+
     auto checkComplete = [this]() {
-        if (!m_shutdownCompleted
-            && taskManagerModel()->isIdle()
-            && futureManagerModel()->isEmpty())
-        {
+        if (!m_shutdownCompleted && futureManagerModel()->isEmpty()) {
             m_shutdownCompleted = true;
             emit shutdownComplete();
         }
     };
 
-    connect(taskManagerModel(), &cwTaskManagerModel::becameIdle,
-            this, checkComplete);
     connect(futureManagerModel(), &cwFutureManagerModel::allFinished,
             this, checkComplete);
 
@@ -539,7 +533,11 @@ void cwRootData::shutdown()
 
 void cwRootData::shutdownBlocking()
 {
-    taskManagerModel()->waitForTasks();
+    //Idempotent, and shutdown() has normally armed it already; this covers a
+    //cwRootData destroyed without a graceful exit. Either way it has to precede
+    //the two waits below, each of which pumps the event loop.
+    updateCoordinator()->beginShutdown();
+
     futureManagerModel()->waitForFinished();
     project()->waitSaveToFinish();
 }
@@ -549,11 +547,17 @@ void cwRootData::initCavewherelib()
 {
     QQuickGit::GitRepository::initGitEngine();
 
+    // On Android these live in the Qt resource bundle and have to be on disk
+    // before survexPath() and projDataPath() can find them.
+    cwGlobals::extractBundledRuntimeData();
+
     // Set SURVEXLIB so cavern_run() can find message files (en.msg).
     // This must be set before any cavern_run() call.
+    bool survexLibFound = false;
     for (const QDir& dir : cwGlobals::survexPath()) {
         if (QFileInfo(dir.filePath("en.msg")).exists()) {
             qputenv("SURVEXLIB", dir.absolutePath().toUtf8());
+            survexLibFound = true;
             break;
         }
     }
@@ -564,6 +568,12 @@ void cwRootData::initCavewherelib()
     // do not — so we resolve the bundled location explicitly and apply it
     // to every PJ_CONTEXT cwCoordinateTransform creates.
     cwCoordinateTransform::setProjSearchPaths(cwGlobals::projDataPath());
+
+    //A missing en.msg makes cavern's first run in the process fail outright
+    if (!survexLibFound) {
+        qWarning() << "Can't find survex's en.msg, the first line plot solve will fail. App dir:"
+                   << QCoreApplication::applicationDirPath();
+    }
 }
 
 cwRemoteServices* cwRootData::remote() const

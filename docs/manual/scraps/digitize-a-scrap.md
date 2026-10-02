@@ -1,8 +1,8 @@
 ---
 title: Digitize a Scrap
-summary: Enter Carpet mode, trace a passage outline on a note, place the survey stations inside it, and mark leads.
+summary: Trace a passage outline on a note in Carpet mode, place its stations, and mark leads.
 problem: Turn a scanned passage sketch into a scrap CaveWhere can morph onto the 3D survey.
-keywords: [scrap, carpet mode, outline, trace, digitize, station, note, sketch, lead, leads, go, unexplored passage]
+keywords: [scrap, carpet mode, outline, trace, digitize, station, note, lead, unexplored passage]
 related: [carpeting.md, scrap-types.md, ../leads/track-and-export-leads.md, ../concepts/glossary.md]
 ---
 
@@ -10,119 +10,135 @@ related: [carpeting.md, scrap-types.md, ../leads/track-and-export-leads.md, ../c
 
 ## Why / when you need this
 
-Before CaveWhere can drape a sketch over the 3D survey, it needs two things from
-you: the **shape** of the passage (an outline traced on the note) and a few
-**anchor points** (the survey stations that appear in that drawing). Tracing the
-outline defines what gets morphed; placing the stations tells CaveWhere where the
-drawing attaches to the real, measured cave. A scrap without stations has nothing
-to morph onto, so both steps matter.
-
-You do this once per piece of passage. A single note is usually broken into
-several scraps — see [Troubleshoot the carpet](troubleshoot-carpeting.md) for
-why splitting a drawing into smaller scraps often gives a cleaner result.
+[Carpeting](../concepts/glossary.md#carpeting) a sketch onto the 3D survey takes
+2 things: the **shape** of the passage, traced as an outline on the note, and the
+**survey stations** drawn inside it.
+CaveWhere carpets a scrap once it holds 1 of each. A note usually breaks into
+several scraps, and [Troubleshoot the Carpet](troubleshoot-carpeting.md) explains
+why the smaller pieces morph cleaner.
 
 ## Enter Carpet mode
 
-Open the [trip](../concepts/glossary.md#trip) whose notes you want to draw on,
-then click **Carpet** (the pencil icon) in the note's toolbar. The note switches
-into the scrap-editing tools: **Back**, **Select**, and an **Add** group with
-**Scrap**, **Station**, and **Lead**.
+Open the [trip](../concepts/glossary.md#trip) whose notes you want to draw on and
+click **Carpet**, the pencil icon shown below, second of 3 after Rotate.
 
-![The trip's page: the Carpet button (a pencil icon), highlighted, in the note toolbar above the scanned survey notebook.](../images/scraps-enter-carpet.png)
-*On a trip's page, click **Carpet** (the pencil icon, highlighted at the top of
-the note) to enter Carpet mode. The note then swaps its toolbar for the
-scrap-editing tools.*
+![The Carpet button, a pencil icon, highlighted in the note toolbar.](../images/scraps-enter-carpet.png)
+*The toolbar swaps for **Select** and an **Add** group of **Scrap**, **Station**
+and **Lead**; on a [LiDAR note](../notes/lidar-notes.md) Scrap and Lead never
+appear.*
+
+Carpet mode belongs to the note: click a different note, or navigate away, and
+CaveWhere drops back to the plain toolbar.
+
+**Esc doesn't leave the Scrap, Station or Lead tool.** It backs out of the north,
+scale and resolution tools, but not these 3. Click **Select** to disarm.
 
 ## Trace the outline
 
-Click **Scrap** in the Add group, then trace the passage: **click a point at a
-time around the passage edge**. CaveWhere's own prompt says it plainly — *"Trace
-a cave section by clicking points around it."* Keep clicking around the outline;
-when you come back near the first point, CaveWhere snaps to it so you can close
-the loop. A closed outline is what gets gridded and morphed.
+Click **Scrap**, then click around the passage edge. The prompt reads
+*Trace a cave section by **clicking** points around it.* Points land on
+**mouse-down**, not release, so you can't nudge one before letting go.
 
-![The carpet toolbar on the trip page: Back, Select, and an Add group with the Scrap button highlighted, above a note whose passages are already outlined.](../images/scraps-trace-outline.png)
-*In Carpet mode, click **Scrap** (highlighted) in the **Add** group to start a new
-outline, then click your way around the passage.*
+![The carpet toolbar with Scrap highlighted, above a note already outlined in blue.](../images/scraps-trace-outline.png)
+*Only the selected scrap draws its points, and none is selected here.*
 
-- To **remove a point**, select it and press **Delete**.
-- To **start another scrap** on the same note, click **Scrap** again and trace a
-  new outline. Break the drawing wherever the passage changes character (a plan
-  floor vs. a profile of a pit) — each piece can then carry its own
-  [scrap type](scrap-types.md).
+### Snapping inserts, it doesn't append
 
-Trace the actual passage walls, not the whole page. Everything inside the outline
-is textured onto the carpet, so a tight outline keeps stray marks and adjacent
-passages out of the morph.
+Come within **7.5 pixels** of an outline edge, in the note image's own pixels,
+and a dot appears. Click while it shows and the point drops **into that edge**,
+between its 2 ends, not onto the tail of the outline. That refines a coarse
+stretch; it also means a stray click near your line lands mid-outline.
 
-![A cave note in Carpet mode: a scrap outline traced over the passage sketch, with draggable outline points and numbered survey-station markers.](../images/scraps-digitize.png)
-*A finished scrap in Carpet mode. The outline follows the passage walls; the small
-points are its draggable vertices. (The numbered markers are survey stations —
-placed next.)*
+### Close the loop
+
+Click your first point and CaveWhere repeats it at the end. Closing needs
+**3 points**; with fewer the click does nothing and nothing says why. After a
+close, the next click that misses the line starts a **new scrap**. The morph
+doesn't care; the triangulator joins last point to first either way.
+
+### Fix and remove points
+
+Drag a point to move it; **Delete** or **Backspace** removes it.
+
+**Remove the last point and the scrap goes with it**, stations, leads and all.
+Nothing undoes that: no Edit menu and no Ctrl+Z reaches CaveWhere's undo stack,
+which never covered scraps. On a `.cwproj` project,
+[Restore to here](../collaboration/review-history.md#restore-back-to-an-earlier-version)
+reaches past the deletion; a bundled `.cw` has no such fallback.
+
+Trace the walls, not the page: everything inside gets textured onto the carpet.
+A new scrap is a **Plan** with **Auto Calculate** on, unless the last one you
+drew in the trip had it off; then it inherits that scrap's scale and orientation.
+
+![A cave note in Carpet mode: a yellow scrap with green points and station markers a9 to A14, a blue scrap above it, and blue question-mark leads.](../images/scraps-digitize.png)
+*The selected scrap fills yellow at 15% behind a 2 px outline; every other fills
+blue at 10% and hides its points.*
 
 ## Place the stations
 
-Click **Station** in the Add group, then **click on the note where each survey
-station sits in the drawing** — CaveWhere prompts *"Click to add new station."*
-Type the station's name (the same name it has in the survey data) so CaveWhere
-can match the drawn point to its measured 3D position.
+**Station** comes next. Armed, every click drops a station where you say a
+surveyed one sits; the prompt reads *Click to add new station*.
 
-![The carpet toolbar on the trip page with the Station button highlighted, above the scanned survey notebook.](../images/scraps-place-stations.png)
-*Click **Station** (highlighted) in the **Add** group, then click each station's
-spot on the drawing and name it.*
+**CaveWhere guesses the name.** It takes whichever neighbor of the selected
+station lands nearest your click, so working in survey order gets most names
+free. Read the label anyway; a station between 2 shots can come out wrong.
+The first station on a scrap arrives named `Station Name`, editor open.
 
-Stations are the control points of the morph: each one pins a spot on the flat
-drawing to a known 3D location, and the warp bends the scrap so the drawn
-stations land on the real ones. That is why **a station has to sit inside a
-scrap** — CaveWhere warns *"Stations must be placed inside a scrap"* if you drop
-one outside the outline, because a control point with no surrounding mesh to bend
-has nothing to act on.
+Matching runs across the **whole cave**, not just the trip, and ignores case: the
+`a9` shown above carpets fine against a survey table reading `A9`.
 
-A few practical notes:
+A name that matches nothing is **dropped without a word**. The cue is indirect:
+select the station, and a name the cave knows draws leader lines to its
+neighbors; one it doesn't draws none. A typo landing on a real station elsewhere
+drags the carpet across the cave;
+[Troubleshoot the Carpet](troubleshoot-carpeting.md) covers finding it.
 
-- **How many you need depends on the [scrap type](scrap-types.md).** A **plan** or
-  **projected profile** scrap needs only **one** station. A **running profile**
-  needs **at least two**, because it warps each point between the two stations it
-  falls between — with only one there's nothing to warp between.
-- **A single station means setting the scale and rotation yourself.** One station
-  fixes *where* the scrap sits, but **Auto Calculate** derives the scale and
-  direction *from* the stations, so it needs two or more. A one-station scrap works
-  fine — just turn Auto Calculate off and enter the scale and the north/up
-  direction by hand (see
-  [North or up](scrap-types.md#north-or-up-orient-the-drawing)).
-- **Name stations exactly** as they appear in the survey. CaveWhere matches by
-  name across the *whole* cave, so a typo or a name that belongs to a different
-  passage will drag the carpet toward the wrong place — a common cause of
-  distortion covered in [Troubleshoot the carpet](troubleshoot-carpeting.md).
+Drop a station outside every outline and a red box reads **"Stations must be
+placed inside a scrap"** for 4 s.
+
+### How many stations you need
+
+- **Auto Calculate needs 2, with a shot between them.** It averages the shots
+  among your drawn stations for the scale and the north or up direction. A pair
+  counts only if the network lists each as the other's neighbor.
+- **With nothing to average, the scale collapses** to a 0 denominator, and
+  Scrap Info warns that a scale of 1:1 or smaller is bad. The first station on a
+  fresh scrap triggers this, overwriting the seeded 1 cm = 2.5 m metric or
+  1 in = 20 ft imperial.
+
+**I recommend 2 connected stations on every scrap you can**, even where the
+drawing really shows one: it saves typing the scale and the orientation in by
+hand. Where one station is all there is, a cross-section most often, uncheck
+**Auto Calculate** and set both yourself. [Carpeting](carpeting.md) is right that
+a hand-set value is usually more accurate. See
+[North or up](scrap-types.md#north-or-up-orient-the-drawing).
 
 ## Mark leads
 
-While you're carpeting, record the passages you *didn't* survey. A
-[lead](../concepts/glossary.md#lead) is a "go" — an unexplored continuation —
-noted on the drawing so a future trip knows where there's more cave.
+Record the passage you did not survey. A [lead](../concepts/glossary.md#lead) is
+a "go", an unexplored continuation marked so a future trip knows where more cave
+waits. **Lead** works like Station: arm it, click where the passage carries on.
 
-Click **Lead** in the Add group, then click the spot on the note where the passage
-carries on. As with stations, **a lead has to sit inside a scrap**; trace the
-outline first, or CaveWhere tells you *"Create a scrap first, then add stations or
-leads."*
+![The carpet toolbar with the Lead button highlighted.](../images/scraps-add-lead.png)
+*Leads carry a question mark wherever they turn up: the button, the note, the
+3D view.*
 
-![The carpet toolbar on the trip page with the Lead button highlighted, above the scanned survey notebook.](../images/scraps-add-lead.png)
-*Click **Lead** (highlighted) in the **Add** group, then click where the passage
-continues.*
+Leads live inside scraps too; missing the outline earns the same 4 s warning. On
+a note holding no scrap at all, a callout points at **Scrap** instead, reading
+**"Create a scrap first, then add stations or leads"**.
 
-Give the lead a **description** and, where you can, a **size** estimate. Because a
-lead is anchored inside a scrap, it is morphed onto the survey along with the
-carpet — so leads appear in the [3D view](../view-3d/the-3d-view.md) as
-question-mark markers sitting where the passage actually is, not on a flat page.
+Selecting a lead opens **Lead Info**: a **Completed** checkbox, a **Size** of
+width, height and unit, and a **Description**. An omitted dimension stores as -1,
+shown `?` here and `-1` on the Leads page.
 
-Each cave then collects its leads on its **Leads** page, where you can rank them
-by size or by distance from a station you pick, jump to any one in the 3D view,
-mark the ones you've pushed as done, and export the list to CSV for the next
-trip — see [Track and Export Leads](../leads/track-and-export-leads.md).
+A lead rides the morph onto the survey with the carpet, turning up in the
+[3D view](../view-3d/the-3d-view.md) as a question mark where the passage really
+is. Each cave collects its leads on a **Leads** page: see
+[Track and Export Leads](../leads/track-and-export-leads.md).
 
 ## Where to go next
 
-- **[Choose the scrap type](scrap-types.md)** — plan, running profile, or
-  projected profile — so CaveWhere projects the drawing correctly.
-- If the carpet comes out distorted, see
-  [Troubleshoot the carpet](troubleshoot-carpeting.md).
+- **[Choose the scrap type](scrap-types.md)**: every scrap starts as a plan, and
+  a profile left that way warps.
+- [Troubleshoot the Carpet](troubleshoot-carpeting.md) when it comes out
+  distorted.

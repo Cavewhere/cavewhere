@@ -31,8 +31,12 @@ public:
         return m_value.toDouble(ok);
     }
     void fromDouble(double value) {
+        //Negating a reading that sits at zero produces a negative zero, which
+        //QString::number spells "-0". Flatten it so a level shot reads "0".
+        const double withoutNegativeZero = value == 0.0 ? 0.0 : value;
+
         //Be very careful changing this, with will cause many conversion issue if precision is too low.
-        setValue(QString::number(value, 'g', 6));
+        setValue(QString::number(withoutNegativeZero, 'g', 6));
     }
 
     bool operator==(const cwReading& other) const {

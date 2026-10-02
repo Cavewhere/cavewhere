@@ -14,6 +14,8 @@ import QtQml
 import QtQuick as QQ
 import QtQuick.Layouts
 import QtQuick.Controls as QC
+import "Utils.js" as Utils
+
 StandardPage {
     id: pageId
 
@@ -119,28 +121,27 @@ StandardPage {
         }
     }
 
-    // Units and the coordinate system are project-wide choices a user rarely
-    // changes but can wreck a project by flipping. They show read-only until
-    // the user clicks Edit, which is the extra click the design asks for.
+    // The unit system is a project-wide choice a user rarely changes but can
+    // wreck a project by flipping. It shows read-only until the user clicks
+    // Edit, which is the extra click the design asks for.
     QQ.Rectangle {
         id: regionInfoBox
         objectName: "regionInfoBox"
+
+        property bool editMode: settingsEditButton.editMode
+
+        // 6 decimals of a degree is ~0.1 m, far finer than an origin that only
+        // has to say which valley the project sits in. The picker reads to 8
+        // because it reports a point the user placed; this reports a projection
+        // parameter.
+        readonly property int originPrecision: 6
+
         Layout.fillWidth: true
         implicitHeight: infoColumnId.implicitHeight + Theme.statsPadding * 2
         color: Theme.borderSubtle
 
-        property bool editMode: settingsEditButton.editMode
-
-        readonly property string coordinateSystemText: {
-            const value = RootData.region.geoReference.globalCoordinateSystem
-            if (value === "") {
-                return qsTr("Local")
-            }
-            if (CoordinateSystem.modeFor(value) === CoordinateSystem.Custom) {
-                const name = CoordinateSystem.nameFor(value)
-                return name.length > 0 ? value + " — " + name : value
-            }
-            return value
+        function formatOrigin(latitude, longitude) {
+            return Utils.formatLatLon(latitude, longitude, regionInfoBox.originPrecision)
         }
 
         ColumnLayout {
@@ -151,96 +152,273 @@ StandardPage {
             anchors.margins: Theme.statsPadding
             spacing: Theme.tightSpacing
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.flowSpacing
+            QC.Label {
+                text: qsTr("Project")
+                font.bold: true
+            }
 
-                QC.Label {
-                    text: qsTr("Project")
-                    font.bold: true
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: Theme.tightSpacing
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.delegatePadding
+
+                    LabelWithHelp {
+                        objectName: "gisSourcesLabel"
+                        text: qsTr("GIS Sources:")
+                        helpArea: gisSourcesHelpArea
+                    }
+
+                    LinkText {
+                        objectName: "geospatialLayersLink"
+                        text: RootData.region.lazLayers.count
+                        onClicked: {
+                            RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                                       "Geospatial Layers");
+                        }
+                    }
+
+                    QQ.Item { Layout.fillWidth: true }
                 }
 
-                QQ.Item { Layout.fillWidth: true }
-
-                EditToggleButton {
-                    id: settingsEditButton
-                    objectName: "regionSettingsEditButton"
+                HelpArea {
+                    id: gisSourcesHelpArea
+                    objectName: "gisSourcesHelp"
+                    Layout.fillWidth: true
+                    text: "<p>A <b>GIS source</b> is a georeferenced file CaveWhere can draw " +
+                          "with your survey. Currently, only LiDAR point clouds are " +
+                          "supported, <b>.laz</b> or <b>.las</b>.</p>" +
+                          "<p>Click the number to add or remove files.</p>"
                 }
             }
 
-            RowLayout {
+            // Everything the project's coordinates are expressed in, read as one
+            // group: the units they are shown in, where the frame sits, what it
+            // is centered on, and what it is measured against. Units is the only
+            // one of them you pick. The projection rows are read-only on
+            // purpose: CaveWhere derives its own projection from the first thing
+            // you georeference and inherits that input's datum, so there is
+            // nothing there to choose — a datum chosen by hand could only
+            // disagree with the data it describes.
+            //
+            // Edit rides the group's title line because Units is the only thing
+            // in the box it unlocks.
+            QC.GroupBox {
+                id: coordinateSystemGroup
+                objectName: "coordinateSystemGroup"
+
                 Layout.fillWidth: true
-                spacing: Theme.delegatePadding
+                Layout.topMargin: Theme.flowSpacing
 
-                QC.Label {
-                    text: qsTr("Units:")
-                }
+                // A custom label replaces the one the style positions and
+                // measures, so it has to do both jobs itself. It sits at the
+                // frame's left padding to line up with the rows, and it declares
+                // an implicit size: the style reserves the title's room only when
+                // the label reports an implicit width, and reserves the height it
+                // reports — a label that stays implicitly empty gets no room and
+                // prints over the first row.
+                label: QQ.Item {
+                    x: coordinateSystemGroup.leftPadding
+                    width: coordinateSystemGroup.availableWidth
+                    implicitWidth: coordinateSystemTitle.implicitWidth
+                                   + Theme.flowSpacing
+                                   + settingsEditButton.implicitWidth
+                    implicitHeight: Math.max(coordinateSystemTitle.implicitHeight,
+                                             settingsEditButton.implicitHeight)
 
-                QC.Label {
-                    objectName: "unitSystemValue"
-                    visible: !regionInfoBox.editMode
-                    text: Units.unitSystemName(RootData.region.unitSystem)
-                }
+                    QC.Label {
+                        id: coordinateSystemTitle
+                        objectName: "coordinateSystemTitle"
 
-                UnitSystemComboBox {
-                    objectName: "unitSystemComboBox"
-                    visible: regionInfoBox.editMode
-                    // The project-wide unit system (region-level). Seeds new trips
-                    // and drives every displayed length; existing trips keep their
-                    // entry units. Metric = index 0, Imperial = index 1.
-                    currentIndex: RootData.region.unitSystem
-                    onActivated: RootData.region.unitSystem = currentIndex
-                }
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
 
-                QQ.Item { Layout.fillWidth: true }
-            }
+                        text: qsTr("Coordinate System")
+                        font.bold: true
+                    }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.delegatePadding
+                    EditToggleButton {
+                        id: settingsEditButton
+                        objectName: "regionSettingsEditButton"
 
-                QC.Label {
-                    text: qsTr("Coordinate system:")
-                }
-
-                QC.Label {
-                    objectName: "coordinateSystemValue"
-                    visible: !regionInfoBox.editMode
-                    Layout.fillWidth: true
-                    elide: QQ.Text.ElideRight
-                    text: regionInfoBox.coordinateSystemText
-                }
-
-                CSComboBox {
-                    objectName: "globalCoordinateSystemComboBox"
-                    visible: regionInfoBox.editMode
-                    Layout.fillWidth: true
-                    value: RootData.region.geoReference.globalCoordinateSystem
-                    allowGeographic: false
-                    onCommitted: (newCS) => {
-                        RootData.region.geoReference.globalCoordinateSystem = newCS
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
                     }
                 }
-            }
 
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: Theme.delegatePadding
+                // The column tracks the frame's inside edges, so the rows below
+                // have a width to fill and a long value has somewhere to wrap
+                // instead of running past the frame.
+                ColumnLayout {
+                    id: coordinateSystemColumn
 
-                QC.Label {
-                    text: qsTr("Layers:")
-                }
+                    anchors.left: parent.left
+                    anchors.right: parent.right
 
-                LinkText {
-                    objectName: "geospatialLayersLink"
-                    text: RootData.region.lazLayers.count
-                    onClicked: {
-                        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                                   "Geospatial Layers");
+                    // A value that wraps onto a second line needs more air
+                    // between rows than within one, so each row still reads as
+                    // one fact.
+                    spacing: Theme.flowSpacing
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.delegatePadding
+
+                        QC.Label {
+                            text: qsTr("Units:")
+                        }
+
+                        QC.Label {
+                            objectName: "unitSystemValue"
+                            visible: !regionInfoBox.editMode
+                            text: Units.unitSystemName(RootData.region.unitSystem)
+                        }
+
+                        UnitSystemComboBox {
+                            objectName: "unitSystemComboBox"
+                            visible: regionInfoBox.editMode
+                            // The project-wide unit system (region-level). Seeds new trips
+                            // and drives every displayed length; existing trips keep their
+                            // entry units. Metric = index 0, Imperial = index 1.
+                            currentIndex: RootData.region.unitSystem
+                            onActivated: RootData.region.unitSystem = currentIndex
+                        }
+
+                        QQ.Item { Layout.fillWidth: true }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.delegatePadding
+
+                        LabelWithHelp {
+                            objectName: "projectionLabel"
+                            text: qsTr("Location:")
+                            helpArea: projectionHelpArea
+                        }
+
+                        QC.Label {
+                            objectName: "projectionOriginValue"
+                            // The coordinate takes the whole rest of the row and
+                            // wraps inside it. Sharing the row with the Recenter…
+                            // button squeezed the label narrower than the
+                            // coordinate needs in the 200 px info column, and the
+                            // text spilled out from under the button.
+                            Layout.fillWidth: true
+                            wrapMode: QQ.Text.Wrap
+                            text: RootData.region.geoReference.hasOrigin
+                                  ? regionInfoBox.formatOrigin(RootData.region.geoReference.originLatitude,
+                                                               RootData.region.geoReference.originLongitude)
+                                  : qsTr("Not georeferenced")
+                        }
+                    }
+
+                    // The button gets a row of its own, so the coordinate keeps
+                    // the frame's full width to itself. Recentering
+                    // re-derives a frame that already exists, so it has nothing
+                    // to offer a project nothing has placed yet.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.delegatePadding
+                        visible: regionInfoBox.editMode
+                                 && RootData.region.geoReference.hasCoordinateSystem
+
+                        QC.Button {
+                            objectName: "recenterButton"
+                            text: qsTr("Recenter…")
+                            onClicked: projectionCenterDialogId.open()
+                        }
+
+                        QQ.Item { Layout.fillWidth: true }
+                    }
+
+                    // Only an Anchored frame has an input answerable for where it
+                    // sits. A frozen frame is centered on the middle of the data
+                    // and has no one station to name, so the row stands down.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.delegatePadding
+                        visible: RootData.region.geoReference.state === GeoReference.Anchored
+                                 && RootData.region.localProjection.anchorDescription !== ""
+
+                        QC.Label {
+                            text: qsTr("Centered on:")
+                        }
+
+                        QC.Label {
+                            objectName: "projectionAnchorValue"
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Math.ceil(implicitWidth)
+                            // Wrap, not WordWrap: a station name is one token
+                            // with nowhere to break, and WordWrap paints it
+                            // past the frame instead of folding it.
+                            wrapMode: QQ.Text.Wrap
+                            text: RootData.region.localProjection.anchorDescription
+                        }
+
+                        QQ.Item { Layout.fillWidth: true }
+                    }
+
+                    // Once there is a frame, the row stays put and says what it
+                    // knows — a row that vanished would leave the reader guessing
+                    // whether the project has no datum or the app forgot to show
+                    // it.
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.delegatePadding
+                        visible: RootData.region.geoReference.hasCoordinateSystem
+
+                        QC.Label {
+                            text: qsTr("Datum:")
+                        }
+
+                        QC.Label {
+                            id: datumValueId
+                            objectName: "projectionDatumValue"
+
+                            readonly property bool unnamed: RootData.region.geoReference.datumName === ""
+
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: Math.ceil(implicitWidth)
+                            wrapMode: QQ.Text.Wrap
+
+                            text: datumValueId.unnamed
+                                  ? qsTr("Unknown")
+                                  : RootData.region.geoReference.datumName
+                            color: datumValueId.unnamed ? Theme.textSubtle : Theme.text
+                            font.italic: datumValueId.unnamed
+                        }
+
+                        QQ.Item { Layout.fillWidth: true }
+                    }
+
+                    HelpArea {
+                        id: projectionHelpArea
+                        objectName: "projectionHelp"
+                        Layout.fillWidth: true
+                        text: "<p>CaveWhere builds its own map projection for each project — a " +
+                              "<i>low-distortion projection</i> centered on the first thing you " +
+                              "georeference, whether that is a fix station or a GIS source. " +
+                              "<b>Location</b> is where that center landed, and <b>Centered on</b> " +
+                              "names the fix station or GIS source it landed on.</p>" +
+                              "<p>Click <b>Edit</b> and then <b>Recenter…</b> to move that center " +
+                              "onto a fix station of your choosing, or onto the middle of your " +
+                              "data. True north lines up best near the center, so the station in " +
+                              "the middle of the part of the cave you care about is a good one to " +
+                              "pick. The datum still comes from your data either way.</p>" +
+                              "<p>The <b>datum</b> is the model of the Earth's shape your " +
+                              "coordinates are measured against, and it comes from that same " +
+                              "first input — it is shown here rather than chosen, because every " +
+                              "coordinate you enter already says which datum it is on. Plain " +
+                              "GPS coordinates are the exception: those say only \"WGS84\", " +
+                              "which drifts about 2 cm a year against the continent under you, " +
+                              "so CaveWhere uses the national datum for where your cave is " +
+                              "instead — <b>NAD83 (National Spatial Reference System 2011)</b> " +
+                              "in the US.</p>"
                     }
                 }
-
-                QQ.Item { Layout.fillWidth: true }
             }
         }
     }
@@ -328,15 +506,6 @@ StandardPage {
         id: regionContextMenuComponent
         QC.Menu {
             QC.MenuItem {
-                objectName: "recenterWorldOriginAction"
-                text: qsTr("Recenter world origin")
-                enabled: RootData.region.geoReference.hasCoordinateSystem
-                onTriggered: RootData.region.recomputeWorldOrigin()
-            }
-
-            QC.MenuSeparator {}
-
-            QC.MenuItem {
                 objectName: "cavernOutputMenuItem"
                 text: RootData.linePlotManager.hasSolveError
                       ? qsTr("Cavern Output (solve error)")
@@ -366,10 +535,12 @@ StandardPage {
         RowLayout {
             spacing: Theme.columnGap
 
+            // Asked for at its widest: the tree beside it reports a wide
+            // implicit width of its own, and left to share the row by
+            // implicit widths it would squeeze this column down to the title.
             ColumnLayout {
-                Layout.maximumWidth: regionInfoBox.editMode
-                                     ? Theme.infoColumnEditMaxWidth
-                                     : Theme.infoColumnMaxWidth
+                Layout.preferredWidth: Theme.infoColumnMaxWidth
+                Layout.maximumWidth: Theme.infoColumnMaxWidth
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.sectionSpacing
 
@@ -409,6 +580,10 @@ StandardPage {
             LayoutItemProxy { target: actionBar }
             LayoutItemProxy { target: caveTreeId }
         }
+    }
+
+    ProjectionCenterDialog {
+        id: projectionCenterDialogId
     }
 
     //The tree's rows are what this prompt asks about, and the tree knows how a

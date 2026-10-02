@@ -14,6 +14,7 @@
 
 // Our includes
 #include "cwGeometry.h"
+#include "cwProgressNode.h"
 #include "CaveWhereLibExport.h"
 
 // tinygltf (forward declare to avoid heavy includes in headers)
@@ -38,8 +39,13 @@ struct AttributeView {
     bool normalized = false;
 };
 
+/**
+ * A texture as the glTF stored it: the PNG or JPEG bytes, undecoded. width and
+ * height come from the encoded header, so the dimensions are known without
+ * touching a pixel, and toImage() decodes on demand and keeps nothing.
+ */
 struct TextureCPU {
-    QByteArray pixels; // RGBA8
+    QByteArray encodedPixels; // PNG/JPEG bytes, exactly as the glTF holds them
     int width = 0;
     int height = 0;
     bool isSRGB = false;
@@ -73,11 +79,20 @@ struct LoadOptions {
     QVector<cwGeometry::AttributeDesc> requestedLayout;
 };
 
+// Returns a null QImage for materials without a baseColor texture.
+CAVEWHERE_LIB_EXPORT QImage baseColorImage(const SceneCPU& scene, const MaterialCPU& material);
+
 class CAVEWHERE_LIB_EXPORT Loader
 {
 public:
     static SceneCPU loadGltf(const QString& filePath);
-    static SceneCPU loadGltf(const QString& filePath, const LoadOptions& options);
+
+    //`parent` is the progress node the load hangs its own steps off. A null
+    //scope leaves the load untracked, which is how every caller outside a
+    //tracked run reads a .glb.
+    static SceneCPU loadGltf(const QString& filePath,
+                             const LoadOptions& options,
+                             const cwProgressScope& parent = {});
 
 private:
     // No instances

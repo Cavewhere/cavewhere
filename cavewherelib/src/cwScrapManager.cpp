@@ -7,9 +7,11 @@
 
 //Our includes
 #include "cwScrapManager.h"
+#include "cwProgressNode.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
 #include "cwScrap.h"
@@ -20,8 +22,8 @@
 #include "cwImageResolution.h"
 #include "cwImageProvider.h"
 #include "cwDiskCacher.h"
+#include "cwStreamedTexture.h"
 #include "cwLinePlotManager.h"
-#include "cwTaskManagerModel.h"
 #include "cwRegionTreeModel.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordItem.h"
@@ -63,7 +65,17 @@ namespace {
 // namespace within cwDiskCacher; identical rasters collide harmlessly.
 inline const QString kSketchTextureCacheKeyPrefix =
     QStringLiteral("sketch-texture");
+
+//What the task list calls a scrap run
+inline const QString kScrapJobName = QStringLiteral("Updating Scraps");
+
 } // namespace
+
+// A dirty scrap is only worth (re)triangulating once it is out of editing and
+// still attached to a cave. Shared by updateState() and the run path.
+bool cwScrapManager::DirtyScrap::isRunnable() const {
+    return scrap != nullptr && !scrap->editing() && !cave.isNull();
+}
 
 cwScrapManager::cwScrapManager(QObject *parent) :
     QObject(parent),
@@ -71,15 +83,14 @@ cwScrapManager::cwScrapManager(QObject *parent) :
     Project(nullptr),
     TriangulateRestarter(this),
     m_renderScraps(nullptr),
-    AutomaticUpdate(true),
     m_warpingSettings(new cwTriangulateWarping(this))
 {
-    TriangulateRestarter.onFutureChanged([this](){
-        FutureManagerToken.addJob({TriangulateRestarter.future(), "Updating Scaps"});
-    });
-
+    //Warping changes mark every scrap dirty; the auto-update policy (via
+    //cwUpdateCoordinator) decides whether to run. Uncoordinated managers
+    //recompute eagerly.
     auto notifyWarpingChanged = [this]() {
-        updateAllScraps();
+        markAllScrapsDirty();
+        runIfStandalone();
     };
 
     connect(m_warpingSettings, &cwTriangulateWarping::gridResolutionMetersChanged,
@@ -102,8 +113,22 @@ cwScrapManager::cwScrapManager(QObject *parent) :
 
 cwScrapManager::~cwScrapManager()
 {
+    //See cwUpdatable::beginTeardown().
+    beginTeardown();
+
+    //Cancel without waiting: each scrap is triangulated from a
+    //cwTriangulateInData value copy (image, outline, stations, view matrix), so
+    //a worker that outlives this manager touches nothing that died with it. The
+    //result continuation is bound with context(this) and is dropped here. This
+    //line finishes the outer future; the cancel the worker itself sees comes
+    //from ~Restarter, which cancels the inner future synchronously as
+    //TriangulateRestarter is destroyed.
     TriangulateRestarter.future().cancel();
-    waitForFinish();
+
+    //The row would otherwise outlive the run that feeds it
+    if(m_progressRoot) {
+        m_progressRoot->cancel();
+    }
 }
 
 /**
@@ -150,7 +175,8 @@ void cwScrapManager::setProject(cwProject *project) {
 
             if (auto* cave = qobject_cast<cwCave*>(object)) {
                 QList<cwScrap*> scraps;
-                for (cwTrip* trip : cave->trips()) {
+                const QList<cwTrip*> trips = cave->allTrips();
+                for (cwTrip* trip : trips) {
                     if (trip == nullptr) {
                         continue;
                     }
@@ -302,13 +328,22 @@ void cwScrapManager::setKeywordItemModel(cwKeywordItemModel *keywordItemModel)
     }
 }
 
-/**
-  This function is for testing
+void cwScrapManager::markScrapDirty(cwScrap* scrap)
+{
+    connect(scrap, &cwScrap::destroyed,
+            this, &cwScrapManager::scrapDeleted,
+            Qt::UniqueConnection);
 
-  This will gather all the scraps from all the caves, and trips, and notes and regenerate
-  all there geometry
+    //Overwrites any earlier entry, so a re-mark refreshes the cached cave.
+    DirtyScraps.insert(scrap, DirtyScrap{scrap, scrap->parentCave()});
+}
+
+/**
+  Marks every scrap in the region dirty, without running. Callers that honour
+  the auto-update policy (e.g. a warping-settings change) route through the
+  cwUpdateCoordinator, which drives run() when appropriate.
   */
-void cwScrapManager::updateAllScraps() {
+void cwScrapManager::markAllScrapsDirty() {
     if(!RegionModel) {
         return;
     }
@@ -320,12 +355,31 @@ void cwScrapManager::updateAllScraps() {
         for(cwNote* note : notes) {
             const QList<cwScrap*> scraps = note->scraps();
             for(cwScrap* scrap : scraps) {
-                DirtyScraps.insert(scrap);
+                markScrapDirty(scrap);
             }
         }
     }
 
-    updateScrapGeometryHelper(cw::toList(DirtyScraps));
+    m_workPending = true;
+    emit updateStateChanged();
+}
+
+cwUpdatable::State cwScrapManager::doUpdateState() const {
+    // Dirty takes priority over Working: a scrap (re)dirtied but not yet handed
+    // to a task (m_workPending) reports Dirty even while an earlier task runs, so
+    // whoever is driving runs the pipeline again once that task is over. Once
+    // dispatched, a running task reports Working until it completes.
+    // See cwUpdatable::State.
+    const bool runnableDirty =
+        std::any_of(DirtyScraps.begin(), DirtyScraps.end(),
+                    [](const DirtyScrap& dirty) { return dirty.isRunnable(); });
+    if(m_workPending && runnableDirty) { return cwUpdatable::State::Dirty; }
+    if(isRunning())                    { return cwUpdatable::State::Working; }
+    return cwUpdatable::State::Clean;
+}
+
+QFuture<void> cwScrapManager::doRun() {
+    return updateScrapGeometryHelper(DirtyScraps.keys());
 }
 
 /**
@@ -352,7 +406,7 @@ void cwScrapManager::updateStationPositionChangedForScraps(QList<cwScrap *> scra
 
 void cwScrapManager::rerunDirtyScraps()
 {
-    updateScrapGeometry({DirtyScraps.begin(), DirtyScraps.end()});
+    updateScrapGeometry(DirtyScraps.keys());
 }
 
 /**
@@ -362,9 +416,32 @@ void cwScrapManager::rerunDirtyScraps()
 void cwScrapManager::scrapDeleted(QObject *scrapObj)
 {
     cwScrap* scrap = static_cast<cwScrap*>(scrapObj);
+
     addToDeletedScraps(scrap);
-    DirtyScraps.remove(scrap); //scrapObj);
+    //Whether this scrap was pending, not a state comparison across the removal.
+    //This slot runs from cwScrap::destroyed, i.e. from ~QObject after ~cwScrap has
+    //already run, so a "before" state would walk DirtyScraps with the dying scrap
+    //still in it and DirtyScrap::isRunnable() would read it — a use-after-free that ASAN
+    //catches in [cwProject], which a release build survives only until the memory
+    //is reused.
+    const bool wasPending = DirtyScraps.remove(scrap) > 0;
     m_sketchScrapBoundingBox.remove(scrap);
+
+    //Deleting the last dirty scrap takes the pipeline Dirty -> Clean, which the
+    //coordinator's staleness aggregate has to hear about like any other
+    //transition; otherwise the footer keeps offering to compute work that no
+    //longer exists.
+    //
+    //Still Dirty afterwards means nothing changed — removals only shrink the set,
+    //and m_workPending is untouched — so the announcement would be redundant. It
+    //would also be unsafe: the coordinator answers a Dirty reading by running the
+    //pipeline, so announcing one from here dispatches a triangulation over the
+    //surviving dirty scraps from inside a scrap's destructor, while the rest of a
+    //deleted note's scraps are still on their way out. The state read is safe
+    //because the dying scrap has already left the set.
+    if(wasPending && updateState() != cwUpdatable::State::Dirty) {
+        emit updateStateChanged();
+    }
 }
 
 /**
@@ -529,6 +606,17 @@ void cwScrapManager::connectNote(cwNote *note) {
  * @param scraps
  */
 void cwScrapManager::connectScrap(cwScrap* scrap) {
+    //The scrap is in the region tree by now, so its parents finally resolve — one
+    //loaded before that read the fallback for its display units
+    scrap->updateNoteTransformUnits();
+
+    if(cwTrip* trip = scrap->parentTrip()) {
+        //An auto-calculated scale reads in the trip's survey unit, so switching
+        //that unit relabels the scale without touching its ratio
+        connect(trip->calibrations(), &cwTripCalibration::distanceUnitChanged,
+                scrap, &cwScrap::updateNoteTransformUnits);
+    }
+
     connect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, &cwScrapManager::updateScrapWithNewNoteTransform); //Morph only
     connect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, &cwScrapManager::updateScrapWithNewNoteTransform);
     connect(scrap, &cwScrap::insertedPoints, this, &cwScrapManager::updateScrapPoints);
@@ -581,6 +669,11 @@ void cwScrapManager::disconnectNote(cwNote *note)
  */
 void cwScrapManager::disconnectScrap(cwScrap* scrap)
 {
+    if(cwTrip* trip = scrap->parentTrip()) {
+        disconnect(trip->calibrations(), &cwTripCalibration::distanceUnitChanged,
+                   scrap, &cwScrap::updateNoteTransformUnits);
+    }
+
     disconnect(scrap->noteTransformation(), &cwNoteTranformation::scaleChanged, this, &cwScrapManager::updateExistingScrapGeometry); //Morph only
     disconnect(scrap->noteTransformation(), &cwNoteTranformation::northUpChanged, this, &cwScrapManager::updateExistingScrapGeometry);
     disconnect(scrap, &cwScrap::insertedPoints, this, &cwScrapManager::updateScrapPoints);
@@ -989,7 +1082,7 @@ void cwScrapManager::attachScrap(cwScrap* scrap)
     cwRenderMaterialState state;
     state.cullMode = cwRenderMaterialState::CullMode::None;
     m_scrapToRenderId.insert(scrap,
-                             m_renderScraps->addItem({cwGeometry(), QImage(), state}));
+                             m_renderScraps->addItem({.material = state}));
     addKeywordItemForScrap(scrap);
 }
 
@@ -1018,17 +1111,17 @@ void cwScrapManager::detachScrap(cwScrap* scrap)
 void cwScrapManager::updateScrapGeometry(QList<cwScrap *> scraps) {
 
     for(cwScrap* scrap : std::as_const(scraps)) {
-        connect(scrap, &cwScrap::destroyed,
-                this, &cwScrapManager::scrapDeleted,
-                Qt::UniqueConnection);
-
-        DirtyScraps.insert(scrap);
+        markScrapDirty(scrap);
     }
 
-    updateScrapGeometryHelper(scraps);
+    m_workPending = true;
+    emit updateStateChanged();
+
+    runIfStandalone();
 }
 
-QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps) const
+QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps(const QList<cwScrap *> &scraps,
+                                                                                 const cwProgressNodePtr& progressRoot) const
 {
     QList<TriangulatedScrapResult> results;
 
@@ -1045,9 +1138,11 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
     }
 
     cwTriangulateTask task;
+    task.setProgressRoot(progressRoot);
     task.setDataRootDir(Project->dataRootDir());
     task.setScrapData(scrapData);
     task.setFormatType(cwTextureUploadTask::format());
+
     auto triangulatedFutures = task.triangulate();
 
     if(triangulatedFutures.isEmpty()) {
@@ -1071,10 +1166,10 @@ QList<cwScrapManager::TriangulatedScrapResult> cwScrapManager::triangulateScraps
  * @brief cwScrapManager::updateScrapGeometryHelper
  * @param scraps
  */
-void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
+QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
 {
     if(scraps.isEmpty()) {
-        return;
+        return currentRun();
     }
 
     //Union NeedUpdate list with scraps, these are the scraps that need to be updated
@@ -1084,79 +1179,107 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     //     scrap->setTriangulationData(oldData);
     // }
 
-    if(!automaticUpdate()) {
-        return;
-    }
-
-    const bool hasRunnableScrap = std::any_of(DirtyScraps.begin(), DirtyScraps.end(), [](const cwScrap* scrap) {
-        return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
-    });
+    const bool hasRunnableScrap =
+        std::any_of(DirtyScraps.begin(), DirtyScraps.end(),
+                    [](const DirtyScrap& dirty) { return dirty.isRunnable(); });
 
     if(!hasRunnableScrap) {
-        return;
+        return currentRun();
     }
 
+    // Dispatching now covers the current dirty set: drop the pending marker and
+    // enter Working. Any edit that arrives after this re-sets m_workPending (via
+    // updateScrapGeometry), flipping back to Dirty so the pipeline is run again.
+    m_workPending = false;
+    const QFuture<void> task = beginRun();
+    emit updateStateChanged();
 
-    auto run = [this]() {
+    //One tree, and one row, per run. Created here rather than in startTask so
+    //the row appears the moment the run is dispatched, and reused when a
+    //dispatch lands on a live run: the restarter coalesces a burst of edits
+    //into one run, and one run is one row.
+    if(!m_progressRoot) {
+        m_progressRoot = cwProgressNode::createRoot(kScrapJobName);
+
+        if(FutureManagerToken.isValid()) {
+            FutureManagerToken.addJob(cwFuture(m_progressRoot->future(), kScrapJobName, m_progressRoot));
+        }
+    }
+
+    auto startTask = [this]() {
 
         //Running
         auto dirtyScrapsRange =
-            cw::toList(DirtyScraps)
-            | std::views::filter([](const cwScrap* scrap) {
-                return scrap != nullptr && !scrap->editing() && scrap->parentCave() != nullptr;
-            });
+            DirtyScraps.values()
+            | std::views::filter([](const DirtyScrap& dirty) { return dirty.isRunnable(); })
+            | std::views::transform([](const DirtyScrap& dirty) { return dirty.scrap; });
 
         QList<cwScrap*> dirtyScraps(dirtyScrapsRange.begin(), dirtyScrapsRange.end());
 
         if(dirtyScraps.isEmpty()) {
+            finishScrapTask();
             return AsyncFuture::completed();
         }
 
-        auto triangulationResults = triangulateScraps(dirtyScraps);
+        //The loop knows its count, so hint it. Nothing below here declares
+        //anything.
+        if(m_progressRoot) {
+            m_progressRoot->expectChildren(dirtyScraps.size());
+        }
+
+        auto triangulationResults = triangulateScraps(dirtyScraps, m_progressRoot);
 
         if(triangulationResults.isEmpty()) {
+            finishScrapTask();
             return AsyncFuture::completed();
         }
 
+        m_runGeneration++;
+        const quint64 generation = m_runGeneration;
+
         QList<QFuture<cwTriangulatedData>> futures;
+        QList<cwScrap*> scrapsToUpdate;
         futures.reserve(triangulationResults.size());
+        scrapsToUpdate.reserve(triangulationResults.size());
+
         for(const auto& result : std::as_const(triangulationResults)) {
             futures.append(result.data);
+
+            if(result.scrap == nullptr) {
+                continue;
+            }
+
+            scrapsToUpdate.append(result.scrap);
+
+            //Deliver this scrap the moment it's triangulated, rather than
+            //waiting on the whole batch. A restart cancels the combine, leaving
+            //these futures running, so the generation check drops their results.
+            cwScrap* scrap = result.scrap;
+            AsyncFuture::observe(result.data).context(this, [this, scrap, generation, future = result.data]()
+            {
+                if(generation != m_runGeneration) {
+                    return;
+                }
+
+                if(future.resultCount() == 1) {
+                    deliverScrap(scrap, future.result());
+                }
+            });
         }
 
         auto combine = AsyncFuture::combine() << futures;
 
-        auto finalFuture = combine.context(this, [this, triangulationResults]()
+        auto finalFuture = combine.context(this, [this, scrapsToUpdate]()
         {
-            QList<cwScrap*> scrapsToUpdate;
-            QList<cwTriangulatedData> scrapDataset;
-
-            scrapsToUpdate.reserve(triangulationResults.size());
-            scrapDataset.reserve(triangulationResults.size());
-
-            for(const auto& result : triangulationResults) {
-                if(result.scrap == nullptr) {
-                    continue;
-                }
-
-                cwTriangulatedData data;
-                const auto& future = result.data;
-
-                if(future.isFinished() && future.resultCount() == 1) {
-                    data = future.result();
-                }
-
-                scrapsToUpdate.append(result.scrap);
-                scrapDataset.append(data);
-            }
-
-            taskFinished(scrapsToUpdate, scrapDataset);
+            taskFinished(scrapsToUpdate);
         }).future();
 
         return finalFuture;
     };
 
-    TriangulateRestarter.restart(run);
+    TriangulateRestarter.restart(startTask);
+
+    return task;
 }
 
 /**
@@ -1164,8 +1287,9 @@ void cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
   */
 cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) const {
     cwTriangulateInData data;
+    cwScrap::ResolvedPlacement placement = scrap->resolvedPlacement();
     data.setOutline(scrap->points());
-    data.setViewMatrix(scrap->viewMatrix()->data()->clone());
+    data.setViewMatrix(placement.viewMatrix.release());
     data.setLeads(scrap->leads());
     data.setMorphingSettings(m_warpingSettings->data());
 
@@ -1235,7 +1359,7 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
     data.setNoteStation(scrap->stations());
     data.setStationLookup(trip->solvedStationPositions());
     data.setSurveyNetwork(trip->solvedNetwork());
-    data.setNoteTransform(scrap->noteTransformAdjustedDeclination());
+    data.setNoteTransform(placement.noteTransform);
 
     double dotsPerMeter = scrap->parentNote()->imageResolution()->convertTo(cwUnits::DotsPerMeter).value;
     data.setNoteImageResolution(dotsPerMeter);
@@ -1522,96 +1646,93 @@ void cwScrapManager::updateScrapWithNewNoteTransform()
     updateExistingScrapGeometryHelper(parentScrap);
 }
 
+void cwScrapManager::finishScrapTask()
+{
+    if(m_progressRoot) {
+        m_progressRoot->finish();
+        m_progressRoot.reset();
+    }
+
+    if(!isRunning()) {
+        return;
+    }
+    endRun();
+    emit updateStateChanged();
+}
+
 /**
   \brief Triangulation task has finished
   */
-void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate,
-                                  const QList<cwTriangulatedData>& scrapDataset) {
+void cwScrapManager::taskFinished(const QList<cwScrap*>& scrapsToUpdate) {
     qCDebug(lcPick).nospace()
-        << "ScrapManager::taskFinished scraps=" << scrapsToUpdate.size()
-        << " dataset=" << scrapDataset.size();
-    if(scrapDataset.isEmpty()) {
+        << "ScrapManager::taskFinished scraps=" << scrapsToUpdate.size();
+
+    // Task done: leave Working. finishScrapTask emits so the coordinator
+    // re-checks its forced-cascade settle state on both the empty and normal
+    // paths below.
+    finishScrapTask();
+
+    if(scrapsToUpdate.isEmpty()) {
         //No scrap data udpated...
         qCDebug(lcPick) << "ScrapManager::taskFinished EARLY RETURN: empty dataset";
         return;
     }
 
     //Clear all the scraps that need to be update, because we are updating now
-    foreach(cwScrap* scrap, DirtyScraps) {
+    for(cwScrap* scrap : DirtyScraps.keys()) {
         disconnect(scrap, &cwScrap::destroyed, this, &cwScrapManager::scrapDeleted);
     }
     DirtyScraps.clear();
+    m_workPending = false;
+    emit updateStateChanged();
 
-    //Make sure there's the same amount of data
-    if(scrapsToUpdate.size() != scrapDataset.size()) {
-        qDebug() << "Scrap size mismatch" << LOCATION;
+    DeletedScraps.clear();
+}
+
+void cwScrapManager::deliverScrap(cwScrap* scrap, const cwTriangulatedData& data)
+{
+    //The scrap was deleted while its triangulation was in flight
+    if(DeletedScraps.contains(scrap)) {
         return;
     }
 
-    //All the images to remove (replacing the previously calculated or invalid images)
-    QList<cwImage> imagesToRemove;
-
-    //Get all the valid scraps
-    QList<cwScrap*> validScraps;
-    QList<cwTriangulatedData> validScrapTriangleDataset;
-    for(int i = 0; i < scrapsToUpdate.size(); i++) {
-        cwScrap* scrap = scrapsToUpdate.at(i);
-        cwTriangulatedData triangleData = scrapDataset.at(i);
-        if(!DeletedScraps.contains(scrap)) {
-            validScraps.append(scrap);
-            validScrapTriangleDataset.append(triangleData);
-        } else {
-            //Scrap has been delete
-            imagesToRemove.append(triangleData.croppedImage());
-            continue;
-        }
+    if(!m_scrapToRenderId.contains(scrap) || m_renderScraps.isNull()) {
+        return;
     }
 
-    DeletedScraps.clear();
+    cwTriangulatedData triangleData = data;
 
-    // //Removed all cropped image data
-    // foreach(cwScrap* scrap, validScraps) {
-    //     cwImage image = scrap->triangulationData().croppedImage();
-    //     imagesToRemove.append(image);
-    // }
+    //Remove the ownership requirements, so it doesn't get delete from database
+    triangleData.croppedImagePtr()->take();
 
-    // auto filename = Project->filename();
-    // auto removeFuture = cwConcurrent::run([filename, imagesToRemove](){
-    //     cwImageDatabase imageDatabase(filename);
-    //     for(const auto& image : imagesToRemove) {
-    //         imageDatabase.removeImages(image.ids());
-    //     }
-    // });
+    scrap->setLeadPositions(triangleData.leadPoints());
 
-    // FutureManagerToken.addJob(cwFuture(removeFuture, "Removing Old Images"));
+    const auto id = m_scrapToRenderId.value(scrap);
+    const cwGeometry& g = triangleData.scrapGeometry();
+    qCDebug(lcPick).nospace()
+        << "ScrapManager::deliverScrap pushing scrap=" << scrap
+        << " renderId=" << id
+        << " geometry: vertexCount=" << g.vertexCount()
+        << " indexCount=" << g.indices().size()
+        << " type=" << cwGeometry::typeName(g.type())
+        << " layoutMode=" << static_cast<int>(g.layoutMode())
+        << " attributes=" << g.attributes().size()
+        << " vertexBuffers=" << g.vertexBuffers().size()
+        << " isEmpty=" << g.isEmpty();
+    m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
 
-    for(int i = 0; i < validScraps.size(); i++) {
-        cwScrap* scrap = validScraps.at(i);
-
-        cwTriangulatedData triangleData = validScrapTriangleDataset.at(i);
-        // Q_ASSERT(!triangleData.isStale());
-
-        //Remove the ownership requirements, so it doesn't get delete from database
-        triangleData.croppedImagePtr()->take();
-
-        // scrap->setTriangulationData(triangleData);
-        scrap->setLeadPositions(triangleData.leadPoints());
-
-        Q_ASSERT(m_scrapToRenderId.contains(scrap));
-        auto id = m_scrapToRenderId.value(scrap);
-        const cwGeometry& g = triangleData.scrapGeometry();
-        qCDebug(lcPick).nospace()
-            << "ScrapManager::taskFinished pushing scrap=" << scrap
-            << " renderId=" << id
-            << " geometry: vertexCount=" << g.vertexCount()
-            << " indexCount=" << g.indices().size()
-            << " type=" << cwGeometry::typeName(g.type())
-            << " layoutMode=" << static_cast<int>(g.layoutMode())
-            << " attributes=" << g.attributes().size()
-            << " vertexBuffers=" << g.vertexBuffers().size()
-            << " isEmpty=" << g.isEmpty();
-        m_renderScraps->updateGeometry(id, triangleData.scrapGeometry());
+    //The render thread streams the levels it needs off the cached KTX2, so
+    //nothing is decoded here. A null descriptor means the encode failed,
+    //and the QImage crop is the only texture the scrap has.
+    const cwStreamedTexture streamed {
+        Project != nullptr ? Project->dataRootDir().absolutePath() : QString(),
+        triangleData.compressedTextureKey(),
+        triangleData.croppedImageSize()
+    };
+    if(streamed.isNull()) {
         m_renderScraps->updateTexture(id, triangleData.croppedImageData().image);
+    } else {
+        m_renderScraps->updateStreamedTexture(id, streamed);
     }
 }
 
@@ -1630,20 +1751,6 @@ void cwScrapManager::setRenderScraps(cwRenderTexturedItems *scraps)
     }
 }
 
-/**
-    Sets automaticUpdate
-
-    If true (default) this class will update the 3d geometry of the scrap when data has
-    change.  Otherwise, scraps must be updated manaually, using updateAllScraps().
-*/
-void cwScrapManager::setAutomaticUpdate(bool automaticUpdate) {
-    if(AutomaticUpdate != automaticUpdate) {
-        AutomaticUpdate = automaticUpdate;
-        emit automaticUpdateChanged();
-        updateScrapGeometry(cw::toList(DirtyScraps));
-    }
-}
-
 void cwScrapManager::waitForFinish()
 {
     AsyncFuture::waitForFinished(TriangulateRestarter.future());
@@ -1651,5 +1758,5 @@ void cwScrapManager::waitForFinish()
 
 QList<cwScrap*> cwScrapManager::dirtyScraps() const
 {
-    return DirtyScraps.values();
+    return DirtyScraps.keys();
 }

@@ -9,6 +9,7 @@
 #include "cwLinePlotErrorCodes.h"
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterUtils.h"
+#include "cwSurvexCS.h"
 
 #include <QFile>
 #include <QTextStream>
@@ -33,9 +34,22 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     stream << "*begin  ;All the caves" << Qt::endl;
 
-    const QString outputCS = cwSurvexExporterUtils::resolveOutputCS(region);
+    //One writer for the whole file: the region's *cs out and every fix row's own
+    //*cs land in it, and each system that needs a sidecar takes its own file.
+    //Only the working-frame file gets sidecars — the bundled cavern is its only
+    //reader, and it is the only survex that reads an @ reference.
+    const auto sidecarPolicy =
+        options.outputCSPolicy == cwSurvexExporterUtils::OutputCSPolicy::WorkingFrame
+            ? cwSurvexCS::SidecarPolicy::BundledCavern
+            : cwSurvexCS::SidecarPolicy::OfficialSyntax;
+    cwSurvexCS::SidecarWriter sidecars(outputPath, sidecarPolicy);
+
+    const QString outputCS =
+        cwSurvexExporterUtils::resolveOutputCS(region,
+                                               region.geoReference.localCoordinateSystem,
+                                               options.outputCSPolicy);
     if (!outputCS.isEmpty()) {
-        stream << "*cs out " << outputCS << Qt::endl;
+        cwSurvexCS::writeCsLine(stream, sidecars, outputCS, true);
     }
 
     // Labels are assigned here and nowhere else: a label is unique only among
@@ -46,6 +60,7 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
 
     cwSurvexExporterCaveTask nodeExporter;
     nodeExporter.setExportOptions(options);
+    nodeExporter.setSidecarWriter(&sidecars);
 
     for (const cwCaveData& node : region.caves) {
         if (!nodeExporter.writeNode(stream, node, tree, outputCS)) {
@@ -68,6 +83,12 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
     stream << "*end" << Qt::endl;
     stream.flush();
     outputFile.close();
+
+    //Last, so no sidecar outlives a file that failed halfway.
+    const QString sidecarError = sidecars.write();
+    if (!sidecarError.isEmpty()) {
+        return Monad::ResultBase(sidecarError, static_cast<int>(LinePlotErrorCode::ExportFailed));
+    }
 
     return Monad::ResultBase();
 }

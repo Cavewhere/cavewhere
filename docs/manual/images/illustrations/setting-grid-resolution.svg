@@ -18,8 +18,8 @@
     <pattern id="coarse" width="26" height="26" patternUnits="userSpaceOnUse">
       <path d="M 26 0 L 0 0 L 0 26 M 0 0 L 26 26" fill="none" stroke="#17618f" stroke-width="0.9" opacity="0.75"/>
     </pattern>
-    <pattern id="fine" width="10" height="10" patternUnits="userSpaceOnUse">
-      <path d="M 10 0 L 0 0 L 0 10 M 0 0 L 10 10" fill="none" stroke="#17618f" stroke-width="0.6" opacity="0.75"/>
+    <pattern id="fine" width="6.5" height="6.5" patternUnits="userSpaceOnUse">
+      <path d="M 6.5 0 L 0 0 L 0 6.5 M 0 0 L 6.5 6.5" fill="none" stroke="#17618f" stroke-width="0.6" opacity="0.75"/>
     </pattern>
 
     <marker id="arrowL" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
@@ -56,10 +56,10 @@
     <use href="#blob" class="outline"/>
 
     <g transform="translate(96,196)">
-      <line class="measure" x1="0" y1="0" x2="10" y2="0"/>
+      <line class="measure" x1="0" y1="0" x2="6.5" y2="0"/>
       <line class="measure" x1="0" y1="-5" x2="0" y2="5"/>
-      <line class="measure" x1="10" y1="-5" x2="10" y2="5"/>
-      <text class="dim" x="5" y="-8" text-anchor="middle">0.25 m</text>
+      <line class="measure" x1="6.5" y1="-5" x2="6.5" y2="5"/>
+      <text class="dim" x="3.25" y="-8" text-anchor="middle">0.25 m</text>
     </g>
   </g>
   <text class="label" x="266" y="272">Fine — 0.25 m</text>

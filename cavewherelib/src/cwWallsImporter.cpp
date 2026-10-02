@@ -7,16 +7,19 @@
 #include "cwStation.h"
 #include "cwShot.h"
 #include "cwLength.h"
+#include "cwMath.h"
 #include "wallssurveyparser.h"
 #include "wallsprojectparser.h"
 #include "wallstypes.h"
 #include "cwTreeImportData.h"
 #include "cwTreeImportDataNode.h"
+#include "img.h"
 
 //Qt includes
 #include <QFileInfo>
 #include <QDir>
 
+#include <cstdlib>
 #include <iostream>
 
 using namespace dewalls;
@@ -29,12 +32,95 @@ cwUnits::LengthUnit cwUnit(Length::Unit dewallsUnit)
     return dewallsUnit == Length::Feet ? cwUnits::LengthUnit::Feet : cwUnits::LengthUnit::Meters;
 }
 
-WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix)
+namespace {
+
+//! The img datum for a Walls datum name.
+//!
+//! img.c matches Compass' spellings exactly and Walls spells several datums
+//! differently, so the ones survex's own Walls reader special-cases are
+//! repeated here (survex/src/datain.c). Walls carries a handful of regional
+//! NAD27 realizations; they differ in how they transform to WGS84, not in which
+//! CRS a coordinate given in them belongs to, so all of them name NAD27.
+img_datum wallsDatum(const QString& name)
+{
+    const QByteArray latin1 = name.toLatin1();
+    const img_datum compassDatum = img_parse_compass_datum_string(latin1.constData(),
+                                                                  static_cast<size_t>(latin1.size()));
+    if (compassDatum != img_DATUM_UNKNOWN) {
+        return compassDatum;
+    }
+
+    if (name.startsWith(QStringLiteral("NAD27"))) {
+        return img_DATUM_NAD27;
+    }
+    if (name == QStringLiteral("NAD83")) {
+        return img_DATUM_NAD83;
+    }
+    if (name == QStringLiteral("Geodetic Datum `49")) {
+        return img_DATUM_NZGD49;
+    }
+    if (name == QStringLiteral("Hu-Tzu-Shan")) {
+        return img_DATUM_HUTZUSHAN1950;
+    }
+    return img_DATUM_UNKNOWN;
+}
+
+//! What \a reference says the project's `#FIX` coordinates are in.
+WallsReferenceCS wallsReferenceCS(const GeoReferencePtr& reference)
+{
+    WallsReferenceCS referenceCS;
+
+    if (reference.isNull()) {
+        return referenceCS;
+    }
+
+    const QString datumName = reference->datumName.trimmed();
+    const img_datum datum = wallsDatum(datumName);
+    if (datum == img_DATUM_UNKNOWN) {
+        referenceCS.unmappedDatum = datumName;
+        return referenceCS;
+    }
+
+    //dewalls signs the zone the way img wants it: positive north, negative
+    //south. img returns null for a zone of 0 — what a .REF with no zone gives
+    //us — for the polar UPS zones, and for a zone outside the datum's area.
+    if (char* utm = img_compass_utm_proj_str(datum, reference->zone)) {
+        referenceCS.rect = QString::fromLatin1(utm);
+        std::free(utm);
+    }
+
+    //Every datum img knows has a geodetic CRS; only img_DATUM_UNKNOWN, which
+    //returned above, has none.
+    referenceCS.geo = QStringLiteral("EPSG:%1").arg(img_compass_longlat_epsg_code(datum));
+
+    return referenceCS;
+}
+
+//! Why \a referenceCS names no system, phrased to finish "#FIX A1 gives grid
+//! coordinates, but ...". The zone reason is reachable only from the rect side;
+//! a lat/long fix needs the datum alone.
+QString missingCSReason(const WallsReferenceCS& referenceCS)
+{
+    if (!referenceCS.unmappedDatum.isEmpty()) {
+        return QString("its datum \"%1\" isn't one CaveWhere can map")
+            .arg(referenceCS.unmappedDatum);
+    }
+    if (referenceCS.geo.isEmpty()) {
+        return QStringLiteral("the project names no datum");
+    }
+    return QStringLiteral("the project names no UTM zone they belong to");
+}
+
+}
+
+WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix,
+                                           WallsReferenceCS referenceCS)
     : Parser(parser),
       Importer(importer),
-      TripNamePrefix(tripNamePrefix),
+      TripNamePrefix(std::move(tripNamePrefix)),
       Trips(QList<cwTripPtr>()),
-      CurrentTrip()
+      CurrentTrip(),
+      ReferenceCS(std::move(referenceCS))
 {
     QObject::connect(parser, &WallsSurveyParser::parsedVector, this, &WallsImporterVisitor::parsedVector);
     QObject::connect(parser, &WallsSurveyParser::parsedFixStation, this, &WallsImporterVisitor::parsedFixStation);
@@ -47,7 +133,35 @@ WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImp
 
 void WallsImporterVisitor::clearTrip()
 {
+    flushSplays();
     CurrentTrip.clear();
+}
+
+void WallsImporterVisitor::finishParsing()
+{
+    flushSplays();
+}
+
+/**
+ * @brief WallsImporterVisitor::flushSplays
+ *
+ * Hangs the current trip's buffered splays on the stations they were shot from
+ */
+void WallsImporterVisitor::flushSplays()
+{
+    if (CurrentTrip.isNull()) {
+        Splays.clear();
+        return;
+    }
+
+    const QList<cwStation> skipped = Splays.attachTo(CurrentTrip->chunks());
+
+    for (const cwStation& station : skipped) {
+        Importer->addImportError(WallsMessage("warning",
+            QString("Skipping %1 splay(s) at %2 because no shot in this trip reaches that station")
+                .arg(station.splayCount())
+                .arg(station.name())));
+    }
 }
 
 void WallsImporterVisitor::ensureValidTrip()
@@ -70,46 +184,57 @@ void WallsImporterVisitor::parsedFixStation(FixStation station)
     const cwStation renamed = Importer->createStation(station.name());
     fix.setStationName(renamed.name());
 
-    // Walls files don't carry a datum/CRS, so we infer one from the fix
-    // shape: rect-style (#FIX east/north) → NAD83 UTM (the typical US Walls
-    // assumption); geo-style (#FIX lat/long) → WGS84. Both carry an explicit
-    // warning so the user can correct the datum on the cwFixStation row.
+    // The coordinate system comes from the project's .REF line, which names the
+    // datum and UTM zone the #FIX coordinates were surveyed in.
     const bool hasRect = station.east().isValid() && station.north().isValid();
     const bool hasGeo  = station.latitude().isValid() && station.longitude().isValid();
 
+    QString inputCS;
+    double easting = 0.0;
+    double northing = 0.0;
+    QString warning;
+
     if (hasRect) {
-        // No way to infer the UTM zone from a Walls #FIX, so we don't pick a
-        // specific EPSG:269nn — the user must finish setting inputCS in the
-        // fix-station editor. EPSG:26900 is intentionally invalid (no zone)
-        // so it's obviously a placeholder rather than a silent guess.
-        fix.setInputCS(QStringLiteral("EPSG:26900"));
-        fix.setEasting(station.east().get(Length::Meters));
-        fix.setNorthing(station.north().get(Length::Meters));
-        if (station.rectUp().isValid()) {
-            fix.setElevation(station.rectUp().get(Length::Meters));
+        inputCS = ReferenceCS.rect;
+        easting = station.east().get(Length::Meters);
+        northing = station.north().get(Length::Meters);
+        if (inputCS.isEmpty()) {
+            warning = QString("#FIX %1 gives grid coordinates, but %2, so they place nothing until "
+                              "you set the coordinate system on the fix in CaveWhere.")
+                          .arg(station.name(), missingCSReason(ReferenceCS));
         }
-        Importer->addImportError(WallsMessage("warning",
-            QString("#FIX %1 is rect-style: assumed NAD83 UTM (EPSG:26900 placeholder; pick the right zone in CaveWhere). "
-                    "If your Walls coords are actually WGS84 UTM (EPSG:326xx) or another datum, change inputCS on the fix.")
-                .arg(station.name())));
     } else if (hasGeo) {
-        fix.setInputCS(cwCoordinateTransform::Wgs84);
-        // FixStation::longitude is east, latitude is north. cwFixStation
-        // stores easting=lon, northing=lat (matches the proj
-        // x=lon/y=lat convention after normalize_for_visualization).
-        fix.setEasting(station.longitude().get(Angle::Degrees));
-        fix.setNorthing(station.latitude().get(Angle::Degrees));
-        if (station.rectUp().isValid()) {
-            fix.setElevation(station.rectUp().get(Length::Meters));
+        // FixStation::longitude is east, latitude is north.
+        inputCS = ReferenceCS.geo;
+        easting = station.longitude().get(Angle::Degrees);
+        northing = station.latitude().get(Angle::Degrees);
+        if (inputCS.isEmpty()) {
+            // Any two datums put the same latitude and longitude within a couple
+            // hundred meters of each other, so assuming one still leaves a usable
+            // coordinate — unlike a grid coordinate, which means nothing without
+            // its zone.
+            inputCS = cwCoordinateTransform::Wgs84;
+            warning = QString("#FIX %1 gives latitude and longitude and %2, so WGS84 (EPSG:4326) "
+                              "is assumed. Change the coordinate system on the fix if it was "
+                              "surveyed in another datum.")
+                          .arg(station.name(), missingCSReason(ReferenceCS));
         }
-        Importer->addImportError(WallsMessage("warning",
-            QString("#FIX %1 is geo-style: assumed WGS84 (EPSG:4326). Change inputCS on the fix if a different datum is required.")
-                .arg(station.name())));
     } else {
         Importer->addImportError(WallsMessage("warning",
             QString("#FIX %1 has neither rect nor geo coordinates; skipped.")
                 .arg(station.name())));
         return;
+    }
+
+    fix.setInputCS(inputCS);
+    //All three components at once: a fix whose CS we couldn't determine has no
+    //axis order to read them back under, so the one-at-a-time setters would
+    //each erase what the one before it stored (see cwFixStation).
+    fix.setCoordinate(easting, northing,
+                      station.rectUp().isValid() ? station.rectUp().get(Length::Meters) : 0.0);
+
+    if (!warning.isEmpty()) {
+        Importer->addImportError(WallsMessage("warning", warning));
     }
 
     Importer->CapturedFixStations.append(fix);
@@ -129,6 +254,12 @@ void WallsImporterVisitor::parsedVector(Vector v)
     Length::Unit dUnit = units.dUnit();
 
     cwStation* lrudStation;
+
+    //A leg with one end omitted is a wall shot: it hangs on the end the line
+    //does name, since it has no destination station to chain to. The raw names
+    //say which end that is — a #prefix would turn the omitted one into "PP:".
+    const bool fromOmitted = v.from().isEmpty();
+    const bool oneEndOmitted = fromOmitted != v.to().isEmpty();
 
     if (units.vectorType() == VectorType::RECT && v.north().isValid())
     {
@@ -211,9 +342,55 @@ void WallsImporterVisitor::parsedVector(Vector v)
 
         // TODO: exclude length flag/segment
 
-        lrudStation = units.lrud() == LrudType::From ||
-                units.lrud() == LrudType::FB ?
-                    &fromStation : &toStation;
+        if (oneEndOmitted)
+        {
+            //A splay hangs on the one end the line names, and the LRUDs on that
+            //line describe it too — the wall point has no passage around it
+            lrudStation = fromOmitted ? &toStation : &fromStation;
+
+            //A station carries foresights only, so a reading the line gives as
+            //a backsight has to be turned around before it can hang there
+            UAngle azimuth = v.frontAzimuth();
+            if (!azimuth.isValid() && v.backAzimuth().isValid())
+            {
+                azimuth = units.typeabCorrected()
+                        ? v.backAzimuth()
+                        : v.backAzimuth() + UAngle(cwHalfTurnDegrees, Angle::Degrees);
+            }
+
+            UAngle inclination = frontInclination;
+            if (!inclination.isValid() && backInclination.isValid())
+            {
+                inclination = units.typevbCorrected()
+                        ? backInclination
+                        : -backInclination;
+            }
+
+            //A plumbed shot leaves the azimuth out entirely
+            cwCompassReading compass;
+            if (azimuth.isValid())
+            {
+                compass = cwCompassReading(cwWrapDegrees360(azimuth.get(Angle::Degrees)));
+            }
+
+            const cwShotMeasurement asWritten(cwDistanceReading(distance.get(dUnit)),
+                                              compass,
+                                              cwClinoReading(inclination.get(Angle::Degrees)));
+
+            if (lrudStation->isValid())
+            {
+                //A leg written wall-point-first reads toward the station, so
+                //the reading has to be turned around to point at the wall
+                Splays.add(lrudStation->name(),
+                           fromOmitted ? asWritten.reversed() : asWritten);
+            }
+        }
+        else
+        {
+            lrudStation = units.lrud() == LrudType::From ||
+                    units.lrud() == LrudType::FB ?
+                        &fromStation : &toStation;
+        }
     }
     else
     {
@@ -225,58 +402,46 @@ void WallsImporterVisitor::parsedVector(Vector v)
     v.up() += units.correctLength(v.up(), units.incs());
     v.down() += units.correctLength(v.down(), units.incs());
 
-    if (v.left().isValid())
-    {
-        lrudStation->setLeft(cwDistanceReading(v.left().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setLeft(cwDistanceReading());
-    }
-    if (v.right().isValid())
-    {
-        lrudStation->setRight(cwDistanceReading(v.right().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setRight(cwDistanceReading());
-    }
-    if (v.up().isValid())
-    {
-        lrudStation->setUp(cwDistanceReading(v.up().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setUp(cwDistanceReading());
-    }
-    if (v.down().isValid())
-    {
-        lrudStation->setDown(cwDistanceReading(v.down().get(dUnit)));
-    }
-    else
-    {
-        lrudStation->setDown(cwDistanceReading());
-    }
+    //A line that measured no passage says nothing about the passage around the
+    //station, so whatever an earlier line recorded stands. Storing this one
+    //would blank those dimensions instead — which a splay line, having no
+    //passage of its own to describe, would otherwise do to the station it hangs on
+    const bool lineHasLruds = v.left().isValid() || v.right().isValid()
+            || v.up().isValid() || v.down().isValid();
 
-    // save the latest LRUDs associated with each station so that we can apply them in the end
-    if (v.date().isValid())
+    if (lineHasLruds)
     {
-        if (!Importer->StationDates.contains(lrudStation->name()) ||
-            v.date() >= Importer->StationDates[lrudStation->name()]) {
-            Importer->StationDates[lrudStation->name()] = v.date();
+        //A line that gives only some of the four restates the passage as a
+        //whole, so the ones it leaves out are cleared rather than kept
+        const auto reading = [dUnit](const ULength& length) {
+            return length.isValid() ? cwDistanceReading(length.get(dUnit))
+                                    : cwDistanceReading();
+        };
+
+        lrudStation->setLeft(reading(v.left()));
+        lrudStation->setRight(reading(v.right()));
+        lrudStation->setUp(reading(v.up()));
+        lrudStation->setDown(reading(v.down()));
+
+        // save the latest LRUDs associated with each station so that we can apply them in the end
+        if (v.date().isValid())
+        {
+            if (!Importer->StationDates.contains(lrudStation->name()) ||
+                v.date() >= Importer->StationDates[lrudStation->name()]) {
+                Importer->StationDates[lrudStation->name()] = v.date();
+                Importer->StationMap[lrudStation->name()] = *lrudStation;
+            }
+        }
+        else if (!Importer->StationDates.contains(lrudStation->name()))
+        {
             Importer->StationMap[lrudStation->name()] = *lrudStation;
         }
     }
-    else if (!Importer->StationDates.contains(lrudStation->name()))
-    {
-        Importer->StationMap[lrudStation->name()] = *lrudStation;
-    }
 
-    if(fromStation.name().isEmpty() || toStation.name().isEmpty()) {
-        Importer->addImportError(WallsMessage("warning", QString("Station \"%1\" to \"%2\" Walls importer currently doesn't support splay shots").arg(fromStation.name()).arg(toStation.name())));
-    }
-
-    if (v.distance().isValid() && !fromStation.name().isEmpty() && !toStation.name().isEmpty())
+    //A splay is already buffered against the end the line names, and it stays
+    //out of the centerline
+    if (!oneEndOmitted && v.distance().isValid()
+        && !fromStation.name().isEmpty() && !toStation.name().isEmpty())
     {
         CurrentTrip->addShotToLastChunk(fromStation, toStation, shot);
     }
@@ -474,11 +639,17 @@ void cwWallsImporter::applyLRUDs(cwTreeImportDataNode* block) {
     {
         for (int i = 0; i < chunk->stationCount(); i++)
         {
-            auto stations = chunk->stations();
-            QString name = stations.at(i).name();
-            if (StationMap.contains(name))
+            cwStation station = chunk->station(i);
+            const auto lruds = StationMap.constFind(station.name());
+            if (lruds != StationMap.constEnd())
             {
-                chunk->setStation(StationMap[name], i);
+                //Copy the LRUDs across rather than the whole station, so the
+                //station keeps the splays hanging on it and the id it already has
+                station.setLeft(lruds->left());
+                station.setRight(lruds->right());
+                station.setUp(lruds->up());
+                station.setDown(lruds->down());
+                chunk->setStation(station, i);
             }
         }
     }
@@ -493,7 +664,9 @@ cwTreeImportDataNode* cwWallsImporter::convertEntry(WpjEntryPtr entry) {
         return nullptr;
     }
     if (shouldWarn(CANT_IMPORT_REFS, !entry->reference().isNull())) {
-        addImportError(WallsMessage("warning", "This data contains geographic references, which can't currently be imported into Cavewhere"));
+        addImportError(WallsMessage("warning", "This data has a .REF geographic reference. Its datum and UTM zone give "
+                                               "the coordinate system for #FIX stations; the reference position itself "
+                                               "isn't imported into Cavewhere"));
     }
     if (entry->isBook()) {
         return convertBook(entry.staticCast<WpjBook>());
@@ -645,7 +818,7 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
     QString justFilename = filename.mid(std::max(qsizetype(0), filename.lastIndexOf('/') + 1));
 
     WallsSurveyParser parser;
-    WallsImporterVisitor visitor(&parser, this, justFilename);
+    WallsImporterVisitor visitor(&parser, this, justFilename, wallsReferenceCS(survey->reference()));
 
     foreach (Segment options, survey->allOptions()) {
         try
@@ -717,6 +890,8 @@ bool cwWallsImporter::parseSrvFile(WpjEntryPtr survey, QList<cwTripPtr>& tripsOu
 
     if (!failed)
     {
+        visitor.finishParsing();
+
         if (!tripName.isEmpty())
         {
             int i = 0;

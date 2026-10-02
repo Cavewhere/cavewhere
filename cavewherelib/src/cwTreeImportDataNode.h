@@ -86,6 +86,9 @@ public:
     void setIncludeDistance(bool includeLength);
     bool isDistanceInclude() const;
 
+    void setSplay(bool splay);
+    bool isSplay() const;
+
     //Child nodes are linked by ParentNode pointers rather than Qt parent/child,
     //so moveToThread doesn't reach them automatically. This walks the tree.
     static void moveTreeToThread(cwTreeImportDataNode* node, QThread* targetThread);
@@ -110,6 +113,7 @@ private:
     cwTripCalibration* Calibration;
 
     bool IncludeDistance;
+    bool Splay;
 
     void addChildNode(cwTreeImportDataNode* blockData);
     void addChunk(cwSurveyChunk* chunk);
@@ -238,6 +242,27 @@ inline void cwTreeImportDataNode::setIncludeDistance(bool includeLength)
 inline bool cwTreeImportDataNode::isDistanceInclude() const
 {
     return IncludeDistance;
+}
+
+/**
+ * @brief cwTreeImportDataNode::setSplay
+ * @param splay
+ *
+ * Tracks Survex's `*flags splay` on its own, so `*flags not splay` leaves an
+ * active `duplicate` alone.
+ */
+inline void cwTreeImportDataNode::setSplay(bool splay)
+{
+    Splay = splay;
+}
+
+/**
+ * @brief cwTreeImportDataNode::isSplay
+ * @return True when `*flags splay` is active for this block
+ */
+inline bool cwTreeImportDataNode::isSplay() const
+{
+    return Splay;
 }
 
 

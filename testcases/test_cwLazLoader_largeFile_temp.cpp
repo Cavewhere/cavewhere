@@ -29,7 +29,7 @@ TEST_CASE("cwLazLoader: real 1.8GB UTM10 LAZ file does not crash",
              << kRealLargeLazPath);
     }
 
-    // No CS override, no globalCS, no worldOrigin — exercise the same path
+    // No CS override and no frame to reproject into — exercise the same path
     // that triggers when a user adds the file to a fresh project.
     cwLazLoader::Request req;
     req.path = QString::fromLatin1(kRealLargeLazPath);

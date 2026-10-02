@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwTransformUpdater.h"
+#include "cwPositionItem.h"
 #include "cwCamera.h"
 
 //Qt includes
@@ -18,42 +19,27 @@ namespace {
     constexpr qreal kPanDistance = 1.0;
 
     /**
-     * Minimal stand-in for a station delegate. cwTransformUpdater reads
-     * "position3D" off the item and connects to position3DChanged().
+     * Minimal stand-in for a station delegate: a cwPositionItem with a convenience
+     * constructor that seeds its starting position3D. cwTransformUpdater reads
+     * position3D, connects to position3DChanged(), and writes inFrustum (false once
+     * the point leaves the view frustum). Real delegates compose inFrustum into
+     * their own visible binding; the tests read it back directly.
      */
-    class TestPositionItem : public QQuickItem
+    class TestPositionItem : public cwPositionItem
     {
         Q_OBJECT
-        Q_PROPERTY(QVector3D position3D READ position3D WRITE setPosition3D NOTIFY position3DChanged)
 
     public:
         explicit TestPositionItem(const QVector3D& position3D = QVector3D())
-            : m_position3D(position3D)
         {
+            setPosition3D(position3D);
         }
-
-        QVector3D position3D() const { return m_position3D; }
-
-        void setPosition3D(const QVector3D& position3D)
-        {
-            if(m_position3D == position3D) {
-                return;
-            }
-            m_position3D = position3D;
-            emit position3DChanged();
-        }
-
-    signals:
-        void position3DChanged();
-
-    private:
-        QVector3D m_position3D;
     };
 
     /**
      * QQuickItem::isVisible() is the *effective* visibility, which is false for
      * any item without a parent. Real delegates are parented into the view, so
-     * the tests need a visible root for setVisible() to mean anything.
+     * the tests need a visible root for the visibility checks to mean anything.
      */
     class TestItemRoot : public QQuickItem
     {
@@ -81,7 +67,7 @@ namespace {
     }
 }
 
-TEST_CASE("cwTransformUpdater shows points inside the viewport by default", "[cwTransformUpdater]") {
+TEST_CASE("cwTransformUpdater reports points inside the frustum as inFrustum", "[cwTransformUpdater]") {
     QObject parent;
     cwTransformUpdater updater;
     updater.setCamera(makeCenteredCamera(&parent));
@@ -90,10 +76,10 @@ TEST_CASE("cwTransformUpdater shows points inside the viewport by default", "[cw
     TestPositionItem* inFront = root.addPoint(QVector3D(0, 0, -10)); //Down the -z axis, dead center
     updater.addPointItem(inFront);
 
-    CHECK(inFront->isVisible() == true);
+    CHECK(inFront->inFrustum() == true);
 }
 
-TEST_CASE("cwTransformUpdater hides points behind the camera", "[cwTransformUpdater]") {
+TEST_CASE("cwTransformUpdater reports points behind the camera as not inFrustum", "[cwTransformUpdater]") {
     QObject parent;
     cwTransformUpdater updater;
     updater.setCamera(makeCenteredCamera(&parent));
@@ -102,7 +88,32 @@ TEST_CASE("cwTransformUpdater hides points behind the camera", "[cwTransformUpda
     TestPositionItem* behind = root.addPoint(QVector3D(0, 0, 10)); //Behind the camera
     updater.addPointItem(behind);
 
-    CHECK(behind->isVisible() == false);
+    CHECK(behind->inFrustum() == false);
+}
+
+TEST_CASE("cwTransformUpdater never writes a point's visible", "[cwTransformUpdater]") {
+    QObject parent;
+    cwCamera* camera = makeCenteredCamera(&parent);
+
+    cwTransformUpdater updater;
+    updater.setCamera(camera);
+
+    TestItemRoot root;
+    TestPositionItem* behind = root.addPoint(QVector3D(0, 0, 10)); //Behind the camera
+    updater.addPointItem(behind);
+
+    //The item's owner is the only writer of visible. The updater used to set it
+    //here, which raced whatever binding the owner had installed - a C++ setter
+    //doesn't remove a QML binding, so the binding won on its next evaluation and
+    //the cull was silently defeated.
+    REQUIRE(behind->inFrustum() == false);
+    CHECK(behind->isVisible() == true);
+
+    //Still true after a camera move, which re-runs every point
+    QMatrix4x4 panned;
+    panned.translate(kPanDistance, 0.0, 0.0);
+    camera->setViewMatrix(panned);
+    CHECK(behind->isVisible() == true);
 }
 
 TEST_CASE("cwTransformUpdater stops following the camera while disabled", "[cwTransformUpdater]") {
@@ -116,7 +127,7 @@ TEST_CASE("cwTransformUpdater stops following the camera while disabled", "[cwTr
     TestPositionItem* inFront = root.addPoint(QVector3D(0, 0, -10));
     updater.addPointItem(inFront);
 
-    REQUIRE(inFront->isVisible() == true);
+    REQUIRE(inFront->inFrustum() == true);
     const QPointF originalPosition = inFront->position();
 
     //cwItem3DRepeater turns this off while the points are hidden, so panning the
@@ -144,7 +155,7 @@ TEST_CASE("cwTransformUpdater tolerates points added without a camera", "[cwTran
     CHECK(item->position() == QPointF(0, 0));
 
     updater.setCamera(makeCenteredCamera(&updater));
-    CHECK(item->isVisible() == true);
+    CHECK(item->inFrustum() == true);
 }
 
 #include "test_cwTransformUpdater.moc"

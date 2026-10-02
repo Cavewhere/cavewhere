@@ -512,13 +512,12 @@ QQ.Rectangle {
 
             spacing: 3
 
-            NeutralIconButton {
+            IconButton {
                 id: rotateIconButtonId
                 objectName: "rotateButton"
                 iconSource: "qrc:/twbs-icons/icons/arrow-repeat.svg"
                 sourceSize: mainToolBar.iconSize
                 text: "Rotate"
-                adjustColor: false
                 visible: noteGallery.currentNote !== null
 
                 onClicked: {
@@ -529,7 +528,7 @@ QQ.Rectangle {
                 }
             }
 
-            NeutralIconButton {
+            IconButton {
                 id: carpetButtonId
                 objectName: "carpetButtonId"
                 iconSource: "qrc:/twbs-icons/icons/pencil.svg"
@@ -542,7 +541,7 @@ QQ.Rectangle {
                 }
             }
 
-            NeutralIconButton {
+            IconButton {
                 id: addMenuButtonId
                 objectName: "toolbarAddNoteButton"
                 iconSource: "qrc:/twbs-icons/icons/plus.svg"
@@ -580,7 +579,7 @@ QQ.Rectangle {
             id: carpetRowId
             spacing: 3
 
-            NeutralIconButton {
+            IconButton {
                 objectName: "backButton"
                 iconSource: "qrc:/twbs-icons/icons/chevron-left.svg"
                 sourceSize: mainToolBar.iconSize
@@ -589,7 +588,7 @@ QQ.Rectangle {
                 onClicked: noteGallery.exitCarpetMode()
             }
 
-            NeutralIconButton {
+            IconButton {
                 id: selectObjectId
                 objectName: "selectButton"
                 iconSource: "qrc:/twbs-icons/icons/hand-index.svg"
@@ -605,7 +604,7 @@ QQ.Rectangle {
                 id: addButtonGroup
                 text: "Add"
 
-                NeutralIconButton {
+                IconButton {
                     id: addScrapId
                     objectName: "addScrapButton"
 
@@ -617,7 +616,7 @@ QQ.Rectangle {
                     onClicked: noteGallery.state = NoteToolMode.addScrap
                 }
 
-                NeutralIconButton {
+                IconButton {
                     id: addStationId
                     objectName: "addScrapStation"
 
@@ -628,7 +627,7 @@ QQ.Rectangle {
                     onClicked: noteGallery.state = NoteToolMode.addStation
                 }
 
-                NeutralIconButton {
+                IconButton {
                     id: addLeadId
                     iconSource: "qrc:/twbs-icons/icons/question-circle.svg"
                     objectName: "addLeads"

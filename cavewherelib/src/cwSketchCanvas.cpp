@@ -18,7 +18,7 @@
 #include "cwGridTextModel.h"
 #include "cwCenterlineSketchPainterModel.h"
 #include "cwStation.h"
-#include "cwSurvey2DGeometryArtifact.h"
+#include "cwSurvey2DGeometrySource.h"
 #include "cwSurvey2DGeometry.h"
 #include "cwTrip.h"
 #include "Monad/Result.h"
@@ -36,13 +36,12 @@ cwSketchCanvas::cwSketchCanvas(QQuickItem *parent)
     : QCanvasPainterItem(parent),
       m_pathModel(new cwSketchPainterPathModel(this)),
       m_linePlotModel(new cwCenterlineSketchPainterModel(this)),
-      m_linePlotGeometry(new cwSurvey2DGeometryArtifact(this))
+      m_linePlotGeometry(new cwSurvey2DGeometrySource(this))
 {
     setFillColor(Qt::transparent);
     setAlphaBlending(true);
     connectPathModelSignals();
 
-    m_linePlotGeometry->setName(QStringLiteral("SketchCanvas Line Plot"));
     m_linePlotModel->setSurvey2DGeometry(m_linePlotGeometry);
     connectModelForUpdate(m_linePlotModel);
 }

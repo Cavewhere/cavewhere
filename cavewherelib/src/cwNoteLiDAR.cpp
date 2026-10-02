@@ -2,6 +2,7 @@
 #include "cwNoteLiDAR.h"
 #include "cwTrip.h"
 #include "cwCave.h"
+#include "cwGridConvergence.h"
 #include "cwNoteLiDARTransformation.h"
 #include "cwNoteTransformCalculator.h"
 #include "cwKeywordModel.h"
@@ -306,6 +307,12 @@ void cwNoteLiDAR::updateNoteTransformion()
 
     double north = cwNoteTranformation::northAdjustedForDeclination(transform.north,
                                                                     -m_parentTrip->calibrations()->declination());
+    // Declination is a pure magnetic declination; the plotted stations are also
+    // rotated by the grid convergence at the fix station, so fold it into the
+    // stored north (0.0 without a projected CS). Read side adds it back in
+    // cwNoteLiDARManager::mapNoteToInData, matching cwScrap (issue #628).
+    north = cwNoteTranformation::northAdjustedForDeclination(north,
+                                                             cwGridConvergence::angleForCave(parentCave()));
     m_noteTransformation->setNorthUp(north);
 }
 

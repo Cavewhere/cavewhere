@@ -42,13 +42,12 @@ TEST_CASE("Copying caving region's data should work correctly", "[cwCavingRegion
 
 TEST_CASE("A cave the region no longer lists stops following its coordinate system",
           "[cwCavingRegion][gridConvergence]") {
-    // A fix station with no input CS of its own falls back to the region's
-    // globalCoordinateSystem, so the region drives the cave's convergence
-    // readout. Removing the cave has to break that drive: cwCavingRegion leaves
-    // the parent set on remove (so undo can restore it), which means without the
-    // teardown in disconnectCave() the region would keep recomputing a cave it
-    // no longer lists — and, once the cave is re-added elsewhere or the undo is
-    // dropped, keep a stale readout alive against the wrong CS.
+    // The region's frame drives the cave's convergence readout. Removing the
+    // cave has to break that drive: cwCavingRegion leaves the parent set on
+    // remove (so undo can restore it), which means without the teardown in
+    // disconnectCave() the region would keep recomputing a cave it no longer
+    // lists — and, once the cave is re-added elsewhere or the undo is dropped,
+    // keep a stale readout alive against the wrong frame.
     //
     // The undo stack owns the removed cave and keeps it alive for the
     // assertions; it only reaches the children present when it is set, so it
@@ -57,16 +56,24 @@ TEST_CASE("A cave the region no longer lists stops following its coordinate syst
     QUndoStack undoStack;
     region.setUndoStack(&undoStack);
 
-    // Central meridian -105°, so a station 100km east of it carries a real
-    // convergence rather than the ~0 the meridian itself would give.
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+    // The frame is derived from the first fix, so it is anchored on a cave of
+    // its own, and the caves under test sit 100km east of it where the grid
+    // carries a real convergence rather than the ~0 at the frame's origin.
+    cwFixStation anchorFix;
+    anchorFix.setStationName(QStringLiteral("a1"));
+    anchorFix.setInputCS(QStringLiteral("EPSG:32613"));
+    anchorFix.setEasting(500000.0);
+    anchorFix.setNorthing(4430000.0);
+    anchorFix.setElevation(1655.0);
 
-    // No input CS of its own, which is what makes these caves read the region's.
-    cwFixStation fix;
-    fix.setStationName(QStringLiteral("a1"));
+    cwCave* anchor = new cwCave();
+    anchor->setName(QStringLiteral("Anchor"));
+    region.addCave(anchor);
+    anchor->fixStations()->appendFixStation(anchorFix);
+    REQUIRE(region.geoReference()->hasCoordinateSystem());
+
+    cwFixStation fix = anchorFix;
     fix.setEasting(600000.0);
-    fix.setNorthing(4430000.0);
-    fix.setElevation(1655.0);
 
     cwCave* removed = new cwCave();
     removed->setName(QStringLiteral("Fisher Ridge"));
@@ -90,10 +97,10 @@ TEST_CASE("A cave the region no longer lists stops following its coordinate syst
     region.removeCave(region.indexOf(removed));
     REQUIRE(removed->parent() == region.rootNode());
 
-    // Taking the CS away leaves a fix station with no input CS and no fallback,
-    // which is exactly the NoCoordinateSystem state — a documented transition
-    // rather than an assumption about how a projection behaves.
-    region.geoReference()->setGlobalCoordinateSystem(QString());
+    // Clearing the frame leaves no grid to converge to, which is exactly the
+    // NoCoordinateSystem state — a documented transition rather than an
+    // assumption about how a projection behaves.
+    region.geoReference()->clear();
 
     CHECK(listed->gridConvergence()->state() == cwGridConvergence::NoCoordinateSystem);
     CHECK(removed->gridConvergence()->state() == cwGridConvergence::Valid);
@@ -281,14 +288,14 @@ TEST_CASE("addCaves inserts a batch as one undo step", "[cwCavingRegion]") {
 
 TEST_CASE("A cave added to a region with a coordinate system picks it up on insert",
           "[cwCavingRegion][gridConvergence]") {
-    // The fix station carries no input CS of its own, so the region's is the
-    // only thing that can give it a convergence — and it only learns of the
-    // region by being inserted.
+    // The grid a cave converges to is the region's frame, and the cave only
+    // learns of the region by being inserted.
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+    region.geoReference()->restore(cwGeoReference::Frozen, QStringLiteral("EPSG:32613"), {}, QString());
 
     cwFixStation fix;
     fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(QStringLiteral("EPSG:32613"));
     fix.setEasting(600000.0);
     fix.setNorthing(4430000.0);
     fix.setElevation(1655.0);

@@ -13,7 +13,9 @@ Item {
         case SurveyEditorRowIndex.StationRow:
             return 49
         case SurveyEditorRowIndex.ShotRow:
-            return 0
+            return itemId.shotBoxShift
+        case SurveyEditorRowIndex.SplayRow:
+            return itemId.columnTemplate.splayRowHeight
         }
     }
 
@@ -25,7 +27,14 @@ Item {
     required property int index;
     required property QC.ButtonGroup errorButtonGroup
     required property var removePreview
+    required property FixStationPopup fixStationPopup
+    required property SplayRemoveAskBox splayRemoveChallenge
     required property int rowType
+    required property cwSurveyEditorRowIndex rowIndex
+
+    //True on the rows the data hasn't reached yet: a chunk's trailing blank
+    //station and shot, and the blank row at the bottom of a splay cluster
+    required property bool isVirtual
 
     //Data that comes from the model
     required property cwSurveyEditorBoxData stationName;
@@ -33,12 +42,19 @@ Item {
     required property cwSurveyEditorBoxData stationRight;
     required property cwSurveyEditorBoxData stationUp;
     required property cwSurveyEditorBoxData stationDown;
+    required property bool stationFixed;
     required property cwSurveyEditorBoxData shotDistance;
     required property bool shotDistanceIncluded;
     required property cwSurveyEditorBoxData shotCompass;
     required property cwSurveyEditorBoxData shotBackCompass;
     required property cwSurveyEditorBoxData shotClino;
     required property cwSurveyEditorBoxData shotBackClino;
+    required property int stationSplayCount;
+    required property bool stationSplaysExpanded;
+    required property cwSurveyEditorBoxData splayDistance;
+    required property cwSurveyEditorBoxData splayCompass;
+    required property cwSurveyEditorBoxData splayClino;
+    required property string splayStationName;
 
     //Visualize properties
     required property SurveyEditorColumnTitles columnTemplate
@@ -52,6 +68,12 @@ Item {
 
     //For sizing
     readonly property int titleOffset: index === 0 ? 5 : 25
+
+    //A shot row is normally zero-height, with its boxes reaching up over the
+    //boundary from columnTemplate.shotRowY. An open splay cluster stands between
+    //the station and its shot, so the row takes on the height the boxes reach up
+    //by and drops them below the cluster instead of covering the last splay
+    readonly property real shotBoxShift: stationSplaysExpanded ? -columnTemplate.shotRowY : 0
 
     Loader {
         id: titleLoaderId
@@ -87,6 +109,9 @@ Item {
                 calibration: itemId.calibration
                 view: itemId.ListView.view
                 dataValidator: stationValidator
+                fixStationPopup: itemId.fixStationPopup
+                stationIsFixed: itemId.stationFixed
+                rowIndex: itemId.rowIndex
             }
 
 
@@ -165,8 +190,225 @@ Item {
                 view: itemId.ListView.view
                 dataValidator: distanceValidator
             }
+
+            SplaysBox {
+                id: splaysBox
+                width: itemId.columnTemplate.splaysWidth
+                height: itemId.columnTemplate.dataRowHeight
+                anchors.top: stationBox.top
+                anchors.left: downBox.right
+                anchors.leftMargin: -1
+
+                model: itemId.model
+                rowIndex: itemId.rowIndex
+                stationData: itemId.stationName
+                listViewIndex: itemId.index
+                splayCount: itemId.stationSplayCount
+                splaysExpanded: itemId.stationSplaysExpanded
+                isVirtual: itemId.isVirtual
+                splayRemoveChallenge: itemId.splayRemoveChallenge
+                removePreview: itemId.removePreview
+                calibration: itemId.calibration
+                view: itemId.ListView.view
+            }
         }
 
+    }
+
+    //Splay data loader. The three readings are cells of the grid like any
+    //other, so a mistyped download is corrected where it's read. The rail down
+    //the station column ties the cluster back to the station it hangs from,
+    //which a long cluster can push off-screen
+    Loader {
+        id: splayLoaderId
+        active: itemId.rowType === SurveyEditorRowIndex.SplayRow
+
+        sourceComponent: Item {
+            id: splayRowId
+
+            width: itemId.columnTemplate.width
+            height: itemId.columnTemplate.splayRowHeight
+
+            //The row at the bottom of every open cluster that holds no splay
+            //yet. Typing a reading into it is what makes one, so it stays out
+            //of the way — no tag of its own and no menu to act on — until the
+            //caret is in it
+            readonly property bool blankRow: itemId.isVirtual
+            readonly property bool blankRowFocused: itemId.model.focusedRow === itemId.index
+
+            readonly property real readingOpacity:
+                splayRowId.blankRow && !splayRowId.blankRowFocused
+                ? Theme.splayWaitingOpacity : 1.0
+
+            //The blank row is the bottom of the cluster, so the rail stops there
+            readonly property bool lastInCluster: splayRowId.blankRow
+
+            //Removing the station takes its splays with it
+            readonly property bool removePreviewActive:
+                itemId.removePreview !== null
+                && itemId.removePreview.chunk === itemId.rowIndex.chunk
+                && (itemId.removePreview.previewChunkRemoval
+                    || itemId.removePreview.stationIndex === itemId.rowIndex.indexInChunk)
+
+            Rectangle {
+                objectName: "splayRail"
+                x: itemId.columnTemplate.stationX + itemId.columnTemplate.splayRailX
+                width: itemId.columnTemplate.splayRailWidth
+                //Every row but the last bridges into the row below so the
+                //cluster draws one unbroken rail. The last stops at its own
+                //edge, since the shot row beneath it has nothing to bridge to
+                height: splayRowId.height
+                        + (splayRowId.lastInCluster ? 0 : itemId.columnTemplate.columnOffset)
+                color: Theme.splayBorder
+            }
+
+            QC.Label {
+                objectName: "splayRowLabel"
+
+                x: itemId.columnTemplate.stationX + itemId.columnTemplate.splayTagIndent
+                width: itemId.columnTemplate.stationWidth
+                       - itemId.columnTemplate.splayTagIndent
+                       - itemId.columnTemplate.splayTagRightMargin
+                anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideLeft
+                opacity: splayRowId.readingOpacity
+                text: splayRowId.blankRow
+                      ? itemId.splayStationName + " · +"
+                      : itemId.splayStationName + " · s" + (itemId.rowIndex.splayIndex + 1)
+                color: Theme.splayText
+                font.pixelSize: Theme.fontSizeCaption
+            }
+
+            SplayDataBox {
+                x: itemId.columnTemplate.distanceX
+                width: itemId.columnTemplate.distanceWidth
+                height: itemId.columnTemplate.splayCellHeight
+
+                opacity: splayRowId.readingOpacity
+
+                dataValue: itemId.splayDistance
+                listViewIndex: itemId.index
+                errorButtonGroup: itemId.errorButtonGroup
+                model: itemId.model
+                calibration: itemId.calibration
+                view: itemId.ListView.view
+                dataValidator: distanceValidator
+            }
+
+            SplayDataBox {
+                x: itemId.columnTemplate.compassX
+                width: itemId.columnTemplate.compassWidth
+                height: itemId.columnTemplate.splayCellHeight
+
+                opacity: splayRowId.readingOpacity
+
+                dataValue: itemId.splayCompass
+                listViewIndex: itemId.index
+                errorButtonGroup: itemId.errorButtonGroup
+                model: itemId.model
+                calibration: itemId.calibration
+                view: itemId.ListView.view
+                dataValidator: compassValidator
+            }
+
+            SplayDataBox {
+                x: itemId.columnTemplate.clinoX
+                width: itemId.columnTemplate.clinoWidth
+                height: itemId.columnTemplate.splayCellHeight
+
+                opacity: splayRowId.readingOpacity
+
+                dataValue: itemId.splayClino
+                listViewIndex: itemId.index
+                errorButtonGroup: itemId.errorButtonGroup
+                model: itemId.model
+                calibration: itemId.calibration
+                view: itemId.ListView.view
+                dataValidator: clinoValidator
+            }
+
+            //The blank row holds no splay to remove or move, so it offers
+            //neither the menu nor the ⋯ that opens it
+            Loader {
+                anchors.fill: parent
+                active: !splayRowId.blankRow
+
+                sourceComponent: Item {
+                    //Filling the row gives the menu somewhere to land on a
+                    //platform with no pointer to open under — Qt centers a
+                    //menu over its parent item there, and the row is the
+                    //parent that makes sense
+                    SplayRowMenu {
+                        id: splayRowMenuId
+                        anchors.fill: parent
+
+                        model: itemId.model
+                        rowIndex: itemId.rowIndex
+                    }
+
+                    //The row's own right click, which used to belong to the
+                    //menu itself. It stays out here so the menu can wait to be
+                    //built until a click like this one asks for it
+                    TapHandler {
+                        acceptedButtons: Qt.RightButton
+                        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+
+                        onTapped: splayRowMenuId.popup()
+                    }
+
+                    //Touch only, so a left click stays with the cells under it
+                    TapHandler {
+                        acceptedDevices: PointerDevice.TouchScreen
+
+                        onLongPressed: splayRowMenuId.popup()
+                    }
+
+                    SplayMenuButton {
+                        objectName: "splayRowMenuButton"
+
+                        x: itemId.columnTemplate.clinoX
+                           + itemId.columnTemplate.clinoWidth
+                           + itemId.columnTemplate.splayMenuIndent
+                        anchors.verticalCenter: parent.verticalCenter
+
+                        //The button takes the grab from the row's own handler,
+                        //so it calls an armed move off the way the rest of the
+                        //row does instead of popping a menu over it
+                        onTapped: {
+                            if(itemId.model.splayMoveActive) {
+                                itemId.model.cancelSplayMove()
+                                return
+                            }
+                            splayRowMenuId.popup()
+                        }
+                    }
+                }
+            }
+
+            //A splay row is a big target to miss a station by, so a click on
+            //one while a move is armed calls the move off rather than doing
+            //nothing at all
+            TapHandler {
+                enabled: itemId.model.splayMoveActive
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+
+                onSingleTapped: itemId.model.cancelSplayMove()
+            }
+
+            Rectangle {
+                objectName: "splayRemovePreviewLine"
+                x: itemId.columnTemplate.stationX + itemId.columnTemplate.splayTagIndent
+                width: itemId.columnTemplate.clinoX
+                       + itemId.columnTemplate.clinoWidth
+                       - x
+                anchors.verticalCenter: parent.verticalCenter
+                height: 2
+                color: Theme.text
+                visible: splayRowId.removePreviewActive
+                z: 2
+            }
+        }
     }
 
     Loader {
@@ -180,7 +422,7 @@ Item {
                 width: itemId.columnTemplate.distanceWidth
                 height: itemId.columnTemplate.dataRowHeight
                 x: itemId.columnTemplate.distanceX
-                y: itemId.columnTemplate.shotRowY
+                y: itemId.columnTemplate.shotRowY + itemId.shotBoxShift
                 anchors.topMargin: 0
 
                 dataValue: shotDistance

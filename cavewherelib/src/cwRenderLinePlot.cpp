@@ -25,9 +25,26 @@ cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
     setPickGateHidesObject(true);
 }
 
-void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData)
+void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
+                                   QVector<cwLinePlotGeometry::VertexRange> splayRanges)
 {
     Data data;
+
+    // One type per segment; a splay range always covers whole segments (its
+    // start and count are even — cwLinePlotGeometry appends vertices in
+    // pairs), so vertex span -> segment span is a divide by 2.
+    const int segmentCount = pointData.size() / 2;
+    data.segmentTypes = QVector<quint32>(segmentCount, kCenterlineSegment);
+    for (const cwLinePlotGeometry::VertexRange& range : splayRanges) {
+        Q_ASSERT(range.start % 2 == 0);
+        Q_ASSERT(range.count % 2 == 0);
+        Q_ASSERT(range.start + range.count <= pointData.size());
+        const int firstSegment = range.start / 2;
+        const int endSegment = (range.start + range.count) / 2;
+        for (int segment = firstSegment; segment < endSegment; ++segment) {
+            data.segmentTypes[segment] = kSplaySegment;
+        }
+    }
 
     // Find the max and min Z values
     data.maxZValue = -std::numeric_limits<float>::max();

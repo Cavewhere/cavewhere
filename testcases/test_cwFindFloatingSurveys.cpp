@@ -306,7 +306,8 @@ TEST_CASE("The floating-survey signal stays quiet when the answer is unchanged",
 
     // A re-solve of the same data must not re-pulse a banner the user is
     // already looking at.
-    manager.rerunSurvex();
+    manager.markNeedsUpdate();
+    manager.run();
     manager.waitToFinish();
     CHECK(spy.size() == 1);
 }

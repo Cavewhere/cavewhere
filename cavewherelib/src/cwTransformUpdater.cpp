@@ -49,12 +49,11 @@ void cwTransformUpdater::setModelMatrix(QMatrix4x4 matrix) {
 }
 
 /**
-  Adds a addItem to the graphics object
+  Adds a point item to be reprojected each time the camera changes.
 
-  This will update the object position by using setPosition.  The object needs to have "position3D"
-  property for this to work.
+  The updater reads the item's position3D and writes its inFrustum and item position.
   */
-void cwTransformUpdater::addPointItem(QQuickItem *object) {
+void cwTransformUpdater::addPointItem(cwPositionItem *object) {
     if(object == nullptr) { return; }
 
     if(PointItems.contains(object)) {
@@ -64,7 +63,7 @@ void cwTransformUpdater::addPointItem(QQuickItem *object) {
 
     PointItems.insert(object);
     connect(object, &QQuickItem::destroyed, this, &cwTransformUpdater::pointItemDeleted);
-    connect(object, SIGNAL(position3DChanged()), this, SLOT(handlePointItemDataChanged()));
+    connect(object, &cwPositionItem::position3DChanged, this, &cwTransformUpdater::handlePointItemDataChanged);
 
     if(Camera) {
         updatePoint(object);
@@ -74,7 +73,7 @@ void cwTransformUpdater::addPointItem(QQuickItem *object) {
 /**
   Removes a object from the transform updater
   */
-void cwTransformUpdater::removePointItem(QQuickItem *object) {
+void cwTransformUpdater::removePointItem(cwPositionItem *object) {
     if(object == nullptr) { return; }
 
     if(!PointItems.contains(object)) {
@@ -100,8 +99,13 @@ void cwTransformUpdater::update() {
         //Update transformation object
         updateTransformMatrix();
 
-        //Update all the point objects
-        foreach(QQuickItem* object, PointItems) {
+        //Update all the point objects. Iterate a copy: updatePoint writes properties
+        //that can synchronously run QML handlers, and one that adds or removes a managed
+        //item would invalidate a live iterator. QSet is implicitly shared, so this is a
+        //refcount bump unless a mutation actually happens mid-iteration - the safety the
+        //old foreach provided for free.
+        const auto pointItems = PointItems;
+        for(cwPositionItem* object : pointItems) {
             updatePoint(object);
         }
 
@@ -114,13 +118,18 @@ void cwTransformUpdater::update() {
   position using setPos.  This doesn't scale the object like updateTransform does.  This is
   useful for billboarded points.
   */
-void cwTransformUpdater::updatePoint(QQuickItem *object) {
+void cwTransformUpdater::updatePoint(cwPositionItem *object) {
     Q_ASSERT(Camera != nullptr);
     Q_ASSERT(object != nullptr);
 
-    QVector3D position = object->property("position3D").value<QVector3D>();
-    QVector3D position2D = TransformMatrix.map(position);
-    object->setVisible(!Camera->isQtViewportCoordinateClipped(position2D));
+    const QVector3D position2D = TransformMatrix.map(object->position3D());
+
+    //Publish frustum membership instead of writing visible: the item's owner decides
+    //what to do with it, so a delegate can have its own reasons to be hidden without
+    //the two writers overwriting each other. Positive polarity keeps owner bindings
+    //an AND (`visible: inFrustum && ...`) rather than a negation.
+    object->setInFrustum(!Camera->isQtViewportCoordinateClipped(position2D));
+
     object->setPosition(QPointF(position2D.x(), position2D.y()));
 }
 
@@ -143,7 +152,7 @@ void cwTransformUpdater::updateTransformMatrix() {
 void cwTransformUpdater::pointItemDeleted(QObject* object) {
     //Object has already been deleted, we need to remove it directly
     //dynamic_cast don't work because the subclass has had destructor called already
-    PointItems.remove(static_cast<QQuickItem*>(object));
+    PointItems.remove(static_cast<cwPositionItem*>(object));
 
     //Don't call removePointItem, object has already been partcially deleted
     // QQuickItem* graphicsObject = qobject_cast<QQuickItem*>(object);
@@ -160,8 +169,8 @@ void cwTransformUpdater::handlePointItemDataChanged() {
         return;
     }
 
-    QQuickItem* item = qobject_cast<QQuickItem*>(sender());
-    if(PointItems.contains(item)) {
+    cwPositionItem* item = qobject_cast<cwPositionItem*>(sender());
+    if(item != nullptr && PointItems.contains(item)) {
         updatePoint(item);
     }
 }

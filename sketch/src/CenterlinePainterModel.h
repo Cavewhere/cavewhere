@@ -2,7 +2,7 @@
 #pragma once
 
 #include "AbstractPainterPathModel.h"
-#include "cwSurvey2DGeometryArtifact.h"
+#include "cwSurvey2DGeometrySource.h"
 
 //Qt includes
 #include <QVector>
@@ -13,13 +13,13 @@ namespace cwSketch {
 class CenterlinePainterModel : public AbstractPainterPathModel
 {
     Q_OBJECT
-    Q_PROPERTY(cwSurvey2DGeometryArtifact* survey2DGeometry READ survey2DGeometry WRITE setSurvey2DGeometry NOTIFY survey2DGeometryChanged)
+    Q_PROPERTY(cwSurvey2DGeometrySource* survey2DGeometry READ survey2DGeometry WRITE setSurvey2DGeometry NOTIFY survey2DGeometryChanged)
 
 public:
     explicit CenterlinePainterModel(QObject *parent = nullptr);
 
-    cwSurvey2DGeometryArtifact* survey2DGeometry() const;
-    void setSurvey2DGeometry(cwSurvey2DGeometryArtifact* geometry);
+    cwSurvey2DGeometrySource* survey2DGeometry() const;
+    void setSurvey2DGeometry(cwSurvey2DGeometrySource* geometry);
 
     // ListModel overrides
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
@@ -34,7 +34,7 @@ private:
     // implement base’s pure virtual
     Path path(const QModelIndex &index) const override;
 
-    QPointer<cwSurvey2DGeometryArtifact> m_geometryArtifact;
+    QPointer<cwSurvey2DGeometrySource> m_geometrySource;
 
     QVector<Path> m_paths;
 };

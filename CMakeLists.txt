@@ -159,7 +159,6 @@ add_subdirectory(QQuickGit)
 set(SURVEX_CONAN OFF CACHE BOOL "Use survex Conan to manage dependencies" FORCE)
 
 add_subdirectory(MarkScope)
-add_subdirectory(QuickQanava)
 # add_subdirectory(SignalSpyChecker)
 
 add_subdirectory(survex)
@@ -177,6 +176,9 @@ find_package(OpenSSL REQUIRED)
 # testlib's LazFixtureHelper can link against it directly without dragging
 # the LASlib include path into cavewherelib's PUBLIC interface.
 find_package(laslib CONFIG REQUIRED)
+# libktx is a private dep of cavewherelib; re-find it here so the tests can
+# call libktx directly without exposing its headers through cavewherelib.
+find_package(Ktx REQUIRED)
 
 find_package(Qt6
     COMPONENTS
@@ -213,12 +215,17 @@ if(BUILD_TESTING)
             testlib/LazFixtureHelper.cpp
             testlib/LazFixtureHelper.h
             testlib/CwRhiSceneTestAccess.h
+            testlib/GeoreferenceFixtureHelper.h
             testlib/BoulderFixtureHelper.cpp
             testlib/BoulderFixtureHelper.h
+            testlib/FixStationFixtureHelper.cpp
+            testlib/FixStationFixtureHelper.h
             testlib/MockAuthProvider.cpp
             testlib/MockAuthProvider.h
             testlib/SvgOverlapAnalyzer.cpp
             testlib/SvgOverlapAnalyzer.h
+            testlib/CaptureLayerInspector.cpp
+            testlib/CaptureLayerInspector.h
             testlib/OffscreenRenderTester.cpp
             testlib/OffscreenRenderTester.h
             testlib/WindowGrabber.cpp
@@ -287,8 +294,9 @@ if(BUILD_TESTING)
         cavewherelib
         qquickgit-lfs-test-server
         protobuf::libprotobuf
+        KTX::ktx
         SignalSpyChecker
-        QuickQanavaplugin
+        laslib::laslib
     )
 
     target_include_directories(cavewhere-test PRIVATE
@@ -342,10 +350,10 @@ if(BUILD_TESTING)
         Qt6::Widgets
         Qt6::Qml
         Qt6::QuickTest
+        Qt6::QuickControls2
         cavewhere_simplemodule
         cavewhere-testlib
         cavewherelib
-        QuickQanavaplugin
     )
 
     # Ensure QML modules are imported without relying on QML2_IMPORT_PATH.
@@ -382,10 +390,10 @@ target_link_libraries(CaveWhere
     Qt6::Gui
     Qt6::Widgets
     Qt6::Quick
+    Qt6::QuickControls2
     Qt6::Sql
     Qt6::Test
     cavewherelib
-    QuickQanavaplugin
     MarkScope
 )
 

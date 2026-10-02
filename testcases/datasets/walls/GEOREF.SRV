@@ -1,0 +1,7 @@
+; Georeferenced Cave, Main Passage
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0
+#FIX A1 580661.570 4113846.340 219
+#FIX A3 W86:5:29.254 N37:10:3.195 219
+A1	A2	5.0	0	0
+A2	A3	4.0	45	-5

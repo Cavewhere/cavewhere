@@ -24,18 +24,47 @@ QtObject {
     readonly property color textSubtle: dark ? "#9fa6b1" : "#616469"
     readonly property color textInverse: dark ? "#111318" : "#f5f5f5"
     readonly property color textLink: dark ? "#85c1f4" : "#1d4d77"
+    // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell),
+    // legible on the page background in both themes — danger is a fill, not text.
+    readonly property color errorText: dark ? "#f47067" : "#cf222e"
 
     // Accents & states
     readonly property color accent: palette.accent
     readonly property color accentMuted: "#8AC6FF"
     readonly property color success: dark ? "#76e596" : "#4caf50"
     readonly property color warning: dark ? "#6b643e" : "#FF9C14"
+    // A warning-toned card: a tinted ground, its outline, and text that reads on
+    // it. Used where a warning has to be a legible block rather than a fill.
+    readonly property color warningSurface: dark ? "#3a3524" : "#fff3df"
+    readonly property color warningBorder: dark ? "#8a8250" : "#e0a64b"
+    readonly property color warningText: dark ? "#f0d9a0" : "#7a4b00"
     readonly property color danger: dark ? "#6f312e" : "#FF6736"
     readonly property color info: dark ? "#1f3f61" : "#85c1f4"
     readonly property color highlight: dark ? "#314f78" : "#a5cdff"
     readonly property color hover: Qt.lighter(highlight, dark ? 1.4 : 1.15)
     readonly property color icon: palette.buttonText
     readonly property color tag: dark ? "#656565" : border
+
+    // Splays: wall shots that hang off a station instead of joining the
+    // centerline. An earth tone keeps them apart from the survey data they sit
+    // next to without reading as an error.
+    readonly property color splaySurface: dark ? "#322a1a" : "#f7f1e3"
+    readonly property color splayBorder: dark ? "#c9a35e" : "#8a6d3b"
+    readonly property color splayText: dark ? "#c9a35e" : "#8a6d3b"
+
+    // How far back the blank row at the bottom of an open splay cluster sits
+    // while it waits for a reading. Qt Quick draws no dashed border without
+    // Shapes, which the survey table stays clear of, so it fades instead.
+    readonly property real splayWaitingOpacity: 0.55
+
+    // The round "+" a station with no splays offers while the pointer is over
+    // its Splays cell. It reads as a button in a 50pt station row, where the
+    // small-sized glyph it replaced read as a stray character. The bars that
+    // draw the "+" span a little under half the button, leaving a ring of the
+    // button's own fill around them.
+    readonly property int splayEntryButtonSize: 28
+    readonly property int splayEntryGlyphThickness: 2
+    readonly property real splayEntryGlyphSpan: 0.45
 
     // Lines and outlines
     readonly property color border: dark ? "#4a4f58" : "#d3d3d3"
@@ -104,10 +133,66 @@ QtObject {
     readonly property int sidebarWidthFull: 80
     readonly property int sidebarWidthCompact: 50
 
+    // Per-page tool rail: icon-only buttons, sized so two fit across the wide
+    // sidebar, grouped inside a card that lifts them off the dark gradient.
+    readonly property int toolRailButtonSize: 30
+    readonly property int toolRailSpacing: 4
+    readonly property int toolRailPanelInset: 3
+    readonly property int toolRailPanelPadding: 4
+
+    // Tool property flyout: the sidebar-hinged panel showing the armed tool's
+    // options. Sized to hold a compact options card; sits a small gap off the
+    // sidebar's right edge.
+    readonly property int toolFlyoutWidth: 220
+    readonly property int toolFlyoutGap: 8
+    readonly property int toolFlyoutPadding: 11
+
+    // Sidebar update footer: the one control at the bottom of the sidebar that
+    // shows whichever derived-data state the update coordinator is in.
+    readonly property int updateFooterPadding: 5
+    readonly property int updateFooterSpacing: 3
+    readonly property int updateFooterChevronSize: 12
+
+    // Task progress ring: the one busy mark, shared by the sidebar footer and
+    // the phone status chip. The track is the part not yet done, so it has to
+    // read as a groove behind the arc rather than as a second arc.
+    readonly property color progressRingTrack: dark ? "#3f4652" : "#c9ced6"
+    // Smaller than fontSizeCaption: the count sits inside the ring, whose inner
+    // opening is only about two thirds of the mark.
+    readonly property int progressRingCountFontSize: Math.round(9 * fontScale)
+
+    // Task flyout: the list of running jobs the footer's busy row opens. Wider
+    // than the tool flyout because job names carry file names, and capped so a
+    // burst of imports scrolls instead of running off the top of the window.
+    readonly property int taskFlyoutWidth: 280
+    readonly property int taskFlyoutMaxListHeight: 220
+    // Long enough for the pointer to cross the gap from the sidebar to the card.
+    readonly property int taskFlyoutHoverCloseDelay: 300
+    // A hairline: the detail line under a task row is a secondary signal, so it
+    // reads as a thinner mark than the row's own bar.
+    readonly property int taskDetailBarHeight: 4
+
     // Icon sizes
     readonly property int iconSizeButton: 16
     readonly property int iconSizeSmall: 24
     readonly property int iconSizeMedium: 32
+
+    // Coordinate-system picker: keep the UTM zone spinbox and N/S combo
+    // compact so mode + zone + hemisphere fit one row without overflowing the
+    // project panel or a fix-station table cell.
+    readonly property int csZoneFieldWidth: 84
+    readonly property int csHemisphereFieldWidth: 64
+    // Wide enough for the longest datum the table names ("Mexico ITRF2008") at
+    // the picker's smaller datum font.
+    readonly property int csDatumFieldWidth: 130
+    // Cap the inline Custom resolved-name label so a long CRS name elides
+    // instead of stretching the picker past its host cell / wrapping the Flow.
+    readonly property int csResolvedLabelMaxWidth: 180
+    // The whole-coordinate field in the inline fix-station editor: wide enough
+    // for a UTM triple with its elevation unit, e.g.
+    // "610016.792, 5615117.075, 2545.34m". Also caps the error line below it, so
+    // a long message wraps inside the popup instead of widening it.
+    readonly property int fixPopupCoordinateWidth: 260
 
     // Touch target sizing — scale up hit points on mobile builds
     readonly property real pointSizeFactor: RootData.mobileBuild ? 2.0 : 1.0
@@ -123,9 +208,12 @@ QtObject {
     readonly property int statsPadding: 10
     readonly property int floatingToolbarPadding: 12
     readonly property int infoColumnMaxWidth: 200
-    // The info column grows while its settings are being edited so the wider
-    // coordinate-system editor (mode + UTM zone + hemisphere) isn't clipped.
-    readonly property int infoColumnEditMaxWidth: 320
+    // Comfortable width for an inline banner that floats over a page: wide
+    // enough to read a sentence or two without crowding the page behind it.
+    readonly property int inlineBannerWidth: 460
+    // Room a fixed-width table sets aside for a vertical scrollbar when it works
+    // out whether it still fits the page it is on.
+    readonly property int scrollBarAllowance: 16
 
     // Tallest a floating list (a review list, a popup's rows) grows before it
     // scrolls, so it leaves the window behind it usable. Font-scaled so a
@@ -149,7 +237,8 @@ QtObject {
     readonly property int treeStationsColumnWidth: Math.round(100 * fontScale)
     readonly property int treeStatColumnWidth: Math.round(120 * fontScale)
     readonly property int treeDateColumnWidth: Math.round(110 * fontScale)
-    readonly property int treeDeclColumnWidth: Math.round(95 * fontScale)
+    //Fits "Declination" plus the sort indicator.
+    readonly property int treeDeclColumnWidth: Math.round(115 * fontScale)
     readonly property int treeFilterWidth: Math.round(220 * fontScale)
     //The arrow the header cell of the sorted column carries, sized to sit
     //beside a fontSizeSmall title rather than to stand on its own.

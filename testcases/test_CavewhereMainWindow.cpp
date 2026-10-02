@@ -10,7 +10,6 @@
 #include "TestHelper.h"
 #include "cwImageProvider.h"
 #include "cwSurveyNoteModel.h"
-#include "cwTaskManagerModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
@@ -29,9 +28,6 @@
 #include <QSettings>
 #include <QGuiApplication>
 
-//QuickQanave includes
-#include <QuickQanava>
-
 class MainHelper {
 public:
     static QQmlApplicationEngine* createApplicationEnigne() {
@@ -40,12 +36,6 @@ public:
 
         rootData->account()->setName("First Last");
         rootData->account()->setEmail("sauce@test.com");
-
-        // Add the macOS Resources directory to the QML import search path
-        QString resourcePath = QCoreApplication::applicationDirPath() + "/QuickQanava/src";
-        applicationEnigine->addImportPath(resourcePath);
-
-        QuickQanava::initialize(applicationEnigine);
 
         applicationEnigine->loadFromModule(QStringLiteral("cavewherelib"),
                                            QStringLiteral("CavewhereMainWindow"));
@@ -196,7 +186,6 @@ TEST_CASE("Load project with no images for scraps", "[CavewhereMainWindow]") {
 
         INFO("Filename:" << project->filename());
 
-        rootData->taskManagerModel()->waitForTasks();
         rootData->futureManagerModel()->waitForFinished();
 
         REQUIRE(project->cavingRegion()->caveCount() == 1);

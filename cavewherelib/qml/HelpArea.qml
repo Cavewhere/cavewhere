@@ -14,6 +14,10 @@ QQ.Rectangle {
     id: helpArea
 
     property alias text: helpText.text
+    // How `text` is read. RichText by default, since most help strings carry
+    // markup and links. A caller whose text is built from user data (station or
+    // cave names) must set PlainText, or a name containing `<` renders as markup.
+    property alias textFormat: helpText.textFormat
     property alias pixelSize: helpText.font.pixelSize
     property alias imageSource: icon.source
     property alias helpImageSource: helpImageId.source

@@ -271,13 +271,11 @@ TEST_CASE("Teardown while a scan is in flight is safe",
         manager->setRegion(&region);
         manager->waitToFinish();
 
-        // Queue a fresh solve restart through the event loop, then destroy
-        // before it dispatches. The restarter's queued start executes during
-        // the destructor's drain pump (only the m_alive flag guards it, and
-        // that flag stays true for the whole destructor body), and its
-        // buildInput reads the external subsystem's attachment dirs — which
-        // must therefore still be alive at that point.
-        manager->rerunSurvex();
+        // Start a fresh solve, then destroy before it finishes. Its buildInput
+        // reads the external subsystem's attachment dirs, which must therefore
+        // still be alive at that point.
+        manager->markNeedsUpdate();
+        manager->run();
         manager.reset();
         CHECK(true); // sentinel: reached teardown without crashing
     }

@@ -13,6 +13,7 @@
 // #include "cwImageItem.h"
 #include "cwScrapOutlinePointView.h"
 #include "cwTrip.h"
+#include "cwTripCalibration.h"
 #include "cwSurveyNoteModel.h"
 #include "cwScrapView.h"
 // #include "cwNoteCamera.h"
@@ -41,11 +42,17 @@ void cwBaseScrapInteraction::addScrap() {
         scrap()->setCalculateNoteTransform(false);
         scrap()->noteTransformation()->setData(transform->data());
     } else {
-        // No previous transform to inherit: seed the auto-scaled scale's display
-        // units from the project unit system (cwNote::unitSystem() resolves the
-        // region, Metric fallback) so it reads in the project's paper/cave units
-        // (cm/m or in/ft) instead of raw inches.
-        scrap()->seedDefaultScale(note() ? note()->unitSystem() : cwUnits::Metric);
+        // No previous transform to inherit: seed a round scale (1 cm = 2.5 m,
+        // 1 in = 20 ft) for a scrap that has no stations to derive one from. Its
+        // units come from the trip's survey unit rather than the project's, so
+        // that the relabel cwScrapManager runs on attach is a no-op — seeding
+        // from a project on the other unit system would rewrite 1 in = 20 ft to
+        // 1 cm = 2.4 m, the same ratio in units nobody chose to round to.
+        cwTrip* trip = note() != nullptr ? note()->parentTrip() : nullptr;
+        const cwUnits::LengthUnit caveUnit = trip != nullptr
+                                                 ? trip->calibrations()->distanceUnit()
+                                                 : cwUnits::Meters;
+        scrap()->seedDefaultScale(cwUnits::unitSystem(caveUnit));
     }
 
     note()->addScrap(scrap());

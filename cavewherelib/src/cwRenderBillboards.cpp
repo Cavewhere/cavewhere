@@ -26,30 +26,39 @@ constexpr float kWorldPerPixel = 0.02f;
 constexpr float kMinClipW = 1e-4f;
 constexpr float kMinProjectionScale = 1e-6f;
 
+// Element (3, 2) — the one that divides by view-space depth — is 0 for an
+// orthographic projection and -1 for a perspective one. cwProjectionTransition
+// scrubs between the two with an element-wise lerp, so this midpoint classifies a
+// blended frame by whichever it is closer to. Same test cwEDLEffect uses on the
+// same render thread.
+constexpr float kPerspectiveDepthDivide = -0.5f;
+
+// True when @a projection is orthographic. The clip-space correction
+// cwRhiFrameRenderer premultiplies leaves the bottom row alone, so this holds for
+// the corrected matrices the render data carries.
+bool isOrthographic(const QMatrix4x4& projection)
+{
+    return projection(3, 2) >= kPerspectiveDepthDivide;
+}
+
 // Build the billboard's model matrix. Columns 0/1/2 are the camera basis (from
 // the view matrix rows) so the quad faces the camera; column 1 is negated so the
 // item's y-down pixel space maps to world-down. Column 3 places it at the world
-// position (biased toward @a eye so a billboard sitting on a wall isn't
-// self-occluded). The trailing translate centers the item on that position. The
-// eye position is frame-constant, so the caller computes it once per frame.
+// position, pulled toward the viewer by the slot's depth bias so a billboard
+// sitting on a wall isn't self-occluded. The trailing translate centers the item
+// on that position.
 QMatrix4x4 buildModelMatrix(const cwRenderBillboards::RenderSlot& slot,
                             const QMatrix4x4& view,
                             const QMatrix4x4& projection,
                             const QMatrix4x4& viewProjection,
                             const QSizeF& logicalViewport,
-                            const QVector3D& eye)
+                            const cwBillboardSightLine& sightLine)
 {
     const QVector3D right(view(0, 0), view(0, 1), view(0, 2));
     const QVector3D up(view(1, 0), view(1, 1), view(1, 2));
     const QVector3D forward(view(2, 0), view(2, 1), view(2, 2));
 
-    QVector3D position = slot.worldPosition;
-    if (slot.depthBias != 0.0f) {
-        const QVector3D toEye = eye - position;
-        if (!toEye.isNull()) {
-            position += toEye.normalized() * slot.depthBias;
-        }
-    }
+    const QVector3D position = sightLine.biasedPosition(slot.worldPosition, slot.depthBias);
 
     float scaleX = kWorldPerPixel;
     float scaleY = kWorldPerPixel;
@@ -150,7 +159,9 @@ public:
         const QMatrix4x4 view = renderData.viewMatrix;
         const QMatrix4x4 projection = renderData.projectionMatrix;
         const QMatrix4x4 viewProjection = renderData.viewProjectionMatrix;
-        const QVector3D eye = view.inverted().column(3).toVector3D();
+        // Frame-constant, and building it inverts a matrix under perspective, so
+        // resolve it once here rather than per billboard.
+        const cwBillboardSightLine sightLine(view, projection);
         const QSize pixelSize = target->pixelSize();
         // The job's device pixel ratio, NOT the QRhiRenderTarget's — the latter
         // defaults to 1.0, which would size ScreenConstant billboards at half their
@@ -182,7 +193,8 @@ public:
             cwItem2DRenderer* renderer2d = rendererIt->second.get();
 
             const QMatrix4x4 model = buildModelMatrix(slot, view, projection,
-                                                       viewProjection, logicalViewport, eye);
+                                                       viewProjection, logicalViewport,
+                                                       sightLine);
 
             // viewProjectionMatrix() is already clip-space corrected (matching the
             // convention the cave geometry was rendered with), so the billboard's
@@ -227,6 +239,35 @@ private:
 };
 
 } // namespace
+
+cwBillboardSightLine::cwBillboardSightLine(const QMatrix4x4& view, const QMatrix4x4& projection) :
+    // The camera's +Z axis in world space (the view matrix's third row): the
+    // direction the eye looks *from*.
+    m_towardViewer(view(2, 0), view(2, 1), view(2, 2)),
+    m_orthographic(isOrthographic(projection))
+{
+    if (!m_orthographic) {
+        m_eye = view.inverted().column(3).toVector3D();
+    }
+}
+
+QVector3D cwBillboardSightLine::biasedPosition(const QVector3D& worldPosition,
+                                               float depthBias) const
+{
+    if (depthBias == 0.0f) {
+        return worldPosition;
+    }
+
+    if (m_orthographic) {
+        return worldPosition + m_towardViewer * depthBias;
+    }
+
+    const QVector3D toEye = m_eye - worldPosition;
+    if (toEye.isNull()) {
+        return worldPosition;
+    }
+    return worldPosition + toEye.normalized() * depthBias;
+}
 
 void cwSortBillboardSlotsBackToFront(QVector<cwRenderBillboards::RenderSlot>& renderSlots,
                                      const QMatrix4x4& viewProjection)

@@ -423,7 +423,7 @@ MainWindowTest {
         // azimuth. gen-manual-screenshots.sh assembles the frames into
         // scraps-carpet-orbit.gif and deletes them — the animated "why" hero
         // for the Scraps / Carpeting overview (docs/manual/scraps/carpeting.md):
-        // it shows the flat sketches morphed and draped on the 3D survey line,
+        // it shows the flat sketches morphed and carpeted on the 3D survey line,
         // turning so the 3D relief reads.
         //
         // Framing is computed ONCE, then the orbit only changes azimuth: a fixed
@@ -458,7 +458,7 @@ MainWindowTest {
             const prevPitchLocked = tt.pitchLocked;
 
             // Carpets on; survey chrome (leads, station labels) off so the orbit
-            // reads as pure morphed sketch draped on the line plot.
+            // reads as pure morphed sketch carpeted on the line plot.
             RootData.regionSceneManager.scraps.visible = true;
             RootData.leadsVisible = false;
             RootData.stationsVisible = false;
@@ -1624,13 +1624,14 @@ MainWindowTest {
         // The Automatic Update checkbox in the lower-left sidebar, highlighted
         // and cropped. Backs the "Carpeting is automatic" section of
         // docs/manual/scraps/carpeting.md — the switch gates the survey solve
-        // (loop closure) and carpet re-morphing together.
+        // (loop closure) and carpet re-morphing together. It lives in the update
+        // footer's idle state, which is what an untouched project shows.
         function test_automaticUpdate() {
             let regionViewer = loadRhiViewer();
             if (!regionViewer) { return; }
 
-            let container = findByName(rootId.mainWindow, "autoUpdateContainer");
-            verify(container, "found the Automatic Update container");
+            let container = findByName(rootId.mainWindow, "updateFooter");
+            verify(container, "found the update footer");
 
             let tabBar = sidePanelTabBar();
             if (tabBar) { tabBar.currentIndex = 0; }
@@ -1686,7 +1687,8 @@ MainWindowTest {
 
         // Load the demo project, open the Settings page, and select tab `index`
         // on the vertical tab bar (0 Jobs, 1 Warping, 2 PDF/SVG, 3 Git,
-        // 4 Appearance, 5 Rendering, 6 Sketch). Returns the tab bar, or null after
+        // 4 Appearance, 5 Rendering, 6 Units; the Sketch tab is hidden for this
+        // release, #587). Returns the tab bar, or null after
         // skip() when there is no live QRhi. The Settings panels don't depend on
         // project content, but reloading hands each shot a known-clean window; the
         // font/PDF/MSAA defaults come from QSettings, which the test harness clears
@@ -1857,11 +1859,10 @@ MainWindowTest {
         readonly property real georefNorthing: 4300000
         readonly property real georefElevation: 1200
 
-        // Set the project coordinate system and fix `page.currentCave`'s first
-        // station to real coordinates, so the cave is georeferenced. Both changes
-        // are undone by the restoreDemoProject() reload each georef shot ends with.
+        // Fix `page.currentCave`'s first station to real coordinates, which
+        // georeferences the cave — the fix anchors the project's frame. Undone
+        // by the restoreDemoProject() reload each georef shot ends with.
         function georeferenceDemoCave(page) {
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
 
             let model = page.currentCave.fixStations;
             model.addFixStation();
@@ -1907,37 +1908,6 @@ MainWindowTest {
             }
             tryVerify(() => interaction.hasMeasurement, 2000,
                       "a two-point measurement is complete");
-        }
-
-        // The project Coordinate system control on the Data page, set to UTM so the
-        // zone / hemisphere / resolved-EPSG fields are all showing.
-        // Backs docs/manual/georeferencing/georeference-a-cave.md.
-        //
-        // Cropped to the Geospatial group box (label + control) rather than grabbed
-        // whole-window: the control is one small row on an otherwise full Data page,
-        // so a cropped shot reads in the manual's narrow column where a whole-window
-        // one would not.
-        function test_georefCoordinateSystem() {
-            let page = openDataPage("Source/Data", "dataMainPage");
-            if (!page) { return; }
-
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
-
-            let group = findByName(page, "geospatialGroupBox");
-            verify(group, "found the Geospatial group box");
-            let combo = findByName(page, "globalCoordinateSystemComboBox");
-            verify(combo, "found the coordinate system combo box");
-
-            highlightOverlayId.target = combo;
-            settle();
-
-            let path = WindowGrabber.grabItemToFile(group, "georef-coordinate-system",
-                                                    panelCropMargin);
-            verify(path.length > 0, "grabItemToFile wrote the coordinate-system shot");
-            verify(OffscreenRenderTester.imageIsNonUniform(path),
-                   "georef-coordinate-system is not blank");
-
-            restoreDemoProject();
         }
 
         // Two shots from one georeferenced cave: the Fix Stations page with a fixed
@@ -1995,7 +1965,7 @@ MainWindowTest {
         // coordinates back out" section of georeference-a-cave.md.
         //
         // The popup is a QC.Popup opened by a `visible` binding (hasPick &&
-        // pickButtonId.selected), so it's a QObject child (findChild, not
+        // the picker is the active interaction), so it's a QObject child (findChild, not
         // findByName) and needs popupType = Popup.Item to draw into the window
         // overlay grabWindow can see — the same reason as the Import/Export menus.
         function test_georefCoordinatePicker() {
@@ -2007,10 +1977,9 @@ MainWindowTest {
             verify(glTerrain, "found the GLTerrainRenderer");
 
             // Georeference cave 0 so the picked point resolves to real coordinates:
-            // the popup's CRS / WGS84 / Elevation sections only show with a CS set.
+            // the popup's WGS84 / Elevation sections only show with a frame set.
             let cave = RootData.region.cave(0);
             verify(cave, "found the demo cave");
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
             let model = cave.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
@@ -2050,8 +2019,8 @@ MainWindowTest {
             // meaningful part of the coordinate. Scroll each field to the start.
             let csField = findChild(popup, "CSField");
             if (csField) { csField.cursorPosition = 0; }
-            let wgsField = findChild(popup, "WgsField");
-            if (wgsField) { wgsField.cursorPosition = 0; }
+            let latLonField = findChild(popup, "LatLonField");
+            if (latLonField) { latLonField.cursorPosition = 0; }
             settle();
 
             let path = WindowGrabber.grabItemToFile(popup.contentItem,
@@ -2098,11 +2067,11 @@ MainWindowTest {
             restoreDemoProject();
         }
 
-        // The Clip tool in the 3D view's bottom toolbar, highlighted, so the clip
+        // The Clip tool in the main sidebar's tool rail, highlighted, so the clip
         // page can show where the tool lives. Whole-window: the demo cave in the 3D
-        // view is the context, and the toolbar (Pick / Clip / Measure) sits over it.
-        // The button is present with or without a loaded cloud, so no fixture is
-        // needed. Backs the "Open the clip tool" section of
+        // view is the context, and the rail (Pick / Measure / Clip) sits in the
+        // sidebar beside it. The button is present with or without a loaded cloud,
+        // so no fixture is needed. Backs the "Open the clip tool" section of
         // docs/manual/point-clouds/clip-a-point-cloud.md.
         function test_pointCloudClipTool() {
             let regionViewer = loadRhiViewer();
@@ -2112,7 +2081,9 @@ MainWindowTest {
                 "rootId->viewPage->SplitView->renderer");
             verify(glTerrain, "found the GLTerrainRenderer");
 
-            let clipButton = findByName(glTerrain, "lazClipButton");
+            // The tool buttons moved from the view's toolbar to the main sidebar's
+            // tool rail, so search the whole window rather than under the renderer.
+            let clipButton = findByName(rootId.mainWindow, "lazClipButton");
             verify(clipButton, "found the Clip tool button");
             highlightOverlayId.target = clipButton;
             settle();
@@ -2125,8 +2096,8 @@ MainWindowTest {
             highlightOverlayId.target = null;
         }
 
-        // The Measure tool in action: the button highlighted in the 3D view's bottom
-        // toolbar (Pick / Clip / Measure) AND a completed two-point measurement — the
+        // The Measure tool in action: the button highlighted in the main sidebar's
+        // tool rail (Pick / Measure / Clip) AND a completed two-point measurement — the
         // two placed points and the line drawn between them — so the page shows both
         // where the tool lives and what using it looks like. Whole-window for context.
         // Backs the "Open the measurement tool" / "Place two points" sections of
@@ -2146,12 +2117,12 @@ MainWindowTest {
             // Hide the readout popup for this shot so it doesn't cover the measurement
             // line — the line and its endpoints are the point here, and the readout has
             // its own dedicated shot (measurement-readout.png). Assigning visible drops
-            // the popup's `measureButton.selected && hasMeasurement` binding, which is
-            // fine for a one-shot grab; the interaction is torn down right after.
+            // the popup's `activeInteraction === measurement && hasMeasurement` binding,
+            // which is fine for a one-shot grab; the interaction is torn down right after.
             let popup = findChild(glTerrain, "measurementReadoutPopup");
             if (popup) { popup.visible = false; }
 
-            let measureButton = findByName(glTerrain, "measurementButton");
+            let measureButton = findByName(rootId.mainWindow, "measurementButton");
             verify(measureButton, "found the Measure tool button");
             highlightOverlayId.target = measureButton;
             settle();
@@ -2183,10 +2154,9 @@ MainWindowTest {
             verify(glTerrain, "found the GLTerrainRenderer");
 
             // Georeference cave 0 so the azimuth selector's True and Magnetic options
-            // are enabled (both need a coordinate system). Undone by restoreDemoProject.
+            // are enabled (both need a frame). Undone by restoreDemoProject.
             let cave = RootData.region.cave(0);
             verify(cave, "found the demo cave");
-            RootData.region.geoReference.globalCoordinateSystem = georefCS;
             let model = cave.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
@@ -2787,8 +2757,8 @@ MainWindowTest {
             let chunk = model.chunkForRow(0);
             verify(chunk, "found the trip's first data block");
 
-            let row = model.modelRowForChunkRole(chunk, 0,
-                                                 SurveyChunk.ShotDistanceRole);
+            let row = model.modelRowForCellRole(chunk, 0,
+                                                SurveyEditorCellIndex.ShotDistanceCell);
             verify(row >= 0, "found the model row of the first shot's Distance");
 
             // Focus the cell rather than clicking it: the caret button's Loader is
@@ -2865,8 +2835,8 @@ MainWindowTest {
 
             let chunk = model.chunkForRow(0);
             verify(chunk, "found the trip's first data block");
-            let row = model.modelRowForChunkRole(chunk, 0,
-                                                 SurveyChunk.ShotDistanceRole);
+            let row = model.modelRowForCellRole(chunk, 0,
+                                                SurveyEditorCellIndex.ShotDistanceCell);
             verify(row >= 0, "found the model row of the first shot's Distance");
 
             chunk.setData(SurveyChunk.ShotDistanceRole, 0, "");

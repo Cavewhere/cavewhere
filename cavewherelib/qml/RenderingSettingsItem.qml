@@ -8,6 +8,25 @@ ColumnLayout {
 
     property RenderingSettings renderingSettings: RootData.settings.renderingSettings
 
+    readonly property int minimumGpuMemoryBudgetMb: 256
+    readonly property int maximumGpuMemoryBudgetMb: 65536
+    readonly property int gpuMemoryBudgetStepMb: 256
+
+    readonly property int minimumCpuCacheBudgetMb: 64
+    readonly property int maximumCpuCacheBudgetMb: 16384
+    readonly property int cpuCacheBudgetStepMb: 64
+
+    readonly property int minimumUploadBudgetMbPerFrame: 1
+    readonly property int maximumUploadBudgetMbPerFrame: 256
+
+    // QC.SpinBox counts in integers, so the screen-space error is held scaled by
+    // this factor and shown with screenSpaceErrorDecimals places.
+    readonly property int screenSpaceErrorScale: 10
+    readonly property int screenSpaceErrorDecimals: 1
+    readonly property real minimumScreenSpaceErrorPx: 0.5
+    readonly property real maximumScreenSpaceErrorPx: 8.0
+    readonly property real screenSpaceErrorStepPx: 0.1
+
     QC.GroupBox {
         title: "Anti-aliasing"
         Layout.fillWidth: true
@@ -67,6 +86,228 @@ ColumnLayout {
                 id: msaaHelpId
                 Layout.fillWidth: true
                 text: "Multisample anti-aliasing smooths jagged edges in the 3D view. Higher sample counts look better but cost more GPU time, especially with a point cloud visible (Eye-Dome Lighting runs once per sample). Off disables anti-aliasing. Changes apply immediately."
+            }
+        }
+    }
+
+    QC.GroupBox {
+        title: "Memory"
+        Layout.fillWidth: true
+
+        ColumnLayout {
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: gpuBudgetHelpId
+                }
+
+                QC.Label {
+                    text: "GPU memory budget (MB)"
+                }
+
+                QC.SpinBox {
+                    id: gpuMemoryBudgetSpinBoxId
+                    objectName: "gpuMemoryBudgetSpinBox"
+
+                    from: itemId.minimumGpuMemoryBudgetMb
+                    to: itemId.maximumGpuMemoryBudgetMb
+                    stepSize: itemId.gpuMemoryBudgetStepMb
+                    editable: true
+
+                    // SpinBox assigns value imperatively when spun or edited, which
+                    // would sever a value binding. Set it explicitly instead and
+                    // re-sync whenever the setting changes (e.g. Restore Defaults).
+                    function syncToSettings() {
+                        value = itemId.renderingSettings.gpuMemoryBudgetMb;
+                    }
+
+                    QQ.Component.onCompleted: syncToSettings()
+                    onValueModified: {
+                        itemId.renderingSettings.gpuMemoryBudgetMb = value
+                    }
+
+                    QQ.Connections {
+                        target: itemId.renderingSettings
+                        function onGpuMemoryBudgetMbChanged() { gpuMemoryBudgetSpinBoxId.syncToSettings() }
+                    }
+                }
+            }
+
+            HelpArea {
+                id: gpuBudgetHelpId
+                Layout.fillWidth: true
+                text: "How much video memory CaveWhere aims to keep its render resources under. When a project goes over, the render stats HUD colors its total and note textures give detail back until it fits again."
+            }
+
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: cpuCacheBudgetHelpId
+                }
+
+                QC.Label {
+                    text: "CPU staging budget (MB)"
+                }
+
+                QC.SpinBox {
+                    id: cpuCacheBudgetSpinBoxId
+                    objectName: "cpuCacheBudgetSpinBox"
+
+                    from: itemId.minimumCpuCacheBudgetMb
+                    to: itemId.maximumCpuCacheBudgetMb
+                    stepSize: itemId.cpuCacheBudgetStepMb
+                    editable: true
+
+                    function syncToSettings() {
+                        value = itemId.renderingSettings.cpuCacheBudgetMb;
+                    }
+
+                    QQ.Component.onCompleted: syncToSettings()
+                    onValueModified: {
+                        itemId.renderingSettings.cpuCacheBudgetMb = value
+                    }
+
+                    QQ.Connections {
+                        target: itemId.renderingSettings
+                        function onCpuCacheBudgetMbChanged() { cpuCacheBudgetSpinBoxId.syncToSettings() }
+                    }
+                }
+            }
+
+            HelpArea {
+                id: cpuCacheBudgetHelpId
+                Layout.fillWidth: true
+                text: "How many megabytes of decoded note texture may wait in main memory on their way to the GPU. A smaller budget holds fewer loads at once, so detail arrives more slowly but the app's memory stays lower."
+            }
+
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: uploadBudgetHelpId
+                }
+
+                QC.Label {
+                    text: "Upload budget (MB per frame)"
+                }
+
+                QC.SpinBox {
+                    id: uploadBudgetSpinBoxId
+                    objectName: "uploadBudgetSpinBox"
+
+                    from: itemId.minimumUploadBudgetMbPerFrame
+                    to: itemId.maximumUploadBudgetMbPerFrame
+                    editable: true
+
+                    function syncToSettings() {
+                        value = itemId.renderingSettings.uploadBudgetMbPerFrame;
+                    }
+
+                    QQ.Component.onCompleted: syncToSettings()
+                    onValueModified: {
+                        itemId.renderingSettings.uploadBudgetMbPerFrame = value
+                    }
+
+                    QQ.Connections {
+                        target: itemId.renderingSettings
+                        function onUploadBudgetMbPerFrameChanged() { uploadBudgetSpinBoxId.syncToSettings() }
+                    }
+                }
+            }
+
+            HelpArea {
+                id: uploadBudgetHelpId
+                Layout.fillWidth: true
+                text: "How many megabytes of texture may be copied to the GPU in a single frame. A larger budget sharpens notes sooner after a camera move; a smaller one keeps those frames smoother."
+            }
+        }
+    }
+
+    QC.GroupBox {
+        title: "Detail"
+        Layout.fillWidth: true
+
+        ColumnLayout {
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: screenSpaceErrorHelpId
+                }
+
+                QC.Label {
+                    text: "Note texture detail (pixels of error)"
+                }
+
+                QC.SpinBox {
+                    id: screenSpaceErrorSpinBoxId
+                    objectName: "screenSpaceErrorSpinBox"
+
+                    from: Math.round(itemId.minimumScreenSpaceErrorPx * itemId.screenSpaceErrorScale)
+                    to: Math.round(itemId.maximumScreenSpaceErrorPx * itemId.screenSpaceErrorScale)
+                    stepSize: Math.round(itemId.screenSpaceErrorStepPx * itemId.screenSpaceErrorScale)
+                    editable: true
+
+                    validator: QQ.DoubleValidator {
+                        bottom: itemId.minimumScreenSpaceErrorPx
+                        top: itemId.maximumScreenSpaceErrorPx
+                        decimals: itemId.screenSpaceErrorDecimals
+                        notation: QQ.DoubleValidator.StandardNotation
+                    }
+
+                    textFromValue: function(value, locale) {
+                        return Number(value / itemId.screenSpaceErrorScale)
+                            .toLocaleString(locale, 'f', itemId.screenSpaceErrorDecimals);
+                    }
+
+                    valueFromText: function(text, locale) {
+                        return Math.round(Number.fromLocaleString(locale, text)
+                                          * itemId.screenSpaceErrorScale);
+                    }
+
+                    function syncToSettings() {
+                        value = Math.round(itemId.renderingSettings.screenSpaceErrorPx
+                                           * itemId.screenSpaceErrorScale);
+                    }
+
+                    QQ.Component.onCompleted: syncToSettings()
+                    onValueModified: {
+                        itemId.renderingSettings.screenSpaceErrorPx = value / itemId.screenSpaceErrorScale
+                    }
+
+                    QQ.Connections {
+                        target: itemId.renderingSettings
+                        function onScreenSpaceErrorPxChanged() { screenSpaceErrorSpinBoxId.syncToSettings() }
+                    }
+                }
+            }
+
+            HelpArea {
+                id: screenSpaceErrorHelpId
+                Layout.fillWidth: true
+                text: "How far a note texture may fall short of screen resolution before CaveWhere loads a sharper mip level. Smaller values keep notes crisper and use more video memory; larger values settle for softer notes and load less."
+            }
+        }
+    }
+
+    QC.GroupBox {
+        title: "Debug"
+        Layout.fillWidth: true
+
+        ColumnLayout {
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: hudHelpId
+                }
+
+                QC.CheckBox {
+                    objectName: "showRenderStatsHudCheckBox"
+                    text: "Show render stats HUD"
+                    checked: itemId.renderingSettings.showRenderStatsHud
+                    onToggled: {
+                        itemId.renderingSettings.showRenderStatsHud = checked
+                    }
+                }
+            }
+
+            HelpArea {
+                id: hudHelpId
+                Layout.fillWidth: true
+                text: "Shows a panel in the 3D view listing how many bytes each kind of render resource holds on the GPU. Useful for tracking down which part of a project is filling video memory."
             }
         }
     }

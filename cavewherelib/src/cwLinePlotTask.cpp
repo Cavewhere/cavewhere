@@ -15,7 +15,7 @@
 #include "cwLinePlotGeometry.h"
 #include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegion.h"
-#include "cwCave.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "cwNote.h"
@@ -24,6 +24,7 @@
 #include "cwNoteLiDAR.h"
 #include "cwScrap.h"
 #include "cwSurveyChunk.h"
+#include "cwStation.h"
 #include "cwDebug.h"
 #include "cwLength.h"
 #include "cwErrorModel.h"
@@ -34,13 +35,14 @@
 #include <QHash>
 #include <QSet>
 #include <QTemporaryDir>
-#include <QRegularExpression>
 #include <QFileInfo>
 #include <QFile>
 #include <QDir>
 #include <QUuid>
+#include <QPromise>
 #include <QtGlobal>
 #include <cmath>
+#include <functional>
 
 cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     DepthLengthChanged(false),
@@ -96,8 +98,11 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* nod
 }
 
 struct cwLinePlotTask::LinePlotWorker {
-    explicit LinePlotWorker(cwLinePlotTask::Input input)
-        : InputData(std::move(input))
+    // IsCanceled is polled between the solve's phases so a canceled run stops at
+    // the next boundary instead of finishing a solve nobody will read.
+    LinePlotWorker(cwLinePlotTask::Input input, std::function<bool ()> isCanceled)
+        : InputData(std::move(input)),
+          IsCanceled(std::move(isCanceled))
     {
     }
 
@@ -124,6 +129,10 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
 
+        if (IsCanceled()) {
+            return result;
+        }
+
         // QTemporaryDir owns the lifecycle of the .svx input, the .3d output,
         // and cavern's .log/.err sidecars. Auto-removed on scope exit, so
         // failure on any step below leaves /tmp clean.
@@ -143,7 +152,15 @@ struct cwLinePlotTask::LinePlotWorker {
             return result;
         }
 
+        if (IsCanceled()) {
+            return result;
+        }
+
         if (!runCavern(svxPath, output3dPath, result)) {
+            return result;
+        }
+
+        if (IsCanceled()) {
             return result;
         }
 
@@ -156,8 +173,10 @@ struct cwLinePlotTask::LinePlotWorker {
             result.setSolveError(error);
             return result;
         }
-        applyWorldOriginOffset(parsed.lookup, InputData.regionData.worldOrigin);
         updateStationPositionForNodes(parsed.lookup, result);
+        const QHash<QUuid, cwSplayTipsByStation> nodeSplayTips =
+            splitSplayTipsByNode(parsed.splayTips);
+        updateSplayTipsForNodes(nodeSplayTips, result);
         result.setRegionNetwork(parsed.network);
 
         // The other half of the floating-survey answer. An attached centerline
@@ -169,12 +188,17 @@ struct cwLinePlotTask::LinePlotWorker {
                                                       ScopeLabels));
         result.ExternalScopesChecked = true;
 
+        if (IsCanceled()) {
+            return result;
+        }
+
         // The network carries the shot topology for externally-attached scopes,
         // which have no cwSurveyChunk of their own. cwSurveyNetwork is
         // implicitly shared, so this is a refcount bump, not a deep copy.
-        cwLinePlotGeometry::Result geometry = generateGeometry(parsed.network);
+        cwLinePlotGeometry::Result geometry = generateGeometry(parsed.network, nodeSplayTips);
         result.setPositions(geometry.points);
         result.setTripVertexRanges(geometry.tripVertexRanges);
+        result.setTripSplayVertexRanges(geometry.tripSplayVertexRanges);
         result.setTripUuids(geometry.tripUuids);
 
         updateDepthLength(geometry.nodeLengthAndDepths, result);
@@ -185,6 +209,7 @@ struct cwLinePlotTask::LinePlotWorker {
 
 private:
     cwLinePlotTask::Input InputData;
+    std::function<bool ()> IsCanceled;
     cwCavingRegion Region;
     // Every node of Region's tree, pre-order, gathered once: the region's caves
     // and every node below them. Each solves into a lookup of its own.
@@ -229,7 +254,10 @@ private:
         for (cwSurveyNode* node : std::as_const(Nodes)) {
             const QUuid id = node->id();
             InternalNodeById.insert(id, node);
-            NodeStationLookups.insert(id, node->stationPositionLookup());
+            // Seed from the caller's snapshot, not from `node`: Region is
+            // rebuilt from cwCaveData, and setData doesn't restore station
+            // positions, so the internal node's lookup is always empty.
+            NodeStationLookups.insert(id, InputData.previousStationPositions.value(id));
         }
     }
 
@@ -244,6 +272,10 @@ private:
         exportOptions.tripAttachmentDirs = InputData.tripAttachmentDirs;
         exportOptions.tripInjectedDeclinations = InputData.tripInjectedDeclinations;
         exportOptions.excludedExternalOwners = InputData.excludedExternalOwners;
+        // Cavern's positions come straight back into the scene, so *cs out has
+        // to name the frame the scene is in, not one a reader would want.
+        exportOptions.outputCSPolicy =
+            cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
 
         const Monad::ResultBase r =
             cwSurvexExporterRegion::exportRegion(InputData.regionData, svxPath, exportOptions);
@@ -302,10 +334,12 @@ private:
         return true;
     }
 
-    cwLinePlotGeometry::Result generateGeometry(const cwSurveyNetwork& network)
+    cwLinePlotGeometry::Result generateGeometry(
+        const cwSurveyNetwork& network,
+        const QHash<QUuid, cwSplayTipsByStation>& nodeSplayTips)
     {
         const Monad::Result<cwLinePlotGeometry::Result> result =
-            cwLinePlotGeometry::generate(Region.data(), network);
+            cwLinePlotGeometry::generate(Region.data(), network, nodeSplayTips);
         if (result.hasError()) {
             return cwLinePlotGeometry::Result();
         }
@@ -433,7 +467,7 @@ private:
     QHash<QUuid, cwStationPositionLookup> splitLookupByNode(
         const cwStationPositionLookup& stationPostions) const
     {
-        // Round positions to millimetre precision to absorb cavern's
+        // Round positions to millimeter precision to absorb cavern's
         // double-to-text rounding when comparing against the previous run.
         constexpr int kPositionPrecisionDigits = 3;
         const double positionFactor = std::pow(10.0, kPositionPrecisionDigits);
@@ -448,8 +482,8 @@ private:
 
             // std::round keeps the intermediate value in double; qRound returns
             // int and overflows for UTM-scale coordinates (a 5.47e6m northing
-            // multiplied by 1000 already exceeds INT_MAX, and the user-visible
-            // crash on projects with no worldOrigin / large fixes traced here).
+            // multiplied by 1000 already exceeds INT_MAX, and a user-visible
+            // crash on projects solving in absolute coordinates traced here).
             position.setX(float(std::round(double(position.x()) * positionFactor) / positionFactor));
             position.setY(float(std::round(double(position.y()) * positionFactor) / positionFactor));
             position.setZ(float(std::round(double(position.z()) * positionFactor) / positionFactor));
@@ -485,6 +519,46 @@ private:
         }
 
         return nodeStations;
+    }
+
+    // The same owning-node split as splitLookupByNode, for the splay tips.
+    // A tip lands only in its owning node's slice, keyed node-locally and
+    // canonically: that node's own trips are the ones that draw it. Positions
+    // are kept as cavern gave them: a tip only ever feeds geometry, so it is
+    // never compared against a previous solve the way station positions are.
+    QHash<QUuid, cwSplayTipsByStation> splitSplayTipsByNode(
+        const cwSplayTipsByStation& splayTips) const
+    {
+        QHash<QUuid, cwSplayTipsByStation> nodeSplayTips;
+        for (auto iter = splayTips.constBegin(); iter != splayTips.constEnd(); ++iter) {
+            const cwSurveyNode* owner = owningNode(iter.key());
+            if (owner == nullptr) {
+                continue;
+            }
+
+            const QString tail = iter.key().sliced(ScopeLabels.prefix(owner->id()).size());
+            if (tail.trimmed().isEmpty()) {
+                continue;
+            }
+
+            nodeSplayTips[owner->id()].insert(cwStation::canonicalKey(tail), iter.value());
+        }
+
+        return nodeSplayTips;
+    }
+
+    // Splays move exactly when the station they hang off does, so they ride out
+    // on the nodes the solve already had something to say about. A node with no
+    // tips keeps the empty hash it was built with.
+    void updateSplayTipsForNodes(const QHash<QUuid, cwSplayTipsByStation>& nodeSplayTips,
+                                 cwLinePlotTask::LinePlotResultData& result)
+    {
+        for (auto iter = nodeSplayTips.constBegin(); iter != nodeSplayTips.constEnd(); ++iter) {
+            const auto it = result.Caves.find(iter.key());
+            if (it != result.Caves.end()) {
+                it.value().setSplayTips(iter.value());
+            }
+        }
     }
 
     void setStationAsChanged(const QUuid& nodeId, const QString& stationName,
@@ -541,40 +615,36 @@ private:
         }
     }
 
-    void updateExternalNodeStationLookups(cwLinePlotTask::LinePlotResultData& result)
+    // Deliberately takes no result parameter, so it cannot be gated on
+    // something having changed: generateGeometry() rebuilds the whole plot from
+    // Region.data(), and a node's data() only carries positions that were set
+    // on the internal node. A node whose stations didn't move this solve still
+    // needs them written here or it drops out of the plot entirely, losing its
+    // geometry, length and depth along with it.
+    void refreshInternalStationLookups()
     {
         for (cwSurveyNode* internalNode : std::as_const(Nodes)) {
-            const QUuid nodeId = internalNode->id();
-            if (!result.Caves.contains(nodeId)) {
-                continue;
-            }
-
-            const cwStationPositionLookup updatedLookup = NodeStationLookups.value(nodeId);
-            cwLinePlotTask::LinePlotCaveData& nodeData = result.Caves[nodeId];
-            nodeData.setStationPositions(updatedLookup);
-            internalNode->setStationPositionLookup(updatedLookup);
+            internalNode->setStationPositionLookup(NodeStationLookups.value(internalNode->id()));
         }
     }
 
-    // Translate every station in lookup by -worldOrigin in place. Cavern
-    // emits .3d coordinates in our globalCS; subtracting worldOrigin keeps
-    // the position lookup (and downstream geometry) close to (0,0,0) for
-    // float precision in shaders. No-op when worldOrigin == (0,0,0), which
-    // is the un-fixed-project default.
-    static void applyWorldOriginOffset(cwStationPositionLookup& lookup,
-                                       const cwGeoPoint& worldOrigin)
+    // Publishing is what tells cwLinePlotManager to write back to the live
+    // node, so only the nodes something actually changed on are published.
+    void publishChangedStationLookups(cwLinePlotTask::LinePlotResultData& result)
     {
-        const QVector3D offset = worldOrigin.toVector3D();
-        if (offset.isNull()) {
-            return;
-        }
-        const QMap<QString, QVector3D> positions = lookup.positions();
-        lookup.clearStations();
-        for (auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
-            lookup.setPosition(it.key(), it.value() - offset);
+        for (const cwSurveyNode* node : std::as_const(Nodes)) {
+            const QUuid nodeId = node->id();
+            const auto it = result.Caves.find(nodeId);
+            if (it != result.Caves.end()) {
+                it.value().setStationPositions(NodeStationLookups.value(nodeId));
+            }
         }
     }
 
+    // Cavern emits .3d coordinates in whatever *cs out named, which for this
+    // export is the project's local projection — already centered on the
+    // project, already small enough for float in the shaders. Nothing is
+    // subtracted on the way in; there is no second frame to reconcile with.
     void updateStationPositionForNodes(const cwStationPositionLookup& stationPostions,
                                        cwLinePlotTask::LinePlotResultData& result)
     {
@@ -583,7 +653,8 @@ private:
         const QHash<QUuid, cwStationPositionLookup> nodeStationLookups = splitLookupByNode(stationPostions);
 
         updateInternalNodeStationLookups(nodeStationLookups, result);
-        updateExternalNodeStationLookups(result);
+        refreshInternalStationLookups();
+        publishChangedStationLookups(result);
     }
 
     void updateDepthLength(const QHash<QUuid, cwLinePlotGeometry::LengthAndDepth>& lengths,
@@ -646,13 +717,17 @@ private:
 
         for (const cwSurveyNode* node : std::as_const(Nodes)) {
             const cwSurveyNetwork network = createNetwork(node);
-            if (network == node->network()) {
+            const QUuid nodeId = node->id();
+            // As with the station lookups, the internal node carries no network
+            // of its own — cwCaveData has no such field — so the previous one
+            // has to come from the caller's snapshot.
+            const cwSurveyNetwork previousNetwork = InputData.previousNetworks.value(nodeId);
+            if (network == previousNetwork) {
                 continue;
             }
-            const QUuid nodeId = node->id();
             result.Caves[nodeId].setNetwork(network);
 
-            const auto changedStations = cwSurveyNetwork::changedStations(node->network(), network);
+            const auto changedStations = cwSurveyNetwork::changedStations(previousNetwork, network);
             for (const auto& station : changedStations) {
                 setStationAsChanged(nodeId, station, result);
             }
@@ -665,6 +740,18 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion *region)
     Input input;
     if(region != nullptr) {
         input.regionData = region->data();
+
+        // Carry the last applied solve across as the change-detection baseline.
+        // The live nodes hold it because cwLinePlotManager writes each result
+        // back to them, so a restarted solve still diffs against what the user
+        // last saw rather than against a half-finished run.
+        const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+        input.previousStationPositions.reserve(nodes.size());
+        input.previousNetworks.reserve(nodes.size());
+        for(const cwSurveyNode* node : nodes) {
+            input.previousStationPositions.insert(node->id(), node->stationPositionLookup());
+            input.previousNetworks.insert(node->id(), node->network());
+        }
     }
     return input;
 }
@@ -700,12 +787,22 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
 
 QFuture<cwLinePlotTask::LinePlotResultData> cwLinePlotTask::run(cwLinePlotTask::Input input)
 {
-    return cwConcurrent::run([input = std::move(input)]() mutable {
+    // The QPromise form is what makes cancel() reach the worker: the solve polls
+    // promise.isCanceled() between its phases, so a restart or a manager being
+    // torn down stops the run at the next boundary rather than paying for cavern
+    // and the geometry pass. A canceled run publishes no result, which every
+    // caller already handles by checking resultCount().
+    return cwConcurrent::run([input = std::move(input)]
+                             (QPromise<cwLinePlotTask::LinePlotResultData>& promise) mutable {
         QElapsedTimer timer;
         timer.start();
-        cwLinePlotTask::LinePlotWorker worker(std::move(input));
+        cwLinePlotTask::LinePlotWorker worker(std::move(input),
+                                              [&promise]() { return promise.isCanceled(); });
         auto result = worker.run();
+        if (promise.isCanceled()) {
+            return;
+        }
         result.SolveDurationSeconds = timer.elapsed() / 1000.0;
-        return result;
+        promise.addResult(std::move(result));
     });
 }

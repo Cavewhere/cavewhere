@@ -250,7 +250,7 @@ QVariant cwSurveyTreeModel::headerData(int section, Qt::Orientation orientation,
     case Date:
         return QStringLiteral("Date");
     case Decl:
-        return QStringLiteral("Decl");
+        return QStringLiteral("Declination");
     default:
         break;
     }

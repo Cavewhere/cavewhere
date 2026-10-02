@@ -15,7 +15,6 @@
 #include "cwSurvexExporterRegion.h"
 #include "cwSurvexExporterUtils.h"
 class cwSurvexExporterTripTask;
-class cwCave;
 class cwStationHandle;
 
 // Qt includes
@@ -25,9 +24,6 @@ class cwStationHandle;
 #include <QStringList>
 #include <QTextStream>
 #include <QUuid>
-
-// Std includes
-#include <optional>
 
 class cwSurvexExporterCaveTask : public cwCaveExporterTask
 {
@@ -128,14 +124,21 @@ public:
                              const QList<cwEquate>& equates,
                              const DriverTree& tree);
 
+protected:
+    QString writeStandaloneHeader(QTextStream& stream) override;
+
 private:
     //! What a node's block hands down to the blocks nested in it.
     struct Inherited {
         //! Some enclosing block already fixes a station, so this one adds no
         //! fallback fix: a second anchor would pin a connected survey twice.
         bool anchored = false;
-        //! The nearest enclosing fix's declination, for a node with none.
-        std::optional<cwSurvexExporterUtils::DeclinationContext> declination;
+        //! An enclosing block already wrote `*declination auto`, which cavern
+        //! scopes to that block and every block nested in it.
+        bool autoDeclinationInScope = false;
+        //! The nearest enclosing located block's grid convergence, for a node
+        //! with no location of its own.
+        double gridConvergence = 0.0;
     };
 
     cwSurvexExporterTripTask* TripExporter;
@@ -146,12 +149,20 @@ private:
                         const cwCaveData& node,
                         const DriverTree& tree,
                         const QString& globalCS,
-                        const Inherited& inherited);
+                        const Inherited& inherited,
+                        const cwSurvexExporterUtils::CsScope& enclosingScope);
 
-    // Returns true when this writes a fix — one of the node's own, or the
-    // fallback on its first station when nothing above is anchored.
-    bool writeFixStations(QTextStream& stream, const cwCaveData& node, const QString& globalCS,
-                          bool anchoredAbove);
+    struct WrittenFixes {
+        //! The node's fixes that validation kept, in the order written.
+        QList<cwFixStation> kept;
+        //! A fix was written — one of the node's own, or the fallback on its
+        //! first station when nothing above is anchored.
+        bool anchored = false;
+    };
+
+    WrittenFixes writeFixStations(QTextStream& stream, const cwCaveData& node,
+                                  const QString& globalCS, bool anchoredAbove,
+                                  cwSurvexExporterUtils::CsScope& scope);
 
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
     // joining the owner's attachment dir with the project-relative

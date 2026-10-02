@@ -22,6 +22,7 @@
 #include "cwSurvexGlobalData.h"
 #include "cwGlobals.h"
 #include "cwFixStation.h"
+#include "cwSurvexCS.h"
 class cwSurveyChunk;
 class cwShot;
 class cwSurvexNodeData;
@@ -57,11 +58,6 @@ protected:
     virtual void runTask();
 
 private:
-
-    enum State {
-        FirstBegin,
-        InsideBegin
-    };
 
     enum DataFormatType {
         To,
@@ -109,6 +105,7 @@ private:
         DataEntryType DataType;
         QString Filename;
         int ColumnCount;
+        cwSurvexCS::Parsed CS;
 
         static QMap<DataFormatType, int> defaultDataFormat();
     };
@@ -135,9 +132,6 @@ private:
 
     QStringList Errors;
 
-    State CurrentState;
-
-    QString CurrentInputCS; // Last seen *cs; empty until first *cs.
     QList<cwFixStation> CapturedFixStations;
 
     //Data map <Type, index>
@@ -186,6 +180,8 @@ private:
     int currentColumnCount() const;
     void setCurrentDataFormat(QMap<DataFormatType, int> format);
     void setCurrentDataEntryType(DataEntryType type);
+    cwSurvexCS::Parsed currentCS() const;
+    void setCurrentCS(const cwSurvexCS::Parsed& cs);
     void setCurrentColumnCount(int count);
 
     QString currentFile() const;
@@ -202,13 +198,30 @@ private:
     void parseEquate(QString line);
     void parseExport(QString line);
     void parseFlags(QString line);
+    void parseAlias(QString line);
     void parseCS(QString line);
+
+    /**
+     * The coordinate system a `*cs ... @name` reference reads from, or empty
+     * when the file it names can't be read.
+     *
+     * Resolved the way cavern resolves it (survex/src/commands.c,
+     * read_cs_from_file): relative to the directory of the file the `*cs` line
+     * is in, with a `.prj` extension assumed when the name as written names
+     * nothing. The contents are the system itself — WKT, a PROJ string, or an
+     * ESRI `.prj` — so its lines are joined with a single space and a leading
+     * BOM dropped, which PROJ refuses to read past.
+     */
+    QString readCSFromFile(const QString& reference) const;
+
     void parseFix(QString line);
 
     void runStats(QString filename);
 
+    void finishBlock();
     void updateLRUDForCurrentBlock();
     void updateStationLRUD(cwStation before, cwStation station, cwStation after);
+    void updateSplaysForCurrentBlock();
 };
 
 /**

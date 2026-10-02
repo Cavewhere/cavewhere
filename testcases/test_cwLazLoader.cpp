@@ -11,9 +11,36 @@
 
 #include "LazFixtureHelper.h"
 
+#include <LASlib/lasreader.hpp>
+
 using Catch::Matchers::WithinAbs;
 
 namespace {
+// GeoTIFF key ids stored in a LAS file's VLR 34735.
+constexpr quint16 kGeographicTypeGeoKey = 2048;
+constexpr quint16 kProjectedCSTypeGeoKey = 3072;
+constexpr quint16 kUserDefinedGeoCode = 32767;
+// A key holds its value inline when it points at no other tag, and an inline
+// key holds exactly one value.
+constexpr quint16 kInlineTiffTagLocation = 0;
+constexpr quint16 kInlineValueCount = 1;
+// NAD83(CSRS) / UTM zone 10N — the CRS on the BC lidar tiles that only carry
+// GeoKeys.
+constexpr quint16 kNad83CsrsUtm10N = 3157;
+constexpr quint16 kNad83Geographic = 4269;
+
+const QByteArray kSampleWkt = QByteArrayLiteral("GEOGCS[\"WGS 84\"]");
+
+LASvlr_key_entry inlineGeoKey(quint16 keyId, quint16 code)
+{
+    LASvlr_key_entry entry;
+    entry.key_id = keyId;
+    entry.tiff_tag_location = kInlineTiffTagLocation;
+    entry.count = kInlineValueCount;
+    entry.value_offset = code;
+    return entry;
+}
+
 // kMinPointsPerWorker in cwLazLoader.cpp is 256 * 1024. To force multi-worker
 // mode we need at least 2 * that, with the actual worker count capped by
 // QThread::idealThreadCount() - 1. 600k is comfortably above the threshold and
@@ -21,7 +48,7 @@ namespace {
 constexpr int kMultiWorkerPointCount = 600 * 1024;
 } // namespace
 
-TEST_CASE("cwLazLoader: empty source CS short-circuits and applies worldOrigin", "[cwLazLoader]") {
+TEST_CASE("cwLazLoader: empty source CS short-circuits to the file's own coordinates", "[cwLazLoader]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
@@ -35,8 +62,7 @@ TEST_CASE("cwLazLoader: empty source CS short-circuits and applies worldOrigin",
     const QString path = tempLazPath(tempDir, QStringLiteral("identity"));
     REQUIRE(writeSyntheticLazFile(path, input));
 
-    const cwGeoPoint origin(100.0, 200.0, 50.0);
-    auto future = cwLazLoader::load({.path = path, .worldOrigin = origin});
+    auto future = cwLazLoader::load({.path = path});
     future.waitForFinished();
     REQUIRE(future.resultCount() == 1);
     cwLazLoadResult result = future.result();
@@ -49,18 +75,19 @@ TEST_CASE("cwLazLoader: empty source CS short-circuits and applies worldOrigin",
         result.geometry.values<QVector3D>(cwGeometry::Semantic::Position);
     REQUIRE(out.size() == input.size());
 
-    // Each point should have worldOrigin subtracted.
-    REQUIRE_THAT(out[0].x(), WithinAbs(0.0f, 1e-3f));
-    REQUIRE_THAT(out[0].y(), WithinAbs(0.0f, 1e-3f));
-    REQUIRE_THAT(out[0].z(), WithinAbs(0.0f, 1e-3f));
-    REQUIRE_THAT(out[1].x(), WithinAbs(10.0f, 1e-3f));
-    REQUIRE_THAT(out[1].y(), WithinAbs(10.0f, 1e-3f));
-    REQUIRE_THAT(out[1].z(), WithinAbs(5.0f, 1e-3f));
+    // With no destination frame to transform into, the points arrive exactly
+    // as the file holds them.
+    REQUIRE_THAT(out[0].x(), WithinAbs(100.0f, 1e-3f));
+    REQUIRE_THAT(out[0].y(), WithinAbs(200.0f, 1e-3f));
+    REQUIRE_THAT(out[0].z(), WithinAbs(50.0f, 1e-3f));
+    REQUIRE_THAT(out[1].x(), WithinAbs(110.0f, 1e-3f));
+    REQUIRE_THAT(out[1].y(), WithinAbs(210.0f, 1e-3f));
+    REQUIRE_THAT(out[1].z(), WithinAbs(55.0f, 1e-3f));
 
     REQUIRE(result.sourceCS.isEmpty());
 }
 
-TEST_CASE("cwLazLoader: bbox tracks min/max in worldOrigin space", "[cwLazLoader]") {
+TEST_CASE("cwLazLoader: bbox tracks min/max of the loaded points", "[cwLazLoader]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
 
@@ -152,4 +179,70 @@ TEST_CASE("cwLazLoader: cancel during multi-worker load does not crash",
     // crash"; cwLazLayer's observer drops the result anyway when m_enabled
     // is false. This test passes iff cwLazLoader returned without aborting.
     SUCCEED();
+}
+
+TEST_CASE("cwLazLoader: GeoTIFF GeoKeys name the source CS when the WKT VLR is absent",
+          "[cwLazLoader][geokeys]") {
+    SECTION("ProjectedCSTypeGeoKey resolves to an EPSG code") {
+        LASheader header;
+        const LASvlr_key_entry keys[] = { inlineGeoKey(kProjectedCSTypeGeoKey, kNad83CsrsUtm10N) };
+        REQUIRE(header.set_geo_keys(1, keys));
+
+        REQUIRE(cwLazLoader::resolveSourceCS(QString(), header)
+                == QStringLiteral("EPSG:3157"));
+    }
+
+    SECTION("GeographicTypeGeoKey is the fallback when no projected key is present") {
+        LASheader header;
+        const LASvlr_key_entry keys[] = { inlineGeoKey(kGeographicTypeGeoKey, kNad83Geographic) };
+        REQUIRE(header.set_geo_keys(1, keys));
+
+        REQUIRE(cwLazLoader::resolveSourceCS(QString(), header)
+                == QStringLiteral("EPSG:4269"));
+    }
+
+    SECTION("A projected key wins over a geographic key in the same file") {
+        LASheader header;
+        const LASvlr_key_entry keys[] = {
+            inlineGeoKey(kGeographicTypeGeoKey, kNad83Geographic),
+            inlineGeoKey(kProjectedCSTypeGeoKey, kNad83CsrsUtm10N)
+        };
+        REQUIRE(header.set_geo_keys(2, keys));
+
+        REQUIRE(cwLazLoader::resolveSourceCS(QString(), header)
+                == QStringLiteral("EPSG:3157"));
+    }
+
+    SECTION("A user-defined code names no EPSG CRS, so the source CS stays empty") {
+        LASheader header;
+        const LASvlr_key_entry keys[] = { inlineGeoKey(kProjectedCSTypeGeoKey, kUserDefinedGeoCode) };
+        REQUIRE(header.set_geo_keys(1, keys));
+
+        REQUIRE(cwLazLoader::resolveSourceCS(QString(), header).isEmpty());
+    }
+
+    SECTION("A header with no CRS at all stays empty") {
+        LASheader header;
+        REQUIRE(cwLazLoader::resolveSourceCS(QString(), header).isEmpty());
+    }
+
+    SECTION("The OGC WKT VLR wins over the GeoKeys") {
+        LASheader header;
+        const LASvlr_key_entry keys[] = { inlineGeoKey(kProjectedCSTypeGeoKey, kNad83CsrsUtm10N) };
+        REQUIRE(header.set_geo_keys(1, keys));
+        header.set_geo_ogc_wkt(kSampleWkt.size(), kSampleWkt.constData());
+
+        REQUIRE(cwLazLoader::resolveSourceCS(QString(), header)
+                == QString::fromLatin1(kSampleWkt));
+    }
+
+    SECTION("An explicit override wins over both") {
+        LASheader header;
+        const LASvlr_key_entry keys[] = { inlineGeoKey(kProjectedCSTypeGeoKey, kNad83CsrsUtm10N) };
+        REQUIRE(header.set_geo_keys(1, keys));
+        header.set_geo_ogc_wkt(kSampleWkt.size(), kSampleWkt.constData());
+
+        REQUIRE(cwLazLoader::resolveSourceCS(QStringLiteral("EPSG:26910"), header)
+                == QStringLiteral("EPSG:26910"));
+    }
 }

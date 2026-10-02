@@ -25,6 +25,7 @@
 #include "cwErrorListModel.h"
 #include "cwCaptureGroupModel.h"
 #include "cwCaptureViewport.h"
+#include "cwFutureManagerToken.h"
 // class cwCaptureViewport;
 class cwCaptureItem;
 
@@ -50,8 +51,10 @@ class CAVEWHERE_LIB_EXPORT cwCaptureManager : public QAbstractListModel
     Q_PROPERTY(int numberOfCaptures READ numberOfCaptures NOTIFY numberOfCapturesChanged)
     Q_PROPERTY(cwCaptureGroupModel* groupModel READ groupModel CONSTANT)
 
-    Q_PROPERTY(double memoryRequired READ memoryRequired NOTIFY memoryRequiredChanged)
-    Q_PROPERTY(double memoryLimit READ memoryLimit CONSTANT)
+    // The future-manager handle used to surface each capture's label-placement
+    // job (progress + cancel) in the app's job list. Set from QML, e.g.
+    // futureManagerToken: RootData.futureManagerModel.token
+    Q_PROPERTY(cwFutureManagerToken futureManagerToken READ futureManagerToken WRITE setFutureManagerToken NOTIFY futureManagerTokenChanged)
 
 public:
     enum FileType {
@@ -107,6 +110,13 @@ public:
 
     Q_INVOKABLE void capture();
 
+    // Aborts an in-progress export: cancels the current capture's worker-thread
+    // label placement and stops the queue before anything is saved.
+    Q_INVOKABLE void cancel();
+
+    cwFutureManagerToken futureManagerToken() const;
+    void setFutureManagerToken(cwFutureManagerToken token);
+
     QGraphicsScene* scene() const;
 
     Q_INVOKABLE void addCaptureViewport(cwCaptureViewport* capture);
@@ -125,9 +135,6 @@ public:
     Q_INVOKABLE FileType typeNameToFileType(QString fileType) const;
     Q_INVOKABLE QString fileTypeToExtention(FileType type) const;
 
-    double memoryRequired() const;
-    double memoryLimit() const;
-
     cwErrorListModel* errorModel() const;
 
 signals:
@@ -143,9 +150,10 @@ signals:
     void filenameChanged();
     void fileTypeChanged();
     void finishedCapture();
+    void canceledCapture();
     void numberOfCapturesChanged();
     void aboutToDestoryManager();
-    void memoryRequiredChanged();
+    void futureManagerTokenChanged();
 
 public slots:
 
@@ -190,6 +198,13 @@ private:
 
     QList<cwCaptureViewport*> Captures;
     QList<cwCaptureItem*> Layers;
+
+    cwFutureManagerToken m_futureManagerToken;
+    bool m_canceled = false; //!< set by cancel() to stop the capture queue
+    //! True from capture() until the run ends (saved, or canceled and the
+    //! in-flight viewport has actually stopped). Guards capture() against
+    //! re-entry, which would stack duplicate handlers on the same viewport.
+    bool m_capturing = false;
 
     void saveScene();
 

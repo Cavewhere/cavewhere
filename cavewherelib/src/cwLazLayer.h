@@ -27,6 +27,10 @@
 #include "cwGeoPoint.h"
 #include "cwLazLayerData.h"
 #include "cwLazLoader.h"
+#include "cwLocalProjectionToken.h"
+
+//Std includes
+#include <optional>
 
 class cwKeywordModel;
 
@@ -65,6 +69,10 @@ class CAVEWHERE_LIB_EXPORT cwLazLayer : public QObject
 public:
     enum class LoadStatus {
         Idle,
+        //! The header has been read but the points have not — where a disabled
+        //! layer rests, and where an enabled one passes through on its way to
+        //! Loading. The file's own CRS and bounding box are already known here.
+        Probed,
         Loading,
         Loaded,
         Error
@@ -100,12 +108,41 @@ public:
     void setEnabled(bool enabled);
 
     QString name() const { return m_name; }
-    QString sourceCS() const { return m_sourceCS; }
+
+    /// The CRS the file is read as: the override if one is set, otherwise what
+    /// the file's own header declares, otherwise empty (identity).
+    QString sourceCS() const;
     QString sourceCSDisplayName() const;
     QString sourceCSOverride() const { return m_sourceCSOverride; }
     void setSourceCSOverride(const QString& cs);
 
-    LoadStatus loadStatus() const { return m_loadStatus; }
+    /// The bounding box in the file's own CRS — the raw header numbers, before
+    /// the reprojection into the region's frame that bboxMin and bboxMax carry.
+    /// Filled by the header probe, so they arrive well before the points do.
+    /// Deriving a coordinate frame from this cloud needs these.
+    cwGeoPoint sourceBboxMin() const;
+    cwGeoPoint sourceBboxMax() const;
+    cwGeoPoint sourceBboxCenter() const;
+
+    /// True once this file's header has been read, which is the point at which
+    /// sourceCS and the source bounding box carry the file's own numbers. It
+    /// says nothing about the points: a disabled layer decodes none and still
+    /// knows where it is. That is what lets the local projection treat every
+    /// layer as a georeferenced input, and so tell an absent one from a
+    /// merely-unfinished one.
+    bool hasReadHeader() const { return m_header.has_value(); }
+
+    /// True from the moment a header read is asked for until its result has
+    /// been applied. The local projection is derived from what the headers say,
+    /// so this is what tells it that the set of layers it can see is still
+    /// growing — see cwLocalProjectionManager::frameFuture().
+    bool headerProbeInFlight() const { return m_headerProbeInFlight; }
+
+    /// Where the layer stands, as one value for the UI to show. It combines the
+    /// two things that happen independently — the header read and the point
+    /// decode — so Probed is not a state anything stores: it is what "the
+    /// header is in, the points are not" is called.
+    LoadStatus loadStatus() const;
     QString errorMessage() const { return m_errorMessage; }
     qint64 pointCount() const { return m_geometry.vertexCount(); }
     QVector3D bboxMin() const { return m_bboxMin; }
@@ -118,10 +155,13 @@ public:
     cwKeywordModel* keywordModel() const { return m_keywordModel; }
 
     void setFutureManagerToken(const cwFutureManagerToken& token);
-    void setRegionGlobalCS(const QString& cs);
-    void setRegionWorldOrigin(const cwGeoPoint& origin);
 
-    /// Kicks off an async load against the current globalCS / worldOrigin.
+    /// Where this layer gets the frame its points are loaded into, and when
+    /// that frame is final. Every reload asks it again.
+    void setLocalProjectionToken(const cwLocalProjectionToken& token);
+
+    /// Kicks off an async load into the frame the token names. Call it after
+    /// the frame moves: the geometry in memory is in the old one.
     /// Re-entrant: rapid restarts coalesce into a single in-flight run.
     void reload();
 
@@ -145,15 +185,31 @@ signals:
     void pointCountChanged();
     void bboxChanged();
     void meanSpacingXYChanged();
+    void headerProbeInFlightChanged();
 
 private:
-    void setLoadStatus(LoadStatus status);
+    //! How far the points have got, which is all this layer actually runs.
+    //! loadStatus() folds it together with whether the header is in.
+    enum class PointState {
+        Idle,
+        Loading,
+        Loaded,
+        Error
+    };
+
+    void setPointState(PointState state);
     void setErrorMessage(const QString& message);
     void updateNameKeyword();
     void updateFileNameKeyword();
     void updateIdKeyword();
     void updateTypeKeyword();
     void applyResult(cwLazLoadResult&& result);
+    void startHeaderProbe();
+    //! Publish what @a probe read, then report the probe finished — in that
+    //! order, which is the whole reason this is one function.
+    void finishProbe(const cwLazLoader::ProbeResult& probe);
+    void setHeaderProbeInFlight(bool inFlight);
+    void startDecode(const QString& frameCS);
 
     QString m_sourcePath;
     qint64 m_sourceSize = -1;
@@ -162,12 +218,18 @@ private:
     bool m_enabled = true;
 
     QString m_name;
-    QString m_sourceCS; // CS used during the last load (override > LAZ-embedded > "")
     QString m_sourceCSOverride;
-    LoadStatus m_loadStatus = LoadStatus::Idle;
     QString m_errorMessage;
     QVector3D m_bboxMin;
     QVector3D m_bboxMax;
+
+    // What the file says about itself, kept whole rather than shredded into
+    // fields plus a bool saying they mean anything. Empty until the header has
+    // been read; the override is applied on the way out, in sourceCS().
+    std::optional<cwLazLoader::ProbeResult> m_header;
+
+    PointState m_pointState = PointState::Idle;
+    bool m_headerProbeInFlight = false;
     float m_meanSpacingXY = 0.0f;
     QUuid m_id;
 
@@ -175,12 +237,21 @@ private:
 
     cwKeywordModel* m_keywordModel = nullptr;
     cwFutureManagerToken m_futureManagerToken;
-    QString m_regionGlobalCS;
-    cwGeoPoint m_regionWorldOrigin;
+    cwLocalProjectionToken m_localProjectionToken;
+
+    // Which wait for the frame is the current one. A reload() that starts while
+    // an earlier one is still waiting supersedes it: the newer one carries the
+    // newer frame, and both would otherwise decode the same file.
+    quint64 m_frameWaitGeneration = 0;
 
     // Coalesces rapid reload() calls and serializes cancel-then-restart so a
     // new load only begins once the previous one has actually stopped.
     AsyncFuture::Restarter<cwLazLoadResult> m_loadRestarter;
+
+    // Its own restarter so probe results arrive in the order they were asked
+    // for: two probes racing on a file rewritten twice could otherwise publish
+    // the older header last.
+    AsyncFuture::Restarter<cwLazLoader::ProbeResult> m_probeRestarter;
 };
 
 #endif // CWLAZLAYER_H

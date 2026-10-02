@@ -1,0 +1,305 @@
+/**************************************************************************
+**
+**    Copyright (C) 2015 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+//Catch includes
+#include <catch2/catch_test_macros.hpp>
+
+//Our includes
+#include "cwError.h"
+#include "cwErrorListModel.h"
+
+//Qt includes
+#include "cwSignalSpy.h"
+
+void checkError(const cwError& error, cwErrorListModel& model, int idx) {
+    REQUIRE(idx >= 0);
+    REQUIRE(idx < model.count());
+
+    CHECK(error == model.at(idx));
+    // CHECK(error == model.get(idx).value<cwError>());
+
+    CHECK(QVariant(error.message()) == model.data(model.index(idx), model.roleForName("message")));
+    CHECK(QVariant(error.errorTypeId()) == model.data(model.index(idx), model.roleForName("errorTypeId")));
+    CHECK(QVariant(error.suppressed()) == model.data(model.index(idx), model.roleForName("suppressed")));
+    CHECK(QVariant(error.type()) == model.data(model.index(idx), model.roleForName("errorType")));
+
+}
+
+TEST_CASE("Basic QML Gadget List operations") {
+    cwErrorListModel model;
+
+    CHECK(model.isEmpty() == true);
+
+    QList<cwError> errors;
+    int size = 10;
+    for(int i = 0; i < size; i++) {
+        cwError error;
+        error.setMessage(QString("Error %1").arg(i));
+        error.setType(cwError::Fatal);
+        error.setErrorTypeId(i);
+        errors.append(error);
+    }
+
+
+    SECTION("Check append") {
+        foreach(cwError error, errors) {
+            model.append(error);
+        }
+
+        REQUIRE(size == model.size());
+        CHECK(model.count() == model.size());
+
+        auto roleNames = model.roleNames();
+
+        for(int i = 0; i < size; i++) {
+            checkError(errors.at(i), model, i);
+        }
+
+        SECTION("Check clear") {
+            CHECK(model.isEmpty() == false);
+
+            model.clear();
+
+            CHECK(model.size() == 0);
+            CHECK(model.isEmpty() == true);
+        }
+
+        SECTION("Check contains") {
+            CHECK(model.contains(errors.first()) == true);
+            // CHECK(model.contains(QVariant::fromValue(errors.first())) == true);
+
+            CHECK(model.contains(errors.last()) == true);
+            // CHECK(model.contains(QVariant::fromValue(errors.last())) == true);
+        }
+
+        SECTION("Check indexOf") {
+            CHECK(model.indexOf(errors.first()) == 0);
+            // CHECK(model.indexOf(QVariant::fromValue(errors.first())) == 0);
+
+            CHECK(model.indexOf(errors.last()) == errors.size() - 1);
+            // CHECK(model.indexOf(QVariant::fromValue(errors.last())) == errors.size() - 1);
+        }
+
+
+        SECTION("Check insert") {
+            QList<cwError> insertErrors;
+
+            for(int i = 0; i < size; i++) {
+                cwError error;
+                error.setMessage(QString("Prepend Error %1").arg(i));
+                error.setType(cwError::Fatal);
+                error.setErrorTypeId(i*i);
+
+                insertErrors.append(error);
+            }
+
+            SECTION("Insert list") {
+
+                model.insert(3, insertErrors);
+
+                REQUIRE(model.size() == size * 2);
+
+                for(int i = 3; i < 3 + size; i++) {
+                    checkError(insertErrors.at(i - 3), model, i);
+                }
+            }
+
+            SECTION("Insert element") {
+                model.insert(4, insertErrors.first());
+
+                REQUIRE(model.size() == size + 1);
+
+                checkError(insertErrors.first(), model, 4);
+            }
+        }
+
+        SECTION("Check remove") {
+
+            SECTION("Remove by index") {
+                int removeIndex = 6;
+                model.remove(removeIndex);
+                CHECK(model.contains(errors.at(removeIndex)) == false);
+
+                for(int i = 0; i < size - 1; i++) {
+                    int skipIndex = i < removeIndex ? i : i + 1;
+                    checkError(errors.at(skipIndex), model, i);
+                }
+            }
+
+            SECTION("Remove by variant") {
+                int removeIndex = 3;
+                model.remove(errors.at(removeIndex));
+                CHECK(model.contains(errors.at(removeIndex)) == false);
+
+                for(int i = 0; i < size - 1; i++) {
+                    int skipIndex = i < removeIndex ? i : i + 1;
+                    checkError(errors.at(skipIndex), model, i);
+                }
+            }
+
+        }
+
+        SECTION("Get / Set Data") {
+            cwSignalSpy dataChangedSpy(&model, SIGNAL(dataChanged(const QModelIndex &, const QModelIndex &, QVector<int>)));
+
+            for(int i = 0; i < size; i++) {
+                //Suppression is the only thing that's supported to set
+                model.setData(model.index(i), true, model.roleForName("suppressed"));
+                CHECK(model.data(model.index(i), model.roleForName("suppressed")) == QVariant(true));
+                CHECK(model.at(i).suppressed() == true);
+
+
+                int errorTypeId = i*5;
+                auto index = model.index(i);
+                CHECK(model.setData(index, errorTypeId, static_cast<int>(cwErrorListModel::ErrorRoles::ErrorTypeIdRole)) == false);
+
+                CHECK(model.data(model.index(i), model.roleForName("errorTypeId")).toInt() == i);
+                CHECK(model.at(i).errorTypeId() == i);
+            }
+
+            CHECK(dataChangedSpy.count() == size);
+            CHECK(dataChangedSpy.first().last().value<QVector<int>>().first() == model.roleForName("suppressed"));
+        }
+
+        SECTION("allMessagesAsText") {
+            const QString text = model.allMessagesAsText();
+            const QStringList lines = text.split('\n');
+            REQUIRE(lines.size() == size);
+            for (int i = 0; i < size; i++) {
+                CHECK(lines.at(i) == QStringLiteral("[Fatal] Error %1").arg(i));
+            }
+        }
+
+        SECTION("allMessagesAsText mixed types") {
+            cwErrorListModel mixed;
+            cwError warning;
+            warning.setMessage("be careful");
+            warning.setType(cwError::Warning);
+
+            cwError fatal;
+            fatal.setMessage("kaboom");
+            fatal.setType(cwError::Fatal);
+
+            mixed.append(warning);
+            mixed.append(fatal);
+
+            CHECK(mixed.allMessagesAsText() == QStringLiteral("[Warning] be careful\n[Fatal] kaboom"));
+        }
+
+        SECTION("allMessagesAsText empty") {
+            cwErrorListModel empty;
+            CHECK(empty.allMessagesAsText() == QString());
+        }
+
+        SECTION("roleNames") {
+            auto roleNames = model.roleNames().values();
+            CHECK(roleNames.contains("suppressed") == true);
+            CHECK(roleNames.contains("errorTypeId") == true);
+            CHECK(roleNames.contains("message") == true);
+            CHECK(roleNames.contains("errorType") == true);
+        }
+    }
+}
+
+TEST_CASE("warningMessagesForTypeIds scopes to the requested error type ids") {
+    cwErrorListModel model;
+
+    cwError outlier;
+    outlier.setMessage("far away");
+    outlier.setType(cwError::Warning);
+    outlier.setErrorTypeId(596);
+
+    cwError reference;
+    reference.setMessage("no such station");
+    reference.setType(cwError::Warning);
+    reference.setErrorTypeId(598);
+
+    cwError other;
+    other.setMessage("unrelated");
+    other.setType(cwError::Warning);
+    other.setErrorTypeId(42);
+
+    cwError fatal;
+    fatal.setMessage("kaboom");
+    fatal.setType(cwError::Fatal);
+    fatal.setErrorTypeId(596);
+
+    model.append(outlier);
+    model.append(reference);
+    model.append(other);
+    model.append(fatal);
+
+    // Only the non-suppressed Warnings whose id is in the set, in order.
+    CHECK(model.warningMessagesForTypeIds({596, 597, 598})
+          == QStringList({QStringLiteral("far away"), QStringLiteral("no such station")}));
+
+    // A fatal of a matching id is excluded (Warnings only).
+    CHECK_FALSE(model.warningMessagesForTypeIds({596}).contains(QStringLiteral("kaboom")));
+
+    // Suppressing a matching warning drops it.
+    model.setData(model.index(0), true,
+                  static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+    CHECK(model.warningMessagesForTypeIds({596, 597, 598})
+          == QStringList({QStringLiteral("no such station")}));
+
+    // An empty id set matches nothing.
+    CHECK(model.warningMessagesForTypeIds({}).isEmpty());
+}
+
+TEST_CASE("warningMessages lists only active warnings") {
+    cwErrorListModel model;
+
+    cwError warning;
+    warning.setMessage("watch out");
+    warning.setType(cwError::Warning);
+
+    cwError fatal;
+    fatal.setMessage("kaboom");
+    fatal.setType(cwError::Fatal);
+
+    SECTION("empty model has no warning messages") {
+        CHECK(model.warningMessages().isEmpty());
+    }
+
+    SECTION("only non-suppressed warnings are listed") {
+        model.append(warning);
+        model.append(fatal);
+
+        //Fatal errors are excluded — the list is warnings only
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out")});
+    }
+
+    SECTION("warningMessagesChanged fires and content updates across the lifecycle") {
+        cwSignalSpy changedSpy(&model, SIGNAL(warningMessagesChanged()));
+
+        model.append(warning);
+        CHECK(changedSpy.count() == 1);
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out")});
+
+        //Suppressing the warning drops it from the list and notifies
+        model.setData(model.index(0), true, static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+        CHECK(changedSpy.count() == 2);
+        CHECK(model.warningMessages().isEmpty());
+
+        //Un-suppressing brings it back
+        model.setData(model.index(0), false, static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+        CHECK(changedSpy.count() == 3);
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out")});
+
+        //A message edit re-notifies and updates the text
+        model.setData(model.index(0), QStringLiteral("watch out more"),
+                      static_cast<int>(cwErrorListModel::ErrorRoles::MessageRole));
+        CHECK(changedSpy.count() == 4);
+        CHECK(model.warningMessages() == QStringList{QStringLiteral("watch out more")});
+
+        //Removing the warning empties the list and notifies
+        model.remove(0);
+        CHECK(changedSpy.count() == 5);
+        CHECK(model.warningMessages().isEmpty());
+    }
+}
+

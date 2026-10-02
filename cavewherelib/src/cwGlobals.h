@@ -45,6 +45,8 @@ public:
     static QStringList projDataPath();
     static bool isInApplicationDir(const QString& path);
 
+    static void extractBundledRuntimeData();
+
     static void initilizeResources();
 
     static void loadFonts();

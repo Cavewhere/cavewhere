@@ -63,9 +63,10 @@ struct cwPickTolerance {
     bias would break the BVH's prune-by-best-depth in the hot path).
 
     Kinds is a bitset over primitive kinds — OR the flags a pass should hit.
-    The coordinate picker uses Kinds::All (nearest of everything wins); the
-    measurement tool does a Kind::Lines pre-pick to clamp to a station, then
-    a Kind::Triangles | Kind::Points fallback for a free point.
+    The coordinate picker uses Kinds::All (nearest of everything wins). The
+    measurement tool picks by mode: Free uses Kinds::All, while Station-only
+    narrows to Kind::Lines so the ray reaches the centerline through any
+    occluding surface and snaps to the station behind it.
 */
 struct cwPickQuery {
     cwPickTolerance tolerance;

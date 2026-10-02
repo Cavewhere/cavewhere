@@ -9,6 +9,9 @@
 #include "cwScale.h"
 #include "cwLength.h"
 
+//Std includes
+#include <cmath>
+
 namespace {
     // The default paper scale a new sketch/scrap is seeded with, per unit system.
     // Each is a round sketching scale in that system's natural paper/cave unit
@@ -30,6 +33,7 @@ cwScale::cwScale(QObject *parent) :
 {
     ScaleNumerator->setValue(1.0);
     ScaleDenominator->setValue(1.0);
+    m_scale = scale();
     connectLengthObjects();
 }
 
@@ -37,10 +41,30 @@ cwScale::cwScale(QObject *parent) :
   This connects the length objects when the scale has changed.
   */
 void cwScale::connectLengthObjects() {
-    connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleNumerator, SIGNAL(unitChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleDenominator, SIGNAL(unitChanged()), SIGNAL(scaleChanged()));
+    connect(ScaleNumerator, &cwLength::valueChanged, this, &cwScale::updateScale);
+    connect(ScaleNumerator, &cwLength::unitChanged, this, &cwScale::updateScale);
+    connect(ScaleDenominator, &cwLength::valueChanged, this, &cwScale::updateScale);
+    connect(ScaleDenominator, &cwLength::unitChanged, this, &cwScale::updateScale);
+}
+
+/**
+  Fans one side's change out to the two signals, which answer different questions:
+  the stored data always changed, the ratio only sometimes did.
+  */
+void cwScale::updateScale() {
+    if(m_settingData) {
+        return;
+    }
+
+    emit dataChanged();
+
+    const double newScale = scale();
+    if(newScale == m_scale || (std::isnan(newScale) && std::isnan(m_scale))) {
+        return;
+    }
+
+    m_scale = newScale;
+    emit scaleChanged();
 }
 
 /**
@@ -58,8 +82,16 @@ double cwScale::scale() const {
 
 void cwScale::setData(const Data &data)
 {
+    //Both sides move together, so hold this scale's own signals until they have.
+    //Halfway through, a relabel has the new denominator against the old numerator
+    //— a ratio that never existed and that consumers would rebuild geometry for.
+    //The lengths still signal individually; only the aggregate is coalesced.
+    m_settingData = true;
     ScaleDenominator->setData(data.scaleDenominator);
     ScaleNumerator->setData(data.scaleNumerator);
+    m_settingData = false;
+
+    updateScale();
 }
 
 double cwScale::scale(const Data &data)
@@ -98,8 +130,9 @@ void cwScale::setScale(double newScale)
 {
     if(newScale == scale()) { return; }
 
-    disconnect(ScaleNumerator, SIGNAL(valueChanged()), this, SIGNAL(scaleChanged()));
-    disconnect(ScaleDenominator, SIGNAL(valueChanged()), this, SIGNAL(scaleChanged()));
+    //Same reason as setData(): the numerator lands before the denominator, and
+    //the ratio in between is not one anybody asked for
+    m_settingData = true;
 
     scaleNumerator()->setValue(1.0);
 
@@ -116,8 +149,7 @@ void cwScale::setScale(double newScale)
     double denominator = 1.0 / newScale * unitScale;
     scaleDenominator()->setValue(denominator);
 
-    connect(ScaleNumerator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
-    connect(ScaleDenominator, SIGNAL(valueChanged()), SIGNAL(scaleChanged()));
+    m_settingData = false;
 
-    emit scaleChanged();
+    updateScale();
 }

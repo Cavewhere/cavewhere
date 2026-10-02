@@ -169,6 +169,7 @@ TEST_CASE("Driver *include emits absolute forward-slash quoted path for trip att
 
     cwSurvexExporterRegion::Options options;
     options.tripAttachmentDirs.insert(attached->id(), attachDir);
+    options.outputCSPolicy = cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame;
 
     const cwCavingRegionData snapshot = region.data();
     REQUIRE(snapshot.caves.size() == 1);
@@ -678,7 +679,7 @@ TEST_CASE("buildInput rides the IGRF-resolved declination for auto external trip
           "[Attach][Declination]")
 {
     cwCavingRegion region;
-    region.geoReference()->setGlobalCoordinateSystem(QStringLiteral("EPSG:32613"));
+    region.geoReference()->restore(cwGeoReference::Frozen, QStringLiteral("EPSG:32613"), {}, QString());
     cwCave* cave = addEmptyCave(region, QStringLiteral("Boulder"));
 
     cwFixStation fix;
@@ -760,6 +761,77 @@ TEST_CASE("Driver emits injected declination inside the trip block before *inclu
     REQUIRE(file.open(QFile::ReadOnly));
     driver = QString::fromUtf8(file.readAll());
     CHECK_FALSE(driver.contains(QStringLiteral("*calibrate DECLINATION")));
+}
+
+TEST_CASE("An attached *include under an inherited *declination auto starts from zero",
+          "[Attach][Declination]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("decl-reset")),
+                                             fixturePath(QStringLiteral("survex_no_metadata.svx")));
+
+    cwCavingRegion region;
+    cwCave* cave = addEmptyCave(region, QStringLiteral("Located"));
+
+    // A native trip with auto declination and a fix on its station is what puts
+    // *declination auto in the cave block.
+    cwTrip* native = addTripWithShot(cave, QStringLiteral("Native"),
+                                     QStringLiteral("a1"), QStringLiteral("a2"), 10.0);
+    native->setDate(makeUtcDate(2024, 6, 1));
+    REQUIRE(native->calibrations()->autoDeclination());
+
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("a1"));
+    fix.setInputCS(QStringLiteral("EPSG:32613"));
+    fix.setEasting(478000.0);
+    fix.setNorthing(4430000.0);
+    fix.setElevation(1655.0);
+    cave->fixStations()->appendFixStation(fix);
+
+    cwTrip* attached = addEmptyTrip(cave, QStringLiteral("Attached"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_no_metadata.svx")));
+
+    cwSurvexExporterRegion::Options options;
+    options.tripAttachmentDirs.insert(attached->id(), attachDir);
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString tripLabel = tripScopeLabel(attached);
+    const QString reset = QStringLiteral("*calibrate DECLINATION 0.00");
+
+    SECTION("with no injected declination the include is preceded by a reset to zero")
+    {
+        const QString driver = writeDriverFor(region, options, driverPath);
+        INFO(driver.toStdString());
+
+        const qsizetype autoIndex = driver.indexOf(QStringLiteral("*declination auto"));
+        const qsizetype beginIndex = driver.indexOf(QStringLiteral("*begin %1").arg(tripLabel));
+        const qsizetype resetIndex = driver.indexOf(reset);
+        const qsizetype includeIndex = driver.indexOf(QStringLiteral("*include"));
+        REQUIRE(autoIndex >= 0);
+        REQUIRE(beginIndex > autoIndex);
+        REQUIRE(resetIndex >= 0);
+        CHECK(driver.count(reset) == 1);
+        CHECK(beginIndex < resetIndex);
+        CHECK(resetIndex < includeIndex);
+        CHECK(driver.lastIndexOf(QStringLiteral("*calibrate DECLINATION"), includeIndex) == resetIndex);
+    }
+
+    SECTION("an injected declination is written as before, with no reset")
+    {
+        options.tripInjectedDeclinations.insert(attached->id(), 5.5);
+        const QString driver = writeDriverFor(region, options, driverPath);
+        INFO(driver.toStdString());
+
+        CHECK(driver.contains(QStringLiteral("*declination auto")));
+        CHECK_FALSE(driver.contains(reset));
+        const qsizetype beginIndex = driver.indexOf(QStringLiteral("*begin %1").arg(tripLabel));
+        const qsizetype injectedIndex = driver.indexOf(QStringLiteral("*calibrate DECLINATION"), beginIndex);
+        const qsizetype includeIndex = driver.indexOf(QStringLiteral("*include"));
+        REQUIRE(injectedIndex >= 0);
+        CHECK(injectedIndex < includeIndex);
+    }
 }
 
 TEST_CASE("Injected manual declination rotates externally attached stations",

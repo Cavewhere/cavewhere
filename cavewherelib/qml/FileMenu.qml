@@ -148,7 +148,11 @@ QC.Menu {
 
         QC.MenuItem {
             text: "Compute Scraps"
-            onTriggered: RootData.scrapManager.updateAllScraps()
+            onTriggered: {
+                // Mark, then drive — see cwUpdateCoordinator::updateNow().
+                RootData.scrapManager.markAllScrapsDirty()
+                RootData.updateCoordinator.updateNow(RootData.scrapManager)
+            }
         }
 
         QC.MenuItem {
@@ -170,6 +174,15 @@ QC.Menu {
             }
         }
 
+
+        QC.MenuItem {
+            text: "Render Stats HUD"
+            checked: RootData.settings.renderingSettings.showRenderStatsHud
+            checkable: true
+            onTriggered: {
+                RootData.settings.renderingSettings.showRenderStatsHud = !RootData.settings.renderingSettings.showRenderStatsHud
+            }
+        }
 
         QC.MenuItem {
             text: "Station Labels Visible"

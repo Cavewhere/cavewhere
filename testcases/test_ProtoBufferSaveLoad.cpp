@@ -15,7 +15,6 @@
 #include "cwErrorListModel.h"
 #include "cavewhereVersion.h"
 #include "cwSurveyNoteModel.h"
-#include "cwTaskManagerModel.h"
 #include "cwImageProvider.h"
 #include "cwTripCalibration.h"
 #include "cwTeam.h"
@@ -221,7 +220,6 @@ TEST_CASE("Loading should report errors correctly", "[ProtoSaveLoad]") {
 
     }
 
-    root->taskManagerModel()->waitForTasks();
     root->futureManagerModel()->waitForFinished();
 }
 
@@ -411,7 +409,6 @@ TEST_CASE("Save and load should work correctly for Projected Profile v3->v5", "[
         auto scrap = note->scraps().at(0);
         scrapCheckFunc(scrap);
 
-        root->taskManagerModel()->waitForTasks();
         root->futureManagerModel()->waitForFinished();
         root->project()->waitSaveToFinish();
 

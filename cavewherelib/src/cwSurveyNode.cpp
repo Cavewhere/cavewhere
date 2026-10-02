@@ -51,6 +51,7 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     m_depth(new cwLength(this)),
     m_errorModel(new cwErrorModel(this)),
     m_fixStations(new cwFixStationModel(this)),
+    m_fixStationDiagnostics(new cwFixStationDiagnosticsModel(this)),
     m_stationPositionLookupStale(false),
     m_id(QUuid::createUuid()),
     m_gridConvergence(new cwGridConvergence(this)),
@@ -769,11 +770,14 @@ cwUnits::UnitSystem cwSurveyNode::unitSystem() const
 void cwSurveyNode::recomputeGridConvergence()
 {
     // The readout owns the PROJ work and change detection; we just feed it the
-    // current fix stations plus the region CS to fall back on when a fix
-    // station omits its own input CS.
+    // current fix stations and the grid they are plotted in. That grid is the
+    // project's local projection — cavern solves under it — so a node with no
+    // region has none, and converges to nothing.
     const cwCavingRegion* region = parentRegion();
-    const QString fallbackCS = region ? region->geoReference()->globalCoordinateSystem() : QString();
-    m_gridConvergence->update(m_fixStations->fixStations(), fallbackCS);
+    const QString frameCS = region == nullptr
+        ? QString()
+        : region->geoReference()->localCoordinateSystem();
+    m_gridConvergence->update(m_fixStations->fixStations(), frameCS);
 }
 
 /**
@@ -1068,9 +1072,9 @@ void cwSurveyNode::InsertRemoveNode::insertNodes() {
         //The whole subtree sits at a new path now, so its hierarchy keywords do too.
         node->updateSubtreeKeywords();
 
-        //The subtree may have landed in a different region, whose coordinate
-        //system is what a fix station with no input CS of its own falls back to.
-        //The node is the object that knows its region moved.
+        //The subtree may have landed in a different region, whose local
+        //projection is the grid its convergence is measured in. The node is the
+        //object that knows its region moved.
         node->recomputeGridConvergence();
         const QList<cwSurveyNode*> descendants = node->allNodes();
         for(cwSurveyNode* descendant : descendants) {
@@ -1364,6 +1368,15 @@ void cwSurveyNode::setStationPositionLookup(const cwStationPositionLookup &model
  */
 void cwSurveyNode::setSurveyNetwork(const cwSurveyNetwork &network)
 {
+    // The line-plot worker rebuilds the network on every solve and cannot see
+    // the node's current one (its region snapshot carries no network), so it
+    // reports "changed" every time. Guard here so surveyNetworkChanged only
+    // fires on a genuine change — otherwise every solve re-notifies listeners,
+    // and any listener that re-runs the solve (fix-station error refresh,
+    // declination) would feed back into an endless re-solve loop.
+    if (m_network == network) {
+        return;
+    }
     m_network = network;
     emit surveyNetworkChanged();
 }

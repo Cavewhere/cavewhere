@@ -16,20 +16,26 @@
 //Qt includes
 #include <QString>
 
+/**
+ * Reads cavern's .3d output into a position lookup and a survey network.
+ *
+ * Coordinates arrive in whatever *cs out named, which for CaveWhere's export is
+ * the project's local projection — centered on the project and small enough to
+ * narrow to QVector3D without losing metres to float.
+ */
 class CAVEWHERE_LIB_EXPORT cwSurvex3DFileReader
 {
 public:
     struct NetworkAndLookup {
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
+        cwSplayTipsByStation splayTips;
     };
 
-    cwStationPositionLookup readStationPositions(const QString& threeDFilePath);
-
-    // Parses a .3d file once, returning both the survey network (station names,
-    // shot connectivity, positions) and a standalone position lookup. Two-pass
-    // using img_rewind(): pass 1 indexes LABEL items, pass 2 resolves LINE
-    // endpoints by coordinate match.
+    // Parses a .3d file once, returning the survey network (station names,
+    // shot connectivity, positions), a standalone position lookup, and the
+    // splay tips. Two-pass using img_rewind(): pass 1 indexes LABEL items,
+    // pass 2 resolves LINE endpoints by coordinate match.
     NetworkAndLookup readNetworkAndLookup(const QString& threeDFilePath);
 };
 

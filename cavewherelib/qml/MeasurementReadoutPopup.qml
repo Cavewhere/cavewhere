@@ -34,8 +34,11 @@ QC.Popup {
         return root.interaction.lengthUnit.format(meters)
     }
 
+    // Angles go through the shared C++ formatter for the same reason lengths do:
+    // one place decides the degree sign and the precision, and a value that
+    // rounds to zero renders "0.0°" rather than a "-0.0°" the digits can't back.
     function _angle(degrees) {
-        return qsTr("%1°").arg(Number(degrees).toFixed(root._anglePrecision))
+        return Units.formatAngle(degrees, root._anglePrecision)
     }
 
     // Signed length for the by-axis components, where the sign carries the
@@ -55,9 +58,9 @@ QC.Popup {
         if (root.interaction.azimuthReference === AzimuthReference.Grid) {
             return ""
         }
-        let parts = [qsTr("Convergence %1°").arg(Number(root.interaction.convergence).toFixed(root._anglePrecision))]
+        let parts = [qsTr("Convergence %1").arg(root._angle(root.interaction.convergence))]
         if (root.interaction.azimuthReference === AzimuthReference.Magnetic) {
-            parts.push(qsTr("Declination %1°").arg(Number(root.interaction.declination).toFixed(root._anglePrecision)))
+            parts.push(qsTr("Declination %1").arg(root._angle(root.interaction.declination)))
         }
         return parts.join(qsTr(" · "))
     }

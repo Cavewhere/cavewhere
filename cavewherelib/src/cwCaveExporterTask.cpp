@@ -7,10 +7,6 @@
 
 //Our includes
 #include "cwCaveExporterTask.h"
-#include "cwCave.h"
-
-//Qt includes
-#include <QThread>
 
 cwCaveExporterTask::cwCaveExporterTask(QObject* parent) :
     cwExporterTask(parent)
@@ -35,7 +31,8 @@ void cwCaveExporterTask::setData(const cwCaveData &cave) {
   */
 void cwCaveExporterTask::runTask() {
     if(checkData() && openOutputFile()) {
-        bool good = writeCave(*OutputStream.data(), Cave);
+        const QString globalCS = writeStandaloneHeader(*OutputStream.data());
+        bool good = writeCave(*OutputStream.data(), Cave, globalCS);
         closeOutputFile();
 
         if(!good) {
@@ -46,9 +43,6 @@ void cwCaveExporterTask::runTask() {
     }
     done();
 }
-
-
-
 
 /**
   \brief Updates the progress of the cave task

@@ -8,6 +8,7 @@
 #include "cwGlobals.h"
 
 //Qt includes
+#include <QFile>
 #include <QFileInfo>
 #include <QSettings>
 #include <QApplication>
@@ -16,10 +17,54 @@
 #include <QDebug>
 #include <QDirIterator>
 #include <QFontDatabase>
+#include <QStandardPaths>
 
 //Std includes
 #include "cwDebug.h"
 #include "math.h"
+
+#ifdef Q_OS_ANDROID
+namespace {
+    const auto kBundledRuntimeResourceRoot = QStringLiteral(":/runtime/");
+    const auto kBundledSurvexDir = QStringLiteral("survex");
+    const auto kBundledProjDir = QStringLiteral("proj");
+
+    /**
+     * Returns where extractBundledRuntimeData() puts the extracted files.
+     * survex's and PROJ's C code opens these with fopen, which can't read qrc.
+     */
+    QString bundledRuntimeRoot()
+    {
+        return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    }
+
+    void extractBundledRuntimeDir(const QString& subDirectory)
+    {
+        const QDir sourceDir(kBundledRuntimeResourceRoot + subDirectory);
+        const QString destinationPath = bundledRuntimeRoot() + QLatin1Char('/') + subDirectory;
+        if (!QDir().mkpath(destinationPath)) {
+            qWarning() << "Can't create runtime data directory" << destinationPath << LOCATION;
+            return;
+        }
+
+        const QDir destinationDir(destinationPath);
+        const auto entries = sourceDir.entryInfoList(QDir::Files);
+        for (const QFileInfo& entry : entries) {
+            const QString destination = destinationDir.absoluteFilePath(entry.fileName());
+            const QFileInfo destinationInfo(destination);
+            if (destinationInfo.exists() && destinationInfo.size() == entry.size()) {
+                continue;
+            }
+
+            QFile::remove(destination);
+            if (!QFile::copy(entry.absoluteFilePath(), destination)) {
+                qWarning() << "Can't extract runtime data" << entry.absoluteFilePath()
+                           << "to" << destination << LOCATION;
+            }
+        }
+    }
+}
+#endif
 
 /**
   If filename doesn't have an extension, the this function will try to add the
@@ -161,6 +206,9 @@ QList<QDir> cwGlobals::survexPath()
             QDir(QStringLiteral("C:/Program Files/Survex"))};
 #elif defined(Q_OS_UNIX)
     QList<QDir> dirs;
+#ifdef Q_OS_ANDROID
+    dirs.append(QDir(bundledRuntimeRoot() + QLatin1Char('/') + kBundledSurvexDir));
+#endif
     dirs.append(cavewhereSurvex);
     dirs.append(QDir(QCoreApplication::applicationDirPath()));
     dirs.append(QDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources")));
@@ -186,6 +234,9 @@ QStringList cwGlobals::projDataPath()
     QStringList candidates;
 
     const QString appDir = QCoreApplication::applicationDirPath();
+#ifdef Q_OS_ANDROID
+    candidates.append(bundledRuntimeRoot() + QLatin1Char('/') + kBundledProjDir);
+#endif
     candidates.append(appDir + QStringLiteral("/proj"));
 #ifdef Q_OS_MAC
     candidates.append(appDir + QStringLiteral("/../Resources/proj"));
@@ -236,6 +287,22 @@ bool cwGlobals::isInApplicationDir(const QString& path)
     const QDir appDir(QCoreApplication::applicationDirPath());
     const QDir resourcesDir(QCoreApplication::applicationDirPath() + QStringLiteral("/../Resources"));
     return isPathInsideDir(path, appDir) || isPathInsideDir(path, resourcesDir);
+}
+
+/**
+ * Copies survex's message file and PROJ's database out of the Qt resource
+ * bundle into the application's data directory, where survex's and PROJ's C
+ * code can fopen them. Files are re-extracted when they're missing or their
+ * size differs from the bundled copy.
+ *
+ * Does nothing on platforms that ship these files next to the executable.
+ */
+void cwGlobals::extractBundledRuntimeData()
+{
+#ifdef Q_OS_ANDROID
+    extractBundledRuntimeDir(kBundledSurvexDir);
+    extractBundledRuntimeDir(kBundledProjDir);
+#endif
 }
 
 /**

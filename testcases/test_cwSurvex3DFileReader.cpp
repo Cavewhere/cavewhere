@@ -60,7 +60,7 @@ namespace {
 
 TEST_CASE("cwSurvex3DFileReader should return empty lookup for missing file", "[cwSurvex3DFileReader]") {
     cwSurvex3DFileReader reader;
-    auto lookup = reader.readStationPositions("/nonexistent/file.3d");
+    auto lookup = reader.readNetworkAndLookup("/nonexistent/file.3d").lookup;
     CHECK(lookup.isEmpty());
 }
 
@@ -77,12 +77,12 @@ TEST_CASE("cwSurvex3DFileReader should read station positions from .3d file", "[
 
     // Read station positions directly from the .3d file
     cwSurvex3DFileReader reader;
-    cwStationPositionLookup lookup = reader.readStationPositions(cavernResult.value().output3dPath);
+    cwStationPositionLookup lookup =
+        reader.readNetworkAndLookup(cavernResult.value().output3dPath).lookup;
 
     CHECK(!lookup.isEmpty());
 
     // The test dataset has 6 stations: 26, 26a-26e
-    // Expected positions match the existing cwSurvexportCSVTask test dataset
     auto positions = lookup.positions();
     CHECK(positions.size() == 6);
 
@@ -126,7 +126,7 @@ TEST_CASE("cwSurvex3DFileReader should normalize a non-dot survex separator", "[
     REQUIRE(QFileInfo(cavernResult.value().output3dPath).exists());
 
     cwSurvex3DFileReader reader;
-    cwStationPositionLookup lookup = reader.readStationPositions(cavernResult.value().output3dPath);
+    cwStationPositionLookup lookup = reader.readNetworkAndLookup(cavernResult.value().output3dPath).lookup;
 
     CHECK(!lookup.isEmpty());
 
@@ -454,7 +454,7 @@ TEST_CASE("cavern survives a fatal error inside a Walls file with a pushed optio
 
     // The clean .srv names no prefix, so its two stations stand alone.
     cwSurvex3DFileReader reader;
-    cwStationPositionLookup lookup = reader.readStationPositions(cleanRun.value().output3dPath);
+    cwStationPositionLookup lookup = reader.readNetworkAndLookup(cleanRun.value().output3dPath).lookup;
     CHECK(lookup.positions().size() == 2);
     CHECK(lookup.hasPosition(QStringLiteral("A1")));
     CHECK(lookup.hasPosition(QStringLiteral("A2")));
@@ -581,7 +581,7 @@ TEST_CASE("cavern forgets a fix with no coordinates between runs",
     REQUIRE(QFileInfo(secondRun.value().output3dPath).exists());
 
     cwSurvex3DFileReader reader;
-    cwStationPositionLookup lookup = reader.readStationPositions(secondRun.value().output3dPath);
+    cwStationPositionLookup lookup = reader.readNetworkAndLookup(secondRun.value().output3dPath).lookup;
     CHECK(lookup.positions().size() == 2);
     CHECK(lookup.hasPosition(QStringLiteral("c")));
     CHECK(lookup.hasPosition(QStringLiteral("d")));
@@ -765,13 +765,13 @@ TEST_CASE("cavern picks the same label separator for a Walls empty name on every
                                         workDir.filePath(QStringLiteral("empty_name_run1.3d")));
     REQUIRE_FALSE(firstRun.hasError());
     cwStationPositionLookup firstLookup =
-        reader.readStationPositions(firstRun.value().output3dPath);
+        reader.readNetworkAndLookup(firstRun.value().output3dPath).lookup;
 
     auto secondRun = cwCavernRunner::run(driver,
                                          workDir.filePath(QStringLiteral("empty_name_run2.3d")));
     REQUIRE_FALSE(secondRun.hasError());
     cwStationPositionLookup secondLookup =
-        reader.readStationPositions(secondRun.value().output3dPath);
+        reader.readNetworkAndLookup(secondRun.value().output3dPath).lookup;
 
     CHECK(secondLookup.positions().keys() == firstLookup.positions().keys());
     CHECK(secondLookup.hasPosition(QStringLiteral("pfx.empty name")));

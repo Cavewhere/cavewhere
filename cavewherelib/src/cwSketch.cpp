@@ -24,12 +24,11 @@
 #include "cwKeywordModel.h"
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwPlanScrapViewMatrix.h"
-#include "cwMatrix4x4Artifact.h"
 #include "cwSketchPainter.h"
 #include "cwSketchScrapRasterizer.h"
-#include "cwSurvey2DGeometryRule.h"
-#include "cwSurvey2DGeometryArtifact.h"
-#include "cwSurveyNetworkArtifact.h"
+#include "cwSurvey2DGeometryBuilder.h"
+#include "cwSurvey2DGeometrySource.h"
+#include "cwSurveyNetworkSource.h"
 
 namespace {
 
@@ -262,8 +261,7 @@ cwSketch::cwSketch(QObject *parent)
       m_undoStack(new QUndoStack(this)),
       m_keywordModel(new cwKeywordModel(this)),
       m_viewState(new cwSketchViewState(this)),
-      m_matrixArtifact(new cwMatrix4x4Artifact(this)),
-      m_geometryRule(new cwSurvey2DGeometryRule(this))
+      m_geometryBuilder(new cwSurvey2DGeometryBuilder(this))
 {
     m_undoStack->setUndoLimit(32);
 
@@ -271,8 +269,7 @@ cwSketch::cwSketch(QObject *parent)
     m_mapScale->scaleDenominator()->setValue(250.0);
 
     rebuildViewMatrixForType();
-    syncMatrixArtifact();
-    m_geometryRule->setViewMatrix(m_matrixArtifact);
+    syncBuilderViewMatrix();
 }
 
 cwSketch::~cwSketch() = default;
@@ -308,27 +305,27 @@ void cwSketch::setViewType(ViewType type)
     }
     m_viewType = type;
     rebuildViewMatrixForType();
-    syncMatrixArtifact();
+    syncBuilderViewMatrix();
     emit viewTypeChanged();
 }
 
-cwSurveyNetworkArtifact *cwSketch::surveyNetworkArtifact() const
+cwSurveyNetworkSource *cwSketch::surveyNetworkSource() const
 {
-    return m_geometryRule->surveyNetwork();
+    return m_geometryBuilder->surveyNetwork();
 }
 
-void cwSketch::setSurveyNetworkArtifact(cwSurveyNetworkArtifact *artifact)
+void cwSketch::setSurveyNetworkSource(cwSurveyNetworkSource *source)
 {
-    if (m_geometryRule->surveyNetwork() == artifact) {
+    if (m_geometryBuilder->surveyNetwork() == source) {
         return;
     }
-    m_geometryRule->setSurveyNetwork(artifact);
-    emit surveyNetworkArtifactChanged();
+    m_geometryBuilder->setSurveyNetwork(source);
+    emit surveyNetworkSourceChanged();
 }
 
-cwSurvey2DGeometryArtifact *cwSketch::survey2DGeometry() const
+cwSurvey2DGeometrySource *cwSketch::survey2DGeometry() const
 {
-    return m_geometryRule->survey2DGeometry();
+    return m_geometryBuilder->survey2DGeometry();
 }
 
 void cwSketch::rebuildViewMatrixForType()
@@ -343,13 +340,13 @@ void cwSketch::rebuildViewMatrixForType()
     m_viewMatrix = new cwPlanScrapViewMatrix(this);
 
     connect(m_viewMatrix, &cwAbstractScrapViewMatrix::matrixChanged,
-            this, &cwSketch::syncMatrixArtifact);
+            this, &cwSketch::syncBuilderViewMatrix);
 }
 
-void cwSketch::syncMatrixArtifact()
+void cwSketch::syncBuilderViewMatrix()
 {
-    if (m_viewMatrix && m_matrixArtifact) {
-        m_matrixArtifact->setMatrix4x4(m_viewMatrix->matrix());
+    if (m_viewMatrix) {
+        m_geometryBuilder->setViewMatrix(m_viewMatrix->matrix());
     }
 }
 

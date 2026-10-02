@@ -156,19 +156,15 @@ TEST_CASE("cwDiskCacher concurrent insert and entry", "[cwDiskCacher]") {
         // Concurrent inserts
         QtConcurrent::blockingMap(idxs, [&](int i) {
             cwDiskCacher cacher(tempPath);
-            //at(), not operator[]: the by-reference capture leaves these
-            //non-const, and the next lambda's by-value capture keeps their
-            //refcount above one, so operator[] would detach and reallocate the
-            //buffer the other worker threads are reading (heap-use-after-free).
             cacher.insert(keys.at(i), datas.at(i));
         });
 
         // Concurrent entries
         QtConcurrent::blockingMap(idxs, [tempPath, &checkMutex, &checks, keys, datas](int i) {
             cwDiskCacher cacher(tempPath);
-            auto res = cacher.entry(keys[i]);
+            auto res = cacher.entry(keys.at(i));
             QMutexLocker locker(&checkMutex);
-            checks.append(res == datas[i]);
+            checks.append(res == datas.at(i));
         });
     }
 

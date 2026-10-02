@@ -18,6 +18,10 @@
 #include <QQmlEngine>
 #include <QImage>
 #include <QMetaObject>
+#include <QFutureWatcher>
+
+//Std includes
+#include <memory>
 
 // Fwd decls
 class cwProject;
@@ -31,11 +35,14 @@ class cwNoteLiDAR;
 // Ours
 #include "cwGlobals.h"
 #include "cwFutureManagerToken.h"
+#include "cwProgressNode.h"
 #include "asyncfuture.h"
 #include "cwTriangulateLiDARInData.h"
+#include "cwTriangulateLiDARTask.h"
 #include "cwRenderTexturedItems.h"
-#include "cwUniqueConnectionChecker.h"
+#include "cwConnectionRegistry.h"
 #include "cwKeywordItemRegistry.h"
+#include "cwUpdatable.h"
 class cwKeywordItemModel;
 class cwRenderTexturedItemsVisibilityGroup;
 
@@ -47,12 +54,10 @@ class cwRenderTexturedItemsVisibilityGroup;
  * - Tracks dirty cwNoteLiDAR objects and batches them through cwTriangulateLiDARTask.
  * - Exposes slots to trigger recomputation when the cave centerline (station positions or survey network) changes.
  */
-class CAVEWHERE_LIB_EXPORT cwNoteLiDARManager : public QObject
+class CAVEWHERE_LIB_EXPORT cwNoteLiDARManager : public QObject, public cwUpdatableBase
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(NoteLiDARManager)
-
-    Q_PROPERTY(bool automaticUpdate READ automaticUpdate WRITE setAutomaticUpdate NOTIFY automaticUpdateChanged)
 
 public:
     explicit cwNoteLiDARManager(QObject* parent = nullptr);
@@ -67,12 +72,6 @@ public:
     void setRender(cwRenderTexturedItems* renderGltf);
     void setKeepRenderGeometry(bool keepGeometry);
     bool keepRenderGeometry() const;
-
-    bool automaticUpdate() const;
-    void setAutomaticUpdate(bool automaticUpdate);
-
-    // Useful in tests or manual recompute
-    Q_INVOKABLE void updateAllLiDAR();
 
     // Call when a cave’s centerline changed (station positions, network, etc.)
     Q_INVOKABLE void updateLiDARForCave(cwCave* cave);
@@ -89,7 +88,7 @@ public:
     static cwTriangulateLiDARInData mapNoteToInData(const cwNoteLiDAR* note, const cwProject *project);
 
 signals:
-    void automaticUpdateChanged();
+    void updateStateChanged();
     // Emitted after a successful triangulation batch completes
     void liDARNotesUpdated(const QList<cwNoteLiDAR*>& notes);
 
@@ -103,18 +102,45 @@ private slots:
     void liDARRowsInserted(const QModelIndex& parent, int begin, int end);
     void liDARRowsAboutToBeRemoved(const QModelIndex& parent, int begin, int end);
 
-    // Centerline triggers (if bound via line plot or elsewhere)
-    void stationPositionsChangedForCave(cwCave* cave);
-
     // Bookkeeping
     void noteDestroyed(QObject* noteObj);
 
 private:
+    cwUpdatable::State doUpdateState() const override;
+    QFuture<void> doRun() override;
 
     // Batch scheduling
     void markDirty(cwNoteLiDAR* note);
-    void runIfNeeded();
-    void runBatch();
+    // Notifies the coordinator of dirtiness and, when standalone, recomputes now.
+    void notifyDirty();
+    QFuture<void> runBatch();
+
+    using LiDARNoteResult = Monad::Result<QVector<cwRenderTexturedItems::Item>>;
+
+    // Pushes one triangulated note's items to the render items as soon as that
+    // note's own result is ready, so a long batch fills the 3d view note by note.
+    void deliverNote(cwNoteLiDAR* note, const LiDARNoteResult& result, int index);
+
+    // Announces a state change, if there was one, after a note left the dirty set.
+    // Removing the last runnable dirty note takes the pipeline Dirty -> Clean, and
+    // the coordinator's staleness aggregate has to hear about that like any other
+    // transition — otherwise the footer keeps offering to compute notes that are
+    // gone.
+    //
+    // Every caller announces once, after its removals, never per note: the
+    // coordinator may run the pipeline in response, and a dirty set only half
+    // walked still holds notes on their way out.
+    //
+    // Only for removals whose notes are still alive — the model's
+    // rowsAboutToBeRemoved and the explicit trip disconnect. Taking the "before"
+    // state means reading every note in the dirty set, so a path reached from a
+    // note's own destroyed() has to decide without it (see noteDestroyed()).
+    void announceStateChange(cwUpdatable::State previousState);
+
+    // Leaves Working: finishes the run's future and emits updateStateChanged.
+    // That future is what whoever asked for the batch waits on, so every
+    // completion path has to reach here.
+    void finishBatch();
 
     // Trip wiring
     void connectTrip(cwTrip* trip);
@@ -126,9 +152,7 @@ private:
     void removeKeywordItemForNote(cwNoteLiDAR* note);
 
     // Utilities
-    static QList<cwNoteLiDAR*> collectAllNotes(cwRegionTreeModel* regionModel);
     static QList<cwNoteLiDAR*> notesFromModel(cwSurveyNoteLiDARModel* model);
-    static QList<cwTrip*> allTrips(cwRegionTreeModel* regionModel);
 
 private:
     QPointer<cwRegionTreeModel> m_regionModel;
@@ -138,19 +162,49 @@ private:
     cwFutureManagerToken m_futureManagerToken;
     AsyncFuture::Restarter<void> m_restarter;
 
-    QSet<cwNoteLiDAR*> m_dirtyNotes;
+    // The run's progress tree, and the job the task list watches. The run grows
+    // it as it works, so nothing here declares how many steps a note takes.
+    cwProgressNodePtr m_progressRoot;
+
+    // One note waiting to be triangulated, with the trip and cave it hung from
+    // when it was marked. Both are cached so isRunnable() reads only this entry:
+    // a trip destroys its own members before ~QObject deletes the notes it owns,
+    // so walking note -> trip -> cave to answer a question about the note reads
+    // a dead trip (#637). The cave itself is still read through, since whether
+    // its centerline is solved changes after the note is marked.
+    struct DirtyNote {
+        cwNoteLiDAR* note = nullptr;
+        QPointer<cwTrip> trip;
+        QPointer<cwCave> cave;
+
+        bool isRunnable() const;
+        bool operator==(const DirtyNote&) const = default;
+    };
+
+    QHash<cwNoteLiDAR*, DirtyNote> m_dirtyNotes;
     QSet<cwNoteLiDAR*> m_deletedNotes;
+
+    // The staleness half of updateState() (see cwUpdatable::State), mirroring the
+    // line plot and scraps: set when a note is (re)dirtied and cleared at
+    // dispatch, so a fresh edit mid-run reports Dirty. The busy half is the run's
+    // future, held by cwUpdatableBase.
+    bool m_workPending = false;
     QHash<cwNoteLiDAR*, QVector<uint32_t>> m_noteToRender;
+
+    // Watches the running batch so each note's result is delivered the moment
+    // it's ready. m_deliveredNotes holds the indices already pushed, so the
+    // completion handler delivers the rest exactly once.
+    std::unique_ptr<QFutureWatcher<LiDARNoteResult>> m_batchWatcher;
+    QSet<int> m_deliveredNotes;
     cwKeywordItemRegistry<cwNoteLiDAR*> m_keywordRegistry;
 
     QPointer<cwRenderTexturedItems> m_render;
 
-    bool m_automaticUpdate = true;
     bool m_keepRenderGeometry = false;
     QMetaObject::Connection m_pathReadyConnection;
 
-    //For checking duplicate connections
-    cwUniqueConnectionChecker m_connectionChecker;
+    //Couples duplicate-connection checking with connect/disconnect (receiver = this)
+    cwConnectionRegistry m_connectionRegistry;
 };
 
 #endif // CWNOTELIDARMANAGER_H

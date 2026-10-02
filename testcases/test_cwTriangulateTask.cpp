@@ -30,6 +30,9 @@
 #include "cwPlanScrapViewMatrix.h"
 #include "cwUnits.h"
 #include "cwTextureUploadTask.h"
+#include "cwDiskCacher.h"
+#include "cwProgressNode.h"
+#include "cwStreamedTexture.h"
 #include "asyncfuture.h"
 
 //Qt includes
@@ -39,6 +42,7 @@
 #include <QImageReader>
 #include <QPainter>
 #include <QCoreApplication>
+#include <QFutureWatcher>
 #include <QPointF>
 #include <QUuid>
 #include <QVector3D>
@@ -159,8 +163,16 @@ static QSize rawPixelSize(const QString& imagePath)
     return reader.size();
 }
 
-static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
-                                                  QSize overrideOriginalSize = QSize())
+//Shared by every triangulation in this file. The pid keeps concurrent test
+//processes out of each other's cache.
+static QDir triangulateTaskDataRootDir()
+{
+    return QDir(QDir::temp().filePath(
+        QStringLiteral("cwTriangulateTask-%1").arg(QCoreApplication::applicationPid())));
+}
+
+static cwTriangulateInData scrapInDataForImage(const QString& imagePath,
+                                               QSize overrideOriginalSize = QSize())
 {
     QFile file(imagePath);
     REQUIRE(file.open(QIODevice::ReadOnly));
@@ -215,8 +227,15 @@ static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
     inData.setViewMatrix(new cwPlanScrapViewMatrix::Data());
     inData.setNoteImageResolution(qRound(300.0 / 0.0254));
 
-    const QDir tempDir(QDir::temp().filePath(
-        QStringLiteral("cwTriangulateTask-%1").arg(QCoreApplication::applicationPid())));
+    return inData;
+}
+
+static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
+                                                 QSize overrideOriginalSize = QSize())
+{
+    const cwTriangulateInData inData = scrapInDataForImage(imagePath, overrideOriginalSize);
+
+    const QDir tempDir = triangulateTaskDataRootDir();
     tempDir.mkpath(".");
 
     cwTriangulateTask task;
@@ -229,6 +248,36 @@ static cwTriangulatedData triangulateImageAtPath(const QString& imagePath,
     REQUIRE(futures.first().resultCount() == 1);
 
     return futures.first().result();
+}
+
+TEST_CASE("A compressed crop skips the decode and still reaches the renderer",
+          "[cwTriangulateTask][ScrapCompressedTexture]") {
+    const QString imagePath = QDir(testDatasetDir())
+                                  .filePath(QStringLiteral("scrap-image-no-rotation.jpg"));
+    REQUIRE(QFileInfo::exists(imagePath));
+
+    const cwTriangulatedData data = triangulateImageAtPath(imagePath);
+    REQUIRE_FALSE(data.isNull());
+    REQUIRE_FALSE(data.compressedTextureKey().id.isEmpty());
+
+    //The gate: the render thread streams the KTX2 entry, so the PNG crop is
+    //never decoded and no RGBA8 pixels ride along
+    CHECK(data.croppedImageData().image.isNull());
+
+    //The tracked image still holds the PNG cache entry open
+    REQUIRE_FALSE(data.croppedImagePtr().isNull());
+    CHECK(QFileInfo::exists(data.croppedImage().path()));
+
+    const QDir dataRootDir = triangulateTaskDataRootDir();
+    const cwStreamedTexture streamed {
+        dataRootDir.absolutePath(),
+        data.compressedTextureKey(),
+        data.croppedImageSize()
+    };
+    REQUIRE_FALSE(streamed.isNull());
+
+    cwDiskCacher cacher(dataRootDir);
+    CHECK(cacher.hasEntry(streamed.key));
 }
 
 TEST_CASE("cwTriangulateTask produces consistent geometry for EXIF-rotated images", "[cwTriangulateTask]") {
@@ -324,4 +373,50 @@ TEST_CASE("cwTriangulateTask detects pre-rotation originalSize mismatch", "[cwTr
     const bool heightMatches = std::abs(correctBounds.height() - buggyBounds.height())
                                < correctBounds.height() * 0.01;
     CHECK_FALSE((widthMatches && heightMatches));
+}
+
+TEST_CASE("A triangulation fills the progress tree it was given",
+          "[cwTriangulateTask][Issue671]")
+{
+    // A scrap run's row shows the tree the task grows: nothing here declares how
+    // many steps a scrap takes, so the bar has to move off the numbers the crop,
+    // the encode, the mesh and the morph report as they go.
+    const QString imagePath = QDir(testDatasetDir())
+                                  .filePath(QStringLiteral("scrap-image-no-rotation.jpg"));
+    REQUIRE(QFileInfo::exists(imagePath));
+
+    // A data root of this test's own, so the texture cache starts cold.
+    QDir dataRootDir(QDir::temp().filePath(
+        QStringLiteral("cwTriangulateTask-progress-%1").arg(QCoreApplication::applicationPid())));
+    dataRootDir.removeRecursively();
+    dataRootDir.mkpath(QStringLiteral("."));
+
+    auto root = cwProgressNode::createRoot(QStringLiteral("Updating Scraps"));
+    root->expectChildren(1);
+
+    QList<int> values;
+    QFutureWatcher<void> watcher;
+    QObject::connect(&watcher, &QFutureWatcherBase::progressValueChanged,
+                     &watcher, [&values](int value) { values.append(value); });
+    watcher.setFuture(root->future());
+
+    cwTriangulateTask task;
+    task.setScrapData({scrapInDataForImage(imagePath)});
+    task.setDataRootDir(dataRootDir);
+    task.setFormatType(cwTextureUploadTask::OpenGL_RGBA);
+    task.setProgressRoot(root);
+
+    auto futures = task.triangulate();
+    REQUIRE(futures.size() == 1);
+    REQUIRE(AsyncFuture::waitForFinished(futures.first()));
+    REQUIRE(futures.first().resultCount() == 1);
+
+    // Every node the run grew has been handed back, so the root reads full...
+    CHECK(root->activeChildren().isEmpty());
+    CHECK(root->fraction() == Catch::Approx(1.0));
+
+    // ...and it got there through several steps, in order, for a single scrap.
+    CHECK(values.size() > 1);
+    CHECK(std::is_sorted(values.begin(), values.end()));
+    CHECK(values.last() == root->future().progressMaximum());
 }

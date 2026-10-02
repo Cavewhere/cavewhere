@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Label Placement Scaling Plan — cwCaptureLabelPlacer</title>
+<style>
+  :root{
+    --bg:#1b1e24; --panel:#242830; --ink:#e7eaf0; --muted:#9aa4b2;
+    --accent:#5aa9e6; --good:#54c98a; --bad:#e2686f; --warn:#e0b04a;
+    --grid:#39404b; --code:#12151a;
+    --font: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1040px;margin:0 auto;padding:40px 28px 96px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.3px}
+  h2{font-size:22px;margin:44px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--grid)}
+  h3{font-size:17px;margin:26px 0 8px;color:#cdd5e0}
+  .sub{color:var(--muted);font-size:15px;margin-top:0}
+  p{margin:10px 0}
+  code{font-family:var(--mono);font-size:.92em;background:var(--code);padding:1px 6px;border-radius:5px;color:#d9e2ee}
+  pre{background:var(--code);border:1px solid var(--grid);border-radius:10px;padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:13px;color:#d9e2ee}
+  .panel{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:18px 20px;margin:16px 0}
+  .fig{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:16px;margin:20px 0}
+  .fig svg{display:block;width:100%;height:auto}
+  .cap{color:var(--muted);font-size:13.5px;margin-top:10px;padding-left:2px}
+  .cap b{color:#cdd5e0}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--grid);padding:8px 11px;text-align:left}
+  th{background:#2b303a;color:#cdd5e0;font-weight:600}
+  td.num{text-align:right;font-family:var(--mono)}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.4px;padding:2px 9px;border-radius:20px;vertical-align:middle}
+  .tag.bad{background:rgba(226,104,111,.16);color:#f3969b;border:1px solid rgba(226,104,111,.4)}
+  .tag.good{background:rgba(84,201,138,.16);color:#82dcaa;border:1px solid rgba(84,201,138,.4)}
+  .tag.warn{background:rgba(224,176,74,.16);color:#e9c877;border:1px solid rgba(224,176,74,.4)}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:5px 0}
+  .kbd{font-family:var(--mono);font-size:12.5px;color:var(--accent)}
+  .lead{font-size:16px;color:#d3dae4}
+  .callout{border-left:3px solid var(--accent);background:#20262f;border-radius:0 10px 10px 0;padding:12px 16px;margin:16px 0}
+  .callout.win{border-left-color:var(--good)}
+  .callout.warn{border-left-color:var(--warn)}
+  .pill{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .swatch{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle;margin-right:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Label Placement Scaling Plan</h1>
+<p class="sub"><code>cwCaptureLabelPlacer</code> · export hang on large surveys · <span class="pill">2026-07-02</span></p>
+
+<div class="panel">
+  <b>TL;DR.</b> Station-label placement during export is <b>O(n²)</b>. On a 150-mile cave
+  (Fisher&nbsp;Ridge, tens of thousands of stations) it never finishes — the UI thread hangs inside
+  <code>cwCaptureLabelPlacer::placeLabel</code>. A new benchmark
+  (<code>testcases/test_cwCaptureLabelPlacerBenchmark.cpp</code>, run with <span class="kbd">./cavewhere-test "[benchmark]"</span>)
+  measures the curve. The fix has layers, cheapest first:
+  <b>(1)</b> cull off-viewport stations, <b>(2)</b> cap the failed-search spiral,
+  <b>(3)</b> replace the three brute-force linear scans with a <b>spatial-hash grid</b>
+  (memory-proportional, because cave plots are <em>sparse curves on a mostly-empty page</em>), and
+  <b>(4)</b> move the whole pass off the main thread with <code>cwConcurrent</code>&nbsp;+&nbsp;AsyncFuture.
+  A separate scaling wall — the distance-transform grid and tile images cost <b>O(page&nbsp;area)</b>,
+  which explodes on a huge single-surface export — is addressed by <b>tile-local placement with
+  obstacle halos</b> (§5).
+</div>
+
+<p class="toc">
+  <b>Contents:</b>
+  <a href="#bench">1. Benchmark</a> ·
+  <a href="#current">2. How it works today</a> ·
+  <a href="#cost">3. Where the O(n²) is</a> ·
+  <a href="#index">4. Spatial-index research</a> ·
+  <a href="#tiling">5. Huge pages: memory &amp; tiling</a> ·
+  <a href="#fixes">6. Proposed fixes</a> ·
+  <a href="#thread">7. Threading</a> ·
+  <a href="#phases">8. Phases &amp; tests</a>
+</p>
+
+<!-- ================================================================ -->
+<h2 id="bench">1. The benchmark &amp; baseline</h2>
+<p>
+  The benchmark drives <code>cwCaptureLabelPlacer</code> directly (no camera / RHI needed) with a
+  synthetic serpentine cave, seeding obstacles exactly the way
+  <code>cwCaptureViewport::placeLabelsAfterTiles</code> does: station dots as hard obstacles before
+  <code>finalize()</code>, legs as soft obstacles after, one label placed per station.
+</p>
+
+<table>
+  <thead><tr><th>Stations</th><th>Time (Release)</th><th>µs / station</th><th>Growth vs&nbsp;½ size</th></tr></thead>
+  <tbody>
+    <tr><td class="num">500</td>  <td class="num">78 ms</td>    <td class="num">156</td>  <td>—</td></tr>
+    <tr><td class="num">1&nbsp;000</td> <td class="num">317 ms</td>   <td class="num">317</td>  <td>×4.1</td></tr>
+    <tr><td class="num">2&nbsp;000</td> <td class="num">1.17 s</td>   <td class="num">586</td>  <td>×3.7</td></tr>
+    <tr><td class="num">4&nbsp;000</td> <td class="num">4.56 s</td>   <td class="num">1&nbsp;141</td><td>×3.9</td></tr>
+    <tr><td class="num">10&nbsp;000</td><td class="num">27.2 s</td>   <td class="num">2&nbsp;720</td><td>×6.0 (×2.5 size)</td></tr>
+  </tbody>
+</table>
+<p>
+  Doubling the station count roughly <b>quadruples</b> the time, and per-station cost grows
+  linearly (156 → 2720 µs) — the signature of an O(n²) algorithm. And this is the <em>easy</em> case
+  where every label finds a home; the real file adds failed-spiral blow-ups and lead-leader
+  obstacles on top.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 300" role="img" aria-label="Runtime scaling chart">
+    <!-- axes -->
+    <line x1="70" y1="250" x2="860" y2="250" stroke="#4a515c" stroke-width="1.5"/>
+    <line x1="70" y1="30"  x2="70"  y2="250" stroke="#4a515c" stroke-width="1.5"/>
+    <text x="60" y="255" fill="#9aa4b2" font-size="11" text-anchor="end">0s</text>
+    <text x="60" y="150" fill="#9aa4b2" font-size="11" text-anchor="end">14s</text>
+    <text x="60" y="45"  fill="#9aa4b2" font-size="11" text-anchor="end">28s</text>
+    <!-- x labels -->
+    <text x="130" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">500</text>
+    <text x="290" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">1k</text>
+    <text x="450" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">2k</text>
+    <text x="610" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">4k</text>
+    <text x="800" y="268" fill="#9aa4b2" font-size="11" text-anchor="middle">10k</text>
+    <!-- current O(n^2) curve: points at (x, y) using 28s=full height 220px from y=250 -->
+    <!-- 78ms->~249.4, 317->247.5, 1171->240.8, 4564->214, 27200->35.2 -->
+    <polyline points="130,249.4 290,247.5 450,240.8 610,214 800,35.2"
+              fill="none" stroke="#e2686f" stroke-width="2.5"/>
+    <g fill="#e2686f">
+      <circle cx="130" cy="249.4" r="4"/><circle cx="290" cy="247.5" r="4"/>
+      <circle cx="450" cy="240.8" r="4"/><circle cx="610" cy="214" r="4"/>
+      <circle cx="800" cy="35.2" r="5"/>
+    </g>
+    <text x="800" y="26" fill="#f3969b" font-size="12" text-anchor="middle">27.2s</text>
+    <!-- projected linear-ish curve (target): assume ~ n * 30us -> 10k=0.3s ~ near axis -->
+    <polyline points="130,249.8 290,249.6 450,249.1 610,248.2 800,245.7"
+              fill="none" stroke="#54c98a" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="805" y="243" fill="#82dcaa" font-size="12" text-anchor="start">target ≈ O(n)</text>
+    <!-- legend -->
+    <rect x="600" y="55" width="12" height="12" fill="#e2686f" rx="2"/>
+    <text x="618" y="65" fill="#cdd5e0" font-size="12">current  O(n²)</text>
+    <rect x="600" y="76" width="12" height="12" fill="#54c98a" rx="2"/>
+    <text x="618" y="86" fill="#cdd5e0" font-size="12">after fixes  ≈ O(n·k)</text>
+  </svg>
+  <div class="cap"><b>Figure 1.</b> Measured runtime vs. station count. Red is today's placement; green
+  is the target once local queries replace global scans.</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="current">2. How placement works today</h2>
+
+<p>
+  After all tiles are grabbed, <code>placeLabelsAfterTiles()</code> (main thread) builds a distance
+  transform of passage ink, seeds obstacles, and then calls <code>placeStationLabels()</code>, which
+  invokes <code>placeLabel()</code> once per station.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 210" role="img" aria-label="Placement pipeline">
+    <defs>
+      <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#5aa9e6"/>
+      </marker>
+    </defs>
+    <g font-size="12.5" fill="#e7eaf0" text-anchor="middle">
+      <rect x="20"  y="60" width="120" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="80" y="82">grab tiles</text><text x="80" y="99" fill="#9aa4b2" font-size="11">QImage[]</text>
+
+      <rect x="180" y="60" width="140" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="250" y="82">build DT grid</text><text x="250" y="99" fill="#9aa4b2" font-size="11">addTileAlpha → finalize</text>
+
+      <rect x="360" y="60" width="150" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="435" y="82">seed obstacles</text><text x="435" y="99" fill="#9aa4b2" font-size="11">dots (hard) + legs (soft)</text>
+
+      <rect x="550" y="35" width="150" height="104" rx="8" fill="#3a2b2f" stroke="#e2686f"/>
+      <text x="625" y="60">placeStationLabels</text>
+      <text x="625" y="80" fill="#f3969b" font-size="11">for each of n stations</text>
+      <text x="625" y="99" fill="#f3969b" font-size="11">placeLabel()  ← hot</text>
+      <text x="625" y="122" fill="#9aa4b2" font-size="10.5">the O(n²) loop</text>
+
+      <rect x="740" y="60" width="140" height="54" rx="8" fill="#2b303a" stroke="#39404b"/>
+      <text x="810" y="82">paint overlay</text><text x="810" y="99" fill="#9aa4b2" font-size="11">drawText per label</text>
+
+      <line x1="140" y1="87" x2="176" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="320" y1="87" x2="356" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="510" y1="87" x2="546" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+      <line x1="700" y1="87" x2="736" y2="87" stroke="#5aa9e6" stroke-width="2" marker-end="url(#arr)"/>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 2.</b> The export label pipeline. Everything runs on the main thread; the
+  red box is where the hang lives.</div>
+</div>
+
+<h3>Inside <code>placeLabel()</code>: spiral search + brute-force scans</h3>
+<p>
+  For one station, the placer spirals outward through DT cells looking for the first cell with enough
+  clearance to seat the label, collects a few more candidates, scores them, and commits the winner.
+  The problem is what happens <em>at every candidate cell</em>.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 340" role="img" aria-label="Spiral search and per-candidate scans">
+    <!-- left: spiral -->
+    <g>
+      <text x="150" y="24" fill="#cdd5e0" font-size="13" text-anchor="middle" font-weight="600">spiral out from anchor</text>
+      <!-- grid -->
+      <g stroke="#2f353f" stroke-width="1">
+        <!-- draw 9x9 grid -->
+        <!-- vertical -->
+        <line x1="40" y1="40" x2="40" y2="292"/><line x1="68" y1="40" x2="68" y2="292"/>
+        <line x1="96" y1="40" x2="96" y2="292"/><line x1="124" y1="40" x2="124" y2="292"/>
+        <line x1="152" y1="40" x2="152" y2="292"/><line x1="180" y1="40" x2="180" y2="292"/>
+        <line x1="208" y1="40" x2="208" y2="292"/><line x1="236" y1="40" x2="236" y2="292"/>
+        <line x1="264" y1="40" x2="264" y2="292"/>
+        <!-- horizontal -->
+        <line x1="40" y1="40"  x2="264" y2="40"/><line x1="40" y1="68"  x2="264" y2="68"/>
+        <line x1="40" y1="96"  x2="264" y2="96"/><line x1="40" y1="124" x2="264" y2="124"/>
+        <line x1="40" y1="152" x2="264" y2="152"/><line x1="40" y1="180" x2="264" y2="180"/>
+        <line x1="40" y1="208" x2="264" y2="208"/><line x1="40" y1="236" x2="264" y2="236"/>
+        <line x1="40" y1="264" x2="264" y2="264"/><line x1="40" y1="292" x2="264" y2="292"/>
+      </g>
+      <!-- anchor at center cell (152,166) -->
+      <rect x="138" y="152" width="28" height="28" fill="#5aa9e6" opacity=".9"/>
+      <!-- ring r=1 -->
+      <rect x="110" y="124" width="84" height="84" fill="none" stroke="#e0b04a" stroke-width="2"/>
+      <!-- ring r=2 -->
+      <rect x="82" y="96" width="140" height="140" fill="none" stroke="#e0b04a" stroke-width="1.6" opacity=".7"/>
+      <!-- ring r=3 -->
+      <rect x="54" y="68" width="196" height="196" fill="none" stroke="#e0b04a" stroke-width="1.3" opacity=".5"/>
+      <text x="152" y="171" fill="#0e1116" font-size="11" text-anchor="middle" font-weight="700">A</text>
+      <text x="150" y="312" fill="#9aa4b2" font-size="11.5" text-anchor="middle">each ring = candidate cells tested</text>
+    </g>
+
+    <!-- arrow -->
+    <line x1="290" y1="166" x2="330" y2="166" stroke="#5aa9e6" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <!-- right: per-candidate cost -->
+    <g>
+      <text x="620" y="24" fill="#cdd5e0" font-size="13" text-anchor="middle" font-weight="600">every candidate cell runs THREE full scans</text>
+
+      <rect x="360" y="44" width="510" height="66" rx="8" fill="#3a2b2f" stroke="#e2686f"/>
+      <text x="376" y="66" fill="#f3969b" font-size="12.5" font-weight="600">1 · hard line-obstacles (lead leaders)</text>
+      <text x="376" y="86" fill="#c9d2dd" font-size="11.5">for each L: segmentIntersectsRect + segmentsCross</text>
+      <text x="376" y="102" fill="#9aa4b2" font-size="11">← the exact frame in the hang stack trace</text>
+
+      <rect x="360" y="120" width="510" height="60" rx="8" fill="#3a2b2f" stroke="#e2686f"/>
+      <text x="376" y="142" fill="#f3969b" font-size="12.5" font-weight="600">2 · placed labels (grows toward n)</text>
+      <text x="376" y="162" fill="#c9d2dd" font-size="11.5">for each placed rect: rect.intersects(candidate)</text>
+
+      <rect x="360" y="190" width="510" height="60" rx="8" fill="#33313a" stroke="#e0b04a"/>
+      <text x="376" y="212" fill="#e9c877" font-size="12.5" font-weight="600">3 · soft obstacles = every centerline leg (n of them)</text>
+      <text x="376" y="232" fill="#c9d2dd" font-size="11.5">scoreCandidate: for each leg: segmentsCross(leader, leg)</text>
+
+      <text x="360" y="278" fill="#9aa4b2" font-size="11.5">No spatial structure — all three are linear over the whole set,</text>
+      <text x="360" y="296" fill="#9aa4b2" font-size="11.5">re-run for every candidate of every station.</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 3.</b> Left: the spiral visits candidate cells ring by ring. Right: at each
+  candidate it linearly scans <em>all</em> hard obstacles, <em>all</em> placed labels, and (when
+  scoring) <em>all</em> soft centerline legs. Nothing is indexed.</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="cost">3. Where the O(n²) actually comes from</h2>
+
+<p>Four independent multipliers stack up. The first two are the dominant quadratics; the last two turn
+a bad case into a catastrophic one on real data.</p>
+
+<table>
+  <thead><tr><th>Source</th><th>Code</th><th>Per label</th><th>Over n labels</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Placed-label rescan</td>
+      <td><code>cwCaptureLabelPlacer.cpp:405</code></td>
+      <td>O(labels placed so far)</td>
+      <td><span class="tag bad">O(n²)</span></td>
+    </tr>
+    <tr>
+      <td>Soft-obstacle scoring</td>
+      <td><code>:449</code> (per candidate × every leg)</td>
+      <td>O(n) legs</td>
+      <td><span class="tag bad">O(n²)</span></td>
+    </tr>
+    <tr>
+      <td>Hard line-obstacle scan</td>
+      <td><code>:385</code> (the hang frame)</td>
+      <td>O(L) × cells visited</td>
+      <td>O(n·L·cells)</td>
+    </tr>
+    <tr>
+      <td>Unbounded failed spiral</td>
+      <td><code>:425</code>, <code>maxRadius = maskW+maskH</code></td>
+      <td>scans the whole grid when no cell fits</td>
+      <td><span class="tag warn">amplifier</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <b>The failed-spiral trap.</b> <code>windowExhausted()</code> only starts limiting the search
+  <em>after</em> the first successful candidate (<code>firstHitRadius &gt;= 0</code>). When a label
+  can't be placed — routine in a dense plot — the spiral runs all the way to
+  <code>maxRadius</code>, and every clear cell it touches pays the full three-scan cost above. Plus
+  there is <b>no viewport cull</b>: <code>placeStationLabels()</code> loops <em>all</em> stations,
+  including ones entirely off the exported page, each running a full max-radius spiral that finds
+  nothing.
+</div>
+
+<div class="callout">
+  The code even documents the broken assumption at <code>cwCaptureLabelPlacer.cpp:401</code>:
+  <em>"Brute-force scan — N is small (~30 labels per export)."</em> Fisher Ridge has on the order of
+  <b>50,000</b> stations.
+</div>
+
+<!-- ================================================================ -->
+<h2 id="index">4. Which spatial index? (research)</h2>
+
+<p>
+  The three hot scans reduce to two query shapes over a mostly-static set: <b>rect-vs-rect overlap</b>
+  (placed labels) and <b>segment-vs-region</b> (hard + soft obstacles). Queries are always
+  <em>local</em> — a leader is a short segment, a label is a small rect — so we never need a global
+  search, only "what's near here." The second decisive fact is the <b>shape of the data</b>.
+</p>
+
+<div class="callout warn">
+  <b>Cave plots are sparse.</b> A centerline is a 1-D curve (thin passages) winding through a large,
+  mostly-empty 2-D page — and a whole-cave export at 300&nbsp;DPI makes that page <em>enormous</em>.
+  So the deciding axis is not raw query speed (all indexes localize well) but <b>how memory scales
+  when the page is huge and empty</b>. That is exactly where a <em>dense</em> uniform grid falls down.
+</div>
+
+<div class="fig">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Sparse cave curve on a large empty page">
+    <rect x="20" y="20" width="500" height="210" rx="8" fill="#20242c" stroke="#39404b"/>
+    <text x="270" y="14" fill="#9aa4b2" font-size="11" text-anchor="middle">huge page — mostly empty</text>
+    <!-- faint dense grid to show wasted cells -->
+    <g stroke="#2b313b" stroke-width="1">
+      <line x1="20" y1="55" x2="520" y2="55"/><line x1="20" y1="90" x2="520" y2="90"/>
+      <line x1="20" y1="125" x2="520" y2="125"/><line x1="20" y1="160" x2="520" y2="160"/>
+      <line x1="20" y1="195" x2="520" y2="195"/>
+      <line x1="90" y1="20" x2="90" y2="230"/><line x1="160" y1="20" x2="160" y2="230"/>
+      <line x1="230" y1="20" x2="230" y2="230"/><line x1="300" y1="20" x2="300" y2="230"/>
+      <line x1="370" y1="20" x2="370" y2="230"/><line x1="440" y1="20" x2="440" y2="230"/>
+    </g>
+    <!-- passage curve -->
+    <path d="M60,205 C120,120 150,180 210,120 S300,60 340,110 S430,150 470,70"
+          fill="none" stroke="#5aa9e6" stroke-width="3"/>
+    <path d="M210,120 C230,160 200,210 260,205" fill="none" stroke="#5aa9e6" stroke-width="3"/>
+    <!-- stations -->
+    <g fill="#e7eaf0"><circle cx="60" cy="205" r="2.6"/><circle cx="150" cy="150" r="2.6"/>
+      <circle cx="210" cy="120" r="2.6"/><circle cx="270" cy="88" r="2.6"/>
+      <circle cx="340" cy="110" r="2.6"/><circle cx="410" cy="118" r="2.6"/>
+      <circle cx="470" cy="70" r="2.6"/><circle cx="260" cy="205" r="2.6"/></g>
+    <text x="270" y="246" fill="#9aa4b2" font-size="11.5" text-anchor="middle">the blue curve is all the data; every empty cell still costs a bucket header in a dense grid</text>
+
+    <!-- arrow -->
+    <line x1="540" y1="125" x2="580" y2="125" stroke="#5aa9e6" stroke-width="2.5" marker-end="url(#arr)"/>
+
+    <!-- occupied-only representation -->
+    <g transform="translate(600,20)">
+      <rect x="0" y="0" width="280" height="210" rx="8" fill="#20242c" stroke="#39404b"/>
+      <text x="140" y="-6" fill="#82dcaa" font-size="11" text-anchor="middle">store only occupied cells</text>
+      <!-- only cells along the curve -->
+      <g fill="#54c98a" opacity=".28">
+        <rect x="20" y="150" width="35" height="30"/><rect x="55" y="120" width="35" height="30"/>
+        <rect x="90" y="120" width="35" height="30"/><rect x="120" y="90" width="35" height="30"/>
+        <rect x="155" y="60" width="35" height="30"/><rect x="190" y="60" width="35" height="30"/>
+        <rect x="225" y="30" width="35" height="30"/><rect x="90" y="150" width="35" height="30"/>
+        <rect x="120" y="180" width="35" height="30"/>
+      </g>
+      <path d="M35,175 C75,110 105,160 150,95 S220,45 255,60"
+            fill="none" stroke="#5aa9e6" stroke-width="3"/>
+      <text x="140" y="200" fill="#82dcaa" font-size="11.5" text-anchor="middle">memory ∝ data, not page area</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 4.</b> The workload that actually matters: a sparse passage curve on a giant
+  page. A dense grid pays for every empty cell (left); a spatial-hash grid stores only the cells the
+  curve touches (right).</div>
+</div>
+
+<table>
+  <thead><tr><th>Structure</th><th>Memory on a huge sparse page</th><th>Local query</th><th>Dynamic insert</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>Dense uniform grid</b> (array of buckets)</td>
+      <td>O((page/cell)²) — empty cells still cost headers</td>
+      <td>O(1)+k</td>
+      <td>trivial</td>
+      <td><span class="tag bad">fails</span> ~1.8M cells → 40+ MB of <em>empty</em> headers on a 47k×31k page; grows with page²</td>
+    </tr>
+    <tr>
+      <td><b>Spatial-hash grid</b> (hash of occupied cells)</td>
+      <td>O(occupied cells + memberships) ≈ O(n)</td>
+      <td>O(1)+k</td>
+      <td>trivial</td>
+      <td><span class="tag good">best</span> keeps every grid win; memory follows the data, not the page</td>
+    </tr>
+    <tr>
+      <td>Quadtree</td>
+      <td>O(nodes), adaptive — big voids stay one node</td>
+      <td>O(log n + k)</td>
+      <td>node splits</td>
+      <td><span class="tag warn">runner-up</span> good memory, but pointer-chasing, ~10–11 levels deep on this page, harder insert</td>
+    </tr>
+    <tr>
+      <td>kd-tree (existing <code>cwCollisionRectKdTree</code>)</td>
+      <td>O(n)</td>
+      <td>O(log n + k) typ., O(n) worst</td>
+      <td>unbalanced ⇒ degrades</td>
+      <td><span class="tag warn">tension</span> balanced=static (bad for growing labels); the existing one degrades on our top-to-bottom insert order. Rect-only.</td>
+    </tr>
+    <tr>
+      <td>R-tree / BVH</td>
+      <td>O(n)</td>
+      <td>O(log n + k)</td>
+      <td>bulk-load</td>
+      <td><span class="tag warn">overkill</span> extra dependency / 3D tool; no local-query edge over a hash grid</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout win">
+  <b>The correction from the first draft:</b> the right move is <b>dense-array → spatial hash</b>, not
+  grid → quadtree. The hash variant delivers the memory-proportionality you'd want a quadtree for,
+  <em>without</em> giving up O(1) insert, contiguous bucket scans, or implementation simplicity. A
+  quadtree only pays off if page density varied over many orders of magnitude <em>and</em> we needed
+  the tree for other queries (nearest-neighbour, ray march) — we don't.
+</div>
+
+<h3>Recommendation: <code>cwSpatialHashGrid2D</code></h3>
+<p>
+  Bucket 2D space into square cells sized to a few label-diagonals, keyed by
+  <code>hash(cellX, cellY) → bucket</code> so only non-empty cells exist. Each bucket holds indices of
+  items whose bbox overlaps it; a query rasterizes the query region to cells and tests only those
+  buckets. Every O(n) scan becomes <b>O(k)</b> local, and memory is <b>O(n)</b> regardless of page
+  size. Three instances:
+</p>
+<ul>
+  <li><span class="swatch" style="background:#e2686f"></span><b>Hard obstacles</b> (lead leaders) — inserted as registered; segment-bbox buckets.</li>
+  <li><span class="swatch" style="background:#e0b04a"></span><b>Soft obstacles</b> (centerline legs) — built once after <code>finalize()</code>. Biggest set, clearest win.</li>
+  <li><span class="swatch" style="background:#54c98a"></span><b>Placed labels</b> — dynamic; insert on commit. Non-overlap bounds per-bucket count, so lookups stay O(1) with cell ≈ label size.</li>
+</ul>
+<p>
+  Keep the existing <code>cwCollisionRectKdTree</code> in mind only as a lower-effort drop-in for the
+  placed-labels rect set if we want to touch less code first — but it doesn't help the two segment
+  scans and degrades on sorted inserts, so it isn't the primary choice.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 330" role="img" aria-label="Grid query vs full scan">
+    <text x="225" y="22" fill="#f3969b" font-size="13" text-anchor="middle" font-weight="600">before — scan every segment</text>
+    <text x="675" y="22" fill="#82dcaa" font-size="13" text-anchor="middle" font-weight="600">after — only buckets the leader crosses</text>
+
+    <!-- BEFORE: many segments, leader tests all -->
+    <g transform="translate(30,40)">
+      <rect x="0" y="0" width="390" height="260" rx="8" fill="#20242c" stroke="#39404b"/>
+      <!-- scattered legs -->
+      <g stroke="#7b828e" stroke-width="2" opacity=".8">
+        <line x1="30" y1="40" x2="90" y2="70"/><line x1="120" y1="30" x2="160" y2="90"/>
+        <line x1="200" y1="50" x2="250" y2="40"/><line x1="290" y1="35" x2="350" y2="80"/>
+        <line x1="40" y1="120" x2="110" y2="140"/><line x1="150" y1="110" x2="210" y2="160"/>
+        <line x1="250" y1="130" x2="320" y2="120"/><line x1="60" y1="200" x2="120" y2="230"/>
+        <line x1="170" y1="210" x2="230" y2="200"/><line x1="270" y1="220" x2="340" y2="235"/>
+        <line x1="100" y1="90" x2="150" y2="180"/><line x1="300" y1="160" x2="360" y2="210"/>
+      </g>
+      <!-- leader -->
+      <line x1="170" y1="150" x2="210" y2="90" stroke="#5aa9e6" stroke-width="3.5"/>
+      <circle cx="170" cy="150" r="4" fill="#5aa9e6"/>
+      <!-- test rays to every segment (faint) -->
+      <g stroke="#e2686f" stroke-width="1" opacity=".35">
+        <line x1="190" y1="120" x2="60" y2="55"/><line x1="190" y1="120" x2="140" y2="60"/>
+        <line x1="190" y1="120" x2="225" y2="45"/><line x1="190" y1="120" x2="320" y2="57"/>
+        <line x1="190" y1="120" x2="75" y2="130"/><line x1="190" y1="120" x2="285" y2="125"/>
+        <line x1="190" y1="120" x2="90" y2="215"/><line x1="190" y1="120" x2="305" y2="227"/>
+      </g>
+      <text x="195" y="252" fill="#9aa4b2" font-size="11.5" text-anchor="middle">O(n) crossings tested per candidate</text>
+    </g>
+
+    <!-- AFTER: grid, leader touches 3 buckets -->
+    <g transform="translate(480,40)">
+      <rect x="0" y="0" width="390" height="260" rx="8" fill="#20242c" stroke="#39404b"/>
+      <!-- grid lines 5x4 -->
+      <g stroke="#2f353f" stroke-width="1">
+        <line x1="78" y1="0" x2="78" y2="260"/><line x1="156" y1="0" x2="156" y2="260"/>
+        <line x1="234" y1="0" x2="234" y2="260"/><line x1="312" y1="0" x2="312" y2="260"/>
+        <line x1="0" y1="65" x2="390" y2="65"/><line x1="0" y1="130" x2="390" y2="130"/>
+        <line x1="0" y1="195" x2="390" y2="195"/>
+      </g>
+      <!-- highlight the 2 buckets the leader passes through -->
+      <rect x="156" y="65" width="78" height="65" fill="#54c98a" opacity=".14"/>
+      <rect x="156" y="130" width="78" height="65" fill="#54c98a" opacity=".14"/>
+      <!-- same segments, greyed except local -->
+      <g stroke="#4a515c" stroke-width="2" opacity=".55">
+        <line x1="30" y1="40" x2="90" y2="70"/><line x1="120" y1="30" x2="160" y2="90"/>
+        <line x1="200" y1="50" x2="250" y2="40"/><line x1="290" y1="35" x2="350" y2="80"/>
+        <line x1="40" y1="120" x2="110" y2="140"/>
+        <line x1="250" y1="130" x2="320" y2="120"/><line x1="60" y1="200" x2="120" y2="230"/>
+        <line x1="170" y1="210" x2="230" y2="200"/><line x1="270" y1="220" x2="340" y2="235"/>
+        <line x1="300" y1="160" x2="360" y2="210"/>
+      </g>
+      <!-- local segments highlighted -->
+      <g stroke="#e0b04a" stroke-width="2.5">
+        <line x1="150" y1="110" x2="210" y2="160"/><line x1="170" y1="150" x2="205" y2="120"/>
+      </g>
+      <!-- leader -->
+      <line x1="170" y1="150" x2="210" y2="90" stroke="#5aa9e6" stroke-width="3.5"/>
+      <circle cx="170" cy="150" r="4" fill="#5aa9e6"/>
+      <text x="195" y="252" fill="#82dcaa" font-size="11.5" text-anchor="middle">only ~k local segments tested</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 5.</b> The soft-obstacle score for one candidate. Today every leader is
+  tested against every leg (left). With a grid, the leader only visits the buckets it actually passes
+  through and tests the few segments there (right).</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="tiling">5. The other scaling wall: page-area memory &amp; tiling</h2>
+
+<p>
+  A fast index fixes the O(n²) <em>time</em>. But a whole-cave single-surface export at 300&nbsp;DPI
+  hits a second wall that has nothing to do with the label index: several data structures cost
+  <b>O(page&nbsp;area)</b>, and the page is gigantic.
+</p>
+
+<div class="callout warn">
+  <b>The distance-transform grid already blows up.</b> <code>placeLabelsAfterTiles</code> unites every
+  tile into one <code>parentBounds</code> and builds a single <code>QVector&lt;float&gt; m_dt</code> at
+  <code>maskW × maskH</code>. On a ~47k×31k-px plot at 2-px cells that is
+  <b>~376&nbsp;M cells × 4&nbsp;B ≈ 1.5&nbsp;GB</b> — before a single label is placed. The summed tile
+  <code>QImage</code>s are gigapixels on top. So "whole huge cave on one page" is memory-infeasible in
+  the current architecture <em>regardless</em> of which label index we choose. The O(n²) time is the
+  hang you hit; this page² memory is the wall right behind it.
+</div>
+
+<div class="callout win">
+  <b>Implemented (Phase 4) — simpler than the sketch below.</b> The border-ledger /
+  seam-reconciliation design this section sketches turned out to be unnecessary: the hash grids
+  holding placed labels, leaders, and soft obstacles are all O(n) and were kept <em>global</em>,
+  so only the distance transform — the one O(page&nbsp;area) structure — is built per window
+  (+ a spiral-reach halo, which the Phase-2 spiral cap makes <em>exactly</em> correct). One
+  placer, one sequential pass ordered window-major by <code>placeAll</code>: cross-seam overlap
+  is impossible by construction, single-window pages are bit-identical to the old algorithm,
+  and no arbitration pass exists to get wrong. See the Phase&nbsp;4 row for details, and
+  Phase&nbsp;4b for the remaining tile-<code>QImage</code> RAM follow-up.
+</div>
+
+<h3>Tile-local placement (invisible seams) — original sketch</h3>
+<p>
+  The export already tiles for the GPU grab (<code>Rows × Columns</code> of <code>grabToImage</code>).
+  The regression is that placement then <em>re-assembles</em> everything into one global DT and one
+  global pass. The fix is to keep placement <b>per-tile</b>, streaming: build the DT and the spatial
+  grids for one tile (plus a halo), place that tile's labels, emit the overlay, release the memory,
+  move on. Target artifact is <b>one giant image/PDF</b>, so seams must be invisible — which sets the
+  requirements below.
+</p>
+
+<div class="fig">
+  <svg viewBox="0 0 900 300" role="img" aria-label="Tile with halo and seam reconciliation">
+    <!-- full page tiled -->
+    <g stroke="#39404b" stroke-width="1.5" fill="none">
+      <rect x="40" y="30" width="360" height="240" rx="4"/>
+      <line x1="160" y1="30" x2="160" y2="270"/><line x1="280" y1="30" x2="280" y2="270"/>
+      <line x1="40" y1="110" x2="400" y2="110"/><line x1="40" y1="190" x2="400" y2="190"/>
+    </g>
+    <!-- active tile -->
+    <rect x="160" y="110" width="120" height="80" fill="#5aa9e6" opacity=".12" stroke="#5aa9e6" stroke-width="2"/>
+    <text x="220" y="105" fill="#5aa9e6" font-size="11" text-anchor="middle">active tile</text>
+    <!-- halo -->
+    <rect x="140" y="90" width="160" height="120" fill="none" stroke="#54c98a" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <text x="220" y="224" fill="#82dcaa" font-size="11" text-anchor="middle">+halo (≈1 label-diagonal)</text>
+    <!-- passage crossing the seam -->
+    <path d="M120,150 C180,130 230,175 320,140" fill="none" stroke="#c9d2dd" stroke-width="2.5"/>
+    <!-- a label near the seam -->
+    <rect x="255" y="150" width="40" height="16" fill="#e0b04a" opacity=".85"/>
+    <text x="275" y="162" fill="#0e1116" font-size="10" text-anchor="middle">A7</text>
+
+    <!-- right: requirements -->
+    <g font-size="12.5">
+      <text x="470" y="46" fill="#cdd5e0" font-weight="600">what "invisible seams" needs</text>
+      <text x="470" y="74" fill="#c9d2dd">• <tspan fill="#82dcaa">Halo:</tspan> each tile ingests obstacles + placed</text>
+      <text x="484" y="92" fill="#9aa4b2">labels within ~1 label-diagonal beyond its edge</text>
+      <text x="470" y="118" fill="#c9d2dd">• <tspan fill="#82dcaa">Border ledger:</tspan> labels placed near a seam are</text>
+      <text x="484" y="136" fill="#9aa4b2">shared so neighbours don't double-claim a cell</text>
+      <text x="470" y="162" fill="#c9d2dd">• <tspan fill="#82dcaa">Deterministic order:</tspan> fixed tile sequence (or</text>
+      <text x="484" y="180" fill="#9aa4b2">border arbitration) keeps output reproducible</text>
+      <text x="470" y="206" fill="#c9d2dd">• <tspan fill="#82dcaa">Leader clamp:</tspan> a leader may cross into a</text>
+      <text x="484" y="224" fill="#9aa4b2">neighbour — resolve in the overlap, not per-tile</text>
+    </g>
+  </svg>
+  <div class="cap"><b>Figure 6.</b> Tile-local placement. Each tile places within its bounds but reads a
+  halo of neighbouring obstacles and border labels so seams are invisible in the final single surface.</div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h3 style="margin-top:2px">Why tiling</h3>
+    <ul>
+      <li><b>Bounds memory</b> for the DT, tile images, <em>and</em> the index — the only way a huge single-surface export fits in RAM at all.</li>
+      <li><b>Parallelism</b> — tiles place concurrently (<code>cwConcurrent::mapped</code>), folding into Fix&nbsp;5.</li>
+      <li><b>Streaming</b> — never hold the whole page's obstacle mask at once.</li>
+    </ul>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:2px">Costs / caveats</h3>
+    <ul>
+      <li><b>Seam handling</b> (halo + border ledger + leader clamp) is the real complexity — required because the target is one seamless surface.</li>
+      <li><b>Asymptotics unchanged:</b> with a spatial-hash grid we're already ≈O(n·k); tiling buys memory + parallelism + feasibility, not a better big-O.</li>
+      <li>Bigger structural change than Fixes 1–3, so it lands after them.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="fixes">6. Proposed fixes</h2>
+
+<div class="grid2">
+  <div class="panel">
+    <h3 style="margin-top:2px">Fix 1 · Cull off-viewport stations <span class="tag good">cheap</span></h3>
+    <p>Before spiraling, skip any station whose anchor lies outside <code>clampRect</code> (plus a
+    label-diagonal margin). Off-page stations can never seat a label anyway, and each one currently
+    burns a full max-radius spiral. Biggest win for the least code.</p>
+  </div>
+  <div class="panel">
+    <h3 style="margin-top:2px">Fix 2 · Bound the failed spiral <span class="tag good">cheap</span></h3>
+    <p>Cap <code>maxRadius</code> at a sane multiple of the label size (a label that has to travel a
+    third of the page isn't useful). Make the search-window logic apply to the
+    <em>no-hit-yet</em> case too, so a hopeless anchor gives up early instead of scanning the whole
+    grid.</p>
+  </div>
+</div>
+
+<div class="panel">
+  <h3 style="margin-top:2px">Fix 3 · Spatial grid for the three scans <span class="tag warn">the real fix</span></h3>
+  <p>Introduce <code>cwSpatialGrid2D</code> and route the three hot loops through it. Each turns from
+  O(n) into O(k) local. This is what flips the benchmark curve from red to green.</p>
+</div>
+
+<div class="fig">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Combined effect of fixes">
+    <!-- viewport -->
+    <rect x="250" y="30" width="400" height="190" rx="6" fill="#20242c" stroke="#5aa9e6" stroke-width="2"/>
+    <text x="450" y="20" fill="#5aa9e6" font-size="12" text-anchor="middle">exported page (clampRect)</text>
+
+    <!-- in-view stations (kept) -->
+    <g fill="#54c98a">
+      <circle cx="320" cy="80" r="4"/><circle cx="400" cy="110" r="4"/>
+      <circle cx="480" cy="90" r="4"/><circle cx="560" cy="150" r="4"/>
+      <circle cx="360" cy="170" r="4"/><circle cx="520" cy="60" r="4"/>
+    </g>
+    <!-- out-of-view stations (culled) -->
+    <g fill="#e2686f" opacity=".8">
+      <circle cx="120" cy="70" r="4"/><circle cx="160" cy="180" r="4"/>
+      <circle cx="760" cy="90" r="4"/><circle cx="800" cy="170" r="4"/>
+      <circle cx="90" cy="130" r="4"/>
+    </g>
+    <g stroke="#e2686f" stroke-width="1.5" opacity=".7">
+      <line x1="112" y1="62" x2="128" y2="78"/><line x1="128" y1="62" x2="112" y2="78"/>
+    </g>
+    <text x="120" y="46" fill="#f3969b" font-size="11" text-anchor="middle">Fix 1: culled</text>
+
+    <!-- capped spiral on one station -->
+    <circle cx="400" cy="110" r="4" fill="#e0b04a"/>
+    <rect x="378" y="88" width="44" height="44" fill="none" stroke="#e0b04a" stroke-width="1.6"/>
+    <rect x="366" y="76" width="68" height="68" fill="none" stroke="#e0b04a" stroke-width="1.2" opacity=".6"/>
+    <text x="400" y="160" fill="#e9c877" font-size="10.5" text-anchor="middle">Fix 2: capped radius</text>
+
+    <!-- grid buckets hint -->
+    <g stroke="#39404b" stroke-width="1" opacity=".6">
+      <line x1="383" y1="30" x2="383" y2="220"/><line x1="516" y1="30" x2="516" y2="220"/>
+      <line x1="250" y1="93" x2="650" y2="93"/><line x1="250" y1="156" x2="650" y2="156"/>
+    </g>
+    <text x="583" y="210" fill="#9aa4b2" font-size="10.5" text-anchor="middle">Fix 3: bucketed obstacles</text>
+  </svg>
+  <div class="cap"><b>Figure 7.</b> The three algorithmic fixes composed: off-page anchors (red) never
+  enter the loop, each remaining spiral is radius-capped, and all obstacle/label queries hit only
+  local grid buckets.</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="thread">7. Fix 5 · Get it off the main thread <span class="tag warn">last</span></h2>
+<p>
+  Even at O(n·k), a huge export takes real time; it must not freeze the UI. Today the whole placement
+  pass runs synchronously inside the final <code>grabToImage</code> <code>ready</code> callback on the
+  main thread. The port mirrors the Compass-importer pattern (commit <code>c76ee6de</code>):
+</p>
+<ol>
+  <li><b>Extract a pure worker.</b> Placement input is already value-typed (tile <code>QImage</code>s,
+      station positions, leg segments). <code>cwCaptureLabelPlacer</code> touches no QObject/GUI
+      state, so it runs safely off-thread. Split "compute placements" (worker) from "own &amp; paint
+      the placed rects" (main-thread items).</li>
+  <li><b>Dispatch</b> with <code>cwConcurrent::run([in = std::move(in)](QPromise&lt;Result&gt;&amp; p){…})</code>
+      → returns <code>QFuture&lt;Result&gt;</code>. The <code>QPromise&amp;</code> overload unlocks
+      <code>setProgressValue</code> (one step per label) and cooperative <code>isCanceled()</code>.</li>
+  <li><b>Deliver back on the main thread</b> with
+      <code>AsyncFuture::observe(future).context(this, […]{ buildOverlayItems(future.result()); emit finishedCapture(); })</code>
+      — auto-disconnects if the viewport dies; the destructor just calls <code>future.cancel()</code>.</li>
+  <li><b>Progress bar</b> for free by handing the future to <code>cwFutureManagerToken::addJob(...)</code>.</li>
+</ol>
+<div class="callout warn">
+  <b>Ordering matters.</b> Do the algorithmic fixes (1–3) first — they make it <em>fast</em>; the
+  benchmark proves each step. Threading only stops the UI from freezing; layering it on an O(n²)
+  core would just hang a background thread instead.
+</div>
+
+<!-- ================================================================ -->
+<h2 id="phases">8. Implementation phases &amp; tests</h2>
+<table>
+  <thead><tr><th>#</th><th>Change</th><th>Fixes</th><th>Expected effect</th><th>Test</th></tr></thead>
+  <tbody>
+    <tr><td>0</td><td><b>Done:</b> benchmark + baseline</td><td>—</td><td>establishes the red curve</td><td><code>test_cwCaptureLabelPlacerBenchmark.cpp</code></td></tr>
+    <tr><td>1</td><td><b>Done:</b> Viewport cull</td><td>1</td><td>anchor outside <code>clampRect</code> (+ label-diagonal margin) drops before the spiral; no-op on whole-cave export, big cut on sub-region exports</td><td><code>placeLabel culls anchors outside the viewport</code> (in/out sections)</td></tr>
+    <tr><td>1.1</td><td><b>Done (2026-07-15):</b> Caller-side viewport cull in <code>buildLabelRequests()</code></td><td>1</td><td>The Phase-1 cull lived <em>inside</em> <code>placeLabel</code> (early return), so every station — even off-viewport ones — still paid a full <code>LabelRequest</code> build (<code>QPainterPath::addText</code> + <code>boundingRect</code>) before the placer bailed; on a zoomed sub-region export of a huge cave that painter-path construction for tens of thousands of discarded stations dominates. <b>As built:</b> <code>cwCaptureCenterline/cwCaptureLeads::buildLabelRequests</code> take optional <code>viewportBounds</code>/<code>labelMargin</code> (the worker passes <code>input-&gt;parentBounds</code>/<code>labelMarginLocal</code>) and skip an anchor before measuring when it falls outside <code>cwCaptureLabelPlacer::viewportCullRect</code> — the <em>same</em> static helper <code>placeLabel</code>'s exact cull now uses, so the two culls can't drift. Because the label size isn't known pre-measurement, the caller culls with <code>labelSizeUpperBound</code> (pure metrics arithmetic — max glyph advance × (len+2), 2× line height; no shaping, no path build), which always dominates the real tight ink, so the pre-measure cull drops a strict subset of the placer's cull: <b>placements are bit-identical with or without it</b>. Empty bounds (the default) disables the cull. (The profiler-helper dedup that landed alongside was superseded the same day by Phase&nbsp;6's full removal of the <code>CW_PROFILE_CAPTURE</code> instrumentation.)</td><td><b>Done:</b> <code>test_cwCaptureCenterline.cpp</code> — off-viewport station produces no request (no path build) while a just-outside-viewport station within its cull margin survives, and <code>applyPlacements</code> maps results back to the right stations through the culled list; <code>labelSizeUpperBound</code> pinned ≥ measured tight ink across strings/DPIs (the invariant that keeps placements identical); <code>viewportCullRect</code> geometry pinned. Capture tags + end-to-end <code>tst_LeadPlacement</code> green.</td></tr>
+    <tr><td>2</td><td><b>Done:</b> Spiral radius cap</td><td>2</td><td>kills the failed-spiral blow-up: buried-anchor path drops from <b>~182,000&nbsp;µs/station</b> (uncapped) to <b>~62&nbsp;µs/station</b> (~1000–3000× per anchor); 10k buried anchors 10s+&nbsp;→&nbsp;0.6&nbsp;s</td><td><code>buried-anchor scaling</code> benchmark + <code>gives up quickly for a buried anchor on a huge page</code> unit test</td></tr>
+    <tr><td>P</td><td><b>Done:</b> opt-in profiling (<code>CW_PROFILE_CAPTURE</code> env var + <code>cwCaptureLabelPlacer::Stats</code>)</td><td>diagnostic</td><td>times addTileAlpha / finalize / placement and counts the O(n²) scans; drove the Phase-3 priority below. <b>Removed in Phase&nbsp;6</b> (the env-var logging; the <code>Stats</code> counters stayed — see row 6).</td><td>emits a one-shot breakdown line from <code>placeLabelsAfterTiles</code></td></tr>
+    <tr><td>3</td><td><b>Done:</b> <code>cwSpatialHashGrid2D</code> — indexes <em>three</em> per-candidate scans: <code>m_placedLabels</code>, <code>m_softLineObstacles</code>, <em>and</em> <code>m_lineObstacles</code> (the hard leader scan, found mid-implementation to be co-dominant once the soft scan was fixed)</td><td>3</td><td>each linear scan → local neighbourhood query. Serpentine benchmark (now exercising all three scans, incl. leaders) flattens to <b>linear ~25&nbsp;µs/station</b> (10k: 27.2&nbsp;s&nbsp;→&nbsp;0.18&nbsp;s). Real zoomed export: soft 1.2&nbsp;B→7.4&nbsp;M, line ~16&nbsp;B (was uncounted)→102&nbsp;M, placed gridded to ~22/query; placement 57&nbsp;s→39&nbsp;s. <b>Residual bottleneck is now the spiral itself</b> (cellsTried 25.7&nbsp;M, 55% reaching queries), <em>not</em> the per-item scans — see Phase&nbsp;3.1.</td><td>grid unit tests (<code>test_cwSpatialHashGrid2D.cpp</code>); serpentine <span class="kbd">[benchmark]</span> flattened; re-profiled — check counts collapsed and grid iteration ruled out (<code>gridCellsVisited</code> ≪ <code>*Checks</code>)</td></tr>
+    <tr><td>4</td><td><b>Done:</b> Windowed distance transform + <code>placeAll</code> batch API — tile-local DT with <em>global</em> collision state</td><td>blocker</td><td><b>Fixes the whole-cave OOM</b> (a full whole-cave Fisher Ridge export ballooned to ~240&nbsp;GB in the O(page&nbsp;area) <code>m_dt</code> and never finished). <b>Implemented design — simpler and stronger than the halo/border-ledger sketch in §5:</b> the only O(page&nbsp;area) structure in the placer was <code>m_dt</code>; the placed-label / leader / soft-obstacle hash grids are all O(n) and never needed tiling. So there is <em>one</em> placer with global collision state, and only the DT is windowed: <code>setObstacleBounds/addTileAlpha/addObstacleRect</code> now <em>record</em> obstacle sources (no page-sized allocation anywhere — <code>finalize()</code> builds nothing), and <code>placeLabel</code> lazily builds the DT for the anchor's window (default 4096&nbsp;paper-px, <code>setPlacementWindowSize</code>) plus a halo covering the spiral's maximum reach. The Phase-2 spiral cap is what makes this <em>exact</em>: no DT read ever needs distance beyond ~9×label-clearance (incl. the 3.1 anisotropic-step overshoot, <code>spiralReachCells</code>), so windowed values equal whole-page values wherever they are read. A new <code>placeAll(requests, control)</code> stable-sorts requests window-major (one DT build per window; a batch-wide halo prevents per-label-size rebuild thrash), keeps request order within a window, registers lead leaders as obstacles on commit (<code>LabelRequest.leaderObstacleThickness/leaderMinLength</code>, <code>Placement.hasLeader</code>), and polls the 5a cancel/progress control per label. <code>cwCaptureCenterline/cwCaptureLeads</code> split into <code>buildLabelRequests()</code> (worker-side text measurement, cancelable) + <code>applyPlacements()</code>; the 5a worker feeds one combined leads-then-stations batch. <b>No seams by construction:</b> collision state is global, so cross-window overlap is impossible — no border ledger, no reconciliation pass. Single-window pages (every preview + typical export) place <em>bit-identically</em> to the unwindowed algorithm (pinned by test). Behavior deltas on multi-window pages only: processing is window-major (leads-before-stations now per window, not global), which can shift which of two competing labels wins a spot — never lets them overlap. Bonus: the uncancelable-finalize gap shrank from whole-page to one window. Memory: <code>maxWindowCells</code> ≈ (window+2·halo)²/cell² ≈ 5–25&nbsp;MB vs the page's hundreds of GB; <code>Stats.windowsBuilt/windowCellsBuilt/maxWindowCells</code> expose builds (thrash detector). Culled anchors never trigger a build (cull precedes the window ensure), so zoomed exports build only the viewport's windows.</td><td><b>Done:</b> placeAll ≡ sequential placeLabel loop on a single-window page (bit-exact); huge sparse page (400M logical cells) places all labels with <code>maxWindowCells</code> &lt; 8M and no page-sized allocation; forced tiny windows: pairwise no-overlap across seams + drop-rate ≥ 0.9× unwindowed; lead leaders respected across windows; cancel mid-batch leaves tail unplaced. Serpentine <span class="kbd">[benchmark]</span> stays flat-linear (100% placed); tst_LeadPlacement end-to-end green. <b>Profiled on real exports (2026-07-14):</b> 1:1000 half-cave placement 1065&nbsp;s → 206&nbsp;s after the three profile-driven fixes (per-window halo, median grid sizing, cell-anchored default window); <code>windowCellsBuilt</code> down to 1.12× page area and <code>placedLabelChecks</code> down 275×. The remaining 206&nbsp;s is the 56 window <em>builds</em> (tile rasterize + DT), not collision work → see 5b/5c. 1:500 and whole-cave still OOM on tile RAM → see 4b.</td></tr>
+    <tr><td>4b</td><td><b>Implemented (2026-07-14, uncommitted):</b> Bound tile-image RAM — compressed tile blobs + per-tile cell masks + TIF LZW</td><td>robustness</td><td><b>Implementation notes:</b> <code>cwCompressedImageItem</code> (new) holds the qCompress'd pixels and decompresses in <code>paint()</code>; export grabs normalize → ink-scan → compress at grab time (the <code>setDevicePixelRatio</code> per-tile deep copy died with it); previews keep raw <code>cwGraphicsImageItem</code>s. The placer takes either source (<code>addTileAlpha</code> / <code>addCompressedTileAlpha</code>) and — better than the planned mask-at-grab — builds each tile's inked-cell bitmap <em>lazily on first window contact</em> after a cell-bbox rejection, so fully culled tiles are never decompressed at all; the mask (itself qCompress'd, row-major over the tile's clamped cell bbox, bit-exact with the old per-window pixel scan) then replaces the pixels, so no tile is scanned twice — this also removes the repeated per-window pixel re-reads that dominated the 206&nbsp;s (window builds now OR bitmaps). Profile line gained <code>tileRawMB/tileCompressedMB/tileMasksBuilt/tileMaskMB</code>. Tests: compressed≡raw bit-identical placements across windows; item paint parity + repeat-paint; full targeted tags + benchmarks (flat-linear, ~235&nbsp;µs/station) green; end-to-end SVG lead export green. <b>1:500 STILL OOMs (user report, page mostly empty — cause unknown):</b> an empty page should compress to almost nothing, so the whale may not be the blobs at all. Added an end-to-end <code>CW_PROFILE_CAPTURE</code> memory trace (<code>cwMemoryUsage::physFootprint()</code> — the dirty+compressed number macOS kills on): per-100-tiles grab log (kept / rawMB / compressedMB / footprintMB), grab-done summary, labels-measured, per-5000-labels placement log (windows / masks / footprintMB), and <code>saveScene</code> stage stamps (start / filled / rendered / written). The last line before the kill names the phase; whichever counter tracks the footprint names the cause. <b>TRACE VERDICT (user's 1:500 run, 29,756 tiles): the tiles were innocent</b> — <code>kept 0, tileRawMB 0</code> yet footprint climbed ~18&nbsp;MB per tile. <b>Root cause: a pre-existing <code>grabToImage</code> leak</b> that predates every phase of this plan — the tile grab's <code>ready</code> connection captured the <code>QSharedPointer&lt;QQuickItemGrabResult&gt;</code> in its closure and was never torn down, so every ~17&nbsp;MB grab result lived until the viewport was destroyed (it also silently doubled tile memory in all earlier profiles). <b>Fixed:</b> the handler now takes the image and parks the last shared-pointer reference in a queued no-op — deferred because we're inside the result's own <code>ready()</code> emission and its deleter is a plain <code>delete</code> (<code>qquickitemgrabresult.cpp</code>), so dropping it in the slot would delete the signal sender mid-emit; the event loop drops it (sender + connection with it) on the next pass. Steady state is now ONE grab result in flight. <code>cwCompressedImageStore</code> (append-only mmap'd blob temp file — the spill fallback) remains written but <b>unwired</b>; wire it only if a post-fix trace shows the compressed blobs themselves are ever the whale. <b>POST-FIX 1:500 WHOLE-CAVE RUN (2026-07-15): memory SOLVED, export completed for the first time.</b> 29,237 tiles, footprint flat at ~4.7&nbsp;GB (app baseline) through the whole grab; 112 inked tiles kept; <b>real compression ratio 10.6:1</b> (1792&nbsp;MB raw → 168.7&nbsp;MB compressed; masks 0.18&nbsp;MB) — the blob store is officially unnecessary at real ratios. SVG (177000×174000&nbsp;px page, 7.6B logical cells) wrote successfully; footprint <em>fell</em> to 3.6&nbsp;GB after the save. <b>Placement wall time read 25,426&nbsp;s (7.06&nbsp;h) — but the machine SLEPT mid-run</b> (user confirmed), so the number is contaminated (sleep may count directly depending on which monotonic clock QElapsedTimer resolves to on this macOS/Qt, and the awake tail was likely App-Nap-throttled) and must not be treated as a measurement. Honest estimate from the 1:1000 run (470M window cells ≈ 206&nbsp;s <em>with</em> the old per-window pixel scans): this run's 2.92B mask-path cells ≈ 15–45&nbsp;min real. Collision counters are tiny (5M cellsTried, 838k label checks), so whatever the true time is, it lives in the 397 window builds (<code>maxWindowCells</code> 66.5M from lead-halo windows). Added <code>Stats.windowRasterMs/windowDtMs</code> (timed inside <code>buildWindow</code>, in the per-5000-labels and final profile lines) so the next run — awake, ideally under <code>caffeinate&nbsp;-i</code> — measures the build cost directly. That number sizes the 5b/5c work. <b>ANSWERED (2026-07-15, awake caffeinate run, Debug build, commit 913cacf9):</b> placement is <b>222&nbsp;s total, 95% of it the distance transform</b> — <code>windowDtMs</code> 211.4&nbsp;s vs <code>windowRasterMs</code> 6.9&nbsp;s (the 4b mask work is now trivial) and ~3.4&nbsp;s of collision/spiral. Memory re-confirmed flat (4.3–4.8&nbsp;GB across 5372 grabs / 114 kept / 10.8:1 / SVG written). See row 5b for the DT analysis and sequencing.<br/><br/>Found during the Phase-4 review: the retained tile <code>QImage</code>s are <em>also</em> O(page&nbsp;area) RAM — 4&nbsp;B/px (× DPR²), i.e. ~4× the old DT — held as <code>cwGraphicsImageItem</code>s in the scene until <code>saveScene()</code> renders them. The whole-cave attempt likely survived them only because macOS memory compression collapses the mostly-transparent tiles while the post-transform DT (dense unique floats) is incompressible — fragile (an opaque background defeats it). <b>Done (2026-07-14):</b> fully transparent tiles are discarded at grab time on export runs (an inked tile exits the alpha scan at its first opaque pixel; previews keep all tiles because their bounding box derives from the tile items) — on a sparse whole-cave page that drops <em>most</em> tiles, bounding tile RAM to the ink; <code>placeLabelsAfterTiles</code> now anchors <code>parentBounds</code> to the full page rect so discarded tiles can't shrink the placement grid/clamp/cull. <b>Confirmed (2026-07-14): inked tiles alone DO still bite</b> — 1:500 and whole-cave exports die with "out of application memory" on the kept inked tiles (1665 tiles × ~16&nbsp;MB at DPR&nbsp;2 ≈ 27&nbsp;GB at 1:1000 <em>half</em>-cave; ~8× that at 1:500 whole-cave). macOS's implicit memory compression didn't save it (compressed pages still count toward <code>phys_footprint</code>), so the raw pixels must stop living as anonymous RAM. <b>Agreed design (revised 2026-07-14; historical — as built, the masks are built lazily in the placer on first window contact, not at grab time; see the implementation notes above) — compressed tile blobs, explicit zlib:</b> at grab time, record the DT-cell-resolution alpha mask from the still-raw grabbed image, then <code>qCompress</code> the pixel bytes (zlib level&nbsp;1, ~10–30&nbsp;ms on a mostly-zero 16&nbsp;MB tile) and drop the raw <code>QImage</code>; the export scene item holds the blob and its <code>paint()</code> decompresses into a one-at-a-time 16&nbsp;MB scratch, draws, and discards. Transparent premultiplied ARGB is runs of zero bytes, so kept tiles should compress ~20–100:1 (same effect as the spike's sparse 2&nbsp;GiB page → 2.3&nbsp;MB PNG): the 27&nbsp;GB half-cave set → ~0.3–1.5&nbsp;GB; 1:500 whole-cave → ~2–12&nbsp;GB. Export full-res items are painted <em>exactly once</em> (<code>saveScene()</code>'s <code>Scene-&gt;render</code>), so each tile decompresses once per export; SVG/PDF drive the same <code>paint()</code> and still embed one bounded image per tile — one code path covers all four formats; previews stay raw (few, screen-sized, repaint interactively). The alpha masks are what keep the <em>placer</em> from <em>repeatedly</em> decompressing (as built, each tile decompresses exactly once, on the first window that touches it): without them each of the ~56 window builds would decompress every tile it touches (the masks are also the 5b window-build speed win; pairs with RF&nbsp;#3). Blob format: keep the grabs <em>premultiplied</em> — the RHI readback behind <code>grabToImage</code> always returns premultiplied (<code>qsgrhisupport.cpp</code>: <code>ARGB32_Premultiplied</code> for BGRA8/Metal, else <code>RGBA8888_Premultiplied</code>), premultiplied alpha=0 forces RGB to zero <em>by construction</em> (guaranteed zlib zero runs), and it is QPainter's fastest <code>SourceOver</code> path for the decompress-and-paint. Normalize once at grab to exactly <code>ARGB32_Premultiplied</code> (converts only on non-Metal backends where a raw <code>qAlpha()</code> read would hit the wrong byte — replaces the <code>tileHasInk</code> format whitelist) so ink scan, mask recorder, compressor, and paint assume one format; the output <em>page</em> stays straight <code>ARGB32</code> (PNG's zero-copy path). Add raw-vs-compressed tile-byte counters to the profile output, and guard that full-res items stay hidden until the save render so decompress-once is structural, not incidental. <b>Fallback if counters ever show a dense-ink export blowing the compressed budget:</b> spill the <em>compressed</em> blobs to one append-only temp file (seek + read ~1&nbsp;MB per tile at paint time) — compression and streaming compose. The earlier raw per-viewport mmap atlas idea is superseded: 27–200&nbsp;GB of mostly zeros never deserved to hit the SSD. <b>Spike (2026-07-14) cleared the last unknown — <code>QImageWriter</code> does NOT deep-copy:</b> the "deep copy in memory!" comment in <code>saveScene()</code> is wrong for Qt&nbsp;6.11, verified in the v6.11.1 handler sources <em>and</em> empirically (2&nbsp;GiB <code>QFile::map</code>-backed ARGB32 written on this machine): PNG passes <code>ARGB32</code> scanlines straight to libpng (peak <code>phys_footprint</code> delta <b>1.1&nbsp;MB</b>), TIFF converts in ≤16&nbsp;MB chunks to RGBA8888 (<b>20.2&nbsp;MB</b>), JPEG converts one scanline at a time (<b>0.2&nbsp;MB</b>). Bonus: dirtying the entire 2&nbsp;GiB mapping left <code>phys_footprint</code> at 4.5&nbsp;MB — dirty <code>QFile::map</code> pages are file-backed and don't count toward the footprint macOS kills on — so the output-page <code>cwMappedQImage</code> stays free, and the spill-file fallback above is pre-validated too. Delete the stale comment with this work, and keep the output image <code>ARGB32</code> — it is every handler's streaming fast path (<code>ARGB32_Premultiplied</code> falls off PNG's zero-copy path). <b>New risk found instead — TIFF file-size cap, not memory:</b> Qt writes <em>classic</em> TIFF (no BigTIFF) and compression defaults to <em>none</em> — the 2&nbsp;GiB test produced a 2048&nbsp;MB .tif (vs PNG 2.3&nbsp;MB), and classic TIFF caps at 4&nbsp;GB, so a 1:500 whole-cave TIF fails at write time regardless of RAM. Mitigate: <code>QImageWriter::setCompression(1)</code> (LZW; sparse cave pages compress enormously) in <code>saveToImage</code> and document the 4&nbsp;GB TIF ceiling (PNG unaffected).</td><td>1:500 and whole-cave exports complete; footprint bounded through the tile phase <em>and</em> the save; profile counters report raw vs compressed tile bytes (real-world ratio check); TIF written with LZW; spike code: session scratchpad <span class="kbd">qiw-spike/</span></td></tr>
+    <tr><td>3.1</td><td><b>Done:</b> Coarsen the candidate step — decouple candidate spacing from the DT resolution</td><td>3 (residual spiral cost)</td><td>after Phase&nbsp;3 the placement cost is dominated by the <em>number of spiral query-cells</em>, not the per-item scans (zoomed-export re-profile: <b>430&nbsp;M exact tests</b> over <b>14.2&nbsp;M</b> DT-cleared cells; grid iteration cheap, <code>gridCellsVisited</code> ≪ the check counts). The spiral sampled a candidate at <em>every DT cell</em> (~2&nbsp;paper-px) — far finer than placement needs. <b>Shipped anisotropic per-axis step</b> instead of a single K: <code>candidateStepX/Y = round(labelExtentCells · kCandidateStepLabelFraction)</code> (0.35), floored at 1, capped at 8. Each axis coarsens proportional to the label's extent on <em>that</em> axis, so a wide text label (e.g. 24×10&nbsp;px → stepX=4, stepY=2, ~8× fewer candidates) coarsens hard along its long axis while the short axis — the one that must fit a gap — stays as fine as a plain min-side K=2. DT clearance and every collision test stay exact on sampled cells, so <b>no placed label can overlap</b>; coarsening only shifts a label within a step or drops a rare marginal one. Serpentine <span class="kbd">[benchmark]</span> stays linear and <em>faster</em> (10k: 0.18&nbsp;s&nbsp;→&nbsp;0.16&nbsp;s, 100% still placed). Step is a file-scope <code>constexpr</code> tunable. Est. K=4/16× from the row above proved optimistic for a plain min-side K on real ~10&nbsp;px text (→ K=2); the anisotropic split recovers the long-axis reduction at equal short-axis safety — and on the real file it <em>beat</em> the estimate because the export's labels are larger than the benchmark's, so the step scaled up further. <b>Real Fisher Ridge export (852×790, 32&nbsp;132 placeCalls): placement 39.7&nbsp;s → 2.57&nbsp;s (~15×)</b>; cellsTried 25.7&nbsp;M→1.27&nbsp;M (~20×), placedLabelChecks 321&nbsp;M→17.4&nbsp;M, lineObstacleChecks 102&nbsp;M→5.0&nbsp;M; <b>placed 556→558</b> (no regression). Remaining placement cost is now DT <code>finalize</code> (166&nbsp;ms) + the ~800&nbsp;K DT-cleared candidates — good enough that <b>Phase&nbsp;4 tiling is now driven by whole-cave DT memory/time, not the spiral</b>. <b>Follow-up (out of scope):</b> <code>kCandidateStepLabelFraction</code>/<code>kMaxCandidateStep</code> are file-scope <code>constexpr</code>, but the placer already takes its other spatial knobs as runtime setters (cell size via <code>setObstacleBounds</code>, margin via <code>setLabelMarginPaperPx</code>). If a "draft vs final export" quality toggle ever wants finer sampling for the final render, promote the fraction to a setter to match that pattern — YAGNI until a second caller exists.</td><td><b>Done:</b> serpentine <span class="kbd">[benchmark]</span> stays linear (16&nbsp;µs/station, 10k in 159&nbsp;ms); new normal-suite test <code>coarsened placement stays non-overlapping</code> asserts the pairwise no-overlap invariant + ≥90% placed on a well-spaced cave; grid+placer suites green (19&nbsp;952 assertions); real Fisher Ridge export re-profiled (39.7&nbsp;s→2.57&nbsp;s, placed 556→558).</td></tr>
+    <tr><td>5a</td><td><b>Done:</b> Move the export label pipeline off the GUI thread — progress + cancel</td><td>responsiveness / harness</td><td>The DT build (<code>finalize</code>, 104–166&nbsp;ms) and placement (even after 3.1, ~2.5&nbsp;s on the real file — and <b>~240&nbsp;GB / never-finishing</b> on a full whole-cave export) ran on the <b>main thread</b>, freezing the UI with no escape. <b>Implemented:</b> <code>cwCaptureViewport::placeLabelsAfterTiles</code> now splits into (1) a GUI-thread <em>prepare</em> that snapshots tile alpha (<code>QImage</code> is implicitly shared), builds the <code>QGraphicsItem</code>s, and gathers obstacle rects / soft segments / label counts into a POD <code>LabelPlacementInput</code>; (2) a <em>worker</em> (<code>cwConcurrent::run</code> with a <code>QPromise&lt;void&gt;</code>) that runs the whole placement stage — <code>setObstacleBounds</code>/<code>addTileAlpha</code>/<code>finalize</code>/<code>placeLeadLabels</code>/<code>placeStationLabels</code> — off-thread; (3) a GUI-thread continuation keyed off <code>QFutureWatcher::finished</code> — which fires only once the worker has actually unwound (its <code>canceled</code> signal fires the moment <code>cancel()</code> is called, while the worker is still running, so nothing keys off it) — that reveals the label items, builds the leader lines, and emits <code>finishedCapture()</code>, or <code>captureCanceled()</code> on abort. Per the design call, <b>text measurement runs on the worker too</b> (whole-thing-on-worker) — the placer is CPU-only and its grids reentrant, so a single worker needs no locking. Cancel + per-label progress flow through a new <code>cwLabelPlacementControl</code> (cancel-check + tick, polled once per label) threaded into both item placement loops, so a runaway export is <b>cancelable mid-run</b>. The future registers with <code>cwFutureManagerModel</code> (export only, not previews) via a new <code>cwCaptureManager</code> <code>futureManagerToken</code> property (wired in <code>MapPage.qml</code>), so the app's job list shows progress + a cancel affordance; <code>cwCaptureManager::cancel()</code> + <code>canceledCapture()</code> abort the serial queue without saving. <code>CapturingImages</code> is held true through placement (cleared only after the worker unwinds); a <code>capture()</code> issued while a <b>preview</b> run is in flight cancels it and restarts once it has fully stopped (supersede) — silently dropping it let an export latch onto the preview’s <code>finishedCapture</code> and crash in <code>saveCaptures()</code> with a null full-res item. The label items stay <b>hidden until the continuation</b> (preview items live in the rendered scene; painting them mid-run raced the worker’s <code>std::sort</code>), the run’s preview/export mode is snapshotted at start (<code>m_runIsPreview</code> — the manager flips the live flag mid-run), a viewport-level cancel flag ends a run at the next <b>tile boundary</b> (previously a tile-phase cancel was a no-op and placement launched post-cancel), and the manager gained an <code>m_capturing</code> re-entry guard + silent idle-<code>cancel()</code>. The destructor / <code>deleteSceneItems</code> <code>cancel()</code>+<code>QFuture::waitForFinished()</code> (blocks without an event loop → no re-entrancy) before freeing the items the worker mutates. <b>Does not fix the 240&nbsp;GB OOM</b> (Phase&nbsp;4) — but it unfreezes every sub-cave export and gives Phase&nbsp;4 its cancelable harness.</td><td><b>Done:</b> new <code>test_cwLabelPlacementThreading.cpp</code> drives the real <code>cwConcurrent::run</code>+<code>QPromise</code>+<code>cwLabelPlacementControl</code> machinery against the placer: asserts placement runs on a pooled worker thread (not the caller), progress advances one tick per label to the total, and a mid-run <code>cancel()</code> bails before placing every station; a continuation-contract test pins <code>finished</code>-after-worker-exit vs <code>canceled</code>-mid-worker, and a manager test pins silent idle-cancel (red→green). Full C++ + QML suites green (one pre-existing <code>cwLeadView</code> ScrapSync flaky observed once, unrelated to capture). End-to-end capture (real RHI tiles) validated by manual export — no headless RHI harness exists.</td></tr>
+    <tr><td>4c</td><td><b>Done:</b> surface the tile-grab phase as a job (progress + cancel)</td><td>UX</td><td>Implemented via a new reusable <b><code>cwPhaseJob</code></b> helper (RAII promise-backed phase job: <code>start(name, steps, token)</code> registers with the job list when the token is valid, <code>setProgressValue</code>/<code>finish()</code> idempotent, destructor finishes an undestroyed job; unit-tested in <code>test_cwPhaseJob.cpp</code>): <code>capture()</code> backs a "Rendering map tiles" job owned by the run data, ticked once per grabbed tile; previews pass an invalid token so they run silently (same rationale as the placement job). The job runs for <em>every</em> capture so the completion/cancel paths stay unconditional — and both exit branches finish it <em>explicitly</em>, because the grab chain's shared_ptr cycle (see RF&nbsp;5) means the destructor safety net never fires here. <code>cwFutureManagerModel</code> has no per-job cancel affordance, so cancel stays with the export UI: <code>cancelCapture()</code> also cancels the tile future (<code>m_tileGrabFuture</code> member), resolving the job-list row immediately while the run still ends at the next tile boundary via <code>m_cancelRequested</code>; <code>deleteSceneItems()</code> cancels it too, so a viewport destroyed mid-grab (e.g. <code>~cwCaptureManager</code>) can't strand a row. The save phase is the remaining unsurfaced one — see 4d.</td><td>manual: <b>verified 2026-07-15</b> — whole-cave export shows the tile-rendering job with advancing progress. C++ suites green (<span class="kbd">[cwCaptureManager]</span>, <span class="kbd">[cwCaptureViewport]</span>, <span class="kbd">[cwCaptureLabelPlacer]</span>, <span class="kbd">[cwLabelPlacementControl]</span>, <span class="kbd">[cwPhaseJob]</span>); grab requires a real render, so no offscreen unit test drives the job itself</td></tr>
+    <tr><td>4d</td><td><b>Abandoned:</b> chunked GUI-thread save (implemented, measured, then reverted)</td><td>UX</td><td><b>Implemented and reverted (2026-07-15).</b> The full design was built and green — banded raster render (1024-row bands, one queued event per band) ticking a "Saving map" <code>cwPhaseJob</code>, plus a worker-thread <code>QImageWriter</code> write — then profiling on the real whole-cave export showed why it isn't worth keeping: <b>the save cost lives inside single slow paint calls, not between them</b>. The whole-cave <b>SVG</b> save (73500&times;44100) measured 23.8&nbsp;s of GUI-thread render, <b>97% of it (23.2&nbsp;s) inside <code>painter-&gt;drawImage</code></b> — <code>QSvgGenerator</code> synchronously base64-PNG-encodes each of the 119 tiles (~195&nbsp;ms/tile); decompress was 0.6&nbsp;s, stream finalize 40&nbsp;ms, file 114&nbsp;MB. SVG has no band decomposition at all, and even the banded PNG path still blocks in coarse chunks. Decision (user): event-loop chunking of an inherently blocking <code>QGraphicsScene</code> pipeline is lipstick — the scene gets replaced in the Map-page rewrite, and the export path should become pure-data + worker-thread then (Phase&nbsp;7 direction, where the 119 tile encodes are embarrassingly parallel). <b>Kept:</b> the CW_PROFILE_CAPTURE instrumentation that found this — <code>cwCompressedImageItem::takePaintStats()</code> (paint count / decompress ms / draw ms) and the saveScene vector-path stage split (renderMs vs painterEndMs + fileMB). <b>Knowledge worth keeping if banding ever returns:</b> a band-sized painter clip is NOT byte-identical to a single-pass render — with a scaled painter the raster engine clips device-space antialiased stroke outlines to the clip's <em>bounding rect</em>, perturbing AA coverage along whole strokes by up to ~5/255 premultiplied. Pinning the clip's bounding rect to the full page (clip region = band + the page's two corner pixels) restores exact byte-identity — verified with 0 differing pixels before the revert.</td><td>reverted to the 4c-era synchronous saveScene; capture-tag suites green post-revert. The blocking-save UX is deferred to the Map-page rewrite / Phase 7 pure-data export</td></tr>
+    <tr><td>5b</td><td><b>Not needed</b> — parallelize the windowed placement (needs&nbsp;4&nbsp;+&nbsp;5a)</td><td>speedup</td><td><b>RESOLVED (2026-07-15 follow-up): the DT raw-pointer hoist + a Release build ended it — no parallelism required.</b> Same export, Debug vs Release, both with the hoist in <code>distanceTransform2D</code> (raw pointers hoisted once; rows memcpy'd, columns walked with a stride-w pointer): placement 69&nbsp;s → <b>6.2&nbsp;s</b>, <code>windowDtMs</code> 60.6&nbsp;s → <b>5.1&nbsp;s</b> (≈70 → <b>≈6.3&nbsp;ns/cell</b>; the hoist alone was ~2.8× even at -O0). Extrapolated to the 1.08B-cell whole-cave export: ~8–9&nbsp;s placement. Placed/culled counts matched across builds (11,246 vs 11,209 — grab nondeterminism), so speed changed, answers didn't. Release footprint flat ~2.2&nbsp;GB (Debug's ~4.6&nbsp;GB was ASan overhead). Options A/B below kept for the record only.<br/><br/><b>Measured (2026-07-15, awake caffeinate run, DEBUG build):</b> placement 221.7&nbsp;s = <code>windowDtMs</code> <b>211.4&nbsp;s (95%)</b> + <code>windowRasterMs</code> 6.9&nbsp;s + ~3.4&nbsp;s collision/spiral; 139 windows, 1.08B cells built (≈0.78× page — window redundancy is NOT the problem), <code>maxWindowCells</code> 66.5M. That is ≈196&nbsp;ns/DT-cell — suspiciously slow because <code>distanceTransform2D</code>/<code>felzenszwalb1D</code> run every access through <code>QVector::operator[]</code> (detach-checked, un-inlined at -O0): row pass, column pass, and the sqrt pass ≈ 5 checked accesses per cell. <b>Sequencing revised by the measurement:</b> (1) hoist raw pointers in the DT inner loops (same fix as <code>rasterizeTileMask</code>; behavior-preserving, pinned by existing parity tests); (2) profile a RELEASE build before sizing anything else — -O2 inlining alone may put DT at 20–40&nbsp;ns/cell (~25–45&nbsp;s), possibly below the pain threshold; (3) only if still slow, the parallel options below — Option&nbsp;A pipelining (needs 5c) and/or parallelizing the DT itself (each row in the row pass and each column in the column pass is independent — embarrassingly parallel within one window build, no double-buffering needed, a much smaller change than Option&nbsp;A).<br/><br/>Phase&nbsp;4 kept collision state <em>global</em> (that is what makes seams impossible), so placement itself is order-dependent and stays sequential — the parallelism target changed. On a whole-cave export the dominant cost is now the per-window <b>DT builds</b> (rasterize + Felzenszwalb over window+halo), which only read immutable sources (tile alpha handles, obstacle rects). <b>Option A — pipeline (do first):</b> while window k places, build window k+1's DT on a second worker (double-buffer <code>m_dt</code>; placeAll already knows the window visit order up front). Hides nearly all DT time behind placement with two threads and zero contention. <b>Option B — full fan-out:</b> per-window placers each with private grids + halo-copied collision state and a seam-reconciliation pass (the original §5 sketch) — only worth it if placement itself, not the DT, dominates after A. Thread-safety constraint unchanged: <code>cwSpatialHashGrid2D</code> is <em>reentrant but not thread-safe</em> — <code>query()</code>/<code>anyOf()</code> bump a <code>mutable</code> generation stamp, so two threads must never query one grid concurrently. Same caveat applies to the #561 <code>cwLabel3dView</code> port if that view ever queries from a render thread.</td><td>pipelined vs serial windowed placement produce identical output; scales with cores &amp; stays cancelable</td></tr>
+    <tr><td>5c</td><td>Extract <code>cwWindowedDistanceField</code> (was: step&nbsp;1 of Phase&nbsp;5b — <b>now optional cleanup</b>, since 5b is resolved without parallelism; still worthwhile purely as a readability refactor if the placer is touched again)</td><td>refactor</td><td>From the Phase-4 review: roughly half of <code>cwCaptureLabelPlacer</code> is now a self-contained "lazy occupancy field" — the obstacle-source recording (<code>m_tileSources</code>/<code>m_obstacleRects</code>), the window machinery (<code>windowCellSpan</code>/<code>ensureWindowFor</code>/<code>buildWindow</code>/<code>rasterizeTileAlpha</code>/<code>rasterizeObstacleRect</code>), and the DT storage + offsets (<code>m_dt</code>, <code>m_dtX0..m_dtY1</code>) whose index arithmetic currently leaks into <code>placeLabel</code>'s hot loop. Splitting it into its own class makes the placer pure placement <em>policy</em> (spiral, scoring, collision), makes the exactness invariant (halo ≥ spiral reach ⇒ windowed reads ≡ whole-page reads) testable in isolation, and is practically a <b>prerequisite for 5b Option&nbsp;A</b> — pipelining "build window k+1 while placing window k" needs the field to be a double-bufferable object, not interleaved member state. Also the natural shape for any future consumer (same generalization path <code>cwSpatialHashGrid2D</code> took, cf. #561). Blast radius: placer internals + <code>test_cwCaptureLabelPlacer.cpp</code> only; no callers change. <b>Sharpened by the 5b resolution (2026-07-15):</b> the DT pointer hoist added the <em>third</em> "raw pointers because <code>QVector::operator[]</code> detach-checks" site in the file (<code>distanceTransform2D</code>, joining <code>rasterizeTileMask</code> and <code>ensureTileMask</code>), each needing a justifying comment. When extracting, move <code>m_dt</code> and the DT scratch buffers (<code>tmp</code>/<code>out</code>/<code>v</code>/<code>z</code>) to non-CoW storage (<code>std::vector</code>) so the entire hoist-and-comment idiom disappears instead of being re-documented at every new hot loop.</td><td>placer suite bit-identical before/after the extraction; new focused unit tests on the field (window containment, halo exactness, tile-vs-rect rasterization equivalence — the latter already exists and moves over)</td></tr>
+    <tr><td>7</td><td>Pure-data placement pipeline — worker stops touching <code>QGraphicsItem</code>s (after R3/R4/4c)</td><td>thread-safety by construction</td><td>From the Phase-4 review: the 4/5a <code>buildLabelRequests()</code>/<code>applyPlacements()</code> split is ~90% of a pure data pipeline, but the worker still mutates item-owned state — <code>buildLabelRequests</code> sorts and writes <code>m_stationData</code>/<code>m_leads</code> on the worker, and <code>applyPlacements</code> runs there too, via raw item pointers in <code>LabelPlacementInput</code>. Safety today rests on a convention documented in comments (items hidden until the continuation; <code>CapturingImages</code> blocking re-entrant deletion). The change: snapshot label geometry into the POD input on the GUI thread (the request lists are already almost that), run measure+place on the worker over pure data, and apply placements in the GUI continuation. Benefits: thread safety by construction instead of by comment, a headless-testable export pipeline (<code>test_cwLabelPlacementThreading.cpp</code> currently has to simulate the harness because the real one needs RHI + live items), and a safe substrate for 5b. <b>Sequence after R3/R4/4c</b> — they queue edits to the same <code>cwCaptureViewport</code> region; doing this first would churn it twice.</td><td>threading test drives the <em>real</em> pipeline end-to-end headlessly; suites green; a placement run with items deleted mid-worker (today's forbidden interleaving) becomes impossible by construction</td></tr>
+    <tr><td>RF</td><td>Small refactors surfaced by the Phase-4 review (batch opportunistically)</td><td>hygiene</td><td>(1) <b><code>cwLabelPlacementTypes.h</code></b>: move <code>LabelRequest</code>/<code>Placement</code> (and possibly <code>cwLabelPlacementControl</code>) into a small types header so <code>cwCaptureCenterline.h</code>/<code>cwCaptureLeads.h</code> go back to forward-declaring the placer — Phase&nbsp;4 made them include the full placer header (and transitively the DT internals) just to name the nested structs. (2) <b>Done (2026-07-15) — Dedup the centerline/leads twin</b>: new shared base <code>cwCaptureLabelItem</code> owns the camera/viewport/scale/DPI setter surface, the label font/pen, <code>boundingRect/shape</code>, projection, and the <code>buildRequests</code>/<code>applyPlacementsTo</code> templates over a shared <code>LabelDrawData</code> entry (leads' entry derives it, statically shadowing <code>resetPlacement/applyPlacement</code> for the leader state). The sort drift is fixed: both items now sort in <code>rebuildGeometry</code> via the shared <code>anchorOrder</code> (behavior-equivalent — placements identical; obstacle registration is order-independent, and <code>stationPositions()</code> becoming sorted only makes obstacle order deterministic). Landed with two coupling fixes from the 1.1 review: <code>cwCaptureLabelPlacer::PlacementViewport</code> (bounds + margin bundled; ONE instance feeds <code>setPlacementViewport</code> and both <code>buildLabelRequests</code> calls, making the caller-cull-subset invariant structural) and a <code>setLabelFont</code> fixture-font seam (tests inject a known font instead of mirroring the private point-size constant; <code>test_cwCaptureCenterline</code> proves the seam by measuring with a non-default 10&nbsp;pt font). Deliberately NOT unified: the two <code>paint()</code> label loops keep different guards (centerline skips labels of off-page anchors; leads draws any placed label) — merging them is a behavior decision, not a dedup. Verified: capture tags 124,732/40 + <code>tst_LeadPlacement</code> + <code>tst_Leads</code> green. (3) <b>One "tile ink" definition, computed once</b>: <code>tileHasInk</code> (grab time, alpha&nbsp;≠&nbsp;0) and the placer's rasterization (<code>alpha&nbsp;&gt;&nbsp;16</code>) define ink twice and scan each tile's pixels twice; computing a per-tile ink bounding rect once at grab and carrying it into <code>TileAlphaSource</code> unifies the definition, lets <code>rasterizeTileAlpha</code> reject by rect, and is the structural half of 4b — land it with 4b. (4) <b><code>placeAll</code> as the sole public entry point + shared spiral geometry</b>: batch context currently flows through mutable members (<code>m_batchHaloCells</code>, <code>m_gridCellSizeHint</code>) and <code>placeLabel</code> survives as test-only surface with subtly different semantics; extracting one <code>SpiralGeometry</code> computation used by both the spiral and <code>spiralReachCells</code> removes the hand-maintained mirror (the 5c extraction largely subsumes this). (5) <b>Split <code>cwCaptureViewport</code>'s god-methods</b> (<code>capture()</code> ~270 lines, <code>placeLabelsAfterTiles</code> ~290): natural cut lines are a <code>TileCaptureRun</code> (jobs + grab loop + boundary cancel) and a <code>LabelPlacementPipeline</code> (the worker body) — <b>after 4c/R3/R4</b>, which restructure exactly this code (Phase&nbsp;7 is the natural vehicle). <b>New evidence from the 4c review (2026-07-15): the run object is a correctness fix, not just hygiene.</b> The recursive grab lambdas form a shared_ptr cycle — <code>*capturedImage</code> captures <code>nextJob</code> by value, and <code>nextJob</code> captures the <code>shared_ptr capturedImage</code> — so <b>every capture run leaks its <code>CaptuteRunData</code></b>: the <code>CaptureJobs</code> list (thousands of entries with a <code>QMatrix4x4</code> each on a whole-page export) and the parentless <code>captureCamera</code> QObject. Nothing in the run may rely on a destructor (4c's <code>cwPhaseJob</code> had to be finished explicitly on every exit branch, and its stuck-job-row hole needed a <code>deleteSceneItems()</code> cancel as a stopgap). A <code>TileCaptureRun</code> with an explicit <code>end()</code> that clears <code>*capturedImage</code> (or a <code>weak_ptr</code> capture in <code>nextJob</code>) breaks the cycle structurally.</td><td>behavior-preserving; suites green after each slice</td></tr>
+    <tr><td>6</td><td><b>Done (2026-07-15):</b> Remove the Phase-P profiling instrumentation</td><td>cleanup</td><td><b>Removed:</b> everything <code>CW_PROFILE_CAPTURE</code>-gated — the tile-grab / labels-measured / placing / placement-summary / saveScene-stage log lines and their stage timers in <code>cwCaptureViewport</code>/<code>cwCaptureManager</code>, the raw/compressed tile-byte counters that fed them, <code>cwMemoryUsage</code> (the <code>phys_footprint</code> tracer existed only for those logs), the <code>windowRasterMs/windowDtMs</code> timers inside <code>buildWindow</code>, the placer's <code>*GridCellsVisited()</code> accessors, and <code>cwSpatialHashGrid2D</code>'s <code>cellsVisited</code> hot-loop counter. <b>Kept, deliberately:</b> the <code>Stats</code> plain-integer counters — the tests pin the scaling guarantees through them (spiral cap via <code>cellsTried</code>, window thrash via <code>windowsBuilt/maxWindowCells/windowCellsBuilt/gridCells</code>, lazy-mask reuse via <code>tileMasksBuilt/tileMaskBytes</code>) and they cost one integer add with no other observable to replace them.</td><td><b>Done:</b> capture/placement/grid/compressed-item tags green (124,731 assertions / 40 cases) + end-to-end <code>tst_LeadPlacement</code> green after removal</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <b>Real-file profile (Fisher Ridge, <em>preview</em> render — 2026-07-03).</b> One
+  <code>CW_PROFILE_CAPTURE</code> line, decisive for sequencing:
+  <pre style="white-space:pre-wrap">tiles 1  bounds 671×612  gridCells 854744
+addTileAlpha 3 ms   finalize 104 ms   placement 44560 ms
+placeCalls 32132   culled 31397 (97.7%)   placed 556   noCandidate 179
+cellsTried 27,051,285   placedLabelChecks 1,652,722,811   softObstacleChecks 1,200,369,584</pre>
+  Reading:
+  <ul>
+    <li><b>Placement (44.5&nbsp;s) is the entire bottleneck</b>; the distance transform (104&nbsp;ms) is
+      <em>not</em> — the earlier "DT dominates" note was an artifact of a tiny test cave.</li>
+    <li>The cost is <b>1.65&nbsp;B + 1.2&nbsp;B linear comparisons</b> — Phase&nbsp;3 must index <em>both</em>
+      the placed-label and soft-obstacle scans.</li>
+    <li>The <b>Phase-1 viewport cull culled 97.7%</b> of calls in O(1); the whole 44.5&nbsp;s is the 735
+      non-culled stations. Without the cull this would be ~30&nbsp;min.</li>
+    <li><b>Caveat: this was the preview render, not a full export.</b> The page was small (671×612), so the
+      DT and memory were cheap. A full whole-cave single-surface export has a huge page → the DT
+      (O(page&nbsp;area)) and its memory become significant, and even 104&nbsp;ms drops frames on the GUI
+      thread. Hence Phase&nbsp;4 (tiling) is expected to matter for the full export and should be
+      investigated right after Phase&nbsp;3 — re-profile a full-cave export to confirm.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <b>First whole-cave profile with Phase 4 (Fisher Ridge 1:2000, 2026-07-14).</b> The export
+  <em>completed</em> for the first time (previously ~240&nbsp;GB, never finished): page 44202×42878,
+  474M logical cells, 1848 tiles, 49 windows — but placement took <b>17.75&nbsp;min</b>. The profile
+  exposed three placer inefficiencies, all fixed same day with no placement-output change:
+  <ul>
+    <li><b>Batch-wide halo:</b> <code>windowCellsBuilt</code> was 2.87B cells — <b>6× the page area</b> —
+      because one long lead label's spiral reach haloed <em>every</em> window (~94% of each window was
+      halo). Now each window's halo comes from the labels routed to it (<code>placeAll</code>
+      per-window reach map).</li>
+    <li><b>Broad-phase grid cells sized by the first request:</b> leads (the largest labels) place
+      first, so cells held dozens of station labels each — <code>placedLabelChecks</code> hit 771M
+      (and 428M on a preview). The grids are now sized from the batch's <em>median</em> label extent.</li>
+    <li><b>Preview units bug:</b> the default window span was interpreted in local units, but previews
+      aren't in paper px — a 1:500 preview got ONE 50M-cell window (39&nbsp;s, ~200&nbsp;MB). The
+      default is now defined in DT cells (2048), which are paper-anchored and scale-independent.</li>
+  </ul>
+  Also implemented from the same session: empty-tile discard at grab time (see Phase&nbsp;4b).
+  Re-profile the whole-cave export after these fixes before considering 5b.
+</div>
+
+<div class="callout">
+  <b>Invariant to protect:</b> placement <em>output</em> must not change from the fixes — the grid is
+  a query accelerator, not a policy change. The existing <code>[cwCaptureLabelPlacer]</code> tests
+  (leader-crossing, obstacle rejection, deterministic order) must keep passing at every phase, so a
+  before/after placement-equivalence check on a mid-size cave is worth adding in Phase&nbsp;3.
+</div>
+
+<p class="cap" style="margin-top:30px">
+  Files: <code>cavewherelib/src/cwCaptureLabelPlacer.{h,cpp}</code> ·
+  <code>cwCaptureCenterline.cpp</code> · <code>cwCaptureViewport.cpp</code> ·
+  existing <code>cwCollisionRectKdTree.{h,cpp}</code> ·
+  benchmark <code>testcases/test_cwCaptureLabelPlacerBenchmark.cpp</code>.
+</p>
+
+</div>
+</body>
+</html>

@@ -11,6 +11,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwMeasurementMath.h"
+#include "cwUnits.h"
 
 //Qt includes
 #include <QClipboard>
@@ -26,7 +27,6 @@ namespace {
     constexpr int kAngleDecimals = 1;
 
     QString azimuthReferenceKey() { return QStringLiteral("measurement/azimuthReference"); }
-    QString lengthUnitKey() { return QStringLiteral("measurement/lengthUnit"); }
 
     // The parenthetical that tags the azimuth in the clipboard readout, so a
     // pasted measurement says which north it is against (matching the on-screen
@@ -62,10 +62,6 @@ cwMeasurementInteraction::cwMeasurementInteraction(QQuickItem* parent) :
     m_azimuthReference(loadAzimuthReference()),
     m_lengthUnit(new cwLengthUnitSelection(this))
 {
-    // Persist the length-unit choice under the measurement key; setting the key
-    // also loads any previously stored choice.
-    m_lengthUnit->setSettingsKey(lengthUnitKey());
-
     // Resolve once up front so the reference readout is self-consistent from
     // construction. With no measurement yet this takes the cheap grid-passthrough
     // path; the detailed resolve waits for a frozen, expanded readout.
@@ -91,10 +87,10 @@ void cwMeasurementInteraction::setUnitSystem(cwUnits::UnitSystem system)
         return;
     }
     m_unitSystem = system;
-    // Seed the default readout unit from the project system. A previously saved
-    // choice is persisted and wins, so this only takes effect on a fresh
-    // selection (setDefaultUnit is a no-op when a value is stored).
-    m_lengthUnit->setDefaultUnit(cwUnits::smallLengthUnit(system));
+    // The readout unit follows the project's unit system (metres / feet). The
+    // popup can override it for the session, but that choice isn't persisted, so
+    // opening a project in the other system re-seeds to its unit here.
+    m_lengthUnit->setUnit(cwUnits::smallLengthUnit(system));
     emit unitSystemChanged();
 }
 
@@ -113,22 +109,18 @@ void cwMeasurementInteraction::setGeoReference(cwGeoReference* geoReference)
     if (m_geoReference == geoReference) {
         return;
     }
-    // The geo-reference supplies the worldOrigin and CRS that turn the grid
-    // azimuth into a true/magnetic bearing. A CRS change can also invalidate the
-    // current reference (a local-only project has none), so it routes through
-    // syncReferenceToGeoReference; an origin change only moves the location.
+    // The geo-reference supplies the frame that turns the grid azimuth into a
+    // true/magnetic bearing. Losing it invalidates the current reference (a
+    // local-only project has none), so it routes through
+    // syncReferenceToGeoReference rather than a plain refresh.
     if (m_geoReference) {
-        disconnect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        disconnect(m_geoReference, &cwGeoReference::localProjectionChanged,
                    this, &cwMeasurementInteraction::syncReferenceToGeoReference);
-        disconnect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                   this, &cwMeasurementInteraction::refreshReference);
     }
     m_geoReference = geoReference;
     if (m_geoReference) {
-        connect(m_geoReference, &cwGeoReference::globalCoordinateSystemChanged,
+        connect(m_geoReference, &cwGeoReference::localProjectionChanged,
                 this, &cwMeasurementInteraction::syncReferenceToGeoReference);
-        connect(m_geoReference, &cwGeoReference::worldOriginChanged,
-                this, &cwMeasurementInteraction::refreshReference);
     }
     emit geoReferenceChanged();
     syncReferenceToGeoReference();
@@ -196,9 +188,9 @@ void cwMeasurementInteraction::refreshReference()
 
     // Resolve against the first picked point (per spec). UTC is enough for IGRF
     // (it keys on the decimal year) and is faster and DST-stable versus local.
-    const cwGeoPoint location = m_geoReference ? m_geoReference->toGlobal(m_firstPoint)
+    const cwGeoPoint location = m_geoReference ? cwGeoPoint::fromSceneLocal(m_firstPoint)
                                                : cwGeoPoint{};
-    const QString sourceCS = m_geoReference ? m_geoReference->globalCoordinateSystem()
+    const QString sourceCS = m_geoReference ? m_geoReference->localCoordinateSystem()
                                             : QString{};
     applyReferenceResult(cwAzimuthReference::resolve(
                 m_azimuth, m_azimuthReference, location, sourceCS,
@@ -254,7 +246,13 @@ void cwMeasurementInteraction::clearMeasurementValues()
 
 void cwMeasurementInteraction::hover(QPointF screenPoint)
 {
-    const cwScenePick::Result pick = snapPick(screenPoint);
+    // Station-only picks just the centerline, so the ray passes through any
+    // scrap or wall geometry in front of a station and still snaps to it.
+    // Free mode picks the nearest of every kind by depth (occlusion applies).
+    const cwPickQuery::Kinds kinds = m_mode == Mode::StationOnly
+            ? cwPickQuery::Kind::Lines
+            : cwPickQuery::All;
+    const cwScenePick::Result pick = snapPick(screenPoint, kinds);
 
     m_hoverScreenPoint = screenPoint;
     m_hoverSnapped = pick.hit && pick.snappedToStation;
@@ -329,7 +327,7 @@ void cwMeasurementInteraction::copyToClipboard() const
     // pastes "n/a (reason)" rather than a silently-wrong grid value. Grid always
     // resolves, so m_referenceAzimuth is the grid azimuth in that case.
     const QString azimuthValue = m_referenceAvailable
-            ? QStringLiteral("%1°").arg(m_referenceAzimuth, 0, 'f', kAngleDecimals)
+            ? cwUnits::formatAngle(m_referenceAzimuth, kAngleDecimals)
             : QStringLiteral("n/a (%1)").arg(m_referenceReason);
     const QString azimuthLine =
             QStringLiteral("Azimuth (%1): %2")
@@ -351,12 +349,12 @@ void cwMeasurementInteraction::copyToClipboard() const
                    m_lengthUnit->format(m_horizontal))
             + azimuthLine
             + QStringLiteral("\n"
-                             "  Inclination: %1°\n"
+                             "  Inclination: %1\n"
                              "By Axis\n"
                              "  Easting (X): %2\n"
                              "  Northing (Y): %3\n"
                              "  Vertical (Z): %4")
-              .arg(QString::number(m_inclination, 'f', kAngleDecimals),
+              .arg(cwUnits::formatAngle(m_inclination, kAngleDecimals),
                    m_lengthUnit->format(m_deltaEast, true),
                    m_lengthUnit->format(m_deltaNorth, true),
                    m_lengthUnit->format(m_vertical, true));

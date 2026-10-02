@@ -54,6 +54,13 @@ QC.TextField {
 
     QQ.Component.onDestruction: SelectableValueGroup.release(root)
 
+    // A TextField can't render an ellipsis, so when the value is wider than the
+    // field it silently clips. Surface the full text on hover in exactly that
+    // case, keeping the field copyable (a plain eliding Label would not be).
+    QC.ToolTip.text: root.text
+    QC.ToolTip.visible: valueHover.hovered && root.contentWidth > root.width
+    QQ.HoverHandler { id: valueHover }
+
     // Right-click to copy, matching the platform-native affordance the drag-select
     // alone doesn't advertise. The Menu is left without an id and defined inline so
     // ContextMenu creates it lazily on first request — nothing is built per field

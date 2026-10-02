@@ -216,7 +216,7 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.headerData(cwSurveyTreeModel::Length, Qt::Horizontal).toString() == QStringLiteral("Length"));
         CHECK(model.headerData(cwSurveyTreeModel::Depth, Qt::Horizontal).toString() == QStringLiteral("Depth"));
         CHECK(model.headerData(cwSurveyTreeModel::Date, Qt::Horizontal).toString() == QStringLiteral("Date"));
-        CHECK(model.headerData(cwSurveyTreeModel::Decl, Qt::Horizontal).toString() == QStringLiteral("Decl"));
+        CHECK(model.headerData(cwSurveyTreeModel::Decl, Qt::Horizontal).toString() == QStringLiteral("Declination"));
 
         //Every column the enum names has a title, and the enum names every
         //column the model has

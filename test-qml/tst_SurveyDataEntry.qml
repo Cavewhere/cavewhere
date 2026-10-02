@@ -379,13 +379,7 @@ MainWindowTest {
             let selected = []
             for(let i = 0; i < boxes.length; ++i) {
                 let box = boxes[i]
-                let editorFocused = false
-                if(box.shouldHaveFocus !== undefined) {
-                    editorFocused = box.shouldHaveFocus()
-                } else if(box.hasEditorFocus !== undefined) {
-                    editorFocused = box.hasEditorFocus === true
-                }
-                if(editorFocused) {
+                if(box.shouldHaveFocus()) {
                     selected.push(box.objectName)
                 }
             }
@@ -411,7 +405,7 @@ MainWindowTest {
                 {
                     currentItem.model.setFocusedCell(
                                 currentItem.model.cellIndex(currentItem.listViewIndex,
-                                                            currentItem.dataValue.chunkDataRole))
+                                                            currentItem.dataValue.cellRole))
                 }
 
                 keyClick(key, modifier)
@@ -463,7 +457,7 @@ MainWindowTest {
                 keyClick(key, modifier)
 
                 let row = model.toModelRow(nextBoxIndex.rowIndex)
-                let itemName = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + nextBoxIndex.chunkDataRole
+                let itemName = "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + nextBoxIndex.cellRole
                 let item = null
                 let focusedName = ""
                 tryVerify(() => {
@@ -1913,18 +1907,21 @@ MainWindowTest {
                 verify(cell.visible === true)
             }
 
-            function modelRoleForChunkRole(chunkRole) {
-                switch(chunkRole) {
-                case SurveyChunk.StationNameRole: return SurveyEditorModel.StationNameRole
-                case SurveyChunk.StationLeftRole: return SurveyEditorModel.StationLeftRole
-                case SurveyChunk.StationRightRole: return SurveyEditorModel.StationRightRole
-                case SurveyChunk.StationUpRole: return SurveyEditorModel.StationUpRole
-                case SurveyChunk.StationDownRole: return SurveyEditorModel.StationDownRole
-                case SurveyChunk.ShotDistanceRole: return SurveyEditorModel.ShotDistanceRole
-                case SurveyChunk.ShotCompassRole: return SurveyEditorModel.ShotCompassRole
-                case SurveyChunk.ShotBackCompassRole: return SurveyEditorModel.ShotBackCompassRole
-                case SurveyChunk.ShotClinoRole: return SurveyEditorModel.ShotClinoRole
-                case SurveyChunk.ShotBackClinoRole: return SurveyEditorModel.ShotBackClinoRole
+            function modelRoleForCellRole(cellRole) {
+                switch(cellRole) {
+                case SurveyEditorCellIndex.StationNameCell: return SurveyEditorModel.StationNameRole
+                case SurveyEditorCellIndex.StationLeftCell: return SurveyEditorModel.StationLeftRole
+                case SurveyEditorCellIndex.StationRightCell: return SurveyEditorModel.StationRightRole
+                case SurveyEditorCellIndex.StationUpCell: return SurveyEditorModel.StationUpRole
+                case SurveyEditorCellIndex.StationDownCell: return SurveyEditorModel.StationDownRole
+                case SurveyEditorCellIndex.ShotDistanceCell: return SurveyEditorModel.ShotDistanceRole
+                case SurveyEditorCellIndex.ShotCompassCell: return SurveyEditorModel.ShotCompassRole
+                case SurveyEditorCellIndex.ShotBackCompassCell: return SurveyEditorModel.ShotBackCompassRole
+                case SurveyEditorCellIndex.ShotClinoCell: return SurveyEditorModel.ShotClinoRole
+                case SurveyEditorCellIndex.ShotBackClinoCell: return SurveyEditorModel.ShotBackClinoRole
+                case SurveyEditorCellIndex.SplayDistanceCell: return SurveyEditorModel.SplayDistanceRole
+                case SurveyEditorCellIndex.SplayCompassCell: return SurveyEditorModel.SplayCompassRole
+                case SurveyEditorCellIndex.SplayClinoCell: return SurveyEditorModel.SplayClinoRole
                 default: return -1
                 }
             }
@@ -1939,8 +1936,8 @@ MainWindowTest {
                     }
 
                     let row = box.listViewIndex
-                    let chunkRole = box.dataValue.chunkDataRole
-                    let modelRole = modelRoleForChunkRole(chunkRole)
+                    let cellRole = box.dataValue.cellRole
+                    let modelRole = modelRoleForCellRole(cellRole)
                     if(modelRole < 0 || row < 0) {
                         continue
                     }
@@ -1951,7 +1948,7 @@ MainWindowTest {
                     let boxValue = box.dataValue.reading.value
                     compare(boxValue,
                             modelValue,
-                            tag + " value mismatch row=" + row + " chunkRole=" + chunkRole)
+                            tag + " value mismatch row=" + row + " cellRole=" + cellRole)
                 }
             }
 
@@ -2205,7 +2202,7 @@ MainWindowTest {
 
                 for(let i = 0; i < maxSteps; i++) {
                     let currentCell = model.cellIndex(currentItem.listViewIndex,
-                                                      currentItem.dataValue.chunkDataRole)
+                                                      currentItem.dataValue.cellRole)
                     let nextCell = model.nextCell(currentCell,
                                                   SurveyEditorModel.Down,
                                                   frontsight.checked,
@@ -2213,7 +2210,7 @@ MainWindowTest {
                     if(!model.isCellValid(nextCell)) {
                         break;
                     }
-                    currentItem = downArrow(currentItem, nextCell.modelRow, nextCell.dataRole);
+                    currentItem = downArrow(currentItem, nextCell.modelRow, nextCell.cellRole);
                 }
 
                 //Scroll to the top
@@ -2244,7 +2241,7 @@ MainWindowTest {
                 let maxSteps = surveyView.count + 10
                 for(let i = 0; i < maxSteps; i++) {
                     let currentCell = model.cellIndex(currentItem.listViewIndex,
-                                                      currentItem.dataValue.chunkDataRole)
+                                                      currentItem.dataValue.cellRole)
                     let previousCell = model.nextCell(currentCell,
                                                       SurveyEditorModel.Up,
                                                       frontsight.checked,
@@ -2252,7 +2249,7 @@ MainWindowTest {
                     if(!model.isCellValid(previousCell)) {
                         break;
                     }
-                    currentItem = upArrow(currentItem, previousCell.modelRow, previousCell.dataRole);
+                    currentItem = upArrow(currentItem, previousCell.modelRow, previousCell.cellRole);
                 }
             }
 
@@ -2262,7 +2259,7 @@ MainWindowTest {
 
 
                 let cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
-                cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.cellRole))
 
                 verify(frontsight.checked === true)
                 verify(backsight.checked === false)
@@ -2298,12 +2295,12 @@ MainWindowTest {
                                   cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + startColumn)
                                   return cell !== null
                               })
-                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.cellRole))
                     tryVerify(() => {
                                   cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + startColumn)
                                   return cell !== null
                               })
-                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.cellRole))
 
                     let focusedName = focusedDataBoxObjectName()
                     let focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
@@ -2311,7 +2308,7 @@ MainWindowTest {
                         cell = focusedItem
                     }
 
-                    direction(cell, cell.listViewIndex, cell.dataValue.chunkDataRole);
+                    direction(cell, cell.listViewIndex, cell.dataValue.cellRole);
 
                     // ----- Enable the backsights only
                     view.positionViewAtBeginning()
@@ -2333,19 +2330,19 @@ MainWindowTest {
                                   cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                                   return cell !== null
                               })
-                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.cellRole))
                     tryVerify(() => {
                                   cell = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->dataBox." + row + "." + column)
                                   return cell !== null
                               })
-                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.chunkDataRole))
+                    cell.model.setFocusedCell(cell.model.cellIndex(cell.listViewIndex, cell.dataValue.cellRole))
                     focusedName = focusedDataBoxObjectName()
                     focusedItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->" + focusedName)
                     if(focusedItem !== null) {
                         cell = focusedItem
                     }
 
-                    direction(cell, cell.listViewIndex, cell.dataValue.chunkDataRole);
+                    direction(cell, cell.listViewIndex, cell.dataValue.cellRole);
 
                     view.positionViewAtBeginning()
                     tryVerify(() => { return frontsight.visible })
@@ -2898,7 +2895,16 @@ MainWindowTest {
 
             keyClick(16777217, 0) //Tab
 
-            verify(lastItem.focus === true);
+            //D hands off to the Splays cell, the last cell in a station row
+            let splaysName = "rootId->tripPage->surveyEditor->view->splaysBox." + surveyView.currentIndex;
+            let splaysItem = ObjectFinder.findObjectByChain(mainWindow, splaysName)
+            verify(splaysItem !== null)
+            tryVerify(() => { return splaysItem.focus === true; })
+
+            //There's nothing past it, so tabbing off the end stays put
+            keyClick(16777217, 0) //Tab
+
+            verify(splaysItem.focus === true);
         }
 
         function test_tabGuessSurveyName() {

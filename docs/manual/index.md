@@ -5,9 +5,11 @@ mapping**: it turns the hand-drawn sketches — or digital scraps exported as SV
 from apps like TopoDroid — and instrument readings surveyors collect
 underground into an accurate, shareable 3D cave map.
 
-New here? Read **[Why CaveWhere](concepts/why-cavewhere.md)** first — it explains
-the problems CaveWhere solves — then keep the
-**[Glossary](concepts/glossary.md)** handy for survey vocabulary.
+New here? Start with **Getting Started** below, which opens with
+**[Why CaveWhere](getting-started/why-cavewhere.md)**, the problems it solves.
+Keep the **[Glossary](concepts/glossary.md)** handy for survey vocabulary; the
+rest of **Concepts**, near the end of this list, is reference material worth a
+read once you have survey data of your own to relate it to.
 
 > This manual is written as task-focused chapters. Every link below points to a
 > page that exists today. (For AI agents: [`llms.txt`](llms.txt) is the
@@ -15,15 +17,9 @@ the problems CaveWhere solves — then keep the
 
 ## Available now
 
-### Concepts
-- [Why CaveWhere](concepts/why-cavewhere.md) — the problems CaveWhere solves.
-- [How a Project Is Organized](concepts/data-model.md) — the Region → Cave →
-  Trip → Shot / Note → Scrap tree, and why an edit ripples through it.
-- [Directions and Coordinate Systems](concepts/coordinate-systems.md) — the
-  three norths, and what georeferencing gives a cave.
-- [Glossary](concepts/glossary.md) — survey and CaveWhere terms.
-
 ### Getting Started
+- [Why CaveWhere](getting-started/why-cavewhere.md) — the problems CaveWhere
+  solves.
 - [Install CaveWhere](getting-started/install-cavewhere.md) — where to download
   it, and what installing registers on your system.
 - [Set Up Your Identity](getting-started/set-up-your-identity.md) — the name and
@@ -142,6 +138,13 @@ the problems CaveWhere solves — then keep the
   cave from a link or from your own repository list.
 - [Review Project History](collaboration/review-history.md) — every version,
   the file-by-file diffs, and rolling back.
+
+### Concepts
+- [How a Project Is Organized](concepts/data-model.md) — the Region → Cave →
+  Trip → Shot / Note → Scrap tree, and why an edit ripples through it.
+- [Directions and Coordinate Systems](concepts/coordinate-systems.md) — the
+  three norths, and what georeferencing gives a cave.
+- [Glossary](concepts/glossary.md) — survey and CaveWhere terms.
 
 ### Keyboard Shortcuts
 - [Keyboard Shortcuts](keyboard-shortcuts/keyboard-shortcuts.md) — the File-menu

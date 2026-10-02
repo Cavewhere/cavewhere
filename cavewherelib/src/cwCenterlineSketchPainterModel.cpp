@@ -7,7 +7,7 @@
 
 //Our includes
 #include "cwCenterlineSketchPainterModel.h"
-#include "cwSurvey2DGeometryArtifact.h"
+#include "cwSurvey2DGeometrySource.h"
 #include "cwSurvey2DGeometry.h"
 #include "cwConcurrent.h"
 #include "cwScale.h"
@@ -29,24 +29,24 @@ cwCenterlineSketchPainterModel::cwCenterlineSketchPainterModel(QObject *parent)
 {
 }
 
-void cwCenterlineSketchPainterModel::setSurvey2DGeometry(cwSurvey2DGeometryArtifact *geometry)
+void cwCenterlineSketchPainterModel::setSurvey2DGeometry(cwSurvey2DGeometrySource *geometry)
 {
-    if (m_geometryArtifact == geometry) {
+    if (m_geometrySource == geometry) {
         return;
     }
 
-    if (m_geometryArtifact) {
-        disconnect(m_geometryArtifact,
-                   &cwSurvey2DGeometryArtifact::geometryResultChanged,
+    if (m_geometrySource) {
+        disconnect(m_geometrySource,
+                   &cwSurvey2DGeometrySource::geometryResultChanged,
                    this,
                    &cwCenterlineSketchPainterModel::updateModel);
     }
 
-    m_geometryArtifact = geometry;
+    m_geometrySource = geometry;
 
-    if (m_geometryArtifact) {
-        connect(m_geometryArtifact,
-                &cwSurvey2DGeometryArtifact::geometryResultChanged,
+    if (m_geometrySource) {
+        connect(m_geometrySource,
+                &cwSurvey2DGeometrySource::geometryResultChanged,
                 this,
                 &cwCenterlineSketchPainterModel::updateModel);
     }
@@ -123,14 +123,14 @@ cwAbstractSketchPainterPathModel::Path cwCenterlineSketchPainterModel::path(cons
 
 void cwCenterlineSketchPainterModel::updateModel()
 {
-    if (!m_geometryArtifact) {
+    if (!m_geometrySource) {
         beginResetModel();
         m_paths.clear();
         endResetModel();
         return;
     }
 
-    auto future = m_geometryArtifact->geometryResult();
+    auto future = m_geometrySource->geometryResult();
 
     // Map-scale ratio (e.g. 1/250 = 0.004). Falls back to 1:250 if no
     // mapScale is attached — matches the default used in SketchItem.qml.

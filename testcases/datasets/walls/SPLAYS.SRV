@@ -1,0 +1,21 @@
+; Splay Passage
+; Alice; Bob
+#units d=meters a=degrees v=degrees decl=0
+; A3's splays are written before the leg that names it, the way TopoDroid-style
+; exports do, so they have to wait for the centerline to catch up
+A3	--	3.5	270	0
+A1	A2	5.0	0	0
+A1	--	1.5	90	-10
+; a single dash marks an omitted station just as two do
+A1	-	2.5	180	20
+; a ceiling shot is plumbed, so Walls lets the azimuth go
+A1	--	1.0	--	+90
+A2	A3	4.0	45	-5
+A2	--	2.0	135	15
+A3	A4	6.0	90	0
+; the omitted end can be the from station, and then the reading is a backsight
+--	A4	2.0	180	-30
+; turning a level shot around has to leave the clino at zero, not minus zero
+--	A4	4.0	90	0
+; Z9 is never surveyed to, so its splay has nothing to hang on
+Z9	--	9.9	10	1

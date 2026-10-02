@@ -65,7 +65,8 @@ jobs:
             @("qt.qt6.6111.win64_msvc2022_64", "qttools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
             @("qt.qt6.6111.win64_msvc2022_64", "qttranslations-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
             @("qt.qt6.6111.addons.qtshadertools.win64_msvc2022_64", "qtshadertools-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
-            @("qt.qt6.6111.addons.qtcanvaspainter.win64_msvc2022_64", "qtcanvaspainter-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z")
+            @("qt.qt6.6111.addons.qtcanvaspainter.win64_msvc2022_64", "qtcanvaspainter-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z"),
+            @("qt.qt6.6111.addons.qtimageformats.win64_msvc2022_64", "qtimageformats-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z")
           )
 
           foreach ($pkg in $packages) {

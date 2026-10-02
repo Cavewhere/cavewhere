@@ -232,7 +232,7 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     // Reached when the group is toggled hidden (updateGroup); the per-frame
     // updatePositions skips hidden groups outright so this loop runs once per
     // toggle, not every frame.
-    if(!group->m_visible) {
+    if(!group->isVisible()) {
         for(int i = 0; i < group->m_labelItems.size(); i++) {
             releaseLabelItem(group, i);
         }
@@ -390,7 +390,7 @@ void cwLabel3dView::updatePositions()
         for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
             // Hidden groups already released their items when toggled; skip the
             // per-frame work entirely rather than re-walking an empty list.
-            if(!group->m_visible) {
+            if(!group->isVisible()) {
                 continue;
             }
             updateGroupPositions(group);

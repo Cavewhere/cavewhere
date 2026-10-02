@@ -10,30 +10,31 @@ related: [calibration.md, enter-survey-data.md, ../concepts/glossary.md]
 
 ## Why / when you need this
 
-Your compass does not point at north. It points at **magnetic north**, which is
-somewhere else entirely — and where it is depends on where you're standing and
-what year it is. The angle between the two is the **declination**, and it can be
-tens of degrees.
+Your compass does not point at north. It points at **magnetic north**, somewhere
+else entirely, and where that lands depends on where you stand and what year you
+stand there. The angle between the two, the **declination**, may reach tens of
+degrees.
 
 Ignore it and nothing looks wrong. The cave plots, the loops close, the passages
-have the right shapes and the right lengths. **The entire map is just rotated**,
-by the declination, off true north. You find out when you try to lay it over a
-surface map and the entrance is in the wrong field, or when the passage that
-should run under the road doesn't.
+come out the right shape and the right length. **The entire map just sits
+rotated** off true north by the declination. You find out when you lay it over a
+surface map and the entrance lands in the wrong field, or when the passage that
+should run under the road does not.
 
 It also has a way of showing up between trips. Declination drifts year on year,
-so trips surveyed a decade apart carry different corrections. Get it wrong on
-one of them and your loop closure errors turn up in the joins between trips,
-where they are miserable to chase.
+so trips surveyed a decade apart carry different corrections. Get one of them
+wrong and your loop closure errors surface in the joins between trips, where
+they are miserable to chase.
 
 Declination lives in the **Declination** box of the trip's **Calibration**
-section, and — like everything else there — it's per trip, which is what lets a
-1998 trip and a 2026 trip in the same cave each get the right one.
+section, and like everything else there it belongs to one trip, which is what
+lets a 1998 trip and a 2026 trip in the same cave each carry the right value.
 
 ![The Calibration section with the Declination row highlighted. The row holds the label Declination and the value 0, with no mode dropdown beside it.](../images/survey-declination.png)
-*The Declination row in a cave that has no fixed station. There's no
-**Auto**/**Manual** selector here — with no location to compute from, there's
-nothing to choose between, so the value stands alone and is yours to type.*
+*The Declination row in a cave with no fixed station, shown above. No
+**Auto**/**Manual** selector appears, because with no location to compute from
+CaveWhere has nothing to choose between, so the value stands alone and you type
+it.*
 
 ## The rule: declination is added
 
@@ -45,52 +46,51 @@ CaveWhere states the arithmetic itself:
 > **MB + D = TB**
 
 So a positive (east) declination rotates your bearings clockwise. You enter what
-the compass read; CaveWhere adds the declination and plots true.
+the compass read, and CaveWhere adds the declination and plots true.
 
 > **Looking the value up?** The
 > [NOAA magnetic field calculator](https://www.ngdc.noaa.gov/geomag/calculators/magcalc.shtml)
-> already reports declination the way CaveWhere wants it — **east positive, west
-> negative** — so **enter what it gives you as-is, sign and all.** A west
-> declination of `-3.2°` goes in as `-3.2`; don't drop the minus and don't flip
-> it. Set the calculator's date to the date of the *trip*, not today, since
-> declination drifts.
+> already reports declination the way CaveWhere wants it, **east positive, west
+> negative**, so **enter what it gives you as-is, sign and all.** A west
+> declination of `-3.2°` goes in as `-3.2`; keep the minus and do not flip it.
+> Set the calculator's date to the date of the *trip*, since declination drifts.
 
 ## Let CaveWhere work it out (Auto)
 
-Declination is not something you should be looking up by hand, and by default
-you don't. In **Auto** mode CaveWhere computes it from the
-**IGRF magnetic model** — the standard model of the Earth's magnetic field —
-using two things it already knows:
+Looking declination up by hand wastes your time, and by default you never do. In
+**Auto** mode CaveWhere computes it from **IGRF-14**, the standard model of the
+Earth's magnetic field, which ships inside Survex as
+`survex/src/igrf14coeffs.txt`. It needs 2 things it already knows:
 
 - **the trip's date**, because declination drifts, and
 - **the cave's location**, from its fixed station.
 
-This is the right default. It uses the date of *that* trip rather than today,
-there is nothing to look up, mistype, or forget to update, and it costs you
-nothing.
+I recommend leaving Auto on. It uses the date of *that* trip, it costs you
+nothing, and it removes 3 ways to get the number wrong: looking it up, mistyping
+it, and forgetting to update it.
 
-Auto needs both facts, so it needs the cave to have a **fixed station** — a
-station whose real-world coordinates you have given. Without one, CaveWhere has
-no idea where on Earth the cave is, and there is no declination to compute.
-Until a cave is georeferenced, the mode selector isn't offered at all and the
-value stays yours to enter.
+Auto needs both facts, so the cave needs a **fixed station**, one whose
+real-world coordinates you have given. Without it CaveWhere cannot know where on
+Earth the cave sits, so no declination exists to compute. Until you georeference
+a cave, CaveWhere offers no mode selector at all and the value stays yours to
+enter.
 
 ## Enter it by hand (Manual)
 
-Switch the dropdown to **Manual** and type the angle. You'll want this when:
+Switch the dropdown to **Manual** and type the angle. You want this when:
 
 - the cave has no fixed station,
-- you're matching data that was reduced with a specific declination and want to
-  reproduce it exactly, or
-- your team corrected the declination **on the instrument** in the cave. In that
-  case your book already holds true bearings, and the declination CaveWhere
-  should apply is **0** — not the real declination, which would apply it twice.
+- you match data reduced with a specific declination and need to reproduce it
+  exactly, or
+- your team corrected the declination **on the instrument** in the cave. Your
+  book then already holds true bearings, so the declination CaveWhere should
+  apply becomes **0**. Enter the real declination and you apply it twice.
 
-In Auto the field is read-only and shows the computed value, so it's always
-worth a glance even when you aren't editing it.
+In Auto the field turns read-only and displays the computed value, so it repays
+a glance even when you do not edit it.
 
-An imported survey that carried its own declination arrives in Manual, holding
-the imported value. That's deliberate: a cave with a fixed station would
+An imported survey carrying its own declination arrives in Manual, holding the
+imported value. That happens deliberately: a cave with a fixed station would
 otherwise silently overwrite the number the original surveyors used.
 
 ## Warnings you might see
@@ -98,19 +98,19 @@ otherwise silently overwrite the number the original surveyors used.
 A warning icon appears beside the field when CaveWhere has something to say:
 
 - **"Trip has no date; auto declination unavailable. Using stored manual
-  value."** — Auto is on, but the trip's date is missing or unreadable, so
-  there's no year to compute for. Set the [trip's date](caves-and-trips.md) and
-  it resolves.
+  value."** Auto is on, but the trip's date is missing or unreadable, so no year
+  exists to compute for. Set the [trip's date](caves-and-trips.md) and it
+  resolves.
 - **"Manual declination *x*° differs from computed *y*° by *z*°. Verify it's
-  still correct."** — you are in Manual, but CaveWhere *could* have computed a
-  value, and yours is at least half a degree away from it. This is a nudge, not
-  an error. It's right to keep your value if you set it deliberately (see the
-  corrected-on-the-instrument case above); it's worth a look if you don't know
-  where the number came from.
+  still correct."** You sit in Manual, CaveWhere *could* have computed a value,
+  and yours differs by at least **0.5°**. Treat it as a nudge, not an error.
+  Keep your value if you set it deliberately, as in the corrected-on-the-
+  instrument case above. Go and look if you do not know where the number came
+  from.
 
 ## Next steps
 
-- [Calibration](calibration.md) covers the rest of the box — distance, compass
-  and clino corrections, which fix the *instrument* rather than the world.
-- [Georeference a Cave](../georeferencing/georeference-a-cave.md) — fix a station
+- [Calibration](calibration.md) covers the rest of the box: distance, compass
+  and clino corrections, which fix the *instrument* instead of the world.
+- [Georeference a Cave](../georeferencing/georeference-a-cave.md): fix a station
   so Auto declination has a location to compute from.

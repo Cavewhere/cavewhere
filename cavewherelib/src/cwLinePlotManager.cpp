@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwLinePlotManager.h"
+#include "cwRestarterTracking.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -26,7 +27,7 @@
 #include "cwSurveyChunkSignaler.h"
 #include "cwErrorModel.h"
 #include "cwErrorListModel.h"
-#include "cwSurveyNetworkArtifact.h"
+#include "cwSurveyNetworkSource.h"
 #include "cwEquateModel.h"
 #include "cwFixStationModel.h"
 #include "cwKeywordItem.h"
@@ -42,6 +43,17 @@
 #include <algorithm>
 
 namespace {
+
+const char* solveErrorStepName(cwLinePlotTask::SolveError::Step step)
+{
+    switch(step) {
+    case cwLinePlotTask::SolveError::Step::Export: return "Export";
+    case cwLinePlotTask::SolveError::Step::Cavern: return "Cavern";
+    case cwLinePlotTask::SolveError::Step::Parse: return "Parse";
+    case cwLinePlotTask::SolveError::Step::Validation: return "Validation";
+    }
+    return "Unknown";
+}
 
 // The worker identifies changed nodes/trips/scraps by UUID. Resolve those
 // UUIDs back to the live objects in `region`, dropping any that were deleted
@@ -93,8 +105,7 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     Region = nullptr;
     m_linePlot = nullptr;
 
-    m_surveyNetworkArtifact = new cwSurveyNetworkArtifact(this);
-    m_surveyNetworkArtifact->setName(QStringLiteral("LinePlotManager Survey Network"));
+    m_surveyNetworkSource = new cwSurveyNetworkSource(this);
 
     m_floatingSurveyModel = new cwFloatingSurveyModel(this);
 
@@ -126,28 +137,30 @@ cwLinePlotManager::cwLinePlotManager(QObject *parent) :
     SurveySignaler->addConnectionToChunks(SIGNAL(stationsAdded(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(stationsRemoved(int,int)), this, SLOT(runSurvex()));
     SurveySignaler->addConnectionToChunks(SIGNAL(dataChanged(cwSurveyChunk::DataRole,int)), this, SLOT(runSurvex()));
+    SurveySignaler->addConnectionToChunks(SIGNAL(stationSplaysChanged(int)), this, SLOT(runSurvex()));
 
-    m_restarter.onFutureChanged([this]() {
-        if (m_futureManagerToken.isValid()) {
-            m_futureManagerToken.addJob({ QFuture<void>(m_restarter.future()), QStringLiteral("Line plot") });
-        }
-    });
+    cwTrackRestarter(m_futureManagerToken, m_restarter, QStringLiteral("Line plot"));
 }
 
 cwLinePlotManager::~cwLinePlotManager() {
-    // Pre-extraction teardown order: cancel the scan first (a canceled
-    // scan's apply never runs, so no solveNeeded can chain a fresh solve),
-    // cancel the solve, then drain scan-then-solve with the external
-    // subsystem still alive — queued solve work (a finished solve's
-    // markSolved callback, a queued restart's buildInput getters)
-    // dispatches during the drain's event pump and dereferences it. The
-    // child object is destroyed by ~QObject after this body, when its own
-    // cancel+drain is a no-op.
-    m_externalCenterlineManager->cancelScan();
-    m_restarter.future().cancel();
-    waitToFinish();
+    //See cwUpdatable::beginTeardown().
+    beginTeardown();
 
-    clearTripKeywordEntries();
+    //Cancel the scan first: a canceled scan's apply never runs, so no
+    //solveNeeded can chain a fresh solve onto a manager being torn down.
+    m_externalCenterlineManager->cancelScan();
+
+    //Cancel without waiting: the worker solves a value copy of the region
+    //(cwLinePlotTask::Input) and polls for cancel between its phases, so nothing
+    //it touches dies with this manager. The result continuation is bound with
+    //context(this), so it is dropped here rather than delivered to a
+    //half-destroyed manager. This line finishes the outer future; the cancel the
+    //worker itself sees comes from ~Restarter, which cancels the inner future
+    //synchronously as m_restarter is destroyed.
+    m_restarter.future().cancel();
+
+    // m_keywordRegistry's destructor tears down the keyword items
+    // synchronously.
 }
 
 /**
@@ -181,14 +194,11 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
         runSurvex();
     });
 
-    // globalCoordinateSystem feeds the *cs out / *cs lines on the survex
-    // export, so the line plot needs to re-run when the user changes the
-    // region's CS.
-    connect(Region->geoReference(), &cwGeoReference::globalCoordinateSystemChanged, this, &cwLinePlotManager::runSurvex);
-
-    // worldOrigin is subtracted by cwLinePlotTask::applyWorldOriginOffset, so
-    // the line plot must re-solve when it changes (auto-compute or manual recenter).
-    connect(Region->geoReference(), &cwGeoReference::worldOriginChanged, this, &cwLinePlotManager::runSurvex);
+    // The local projection is what *cs out names, and cavern reports the solved
+    // stations in it — so the scene's coordinates are only meaningful in the
+    // frame that was current when the solve ran. A frame that moves invalidates
+    // every position and has to re-solve.
+    connect(Region->geoReference(), &cwGeoReference::localProjectionChanged, this, &cwLinePlotManager::runSurvex);
 
     SurveySignaler->setRegion(Region);
 
@@ -247,36 +257,58 @@ void cwLinePlotManager::setFutureManagerToken(cwFutureManagerToken token)
 
 void cwLinePlotManager::setKeywordItemModel(cwKeywordItemModel* keywordItemModel)
 {
-    if (m_keywordItemModel == keywordItemModel) {
+    if (m_keywordRegistry.model() == keywordItemModel) {
         return;
     }
 
-    // Tear down items registered with the old model before switching.
-    clearTripKeywordEntries();
+    // setModel tears down the items registered with the old model. Items are
+    // (re)created on the next updateLinePlot() against the current geometry.
+    m_keywordRegistry.setModel(keywordItemModel);
 
-    m_keywordItemModel = keywordItemModel;
-
-    // Entries are (re)created on the next updateLinePlot() against the current
-    // geometry; nothing to do here.
+    for (cwTrip* trip : std::as_const(m_trackedTrips)) {
+        disconnect(trip, &QObject::destroyed, this, nullptr);
+    }
+    m_trackedTrips.clear();
 }
 
 void cwLinePlotManager::reconcileTripKeywordItems(
     const QVector<QUuid>& tripUuids,
-    const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges)
+    const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges,
+    const QVector<cwLinePlotGeometry::VertexRange>& tripSplayVertexRanges)
 {
-    if (Region == nullptr) {
+    // With no keyword item model there are no items to reconcile:
+    // setKeywordItemModel() tears everything down when the model goes away.
+    if (Region == nullptr || m_keywordRegistry.model() == nullptr) {
         return;
     }
 
     // Built in lockstep in cwLinePlotGeometry::generate (one append each per
-    // trip), so the running id indexes both tables identically.
+    // trip), so the running id indexes all three tables identically.
     Q_ASSERT(tripVertexRanges.size() == tripUuids.size());
+    Q_ASSERT(tripSplayVertexRanges.size() == tripUuids.size());
 
     // Resolve UUIDs to live trips by identity (never by list position).
     QHash<QUuid, cwTrip*> liveByUuid;
     for (cwTrip* trip : Region->rootNode()->allTrips()) {
         liveByUuid.insert(trip->id(), trip);
     }
+
+    // Re-binds an item's proxy to its current vertex span (they shift each
+    // solve) and re-hides a keyword-hidden span. setGeometry just reset every
+    // vertex to visible, so a visible proxy has nothing to publish.
+    const auto retarget = [this](cwKeywordItem* item,
+                                 cwLinePlotGeometry::VertexRange range) {
+        if (item == nullptr) {
+            return;
+        }
+        auto* visibility = qobject_cast<cwLinePlotTripVisibility*>(item->object());
+        if (visibility) {
+            visibility->setTarget(m_linePlot, range);
+            if (!visibility->isVisible()) {
+                visibility->pushToTarget();
+            }
+        }
+    };
 
     QSet<cwTrip*> present;
     for (int i = 0; i < tripUuids.size(); ++i) {
@@ -286,96 +318,90 @@ void cwLinePlotManager::reconcileTripKeywordItems(
         }
         present.insert(trip);
 
-        cwLinePlotTripVisibility* visibility = nullptr;
-        auto entryIt = m_tripKeywordEntries.constFind(trip);
-        if (entryIt != m_tripKeywordEntries.constEnd()) {
-            visibility = entryIt.value()
-                ? qobject_cast<cwLinePlotTripVisibility*>(entryIt.value()->object())
-                : nullptr;
-        } else if (m_keywordItemModel) {
-            auto item = new cwKeywordItem();
-            // References the trip-owned line plot keyword model (Type=Line Plot
-            // plus the trip's inherited Trip/Year/Date/Cave/Caver keywords), so
-            // filtering the Type keyword toggles the whole centerline. The Type
-            // lives on that dedicated model, not trip->keywordModel(), so
-            // scraps/notes under the trip don't inherit it. The station labels'
-            // keyword item references the same model.
-            item->keywordModel()->addExtension(trip->linePlotKeywordModel());
+        // The splays ride at the tail of the trip's contiguous span, so the
+        // centerline is the prefix before them. The two keyword items address
+        // these disjoint ranges, which keeps their toggles independent: hiding
+        // Type="Splays" leaves the centerline alone and vice versa.
+        const cwLinePlotGeometry::VertexRange fullRange = tripVertexRanges.at(i);
+        const cwLinePlotGeometry::VertexRange splayRange = tripSplayVertexRanges.at(i);
+        const cwLinePlotGeometry::VertexRange centerlineRange {
+            fullRange.start, splayRange.start - fullRange.start};
 
-            visibility = new cwLinePlotTripVisibility(trip, item);
-            item->setObject(visibility);
-
-            // addItem fires resolveVisibility → proxy setVisible, which sets the
-            // proxy's state; the seed below pushes it to the render object.
-            m_keywordItemModel->addItem(item);
+        if (!m_trackedTrips.contains(trip)) {
+            m_trackedTrips.insert(trip);
 
             // Prompt cleanup if the trip is destroyed before the next solve.
             connect(trip, &QObject::destroyed, this, [this, trip]() {
-                removeTripKeywordEntry(trip);
+                removeTripKeywordItems(trip);
+            });
+        }
+
+        cwKeywordItem* centerline = m_keywordRegistry.ensure(
+            {trip, TripKeywordKind::Centerline}, [this, trip]() {
+                return makeTripKeywordItem(trip, trip->linePlotKeywordModel());
             });
 
-            m_tripKeywordEntries.insert(trip, item);
+        // The splays item exists only while the trip has splay geometry, so
+        // an empty filter panel stays free of a "Splays" type that matches
+        // nothing.
+        cwKeywordItem* splays = nullptr;
+        if (splayRange.count > 0) {
+            splays = m_keywordRegistry.ensure(
+                {trip, TripKeywordKind::Splays}, [this, trip]() {
+                    return makeTripKeywordItem(trip, trip->splaysKeywordModel());
+                });
+        } else {
+            m_keywordRegistry.drop({trip, TripKeywordKind::Splays});
         }
 
-        // Re-bind the proxy to the trip's current vertex span (it shifts each
-        // solve) and seed the render object. setGeometry just reset every vertex
-        // to visible, so only hidden trips need an explicit push.
-        if (visibility) {
-            // tripVertexRanges is parallel to tripUuids (both appended once per
-            // trip in cwLinePlotGeometry::generate), so index i is always valid.
-            const cwLinePlotGeometry::VertexRange range = tripVertexRanges.at(i);
-            visibility->setTarget(m_linePlot, range.start, range.count);
-            if (m_linePlot && !visibility->isVisible()) {
-                m_linePlot->setRangeVisible(range.start, range.count, false);
-            }
-        }
+        retarget(centerline, centerlineRange);
+        retarget(splays, splayRange);
     }
 
-    // Drop entries for trips that are no longer in the solved geometry.
-    const QList<cwTrip*> tracked = m_tripKeywordEntries.keys();
+    // Drop items for trips that are no longer in the solved geometry.
+    const QSet<cwTrip*> tracked = m_trackedTrips;
     for (cwTrip* trip : tracked) {
         if (!present.contains(trip)) {
-            removeTripKeywordEntry(trip);
+            removeTripKeywordItems(trip);
         }
     }
 }
 
-void cwLinePlotManager::removeTripKeywordEntry(cwTrip* trip)
+cwKeywordItem* cwLinePlotManager::makeTripKeywordItem(cwTrip* trip,
+                                                      cwKeywordModel* keywordModel)
 {
-    auto it = m_tripKeywordEntries.find(trip);
-    if (it == m_tripKeywordEntries.end()) {
+    auto item = new cwKeywordItem();
+    // References a trip-owned identity model (Type="Line Plot" or
+    // Type="Splays" plus the trip's inherited Trip/Year/Date/Cave/Caver
+    // keywords), so filtering the Type keyword toggles the item's whole vertex
+    // range. The Type lives on that dedicated model, not trip->keywordModel(),
+    // so scraps/notes under the trip don't inherit it. The station labels'
+    // keyword item references the same line-plot model.
+    item->keywordModel()->addExtension(keywordModel);
+
+    auto visibility = new cwLinePlotTripVisibility(trip, item);
+    item->setObject(visibility);
+
+    // The registry's ensure() adds the item to the model after this factory
+    // returns; addItem fires resolveVisibility → proxy setVisible, and the
+    // caller's retarget seeds the render object.
+    return item;
+}
+
+void cwLinePlotManager::removeTripKeywordItems(cwTrip* trip)
+{
+    if (!m_trackedTrips.remove(trip)) {
         return;
     }
 
-    if (it.value() && m_keywordItemModel) {
-        m_keywordItemModel->removeItem(it.value());
-    }
-    if (it.value()) {
-        it.value()->deleteLater();
-    }
-    m_tripKeywordEntries.erase(it);
+    m_keywordRegistry.drop({trip, TripKeywordKind::Centerline});
+    m_keywordRegistry.drop({trip, TripKeywordKind::Splays});
 
-    // Drop the destroyed() connection added when the entry was created;
+    // Drop the destroyed() connection added when the trip was first tracked;
     // otherwise a trip that leaves and re-enters the solved geometry
     // accumulates a duplicate connection on every cycle. (Lambda connections
     // can't use Qt::UniqueConnection, so disconnect explicitly.)
     disconnect(trip, &QObject::destroyed, this, nullptr);
-}
-
-void cwLinePlotManager::clearTripKeywordEntries()
-{
-    // Synchronous delete (not deleteLater): used for manager destruction and
-    // model swaps, where the event loop may not run again to drain deferred
-    // deletes. addItem reparents each item to the model, so deleting it here
-    // (rather than leaking) is required; the proxy is the item's child, so
-    // deleting the item deletes the proxy too.
-    for (auto it = m_tripKeywordEntries.begin(); it != m_tripKeywordEntries.end(); ++it) {
-        if (it.value() && m_keywordItemModel) {
-            m_keywordItemModel->removeItem(it.value());
-        }
-        delete it.value();
-    }
-    m_tripKeywordEntries.clear();
 }
 
 /**
@@ -458,23 +484,41 @@ void cwLinePlotManager::clearUnconnectedChunkErrors()
     UnconnectedChunks.clear();
 }
 
-/**
- * @brief cwLinePlotManager::rerunSurvex
- *
- * Re-runs the survex. This simply just calls runSurvex but is useful for debugging
- * if the re-run isn't working correctly.
- */
-void cwLinePlotManager::rerunSurvex()
-{
-    runSurvex();
+void cwLinePlotManager::markNeedsUpdate() {
+    if(!m_needsUpdate) {
+        m_needsUpdate = true;
+        // Clean -> Dirty, or (mid-solve edit) Working -> Dirty. Either is a real
+        // state change; whoever is driving runs the pipeline again on the Dirty.
+        emit updateStateChanged();
+    }
 }
 
 /**
-  \brief Run the line plot task
+  \brief The survey-edit slot: marks the line plot dirty, and solves on the spot
+  while standalone.
+
+  Marking is all this does once a coordinator has taken over — whether the solve
+  runs now or waits is that coordinator's call.
   */
 void cwLinePlotManager::runSurvex() {
-    if(!AutomaticUpdate) {
-        return;
+    markNeedsUpdate();
+    runIfStandalone();
+}
+
+/**
+  \brief Runs the line plot task now, unconditionally.
+  */
+QFuture<void> cwLinePlotManager::doRun() {
+    // Enter Working and drop the pending-dirty marker in one step: a solve now
+    // covers the current data, so the pipeline is Working (not Dirty) until it
+    // completes. Reporting Working — not the synchronously-cleared Dirty — is
+    // what keeps a caller waiting on the returned future from mistaking the
+    // pipeline for "finished" while the solve is still in flight.
+    const cwUpdatable::State previousState = updateState();
+    m_needsUpdate = false;
+    const QFuture<void> solve = beginRun();
+    if(updateState() != previousState) {
+        emit updateStateChanged();
     }
 
     if(Region != nullptr) {
@@ -507,15 +551,17 @@ void cwLinePlotManager::runSurvex() {
         if(!hasAnySolvableInput()) {
             // No-shots path must also clear the cached cavern output / solve
             // error so CavernOutputPage doesn't keep showing the previous
-            // run's text (D-1).
+            // run's text (D-1). No async work, so the solve is already done.
             publishResults(cwLinePlotTask::LinePlotResultData::cleared());
             updateLinePlot(cwLinePlotTask::LinePlotResultData());
-            return;
+            finishSolving();
+            return solve;
         }
 
         setCaveStationLookupAsStale(true);
         m_restarter.restart([this]() {
             if (Region.isNull()) {
+                finishSolving();
                 return QFuture<cwLinePlotTask::LinePlotResultData>();
             }
 
@@ -536,16 +582,37 @@ void cwLinePlotManager::runSurvex() {
             AsyncFuture::observe(future)
                 .context(this, [this](cwLinePlotTask::LinePlotResultData result) {
                     publishResults(result);
-                    if (!result.hasSolveError()) {
+                    if (result.hasSolveError()) {
+                        const auto& error = result.solveError();
+                        qWarning() << "Line plot solve failed at step"
+                                   << solveErrorStepName(error.step)
+                                   << "exit code" << error.exitCode << ":" << error.message;
+                    } else {
                         m_externalCenterlineManager->markSolved(QDateTime::currentDateTime());
                         updateLinePlot(std::move(result));
                     }
+                    finishSolving();
                 });
 
             return future;
         });
+    } else {
+        // No region: nothing to solve.
+        finishSolving();
     }
 
+    return solve;
+}
+
+void cwLinePlotManager::finishSolving() {
+    if(isRunning()) {
+        // Working -> Clean (or -> Dirty if a survey edit arrived mid-solve).
+        // endRun() finishes the future run() handed out, releasing whoever is
+        // waiting on the solve; the signal is the coordinator's cue to re-check
+        // its staleness aggregate.
+        endRun();
+        emit updateStateChanged();
+    }
 }
 
 /**
@@ -700,19 +767,19 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
         }
     }
 
-    const QVector<QUuid> tripUuids = results.tripUuids();
-    const QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges = results.tripVertexRanges();
-
     //Update the 3D plot
     if(m_linePlot != nullptr) {
-        m_linePlot->setGeometry(results.stationPositions());
+        m_linePlot->setGeometry(results.stationPositions(),
+                                results.tripSplayVertexRanges());
     }
 
-    // Re-attach per-trip centerline keyword items to the new geometry and
-    // re-seed each trip's visibility by its (shifted) vertex span. setGeometry
-    // reset the render object to all-visible, so reconcile only pushes the trips
-    // that are currently hidden.
-    reconcileTripKeywordItems(tripUuids, tripVertexRanges);
+    // Re-attach per-trip keyword items (centerline + splays) to the new
+    // geometry and re-seed each item's visibility by its (shifted) vertex
+    // span. setGeometry reset the render object to all-visible, so reconcile
+    // pushes the spans that keyword filtering hides.
+    reconcileTripKeywordItems(results.tripUuids(),
+                              results.tripVertexRanges(),
+                              results.tripSplayVertexRanges());
 
     // Skip publication when the network hasn't changed so 2D-geometry rules
     // don't rebuild on every line-plot completion triggered by unrelated
@@ -722,7 +789,7 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     const cwSurveyNetwork newNetwork = results.regionNetwork();
     if (newNetwork != m_lastPublishedNetwork) {
         m_lastPublishedNetwork = newNetwork;
-        m_surveyNetworkArtifact->setSurveyNetwork(
+        m_surveyNetworkSource->setSurveyNetwork(
             QtFuture::makeReadyValueFuture(Monad::Result<cwSurveyNetwork>(newNetwork)));
     }
 
@@ -732,29 +799,6 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     emit stationPositionInCavesChanged(resolved.nodes.keys());
     emit stationPositionInTripsChanged(cw::toList(resolved.trips));
     emit stationPositionInScrapsChanged(cw::toList(resolved.scraps));
-
-    // First-time auto-compute of worldOrigin: when nobody has explicitly
-    // picked one yet and we now have at least one valid fix, recenter the
-    // scene. recomputeWorldOrigin() is a no-op when no candidates exist,
-    // and the resulting setWorldOrigin() emits worldOriginChanged → re-runs
-    // survex so the lookup positions land in offset-relative coords. Sticky
-    // after: once anyone has set worldOrigin explicitly (user, load, this
-    // recompute, or LAZ auto-adopt), this branch never fires again.
-    //
-    // Uses hasExplicitWorldOrigin() rather than `worldOrigin() == {}`
-    // because an explicit pin to (0,0,0) — e.g. sink-training tests that
-    // align render-space with LAZ-source XY — is a valid origin that must
-    // not be silently overwritten by the fix-station centroid.
-    if (!Region->geoReference()->hasExplicitWorldOrigin()) {
-        Region->recomputeWorldOrigin();
-    }
 }
 
 
-void cwLinePlotManager::setAutomaticUpdate(bool automaticUpdate) {
-    if(AutomaticUpdate != automaticUpdate) {
-        AutomaticUpdate = automaticUpdate;
-        emit automaticUpdateChanged();
-        runSurvex();
-    }
-}

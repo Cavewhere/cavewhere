@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Splay Editor Prototype — Splays Column</title>
+<style>
+  :root {
+    --bg: #f5f5f4;
+    --paper: #ffffff;
+    --ink: #1c1c1a;
+    --muted: #7a7a74;
+    --line: #d8d8d2;
+    --accent: #2e6fb0;
+    --accent-soft: #e3eefb;
+    --splay: #8a6d3b;
+    --splay-soft: #f7f1e3;
+    font-size: 15px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #191917;
+      --paper: #232320;
+      --ink: #e8e8e2;
+      --muted: #9a9a90;
+      --line: #3a3a34;
+      --accent: #6aa5dd;
+      --accent-soft: #1e304a;
+      --splay: #c9a35e;
+      --splay-soft: #322a1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.45 -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 18px 28px 14px; }
+  header h1 { margin: 0 0 4px; font-size: 22px; }
+  header p { margin: 0; color: var(--muted); max-width: 78ch; }
+  main { padding: 0 28px 60px; }
+
+  .editor {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 8px;
+    overflow: hidden; max-width: 900px;
+  }
+  table { border-collapse: collapse; width: 100%; }
+  th {
+    text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--paper) 70%, var(--bg));
+  }
+  th.num { text-align: right; }
+  td {
+    padding: 5px 10px; border-bottom: 1px solid var(--line);
+    font: 14px ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; }
+  tr.station td.name { font-weight: 700; }
+  tr.shot td { color: var(--muted); background: color-mix(in srgb, var(--paper) 85%, var(--bg)); }
+  tr.shot td.num { color: var(--ink); }
+
+  tr.splay td { background: var(--splay-soft); color: var(--splay); }
+  tr.splay td.num { color: var(--ink); }
+  tr.splay td.name { padding-left: 30px; font-size: 12px; }
+
+  td.splaycell { width: 1%; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--splay); color: var(--splay); background: var(--splay-soft);
+    border-radius: 999px; padding: 1px 10px; font: 12px -apple-system, sans-serif;
+    cursor: pointer; user-select: none;
+  }
+  .chip:hover { filter: brightness(1.05); }
+  .chip .tri { font-size: 9px; transition: transform .12s; display: inline-block; }
+  .chip.open .tri { transform: rotate(90deg); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SurveyEditor splays — dedicated column</h1>
+  <p>The station cell stays clean; the splay count lives in its own <b>Splays</b> column at the
+     end of the row. Clicking the chip expands display-only splay rows (distance, compass, clino)
+     under the station. Renaming/promotion is deferred — splays are read-only rows for now.
+     A2 and A4 start expanded.</p>
+</header>
+
+<main>
+  <div class="editor">
+    <table id="table">
+      <thead><tr>
+        <th>Station</th><th class="num">Dist</th><th class="num">Compass</th><th class="num">Clino</th>
+        <th class="num">L</th><th class="num">R</th><th class="num">U</th><th class="num">D</th>
+        <th>Splays</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+function makeTrip() {
+  const s = (name, l, r, u, d) => ({ name, lrud: [l, r, u, d], splays: [] });
+  const sp = (dist, comp, clino) => ({ dist, comp, clino });
+  const stations = [
+    s("A1", 1.2, 0.8, 3.1, 0.4), s("A2", 2.1, 1.4, 2.6, 0.9),
+    s("A3", 0.6, 2.2, 4.0, 1.1), s("A4", 1.8, 1.8, 1.9, 0.6),
+    s("A5", 0.9, 0.5, 2.2, 0.3),
+  ];
+  const shots = [
+    { dist: 8.23, comp: 271.5, clino: -4.0 },
+    { dist: 12.61, comp: 265.0, clino: 2.5 },
+    { dist: 6.15, comp: 291.0, clino: -12.0 },
+    { dist: 9.87, comp: 254.5, clino: 1.0 },
+  ];
+  const splayData = [
+    [[2.1,10,5],[1.8,95,2],[3.2,182,-3],[1.1,268,8]],
+    [[4.5,20,15],[2.2,110,0],[1.9,200,-6],[3.8,290,3],[2.4,340,45],[1.6,155,-30]],
+    [[0.8,30,2],[1.4,120,-1],[2.9,215,10]],
+    [[5.1,15,8],[3.3,100,-4],[2.7,190,1],[4.2,275,12],[1.9,60,-22],[2.5,130,35],[3.0,310,-8],[1.2,225,4]],
+    [],
+  ];
+  stations.forEach((st, i) => splayData[i].forEach(v => st.splays.push(sp(...v))));
+  return { stations, shots };
+}
+
+const fmt = (v, digits = 1) => v.toFixed(digits);
+const trip = makeTrip();
+const tbody = document.querySelector("#table tbody");
+const open = new Set([1, 3]);   // A2 and A4 start expanded
+
+function render() {
+  tbody.innerHTML = "";
+  trip.stations.forEach((st, i) => {
+    const tr = document.createElement("tr");
+    tr.className = "station";
+    const chip = st.splays.length
+      ? `<span class="chip ${open.has(i) ? "open" : ""}" data-station="${i}">
+           <span class="tri">▶</span>${st.splays.length}</span>`
+      : "";
+    tr.innerHTML =
+      `<td class="name">${st.name}</td><td></td><td></td><td></td>` +
+      st.lrud.map(v => `<td class="num">${fmt(v)}</td>`).join("") +
+      `<td class="splaycell">${chip}</td>`;
+    tbody.appendChild(tr);
+
+    if (open.has(i)) {
+      st.splays.forEach(s => {
+        const str = document.createElement("tr");
+        str.className = "splay";
+        str.innerHTML =
+          `<td class="name">splay</td>` +
+          `<td class="num">${fmt(s.dist, 2)}</td><td class="num">${fmt(s.comp)}</td>` +
+          `<td class="num">${fmt(s.clino)}</td><td></td><td></td><td></td><td></td><td></td>`;
+        tbody.appendChild(str);
+      });
+    }
+
+    if (i < trip.shots.length) {
+      const sh = trip.shots[i];
+      const shr = document.createElement("tr");
+      shr.className = "shot";
+      shr.innerHTML =
+        `<td class="name">↓</td><td class="num">${fmt(sh.dist, 2)}</td>` +
+        `<td class="num">${fmt(sh.comp)}</td><td class="num">${fmt(sh.clino)}</td>` +
+        `<td></td><td></td><td></td><td></td><td></td>`;
+      tbody.appendChild(shr);
+    }
+  });
+}
+
+tbody.addEventListener("click", e => {
+  const chip = e.target.closest(".chip");
+  if (chip) {
+    const i = Number(chip.dataset.station);
+    open.has(i) ? open.delete(i) : open.add(i);
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>

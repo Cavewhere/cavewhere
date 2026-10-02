@@ -146,8 +146,8 @@ StandardPage {
 
     HelpBox {
         objectName: "noProjectCSHelpBox"
-        text: "One or more layers don't have an embedded coordinate system.<br>"
-              + "Set the project's coordinate system on the <b>Data</b> page to align them with surveys."
+        text: "One or more layers don't have an embedded coordinate system,<br>"
+              + "so there's nothing to line them up with your surveys."
         visible: RootData.region.lazLayers.count > 0
                  && !RootData.region.geoReference.hasCoordinateSystem
     }

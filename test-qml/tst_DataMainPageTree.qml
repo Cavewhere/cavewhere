@@ -149,7 +149,7 @@ MainWindowTest {
             const tree = surveyTree(page)
             tryCompare(tree, "rows", 1, 5000)
 
-            const titles = ["Name", "Kind", "Trips", "Stations", "Length", "Depth", "Date", "Decl"]
+            const titles = ["Name", "Kind", "Trips", "Stations", "Length", "Depth", "Date", "Declination"]
             for(let column = 0; column < titles.length; column++) {
                 let cell = null
                 tryVerify(() => {
