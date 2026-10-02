@@ -261,6 +261,11 @@ QtObject {
     // Timing
     // Hover time, in milliseconds, before a tooltip appears.
     readonly property int toolTipDelay: 500
+    // One fade in or out, in milliseconds, of the attention pulse: the frame
+    // that marks the part of a page a tap asked for.
+    readonly property int attentionPulseDuration: 250
+    // How many times the attention pulse fades in and out.
+    readonly property int attentionPulseCount: 2
 
     // Utility
     readonly property color transparent: "#00000000"
@@ -275,6 +280,8 @@ QtObject {
     readonly property real floatingWidgetRadius: 3
     // Corner radius of an in-page banner, such as a node's warnings.
     readonly property int bannerRadius: 5
+    // Border of the attention pulse's frame.
+    readonly property int attentionBorderWidth: 2
     readonly property color errorBackground: danger
 
     // View (3D scene) radial background gradient + grid lines

@@ -149,15 +149,16 @@ StandardPage {
     // its visible (that clobbers the proxy's imperative control and deadlocks).
     readonly property bool hasWarnings: warningsBannerId.count > 0
 
-    // Brings the attached file's source line into view: the wide page scrolls
-    // as a whole, while the narrow column always shows it under the stats.
+    // Brings the attached file's source line into view and pulses it. The
+    // wide page scrolls as a whole; the narrow column always shows it under
+    // the stats.
     function showSourceLine() {
-        if (cavePageArea.isNarrow) {
-            return
+        if (!cavePageArea.isNarrow) {
+            const top = caveSummaryId.mapToItem(wideFlickableId.contentItem, 0, 0).y - Theme.pageMargin
+            const maxContentY = Math.max(0, wideFlickableId.contentHeight - wideFlickableId.height)
+            wideFlickableId.contentY = Math.min(Math.max(0, top), maxContentY)
         }
-        const top = caveSummaryId.mapToItem(wideFlickableId.contentItem, 0, 0).y - Theme.pageMargin
-        const maxContentY = Math.max(0, wideFlickableId.contentHeight - wideFlickableId.height)
-        wideFlickableId.contentY = Math.min(Math.max(0, top), maxContentY)
+        caveSummaryId.drawAttention()
     }
 
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---

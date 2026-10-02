@@ -23,12 +23,20 @@ QQ.Item {
     property ExternalSourceSettings externalSourceSettings: RootData.externalSourceSettings
     property LinePlotManager linePlotManager: RootData.linePlotManager
 
+    // True while the summary pulses to answer a request for it, such as a
+    // warning line pointing at the attached file.
+    readonly property bool attentionActive: attentionPulseId.running
+
     implicitWidth: contentColumnId.implicitWidth
     implicitHeight: contentColumnId.implicitHeight
 
     function openReplaceDialog() {
         replaceDialogLoaderId.active = true
         replaceDialogLoaderId.item.open()
+    }
+
+    function drawAttention() {
+        attentionPulseId.restart()
     }
 
     // What the manager knows about this cave's attachment, all of it
@@ -38,6 +46,18 @@ QQ.Item {
 
         owner: root.cave
         manager: root.externalCenterlineManager
+    }
+
+    QQ.Rectangle {
+        id: attentionFrameId
+
+        anchors.fill: parent
+        anchors.margins: -Theme.tightSpacing
+        radius: Theme.bannerRadius
+        color: Theme.highlight
+        border.color: Theme.focusRing
+        border.width: Theme.attentionBorderWidth
+        opacity: 0
     }
 
     ColumnLayout {
@@ -81,6 +101,28 @@ QQ.Item {
             onViewCavernOutputRequested: {
                 RootData.pageSelectionModel.gotoPageByName(null, "Cavern")
             }
+        }
+    }
+
+    QQ.SequentialAnimation {
+        id: attentionPulseId
+
+        loops: Theme.attentionPulseCount
+
+        QQ.NumberAnimation {
+            target: attentionFrameId
+            property: "opacity"
+            to: 1
+            duration: Theme.attentionPulseDuration
+            easing.type: QQ.Easing.OutQuad
+        }
+
+        QQ.NumberAnimation {
+            target: attentionFrameId
+            property: "opacity"
+            to: 0
+            duration: Theme.attentionPulseDuration
+            easing.type: QQ.Easing.InOutQuad
         }
     }
 

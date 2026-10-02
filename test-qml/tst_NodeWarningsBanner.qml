@@ -314,6 +314,10 @@ MainWindowTest {
 
         // Off the trip page first, so the page never sees its trip deleted.
         function cleanup() {
+            if (restoreWidth > 0) {
+                rootId.width = restoreWidth
+                restoreWidth = 0
+            }
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.project.newProject()
         }
@@ -342,26 +346,41 @@ MainWindowTest {
             return trip
         }
 
+        // The window's width before a test narrowed it, or 0 while it is wide.
+        property int restoreWidth: 0
+
         SignalSpy {
             id: sourceLineSpyId
             signalName: "sourceLineRequested"
         }
 
+        // Expects the source line's summary to pulse once and settle.
+        function verifyPulses(summary) {
+            tryVerify(() => summary.attentionActive, 5000, "the source line pulses")
+            tryVerify(() => !summary.attentionActive, 5000, "the pulse settles")
+        }
+
         // Expects the page's banner to raise sourceLineRequested for `entry`
-        // and leave the attached file's source line on screen.
+        // and leave the attached file's source line on screen, pulsing, in the
+        // wide layout and then the narrow one.
         function verifyOpensSourceLine(cavePage, bannerItem, entry) {
+            const summary = findChild(cavePage, "externalCaveSummary")
+            verify(summary !== null)
+            tryVerify(() => !summary.attentionActive, 5000, "the source line starts at rest")
+
             sourceLineSpyId.target = bannerItem
             sourceLineSpyId.clear()
             mouseClick(messageLabel(entry))
             compare(sourceLineSpyId.count, 1, "the line asks for the source line")
             compare(RootData.pageView.currentPageItem, cavePage,
                     "the source line is on the cave page itself")
+            verifyPulses(summary)
 
-            const summary = findChild(cavePage, "externalCaveSummary")
             // The Flickable carries no objectName of its own: one would sit in
             // every "rootId->cavePage->..." chain the other tests walk.
             const flickable = findChild(cavePage, "cavePageVerticalScrollBar").parent
-            verify(summary !== null && flickable !== null)
+            verify(flickable !== null)
+            const wideColumn = summary.parent
             const top = summary.mapToItem(flickable, 0, 0).y
             verify(top >= 0 && top < flickable.height,
                    "the source line is in view: " + top)
@@ -375,6 +394,31 @@ MainWindowTest {
             const backTop = summary.mapToItem(flickable, 0, 0).y
             verify(backTop >= 0 && backTop < flickable.height,
                    "the page scrolls the source line back into view: " + backTop)
+            verifyPulses(summary)
+
+            // The narrow column shows the summary under the stats, so the
+            // line pulses it where it stands.
+            restoreWidth = rootId.width
+            rootId.width = Math.round(Theme.breakpointPanelCollapse * 2 / 3)
+            tryVerify(() => cavePage.isNarrow, 5000, "the page takes its narrow layout")
+            waitForRendering(rootId)
+            const narrowEntry = entryContaining(bannerItem, messageLabel(entry).text)
+            verify(narrowEntry !== null, "the narrow banner lists the line")
+            sourceLineSpyId.clear()
+            mouseClick(messageLabel(narrowEntry))
+            compare(sourceLineSpyId.count, 1, "the narrow line asks for the source line")
+            verify(summary.visible, "the narrow column shows the source line")
+            // The proxy moves the summary into the narrow column, which fills
+            // the page with no scrolling of its own: it is the viewport.
+            const narrowColumn = summary.parent
+            verify(narrowColumn !== wideColumn, "the summary sits in the narrow column")
+            const narrowTop = summary.mapToItem(narrowColumn, 0, 0).y
+            verify(narrowTop >= 0 && narrowTop < narrowColumn.height,
+                   "the narrow source line is in view: " + narrowTop)
+            const columnTop = narrowColumn.mapToItem(cavePage, 0, 0).y
+            verify(columnTop >= 0 && columnTop + narrowColumn.height <= cavePage.height,
+                   "the narrow column fits the page: " + columnTop)
+            verifyPulses(summary)
         }
 
         // ── An untied survey in a cave-level attach ─────────────────────────
