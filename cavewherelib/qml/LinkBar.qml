@@ -16,10 +16,19 @@ QQ.Item {
     required property string dataPageAddress
     required property string mapPageAddress
 
+    property bool editingAddress: false
+
     // The status chip was tapped. The task sheet it opens is the host's, for the
     // same reason the sidebar's task flyout is: it has to composite above the
     // page view, and a child of the top bar cannot.
     signal tasksRequested()
+
+    function startEditingAddress() {
+        textFieldId.text = RootData.pageSelectionModel.currentPageAddress
+        editingAddress = true
+        textFieldId.selectAll()
+        textFieldId.forceActiveFocus()
+    }
 
     RowLayout {
         id: rowLayoutId
@@ -123,16 +132,32 @@ QQ.Item {
             }
         }
 
-        QQ.Rectangle {
-            id: linkbarBackgroundRect
+        QQ.Item {
+            id: breadcrumbAreaId
+            objectName: "linkBarBreadcrumb"
 
             Layout.fillWidth: true
             Layout.topMargin: Theme.linkBarVerticalMargin
             Layout.bottomMargin: Theme.linkBarVerticalMargin
             implicitHeight: sizeItemId.height + 10
-            border.width: 1
-            border.color: Theme.fieldBorder
-            color: Theme.linkBar
+
+            // Built lazily on the first right-click, in-scene like SelectableValue's
+            // menu so it behaves the same on every platform.
+            QC.ContextMenu.menu: QC.Menu {
+                objectName: "linkBarMenu"
+                popupType: QC.Popup.Item
+
+                QC.MenuItem {
+                    objectName: "linkBarEditItem"
+                    text: qsTr("Edit")
+                    onTriggered: linkBarId.startEditingAddress()
+                }
+                QC.MenuItem {
+                    objectName: "linkBarCopyItem"
+                    text: qsTr("Copy")
+                    onTriggered: RootData.copyText(RootData.pageSelectionModel.currentPageAddress)
+                }
+            }
 
             LinkBarItem {
                 id: sizeItemId
@@ -154,7 +179,6 @@ QQ.Item {
                 spacing: 0
                 visible: !textFieldId.visible
 
-
                 delegate: LinkBarItem {
                     required property string nameRole
                     required property string fullPathRole
@@ -163,37 +187,29 @@ QQ.Item {
                     text: nameRole
                     onClicked: RootData.pageSelectionModel.currentPageAddress = fullPathRole
                 }
-
-                QQ.Rectangle {
-                    anchors.fill: parent
-                    color: Theme.linkBar
-                }
             }
 
             QC.TextField {
                 id: textFieldId
+                objectName: "linkBarAddressField"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.margins: 3
                 anchors.verticalCenter: parent.verticalCenter
-                // implicitHeight: linkbarBackgroundRect.height
-                visible: textEnableButtonId.checked
+                visible: linkBarId.editingAddress
                 focus: false
-                text: RootData.pageSelectionModel.currentPageAddress
-                onEditingFinished: RootData.pageSelectionModel.currentPageAddress = text
-            }
 
-            QC.Button {
-                id: textEnableButtonId
-                anchors.right: parent.right
-                anchors.rightMargin: 5
-                anchors.verticalCenter: parent.verticalCenter
-                visible: true //RootData.desktopBuild
-
-                text: "..."
-                onClicked: {
-                    textFieldId.forceActiveFocus()
-                    checked = !checked;
+                // Hiding the field takes its focus, which emits editingFinished;
+                // the editingAddress check keeps an Escape from applying the text.
+                onEditingFinished: {
+                    if (linkBarId.editingAddress) {
+                        RootData.pageSelectionModel.currentPageAddress = text
+                        linkBarId.editingAddress = false
+                    }
+                }
+                QQ.Keys.onEscapePressed: {
+                    text = RootData.pageSelectionModel.currentPageAddress
+                    linkBarId.editingAddress = false
                 }
             }
         }

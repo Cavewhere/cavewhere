@@ -300,6 +300,7 @@ Item {
             objectName: "alsoButton"
             text: qsTr("Also Include")
             Layout.fillWidth: true
+            Layout.margins: Theme.pageMargin
             onClicked: {
                 pipelineModel.addRow();
                 let last = pipelineModel.rowCount() - 1;

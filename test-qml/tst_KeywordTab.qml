@@ -585,5 +585,20 @@ MainWindowTest {
                     verify(checkbox1.checked === true);
                     verify(checkbox2.checked === false);
         }
+
+        function test_alsoButtonSitsInsideThePanel() {
+            RootData.pageSelectionModel.gotoPageByName(null, "View");
+
+            let layersTab = findChild(rootId.mainWindow, "layersTabButton");
+            verify(layersTab !== null);
+            mouseClick(layersTab);
+
+            let alsoButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->alsoButton");
+            verify(alsoButton);
+            let column = alsoButton.parent;
+            tryCompare(alsoButton, "x", Theme.pageMargin);
+            tryCompare(alsoButton, "width", column.width - 2 * Theme.pageMargin);
+            tryCompare(alsoButton, "y", column.height - Theme.pageMargin - alsoButton.height);
+        }
     }
 }

@@ -302,7 +302,6 @@ QtObject {
     readonly property color progressLead: dark ? "#FFFFFF" : "#0A3659"
 
     // Link bar
-    readonly property color linkBar: dark ? "#262626" : "#FFFFFF"
     readonly property color linkBarChip: dark ? "#454545" : "#E4E4E4"
 
     // Metrics, in logical pixels

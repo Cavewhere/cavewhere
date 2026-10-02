@@ -96,7 +96,7 @@ QC.ScrollView {
             "toolTipSurface", "toolTipBorder", "toolTipText", "overlayScrim",
             "tabStrip", "tabText",
             "progressStart", "progressMid", "progressEnd", "progressLead",
-            "linkBar", "linkBarChip"
+            "linkBarChip"
         ]
 
         function refreshModels() {

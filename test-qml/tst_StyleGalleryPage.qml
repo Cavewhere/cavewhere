@@ -159,6 +159,8 @@ MainWindowTest {
 
                 screenshotTextEditingMenu(page, mode)
                 screenshotMainWindow(mode)
+                screenshotLinkBarMenu(mode)
+                screenshotKeywordTab(mode)
                 screenshotTripPage(mode)
             }
         }
@@ -189,6 +191,42 @@ MainWindowTest {
 
             verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-main-window").length > 0)
             mouseMove(rootId.mainWindow, rootId.mainWindow.width - 1, rootId.mainWindow.height - 1)
+        }
+
+        // The breadcrumb's right-click menu over the cave page. It is made on
+        // first use and keeps its first palette, so it takes its parent again
+        // for each mode.
+        function screenshotLinkBarMenu(mode) {
+            const crumb = findChild(rootId.mainWindow, "linkBarBreadcrumb")
+            verify(crumb !== null, "linkBarBreadcrumb should exist")
+            const menu = crumb.QC.ContextMenu.menu
+            verify(menu !== null, "the breadcrumb should carry a context menu")
+            const menuParent = menu.parent
+            menu.parent = null
+            menu.parent = menuParent
+            menu.popup(crumb, crumb.width / 3, crumb.height / 2)
+            tryVerify(() => menu.opened, 5000, "the link bar menu should finish opening")
+            verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-link-bar-menu").length > 0)
+            menu.close()
+            tryVerify(() => !menu.visible)
+        }
+
+        // The view page with the Layers tab open, where the keyword filter's
+        // "Also Include" button sits at the bottom of the side panel.
+        function screenshotKeywordTab(mode) {
+            RootData.pageSelectionModel.gotoPageByName(null, "View")
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "viewPage",
+                      5000, "should land on the view page")
+            const layersTab = findChild(rootId.mainWindow, "layersTabButton")
+            verify(layersTab !== null, "layersTabButton should exist")
+            mouseClick(layersTab)
+            let alsoButton = null
+            tryVerify(() => {
+                alsoButton = findChild(rootId.mainWindow, "alsoButton")
+                return alsoButton !== null && alsoButton.visible && alsoButton.width > 0
+            }, 5000, "the Also Include button should show")
+            verify(WindowGrabber.grabToFile(rootId.mainWindow, "style-gallery-" + mode.name + "-keyword-tab").length > 0)
         }
 
         // A trip page's survey editor in three states: at rest, with only the
