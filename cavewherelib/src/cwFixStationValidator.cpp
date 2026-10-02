@@ -217,6 +217,22 @@ QString namedCaveWarning(const QStringList& parts,
         : plural.arg(parts.join(kFragmentSeparator));
 }
 
+//! One node's offending fixes of one kind: a quoted fragment per fix, and the
+//! first fix's id, which is where a click on the warning takes the user.
+struct NamedFixes
+{
+    QStringList parts;
+    QUuid firstFixId;
+
+    void add(const QUuid& fixId, const QString& part)
+    {
+        if (parts.isEmpty()) {
+            firstFixId = fixId;
+        }
+        parts.append(part);
+    }
+};
+
 QString stationNameFor(cwSurveyNode* node, const QUuid& fixId)
 {
     if (node == nullptr || node->fixStations() == nullptr) {
@@ -236,43 +252,45 @@ void cwFixStationValidator::revalidate()
     // offending node. The distance is measured from the frame origin, which the
     // rest of the survey sits on — so it is also the gap the user would see
     // between the bad station and everything else.
-    QHash<cwSurveyNode*, QStringList> distantParts;
+    QHash<cwSurveyNode*, NamedFixes> distantFixes;
     for (const auto& c : classification.outliers) {
         if (c.node == nullptr) {
             continue;
         }
         const QString name = stationNameFor(c.node, c.fixId);
         const double km = distanceFromFrameOrigin(c.global) / 1000.0;
-        distantParts[c.node].append(QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
+        distantFixes[c.node].add(c.fixId, QStringLiteral("\"%1\" (~%2 km)").arg(name).arg(km, 0, 'f', 0));
     }
 
-    QHash<cwSurveyNode*, QString> distantMessages;
-    for (auto it = distantParts.constBegin(); it != distantParts.constEnd(); ++it) {
-        distantMessages.insert(it.key(),
-            namedCaveWarning(it.value(),
+    QHash<cwSurveyNode*, NodeWarning> distantWarnings;
+    for (auto it = distantFixes.constBegin(); it != distantFixes.constEnd(); ++it) {
+        distantWarnings.insert(it.key(), NodeWarning{
+            namedCaveWarning(it.value().parts,
                 QStringLiteral("Fix station %1 is far from the rest of the survey — "
                                "check the coordinate system, UTM zone, and value."),
                 QStringLiteral("Fix stations %1 are far from the rest of the survey — "
-                               "check the coordinate system, UTM zone, and value.")));
+                               "check the coordinate system, UTM zone, and value.")),
+            it.value().firstFixId});
     }
 
     // Domain-outlier messages (Part A): fixes outside their own CS's valid range.
-    QHash<cwSurveyNode*, QStringList> domainParts;
+    QHash<cwSurveyNode*, NamedFixes> domainFixes;
     for (const auto& c : classification.domainOutliers) {
         if (c.node == nullptr) {
             continue;
         }
-        domainParts[c.node].append(QStringLiteral("\"%1\"").arg(stationNameFor(c.node, c.fixId)));
+        domainFixes[c.node].add(c.fixId, QStringLiteral("\"%1\"").arg(stationNameFor(c.node, c.fixId)));
     }
 
-    QHash<cwSurveyNode*, QString> domainMessages;
-    for (auto it = domainParts.constBegin(); it != domainParts.constEnd(); ++it) {
-        domainMessages.insert(it.key(),
-            namedCaveWarning(it.value(),
+    QHash<cwSurveyNode*, NodeWarning> domainWarnings;
+    for (auto it = domainFixes.constBegin(); it != domainFixes.constEnd(); ++it) {
+        domainWarnings.insert(it.key(), NodeWarning{
+            namedCaveWarning(it.value().parts,
                 QStringLiteral("Fix station %1 has a coordinate outside the valid range for its "
                                "coordinate system — check for a transposed digit or the wrong CS/zone."),
                 QStringLiteral("Fix stations %1 have coordinates outside the valid range for their "
-                               "coordinate system — check for a transposed digit or the wrong CS/zone.")));
+                               "coordinate system — check for a transposed digit or the wrong CS/zone.")),
+            it.value().firstFixId});
     }
 
     // Reference messages: fixes whose station name matches no survey station in
@@ -280,16 +298,16 @@ void cwFixStationValidator::revalidate()
     // silently drops). Independent of the project frame and the distance/domain
     // math, so it runs even before the project is georeferenced. A node whose
     // network hasn't been computed yet is skipped for its *named* fixes.
-    const QHash<cwSurveyNode*, QString> referenceMessages = referenceWarnings();
+    const QHash<cwSurveyNode*, NodeWarning> referenceWarningsByNode = referenceWarnings();
 
     // Reconcile every warning kind against every node that has or had one, so a
     // correction clears the old warning.
     QSet<cwSurveyNode*> nodes(m_connectedNodes);
     nodes.unite(m_nodesWithWarning);
     for (cwSurveyNode* node : nodes) {
-        setNodeWarning(node, cwErrorTypeId::FixStationOutlier, distantMessages.value(node));
-        setNodeWarning(node, cwErrorTypeId::FixStationDomain, domainMessages.value(node));
-        setNodeWarning(node, cwErrorTypeId::FixStationReference, referenceMessages.value(node));
+        setNodeWarning(node, cwErrorTypeId::FixStationOutlier, distantWarnings.value(node));
+        setNodeWarning(node, cwErrorTypeId::FixStationDomain, domainWarnings.value(node));
+        setNodeWarning(node, cwErrorTypeId::FixStationReference, referenceWarningsByNode.value(node));
     }
 
     // Region-wide summary for the render-view overlay. A domain-bad fix is the
@@ -327,11 +345,11 @@ void cwFixStationValidator::revalidate()
     setSummary(summary, total, firstOffender);
 }
 
-QHash<cwSurveyNode*, QString> cwFixStationValidator::referenceWarnings() const
+QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::referenceWarnings() const
 {
-    QHash<cwSurveyNode*, QString> messages;
+    QHash<cwSurveyNode*, NodeWarning> warnings;
     if (m_region == nullptr) {
-        return messages;
+        return warnings;
     }
 
     const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
@@ -342,8 +360,13 @@ QHash<cwSurveyNode*, QString> cwFixStationValidator::referenceWarnings() const
         const cwSurveyNetwork network = node->network();
         QStringList unknownNames;
         int emptyCount = 0;
+        QUuid firstBrokenFix;
         for (const cwFixStation& fix : node->fixStations()->fixStations()) {
-            switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network)) {
+            const auto reference = cwFixStationDiagnostics::classifyStationReference(fix.stationName(), network);
+            if (reference != cwFixStationDiagnostics::StationReference::Ok && firstBrokenFix.isNull()) {
+                firstBrokenFix = fix.id();
+            }
+            switch (reference) {
             case cwFixStationDiagnostics::StationReference::Unknown:
                 unknownNames.append(QStringLiteral("\"%1\"").arg(fix.stationName().trimmed()));
                 break;
@@ -379,9 +402,9 @@ QHash<cwSurveyNode*, QString> cwFixStationValidator::referenceWarnings() const
         if (parts.isEmpty()) {
             continue;
         }
-        messages.insert(node, parts.join(kSentenceSeparator));
+        warnings.insert(node, NodeWarning{parts.join(kSentenceSeparator), firstBrokenFix});
     }
-    return messages;
+    return warnings;
 }
 
 void cwFixStationValidator::syncNodeConnections()
@@ -401,9 +424,9 @@ void cwFixStationValidator::syncNodeConnections()
                     disconnect(node->fixStations(), nullptr, this, nullptr);
                 }
             }
-            setNodeWarning(node, cwErrorTypeId::FixStationOutlier, QString());
-            setNodeWarning(node, cwErrorTypeId::FixStationDomain, QString());
-            setNodeWarning(node, cwErrorTypeId::FixStationReference, QString());
+            setNodeWarning(node, cwErrorTypeId::FixStationOutlier, NodeWarning());
+            setNodeWarning(node, cwErrorTypeId::FixStationDomain, NodeWarning());
+            setNodeWarning(node, cwErrorTypeId::FixStationReference, NodeWarning());
             it = m_connectedNodes.erase(it);
         } else {
             ++it;
@@ -437,13 +460,13 @@ void cwFixStationValidator::syncNodeConnections()
     }
 }
 
-void cwFixStationValidator::setNodeWarning(cwSurveyNode* node, cwErrorTypeId errorTypeId, const QString& message)
+void cwFixStationValidator::setNodeWarning(cwSurveyNode* node, cwErrorTypeId errorTypeId, const NodeWarning& warning)
 {
     if (node == nullptr || node->errorModel() == nullptr) {
         return;
     }
     cwErrorListModel* errors = node->errorModel()->errors();
-    errors->setTypedWarning(errorTypeId, message);
+    errors->setTypedWarning(errorTypeId, warning.message, QString(), warning.fixId);
     updateWarningTracking(node, errors);
 }
 

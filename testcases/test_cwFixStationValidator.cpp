@@ -1007,3 +1007,49 @@ TEST_CASE("a station appearing in the survey clears the reference warning",
     cave->setSurveyNetwork(grown);
     CHECK(cave->errorModel()->warningCount() == 0);
 }
+
+TEST_CASE("each fix-station warning targets the first fix it names",
+          "[cwFixStationValidator]")
+{
+    // A click on a warning opens the fix it names, so each kind carries that
+    // fix's id: the domain-bad one, and the first of the broken references.
+    cwCavingRegion region;
+    region.addCave();
+    auto* cave = region.cave(0);
+    REQUIRE(cave != nullptr);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
+    cave->setSurveyNetwork(network);
+
+    const auto targetOf = [cave](cwErrorTypeId errorTypeId) {
+        const QList<cwError> errors = cave->errorModel()->errors()->toList();
+        for (const cwError& error : errors) {
+            if (error.errorTypeId() == static_cast<int>(errorTypeId)) {
+                return error.targetId();
+            }
+        }
+        return QUuid();
+    };
+    const auto fixIdAt = [cave](int row) {
+        return cave->fixStations()->fixStationAt(row).id();
+    };
+
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("A2"), QStringLiteral("EPSG:32613"), 1478000.0, 4430000.0, 1655.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("XYZ"), QStringLiteral("EPSG:32613"), 478100.0, 4430100.0, 1656.0));
+    cave->fixStations()->appendFixStation(
+        makeFix(QStringLiteral("PDQ"), QStringLiteral("EPSG:32613"), 478200.0, 4430200.0, 1657.0));
+
+    CHECK(targetOf(cwErrorTypeId::FixStationDomain) == fixIdAt(1));
+    CHECK(targetOf(cwErrorTypeId::FixStationReference) == fixIdAt(2));
+
+    // Correcting the first broken name moves the target to the next one.
+    cave->fixStations()->setData(cave->fixStations()->index(2),
+                                 QStringLiteral("A1"),
+                                 cwFixStationModel::StationNameRole);
+    CHECK(targetOf(cwErrorTypeId::FixStationReference) == fixIdAt(3));
+}

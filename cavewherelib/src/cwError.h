@@ -13,6 +13,7 @@
 #include <QSharedDataPointer>
 #include <QObject>
 #include <QQmlEngine>
+#include <QUuid>
 
 //Our includes
 class cwErrorData;
@@ -56,6 +57,7 @@ class CAVEWHERE_LIB_EXPORT cwError
     Q_PROPERTY(int errorTypeId READ errorTypeId WRITE setErrorTypeId)
     Q_PROPERTY(QString message READ message WRITE setMessage)
     Q_PROPERTY(QString detail READ detail WRITE setDetail)
+    Q_PROPERTY(QUuid targetId READ targetId WRITE setTargetId)
     Q_PROPERTY(ErrorType type READ type WRITE setType)
 
 public:
@@ -88,6 +90,11 @@ public:
     //! names a warning counts. Empty when the message says everything.
     QString detail() const;
     void setDetail(QString detail);
+
+    //! The id of the object the user edits to resolve this error: a fix
+    //! station, a trip, or a survey node. Null when no single object does.
+    QUuid targetId() const;
+    void setTargetId(const QUuid& targetId);
 
     bool operator==(const cwError& error) const;
     bool operator!=(const cwError& error) const;

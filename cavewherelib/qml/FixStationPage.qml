@@ -40,6 +40,14 @@ StandardPage {
     // rows, same role names — only the derived warnings are extra.
     readonly property FixStationDiagnosticsModel diagnosticsModel: cave ? cave.fixStationDiagnostics : null
 
+    // The row to select and scroll to, or -1. A page selection property: a
+    // link into the page (a node warning naming a fix) sets it through the
+    // page, and a row the user picks writes it back, so the same link works
+    // again after the user has moved on.
+    property int currentFixRow: -1
+
+    PageView.defaultSelectionProperties: ({ "currentFixRow": -1 })
+
     function addFix() {
         if (fixStationPage.fixStationsModel) {
             fixStationPage.fixStationsModel.addFixStation()
@@ -92,6 +100,32 @@ StandardPage {
                       coordinateText: string): void {
         fixStationPage.commitEdit(rowIndex, FixStationModel.InputCSRole, newCS)
         coordinateOrderAskId.askAbout(rowIndex, coordinateText, newCS, orderWasUnknown)
+    }
+
+    // Only a row the user picks is written back to the page: the view's own
+    // currentIndex changes (the first row it selects as the model fills) would
+    // race a link that is opening the page on another row.
+    function pickRow(row: int): void {
+        tableView.currentIndex = row
+        if (fixStationPage.PageView.page !== null) {
+            fixStationPage.PageView.page.selectionProperties = { "currentFixRow": row }
+        }
+    }
+
+    onCurrentFixRowChanged: {
+        if (fixStationPage.currentFixRow < 0) {
+            return
+        }
+        tableView.currentIndex = fixStationPage.currentFixRow
+        // The rows may not be laid out yet when the page opens on a link.
+        Qt.callLater(() => tableView.positionViewAtIndex(tableView.currentIndex, QQ.ListView.Contain))
+    }
+
+    // currentFixRow mirrors the view, so a link naming the row the page last
+    // showed still counts as a change once the view has moved on.
+    QQ.Connections {
+        target: tableView
+        function onCurrentIndexChanged() { fixStationPage.currentFixRow = tableView.currentIndex }
     }
 
     component FixField : DoubleClickTextInput {
@@ -407,7 +441,7 @@ StandardPage {
             QQ.MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
-                onClicked: tableView.currentIndex = wideDelegateId.index
+                onClicked: fixStationPage.pickRow(wideDelegateId.index)
             }
 
             RowLayout {
@@ -540,7 +574,7 @@ StandardPage {
             QQ.MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
-                onClicked: tableView.currentIndex = narrowDelegateId.index
+                onClicked: fixStationPage.pickRow(narrowDelegateId.index)
             }
 
             QQ.Flow {

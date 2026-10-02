@@ -131,15 +131,23 @@ private:
 
     void syncNodeConnections();
 
-    //! Per-node FixStationReference message: the fixes whose station name matches
-    //! no station in that node's survey network, joined into one warning. Nodes
-    //! with no broken reference are absent from the map (their warning clears).
-    QHash<cwSurveyNode*, QString> referenceWarnings() const;
+    //! One node's warning of one kind: its text, and the first fix it names,
+    //! which is where a click on the warning takes the user.
+    struct NodeWarning {
+        QString message;
+        QUuid fixId;
+    };
+
+    //! Per-node FixStationReference warning: the fixes whose station name
+    //! matches no station in that node's survey network, joined into one
+    //! warning. Nodes with no broken reference are absent from the map (their
+    //! warning clears).
+    QHash<cwSurveyNode*, NodeWarning> referenceWarnings() const;
 
     //! Set (or, with an empty message, clear) the node's Warning row for one of
     //! our stable errorTypeIds. Each id owns its own row, so the distance and
     //! the domain warnings coexist and are suppressed independently.
-    void setNodeWarning(cwSurveyNode* node, cwErrorTypeId errorTypeId, const QString& message);
+    void setNodeWarning(cwSurveyNode* node, cwErrorTypeId errorTypeId, const NodeWarning& warning);
 
     //! Keep m_nodesWithWarning in step with the node's error rows after a
     //! setNodeWarning: a node stays tracked while it carries any of our

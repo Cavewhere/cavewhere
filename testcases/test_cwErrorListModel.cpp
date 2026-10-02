@@ -303,3 +303,23 @@ TEST_CASE("warningMessages lists only active warnings") {
     }
 }
 
+
+TEST_CASE("setTypedWarning carries the warning's target id", "[cwErrorListModel]") {
+    cwErrorListModel model;
+    const QUuid first = QUuid::createUuid();
+    const QUuid second = QUuid::createUuid();
+    const int targetIdRole = static_cast<int>(cwErrorListModel::ErrorRoles::TargetIdRole);
+
+    model.setTypedWarning(cwErrorTypeId::UnconnectedStations, QStringLiteral("Untied"), QString(), first);
+    REQUIRE(model.size() == 1);
+    CHECK(model.at(0).targetId() == first);
+    CHECK(model.data(model.index(0), targetIdRole).toUuid() == first);
+    CHECK(model.roleNames().value(targetIdRole) == QByteArrayLiteral("targetId"));
+
+    // The same row takes the new target, so a suppression survives it.
+    model.setData(model.index(0), true, static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole));
+    model.setTypedWarning(cwErrorTypeId::UnconnectedStations, QStringLiteral("Untied"), QString(), second);
+    REQUIRE(model.size() == 1);
+    CHECK(model.at(0).targetId() == second);
+    CHECK(model.at(0).suppressed());
+}

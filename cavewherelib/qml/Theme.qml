@@ -273,6 +273,8 @@ QtObject {
         ? Qt.lighter(floatingWidgetColor, 1.3)
         : Qt.darker(floatingWidgetColor, 1.12)
     readonly property real floatingWidgetRadius: 3
+    // Corner radius of an in-page banner, such as a node's warnings.
+    readonly property int bannerRadius: 5
     readonly property color errorBackground: danger
 
     // View (3D scene) radial background gradient + grid lines

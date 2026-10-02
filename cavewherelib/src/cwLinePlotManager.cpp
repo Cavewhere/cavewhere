@@ -731,7 +731,7 @@ void cwLinePlotManager::publishUnconnectedStationWarnings()
                           .arg(QString::number(stations.size()), ownerName);
         }
         model->errors()->setTypedWarning(cwErrorTypeId::UnconnectedStations, message,
-                                         stations.join(QStringLiteral(", ")));
+                                         stations.join(QStringLiteral(", ")), ownerId);
     };
 
     const auto displayName = [](const cwExternalCenterline& centerline, const QString& name) {
@@ -844,19 +844,28 @@ void cwLinePlotManager::publishAttachedFixWarnings(const QSet<QUuid>& ownersWith
 
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         QStringList messages;
+        // The file a click on the warning opens: the first one it names.
+        QUuid firstOwnerId;
+        const auto addWarning = [&](const QUuid& ownerId, const QString& message) {
+            messages.append(message);
+            if (firstOwnerId.isNull()) {
+                firstOwnerId = ownerId;
+            }
+        };
         if (georeferenced) {
             if (ownersWithBareFixes.contains(node->id())) {
-                messages.append(warningFor(node->externalCenterline(), node->parentNode()));
+                addWarning(node->id(), warningFor(node->externalCenterline(), node->parentNode()));
             }
             for (const cwTrip* trip : node->trips()) {
                 if (ownersWithBareFixes.contains(trip->id())) {
-                    messages.append(warningFor(trip->externalCenterline(), node));
+                    addWarning(trip->id(), warningFor(trip->externalCenterline(), node));
                 }
             }
         }
         if (node->errorModel() != nullptr) {
             node->errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
-                                                          messages.join(QLatin1Char('\n')));
+                                                          messages.join(QLatin1Char('\n')),
+                                                          QString(), firstOwnerId);
         }
     }
 }

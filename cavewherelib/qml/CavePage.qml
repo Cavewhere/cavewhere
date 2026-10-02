@@ -143,13 +143,22 @@ StandardPage {
     readonly property bool caveAttached: cavePageArea.currentCave !== null
                                          && cavePageArea.currentCave.externalCenterline.entryFile.length > 0
 
-    // Whether the current cave carries any non-suppressed warning. Drives the
-    // banner proxies' visibility directly — the banner's own visibility is
-    // controlled by whichever proxy hosts it, so this must not read off the
-    // banner (that clobbers the proxy's imperative control and deadlocks).
-    readonly property bool hasCaveWarning: cavePageArea.currentCave
-        ? cavePageArea.currentCave.errorModel.errors.warningMessages.length > 0
-        : false
+    // Whether the warnings banner has anything to list. Drives the banner
+    // proxies' visibility directly — the banner's own visibility is controlled
+    // by whichever proxy hosts it, so this reads the banner's count and never
+    // its visible (that clobbers the proxy's imperative control and deadlocks).
+    readonly property bool hasWarnings: warningsBannerId.count > 0
+
+    // Brings the attached file's source line into view: the wide page scrolls
+    // as a whole, while the narrow column always shows it under the stats.
+    function showSourceLine() {
+        if (cavePageArea.isNarrow) {
+            return
+        }
+        const top = caveSummaryId.mapToItem(wideFlickableId.contentItem, 0, 0).y - Theme.pageMargin
+        const maxContentY = Math.max(0, wideFlickableId.contentHeight - wideFlickableId.height)
+        wideFlickableId.contentY = Math.min(Math.max(0, top), maxContentY)
+    }
 
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
 
@@ -165,22 +174,12 @@ StandardPage {
                             }
     }
 
-    ErrorHelpArea {
-        id: outlierWarningBanner
-        objectName: "outlierWarningBanner"
+    NodeWarningsBanner {
+        id: warningsBannerId
 
-        // The cave's own non-suppressed warnings (the fix-station outlier among
-        // them), joined for the banner. Read straight off the cave's errorModel
-        // list — trip warnings live in child models, so they never leak in here.
-        // Plain text, joined with newlines rather than <br>: the messages quote
-        // user-typed station names, so treating them as markup would swallow a
-        // name like A<b>B and render whatever it happens to spell.
-        textFormat: QC.Label.PlainText
-        text: cavePageArea.currentCave
-              ? cavePageArea.currentCave.errorModel.errors.warningMessages.join("\n")
-              : ""
-        // Visibility is owned by the hosting proxy (visible: hasCaveWarning);
-        // don't set it here or it fights the proxy's imperative control.
+        node: cavePageArea.currentCave
+
+        onSourceLineRequested: cavePageArea.showSourceLine()
     }
 
     SelectableCaveStat {
@@ -430,6 +429,7 @@ StandardPage {
     // auto-anchor under Qt 6.11 macOS — the bar ends up at (0,0).
     QQ.Flickable {
         id: wideFlickableId
+        objectName: "cavePageWideFlickable"
         visible: !cavePageArea.isNarrow
         anchors.fill: parent
         clip: true
@@ -459,13 +459,13 @@ StandardPage {
                 LayoutItemProxy { target: caveNameText }
 
                 LayoutItemProxy {
-                    objectName: "outlierWarningBannerProxy"
-                    target: cavePageArea.isNarrow ? null : outlierWarningBanner
+                    objectName: "nodeWarningsBannerProxy"
+                    target: cavePageArea.isNarrow ? null : warningsBannerId
                     // Hide the proxy when there is no warning: a visible proxy
                     // whose target is invisible still forwards the target's
                     // implicit height, reserving an empty full-width slot (an
                     // empty "badge"). An invisible layout item is excluded.
-                    visible: cavePageArea.hasCaveWarning
+                    visible: cavePageArea.hasWarnings
                     Layout.fillWidth: true
                 }
 
@@ -553,8 +553,8 @@ StandardPage {
             }
 
             LayoutItemProxy {
-                target: cavePageArea.isNarrow ? outlierWarningBanner : null
-                visible: cavePageArea.hasCaveWarning
+                target: cavePageArea.isNarrow ? warningsBannerId : null
+                visible: cavePageArea.hasWarnings
                 Layout.fillWidth: true
             }
 

@@ -28,7 +28,7 @@ QQ.Rectangle {
 
     color: Theme.surfaceRaised
     implicitHeight: layout.implicitHeight
-    radius: 5
+    radius: Theme.bannerRadius
     clip: true
 
     visible: false

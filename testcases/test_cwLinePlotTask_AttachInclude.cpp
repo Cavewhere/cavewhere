@@ -57,6 +57,9 @@
 #include <QTemporaryDir>
 #include <QUuid>
 
+// Std
+#include <algorithm>
+
 namespace {
 
 //! The survey label an externally-attached trip's *begin block carries, which is
@@ -1314,6 +1317,14 @@ TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
     REQUIRE(warnings.size() == 1);
     CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
     CHECK(attachedFixWarnings(project.beside).isEmpty());
+
+    // A click on the warning opens the file it names: the cave's own.
+    const QList<cwError> attachedErrors = project.attached->errorModel()->errors()->toList();
+    const auto warning = std::find_if(attachedErrors.cbegin(), attachedErrors.cend(), [](const cwError& error) {
+        return error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFixWithoutCS);
+    });
+    REQUIRE(warning != attachedErrors.cend());
+    CHECK(warning->targetId() == project.attached->id());
 
     SECTION("the warning clears when the project loses its frame")
     {

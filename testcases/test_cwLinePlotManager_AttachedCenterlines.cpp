@@ -371,6 +371,7 @@ TEST_CASE("A cave-level Compass attach with an untied survey warns on its node",
     CHECK(entry->type() == cwError::Warning);
     CHECK(entry->message() == QStringLiteral("3 stations in compass_untied.dat are not tied to the cave"));
     CHECK(entry->detail() == QStringLiteral("u1, u2, u3"));
+    CHECK(entry->targetId() == cave->id());
 }
 
 TEST_CASE("Tying an attached file's dropped survey in clears its warning on the next solve",

@@ -32,6 +32,7 @@ public:
     bool Suppressed = false;
     QString Message;
     QString Detail;
+    QUuid TargetId;
 };
 
 cwError::cwError() : data(new cwErrorData)
@@ -114,6 +115,14 @@ void cwError::setDetail(QString detail) {
     data->Detail = detail;
 }
 
+QUuid cwError::targetId() const {
+    return data->TargetId;
+}
+
+void cwError::setTargetId(const QUuid& targetId) {
+    data->TargetId = targetId;
+}
+
 /**
  * @brief cwError::operator ==
  * @param error
@@ -126,7 +135,8 @@ bool cwError::operator==(const cwError &other) const
             data->Index == other.data->Index &&
             data->Suppressed == other.data->Suppressed &&
             data->Message == other.data->Message &&
-            data->Detail == other.data->Detail;
+            data->Detail == other.data->Detail &&
+            data->TargetId == other.data->TargetId;
 }
 
 /**
