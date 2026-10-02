@@ -37,6 +37,7 @@
 #include "asyncfuture.h"
 
 #include <QDateTime>
+#include <QFileInfo>
 #include <QFuture>
 #include <QSet>
 
@@ -549,6 +550,7 @@ QFuture<void> cwLinePlotManager::doRun() {
             return false;
         };
         if(!hasAnySolvableInput()) {
+            publishAttachedFixWarnings({});
             // No-shots path must also clear the cached cavern output / solve
             // error so CavernOutputPage doesn't keep showing the previous
             // run's text (D-1). No async work, so the solve is already done.
@@ -565,8 +567,9 @@ QFuture<void> cwLinePlotManager::doRun() {
                 return QFuture<cwLinePlotTask::LinePlotResultData>();
             }
 
-            auto input = cwLinePlotTask::buildInput(Region.data(),
-                                                    m_externalCenterlineManager->solveInputs());
+            const auto externalInputs = m_externalCenterlineManager->solveInputs();
+            publishAttachedFixWarnings(externalInputs.ownersWithBareFixes);
+            auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
             auto future = cwLinePlotTask::run(std::move(input));
 
             // Receive the worker's result by parameter rather than capturing
@@ -730,6 +733,61 @@ void cwLinePlotManager::publishPerCaveErrors(const cwLinePlotTask::LinePlotResul
             continue;
         }
         updateUnconnectedChunkErrors(node, it.value());
+    }
+}
+
+void cwLinePlotManager::publishAttachedFixWarnings(const QSet<QUuid>& ownersWithBareFixes)
+{
+    if (Region == nullptr) {
+        return;
+    }
+
+    const cwGeoReference* geoReference = Region->geoReference();
+    const bool georeferenced = geoReference->hasCoordinateSystem();
+    const QString projectSystem = geoReference->datumName().isEmpty()
+                                      ? QStringLiteral("the project's coordinate system")
+                                      : QStringLiteral("the project's %1 system")
+                                            .arg(geoReference->datumName());
+
+    // The driver opens the *include under the nearest fix *cs above it, so
+    // the project's system is the one used only when no such fix exists.
+    const auto fixSystemInScope = [](const cwSurveyNode* scope) {
+        for (; scope != nullptr; scope = scope->parentNode()) {
+            for (const cwFixStation& fix : scope->fixStations()->fixStations()) {
+                if (!fix.inputCS().trimmed().isEmpty()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
+
+    const auto warningFor = [&](const cwExternalCenterline& centerline,
+                                const cwSurveyNode* enclosingNode) {
+        const QString system = fixSystemInScope(enclosingNode)
+                                   ? QStringLiteral("the coordinate system of the fixed stations around it")
+                                   : projectSystem;
+        return QStringLiteral("%1 fixes stations without a coordinate system; they are "
+                              "placed in %2.")
+            .arg(QFileInfo(centerline.entryFile()).fileName(), system);
+    };
+
+    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
+        QStringList messages;
+        if (georeferenced) {
+            if (ownersWithBareFixes.contains(node->id())) {
+                messages.append(warningFor(node->externalCenterline(), node->parentNode()));
+            }
+            for (const cwTrip* trip : node->trips()) {
+                if (ownersWithBareFixes.contains(trip->id())) {
+                    messages.append(warningFor(trip->externalCenterline(), node));
+                }
+            }
+        }
+        if (node->errorModel() != nullptr) {
+            node->errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
+                                                          messages.join(QLatin1Char('\n')));
+        }
     }
 }
 

@@ -232,6 +232,11 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         if (inherited.autoDeclinationInScope) {
             cwSurvexExporterUtils::writeDeclinationReset(stream);
         }
+        // A georeferenced run names *cs out, after which cavern refuses any
+        // *fix with no input system. The file's own *cs still wins inside
+        // its blocks; this only catches the bare ones.
+        cwSurvexExporterUtils::CsScope includeScope(enclosingScope);
+        includeScope.ensureAnySystem(stream, globalCS);
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
@@ -300,6 +305,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
             } else if (here.autoDeclinationInScope) {
                 cwSurvexExporterUtils::writeDeclinationReset(stream);
             }
+            cwSurvexExporterUtils::CsScope includeScope(csScope);
+            includeScope.ensureAnySystem(stream, globalCS);
             if (!writeExternalInclude(stream, tripData.id,
                                       ExportOptions.tripAttachmentDirs,
                                       tripData.externalCenterline.entryFile(),

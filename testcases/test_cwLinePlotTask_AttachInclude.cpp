@@ -8,10 +8,14 @@
 // Catch
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Cavewhere
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
@@ -1183,4 +1187,266 @@ TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
     // text so CavernOutputPage can surface it.
     CHECK_FALSE(manager.cavernLog().isEmpty());
     CHECK(lookupHasAnyStationFor(cave->stationPositionLookup()) == false);
+}
+
+namespace {
+
+// The project's frame and the system the beside-cave's fix is entered in: a
+// transverse Mercator centered on its own origin, so a fix in it reads in
+// meters from the scene origin.
+const QString kBareFixFrameCS = QStringLiteral(
+    "+proj=tmerc +lat_0=37.1832 +lon_0=-84.0947 +k=1 +x_0=0 +y_0=0 "
+    "+datum=WGS84 +units=m +no_defs +type=crs");
+// Away from the origin survex_blocks.svx fixes d1 at, so the two caves share no
+// point the .3d could fuse.
+constexpr double kBesideCaveEasting = 1000.0;
+
+enum class Frame { Georeferenced, Ungeoreferenced };
+enum class FileSystem { Bare, OwnCS };
+
+//! survex_blocks.svx attached as a whole cave, beside a native cave. In a
+//! georeferenced project the native cave carries a fix in the frame, which is
+//! what makes the driver write *cs out. OwnCS prepends a *cs of the file's own,
+//! so its *fix d1 carries an input system.
+struct BareFixProject {
+    cwCave* beside = nullptr;
+    cwCave* attached = nullptr;
+    QString includePath;
+};
+
+BareFixProject buildBareFixProject(cwCavingRegion& region,
+                                   cwLinePlotManager& manager,
+                                   const QTemporaryDir& tempRoot,
+                                   Frame frame,
+                                   FileSystem fileSystem)
+{
+    BareFixProject project;
+    project.beside = addEmptyCave(region, QStringLiteral("Beside"));
+    cwTrip* nativeTrip = addTripWithShot(project.beside, QStringLiteral("Native"),
+                                         QStringLiteral("b1"), QStringLiteral("b2"), 10.0);
+    nativeTrip->calibrations()->setAutoDeclination(false);
+
+    if (frame == Frame::Georeferenced) {
+        cwFixStation fix;
+        fix.setStationName(QStringLiteral("b1"));
+        fix.setInputCS(kBareFixFrameCS);
+        fix.setEasting(kBesideCaveEasting);
+        fix.setNorthing(0.0);
+        project.beside->fixStations()->appendFixStation(fix);
+        region.geoReference()->restore(cwGeoReference::Frozen, kBareFixFrameCS, {}, QString());
+    }
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("blocks")),
+                                             fixturePath(QStringLiteral("survex_blocks.svx")));
+    project.includePath = QDir(attachDir).absoluteFilePath(QStringLiteral("survex_blocks.svx"));
+    if (fileSystem == FileSystem::OwnCS) {
+        QFile file(project.includePath);
+        REQUIRE(file.open(QFile::ReadOnly));
+        const QByteArray body = file.readAll();
+        file.close();
+        REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate));
+        file.write(QStringLiteral("*cs CUSTOM \"%1\"\n").arg(kBareFixFrameCS).toUtf8() + body);
+    }
+
+    project.attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    project.attached->setExternalCenterline(
+        cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+
+    QHash<QUuid, QString> caveDirs;
+    caveDirs.insert(project.attached->id(), attachDir);
+    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
+    manager.setRegion(&region);
+    manager.waitToFinish();
+    return project;
+}
+
+QStringList attachedFixWarnings(const cwSurveyNode* node)
+{
+    return node->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::AttachedFixWithoutCS)});
+}
+
+//! The directive written just before the *include of \a includePath.
+QString lineBeforeInclude(const QString& driver, const QString& includePath)
+{
+    const QStringList lines = driver.split(QLatin1Char('\n'));
+    const QString includeLine = QStringLiteral("*include \"%1\"").arg(includePath);
+    for (qsizetype i = 1; i < lines.size(); ++i) {
+        if (lines.at(i).trimmed() == includeLine) {
+            return lines.at(i - 1).trimmed();
+        }
+    }
+    return QString();
+}
+
+} // namespace
+
+TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    const BareFixProject project =
+        buildBareFixProject(region, manager, tempRoot, Frame::Georeferenced, FileSystem::Bare);
+    REQUIRE(region.geoReference()->hasCoordinateSystem());
+
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // The include opens under an input *cs, so cavern reads the file's bare
+    // *fix d1 0 0 0 in it rather than refusing it under *cs out.
+    CHECK(manager.driverSource().contains(QStringLiteral("*cs out ")));
+    const QString beforeInclude = lineBeforeInclude(manager.driverSource(), project.includePath);
+    CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
+    CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs out")));
+
+    // Placed where an ungeoreferenced project puts it: d1 at the frame's origin.
+    const cwStationPositionLookup& lookup = project.attached->stationPositionLookup();
+    REQUIRE(lookup.hasPosition(QStringLiteral("doghill.d1")));
+    CHECK(lookup.position(QStringLiteral("doghill.d1")).x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
+
+    const QStringList warnings = attachedFixWarnings(project.attached);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
+    CHECK(attachedFixWarnings(project.beside).isEmpty());
+
+    SECTION("the warning clears when the project loses its frame")
+    {
+        project.beside->fixStations()->removeAt(0);
+        region.geoReference()->clear();
+        manager.waitToFinish();
+
+        REQUIRE_FALSE(region.geoReference()->hasCoordinateSystem());
+        CHECK(attachedFixWarnings(project.attached).isEmpty());
+    }
+}
+
+TEST_CASE("An attached file's bare *fix warns nothing in an ungeoreferenced project",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    const BareFixProject project =
+        buildBareFixProject(region, manager, tempRoot, Frame::Ungeoreferenced, FileSystem::Bare);
+    REQUIRE_FALSE(region.geoReference()->hasCoordinateSystem());
+
+    INFO("driver:\n" << manager.driverSource().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK_FALSE(manager.driverSource().contains(QStringLiteral("*cs")));
+    CHECK(attachedFixWarnings(project.attached).isEmpty());
+}
+
+TEST_CASE("An attached file whose fixes carry their own *cs warns nothing",
+          "[Attach][Cave][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const Frame frame = GENERATE(Frame::Georeferenced, Frame::Ungeoreferenced);
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+    const BareFixProject project =
+        buildBareFixProject(region, manager, tempRoot, frame, FileSystem::OwnCS);
+
+    CHECK(attachedFixWarnings(project.attached).isEmpty());
+    CHECK(attachedFixWarnings(project.beside).isEmpty());
+
+    if (frame == Frame::Georeferenced) {
+        INFO("solve error: " << manager.solveErrorMessage().toStdString());
+        CHECK_FALSE(manager.hasSolveError());
+    }
+}
+
+TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around it",
+          "[Attach][Trip][CS]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    cwLinePlotManager manager;
+
+    cwCave* beside = addEmptyCave(region, QStringLiteral("Beside"));
+    cwTrip* nativeTrip = addTripWithShot(beside, QStringLiteral("Native"),
+                                         QStringLiteral("b1"), QStringLiteral("b2"), 10.0);
+    nativeTrip->calibrations()->setAutoDeclination(false);
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("b1"));
+    fix.setInputCS(kBareFixFrameCS);
+    fix.setEasting(kBesideCaveEasting);
+    fix.setNorthing(0.0);
+    beside->fixStations()->appendFixStation(fix);
+    region.geoReference()->restore(cwGeoReference::Frozen, kBareFixFrameCS, {}, QString());
+
+    const QString attachDir = seedAttachment(tempSubdir(tempRoot, QStringLiteral("blocks")),
+                                             fixturePath(QStringLiteral("survex_blocks.svx")));
+    const QString includePath =
+        QDir(attachDir).absoluteFilePath(QStringLiteral("survex_blocks.svx"));
+
+    SECTION("under a cave with no fix of its own, the trip block opens the project's system")
+    {
+        cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+        cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
+        attached->calibrations()->setAutoDeclination(false);
+        attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+        manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+        manager.setRegion(&region);
+        manager.waitToFinish();
+
+        const QString driver = manager.driverSource();
+        INFO("driver:\n" << driver.toStdString());
+        INFO("solve error: " << manager.solveErrorMessage().toStdString());
+        REQUIRE_FALSE(manager.hasSolveError());
+
+        const QString beforeInclude = lineBeforeInclude(driver, includePath);
+        CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
+        CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs out")));
+        const qsizetype tripBegin =
+            driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+        REQUIRE(tripBegin >= 0);
+        CHECK(driver.indexOf(beforeInclude, tripBegin) > tripBegin);
+
+        const QStringList warnings = attachedFixWarnings(host);
+        REQUIRE(warnings.size() == 1);
+        CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
+        CHECK(warnings.first().contains(QStringLiteral("the project's")));
+        CHECK(attachedFixWarnings(beside).isEmpty());
+    }
+
+    SECTION("under a cave whose fix names a system, the trip inherits it and writes none")
+    {
+        cwTrip* attached = addEmptyTrip(beside, QStringLiteral("Attached"));
+        attached->calibrations()->setAutoDeclination(false);
+        attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+        manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+        manager.setRegion(&region);
+        manager.waitToFinish();
+
+        const QString driver = manager.driverSource();
+        INFO("driver:\n" << driver.toStdString());
+        INFO("solve error: " << manager.solveErrorMessage().toStdString());
+        REQUIRE_FALSE(manager.hasSolveError());
+
+        const qsizetype tripBegin =
+            driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+        const qsizetype include =
+            driver.indexOf(QStringLiteral("*include \"%1\"").arg(includePath));
+        REQUIRE(tripBegin >= 0);
+        REQUIRE(include > tripBegin);
+        CHECK_FALSE(driver.mid(tripBegin, include - tripBegin).contains(QStringLiteral("*cs")));
+
+        const QStringList warnings = attachedFixWarnings(beside);
+        REQUIRE(warnings.size() == 1);
+        CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
+        CHECK(warnings.first().contains(QStringLiteral("fixed stations around it")));
+    }
 }

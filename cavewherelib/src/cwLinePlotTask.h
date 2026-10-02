@@ -254,6 +254,10 @@ public:
         // or whose in-project copy is gone from disk. The driver writes no
         // *include for them (see Input).
         QSet<QUuid> excludedExternalOwners;
+        // Owners (cave or trip) whose file fixes a station with no input
+        // coordinate system of its own. Read on the main thread when the
+        // solve starts, to warn about them in a georeferenced project.
+        QSet<QUuid> ownersWithBareFixes;
     };
 
     static Input buildInput(const cwCavingRegion* region,

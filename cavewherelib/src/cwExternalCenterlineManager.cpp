@@ -386,7 +386,8 @@ cwLinePlotTask::ExternalCenterlineInputs cwExternalCenterlineManager::solveInput
     return { m_caveAttachmentDirs,
              m_tripAttachmentDirs,
              m_fileOwnsDeclination,
-             std::move(excluded) };
+             std::move(excluded),
+             m_ownersWithBareFixes };
 }
 
 void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
@@ -692,6 +693,9 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     }
                     result.fileOwnsDeclination.insert(
                         owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
+                    if (scan.value().hasFixWithoutCoordinateSystem()) {
+                        result.ownersWithBareFixes.insert(owner.ownerId);
+                    }
                     row.depCount = scan.value().dependencies.size();
                     row.warningCount = scan.value().warnings.size();
                 }
@@ -750,10 +754,12 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     const bool missingCopiesChangedNow = result.missingCopies != m_missingCopies;
     const bool solveNow = m_solveOnScanApply
         || result.fileOwnsDeclination != m_fileOwnsDeclination
+        || result.ownersWithBareFixes != m_ownersWithBareFixes
         || result.containmentErrors != m_containmentErrors
         || missingCopiesChangedNow;
     m_solveOnScanApply = false;
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
+    m_ownersWithBareFixes = std::move(result.ownersWithBareFixes);
     // An owner entering or leaving the excluded set changes the driver the
     // same way a declination flag does — its *include just vanished or
     // reappeared — so both halves of that set swap ahead of the solve

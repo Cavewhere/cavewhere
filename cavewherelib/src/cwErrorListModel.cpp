@@ -8,6 +8,9 @@
 
 #include "cwErrorListModel.h"
 
+//Std includes
+#include <algorithm>
+
 cwErrorListModel::cwErrorListModel(QObject *parent)
     : QAbstractListModel(parent)
 {
@@ -46,6 +49,30 @@ QStringList cwErrorListModel::warningMessagesForTypeIds(const QList<int>& ids) c
         }
     }
     return messages;
+}
+
+void cwErrorListModel::setTypedWarning(cwErrorTypeId errorTypeId, const QString& message)
+{
+    const int errorTypeIdValue = static_cast<int>(errorTypeId);
+    const auto found = std::find_if(m_errors.cbegin(), m_errors.cend(),
+                                    [errorTypeIdValue](const cwError& error) {
+                                        return error.errorTypeId() == errorTypeIdValue;
+                                    });
+    const int row = found == m_errors.cend() ? -1 : int(std::distance(m_errors.cbegin(), found));
+
+    if (message.isEmpty()) {
+        if (row >= 0) {
+            remove(row);
+        }
+    } else if (row >= 0) {
+        if (m_errors.at(row).message() != message) {
+            setData(index(row), message, static_cast<int>(ErrorRoles::MessageRole));
+        }
+    } else {
+        cwError error(message, cwError::Warning);
+        error.setErrorTypeId(errorTypeIdValue);
+        append(error);
+    }
 }
 
 cwError cwErrorListModel::at(int index) const

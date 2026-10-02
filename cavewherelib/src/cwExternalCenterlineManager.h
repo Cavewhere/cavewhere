@@ -381,6 +381,9 @@ private:
         // missing files) without re-statting on the main thread.
         QStringList existingWatchedFiles;
         QHash<QUuid, bool> fileOwnsDeclination;
+        // Owners whose file fixes at least one station with no input
+        // coordinate system of its own (ScanResult::fixes).
+        QSet<QUuid> ownersWithBareFixes;
         // Station names harvested from each trip owner's in-project entry
         // file, and cavern's complaint when that harvest failed. An owner
         // appears in at most one of them; an owner in neither had no
@@ -489,6 +492,11 @@ private:
     // read via fileOwnsDeclination() and baked into each solve's Input by
     // the consumer. Rebuilt wholesale on every recompute.
     QHash<QUuid, bool> m_fileOwnsDeclination;
+
+    // Owners whose file fixes a station with no input coordinate system,
+    // from the most recent recompute; handed to each solve through
+    // solveInputs(). Rebuilt wholesale on every recompute.
+    QSet<QUuid> m_ownersWithBareFixes;
 
     // RAII completion guard for one owner operation, shared (via
     // shared_ptr) by the operation's completion and canceled

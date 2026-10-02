@@ -31,6 +31,7 @@ enum class cwErrorTypeId : int {
     FixStationOutlier = 596,   //!< issue #596: a fix far from the survey cluster
     FixStationDomain = 597,    //!< issue #596: a fix outside its CS's valid domain
     FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
+    AttachedFixWithoutCS = 599, //!< an attached file fixes stations with no input CS in a georeferenced project
 };
 
 /**

@@ -90,20 +90,6 @@ QStringList skeleton(const QString& driver)
     return lines;
 }
 
-//! Puts a *cs line at the top of the seeded copy of an included file. Side
-//! Cave's fix makes the driver name a *cs out, and cavern refuses a *fix with
-//! no input system under one — survex_blocks.svx fixes d1 bare, and OMEGA2's
-//! block sits outside the *cs Side Cave's own fix brings into scope.
-void declareInputCS(const QString& includePath)
-{
-    QFile file(includePath);
-    REQUIRE(file.open(QFile::ReadOnly));
-    const QByteArray body = file.readAll();
-    file.close();
-    REQUIRE(file.open(QFile::WriteOnly | QFile::Truncate));
-    file.write(QStringLiteral("*cs %1\n").arg(kSideCaveCS).toUtf8() + body);
-}
-
 //! The §7.1 tree, native part plus one sourced root:
 //!
 //!   Kentucky field seasons            Folder
@@ -151,7 +137,6 @@ SevenOneTree buildSevenOneTree(cwCavingRegion& region, const QTemporaryDir& temp
     addEmptyTrip(tree.omega2, QStringLiteral("Window"));
     const QString omegaDir = tempSubdir(tempRoot, QStringLiteral("omega2"));
     tree.omega2Include = seedAttachment(omegaDir, fixturePath(QStringLiteral("survex_blocks.svx")));
-    declareInputCS(tree.omega2Include);
     tree.options.caveAttachmentDirs.insert(tree.omega2->id(), omegaDir);
 
     region.equates()->appendEquate(cwEquate({tripHandle(tree.domeClimb, QStringLiteral("simple.a1")),
@@ -197,6 +182,9 @@ TEST_CASE("Every native node exports as its own nested *begin block", "[Exporter
         QStringLiteral("*end side_cave ; End of Side Cave"),
         QStringLiteral("*end kentucky_field_seasons ; End of Kentucky field seasons"),
         QStringLiteral("*begin omega2 ;OMEGA2"),
+        // survex_blocks.svx fixes d1 with no *cs of its own, and *cs out is
+        // set, so the include inherits the run's system.
+        QStringLiteral("*cs EPSG:32613"),
         QStringLiteral("*include \"%1\"").arg(tree.omega2Include),
         QStringLiteral("*end omega2 ; End of OMEGA2"),
         QStringLiteral("*equate kentucky_field_seasons.side_cave.upper_level.dome_climb.simple.a1"

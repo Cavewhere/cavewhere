@@ -75,6 +75,13 @@ void CsScope::ensure(QTextStream& stream, const QString& cs)
     m_current = trimmed;
 }
 
+void CsScope::ensureAnySystem(QTextStream& stream, const QString& fallback)
+{
+    if (m_current.isEmpty()) {
+        ensure(stream, fallback);
+    }
+}
+
 std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStation>& fixes)
 {
     // "Mark Station as Fixed" creates a row before the user types anything, and

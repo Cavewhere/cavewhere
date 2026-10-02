@@ -21,6 +21,7 @@
 #include <QtQml/qqmlregistration.h>
 
 //Std includes
+#include <algorithm>
 #include <optional>
 
 /**
@@ -189,6 +190,27 @@ struct SeededTripMetadata {
     bool operator!=(const SeededTripMetadata& other) const { return !(*this == other); }
 };
 
+/**
+ * One station the closure fixes, and whether an input coordinate system is in
+ * force for its coordinate. A fix with one reads its coordinate in that system;
+ * one without reads it in whatever system the driver puts in scope around the
+ * file's *include.
+ *
+ * Per format:
+ *   Survex  - a *fix, with a *cs (not *cs out) in force in its block.
+ *   Compass - a station fixed on a .mak '#' line ("name[m,x,y,z]"), with a
+ *             datum ('&') and a UTM zone ('$', or a base location's '@') in
+ *             force, or a *cs around the .mak's *include. A .dat fixes nothing.
+ *   Walls   - a #FIX in a .srv, with a .REF georeference in force on its .wpj
+ *             entry. A .srv attached on its own has none.
+ */
+struct ScannedFix {
+    QString station;
+    bool hasCoordinateSystem = false;
+
+    bool operator==(const ScannedFix& other) const = default;
+};
+
 struct ScanResult {
     /**
      * Every file required to feed the entry file into cavern,
@@ -260,6 +282,18 @@ struct ScanResult {
      */
     SeededTripMetadata seededMetadata;
 
+    /**
+     * Every station the closure fixes, in walk order. See ScannedFix.
+     */
+    QList<ScannedFix> fixes;
+
+    bool hasFixWithoutCoordinateSystem() const
+    {
+        return std::any_of(fixes.cbegin(), fixes.cend(), [](const ScannedFix& fix) {
+            return !fix.hasCoordinateSystem;
+        });
+    }
+
     bool operator==(const ScanResult& other) const
     {
         return dependencies == other.dependencies
@@ -269,7 +303,8 @@ struct ScanResult {
             && rootStationCount == other.rootStationCount
             && rootDate == other.rootDate
             && entryHasOwnShots == other.entryHasOwnShots
-            && seededMetadata == other.seededMetadata;
+            && seededMetadata == other.seededMetadata
+            && fixes == other.fixes;
     }
     bool operator!=(const ScanResult& other) const { return !(*this == other); }
 };

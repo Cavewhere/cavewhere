@@ -200,6 +200,14 @@ void applyWallsPrefixOptions(const QString& text, WallsPrefixLevels& prefix)
     }
 }
 
+const QRegularExpression& wallsFixRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^#fix\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
 const QRegularExpression& wallsDateRegex()
 {
     static const QRegularExpression regex(
@@ -340,6 +348,24 @@ const QRegularExpression& survexDataRegex()
     return regex;
 }
 
+// "*cs <system>" sets the input system; "*cs out <system>" sets only the
+// output one, which a *fix never reads.
+const QRegularExpression& survexCsRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*cs\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+const QRegularExpression& survexFixRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*fix\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
 const QRegularExpression& survexDateRegex()
 {
     static const QRegularExpression regex(
@@ -452,6 +478,11 @@ struct ScanState {
     // index 0 is the file root, which starts in Survex's default
     // normal style
     QList<bool> passageStyles = QList<bool>{false};
+    // per open scope, whether an input *cs is in force; index 0 is the
+    // file root. Cavern scopes *cs to its *begin block like *data.
+    QList<bool> coordinateSystemInForce = QList<bool>{false};
+    // every station the closure fixes, in walk order
+    QList<cwExternalCenterlineScanner::ScannedFix> fixes;
     // set when the entry file itself carries shot data
     bool entryHasOwnShots = false;
     // distinct station names written where no block is open - the
@@ -468,6 +499,8 @@ struct ScanState {
     // force, handed from the project walk to the .srv about to be
     // scanned
     WallsPrefixLevels pendingWallsPrefix;
+    // whether that same entry carries a .REF georeference
+    bool pendingWallsGeoreferenced = false;
 };
 
 // inProgress is exactly the recursion stack, so a depth of one means
@@ -544,6 +577,7 @@ void pushSurvexBlock(ScanState& state, const QString& name)
     // A *data directive inside a block reverts at its *end, so each
     // scope starts from the enclosing scope's style.
     state.passageStyles.append(state.passageStyles.constLast());
+    state.coordinateSystemInForce.append(state.coordinateSystemInForce.constLast());
 
     OpenBlock open;
     if (!name.isEmpty()) {
@@ -572,6 +606,9 @@ void popSurvexBlock(ScanState& state)
     state.openBlocks.removeLast();
     if (state.passageStyles.size() > 1) {
         state.passageStyles.removeLast();
+    }
+    if (state.coordinateSystemInForce.size() > 1) {
+        state.coordinateSystemInForce.removeLast();
     }
 }
 
@@ -602,6 +639,11 @@ void scanSurvexFile(const QString& filePath, ScanState& state);
 void scanCompassFile(const QString& filePath, ScanState& state);
 void scanWallsFile(const QString& filePath, ScanState& state);
 void scanByFormat(const QString& filePath, ScanState& state);
+
+void recordFix(ScanState& state, const QString& station, bool hasCoordinateSystem)
+{
+    state.fixes.append({station, hasCoordinateSystem});
+}
 
 void recordWarning(ScanState& state, const QString& message)
 {
@@ -720,6 +762,19 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             state.passageStyles.last() =
                 dataMatch.captured(1).compare(kSurvexPassageDataStyle,
                                               Qt::CaseInsensitive) == 0;
+            continue;
+        }
+
+        if (const auto csMatch = survexCsRegex().match(line); csMatch.hasMatch()) {
+            const bool setsInput =
+                csMatch.captured(1).compare(QLatin1String("out"), Qt::CaseInsensitive) != 0;
+            if (setsInput) {
+                state.coordinateSystemInForce.last() = true;
+            }
+            continue;
+        }
+        if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
+            recordFix(state, fixMatch.captured(1), state.coordinateSystemInForce.constLast());
             continue;
         }
 
@@ -846,6 +901,54 @@ void collectCompassStations(const QString& text, ScanState& state)
     }
 }
 
+// A station fixed on a .mak '#' line: ",<name>[" after the file name.
+const QRegularExpression& compassMakFixRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(,\s*([^,;\[\s]+)\s*\[)RX"));
+    return regex;
+}
+
+/**
+ * Whether a .mak names an input system for its fixes, the way cavern reads
+ * one: each datum ('&') or UTM zone ('$') line replaces the system with the
+ * one the pair names, or with none until both are set, and a base location ('@', whose fourth field is a zone)
+ * supplies one at the next '#' line when nothing else has. Until the .mak
+ * writes any of them, the system in force around the .mak stands.
+ */
+struct CompassMakCoordinateSystem {
+    bool inForce = false;
+    bool hasDatum = false;
+    int zone = 0;
+    int baseLocationZone = 0;
+
+    void setBaseLocation(const QString& text)
+    {
+        constexpr int kZoneField = 3;
+        const QStringList fields = text.split(QLatin1Char(','));
+        if (fields.size() > kZoneField) {
+            baseLocationZone = fields.at(kZoneField).trimmed().toInt();
+        }
+    }
+
+    void applyBaseLocation()
+    {
+        inForce = inForce || (hasDatum && baseLocationZone != 0);
+    }
+
+    void setDatum(const QString& text)
+    {
+        hasDatum = !text.trimmed().isEmpty();
+        inForce = hasDatum && zone != 0;
+    }
+
+    void setZone(const QString& text)
+    {
+        zone = text.trimmed().toInt();
+        inForce = hasDatum && zone != 0;
+    }
+};
+
 void scanCompassFile(const QString& filePath, ScanState& state)
 {
     const QString canonical = canonicalize(filePath);
@@ -888,9 +991,26 @@ void scanCompassFile(const QString& filePath, ScanState& state)
         if (isMak) {
             const QDir baseDir = QFileInfo(canonical).absoluteDir();
             const QRegularExpression& regex = compassMakReferenceRegex();
+            CompassMakCoordinateSystem coordinateSystem;
+            coordinateSystem.inForce = state.coordinateSystemInForce.constLast();
             const QStringList lines = decoded.text.split(QLatin1Char('\n'));
             for (const QString& rawLine : lines) {
                 const QString line = rawLine.trimmed();
+                const auto directiveText = [&line]() {
+                    return line.mid(1).section(QLatin1Char(';'), 0, 0);
+                };
+                if (line.startsWith(QLatin1Char('&'))) {
+                    coordinateSystem.setDatum(directiveText());
+                    continue;
+                }
+                if (line.startsWith(QLatin1Char('$'))) {
+                    coordinateSystem.setZone(directiveText());
+                    continue;
+                }
+                if (line.startsWith(QLatin1Char('@'))) {
+                    coordinateSystem.setBaseLocation(directiveText());
+                    continue;
+                }
                 // A Compass comment is a whole line starting with '/';
                 // a '/' inside a '#' reference is a path separator and
                 // must survive so absolute and subdirectory targets
@@ -913,6 +1033,11 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                 }
                 if (rejectAbsolutePath(state, canonical, target)) {
                     break;
+                }
+                coordinateSystem.applyBaseLocation();
+                auto fixMatches = compassMakFixRegex().globalMatch(line);
+                while (fixMatches.hasNext()) {
+                    recordFix(state, fixMatches.next().captured(1), coordinateSystem.inForce);
                 }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
@@ -1025,6 +1150,7 @@ void recordWallsDate(ScanState& state, const QString& path, const QDate& date)
  */
 void collectWallsStations(const QString& canonical,
                           WallsPrefixLevels prefix,
+                          bool georeferenced,
                           ScanState& state)
 {
     bool sawStation = false;
@@ -1035,6 +1161,10 @@ void collectWallsStations(const QString& canonical,
             continue;
         }
         if (line.startsWith(QLatin1Char('#'))) {
+            if (const auto fixMatch = wallsFixRegex().match(line); fixMatch.hasMatch()) {
+                recordFix(state, fixMatch.captured(1), georeferenced);
+                continue;
+            }
             if (const auto dateMatch = wallsDateRegex().match(line);
                 dateMatch.hasMatch()) {
                 recordWallsDate(state, prefix.path(),
@@ -1147,6 +1277,7 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
         // not from the .srv, so hand them to the scan about to read
         // that file.
         state.pendingWallsPrefix = wallsPrefixFromOptions(child->allOptions());
+        state.pendingWallsGeoreferenced = !child->reference().isNull();
         scanByFormat(absolutePath, state);
     }
 }
@@ -1196,8 +1327,10 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         state.inProgress.insert(canonical);
         state.dependencies.append(canonical);
         const WallsPrefixLevels prefix = state.pendingWallsPrefix;
+        const bool georeferenced = state.pendingWallsGeoreferenced;
         state.pendingWallsPrefix = WallsPrefixLevels();
-        collectWallsStations(canonical, prefix, state);
+        state.pendingWallsGeoreferenced = false;
+        collectWallsStations(canonical, prefix, georeferenced, state);
     }
 
     state.inProgress.remove(canonical);
@@ -1605,6 +1738,7 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     result.rootStationCount = static_cast<int>(state.rootStations.size());
     result.rootDate = state.rootDate;
     result.entryHasOwnShots = state.entryHasOwnShots;
+    result.fixes = state.fixes;
     parseSeededMetadata(result);
     return Monad::Result<ScanResult>(result);
 }

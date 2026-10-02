@@ -443,36 +443,7 @@ void cwFixStationValidator::setNodeWarning(cwSurveyNode* node, cwErrorTypeId err
         return;
     }
     cwErrorListModel* errors = node->errorModel()->errors();
-    const int errorTypeIdValue = static_cast<int>(errorTypeId);
-
-    // Find our warning by its stable errorTypeId, not by value equality: the user
-    // can suppress it, and cwError::operator== includes the suppressed flag, so a
-    // stored value copy would stop matching the row the moment it is suppressed.
-    int row = -1;
-    for (int i = 0; i < errors->size(); ++i) {
-        if (errors->at(i).errorTypeId() == errorTypeIdValue) {
-            row = i;
-            break;
-        }
-    }
-
-    if (message.isEmpty()) {
-        if (row >= 0) {
-            errors->remove(row);
-        }
-    } else if (row >= 0) {
-        // Text-only change: update the row in place so the cave-list badge, any
-        // open delegate, the user's suppression, and warningCount all survive.
-        if (errors->at(row).message() != message) {
-            errors->setData(errors->index(row), message,
-                            static_cast<int>(cwErrorListModel::ErrorRoles::MessageRole));
-        }
-    } else {
-        cwError error(message, cwError::Warning);
-        error.setErrorTypeId(errorTypeIdValue);
-        errors->append(error);
-    }
-
+    errors->setTypedWarning(errorTypeId, message);
     updateWarningTracking(node, errors);
 }
 

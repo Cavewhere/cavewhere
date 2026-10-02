@@ -85,6 +85,11 @@ public:
     //! system of its own doesn't un-declare the enclosing one.
     void ensure(QTextStream& stream, const QString& cs);
 
+    //! Puts \a fallback in scope when the block names no system yet. An
+    //! *include'd file's bare *fix needs some input system once *cs out is
+    //! set, and one the block already names serves it as well as \a fallback.
+    void ensureAnySystem(QTextStream& stream, const QString& fallback);
+
 private:
     cwSurvexCS::SidecarWriter& m_sidecars;
     QString m_current;

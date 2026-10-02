@@ -71,6 +71,12 @@ public:
     void append(const cwError& error);
     void append(const QList<cwError>& errors);
 
+    //! Sets the one Warning row that \a errorTypeId owns to \a message, adding
+    //! it when absent and removing it when \a message is empty. The row is
+    //! found by its id rather than by value, so a user's suppression survives a
+    //! change of text.
+    void setTypedWarning(cwErrorTypeId errorTypeId, const QString& message);
+
     QHash<int, QByteArray> roleNames() const;
 
 public slots:
