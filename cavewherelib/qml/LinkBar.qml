@@ -133,7 +133,6 @@ QQ.Item {
             border.width: 1
             border.color: Theme.fieldBorder
             color: Theme.linkBar
-            radius: Theme.panelRadius
 
             LinkBarItem {
                 id: sizeItemId
@@ -168,7 +167,6 @@ QQ.Item {
                 QQ.Rectangle {
                     anchors.fill: parent
                     color: Theme.linkBar
-                    radius: Theme.panelRadius
                 }
             }
 

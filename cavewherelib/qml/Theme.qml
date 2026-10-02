@@ -136,9 +136,13 @@ QtObject {
     readonly property int sidebarWidthCompact: 50
     // A page button other than the current one, until the pointer reaches it
     readonly property real sidebarIdleOpacity: 0.5
-    // Room above and below the link bar, so its rounded outline clears the
+    // Room above and below the link bar, so its outline clears the
     // window edge and the divider under the bar
     readonly property int linkBarVerticalMargin: 4
+    // Page buttons: the icon sits tight to its label, and the pair keeps clear
+    // of the selected and hovered outline on every side
+    readonly property int sidebarButtonContentSpacing: 1
+    readonly property int sidebarButtonPadding: 7
 
     // Per-page tool rail: icon-only buttons, sized so two fit across the wide
     // sidebar, grouped inside a card that lifts them off the sidebar.

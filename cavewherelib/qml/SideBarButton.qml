@@ -26,7 +26,7 @@ QQ.Rectangle {
 
     anchors.left: parent.left;
     anchors.right: parent.right
-    height: columnLayoutId.height + 10
+    height: columnLayoutId.height + 2 * (Theme.toolRailPanelInset + Theme.sidebarButtonPadding)
     color: Theme.transparent
 
     //Called when troggle is true
@@ -54,6 +54,8 @@ QQ.Rectangle {
         opacity: button.troggled || hoverHandler.hovered ? 1.0 : Theme.sidebarIdleOpacity
 
         columns: layout == Qt.Vertical ? 1 : 2
+        rowSpacing: Theme.sidebarButtonContentSpacing
+        columnSpacing: Theme.sidebarButtonContentSpacing
         // rows: columnLayout ? 2 : 1
 
         QQ.Image {
