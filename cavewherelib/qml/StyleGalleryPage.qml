@@ -370,15 +370,22 @@ StandardPage {
                     RowLayout {
                         spacing: Theme.columnGap
 
-                        QC.BusyIndicator { running: true }
+                        QC.BusyIndicator { running: busyRunningSwitch.checked }
 
                         QC.BusyIndicator {
                             Layout.preferredWidth: galleryPage.smallBusySize
                             Layout.preferredHeight: galleryPage.smallBusySize
-                            running: true
+                            running: busyRunningSwitch.checked
                         }
 
                         TaskProgressRing { progress: 0.4 }
+
+                        // Turning it back on plays the droplet opening on the larger ring.
+                        QC.Switch {
+                            id: busyRunningSwitch
+                            text: "Running"
+                            checked: true
+                        }
                     }
                 }
 

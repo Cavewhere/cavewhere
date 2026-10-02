@@ -329,6 +329,27 @@ QtObject {
     // An indeterminate bar: its share of the track and one pass across it.
     readonly property real progressIndeterminateFraction: 0.35
     readonly property int progressSlideDuration: 1600
+    // The busy indicator: its implicit size, one turn of the ring, and its
+    // fade in and out.
+    readonly property int busyIndicatorSize: 44
+    readonly property int busySpinDuration: 1100
+    readonly property int busyFadeDuration: 150
+    // The droplet opening and the expanding close play at this size and above.
+    readonly property int busyDropletMinimumSize: 32
+    // Opening: a drop falls to the center, two ripples spread from where it
+    // lands, and the ring grows in from a smaller scale.
+    readonly property int busyDropSize: 4
+    readonly property int busyDropFallDuration: 450
+    readonly property real busyRippleBorderWidth: 1.5
+    readonly property real busyRippleStartScale: 0.1
+    readonly property real busyRippleStartOpacity: 0.9
+    readonly property int busyRippleDuration: 700
+    readonly property int busyRippleStagger: 150
+    readonly property real busyRingEnterScale: 0.6
+    readonly property int busyRingEnterDuration: 350
+    // Closing: the ring expands as it fades out.
+    readonly property real busyRingExitScale: 1.45
+    readonly property int busyRingExitDuration: 500
     // Group boxes and frames: the padding around their content.
     readonly property int containerPadding: 9
     readonly property int groupBoxHorizontalPadding: 11
