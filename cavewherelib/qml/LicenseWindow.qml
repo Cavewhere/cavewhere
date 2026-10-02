@@ -37,7 +37,7 @@ Window {
         RowLayout {
             Layout.alignment: Qt.AlignRight
 
-            Button {
+            QC.Button {
                 text: "Close CaveWhere"
                 onClicked: {
                     RootData.license.hasReadLicenseAgreement = false
@@ -45,7 +45,7 @@ Window {
                 }
             }
 
-            Button {
+            QC.Button {
                 text: "Accept"
                 onClicked: {
                     RootData.license.hasReadLicenseAgreement = true

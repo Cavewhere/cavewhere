@@ -391,19 +391,28 @@ QQ.Rectangle {
 
         color: Theme.floatingWidgetColor
 
-        ShadowRectangle {
+        QC.Frame {
             id: errorBoxId
 
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: visible ? errorColumnId.height + 10 : 0
+            height: visible ? errorColumnId.height + topPadding + bottomPadding : 0
             anchors.leftMargin: 5
             anchors.rightMargin: 5
             anchors.topMargin: 5
             visible: errorText.text !== ""
 
-            color: Theme.danger;
+            padding: 5
+            // A Frame's own content item is named "Frame", which would add a link
+            // to the object-name chains tests use to reach these items.
+            contentItem: QQ.Item {}
+            background: QQ.Rectangle {
+                color: Theme.danger
+                border.width: 1
+                border.color: Theme.border
+                radius: Theme.panelRadius
+            }
 
             QQ.Column {
                 id: errorColumnId
@@ -420,7 +429,7 @@ QQ.Rectangle {
                     wrapMode: QQ.Text.WordWrap
                 }
 
-                Button {
+                QC.Button {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "Okay"
                     onClicked: {
@@ -489,7 +498,7 @@ QQ.Rectangle {
         }
     }
 
-    ShadowRectangle {
+    QC.Frame {
         id: mainButtonArea
         objectName: "mainButtonArea"
         visible: !noteGallery.isNarrow
@@ -500,11 +509,19 @@ QQ.Rectangle {
         anchors.topMargin: 5
         anchors.rightMargin: 8
 
-        width: mainToolBar.width + 6
-        height: mainToolBar.height + 6
-
-        radius: Theme.floatingWidgetRadius
-        color: Theme.floatingWidgetColor
+        padding: 3
+        contentWidth: mainToolBar.width
+        contentHeight: mainToolBar.height
+        // A Frame's own content item is named "Frame", which would add a link
+        // to the object-name chains tests use to reach these buttons.
+        contentItem: QQ.Item {}
+        // Opaque so the toolbar reads over the note image beneath it.
+        background: QQ.Rectangle {
+            color: Theme.floatingWidgetColor
+            border.width: 1
+            border.color: Theme.border
+            radius: Theme.panelRadius
+        }
 
         QQ.Row {
             id: mainToolBar
@@ -560,7 +577,7 @@ QQ.Rectangle {
     }
 
 
-    ShadowRectangle {
+    QC.Frame {
         id: carpetButtonArea
         visible: false
         z: 1
@@ -570,11 +587,20 @@ QQ.Rectangle {
         anchors.rightMargin: mainButtonArea.anchors.rightMargin
         anchors.topMargin: mainButtonArea.anchors.topMargin
 
-        width: carpetRowId.width + 6
-        height: carpetRowId.height + 6
+        padding: mainButtonArea.padding
+        contentWidth: carpetRowId.width
+        contentHeight: carpetRowId.height
+        // A Frame's own content item is named "Frame", which would add a link
+        // to the object-name chains tests use to reach these buttons.
+        contentItem: QQ.Item {}
+        // Opaque so the toolbar reads over the note image beneath it.
+        background: QQ.Rectangle {
+            color: Theme.chrome
+            border.width: 1
+            border.color: Theme.border
+            radius: Theme.panelRadius
+        }
 
-        radius: mainButtonArea.radius
-        color: Theme.surfaceMuted
         RowLayout {
             id: carpetRowId
             spacing: 3

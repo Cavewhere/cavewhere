@@ -114,7 +114,7 @@ QQ.Item {
                 width: teamList.width
                 height: Math.max(25, Math.max(personNameRow.height, jobsListView.height)) + 6
 
-                color: index % 2 === 0 ? Theme.surfaceMuted : Theme.surface
+                color: index % 2 === 0 ? Theme.rowAlternate : Theme.background
 
                 property bool selected: teamList.currentIndex === index
 

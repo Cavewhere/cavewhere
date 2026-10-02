@@ -19,7 +19,7 @@ QQ.Rectangle {
     signal logoutRequested()
 
     implicitHeight: cardLayout.implicitHeight + 24
-    radius: 6
+    radius: Theme.panelRadius
     color: Theme.surfaceRaised
     border.width: 1
     border.color: Theme.borderSubtle

@@ -647,6 +647,19 @@ StandardPage {
                         QC.Label { text: "Checkable content" }
                     }
 
+                    ShadowRectangle {
+                        objectName: "galleryShadowRectangle"
+                        Layout.fillWidth: true
+                        implicitHeight: shadowLabelId.implicitHeight + 2 * Theme.statsPadding
+                        color: Theme.floatingWidgetColor
+
+                        QC.Label {
+                            id: shadowLabelId
+                            anchors.centerIn: parent
+                            text: "A floating panel"
+                        }
+                    }
+
                     QQ.Item {
                         Layout.fillWidth: true
                         implicitHeight: quoteLabelId.implicitHeight + galleryPage.quoteTipHeight

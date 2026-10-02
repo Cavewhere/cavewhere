@@ -30,7 +30,6 @@ ShadowRectangle {
     anchors.horizontalCenter: parent.horizontalCenter
 
     color: Theme.info
-    radius: 5
 
     property bool _hiding: false
 

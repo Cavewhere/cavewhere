@@ -111,7 +111,7 @@ RoundButton {
 
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        radius: 7
+        radius: Theme.controlRadius
         color: syncHealth.status.stale ? Theme.warning : Theme.success
         border.width: 1
         border.color: Theme.surface

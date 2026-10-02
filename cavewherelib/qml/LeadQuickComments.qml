@@ -45,7 +45,7 @@ QQ.Item {
                     model: itemId.keywords
 
                     delegate:
-                        CWButton {
+                        QC.Button {
                         required property string modelData
 
                         text: modelData

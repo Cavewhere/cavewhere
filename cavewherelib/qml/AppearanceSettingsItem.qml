@@ -60,7 +60,7 @@ ColumnLayout {
 
                     implicitWidth: 110
                     implicitHeight: delegateFontLayout.implicitHeight + 24
-                    radius: 6
+                    radius: Theme.controlRadius
                     color: Theme.surface
                     border.width: familyBtn.checked ? 2 : 1
                     border.color: familyBtn.checked ? Theme.accent : Theme.border
@@ -104,7 +104,7 @@ ColumnLayout {
             QQ.Rectangle {
                 implicitWidth: largerCard.implicitWidth
                 implicitHeight: largerCard.implicitHeight
-                radius: 6
+                radius: Theme.controlRadius
                 color: Theme.surface
                 border.width: 1
                 border.color: Theme.border
@@ -139,7 +139,7 @@ ColumnLayout {
 
                 implicitWidth: largerCard.implicitWidth
                 implicitHeight: largerCard.implicitHeight
-                radius: 6
+                radius: Theme.controlRadius
                 color: Theme.surface
                 border.width: active ? 2 : 1
                 border.color: active ? Theme.accent : Theme.border
@@ -171,7 +171,7 @@ ColumnLayout {
                 id: largerCard
                 implicitWidth: sizeLayout2.implicitWidth + 24
                 implicitHeight: sizeLayout2.implicitHeight + 24
-                radius: 6
+                radius: Theme.controlRadius
                 color: Theme.surface
                 border.width: 1
                 border.color: Theme.border

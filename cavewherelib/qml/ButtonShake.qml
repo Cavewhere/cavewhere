@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls as QC
 
 Item {
 
@@ -12,7 +12,7 @@ Item {
         shakeAnim.restart()
     }
 
-    Button {
+    QC.Button {
         id: buttonId
     }
 

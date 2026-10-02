@@ -423,7 +423,7 @@ StandardPage {
                         height: layoutId.height + 10
                         color: repoList.currentIndex === index
                                ? Theme.highlight
-                               : (index % 2 === 0 ? Theme.surface : Theme.surfaceMuted)
+                               : (index % 2 === 0 ? Theme.background : Theme.rowAlternate)
 
                         RowLayout {
                             id: layoutId

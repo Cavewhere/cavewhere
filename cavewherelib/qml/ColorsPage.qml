@@ -28,7 +28,7 @@ QC.ScrollView {
                 id: rectId
                 width: 100
                 height: 100
-                radius: 6
+                radius: Theme.controlRadius
                 color: model.color
                 border.width: 1
                 border.color: Theme.border

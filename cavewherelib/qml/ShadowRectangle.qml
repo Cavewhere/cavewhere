@@ -46,17 +46,28 @@
 ****************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Effects
+import cavewherelib
 
+// The floating panel for hand-drawn widgets: a bordered surface with the same
+// soft drop shadow the style's popups carry.
 QQ.Item {
-    property alias color : rectangle.color
+    property alias color: rectangle.color
     property alias radius: rectangle.radius
 
-    QQ.BorderImage {
+    RectangularShadow {
         anchors.fill: rectangle
-        anchors { leftMargin: -6; topMargin: -6; rightMargin: -8; bottomMargin: -8 }
-        border { left: 10; top: 10; right: 10; bottom: 10 }
-        source: "qrc:/icons/shadow.png"; smooth: true
+        radius: rectangle.radius
+        blur: Theme.popupShadowBlur
+        offset.y: Theme.popupShadowOffset
+        color: Theme.popupShadow
     }
 
-    QQ.Rectangle { id: rectangle; anchors.fill: parent }
+    QQ.Rectangle {
+        id: rectangle
+        anchors.fill: parent
+        radius: Theme.controlRadius
+        border.width: 1
+        border.color: Theme.border
+    }
 }
