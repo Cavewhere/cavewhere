@@ -2,12 +2,17 @@
 #include "cwGltfBaseColorTexture.h"
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
+#include "cwTask.h"
 
 // Qt includes
 #include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutex>
+#include <QSet>
+#include <QThreadPool>
+#include <QWaitCondition>
 
 // xxhash includes
 #include "xxhash.h"
@@ -54,6 +59,65 @@ namespace {
 
         return QString::number(static_cast<quint64>(hash), kHashRadix);
     }
+
+    /**
+     * One claim per cache entry while its encode runs; a second claimant waits,
+     * then reads the finished entry instead of queuing a duplicate encode.
+     */
+    class EncodeClaim
+    {
+    public:
+        explicit EncodeClaim(const QString& entryPath) :
+            m_entryPath(entryPath)
+        {
+            QMutexLocker locker(&mutex());
+            if(inFlight().contains(m_entryPath)) {
+                //Waiting frees this worker's pool slot, as compressOnLane does.
+                QThreadPool* pool = cwTask::threadPool();
+                if(pool != nullptr) {
+                    pool->releaseThread();
+                }
+                while(inFlight().contains(m_entryPath)) {
+                    finished().wait(&mutex());
+                }
+                if(pool != nullptr) {
+                    pool->reserveThread();
+                }
+            }
+            inFlight().insert(m_entryPath);
+        }
+
+        ~EncodeClaim()
+        {
+            QMutexLocker locker(&mutex());
+            inFlight().remove(m_entryPath);
+            finished().wakeAll();
+        }
+
+        EncodeClaim(const EncodeClaim&) = delete;
+        EncodeClaim& operator=(const EncodeClaim&) = delete;
+
+    private:
+        static QMutex& mutex()
+        {
+            static QMutex instance;
+            return instance;
+        }
+
+        static QWaitCondition& finished()
+        {
+            static QWaitCondition instance;
+            return instance;
+        }
+
+        static QSet<QString>& inFlight()
+        {
+            static QSet<QString> instance;
+            return instance;
+        }
+
+        const QString m_entryPath;
+    };
 }
 
 cwGltfBaseColorTexture::cwGltfBaseColorTexture(const QString& dataRootPath,
@@ -118,6 +182,11 @@ cwStreamedTexture cwGltfBaseColorTexture::streamedSource(const cw::gltf::SceneCP
     };
 
     cwDiskCacher cacher{QDir(m_dataRootPath)};
+
+    //Claimed before the lookup, so a request that waited on another's encode
+    //finds that encode's entry here.
+    const EncodeClaim claim(cacher.filePath(streamed.key));
+
     //entry() rather than hasEntry(): the file name leaves the checksum out, so
     //reading the entry is what tells a current encode from a stale one.
     if(!cacher.entry(streamed.key).isEmpty()) {
