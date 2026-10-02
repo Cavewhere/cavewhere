@@ -54,7 +54,7 @@ T.Switch {
         rightPadding: control.indicator && control.mirrored ? control.indicator.width + control.spacing : 0
         text: control.text
         font: control.font
-        color: control.palette.windowText
+        color: control.palette.active.windowText
         opacity: control.enabled ? 1 : Theme.disabledOpacity
     }
 }

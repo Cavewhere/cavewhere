@@ -17,9 +17,9 @@ T.TextField {
     leftPadding: Theme.fieldHorizontalPadding
     rightPadding: Theme.fieldHorizontalPadding
 
-    color: control.palette.text
+    color: control.palette.active.text
     selectionColor: Theme.highlight
-    selectedTextColor: control.palette.text
+    selectedTextColor: control.palette.active.text
     placeholderTextColor: Theme.fieldPlaceholder
     verticalAlignment: QQ.TextInput.AlignVCenter
     opacity: control.enabled ? 1 : Theme.disabledOpacity

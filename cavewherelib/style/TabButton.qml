@@ -10,7 +10,7 @@ T.TabButton {
     // round all four corners.
     readonly property bool inTabBar: T.TabBar.tabBar !== null
     readonly property QQ.color textColor: control.checked || control.hovered
-                                          ? control.palette.windowText : Theme.tabText
+                                          ? control.palette.active.windowText : Theme.tabText
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding)

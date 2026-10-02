@@ -127,7 +127,7 @@ RowLayout {
 
     QC.Label {
         id: errorText
-        color: Theme.danger
+        color: Theme.errorText
         Layout.alignment: Qt.AlignVCenter
         visible: false
         text: "Weird scaling units"

@@ -93,7 +93,7 @@ QC.ScrollView {
             "fieldSurface", "fieldBorder", "fieldPlaceholder", "hoverOverlay",
             "controlBorder", "checkFill", "checkMark", "track", "scrollHandle",
             "popupSurface", "popupBorder", "popupSelected", "popupShadow",
-            "toolTipSurface", "toolTipText", "overlayScrim",
+            "toolTipSurface", "toolTipBorder", "toolTipText", "overlayScrim",
             "tabStrip", "tabText",
             "progressStart", "progressMid", "progressEnd", "progressLead",
             "linkBar", "linkBarChip"

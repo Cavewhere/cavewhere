@@ -19,9 +19,9 @@ T.TextArea {
     leftPadding: padding + Theme.fieldHorizontalPadding - Theme.textAreaVerticalPadding
     rightPadding: padding + Theme.fieldHorizontalPadding - Theme.textAreaVerticalPadding
 
-    color: control.palette.text
+    color: control.palette.active.text
     selectionColor: Theme.highlight
-    selectedTextColor: control.palette.text
+    selectedTextColor: control.palette.active.text
     placeholderTextColor: Theme.fieldPlaceholder
     opacity: control.enabled ? 1 : Theme.disabledOpacity
 

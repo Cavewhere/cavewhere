@@ -496,7 +496,7 @@ StandardPage {
         //     Layout.fillWidth: true
         //     visible: gitHub.errorMessage.length > 0 && gitHub.authState === GitHubIntegration.Authorized
         //     wrapMode: Text.WordWrap
-        //     color: Theme.danger
+        //     color: Theme.errorText
         //     text: gitHub.errorMessage
         // }
 

@@ -16,7 +16,7 @@ T.ToolButton {
 
     icon.width: Theme.iconSizeButton
     icon.height: Theme.iconSizeButton
-    icon.color: control.highlighted ? Theme.buttonPrimaryText : control.palette.buttonText
+    icon.color: control.highlighted ? Theme.buttonPrimaryText : control.palette.active.buttonText
 
     contentItem: IconLabel {
         spacing: control.spacing
@@ -25,7 +25,7 @@ T.ToolButton {
         icon: control.icon
         text: control.text
         font: control.font
-        color: control.highlighted ? Theme.buttonPrimaryText : control.palette.buttonText
+        color: control.highlighted ? Theme.buttonPrimaryText : control.palette.active.buttonText
         opacity: !control.enabled ? Theme.disabledOpacity
                  : control.checkable && !control.checked ? Theme.uncheckedToggleOpacity : 1
     }

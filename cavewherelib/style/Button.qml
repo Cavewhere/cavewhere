@@ -17,7 +17,9 @@ T.Button {
 
     icon.width: Theme.iconSizeButton
     icon.height: Theme.iconSizeButton
-    icon.color: control.highlighted ? Theme.buttonPrimaryText : control.palette.buttonText
+    // Faded content reads the active group, so a disabled control dims once,
+    // through its opacity. Every style file with faded text does the same.
+    icon.color: control.highlighted ? Theme.buttonPrimaryText : control.palette.active.buttonText
 
     contentItem: IconLabel {
         spacing: control.spacing
@@ -26,7 +28,7 @@ T.Button {
         icon: control.icon
         text: control.text
         font: control.font
-        color: control.highlighted ? Theme.buttonPrimaryText : control.palette.buttonText
+        color: control.highlighted ? Theme.buttonPrimaryText : control.palette.active.buttonText
         opacity: !control.enabled ? Theme.disabledOpacity
                  : control.checkable && !control.checked ? Theme.uncheckedToggleOpacity : 1
     }

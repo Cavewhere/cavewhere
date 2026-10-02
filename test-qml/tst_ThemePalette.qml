@@ -104,6 +104,42 @@ MainWindowTest {
             verify(!Qt.colorEqual(Theme.textDisabled, Theme.text))
         }
 
+        function test_disabledLabelIsDimmed() {
+            const label = createObject("QC.Label { text: \"Plain\"; enabled: false }")
+            tryVerify(() => Qt.colorEqual(label.color, Theme.textDisabled), 5000, "disabled label")
+        }
+
+        // A disabled control dims once, through the opacity fade; its text
+        // keeps the enabled color underneath.
+        function test_disabledButtonTextFadesOnce() {
+            const enabledButton = createObject("QC.Button { text: \"On\" }")
+            const disabledButton = createObject("QC.Button { text: \"Off\"; enabled: false }")
+            tryVerify(() => Qt.colorEqual(enabledButton.contentItem.color, Theme.text), 5000, "enabled label")
+            verify(Qt.colorEqual(disabledButton.contentItem.color, enabledButton.contentItem.color),
+                   "disabled label " + disabledButton.contentItem.color)
+            compare(disabledButton.contentItem.opacity, Theme.disabledOpacity)
+            compare(enabledButton.contentItem.opacity, 1)
+        }
+
+        function test_disabledButtonKeepsOverride() {
+            const button = createObject("import cavewherelib; QC.Button { text: \"Delete\"; enabled: false; palette.buttonText: Theme.errorText }")
+            tryVerify(() => Qt.colorEqual(button.contentItem.color, Theme.errorText), 5000, "disabled override")
+            button.enabled = true
+            tryVerify(() => Qt.colorEqual(button.contentItem.color, Theme.errorText), 5000, "enabled override")
+        }
+
+        function test_darkToolTipIsDarkPanel() {
+            RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Dark
+            tryVerify(() => Theme.dark)
+            const toolTip = createObject("QC.ToolTip { text: \"Tip\" }")
+            toolTip.open()
+            tryVerify(() => toolTip.opened)
+            verify(toolTip.background.color.hslLightness < toolTip.contentItem.color.hslLightness,
+                   "surface " + toolTip.background.color + " text " + toolTip.contentItem.color)
+            verify(toolTip.background.color.hslLightness < 0.5, "surface " + toolTip.background.color)
+            toolTip.close()
+        }
+
         // The test window is a plain view that MainWindowTest hands the palette.
         function test_harnessControlFollowsTheme() {
             verifyFollowsTheme(createObject("QC.TextField {}").palette, "a new text field")

@@ -19,7 +19,7 @@ T.MenuItem {
 
     icon.width: Theme.iconSizeButton
     icon.height: Theme.iconSizeButton
-    icon.color: control.palette.windowText
+    icon.color: control.palette.active.windowText
 
     // Every row keeps the check column, so checkable and plain items line up.
     contentItem: IconLabel {
@@ -35,7 +35,7 @@ T.MenuItem {
         icon: control.icon
         text: control.text
         font: control.font
-        color: control.palette.windowText
+        color: control.palette.active.windowText
         opacity: control.enabled ? 1 : Theme.disabledOpacity
     }
 
@@ -46,7 +46,7 @@ T.MenuItem {
         height: Theme.menuIndicatorColumn
         sourceSize: Qt.size(width, height)
         source: "qrc:/twbs-icons/icons/check-lg.svg"
-        color: control.palette.windowText
+        color: control.palette.active.windowText
         visible: control.checked
         opacity: control.enabled ? 1 : Theme.disabledOpacity
     }
@@ -58,7 +58,7 @@ T.MenuItem {
         height: Theme.chevronSize
         sourceSize: Qt.size(width, height)
         source: "qrc:/twbs-icons/icons/chevron-right.svg"
-        color: control.palette.windowText
+        color: control.palette.active.windowText
         mirror: control.mirrored
         visible: control.subMenu
         opacity: control.enabled ? 1 : Theme.disabledOpacity

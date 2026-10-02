@@ -30,9 +30,9 @@ T.SpinBox {
         clip: width < implicitWidth
 
         font: control.font
-        color: control.palette.text
+        color: control.palette.active.text
         selectionColor: Theme.highlight
-        selectedTextColor: control.palette.text
+        selectedTextColor: control.palette.active.text
         horizontalAlignment: Qt.AlignLeft
         verticalAlignment: Qt.AlignVCenter
 
@@ -65,7 +65,7 @@ T.SpinBox {
             height: Theme.spinChevronSize
             sourceSize: Qt.size(width, height)
             source: "qrc:/twbs-icons/icons/chevron-up.svg"
-            color: control.up.hovered ? control.palette.text : Theme.textSecondary
+            color: control.up.hovered ? control.palette.active.text : Theme.textSecondary
         }
     }
 
@@ -87,7 +87,7 @@ T.SpinBox {
             height: Theme.spinChevronSize
             sourceSize: Qt.size(width, height)
             source: "qrc:/twbs-icons/icons/chevron-down.svg"
-            color: control.down.hovered ? control.palette.text : Theme.textSecondary
+            color: control.down.hovered ? control.palette.active.text : Theme.textSecondary
         }
     }
 

@@ -111,7 +111,7 @@ QQ.Rectangle {
             property bool succeeded: false
 
             color: testConnection.state === GitTestConnection.Testing ? Theme.textSubtle
-                 : testResultLabel.hasError ? Theme.danger
+                 : testResultLabel.hasError ? Theme.errorText
                  : Theme.success
             text: testConnection.state === GitTestConnection.Testing ? qsTr("Testing connection...")
                 : testResultLabel.hasError ? testConnection.errorMessage

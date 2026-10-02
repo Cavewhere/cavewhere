@@ -180,6 +180,7 @@ StandardPage {
                         QC.Button { text: "Save"; highlighted: true }
                         QC.Button { text: "Draw Up"; icon.source: "qrc:/twbs-icons/icons/plus.svg" }
                         QC.Button { text: "Flat"; flat: true }
+                        QC.Button { text: "Delete"; palette.buttonText: Theme.errorText; enabled: false }
                     }
 
                     QQ.Flow {

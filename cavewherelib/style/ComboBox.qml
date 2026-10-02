@@ -52,7 +52,7 @@ T.ComboBox {
             height: Theme.chevronSize
             sourceSize: Qt.size(width, height)
             source: "qrc:/twbs-icons/icons/chevron-down.svg"
-            color: control.hovered ? control.palette.text : Theme.textSecondary
+            color: control.hovered ? control.palette.active.text : Theme.textSecondary
         }
     }
 
@@ -72,9 +72,9 @@ T.ComboBox {
         validator: control.validator
         selectByMouse: control.selectTextByMouse
 
-        color: control.palette.text
+        color: control.palette.active.text
         selectionColor: Theme.highlight
-        selectedTextColor: control.palette.text
+        selectedTextColor: control.palette.active.text
         verticalAlignment: QQ.Text.AlignVCenter
 
         T.ContextMenu.menu: StyleTextEditingMenu {

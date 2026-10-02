@@ -18,7 +18,7 @@ T.ItemDelegate {
 
     icon.width: Theme.iconSizeButton
     icon.height: Theme.iconSizeButton
-    icon.color: control.palette.text
+    icon.color: control.palette.active.text
 
     contentItem: IconLabel {
         spacing: control.spacing
@@ -29,7 +29,7 @@ T.ItemDelegate {
         icon: control.icon
         text: control.text
         font: control.font
-        color: control.palette.text
+        color: control.palette.active.text
         opacity: control.enabled ? 1 : Theme.disabledOpacity
     }
 

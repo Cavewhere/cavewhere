@@ -32,6 +32,6 @@ T.ToolTip {
 
     background: StylePopupPanel {
         color: Theme.toolTipSurface
-        borderColor: Theme.toolTipSurface
+        borderColor: Theme.toolTipBorder
     }
 }

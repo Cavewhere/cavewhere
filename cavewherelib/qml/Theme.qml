@@ -277,8 +277,11 @@ QtObject {
     readonly property color popupShadow: dark ? "#6B000000" : "#29000000"
     // The palette's shadow role, which the fallback style draws its edges with.
     readonly property color paletteShadow: "#000000"
-    readonly property color toolTipSurface: dark ? "#FFFFFF" : "#2B2B2B"
-    readonly property color toolTipText: dark ? "#232323" : "#FFFFFF"
+    // A dark panel in both schemes. In Dark its fill sits close to the page's
+    // surfaces, so the border sets it apart.
+    readonly property color toolTipSurface: dark ? "#454545" : "#2B2B2B"
+    readonly property color toolTipBorder: dark ? "#606060" : "#2B2B2B"
+    readonly property color toolTipText: "#FFFFFF"
     readonly property color overlayScrim: dark ? "#66000000" : "#40000000" // behind a modal popup
 
     // Tabs
