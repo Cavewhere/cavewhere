@@ -36,9 +36,11 @@ StandardPage {
     readonly property FixStationModel fixStationsModel: cave ? cave.fixStations : null
 
     // Edits go to fixStationsModel; the rows the table shows come from the
-    // diagnostics proxy, which layers the read-only warning roles on top. Same
-    // rows, same role names — only the derived warnings are extra.
-    readonly property FixStationDiagnosticsModel diagnosticsModel: cave ? cave.fixStationDiagnostics : null
+    // node's fix station table: its own rows (through the diagnostics proxy,
+    // which adds the warning roles) followed by the read-only rows its attached
+    // files fix themselves. The node's rows come first, so a table row below
+    // fixStationsModel.count is the same row in fixStationsModel.
+    readonly property AttachedFixModel attachedFixesModel: cave ? cave.attachedFixes : null
 
     // The row to select and scroll to, or -1 for none. A page selection property: a
     // link into the page (a node warning naming a fix) sets it through the
@@ -160,7 +162,8 @@ StandardPage {
         //! column renders every row in the project's units so it can be scanned,
         //! while an edit starts from what the user wrote.
         editText: field.editValue !== "" ? field.editValue : field.text
-        color: field.error ? Theme.errorText : Theme.text
+        color: field.error ? Theme.errorText
+                           : field.readOnly ? Theme.textSubtle : Theme.text
         validator: field.coordinate ? coordinateValidatorId : null
 
         onFinishedEditting: (newText) => {
@@ -186,6 +189,9 @@ StandardPage {
         //! cell; the field gives up the room it takes. The coordinate column
         //! uses it so the "Coordinate" header owns the crosshair that fills it.
         property QQ.Item trailingItem: null
+        //! The same at the left edge; the station column parks the read-only
+        //! lock there.
+        property QQ.Item leadingItem: null
         property alias value: field.value
         property alias role: field.role
         property alias rowIndex: field.rowIndex
@@ -193,18 +199,21 @@ StandardPage {
         property alias coordinate: field.coordinate
         property alias axisOrder: field.axisOrder
         property alias editValue: field.editValue
+        property alias readOnly: field.readOnly
         //! Names the inner editable field rather than this wrapper, so callers
         //! reach the same item the narrow layout exposes directly.
         property alias fieldObjectName: field.objectName
 
         implicitWidth: columnWidth
         implicitHeight: Math.max(field.implicitHeight,
-                                 cell.trailingItem ? cell.trailingItem.implicitHeight : 0)
+                                 cell.trailingItem ? cell.trailingItem.implicitHeight : 0,
+                                 cell.leadingItem ? cell.leadingItem.implicitHeight : 0)
         clip: true
 
         FixField {
             id: field
-            anchors.left: parent.left
+            anchors.left: cell.leadingItem ? cell.leadingItem.right : parent.left
+            anchors.leftMargin: cell.leadingItem ? Theme.tightSpacing : 0
             anchors.right: cell.trailingItem ? cell.trailingItem.left : parent.right
             anchors.rightMargin: cell.trailingItem ? Theme.tightSpacing : 0
             anchors.verticalCenter: parent.verticalCenter
@@ -250,6 +259,49 @@ StandardPage {
         }
     }
 
+    // Marks a row an attached file fixes itself, with a tooltip naming the
+    // file, which is the only place that fix can be changed.
+    component ReadOnlyLock : QQ.Item {
+        id: readOnlyLock
+        property string sourceFile: ""
+
+        implicitWidth: Theme.iconSizeButton
+        implicitHeight: Theme.iconSizeButton
+
+        Icon {
+            anchors.centerIn: parent
+            source: "qrc:/twbs-icons/icons/lock.svg"
+            sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
+            colorizationColor: Theme.textSubtle
+        }
+
+        QQ.HoverHandler {
+            id: lockHover
+        }
+
+        QC.ToolTip {
+            visible: lockHover.hovered
+            delay: Theme.toolTipDelay
+
+            // The file name is the user's; see InlineWarning.
+            contentItem: QC.Label {
+                text: "Fixed by " + readOnlyLock.sourceFile + ". Edit that file to change this fix."
+                textFormat: QC.Label.PlainText
+            }
+        }
+    }
+
+    // A read-only row's coordinate system, as the file wrote it, or "none".
+    component ReadOnlyCSLabel : QC.Label {
+        id: readOnlyCSLabel
+        property string value: ""
+
+        text: readOnlyCSLabel.value !== "" ? readOnlyCSLabel.value : "none"
+        textFormat: QC.Label.PlainText
+        elide: QC.Label.ElideRight
+        color: Theme.textSubtle
+    }
+
     component CSCell : QQ.Item {
         id: csCell
         property int columnWidth: 0
@@ -263,22 +315,42 @@ StandardPage {
         //! all — see CSPicker.availableDatums / datumEnabled.
         property list<string> availableDatums: []
         property bool datumEnabled: false
+        //! A row an attached file fixes: the system is shown as text, with no
+        //! combo to change it.
+        property bool readOnly: false
 
         implicitWidth: columnWidth
-        implicitHeight: combo.implicitHeight
+        implicitHeight: csLoader.implicitHeight
         clip: true
 
-        CSComboBox {
-            id: combo
-            objectName: "inputCSComboBox." + csCell.rowIndex
+        QQ.Loader {
+            id: csLoader
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            value: csCell.value
-            availableDatums: csCell.availableDatums
-            datumEnabled: csCell.datumEnabled
-            onCommitted: (newCS) => fixStationPage.commitCS(
-                csCell.rowIndex, newCS, csCell.orderUnknown, csCell.coordinateText)
+            sourceComponent: csCell.readOnly ? readOnlyCSComponent : comboComponent
+        }
+
+        QQ.Component {
+            id: comboComponent
+
+            CSComboBox {
+                objectName: "inputCSComboBox." + csCell.rowIndex
+                value: csCell.value
+                availableDatums: csCell.availableDatums
+                datumEnabled: csCell.datumEnabled
+                onCommitted: (newCS) => fixStationPage.commitCS(
+                    csCell.rowIndex, newCS, csCell.orderUnknown, csCell.coordinateText)
+            }
+        }
+
+        QQ.Component {
+            id: readOnlyCSComponent
+
+            ReadOnlyCSLabel {
+                objectName: "inputCSText." + csCell.rowIndex
+                value: csCell.value
+            }
         }
     }
 
@@ -374,7 +446,7 @@ StandardPage {
                 id: tableView
                 objectName: "fixStationTableView"
 
-                model: fixStationPage.diagnosticsModel
+                model: fixStationPage.cave ? fixStationPage.cave.fixStationTable : null
                 columnModel: columnModelId
                 // No row is picked until a link or the user picks one; a
                 // ListView would otherwise select the first row as it fills.
@@ -385,84 +457,15 @@ StandardPage {
                 delegate: fixStationPage.isNarrow ? narrowDelegateComponent : wideDelegateComponent
             }
         }
-
-        // The fixes the node's attached files carry themselves, read-only: they
-        // show what anchors each file, and why a fix above on one of those
-        // stations is refused. Laid out under the table's columns.
-        ColumnLayout {
-            visible: attachedFixesId.count > 0
-            spacing: Theme.tightSpacing
-            Layout.fillWidth: true
-
-            QC.Label {
-                text: "Fixed by attached files"
-                font.bold: true
-            }
-
-            QQ.Repeater {
-                id: attachedFixesId
-
-                model: fixStationPage.cave ? fixStationPage.cave.attachedFixes : []
-
-                delegate: QQ.Flow {
-                    id: attachedFixRowId
-
-                    required property int index
-                    required property cwAttachedFix modelData
-
-                    spacing: fixStationPage.isNarrow ? Theme.flowSpacing : 0
-                    Layout.fillWidth: true
-
-                    QC.Label {
-                        objectName: "attachedFixStation." + attachedFixRowId.index
-                        width: fixStationPage.isNarrow ? implicitWidth : stationColumn.columnWidth
-                        elide: QC.Label.ElideRight
-                        textFormat: QC.Label.PlainText
-                        font.bold: fixStationPage.isNarrow
-                        text: attachedFixRowId.modelData.station
-                    }
-
-                    QC.Label { visible: fixStationPage.isNarrow; text: "·"; color: Theme.textSubtle }
-
-                    QC.Label {
-                        objectName: "attachedFixSystem." + attachedFixRowId.index
-                        width: fixStationPage.isNarrow ? implicitWidth : csColumn.columnWidth
-                        elide: QC.Label.ElideRight
-                        textFormat: QC.Label.PlainText
-                        text: attachedFixRowId.modelData.coordinateSystem !== ""
-                              ? attachedFixRowId.modelData.coordinateSystem
-                              : "none"
-                    }
-
-                    QC.Label { visible: fixStationPage.isNarrow; text: "·"; color: Theme.textSubtle }
-
-                    QC.Label {
-                        objectName: "attachedFixCoordinate." + attachedFixRowId.index
-                        width: fixStationPage.isNarrow ? implicitWidth : coordinateColumn.columnWidth
-                        elide: QC.Label.ElideRight
-                        textFormat: QC.Label.PlainText
-                        text: attachedFixRowId.modelData.coordinate
-                    }
-
-                    QC.Label { visible: fixStationPage.isNarrow; text: "·"; color: Theme.textSubtle }
-
-                    QC.Label {
-                        objectName: "attachedFixFile." + attachedFixRowId.index
-                        textFormat: QC.Label.PlainText
-                        color: Theme.textSubtle
-                        text: attachedFixRowId.modelData.fileName
-                    }
-                }
-            }
-        }
     }
 
     HelpBox {
         objectName: "noFixStationsHelpBox"
         anchors.centerIn: parent
         text: "No fix stations yet. Click <b>Add Fix</b> to anchor a station to absolute coordinates."
-        visible: fixStationPage.fixStationsModel
+        visible: fixStationPage.fixStationsModel !== null
                  && fixStationPage.fixStationsModel.count === 0
+                 && (fixStationPage.attachedFixesModel?.count ?? 0) === 0
     }
 
     QQ.Component {
@@ -486,6 +489,9 @@ StandardPage {
             required property string stationError
             required property list<string> availableDatums
             required property bool datumEnabled
+            //! Set on a row an attached file fixes itself, named by sourceFile.
+            required property bool readOnly
+            required property string sourceFile
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
@@ -504,11 +510,16 @@ StandardPage {
                 anchors.fill: parent
             }
 
-            DataRightClickMouseMenu {
+            // Only the node's own rows can be removed here.
+            QQ.Loader {
                 anchors.fill: parent
-                removeChallenge: removeChallengeId
-                row: wideDelegateId.index
-                name: wideDelegateId.stationName
+                active: !wideDelegateId.readOnly
+                sourceComponent: DataRightClickMouseMenu {
+                    objectName: "fixRowMenu." + wideDelegateId.index
+                    removeChallenge: removeChallengeId
+                    row: wideDelegateId.index
+                    name: wideDelegateId.stationName
+                }
             }
 
             QQ.MouseArea {
@@ -525,10 +536,23 @@ StandardPage {
                 WideCell {
                     fieldObjectName: "stationCell." + wideDelegateId.index
                     columnWidth: stationColumn.columnWidth
+                    leadingItem: wideDelegateId.readOnly ? wideLockLoader : null
                     value: wideDelegateId.stationName
                     role: FixStationModel.StationNameRole
                     rowIndex: wideDelegateId.index
+                    readOnly: wideDelegateId.readOnly
                     error: wideDelegateId.stationError !== ""
+
+                    QQ.Loader {
+                        id: wideLockLoader
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        active: wideDelegateId.readOnly
+                        sourceComponent: ReadOnlyLock {
+                            objectName: "readOnlyLock." + wideDelegateId.index
+                            sourceFile: wideDelegateId.sourceFile
+                        }
+                    }
                 }
 
                 CSCell {
@@ -539,13 +563,15 @@ StandardPage {
                     orderUnknown: wideDelegateId.coordinateOrderUnknown
                     availableDatums: wideDelegateId.availableDatums
                     datumEnabled: wideDelegateId.datumEnabled
+                    readOnly: wideDelegateId.readOnly
                 }
 
                 WideCell {
                     fieldObjectName: "coordinateCell." + wideDelegateId.index
                     columnWidth: coordinateColumn.columnWidth
                     coordinate: true
-                    trailingItem: pickButtonId
+                    readOnly: wideDelegateId.readOnly
+                    trailingItem: wideDelegateId.readOnly ? null : pickButtonLoader
                     // Normally the cell renders the numbers, so it needs the
                     // same axis order they were read under. A CS flip swaps the
                     // numbers and the render order together, so what this
@@ -556,7 +582,9 @@ StandardPage {
                     // three zeros, and rendering those would hide the very text
                     // that is wrong with it behind a coordinate at the origin.
                     // So it shows what was written, which is all such a row has.
-                    value: wideDelegateId.coordinateError !== ""
+                    // So does a read-only row: the scan keeps the file's text,
+                    // not the numbers.
+                    value: wideDelegateId.coordinateError !== "" || wideDelegateId.readOnly
                            ? wideDelegateId.coordinateText
                            : CoordinateText.format(wideDelegateId.easting,
                                                    wideDelegateId.northing,
@@ -575,12 +603,15 @@ StandardPage {
                            || wideDelegateId.eastingDomainError
                            || wideDelegateId.northingDomainError
 
-                    PickFromViewButton {
-                        id: pickButtonId
-                        objectName: "pickFromViewButton." + wideDelegateId.index
+                    QQ.Loader {
+                        id: pickButtonLoader
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        onClicked: fixStationPage.pickFromView(wideDelegateId.index)
+                        active: !wideDelegateId.readOnly
+                        sourceComponent: PickFromViewButton {
+                            objectName: "pickFromViewButton." + wideDelegateId.index
+                            onClicked: fixStationPage.pickFromView(wideDelegateId.index)
+                        }
                     }
                 }
 
@@ -622,6 +653,9 @@ StandardPage {
             required property string stationError
             required property list<string> availableDatums
             required property bool datumEnabled
+            //! Set on a row an attached file fixes itself, named by sourceFile.
+            required property bool readOnly
+            required property string sourceFile
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
@@ -637,11 +671,15 @@ StandardPage {
                 anchors.fill: parent
             }
 
-            DataRightClickMouseMenu {
+            QQ.Loader {
                 anchors.fill: parent
-                removeChallenge: removeChallengeId
-                row: narrowDelegateId.index
-                name: narrowDelegateId.stationName
+                active: !narrowDelegateId.readOnly
+                sourceComponent: DataRightClickMouseMenu {
+                    objectName: "fixRowMenu." + narrowDelegateId.index
+                    removeChallenge: removeChallengeId
+                    row: narrowDelegateId.index
+                    name: narrowDelegateId.stationName
+                }
             }
 
             QQ.MouseArea {
@@ -670,26 +708,54 @@ StandardPage {
                     message: narrowDelegateId.coordinateWarning
                 }
 
+                QQ.Loader {
+                    active: narrowDelegateId.readOnly
+                    visible: narrowDelegateId.readOnly
+                    sourceComponent: ReadOnlyLock {
+                        objectName: "readOnlyLock." + narrowDelegateId.index
+                        sourceFile: narrowDelegateId.sourceFile
+                    }
+                }
+
                 FixField {
                     objectName: "stationCell." + narrowDelegateId.index
                     value: narrowDelegateId.stationName
                     role: FixStationModel.StationNameRole
                     rowIndex: narrowDelegateId.index
+                    readOnly: narrowDelegateId.readOnly
                     font.bold: true
                     error: narrowDelegateId.stationError !== ""
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
-                CSComboBox {
-                    objectName: "inputCSComboBox." + narrowDelegateId.index
-                    value: narrowDelegateId.inputCS
-                    availableDatums: narrowDelegateId.availableDatums
-                    datumEnabled: narrowDelegateId.datumEnabled
-                    onCommitted: (newCS) => fixStationPage.commitCS(
-                        narrowDelegateId.index, newCS,
-                        narrowDelegateId.coordinateOrderUnknown,
-                        narrowDelegateId.coordinateText)
+                QQ.Loader {
+                    sourceComponent: narrowDelegateId.readOnly ? narrowReadOnlyCSComponent
+                                                               : narrowComboComponent
+                }
+
+                QQ.Component {
+                    id: narrowComboComponent
+
+                    CSComboBox {
+                        objectName: "inputCSComboBox." + narrowDelegateId.index
+                        value: narrowDelegateId.inputCS
+                        availableDatums: narrowDelegateId.availableDatums
+                        datumEnabled: narrowDelegateId.datumEnabled
+                        onCommitted: (newCS) => fixStationPage.commitCS(
+                            narrowDelegateId.index, newCS,
+                            narrowDelegateId.coordinateOrderUnknown,
+                            narrowDelegateId.coordinateText)
+                    }
+                }
+
+                QQ.Component {
+                    id: narrowReadOnlyCSComponent
+
+                    ReadOnlyCSLabel {
+                        objectName: "inputCSText." + narrowDelegateId.index
+                        value: narrowDelegateId.inputCS
+                    }
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
@@ -698,7 +764,7 @@ StandardPage {
                     objectName: "coordinateCell." + narrowDelegateId.index
                     //! The text itself when there are no numbers to render —
                     //! see the wide delegate.
-                    value: narrowDelegateId.coordinateError !== ""
+                    value: narrowDelegateId.coordinateError !== "" || narrowDelegateId.readOnly
                            ? narrowDelegateId.coordinateText
                            : CoordinateText.format(narrowDelegateId.easting,
                                                    narrowDelegateId.northing,
@@ -708,15 +774,28 @@ StandardPage {
                     editValue: narrowDelegateId.coordinateText
                     rowIndex: narrowDelegateId.index
                     coordinate: true
+                    readOnly: narrowDelegateId.readOnly
                     axisOrder: CoordinateText.axisOrderFor(narrowDelegateId.inputCS)
                     error: narrowDelegateId.coordinateError !== ""
                            || narrowDelegateId.eastingDomainError
                            || narrowDelegateId.northingDomainError
                 }
 
-                PickFromViewButton {
-                    objectName: "pickFromViewButton." + narrowDelegateId.index
-                    onClicked: fixStationPage.pickFromView(narrowDelegateId.index)
+                QQ.Loader {
+                    active: !narrowDelegateId.readOnly
+                    visible: !narrowDelegateId.readOnly
+                    sourceComponent: PickFromViewButton {
+                        objectName: "pickFromViewButton." + narrowDelegateId.index
+                        onClicked: fixStationPage.pickFromView(narrowDelegateId.index)
+                    }
+                }
+
+                QC.Label {
+                    objectName: "readOnlySource." + narrowDelegateId.index
+                    visible: narrowDelegateId.readOnly
+                    text: "from " + narrowDelegateId.sourceFile
+                    textFormat: QC.Label.PlainText
+                    color: Theme.textSubtle
                 }
             }
         }

@@ -814,24 +814,31 @@ void cwLinePlotManager::publishAttachedFixWarnings(const QHash<QUuid, QStringLis
 
     const bool georeferenced = Region->geoReference()->hasCoordinateSystem();
 
-    const auto addWarning = [&](QStringList& messages, const QUuid& ownerId,
+    // Names each station the way the node's Fix Stations table lists it: a
+    // trip's file stations sit under the trip's scopePrefix().
+    const auto addWarning = [&](QStringList& messages, const QUuid& ownerId, const QString& scope,
                                 const cwExternalCenterline& centerline) {
         const auto stations = bareFixedStations.constFind(ownerId);
         if (stations == bareFixedStations.constEnd()) {
             return;
         }
+        QStringList scoped;
+        scoped.reserve(stations.value().size());
+        for (const QString& station : stations.value()) {
+            scoped.append(scope + station);
+        }
         messages.append(QStringLiteral("%1 fixes %2 without a coordinate system; add one to the "
                                        "file or remove that fix.")
                             .arg(QFileInfo(centerline.entryFile()).fileName(),
-                                 stations.value().join(QStringLiteral(", "))));
+                                 scoped.join(QStringLiteral(", "))));
     };
 
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         QStringList messages;
         if (georeferenced) {
-            addWarning(messages, node->id(), node->externalCenterline());
+            addWarning(messages, node->id(), QString(), node->externalCenterline());
             for (const cwTrip* trip : node->trips()) {
-                addWarning(messages, trip->id(), trip->externalCenterline());
+                addWarning(messages, trip->id(), trip->scopePrefix(), trip->externalCenterline());
             }
         }
         if (node->errorModel() != nullptr) {

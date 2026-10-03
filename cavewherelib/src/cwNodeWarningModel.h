@@ -30,8 +30,8 @@ class cwTrip;
  * Each row also says where the user fixes it, resolved from the warning's
  * targetId against the node: a row of the node's fix stations, one of its
  * trips' pages, or the node's own attached-file source line. An
- * AttachedFixWithoutCS warning opens the Fix Stations page with no row, where
- * the file's own fixes are listed.
+ * AttachedFixWithoutCS warning opens the Fix Stations page on the first bare
+ * fix it names, a read-only row of cwSurveyNode::fixStationTable.
  */
 class CAVEWHERE_LIB_EXPORT cwNodeWarningModel : public QAbstractListModel
 {
@@ -44,7 +44,7 @@ class CAVEWHERE_LIB_EXPORT cwNodeWarningModel : public QAbstractListModel
 public:
     enum class Target : int {
         NoTarget,      //!< the warning names nothing the user can open
-        FixStationRow, //!< fixStationRow of the node's fix stations, or the page itself at -1
+        FixStationRow, //!< fixStationRow of the node's fixStationTable, or the page itself at -1
         TripPage,      //!< the trip's page, which also shows a trip's attached file
         SourceLine     //!< the source line of the file attached to the node itself
     };

@@ -27,6 +27,7 @@ class cwKeywordModel;
 #include "cwSurveyNodeKind.h"
 #include "cwFixStationModel.h"
 #include "cwFixStationDiagnosticsModel.h"
+#include "cwAttachedFixModel.h"
 #include "cwSiblingLabelCache.h"
 
 //Qt includes
@@ -39,6 +40,7 @@ class cwKeywordModel;
 #include <QWeakPointer>
 #include <QVariant>
 #include <QAbstractListModel>
+#include <QConcatenateTablesProxyModel>
 #include <QHash>
 #include <QQmlEngine>
 #include <QUuid>
@@ -76,7 +78,8 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(int childNodeCount READ childNodeCount NOTIFY childNodeCountChanged)
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
-    Q_PROPERTY(QList<cwAttachedFix> attachedFixes READ attachedFixes NOTIFY attachedFixesChanged FINAL)
+    Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
+    Q_PROPERTY(QAbstractItemModel* fixStationTable READ fixStationTable CONSTANT)
 
 public:
     enum Roles {
@@ -143,7 +146,8 @@ public:
     //! The fixes the files attached to this node and to its trips carry
     //! themselves, as the attach scan read them, for the Fix Stations page to
     //! list read-only. Derived like externalStations().
-    QList<cwAttachedFix> attachedFixes() const { return m_attachedFixes; }
+    cwAttachedFixModel* attachedFixes() const { return m_attachedFixes; }
+    //! Feeds attachedFixes(), emitting attachedFixesChanged() when the list differs.
     void setAttachedFixes(const QList<cwAttachedFix>& fixes);
 
     //! Per owner (this node or one of its trips), the stations its attached
@@ -182,6 +186,12 @@ public:
     /// fixStations()' dataChanged, which means "persisted data changed" and
     /// nothing else.
     cwFixStationDiagnosticsModel* fixStationDiagnostics() const { return m_fixStationDiagnostics; }
+
+    /// The Fix Stations page's table: fixStationDiagnostics()' rows, then
+    /// attachedFixes()' read-only rows. The node's own rows keep their indices
+    /// 0..n-1, and setData()/flags() reach the model that owns each row, so an
+    /// attached row refuses edits. Map an attached row with mapFromSource().
+    QConcatenateTablesProxyModel* fixStationTable() const { return m_fixStationTable; }
 
     /// Per-node grid-convergence readout (angle + state + display text).
     /// Recomputed via recomputeGridConvergence() in the region's local
@@ -392,7 +402,7 @@ signals:
     //! every trip at once and a harvest does not.
     void tripExternalStationsChanged();
 
-    //! attachedFixes() or the stations behind fileFixedStations() changed.
+    //! attachedFixes()' rows or the stations behind fileFixedStations() changed.
     void attachedFixesChanged();
 
     void stationPositionPositionChanged();
@@ -448,6 +458,9 @@ private:
     cwFixStationModel* m_fixStations;
     //! Declared after m_fixStations, which it proxies.
     cwFixStationDiagnosticsModel* const m_fixStationDiagnostics;
+    cwAttachedFixModel* const m_attachedFixes;
+    //! Declared after the two models it concatenates.
+    QConcatenateTablesProxyModel* const m_fixStationTable;
 
     cwStationPositionLookup m_stationPositionLookup;
     bool m_stationPositionLookupStale;
@@ -461,7 +474,6 @@ private:
 
     cwExternalCenterline m_externalCenterline;
     QStringList m_externalStations;
-    QList<cwAttachedFix> m_attachedFixes;
     QHash<QUuid, QStringList> m_fileFixedStations;
 
     cwKeywordModel* m_keywordModel = nullptr;

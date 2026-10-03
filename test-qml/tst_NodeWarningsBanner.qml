@@ -492,8 +492,8 @@ MainWindowTest {
 
             const cave = makeAttachedCave("Blocks", TestHelper.testcasesDatasetPath(
                                               "external-centerlines/survex_blocks.svx"))
-            // A row with no station yet: it places nothing, and gives the page a
-            // row the line must leave unpicked.
+            // A row with no station yet: it places nothing, and puts the
+            // attached row at index 1, after the node's own.
             cave.fixStations.addFixStation()
 
             const cavePage = gotoCavePage(cave)
@@ -504,7 +504,7 @@ MainWindowTest {
             const entry = entryContaining(bannerItem, "without a coordinate system")
             const text = messageLabel(entry).text
             verify(text.indexOf("survex_blocks.svx") >= 0, "the line names the file: " + text)
-            verify(text.indexOf("fixes d1 without") >= 0, "the line names the station: " + text)
+            verify(text.indexOf("fixes doghill.d1 without") >= 0, "the line names the station: " + text)
             verify(text.indexOf("add one to the file or remove that fix") >= 0,
                    "the line names the remedy: " + text)
 
@@ -515,9 +515,11 @@ MainWindowTest {
             compare(RootData.pageView.currentPageItem.cave, cave, "the page is the attached cave's")
             const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
             verify(tableView !== null, "fixStationTableView must exist")
-            tryCompare(tableView, "count", 1)
-            waitForRendering(rootId)
-            compare(tableView.currentIndex, -1, "the page opens with no row picked")
+            tryCompare(tableView, "count", 2)
+            tryCompare(tableView, "currentIndex", 1, 5000, "the page opens on the attached row")
+            tryVerify(() => findChild(tableView, "stationCell.1") !== null
+                      && findChild(tableView, "stationCell.1").text === "doghill.d1",
+                      5000, "and that row is the file's fix")
         }
     }
 }

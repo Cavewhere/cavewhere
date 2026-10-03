@@ -691,6 +691,10 @@ private:
     // no longer owns.
     void applyHarvest(const ExternalScanResult& result);
 
+    // Lists the files' own fixes (from m_ownerFixes) on the node, a trip's
+    // under its live scopePrefix(), and the stations each file fixes.
+    void refreshAttachedFixes(cwSurveyNode* node);
+
     // Per owner whose file fixes stations with no input coordinate system,
     // those stations as the file writes them (from m_ownerFixes).
     QHash<QUuid, QStringList> bareFixedStations() const;
@@ -764,6 +768,9 @@ private slots:
     // cached per-owner scan counts (m_lastScanRows) — zero disk I/O and
     // no waiting on a full recompute, so the list re-sorts immediately.
     void rebuildAttachedRowsFromNames();
+
+    // A trip's scope moved: re-list every node's attached fixes.
+    void refreshAllAttachedFixes();
 };
 
 #endif // CWEXTERNALCENTERLINEMANAGER_H

@@ -11,6 +11,7 @@
 #include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
+#include "cwAttachedFixModel.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwNodeWarningModel.h"
@@ -103,14 +104,34 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
         CHECK(targetAt(model, 0) == Target::NoTarget);
     }
 
-    SECTION("an attached file's bare fix opens the Fix Stations page with no row")
+    SECTION("an attached file's bare fix opens the Fix Stations page on that fix's row")
     {
+        cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("G"), 478000.0));
+        cave->setAttachedFixes(
+            {cwAttachedFix{QStringLiteral("a.p1"), QStringLiteral("1 2 3"),
+                           QStringLiteral("EPSG:32613"), QStringLiteral("a.svx")},
+             cwAttachedFix{QStringLiteral("a.p2"), QStringLiteral("0 0 0"), QString(),
+                           QStringLiteral("a.svx")}});
         errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
-                                QStringLiteral("a.svx fixes stations without a coordinate system."));
+                                QStringLiteral("a.svx fixes a.p2 without a coordinate system."));
         REQUIRE(model.count() == 1);
         CHECK(targetAt(model, 0) == Target::FixStationRow);
-        CHECK(roleAt(model, 0, cwNodeWarningModel::FixStationRowRole).toInt() == -1);
         CHECK(tripAt(model, 0) == nullptr);
+
+        // The node's own fix comes first, then the attached fix that has a system.
+        const int bareRow = cave->fixStationTable()
+                                ->mapFromSource(cave->attachedFixes()->index(1))
+                                .row();
+        CHECK(bareRow == 2);
+        CHECK(roleAt(model, 0, cwNodeWarningModel::FixStationRowRole).toInt() == bareRow);
+
+        // A node fix inserted ahead of the attached rows moves the target with them.
+        cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("H"), 478010.0));
+        CHECK(roleAt(model, 0, cwNodeWarningModel::FixStationRowRole).toInt() == 3);
+
+        // With no bare fix left the entry opens the page with no row.
+        cave->setAttachedFixes({});
+        CHECK(roleAt(model, 0, cwNodeWarningModel::FixStationRowRole).toInt() == -1);
     }
 
     SECTION("a suppressed warning leaves the list, and returns when unsuppressed")

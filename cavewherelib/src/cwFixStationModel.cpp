@@ -215,6 +215,12 @@ bool cwFixStationModel::setData(const QModelIndex& index, const QVariant& value,
     return changed;
 }
 
+Qt::ItemFlags cwFixStationModel::flags(const QModelIndex& index) const
+{
+    const Qt::ItemFlags base = QAbstractListModel::flags(index);
+    return index.isValid() ? base | Qt::ItemIsEditable : base;
+}
+
 QHash<int, QByteArray> cwFixStationModel::roleNames() const
 {
     return {

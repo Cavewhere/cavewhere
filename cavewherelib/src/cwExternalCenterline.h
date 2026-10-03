@@ -78,7 +78,8 @@ class CAVEWHERE_LIB_EXPORT cwAttachedFix
 {
     Q_GADGET
     QML_VALUE_TYPE(cwAttachedFix)
-    //! The station as the file writes it.
+    //! The station as a fix on the node names it ("doghill.d1"): qualified by
+    //! the file's own blocks, and by the trip's scopePrefix() for a trip's file.
     Q_PROPERTY(QString station MEMBER station FINAL)
     //! The coordinate text as the file writes it.
     Q_PROPERTY(QString coordinate MEMBER coordinate FINAL)

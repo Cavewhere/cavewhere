@@ -53,6 +53,8 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     m_errorModel(new cwErrorModel(this)),
     m_fixStations(new cwFixStationModel(this)),
     m_fixStationDiagnostics(new cwFixStationDiagnosticsModel(this)),
+    m_attachedFixes(new cwAttachedFixModel(this)),
+    m_fixStationTable(new QConcatenateTablesProxyModel(this)),
     m_stationPositionLookupStale(false),
     m_id(QUuid::createUuid()),
     m_gridConvergence(new cwGridConvergence(this)),
@@ -64,6 +66,9 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
 
     m_length->setUpdateValue(true);
     m_depth->setUpdateValue(true);
+
+    m_fixStationTable->addSourceModel(m_fixStationDiagnostics);
+    m_fixStationTable->addSourceModel(m_attachedFixes);
 
     connect(m_fixStations, &cwFixStationModel::countChanged,
             this, &cwSurveyNode::recomputeGridConvergence);
@@ -1295,10 +1300,10 @@ bool cwSurveyNode::validate(const cwEquate& equate) const
 
 void cwSurveyNode::setAttachedFixes(const QList<cwAttachedFix>& fixes)
 {
-    if (m_attachedFixes == fixes) {
+    if (m_attachedFixes->attachedFixes() == fixes) {
         return;
     }
-    m_attachedFixes = fixes;
+    m_attachedFixes->setAttachedFixes(fixes);
     emit attachedFixesChanged();
 }
 

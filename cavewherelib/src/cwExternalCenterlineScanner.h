@@ -46,8 +46,12 @@
  *             into its parent: it makes no block and its shots
  *             count toward the enclosing named block.
  *   Compass - none. cavern discards a .dat's "SURVEY NAME:" value
- *             and reads every referenced .dat with no surrounding
- *             level, so every Compass station is a root station.
+ *             and reads each .mak '#' DAT into a survey named
+ *             after its file (survex datain.c mak_dat_survey), so a
+ *             .mak fix is recorded under that survey
+ *             (compassDatSurveyName). Station counting has no such
+ *             level yet: every Compass station still lands in
+ *             rootStationCount, a known gap.
  *   Walls   - one block per distinct prefix path, merged across
  *             the project's files. path is the prefix levels
  *             #PREFIX3, #PREFIX2, #PREFIX1 joined by '.'
@@ -191,8 +195,11 @@ struct SeededTripMetadata {
 };
 
 /**
- * One station the closure fixes: its name and coordinate as the file writes
- * them, and the input coordinate system in force for that coordinate. A fix
+ * One station the closure fixes: its name as cavern qualifies it within the
+ * entry file (the enclosing *begin blocks, a Compass DAT's survey, a Walls
+ * prefix path, then the station - "doghill.d1"), the same spelling
+ * cwExternalStationHarvest's fixedNames use; its coordinate as the file
+ * writes it; and the input coordinate system in force for that coordinate. A fix
  * with one reads its coordinate in that system; one without reads it in
  * whatever system the driver puts in scope around the file's *include.
  *

@@ -11,6 +11,8 @@
 // Our
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineScanner.h"
+#include "cwExternalStationHarvest.h"
+#include "cwStation.h"
 
 // Test helpers
 #include "LoadProjectHelper.h"
@@ -1535,7 +1537,7 @@ TEST_CASE("scanSurvex records each *fix's coordinate and the input *cs in force"
     {
         const QList<ScannedFix> fixes =
             scannedFixes(datasetExternalCenterlinePath(QStringLiteral("survex_blocks.svx")));
-        CHECK(fixes == QList<ScannedFix>{{QStringLiteral("d1"), QStringLiteral("0 0 0"), QString()}});
+        CHECK(fixes == QList<ScannedFix>{{QStringLiteral("doghill.d1"), QStringLiteral("0 0 0"), QString()}});
     }
 
     SECTION("*cs scopes to its *begin block, and *cs out names no input system")
@@ -1553,8 +1555,8 @@ TEST_CASE("scanSurvex records each *fix's coordinate and the input *cs in force"
                                                              "*fix after 0 0 0\n"));
         const QString utm16 = QStringLiteral("EPSG:32616");
         CHECK(scannedFixes(path) == QList<ScannedFix>{{QStringLiteral("root"), QStringLiteral("0 0 0"), QString()},
-                                                      {QStringLiteral("a"), QStringLiteral("1 2 3"), utm16},
-                                                      {QStringLiteral("b"), QStringLiteral("1 2 3"), utm16},
+                                                      {QStringLiteral("inner.a"), QStringLiteral("1 2 3"), utm16},
+                                                      {QStringLiteral("inner.deeper.b"), QStringLiteral("1 2 3"), utm16},
                                                       {QStringLiteral("after"), QStringLiteral("0 0 0"), QString()}});
     }
 
@@ -1580,8 +1582,8 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
                               "$16;\n"
                               "#cave.dat,B1[M,580661.57,4113846.34,219];\n"));
         CHECK(scannedFixes(makPath)
-              == QList<ScannedFix>{{QStringLiteral("A1"), QStringLiteral("m,0,0,0"), QString()},
-                                   {QStringLiteral("B1"), QStringLiteral("M,580661.57,4113846.34,219"),
+              == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("m,0,0,0"), QString()},
+                                   {QStringLiteral("cave.B1"), QStringLiteral("M,580661.57,4113846.34,219"),
                                     QStringLiteral("North American 1983, UTM zone 16N")}});
     }
 
@@ -1593,8 +1595,19 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
                               "&North American 1983;\n"
                               "#cave.dat,A1[m,580661.57,4113846.34,219];\n"));
         CHECK(scannedFixes(makPath)
-              == QList<ScannedFix>{{QStringLiteral("A1"), QStringLiteral("m,580661.57,4113846.34,219"),
+              == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("m,580661.57,4113846.34,219"),
                                     QStringLiteral("North American 1983, UTM zone 16N")}});
+    }
+
+    SECTION("a fix is named under its DAT's survey, as cavern reads the line")
+    {
+        const QString makPath = writeUtf8File(
+            tempPath(tempDir, QStringLiteral("nested.mak")),
+            QByteArrayLiteral("#sub/Upper.Cave.DAT,A1[m,0,0,0];\n"
+                              "#.DAT,B1[m,0,0,0];\n"));
+        CHECK(scannedFixes(makPath)
+              == QList<ScannedFix>{{QStringLiteral("upper.cave.A1"), QStringLiteral("m,0,0,0"), QString()},
+                                   {QStringLiteral("dat.B1"), QStringLiteral("m,0,0,0"), QString()}});
     }
 
     SECTION("a lone .dat fixes nothing")
@@ -1618,4 +1631,67 @@ TEST_CASE("scanWalls records #FIX lines and the system their .wpj's .REF names",
         scannedFixes(testcasesDatasetSourcePath(QStringLiteral("walls/GEOREF.SRV")));
     CHECK(alone == QList<ScannedFix>{{QStringLiteral("A1"), a1, QString()},
                                      {QStringLiteral("A3"), a3, QString()}});
+}
+
+TEST_CASE("scanWalls names a #FIX under the prefix levels in force", "[Scanner][Attach]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString srvPath = writeUtf8File(tempPath(tempDir, QStringLiteral("prefixed.srv")),
+                                          QByteArrayLiteral("#PREFIX2 OUTER\n"
+                                                            "#PREFIX XY\n"
+                                                            "#FIX A1 0 0 0\n"
+                                                            "#FIX AB:B1 0 0 0\n"
+                                                            "A1\tA2\t5.0\t0\t0\n"));
+    CHECK(scannedFixes(srvPath)
+          == QList<ScannedFix>{{QStringLiteral("OUTER.XY.A1"), QStringLiteral("0 0 0"), QString()},
+                               {QStringLiteral("OUTER.AB.B1"), QStringLiteral("0 0 0"), QString()}});
+}
+
+TEST_CASE("A scanned fix names the station the harvest says the file fixes", "[Scanner][Attach]")
+{
+    // The scan reads the fix from the text; the harvest asks cavern. Pinning the
+    // two to one answer per format keeps the Fix Stations page's read-only row
+    // spelled the way a node fix on the same station must be.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QString entryFile;
+    SECTION("Survex: the enclosing *begin blocks")
+    {
+        entryFile = datasetExternalCenterlinePath(QStringLiteral("survex_blocks.svx"));
+    }
+    SECTION("Compass: the .mak line's DAT survey")
+    {
+        REQUIRE(QFile::copy(datasetExternalCenterlinePath(QStringLiteral("compass_solvable.dat")),
+                            tempPath(tempDir, QStringLiteral("compass_solvable.dat"))));
+        entryFile = writeUtf8File(tempPath(tempDir, QStringLiteral("solvable.mak")),
+                                  QByteArrayLiteral("#compass_solvable.dat,S1[m,0,0,0];\n"));
+    }
+    SECTION("Walls: the #PREFIX levels in force")
+    {
+        writeUtf8File(tempPath(tempDir, QStringLiteral("MAIN.SRV")),
+                      QByteArrayLiteral("#PREFIX2 OUTER\n"
+                                        "#PREFIX XY\n"
+                                        "#FIX A1 0 0 0\n"
+                                        "A1\tA2\t5.0\t0\t0\n"));
+        entryFile = writeUtf8File(tempPath(tempDir, QStringLiteral("prefixed.wpj")),
+                                  QByteArrayLiteral(";WALLS Project file\n"
+                                                    ".BOOK\tTest Cave\n"
+                                                    ".NAME\tTEST-CAVE\n"
+                                                    ".STATUS\t8\n"
+                                                    ".SURVEY\tMain Passage\n"
+                                                    ".NAME\tMAIN\n"
+                                                    ".STATUS\t8\n"
+                                                    ".ENDBOOK\n"));
+    }
+
+    const QList<ScannedFix> fixes = scannedFixes(entryFile);
+    REQUIRE(fixes.size() == 1);
+
+    const auto harvest = cwExternalStationHarvest::harvestWithFixes(entryFile);
+    INFO("harvest: " << harvest.errorMessage().toStdString());
+    REQUIRE_FALSE(harvest.hasError());
+    REQUIRE(harvest.value().fixedNames.size() == 1);
+    CHECK(cwStation::canonicalKey(fixes.first().station) == harvest.value().fixedNames.first());
 }

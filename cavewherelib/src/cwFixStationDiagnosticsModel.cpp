@@ -9,6 +9,7 @@
 
 //Our includes
 #include "cwSurveyNode.h"
+#include "cwAttachedFixModel.h"
 #include "cwCoordinateText.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
@@ -256,6 +257,8 @@ QModelIndex cwFixStationDiagnosticsModel::index(int row, int column, const QMode
 QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) const
 {
     switch (role) {
+    case cwAttachedFixModel::ReadOnlyRole:
+    case cwAttachedFixModel::SourceFileRole:
     case DomainErrorRole:
     case EastingDomainErrorRole:
     case NorthingDomainErrorRole:
@@ -275,6 +278,10 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     }
 
     switch (role) {
+    // The node's own rows: editable and carried by no file, beside
+    // cwAttachedFixModel's rows in cwSurveyNode::fixStationTable.
+    case cwAttachedFixModel::ReadOnlyRole:   return false;
+    case cwAttachedFixModel::SourceFileRole: return QString();
     case DomainErrorRole:            return domainErrorMessage(*fix);
     case CoordinateErrorRole:        return coordinateErrorMessage(*fix);
     case CoordinateOrderUnknownRole: return fix->state() == cwFixStation::NoSystem;
@@ -304,5 +311,7 @@ QHash<int, QByteArray> cwFixStationDiagnosticsModel::roleNames() const
     names.insert(StationErrorRole, "stationError");
     names.insert(AvailableDatumsRole, "availableDatums");
     names.insert(DatumEnabledRole, "datumEnabled");
+    names.insert(cwAttachedFixModel::SourceFileRole, "sourceFile");
+    names.insert(cwAttachedFixModel::ReadOnlyRole, "readOnly");
     return names;
 }

@@ -11,6 +11,7 @@
 #include <catch2/generators/catch_generators.hpp>
 
 // Cavewhere
+#include "cwAttachedFixModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwError.h"
@@ -1326,18 +1327,19 @@ TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
     CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
     CHECK(attachedFixWarnings(project.beside).isEmpty());
 
-    CHECK(warnings.first().contains(QStringLiteral("fixes d1 without a coordinate system; add one "
-                                                   "to the file or remove that fix.")));
+    CHECK(warnings.first().contains(QStringLiteral("fixes doghill.d1 without a coordinate system; "
+                                                   "add one to the file or remove that fix.")));
 
-    // A click on the warning opens the node's Fix Stations page with no row
-    // picked, where the file's own fixes are listed.
+    // A click on the warning opens the node's Fix Stations page on the file's
+    // bare fix, the first attached row after the node's own fixes.
     cwNodeWarningModel warningModel;
     warningModel.setNode(project.attached);
     REQUIRE(warningModel.rowCount() == 1);
     const QModelIndex warningIndex = warningModel.index(0);
     CHECK(warningModel.data(warningIndex, cwNodeWarningModel::TargetRole).toInt()
           == static_cast<int>(cwNodeWarningModel::Target::FixStationRow));
-    CHECK(warningModel.data(warningIndex, cwNodeWarningModel::FixStationRowRole).toInt() == -1);
+    CHECK(warningModel.data(warningIndex, cwNodeWarningModel::FixStationRowRole).toInt()
+          == project.attached->fixStations()->rowCount());
 
     SECTION("the warning clears when the project loses its frame")
     {
@@ -1443,6 +1445,26 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         REQUIRE(warnings.size() == 1);
         CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
         CHECK(attachedFixWarnings(beside).isEmpty());
+
+        // The warning and the attached row name the station under the trip's
+        // scope, the way a node fix on it must be spelled.
+        const auto scopedD1 = [&]() {
+            return attached->scopePrefix() + QStringLiteral("doghill.d1");
+        };
+        const QString originalD1 = scopedD1();
+        CHECK(warnings.first().contains(QStringLiteral("fixes %1 without").arg(originalD1)));
+        REQUIRE(host->attachedFixes()->count() == 1);
+        CHECK(host->attachedFixes()->attachedFixes().first().station == originalD1);
+
+        // A rename moves the scope; the row follows before any rescan, and the
+        // warning follows on the re-solve.
+        attached->setName(QStringLiteral("Renamed"));
+        REQUIRE(scopedD1() != originalD1);
+        CHECK(host->attachedFixes()->attachedFixes().first().station == scopedD1());
+        manager.waitToFinish();
+        const QStringList renamedWarnings = attachedFixWarnings(host);
+        REQUIRE(renamedWarnings.size() == 1);
+        CHECK(renamedWarnings.first().contains(QStringLiteral("fixes %1 without").arg(scopedD1())));
     }
 
     SECTION("under a cave whose fix names a system, the trip inherits it and writes none")
@@ -1578,7 +1600,7 @@ TEST_CASE("A node fix on a station of an attached file with no fix of its own pl
     // The harvest names the file's stations on the node, which is what lets
     // the driver keep a fix on one of them.
     CHECK(attached->externalStations().contains(QStringLiteral("doghill.d1")));
-    CHECK(attached->attachedFixes().isEmpty());
+    CHECK(attached->attachedFixes()->count() == 0);
 
     // Written in the node's block ahead of the *include, so the name resolves
     // to the file's own doghill.d1 inside it.
@@ -1670,10 +1692,11 @@ TEST_CASE("A node fix on a station the attached file fixes itself is refused",
     INFO("solve error: " << manager.solveErrorMessage().toStdString());
     INFO("cavern log:\n" << manager.cavernLog().toStdString());
 
-    // The file's own fix is listed for the Fix Stations page, as written.
-    const QList<cwAttachedFix> fileFixes = attached->attachedFixes();
+    // The file's own fix is listed for the Fix Stations page, named as a node
+    // fix on the same station is.
+    const QList<cwAttachedFix> fileFixes = attached->attachedFixes()->attachedFixes();
     REQUIRE(fileFixes.size() == 1);
-    CHECK(fileFixes.first() == cwAttachedFix{QStringLiteral("d1"), QStringLiteral("0 0 0"),
+    CHECK(fileFixes.first() == cwAttachedFix{QStringLiteral("doghill.d1"), QStringLiteral("0 0 0"),
                                              QString(), QStringLiteral("survex_blocks.svx")});
 
     // Either way cavern sees one fix per station, so the solve runs, and the
@@ -1681,7 +1704,7 @@ TEST_CASE("A node fix on a station the attached file fixes itself is refused",
     REQUIRE_FALSE(manager.hasSolveError());
     const QStringList warnings = attachedFixWarnings(attached);
     REQUIRE(warnings.size() == 1);
-    CHECK(warnings.first() == QStringLiteral("survex_blocks.svx fixes d1 without a coordinate "
+    CHECK(warnings.first() == QStringLiteral("survex_blocks.svx fixes doghill.d1 without a coordinate "
                                              "system; add one to the file or remove that fix."));
 
     const cwFixStationDiagnosticsModel* diagnostics = attached->fixStationDiagnostics();

@@ -641,10 +641,36 @@ void scanCompassFile(const QString& filePath, ScanState& state);
 void scanWallsFile(const QString& filePath, ScanState& state);
 void scanByFormat(const QString& filePath, ScanState& state);
 
-void recordFix(ScanState& state, const QString& station, const QString& coordinate,
-               const QString& coordinateSystem)
+/**
+ * Records a fix under the name cavern gives its station: the open blocks'
+ * dotted path, then \a scopePath (a Compass DAT's survey, a Walls prefix
+ * path, empty for Survex, whose blocks are the open blocks), then the
+ * station as the file writes it.
+ */
+void recordFix(ScanState& state, const QString& scopePath, const QString& station,
+               const QString& coordinate, const QString& coordinateSystem)
 {
-    state.fixes.append({station, coordinate, coordinateSystem});
+    QStringList segments = state.blockSegments;
+    if (!scopePath.isEmpty()) {
+        segments.append(scopePath);
+    }
+    segments.append(station);
+    state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem});
+}
+
+/**
+ * The survey cavern reads a .mak '#' line's DAT into, and so the scope of the
+ * fixes on that line (survex datain.c mak_dat_survey): the DAT's leaf name
+ * without its extension, lower-cased, or "dat" when that leaves nothing.
+ */
+QString compassDatSurveyName(const QString& datReference)
+{
+    const qsizetype lastSeparator =
+        qMax(datReference.lastIndexOf(QLatin1Char('/')), datReference.lastIndexOf(QLatin1Char('\\')));
+    const QString leaf = datReference.mid(lastSeparator + 1);
+    const qsizetype extension = leaf.lastIndexOf(QLatin1Char('.'));
+    const QString name = (extension >= 0 ? leaf.left(extension) : leaf).toLower();
+    return name.isEmpty() ? QStringLiteral("dat") : name;
 }
 
 void recordWarning(ScanState& state, const QString& message)
@@ -776,7 +802,8 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             continue;
         }
         if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
-            recordFix(state, fixMatch.captured(1), line.mid(fixMatch.capturedEnd(1)).trimmed(),
+            recordFix(state, QString(), fixMatch.captured(1),
+                      line.mid(fixMatch.capturedEnd(1)).trimmed(),
                       state.coordinateSystems.constLast());
             continue;
         }
@@ -1057,11 +1084,12 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                     break;
                 }
                 coordinateSystem.applyBaseLocation();
+                const QString datSurvey = compassDatSurveyName(target);
                 auto fixMatches = compassMakFixRegex().globalMatch(line);
                 while (fixMatches.hasNext()) {
                     const QRegularExpressionMatch fixMatch = fixMatches.next();
-                    recordFix(state, fixMatch.captured(1), fixMatch.captured(2).trimmed(),
-                              coordinateSystem.name);
+                    recordFix(state, datSurvey, fixMatch.captured(1),
+                              fixMatch.captured(2).trimmed(), coordinateSystem.name);
                 }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
@@ -1160,6 +1188,26 @@ void recordWallsDate(ScanState& state, const QString& path, const QDate& date)
     }
 }
 
+// A Walls station token split into the prefix path cavern files it under
+// and its bare name.
+struct WallsStationName
+{
+    QString path;
+    QString station;
+};
+
+// A ':'-qualified token ("XY:P1", "A:B:C:name") names its own path, laid
+// over the prefix levels in force; a bare token sits under those levels.
+WallsStationName wallsStationName(const WallsPrefixLevels& prefix, const QString& token)
+{
+    const qsizetype lastQualifier = token.lastIndexOf(QLatin1Char(':'));
+    if (lastQualifier >= 0) {
+        const QStringList explicitSegments = token.left(lastQualifier).split(QLatin1Char(':'));
+        return {prefix.overlaidWith(explicitSegments).path(), token.mid(lastQualifier + 1)};
+    }
+    return {prefix.path(), token};
+}
+
 /**
  * Walks one Walls .srv, counting its stations under the prefix
  * levels in force. They start from the levels the project entry's
@@ -1186,7 +1234,8 @@ void collectWallsStations(const QString& canonical,
         }
         if (line.startsWith(QLatin1Char('#'))) {
             if (const auto fixMatch = wallsFixRegex().match(line); fixMatch.hasMatch()) {
-                recordFix(state, fixMatch.captured(1),
+                const WallsStationName name = wallsStationName(prefix, fixMatch.captured(1));
+                recordFix(state, name.path, name.station,
                           stripCommentAndWhitespace(line.mid(fixMatch.capturedEnd(1))),
                           coordinateSystem);
                 continue;
@@ -1215,19 +1264,10 @@ void collectWallsStations(const QString& canonical,
             continue;
         }
 
-        const QString pathInForce = prefix.path();
         for (const QString& token :
              leadingStationTokens(line, kStationsPerShotLine)) {
-            const qsizetype lastQualifier = token.lastIndexOf(QLatin1Char(':'));
-            if (lastQualifier >= 0) {
-                const QStringList explicitSegments =
-                    token.left(lastQualifier).split(QLatin1Char(':'));
-                recordWallsStation(state,
-                                   prefix.overlaidWith(explicitSegments).path(),
-                                   token.mid(lastQualifier + 1));
-            } else {
-                recordWallsStation(state, pathInForce, token);
-            }
+            const WallsStationName name = wallsStationName(prefix, token);
+            recordWallsStation(state, name.path, name.station);
             sawStation = true;
         }
     }

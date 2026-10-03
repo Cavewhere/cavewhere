@@ -278,6 +278,9 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
     m_signaler = new cwSurveyChunkSignaler(this);
     m_signaler->addConnectionToCaves(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
     m_signaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
+    // A trip's file fixes are listed under its scope, so a scope move
+    // renames those rows without waiting for the next scan.
+    m_signaler->addConnectionToTrips(SIGNAL(scopeChanged()), this, SLOT(refreshAllAttachedFixes()));
 
     // Any attach/detach — the wrappers here, undo/redo, or protobuf load
     // populating a trip after insertion — re-derives the watch set, dir
@@ -814,22 +817,7 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
     for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
         node->setExternalStations(result.ownerStations.value(node->id()));
 
-        QList<cwAttachedFix> attachedFixes;
-        QHash<QUuid, QStringList> fileFixedStations;
-        const auto addOwner = [&](const QUuid& ownerId, const cwExternalCenterline& centerline) {
-            const QString fileName = QFileInfo(centerline.entryFile()).fileName();
-            for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
-                attachedFixes.append({fix.station, fix.coordinate, fix.coordinateSystem, fileName});
-            }
-            const auto fixed = m_ownerFixedStations.constFind(ownerId);
-            if (fixed != m_ownerFixedStations.constEnd()) {
-                fileFixedStations.insert(ownerId, fixed.value());
-            }
-        };
-        addOwner(node->id(), node->externalCenterline());
-
         for (cwTrip* trip : node->trips()) {
-            addOwner(trip->id(), trip->externalCenterline());
             trip->setExternalStations(result.ownerStations.value(trip->id()));
             // A containment failure skipped the harvest, so the two are
             // never both present; naming it first keeps that explicit.
@@ -840,8 +828,44 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
                     : containmentError);
         }
 
-        node->setAttachedFixes(attachedFixes);
-        node->setFileFixedStations(fileFixedStations);
+        refreshAttachedFixes(node);
+    }
+}
+
+void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
+{
+    QList<cwAttachedFix> attachedFixes;
+    QHash<QUuid, QStringList> fileFixedStations;
+    // Named the way a fix on this node names the station: a trip's file
+    // stations sit under its scopePrefix(), as in fileFixedStations().
+    const auto addOwner = [&](const QUuid& ownerId, const QString& scope,
+                              const cwExternalCenterline& centerline) {
+        const QString fileName = QFileInfo(centerline.entryFile()).fileName();
+        for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
+            attachedFixes.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
+                                  fileName});
+        }
+        const auto fixed = m_ownerFixedStations.constFind(ownerId);
+        if (fixed != m_ownerFixedStations.constEnd()) {
+            fileFixedStations.insert(ownerId, fixed.value());
+        }
+    };
+    addOwner(node->id(), QString(), node->externalCenterline());
+    for (const cwTrip* trip : node->trips()) {
+        addOwner(trip->id(), trip->scopePrefix(), trip->externalCenterline());
+    }
+
+    node->setAttachedFixes(attachedFixes);
+    node->setFileFixedStations(fileFixedStations);
+}
+
+void cwExternalCenterlineManager::refreshAllAttachedFixes()
+{
+    if (m_region.isNull()) {
+        return;
+    }
+    for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
+        refreshAttachedFixes(node);
     }
 }
 

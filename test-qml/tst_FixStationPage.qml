@@ -1566,12 +1566,27 @@ MainWindowTest {
             RootData.project.newProject()
         }
 
-        // The attached file's own *fix is listed under the node's rows,
-        // read-only, with its coordinate, its system, and the file.
-        function test_attachedFileFixesAreListedReadOnly() {
+        //! Waits for \a objectName under the current page and returns it.
+        function waitForChild(objectName) {
+            let item = null
+            tryVerify(() => {
+                item = findChild(RootData.pageView.currentPageItem, objectName)
+                return item !== null && item.visible
+            }, 5000, objectName + " should be on screen")
+            return item
+        }
+
+        // The attached file's own *fix is a row of the table after the node's
+        // own, read-only, named the way a node fix on that station is spelled.
+        function test_attachedFileFixesAreReadOnlyRowsOfTheTable() {
             const cave = makeSavedCaveAttach("fix-station-attached-fixes",
                                              "external-centerlines/survex_blocks.svx")
-            tryVerify(() => cave.attachedFixes.length === 1, 20000, "the scan lists the file's fix")
+            tryVerify(() => cave.attachedFixes.count === 1, 20000, "the scan lists the file's fix")
+            cave.fixStations.addFixStation()
+            const model = cave.fixStations
+            model.setData(model.index(0), "EPSG:32613", FixStationModel.InputCSRole)
+            // A name gives the cell text to double-click.
+            model.setData(model.index(0), "doghill.d2", FixStationModel.StationNameRole)
 
             RootData.pageSelectionModel.currentPageAddress =
                 "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
@@ -1579,19 +1594,79 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
             const page = RootData.pageView.currentPageItem
+            const tableView = findChild(page, "fixStationTableView")
+            tryCompare(tableView, "count", 2)
+            compare(findChild(page, "noFixStationsHelpBox").visible, false)
 
-            const station = findChild(page, "attachedFixStation.0")
-            verify(station !== null, "the file's fix is listed")
-            tryVerify(() => station.visible, 5000, "the file's fix is on screen")
-            compare(station.text, "d1")
-            compare(findChild(page, "attachedFixCoordinate.0").text, "0 0 0")
-            compare(findChild(page, "attachedFixSystem.0").text, "none")
-            compare(findChild(page, "attachedFixFile.0").text, "survex_blocks.svx")
+            // The qualified name: the file writes d1 inside *begin doghill.
+            const attachedStation = waitForChild("stationCell.1")
+            compare(attachedStation.text, "doghill.d1")
+            compare(waitForChild("inputCSText.1").text, "none")
+            const attachedCoordinate = waitForChild("coordinateCell.1")
+            compare(attachedCoordinate.text, "0 0 0")
+            verify(waitForChild("readOnlyLock.1") !== null, "the row carries the lock")
+            compare(findChild(page, "readOnlyLock.0"), null, "the node's own row does not")
+            compare(findChild(page, "inputCSComboBox.1"), null, "nor a system to pick")
+            compare(findChild(page, "pickFromViewButton.1"), null, "nor a pick button")
+            verify(waitForChild("pickFromViewButton.0") !== null)
 
-            // A label, not an editor, and not a row of the node's own fixes.
-            verify(station.editText === undefined, "the row is read-only")
-            compare(cave.fixStations.count, 0)
-            compare(findChild(page, "fixStationTableView").count, 0)
+            // Focus opens an editor the way a double-click does (QTest's
+            // double-click sequence never reaches the field's doubleTapped),
+            // and it opens the node's row, so the read-only row's refusal
+            // below is the row's doing, not the gesture's.
+            const ownStation = waitForChild("stationCell.0")
+            ownStation.forceActiveFocus()
+            tryVerify(() => ownStation.isEditting, 5000, "the node's own row opens an editor")
+            rootId.closeAnyOpenEditor()
+            tryVerify(() => !ownStation.isEditting)
+
+            for (const cell of [attachedStation, attachedCoordinate]) {
+                mouseDoubleClickSequence(cell)
+                cell.forceActiveFocus()
+                cell.openEditor()
+                verify(!cell.isEditting, cell.objectName + " opens no editor")
+            }
+            compare(rootId.shadowEditor.coreClickInput, null, "and the shared editor stays closed")
+
+            // The right-click menu is the remove path; the attached row has none.
+            mouseClick(attachedStation, 2, 2, Qt.RightButton)
+            compare(findChild(page, "fixRowMenu.1"), null, "the attached row offers no Remove")
+            verify(findChild(page, "fixRowMenu.0") !== null, "the node's own row does")
+
+            // The node's row still edits with the attached row beside it.
+            const ownCoordinate = waitForChild("coordinateCell.0")
+            ownCoordinate.openEditor()
+            rootId.shadowEditor.setEditorText("478000, 4430000, 1655m")
+            compare(ownCoordinate.commitChanges(), true, "the edit commits")
+            fuzzyCompare(model.data(model.index(0), FixStationModel.EastingRole), 478000, 1e-6)
+            fuzzyCompare(model.data(model.index(0), FixStationModel.NorthingRole), 4430000, 1e-6)
+            tryCompare(tableView, "count", 2)
+
+            // And removes; the attached row moves up to index 0.
+            const removeAskBox = findChild(page, "removeChallange")
+            removeAskBox.indexToRemove = 0
+            removeAskBox.removeName = ""
+            removeAskBox.show()
+            tryVerify(() => removeAskBox.visible)
+            mouseClick(findChild(removeAskBox, "removeButton"))
+            tryVerify(() => !removeAskBox.visible)
+            tryCompare(model, "count", 0)
+            tryCompare(tableView, "count", 1)
+            tryCompare(waitForChild("stationCell.0"), "text", "doghill.d1")
+            verify(waitForChild("readOnlyLock.0") !== null, "the attached row is now row 0")
+            compare(cave.attachedFixes.count, 1, "and is still the file's")
+            compare(findChild(page, "noFixStationsHelpBox").visible, false,
+                    "the table is not empty while the file's fix is listed")
+
+            // The narrow layout says where the row comes from in words.
+            const wideWidth = rootId.width
+            rootId.width = Theme.breakpointPanelCollapse / 2
+            tryCompare(waitForChild("readOnlySource.0"), "text", "from survex_blocks.svx")
+            verify(waitForChild("readOnlyLock.0") !== null, "the narrow row carries the lock too")
+            compare(findChild(page, "inputCSComboBox.0"), null)
+            compare(waitForChild("inputCSText.0").text, "none")
+            compare(findChild(page, "pickFromViewButton.0"), null)
+            rootId.width = wideWidth
         }
     }
 }
