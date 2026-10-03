@@ -35,7 +35,9 @@ MainWindowTest {
             mouseClick(lidarThumb);
 
             let lidarViewer = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId");
-            tryVerify(() => { return lidarViewer.scene.gltf.status === RenderGLTF.Ready }, 10000);
+            // Each test loads a fresh project, so the scan's large baseColor
+            // texture is compressed to KTX2 on a cold cache before the glTF is Ready.
+            tryVerify(() => { return lidarViewer.scene.gltf.status === RenderGLTF.Ready }, 30000);
 
             RootData.futureManagerModel.waitForFinished();
 

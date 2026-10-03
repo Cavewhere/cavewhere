@@ -678,12 +678,27 @@ TEST_CASE("A key re-dirtied during a build publishes only from the follow-up bui
     const QRay3D rayAtZero(QVector3D(0.0f, 0.0f, 100.0f),
                            QVector3D(0.0f, 0.0f, -1.0f));
 
-    pumpUntilFirstInstall([&]() { return !readySpy.isEmpty(); });
+    // The probes run inside the first bvhReady so they read that install: the
+    // follow-up build is small and can install within the same pump.
+    bool firstInstallSeen = false;
+    bool hitZeroAtFirstInstall = false;
+    bool readyAtFirstInstall = false;
+    QObject::connect(&intersector, &cwGeometryItersecter::bvhReady,
+                     &intersector, [&]() {
+        if (firstInstallSeen) {
+            return;
+        }
+        firstInstallSeen = true;
+        hitZeroAtFirstInstall = intersector.intersectsDetailed(rayAtZero).hit();
+        readyAtFirstInstall = intersector.isObjectPickReady({cwRenderObjectId{}, 1});
+    });
+
+    pumpUntilFirstInstall([&]() { return firstInstallSeen; });
 
     // The first install dropped the stale point, so nothing picks at the old
     // position and the key is not pick-ready yet.
-    CHECK_FALSE(intersector.intersectsDetailed(rayAtZero).hit());
-    CHECK_FALSE(intersector.isObjectPickReady({cwRenderObjectId{}, 1}));
+    CHECK_FALSE(hitZeroAtFirstInstall);
+    CHECK_FALSE(readyAtFirstInstall);
 
     intersector.waitForFinish();
     INFO("bvhReady count=" << readySpy.count());

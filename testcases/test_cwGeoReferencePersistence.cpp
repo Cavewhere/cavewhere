@@ -11,6 +11,7 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwFixStation.h"
 #include "cwGeoReference.h"
 #include "cwProject.h"
 #include "cwRootData.h"

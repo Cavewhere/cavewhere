@@ -85,8 +85,11 @@ MainWindowTest {
         // asynchronously after load, growing the scene bounding box and thus the
         // framed view. Until the first geometry publishes, a reset has nothing
         // to frame and snaps to the camera's default zoom, so first reset until
-        // a framed zoom comes back, then until the framed zoom stops changing,
-        // so a captured reference reset is stable. Leaves the view at a settled
+        // a framed zoom comes back, then until the framed zoom and in-plane
+        // position both stop changing, so a captured reference reset is stable.
+        // Zoom alone is too coarse: the framed zoomScale is under 0.1 here, so a
+        // late registration can move it by less than framingEpsilon while
+        // shifting the box center by meters. Leaves the view at a settled
         // framed reset.
         function settleFraming(turnTableInteraction, resetViewButton) {
             const unframedZoom = turnTableInteraction.camera.defaultZoomScale;
@@ -95,14 +98,22 @@ MainWindowTest {
                 return turnTableInteraction.camera.zoomScale !== unframedZoom;
             });
 
-            let previous = turnTableInteraction.camera.zoomScale;
+            let previousZoom = turnTableInteraction.camera.zoomScale;
+            let previousPosition = Qt.vector3d(turnTableInteraction.camera.position.x,
+                                               turnTableInteraction.camera.position.y,
+                                               turnTableInteraction.camera.position.z);
             for (let i = 0; i < 15; i++) {
                 clickResetAndWait(resetViewButton);
-                let current = turnTableInteraction.camera.zoomScale;
-                if (Math.abs(current - previous) < framingEpsilon) {
+                let currentZoom = turnTableInteraction.camera.zoomScale;
+                let currentPosition = Qt.vector3d(turnTableInteraction.camera.position.x,
+                                                  turnTableInteraction.camera.position.y,
+                                                  turnTableInteraction.camera.position.z);
+                if (Math.abs(currentZoom - previousZoom) < framingEpsilon
+                        && pointsCloseXY(currentPosition, previousPosition)) {
                     return;
                 }
-                previous = current;
+                previousZoom = currentZoom;
+                previousPosition = currentPosition;
             }
             fail("scene framing did not stabilize");
         }
@@ -122,6 +133,12 @@ MainWindowTest {
             //the framed view) is stable before capturing a reference reset.
             tryVerify(() => RootData.linePlotManager.cavernLog.length > 0)
             waitForFramableScene(resetViewButton);
+
+            //The scraps triangulate one at a time after the solve, each growing
+            //the framed box when it lands. Waiting for those jobs narrows the
+            //window; the BVH install still lags them, so settleFraming() stays
+            //the real gate.
+            TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel);
 
             //Establish the canonical framed view (ortho). Reset frames the scene
             //bounding box, so the reference is the post-reset state, not the

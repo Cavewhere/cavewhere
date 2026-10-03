@@ -150,6 +150,11 @@ cwFixStationValidator::gatherCandidates() const
         return candidates;
     }
 
+    // Without a project frame there is no origin to measure a distance from,
+    // and fixes entered in different input CSs would be compared as raw
+    // coordinates — degrees against meters — so Part B waits for the project to
+    // be georeferenced. Part A needs no frame, and is the very reason a project
+    // whose only fix is a typo has none: that fix may not anchor one.
     const QString frameCS = m_region->geoReference()->localCoordinateSystem();
 
     const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
@@ -181,9 +186,6 @@ cwFixStationValidator::gatherCandidates() const
                 continue;
             }
 
-            // Part B needs a frame: without one there is no origin to measure a
-            // distance from, and fixes entered in different input CSs would be
-            // compared as raw coordinates — degrees against meters.
             if (frameCS.isEmpty()) {
                 continue;
             }
