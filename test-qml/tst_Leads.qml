@@ -714,6 +714,15 @@ MainWindowTest {
 
             let checkbox = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView->andListView_0->delegate_0->keywordList->row" + rowIndex + "->checkbox");
             verify(checkbox);
+
+            // The tab's column layout sizes the group list on a deferred polish
+            // pass. Until then the list still has its placeholder size, so a click
+            // on the checkbox lands outside the clipping list and reaches nothing.
+            let groupList = ObjectFinder.findObjectByChain(mainWindow, "rootId->viewPage->SplitView->renderingSidePanel->keyword->groupListView");
+            tryVerify(() => {
+                let center = checkbox.mapToItem(groupList, checkbox.width / 2, checkbox.height / 2);
+                return groupList.contains(center);
+            }, 5000, "keyword list should be laid out before the checkbox is clicked");
             return checkbox;
         }
 
