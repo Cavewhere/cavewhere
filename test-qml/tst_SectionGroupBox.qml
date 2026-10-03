@@ -3,6 +3,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtTest
 import cavewherelib
+import QmlTestRecorder
 
 MainWindowTest {
     id: rootId
@@ -14,7 +15,7 @@ MainWindowTest {
 
         ColumnLayout {
             QC.Label { text: "Row one" }
-            QC.Label { text: "Row two" }
+            QC.Label { id: rowTwoId; objectName: "rowTwo"; text: "Row two" }
         }
     }
 
@@ -41,6 +42,13 @@ MainWindowTest {
             compare(label.y, titledBoxId.verticalPadding)
             compare(titledBoxId.verticalPadding, Theme.statsPadding)
             verify(titledBoxId.topPadding > titledBoxId.bottomPadding)
+        }
+
+        // The pane's implicit content item is named "GroupBox" by Qt; page
+        // tests find content by its chain of named ancestors, so the box adds
+        // no link of its own.
+        function test_addsNoNamedAncestor() {
+            compare(ObjectFinder.chainOf(rowTwoId), "rootId->rowTwo")
         }
 
         function test_untitledReservesNoTitleRoom() {
