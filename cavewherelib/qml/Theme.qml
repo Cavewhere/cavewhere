@@ -306,6 +306,9 @@ QtObject {
     // Link bar
     readonly property color linkBarChip: dark ? "#454545" : "#E4E4E4"
 
+    // Flat section box: SectionGroupBox
+    readonly property color sectionFill: dark ? "#424242" : "#E0E0E0"
+
     // Metrics, in logical pixels
     readonly property int controlRadius: 6
     readonly property int panelRadius: 8

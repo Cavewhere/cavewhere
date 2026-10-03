@@ -464,6 +464,16 @@ StandardPage {
                         QC.Label { text: "Inside a frame" }
                     }
 
+                    SectionGroupBox {
+                        Layout.fillWidth: true
+                        title: "Section"
+
+                        ColumnLayout {
+                            QC.Label { text: "Inside a flat section" }
+                            QC.Label { text: "A second row" }
+                        }
+                    }
+
                     QC.ScrollView {
                         Layout.fillWidth: true
                         Layout.preferredHeight: galleryPage.scrollDemoHeight
