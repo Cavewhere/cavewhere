@@ -64,7 +64,6 @@
         <file>src/cavewhere.proto</file>
         <file>LICENSE.txt</file>
         <file>icons/viewIcon.png</file>
-        <file>icons/shadow.png</file>
         <file>icons/red-cancel.png</file>
         <file>icons/dragArrow/arrowHighLeft.png</file>
         <file>icons/dragArrow/arrowHighLeftBlack.png</file>

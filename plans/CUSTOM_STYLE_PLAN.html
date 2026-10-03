@@ -87,6 +87,7 @@
   <li><a href="#verify">Verification toolkit</a></li>
   <li><a href="#traps">Trap register</a></li>
   <li><a href="#background">Background</a></li>
+  <li><a href="#status">Status</a></li>
 </ol>
 </div>
 
@@ -1995,6 +1996,74 @@ echo "==&gt; Screenshots in $shot_dir"
 <div class="ok">
 <b>Sources.</b> Qt 6.11 documentation: Customizing Qt Quick Controls; Styling Qt Quick Controls; QQuickStyle; Deploying Qt Quick Controls Applications; QStyleHints. The Qt 6.11.2 installation: Basic, Fusion, and FluentWinUI3 style sources, the <code>attachedstyleproperties</code> example. A test project built and run on 2026-10-01 against Qt 6.11.2 on macOS, native and offscreen. A file-and-line inventory of the repository at commit <code>3db25ddb</code>.
 </div>
+
+<h2 id="status">12. Status</h2>
+<p class="meta">Recorded by WP15 on 2026-10-03 at <code>f7c3c06b</code> plus the uncommitted WP15 changes. Every commit sits on <code>dev_3</code>, unpushed.</p>
+<div class="wide"><table>
+<tr><th>Package</th><th>Commit</th><th>Outcome</th></tr>
+<tr><td>WP0 · Baseline</td><td>none (no source change)</td><td>Done. <code>style-baseline-qml.txt</code> and <code>style-baseline-cpp.txt</code> recorded in the build directory.</td></tr>
+<tr><td>WP1 · Color scheme setting</td><td><code>515f7a5c</code></td><td>Done. System, Light, Dark setting; <code>Theme.dark</code> follows it.</td></tr>
+<tr><td>WP2 · Style gallery page</td><td><code>0ef5b913</code></td><td>Done. Debug page plus <code>scripts/gen-style-gallery-screenshots.sh</code>.</td></tr>
+<tr><td>WP3 · Tokens and the application palette</td><td><code>792e416a</code>, then <code>ebfd07d5</code></td><td>Done, with the palette redesign below.</td></tr>
+<tr><td>WP4 · Style module skeleton</td><td><code>e95e9e24</code></td><td>Done. CaveWhereStyle primary, Fusion fallback.</td></tr>
+<tr><td>Gate A · Colors</td><td>after <code>ebfd07d5</code></td><td>Passed (moved after WP4 by Philip on 2026-10-02).</td></tr>
+<tr><td>WP5 · Buttons</td><td><code>b48dcea3</code></td><td>Done.</td></tr>
+<tr><td>WP6 · Indicators</td><td><code>3d8dc479</code></td><td>Done.</td></tr>
+<tr><td>WP7 · Fields</td><td><code>69478520</code></td><td>Done.</td></tr>
+<tr><td>WP8 · Menus and popups</td><td><code>d153b034</code></td><td>Done.</td></tr>
+<tr><td>WP9 · Containers and scrolling</td><td><code>d21d27ad</code></td><td>Done.</td></tr>
+<tr><td>WP10 · Busy ring</td><td><code>3d5f97d7</code></td><td>Done. C++ <code>cwBusyRing</code> exposed as <code>BusyRing</code>.</td></tr>
+<tr><td>Gate B · Controls</td><td>after <code>3d5f97d7</code></td><td>Passed 2026-10-02 with the follow-ups WP10a, WP11, WP12, WP12a.</td></tr>
+<tr><td>WP10a · Text editing menu</td><td><code>b0406759</code></td><td>Done.</td></tr>
+<tr><td>WP11 · Sidebar and link bar</td><td><code>a53169f2</code></td><td>Done.</td></tr>
+<tr><td>WP12 · Hand-drawn widgets</td><td><code>2ee99a5a</code></td><td>Done.</td></tr>
+<tr><td>WP12a · Follow-up widgets</td><td><code>a9089e5d</code></td><td>Done.</td></tr>
+<tr><td>WP13 · Style-bound spots</td><td><code>79d8a2fe</code></td><td>Done. Comments only; nothing on screen changes.</td></tr>
+<tr><td>WP11a · Frame adjustments</td><td><code>bc17a826</code></td><td>Done.</td></tr>
+<tr><td>WP13a · Readability fixes</td><td><code>e05a9907</code></td><td>Done.</td></tr>
+<tr><td>WP13b · Survey editor rows</td><td><code>7fc02937</code></td><td>Done.</td></tr>
+<tr><td>WP13c · Link bar and keyword tab trims</td><td><code>b3cb4e97</code></td><td>Done.</td></tr>
+<tr><td>WP13d · Link bar button spacing</td><td><code>b15bab29</code></td><td>Done.</td></tr>
+<tr><td>WP13e · Link bar overlay TypeError</td><td><code>91a9add3</code></td><td>Done.</td></tr>
+<tr><td>Gate C · Whole app</td><td>suites on <code>91a9add3</code>; test fix <code>03b0a7df</code></td><td>Passed; Philip approved 2026-10-03. QML 1065 passed / 11 failed / 84 skipped, the baseline failure set; C++ 2140 cases, 6 failed, all known.</td></tr>
+<tr><td>WP13f · Flat section group box</td><td><code>81301dbc</code></td><td>Done.</td></tr>
+<tr><td>Plan files</td><td><code>06f7251a</code></td><td>This plan and the prototypes are tracked.</td></tr>
+<tr><td>WP14 · Manual screenshots</td><td><code>7158bf69</code>, <code>708730d7</code>, <code>f7c3c06b</code></td><td>Done. 64 images regenerated; 57 of 57 cases after one retry.</td></tr>
+<tr><td>WP15 · Final audit</td><td>uncommitted</td><td>Done. Coverage, rule, and token checks clean after removing <code>canvas</code>; leftovers cleaned; both suites match the Gate C failure set once load flakes are rerun alone.</td></tr>
+</table></div>
+
+<h3>Deviations from the cards</h3>
+<ul>
+  <li><b>WP3, palette.</b> The card's C++ <code>cwApplicationPalette</code> (<code>792e416a</code>) reached only items that already existed, so new controls and popups came up in Fusion's colors. <code>ebfd07d5</code> removed it and its test; <code>cavewherelib/qml/ThemePalette.qml</code> now binds every role to a token and sits on each window root (the style's <code>ApplicationWindow</code>, <code>LicenseWindow.qml</code>, <code>test-qml/MainWindowTest.qml</code>), with the three text roles set per color group. <code>tst_ThemePalette.qml</code> guards it.</li>
+  <li><b>Gate A</b> moved from after WP3 to after WP4 (Philip, 2026-10-02).</li>
+  <li><b>Gate B full suites</b> were skipped (another session's hung <code>cavewhere-test</code> held the machine); the comparison for WP5 to WP13 ran once at Gate C.</li>
+  <li><b>Token block 5.1.</b> Values changed: <code>toolTipSurface</code> Dark is <code>#454545</code> and <code>toolTipText</code> is <code>#FFFFFF</code> in both modes (<code>e05a9907</code>, the Dark tooltip was a white panel). Tokens removed: <code>linkBar</code> (<code>b3cb4e97</code>) and <code>canvas</code> (WP15), each with zero uses. Tokens added beyond the block, each listed on the Colors page when it is a color: <code>rowCurrent</code>, <code>toolTipBorder</code>, <code>sectionFill</code>, plus metric and timing tokens added by WP5 to WP13f in place of bare numbers (for example <code>compactButtonPadding</code>, <code>sidebarIdleOpacity</code>, <code>linkBarButtonSpacing</code>, <code>shotArrowSize</code>, the <code>busy*</code> group). WP11 dropped 13 unused sidebar tokens.</li>
+  <li><b>Rule S5.</b> Style files whose content sits under <code>opacity: Theme.disabledOpacity</code> read <code>control.palette.active.&lt;role&gt;</code>, so a disabled control fades once (<code>e05a9907</code>). Label and GroupBox have no fade and keep the plain role. Per-instance overrides such as <code>palette.buttonText</code> still hold in every group.</li>
+  <li><b>WP8.</b> <code>DialogButtonBox.qml</code> imports <code>cavewherelib as CW</code>, because the app's legacy <code>Button.qml</code> shadowed the style Button in its delegate; WP12 later deleted that legacy Button and <code>CWButton</code>.</li>
+  <li><b>WP10.</b> The spin is a <code>RotationAnimation</code>, as the commit explains: an animator reports its value to QML only when it stops.</li>
+  <li><b>WP10a</b> is a package added after Gate B: <code>StyleTextEditingMenu.qml</code> restores the Cut/Copy/Paste menu that Fusion supplied.</li>
+  <li><b>WP11a, WP12a, WP13a to WP13f</b> are packages added from Philip's reviews. WP13b adds a C++ property, <code>cwSurveyEditorModel::focusedRowIndex</code>.</li>
+  <li><b>WP12.</b> The notes gallery error box and both toolbars became <code>QC.Frame</code> with their own opaque backgrounds; the legacy <code>Button.qml</code> and <code>CWButton.qml</code> were deleted.</li>
+  <li><b>Gate C</b> found one test defect, fixed in <code>03b0a7df</code>: <code>tst_Leads.qml</code> clicked a keyword checkbox before the KeywordTab layout's polish pass sized the clipping list.</li>
+  <li><b>WP14</b> carried two fixes outside its card: a renderer bug where a streaming texture load requested during gather had no frame to drain it (<code>7158bf69</code>, <code>cwRHIObject::hasStreamingWork</code>), and a WP13f regression where Qt names a Pane's implicit content item "GroupBox", which added a link to ObjectFinder chains (<code>708730d7</code>, guarded by <code>tst_SectionGroupBox</code>). The screenshot harness gained <code>waitForTexturesResident(viewer)</code>.</li>
+  <li><b>WP15</b> cleaned the leftovers WP14 listed: deleted <code>cavewherelib/icons/shadow.png</code> and its <code>cwResources.qrc</code> line and the unreferenced <code>cavewherelib/icons/svg/troggleSlider.svg</code>; <code>BodyText.qml</code> now sets <code>font.family: Theme.fontFamilyBody</code>; <code>tst_ManualScreenshots.qml</code> drops the <code>palette.placeholderText</code> line that the style ignores.</li>
+</ul>
+
+<h3>WP15 audit results</h3>
+<ul>
+  <li><b>Coverage.</b> Every visual type from the section 8 grep has a style file or a section 7.6 listing (<code>HorizontalHeaderView</code>). The remaining names draw nothing of their own: <code>Action</code>, <code>ButtonGroup</code>, <code>ContextMenu</code> and <code>Overlay</code> (attached types), and <code>Control</code> (the bare base type at <code>DrySurveyComponent.qml:538</code>). <code>QC.LabelInput</code> appears only inside a comment at <code>GlobalShadowTextInput.qml:69</code>.</li>
+  <li><b>Rules.</b> Both section 9 greps print nothing. Every <code>id</code> in <code>cavewherelib/style/*.qml</code> sits on a file root or on a nested child: inside a <code>contentItem</code> (<code>ProgressBar.qml:21,37</code>, <code>BusyIndicator.qml:62–224</code>), a direct child of the control (<code>TextField.qml:32</code>, <code>TextArea.qml:33</code>), or a child of a helper's root (<code>StylePopupPanel.qml:30</code>).</li>
+  <li><b>Tokens.</b> Every remaining 5.1 token has at least one use outside Theme.qml and ColorsPage.qml.</li>
+  <li><b>Suites.</b> Run on 2026-10-03, QML then C++, under a load average near 10 from another session; summary in <code>$BUILD/style-wp15-suites.txt</code>. QML: 1068 passed / 14 failed / 84 skipped. The 11 Gate C failures recur; the three others (<code>AddRemoveNote::test_addNotes</code>, <code>CoordinatePickerInteraction::test_aPickReadsOutOnTheContextDatumAndFollowsIt</code>, <code>LiDARNotes::test_lidarCarpeting</code>) pass when their files run alone, so they are load flakes. C++: 2140 cases, 2135 passed, 5 failed, all in the known set (<code>test_cwGeoReferencePersistence.cpp:72–74</code> and <code>:163</code>, <code>test_cwNoteLiDARManager.cpp:627/630</code>, <code>:1147</code>, <code>:1199</code>); <code>test_cwGeometryItersecter_twoLevel.cpp:686</code> passed this run.</li>
+</ul>
+
+<h3>Open items</h3>
+<ul>
+  <li><b>Dark row bands have low contrast.</b> <code>Theme.rowAlternate</code> Dark <code>#3A3A3A</code> (<code>cavewherelib/qml/Theme.qml:249</code>) sits close to <code>Theme.background</code> Dark <code>#313131</code> (<code>Theme.qml:17</code>), so the shot bands in <code>SurveyEditorCell.qml:130</code> read faintly in Dark. Noted after WP14; a token value for Philip to decide.</li>
+  <li><b>KeywordTab TypeError.</b> A pre-existing TypeError from <code>cavewherelib/qml/KeywordTab.qml:123</code> (the <code>keyCombo</code> <code>currentIndex</code> binding reads <code>filterModelObjectRole.key</code>) prints in some test consoles, including <code>tst_KeywordTab</code>. It predates the style work; a candidate small card.</li>
+  <li><b>Unreferenced app QML files</b> that predate the style work; nothing in QML, C++, or CMake names them: <code>cavewherelib/qml/ComboBoxWithInfo.qml</code>, <code>FileButtonAndMenu.qml</code>, <code>GlobalDialogHandler.qml</code>, <code>GlobalItems.qml</code>, <code>ImageArrowNavigation.qml</code>, <code>KeyNavigationContainer.qml</code>, <code>LabeledInfo.qml</code>, <code>LeadQuickComments.qml</code>, <code>LicenseWindow.qml</code>, <code>Pallete.qml</code>, <code>StandardBorder.qml</code>, <code>StaticKeywordItem.qml</code>, <code>SupportedCheckLabel.qml</code>, <code>UsedStationsWidget.qml</code>. WP12 and the palette commit edited <code>LeadQuickComments.qml</code> and <code>LicenseWindow.qml</code>. Left in place for Philip to delete.</li>
+  <li><b>Platforms still to check</b> (section 10): the native title bar and dialogs on Windows and Linux, and a phone build, each after Gate C.</li>
+</ul>
 
 </body>
 </html>

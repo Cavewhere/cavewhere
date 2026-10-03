@@ -244,7 +244,6 @@ QtObject {
 
     // ---- BEGIN style tokens (direction D, Karst Soft) ----
     // Surfaces
-    readonly property color canvas: dark ? "#565656" : "#C9CBCD"
     readonly property color chrome: dark ? "#232323" : "#DADCDE"
     readonly property color chromeText: dark ? "#FFFFFF" : "#1E1E1E"
     readonly property color rowAlternate: dark ? "#3A3A3A" : "#E7E7E7"

@@ -58,9 +58,8 @@ MainWindowTest {
     // of its own — in the app it sits on the window's — and grabItemToFile crops
     // out of a whole-window grab, so without an opaque one beneath it MainContent
     // shows through inside the crop. The name and email placeholders are the
-    // point of the shot; CaveWhereStyle draws them with Theme.fieldPlaceholder
-    // whatever the palette holds, so they match the app, and MainWindowTest.qml
-    // carries ThemePalette for every other role.
+    // point of the shot; CaveWhereStyle draws them with Theme.fieldPlaceholder,
+    // so they match the app.
     QQ.Loader {
         id: welcomePageLoaderId
         anchors.centerIn: parent
@@ -70,7 +69,6 @@ MainWindowTest {
         z: 999
         sourceComponent: QQ.Rectangle {
             color: Theme.background
-            palette.placeholderText: Theme.textSubtle
 
             WelcomePage {
                 objectName: "welcomePage"
