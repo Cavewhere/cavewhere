@@ -3,6 +3,7 @@
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
+#include "cwAttachedFixModel.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
@@ -133,9 +134,14 @@ TEST_CASE("cwFixStationDiagnosticsModel merges the source's role names with its 
     CHECK(roles.value(cwFixStationDiagnosticsModel::AvailableDatumsRole) == "availableDatums");
     CHECK(roles.value(cwFixStationDiagnosticsModel::DatumEnabledRole) == "datumEnabled");
 
-    // The two role blocks must not collide, or the merge would silently drop one
-    // side: every name in the merged hash is still reachable by its own value.
-    CHECK(roles.size() == fixture.source->roleNames().size() + 8);
+    // The fix station table concatenates this model with cwAttachedFixModel, so
+    // it answers the attached-fix roles too, as an editable row.
+    CHECK(roles.value(cwAttachedFixModel::SourceFileRole) == "sourceFile");
+    CHECK(roles.value(cwAttachedFixModel::ReadOnlyRole) == "readOnly");
+
+    // The three role blocks must not collide, or the merge would silently drop
+    // one side: every name in the merged hash is still reachable by its own value.
+    CHECK(roles.size() == fixture.source->roleNames().size() + 10);
 }
 
 TEST_CASE("cwFixStationDiagnosticsModel passes persisted rows through untouched",
