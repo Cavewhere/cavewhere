@@ -30,6 +30,7 @@ public:
      * shared total and every demotion shrinks what the other views measure.
      */
     bool streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes) override;
+    bool hasStreamingWork() const override;
     /**
      * Runs selection for every item the offscreen job's camera can see, at the
      * job's output size, asking for whatever detail is missing at export priority.

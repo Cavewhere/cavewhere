@@ -41,6 +41,8 @@ class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
     Q_PROPERTY(qint64 readyCpuBytes READ readyCpuBytes NOTIFY streamingChanged)
     Q_PROPERTY(QString readyCpuText READ readyCpuText NOTIFY streamingChanged)
     Q_PROPERTY(int demotionsInFlight READ demotionsInFlight NOTIFY streamingChanged)
+    //! Counts the frames that published streaming counts, so a reader can tell a fresh frame from a stale one
+    Q_PROPERTY(qint64 streamingRevision READ streamingRevision NOTIFY streamingChanged)
 
 public:
     enum Roles {
@@ -76,6 +78,7 @@ public:
     qint64 readyCpuBytes() const { return m_streaming.readyCpuBytes; }
     QString readyCpuText() const { return formattedBytes(m_streaming.readyCpuBytes); }
     int demotionsInFlight() const { return m_streaming.demotionsInFlight; }
+    qint64 streamingRevision() const { return qint64(m_lastStreamingRevision); }
 
     //! Re-reads the ledger now, for the HUD's refresh affordance
     Q_INVOKABLE void refresh();

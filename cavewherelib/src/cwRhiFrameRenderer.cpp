@@ -290,6 +290,12 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
 
     gatherScene(passBatches, perPassRenderData);
 
+    // Gather is where streamed items ask for the levels this camera wants, so a
+    // load requested there needs a frame of its own to land in.
+    for(auto object : std::as_const(m_rhiObjects)) {
+        m_hasPendingStreamingWork = m_hasPendingStreamingWork || object->hasStreamingWork();
+    }
+
     const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
 
     // The live frame always reads camera slot 0 of the global UBO.

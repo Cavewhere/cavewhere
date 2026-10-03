@@ -244,6 +244,11 @@ public:
     // scene re-arm another frame.
     virtual bool streamResources(ResourceUpdateData&, qint64&) { return false; }
 
+    // True while this object has loads queued or in flight. Asked after gather,
+    // because gather is where selection issues the loads a frame's camera wants:
+    // a load requested there lands only if another frame follows.
+    virtual bool hasStreamingWork() const { return false; }
+
     // True when this object holds the detail @a jobRenderData's camera and output
     // size call for. Offscreen jobs (map/plot exports, captures) ask before
     // dispatching, so an export renders at its own quality instead of baking in
