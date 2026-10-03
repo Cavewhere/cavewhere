@@ -43,7 +43,9 @@ MainWindowTest {
 
                     let noteLiDARItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->rhiViewerId")
 
-                    tryVerify(() => { return noteLiDARItem.scene.gltf.status === RenderGLTF.Ready }, 10000)
+                    // The scan's large baseColor texture is compressed to KTX2 on a
+                    // cold cache before the glTF is Ready.
+                    tryVerify(() => { return noteLiDARItem.scene.gltf.status === RenderGLTF.Ready }, 30000)
 
                     let noteImageItem = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->galleryView->noteImage1->noteImageItem")
                     tryVerify(() => { return noteImageItem !== null })
