@@ -24,6 +24,12 @@ import QQuickGit
 MainWindowTest {
     id: rootId
 
+    // Streaming counts for the last frame that streamed, read by
+    // waitForTexturesResident below.
+    RenderingStatsModel {
+        id: renderStatsId
+    }
+
     HighlightOverlay {
         id: highlightOverlayId
         anchors.fill: parent
@@ -166,6 +172,7 @@ MainWindowTest {
             // grab. (The render background is left at the app's own light gradient —
             // no override — so screenshots match the real appearance.)
             RootData.futureManagerModel.waitForFinished();
+            waitForTexturesResident(regionViewer);
             return regionViewer;
         }
 
@@ -270,6 +277,35 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished();
             wait(150);
             highlightOverlayId.refresh();
+        }
+
+        // Scrap carpets and LiDAR scans draw from streamed textures that arrive
+        // over several frames after their geometry: a grab taken as soon as the
+        // jobs drain shows their white base level. The streaming counts are
+        // process-wide and hold whichever view published last, so force a frame
+        // of this viewer first and trust only counts published after it. A view
+        // with nothing streamed publishes no counts at all; after a bounded
+        // chance to publish, such a view has nothing to wait for. The renderer
+        // keeps asking for frames while loads remain; the trailing settle()
+        // lets the last upload reach the screen.
+        function waitForTexturesResident(viewer) {
+            renderStatsId.refresh();
+            const staleRevision = renderStatsId.streamingRevision;
+            for (let i = 0; i < 30 && renderStatsId.streamingRevision === staleRevision; ++i) {
+                viewer.update();
+                wait(50);
+                renderStatsId.refresh();
+            }
+            if (renderStatsId.streamingRevision === staleRevision) {
+                settle();
+                return;
+            }
+            tryVerify(() => {
+                renderStatsId.refresh();
+                return renderStatsId.loadsInFlight === 0
+                    && renderStatsId.itemsBelowDesired === 0;
+            }, 30000, "every streamed texture holds the level the camera asked for");
+            settle();
         }
 
         // Wait up to ~2s for a live QRhi on the given item's window; on a headless
@@ -484,6 +520,7 @@ MainWindowTest {
                 if (candidate.zoomScale > fit.zoomScale) { fit = candidate; }
             }
             tt.setViewState(fit); // sets center + zoom + pitch once
+            waitForTexturesResident(regionViewer); // the new zoom asks for new levels
 
             let frameCount = 48; // 7.5 deg/frame — smooth, seamless 360 loop
             let firstPath = "";
@@ -516,7 +553,7 @@ MainWindowTest {
             // the grid convergence reads stronger.
             posterState.distance = posterState.distance * 0.62;
             tt.setViewState(posterState);
-            wait(120); // perspective settle + present
+            waitForTexturesResident(regionViewer); // the closer eye asks for finer levels
             let posterPath = WindowGrabber.grabItemToFile(
                 regionViewer, "scraps-carpet-orbit-poster", 0);
             verify(posterPath.length > 0, "wrote the perspective poster");
@@ -1551,6 +1588,7 @@ MainWindowTest {
             tryVerify(() => viewer.scene.gltf.status === RenderGLTF.Ready, 20000,
                       "the glTF scan finished loading");
             RootData.futureManagerModel.waitForFinished();
+            waitForTexturesResident(viewer);
 
             // Wait for the editor rather than grabbing as soon as the glTF is
             // Ready: on Ready the viewer captures a gallery thumbnail of itself,
