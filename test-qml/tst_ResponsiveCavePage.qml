@@ -91,6 +91,40 @@ MainWindowTest {
             tryVerify(() => tree.visible, 5000, "and keeps showing it")
         }
 
+        // One header serves both layouts, as the tree does.
+        function test_headerVisibleAtBothWidths() {
+            rootId.width = 800
+            waitForRendering(rootId)
+            let chip = findChild(rootId, "nodeKindChip")
+            verify(chip !== null, "the Kind chip should exist at wide width")
+            tryVerify(() => chip.visible, 5000, "the header shows at wide width")
+
+            rootId.width = 400
+            waitForRendering(rootId)
+            compare(findChild(rootId, "nodeKindChip"), chip, "the narrow layout proxies the same header")
+            tryVerify(() => chip.visible, 5000, "and keeps showing it")
+            verify(findChild(rootId, "renameNodeButton").visible, "Rename stays reachable when narrow")
+        }
+
+        // A Section is a second kind of row in the page's tree, ahead of the
+        // trips, at either width.
+        function test_sectionRowShowsAtBothWidths() {
+            let page = findCavePage()
+            let cave = page.currentNode
+            let section = RootData.region.addNode(cave, SurveyNodeKind.Folder)
+
+            for (let width of [800, 400]) {
+                rootId.width = width
+                waitForRendering(rootId)
+                tryVerify(() => {
+                              let row = findChild(rootId, "caveDelegate0")
+                              return row !== null && row.visible && row.object === section
+                          }, 5000, "the Section leads the tree at width " + width)
+                tryVerify(() => findChild(rootId, "tripDelegate1") !== null, 5000,
+                          "the cave's trips follow it at width " + width)
+            }
+        }
+
         function test_leadsLinkVisible() {
             let leadsLink = findChild(rootId, "leadsLink")
             verify(leadsLink !== null, "leadsLink not found")

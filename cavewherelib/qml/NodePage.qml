@@ -13,11 +13,14 @@ import QtQml
 import QtQuick.Layouts
 import QtQuick.Controls as QC
 
+// The page of one survey node — a Cave, a Folder, or a Section. The header
+// names the node and its kind, the stats sum everything at or below it, and
+// the survey tree rooted at the node lists its child nodes and then its trips.
 StandardPage {
-    id: cavePageArea
+    id: nodePageArea
     objectName: "cavePage"
 
-    property Cave currentCave
+    property SurveyNode currentNode
 
     // Shared down the node pages so every trip page shows in one TripPage item.
     property QQ.Component tripComponent: tripPageComponent
@@ -26,7 +29,7 @@ StandardPage {
     // the way to a page, so each depth needs its own component. A type cannot
     // name itself in its own body, hence the run-time creation.
     readonly property QQ.Component childNodePageComponent:
-        Qt.createComponent("cavewherelib", "CavePage", QQ.Component.PreferSynchronous, cavePageArea)
+        Qt.createComponent("cavewherelib", "NodePage", QQ.Component.PreferSynchronous, nodePageArea)
 
     function tripPageName(trip) {
         return "Trip=" + trip.name;
@@ -37,16 +40,40 @@ StandardPage {
         return "Node=" + node.name;
     }
 
+    function addTrip() {
+        nodePageArea.currentNode.addTrip()
+        return nodePageArea.currentNode.trip(nodePageArea.currentNode.tripCount - 1)
+    }
+
     function addTripAndNavigate() {
-        cavePageArea.currentCave.addTrip()
-
-        var lastIndex = cavePageArea.currentCave.rowCount() - 1;
-        var lastModelIndex = cavePageArea.currentCave.index(lastIndex);
-        var lastTrip = cavePageArea.currentCave.data(lastModelIndex, Cave.TripObjectRole);
-
-        RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                   cavePageArea.tripPageName(lastTrip));
+        const lastTrip = nodePageArea.addTrip()
+        RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page,
+                                                   nodePageArea.tripPageName(lastTrip));
         return lastTrip;
+    }
+
+    // The Add button's own action, which follows position the way the menu
+    // beside it does: where caves go it adds a cave and opens its page,
+    // inside a cave it adds a trip and opens the trip page.
+    function addByPosition() {
+        if (nodePageArea.takesCaves) {
+            nodePageArea.showAdded(RootData.region.addNode(nodePageArea.currentNode, SurveyNodeKind.Cave),
+                                   AddVerbsMenu.AddCave)
+        } else {
+            nodePageArea.addTripAndNavigate()
+        }
+    }
+
+    // Lands the user on what an Add verb just made: Add Folder and Add Section
+    // stay on this page with the new row's name ready to type; Add Cave and
+    // Add Trip open the new page.
+    function showAdded(object: QQ.QtObject, verb: int) {
+        if (verb === AddVerbsMenu.AddFolder || verb === AddVerbsMenu.AddSection) {
+            nodePageArea.pendingReveal = object as SurveyNode
+            nodePageArea.revealPending()
+        } else {
+            tripTreeId.openObject(object)
+        }
     }
 
     // Add Trip → Add trip from survey file…: create the trip first
@@ -56,9 +83,7 @@ StandardPage {
     // orphan, since the user asked for a trip from a file, not an
     // empty native one.
     function addTripFromSurveyFileWithDialog() {
-        cavePageArea.currentCave.addTrip()
-        var newTrip = cavePageArea.currentCave.trip(cavePageArea.currentCave.rowCount() - 1)
-        addSurveyFileDialogId.trip = newTrip
+        addSurveyFileDialogId.trip = nodePageArea.addTrip()
         addSurveyFileDialogId.open()
     }
 
@@ -72,13 +97,26 @@ StandardPage {
         if (dotIndex > 0) {
             baseName = baseName.substring(0, dotIndex)
         }
-        newTrip.name = cavePageArea.currentCave.uniqueTripName(baseName)
-        RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page,
-                                                   cavePageArea.tripPageName(newTrip))
+        newTrip.name = nodePageArea.currentNode.uniqueTripName(baseName)
+        RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page,
+                                                   nodePageArea.tripPageName(newTrip))
+    }
+
+    // The first child of an empty node brings the tree back, and the tree
+    // draws the new row only once it has been laid out at its new height, so
+    // the reveal is retried until the row exists.
+    function revealPending() {
+        if (nodePageArea.pendingReveal === null) {
+            return
+        }
+        tripTreeId.revealAdded(nodePageArea.pendingReveal)
+        if (tripTreeId.currentRowItem() !== null) {
+            nodePageArea.pendingReveal = null
+        }
     }
 
     function registerSubPages() {
-        if(currentCave) {
+        if(currentNode) {
             var oldCarpetPage = PageView.page.childPage("Leads")
             if(oldCarpetPage !== RootData.pageSelectionModel.currentPage) {
                 if(oldCarpetPage !== null) {
@@ -89,7 +127,7 @@ StandardPage {
                     RootData.pageSelectionModel.registerPage(PageView.page,
                                                              "Leads",
                                                              caveLeadsPage,
-                                                             {"cave":currentCave});
+                                                             {"cave":currentNode});
                 }
             }
 
@@ -103,7 +141,7 @@ StandardPage {
                     RootData.pageSelectionModel.registerPage(PageView.page,
                                                              "Fix Stations",
                                                              fixStationsSubPage,
-                                                             {"cave":currentCave});
+                                                             {"cave":currentNode});
                 }
             }
         }
@@ -111,8 +149,9 @@ StandardPage {
 
     PageView.onPageChanged: registerSubPages()
 
-    onCurrentCaveChanged: {
-        instantiatorId.model = cavePageArea.currentCave
+    onCurrentNodeChanged: {
+        nodePageArea.pendingReveal = null
+        instantiatorId.model = nodePageArea.currentNode
         registerSubPages()
     }
 
@@ -133,29 +172,42 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    // A Folder or Section an Add verb made, still waiting for its tree row.
+    property QQ.QtObject pendingReveal: null
+
     // The narrow layout's Add Trip bar lives inside narrowColumnComponent,
     // whose ids aren't reachable from out here; it publishes itself on
     // completion so the one hint can point at whichever bar is showing.
     property QQ.Item narrowAddTripBar: null
 
-    // currentCave.tripCount rather than currentCave.rowCount(): rowCount()
-    // is a plain function, so a binding on it would never re-evaluate when a
-    // trip arrives, while tripCount announces itself.
-    readonly property bool hasNoTrips: cavePageArea.currentCave !== null
-                                       && cavePageArea.currentCave.tripCount === 0
+    // Where the node sits decides its Add verbs: where caves go, Add Cave and
+    // Add Folder; inside a cave, Add Trip and Add Section.
+    readonly property bool takesCaves: nodePageArea.currentNode !== null
+                                       && nodePageArea.currentNode.takesCaves
 
-    // The tree shows a cave's trips, so it stays away while the page stands
-    // for no cave: a null rootNode is a whole-region tree, which is the Data
-    // page's reading of it and no cave page's.
-    readonly property bool showsTripTree: cavePageArea.currentCave !== null
-                                          && !cavePageArea.hasNoTrips
+    // A node copied from a survey file: its name and kind belong to the file.
+    readonly property bool isSourced: nodePageArea.currentNode !== null
+                                      && nodePageArea.currentNode.isSourced
+
+    // tripCount and childNodeCount rather than rowCount(): rowCount() is a
+    // plain function, so a binding on it would never re-evaluate when a trip
+    // arrives, while the counts announce themselves.
+    readonly property bool isEmpty: nodePageArea.currentNode !== null
+                                    && nodePageArea.currentNode.tripCount === 0
+                                    && nodePageArea.currentNode.childNodeCount === 0
+
+    // The tree shows the node's child nodes and trips, so it stays away while
+    // the page stands for no node: a null rootNode is a whole-region tree,
+    // which is the Data page's reading of it and no node page's.
+    readonly property bool showsTripTree: nodePageArea.currentNode !== null
+                                          && !nodePageArea.isEmpty
 
     // True while this cave's centerline comes from an attached survey
     // file. The trips such a cave holds are windows into that file, so
     // the page shows the attachment's own state and stops inviting
     // native trips.
-    readonly property bool caveAttached: cavePageArea.currentCave !== null
-                                         && cavePageArea.currentCave.externalCenterline.entryFile.length > 0
+    readonly property bool caveAttached: nodePageArea.currentNode !== null
+                                         && nodePageArea.currentNode.externalCenterline.entryFile.length > 0
 
     // Whether the warnings banner has anything to list. Drives the banner
     // proxies' visibility directly — the banner's own visibility is controlled
@@ -163,11 +215,22 @@ StandardPage {
     // its visible (that clobbers the proxy's imperative control and deadlocks).
     readonly property bool hasWarnings: warningsBannerId.count > 0
 
+    // The date of the newest trip at or below the node, as the tree's Date
+    // cell writes a date; a dash while no trip there has one.
+    readonly property string lastSurveyText: isNaN(nodePageModelId.lastSurvey.getTime())
+                                             ? "—"
+                                             : Qt.formatDate(nodePageModelId.lastSurvey, Qt.ISODate)
+
+    readonly property string addButtonText: nodePageArea.takesCaves ? qsTr("Add Cave") : qsTr("Add Trip")
+    readonly property string addMenuToolTip: nodePageArea.takesCaves
+                                             ? qsTr("More ways to add here")
+                                             : qsTr("More ways to add a trip")
+
     // Brings the attached file's source line into view and pulses it. The
     // wide page scrolls as a whole; the narrow column always shows it under
     // the stats.
     function showSourceLine() {
-        if (!cavePageArea.isNarrow) {
+        if (!nodePageArea.isNarrow) {
             const top = caveSummaryId.mapToItem(wideFlickableId.contentItem, 0, 0).y - Theme.pageMargin
             const maxContentY = Math.max(0, wideFlickableId.contentHeight - wideFlickableId.height)
             wideFlickableId.contentY = Math.min(Math.max(0, top), maxContentY)
@@ -177,36 +240,112 @@ StandardPage {
 
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
 
-    DoubleClickTextInput {
-        id: caveNameText
-        text: cavePageArea.currentCave ? cavePageArea.currentCave.name : ""
-        font.bold: true
-        font.pixelSize: Theme.fontSizeTitle
-        wrapMode: QQ.Text.WordWrap
+    // The header: the kind's icon, the name, the Kind chip (a Cave/Folder
+    // picker on a native node) and Rename. One instance serves both layouts.
+    RowLayout {
+        id: nodeHeaderId
+        spacing: Theme.delegatePadding
 
-        onFinishedEditting: (newText) => {
-                                cavePageArea.currentCave.name = newText
-                            }
+        Icon {
+            objectName: "nodeKindIcon"
+            source: nodePageArea.currentNode !== null && nodePageArea.currentNode.kind === SurveyNodeKind.Folder
+                    ? "qrc:/twbs-icons/icons/folder.svg"
+                    : "qrc:/icons/svg/caveKind.svg"
+            sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
+            colorizationColor: Theme.textSubtle
+            visible: nodePageArea.currentNode !== null && !nodePageArea.isSourced
+        }
+
+        DoubleClickTextInput {
+            id: caveNameText
+            objectName: "nodeNameText"
+            text: nodePageArea.currentNode ? nodePageArea.currentNode.name : ""
+            font.bold: true
+            font.pixelSize: Theme.fontSizeTitle
+            wrapMode: QQ.Text.WordWrap
+            readOnly: nodePageArea.isSourced
+
+            // Wraps once the row runs out of room, and otherwise keeps the
+            // chip and Rename right after the name.
+            Layout.fillWidth: true
+            Layout.maximumWidth: caveNameText.implicitWidth
+
+            onFinishedEditting: (newText) => {
+                                    nodePageArea.currentNode.name = newText
+                                }
+        }
+
+        KindChip {
+            objectName: "nodeKindChip"
+            text: nodePageModelId.kindLabel
+            sourced: nodePageArea.isSourced
+            node: nodePageArea.currentNode
+        }
+
+        QC.Button {
+            objectName: "renameNodeButton"
+            text: qsTr("Rename…")
+            flat: true
+            visible: nodePageArea.currentNode !== null && !nodePageArea.isSourced
+
+            onClicked: caveNameText.openEditor()
+        }
+
+        QQ.Item { Layout.fillWidth: true }
+    }
+
+    // What the stats row needs beyond the node's own properties.
+    NodePageModel {
+        id: nodePageModelId
+        node: nodePageArea.currentNode
+    }
+
+    RowLayout {
+        id: tripsStatRow
+        spacing: Theme.delegatePadding
+
+        QC.Label {
+            text: qsTr("Trips:")
+        }
+
+        QC.Label {
+            objectName: "tripCountValue"
+            text: nodePageModelId.tripCount
+        }
+    }
+
+    RowLayout {
+        id: lastSurveyStatRow
+        spacing: Theme.delegatePadding
+
+        QC.Label {
+            text: qsTr("Last survey:")
+        }
+
+        QC.Label {
+            objectName: "lastSurveyValue"
+            text: nodePageArea.lastSurveyText
+        }
     }
 
     NodeWarningsBanner {
         id: warningsBannerId
 
-        node: cavePageArea.currentCave
+        node: nodePageArea.currentNode
 
-        onSourceLineRequested: cavePageArea.showSourceLine()
+        onSourceLineRequested: nodePageArea.showSourceLine()
     }
 
     SelectableCaveStat {
         id: lengthStat
         label: "Length:"
-        unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.length : null
+        unitValue: nodePageArea.currentNode ? nodePageArea.currentNode.length : null
     }
 
     SelectableCaveStat {
         id: depthStat
         label: "Depth:"
-        unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.depth : null
+        unitValue: nodePageArea.currentNode ? nodePageArea.currentNode.depth : null
         depth: true
     }
 
@@ -222,7 +361,7 @@ StandardPage {
             objectName: "leadsLink"
             text: leadModelId.count
             onClicked: {
-                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+                RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Leads");
             }
         }
     }
@@ -237,15 +376,15 @@ StandardPage {
 
         LinkText {
             objectName: "fixStationsLink"
-            text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStationCount : 0
+            text: nodePageArea.currentNode ? nodePageArea.currentNode.fixStationCount : 0
             onClicked: {
-                RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
+                RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
             }
         }
 
         FixStationErrorBadge {
             objectName: "fixStationsBadge"
-            errorModel: cavePageArea.currentCave ? cavePageArea.currentCave.errorModel : null
+            errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
             errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
         }
     }
@@ -264,7 +403,7 @@ StandardPage {
 
             QC.Label {
                 objectName: "gridConvergenceValue"
-                text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergence.text : ""
+                text: nodePageArea.currentNode ? nodePageArea.currentNode.gridConvergence.text : ""
 
                 QQ.HoverHandler {
                     id: gridConvergenceHoverId
@@ -274,9 +413,9 @@ StandardPage {
                 // detailText repeats it verbatim — so only a real angle earns a
                 // tooltip.
                 QC.ToolTip.visible: gridConvergenceHoverId.hovered
-                                    && cavePageArea.currentCave
-                                    && cavePageArea.currentCave.gridConvergence.state === GridConvergence.Valid
-                QC.ToolTip.text: cavePageArea.currentCave ? cavePageArea.currentCave.gridConvergence.detailText : ""
+                                    && nodePageArea.currentNode
+                                    && nodePageArea.currentNode.gridConvergence.state === GridConvergence.Valid
+                QC.ToolTip.text: nodePageArea.currentNode ? nodePageArea.currentNode.gridConvergence.detailText : ""
             }
         }
 
@@ -303,29 +442,30 @@ StandardPage {
     ExternalCenterlineCaveSummary {
         id: caveSummaryId
         Layout.fillWidth: true
-        cave: cavePageArea.currentCave
+        cave: nodePageArea.currentNode as Cave
     }
 
-    // The cave's trips, in the same tree the Data page shows, rooted at this
-    // cave: its trips are the view's own rows. One instance serves both
-    // layouts through the proxies below, so the narrow page shows the tree the
-    // wide page shows rather than a list of its own.
+    // The node's contents, in the same tree the Data page shows, rooted at
+    // this node: its child nodes (Sections, or caves in a Folder) come first,
+    // then its trips, each row with the tree's own context menu. One instance
+    // serves both layouts through the proxies below, so the narrow page shows
+    // the tree the wide page shows rather than a list of its own.
     SurveyTreeView {
         id: tripTreeId
         objectName: "tripTree"
 
         removeAskBox: removeChallengeId
-        rootNode: cavePageArea.currentCave
+        rootNode: nodePageArea.currentNode
         // The wide page scrolls as a whole, so the tree gives up its own
         // scrolling there and takes the height every row needs. The narrow
         // page hands it what is left of the window and lets it scroll.
-        scrollable: cavePageArea.isNarrow
+        scrollable: nodePageArea.isNarrow
 
         // Set here rather than on the proxies: a LayoutItemProxy forwards its
         // target's Layout properties, so one set of them serves both layouts.
         Layout.fillWidth: true
-        Layout.fillHeight: cavePageArea.isNarrow
-        Layout.preferredHeight: cavePageArea.isNarrow ? -1 : tripTreeId.fullHeight
+        Layout.fillHeight: nodePageArea.isNarrow
+        Layout.preferredHeight: nodePageArea.isNarrow ? -1 : tripTreeId.fullHeight
     }
 
     QQ.Flow {
@@ -336,18 +476,18 @@ StandardPage {
         AddAndSearchBar {
             id: addTripBarWideId
             objectName: "addTrip"
-            addButtonText: "Add Trip"
+            addButtonText: nodePageArea.addButtonText
             menu: addTripMenuId
-            menuToolTip: qsTr("More ways to add a trip")
-            onAdd: cavePageArea.addTripAndNavigate()
+            menuToolTip: nodePageArea.addMenuToolTip
+            onAdd: nodePageArea.addByPosition()
         }
 
         ExportImportButtons {
             id: exportButton
             objectName: "exportImportButtons"
-            visible: RootData.desktopBuild && !cavePageArea.hasNoTrips
+            visible: RootData.desktopBuild && nodePageModelId.tripCount > 0
             currentRegion: RootData.region
-            currentCave: cavePageArea.currentCave
+            currentCave: nodePageArea.currentNode as Cave
             // The tree's current row, which the export verbs take a trip
             // from. A cave row leaves them without one.
             currentTrip: tripTreeId.currentObject as Trip
@@ -355,26 +495,28 @@ StandardPage {
     }
 
     // Sits outside both layouts and positions itself, so one hint serves
-    // wide and narrow. The arrow points at Add Trip, which is why the
+    // wide and narrow. The arrow points at the Add button, which is why the
     // text doesn't name the button.
     HelpQuoteBox {
         id: noTripsHintId
         objectName: "noTripsHint"
 
-        readonly property QQ.Item targetBar: cavePageArea.isNarrow
-                                             ? cavePageArea.narrowAddTripBar
+        readonly property QQ.Item targetBar: nodePageArea.isNarrow
+                                             ? nodePageArea.narrowAddTripBar
                                              : addTripBarWideId
 
         z: 10
         triangleOffset: 0.0
         // The hint is a sibling of the scrolling area it points into, so
         // it has to retire itself when the bar scrolls out of view.
-        visibilityClip: cavePageArea
+        visibilityClip: nodePageArea
         // Names the control rather than drawing a glyph: the button shows a
         // stroked chevron, not the solid triangle a "▾" renders, and a bare
         // symbol inside qsTr has no font-coverage or translator guarantee.
-        text: qsTr("No trips yet — add one here, or use the menu beside this button to add one from a survey file.")
-        visible: cavePageArea.hasNoTrips && !cavePageArea.caveAttached
+        text: nodePageArea.takesCaves
+              ? qsTr("Nothing here yet — add a cave here, or use the menu beside this button to add a folder.")
+              : qsTr("No trips yet — add one here, or use the menu beside this button to add one from a survey file.")
+        visible: nodePageArea.isEmpty && !nodePageArea.caveAttached
                  && noTripsHintId.targetBar !== null
         pointAtObject: noTripsHintId.targetBar
         pointAtObjectPosition: noTripsHintId.targetBar !== null
@@ -383,14 +525,23 @@ StandardPage {
                                : Qt.point(0, 0)
     }
 
-    QC.Menu {
+    // The Add verbs for this node's position, then the survey-file entry,
+    // which makes a trip and so belongs only where trips go.
+    AddVerbsMenu {
         id: addTripMenuId
         objectName: "addTripMenu"
+
+        node: nodePageArea.currentNode
+
+        onAdded: (object, verb) => nodePageArea.showAdded(object, verb)
 
         QC.MenuItem {
             objectName: "addExternalTripMenuItem"
             text: qsTr("Add trip from survey file…")
-            onTriggered: cavePageArea.addTripFromSurveyFileWithDialog()
+            visible: !nodePageArea.takesCaves
+            enabled: !nodePageArea.takesCaves
+            height: visible ? implicitHeight : 0
+            onTriggered: nodePageArea.addTripFromSurveyFileWithDialog()
         }
     }
 
@@ -402,7 +553,7 @@ StandardPage {
             if (newTrip === null) {
                 return
             }
-            cavePageArea.nameTripFromFileAndNavigate(
+            nodePageArea.nameTripFromFileAndNavigate(
                 newTrip, newTrip.externalCenterline.entryFile)
         }
 
@@ -411,26 +562,26 @@ StandardPage {
             if (newTrip === null) {
                 return
             }
-            cavePageArea.nameTripFromFileAndNavigate(newTrip, sourcePath)
+            nodePageArea.nameTripFromFileAndNavigate(newTrip, sourcePath)
         }
 
         onDismissed: {
             let orphanTrip = addSurveyFileDialogId.trip
             addSurveyFileDialogId.trip = null
-            if (orphanTrip === null || cavePageArea.currentCave === null) {
+            if (orphanTrip === null || nodePageArea.currentNode === null) {
                 return
             }
-            let index = cavePageArea.currentCave.indexOf(orphanTrip)
+            let index = nodePageArea.currentNode.indexOf(orphanTrip)
             if (index >= 0) {
-                cavePageArea.currentCave.removeTrip(index)
+                nodePageArea.currentNode.removeTrip(index)
             }
         }
     }
 
     QQ.Loader {
         id: narrowLoaderId
-        active: cavePageArea.isNarrow
-        visible: cavePageArea.isNarrow
+        active: nodePageArea.isNarrow
+        visible: nodePageArea.isNarrow
         Layout.fillWidth: true
         Layout.fillHeight: true
         sourceComponent: narrowColumnComponent
@@ -444,7 +595,7 @@ StandardPage {
     // auto-anchor under Qt 6.11 macOS — the bar ends up at (0,0).
     QQ.Flickable {
         id: wideFlickableId
-        visible: !cavePageArea.isNarrow
+        visible: !nodePageArea.isNarrow
         anchors.fill: parent
         clip: true
         contentWidth: width
@@ -470,16 +621,19 @@ StandardPage {
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.flowSpacing
 
-                LayoutItemProxy { target: caveNameText }
+                LayoutItemProxy {
+                    target: nodePageArea.isNarrow ? null : nodeHeaderId
+                    Layout.fillWidth: true
+                }
 
                 LayoutItemProxy {
                     objectName: "nodeWarningsBannerProxy"
-                    target: cavePageArea.isNarrow ? null : warningsBannerId
+                    target: nodePageArea.isNarrow ? null : warningsBannerId
                     // Hide the proxy when there is no warning: a visible proxy
                     // whose target is invisible still forwards the target's
                     // implicit height, reserving an empty full-width slot (an
                     // empty "badge"). An invisible layout item is excluded.
-                    visible: cavePageArea.hasWarnings
+                    visible: nodePageArea.hasWarnings
                     Layout.fillWidth: true
                 }
 
@@ -493,13 +647,15 @@ StandardPage {
                         anchors.right: parent.right
                         spacing: Theme.tightSpacing
 
+                        LayoutItemProxy { target: tripsStatRow }
                         LayoutItemProxy { target: lengthStat }
                         LayoutItemProxy { target: depthStat }
+                        LayoutItemProxy { target: lastSurveyStatRow }
 
                         QQ.Item { implicitHeight: Theme.delegatePadding }
 
-                        LayoutItemProxy { target: leadsRow }
                         LayoutItemProxy { target: fixStationsRow }
+                        LayoutItemProxy { target: leadsRow }
                         LayoutItemProxy { target: gridConvergenceCell }
                     }
                 }
@@ -514,7 +670,7 @@ StandardPage {
 
                 LayoutItemProxy {
                     target: caveSummaryId
-                    visible: cavePageArea.caveAttached && !cavePageArea.isNarrow
+                    visible: nodePageArea.caveAttached && !nodePageArea.isNarrow
                 }
 
                 // An empty cave has nothing to tabulate, so the tree stays
@@ -522,7 +678,7 @@ StandardPage {
                 // itself, which is how a proxied item is put away.
                 LayoutItemProxy {
                     target: tripTreeId
-                    visible: !cavePageArea.isNarrow && cavePageArea.showsTripTree
+                    visible: !nodePageArea.isNarrow && nodePageArea.showsTripTree
                 }
             }
         }
@@ -531,7 +687,7 @@ StandardPage {
     // --- Narrow layout ---
     // The column itself is narrowColumnComponent, below.
     QQ.Item {
-        visible: cavePageArea.isNarrow
+        visible: nodePageArea.isNarrow
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
 
@@ -541,7 +697,7 @@ StandardPage {
     LeadModel {
         id: leadModelId
         regionModel: RootData.regionTreeModel
-        cave: cavePageArea.currentCave
+        cave: nodePageArea.currentNode as Cave
     }
 
     // The narrow column: the same tree the wide page shows, under the cave's
@@ -553,19 +709,14 @@ StandardPage {
         ColumnLayout {
             spacing: Theme.sectionSpacing
 
-            DoubleClickTextInput {
-                text: cavePageArea.currentCave ? cavePageArea.currentCave.name : ""
-                font.bold: true
-                font.pixelSize: Theme.fontSizeTitle
-
-                onFinishedEditting: (newText) => {
-                                        cavePageArea.currentCave.name = newText
-                                    }
+            LayoutItemProxy {
+                target: nodePageArea.isNarrow ? nodeHeaderId : null
+                Layout.fillWidth: true
             }
 
             LayoutItemProxy {
-                target: cavePageArea.isNarrow ? warningsBannerId : null
-                visible: cavePageArea.hasWarnings
+                target: nodePageArea.isNarrow ? warningsBannerId : null
+                visible: nodePageArea.hasWarnings
                 Layout.fillWidth: true
             }
 
@@ -573,17 +724,55 @@ StandardPage {
                 Layout.fillWidth: true
                 spacing: Theme.flowSpacing
 
+                RowLayout {
+                    spacing: Theme.delegatePadding
+
+                    QC.Label { text: qsTr("Trips:") }
+                    QC.Label { text: nodePageModelId.tripCount }
+                }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
                 SelectableCaveStat {
                     label: "Length:"
-                    unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.length : null
+                    unitValue: nodePageArea.currentNode ? nodePageArea.currentNode.length : null
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
                 SelectableCaveStat {
                     label: "Depth:"
-                    unitValue: cavePageArea.currentCave ? cavePageArea.currentCave.depth : null
+                    unitValue: nodePageArea.currentNode ? nodePageArea.currentNode.depth : null
                     depth: true
+                }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                RowLayout {
+                    spacing: Theme.delegatePadding
+
+                    QC.Label { text: qsTr("Last survey:") }
+                    QC.Label { text: nodePageArea.lastSurveyText }
+                }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                RowLayout {
+                    spacing: Theme.delegatePadding
+
+                    QC.Label { text: "Fix stations:" }
+
+                    LinkText {
+                        text: nodePageArea.currentNode ? nodePageArea.currentNode.fixStationCount : 0
+                        onClicked: {
+                            RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
+                        }
+                    }
+
+                    FixStationErrorBadge {
+                        errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
+                        errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
+                    }
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
@@ -596,28 +785,8 @@ StandardPage {
                     LinkText {
                         text: leadModelId.count
                         onClicked: {
-                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Leads");
+                            RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Leads");
                         }
-                    }
-                }
-
-                QC.Label { text: "·"; color: Theme.textSubtle }
-
-                RowLayout {
-                    spacing: Theme.delegatePadding
-
-                    QC.Label { text: "Fix stations:" }
-
-                    LinkText {
-                        text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStationCount : 0
-                        onClicked: {
-                            RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
-                        }
-                    }
-
-                    FixStationErrorBadge {
-                        errorModel: cavePageArea.currentCave ? cavePageArea.currentCave.errorModel : null
-                        errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
                     }
                 }
             }
@@ -625,30 +794,43 @@ StandardPage {
             AddAndSearchBar {
                 id: addTripBarNarrowId
                 objectName: "addTrip"
-                addButtonText: "Add Trip"
+                addButtonText: nodePageArea.addButtonText
                 menu: addTripMenuId
-                menuToolTip: qsTr("More ways to add a trip")
-                onAdd: cavePageArea.addTripAndNavigate()
+                menuToolTip: nodePageArea.addMenuToolTip
+                onAdd: nodePageArea.addByPosition()
 
-                QQ.Component.onCompleted: cavePageArea.narrowAddTripBar = addTripBarNarrowId
-                QQ.Component.onDestruction: cavePageArea.narrowAddTripBar = null
+                QQ.Component.onCompleted: nodePageArea.narrowAddTripBar = addTripBarNarrowId
+                QQ.Component.onDestruction: nodePageArea.narrowAddTripBar = null
             }
 
             LayoutItemProxy {
                 target: caveSummaryId
-                visible: cavePageArea.caveAttached && cavePageArea.isNarrow
+                visible: nodePageArea.caveAttached && nodePageArea.isNarrow
             }
 
             LayoutItemProxy {
                 target: tripTreeId
-                visible: cavePageArea.isNarrow && cavePageArea.showsTripTree
+                visible: nodePageArea.isNarrow && nodePageArea.showsTripTree
             }
 
             //Holds the tree up when an empty cave leaves it out, so the
             //hint keeps the space it points into.
             QQ.Item {
-                Layout.fillHeight: cavePageArea.hasNoTrips
+                Layout.fillHeight: nodePageArea.isEmpty
             }
+        }
+    }
+
+    QQ.Connections {
+        target: tripTreeId
+        enabled: nodePageArea.pendingReveal !== null
+
+        function onHeightChanged() {
+            Qt.callLater(nodePageArea.revealPending)
+        }
+
+        function onVisibleChanged() {
+            Qt.callLater(nodePageArea.revealPending)
         }
     }
 
@@ -673,15 +855,15 @@ StandardPage {
         onObjectAdded: (index, object) => {
                            //In-ables the link
                            let trip = (object as Delegate).tripObjectRole
-                           var page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
-                                                                               cavePageArea.tripPageName(trip), //Name
-                                                                               cavePageArea.tripComponent, //component
+                           var page = RootData.pageSelectionModel.registerPage(nodePageArea.PageView.page, //From
+                                                                               nodePageArea.tripPageName(trip), //Name
+                                                                               nodePageArea.tripComponent, //component
                                                                                {"currentTrip":trip}
                                                                                )
                            object.page = page;
                            page.setNamingFunction(trip, //The trip that's signaling
                                                   "nameChanged()", //Signal
-                                                  cavePageArea, //The object that has renaming function
+                                                  nodePageArea, //The object that has renaming function
                                                   "tripPageName", //The function that will generate the name
                                                   trip) //The paramaters to tripPageName() function
                        }
@@ -696,12 +878,12 @@ StandardPage {
         id: childNodeInstantiatorId
 
         component ChildNodeDelegate: QQ.QtObject {
-            required property Cave nodeObjectRole
+            required property SurveyNode nodeObjectRole
             property Page page
         }
 
         model: SurveyNodeChildModel {
-            node: cavePageArea.currentCave
+            node: nodePageArea.currentNode
         }
 
         delegate: ChildNodeDelegate {
@@ -710,13 +892,13 @@ StandardPage {
         onObjectAdded: (index, object) => {
                            const delegate = object as ChildNodeDelegate
                            const node = delegate.nodeObjectRole
-                           const page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page,
-                                                                                 cavePageArea.nodePageName(node),
-                                                                                 cavePageArea.childNodePageComponent,
-                                                                                 {"currentCave": node,
-                                                                                  "tripComponent": cavePageArea.tripComponent})
+                           const page = RootData.pageSelectionModel.registerPage(nodePageArea.PageView.page,
+                                                                                 nodePageArea.nodePageName(node),
+                                                                                 nodePageArea.childNodePageComponent,
+                                                                                 {"currentNode": node,
+                                                                                  "tripComponent": nodePageArea.tripComponent})
                            delegate.page = page
-                           page.setNamingFunction(node, "nameChanged()", cavePageArea, "nodePageName", node)
+                           page.setNamingFunction(node, "nameChanged()", nodePageArea, "nodePageName", node)
                        }
 
         onObjectRemoved: (index, object) => {

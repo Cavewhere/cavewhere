@@ -60,7 +60,7 @@ MainWindowTest {
             tryVerify(() => {
                           let page = RootData.pageView.currentPageItem
                           return page !== null && page.objectName === "cavePage"
-                              && page.currentCave !== null && page.currentCave.name === caveName
+                              && page.currentNode !== null && page.currentNode.name === caveName
                       }, 5000, "cave page should be showing " + caveName)
             return RootData.pageView.currentPageItem
         }
@@ -72,7 +72,7 @@ MainWindowTest {
         }
 
         // Regression test for issue #657: the page view keeps one CavePage item
-        // and reassigns currentCave, so the "Leads:" count has to follow the
+        // and reassigns currentNode, so the "Leads:" count has to follow the
         // cave the page is showing rather than the one it was created with.
         function test_leadCountFollowsCurrentCave() {
             setupCaveWithLeads("LeadCaveA", 3)
@@ -280,7 +280,7 @@ MainWindowTest {
                       5000, "the hint re-anchors to the wide bar")
         }
 
-        // The tree of the cave page: the trips of `currentCave` are its rows,
+        // The tree of the cave page: the trips of `currentNode` are its rows,
         // since the view is rooted at the cave itself.
         function tripTree(cavePage) {
             let tree = findChild(cavePage, "tripTree")

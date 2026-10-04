@@ -1890,12 +1890,12 @@ MainWindowTest {
         readonly property real georefNorthing: 4300000
         readonly property real georefElevation: 1200
 
-        // Fix `page.currentCave`'s first station to real coordinates, which
+        // Fix `page.currentNode`'s first station to real coordinates, which
         // georeferences the cave — the fix anchors the project's frame. Undone
         // by the restoreDemoProject() reload each georef shot ends with.
         function georeferenceDemoCave(page) {
 
-            let model = page.currentCave.fixStations;
+            let model = page.currentNode.fixStations;
             model.addFixStation();
             model.setData(model.index(0), georefStation, FixStationModel.StationNameRole);
             model.setData(model.index(0), georefCS, FixStationModel.InputCSRole);
@@ -2372,7 +2372,7 @@ MainWindowTest {
         // Backs docs/manual/import-export/export-surveys.md.
         //
         // On the cave page rather than the Data page: there currentCave is always
-        // set (cavePageArea.currentCave), so the Compass and Chipdata items — which
+        // set (nodePageArea.currentNode), so the Compass and Chipdata items — which
         // disable on an empty cave — read enabled. The top level (Survex / Compass /
         // Chipdata) is what's grabbed; its submenus expand on hover, one at a time,
         // and the format list is the point.

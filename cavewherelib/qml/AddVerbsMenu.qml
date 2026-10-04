@@ -38,8 +38,8 @@ QC.Menu {
                                        ? [AddVerbsMenu.AddCave, AddVerbsMenu.AddFolder]
                                        : [AddVerbsMenu.AddTrip, AddVerbsMenu.AddSection]
 
-    //A verb ran: \a object is the new cwSurveyNode or cwTrip.
-    signal added(object: QQ.QtObject)
+    //\a verb ran: \a object is the new cwSurveyNode or cwTrip.
+    signal added(object: QQ.QtObject, verb: int)
 
     function verbText(verb: int) : string {
         switch(verb) {
@@ -95,7 +95,7 @@ QC.Menu {
         }
 
         if(object !== null) {
-            addVerbsMenuId.added(object);
+            addVerbsMenuId.added(object, verb);
         }
     }
 

@@ -9,7 +9,7 @@ import QtQuick as QQ
 import QtQuick.Layouts
 import cavewherelib
 
-// Cave-level state for an externally-backed cave, shown on CavePage
+// Cave-level state for an externally-backed cave, shown on NodePage
 // (plans/EXTERNAL_FILE_PHASE3.html P3.8): the attached header (entry
 // file, format, Replace…, and where the copy came from) and the solve
 // status of the last cavern run. Dropping the attachment is removing

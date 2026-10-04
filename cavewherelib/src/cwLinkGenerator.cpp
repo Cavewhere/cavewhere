@@ -19,9 +19,9 @@
 
 
 namespace {
-//! Must match the sub-page CavePage.qml registers in registerSubPages().
+//! Must match the sub-page NodePage.qml registers in registerSubPages().
 constexpr QLatin1String kFixStationsPageName("Fix Stations");
-//! Must match the page names DataMainPage.qml and CavePage.qml register.
+//! Must match the page names DataMainPage.qml and NodePage.qml register.
 constexpr QLatin1String kNodePagePrefix("Node=");
 constexpr QLatin1String kTripPagePrefix("Trip=");
 }
@@ -79,7 +79,7 @@ QString cwLinkGenerator::caveLink(cwCave *cave)
  * @param node
  * @return The address of the node's Fix Stations sub-page.
  *
- * CavePage.qml registers that sub-page only once the node page itself is
+ * NodePage.qml registers that sub-page only once the node page itself is
  * current, so this address names a page that may not exist yet.
  * cwPageSelectionModel::setCurrentPageAddress() handles that: it walks the
  * parent addresses first, and visiting the node page is what registers the

@@ -17,7 +17,7 @@ StandardPage {
     id: fixStationPage
     objectName: "fixStationPage"
 
-    property Cave cave
+    property SurveyNode cave
 
     // The wide layout is a fixed-width table and nothing scrolls it sideways, so
     // it may only stay up while the whole row fits: every column, the two
@@ -90,7 +90,7 @@ StandardPage {
     // Hands row \a rowIndex to the 3D view to be placed by clicking the terrain,
     // the way the Map page's Add Layer hands its selection to the view.
     function pickFromView(rowIndex: int): void {
-        FixStationPick.begin(fixStationPage.cave, rowIndex)
+        FixStationPick.begin(fixStationPage.cave as Cave, rowIndex)
     }
 
     // Both coordinate-system cells commit through here so the transposition

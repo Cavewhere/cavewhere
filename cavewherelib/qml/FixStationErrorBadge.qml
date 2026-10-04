@@ -9,7 +9,7 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// A compact warning icon shown next to the "Fix stations:" line on CavePage when
+// A compact warning icon shown next to the "Fix stations:" line on NodePage when
 // a cave carries a fix-station error. Bound to the cave's errorModel but scoped
 // by errorTypeIds to just the fix-station warning kinds, so it stays distinct
 // from the page banner's all-warnings roll-up. Presentation-only: it reflects

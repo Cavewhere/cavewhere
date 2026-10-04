@@ -33,7 +33,7 @@ MainWindowTest {
             })
 
             let cavePage = RootData.pageView.currentPageItem
-            let cave = cavePage.currentCave
+            let cave = cavePage.currentNode
             verify(cave !== null, "Cave should exist")
             cave.addTrip()
             let lastIndex = cave.index(cave.rowCount() - 1)

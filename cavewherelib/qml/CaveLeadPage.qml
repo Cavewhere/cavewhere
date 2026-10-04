@@ -12,7 +12,7 @@ StandardPage {
     id: leadPage
     objectName: "leadPage"
 
-    property Cave cave
+    property SurveyNode cave
     property string filterText: ""
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
@@ -21,7 +21,7 @@ StandardPage {
         id: leadModel
         objectName: "leadModel"
         regionModel: RootData.regionTreeModel
-        cave: leadPage.cave
+        cave: leadPage.cave as Cave
     }
 
     LeadsSortFilterProxyModel {

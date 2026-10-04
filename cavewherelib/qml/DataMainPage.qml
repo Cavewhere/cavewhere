@@ -481,11 +481,10 @@ StandardPage {
 
         //A new cave opens its page, as the Add Cave button does; a new folder
         //stays on this page with its name ready to type.
-        onAdded: (object) => {
-            const cave = object as Cave;
-            if(cave !== null && !cave.takesCaves) {
+        onAdded: (object, verb) => {
+            if(verb === AddVerbsMenu.AddCave) {
                 RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                           pageId.cavePageName(cave));
+                                                           pageId.cavePageName(object as Cave));
             } else {
                 caveTreeId.revealAdded(object);
             }
@@ -632,7 +631,7 @@ StandardPage {
             var linkId = RootData.pageSelectionModel.registerPage(pageId.PageView.page, //From
                                                                   pageId.cavePageName(delegate.caveObjectRole), //Name
                                                                   caveOverviewPageComponent,
-                                                                  {currentCave:delegate.caveObjectRole}
+                                                                  {currentNode:delegate.caveObjectRole}
                                                                   )
 
             delegate.page = linkId
@@ -652,7 +651,7 @@ StandardPage {
     //Child page
     QQ.Component {
         id: caveOverviewPageComponent
-        CavePage {
+        NodePage {
             anchors.fill: parent
         }
     }

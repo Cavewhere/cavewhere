@@ -53,7 +53,7 @@ MainWindowTest {
             const item = RootData.pageView.currentPageItem
             return item !== null
                     && item.objectName === objectName
-                    && (node === null || item.currentCave === node)
+                    && (node === null || item.currentNode === node)
         }
 
         // Clicks the name link of a node or trip row on the current page's tree.
