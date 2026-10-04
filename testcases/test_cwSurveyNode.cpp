@@ -4,6 +4,7 @@
 //Our includes
 #include "SignalSpyChecker.h"
 #include "cwCave.h"
+#include "cwCavingRegion.h"
 #include "cwSignalSpy.h"
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
@@ -22,6 +23,13 @@ namespace {
     {
         auto* node = new cwCave();
         node->setName(name);
+        return node;
+    }
+
+    cwCave* makeNode(const QString& name, cwSurveyNode::Kind kind)
+    {
+        cwCave* node = makeNode(name);
+        node->setKind(kind);
         return node;
     }
 
@@ -567,4 +575,116 @@ TEST_CASE("MoveNodeCommand restores the parent, row and name it left", "[SurveyN
         CHECK(beta->parentNode() == &first);
         CHECK(child->parentNode() == beta);
     }
+}
+
+TEST_CASE("cwSurveyNode takesCaves follows position, not a question", "[SurveyNode]")
+{
+    using Kind = cwSurveyNode::Kind;
+
+    cwCavingRegion region;
+    cwSurveyNode* root = region.rootNode();
+    CHECK(root->takesCaves());
+
+    cwCave* topFolder = makeNode(QStringLiteral("Kentucky"), Kind::Folder);
+    root->addNode(topFolder);
+    cwCave* innerFolder = makeNode(QStringLiteral("Field seasons"), Kind::Folder);
+    topFolder->addNode(innerFolder);
+    cwCave* cave = makeNode(QStringLiteral("Side Cave"), Kind::Cave);
+    innerFolder->addNode(cave);
+    cwCave* section = makeNode(QStringLiteral("Upper level"), Kind::Folder);
+    cave->addNode(section);
+
+    //Outside every cave, a Folder takes caves; a Cave and anything inside it
+    //takes trips and sections.
+    CHECK(topFolder->takesCaves());
+    CHECK(innerFolder->takesCaves());
+    CHECK_FALSE(cave->takesCaves());
+    CHECK_FALSE(section->takesCaves());
+
+    SECTION("relabeling a node moves the answer for its whole subtree") {
+        cwSignalSpy caveSpy(cave, &cwSurveyNode::takesCavesChanged);
+        cwSignalSpy sectionSpy(section, &cwSurveyNode::takesCavesChanged);
+
+        cave->setKind(Kind::Folder);
+        CHECK(cave->takesCaves());
+        CHECK(section->takesCaves());
+        CHECK(caveSpy.count() == 1);
+        CHECK(sectionSpy.count() == 1);
+
+        cave->setKind(Kind::Cave);
+        CHECK_FALSE(cave->takesCaves());
+        CHECK_FALSE(section->takesCaves());
+        CHECK(caveSpy.count() == 2);
+        CHECK(sectionSpy.count() == 2);
+    }
+
+    SECTION("relabeling a top Folder as a Cave turns every Folder under it into a section") {
+        topFolder->setKind(Kind::Cave);
+        CHECK_FALSE(topFolder->takesCaves());
+        CHECK_FALSE(innerFolder->takesCaves());
+        CHECK_FALSE(section->takesCaves());
+        CHECK(root->takesCaves());
+    }
+
+    SECTION("a sourced node and everything under it takes trips") {
+        cwCave* sourcedFolder = makeNode(QStringLiteral("Survex file"), Kind::Folder);
+        root->addNode(sourcedFolder);
+        cwCave* nativeFolderUnderSource = makeNode(QStringLiteral("Native"), Kind::Folder);
+        sourcedFolder->addNode(nativeFolderUnderSource);
+        CHECK(sourcedFolder->takesCaves());
+        CHECK(nativeFolderUnderSource->takesCaves());
+
+        sourcedFolder->setSourceId(QUuid::createUuid());
+        CHECK_FALSE(sourcedFolder->takesCaves());
+        CHECK_FALSE(nativeFolderUnderSource->takesCaves());
+    }
+
+    SECTION("a move re-answers for the moved subtree") {
+        cwSignalSpy sectionSpy(section, &cwSurveyNode::takesCavesChanged);
+
+        region.moveNode(section, topFolder, 0);
+        REQUIRE(section->parentNode() == topFolder);
+        CHECK(section->takesCaves());
+        CHECK(sectionSpy.count() == 1);
+    }
+}
+
+TEST_CASE("cwCavingRegion addNode names new nodes New <Kind>, unique among siblings",
+          "[SurveyNode]")
+{
+    using Kind = cwSurveyNode::Kind;
+
+    cwCavingRegion region;
+    QUndoStack undoStack;
+    region.setUndoStack(&undoStack);
+
+    cwSurveyNode* firstCave = region.addNode(nullptr, Kind::Cave);
+    cwSurveyNode* secondCave = region.addNode(nullptr, Kind::Cave);
+    cwSurveyNode* folder = region.addNode(nullptr, Kind::Folder);
+    REQUIRE(firstCave != nullptr);
+    REQUIRE(secondCave != nullptr);
+    REQUIRE(folder != nullptr);
+    CHECK(firstCave->name() == QStringLiteral("New Cave"));
+    CHECK(secondCave->name() == QStringLiteral("New Cave 2"));
+    CHECK(folder->name() == QStringLiteral("New Folder"));
+
+    //Add Section is a Folder named for where it sits, still one undo step.
+    const int undoCountBefore = undoStack.count();
+    cwSurveyNode* section = region.addNode(firstCave, Kind::Folder, QStringLiteral("New Section"));
+    cwSurveyNode* secondSection = region.addNode(firstCave, Kind::Folder, QStringLiteral("New Section"));
+    REQUIRE(section != nullptr);
+    REQUIRE(secondSection != nullptr);
+    CHECK(section->name() == QStringLiteral("New Section"));
+    CHECK(section->kind() == Kind::Folder);
+    CHECK(section->parentNode() == firstCave);
+    CHECK(secondSection->name() == QStringLiteral("New Section 2"));
+    CHECK(undoStack.count() == undoCountBefore + 2);
+
+    //Uniqueness is per sibling set: another cave's first section takes the bare name.
+    cwSurveyNode* otherSection = region.addNode(secondCave, Kind::Folder, QStringLiteral("New Section"));
+    REQUIRE(otherSection != nullptr);
+    CHECK(otherSection->name() == QStringLiteral("New Section"));
+
+    undoStack.undo();
+    CHECK(secondCave->childNodeCount() == 0);
 }

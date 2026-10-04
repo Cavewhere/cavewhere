@@ -11,6 +11,8 @@ RowLayout {
     // A length's unit follows its magnitude (m/km, ft/mi); a depth always uses
     // the small unit (m/ft). Set true for the depth stat.
     property bool depth: false
+    // Drawn in the subtle text color, for a value that sums other rows' values.
+    property bool muted: false
 
     // The unit is resolved live from the project's unit system, never from the
     // cave's stored length/depth unit (which stays metres regardless).
@@ -37,10 +39,13 @@ RowLayout {
             ? Utils.fixed(Units.convertLength(rootId.meters, Units.Meters, rootId.displayUnit), 2)
             : ""
         font.pixelSize: Theme.fontSizeUI
+        color: rootId.muted ? Theme.textSubtle : Theme.text
     }
 
     QC.Label {
+        id: unitLabelId
         objectName: "unit"
         text: rootId.unitValue !== null ? Units.lengthUnitName(rootId.displayUnit) : ""
+        color: rootId.muted ? Theme.textSubtle : unitLabelId.palette.windowText
     }
 }

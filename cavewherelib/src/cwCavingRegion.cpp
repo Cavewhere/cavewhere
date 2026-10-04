@@ -316,7 +316,9 @@ QList<cwCave*> cwCavingRegion::caves() const {
     return caves;
 }
 
-cwSurveyNode* cwCavingRegion::addNode(cwSurveyNode* parent, cwSurveyNode::Kind kind)
+cwSurveyNode* cwCavingRegion::addNode(cwSurveyNode* parent,
+                                      cwSurveyNode::Kind kind,
+                                      const QString& proposedName)
 {
     cwSurveyNode* parentNode = parent == nullptr ? m_root : parent;
     if(parentNode->parentRegion() != this) {
@@ -331,10 +333,10 @@ cwSurveyNode* cwCavingRegion::addNode(cwSurveyNode* parent, cwSurveyNode::Kind k
         return nullptr;
     }
 
-    const QString kindName = QString::fromUtf8(kindKey);
-    const QString newNodeName = QStringLiteral("%1 %2")
-                                    .arg(kindName)
-                                    .arg(parentNode->childNodeCount() + 1);
+    const QString baseName = proposedName.isEmpty()
+                                 ? QStringLiteral("New %1").arg(QString::fromUtf8(kindKey))
+                                 : proposedName;
+    const QString newNodeName = parentNode->uniqueChildName(baseName);
 
     beginUndoMacro(QStringLiteral("Add %1").arg(newNodeName));
 

@@ -47,7 +47,7 @@ MainWindowTest {
         }
 
         // Opens the split button's chevron menu on the data page and
-        // returns its one item.
+        // returns its Attach survey file… item.
         function openAddCaveMenu(dataPage) {
             const addBar = findChild(dataPage, "addCave")
             verify(addBar !== null, "addCave bar must exist")
@@ -58,9 +58,8 @@ MainWindowTest {
             const menu = findChild(dataPage, "addCaveMenu")
             verify(menu !== null, "addCaveMenu must exist")
             tryVerify(() => menu.visible, 5000, "menu opens on chevron click")
-            compare(menu.count, 1, "menu shows exactly one item")
-            const item = menu.itemAt(0)
-            compare(item.objectName, "addExternalCaveMenuItem")
+            const item = findChild(menu, "addExternalCaveMenuItem")
+            verify(item !== null, "the menu offers Attach survey file…")
             return item
         }
 

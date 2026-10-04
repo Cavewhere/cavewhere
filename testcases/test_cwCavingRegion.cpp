@@ -319,7 +319,7 @@ TEST_CASE("addNode names, places and undoes a node", "[cwCavingRegion]") {
     cwSurveyNode* cave = region.addNode(nullptr, cwSurveyNode::Kind::Cave);
 
     REQUIRE(cave != nullptr);
-    CHECK(cave->name() == QStringLiteral("Cave 1"));
+    CHECK(cave->name() == QStringLiteral("New Cave"));
     CHECK(cave->kind() == cwSurveyNode::Kind::Cave);
     REQUIRE(region.caveCount() == 1);
     CHECK(region.cave(0) == cave);
@@ -328,7 +328,7 @@ TEST_CASE("addNode names, places and undoes a node", "[cwCavingRegion]") {
     cwSurveyNode* folder = region.addNode(cave, cwSurveyNode::Kind::Folder);
 
     REQUIRE(folder != nullptr);
-    CHECK(folder->name() == QStringLiteral("Folder 1"));
+    CHECK(folder->name() == QStringLiteral("New Folder"));
     CHECK(folder->kind() == cwSurveyNode::Kind::Folder);
     CHECK(folder->parentNode() == cave);
     CHECK(region.rootNode()->allNodes().contains(folder));

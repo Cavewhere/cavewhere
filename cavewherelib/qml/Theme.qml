@@ -269,11 +269,14 @@ QtObject {
     //The arrow the header cell of the sorted column carries, sized to sit
     //beside a fontSizeSmall title rather than to stand on its own.
     readonly property int treeSortIndicatorSize: Math.round(10 * fontScale)
+    //The icon ahead of a Folder row's name.
+    readonly property int treeKindIconSize: Math.round(14 * fontScale)
 
     // Chips (the Kind chip on a tree row)
     readonly property int chipRadius: Math.round(3 * fontScale)
     readonly property int chipPadding: Math.round(6 * fontScale)
     readonly property color chipBackground: surfaceRaised
+    readonly property color chipHoverBackground: hover
     readonly property color chipText: textSubtle
     readonly property color chipSourcedBackground: info
     readonly property color chipSourcedText: textSecondary

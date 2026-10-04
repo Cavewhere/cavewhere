@@ -154,11 +154,14 @@ public:
     Q_INVOKABLE cwCave* cave(int index) const;
     QList<cwCave*> caves() const;
 
-    //! Creates a node of \a kind under \a parent (the root when null), named
-    //! "<Kind> N" and deduplicated against its siblings, as one undo step.
+    //! Creates a node of \a kind under \a parent (the root when null), as one
+    //! undo step. It is named \a proposedName, or "New <Kind>" when that is
+    //! empty, sanitized and deduplicated against its siblings ("New Cave 2").
     //! Returns the new node, or nullptr when \a parent belongs to another region
     //! or \a kind is outside cwSurveyNode::Kind.
-    Q_INVOKABLE cwSurveyNode* addNode(cwSurveyNode* parent, cwSurveyNode::Kind kind);
+    Q_INVOKABLE cwSurveyNode* addNode(cwSurveyNode* parent,
+                                      cwSurveyNode::Kind kind,
+                                      const QString& proposedName = QString());
 
     //! Moves \a node under \a newParent (the root when null) at \a row, as one
     //! undo step that undo puts back.

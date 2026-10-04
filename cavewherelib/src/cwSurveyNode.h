@@ -77,6 +77,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(cwSurveyNode* parentNode READ parentNode NOTIFY parentNodeChanged)
     Q_PROPERTY(int childNodeCount READ childNodeCount NOTIFY childNodeCountChanged)
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
+    Q_PROPERTY(bool takesCaves READ takesCaves NOTIFY takesCavesChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
     Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
     Q_PROPERTY(QAbstractItemModel* fixStationTable READ fixStationTable CONSTANT)
@@ -129,6 +130,12 @@ public:
     //! True when this node is the top of a sourced subtree — the row that owns
     //! the copied file and carries the Reload and Replace verbs.
     bool isSourceRoot() const { return isSourced() && m_sourcePath.isEmpty(); }
+
+    //! True where caves go: the root, or a Folder with no Cave and no sourced
+    //! node at or above it. Everywhere else takes trips and sections, so a Cave
+    //! is never offered inside a Cave. The Add verbs read this; it is the one
+    //! place the kind of a node decides what may be added under it.
+    bool takesCaves() const { return m_takesCaves; }
 
     cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
     void setExternalCenterline(const cwExternalCenterline& value);
@@ -354,6 +361,10 @@ signals:
 
     void kindChanged();
 
+    //! takesCaves() moved: this node's kind or source changed, or one of its
+    //! ancestors' did, or the node moved.
+    void takesCavesChanged();
+
     //! One of readOnly, sourceId, or sourcePath moved, so isSourced() and
     //! isSourceRoot() may have moved with them.
     void sourceChanged();
@@ -492,6 +503,7 @@ private:
     const bool m_isRoot;
 
     Kind m_kind = Kind::Cave;
+    bool m_takesCaves = false;
     bool m_readOnly = false;
     QUuid m_sourceId;
     QString m_sourcePath;
@@ -507,6 +519,11 @@ private:
 
     //! This node, then each node above it, ending at the topmost.
     QList<const cwSurveyNode*> ancestorsOrSelf() const;
+
+    //! Recomputes takesCaves() here and below: a change at this node moves the
+    //! answer for its whole subtree.
+    void updateTakesCaves();
+    bool computeTakesCaves() const;
 
     //! The chain path() and pathIds() read, root-most first, the root excluded.
     QList<const cwSurveyNode*> pathNodes() const;

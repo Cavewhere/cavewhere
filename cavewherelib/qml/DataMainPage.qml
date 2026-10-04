@@ -474,9 +474,21 @@ StandardPage {
         pointAtObjectPosition: Qt.point(addCaveBarId.width / 2.0, addCaveBarId.height)
     }
 
-    QC.Menu {
+    AddVerbsMenu {
         id: addCaveMenuId
         objectName: "addCaveMenu"
+
+        //A new cave opens its page, as the Add Cave button does; a new folder
+        //stays on this page with its name ready to type.
+        onAdded: (object) => {
+            const cave = object as Cave;
+            if(cave !== null && !cave.takesCaves) {
+                RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                           pageId.cavePageName(cave));
+            } else {
+                caveTreeId.revealAdded(object);
+            }
+        }
 
         QC.MenuItem {
             objectName: "addExternalCaveMenuItem"

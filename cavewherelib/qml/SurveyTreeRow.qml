@@ -72,6 +72,10 @@ QQ.Item {
     readonly property SurveyNode node: rowId.object as SurveyNode
     readonly property Trip trip: rowId.object as Trip
 
+    //A Folder row draws a folder ahead of its name.
+    readonly property bool isFolder: rowId.node !== null
+                                     && rowId.node.kind === SurveyNodeKind.Folder
+
     //A trip row sits under the cave it belongs to, so its cells are drawn
     //quieter than the cave's own.
     readonly property QQ.color textColor: rowId.muted ? Theme.textSubtle : Theme.text
@@ -294,6 +298,15 @@ QQ.Item {
                                    : ""
                 }
 
+                Icon {
+                    objectName: rowId.cellName("folderIcon")
+
+                    visible: rowId.isFolder
+                    source: "qrc:/twbs-icons/icons/folder.svg"
+                    sourceSize: Qt.size(Theme.treeKindIconSize, Theme.treeKindIconSize)
+                    colorizationColor: Theme.textSubtle
+                }
+
                 LinkText {
                     objectName: rowId.cellName(rowId.isNode ? "caveLink" : "tripLink")
                     //The paperclip marks a trip that windows an attached file;
@@ -338,6 +351,7 @@ QQ.Item {
                 anchors.verticalCenter: parent.verticalCenter
                 text: rowId.kindLabel
                 sourced: rowId.isSourced
+                node: rowId.node
             }
         }
     }
@@ -357,6 +371,7 @@ QQ.Item {
                 anchors.verticalCenter: parent.verticalCenter
                 unitValue: isDepthCell ? rowId.depthValue : (rowId.length as UnitValue)
                 depth: isDepthCell
+                muted: rowId.muted
             }
         }
     }

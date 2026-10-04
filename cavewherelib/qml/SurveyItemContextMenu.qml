@@ -9,13 +9,14 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// The context menu of a survey-tree row: Delete…, and Declination on a trip.
+// The context menu of a survey-tree row: Add on a node, Delete…, and
+// Declination on a trip.
 //
 // A click on the row's name opens it and the name cell renames it, so the menu
-// is left holding the verbs no cell of the row carries — a destructive verb
-// always costs a deliberate right-click, a long press, or Shift+F10 on the
-// current row, and a trip's calibration is set here rather than on a cell of
-// its own.
+// is left holding the verbs no cell of the row carries — the Add verbs for the
+// node's position, a destructive verb that always costs a deliberate
+// right-click, a long press, or Shift+F10 on the current row, and a trip's
+// calibration, set here rather than on a cell of its own.
 //
 // A row is eight cells, and a menu per cell would be eight menus saying the
 // same thing, so the row holds one of these (in its Name cell) and every cell
@@ -50,12 +51,54 @@ QC.Menu {
     readonly property bool isTripRow: contextMenuId.row !== null
                                       && !contextMenuId.row.isNode
 
+    //Only a node holds anything, so only a node's menu offers Add.
+    readonly property bool isNodeRow: contextMenuId.row !== null
+                                      && contextMenuId.row.isNode
+
+    //The position of the submenu \a menu among this menu's entries, -1 when
+    //it holds none.
+    function indexOfMenu(menu: QC.Menu) : int {
+        for(let i = 0; i < contextMenuId.count; i++) {
+            if(contextMenuId.menuAt(i) === menu) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    //Gives up the submenu an Instantiator is about to destroy, so the menu does
+    //not destroy it a second time.
+    function takeSubmenu(menu: QC.Menu) {
+        const position = contextMenuId.indexOfMenu(menu);
+        if(position >= 0) {
+            contextMenuId.takeMenu(position);
+        }
+    }
+
     function showMenu(x: real, y: real) {
         contextMenuId.asking = false;
         contextMenuId.clickPos = Qt.point(x, y);
         contextMenuId.tripCalibrations =
                 contextMenuId.surveyTree.tripCalibrationsFor(contextMenuId.row.object);
         contextMenuId.popup(x, y);
+    }
+
+    //The node's Add verbs lead the menu. A Menu's `visible` opens a submenu
+    //rather than hiding its entry, so the submenu joins a node row's menu and
+    //leaves a trip's instead.
+    QQ.Instantiator {
+        active: contextMenuId.isNodeRow
+
+        delegate: AddVerbsMenu {
+            objectName: "addVerbsSubmenu"
+            title: qsTr("Add")
+            node: contextMenuId.row !== null ? contextMenuId.row.node : null
+
+            onAdded: (object) => contextMenuId.surveyTree.revealAdded(object)
+        }
+
+        onObjectAdded: (index, object) => contextMenuId.insertMenu(0, object as QC.Menu)
+        onObjectRemoved: (index, object) => contextMenuId.takeSubmenu(object as QC.Menu)
     }
 
     QC.MenuItem {
@@ -82,9 +125,7 @@ QC.Menu {
 
         onObjectAdded: (index, object) => contextMenuId.addMenu(object as QC.Menu)
 
-        //The submenu is the entry after Delete…, and the Instantiator destroys
-        //what it made, so the menu gives it up rather than destroying it too.
-        onObjectRemoved: (index, object) => contextMenuId.takeMenu(contextMenuId.count - 1)
+        onObjectRemoved: (index, object) => contextMenuId.takeSubmenu(object as QC.Menu)
     }
 
     //The tree takes the keyboard back, except when the Remove prompt is the

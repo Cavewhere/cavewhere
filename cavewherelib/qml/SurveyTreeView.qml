@@ -241,21 +241,79 @@ ColumnLayout {
         surveyTreeId.removeAskBox.y = position.y;
         surveyTreeId.removeAskBox.removeName = row.name;
         surveyTreeId.removeAskBox.message =
-                surveyTreeId.removeMessage(row.name, row.isNode, row.tripCount);
+                surveyTreeId.removeMessage(row.name,
+                                           row.isNode,
+                                           surveyTreeId.descendantNodeCount(row.node),
+                                           row.tripCount);
         surveyTreeId.pendingRemoveObject = row.object;
         surveyTreeId.removeAskBox.show();
     }
 
-    //What the prompt says. A node takes its trips with it, so the question
-    //names them.
-    function removeMessage(name: string, isNode: bool, tripCount: int) : string {
-        if(!isNode || tripCount === 0) {
-            return qsTr("Remove <b>%1</b>?").arg(name);
+    //Every node under \a node, at any depth.
+    function descendantNodeCount(node: SurveyNode) : int {
+        if(node === null) {
+            return 0;
         }
-        if(tripCount === 1) {
-            return qsTr("Remove <b>%1</b> and its 1 trip?").arg(name);
+
+        let count = node.childNodeCount;
+        for(let i = 0; i < node.childNodeCount; i++) {
+            count += surveyTreeId.descendantNodeCount(node.childNode(i));
         }
-        return qsTr("Remove <b>%1</b> and its %2 trips?").arg(name).arg(tripCount);
+        return count;
+    }
+
+    //"1 trip", "3 trips".
+    function countText(count: int, singular: string, plural: string) : string {
+        return count === 1 ? qsTr("1 %1").arg(singular)
+                           : qsTr("%1 %2").arg(count).arg(plural);
+    }
+
+    //What the prompt says. A node takes everything under it along, so the
+    //question counts the nodes and trips that go with it.
+    function removeMessage(name: string, isNode: bool, nodeCount: int, tripCount: int) : string {
+        let contents = [];
+        if(isNode && nodeCount > 0) {
+            contents.push(surveyTreeId.countText(nodeCount, qsTr("node"), qsTr("nodes")));
+        }
+        if(isNode && tripCount > 0) {
+            contents.push(surveyTreeId.countText(tripCount, qsTr("trip"), qsTr("trips")));
+        }
+
+        const subject = contents.length === 0
+                      ? qsTr("<b>%1</b>").arg(name)
+                      : qsTr("<b>%1</b> and its %2").arg(name).arg(contents.join(qsTr(" and ")));
+        return qsTr("Delete %1? Git history is the way back.").arg(subject);
+    }
+
+    //Shows a node or trip one of the Add verbs just made. A trip directly
+    //under a top-level node opens its trip page, the way Add Trip on a cave
+    //page does; anything else has no page address yet, so its row is opened
+    //up to, made current and, for a node, put straight into its name editor.
+    function revealAdded(object: QQ.QtObject) {
+        if(object === null) {
+            return;
+        }
+
+        const trip = object as Trip;
+        if(trip !== null && RootData.region.indexOf(trip.parentNode as Cave) >= 0) {
+            surveyTreeId.openObject(trip);
+            return;
+        }
+
+        surveyTreeId.expandTo(object);
+        const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(object));
+        const viewRow = treeViewId.rowAtIndex(proxyIndex);
+        if(viewRow < 0) {
+            return;
+        }
+
+        surveyTreeId.setCurrentRow(viewRow);
+        treeViewId.forceLayout();
+
+        const rowItem = treeViewId.itemAtCell(Qt.point(SurveyTreeModel.Name, viewRow));
+        if(rowItem !== null && rowItem.canRename) {
+            rowItem.startRename();
+        }
     }
 
     //Removes whatever the prompt asked about. A top-level node is a row of the

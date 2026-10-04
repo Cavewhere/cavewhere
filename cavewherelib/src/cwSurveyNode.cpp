@@ -98,6 +98,8 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     wireScopeLabelAggregate();
 
     recomputeGridConvergence();
+
+    m_takesCaves = computeTakesCaves();
 }
 
 cwSurveyNode::~cwSurveyNode() {
@@ -223,6 +225,7 @@ void cwSurveyNode::setKind(Kind kind)
     }
     m_kind = kind;
     emit kindChanged();
+    updateTakesCaves();
 }
 
 void cwSurveyNode::setReadOnly(bool readOnly)
@@ -241,6 +244,7 @@ void cwSurveyNode::setSourceId(const QUuid& sourceId)
     }
     m_sourceId = sourceId;
     emit sourceChanged();
+    updateTakesCaves();
 }
 
 void cwSurveyNode::setSourcePath(const QString& sourcePath)
@@ -669,6 +673,7 @@ void cwSurveyNode::setParentNode(cwSurveyNode* node)
     m_parentNode = node;
     setParent(node);
     emit parentNodeChanged();
+    updateTakesCaves();
 }
 
 QList<cwTrip*> cwSurveyNode::allTrips() const
@@ -698,6 +703,40 @@ QList<const cwSurveyNode*> cwSurveyNode::ancestorsOrSelf() const
         chain.append(node);
     }
     return chain;
+}
+
+bool cwSurveyNode::computeTakesCaves() const
+{
+    if(m_isRoot) {
+        return true;
+    }
+    if(m_kind != Kind::Folder) {
+        return false;
+    }
+
+    const QList<const cwSurveyNode*> chain = ancestorsOrSelf();
+    for(const cwSurveyNode* node : chain) {
+        if(node->isRoot()) {
+            break;
+        }
+        if(node->kind() == Kind::Cave || node->isSourced()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void cwSurveyNode::updateTakesCaves()
+{
+    const bool takesCaves = computeTakesCaves();
+    if(m_takesCaves != takesCaves) {
+        m_takesCaves = takesCaves;
+        emit takesCavesChanged();
+    }
+
+    for(cwSurveyNode* child : std::as_const(m_childNodes)) {
+        child->updateTakesCaves();
+    }
 }
 
 QList<const cwSurveyNode*> cwSurveyNode::pathNodes() const

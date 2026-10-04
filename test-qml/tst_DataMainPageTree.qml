@@ -416,8 +416,9 @@ MainWindowTest {
             const menu = rowContextMenu(page, "caveDelegate0")
 
             //A click opens the row and the name cell renames it, so a cave's
-            //menu holds the one verb no cell carries.
-            compare(menu.count, 1, "a cave row's menu offers Delete… alone")
+            //menu holds the verbs no cell carries: Add and Delete….
+            compare(menu.count, 2, "a cave row's menu offers Add and Delete…")
+            compare(menu.menuAt(0).objectName, "addVerbsSubmenu")
             const deleteItem = findChild(menu, "surveyItemDeleteMenuItem")
             verify(deleteItem !== null && deleteItem.visible, "Delete… must be offered")
             compare(deleteItem.text, "Delete…")
@@ -433,7 +434,8 @@ MainWindowTest {
                           askBox = findChild(page, "removeChallange")
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
-            compare(askBox.message, "Remove <b>Alpha Cave</b> and its 2 trips?")
+            compare(askBox.message,
+                    "Delete <b>Alpha Cave</b> and its 2 trips? Git history is the way back.")
 
             const removeButton = findChild(askBox, "removeButton")
             verify(removeButton !== null, "the prompt must offer Remove")
@@ -479,7 +481,7 @@ MainWindowTest {
                           askBox = findChild(page, "removeChallange")
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
-            compare(askBox.message, "Remove <b>Trip A</b>?")
+            compare(askBox.message, "Delete <b>Trip A</b>? Git history is the way back.")
 
             mouseClick(findChild(askBox, "removeButton"))
 
@@ -634,10 +636,7 @@ MainWindowTest {
             tryCompare(cellValue(page, "tripDate1"), "text", "2026-09-15", 5000)
         }
 
-        // The Add ▾ caret holds the cave-level attach, under its settled name.
-        function test_addCaretOffersAttachSurveyFile() {
-            const page = gotoDataMainPage()
-
+        function openAddCaret(page) {
             const addBar = findChild(page, "addCave")
             verify(addBar !== null, "the Add bar must exist")
             const menuButton = findChild(addBar, "menuButton")
@@ -647,13 +646,240 @@ MainWindowTest {
             let menu = null
             tryVerify(() => {
                           menu = findChild(page, "addCaveMenu")
-                          return menu !== null && menu.visible
+                          return menu !== null && menu.opened
                       }, 5000, "the caret must open the Add menu")
-            compare(menu.count, 1, "the Data page offers one extra way to add")
-            const item = menu.itemAt(0)
-            compare(item.objectName, "addExternalCaveMenuItem")
-            compare(item.text, "Attach survey file…")
+            return menu
+        }
+
+        // The objectNames of a menu's entries, in order.
+        function menuEntryNames(menu) {
+            const names = []
+            for(let i = 0; i < menu.count; i++) {
+                names.push(menu.itemAt(i).objectName)
+            }
+            return names
+        }
+
+        // The Add ▾ caret on the region's top level offers caves and folders,
+        // then the cave-level attach under its settled name.
+        function test_addCaretOffersAttachSurveyFile() {
+            const page = gotoDataMainPage()
+            const menu = openAddCaret(page)
+
+            compare(menuEntryNames(menu),
+                    ["addCaveMenuItem", "addFolderMenuItem", "addExternalCaveMenuItem"])
+            compare(menu.itemAt(0).text, "Add Cave")
+            compare(menu.itemAt(1).text, "Add Folder")
+            compare(menu.itemAt(2).text, "Attach survey file…")
             menu.close()
+        }
+
+        // --- C5.1: Add Folder / Add Section / the kind chip / delete counts ---
+
+        // Opens the context menu of the row at view row \a viewRow and returns
+        // it. The menu belongs to the current row, so the row is made current
+        // first.
+        function openRowMenu(page, tree, viewRow) {
+            tree.surveyTree.setCurrentRow(viewRow)
+            tree.forceActiveFocus()
+            tryVerify(() => tree.activeFocus && tree.currentRow === viewRow, 5000,
+                      "row " + viewRow + " must be current")
+            keyClick(Qt.Key_F10, Qt.ShiftModifier)
+            return rowContextMenu(page, "caveDelegate" + viewRow)
+        }
+
+        // Opens the Add submenu of a node row's context menu.
+        function openAddSubmenu(menu) {
+            const submenu = menu.menuAt(0)
+            verify(submenu !== null && submenu.objectName === "addVerbsSubmenu",
+                   "a node row's menu leads with Add")
+            mouseClick(menu.itemAt(0))
+            tryVerify(() => submenu.opened, 5000, "Add must open its verbs")
+            return submenu
+        }
+
+        // A new node opens straight into its name editor; this names it.
+        function commitNewName(name) {
+            tryVerify(() => rootId.shadowEditor.coreClickInput !== null, 5000,
+                      "a new node must open its name editor")
+            rootId.shadowEditor.setEditorText(name)
+            rootId.shadowEditor.coreClickInput.commitChanges()
+        }
+
+        function test_addFolderAtTopLevelOffersCavesAndFoldersInside() {
+            const page = gotoDataMainPage()
+            mouseClick(findChild(openAddCaret(page), "addFolderMenuItem"))
+
+            tryCompare(RootData.region, "caveCount", 1, 5000)
+            const folder = RootData.region.cave(0)
+            compare(folder.kind, SurveyNodeKind.Folder, "Add Folder makes a Folder")
+            compare(folder.name, "New Folder")
+            verify(folder.takesCaves, "a top-level Folder holds caves")
+
+            commitNewName("Kentucky field seasons")
+            tryCompare(folder, "name", "Kentucky field seasons", 5000)
+            compare(RootData.pageView.currentPageItem, page,
+                    "a new folder keeps the Data page in front")
+
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+            const chip = findChild(findChild(page, "caveKind0"), "kindChip")
+            compare(chip.text, "Folder")
+            const icon = findChild(findChild(page, "caveDelegate0"), "folderIcon")
+            verify(icon !== null && icon.visible, "a Folder row carries the folder icon")
+
+            const menu = openRowMenu(page, tree, 0)
+            const submenu = openAddSubmenu(menu)
+            compare(menuEntryNames(submenu), ["addCaveMenuItem", "addFolderMenuItem"],
+                    "a Folder outside every cave takes caves and folders")
+
+            mouseClick(findChild(submenu, "addCaveMenuItem"))
+            tryCompare(folder, "childNodeCount", 1, 5000)
+            const cave = folder.childNode(0)
+            compare(cave.kind, SurveyNodeKind.Cave)
+            compare(cave.name, "New Cave")
+
+            //The new cave's row is opened up to and its name is ready to type.
+            commitNewName("Side Cave")
+            tryCompare(cave, "name", "Side Cave", 5000)
+            tryCompare(tree, "rows", 2, 5000)
+            tryCompare(tree, "currentRow", 1, 5000)
+            const caveIcon = findChild(findChild(page, "caveDelegate1"), "folderIcon")
+            verify(caveIcon !== null && !caveIcon.visible, "a Cave row draws no folder")
+        }
+
+        function test_insideACaveTheMenuOffersTripsAndSections() {
+            const cave = addCave("Side Cave", 1)
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+
+            let submenu = openAddSubmenu(openRowMenu(page, tree, 0))
+            compare(menuEntryNames(submenu), ["addTripMenuItem", "addSectionMenuItem"],
+                    "a Cave takes trips and sections, never a cave")
+            compare(submenu.itemAt(1).text, "Add Section")
+
+            mouseClick(findChild(submenu, "addSectionMenuItem"))
+            tryCompare(cave, "childNodeCount", 1, 5000)
+            const section = cave.childNode(0)
+            compare(section.name, "New Section")
+            compare(section.kind, SurveyNodeKind.Folder, "a Section is a Folder")
+            verify(!section.takesCaves, "a Folder inside a cave takes trips")
+
+            commitNewName("Upper level")
+            tryCompare(section, "name", "Upper level", 5000)
+
+            //The Section's row sits under the cave's, ahead of the cave's trip.
+            tryCompare(tree, "rows", 3, 5000)
+            tryCompare(tree, "currentRow", 1, 5000)
+            const sectionChip = findChild(findChild(page, "caveKind1"), "kindChip")
+            compare(sectionChip.text, "Folder", "the chip says Folder everywhere")
+
+            submenu = openAddSubmenu(openRowMenu(page, tree, 1))
+            compare(menuEntryNames(submenu), ["addTripMenuItem", "addSectionMenuItem"],
+                    "a Section offers no cave either")
+
+            mouseClick(findChild(submenu, "addTripMenuItem"))
+            tryCompare(section, "tripCount", 1, 5000)
+            tryCompare(tree, "rows", 4, 5000)
+            tryCompare(tree, "currentRow", 2, 5000)
+            verify(tree.surveyTree.currentObject === section.trip(0),
+                   "the new trip's row is current")
+        }
+
+        // The chip relabels a native node: label and icon change, the node's
+        // trips and length stay.
+        function test_kindChipRelabelsOnlyTheChipAndIcon() {
+            const cave = addCave("Side Cave", 2)
+            addShotToTrip(cave.trip(0))
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+
+            const model = tree.model
+            tryVerify(() => model.data(model.index(0, SurveyTreeModel.Stations),
+                                       SurveyTreeModel.StationCountRole) === 2,
+                      10000, "the cave's trips report their stations")
+            tryVerify(() => cave.length.value > 0, 10000, "the cave's length is solved")
+            const lengthBefore = cave.length.value
+
+            const chip = findChild(findChild(page, "caveKind0"), "kindChip")
+            verify(chip.pickable, "a native node's chip is a picker")
+            compare(chip.text, "Cave")
+            mouseClick(chip)
+
+            let picker = null
+            tryVerify(() => {
+                          picker = findChild(chip, "kindPickerMenu")
+                          return picker !== null && picker.opened
+                      }, 5000, "the chip opens the Cave/Folder picker")
+            compare(menuEntryNames(picker), ["kindPickerCave", "kindPickerFolder"])
+            compare(picker.itemAt(0).text, "✓ Cave", "the label in force is checked")
+
+            mouseClick(findChild(picker, "kindPickerFolder"))
+            tryCompare(cave, "kind", SurveyNodeKind.Folder, 5000)
+
+            tryVerify(() => {
+                          const kindCell = findChild(page, "caveKind0")
+                          const folderChip = kindCell === null ? null : findChild(kindCell, "kindChip")
+                          return folderChip !== null && folderChip.text === "Folder"
+                      }, 5000, "the chip reads Folder")
+            tryVerify(() => {
+                          const icon = findChild(findChild(page, "caveDelegate0"), "folderIcon")
+                          return icon !== null && icon.visible
+                      }, 5000, "the row draws the folder icon")
+            compare(cave.tripCount, 2, "the node keeps its trips")
+            compare(cave.length.value, lengthBefore, "the node keeps its length")
+            compare(model.data(model.index(0, SurveyTreeModel.Trips), SurveyTreeModel.TripCountRole), 2,
+                    "the row still counts its trips")
+
+            const folderChip = findChild(findChild(page, "caveKind0"), "kindChip")
+            mouseClick(folderChip)
+            tryVerify(() => {
+                          picker = findChild(folderChip, "kindPickerMenu")
+                          return picker !== null && picker.opened
+                      }, 5000, "the picker opens again")
+            mouseClick(findChild(picker, "kindPickerCave"))
+            tryCompare(cave, "kind", SurveyNodeKind.Cave, 5000)
+            compare(cave.tripCount, 2)
+        }
+
+        // Delete… on a node counts every node and trip it takes along, and
+        // undo brings them back.
+        function test_deletingANodeCountsItsNodesAndTrips() {
+            RootData.region.addNode(null, SurveyNodeKind.Folder)
+            const folder = RootData.region.cave(0)
+            folder.name = "Kentucky"
+            const cave = RootData.region.addNode(folder, SurveyNodeKind.Cave)
+            cave.addTrip()
+            const section = RootData.region.addNode(cave, SurveyNodeKind.Folder, "Upper level")
+            section.addTrip()
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+
+            mouseClick(findChild(openRowMenu(page, tree, 0), "surveyItemDeleteMenuItem"))
+
+            let askBox = null
+            tryVerify(() => {
+                          askBox = findChild(page, "removeChallange")
+                          return askBox !== null && askBox.visible
+                      }, 5000, "Delete… must ask first")
+            compare(askBox.message,
+                    "Delete <b>Kentucky</b> and its 2 nodes and 2 trips? Git history is the way back.")
+
+            mouseClick(findChild(askBox, "removeButton"))
+            tryCompare(tree, "rows", 0, 5000)
+            compare(RootData.region.caveCount, 0, "the folder is gone with everything in it")
+
+            RootData.undoStack.undo()
+            tryCompare(RootData.region, "caveCount", 1, 5000)
+            compare(RootData.region.cave(0).name, "Kentucky")
+            compare(RootData.region.cave(0).childNode(0).childNode(0).tripCount, 1,
+                    "undo restores the section's trip")
         }
 
         // An empty region points at Add Cave; the first cave retires the
