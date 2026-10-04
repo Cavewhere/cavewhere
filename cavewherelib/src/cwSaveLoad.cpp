@@ -21,7 +21,6 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwEquateModel.h"
-#include "cwExternalCenterlineSync.h"
 #include "cwGeoReference.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
@@ -4588,8 +4587,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopy(const QString& sourcePath,
 
         const QFileInfo dstInfo(destinationPath);
         if (dstInfo.exists()) {
-            const bool sameSize =
-                cwExternalCenterlineSync::projectCopySize(srcInfo) == dstInfo.size();
+            const bool sameSize = srcInfo.size() == dstInfo.size();
             const bool srcOlderOrEqual = srcInfo.lastModified() <= dstInfo.lastModified();
             if (keepMatchingDestination && sameSize && srcOlderOrEqual) {
                 return Monad::ResultBase();
@@ -4609,7 +4607,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopy(const QString& sourcePath,
             return ensureResult;
         }
 
-        if (!cwExternalCenterlineSync::writeProjectCopy(sourcePath, destinationPath)) {
+        if (!QFile::copy(sourcePath, destinationPath)) {
             return Monad::ResultBase(
                         QStringLiteral("externalCenterlineCopy: failed to copy %1 -> %2")
                         .arg(sourcePath, destinationPath));

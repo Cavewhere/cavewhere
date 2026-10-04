@@ -169,6 +169,10 @@ private:
         //! A fix was written — one of the node's own, or the fallback on its
         //! first station when nothing above is anchored.
         bool anchored = false;
+        //! The kept fixes on an attached Compass .mak's stations, left for
+        //! writeExternalInclude to write inside the .mak's translation. Keyed
+        //! by owner (the node or its trip), named within the owner's scope.
+        QHash<QUuid, QList<cwFixStation>> makFixes;
     };
 
     WrittenFixes writeFixStations(QTextStream& stream, const cwCaveData& node,
@@ -178,15 +182,21 @@ private:
 
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
     // joining the owner's attachment dir with the project-relative
-    // entry file. Returns false (and appends an error) when the owner's
-    // attachment dir is missing from ExportOptions — that state means
-    // reconcile has not run yet, so writing a stale *include would
-    // surface as a cavern parse failure rather than a clear message.
+    // entry file. A Compass .mak is written as its Survex translation
+    // (cwCompassMakTranslator) instead, carrying \a makFixes, so its fixes
+    // read through their datum and zone. Returns false (and appends an
+    // error) when the owner's attachment dir is missing from ExportOptions
+    // — that state means reconcile has not run yet, so writing a stale
+    // *include would surface as a cavern parse failure rather than a clear
+    // message.
     bool writeExternalInclude(QTextStream& stream,
                               const QUuid& ownerId,
                               const QHash<QUuid, QString>& attachmentDirs,
                               const QString& entryFile,
-                              const QString& ownerLabel);
+                              const QString& ownerLabel,
+                              const QString& globalCS,
+                              cwSurvexExporterUtils::CsScope& scope,
+                              const QList<cwFixStation>& makFixes);
 };
 
 #endif // CWSURVEXEXPORTERCAVETASK_H

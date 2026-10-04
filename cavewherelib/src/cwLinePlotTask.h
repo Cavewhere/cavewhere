@@ -285,7 +285,7 @@ public:
         // Owners whose file fixes stations itself, and those stations (see
         // Input::externalFixedStations).
         QHash<QUuid, QStringList> externalFixedStations;
-        // Owners whose copy gave a Compass .mak the default datum, and those
+        // Owners whose Compass .mak names a zone and no datum, and those
         // files. Read on the main thread when the solve starts, to say so.
         QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> defaultedDatums;
     };

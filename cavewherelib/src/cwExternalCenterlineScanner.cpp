@@ -6,6 +6,7 @@
 **************************************************************************/
 
 #include "cwExternalCenterlineScanner.h"
+#include "cwCompassMakFile.h"
 
 //Walls
 #include "wallsprojectparser.h"
@@ -31,7 +32,6 @@ namespace {
 constexpr const char* kSurvexCommentChar = ";";
 constexpr const char* kSurvexExtension = ".svx";
 constexpr const char* kCompassDatExtension = ".dat";
-constexpr const char* kCompassMakExtension = ".mak";
 constexpr const char* kWallsWpjExtension = ".wpj";
 constexpr const char* kWallsSrvExtension = ".srv";
 constexpr int kCompassYearPivot = 1900;
@@ -40,15 +40,6 @@ constexpr int kSurvexDateLength = 10;
 
 // UTF-8 byte-order mark (0xEF 0xBB 0xBF).
 const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
-
-// The datum Compass reads a UTM zone in when its .mak names none
-// (survex doc/compass.rst), spelled the way Compass writes it.
-constexpr const char* kCompassDefaultDatum = "North American 1927";
-// The comment trailing the datum line compassMakWithDefaultDatum inserts,
-// which is how a scan of the project copy tells that line from one the
-// file's author wrote. Free of '/', which would end a Compass comment.
-constexpr const char* kDefaultDatumNote =
-    "CaveWhere: Compass's default datum, since this file names a UTM zone but no datum";
 
 bool hasExtension(const QString& path, const char* extension)
 {
@@ -493,7 +484,7 @@ struct ScanState {
     QStringList coordinateSystems = QStringList{QString()};
     // every station the closure fixes, in walk order
     QList<cwExternalCenterlineScanner::ScannedFix> fixes;
-    // every .mak whose datum line is the one compassMakWithDefaultDatum adds
+    // every .mak that names a UTM zone and no datum
     QList<cwExternalCenterlineScanner::DefaultedDatum> defaultedDatums;
     // set when the entry file itself carries shot data
     bool entryHasOwnShots = false;
@@ -667,21 +658,6 @@ void recordFix(ScanState& state, const QString& scopePath, const QString& statio
     }
     segments.append(station);
     state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem});
-}
-
-/**
- * The survey cavern reads a .mak '#' line's DAT into, and so the scope of the
- * fixes on that line (survex datain.c mak_dat_survey): the DAT's leaf name
- * without its extension, lower-cased, or "dat" when that leaves nothing.
- */
-QString compassDatSurveyName(const QString& datReference)
-{
-    const qsizetype lastSeparator =
-        qMax(datReference.lastIndexOf(QLatin1Char('/')), datReference.lastIndexOf(QLatin1Char('\\')));
-    const QString leaf = datReference.mid(lastSeparator + 1);
-    const qsizetype extension = leaf.lastIndexOf(QLatin1Char('.'));
-    const QString name = (extension >= 0 ? leaf.left(extension) : leaf).toLower();
-    return name.isEmpty() ? QStringLiteral("dat") : name;
 }
 
 void recordWarning(ScanState& state, const QString& message)
@@ -877,21 +853,6 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
     state.visited.insert(canonical);
 }
 
-// Compass .mak references look like:
-//   #filename.dat,A,B;          // bareword form
-//   #"name with spaces.dat",A;  // quoted form (Windows projects use this)
-//   /comment                    // single-line comment
-//   "Cave Name";                // misc directive
-// We only care about '#'-prefixed lines. Group 1 captures the
-// double-quoted filename, group 2 the bareword.
-const QRegularExpression& compassMakReferenceRegex()
-{
-    static const QRegularExpression regex(
-        QString::fromLatin1(R"RX(^\s*#\s*(?:"([^"]+)"|([^,;\s]+)))RX"),
-        QRegularExpression::CaseInsensitiveOption);
-    return regex;
-}
-
 /**
  * Counts every station a Compass .dat spells as a root station, and
  * takes the first survey's "SURVEY DATE:" as the root date. Surveys
@@ -942,81 +903,6 @@ void collectCompassStations(const QString& text, ScanState& state)
     }
 }
 
-// A station fixed on a .mak '#' line: ",<name>[<coordinate>]" after the file
-// name.
-const QRegularExpression& compassMakFixRegex()
-{
-    static const QRegularExpression regex(
-        QStringLiteral(R"RX(,\s*([^,;\[\s]+)\s*\[([^\]]*)\])RX"));
-    return regex;
-}
-
-//! A UTM zone as a system name spells it: "<zone><N|S>", positive zones north.
-QString utmZoneName(int zone)
-{
-    return QStringLiteral("%1%2").arg(std::abs(zone)).arg(
-        zone < 0 ? QLatin1Char('S') : QLatin1Char('N'));
-}
-
-//! A UTM system's name: "<datum>, UTM zone <zone><N|S>", positive zones north.
-QString utmSystemName(const QString& datum, int zone)
-{
-    return datum.isEmpty() ? QStringLiteral("UTM zone %1").arg(utmZoneName(zone))
-                           : QStringLiteral("%1, UTM zone %2").arg(datum, utmZoneName(zone));
-}
-
-/**
- * The input system a .mak names for its fixes, the way cavern reads one: each
- * datum ('&') or UTM zone ('$') line replaces the system with the one the pair
- * names, or with none until both are set, and a base location ('@', whose
- * fourth field is a zone) supplies one at the next '#' line when nothing else
- * has. Until the .mak writes any of them, the system in force around the .mak
- * stands. Empty while none is in force.
- */
-struct CompassMakCoordinateSystem {
-    QString name;
-    QString datum;
-    int zone = 0;
-    int baseLocationZone = 0;
-
-    void setBaseLocation(const QString& text)
-    {
-        constexpr int kZoneField = 3;
-        const QStringList fields = text.split(QLatin1Char(','));
-        if (fields.size() > kZoneField) {
-            baseLocationZone = fields.at(kZoneField).trimmed().toInt();
-        }
-    }
-
-    void applyBaseLocation()
-    {
-        if (name.isEmpty() && !datum.isEmpty() && baseLocationZone != 0) {
-            name = utmSystemName(datum, baseLocationZone);
-        }
-    }
-
-    void setDatum(const QString& text)
-    {
-        datum = text.trimmed();
-        updateName();
-    }
-
-    void setZone(const QString& text)
-    {
-        zone = text.trimmed().toInt();
-        updateName();
-    }
-
-    //! The zone the .mak names, its '$' line's or else its base location's.
-    int namedZone() const { return zone != 0 ? zone : baseLocationZone; }
-
-private:
-    void updateName()
-    {
-        name = !datum.isEmpty() && zone != 0 ? utmSystemName(datum, zone) : QString();
-    }
-};
-
 void scanCompassFile(const QString& filePath, ScanState& state)
 {
     const QString canonical = canonicalize(filePath);
@@ -1035,7 +921,7 @@ void scanCompassFile(const QString& filePath, ScanState& state)
         return;
     }
 
-    const bool isMak = hasExtension(canonical, kCompassMakExtension);
+    const bool isMak = cwCompassMakFile::isMakFile(canonical);
 
     state.inProgress.insert(canonical);
     state.dependencies.append(canonical);
@@ -1058,60 +944,21 @@ void scanCompassFile(const QString& filePath, ScanState& state)
 
         if (isMak) {
             const QDir baseDir = QFileInfo(canonical).absoluteDir();
-            const QRegularExpression& regex = compassMakReferenceRegex();
-            CompassMakCoordinateSystem coordinateSystem;
-            coordinateSystem.name = state.coordinateSystems.constLast();
-            bool datumDefaulted = false;
-            const QStringList lines = decoded.text.split(QLatin1Char('\n'));
-            for (const QString& rawLine : lines) {
-                const QString line = rawLine.trimmed();
-                const auto directiveText = [&line]() {
-                    return line.mid(1).section(QLatin1Char(';'), 0, 0);
-                };
-                if (line.startsWith(QLatin1Char('&'))) {
-                    coordinateSystem.setDatum(directiveText());
-                    datumDefaulted = datumDefaulted
-                        || line.contains(QLatin1String(kDefaultDatumNote));
-                    continue;
-                }
-                if (line.startsWith(QLatin1Char('$'))) {
-                    coordinateSystem.setZone(directiveText());
-                    continue;
-                }
-                if (line.startsWith(QLatin1Char('@'))) {
-                    coordinateSystem.setBaseLocation(directiveText());
-                    continue;
-                }
-                // A Compass comment is a whole line starting with '/';
-                // a '/' inside a '#' reference is a path separator and
-                // must survive so absolute and subdirectory targets
-                // stay readable.
-                if (line.isEmpty()
-                    || line.startsWith(QLatin1Char('/'))
-                    || !line.startsWith(QLatin1Char('#'))) {
-                    continue;
-                }
-                const auto match = regex.match(line);
-                if (!match.hasMatch()) {
-                    continue;
-                }
-                QString target = match.captured(1);  // quoted form
-                if (target.isEmpty()) {
-                    target = match.captured(2);      // bareword form
-                }
-                if (target.isEmpty()) {
-                    continue;
-                }
+            const QString outerSystem = state.coordinateSystems.constLast();
+            const cwCompassMakFile::Project project = cwCompassMakFile::parse(decoded.text);
+            for (const cwCompassMakFile::DatReference& reference : project.references) {
+                const QString& target = reference.file;
                 if (rejectAbsolutePath(state, canonical, target)) {
                     break;
                 }
-                coordinateSystem.applyBaseLocation();
-                const QString datSurvey = compassDatSurveyName(target);
-                auto fixMatches = compassMakFixRegex().globalMatch(line);
-                while (fixMatches.hasNext()) {
-                    const QRegularExpressionMatch fixMatch = fixMatches.next();
-                    recordFix(state, datSurvey, fixMatch.captured(1),
-                              fixMatch.captured(2).trimmed(), coordinateSystem.name);
+                // Until the .mak names a datum or zone itself, the system in
+                // force around it stands.
+                const QString system = !reference.namesSystem && !outerSystem.isEmpty()
+                    ? outerSystem
+                    : reference.coordinateSystemName();
+                const QString datSurvey = cwCompassMakFile::datSurveyName(target);
+                for (const cwCompassMakFile::Fix& fix : reference.fixes) {
+                    recordFix(state, datSurvey, fix.station, fix.coordinate, system);
                 }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
@@ -1136,9 +983,9 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                     break;
                 }
             }
-            if (datumDefaulted) {
+            if (project.datumDefaulted) {
                 state.defaultedDatums.append({QFileInfo(canonical).fileName(),
-                                              utmZoneName(coordinateSystem.namedZone())});
+                                              cwCompassMakFile::utmZoneName(project.namedZone)});
             }
         } else {
             // A .dat holds the surveys themselves; a .mak only points
@@ -1372,7 +1219,7 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
         const dewalls::GeoReferencePtr reference = child->reference();
         state.pendingWallsCoordinateSystem = reference.isNull()
             ? QString()
-            : utmSystemName(reference->datumName, reference->zone);
+            : cwCompassMakFile::utmSystemName(reference->datumName, reference->zone);
         scanByFormat(absolutePath, state);
     }
 }
@@ -1468,7 +1315,7 @@ Format formatFor(const QString& entryFile)
         return Format::Survex;
     }
     if (hasExtension(entryFile, kCompassDatExtension)
-        || hasExtension(entryFile, kCompassMakExtension)) {
+        || cwCompassMakFile::isMakFile(entryFile)) {
         return Format::Compass;
     }
     if (hasExtension(entryFile, kWallsWpjExtension)
@@ -1754,7 +1601,7 @@ void parseSeededMetadata(ScanResult& result)
     case Format::Survex:
         break;
     case Format::Compass:
-        if (hasExtension(entry, kCompassMakExtension)) {
+        if (cwCompassMakFile::isMakFile(entry)) {
             metadataFile.clear();
             for (const QString& dependency : std::as_const(result.dependencies)) {
                 if (hasExtension(dependency, kCompassDatExtension)) {
@@ -1856,43 +1703,25 @@ Monad::Result<ScanResult> scanWalls(const QString& entryFile)
     return scanWithEntry(entryFile, &scanWallsFile, "scanWalls");
 }
 
-bool isCompassMak(const QString& path)
+QString resolveCompassReference(const QString& makPath, const QString& reference)
 {
-    return hasExtension(path, kCompassMakExtension);
+    return resolveIncludeTarget(reference, QFileInfo(makPath).absoluteDir()).resolved;
 }
 
-QByteArray compassMakWithDefaultDatum(const QByteArray& makBytes)
+std::optional<QString> readSurveyText(const QString& path)
 {
-    const qsizetype bodyStart = makBytes.startsWith(kUtf8Bom) ? kUtf8Bom.size() : 0;
-
-    qsizetype firstZoneLine = -1;
-    qsizetype lineStart = bodyStart;
-    while (lineStart < makBytes.size()) {
-        qsizetype lineEnd = makBytes.indexOf('\n', lineStart);
-        if (lineEnd < 0) {
-            lineEnd = makBytes.size();
-        }
-        const QByteArray line = makBytes.mid(lineStart, lineEnd - lineStart).trimmed();
-        if (line.startsWith('&')) {
-            return makBytes;
-        }
-        if (firstZoneLine < 0 && (line.startsWith('$') || line.startsWith('@'))) {
-            firstZoneLine = lineStart;
-        }
-        lineStart = lineEnd + 1;
+    QFile file(path);
+    if (!file.open(QFile::ReadOnly)) {
+        return std::nullopt;
     }
+    return decodeBytes(file.readAll()).text;
+}
 
-    if (firstZoneLine < 0) {
-        return makBytes;
-    }
-
-    const QByteArray lineEnding = makBytes.contains("\r\n") ? QByteArrayLiteral("\r\n")
-                                                            : QByteArrayLiteral("\n");
-    const QByteArray datumLine = QByteArrayLiteral("&") + kCompassDefaultDatum
-        + QByteArrayLiteral("; / ") + kDefaultDatumNote + lineEnding;
-    QByteArray copy = makBytes;
-    copy.insert(firstZoneLine, datumLine);
-    return copy;
+QSet<QString> compassDatStationNames(const QString& datText)
+{
+    ScanState state;
+    collectCompassStations(datText, state);
+    return state.rootStations;
 }
 
 } // namespace cwExternalCenterlineScanner

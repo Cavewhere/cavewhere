@@ -7,6 +7,8 @@
 
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
+#include "cwCompassMakFile.h"
+#include "cwCompassMakTranslator.h"
 #include "cwExternalCenterlineScanner.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwSurvexExporterTripTask.h"
@@ -239,7 +241,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         // drops. A file that fixes nothing sits at the origin, like a native
         // node with no fix.
         cwSurvexExporterUtils::CsScope includeScope(enclosingScope);
-        writeFixStations(stream, node, tree, globalCS, inherited.anchored, includeScope);
+        const WrittenFixes written =
+            writeFixStations(stream, node, tree, globalCS, inherited.anchored, includeScope);
         // A georeferenced run names *cs out, after which cavern refuses any
         // *fix with no input system. The file's own *cs still wins inside
         // its blocks; this only catches the bare ones.
@@ -247,7 +250,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
-                                  node.name)) {
+                                  node.name, globalCS, includeScope,
+                                  written.makFixes.value(node.id))) {
             return false;
         }
         writeEnd();
@@ -326,7 +330,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
             if (!writeExternalInclude(stream, tripData.id,
                                       ExportOptions.tripAttachmentDirs,
                                       tripData.externalCenterline.entryFile(),
-                                      tripData.name)) {
+                                      tripData.name, globalCS, includeScope,
+                                      written.makFixes.value(tripData.id))) {
                 return false;
             }
             stream << "*end " << tripLabel << Qt::endl << Qt::endl;
@@ -415,11 +420,12 @@ void cwSurvexExporterCaveTask::writeEquateLine(QTextStream& stream, const QStrin
  * stations ("doghill.d1"). Those are the names the node's solved network
  * carries, so the Fix Stations page and the driver agree on one spelling, and
  * the *fix written from this block resolves to the file's station inside its
- * *include. Rejected fixes, and fixes on a station an attached file fixes
- * itself, are dropped from the output and their reasons appended to Errors.
- * Falls back to `*fix <firstStation> 0 0 0` when no valid fix exists and no
- * enclosing block is anchored, so each un-fixed top-level survey still
- * resolves in cavern.
+ * *include. A fix on an attached Compass .mak's station is returned in
+ * WrittenFixes::makFixes rather than written here. Rejected fixes, and fixes
+ * on a station an attached file fixes itself, are dropped from the output
+ * and their reasons appended to Errors. Falls back to
+ * `*fix <firstStation> 0 0 0` when no valid fix exists and no enclosing block
+ * is anchored, so each un-fixed top-level survey still resolves in cavern.
  */
 cwSurvexExporterCaveTask::WrittenFixes
 cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData &node,
@@ -445,10 +451,24 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
     // The stations the attached files fix themselves, under the same keys,
     // each with the name of the file that fixes it.
     QHash<QString, QString> fileFixedStations;
+    // The stations of attached Compass .mak files, under the same keys, each
+    // with its owner and the owner's scope: a fix on one is written inside
+    // the Survex the .mak is translated into, where its case is kept.
+    struct MakOwner {
+        QUuid ownerId;
+        QString scope;
+    };
+    QHash<QString, MakOwner> makStationOwners;
     const auto addFileStations = [&](const QUuid& ownerId, const QString& scope,
                                      const cwExternalCenterline& centerline,
                                      const QStringList& stations) {
-        stationNamesLower.unite(cwSurvexExporterUtils::scopedStationKeys(scope, stations));
+        const QSet<QString> stationKeys = cwSurvexExporterUtils::scopedStationKeys(scope, stations);
+        stationNamesLower.unite(stationKeys);
+        if (cwCompassMakFile::isMakFile(centerline.entryFile())) {
+            for (const QString& key : stationKeys) {
+                makStationOwners.insert(key, {ownerId, scope});
+            }
+        }
         const QString fileName = QFileInfo(centerline.entryFile()).fileName();
         const QSet<QString> fixedKeys = cwSurvexExporterUtils::scopedStationKeys(
             scope, ExportOptions.externalFixedStations.value(ownerId));
@@ -491,15 +511,30 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
         }
     }
 
+    QList<cwFixStation> directFixes;
+    QHash<QUuid, QList<cwFixStation>> makFixes;
+    for (const cwFixStation& fix : std::as_const(writtenFixes)) {
+        const QString name = fix.stationName().trimmed();
+        const auto makOwner = makStationOwners.constFind(cwStation::canonicalKey(name));
+        if (makOwner == makStationOwners.constEnd()) {
+            directFixes.append(fix);
+            continue;
+        }
+        cwFixStation inFileScope = fix;
+        inFileScope.setStationName(name.mid(makOwner->scope.size()));
+        makFixes[makOwner->ownerId].append(inFileScope);
+    }
+
     // A sourced root has no native stations; the file's own first station
     // stands in for them when the file fixes nothing.
     const QString nativeOrFileStation = node.externalCenterline.isEmpty()
         ? firstValidStation
         : originStation(node.externalCenterline, node.externalStations,
                         ExportOptions.externalFixedStations.value(node.id));
-    const QString fallbackStation = anchoredAbove ? QString() : nativeOrFileStation;
-    cwSurvexExporterUtils::writeFixStations(stream, writtenFixes, fallbackStation, globalCS, scope);
-    return { writtenFixes, !writtenFixes.isEmpty() || !fallbackStation.isEmpty() };
+    const QString fallbackStation =
+        anchoredAbove || !writtenFixes.isEmpty() ? QString() : nativeOrFileStation;
+    cwSurvexExporterUtils::writeFixStations(stream, directFixes, fallbackStation, globalCS, scope);
+    return { writtenFixes, !writtenFixes.isEmpty() || !fallbackStation.isEmpty(), makFixes };
 }
 
 QString cwSurvexExporterCaveTask::originStation(const cwExternalCenterline& centerline,
@@ -535,7 +570,10 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
                                                     const QUuid& ownerId,
                                                     const QHash<QUuid, QString>& attachmentDirs,
                                                     const QString& entryFile,
-                                                    const QString& ownerLabel)
+                                                    const QString& ownerLabel,
+                                                    const QString& globalCS,
+                                                    cwSurvexExporterUtils::CsScope& scope,
+                                                    const QList<cwFixStation>& makFixes)
 {
     const auto it = attachmentDirs.constFind(ownerId);
     if (it == attachmentDirs.constEnd()) {
@@ -560,6 +598,18 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
             "Survex *include cannot quote (\", newline, carriage return or Ctrl-Z): %2")
             .arg(ownerLabel, absolutePath));
         return false;
+    }
+
+    if (cwCompassMakFile::isMakFile(absolutePath)) {
+        const auto translated =
+            cwCompassMakTranslator::translate({absolutePath, globalCS, makFixes}, scope);
+        if (translated.has_value()) {
+            stream << *translated;
+            return true;
+        }
+        // A .mak the translation cannot spell is read by cavern itself, which
+        // places its fixes at their raw numbers.
+        cwSurvexExporterUtils::writeFixStations(stream, makFixes, QString(), globalCS, scope);
     }
 
     stream << "*include \"" << absolutePath << "\"" << Qt::endl;

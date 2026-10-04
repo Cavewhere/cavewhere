@@ -16,6 +16,7 @@
 #include <QDate>
 #include <QList>
 #include <QMetaType>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QtQml/qqmlregistration.h>
@@ -49,7 +50,7 @@
  *             and reads each .mak '#' DAT into a survey named
  *             after its file (survex datain.c mak_dat_survey), so a
  *             .mak fix is recorded under that survey
- *             (compassDatSurveyName). Station counting has no such
+ *             (cwCompassMakFile::datSurveyName). Station counting has no such
  *             level yet: every Compass station still lands in
  *             rootStationCount, a known gap.
  *   Walls   - one block per distinct prefix path, merged across
@@ -225,10 +226,9 @@ struct ScannedFix {
 };
 
 /**
- * A Compass .mak whose project copy reads its UTM zone in Compass's default
- * datum, North American 1927, because the source names a zone and no datum
- * (see compassMakWithDefaultDatum): the .mak's file name and the zone as a
- * system name spells it ("13N").
+ * A Compass .mak that names a UTM zone and no datum, whose zone CaveWhere
+ * reads in Compass's default datum, North American 1927, as Compass does: the
+ * .mak's file name and the zone as a system name spells it ("13N").
  */
 struct DefaultedDatum {
     QString file;
@@ -314,9 +314,8 @@ struct ScanResult {
     QList<ScannedFix> fixes;
 
     /**
-     * Every .mak in the closure that CaveWhere's copy gave Compass's default
-     * datum, in walk order. Empty when the scan reads a source rather than
-     * the project's copy.
+     * Every .mak in the closure that names a UTM zone ('$' or '@') and no
+     * datum ('&'), in walk order.
      */
     QList<DefaultedDatum> defaultedDatums;
 
@@ -411,19 +410,23 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryF
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanWalls(const QString& entryFile);
 
 /**
- * True when \a path names a Compass project file (.mak, any case).
+ * The file a Compass .mak's '#' line names, resolved against the .mak's
+ * directory the way the scan resolves it (a case-insensitive match where the
+ * file system is case-sensitive). Empty when no such file exists.
  */
-CAVEWHERE_LIB_EXPORT bool isCompassMak(const QString& path);
+CAVEWHERE_LIB_EXPORT QString resolveCompassReference(const QString& makPath,
+                                                     const QString& reference);
 
 /**
- * The bytes of CaveWhere's project copy of a Compass .mak. A .mak that names
- * a UTM zone ('$', or a base location's '@') and no datum ('&') anywhere gets
- * a line setting Compass's own default datum, North American 1927, inserted
- * before its first '$' or '@' line, so cavern and the scan read the zone in
- * the datum Compass shows the project in. Every other .mak comes back
- * byte-identical.
+ * The text of a survey file, decoded the way the scan decodes it (UTF-8, or
+ * Latin-1 when the bytes are not UTF-8). Empty when the file cannot be read.
  */
-CAVEWHERE_LIB_EXPORT QByteArray compassMakWithDefaultDatum(const QByteArray& makBytes);
+CAVEWHERE_LIB_EXPORT std::optional<QString> readSurveyText(const QString& path);
+
+/**
+ * Every station a Compass .dat's shots name, spelled as the file spells them.
+ */
+CAVEWHERE_LIB_EXPORT QSet<QString> compassDatStationNames(const QString& datText);
 
 } // namespace cwExternalCenterlineScanner
 

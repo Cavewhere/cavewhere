@@ -8,11 +8,13 @@
 // Catch
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Our
 #include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwCoordinateTransform.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
@@ -49,6 +51,7 @@
 
 // Std
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 
@@ -1117,12 +1120,25 @@ namespace {
 
 const QString kZoneNoDatumMak = QStringLiteral("compass_zone_no_datum.mak");
 const QString kUtm13N = QStringLiteral("EPSG:32613");
-const QByteArray kDefaultDatumLine = QByteArrayLiteral("&North American 1927;");
-// What the fixture's .mak fixes A1 at, in feet, converted to meters.
-constexpr double kFixEasting = 478000.0;
-constexpr double kFixNorthing = 4430000.0;
-// Absorbs the feet conversion and the float a solved position is stored in.
+// A local transverse Mercator centered near the fixture's fix.
+const QString kBoulderFrameCS = QStringLiteral(
+    "+proj=tmerc +lat_0=40.0254 +lon_0=-105.2581 +k=1 +x_0=0 +y_0=0 "
+    "+datum=WGS84 +units=m +no_defs +type=crs");
+// North American 1927, UTM zone 13N: the system the fixture's zone reads in
+// under Compass's default datum.
+const QString kNad27Utm13N = QStringLiteral("EPSG:26713");
+// survex METRES_PER_FOOT.
+constexpr double kMetersPerFoot = 0.3048;
+// What the fixture's .mak fixes A1 at, in feet.
+constexpr double kFixEastingFeet = 1568241.5;
+constexpr double kFixNorthingFeet = 14534120.7;
+constexpr double kFixElevationFeet = 5429.8;
+// Absorbs the float a solved position is stored in.
 constexpr double kFixMarginMeters = 5.0;
+// The NAD27 -> WGS84 shift near the fixture's fix is ~210 m (PROJ cs2cs:
+// 478000 4430000 EPSG:26713 -> 477953.925 4430208.847 EPSG:32613); any shift
+// beyond this says the fix went through its datum.
+constexpr double kMinimumDatumShiftMeters = 50.0;
 
 QStringList defaultDatumWarnings(const cwSurveyNode* node)
 {
@@ -1130,14 +1146,30 @@ QStringList defaultDatumWarnings(const cwSurveyNode* node)
         {static_cast<int>(cwErrorTypeId::AttachedFileDefaultDatum)});
 }
 
+//! Where the fixture's A1 belongs in \a frameCS: its .mak coordinate, read in
+//! North American 1927 at UTM zone 13N.
+cwGeoPoint fixtureA1In(const QString& frameCS)
+{
+    const auto point = cwCoordinateTransform::transformPoint(
+        kNad27Utm13N, frameCS,
+        cwGeoPoint(kFixEastingFeet * kMetersPerFoot, kFixNorthingFeet * kMetersPerFoot,
+                   kFixElevationFeet * kMetersPerFoot));
+    REQUIRE(point.has_value());
+    return *point;
+}
+
 } // namespace
 
 TEST_CASE("A Compass .mak that names a UTM zone but no datum is read in North American 1927",
           "[Attach][Cave][CS]")
 {
+    const bool localFrame = GENERATE(false, true);
+    const QString frameCS = localFrame ? kBoulderFrameCS : kUtm13N;
+    INFO("frame: " << frameCS.toStdString());
+
     auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-compass-default-datum"));
     cwCavingRegion* region = fixture->project->cavingRegion();
-    region->geoReference()->restore(cwGeoReference::Frozen, kUtm13N, {}, QString());
+    region->geoReference()->restore(cwGeoReference::Frozen, frameCS, {}, QString());
     cwCave* cave = freshCaveOf(fixture.get());
 
     const QString source = fixturePath(kZoneNoDatumMak);
@@ -1147,21 +1179,15 @@ TEST_CASE("A Compass .mak that names a UTM zone but no datum is read in North Am
     attachAndSolve(fixture.get(), cave, source);
     drainPipelines(fixture.get());
 
-    // The datum lands in the project's copy, ahead of the zone it qualifies;
-    // the source keeps its bytes.
-    CHECK(fileContents(source) == sourceBytes);
+    // The project's copy is the source's bytes; the default datum lives in
+    // the driver's translation of it.
     const QString copyPath =
         fixture->saveLoad()->externalCenterlineDir(cave).absoluteFilePath(kZoneNoDatumMak);
-    const QByteArray copyBytes = fileContents(copyPath);
-    const qsizetype datumAt = copyBytes.indexOf(kDefaultDatumLine);
-    REQUIRE(datumAt >= 0);
-    CHECK(datumAt < copyBytes.indexOf('@'));
-    CHECK(datumAt < copyBytes.indexOf('$'));
+    CHECK(fileContents(copyPath) == sourceBytes);
+    CHECK(fileContents(source) == sourceBytes);
 
-    // cavern hands a .mak fix's numbers to fix_station as the output system's
-    // coordinates (survex datain.c) and projects only *fix, so the datum line
-    // leaves A1 at the .mak's raw numbers in the frame; the datum reaches the
-    // rows, the warning, and the system cavern reads the .dat in.
+    // The driver writes A1's fix under North American 1927, UTM zone 13N, so
+    // cavern moves it through the datum shift into the frame.
     INFO("driver:\n" << fixture->rootData->linePlotManager()->driverSource().toStdString());
     INFO("cavern log:\n" << fixture->rootData->linePlotManager()->cavernLog().toStdString());
     REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
@@ -1169,8 +1195,15 @@ TEST_CASE("A Compass .mak that names a UTM zone but no datum is read in North Am
     const QString a1 = QStringLiteral("compass_zone_no_datum.a1");
     REQUIRE(lookup.hasPosition(a1));
     const QVector3D placed = lookup.position(a1);
-    CHECK(placed.x() == Catch::Approx(kFixEasting).margin(kFixMarginMeters));
-    CHECK(placed.y() == Catch::Approx(kFixNorthing).margin(kFixMarginMeters));
+    const cwGeoPoint expected = fixtureA1In(frameCS);
+    CHECK(placed.x() == Catch::Approx(expected.x).margin(kFixMarginMeters));
+    CHECK(placed.y() == Catch::Approx(expected.y).margin(kFixMarginMeters));
+    CHECK(placed.z() == Catch::Approx(expected.z).margin(kFixMarginMeters));
+    if (!localFrame) {
+        const double shift = std::hypot(expected.x - kFixEastingFeet * kMetersPerFoot,
+                                        expected.y - kFixNorthingFeet * kMetersPerFoot);
+        CHECK(shift > kMinimumDatumShiftMeters);
+    }
 
     const QStringList warnings = defaultDatumWarnings(cave);
     REQUIRE(warnings.size() == 1);
@@ -1190,20 +1223,20 @@ TEST_CASE("A Compass .mak that names a UTM zone but no datum is read in North Am
     CHECK(warningModel.data(warningRow, cwNodeWarningModel::TargetRole).toInt()
           == static_cast<int>(cwNodeWarningModel::Target::FixStationRow));
 
-    SECTION("Reload applies the default again to the fresh copy")
+    SECTION("Reload copies the source byte for byte again")
     {
         auto reloadFuture = managerOf(fixture.get())->reloadFromSource(cave);
         REQUIRE(AsyncFuture::waitForFinished(reloadFuture, kAttachWaitMs));
         REQUIRE_FALSE(reloadFuture.result().hasError());
         drainPipelines(fixture.get());
 
-        CHECK(fileContents(copyPath) == copyBytes);
+        CHECK(fileContents(copyPath) == sourceBytes);
         CHECK(fileContents(source) == sourceBytes);
         CHECK(defaultDatumWarnings(cave).size() == 1);
     }
 }
 
-TEST_CASE("A Compass .mak that names its datum is copied byte for byte", "[Attach][Cave][CS]")
+TEST_CASE("A Compass .mak is copied byte for byte", "[Attach][Cave][CS]")
 {
     auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-compass-explicit-datum"));
     cwCave* cave = freshCaveOf(fixture.get());
@@ -1212,8 +1245,10 @@ TEST_CASE("A Compass .mak that names its datum is copied byte for byte", "[Attac
     REQUIRE(sourceDir.isValid());
     const QByteArray datBytes = fileContents(fixturePath(QStringLiteral("compass_zone_no_datum.dat")));
     writeSurvey(sourceDir, QStringLiteral("compass_zone_no_datum.dat"), datBytes);
-    const QByteArray makBytes =
-        QByteArrayLiteral("&North American 1983;\n") + fileContents(fixturePath(kZoneNoDatumMak));
+    const bool explicitDatum = GENERATE(false, true);
+    const QByteArray datumLine =
+        explicitDatum ? QByteArrayLiteral("&North American 1983;\n") : QByteArray();
+    const QByteArray makBytes = datumLine + fileContents(fixturePath(kZoneNoDatumMak));
     const QString source = writeSurvey(sourceDir, kZoneNoDatumMak, makBytes);
 
     attachAndSolve(fixture.get(), cave, source);
@@ -1222,7 +1257,7 @@ TEST_CASE("A Compass .mak that names its datum is copied byte for byte", "[Attac
     CHECK(fileContents(fixture->saveLoad()->externalCenterlineDir(cave).absoluteFilePath(
               kZoneNoDatumMak))
           == makBytes);
-    CHECK(defaultDatumWarnings(cave).isEmpty());
+    CHECK(defaultDatumWarnings(cave).size() == (explicitDatum ? 0 : 1));
 }
 
 // The owner's report (2026-10-03): attach, save, quit, reopen, and the

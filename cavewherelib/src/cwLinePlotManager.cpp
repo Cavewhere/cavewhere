@@ -935,8 +935,8 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
                             .arg(entryFileName(centerline), scoped.join(QStringLiteral(", "))));
     };
 
-    // The copy changed the file whether or not the project has a frame, so
-    // this one is said either way.
+    // The default datum places the file's fixes whether or not the project
+    // has a frame, so this one is said either way.
     const auto addDefaultDatumMessages = [&inputs](QStringList& messages, const QUuid& ownerId) {
         for (const auto& defaulted : inputs.defaultedDatums.value(ownerId)) {
             messages.append(QStringLiteral("%1 names UTM zone %2 but no datum; CaveWhere used "

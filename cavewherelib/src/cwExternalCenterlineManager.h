@@ -385,7 +385,7 @@ private:
         // Every station each owner's file fixes itself (ScanResult::fixes),
         // for owners whose file fixes any.
         QHash<QUuid, QList<cwExternalCenterlineScanner::ScannedFix>> ownerFixes;
-        // The .mak files each owner's copy gave Compass's default datum
+        // The .mak files each owner's file reads in Compass's default datum
         // (ScanResult::defaultedDatums), for owners with any.
         QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> ownerDefaultedDatums;
         // Station names harvested from each owner's (cave or trip) in-project

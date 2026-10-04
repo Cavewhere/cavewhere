@@ -1616,63 +1616,88 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
     }
 }
 
-TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default once copied",
+TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default",
           "[Scanner][Attach]")
 {
     using cwExternalCenterlineScanner::DefaultedDatum;
-    using cwExternalCenterlineScanner::compassMakWithDefaultDatum;
 
     const QString fixtureName = QStringLiteral("compass_zone_no_datum");
-    const QString fixedA1 = QStringLiteral("compass_zone_no_datum.A1");
-    const QString coordinate = QStringLiteral("f,1568241.5,14534120.7,5429.8");
-    const QString sourceMak = datasetExternalCenterlinePath(fixtureName + QStringLiteral(".mak"));
+    const QString nad27Zone13 = QStringLiteral("North American 1927, UTM zone 13N");
 
-    SECTION("the source names no system and asks for no default")
+    SECTION("the fixture's fix reads in North American 1927 at its zone")
     {
-        const auto scan = cwExternalCenterlineScanner::scan(sourceMak);
-        REQUIRE_FALSE(scan.hasError());
-        CHECK(scan.value().fixes == QList<ScannedFix>{{fixedA1, coordinate, QString()}});
-        CHECK(scan.value().defaultedDatums.isEmpty());
-    }
-
-    SECTION("the project copy names North American 1927 at the source's zone")
-    {
-        QTemporaryDir tempDir;
-        REQUIRE(tempDir.isValid());
-        const QString dat = fixtureName + QStringLiteral(".dat");
-        REQUIRE(QFile::copy(datasetExternalCenterlinePath(dat), tempPath(tempDir, dat)));
-        QFile source(sourceMak);
-        REQUIRE(source.open(QFile::ReadOnly));
-        const QString copyMak = writeUtf8File(tempPath(tempDir, fixtureName + QStringLiteral(".mak")),
-                                              compassMakWithDefaultDatum(source.readAll()));
-
-        const auto scan = cwExternalCenterlineScanner::scan(copyMak);
+        const auto scan = cwExternalCenterlineScanner::scan(
+            datasetExternalCenterlinePath(fixtureName + QStringLiteral(".mak")));
         REQUIRE_FALSE(scan.hasError());
         CHECK(scan.value().fixes
-              == QList<ScannedFix>{{fixedA1, coordinate,
-                                    QStringLiteral("North American 1927, UTM zone 13N")}});
+              == QList<ScannedFix>{{QStringLiteral("compass_zone_no_datum.A1"),
+                                    QStringLiteral("f,1568241.5,14534120.7,5429.8"), nad27Zone13}});
         CHECK(scan.value().defaultedDatums
               == QList<DefaultedDatum>{{fixtureName + QStringLiteral(".mak"), QStringLiteral("13N")}});
     }
 
-    SECTION("the datum goes in before the first zone line, in the file's line endings")
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    writeUtf8File(tempPath(tempDir, QStringLiteral("a.dat")), QByteArrayLiteral("anything\n"));
+
+    SECTION("a base location alone names the zone")
     {
-        CHECK(compassMakWithDefaultDatum(QByteArrayLiteral("/ note\r\n$16;\r\n@1,2,3,16,0;\r\n"))
-                  .startsWith(QByteArrayLiteral("/ note\r\n&North American 1927; / ")));
-        const QByteArray baseOnly = compassMakWithDefaultDatum(
-            QByteArrayLiteral("#a.dat;\n@1,2,3,16,0;\n#b.dat;\n"));
-        CHECK(baseOnly.startsWith(QByteArrayLiteral("#a.dat;\n&North American 1927; / ")));
-        CHECK(baseOnly.endsWith(QByteArrayLiteral("\n@1,2,3,16,0;\n#b.dat;\n")));
-        CHECK(baseOnly.count('\n') == 4);
+        const QString makPath = writeUtf8File(
+            tempPath(tempDir, QStringLiteral("base.mak")),
+            QByteArrayLiteral("#a.dat;\n@1,2,3,16,0;\n#a.dat,B1[m,0,0,0];\n"));
+        const auto scan = cwExternalCenterlineScanner::scan(makPath);
+        REQUIRE_FALSE(scan.hasError());
+        CHECK(scan.value().fixes
+              == QList<ScannedFix>{{QStringLiteral("a.B1"), QStringLiteral("m,0,0,0"),
+                                    QStringLiteral("North American 1927, UTM zone 16N")}});
+        CHECK(scan.value().defaultedDatums
+              == QList<DefaultedDatum>{{QStringLiteral("base.mak"), QStringLiteral("16N")}});
     }
 
-    SECTION("a .mak that writes a datum anywhere, or no zone, is left as it is")
+    SECTION("a .mak that writes a datum anywhere, or no zone, asks for no default")
     {
-        const QByteArray datumLater = QByteArrayLiteral("$16;\n#a.dat;\n&North American 1983;\n");
-        CHECK(compassMakWithDefaultDatum(datumLater) == datumLater);
-        const QByteArray noZone = QByteArrayLiteral("/ note\n#a.dat,A1;\n");
-        CHECK(compassMakWithDefaultDatum(noZone) == noZone);
+        const QString datumLater = writeUtf8File(
+            tempPath(tempDir, QStringLiteral("later.mak")),
+            QByteArrayLiteral("$16;\n#a.dat,A1[m,1,2,3];\n&North American 1983;\n"));
+        const auto laterScan = cwExternalCenterlineScanner::scan(datumLater);
+        REQUIRE_FALSE(laterScan.hasError());
+        CHECK(laterScan.value().fixes
+              == QList<ScannedFix>{{QStringLiteral("a.A1"), QStringLiteral("m,1,2,3"), QString()}});
+        CHECK(laterScan.value().defaultedDatums.isEmpty());
+
+        const QString noZone = writeUtf8File(tempPath(tempDir, QStringLiteral("nozone.mak")),
+                                             QByteArrayLiteral("/ note\n#a.dat,A1;\n"));
+        const auto noZoneScan = cwExternalCenterlineScanner::scan(noZone);
+        REQUIRE_FALSE(noZoneScan.hasError());
+        CHECK(noZoneScan.value().defaultedDatums.isEmpty());
     }
+}
+
+TEST_CASE("scanCompass reads a .mak '#' line that spans lines", "[Scanner][Attach]")
+{
+    // Compass's Project Manager writes each link and fixed station of a '#'
+    // line on a line of its own, and cavern reads the statement up to its ';'.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    writeUtf8File(tempPath(tempDir, QStringLiteral("sub/cave.dat")), QByteArrayLiteral("anything\n"));
+    const QString makPath = writeUtf8File(
+        tempPath(tempDir, QStringLiteral("spanning.mak")),
+        QByteArrayLiteral("&North American 1983; / inline / $16;\r\n"
+                          "[sub;\r\n"
+                          "#cave.dat,\r\n"
+                          "  A1[M,580661.57,4113846.34,219],\r\n"
+                          "  A2,\r\n"
+                          "  A3[F,1904992.0,13497526.0,718.5];\r\n"
+                          "];\r\n"));
+
+    const auto scan = cwExternalCenterlineScanner::scan(makPath);
+    REQUIRE_FALSE(scan.hasError());
+    const QString system = QStringLiteral("North American 1983, UTM zone 16N");
+    CHECK(scan.value().fixes
+          == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("M,580661.57,4113846.34,219"), system},
+                               {QStringLiteral("cave.A3"), QStringLiteral("F,1904992.0,13497526.0,718.5"), system}});
+    CHECK(scan.value().dependencies.size() == 2);
+    CHECK(scan.value().warnings.isEmpty());
 }
 
 TEST_CASE("scanWalls records #FIX lines and the system their .wpj's .REF names",
