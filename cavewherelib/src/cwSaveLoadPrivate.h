@@ -257,7 +257,7 @@ struct cwSaveLoadPrivate {
     // would block on shutdown waiting for a thread to become available.
     QThreadPool m_saveThreadPool;
 
-    bool isTemporary = true;
+    bool hasDurableHome = false;
     bool saveEnabled = true;
 
     //! The FileVersion the project's files were last written with, -1 before the

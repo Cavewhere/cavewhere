@@ -6,22 +6,24 @@
 **************************************************************************/
 
 // Attaching an external centerline before the project has a durable
-// home. attach() used to reject cwSaveLoad::isTemporaryProject(),
-// because the enqueueExternalCenterline* jobs early-returned on the
-// same flag. These tests pin the behaviour we want instead: attach
-// works on any project, and the attachment survives whichever write
-// the user reaches for first (Save on a bundled .cw, Save As on a
-// brand-new project).
+// home. attach() used to reject a project whose cwSaveLoad layer had
+// no durable home yet, because the enqueueExternalCenterline* jobs
+// early-returned on the same flag. These tests pin the behavior we want
+// instead: attach works on any project, and the attachment survives
+// whichever write the user reaches for first (Save on a bundled .cw,
+// Save As on a brand-new project).
 //
-// "Temporary" means two different things here, which is what made the
-// original guard wrong. cwSaveLoad::isTemporaryProject() asks "does the
-// project have a durable home yet?" — historically it also stayed true
-// for a bundled .cw saved this session (issue #597), which is how the
-// blanket guard came to block bundles too, not just unsaved projects.
-// cwProject::isTemporaryProject() asks the same question one layer up
-// and masked the stale flag via LoadedFromBundledArchive. Since #597
-// was fixed the two layers agree; both are asserted directly rather
-// than assumed.
+// The two layers answer different questions, and conflating them is
+// what made the original guard wrong. cwSaveLoad::hasDurableHome() asks
+// "does the working tree have a durable home yet?" (a loaded, saved, or
+// converted tree counts; a brand-new project in its QTemporaryDir does
+// not) — historically it
+// stayed false for a bundled .cw saved this session (issue #597), which
+// is how the blanket guard came to block bundles too, not just unsaved
+// projects. cwProject::isTemporaryProject() asks "has the user chosen
+// where the project lives?". Since #597 was fixed the two agree for
+// every state these tests reach; both are asserted directly rather than
+// assumed.
 
 // Catch
 #include <catch2/catch_test_macros.hpp>
@@ -192,19 +194,19 @@ TEST_CASE("a bundled .cw is durable at both the cwSaveLoad and cwProject layers"
           "[Attach][Temporary]")
 {
     // Save As to a bundle re-zips the working tree; the archive is the
-    // durable home, so both layers must report not-temporary. The
+    // durable home, so both layers must report it as saved. The
     // cwSaveLoad flag used to stay stale here (issue #597), which is
     // how the attach guard came to block bundles.
     auto fixture = makeBundledProject(QStringLiteral("bundle-not-temporary"));
-    CHECK_FALSE(fixture->saveLoad()->isTemporaryProject());
+    CHECK(fixture->saveLoad()->hasDurableHome());
     CHECK_FALSE(fixture->project->isTemporaryProject());
 }
 
 TEST_CASE("a bundled .cw agrees with itself about being temporary across a reopen",
           "[Attach][Temporary]")
 {
-    // Issue #597, fixed: Save As to a bundle now clears the cwSaveLoad
-    // temporary flag exactly like loading the same bundle back does, so
+    // Issue #597, fixed: Save As to a bundle now marks the cwSaveLoad
+    // durable home exactly like loading the same bundle back does, so
     // identical bytes on disk get one answer. The flag gates
     // enqueueProjectRenameJobs and the orphan/conflict cleanups, so
     // this parity is what makes a rename inside a saved-as bundle take
@@ -214,20 +216,20 @@ TEST_CASE("a bundled .cw agrees with itself about being temporary across a reope
     REQUIRE(tempDir.isValid());
     const QString bundlePath = QDir(tempDir.path()).filePath(QStringLiteral("state-parity.cw"));
 
-    bool temporaryAfterSaveAs = true;
+    bool durableAfterSaveAs = false;
     {
         auto fixture = makeUnsavedProject();
         REQUIRE(fixture->project->saveAs(bundlePath));
         fixture->project->waitSaveToFinish();
-        temporaryAfterSaveAs = fixture->saveLoad()->isTemporaryProject();
+        durableAfterSaveAs = fixture->saveLoad()->hasDurableHome();
     }
 
     auto reopenedRoot = openProjectInPlace(bundlePath);
-    const bool temporaryAfterReopen =
-        reopenedRoot->project()->saveLoad()->isTemporaryProject();
+    const bool durableAfterReopen =
+        reopenedRoot->project()->saveLoad()->hasDurableHome();
 
-    CHECK_FALSE(temporaryAfterSaveAs);
-    CHECK_FALSE(temporaryAfterReopen);
+    CHECK(durableAfterSaveAs);
+    CHECK(durableAfterReopen);
 }
 
 TEST_CASE("an unsaved project is temporary but already materialized on disk",
@@ -239,7 +241,7 @@ TEST_CASE("an unsaved project is temporary but already materialized on disk",
     // guard is policy rather than a physical limit.
     auto fixture = makeUnsavedProject();
 
-    REQUIRE(fixture->saveLoad()->isTemporaryProject());
+    REQUIRE_FALSE(fixture->saveLoad()->hasDurableHome());
 
     const QString projectFile = fixture->saveLoad()->fileName();
     REQUIRE_FALSE(projectFile.isEmpty());
@@ -303,7 +305,7 @@ TEST_CASE("an external centerline attached to a bundled .cw survives save and re
 TEST_CASE("attach works on a project that has never been saved", "[Attach][Temporary]")
 {
     auto fixture = makeUnsavedProject();
-    REQUIRE(fixture->saveLoad()->isTemporaryProject());
+    REQUIRE_FALSE(fixture->saveLoad()->hasDurableHome());
 
     const QString source = datasetPath(kEntryFile);
     const auto result = runAttach(fixture.get(), source);
@@ -359,7 +361,7 @@ TEST_CASE("an external centerline attached before the first save survives Save A
     QCoreApplication::processEvents();
 
     // Both layers agree the bundle is a durable home now (issue #597).
-    CHECK_FALSE(fixture->saveLoad()->isTemporaryProject());
+    CHECK(fixture->saveLoad()->hasDurableHome());
     CHECK_FALSE(fixture->project->isTemporaryProject());
     CHECK(QFileInfo::exists(fixture->attachmentDir().absoluteFilePath(kEntryFile)));
 

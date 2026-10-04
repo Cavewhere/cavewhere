@@ -1395,7 +1395,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
     // For Copy mode on already-saved projects, preserve the existing dataRoot rather than
     // deriving a new one from the destination basename. This keeps the copy internally
     // consistent without mutating the loaded project's identity.
-    const bool isAlreadySavedCopy = (mode == ProjectTransferMode::Copy && !d->isTemporary);
+    const bool isAlreadySavedCopy = (mode == ProjectTransferMode::Copy && d->hasDurableHome);
     const QString newDataRootName = isAlreadySavedCopy ? d->projectMetadata.dataRoot
                                                        : destination.sanitizedBaseName;
 
@@ -1422,7 +1422,7 @@ ResultBase cwSaveLoad::transferProjectTo(const QString& destinationFileUrl, Proj
 
     setFileName(desiredFilePath);
     initializeRepositoryForCurrentFile();
-    setTemporary(false);
+    markDurableHome();
     // Do NOT call region->setName() here: the sanitizedBaseName is a filesystem-safe
     // name and is not appropriate as the user-visible display name. The caller
     // (cwProject::saveAs) is responsible for setting the region name to the raw
@@ -1563,7 +1563,7 @@ void cwSaveLoad::newProject()
         d->projectMetadata.syncEnabled = true;
         tempDir.mkpath(d->projectMetadata.dataRoot);
 
-        setTemporary(true);
+        markTemporaryHome();
         setFileName(regionFileName(tempDir, region));
         initializeRepositoryForCurrentFile();
 
@@ -1665,7 +1665,6 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                         return canceledResult();
                     }
 
-                    // setTemporaryProject(false);
                     //The filename needs to be set first because, image providers should
                     //have the filename before the region model is set
                     setFileName(filename);
@@ -1674,7 +1673,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
                     //no undo stack can reach any more, so opening a project
                     //empties the trash.
                     d->sweepTrash(this);
-                    setTemporary(false);
+                    markDurableHome();
 
                     setSaveEnabled(false);
 
@@ -2674,8 +2673,8 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
             d->futureToken.addJob(packageFuture, QStringLiteral("Bundling project"));
         }
 
-        // A written archive is a durable home, so clear the temporary
-        // flag just like load() and transferProjectTo() do. Leaving it
+        // A written archive is a durable home, so mark it just like
+        // load() and transferProjectTo() do. Leaving it
         // stale after Save As to a bundle (issue #597) suppressed the
         // region-rename handler, which silently dropped a post-Save-As
         // rename from the next re-zip.
@@ -2683,7 +2682,7 @@ QFuture<ResultBase> cwSaveLoad::saveBundledArchive(const QString& targetArchiveP
                 .context(this, [this, packageFuture]() -> ResultBase {
             const auto packageResult = packageFuture.result();
             if (!packageResult.hasError()) {
-                setTemporary(false);
+                markDurableHome();
             }
             return packageResult;
         }).future();
@@ -4108,7 +4107,7 @@ void cwSaveLoad::connectTreeModel()
         };
 
         connect(region, &cwCavingRegion::nameChanged, this, [this, region, saveMetadata]() {
-            if (d->isTemporary) {
+            if (!d->hasDurableHome) {
                 return;
             }
 
@@ -4383,13 +4382,13 @@ void cwSaveLoad::rescanLazLayersAfterGitWrite()
 void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
                                           const QString& newDescriptorPath)
 {
-    // Still gated on isTemporary, unlike the enqueueExternalCenterline* jobs.
+    // Still gated on hasDurableHome, unlike the enqueueExternalCenterline* jobs.
     // These mutate the project's durable on-disk identity (the .cwproj
     // descriptor and dataRoot directory name), which doesn't exist until the
     // first save - Save As renames it as part of the move. The external-
     // centerline jobs write inside the dataRoot tree, which a temp project
     // already has, so they don't wait. Same reasoning at the two cleanups below.
-    if (d->isTemporary) {
+    if (!d->hasDurableHome) {
         return;
     }
 
@@ -4448,9 +4447,9 @@ void cwSaveLoad::enqueueProjectRenameJobs(const QString& oldDescriptorPath,
 
 void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDescriptorRelPath)
 {
-    // Temp-gated - see enqueueProjectRenameJobs for why the durable-identity
+    // Durable-home-gated - see enqueueProjectRenameJobs for why the durable-identity
     // jobs wait for the first save while the external-centerline jobs don't.
-    if (d->isTemporary || conflictingDescriptorRelPath.isEmpty()) {
+    if (!d->hasDurableHome || conflictingDescriptorRelPath.isEmpty()) {
         return;
     }
 
@@ -4495,8 +4494,8 @@ void cwSaveLoad::enqueueConflictingProjectCleanup(const QString& conflictingDesc
 
 void cwSaveLoad::enqueueOrphanDirectoryCleanup(const QString& orphanDirRelPath)
 {
-    // Temp-gated - see enqueueProjectRenameJobs.
-    if (d->isTemporary || orphanDirRelPath.isEmpty()) {
+    // Durable-home-gated - see enqueueProjectRenameJobs.
+    if (!d->hasDurableHome || orphanDirRelPath.isEmpty()) {
         return;
     }
 
@@ -4544,7 +4543,7 @@ void cwSaveLoad::enqueueExternalCenterlineCopy(const QString& sourcePath,
                                                const QString& destinationPath,
                                                bool keepMatchingDestination)
 {
-    // Deliberately not gated on d->isTemporary, unlike the project-rename
+    // Deliberately not gated on d->hasDurableHome, unlike the project-rename
     // and cleanup jobs above. A temporary project already has a real root
     // dir, and Save As moves or re-zips that whole tree, so an attachment
     // copied in before the first save travels with it.
@@ -5215,12 +5214,22 @@ void cwSaveLoad::connectSketch(cwSketch *sketch)
 }
 
 
-void cwSaveLoad::setTemporary(bool isTemp)
+void cwSaveLoad::markDurableHome()
 {
-    if(d->isTemporary != isTemp) {
-        d->isTemporary = isTemp;
-        emit isTemporaryProjectChanged();
+    if (d->hasDurableHome) {
+        return;
     }
+    d->hasDurableHome = true;
+    emit hasDurableHomeChanged();
+}
+
+void cwSaveLoad::markTemporaryHome()
+{
+    if (!d->hasDurableHome) {
+        return;
+    }
+    d->hasDurableHome = false;
+    emit hasDurableHomeChanged();
 }
 
 QString cwSaveLoad::randomName() const
@@ -5654,9 +5663,9 @@ QDir cwSaveLoad::externalCenterlineDir(const cwTrip *trip) const
     return externalCenterlineDirHelper(dirPrivate(trip));
 }
 
-bool cwSaveLoad::isTemporaryProject() const
+bool cwSaveLoad::hasDurableHome() const
 {
-    return d->isTemporary;
+    return d->hasDurableHome;
 }
 
 QString cwSaveLoad::dataRoot() const

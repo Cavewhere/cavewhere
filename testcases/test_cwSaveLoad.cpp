@@ -3561,10 +3561,10 @@ TEST_CASE("Bundle saveAs preserves note image for existing trip", "[cwProject][c
     }
 }
 
-TEST_CASE("Bundle saveAs clears the cwSaveLoad temporary flag like a reopen does", "[cwSaveLoad][cwProject]") {
-    // Issue #597: Save As to a bundled .cw used to leave cwSaveLoad's
-    // temporary flag stale (true) until the bundle was closed and
-    // reopened, while load() cleared it. Identical project on disk, two
+TEST_CASE("Bundle saveAs marks the cwSaveLoad durable home like a reopen does", "[cwSaveLoad][cwProject]") {
+    // Issue #597: Save As to a bundled .cw used to leave cwSaveLoad
+    // without a durable home until the bundle was closed and reopened,
+    // while load() marked one. Identical project on disk, two
     // different answers, and the flag gates the project-rename and
     // cleanup jobs — so a rename inside a saved-as bundle silently took
     // a different path than the same rename after a reopen.
@@ -3586,7 +3586,7 @@ TEST_CASE("Bundle saveAs clears the cwSaveLoad temporary flag like a reopen does
 
     // The archive is now the project's durable home, so both layers
     // must agree — this is what load() reports for the same file.
-    CHECK_FALSE(project->saveLoad()->isTemporaryProject());
+    CHECK(project->saveLoad()->hasDurableHome());
     CHECK_FALSE(project->isTemporaryProject());
 
     auto reopenedRoot = std::make_unique<cwRootData>();
@@ -3595,17 +3595,17 @@ TEST_CASE("Bundle saveAs clears the cwSaveLoad temporary flag like a reopen does
     reopenedRoot->project()->waitLoadToFinish();
     REQUIRE(reopenedRoot->project()->errorModel()->size() == 0);
 
-    CHECK_FALSE(reopenedRoot->project()->saveLoad()->isTemporaryProject());
+    CHECK(reopenedRoot->project()->saveLoad()->hasDurableHome());
     CHECK_FALSE(reopenedRoot->project()->isTemporaryProject());
 }
 
 TEST_CASE("Region rename after bundle saveAs updates the descriptor and dataRoot", "[cwSaveLoad][cwProject]") {
     // The user-visible half of issue #597. The region-nameChanged
-    // handler early-outs on the temporary flag, so while the flag was
-    // stale a rename made right after Save As to a bundle left the
-    // .cwproj descriptor and dataRoot directory under their old names
-    // inside the archive. The same rename after close-and-reopen moved
-    // both. This pins the reopen behavior for the saved-this-session
+    // handler early-outs until cwSaveLoad has a durable home, so while
+    // that flag was stale a rename made right after Save As to a bundle
+    // left the .cwproj descriptor and dataRoot directory under their old
+    // names inside the archive. The same rename after close-and-reopen
+    // moved both. This pins the reopen behavior for the saved-this-session
     // case too.
     auto rootData = std::make_unique<cwRootData>();
     auto project = rootData->project();

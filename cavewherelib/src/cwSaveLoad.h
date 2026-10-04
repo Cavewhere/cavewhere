@@ -132,7 +132,7 @@ class CAVEWHERE_LIB_EXPORT cwSaveLoad : public QObject
     Q_OBJECT
 
     Q_PROPERTY(QString fileName READ fileName WRITE setFileName NOTIFY fileNameChanged);
-    Q_PROPERTY(bool isTemporaryProject READ isTemporaryProject NOTIFY isTemporaryProjectChanged)
+    Q_PROPERTY(bool hasDurableHome READ hasDurableHome NOTIFY hasDurableHomeChanged)
 
 public:
     struct ProjectMetadataData {
@@ -388,10 +388,10 @@ public:
     // only completion.
     QFuture<void> pendingJobsFinished();
 
+    bool hasDurableHome() const;
+
     //For testing
     void waitForFinished();
-
-    bool isTemporaryProject() const;
 
     QString dataRoot() const;
     void setDataRoot(const QString& dataRoot);
@@ -435,7 +435,7 @@ public:
 signals:
     void fileNameChanged();
     void dataRootChanged();
-    void isTemporaryProjectChanged();
+    void hasDurableHomeChanged();
     void objectPathReady(QObject* object);
     void localMutationOccurred(); //!< Emitted when user-visible data is mutated (save queued, tracking not suppressed)
     void saveFlushCompleted(); //!< Emitted after pending file writes are flushed to disk
@@ -571,7 +571,8 @@ private:
     void connectNoteLiDAR(cwNoteLiDAR * lidarNote);
     void connectSketch(cwSketch* sketch);
 
-    void setTemporary(bool isTemp);
+    void markDurableHome();
+    void markTemporaryHome();
 
     // QString
     QString randomName() const;

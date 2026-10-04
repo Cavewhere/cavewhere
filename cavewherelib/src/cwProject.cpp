@@ -140,7 +140,7 @@ cwProject::cwProject(QObject* parent) :
     QObject(parent),
     m_saveLoad(new cwSaveLoad(this)),
     FileVersion(cwRegionIOTask::protoVersion()),
-    SQLiteTempProject(false),
+    m_unsavedReadOnlyConversion(false),
     LoadedFromBundledArchive(false),
     ConvertedFromSqlite(false),
     BundledArchivePath(),
@@ -201,7 +201,7 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
             cwError::Warning));
     });
 
-    connect(saveLoad, &cwSaveLoad::isTemporaryProjectChanged, this, [this, saveLoad]() {
+    connect(saveLoad, &cwSaveLoad::hasDurableHomeChanged, this, [this, saveLoad]() {
         if (m_saveLoad != saveLoad) {
             return;
         }
@@ -773,7 +773,7 @@ bool cwProject::saveAs(QString newFilename)
                              }
 
                              ScopedProjectStateNotifier stateGuard(this);
-                             setSqliteTemporaryProject(false);
+                             setUnsavedReadOnlyConversion(false);
                              LoadedFromBundledArchive = true;
                              ConvertedFromSqlite = false;
                              BundledArchivePath = newFilename;
@@ -817,7 +817,7 @@ bool cwProject::saveAs(QString newFilename)
 
     {
         ScopedProjectStateNotifier stateGuard(this);
-        setSqliteTemporaryProject(false);
+        setUnsavedReadOnlyConversion(false);
         LoadedFromBundledArchive = false;
         ConvertedFromSqlite = false;
         BundledArchivePath.clear();
@@ -844,12 +844,12 @@ bool cwProject::saveAs(QString newFilename)
     return true;
 }
 
-void cwProject::setSqliteTemporaryProject(bool isTemp)
+void cwProject::setUnsavedReadOnlyConversion(bool isUnsavedConversion)
 {
-    if (SQLiteTempProject == isTemp) {
+    if (m_unsavedReadOnlyConversion == isUnsavedConversion) {
         return;
     }
-    SQLiteTempProject = isTemp;
+    m_unsavedReadOnlyConversion = isUnsavedConversion;
     emit fileTypeChanged();
     m_syncHealth->refresh();
 }
@@ -939,7 +939,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
             //Disable the m_saveLoad, since this should be a temporary project
             m_saveLoad->setCavingRegion(nullptr);
 
-            setSqliteTemporaryProject(result.isTempFile());
+            setUnsavedReadOnlyConversion(result.isTempFile());
             LoadedFromBundledArchive = false;
             ConvertedFromSqlite = false;
             BundledArchivePath.clear();
@@ -991,7 +991,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
 
                 if (!result.hasError()) {
                     ScopedProjectStateNotifier stateGuard(this);
-                    setSqliteTemporaryProject(false);
+                    setUnsavedReadOnlyConversion(false);
                     LoadedFromBundledArchive = false;
                     ConvertedFromSqlite = false;
                     BundledArchivePath.clear();
@@ -1093,7 +1093,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
                         auto result = extractedProjectLoadFuture.result();
                         if (!result.hasError()) {
                             ScopedProjectStateNotifier stateGuard(this);
-                            setSqliteTemporaryProject(false);
+                            setUnsavedReadOnlyConversion(false);
                             LoadedFromBundledArchive = true;
                             ConvertedFromSqlite = false;
                             BundledArchivePath = bundleSourcePath;
@@ -1122,7 +1122,7 @@ QFuture<ResultBase> cwProject::loadHelperImpl(const QString& filename, LoadParam
 
 QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFilename,
                                                           const QDir &newProjectDirectory,
-                                                          bool isTemporary,
+                                                          bool isReadOnlySource,
                                                           const QString& bundledArchivePath)
 {
     //Make a temporary project
@@ -1162,14 +1162,14 @@ QFuture<ResultBase> cwProject::convertFromProjectV6Helper(QString oldProjectFile
 
     auto finalFuture =
         AsyncFuture::observe(loadTempProjectFuture)
-            .context(this, [this, loadTempProjectFuture, tempProject, isTemporary, bundledArchivePath](){
+            .context(this, [this, loadTempProjectFuture, tempProject, isReadOnlySource, bundledArchivePath](){
                 auto result = loadTempProjectFuture.result();
                 errorModel()->append(tempProject->errorModel()->toList());
 
                 if (!result.hasError()) {
                     ScopedProjectStateNotifier stateGuard(this);
 
-                    setSqliteTemporaryProject(isTemporary);
+                    setUnsavedReadOnlyConversion(isReadOnlySource);
                     const bool keepBundledTarget = !bundledArchivePath.isEmpty();
                     LoadedFromBundledArchive = keepBundledTarget;
                     ConvertedFromSqlite = keepBundledTarget;
@@ -1287,7 +1287,7 @@ void cwProject::newProject() {
     connectSaveLoad(m_saveLoad);
     emit saveLoadChanged();
     m_saveLoad->newProject();
-    setSqliteTemporaryProject(false);
+    setUnsavedReadOnlyConversion(false);
     LoadedFromBundledArchive = false;
     ConvertedFromSqlite = false;
     BundledArchivePath.clear();
@@ -1521,14 +1521,14 @@ void cwProject::loadOrConvert(const QString &filename)
                              m_saveLoad->setOwnedTempDir(dir.path());  // Track for cleanup
                              auto tempDir = QDir(dir.filePath(QFileInfo(normalizedFilename).baseName()));
                              const QFileInfo info(normalizedFilename);
-                             const bool temporaryProject = !info.isWritable();
+                             const bool isReadOnlySource = !info.isWritable();
                              // Convert legacy SQLite .cw files into a BundledGitFileType pointing
                              // back at the original .cw path, so save() re-zips over the original
                              // file in place rather than leaving the user editing a temp dir
                              // (issue #515). When the source is not writable, fall back to a
                              // temporary project so save() prompts for Save As.
-                             const QString bundledTarget = temporaryProject ? QString() : normalizedFilename;
-                             return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, temporaryProject, bundledTarget));
+                             const QString bundledTarget = isReadOnlySource ? QString() : normalizedFilename;
+                             return QFuture<void>(convertFromProjectV6Helper(normalizedFilename, tempDir, isReadOnlySource, bundledTarget));
                          } else {
                              //This could be Git file or a corrupted file
                              auto loadFuture = loadHelper(normalizedFilename, {type});
@@ -1763,7 +1763,10 @@ void cwProject::setModified(bool modified)
 }
 
 bool cwProject::isTemporaryProject() const {
-    return m_saveLoad->isTemporaryProject() || SQLiteTempProject;
+    // cwSaveLoad answers "does the working tree have a durable home?"; this asks
+    // "has the user chosen where the project lives?". They disagree only for an
+    // unsaved read-only conversion, whose converted tree is durable but unchosen.
+    return !m_saveLoad->hasDurableHome() || m_unsavedReadOnlyConversion;
 }
 
 QString cwProject::filename() const {
@@ -1775,7 +1778,7 @@ QString cwProject::filename() const {
 
 cwProject::FileType cwProject::fileType() const
 {
-    if (SQLiteTempProject) {
+    if (m_unsavedReadOnlyConversion) {
         return SqliteFileType;
     }
 

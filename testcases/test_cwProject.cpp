@@ -11896,6 +11896,82 @@ TEST_CASE("Save As a cwproj from a read-only sqlite conversion makes the project
     CHECK_FALSE(cwError::containsFatal(project->errorModel()->toList()));
 }
 
+TEST_CASE("cwProject temporary state matches cwSaveLoad durable home except for a read-only conversion",
+          "[cwProject][temporary]") {
+    const auto requireLayersAgree = [](const cwProject* project) {
+        REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+        CHECK(project->isTemporaryProject() == !project->saveLoad()->hasDurableHome());
+    };
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const auto makeRootData = []() {
+        auto rootData = std::make_unique<cwRootData>();
+        rootData->account()->setName(QStringLiteral("Layers Agree Tester"));
+        rootData->account()->setEmail(QStringLiteral("layers.agree.tester@example.com"));
+        return rootData;
+    };
+
+    const auto saveFreshProjectAs = [&](const QString& fileName) {
+        auto rootData = makeRootData();
+        auto project = rootData->project();
+        REQUIRE(project->saveAs(destinationParent.filePath(fileName)));
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
+        requireLayersAgree(project);
+        CHECK_FALSE(project->isTemporaryProject());
+        return project->filename();
+    };
+
+    const auto loadIntoFreshProject = [&](const QString& path) {
+        const auto project = reloadProject(path);
+        requireLayersAgree(project.get());
+        CHECK_FALSE(project->isTemporaryProject());
+    };
+
+    SECTION("a fresh project is temporary at both layers") {
+        auto rootData = makeRootData();
+        auto project = rootData->project();
+        requireLayersAgree(project);
+        CHECK(project->isTemporaryProject());
+    }
+
+    SECTION("Save As a cwproj and reload it") {
+        loadIntoFreshProject(saveFreshProjectAs(QStringLiteral("LayersAgree.cwproj")));
+    }
+
+    SECTION("Save As a cw bundle and reload it") {
+        loadIntoFreshProject(saveFreshProjectAs(QStringLiteral("LayersAgree.cw")));
+    }
+
+    SECTION("converting a writable legacy SQLite cw") {
+        const QString sqliteSource = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+        REQUIRE(QFileInfo(sqliteSource).isWritable());
+
+        auto project = std::make_unique<cwProject>();
+        addTokenManager(project.get());
+        QQuickGit::Account account;
+        account.setName(QStringLiteral("Layers Agree Tester"));
+        account.setEmail(QStringLiteral("layers.agree.tester@example.com"));
+        project->setGitAccount(&account);
+        project->loadOrConvert(sqliteSource);
+        project->waitLoadToFinish();
+        requireLayersAgree(project.get());
+        CHECK_FALSE(project->isTemporaryProject());
+    }
+
+    SECTION("a read-only SQLite conversion is durable on disk but still temporary to the user") {
+        const ReadOnlySqliteSource source;
+        REQUIRE(source.isReadOnly());
+
+        QQuickGit::Account account;
+        const auto project = loadReadOnlySqliteConversion(source, account);
+        CHECK(project->isTemporaryProject());
+        CHECK(project->saveLoad()->hasDurableHome());
+    }
+}
+
 TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
     auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto project = std::make_unique<cwProject>();

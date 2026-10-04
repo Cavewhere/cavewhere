@@ -267,8 +267,8 @@ private:
 
     bool m_modified = false;
 
-    //Mark true if temp project when loaded via legacy SQLite/v6 paths
-    bool SQLiteTempProject;
+    //Set by convertFromProjectV6Helper for a read-only legacy SQLite source; cleared by load, saveAs, and newProject
+    bool m_unsavedReadOnlyConversion;
     bool LoadedFromBundledArchive;
     bool ConvertedFromSqlite; //!< True when a SQLite .cw was auto-converted; distinguishes from a genuine bundled .cw zip
     QString BundledArchivePath;
@@ -302,7 +302,7 @@ private:
     void disconnectSaveLoad(cwSaveLoad *saveLoad);
 
     bool emitVersionGuardError(const QString& action);
-    void setSqliteTemporaryProject(bool isTemp);
+    void setUnsavedReadOnlyConversion(bool isUnsavedConversion);
     void completeSyncOperation(const Monad::ResultBase& result);
     void continueSyncAfterGates(const std::shared_ptr<SyncCycle>& cycle);
 
