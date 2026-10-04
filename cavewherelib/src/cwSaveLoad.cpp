@@ -3248,41 +3248,9 @@ QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QS
                     loadData.errors.append(*caveVersionWarning);
                 }
 
-                cwCaveData cave;
-                if(caveProto.has_name()) {
-                    cave.name = QString::fromStdString(caveProto.name());
-                }
-                if (caveProto.has_id()) {
-                    cave.id = cwProtoUtils::toUuid(caveProto.id());
-                }
-                cave.lengthUnit = caveProto.has_lengthunit()
-                        ? static_cast<cwUnits::LengthUnit>(caveProto.lengthunit())
-                        : cwUnits::Meters;
-                cave.depthUnit = caveProto.has_depthunit()
-                        ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
-                        : cwUnits::Meters;
-
-                if (caveProto.has_kind()) {
-                    cave.kind = cwSurveyNodeKind::fromSavedValue(caveProto.kind());
-                }
-                if (caveProto.has_read_only()) {
-                    cave.readOnly = caveProto.read_only();
-                }
-                if (caveProto.has_source_id()) {
-                    cave.sourceId = cwProtoUtils::toUuid(caveProto.source_id());
-                }
-                if (caveProto.has_source_path()) {
-                    cave.sourcePath = QString::fromStdString(caveProto.source_path());
-                }
-
-                cave.fixStations.reserve(caveProto.fixstations_size());
-                for (const auto& protoFix : caveProto.fixstations()) {
-                    cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
-                }
-
                 nodeEntries.push_back(std::make_unique<NodeEntry>());
                 NodeEntry* entry = nodeEntries.back().get();
-                entry->data = std::move(cave);
+                entry->data = caveDataFromProtoCave(caveProto);
                 nodeByDir.insert(caveDirPath, entry);
                 if (parentEntry != nullptr) {
                     parentEntry->children.append(entry);
@@ -3535,22 +3503,49 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
 Monad::Result<cwCaveData> cwSaveLoad::loadCave(const QString &filename)
 {
     auto caveResult = loadMessage<CavewhereProto::Cave>(filename);
-    return Monad::mbind(caveResult, [](const Result<CavewhereProto::Cave>& result)
-    {
-        auto caveProto = result.value();
-        cwCaveData caveData;
-        if(caveProto.has_name()) {
-            caveData.name = QString::fromStdString(caveProto.name());
-        }
-        if (caveProto.has_id()) {
-            caveData.id = cwProtoUtils::toUuid(caveProto.id());
-        }
-        if (caveProto.has_external_centerline()) {
-            caveData.externalCenterline = cwExternalCenterline(
-                        QString::fromStdString(caveProto.external_centerline().entry_file()));
-        }
-        return Result(caveData);
+    return Monad::mbind(caveResult, [](const Result<CavewhereProto::Cave>& result) {
+        return Result(caveDataFromProtoCave(result.value()));
     });
+}
+
+cwCaveData cwSaveLoad::caveDataFromProtoCave(const CavewhereProto::Cave& caveProto)
+{
+    cwCaveData cave;
+    if (caveProto.has_name()) {
+        cave.name = QString::fromStdString(caveProto.name());
+    }
+    if (caveProto.has_id()) {
+        cave.id = cwProtoUtils::toUuid(caveProto.id());
+    }
+    cave.lengthUnit = caveProto.has_lengthunit()
+            ? static_cast<cwUnits::LengthUnit>(caveProto.lengthunit())
+            : cwUnits::Meters;
+    cave.depthUnit = caveProto.has_depthunit()
+            ? static_cast<cwUnits::LengthUnit>(caveProto.depthunit())
+            : cwUnits::Meters;
+
+    if (caveProto.has_kind()) {
+        cave.kind = cwSurveyNodeKind::fromSavedValue(caveProto.kind());
+    }
+    if (caveProto.has_read_only()) {
+        cave.readOnly = caveProto.read_only();
+    }
+    if (caveProto.has_source_id()) {
+        cave.sourceId = cwProtoUtils::toUuid(caveProto.source_id());
+    }
+    if (caveProto.has_source_path()) {
+        cave.sourcePath = QString::fromStdString(caveProto.source_path());
+    }
+    if (caveProto.has_external_centerline()) {
+        cave.externalCenterline = cwExternalCenterline(
+                    QString::fromStdString(caveProto.external_centerline().entry_file()));
+    }
+
+    cave.fixStations.reserve(caveProto.fixstations_size());
+    for (const auto& protoFix : caveProto.fixstations()) {
+        cave.fixStations.append(cwProtoUtils::fromProtoFixStation(protoFix));
+    }
+    return cave;
 }
 
 Monad::Result<cwTripData> cwSaveLoad::loadTrip(const QString &filename)

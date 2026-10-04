@@ -1803,3 +1803,53 @@ TEST_CASE("moving a trip to another cave keeps its remembered source",
     CHECK(fixture->settings()->breadcrumbPath(ownerId) == source);
     CHECK_FALSE(fixture->settings()->fingerprint(ownerId).isEmpty());
 }
+
+// Trip-level sibling of the cave reopen case in test_cwExternalCenterlineAttachCave.cpp.
+TEST_CASE("trip reload stays offered after the project is saved and reopened",
+          "[Attach][Manager][Reload]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("trip-reload-reopen"));
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString source = QDir(sourceDir.path()).absoluteFilePath(QStringLiteral("blocks.svx"));
+    REQUIRE(QFile::copy(datasetExternalCenterlinePath(QStringLiteral("survex_blocks.svx")),
+                        source));
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+    const QUuid tripId = fixture->trip->id();
+    REQUIRE(managerOf(fixture.get())->canReloadFromSource(fixture->trip));
+
+    QTemporaryDir destinationDir;
+    REQUIRE(destinationDir.isValid());
+    QString destination;
+    SECTION("bundled .cw") {
+        destination = QDir(destinationDir.path()).filePath(QStringLiteral("reopened.cw"));
+    }
+    SECTION(".cwproj directory") {
+        destination = QDir(destinationDir.path()).filePath(QStringLiteral("reopened.cwproj"));
+    }
+
+    REQUIRE(fixture->project->saveAs(destination));
+    fixture->project->waitSaveToFinish();
+    drainPipelines(fixture.get());
+    const QString savedPath = fixture->project->filename();
+    fixture.reset();
+
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(savedPath);
+    freshRoot->project()->waitLoadToFinish();
+    freshRoot->linePlotManager()->waitToFinish();
+    freshRoot->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    REQUIRE(freshRoot->region()->caveCount() == 1);
+    REQUIRE(freshRoot->region()->cave(0)->tripCount() == 1);
+    cwTrip* reopened = freshRoot->region()->cave(0)->trip(0);
+    REQUIRE(reopened->id() == tripId);
+    REQUIRE_FALSE(reopened->externalCenterline().isEmpty());
+    CHECK(freshRoot->externalSourceSettings()->breadcrumbPath(tripId)
+          == QFileInfo(source).absoluteFilePath());
+    REQUIRE(freshRoot->externalCenterlineManager()->canReloadFromSource(reopened));
+}

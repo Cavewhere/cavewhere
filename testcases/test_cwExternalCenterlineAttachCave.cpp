@@ -1224,3 +1224,58 @@ TEST_CASE("A Compass .mak that names its datum is copied byte for byte", "[Attac
           == makBytes);
     CHECK(defaultDatumWarnings(cave).isEmpty());
 }
+
+// The owner's report (2026-10-03): attach, save, quit, reopen, and the
+// attached-file header no longer offers Reload. The fresh cwRootData stands
+// in for the next launch; the per-machine store is the same one.
+TEST_CASE("cave reload stays offered after the project is saved and reopened",
+          "[Attach][Cave][Reload]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-reload-reopen"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString source = QDir(sourceDir.path()).absoluteFilePath(QStringLiteral("blocks.svx"));
+    REQUIRE(QFile::copy(blocksFixture(), source));
+
+    attachCaveThroughManager(fixture.get(), cave, source);
+    drainPipelines(fixture.get());
+    const QUuid caveId = cave->id();
+    REQUIRE(managerOf(fixture.get())->canReloadFromSource(cave));
+
+    QTemporaryDir destinationDir;
+    REQUIRE(destinationDir.isValid());
+    QString destination;
+    SECTION("bundled .cw") {
+        destination = QDir(destinationDir.path()).filePath(QStringLiteral("reopened.cw"));
+    }
+    SECTION(".cwproj directory") {
+        destination = QDir(destinationDir.path()).filePath(QStringLiteral("reopened.cwproj"));
+    }
+
+    REQUIRE(fixture->project->saveAs(destination));
+    fixture->project->waitSaveToFinish();
+    drainPipelines(fixture.get());
+    const QString savedPath = fixture->project->filename();
+    fixture.reset();
+
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(savedPath);
+    freshRoot->project()->waitLoadToFinish();
+    freshRoot->linePlotManager()->waitToFinish();
+    freshRoot->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    cwCave* reopened = nullptr;
+    for (cwCave* candidate : freshRoot->region()->caves()) {
+        if (candidate->id() == caveId) {
+            reopened = candidate;
+        }
+    }
+    REQUIRE(reopened != nullptr);
+    REQUIRE_FALSE(reopened->externalCenterline().isEmpty());
+    CHECK(freshRoot->externalSourceSettings()->breadcrumbPath(caveId)
+          == QFileInfo(source).absoluteFilePath());
+    REQUIRE(freshRoot->externalCenterlineManager()->canReloadFromSource(reopened));
+}

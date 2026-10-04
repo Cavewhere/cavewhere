@@ -426,6 +426,7 @@ public:
     static Monad::Result<cwNoteLiDARData> loadNoteLiDAR(const QByteArray& content, const QString& filename, const QDir &projectDir);
     static Monad::Result<cwSketchData> loadSketch(const QString& filename, const QDir& projectDir);
     static Monad::Result<cwSketchData> loadSketch(const QByteArray& content, const QString& filename, const QDir& projectDir);
+    static cwCaveData caveDataFromProtoCave(const CavewhereProto::Cave& proto);
     static cwTripData tripDataFromProtoTrip(const CavewhereProto::Trip& proto);
     static cwNoteData noteDataFromProtoNote(const CavewhereProto::Note& protoNote, const QString& filename);
     static cwNoteLiDARData noteLiDARDataFromProtoNoteLiDAR(const CavewhereProto::NoteLiDAR& protoNote, const QString& filename);
