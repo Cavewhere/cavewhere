@@ -422,6 +422,7 @@ StandardPage {
         spacing: Theme.actionBarSpacing
 
         AddAndSearchBar {
+            id: addCaveBarId
             objectName: "addCave"
             addButtonText: "Add Cave"
             menu: addCaveMenuId
@@ -457,6 +458,20 @@ StandardPage {
 
         Layout.fillWidth: true
         Layout.fillHeight: true
+    }
+
+    // Sits outside both layouts and positions itself, so one hint serves
+    // wide and narrow. The arrow on Add Cave is what the text's "here" means.
+    HelpQuoteBox {
+        id: noCavesHintId
+        objectName: "noCavesHint"
+
+        z: 10
+        triangleOffset: 0.0
+        text: qsTr("No cave yet — add one here, or use the menu beside this button to add one from a survey file.")
+        visible: RootData.region.caveCount === 0
+        pointAtObject: addCaveBarId
+        pointAtObjectPosition: Qt.point(addCaveBarId.width / 2.0, addCaveBarId.height)
     }
 
     QC.Menu {

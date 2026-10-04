@@ -656,6 +656,57 @@ MainWindowTest {
             menu.close()
         }
 
+        // An empty region points at Add Cave; the first cave retires the
+        // hint and deleting the last one brings it back.
+        function test_noCavesHintShowsOnlyWhileRegionIsEmpty() {
+            let page = gotoDataMainPage()
+
+            const hint = findChild(page, "noCavesHint")
+            verify(hint !== null, "the empty state must exist")
+            tryVerify(() => hint.visible, 5000, "an empty region explains itself")
+            compare(findChild(hint, "helpText").text,
+                    "No cave yet — add one here, or use the menu beside this button to add one from a survey file.")
+
+            const addBar = findChild(page, "addCave")
+            verify(addBar !== null, "the Add Cave bar must exist")
+
+            // triangleOffset is 0, so the arrow tip is the box's origin.
+            tryVerify(() => {
+                          const tip = hint.mapToItem(page, 0, 0)
+                          const anchor = addBar.mapToItem(page, addBar.width / 2.0, addBar.height)
+                          return Math.abs(tip.x - anchor.x) < 2
+                                  && Math.abs(tip.y - anchor.y) < 2
+                      }, 5000, "the arrow lands on Add Cave")
+
+            const addButton = findChild(addBar, "addButton")
+            verify(addButton !== null, "the Add Cave button must exist")
+            mouseClick(addButton)
+            tryCompare(RootData.region, "caveCount", 1, 5000)
+
+            // Add Cave opens the new cave's page; the hint is read on the
+            // Data page so its visibility reflects the cave count alone.
+            page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+            tryVerify(() => !hint.visible, 5000, "the first cave retires the hint")
+
+            focusTree(tree)
+            keyClick(Qt.Key_F10, Qt.ShiftModifier)
+            const menu = rowContextMenu(page, "caveDelegate0")
+            mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
+
+            let askBox = null
+            tryVerify(() => {
+                          askBox = findChild(page, "removeChallange")
+                          return askBox !== null && askBox.visible
+                      }, 5000, "Delete… must ask first")
+            mouseClick(findChild(askBox, "removeButton"))
+
+            tryCompare(tree, "rows", 0, 5000)
+            tryVerify(() => hint.visible, 5000,
+                      "deleting the last cave brings the hint back")
+        }
+
         // --- C2b.5: the header is the tree's sort control ---
 
         function headerCell(page, column) {
