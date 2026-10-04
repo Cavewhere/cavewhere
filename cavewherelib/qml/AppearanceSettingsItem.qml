@@ -6,6 +6,42 @@ import cavewherelib
 ColumnLayout {
     spacing: 20
 
+    // ── Color Scheme ────────────────────────────────────────────────────────
+
+    QC.GroupBox {
+        title: "Color scheme"
+
+        QC.ButtonGroup { id: colorSchemeGroup }
+
+        RowLayout {
+            spacing: 12
+
+            QC.RadioButton {
+                objectName: "systemSchemeRadioButton"
+                text: "System"
+                checked: RootData.settings.appearanceSettings.colorScheme === AppearanceSettings.System
+                QC.ButtonGroup.group: colorSchemeGroup
+                onClicked: RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.System
+            }
+
+            QC.RadioButton {
+                objectName: "lightSchemeRadioButton"
+                text: "Light"
+                checked: RootData.settings.appearanceSettings.colorScheme === AppearanceSettings.Light
+                QC.ButtonGroup.group: colorSchemeGroup
+                onClicked: RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Light
+            }
+
+            QC.RadioButton {
+                objectName: "darkSchemeRadioButton"
+                text: "Dark"
+                checked: RootData.settings.appearanceSettings.colorScheme === AppearanceSettings.Dark
+                QC.ButtonGroup.group: colorSchemeGroup
+                onClicked: RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Dark
+            }
+        }
+    }
+
     // ── Font Family ─────────────────────────────────────────────────────────
 
     QC.GroupBox {
@@ -24,7 +60,7 @@ ColumnLayout {
 
                     implicitWidth: 110
                     implicitHeight: delegateFontLayout.implicitHeight + 24
-                    radius: 6
+                    radius: Theme.controlRadius
                     color: Theme.surface
                     border.width: familyBtn.checked ? 2 : 1
                     border.color: familyBtn.checked ? Theme.accent : Theme.border
@@ -68,7 +104,7 @@ ColumnLayout {
             QQ.Rectangle {
                 implicitWidth: largerCard.implicitWidth
                 implicitHeight: largerCard.implicitHeight
-                radius: 6
+                radius: Theme.controlRadius
                 color: Theme.surface
                 border.width: 1
                 border.color: Theme.border
@@ -103,7 +139,7 @@ ColumnLayout {
 
                 implicitWidth: largerCard.implicitWidth
                 implicitHeight: largerCard.implicitHeight
-                radius: 6
+                radius: Theme.controlRadius
                 color: Theme.surface
                 border.width: active ? 2 : 1
                 border.color: active ? Theme.accent : Theme.border
@@ -135,7 +171,7 @@ ColumnLayout {
                 id: largerCard
                 implicitWidth: sizeLayout2.implicitWidth + 24
                 implicitHeight: sizeLayout2.implicitHeight + 24
-                radius: 6
+                radius: Theme.controlRadius
                 color: Theme.surface
                 border.width: 1
                 border.color: Theme.border

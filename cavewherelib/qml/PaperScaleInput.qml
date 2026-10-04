@@ -122,7 +122,7 @@ QQ.Item {
 
         QC.Label {
             id: errorText
-            color: Theme.danger
+            color: Theme.errorText
             visible: false
             text: "Weird scaling units"
             font.italic: true

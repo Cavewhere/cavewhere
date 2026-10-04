@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Controls as QC
 import cavewherelib
 
 pragma Singleton
@@ -7,30 +6,33 @@ pragma Singleton
 QtObject {
     id: theme
 
-    // Track the OS/application color scheme
-    readonly property bool dark: Qt.application.styleHints.colorScheme === Qt.Dark
+    // Track the color scheme: the Appearance setting first, the OS second
+    readonly property bool dark: RootData.settings.appearanceSettings.dark
 
-    // Base palette hook using the active system palette
+    // Shows the system palette on the Colors page. Tokens below are fixed
+    // values; none of them reads this object.
     readonly property SystemPalette palette: SystemPalette { colorGroup: SystemPalette.Active }
 
     // Core surfaces/text
-    readonly property color background: palette.window
-    readonly property color surface: dark ? "#1f232a" : "#ffffff"
-    readonly property color surfaceMuted: dark ? "#292d35" : "#f6f6f6"
-    readonly property color surfaceRaised: dark ? "#242933" : "#f0f0f0"
+    readonly property color background: dark ? "#313131" : "#F2F2F2"
+    readonly property color surface: dark ? "#3A3A3A" : "#FFFFFF"
+    readonly property color surfaceMuted: dark ? "#2B2B2B" : "#E9E9E9"
+    readonly property color surfaceRaised: dark ? "#454545" : "#FFFFFF"
     // readonly property color sidebar: dark ? "#141414" : "#f4f4f4"
-    readonly property color text: palette.text
-    readonly property color textSecondary: dark ? "#cdd2db" : "#33363a"
-    readonly property color textSubtle: dark ? "#9fa6b1" : "#616469"
-    readonly property color textInverse: dark ? "#111318" : "#f5f5f5"
-    readonly property color textLink: dark ? "#85c1f4" : "#1d4d77"
-    // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell),
-    // legible on the page background in both themes — danger is a fill, not text.
+    readonly property color text: dark ? "#FFFFFF" : "#1E1E1E"
+    readonly property color textSecondary: dark ? "#C9C9C9" : "#555555"
+    readonly property color textSubtle: dark ? "#A8A8A8" : "#6A6A6A"
+    readonly property color textInverse: dark ? "#232323" : "#FFFFFF"
+    readonly property color textLink: dark ? "#38BDD9" : "#086A86"
+    readonly property color textDisabled: Qt.rgba(text.r, text.g, text.b, disabledOpacity)
+    // Red foreground for an invalid value (e.g. an out-of-domain coordinate cell)
+    // or a destructive button's label, legible on the page and on a button face
+    // in both themes — danger is a fill, not text.
     readonly property color errorText: dark ? "#f47067" : "#cf222e"
 
     // Accents & states
-    readonly property color accent: palette.accent
-    readonly property color accentMuted: "#8AC6FF"
+    readonly property color accent: dark ? "#38BDD9" : "#1493B3"
+    readonly property color accentMuted: dark ? "#2A8FA6" : "#8FD3E4"
     readonly property color success: dark ? "#76e596" : "#4caf50"
     readonly property color warning: dark ? "#6b643e" : "#FF9C14"
     // A warning-toned card: a tinted ground, its outline, and text that reads on
@@ -39,10 +41,10 @@ QtObject {
     readonly property color warningBorder: dark ? "#8a8250" : "#e0a64b"
     readonly property color warningText: dark ? "#f0d9a0" : "#7a4b00"
     readonly property color danger: dark ? "#6f312e" : "#FF6736"
-    readonly property color info: dark ? "#1f3f61" : "#85c1f4"
-    readonly property color highlight: dark ? "#314f78" : "#a5cdff"
-    readonly property color hover: Qt.lighter(highlight, dark ? 1.4 : 1.15)
-    readonly property color icon: palette.buttonText
+    readonly property color info: dark ? "#12405F" : "#D1F5FA"
+    readonly property color highlight: dark ? "#1E5261" : "#C5E6EF"
+    readonly property color hover: dark ? "#424242" : "#E4E4E4"
+    readonly property color icon: text
     readonly property color tag: dark ? "#656565" : border
 
     // Splays: wall shots that hang off a station instead of joining the
@@ -66,10 +68,17 @@ QtObject {
     readonly property int splayEntryGlyphThickness: 2
     readonly property real splayEntryGlyphSpan: 0.45
 
+    // The arrow in the station column that points from the selected shot's
+    // from station to its to station. It shrinks below this size when large
+    // text leaves less room between the two names, keeping this clearance from
+    // each name's text.
+    readonly property int shotArrowSize: 16
+    readonly property int shotArrowClearance: 2
+
     // Lines and outlines
-    readonly property color border: dark ? "#4a4f58" : "#d3d3d3"
-    readonly property color borderSubtle: dark ? "#353a42" : "#e4e4e4"
-    readonly property color divider: dark ? "#2c3138" : "#d8d8d8"
+    readonly property color border: dark ? "#4C4C4C" : "#D2D2D2"
+    readonly property color borderSubtle: dark ? "#424242" : "#E0E0E0"
+    readonly property color divider: dark ? "#454545" : "#D8D8D8"
 
     // Sketch palette. Cave maps are paper-first; dark mode uses tuned
     // light grays rather than a literal color inversion.
@@ -132,9 +141,20 @@ QtObject {
     // Sidebar dimensions per tier
     readonly property int sidebarWidthFull: 80
     readonly property int sidebarWidthCompact: 50
+    // A page button other than the current one, until the pointer reaches it
+    readonly property real sidebarIdleOpacity: 0.5
+    // Room above and below the link bar, so its outline clears the
+    // window edge and the divider under the bar
+    readonly property int linkBarVerticalMargin: 4
+    // Gap between neighbors in the link bar row
+    readonly property int linkBarButtonSpacing: 6
+    // Page buttons: the icon sits tight to its label, and the pair keeps clear
+    // of the selected and hovered outline on every side
+    readonly property int sidebarButtonContentSpacing: 1
+    readonly property int sidebarButtonPadding: 7
 
     // Per-page tool rail: icon-only buttons, sized so two fit across the wide
-    // sidebar, grouped inside a card that lifts them off the dark gradient.
+    // sidebar, grouped inside a card that lifts them off the sidebar.
     readonly property int toolRailButtonSize: 30
     readonly property int toolRailSpacing: 4
     readonly property int toolRailPanelInset: 3
@@ -156,7 +176,7 @@ QtObject {
     // Task progress ring: the one busy mark, shared by the sidebar footer and
     // the phone status chip. The track is the part not yet done, so it has to
     // read as a groove behind the arc rather than as a second arc.
-    readonly property color progressRingTrack: dark ? "#3f4652" : "#c9ced6"
+    readonly property color progressRingTrack: track
     // Smaller than fontSizeCaption: the count sits inside the ring, whose inner
     // opening is only about two thirds of the mark.
     readonly property int progressRingCountFontSize: Math.round(9 * fontScale)
@@ -269,17 +289,201 @@ QtObject {
 
     // Utility
     readonly property color transparent: "#00000000"
-    readonly property color shadow: dark ? "#33000000" : "#22000000"
-    readonly property color focusRing: dark ? "#b0d3ff" : "#5a9bff"
+    readonly property color shadow: dark ? "#6B000000" : "#29000000"
+    readonly property color focusRing: dark ? "#38BDD9" : "#0A7391"
+
+    // ---- BEGIN style tokens (direction D, Karst Soft) ----
+    // Surfaces
+    readonly property color chrome: dark ? "#232323" : "#DADCDE"
+    readonly property color chromeText: dark ? "#FFFFFF" : "#1E1E1E"
+    readonly property color rowAlternate: dark ? "#3A3A3A" : "#E7E7E7"
+    // The shot or station that holds the keyboard in the survey editor: a
+    // faint band, fainter than highlight, which marks the focused cell inside it.
+    readonly property color rowCurrent: dark ? "#2B4048" : "#E2F2F6"
+
+    // Buttons
+    readonly property color buttonSurface: dark ? "#454545" : "#FFFFFF"
+    readonly property color buttonBorder: dark ? "#606060" : "#C2C2C2"
+    readonly property color buttonHover: dark ? "#505050" : "#F0F0F0"
+    readonly property color buttonHoverBorder: dark ? "#767676" : "#A8A8A8"
+    readonly property color buttonPressed: dark ? "#2A2A2A" : "#DEDEDE"
+    readonly property color buttonPressedBorder: dark ? "#606060" : "#A8A8A8"
+    readonly property color buttonChecked: dark ? "#626262" : "#D6D6D6"
+    readonly property color buttonCheckedBorder: dark ? "#A6A6A6" : "#858585"
+    readonly property color buttonPrimary: dark ? "#FFFFFF" : "#2B2B2B"
+    readonly property color buttonPrimaryHover: dark ? "#DADADA" : "#4A4A4A"
+    readonly property color buttonPrimaryText: dark ? "#232323" : "#FFFFFF"
+    readonly property color buttonShadow: dark ? "#4D000000" : "#14000000"
+
+    // Fields: TextField, TextArea, ComboBox, SpinBox
+    readonly property color fieldSurface: dark ? "#262626" : "#FFFFFF"
+    readonly property color fieldBorder: dark ? "#606060" : "#C2C2C2"
+    readonly property color fieldPlaceholder: dark ? "#9A9A9A" : "#8A8A8A"
+    readonly property color hoverOverlay: dark ? "#14FFFFFF" : "#12000000"
+
+    // Indicators: CheckBox, RadioButton, Switch, Slider
+    readonly property color controlBorder: dark ? "#939393" : "#858585"
+    readonly property color checkFill: dark ? "#FFFFFF" : "#2B2B2B"
+    readonly property color checkMark: dark ? "#232323" : "#FFFFFF"
+    readonly property color track: dark ? "#565656" : "#C4C4C4"
+    readonly property color scrollHandle: dark ? "#9E9E9E" : "#8C8C8C"
+
+    // Popups: Menu, ComboBox list, Dialog, ToolTip
+    readonly property color popupSurface: dark ? "#3A3A3A" : "#FFFFFF"
+    readonly property color popupBorder: dark ? "#606060" : "#C2C2C2"
+    readonly property color popupSelected: dark ? "#565656" : "#E4E4E4"
+    readonly property color popupShadow: dark ? "#6B000000" : "#29000000"
+    // The palette's shadow role, which the fallback style draws its edges with.
+    readonly property color paletteShadow: "#000000"
+    // A dark panel in both schemes. In Dark its fill sits close to the page's
+    // surfaces, so the border sets it apart.
+    readonly property color toolTipSurface: dark ? "#454545" : "#2B2B2B"
+    readonly property color toolTipBorder: dark ? "#606060" : "#2B2B2B"
+    readonly property color toolTipText: "#FFFFFF"
+    readonly property color overlayScrim: dark ? "#66000000" : "#40000000" // behind a modal popup
+
+    // Tabs
+    readonly property color tabStrip: dark ? "#232323" : "#DADCDE"
+    readonly property color tabText: dark ? "#A8A8A8" : "#6A6A6A"
+
+    // Progress sweep: ProgressBar and BusyIndicator
+    readonly property color progressStart: dark ? "#70EBC9" : "#03A899"
+    readonly property color progressMid: dark ? "#2EE8E3" : "#2EC4D6"
+    readonly property color progressEnd: dark ? "#38BDD9" : "#4096CF"
+    readonly property color progressLead: dark ? "#FFFFFF" : "#0A3659"
+
+    // Link bar
+    readonly property color linkBarChip: dark ? "#454545" : "#E4E4E4"
+
+    // Flat section box: SectionGroupBox
+    readonly property color sectionFill: dark ? "#424242" : "#E0E0E0"
+
+    // Metrics, in logical pixels
+    readonly property int controlRadius: 6
+    readonly property int panelRadius: 8
+    readonly property int indicatorRadius: 4
+    readonly property int controlHeight: 28
+    readonly property int controlVerticalPadding: 4
+    readonly property int buttonHorizontalPadding: 14
+    // Tool and round buttons on every side; tab buttons vertically.
+    readonly property int compactButtonPadding: 6
+    readonly property int fieldHorizontalPadding: 10
+    readonly property int textAreaVerticalPadding: 7
+    // Implicit widths: a text field, and the narrower combo and spin boxes.
+    readonly property int fieldWidth: 160
+    readonly property int compactFieldWidth: 120
+    // The chevron column at the right of a spin box, and its glyphs.
+    readonly property int spinIndicatorWidth: 18
+    readonly property int spinChevronSize: 8
+    // The chevron on a combo box and beside a submenu.
+    readonly property int chevronSize: 12
+    // A row in a list or menu: its implicit height and highlight corners.
+    readonly property int listRowHeight: 24
+    readonly property int rowRadius: 4
+    readonly property int controlSpacing: 6
+    readonly property int indicatorSize: 16
+    // The check and dash glyph inside a check box.
+    readonly property int indicatorGlyphSize: 14
+    readonly property int radioDotSize: 6
+    readonly property int switchWidth: 34
+    readonly property int switchHeight: 18
+    // Gap between the switch's pill edge and its thumb.
+    readonly property int switchThumbInset: 2
+    readonly property int sliderHandleSize: 16
+    readonly property int sliderTrackHeight: 2
+    // A slider's implicit size: length along the groove, thickness across it.
+    readonly property int sliderLength: 150
+    readonly property int sliderThickness: 18
+    // The switch thumb's slide.
+    readonly property int toggleAnimationDuration: 150
+    readonly property int progressBarHeight: 5
+    readonly property int progressBarWidth: 150
+    // Where the mid and end colors sit along the progress sweep, 0 to 1.
+    readonly property real progressMidPosition: 0.62
+    readonly property real progressEndPosition: 0.86
+    // An indeterminate bar: its share of the track and one pass across it.
+    readonly property real progressIndeterminateFraction: 0.35
+    readonly property int progressSlideDuration: 1600
+    // The busy indicator: its implicit size, one turn of the ring, and its
+    // fade in and out.
+    readonly property int busyIndicatorSize: 44
+    readonly property int busySpinDuration: 1100
+    readonly property int busyFadeDuration: 150
+    // The droplet opening and the expanding close play at this size and above.
+    readonly property int busyDropletMinimumSize: 32
+    // Opening: a drop falls to the center, two ripples spread from where it
+    // lands, and the ring grows in from a smaller scale.
+    readonly property int busyDropSize: 4
+    readonly property int busyDropFallDuration: 450
+    readonly property real busyRippleBorderWidth: 1.5
+    readonly property real busyRippleStartScale: 0.1
+    readonly property real busyRippleStartOpacity: 0.9
+    readonly property int busyRippleDuration: 700
+    readonly property int busyRippleStagger: 150
+    readonly property real busyRingEnterScale: 0.6
+    readonly property int busyRingEnterDuration: 350
+    // Closing: the ring expands as it fades out.
+    readonly property real busyRingExitScale: 1.45
+    readonly property int busyRingExitDuration: 500
+    // Group boxes and frames: the padding around their content.
+    readonly property int containerPadding: 9
+    readonly property int groupBoxHorizontalPadding: 11
+    // Between a group box title and the content below it.
+    readonly property int groupBoxTitleSpacing: 5
+    // A split view handle, and the wider strip that grabs it.
+    readonly property int splitHandleThickness: 5
+    readonly property int splitHandleGrabThickness: 11
+    readonly property int scrollBarThickness: 8
+    readonly property int scrollBarPadding: 2
+    readonly property int scrollBarMinimumLength: 24
+    readonly property int scrollIndicatorThickness: 4
+    readonly property real scrollHandleOpacity: 0.55
+    readonly property real scrollHandleHoverOpacity: 0.8
+    // A scroll indicator stays visible this long after scrolling stops, then fades.
+    readonly property int scrollFadeDelay: 450
+    readonly property int scrollFadeDuration: 200
+    readonly property int focusRingWidth: 2
+    readonly property int focusRingOffset: 2
+    readonly property int menuItemHorizontalPadding: 12
+    readonly property int menuItemVerticalPadding: 3
+    readonly property int menuIndicatorColumn: 14
+    // A menu's side padding keeps its rows inside the surface's border.
+    readonly property int menuHorizontalPadding: 1
+    readonly property int menuMinimumWidth: 100
+    // How far a submenu slides back over the menu that opened it.
+    readonly property int menuOverlap: 2
+    readonly property int menuBarHeight: 24
+    readonly property int menuBarItemHorizontalPadding: 10
+    readonly property int popupPadding: 3
+    // Space between a combo box and the list it opens.
+    readonly property int popupGap: 2
+    // Around the content of a plain popup, a dialog, and its button row.
+    readonly property int dialogPadding: 12
+    readonly property int dialogButtonSpacing: 8
+    readonly property int toolTipVerticalPadding: 5
+    readonly property int toolTipHorizontalPadding: 9
+    // Closest a tooltip comes to the window edge, and its gap above its parent.
+    readonly property int toolTipMargin: 6
+    readonly property int toolTipGap: 4
+    // A drawer's slide, in drawer lengths per second.
+    readonly property real drawerSlideVelocity: 5
+    readonly property int popupShadowBlur: dark ? 14 : 8
+    readonly property int popupShadowOffset: dark ? 4 : 2
+    // Room around a popup's surface for its shadow. Popups set all four
+    // insets to minus this value; StylePopupPanel draws inside it.
+    readonly property int popupShadowMargin: 18
+    readonly property real disabledOpacity: 0.4
+    readonly property real uncheckedToggleOpacity: 0.7
+    // ---- END style tokens ----
 
     // Legacy values mapped from the previous Theme.js
-    readonly property color floatingWidgetColor: dark ? "#2b3038" : "#DDDDDD"
+    readonly property color floatingWidgetColor: dark ? "#3A3A3A" : "#FFFFFF"
     readonly property color floatingWidgetRaisedColor: dark
         ? Qt.lighter(floatingWidgetColor, 1.3)
         : Qt.darker(floatingWidgetColor, 1.12)
-    readonly property real floatingWidgetRadius: 3
+    readonly property real floatingWidgetRadius: controlRadius
     // Corner radius of an in-page banner, such as a node's warnings.
-    readonly property int bannerRadius: 5
+    readonly property int bannerRadius: controlRadius
     // Border of the attention pulse's frame.
     readonly property int attentionBorderWidth: 2
     readonly property color errorBackground: danger
@@ -291,23 +495,11 @@ QtObject {
         readonly property color gridLineColor: dark ? "#585a5e" : "#000000"
     }
 
-    // Sidebar-specific palette (original colors retained)
+    // Sidebar: a flat panel in the page color with a hairline right edge
     readonly property QtObject sidebar: QtObject {
-        readonly property color background: palette.window
-        readonly property color gradientTop: "#1b2331"
-        readonly property color gradientBottom: dark ? theme.surface : "#616469"
-        readonly property color panel: palette.window
-        readonly property color divider: theme.divider //"#141414"
-        readonly property color hoverStart: "#00d1d1d1"
-        readonly property color hoverMid: "#96b5b5b5"
-        readonly property color hoverMidHover: "#32b5b5b5"
-        readonly property color toggledStart: "#ffffff"
-        readonly property color toggledMid: "#000000"
-        readonly property color toggledEnd: "#c8c0c0c0"
-        readonly property color text: "#ffffff"
-        readonly property color textActive: "#000000"
-        readonly property color textStroke: "#aaaaaa"
-        readonly property color borderActive: "#313131"
-        readonly property color borderHover: "#ffffff"
+        readonly property color background: theme.background
+        readonly property color panel: theme.surface
+        readonly property color divider: theme.border
+        readonly property color text: theme.text
     }
 }

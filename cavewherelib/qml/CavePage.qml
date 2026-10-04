@@ -451,7 +451,7 @@ StandardPage {
             spacing: Theme.columnGap
 
             ColumnLayout {
-                Layout.minimumWidth: statsColumnId.implicitWidth + Theme.statsPadding * 2
+                Layout.minimumWidth: statsBoxId.implicitWidth
                 Layout.maximumWidth: Theme.infoColumnMaxWidth
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.flowSpacing
@@ -469,17 +469,14 @@ StandardPage {
                     Layout.fillWidth: true
                 }
 
-                QQ.Rectangle {
+                SectionGroupBox {
+                    id: statsBoxId
                     Layout.fillWidth: true
-                    implicitHeight: statsColumnId.implicitHeight + Theme.statsPadding * 2
-                    color: Theme.borderSubtle
 
                     ColumnLayout {
                         id: statsColumnId
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.margins: Theme.statsPadding
                         spacing: Theme.tightSpacing
 
                         LayoutItemProxy { target: lengthStat }

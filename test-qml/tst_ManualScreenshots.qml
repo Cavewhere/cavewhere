@@ -24,6 +24,12 @@ import QQuickGit
 MainWindowTest {
     id: rootId
 
+    // Streaming counts for the last frame that streamed, read by
+    // waitForTexturesResident below.
+    RenderingStatsModel {
+        id: renderStatsId
+    }
+
     HighlightOverlay {
         id: highlightOverlayId
         anchors.fill: parent
@@ -51,10 +57,9 @@ MainWindowTest {
     // The Rectangle is what keeps the grab clean. WelcomePage draws no background
     // of its own — in the app it sits on the window's — and grabItemToFile crops
     // out of a whole-window grab, so without an opaque one beneath it MainContent
-    // shows through inside the crop. It also carries the palette that
-    // CavewhereMainWindow.qml sets and MainWindowTest.qml does not, which the name
-    // and email placeholders are drawn with; Fusion's default placeholder color is
-    // not the one users see, and those two fields are the point of the shot.
+    // shows through inside the crop. The name and email placeholders are the
+    // point of the shot; CaveWhereStyle draws them with Theme.fieldPlaceholder,
+    // so they match the app.
     QQ.Loader {
         id: welcomePageLoaderId
         anchors.centerIn: parent
@@ -64,7 +69,6 @@ MainWindowTest {
         z: 999
         sourceComponent: QQ.Rectangle {
             color: Theme.background
-            palette.placeholderText: Theme.textSubtle
 
             WelcomePage {
                 objectName: "welcomePage"
@@ -166,6 +170,7 @@ MainWindowTest {
             // grab. (The render background is left at the app's own light gradient —
             // no override — so screenshots match the real appearance.)
             RootData.futureManagerModel.waitForFinished();
+            waitForTexturesResident(regionViewer);
             return regionViewer;
         }
 
@@ -270,6 +275,35 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished();
             wait(150);
             highlightOverlayId.refresh();
+        }
+
+        // Scrap carpets and LiDAR scans draw from streamed textures that arrive
+        // over several frames after their geometry: a grab taken as soon as the
+        // jobs drain shows their white base level. The streaming counts are
+        // process-wide and hold whichever view published last, so force a frame
+        // of this viewer first and trust only counts published after it. A view
+        // with nothing streamed publishes no counts at all; after a bounded
+        // chance to publish, such a view has nothing to wait for. The renderer
+        // keeps asking for frames while loads remain; the trailing settle()
+        // lets the last upload reach the screen.
+        function waitForTexturesResident(viewer) {
+            renderStatsId.refresh();
+            const staleRevision = renderStatsId.streamingRevision;
+            for (let i = 0; i < 30 && renderStatsId.streamingRevision === staleRevision; ++i) {
+                viewer.update();
+                wait(50);
+                renderStatsId.refresh();
+            }
+            if (renderStatsId.streamingRevision === staleRevision) {
+                settle();
+                return;
+            }
+            tryVerify(() => {
+                renderStatsId.refresh();
+                return renderStatsId.loadsInFlight === 0
+                    && renderStatsId.itemsBelowDesired === 0;
+            }, 30000, "every streamed texture holds the level the camera asked for");
+            settle();
         }
 
         // Wait up to ~2s for a live QRhi on the given item's window; on a headless
@@ -484,6 +518,7 @@ MainWindowTest {
                 if (candidate.zoomScale > fit.zoomScale) { fit = candidate; }
             }
             tt.setViewState(fit); // sets center + zoom + pitch once
+            waitForTexturesResident(regionViewer); // the new zoom asks for new levels
 
             let frameCount = 48; // 7.5 deg/frame — smooth, seamless 360 loop
             let firstPath = "";
@@ -516,7 +551,7 @@ MainWindowTest {
             // the grid convergence reads stronger.
             posterState.distance = posterState.distance * 0.62;
             tt.setViewState(posterState);
-            wait(120); // perspective settle + present
+            waitForTexturesResident(regionViewer); // the closer eye asks for finer levels
             let posterPath = WindowGrabber.grabItemToFile(
                 regionViewer, "scraps-carpet-orbit-poster", 0);
             verify(posterPath.length > 0, "wrote the perspective poster");
@@ -584,20 +619,15 @@ MainWindowTest {
             // Move the toggle's handle to the Perspective end too, so the shot is
             // self-consistent (a handle stuck at Orthognal while the Field of View
             // row shows would read as a bug). ToggleSlider.sliderPos is read-only —
-            // computed from the internal button's x — so nudge the button image,
-            // which also drives progress back through the normal binding.
+            // computed from the internal thumb's x — so nudge the thumb, which
+            // also drives progress back through the normal binding.
             let slider = findByName(panel, "projectionSlider");
             verify(slider, "found the projection slider");
             let toggle = findByName(slider, "slider");
             verify(toggle, "found the toggle inside the projection slider");
-            let kids = toggle.children;
-            for (let i = 0; kids && i < kids.length; ++i) {
-                if (kids[i].source !== undefined
-                        && String(kids[i].source).indexOf("buttonSlider") !== -1) {
-                    kids[i].x = toggle.sliderRange;
-                    break;
-                }
-            }
+            let thumb = findByName(toggle, "toggleSliderThumb");
+            verify(thumb, "found the toggle's thumb");
+            thumb.x = toggle.sliderRange;
             tryVerify(function() { return toggle.sliderPos >= 1.0; }, 2000,
                       "the projection toggle reached the Perspective end");
 
@@ -1556,6 +1586,7 @@ MainWindowTest {
             tryVerify(() => viewer.scene.gltf.status === RenderGLTF.Ready, 20000,
                       "the glTF scan finished loading");
             RootData.futureManagerModel.waitForFinished();
+            waitForTexturesResident(viewer);
 
             // Wait for the editor rather than grabbing as soon as the glTF is
             // Ready: on Ready the viewer captures a gallery thumbnail of itself,
@@ -2310,10 +2341,10 @@ MainWindowTest {
         // Backs docs/manual/import-export/import-surveys.md.
         //
         // The menu is grabbed with Popup.Item for the reason test_excludeDistance
-        // is: Fusion gives a QC.Menu no popupType, so it defaults to Popup.Window
-        // — a separate top-level window grabWindow(mainWindow) cannot see. Set from
-        // the test, never in the app's QML. importMenu is a flat list (no
-        // submenus), so a single grab shows every format.
+        // is: CaveWhereStyle gives a QC.Menu no popupType, so it defaults to
+        // Popup.Window — a separate top-level window grabWindow(mainWindow) cannot
+        // see. Set from the test, never in the app's QML. importMenu is a flat
+        // list (no submenus), so a single grab shows every format.
         function test_importMenu() {
             let page = openDataPage("Source/Data", "dataMainPage");
             if (!page) { return; }
@@ -2740,7 +2771,7 @@ MainWindowTest {
         // docs/manual/survey-data/enter-survey-data.md.
         //
         // The menu is forced to popupType Item for the grab. A QC.Menu's type is
-        // the style's choice, and Fusion sets none, so it defaults to
+        // the style's choice, and CaveWhereStyle sets none, so it defaults to
         // Popup.Window — a separate top-level window that grabWindow(mainWindow)
         // cannot see. Popup.Item draws the menu into this window's overlay from
         // the same QML delegates Popup.Window would use, so the menu a reader

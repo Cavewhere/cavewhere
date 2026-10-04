@@ -100,7 +100,7 @@ StandardPage {
             Layout.fillHeight: true
             visible: diffPage.displayState === GitFileDiffPage.DisplayState.Error
             text: filePatch.errorMessage
-            color: Theme.danger
+            color: Theme.errorText
             horizontalAlignment: QC.Label.AlignHCenter
             verticalAlignment: QC.Label.AlignVCenter
             wrapMode: QC.Label.Wrap

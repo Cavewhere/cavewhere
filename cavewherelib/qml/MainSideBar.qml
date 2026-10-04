@@ -103,32 +103,6 @@ QQ.Rectangle {
         }
     }
 
-    QQ.Rectangle {
-        id: sideBarBackground
-        border.width: 0
-       // border.color: "#000000"
-        height: parent.width
-        gradient: QQ.Gradient {
-            QQ.GradientStop {
-                position: 1
-                color: Theme.sidebar.gradientBottom
-            }
-
-            QQ.GradientStop {
-                position: 0
-                color: Theme.sidebar.gradientTop
-            }
-        }
-        width: parent.height
-        x: -parent.height / 2
-        y: parent.height / 2
-        rotation: -90
-        transformOrigin: QQ.Item.Top
-
-    }
-
-
-
     QQ.Column {
         id: buttonBar
         anchors.left: parent.left

@@ -38,7 +38,7 @@ QQ.Rectangle {
 
     implicitWidth: columnWidth
     implicitHeight: textId.implicitHeight + (cellPadding * 2)
-    color: Theme.surfaceMuted
+    color: Theme.chrome
     border.color: Theme.borderSubtle
 
     QQ.Item {

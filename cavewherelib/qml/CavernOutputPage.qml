@@ -34,7 +34,7 @@ StandardPage {
                 // instead of forcing the row wider than the page.
                 width: Math.min(implicitWidth, parent.width)
                 font.pixelSize: Theme.fontSizeMedium
-                color: root.hasError ? Theme.danger : Theme.text
+                color: root.hasError ? Theme.errorText : Theme.text
                 wrapMode: QC.Label.WordWrap
                 text: {
                     if (root.hasError) {

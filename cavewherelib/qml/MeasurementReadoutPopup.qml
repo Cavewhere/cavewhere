@@ -135,13 +135,6 @@ QC.Popup {
                                 : QC.Popup.NoAutoClose
     modal: false
 
-    background: QQ.Rectangle {
-        color: Theme.surfaceRaised
-        border.color: Theme.border
-        border.width: 1
-        radius: Theme.floatingWidgetRadius
-    }
-
     // The detailed azimuth reference (PROJ grid convergence + IGRF) only resolves
     // while this panel is expanded and on screen, so the per-hover live preview
     // and the collapsed distance chip stay cheap.

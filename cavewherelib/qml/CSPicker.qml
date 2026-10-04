@@ -165,10 +165,9 @@ QQ.Item {
             objectName: "csUtmZone"
             visible: rootId.showsUtm
             width: Theme.csZoneFieldWidth
-            // The native macOS style sizes a SpinBox shorter than a ComboBox (24
-            // vs 32); QQ.Flow top-aligns a row, so the shorter box would ride
-            // high. Match the mode combo's height to center all three. A no-op in
-            // Fusion/Basic, where the two controls are already the same height.
+            // CaveWhereStyle gives the SpinBox and the ComboBox the same height
+            // (Theme.controlHeight); binding to the mode combo keeps them equal at
+            // every font size, so QQ.Flow's top-aligned row stays level.
             height: modeComboId.height
             from: 1
             to: 60

@@ -144,7 +144,7 @@ GridLayout {
     }
 
     // Customizes the style's own scroll bar through the attached properties;
-    // replacing the bar would drop the placement the style gives it. Fusion
+    // replacing the bar would drop the placement the style gives it. The style
     // overlays its bar on the content, so pad the right edge to keep the text
     // clear of it.
     component DescriptionScrollView: QC.ScrollView {

@@ -129,7 +129,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.errorMessage.length > 0
         wrapMode: Text.WrapAtWordBoundaryOrAnywhere
-        color: Theme.danger
+        color: Theme.errorText
         text: root.errorMessage
     }
 

@@ -560,6 +560,11 @@ bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remai
     return levelsRemain || m_streamer.hasWork();
 }
 
+bool cwRhiTexturedItems::hasStreamingWork() const
+{
+    return m_streamer.hasWork();
+}
+
 void cwRhiTexturedItems::publishStreamingStats() const
 {
     const cwTextureStreamer::Pending pending = m_streamer.pending();

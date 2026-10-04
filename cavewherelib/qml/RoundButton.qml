@@ -10,5 +10,5 @@ QC.RoundButton {
 
     // Match common sizing
     implicitWidth: implicitHeight
-    implicitHeight: 28
+    implicitHeight: Theme.controlHeight
 }

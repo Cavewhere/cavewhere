@@ -300,7 +300,7 @@ QQ.Loader {
                     text: "Delete"
                     QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
                     onClicked: loaderId.handleTemporaryDeleteRequest()
-                    palette.buttonText: Theme.danger
+                    palette.buttonText: Theme.errorText
                 }
                 QC.Button {
                     text: "Cancel"
@@ -325,7 +325,7 @@ QQ.Loader {
                     text: "Discard"
                     QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
                     onClicked: itemId.askToSaveDialog.discarded()
-                    palette.buttonText: Theme.danger
+                    palette.buttonText: Theme.errorText
                 }
                 QC.Button {
                     text: "Cancel"
@@ -350,7 +350,7 @@ QQ.Loader {
                     text: "Discard"
                     QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.NoRole
                     onClicked: itemId.askToSaveDialog.discarded()
-                    palette.buttonText: Theme.danger
+                    palette.buttonText: Theme.errorText
                 }
                 QC.Button {
                     text: "Cancel"

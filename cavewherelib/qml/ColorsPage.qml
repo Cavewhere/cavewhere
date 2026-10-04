@@ -28,7 +28,7 @@ QC.ScrollView {
                 id: rectId
                 width: 100
                 height: 100
-                radius: 6
+                radius: Theme.controlRadius
                 color: model.color
                 border.width: 1
                 border.color: Theme.border
@@ -84,13 +84,29 @@ QC.ScrollView {
         spacing: 16
         anchors.margins: 12
         property int sortIndex: 0 // 0 = name, 1 = color
+        // The color tokens of Theme.qml's style block, in the order they appear there
+        readonly property list<string> styleColorKeys: [
+            "chrome", "chromeText", "rowAlternate", "rowCurrent",
+            "buttonSurface", "buttonBorder", "buttonHover", "buttonHoverBorder",
+            "buttonPressed", "buttonPressedBorder", "buttonChecked", "buttonCheckedBorder",
+            "buttonPrimary", "buttonPrimaryHover", "buttonPrimaryText", "buttonShadow",
+            "fieldSurface", "fieldBorder", "fieldPlaceholder", "hoverOverlay",
+            "controlBorder", "checkFill", "checkMark", "track", "scrollHandle",
+            "popupSurface", "popupBorder", "popupSelected", "popupShadow",
+            "toolTipSurface", "toolTipBorder", "toolTipText", "overlayScrim",
+            "tabStrip", "tabText",
+            "progressStart", "progressMid", "progressEnd", "progressLead",
+            "linkBarChip", "sectionFill"
+        ]
 
         function refreshModels() {
             paletteModel.clear()
             themeModel.clear()
+            styleModel.clear()
             sidebarModel.clear()
             populateModel(Theme.palette, paletteModel)
-            populateModel(Theme, themeModel, ["palette", "sidebar"])
+            populateModel(Theme, themeModel, ["palette", "sidebar"].concat(Array.from(styleColorKeys)))
+            populateModelWithKeys(Theme, styleModel, styleColorKeys)
             populateModel(Theme.sidebar, sidebarModel)
             sortAll()
         }
@@ -100,6 +116,12 @@ QC.ScrollView {
         QQ.Connections {
             target: Theme
             function onDarkChanged() { layout.refreshModels() }
+        }
+
+        // The system palette follows the scheme after darkChanged
+        QQ.Connections {
+            target: Theme.palette
+            function onPaletteChanged() { layout.refreshModels() }
         }
 
         function populateModel(source, model, skipKeys) {
@@ -120,6 +142,12 @@ QC.ScrollView {
                         model.append({ name: key, color: valueStr });
                     }
                 }
+            }
+        }
+
+        function populateModelWithKeys(source, model, keys) {
+            for (const key of keys) {
+                model.append({ name: key, color: source[key].toString() });
             }
         }
 
@@ -147,6 +175,7 @@ QC.ScrollView {
 
         QQ.ListModel { id: paletteModel }
         QQ.ListModel { id: themeModel }
+        QQ.ListModel { id: styleModel }
         QQ.ListModel { id: sidebarModel }
 
         function sortModelBy(model, key) {
@@ -173,6 +202,7 @@ QC.ScrollView {
             const key = layout.sortIndex === 0 ? "name" : "color";
             sortModelBy(paletteModel, key);
             sortModelBy(themeModel, key);
+            sortModelBy(styleModel, key);
             sortModelBy(sidebarModel, key);
         }
 
@@ -184,6 +214,11 @@ QC.ScrollView {
         ColorGrid {
             title: "Theme Colors"
             model: themeModel
+        }
+
+        ColorGrid {
+            title: "Style"
+            model: styleModel
         }
 
         ColorGrid {

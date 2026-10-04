@@ -9,6 +9,7 @@
 class cwJobSettings;
 class cwPDFSettings;
 class cwFontSettings;
+class cwAppearanceSettings;
 class cwRenderingSettings;
 #include "cwSketchSettings.h"
 // Included (not forward-declared) so the unitSettings pointer property has a
@@ -26,6 +27,7 @@ class CAVEWHERE_LIB_EXPORT cwSettings : public QObject
     Q_PROPERTY(cwJobSettings* jobSettings READ jobSettings CONSTANT)
     Q_PROPERTY(cwPDFSettings* pdfSettings READ pdfSettings CONSTANT)
     Q_PROPERTY(cwFontSettings* fontSettings READ fontSettings CONSTANT)
+    Q_PROPERTY(cwAppearanceSettings* appearanceSettings READ appearanceSettings CONSTANT)
     Q_PROPERTY(cwSketchSettings* sketchSettings READ sketchSettings CONSTANT)
     Q_PROPERTY(cwRenderingSettings* renderingSettings READ renderingSettings CONSTANT)
     Q_PROPERTY(cwUnitSettings* unitSettings READ unitSettings CONSTANT)
@@ -34,6 +36,7 @@ public:
     cwJobSettings* jobSettings() const;
     cwPDFSettings* pdfSettings() const;
     cwFontSettings* fontSettings() const;
+    cwAppearanceSettings* appearanceSettings() const;
     cwSketchSettings* sketchSettings() const;
     cwRenderingSettings* renderingSettings() const;
     cwUnitSettings* unitSettings() const;

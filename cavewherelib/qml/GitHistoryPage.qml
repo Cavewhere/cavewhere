@@ -118,7 +118,7 @@ StandardPage {
             deletedColor: Theme.diffDeletedText
             modifiedColor: Theme.warning
             renamedColor: Theme.info
-            errorColor: Theme.danger
+            errorColor: Theme.errorText
             errorBackground: Theme.diffDeletedBackground
 
             onFileClicked: (filePath, isBinary, isImage, statusText) => {
@@ -163,7 +163,7 @@ StandardPage {
 
     QG.GitDiscardDialog {
         id: discardConfirmDialog
-        dangerColor: Theme.danger
+        dangerColor: Theme.errorText
         onDiscardConfirmed: RootData.discardChangesAndReload()
     }
 

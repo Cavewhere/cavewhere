@@ -20,8 +20,6 @@ QC.ApplicationWindow {
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontSizeUI
 
-    palette.placeholderText: Theme.textSubtle
-
     Binding { target: GitFontScale; property: "fontSizeCaption"; value: Theme.fontSizeCaption }
     Binding { target: GitFontScale; property: "fontSizeSmall";   value: Theme.fontSizeSmall }
     Binding { target: GitFontScale; property: "fontSizeUI";      value: Theme.fontSizeBody }
