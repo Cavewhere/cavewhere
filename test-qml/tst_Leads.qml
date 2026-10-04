@@ -154,7 +154,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
                       5000, "should land on cavePage");
@@ -182,7 +182,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished();
 
             let cave = RootData.region.cave(0)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Leads"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Leads"
 
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "leadPage",
@@ -211,7 +211,7 @@ MainWindowTest {
             // mouse-click navigation under offscreen rendering.
             RootData.region.addCave()
             let cave = RootData.region.cave(RootData.region.caveCount - 1)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Leads"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Leads"
 
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "leadPage",
@@ -232,7 +232,7 @@ MainWindowTest {
 
             let cave = RootData.region.cave(0);
             let trip = cave.trip(0);
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name;
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + trip.name;
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
 
             let carpetButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId");
@@ -780,7 +780,7 @@ MainWindowTest {
             // Navigate to the trip page
             let cave = RootData.region.cave(0);
             let trip = cave.trip(0);
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name;
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + trip.name;
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "tripPage");
 
             // Enter carpet mode

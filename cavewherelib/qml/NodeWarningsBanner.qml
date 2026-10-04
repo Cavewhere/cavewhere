@@ -34,10 +34,8 @@ QQ.Rectangle {
     function openTarget(target: int, trip: Trip, fixStationRow: int) {
         switch (target) {
         case NodeWarningModel.FixStationRow: {
-            // Only caves have a fix-station page so far; a page for a nested
-            // node needs fixStationsLink to take a SurveyNode first.
             RootData.pageSelectionModel.currentPageAddress =
-                    linkGeneratorId.fixStationsLink(bannerId.node as Cave)
+                    linkGeneratorId.fixStationsLink(bannerId.node)
             const page = RootData.pageSelectionModel.currentPage
             if (page !== null) {
                 page.selectionProperties = { "currentFixRow": fixStationRow }

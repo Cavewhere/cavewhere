@@ -17,6 +17,14 @@
 #include <QQmlComponent>
 #include <QVariantMap>
 
+namespace {
+//! Before survey nodes nested, the Data page's children were named Cave=X.
+//! They are Node=X now (cwLinkGenerator::nodeLink), and a link written in the
+//! old shape still resolves to the same page.
+constexpr QLatin1String kLegacyCavePagePrefix("Cave=");
+constexpr QLatin1String kNodePagePrefix("Node=");
+}
+
 cwPageSelectionModel::cwPageSelectionModel(QObject *parent) :
     QObject(parent),
     RootPage(new cwPage()),
@@ -412,8 +420,11 @@ cwPage* cwPageSelectionModel::stringToPage(const QString &pageLinkString) const
     QStringList parts = cwPage::splitLinkIntoParts(pageLinkString);
     cwPage* current = RootPage;
 
-    foreach(QString part, parts) {
+    for(const QString& part : std::as_const(parts)) {
         cwPage* nextPage = current->childPage(part);
+        if(nextPage == nullptr && part.startsWith(kLegacyCavePagePrefix)) {
+            nextPage = current->childPage(kNodePagePrefix + part.mid(kLegacyCavePagePrefix.size()));
+        }
         if(nextPage == nullptr) {
             return nullptr;
         }
@@ -496,8 +507,10 @@ QSet<QQmlComponent*> cwPageSelectionModel::clearHistory()
     PageHistory.clear();
     CurrentPageIndex = 0;
 
-    // Only depth-2+ pages are dynamic (Cave=…, Trip=… from QML Repeaters).
     // Top-level pages and their direct children are static (MainContent.qml).
+    // Everything below them is dynamic and nests to any depth (Node=… pages
+    // inside Node=… pages, then Trip=…, Note=…), and clearChildren() frees the
+    // whole subtree.
     QSet<QQmlComponent*> clearedComponents;
     for (cwPage* topLevel : RootPage->childPages()) {
         for (cwPage* child : topLevel->childPages()) {

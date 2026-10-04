@@ -50,7 +50,7 @@ MainWindowTest {
             let trip = cave.trip(0)
             let caveName = String(cave.name)
             let tripName = String(trip.name)
-            let tripAddress = "Source/Data/Cave=" + caveName + "/Trip=" + tripName
+            let tripAddress = "Source/Data/Node=" + caveName + "/Trip=" + tripName
 
             RootData.pageSelectionModel.currentPageAddress = tripAddress
             tryVerify(() => {
@@ -127,14 +127,14 @@ MainWindowTest {
                        && RootData.pageView.currentPageItem.objectName === "dataMainPage"
             }, 10000, "should navigate to data page")
 
-            let caveAddress = "Source/Data/Cave=" + String(cave.name)
+            let caveAddress = "Source/Data/Node=" + String(cave.name)
             RootData.pageSelectionModel.currentPageAddress = caveAddress
             tryVerify(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "cavePage"
             }, 10000, "should navigate to cave page")
 
-            tripAddress = "Source/Data/Cave=" + String(cave.name) + "/Trip=" + String(trip.name)
+            tripAddress = "Source/Data/Node=" + String(cave.name) + "/Trip=" + String(trip.name)
             RootData.pageSelectionModel.currentPageAddress = tripAddress
             tryVerify(() => {
                 return RootData.pageView.currentPageItem !== null

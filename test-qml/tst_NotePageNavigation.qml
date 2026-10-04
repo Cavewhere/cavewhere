@@ -16,7 +16,7 @@ MainWindowTest {
         name: "NotePageNavigation"
         when: windowShown
 
-        readonly property string tripAddress: "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
+        readonly property string tripAddress: "Source/Data/Node=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
         function init() {
             // Start narrow so the NotesGallery Loader is inactive —

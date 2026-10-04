@@ -22,7 +22,7 @@ MainWindowTest {
         function test_addNotes() {
                     // TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
                     TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
-                    RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
+                    RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
                     tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -55,7 +55,7 @@ MainWindowTest {
 
         function test_autoSelectNewNote() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -74,7 +74,7 @@ MainWindowTest {
 
         function test_removeNote() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -120,7 +120,7 @@ MainWindowTest {
 
         function test_removeLidarNote() {
             TestHelper.loadProjectFromZip(RootData.project, TestHelper.testcasesDatasetPath("lidarProjects/jaws of the beast.zip"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Jaws of the Beast/Trip=2019c154_-_party_fault"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Jaws of the Beast/Trip=2019c154_-_party_fault"
 
             tryVerify(() => { return RootData.pageView.currentPageItem !== null })
                     tryVerify(() => {return RootData.pageView.currentPageItem.objectName === "tripPage" });

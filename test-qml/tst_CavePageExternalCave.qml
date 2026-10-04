@@ -41,7 +41,7 @@ MainWindowTest {
         }
 
         function gotoCavePage(cave) {
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name
             tryVerify(() => RootData.pageView.currentPageItem !== null
                       && RootData.pageView.currentPageItem.objectName === "cavePage",
                       10000, "the cave page opens")

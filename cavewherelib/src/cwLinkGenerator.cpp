@@ -9,6 +9,7 @@
 #include "cwLinkGenerator.h"
 #include "cwPageSelectionModel.h"
 #include "cwCave.h"
+#include "cwSurveyNode.h"
 #include "cwTrip.h"
 #include "cwNote.h"
 #include "cwScrap.h"
@@ -20,6 +21,9 @@
 namespace {
 //! Must match the sub-page CavePage.qml registers in registerSubPages().
 constexpr QLatin1String kFixStationsPageName("Fix Stations");
+//! Must match the page names DataMainPage.qml and CavePage.qml register.
+constexpr QLatin1String kNodePagePrefix("Node=");
+constexpr QLatin1String kTripPagePrefix("Trip=");
 }
 
 cwLinkGenerator::cwLinkGenerator(QObject *parent) : QObject(parent)
@@ -35,7 +39,7 @@ cwLinkGenerator::~cwLinkGenerator()
 
 /**
  * @brief cwLinkGenerator::dataPageLink
- * @return The address of the top-level Data page (parent of the per-cave pages).
+ * @return The address of the top-level Data page (parent of the top-level node pages).
  */
 QString cwLinkGenerator::dataPageLink()
 {
@@ -45,51 +49,60 @@ QString cwLinkGenerator::dataPageLink()
 }
 
 /**
- * @brief cwLinkGenerator::link
- * @param cave
- * @return
+ * The address of \a node's page: the Data page, then one Node= part per node
+ * from the top level down to \a node, so a Section in a Cave in a Folder is
+ * Source/Data/Node=Folder/Node=Cave/Node=Section. The region's root node is the
+ * Data page itself.
+ */
+QString cwLinkGenerator::nodeLink(cwSurveyNode *node)
+{
+    if(node == nullptr) { return QString(); }
+
+    QString link = dataPageLink();
+    const QStringList names = node->path();
+    for(const QString& name : names) {
+        link += cwPageSelectionModel::seperator() + kNodePagePrefix + name;
+    }
+    return link;
+}
+
+/**
+ * The same address as nodeLink(), for callers still typed cwCave.
  */
 QString cwLinkGenerator::caveLink(cwCave *cave)
 {
-    if(cave == nullptr) { return QString(); }
-    return dataPageLink()
-           + cwPageSelectionModel::seperator()
-           + QStringLiteral("Cave=")
-           + cave->name();
+    return nodeLink(cave);
 }
 
 /**
  * @brief cwLinkGenerator::fixStationsLink
- * @param cave
- * @return The address of the cave's Fix Stations sub-page.
+ * @param node
+ * @return The address of the node's Fix Stations sub-page.
  *
- * CavePage.qml registers that sub-page only once the cave page itself is
+ * CavePage.qml registers that sub-page only once the node page itself is
  * current, so this address names a page that may not exist yet.
  * cwPageSelectionModel::setCurrentPageAddress() handles that: it walks the
- * parent addresses first, and visiting the cave page is what registers the
+ * parent addresses first, and visiting the node page is what registers the
  * sub-page the last step then finds.
  */
-QString cwLinkGenerator::fixStationsLink(cwCave *cave)
+QString cwLinkGenerator::fixStationsLink(cwSurveyNode *node)
 {
-    if(cave == nullptr) { return QString(); }
-    return caveLink(cave)
+    if(node == nullptr) { return QString(); }
+    return nodeLink(node)
            + cwPageSelectionModel::seperator()
            + kFixStationsPageName;
 }
 
 /**
- * @brief cwLinkGenerator::link
- * @param cave
- * @return
+ * The address of \a trip's page: its node's address, then Trip=.
  */
 QString cwLinkGenerator::tripLink(cwTrip *trip)
 {
     if(trip == nullptr) { return QString(); }
-    return caveLink(trip->parentCave())
+    return nodeLink(trip->parentNode())
            + cwPageSelectionModel::seperator()
-           + QStringLiteral("Trip=")
+           + kTripPagePrefix
            + trip->name();
-
 }
 
 /**

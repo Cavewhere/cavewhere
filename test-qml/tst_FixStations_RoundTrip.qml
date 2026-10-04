@@ -41,7 +41,7 @@ MainWindowTest {
             const cave = RootData.region.cave(RootData.region.caveCount - 1)
             cave.name = "RoundTripCave"
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000)

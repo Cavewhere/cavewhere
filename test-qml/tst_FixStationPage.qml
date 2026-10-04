@@ -49,7 +49,7 @@ MainWindowTest {
             const cave = RootData.region.cave(RootData.region.caveCount - 1)
             cave.name = "PR4Cave"
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
@@ -184,7 +184,7 @@ MainWindowTest {
             cave.fixStations.addFixStation("A1")
             cave.fixStations.addFixStation("A2")
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
@@ -1539,7 +1539,7 @@ MainWindowTest {
             cave.fixStations.addFixStation()
             cave.fixStations.addFixStation()
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name)
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name)
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
                       5000, "should land on cavePage")
@@ -1589,7 +1589,7 @@ MainWindowTest {
             model.setData(model.index(0), "doghill.d2", FixStationModel.StationNameRole)
 
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+                "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
@@ -1678,7 +1678,7 @@ MainWindowTest {
             tryVerify(() => cave.attachedFixes.count === 1, 20000, "the scan lists the file's fix")
 
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+                "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
@@ -1687,7 +1687,7 @@ MainWindowTest {
             compare(waitForChild("inputCSText.0").text, "North American 1927, UTM zone 13N")
             verify(waitForChild("readOnlyLock.0") !== null, "the row is the file's")
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name)
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name)
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
                       5000, "should land on cavePage")

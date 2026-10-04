@@ -13,7 +13,7 @@ MainWindowTest {
 
         function openTripNotes() {
             RootData.pageSelectionModel.currentPageAddress = "View"
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
             let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")

@@ -18,7 +18,7 @@ MainWindowTest {
             RootData.region.addCave()
             cave = RootData.region.cave(0)
             cave.name = "ConvCave"
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=ConvCave"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=ConvCave"
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "cavePage")
         }
 

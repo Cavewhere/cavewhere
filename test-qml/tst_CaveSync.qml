@@ -32,7 +32,7 @@ MainWindowTest {
         }
 
         function cavePageAddress(caveName) {
-            return "Source/Data/Cave=" + caveName
+            return "Source/Data/Node=" + caveName
         }
 
         function tripNamesFromCave(cave) {

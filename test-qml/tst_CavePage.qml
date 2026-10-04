@@ -56,7 +56,7 @@ MainWindowTest {
         }
 
         function gotoCavePage(caveName) {
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + caveName
             tryVerify(() => {
                           let page = RootData.pageView.currentPageItem
                           return page !== null && page.objectName === "cavePage"
@@ -134,7 +134,7 @@ MainWindowTest {
             let cave = RootData.region.cave(0)
             cave.name = "EmptyCave"
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=EmptyCave"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=EmptyCave"
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "cavePage")
             waitForRendering(rootId)
 

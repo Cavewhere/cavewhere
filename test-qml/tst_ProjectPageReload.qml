@@ -36,7 +36,7 @@ MainWindowTest {
             // 2. Navigate to a trip page
             let cave = RootData.region.cave(0)
             let trip = cave.trip(0)
-            let tripAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
+            let tripAddress = "Source/Data/Node=" + cave.name + "/Trip=" + trip.name
             RootData.pageSelectionModel.currentPageAddress = tripAddress
             tryVerify(() => {
                 return RootData.pageView.currentPageItem !== null

@@ -81,7 +81,7 @@ MainWindowTest {
             SyncTestHelper.openTripPage(testCaseId, RootData, caveName, tripName)
 
             return {
-                tripPageAddress: "Source/Data/Cave=" + caveName + "/Trip=" + tripName
+                tripPageAddress: "Source/Data/Node=" + caveName + "/Trip=" + tripName
             }
         }
 

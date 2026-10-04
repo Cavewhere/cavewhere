@@ -238,7 +238,7 @@ MainWindowTest {
             }
 
             let tripPageAddressForName = function(tripName) {
-                return "Source/Data/Cave=" + caveName + "/Trip=" + String(tripName)
+                return "Source/Data/Node=" + caveName + "/Trip=" + String(tripName)
             }
 
             let tripNameInput = function() {
@@ -348,7 +348,7 @@ MainWindowTest {
                                 : (baselineCaveName + " LinkBar Rename")
 
             let tripName = String(trip.name)
-            let expectedTripPageAddress = "Source/Data/Cave=" + renamedCaveName + "/Trip=" + tripName
+            let expectedTripPageAddress = "Source/Data/Node=" + renamedCaveName + "/Trip=" + tripName
 
             let linkBarTexts = function() {
                 let listView = findDescendantByObjectName(mainWindow, "linkBarListView")
@@ -376,7 +376,7 @@ MainWindowTest {
             }
 
             let expectedLinkBarCaveText = function(caveName) {
-                return "Cave=" + String(caveName)
+                return String(caveName)
             }
 
             let hasLinkBarText = function(expectedText) {

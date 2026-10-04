@@ -500,7 +500,7 @@ MainWindowTest {
         }
 
         function openCaveLeadPage(caveName) {
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + caveName
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + caveName
             tryVerifyWithDiagnostics(() => {
                 return RootData.pageView.currentPageItem !== null
                        && RootData.pageView.currentPageItem.objectName === "cavePage"

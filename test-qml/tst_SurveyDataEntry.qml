@@ -21,7 +21,7 @@ MainWindowTest {
 
         function addSurvey() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.testcasesDatasetPath("test_cwScrapManager/ProjectProfile-test-v3.cw"));
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
 
@@ -1592,7 +1592,7 @@ MainWindowTest {
             verify(cave !== null)
             let tripFromRegion = cave.trip(0)
             verify(tripFromRegion !== null)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + tripFromRegion.name
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view");
@@ -1819,7 +1819,7 @@ MainWindowTest {
             verify(cave !== null)
             let tripFromRegion = cave.trip(0)
             verify(tripFromRegion !== null)
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + cave.name + "/Trip=" + tripFromRegion.name
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name + "/Trip=" + tripFromRegion.name
             tryVerify(() => { return RootData.pageView.currentPageItem.objectName === "tripPage" })
 
             let view = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view")
@@ -2130,7 +2130,7 @@ MainWindowTest {
         function test_arrowNavigation() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -2437,7 +2437,7 @@ MainWindowTest {
         function test_tabNavigationTabWorks() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -2870,7 +2870,7 @@ MainWindowTest {
         function test_tabEndingShouldStayFocus() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -2921,7 +2921,7 @@ MainWindowTest {
         function test_tabGuessSurveyName() {
             TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -2946,7 +2946,7 @@ MainWindowTest {
         // function test_editorTest() {
         //     TestHelper.loadProjectFromFile(RootData.project, TestHelper.qmlTestDatasetPath("tst_SurveyDataEntry/navTest.cw"));
 
-        //     RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=Cave 1/Trip=Trip 1"
+        //     RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Cave 1/Trip=Trip 1"
 
         //     tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 

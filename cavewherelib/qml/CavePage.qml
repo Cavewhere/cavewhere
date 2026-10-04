@@ -19,8 +19,22 @@ StandardPage {
 
     property Cave currentCave
 
+    // Shared down the node pages so every trip page shows in one TripPage item.
+    property QQ.Component tripComponent: tripPageComponent
+
+    // cwPageView keeps one item per component and sets each ancestor's item on
+    // the way to a page, so each depth needs its own component. A type cannot
+    // name itself in its own body, hence the run-time creation.
+    readonly property QQ.Component childNodePageComponent:
+        Qt.createComponent("cavewherelib", "CavePage", QQ.Component.PreferSynchronous, cavePageArea)
+
     function tripPageName(trip) {
         return "Trip=" + trip.name;
+    }
+
+    //Must match cwLinkGenerator::nodeLink, which builds the same address.
+    function nodePageName(node) {
+        return "Node=" + node.name;
     }
 
     function addTripAndNavigate() {
@@ -661,7 +675,7 @@ StandardPage {
                            let trip = (object as Delegate).tripObjectRole
                            var page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page, //From
                                                                                cavePageArea.tripPageName(trip), //Name
-                                                                               tripPageComponent, //component
+                                                                               cavePageArea.tripComponent, //component
                                                                                {"currentTrip":trip}
                                                                                )
                            object.page = page;
@@ -674,6 +688,39 @@ StandardPage {
 
         onObjectRemoved: (index, object) => {
                              RootData.pageSelectionModel.unregisterPage((object as Delegate).page);
+                         }
+    }
+
+    // A child's page is this same page type, so registration repeats to any depth.
+    Instantiator {
+        id: childNodeInstantiatorId
+
+        component ChildNodeDelegate: QQ.QtObject {
+            required property Cave nodeObjectRole
+            property Page page
+        }
+
+        model: SurveyNodeChildModel {
+            node: cavePageArea.currentCave
+        }
+
+        delegate: ChildNodeDelegate {
+        }
+
+        onObjectAdded: (index, object) => {
+                           const delegate = object as ChildNodeDelegate
+                           const node = delegate.nodeObjectRole
+                           const page = RootData.pageSelectionModel.registerPage(cavePageArea.PageView.page,
+                                                                                 cavePageArea.nodePageName(node),
+                                                                                 cavePageArea.childNodePageComponent,
+                                                                                 {"currentCave": node,
+                                                                                  "tripComponent": cavePageArea.tripComponent})
+                           delegate.page = page
+                           page.setNamingFunction(node, "nameChanged()", cavePageArea, "nodePageName", node)
+                       }
+
+        onObjectRemoved: (index, object) => {
+                             RootData.pageSelectionModel.unregisterPage((object as ChildNodeDelegate).page)
                          }
     }
 

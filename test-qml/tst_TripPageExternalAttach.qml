@@ -35,7 +35,7 @@ MainWindowTest {
 
         function gotoCavePage() {
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=" + currentCave().name
+                "Source/Data/Node=" + currentCave().name
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
                       10000, "cave page opens")
@@ -47,7 +47,7 @@ MainWindowTest {
 
         function gotoTripPage(trip) {
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=" + currentCave().name + "/Trip=" + trip.name
+                "Source/Data/Node=" + currentCave().name + "/Trip=" + trip.name
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "tripPage",
                       10000, "trip page opens")
@@ -475,7 +475,7 @@ MainWindowTest {
 
             // Visiting the trip page registers the Carpet sub-page.
             RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=" + currentCave().name + "/Trip=" + fixture.trip.name
+                "Source/Data/Node=" + currentCave().name + "/Trip=" + fixture.trip.name
                 + "/Carpet"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "tripPage",

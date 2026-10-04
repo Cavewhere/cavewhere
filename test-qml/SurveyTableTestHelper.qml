@@ -46,7 +46,7 @@ QQ.QtObject {
         trip.addNewChunk()
 
         RootData.pageSelectionModel.currentPageAddress =
-                "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
+                "Source/Data/Node=" + cave.name + "/Trip=" + trip.name
         testCase.tryVerify(() => RootData.pageView.currentPageItem !== null
                                  && RootData.pageView.currentPageItem.objectName === "tripPage",
                            5000, "should land on tripPage")

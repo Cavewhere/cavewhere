@@ -219,7 +219,7 @@ MainWindowTest {
                     TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))
                 tryVerify(() => RootData.region.caveCount > 0, 10000, "the demo cave should load")
             }
-            const address = "Source/Data/Cave=" + RootData.region.cave(0).name
+            const address = "Source/Data/Node=" + RootData.region.cave(0).name
             RootData.pageSelectionModel.currentPageAddress = address
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName !== "styleGalleryPage",
@@ -290,7 +290,7 @@ MainWindowTest {
             verify(chunk.stationCount > splayStation, "the demo chunk should have enough stations")
 
             RootData.pageSelectionModel.currentPageAddress =
-                    "Source/Data/Cave=" + cave.name + "/Trip=" + trip.name
+                    "Source/Data/Node=" + cave.name + "/Trip=" + trip.name
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "tripPage",
                       5000, "should land on the trip page")

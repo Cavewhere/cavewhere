@@ -23,8 +23,9 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    //Must match cwLinkGenerator::nodeLink, which builds the same address.
     function cavePageName(cave) {
-        return "Cave=" + cave.name;
+        return "Node=" + cave.name;
     }
 
     // Add Cave → Add cave from survey file…: create the cave first (the

@@ -23,6 +23,21 @@ QQ.Item {
     // page view, and a child of the top bar cannot.
     signal tasksRequested()
 
+    // The address names pages by kind ("Node=Side Cave", "Trip=Survey 1"); the
+    // crumb shows only the name, and the Data page reads as the list it is.
+    function crumbLabel(name: string, fullPath: string): string {
+        if (fullPath === linkBarId.dataPageAddress) {
+            return qsTr("All caves")
+        }
+        const kindPrefixes = ["Node=", "Trip=", "Note=", "Cave="]
+        for (const prefix of kindPrefixes) {
+            if (name.startsWith(prefix)) {
+                return name.substring(prefix.length)
+            }
+        }
+        return name
+    }
+
     function startEditingAddress() {
         textFieldId.text = RootData.pageSelectionModel.currentPageAddress
         editingAddress = true
@@ -184,7 +199,7 @@ QQ.Item {
                     required property string fullPathRole
                     required property int index
                     nextArrowVisible: linkBarListView.count - 1 !== index
-                    text: nameRole
+                    text: linkBarId.crumbLabel(nameRole, fullPathRole)
                     onClicked: RootData.pageSelectionModel.currentPageAddress = fullPathRole
                 }
             }

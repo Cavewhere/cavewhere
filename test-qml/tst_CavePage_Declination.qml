@@ -43,7 +43,7 @@ MainWindowTest {
             fixModel.setData(idx, 4430000.0, FixStationModel.NorthingRole)
             fixModel.setData(idx, 1655.0, FixStationModel.ElevationRole)
 
-            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=DeclCave"
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=DeclCave"
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "cavePage")
         }
 

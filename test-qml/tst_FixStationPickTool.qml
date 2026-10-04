@@ -68,7 +68,7 @@ MainWindowTest {
                       "the anchoring fix should have given the project a frame")
 
             RootData.pageSelectionModel.currentPageAddress =
-                    "Source/Data/Cave=" + cave.name + "/Fix Stations"
+                    "Source/Data/Node=" + cave.name + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
@@ -278,7 +278,7 @@ MainWindowTest {
             startPick(1)
 
             RootData.pageSelectionModel.currentPageAddress =
-                    "Source/Data/Cave=" + cave.name + "/Fix Stations"
+                    "Source/Data/Node=" + cave.name + "/Fix Stations"
 
             tryCompare(FixStationPick, "active", false, 5000)
 
@@ -344,7 +344,7 @@ MainWindowTest {
             compare(cave.fixStations.addFixStation("A1"), 0)
 
             RootData.pageSelectionModel.currentPageAddress =
-                    "Source/Data/Cave=" + cave.name + "/Fix Stations"
+                    "Source/Data/Node=" + cave.name + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")

@@ -210,7 +210,7 @@ ColumnLayout {
         treeViewId.forceLayout();
     }
 
-    //Opens the page a row stands for: a node's cave page, a trip's trip page.
+    //Opens the page a row stands for: a node's page, a trip's trip page.
     //Both go through the page address, which walks and registers the parent
     //pages on the way, so a trip opens before its cave page ever existed.
     function openObject(object: QQ.QtObject) {
@@ -220,7 +220,7 @@ ColumnLayout {
 
         const node = object as SurveyNode;
         const link = node !== null
-                   ? linkGeneratorId.caveLink(node)
+                   ? linkGeneratorId.nodeLink(node)
                    : linkGeneratorId.tripLink(object as Trip);
         if(link !== "") {
             RootData.pageSelectionModel.currentPageAddress = link;
