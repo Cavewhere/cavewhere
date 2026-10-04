@@ -773,8 +773,9 @@ private slots:
     // no waiting on a full recompute, so the list re-sorts immediately.
     void rebuildAttachedRowsFromNames();
 
-    // A trip's scope moved: re-list every node's attached fixes.
-    void refreshAllAttachedFixes();
+    // Trip scopes moved under the sending node, or the sending trip's
+    // centerline changed: re-list that node's attached fixes.
+    void refreshSenderAttachedFixes();
 };
 
 #endif // CWEXTERNALCENTERLINEMANAGER_H

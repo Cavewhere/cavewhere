@@ -279,8 +279,12 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
     m_signaler->addConnectionToCaves(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
     m_signaler->addConnectionToTrips(SIGNAL(nameChanged()), this, SLOT(rebuildAttachedRowsFromNames()));
     // A trip's file fixes are listed under its scope, so a scope move
-    // renames those rows without waiting for the next scan.
-    m_signaler->addConnectionToTrips(SIGNAL(scopeChanged()), this, SLOT(refreshAllAttachedFixes()));
+    // renames those rows without waiting for the next scan. The node's
+    // tripScopeLabelsChanged() fires once per scope move; each trip's
+    // scopeChanged() would fire on every sibling at every trip insert.
+    // A trip's own centerline change moves its scope too.
+    m_signaler->addConnectionToCaves(SIGNAL(tripScopeLabelsChanged()), this, SLOT(refreshSenderAttachedFixes()));
+    m_signaler->addConnectionToTrips(SIGNAL(externalCenterlineChanged()), this, SLOT(refreshSenderAttachedFixes()));
 
     // Any attach/detach — the wrappers here, undo/redo, or protobuf load
     // populating a trip after insertion — re-derives the watch set, dir
@@ -866,12 +870,11 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
     node->setFileFixedStations(fileFixedStations);
 }
 
-void cwExternalCenterlineManager::refreshAllAttachedFixes()
+void cwExternalCenterlineManager::refreshSenderAttachedFixes()
 {
-    if (m_region.isNull()) {
-        return;
-    }
-    for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
+    const auto* trip = qobject_cast<cwTrip*>(sender());
+    cwSurveyNode* node = trip ? trip->parentNode() : qobject_cast<cwSurveyNode*>(sender());
+    if (node) {
         refreshAttachedFixes(node);
     }
 }
