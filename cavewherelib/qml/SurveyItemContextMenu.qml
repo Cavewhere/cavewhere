@@ -9,8 +9,8 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// The context menu of a survey-tree row: Add on a node, Delete…, and
-// Declination on a trip.
+// The context menu of a survey-tree row: Add on a node, Move to…, Delete…,
+// and Declination on a trip.
 //
 // A click on the row's name opens it and the name cell renames it, so the menu
 // is left holding the verbs no cell of the row carries — the Add verbs for the
@@ -47,6 +47,11 @@ QC.Menu {
     //since the selection can have moved since the last time it did.
     property list<TripCalibration> tripCalibrations: []
 
+    //Whether the row may be moved: survey data an attached file places stays
+    //where its file puts it, so its menu offers no Move to…. Read when the
+    //menu opens, like the calibrations.
+    property bool canMove: false
+
     //Only a trip carries a calibration, so only a trip's menu offers one.
     readonly property bool isTripRow: contextMenuId.row !== null
                                       && !contextMenuId.row.isNode
@@ -60,6 +65,16 @@ QC.Menu {
     function indexOfMenu(menu: QC.Menu) : int {
         for(let i = 0; i < contextMenuId.count; i++) {
             if(contextMenuId.menuAt(i) === menu) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    //The position of \a item among this menu's entries, -1 when it holds none.
+    function indexOfItem(item: QC.MenuItem) : int {
+        for(let i = 0; i < contextMenuId.count; i++) {
+            if(contextMenuId.itemAt(i) === item) {
                 return i;
             }
         }
@@ -80,6 +95,8 @@ QC.Menu {
         contextMenuId.clickPos = Qt.point(x, y);
         contextMenuId.tripCalibrations =
                 contextMenuId.surveyTree.tripCalibrationsFor(contextMenuId.row.object);
+        contextMenuId.canMove =
+                RegionSurveyTree.isMovableIndex(RegionSurveyTree.indexOf(contextMenuId.row.object));
         contextMenuId.popup(x, y);
     }
 
@@ -101,7 +118,31 @@ QC.Menu {
         onObjectRemoved: (index, object) => contextMenuId.takeSubmenu(object as QC.Menu)
     }
 
+    //Arms the move; the tree's own rows then pick where it goes. A hidden
+    //MenuItem keeps its slot in the menu's list, so the entry joins a movable
+    //row's menu and leaves every other one, the way the submenus do.
+    QQ.Instantiator {
+        active: contextMenuId.canMove
+
+        delegate: QC.MenuItem {
+            objectName: "surveyItemMoveMenuItem"
+            text: qsTr("Move to…")
+
+            onTriggered: contextMenuId.surveyTree.moveObject(contextMenuId.row.object)
+        }
+
+        onObjectAdded: (index, object) => contextMenuId.insertItem(contextMenuId.indexOfItem(deleteMenuItemId),
+                                                                   object as QC.MenuItem)
+        onObjectRemoved: (index, object) => {
+            const position = contextMenuId.indexOfItem(object as QC.MenuItem);
+            if(position >= 0) {
+                contextMenuId.takeItem(position);
+            }
+        }
+    }
+
     QC.MenuItem {
+        id: deleteMenuItemId
         objectName: "surveyItemDeleteMenuItem"
         text: qsTr("Delete…")
 

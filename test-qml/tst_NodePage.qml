@@ -19,6 +19,7 @@ MainWindowTest {
         }
 
         function cleanup() {
+            RegionSurveyTree.cancelMove()
             RootData.project.newProject()
             rootId.width = 1200
             rootId.height = 700
@@ -264,6 +265,49 @@ MainWindowTest {
             addTrip(nodes.section, "Later survey", new Date(2025, 4, 10))
             tryCompare(findChild(page, "tripCountValue"), "text", "3", 5000)
             tryCompare(findChild(page, "lastSurveyValue"), "text", "2025-05-10", 5000)
+        }
+
+        // Move to… on the header opens the Data page with the move armed,
+        // where the whole tree picks the destination; the top level is offered
+        // as a button, since the region's root owns no row.
+        function test_moveToFromTheHeaderArmsTheDataPage() {
+            const nodes = setupCaveWithSection()
+            const page = gotoNodePage("Source/Data/Node=Side Cave/Node=Upper level", nodes.section)
+
+            const moveButton = findChild(page, "moveNodeButton")
+            verify(moveButton !== null && moveButton.visible, "a native node offers Move to…")
+            mouseClick(moveButton)
+
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "dataMainPage",
+                      5000, "Move to… opens the Data page")
+            verify(RegionSurveyTree.moveSubject === nodes.section, "the move carries the page's node")
+
+            const dataPage = RootData.pageView.currentPageItem
+            const banner = findChild(dataPage, "surveyMoveBanner")
+            tryVerify(() => banner.visible, 5000, "the Data page shows the armed move")
+            compare(findChild(banner, "surveyMoveBannerLabel").text,
+                    "Click where to move Upper level — Esc cancels")
+
+            const topLevel = findChild(banner, "surveyMoveTopLevelButton")
+            tryVerify(() => topLevel.visible, 5000, "the top level takes a section")
+            waitForRendering(banner)
+            mouseClick(topLevel)
+
+            tryCompare(RootData.region, "caveCount", 2, 5000)
+            compare(nodes.cave.childNodeCount, 0)
+            verify(!RegionSurveyTree.moveActive, "landing the move disarms it")
+
+            RootData.undoStack.undo()
+            tryCompare(nodes.section, "parentNode", nodes.cave, 5000)
+        }
+
+        // A top-level cave's header offers the move too: a folder can take it.
+        function test_moveToShowsOnATopLevelCaveHeader() {
+            const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
+            const page = gotoNodePage("Source/Data/Node=Side Cave", cave)
+            tryVerify(() => findChild(page, "moveNodeButton").visible, 5000,
+                      "a top-level cave can move into a folder")
         }
     }
 }

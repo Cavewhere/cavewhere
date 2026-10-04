@@ -90,6 +90,26 @@ QQ.Item {
     //own page, so only a native node offers Rename.
     readonly property bool canRename: rowId.isNode && !rowId.isSourced
 
+    //Move to… is armed somewhere in the tree. Read off moveSubject rather than
+    //moveActive, so a second move re-asks every row.
+    readonly property bool moveArmed: RegionSurveyTree.moveSubject !== null
+
+    //True while an armed move can land under this row. A pooled cell holds no
+    //object, and the index of none is the region's root, so it answers false.
+    readonly property bool isMoveTarget: rowId.moveArmed
+                                         && rowId.object !== null
+                                         && RegionSurveyTree.isMoveTarget(RegionSurveyTree.indexOf(rowId.object))
+
+    //Why this row cannot take the armed move: its tool tip while one is armed.
+    readonly property string moveReason: rowId.moveArmed && rowId.object !== null && !rowId.isMoveTarget
+                                         ? RegionSurveyTree.moveTargetReason(RegionSurveyTree.indexOf(rowId.object))
+                                         : ""
+
+    //A target under the pointer draws its whole row lit, whichever cell the
+    //pointer is in.
+    readonly property bool moveHovered: rowId.isMoveTarget
+                                        && rowId.treeView.surveyTree.hoveredRow === rowId.row
+
     objectName: {
         if(rowId.pooled) {
             return "";
@@ -165,6 +185,14 @@ QQ.Item {
         cell.popupContextMenu(position.x, position.y);
     }
 
+    //True when \a x, in this cell's coordinates, falls on the Name cell's
+    //caret, which keeps opening rows while a move is armed.
+    function isOnCaret(x: real) : bool {
+        return rowId.column === SurveyTreeModel.Name
+               && x < Theme.delegatePadding + rowId.depth * Theme.treeIndent
+                      + Theme.tightSpacing + Theme.treeCaretWidth;
+    }
+
     //Pops this cell's own menu. Only the Name cell carries one.
     function popupContextMenu(x: real, y: real) {
         const menu = contextMenuLoaderId.item as SurveyItemContextMenu;
@@ -178,6 +206,10 @@ QQ.Item {
         rowId.treeView.selectionModel.setCurrentIndex(index, ItemSelectionModel.NoUpdate);
         rowId.treeView.toggleExpanded(rowId.row);
     }
+
+    QC.ToolTip.visible: rowHoverId.hovered && rowId.moveReason !== ""
+    QC.ToolTip.text: rowId.moveReason
+    QC.ToolTip.delay: Theme.toolTipDelay
 
     QQ.TableView.onPooled: {
         rowId.pooled = true;
@@ -193,12 +225,62 @@ QQ.Item {
         rowIndex: rowId.row
     }
 
+    //An armed move's target: one frame along the whole row, drawn a cell at a
+    //time, and lit while the pointer is on the row.
+    QQ.Item {
+        anchors.fill: parent
+        visible: rowId.isMoveTarget
+
+        QQ.Rectangle {
+            anchors.fill: parent
+            color: rowId.moveHovered ? Theme.highlight : Theme.transparent
+        }
+
+        QQ.Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: Theme.attentionBorderWidth
+            color: Theme.focusRing
+        }
+
+        QQ.Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Theme.attentionBorderWidth
+            color: Theme.focusRing
+        }
+
+        QQ.Rectangle {
+            visible: rowId.column === SurveyTreeModel.Name
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Theme.attentionBorderWidth
+            color: Theme.focusRing
+        }
+
+        QQ.Rectangle {
+            visible: rowId.column === SurveyTreeModel.Decl
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Theme.attentionBorderWidth
+            color: Theme.focusRing
+        }
+    }
+
     QQ.Loader {
         id: contentLoaderId
 
         anchors.fill: parent
         anchors.leftMargin: Theme.delegatePadding
         anchors.rightMargin: Theme.delegatePadding
+
+        //Every row an armed move cannot land under steps back, the moving row
+        //and its subtree among them.
+        opacity: rowId.moveArmed && !rowId.isMoveTarget ? Theme.disabledOpacity : 1.0
 
         sourceComponent: {
             switch(rowId.column) {
@@ -231,6 +313,35 @@ QQ.Item {
 
         onTapped: (eventPoint) => rowId.showContextMenu(eventPoint.position.x,
                                                         eventPoint.position.y)
+    }
+
+    //Shares which row the pointer is on with the row's other cells, and
+    //shows a muted row's reason while a move is armed.
+    QQ.HoverHandler {
+        id: rowHoverId
+
+        onHoveredChanged: {
+            const tree = rowId.treeView.surveyTree;
+            if(rowHoverId.hovered) {
+                tree.hoveredRow = rowId.row;
+            } else if(tree.hoveredRow === rowId.row) {
+                tree.hoveredRow = -1;
+            }
+        }
+    }
+
+    //While a move is armed, a click on a row lands it there, and a row that
+    //cannot take it does nothing. The caret keeps opening rows, so a target
+    //the tree holds folded stays reachable.
+    QQ.TapHandler {
+        enabled: rowId.moveArmed
+        acceptedButtons: Qt.LeftButton
+
+        onTapped: (eventPoint) => {
+            if(!rowId.isOnCaret(eventPoint.position.x)) {
+                rowId.treeView.surveyTree.requestMoveTo(rowId.object);
+            }
+        }
     }
 
     // Touch-only so mouse left-clicks pass through to the name link below.
@@ -316,6 +427,8 @@ QQ.Item {
                     color: rowId.isNode ? Theme.textLink : Theme.textSubtle
                     elide: QQ.Text.ElideRight
                     visible: !rowId.renaming
+                    //An armed move takes the click instead of the page.
+                    enabled: !rowId.moveArmed
 
                     Layout.fillWidth: true
 

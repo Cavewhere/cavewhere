@@ -42,6 +42,10 @@ class CAVEWHERE_LIB_EXPORT cwSurveyTreeModel : public QAbstractItemModel
     QML_NAMED_ELEMENT(SurveyTreeModel)
 
     Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
+    Q_PROPERTY(bool moveActive READ moveActive NOTIFY moveChanged)
+    Q_PROPERTY(QObject* moveSubject READ moveSubject NOTIFY moveChanged)
+    Q_PROPERTY(QString moveSubjectName READ moveSubjectName NOTIFY moveChanged)
+    Q_PROPERTY(bool moveRootIsTarget READ moveRootIsTarget NOTIFY moveChanged)
 
 public:
     //! The columns of the Data page's tree table. Stations, Length, Depth and
@@ -115,11 +119,52 @@ public:
     //! row the view opens one level on insert.
     Q_INVOKABLE bool isSourceRootIndex(const QModelIndex& index) const;
 
+    //! True when the row \a index stands for may be moved: Move to… is
+    //! offered on it.
+    Q_INVOKABLE bool isMovableIndex(const QModelIndex& index) const;
+
+    //! Arms "Move to…" for the row \a index stands for, canceling any move
+    //! already armed: one armed move per tree. Every row then answers
+    //! isMoveTarget() until commitMove() or cancelMove().
+    Q_INVOKABLE void startMove(const QModelIndex& index);
+    Q_INVOKABLE void cancelMove();
+
+    //! Moves the armed subject under the node \a targetIndex stands for, the
+    //! invalid index standing for the region's root, and disarms. Returns
+    //! false and keeps the move armed when the row cannot take it.
+    Q_INVOKABLE bool commitMove(const QModelIndex& targetIndex);
+
+    //! True while a move is armed and \a index is a node row that takes it.
+    Q_INVOKABLE bool isMoveTarget(const QModelIndex& index) const;
+
+    //! True while a move is armed and \a index is the moving row or a row
+    //! under it.
+    Q_INVOKABLE bool isMoveSource(const QModelIndex& index) const;
+
+    //! Why the row \a index stands for cannot take the armed move, empty for
+    //! a target and while no move is armed.
+    Q_INVOKABLE QString moveTargetReason(const QModelIndex& index) const;
+
+    //! The question to ask before the armed move lands under \a targetIndex:
+    //! the ties it makes, the names it joins, the fixes it carries. Empty when
+    //! the move is the move and nothing more.
+    Q_INVOKABLE QString moveConfirmation(const QModelIndex& targetIndex) const;
+
+    bool moveActive() const { return !m_moveSubject.isNull(); }
+    QObject* moveSubject() const { return m_moveSubject; }
+    QString moveSubjectName() const;
+    //! True when the region's root, which owns no row, takes the armed move.
+    bool moveRootIsTarget() const { return isMoveTarget(QModelIndex()); }
+
 signals:
     void regionChanged();
+    void moveChanged();
 
 private:
     QPointer<cwCavingRegion> m_region;
+    //! The node or trip an armed Move to… carries, null while none is armed.
+    QPointer<QObject> m_moveSubject;
+    QMetaObject::Connection m_moveSubjectDestroyed;
 
     //! Every node and trip this model holds connections to, so a second wiring
     //! of the same object is refused and a deleted one is forgotten.

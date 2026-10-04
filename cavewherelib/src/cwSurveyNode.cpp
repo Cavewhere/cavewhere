@@ -941,11 +941,20 @@ cwSurveyNode::InsertRemoveTrip::InsertRemoveTrip(cwSurveyNode* node,
 cwSurveyNode::InsertRemoveTrip::~InsertRemoveTrip() {
     if(OwnsTrips) {
         for(auto trip : std::as_const(Trips)) {
-            if(!trip.isNull()) {
+            //A moved trip is removed from its old node and inserted under its
+            //new one, so this command can still hold a trip alive in the tree.
+            //A node that lists the trip owns it.
+            if(!trip.isNull() && !isListed(trip)) {
                 trip->deleteLater();
             }
         }
     }
+}
+
+bool cwSurveyNode::InsertRemoveTrip::isListed(const cwTrip* trip)
+{
+    const cwSurveyNode* node = trip->parentNode();
+    return node != nullptr && node->m_trips.contains(const_cast<cwTrip*>(trip));
 }
 
 void cwSurveyNode::InsertRemoveTrip::insertTrips() {

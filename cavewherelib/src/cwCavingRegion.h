@@ -135,6 +135,9 @@ public:
     Q_INVOKABLE bool tieStations(const cwStationHandle& first,
                                  const cwStationHandle& second);
 
+    //! True when one declared equate holds both \a first and \a second.
+    bool isTied(const cwStationHandle& first, const cwStationHandle& second) const;
+
     //! The project-wide default unit system, persisted with the project. It
     //! seeds the entry unit of new trips but never reinterprets existing ones.
     //! Defaults to Metric; cwProject seeds it from the app-level cwUnitSettings

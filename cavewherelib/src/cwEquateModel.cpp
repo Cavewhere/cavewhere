@@ -67,6 +67,16 @@ void cwEquateModel::removeAt(int index)
     emit countChanged();
 }
 
+void cwEquateModel::replaceAt(int index, const cwEquate& equate)
+{
+    if (index < 0 || index >= m_equates.size() || m_equates.at(index) == equate) {
+        return;
+    }
+    m_equates.replace(index, equate);
+    const QModelIndex changed = this->index(index);
+    emit dataChanged(changed, changed, {EquateRole, StationCountRole});
+}
+
 cwEquate cwEquateModel::equateAt(int index) const
 {
     if (index < 0 || index >= m_equates.size()) {

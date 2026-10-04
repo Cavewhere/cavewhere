@@ -56,6 +56,8 @@ void cwSurveyTreeModel::setRegion(cwCavingRegion* region)
 {
     if(m_region == region) { return; }
 
+    cancelMove();
+
     if(m_region) {
         disconnect(m_region, nullptr, this, nullptr);
         disconnectSubtree(m_region->rootNode());
@@ -317,6 +319,112 @@ bool cwSurveyTreeModel::isSourceRootIndex(const QModelIndex& index) const
 {
     cwSurveyNode* node = nodeAt(index);
     return node != nullptr && node->isSourceRoot();
+}
+
+bool cwSurveyTreeModel::isMovableIndex(const QModelIndex& index) const
+{
+    return cwSurveyNode::isMovable(objectFor(index));
+}
+
+void cwSurveyTreeModel::startMove(const QModelIndex& index)
+{
+    cancelMove();
+
+    QObject* subject = objectFor(index);
+    if(!cwSurveyNode::isMovable(subject)) { return; }
+
+    m_moveSubject = subject;
+
+    //A subject destroyed while armed leaves the QPointer null with nothing
+    //said, and the banner would keep asking about it.
+    m_moveSubjectDestroyed = connect(subject, &QObject::destroyed, this, [this]() {
+        m_moveSubject = nullptr;
+        emit moveChanged();
+    }, Qt::SingleShotConnection);
+
+    emit moveChanged();
+}
+
+void cwSurveyTreeModel::cancelMove()
+{
+    if(m_moveSubject.isNull()) { return; }
+
+    disconnect(m_moveSubjectDestroyed);
+    m_moveSubject = nullptr;
+    emit moveChanged();
+}
+
+bool cwSurveyTreeModel::commitMove(const QModelIndex& targetIndex)
+{
+    if(!isMoveTarget(targetIndex)) { return false; }
+
+    QObject* subject = m_moveSubject;
+    cwSurveyNode* destination = nodeForIndex(targetIndex);
+
+    //Disarmed first, so the rows the move re-announces draw unarmed.
+    cancelMove();
+
+    return destination->moveHere(subject);
+}
+
+bool cwSurveyTreeModel::isMoveTarget(const QModelIndex& index) const
+{
+    if(!moveActive()) { return false; }
+
+    //The invalid index is the region's root, and a trip row is no node at all.
+    const cwSurveyNode* destination = nodeForIndex(index);
+    return destination != nullptr && destination->moveRefusal(m_moveSubject).isEmpty();
+}
+
+bool cwSurveyTreeModel::isMoveSource(const QModelIndex& index) const
+{
+    if(!moveActive() || !index.isValid()) { return false; }
+
+    QObject* object = objectFor(index);
+    if(object == m_moveSubject) { return true; }
+
+    const auto* movingNode = qobject_cast<const cwSurveyNode*>(m_moveSubject);
+    if(movingNode == nullptr) { return false; }
+
+    const cwTrip* trip = qobject_cast<const cwTrip*>(object);
+    const cwSurveyNode* node = trip != nullptr ? trip->parentNode()
+                                               : qobject_cast<const cwSurveyNode*>(object);
+    for(; node != nullptr; node = node->parentNode()) {
+        if(node == movingNode) { return true; }
+    }
+    return false;
+}
+
+QString cwSurveyTreeModel::moveTargetReason(const QModelIndex& index) const
+{
+    if(!moveActive()) { return QString(); }
+
+    if(objectFor(index) == m_moveSubject) {
+        return tr("This is what's moving");
+    }
+
+    const cwSurveyNode* destination = nodeForIndex(index);
+    if(destination == nullptr) {
+        return tr("A trip holds no other survey");
+    }
+    return destination->moveRefusal(m_moveSubject);
+}
+
+QString cwSurveyTreeModel::moveConfirmation(const QModelIndex& targetIndex) const
+{
+    if(!isMoveTarget(targetIndex)) { return QString(); }
+    return nodeForIndex(targetIndex)->moveConsequences(m_moveSubject);
+}
+
+QString cwSurveyTreeModel::moveSubjectName() const
+{
+    if(const auto* node = qobject_cast<const cwSurveyNode*>(m_moveSubject)) {
+        return node->name();
+    }
+    if(const auto* trip = qobject_cast<const cwTrip*>(m_moveSubject)) {
+        return trip->name();
+    }
+    return QString();
 }
 
 cwSurveyNode* cwSurveyTreeModel::nodeForIndex(const QModelIndex& index) const

@@ -149,6 +149,8 @@ public:
                                     cwUnits::UnitSystem units);
 
     void appendFixStation(const cwFixStation& fix);
+    //! Inserts \a fix at \a row, clamped to the rows the model has.
+    void insertFixStation(int row, const cwFixStation& fix);
     void setFixStations(const QList<cwFixStation>& fixes);
     const QList<cwFixStation>& fixStations() const { return m_fixStations; }
     int count() const { return m_fixStations.size(); }

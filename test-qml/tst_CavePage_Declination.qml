@@ -242,8 +242,8 @@ MainWindowTest {
                           return menu !== null && menu.visible
                       }, 5000, "the trip row must open its context menu")
 
-            compare(menu.count, 2, "Delete… and Declination")
-            const submenu = menu.menuAt(1)
+            compare(menu.count, 3, "Move to…, Delete… and Declination")
+            const submenu = menu.menuAt(2)
             verify(submenu !== null, "a trip row's menu carries a submenu")
             compare(submenu.objectName, "declinationSubmenu")
             compare(menu.tripCalibrations.length, 3,

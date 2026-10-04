@@ -291,6 +291,22 @@ StandardPage {
             onClicked: caveNameText.openEditor()
         }
 
+        // The whole-region tree is where a move picks its destination, so
+        // this arms the move and opens the Data page. The isSourced and
+        // externallyBacked reads re-evaluate the binding when an attachment
+        // changes; isMovableIndex alone would not.
+        QC.Button {
+            objectName: "moveNodeButton"
+            text: qsTr("Move to…")
+            flat: true
+            visible: nodePageArea.currentNode !== null
+                     && !nodePageArea.isSourced
+                     && !nodePageArea.currentNode.externallyBacked
+                     && RegionSurveyTree.isMovableIndex(RegionSurveyTree.indexOf(nodePageArea.currentNode))
+
+            onClicked: tripTreeId.moveObject(nodePageArea.currentNode)
+        }
+
         QQ.Item { Layout.fillWidth: true }
     }
 

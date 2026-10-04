@@ -510,21 +510,26 @@ bool cwCavingRegion::tieStations(const cwStationHandle& first,
     }
 
     //A tie is a fact about two stations, so declaring it twice says nothing
-    //more. Checked by membership rather than by equality: an equate that
-    //already ties these two along with a third still says what the caller
-    //asked for.
-    const QList<cwEquate>& declared = m_equates->equates();
-    const bool alreadyTied = std::any_of(declared.cbegin(), declared.cend(),
-                                         [&first, &second](const cwEquate& existing) {
-        const QList<cwStationHandle> stations = existing.stations();
-        return stations.contains(first) && stations.contains(second);
-    });
-    if (alreadyTied) {
+    //more.
+    if (isTied(first, second)) {
         return true;
     }
 
     m_equates->appendEquate(equate);
     return true;
+}
+
+bool cwCavingRegion::isTied(const cwStationHandle& first,
+                            const cwStationHandle& second) const
+{
+    //Checked by membership rather than by equality: an equate that already
+    //ties these two along with a third still ties them.
+    const QList<cwEquate>& declared = m_equates->equates();
+    return std::any_of(declared.cbegin(), declared.cend(),
+                       [&first, &second](const cwEquate& existing) {
+        const QList<cwStationHandle> stations = existing.stations();
+        return stations.contains(first) && stations.contains(second);
+    });
 }
 
 cwCavingRegionData cwCavingRegion::data() const

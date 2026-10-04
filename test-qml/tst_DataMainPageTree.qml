@@ -82,6 +82,7 @@ MainWindowTest {
             }
 
             rootId.closeAnyOpenEditor()
+            RegionSurveyTree.cancelMove()
             smokeLoaderId.active = false
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.newProject()
@@ -416,8 +417,8 @@ MainWindowTest {
             const menu = rowContextMenu(page, "caveDelegate0")
 
             //A click opens the row and the name cell renames it, so a cave's
-            //menu holds the verbs no cell carries: Add and Delete….
-            compare(menu.count, 2, "a cave row's menu offers Add and Delete…")
+            //menu holds the verbs no cell carries: Add, Move to… and Delete….
+            compare(menu.count, 3, "a cave row's menu offers Add, Move to… and Delete…")
             compare(menu.menuAt(0).objectName, "addVerbsSubmenu")
             const deleteItem = findChild(menu, "surveyItemDeleteMenuItem")
             verify(deleteItem !== null && deleteItem.visible, "Delete… must be offered")
@@ -469,9 +470,9 @@ MainWindowTest {
 
             //Only a trip carries a calibration, so only a trip's menu offers
             //one — the cave page's trip table was the last place to set it.
-            compare(menu.count, 2, "a trip row's menu offers Delete… and Declination")
-            const submenu = menu.menuAt(1)
-            verify(submenu !== null, "the second entry is a submenu")
+            compare(menu.count, 3, "a trip row's menu offers Move to…, Delete… and Declination")
+            const submenu = menu.menuAt(2)
+            verify(submenu !== null, "the third entry is a submenu")
             compare(submenu.objectName, "declinationSubmenu")
 
             mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
@@ -1137,6 +1138,227 @@ MainWindowTest {
 
             mouseMove(page, page.width / 2, page.height - Theme.treeRowHeight)
             tryVerify(() => !popover.opened, 5000, "leaving the badges closes the peek")
+        }
+
+        // --- C5.4: Move to… ---
+
+        // Kentucky (Folder) › Side Cave (Cave) › Upper level (Section), with
+        // Trip 1 under Side Cave, beside a top-level Other Cave. Fully
+        // expanded, the view rows are Kentucky 0, Side Cave 1, Upper level 2,
+        // Trip 1 3 and Other Cave 4.
+        function setupMoveTree() {
+            const kentucky = RootData.region.addNode(null, SurveyNodeKind.Folder, "Kentucky")
+            const sideCave = RootData.region.addNode(kentucky, SurveyNodeKind.Cave, "Side Cave")
+            const upperLevel = RootData.region.addNode(sideCave, SurveyNodeKind.Folder, "Upper level")
+            sideCave.addTrip()
+            const trip = sideCave.trip(0)
+            trip.name = "Trip 1"
+            const otherCave = RootData.region.addNode(null, SurveyNodeKind.Cave, "Other Cave")
+            return { kentucky: kentucky, sideCave: sideCave, upperLevel: upperLevel,
+                     trip: trip, otherCave: otherCave }
+        }
+
+        // Shows every row of the tree setupMoveTree() builds.
+        function expandedMoveTree(page) {
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
+            tree.surveyTree.expandAll()
+            tryCompare(tree, "rows", 5, 5000)
+            return tree
+        }
+
+        // The Name cell of view row \a viewRow once it draws \a object.
+        function rowFor(page, prefix, viewRow, object) {
+            let row = null
+            tryVerify(() => {
+                          row = findChild(page, prefix + viewRow)
+                          return row !== null && row.object === object
+                      }, 5000, prefix + viewRow + " must draw its object")
+            return row
+        }
+
+        // Opens the context menu of view row \a viewRow, a node row for the
+        // "caveDelegate" prefix and a trip row for "tripDelegate".
+        function openMenuOn(page, tree, viewRow, prefix) {
+            tree.surveyTree.setCurrentRow(viewRow)
+            tree.forceActiveFocus()
+            tryVerify(() => tree.activeFocus && tree.currentRow === viewRow, 5000,
+                      "row " + viewRow + " must be current")
+            keyClick(Qt.Key_F10, Qt.ShiftModifier)
+            return rowContextMenu(page, prefix + viewRow)
+        }
+
+        function moveBanner(page) {
+            const banner = findChild(page, "surveyMoveBanner")
+            verify(banner !== null, "the Data page carries the move banner")
+            return banner
+        }
+
+        // A click where the row's name ends: past the caret, on the cell that
+        // takes an armed move's click.
+        function clickRow(row) {
+            mouseClick(row, row.width - Theme.delegatePadding, row.height / 2)
+        }
+
+        // Move to… arms the tree: the banner asks, every row that takes the
+        // move is a target and every other row says why it is not; a click on
+        // a target lands the move, and the breadcrumb follows the trip.
+        function test_moveToArmsTheTreeAndAClickOnATargetLandsIt() {
+            const t = setupMoveTree()
+            const page = gotoDataMainPage()
+            const tree = expandedMoveTree(page)
+            const banner = moveBanner(page)
+            verify(!banner.visible, "no banner before a move is armed")
+
+            const menu = openMenuOn(page, tree, 3, "tripDelegate")
+            const moveItem = findChild(menu, "surveyItemMoveMenuItem")
+            verify(moveItem !== null && moveItem.visible, "a native trip offers Move to…")
+            compare(moveItem.text, "Move to…")
+            mouseClick(moveItem)
+
+            tryVerify(() => banner.visible, 5000, "Move to… shows the banner")
+            compare(findChild(banner, "surveyMoveBannerLabel").text,
+                    "Click where to move Trip 1 — Esc cancels")
+            verify(!findChild(banner, "surveyMoveTopLevelButton").visible,
+                   "the top level takes no trip")
+
+            const upperRow = rowFor(page, "caveDelegate", 2, t.upperLevel)
+            tryVerify(() => upperRow.isMoveTarget, 5000, "a Section takes a trip")
+            verify(rowFor(page, "caveDelegate", 4, t.otherCave).isMoveTarget, "another cave takes a trip")
+
+            const kentuckyRow = rowFor(page, "caveDelegate", 0, t.kentucky)
+            verify(!kentuckyRow.isMoveTarget)
+            compare(kentuckyRow.moveReason, "Trips go in a cave or a section")
+            compare(rowFor(page, "caveDelegate", 1, t.sideCave).moveReason, "Already here")
+            compare(rowFor(page, "tripDelegate", 3, t.trip).moveReason, "This is what's moving")
+
+            //A muted row takes no click.
+            clickRow(kentuckyRow)
+            verify(RegionSurveyTree.moveActive, "a click on a muted row leaves the move armed")
+            compare(t.trip.parentNode, t.sideCave)
+
+            clickRow(upperRow)
+            tryCompare(t.trip, "parentNode", t.upperLevel, 5000)
+            tryVerify(() => !banner.visible, 5000, "landing the move retires the banner")
+            compare(t.sideCave.tripCount, 0)
+            compare(t.upperLevel.tripCount, 1)
+
+            tree.surveyTree.openObject(t.trip)
+            tryCompare(RootData.pageSelectionModel, "currentPageAddress",
+                       "Source/Data/Node=Kentucky/Node=Side Cave/Node=Upper level/Trip=Trip 1", 5000)
+
+            RootData.undoStack.undo()
+            tryCompare(t.trip, "parentNode", t.sideCave, 5000)
+        }
+
+        // Esc, leaving the page, and the banner's Cancel each disarm the move.
+        function test_escapeLeavingAndCancelDisarmTheMove() {
+            const t = setupMoveTree()
+            let page = gotoDataMainPage()
+            const tree = expandedMoveTree(page)
+            const banner = moveBanner(page)
+
+            mouseClick(findChild(openMenuOn(page, tree, 2, "caveDelegate"), "surveyItemMoveMenuItem"))
+            tryVerify(() => banner.visible, 5000, "Move to… shows the banner")
+            verify(findChild(banner, "surveyMoveTopLevelButton").visible,
+                   "the top level takes a section")
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => !RegionSurveyTree.moveActive, 5000, "Esc cancels the move")
+            verify(!banner.visible)
+
+            RegionSurveyTree.startMove(RegionSurveyTree.indexOf(t.upperLevel))
+            tryVerify(() => banner.visible, 5000)
+            mouseClick(findChild(banner, "surveyMoveCancelButton"))
+            tryVerify(() => !RegionSurveyTree.moveActive, 5000, "Cancel cancels the move")
+
+            RegionSurveyTree.startMove(RegionSurveyTree.indexOf(t.upperLevel))
+            verify(RegionSurveyTree.moveActive)
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            tryVerify(() => !RegionSurveyTree.moveActive, 5000, "leaving the Data page cancels the move")
+            compare(t.upperLevel.parentNode, t.sideCave, "nothing moved")
+        }
+
+        // A move that ties stations asks first and names the count; Move
+        // lands it with the tie, and one undo takes both back.
+        function test_aMoveThatTiesStationsAsksFirst() {
+            const t = setupMoveTree()
+            t.sideCave.addTrip()
+            const partner = t.sideCave.trip(1)
+            partner.name = "Trip 2"
+            const stationNames = [[t.trip, "a1", "a2"], [partner, "a2", "b1"]]
+            for(let i = 0; i < stationNames.length; i++) {
+                const trip = stationNames[i][0]
+                trip.addNewChunk()
+                const chunk = trip.chunk(0)
+                chunk.setData(SurveyChunk.StationNameRole, 0, stationNames[i][1])
+                chunk.setData(SurveyChunk.StationNameRole, 1, stationNames[i][2])
+                chunk.setData(SurveyChunk.ShotDistanceRole, 0, "10")
+                chunk.setData(SurveyChunk.ShotCompassRole, 0, "0")
+                chunk.setData(SurveyChunk.ShotClinoRole, 0, "0")
+            }
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
+            tree.surveyTree.expandAll()
+            tryCompare(tree, "rows", 6, 5000)
+            const banner = moveBanner(page)
+
+            RegionSurveyTree.startMove(RegionSurveyTree.indexOf(t.trip))
+            tryVerify(() => banner.visible, 5000)
+
+            clickRow(rowFor(page, "caveDelegate", 2, t.upperLevel))
+            tryCompare(findChild(banner, "surveyMoveBannerLabel"), "text",
+                       "Move Trip 1 to Upper level? 1 station shared with Side Cave becomes a tie.", 5000)
+            compare(t.trip.parentNode, t.sideCave, "the question comes before the move")
+            //The Move button appears with the question, so the banner is laid
+            //out again before it is clicked.
+            waitForRendering(banner)
+
+            const equatesBefore = RootData.region.equates.count
+            mouseClick(findChild(banner, "surveyMoveConfirmButton"))
+            tryCompare(t.trip, "parentNode", t.upperLevel, 5000)
+            compare(RootData.region.equates.count, equatesBefore + 1, "the shared station became a tie")
+            tryVerify(() => !banner.visible, 5000)
+
+            RootData.undoStack.undo()
+            tryCompare(t.trip, "parentNode", t.sideCave, 5000)
+            compare(RootData.region.equates.count, equatesBefore, "one undo takes the tie back too")
+        }
+
+        // Survey data an attached file places stays where the file puts it:
+        // its rows offer no Move to….
+        function test_attachedRowsOfferNoMove() {
+            RootData.account.name = "Move Test"
+            RootData.account.email = "move.test@example.com"
+            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            verify(RootData.project.saveAs(tmpPath + "/moveTest.cwproj"), "saveAs should succeed")
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            RootData.region.addCave()
+            const cave = RootData.region.cave(0)
+            cave.name = "Attached Cave"
+            const model = RootData.externalCenterlineManager.attachedCenterlinesModel
+            const rowsBefore = model.rowCount()
+            RootData.attachCaveCenterline(cave,
+                                          TestHelper.testcasesDatasetPath("external-centerlines/survex_simple.svx"))
+            tryVerify(() => model.rowCount() > rowsBefore, 10000, "the attach must land")
+            RootData.futureManagerModel.waitForFinished()
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            const menu = openMenuOn(page, tree, 0, "caveDelegate")
+            verify(findChild(menu, "surveyItemMoveMenuItem") === null,
+                   "an attached cave offers no Move to…")
+            menu.close()
+
+            tryVerify(() => cave.tripCount > 0, 10000, "the attached cave windows its file in a trip")
+            tree.surveyTree.expandAll()
+            tryVerify(() => tree.rows > 1, 5000)
+            const tripMenu = openMenuOn(page, tree, 1, "tripDelegate")
+            verify(findChild(tripMenu, "surveyItemMoveMenuItem") === null,
+                   "a trip of an attached cave offers no Move to…")
+            tripMenu.close()
         }
     }
 }

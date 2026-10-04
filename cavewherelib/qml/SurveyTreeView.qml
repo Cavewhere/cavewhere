@@ -33,6 +33,11 @@ ColumnLayout {
     //view, since a TreeView delegate is handed nothing but its model roles.
     property RemoveAskBox removeAskBox
 
+    //The banner an armed Move to… waits in, which lands the move or asks
+    //first. Only the whole-region tree picks a destination, so a node page's
+    //tree leaves it null and hands its moves to the Data page.
+    property SurveyMoveBanner moveBanner: null
+
     //The node whose children the tree shows: null shows the whole region, a
     //cave shows that cave's own rows. TreeView draws the CHILDREN of its
     //rootIndex, so a cave here leaves the cave itself off and its trips as
@@ -80,6 +85,10 @@ ColumnLayout {
     //What was open before the filter took over the rows. Kept by node id
     //rather than by row, since filtering rebuilds every row.
     property list<string> expansionBeforeFilter: []
+
+    //The view row under the pointer, -1 for none. A move target draws its
+    //whole row hovered, and a row is one cell per column.
+    property int hoveredRow: -1
 
     spacing: 0
 
@@ -348,6 +357,37 @@ ColumnLayout {
         }
     }
 
+    //Arms Move to… for \a object. The whole-region tree is where a move picks
+    //its destination, so a node page's tree opens the Data page first.
+    function moveObject(object: QQ.QtObject) {
+        if(surveyTreeId.rootNode !== null) {
+            RootData.pageSelectionModel.currentPageAddress = linkGeneratorId.dataPageLink();
+        }
+        RegionSurveyTree.startMove(RegionSurveyTree.indexOf(object));
+    }
+
+    //A click on the row \a object stands for while a move is armed.
+    function requestMoveTo(object: QQ.QtObject) {
+        if(surveyTreeId.moveBanner !== null) {
+            surveyTreeId.moveBanner.requestMoveTo(object);
+        }
+    }
+
+    //Opens the tree down to what an armed move carries and makes its row
+    //current, so the move starts from where the thing moving sits.
+    function revealMoveSubject() {
+        const subject = RegionSurveyTree.moveSubject;
+        if(subject === null) {
+            return;
+        }
+
+        surveyTreeId.expandTo(subject);
+        const viewRow = treeViewId.rowAtIndex(filterModelId.mapFromSource(RegionSurveyTree.indexOf(subject)));
+        if(viewRow >= 0) {
+            surveyTreeId.setCurrentRow(viewRow);
+        }
+    }
+
     //Takes the keyboard back after a menu closes, so the arrow keys keep
     //moving the tree.
     function focusTree() {
@@ -544,6 +584,16 @@ ColumnLayout {
     QQ.Component.onCompleted: {
         surveyTreeId.applyRootIndex();
         surveyTreeId.makeFirstRowCurrent();
+    }
+
+    //The whole-region tree shows where an armed move starts from.
+    QQ.Connections {
+        target: RegionSurveyTree
+        enabled: surveyTreeId.moveBanner !== null
+
+        function onMoveChanged() {
+            surveyTreeId.revealMoveSubject();
+        }
     }
 
     //The prompt answers for whichever row asked for it.

@@ -78,6 +78,12 @@ StandardPage {
             // read-only so the rarely-changed unit/CS editors are never left
             // exposed after navigating away.
             settingsEditButton.editMode = false
+
+            // A move is picked on this page's tree, so leaving the page
+            // cancels it.
+            if (RootData.pageSelectionModel.currentPage !== pageId.PageView.page) {
+                moveBannerId.cancel()
+            }
         }
     }
 
@@ -452,10 +458,27 @@ StandardPage {
         }
     }
 
+    SurveyMoveBanner {
+        id: moveBannerId
+
+        Layout.fillWidth: true
+    }
+
+    // A window-context Shortcut instead of Keys.onEscapePressed: Esc has to
+    // reach the move wherever the focus sits. Live only while this page shows
+    // an armed move, so it stays out of the way of every other Escape.
+    QQ.Shortcut {
+        sequences: ["Escape"]
+        enabled: pageId.visible && RegionSurveyTree.moveActive
+        context: Qt.WindowShortcut
+        onActivated: moveBannerId.cancel()
+    }
+
     SurveyTreeView {
         id: caveTreeId
 
         removeAskBox: removeChallengeId
+        moveBanner: moveBannerId
 
         Layout.fillWidth: true
         Layout.fillHeight: true
@@ -574,6 +597,13 @@ StandardPage {
                 spacing: Theme.sectionSpacing
 
                 LayoutItemProxy { target: actionBar }
+                // An invisible layout item is excluded; a visible proxy of an
+                // invisible target would still reserve the banner's height.
+                LayoutItemProxy {
+                    target: moveBannerId
+                    visible: RegionSurveyTree.moveActive
+                    Layout.fillWidth: true
+                }
                 LayoutItemProxy { target: caveTreeId }
             }
         }
@@ -598,6 +628,11 @@ StandardPage {
             LayoutItemProxy { target: titleRow }
             LayoutItemProxy { target: regionInfoBox }
             LayoutItemProxy { target: actionBar }
+            LayoutItemProxy {
+                target: moveBannerId
+                visible: RegionSurveyTree.moveActive
+                Layout.fillWidth: true
+            }
             LayoutItemProxy { target: caveTreeId }
         }
     }

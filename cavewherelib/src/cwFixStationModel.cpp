@@ -401,9 +401,14 @@ void cwFixStationModel::removeFixStation(const QString& stationName)
 
 void cwFixStationModel::appendFixStation(const cwFixStation& fix)
 {
-    const int row = m_fixStations.size();
-    beginInsertRows(QModelIndex(), row, row);
-    m_fixStations.append(fix);
+    insertFixStation(m_fixStations.size(), fix);
+}
+
+void cwFixStationModel::insertFixStation(int row, const cwFixStation& fix)
+{
+    const int clampedRow = qBound(0, row, static_cast<int>(m_fixStations.size()));
+    beginInsertRows(QModelIndex(), clampedRow, clampedRow);
+    m_fixStations.insert(clampedRow, fix);
     endInsertRows();
     emit countChanged();
 }

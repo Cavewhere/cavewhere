@@ -44,6 +44,10 @@ class cwKeywordModel;
 #include <QHash>
 #include <QQmlEngine>
 #include <QUuid>
+#include <QSet>
+
+//Std includes
+#include <memory>
 
 /**
  * One node of the survey tree: the region's root, a cave, a folder, or a node
@@ -275,6 +279,32 @@ public:
     Q_INVOKABLE void clearNodes();
 
     Q_INVOKABLE QString uniqueChildName(const QString& proposedName) const;
+
+    //! True when \a subject, a cwSurveyNode or a cwTrip, may be moved at all:
+    //! a native node other than the root, or a native trip of a native node.
+    //! Survey data an attached file places — a sourced node, a node or trip
+    //! with an attachment of its own or under one, a Scope trip — stays where
+    //! its file puts it.
+    static bool isMovable(const QObject* subject);
+
+    //! Why \a subject, a cwSurveyNode or a cwTrip, cannot move here, empty
+    //! when it can. A node takes the subjects the Add verbs would offer at its
+    //! position: a trip lands on a native node where caves do not go, a Cave
+    //! only where caves go, and a node never inside itself.
+    Q_INVOKABLE QString moveRefusal(QObject* subject) const;
+
+    //! The sentence a move of \a subject here owes the user before it runs:
+    //! the station names it ties back to the node it leaves, the names it
+    //! joins here, and the fixes that travel with it. Empty when the move is
+    //! the move and nothing more.
+    Q_INVOKABLE QString moveConsequences(QObject* subject) const;
+
+    //! Moves \a subject here as one undo step: the move itself, a tie for
+    //! every station name a trip leaves behind on the far side of a scope
+    //! boundary, the equates that named a leaving station re-keyed to where it
+    //! now lives, and the fixes of leaving stations carried to this node.
+    //! Returns false and changes nothing when moveRefusal() names a reason.
+    Q_INVOKABLE bool moveHere(QObject* subject);
 
     cwSanitizedNameSet& childNameSet() { return m_childNames; }
     const cwSanitizedNameSet& childNameSet() const { return m_childNames; }
@@ -562,6 +592,27 @@ private:
 
     void addTripNullHelper();
 
+    //! What a move of a subject to this node does beyond the move, worked out
+    //! from the tree as it stands before the move.
+    struct MovePlan {
+        //! The node the subject leaves.
+        cwSurveyNode* source = nullptr;
+        //! A trip move's new ties, one per station name shared with the trips
+        //! left behind.
+        QList<cwEquate> ties;
+        //! Station names a moving trip shares with the trips already here.
+        int joinedCount = 0;
+        //! Canonical station names leaving \a source: a trip move's names no
+        //! trip left behind carries.
+        QSet<QString> leavingNames;
+        //! A node move's scope label under \a source; its stations are
+        //! named "<label>.<tail>" there.
+        QString leavingLabel;
+        //! Rows of the source's fix table whose station leaves with the subject.
+        QList<int> leavingFixRows;
+    };
+    MovePlan planMove(const QObject* subject) const;
+
     virtual void setUndoStackForChildren();
 
 ////////////////////// Undo Redo commands ///////////////////////////////////
@@ -582,6 +633,9 @@ private:
     public:
         InsertRemoveTrip(cwSurveyNode* node, int beginIndex, int endIndex);
         ~InsertRemoveTrip();
+
+        //! True while a node lists \a trip among its trips.
+        static bool isListed(const cwTrip* trip);
 
     protected:
         void insertTrips();
@@ -669,6 +723,63 @@ private:
         RemoveNodeCommand Remove;
         InsertNodeCommand Insert;
         QString OldName;
+    };
+
+    //! One trip's move to another node as a single undo step, the trip-side
+    //! twin of MoveNodeCommand: the trip returns to the node, row and name it
+    //! left.
+    class MoveTripCommand : public QUndoCommand {
+    public:
+        MoveTripCommand(cwTrip* trip, cwSurveyNode* newParent);
+        virtual void redo();
+        virtual void undo();
+
+    private:
+        void renameWhileUnlisted(const cwSanitizedNameSet& siblingNames,
+                                 const QString& desiredName);
+
+        cwTrip* TripPtr;
+        cwSurveyNode* OldParentPtr;
+        cwSurveyNode* NewParentPtr;
+        RemoveTripCommand Remove;
+        InsertTripCommand Insert;
+        QString OldName;
+    };
+
+    //! "Move to…": the move of a node or trip plus what crossing a scope
+    //! boundary costs — new ties, re-keyed equates, traveling fixes — as one
+    //! undo step.
+    class MoveToCommand : public QUndoCommand {
+    public:
+        MoveToCommand(QObject* subject, cwSurveyNode* destination, const MovePlan& plan);
+        virtual void redo();
+        virtual void undo();
+
+    private:
+        struct EquateEdit {
+            cwEquate before;
+            cwEquate after;
+        };
+
+        struct FixEdit {
+            int sourceRow;
+            cwFixStation before;
+            cwFixStation after;
+        };
+
+        //! Works out the equate re-keys and fix edits once the subject hangs
+        //! in its new place, where a node's new scope label is known.
+        void finishPlan();
+
+        QObject* SubjectPtr;
+        cwSurveyNode* SourcePtr;
+        cwSurveyNode* DestinationPtr;
+        QPointer<cwCavingRegion> Region;
+        std::unique_ptr<QUndoCommand> Move;
+        MovePlan Plan;
+        bool Planned = false;
+        QList<EquateEdit> EquateEdits;
+        QList<FixEdit> FixEdits;
     };
 
 };

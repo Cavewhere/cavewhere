@@ -439,6 +439,10 @@ protected:
 
     virtual void setUndoStackForChildren();
 private:
+    //A trip moving between nodes is renamed while no node lists it, as part of
+    //the node's own move command, so the rename and the move undo as one.
+    friend class cwSurveyNode;
+
     // void Copy(const cwTrip& object);
 
     class NameCommand : public QUndoCommand {

@@ -50,6 +50,8 @@ public:
 
     void appendEquate(const cwEquate& equate);
     Q_INVOKABLE void removeAt(int index);
+    //! Replaces the equate at \a index in place, one dataChanged() for the row.
+    void replaceAt(int index, const cwEquate& equate);
     cwEquate equateAt(int index) const;
 
     void setEquates(const QList<cwEquate>& equates);
