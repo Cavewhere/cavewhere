@@ -11727,6 +11727,111 @@ TEST_CASE("loadOrConvert sqlite read-only source remains temporary and won't sav
     sourceFile.setPermissions(originalPermissions);
 }
 
+namespace {
+// Makes a copy of the legacy SQLite fixture read-only for the lifetime of the
+// guard, so loadOrConvert converts it into a temporary project.
+class ReadOnlySqliteSource
+{
+public:
+    ReadOnlySqliteSource()
+        : m_path(copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"))),
+          m_file(m_path),
+          m_originalPermissions(m_file.permissions())
+    {
+        m_madeReadOnly = m_file.setPermissions(QFileDevice::ReadOwner
+                                               | QFileDevice::ReadUser
+                                               | QFileDevice::ReadGroup
+                                               | QFileDevice::ReadOther);
+    }
+
+    ~ReadOnlySqliteSource()
+    {
+        m_file.setPermissions(m_originalPermissions);
+    }
+
+    QString path() const { return m_path; }
+    bool isReadOnly() const { return m_madeReadOnly && !QFileInfo(m_path).isWritable(); }
+
+private:
+    QString m_path;
+    QFile m_file;
+    QFileDevice::Permissions m_originalPermissions;
+    bool m_madeReadOnly = false;
+};
+
+std::unique_ptr<cwProject> loadReadOnlySqliteConversion(const ReadOnlySqliteSource& source,
+                                                        QQuickGit::Account& account)
+{
+    auto project = std::make_unique<cwProject>();
+    addTokenManager(project.get());
+    account.setName(QStringLiteral("Save As Tester"));
+    account.setEmail(QStringLiteral("save.as.tester@example.com"));
+    project->setGitAccount(&account);
+    project->loadOrConvert(source.path());
+    project->waitLoadToFinish();
+    REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+    REQUIRE(project->isTemporaryProject());
+    REQUIRE(project->fileType() == cwProject::SqliteFileType);
+    return project;
+}
+}
+
+TEST_CASE("Save As a bundle from a read-only sqlite conversion makes the project a savable bundle",
+          "[cwProject][conversion][saveAs]") {
+    const ReadOnlySqliteSource source;
+    REQUIRE(source.isReadOnly());
+
+    QQuickGit::Account account;
+    const auto project = loadReadOnlySqliteConversion(source, account);
+
+    const QString bundlePath = QFileInfo(source.path()).dir().absoluteFilePath(
+        QStringLiteral("saveAsFromReadOnlySqlite.cw"));
+
+    REQUIRE(project->saveAs(bundlePath));
+    project->waitSaveToFinish();
+    REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+
+    CHECK(QFileInfo::exists(bundlePath));
+    CHECK_FALSE(project->isTemporaryProject());
+    CHECK(project->fileType() == cwProject::BundledGitFileType);
+    CHECK(project->canSaveDirectly());
+    CHECK(project->filename() == bundlePath);
+
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Renamed after Save As"));
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    CHECK_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+    CHECK(project->filename() == bundlePath);
+}
+
+TEST_CASE("Save As a cwproj from a read-only sqlite conversion makes the project a savable git project",
+          "[cwProject][conversion][saveAs]") {
+    const ReadOnlySqliteSource source;
+    REQUIRE(source.isReadOnly());
+
+    QQuickGit::Account account;
+    const auto project = loadReadOnlySqliteConversion(source, account);
+
+    const QString projectPath = QFileInfo(source.path()).dir().absoluteFilePath(
+        QStringLiteral("saveAsFromReadOnlySqlite.cwproj"));
+
+    REQUIRE(project->saveAs(projectPath));
+    project->waitSaveToFinish();
+    REQUIRE_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+
+    CHECK(QFileInfo::exists(project->filename()));
+    CHECK_FALSE(project->isTemporaryProject());
+    CHECK(project->fileType() == cwProject::GitFileType);
+    CHECK(project->canSaveDirectly());
+
+    REQUIRE(project->cavingRegion()->caveCount() > 0);
+    project->cavingRegion()->cave(0)->setName(QStringLiteral("Renamed after Save As"));
+    REQUIRE(project->save());
+    project->waitSaveToFinish();
+    CHECK_FALSE(cwError::containsFatal(project->errorModel()->toList()));
+}
+
 TEST_CASE("Caves should be removed correctly simple", "[cwProject]") {
     auto filename = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
     auto project = std::make_unique<cwProject>();

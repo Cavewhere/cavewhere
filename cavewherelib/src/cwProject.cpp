@@ -773,6 +773,7 @@ bool cwProject::saveAs(QString newFilename)
                              }
 
                              ScopedProjectStateNotifier stateGuard(this);
+                             setSqliteTemporaryProject(false);
                              LoadedFromBundledArchive = true;
                              ConvertedFromSqlite = false;
                              BundledArchivePath = newFilename;
@@ -816,6 +817,7 @@ bool cwProject::saveAs(QString newFilename)
 
     {
         ScopedProjectStateNotifier stateGuard(this);
+        setSqliteTemporaryProject(false);
         LoadedFromBundledArchive = false;
         ConvertedFromSqlite = false;
         BundledArchivePath.clear();
@@ -1761,9 +1763,6 @@ void cwProject::setModified(bool modified)
 }
 
 bool cwProject::isTemporaryProject() const {
-    if (LoadedFromBundledArchive && !BundledArchivePath.isEmpty() && !ConvertedFromSqlite) {
-        return false;
-    }
     return m_saveLoad->isTemporaryProject() || SQLiteTempProject;
 }
 
