@@ -80,6 +80,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
     Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
     Q_PROPERTY(QAbstractItemModel* fixStationTable READ fixStationTable CONSTANT)
+    Q_PROPERTY(int fixStationCount READ fixStationCount NOTIFY fixStationCountChanged)
 
 public:
     enum Roles {
@@ -192,6 +193,10 @@ public:
     /// 0..n-1, and setData()/flags() reach the model that owns each row, so an
     /// attached row refuses edits. Map an attached row with mapFromSource().
     QConcatenateTablesProxyModel* fixStationTable() const { return m_fixStationTable; }
+
+    /// The number of rows fixStationTable() lists: the node's own fixes plus
+    /// the ones its attached files carry.
+    int fixStationCount() const { return m_fixStationTable->rowCount(); }
 
     /// Per-node grid-convergence readout (angle + state + display text).
     /// Recomputed via recomputeGridConvergence() in the region's local
@@ -404,6 +409,9 @@ signals:
 
     //! attachedFixes()' rows or the stations behind fileFixedStations() changed.
     void attachedFixesChanged();
+
+    //! fixStationTable()'s row count changed.
+    void fixStationCountChanged();
 
     void stationPositionPositionChanged();
     void surveyNetworkChanged();

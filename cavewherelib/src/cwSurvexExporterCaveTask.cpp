@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwSurvexExporterCaveTask.h"
+#include "cwExternalCenterlineScanner.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporter.h"
@@ -235,11 +236,10 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         }
         // The node's own fixes name the file's stations in this block's scope,
         // except a station the file fixes itself, whose fix writeFixStations
-        // drops. No fallback fix is added: the file is placed by its own
-        // fixes or by these.
-        constexpr bool fileAnchorsItself = true;
+        // drops. A file that fixes nothing sits at the origin, like a native
+        // node with no fix.
         cwSurvexExporterUtils::CsScope includeScope(enclosingScope);
-        writeFixStations(stream, node, tree, globalCS, fileAnchorsItself, includeScope);
+        writeFixStations(stream, node, tree, globalCS, inherited.anchored, includeScope);
         // A georeferenced run names *cs out, after which cavern refuses any
         // *fix with no input system. The file's own *cs still wins inside
         // its blocks; this only catches the bare ones.
@@ -314,6 +314,14 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                 cwSurvexExporterUtils::writeDeclinationReset(stream);
             }
             cwSurvexExporterUtils::CsScope includeScope(csScope);
+            const QString tripOriginStation =
+                here.anchored ? QString()
+                              : originStation(tripData.externalCenterline, tripData.externalStations,
+                                              ExportOptions.externalFixedStations.value(tripData.id));
+            if (!tripOriginStation.isEmpty()) {
+                cwSurvexExporterUtils::writeFixStations(stream, {}, tripOriginStation, globalCS,
+                                                        includeScope);
+            }
             includeScope.ensureAnySystem(stream, globalCS);
             if (!writeExternalInclude(stream, tripData.id,
                                       ExportOptions.tripAttachmentDirs,
@@ -483,9 +491,27 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
         }
     }
 
-    const QString fallbackStation = anchoredAbove ? QString() : firstValidStation;
+    // A sourced root has no native stations; the file's own first station
+    // stands in for them when the file fixes nothing.
+    const QString nativeOrFileStation = node.externalCenterline.isEmpty()
+        ? firstValidStation
+        : originStation(node.externalCenterline, node.externalStations,
+                        ExportOptions.externalFixedStations.value(node.id));
+    const QString fallbackStation = anchoredAbove ? QString() : nativeOrFileStation;
     cwSurvexExporterUtils::writeFixStations(stream, writtenFixes, fallbackStation, globalCS, scope);
     return { writtenFixes, !writtenFixes.isEmpty() || !fallbackStation.isEmpty() };
+}
+
+QString cwSurvexExporterCaveTask::originStation(const cwExternalCenterline& centerline,
+                                                const QStringList& externalStations,
+                                                const QStringList& fileFixedStations)
+{
+    const bool survexEntry = cwExternalCenterlineScanner::formatFor(centerline.entryFile())
+                             == cwExternalCenterlineScanner::Format::Survex;
+    if (!survexEntry || externalStations.isEmpty() || !fileFixedStations.isEmpty()) {
+        return QString();
+    }
+    return externalStations.first();
 }
 
 QString cwSurvexExporterCaveTask::writeStandaloneHeader(QTextStream& stream)

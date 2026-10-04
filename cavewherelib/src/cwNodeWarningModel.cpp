@@ -198,6 +198,12 @@ cwNodeWarningModel::Entry cwNodeWarningModel::nodeEntry(const cwError& error) co
         return entry;
     }
 
+    // The page itself: the user places the file by fixing any of its stations.
+    if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileUnfixed)) {
+        entry.target = Target::FixStationRow;
+        return entry;
+    }
+
     const QUuid targetId = error.targetId();
     if (targetId.isNull()) {
         return entry;

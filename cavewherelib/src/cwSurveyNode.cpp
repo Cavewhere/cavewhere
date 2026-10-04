@@ -69,6 +69,12 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
 
     m_fixStationTable->addSourceModel(m_fixStationDiagnostics);
     m_fixStationTable->addSourceModel(m_attachedFixes);
+    connect(m_fixStationTable, &QAbstractItemModel::rowsInserted,
+            this, &cwSurveyNode::fixStationCountChanged);
+    connect(m_fixStationTable, &QAbstractItemModel::rowsRemoved,
+            this, &cwSurveyNode::fixStationCountChanged);
+    connect(m_fixStationTable, &QAbstractItemModel::modelReset,
+            this, &cwSurveyNode::fixStationCountChanged);
 
     connect(m_fixStations, &cwFixStationModel::countChanged,
             this, &cwSurveyNode::recomputeGridConvergence);

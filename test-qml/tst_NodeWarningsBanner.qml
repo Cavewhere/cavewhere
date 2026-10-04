@@ -471,15 +471,11 @@ MainWindowTest {
                     "the page is the untied trip's")
         }
 
-        // ── A bare *fix in an attached file of a georeferenced project ──────
-
-        function test_attachedFixWithoutCSEntryOpensFixStations() {
-            saveProjectAs("node-warnings-bare-fix")
-
-            // A native cave with a fix in a real system gives the project its
-            // frame, which is what makes the attached file's bare fix a warning.
+        // A native cave with a fix in a real system gives the project its
+        // frame, which is what turns an attached file's fixes into warnings.
+        function addFixedBesideCave() {
             RootData.region.addCave()
-            const beside = RootData.region.cave(0)
+            const beside = RootData.region.cave(RootData.region.rowCount() - 1)
             beside.name = "Beside"
             addTripWithShot(beside, "Native", "b1", "b2")
             beside.fixStations.addFixStation()
@@ -489,6 +485,68 @@ MainWindowTest {
             beside.fixStations.setData(idx, 478000.0, FixStationModel.EastingRole)
             beside.fixStations.setData(idx, 4430000.0, FixStationModel.NorthingRole)
             beside.fixStations.setData(idx, 1655.0, FixStationModel.ElevationRole)
+            return beside
+        }
+
+        // ── The cave page counts the attached file's fixes ──────────────────
+
+        function test_fixStationsLinkCountsAttachedFixes() {
+            const cave = makeSavedCaveAttach("node-warnings-fix-count",
+                                             "external-centerlines/survex_blocks.svx")
+            const cavePage = gotoCavePage(cave)
+            const link = findChild(cavePage, "fixStationsLink")
+            verify(link !== null, "fixStationsLink must exist")
+            tryCompare(link, "text", "1", 20000, "the link counts the file's own *fix")
+
+            cave.fixStations.addFixStation()
+            tryCompare(link, "text", "2", 5000, "and the node's own fixes beside it")
+        }
+
+        // ── An attached file with no fix of its own ─────────────────────────
+
+        function test_attachedFileUnfixedEntryOpensFixStations() {
+            saveProjectAs("node-warnings-unfixed")
+            addFixedBesideCave()
+
+            const source = RootData.urlToLocal(TestHelper.tempDirectoryUrl()) + "/unfixed_blocks.svx"
+            verify(TestHelper.writeTextFile(source,
+                                            "*begin doghill\n"
+                                            + "*data normal from to tape compass clino\n"
+                                            + "d1 d2 10.0 0 0\n"
+                                            + "d2 d3 5.0 90 0\n"
+                                            + "*end doghill\n"),
+                   "the unfixed copy is written")
+            const cave = makeAttachedCave("Unfixed", source)
+
+            const cavePage = gotoCavePage(cave)
+            const bannerItem = bannerOn(cavePage)
+            tryVerify(() => bannerItem.visible
+                      && entryContaining(bannerItem, "has no fixed station") !== null,
+                      20000, "the unfixed-file warning reaches the banner")
+            const entry = entryContaining(bannerItem, "has no fixed station")
+            compare(messageLabel(entry).text,
+                    "unfixed_blocks.svx has no fixed station, so it sits at the origin — "
+                    + "fix one of its stations.")
+            verify(entryContaining(bannerItem, "not tied") === null,
+                   "the file sits at the origin, so nothing is untied")
+
+            mouseClick(messageLabel(entry))
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "the line opens the cave's Fix Stations page")
+            compare(RootData.pageView.currentPageItem.cave, cave, "the page is the attached cave's")
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
+            verify(tableView !== null, "fixStationTableView must exist")
+            compare(tableView.count, 0, "the file lists no fix of its own")
+            compare(tableView.currentIndex, -1, "the page opens with no row selected")
+        }
+
+        // ── A bare *fix in an attached file of a georeferenced project ──────
+
+        function test_attachedFixWithoutCSEntryOpensFixStations() {
+            saveProjectAs("node-warnings-bare-fix")
+
+            addFixedBesideCave()
 
             const cave = makeAttachedCave("Blocks", TestHelper.testcasesDatasetPath(
                                               "external-centerlines/survex_blocks.svx"))

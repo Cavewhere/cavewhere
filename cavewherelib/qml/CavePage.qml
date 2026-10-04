@@ -223,7 +223,7 @@ StandardPage {
 
         LinkText {
             objectName: "fixStationsLink"
-            text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations.count : 0
+            text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStationCount : 0
             onClicked: {
                 RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
             }
@@ -595,7 +595,7 @@ StandardPage {
                     QC.Label { text: "Fix stations:" }
 
                     LinkText {
-                        text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStations.count : 0
+                        text: cavePageArea.currentCave ? cavePageArea.currentCave.fixStationCount : 0
                         onClicked: {
                             RootData.pageSelectionModel.gotoPageByName(cavePageArea.PageView.page, "Fix Stations");
                         }

@@ -34,6 +34,7 @@ enum class cwErrorTypeId : int {
     FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
     AttachedFixWithoutCS = 599, //!< an attached file fixes stations with no input CS in a georeferenced project
     UnconnectedStations = 600,  //!< a trip's or attached file's stations that the solve could not tie to the cave
+    AttachedFileUnfixed = 601,  //!< an attached file that fixes no station, placed at the origin in a georeferenced project
 };
 
 /**

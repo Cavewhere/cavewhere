@@ -256,7 +256,11 @@ private:
     //! stations, and every other node has it cleared. It stays while the bare
     //! fix does: the driver drops a node fix on that station, and a node fix
     //! on another one leaves the file anchored twice.
-    void publishAttachedFixWarnings(const QHash<QUuid, QStringList>& bareFixedStations);
+    //!
+    //! Beside it, an AttachedFileUnfixed warning names each attached file the
+    //! driver fixes at the origin because the file fixes no station of its
+    //! own and no node fix places it.
+    void publishAttachedFixWarnings(const cwLinePlotTask::ExternalCenterlineInputs& inputs);
     void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
                                 bool externalScopesChecked);
 

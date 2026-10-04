@@ -1792,3 +1792,154 @@ TEST_CASE("A node fix naming a station its attached file lacks or fixes itself i
         "survex_blocks.svx already fixes %1; remove that fix from the file or fix another "
         "station").arg(tripFix)));
 }
+
+namespace {
+
+QStringList unfixedFileWarnings(const cwSurveyNode* node)
+{
+    return node->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::AttachedFileUnfixed)});
+}
+
+//! A native cave fixed in kBareFixFrameCS away from the origin, which
+//! georeferences the project and anchors the solve on its own.
+cwCave* addFixedNativeCave(cwCavingRegion& region)
+{
+    cwCave* native = addEmptyCave(region, QStringLiteral("Native"));
+    cwTrip* trip = addTripWithShot(native, QStringLiteral("Native"), QStringLiteral("b1"),
+                                   QStringLiteral("b2"), 10.0);
+    trip->calibrations()->setAutoDeclination(false);
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("b1"));
+    fix.setInputCS(kBareFixFrameCS);
+    fix.setEasting(kBesideCaveEasting);
+    fix.setNorthing(0.0);
+    native->fixStations()->appendFixStation(fix);
+    region.geoReference()->restore(cwGeoReference::Frozen, kBareFixFrameCS, {}, QString());
+    return native;
+}
+
+void checkAtOrigin(const cwStationPositionLookup& lookup, const QString& station)
+{
+    INFO("station " << station.toStdString());
+    REQUIRE(lookup.hasPosition(station));
+    const QVector3D position = lookup.position(station);
+    CHECK(position.x() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
+    CHECK(position.y() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
+    CHECK(position.z() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
+}
+
+} // namespace
+
+TEST_CASE("An attached file with no fix of its own sits at the origin beside a fixed cave",
+          "[Attach][Cave][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const bool keepOwnFix = GENERATE(false, true);
+    INFO("the file keeps its own *fix: " << keepOwnFix);
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, keepOwnFix);
+
+    cwCavingRegion region;
+    cwCave* native = addFixedNativeCave(region);
+    cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const auto driverInfo = [&manager]() {
+        return "driver:\n" + manager.driverSource().toStdString() + "\nsolve error: "
+               + manager.solveErrorMessage().toStdString() + "\ncavern log:\n"
+               + manager.cavernLog().toStdString();
+    };
+    INFO(driverInfo());
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE_FALSE(attached->externalStations().isEmpty());
+    CHECK(unfixedFileWarnings(native).isEmpty());
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+
+    if (keepOwnFix) {
+        // The file places itself, so the driver adds nothing and nothing warns.
+        CHECK_FALSE(driverUpToInclude(manager.driverSource(), includePath)
+                        .contains(QStringLiteral("*fix %1 0 0 0")
+                                      .arg(attached->externalStations().first())));
+        CHECK(unfixedFileWarnings(attached).isEmpty());
+        return;
+    }
+
+    // The fallback names the file's first harvested station inside the
+    // include, the way a native node with no fix gets one on its first station.
+    const QString originStation = attached->externalStations().first();
+    CHECK(driverUpToInclude(manager.driverSource(), includePath)
+              .contains(QStringLiteral("*fix %1 0 0 0").arg(originStation)));
+    checkAtOrigin(attached->stationPositionLookup(), originStation);
+
+    const QStringList warnings = unfixedFileWarnings(attached);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first() == QStringLiteral("survex_blocks.svx has no fixed station, so it sits "
+                                             "at the origin — fix one of its stations."));
+
+    SECTION("a node fix on one of its stations places it and clears the warning")
+    {
+        attached->fixStations()->appendFixStation(placingFix(QStringLiteral("doghill.d1")));
+        manager.waitToFinish();
+        INFO(driverInfo());
+
+        REQUIRE_FALSE(manager.hasSolveError());
+        CHECK_FALSE(manager.driverSource().contains(QStringLiteral("*fix %1 0 0 0").arg(originStation)));
+        CHECK(unfixedFileWarnings(attached).isEmpty());
+        CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+    }
+}
+
+TEST_CASE("A trip-attached file with no fix of its own sits at the origin under the trip's scope",
+          "[Attach][Trip][CS][LinePlotManager]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    const QString attachDir = tempSubdir(tempRoot, QStringLiteral("blocks"));
+    const QString includePath = seedBlocks(attachDir, false);
+
+    cwCavingRegion region;
+    addFixedNativeCave(region);
+    cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
+    cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
+    attached->calibrations()->setAutoDeclination(false);
+    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+
+    cwLinePlotManager manager;
+    manager.externalCenterlineManager()->setTripAttachmentDirs({{attached->id(), attachDir}});
+    manager.setRegion(&region);
+    manager.waitToFinish();
+
+    const QString driver = manager.driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    INFO("cavern log:\n" << manager.cavernLog().toStdString());
+
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE_FALSE(attached->externalStations().isEmpty());
+
+    // Written inside the trip's own block, so the name resolves in the file.
+    const QString originStation = attached->externalStations().first();
+    const QString beforeInclude = driverUpToInclude(driver, includePath);
+    const qsizetype tripBegin =
+        beforeInclude.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+    REQUIRE(tripBegin >= 0);
+    CHECK(beforeInclude.indexOf(QStringLiteral("*fix %1 0 0 0").arg(originStation), tripBegin)
+          > tripBegin);
+    checkAtOrigin(host->stationPositionLookup(), attached->scopePrefix() + originStation);
+
+    const QStringList warnings = unfixedFileWarnings(host);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first().startsWith(QStringLiteral("survex_blocks.svx has no fixed station")));
+    CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
+    CHECK(unconnectedWarnings(host->errorModel()).isEmpty());
+}

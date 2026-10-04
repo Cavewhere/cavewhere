@@ -134,6 +134,18 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
         CHECK(roleAt(model, 0, cwNodeWarningModel::FixStationRowRole).toInt() == -1);
     }
 
+    SECTION("an attached file with no fixed station opens the Fix Stations page with no row")
+    {
+        cave->fixStations()->appendFixStation(utm13NFix(QStringLiteral("G"), 478000.0));
+        errors->setTypedWarning(cwErrorTypeId::AttachedFileUnfixed,
+                                QStringLiteral("a.svx has no fixed station, so it sits at the "
+                                               "origin — fix one of its stations."));
+        REQUIRE(model.count() == 1);
+        CHECK(targetAt(model, 0) == Target::FixStationRow);
+        CHECK(roleAt(model, 0, cwNodeWarningModel::FixStationRowRole).toInt() == -1);
+        CHECK(tripAt(model, 0) == nullptr);
+    }
+
     SECTION("a suppressed warning leaves the list, and returns when unsuppressed")
     {
         errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS, QStringLiteral("Plain"));
