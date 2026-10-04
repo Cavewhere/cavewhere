@@ -935,6 +935,17 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
                             .arg(entryFileName(centerline), scoped.join(QStringLiteral(", "))));
     };
 
+    // The copy changed the file whether or not the project has a frame, so
+    // this one is said either way.
+    const auto addDefaultDatumMessages = [&inputs](QStringList& messages, const QUuid& ownerId) {
+        for (const auto& defaulted : inputs.defaultedDatums.value(ownerId)) {
+            messages.append(QStringLiteral("%1 names UTM zone %2 but no datum; CaveWhere used "
+                                           "Compass's default, North American 1927 — add a & "
+                                           "line to the file to choose another.")
+                                .arg(defaulted.file, defaulted.zone));
+        }
+    };
+
     QHash<const cwSurveyNode*, QStringList> filesAtOrigin;
     if (georeferenced) {
         for (const cwSurveyNode* cave : Region->rootNode()->childNodes()) {
@@ -958,14 +969,22 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
                                        .arg(file));
         }
 
+        QStringList defaultDatumMessages;
+        addDefaultDatumMessages(defaultDatumMessages, node->id());
+        for (const cwTrip* trip : node->trips()) {
+            addDefaultDatumMessages(defaultDatumMessages, trip->id());
+        }
+
         if (node->errorModel() != nullptr) {
-            // cwNodeWarningModel opens the node's Fix Stations page for both
+            // cwNodeWarningModel opens the node's Fix Stations page for these
             // types, where the file's own fixes are listed.
             cwErrorListModel* errors = node->errorModel()->errors();
             errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
                                     messages.join(QLatin1Char('\n')));
             errors->setTypedWarning(cwErrorTypeId::AttachedFileUnfixed,
                                     unfixedMessages.join(QLatin1Char('\n')));
+            errors->setTypedWarning(cwErrorTypeId::AttachedFileDefaultDatum,
+                                    defaultDatumMessages.join(QLatin1Char('\n')));
         }
     }
 }

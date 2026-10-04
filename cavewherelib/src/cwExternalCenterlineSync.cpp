@@ -16,8 +16,12 @@
 //Qt includes
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QFileInfo>
 #include <QSet>
+
+//Std includes
+#include <optional>
 
 namespace {
 
@@ -111,7 +115,7 @@ bool destinationMatchesSource(const QFileInfo& srcInfo, const QFileInfo& dstInfo
     if (!dstInfo.exists()) {
         return false;
     }
-    if (srcInfo.size() != dstInfo.size()) {
+    if (cwExternalCenterlineSync::projectCopySize(srcInfo) != dstInfo.size()) {
         return false;
     }
     return srcInfo.lastModified() <= dstInfo.lastModified();
@@ -162,6 +166,25 @@ QString canonicalPathOrCleaned(const QString& path)
         }
         walk = QFileInfo(parent);
     }
+}
+
+//! The bytes of a Compass .mak's project copy when they differ from the
+//! source's, or nothing when the copy is the source's bytes as they are.
+std::optional<QByteArray> rewrittenProjectCopy(const QString& source)
+{
+    if (!cwExternalCenterlineScanner::isCompassMak(source)) {
+        return std::nullopt;
+    }
+    QFile file(source);
+    if (!file.open(QFile::ReadOnly)) {
+        return std::nullopt;
+    }
+    const QByteArray bytes = file.readAll();
+    QByteArray copy = cwExternalCenterlineScanner::compassMakWithDefaultDatum(bytes);
+    if (copy.size() == bytes.size()) {
+        return std::nullopt;
+    }
+    return copy;
 }
 
 QStringList enumerateFilesRecursively(const QString& dirPath)
@@ -297,6 +320,23 @@ QFuture<Monad::ResultBase> reconcile(
             return Monad::ResultBase();
         })
         .future();
+}
+
+qint64 projectCopySize(const QFileInfo& source)
+{
+    const auto rewritten = rewrittenProjectCopy(source.filePath());
+    return rewritten.has_value() ? rewritten->size() : source.size();
+}
+
+bool writeProjectCopy(const QString& source, const QString& destination)
+{
+    const auto rewritten = rewrittenProjectCopy(source);
+    if (!rewritten.has_value()) {
+        return QFile::copy(source, destination);
+    }
+    QFile file(destination);
+    return file.open(QFile::WriteOnly | QFile::NewOnly)
+        && file.write(*rewritten) == rewritten->size();
 }
 
 bool isContainedIn(const QString& path, const QString& boundaryDir)

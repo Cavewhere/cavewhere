@@ -16,6 +16,7 @@ class cwCavingRegion;
 #include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegionData.h"
 #include "cwLinePlotGeometry.h"
+#include "cwExternalCenterlineScanner.h"
 class cwScrap;
 class cwTrip;
 class cwSurveyNode;
@@ -284,6 +285,9 @@ public:
         // Owners whose file fixes stations itself, and those stations (see
         // Input::externalFixedStations).
         QHash<QUuid, QStringList> externalFixedStations;
+        // Owners whose copy gave a Compass .mak the default datum, and those
+        // files. Read on the main thread when the solve starts, to say so.
+        QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> defaultedDatums;
     };
 
     static Input buildInput(const cwCavingRegion* region,

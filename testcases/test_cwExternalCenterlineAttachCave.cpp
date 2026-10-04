@@ -13,12 +13,17 @@
 #include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwErrorModel.h"
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
+#include "cwGeoReference.h"
 #include "cwLinePlotGeometry.h"
 #include "cwLinePlotManager.h"
+#include "cwNodeWarningModel.h"
 #include "cwNoteLiDAR.h"
 #include "cwProject.h"
 #include "cwRootData.h"
@@ -1106,4 +1111,116 @@ TEST_CASE("cave reload keeps a scope trip's notes and scraps", "[Attach][Cave][R
     CHECK(note->scrap(0) == scrap);
     REQUIRE(scrap->numberOfStations() == 1);
     CHECK(scrap->station(0).name() == QStringLiteral("e1"));
+}
+
+namespace {
+
+const QString kZoneNoDatumMak = QStringLiteral("compass_zone_no_datum.mak");
+const QString kUtm13N = QStringLiteral("EPSG:32613");
+const QByteArray kDefaultDatumLine = QByteArrayLiteral("&North American 1927;");
+// What the fixture's .mak fixes A1 at, in feet, converted to meters.
+constexpr double kFixEasting = 478000.0;
+constexpr double kFixNorthing = 4430000.0;
+// Absorbs the feet conversion and the float a solved position is stored in.
+constexpr double kFixMarginMeters = 5.0;
+
+QStringList defaultDatumWarnings(const cwSurveyNode* node)
+{
+    return node->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::AttachedFileDefaultDatum)});
+}
+
+} // namespace
+
+TEST_CASE("A Compass .mak that names a UTM zone but no datum is read in North American 1927",
+          "[Attach][Cave][CS]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-compass-default-datum"));
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    region->geoReference()->restore(cwGeoReference::Frozen, kUtm13N, {}, QString());
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    const QString source = fixturePath(kZoneNoDatumMak);
+    const QByteArray sourceBytes = fileContents(source);
+    REQUIRE_FALSE(sourceBytes.contains('&'));
+
+    attachAndSolve(fixture.get(), cave, source);
+    drainPipelines(fixture.get());
+
+    // The datum lands in the project's copy, ahead of the zone it qualifies;
+    // the source keeps its bytes.
+    CHECK(fileContents(source) == sourceBytes);
+    const QString copyPath =
+        fixture->saveLoad()->externalCenterlineDir(cave).absoluteFilePath(kZoneNoDatumMak);
+    const QByteArray copyBytes = fileContents(copyPath);
+    const qsizetype datumAt = copyBytes.indexOf(kDefaultDatumLine);
+    REQUIRE(datumAt >= 0);
+    CHECK(datumAt < copyBytes.indexOf('@'));
+    CHECK(datumAt < copyBytes.indexOf('$'));
+
+    // cavern hands a .mak fix's numbers to fix_station as the output system's
+    // coordinates (survex datain.c) and projects only *fix, so the datum line
+    // leaves A1 at the .mak's raw numbers in the frame; the datum reaches the
+    // rows, the warning, and the system cavern reads the .dat in.
+    INFO("driver:\n" << fixture->rootData->linePlotManager()->driverSource().toStdString());
+    INFO("cavern log:\n" << fixture->rootData->linePlotManager()->cavernLog().toStdString());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const QString a1 = QStringLiteral("compass_zone_no_datum.a1");
+    REQUIRE(lookup.hasPosition(a1));
+    const QVector3D placed = lookup.position(a1);
+    CHECK(placed.x() == Catch::Approx(kFixEasting).margin(kFixMarginMeters));
+    CHECK(placed.y() == Catch::Approx(kFixNorthing).margin(kFixMarginMeters));
+
+    const QStringList warnings = defaultDatumWarnings(cave);
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings.first()
+          == QStringLiteral("compass_zone_no_datum.mak names UTM zone 13N but no datum; CaveWhere "
+                            "used Compass's default, North American 1927 — add a & line to the "
+                            "file to choose another."));
+
+    // A click on it opens the Fix Stations page, where the file's row shows
+    // the system the default gave it.
+    cwNodeWarningModel warningModel;
+    warningModel.setNode(cave);
+    REQUIRE(warningModel.rowCount() == 1);
+    const QModelIndex warningRow = warningModel.index(0);
+    CHECK(warningModel.data(warningRow, cwNodeWarningModel::MessageRole).toString()
+          == warnings.first());
+    CHECK(warningModel.data(warningRow, cwNodeWarningModel::TargetRole).toInt()
+          == static_cast<int>(cwNodeWarningModel::Target::FixStationRow));
+
+    SECTION("Reload applies the default again to the fresh copy")
+    {
+        auto reloadFuture = managerOf(fixture.get())->reloadFromSource(cave);
+        REQUIRE(AsyncFuture::waitForFinished(reloadFuture, kAttachWaitMs));
+        REQUIRE_FALSE(reloadFuture.result().hasError());
+        drainPipelines(fixture.get());
+
+        CHECK(fileContents(copyPath) == copyBytes);
+        CHECK(fileContents(source) == sourceBytes);
+        CHECK(defaultDatumWarnings(cave).size() == 1);
+    }
+}
+
+TEST_CASE("A Compass .mak that names its datum is copied byte for byte", "[Attach][Cave][CS]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-compass-explicit-datum"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QByteArray datBytes = fileContents(fixturePath(QStringLiteral("compass_zone_no_datum.dat")));
+    writeSurvey(sourceDir, QStringLiteral("compass_zone_no_datum.dat"), datBytes);
+    const QByteArray makBytes =
+        QByteArrayLiteral("&North American 1983;\n") + fileContents(fixturePath(kZoneNoDatumMak));
+    const QString source = writeSurvey(sourceDir, kZoneNoDatumMak, makBytes);
+
+    attachAndSolve(fixture.get(), cave, source);
+    drainPipelines(fixture.get());
+
+    CHECK(fileContents(fixture->saveLoad()->externalCenterlineDir(cave).absoluteFilePath(
+              kZoneNoDatumMak))
+          == makBytes);
+    CHECK(defaultDatumWarnings(cave).isEmpty());
 }

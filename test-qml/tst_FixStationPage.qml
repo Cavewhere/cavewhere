@@ -1668,5 +1668,30 @@ MainWindowTest {
             compare(findChild(page, "pickFromViewButton.0"), null)
             rootId.width = wideWidth
         }
+
+        // A .mak naming a UTM zone and no datum reads in Compass's default
+        // datum, and the cave page counts its fix.
+        function test_aZoneWithoutADatumReadsInCompassDefault() {
+            saveProjectAs("fix-station-default-datum")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/compass_zone_no_datum.mak"))
+            tryVerify(() => cave.attachedFixes.count === 1, 20000, "the scan lists the file's fix")
+
+            RootData.pageSelectionModel.currentPageAddress =
+                "Source/Data/Cave=" + String(cave.name) + "/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage")
+            tryCompare(findChild(RootData.pageView.currentPageItem, "fixStationTableView"), "count", 1)
+            compare(waitForChild("stationCell.0").text, "compass_zone_no_datum.A1")
+            compare(waitForChild("inputCSText.0").text, "North American 1927, UTM zone 13N")
+            verify(waitForChild("readOnlyLock.0") !== null, "the row is the file's")
+
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Cave=" + String(cave.name)
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "cavePage",
+                      5000, "should land on cavePage")
+            tryCompare(waitForChild("fixStationsLink"), "text", "1")
+        }
     }
 }

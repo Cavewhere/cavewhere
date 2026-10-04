@@ -259,7 +259,8 @@ private:
     //!
     //! Beside it, an AttachedFileUnfixed warning names each attached file the
     //! driver fixes at the origin because the file fixes no station of its
-    //! own and no node fix places it.
+    //! own and no node fix places it, and an AttachedFileDefaultDatum warning
+    //! names each Compass .mak whose copy took Compass's default datum.
     void publishAttachedFixWarnings(const cwLinePlotTask::ExternalCenterlineInputs& inputs);
     void publishFloatingSurveys(QList<cwFindFloatingSurveys::Result> floatingSurveys,
                                 bool externalScopesChecked);

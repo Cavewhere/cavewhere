@@ -198,8 +198,10 @@ cwNodeWarningModel::Entry cwNodeWarningModel::nodeEntry(const cwError& error) co
         return entry;
     }
 
-    // The page itself: the user places the file by fixing any of its stations.
-    if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileUnfixed)) {
+    // The page itself: the user places the file by fixing any of its stations,
+    // and the rows show the system a defaulted datum gave the file's fixes.
+    if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileUnfixed)
+        || error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileDefaultDatum)) {
         entry.target = Target::FixStationRow;
         return entry;
     }

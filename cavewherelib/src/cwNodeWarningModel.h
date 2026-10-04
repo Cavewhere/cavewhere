@@ -32,7 +32,8 @@ class cwTrip;
  * trips' pages, or the node's own attached-file source line. An
  * AttachedFixWithoutCS warning opens the Fix Stations page on the first bare
  * fix it names, a read-only row of cwSurveyNode::fixStationTable; an
- * AttachedFileUnfixed warning opens the page with no row selected.
+ * AttachedFileUnfixed or AttachedFileDefaultDatum warning opens the page with
+ * no row selected.
  */
 class CAVEWHERE_LIB_EXPORT cwNodeWarningModel : public QAbstractListModel
 {

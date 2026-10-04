@@ -385,6 +385,9 @@ private:
         // Every station each owner's file fixes itself (ScanResult::fixes),
         // for owners whose file fixes any.
         QHash<QUuid, QList<cwExternalCenterlineScanner::ScannedFix>> ownerFixes;
+        // The .mak files each owner's copy gave Compass's default datum
+        // (ScanResult::defaultedDatums), for owners with any.
+        QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> ownerDefaultedDatums;
         // Station names harvested from each owner's (cave or trip) in-project
         // entry file, and, for a trip owner, cavern's complaint when that
         // harvest failed. A trip owner appears in at most one of them; an
@@ -502,6 +505,7 @@ private:
     // solve through solveInputs(). Rebuilt wholesale on every recompute.
     QHash<QUuid, QList<cwExternalCenterlineScanner::ScannedFix>> m_ownerFixes;
     QHash<QUuid, QStringList> m_ownerFixedStations;
+    QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> m_ownerDefaultedDatums;
 
     // RAII completion guard for one owner operation, shared (via
     // shared_ptr) by the operation's completion and canceled

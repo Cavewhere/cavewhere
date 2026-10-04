@@ -41,6 +41,15 @@ constexpr int kSurvexDateLength = 10;
 // UTF-8 byte-order mark (0xEF 0xBB 0xBF).
 const QByteArray kUtf8Bom = QByteArray::fromHex("EFBBBF");
 
+// The datum Compass reads a UTM zone in when its .mak names none
+// (survex doc/compass.rst), spelled the way Compass writes it.
+constexpr const char* kCompassDefaultDatum = "North American 1927";
+// The comment trailing the datum line compassMakWithDefaultDatum inserts,
+// which is how a scan of the project copy tells that line from one the
+// file's author wrote. Free of '/', which would end a Compass comment.
+constexpr const char* kDefaultDatumNote =
+    "CaveWhere: Compass's default datum, since this file names a UTM zone but no datum";
+
 bool hasExtension(const QString& path, const char* extension)
 {
     return path.endsWith(QLatin1String(extension), Qt::CaseInsensitive);
@@ -484,6 +493,8 @@ struct ScanState {
     QStringList coordinateSystems = QStringList{QString()};
     // every station the closure fixes, in walk order
     QList<cwExternalCenterlineScanner::ScannedFix> fixes;
+    // every .mak whose datum line is the one compassMakWithDefaultDatum adds
+    QList<cwExternalCenterlineScanner::DefaultedDatum> defaultedDatums;
     // set when the entry file itself carries shot data
     bool entryHasOwnShots = false;
     // distinct station names written where no block is open - the
@@ -940,13 +951,18 @@ const QRegularExpression& compassMakFixRegex()
     return regex;
 }
 
+//! A UTM zone as a system name spells it: "<zone><N|S>", positive zones north.
+QString utmZoneName(int zone)
+{
+    return QStringLiteral("%1%2").arg(std::abs(zone)).arg(
+        zone < 0 ? QLatin1Char('S') : QLatin1Char('N'));
+}
+
 //! A UTM system's name: "<datum>, UTM zone <zone><N|S>", positive zones north.
 QString utmSystemName(const QString& datum, int zone)
 {
-    const QString zoneText = QStringLiteral("%1%2").arg(std::abs(zone)).arg(
-        zone < 0 ? QLatin1Char('S') : QLatin1Char('N'));
-    return datum.isEmpty() ? QStringLiteral("UTM zone %1").arg(zoneText)
-                           : QStringLiteral("%1, UTM zone %2").arg(datum, zoneText);
+    return datum.isEmpty() ? QStringLiteral("UTM zone %1").arg(utmZoneName(zone))
+                           : QStringLiteral("%1, UTM zone %2").arg(datum, utmZoneName(zone));
 }
 
 /**
@@ -990,6 +1006,9 @@ struct CompassMakCoordinateSystem {
         zone = text.trimmed().toInt();
         updateName();
     }
+
+    //! The zone the .mak names, its '$' line's or else its base location's.
+    int namedZone() const { return zone != 0 ? zone : baseLocationZone; }
 
 private:
     void updateName()
@@ -1042,6 +1061,7 @@ void scanCompassFile(const QString& filePath, ScanState& state)
             const QRegularExpression& regex = compassMakReferenceRegex();
             CompassMakCoordinateSystem coordinateSystem;
             coordinateSystem.name = state.coordinateSystems.constLast();
+            bool datumDefaulted = false;
             const QStringList lines = decoded.text.split(QLatin1Char('\n'));
             for (const QString& rawLine : lines) {
                 const QString line = rawLine.trimmed();
@@ -1050,6 +1070,8 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                 };
                 if (line.startsWith(QLatin1Char('&'))) {
                     coordinateSystem.setDatum(directiveText());
+                    datumDefaulted = datumDefaulted
+                        || line.contains(QLatin1String(kDefaultDatumNote));
                     continue;
                 }
                 if (line.startsWith(QLatin1Char('$'))) {
@@ -1113,6 +1135,10 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                 if (!state.error.isEmpty()) {
                     break;
                 }
+            }
+            if (datumDefaulted) {
+                state.defaultedDatums.append({QFileInfo(canonical).fileName(),
+                                              utmZoneName(coordinateSystem.namedZone())});
             }
         } else {
             // A .dat holds the surveys themselves; a .mak only points
@@ -1808,6 +1834,7 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     result.rootDate = state.rootDate;
     result.entryHasOwnShots = state.entryHasOwnShots;
     result.fixes = state.fixes;
+    result.defaultedDatums = state.defaultedDatums;
     parseSeededMetadata(result);
     return Monad::Result<ScanResult>(result);
 }
@@ -1827,6 +1854,45 @@ Monad::Result<ScanResult> scanCompass(const QString& entryFile)
 Monad::Result<ScanResult> scanWalls(const QString& entryFile)
 {
     return scanWithEntry(entryFile, &scanWallsFile, "scanWalls");
+}
+
+bool isCompassMak(const QString& path)
+{
+    return hasExtension(path, kCompassMakExtension);
+}
+
+QByteArray compassMakWithDefaultDatum(const QByteArray& makBytes)
+{
+    const qsizetype bodyStart = makBytes.startsWith(kUtf8Bom) ? kUtf8Bom.size() : 0;
+
+    qsizetype firstZoneLine = -1;
+    qsizetype lineStart = bodyStart;
+    while (lineStart < makBytes.size()) {
+        qsizetype lineEnd = makBytes.indexOf('\n', lineStart);
+        if (lineEnd < 0) {
+            lineEnd = makBytes.size();
+        }
+        const QByteArray line = makBytes.mid(lineStart, lineEnd - lineStart).trimmed();
+        if (line.startsWith('&')) {
+            return makBytes;
+        }
+        if (firstZoneLine < 0 && (line.startsWith('$') || line.startsWith('@'))) {
+            firstZoneLine = lineStart;
+        }
+        lineStart = lineEnd + 1;
+    }
+
+    if (firstZoneLine < 0) {
+        return makBytes;
+    }
+
+    const QByteArray lineEnding = makBytes.contains("\r\n") ? QByteArrayLiteral("\r\n")
+                                                            : QByteArrayLiteral("\n");
+    const QByteArray datumLine = QByteArrayLiteral("&") + kCompassDefaultDatum
+        + QByteArrayLiteral("; / ") + kDefaultDatumNote + lineEnding;
+    QByteArray copy = makBytes;
+    copy.insert(firstZoneLine, datumLine);
+    return copy;
 }
 
 } // namespace cwExternalCenterlineScanner

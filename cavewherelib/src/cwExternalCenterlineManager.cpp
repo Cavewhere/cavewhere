@@ -391,7 +391,8 @@ cwLinePlotTask::ExternalCenterlineInputs cwExternalCenterlineManager::solveInput
              m_fileOwnsDeclination,
              std::move(excluded),
              bareFixedStations(),
-             m_ownerFixedStations };
+             m_ownerFixedStations,
+             m_ownerDefaultedDatums };
 }
 
 void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
@@ -711,6 +712,10 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     if (!scan.value().fixes.isEmpty()) {
                         result.ownerFixes.insert(owner.ownerId, scan.value().fixes);
                     }
+                    if (!scan.value().defaultedDatums.isEmpty()) {
+                        result.ownerDefaultedDatums.insert(owner.ownerId,
+                                                           scan.value().defaultedDatums);
+                    }
                     row.depCount = scan.value().dependencies.size();
                     row.warningCount = scan.value().warnings.size();
                 }
@@ -771,12 +776,14 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
         || result.fileOwnsDeclination != m_fileOwnsDeclination
         || result.ownerFixes != m_ownerFixes
         || result.ownerFixedStations != m_ownerFixedStations
+        || result.ownerDefaultedDatums != m_ownerDefaultedDatums
         || result.containmentErrors != m_containmentErrors
         || missingCopiesChangedNow;
     m_solveOnScanApply = false;
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
     m_ownerFixes = std::move(result.ownerFixes);
     m_ownerFixedStations = std::move(result.ownerFixedStations);
+    m_ownerDefaultedDatums = std::move(result.ownerDefaultedDatums);
     // An owner entering or leaving the excluded set changes the driver the
     // same way a declination flag does — its *include just vanished or
     // reappeared — so both halves of that set swap ahead of the solve

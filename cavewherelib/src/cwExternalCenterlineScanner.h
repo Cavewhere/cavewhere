@@ -224,6 +224,19 @@ struct ScannedFix {
     bool operator==(const ScannedFix& other) const = default;
 };
 
+/**
+ * A Compass .mak whose project copy reads its UTM zone in Compass's default
+ * datum, North American 1927, because the source names a zone and no datum
+ * (see compassMakWithDefaultDatum): the .mak's file name and the zone as a
+ * system name spells it ("13N").
+ */
+struct DefaultedDatum {
+    QString file;
+    QString zone;
+
+    bool operator==(const DefaultedDatum& other) const = default;
+};
+
 struct ScanResult {
     /**
      * Every file required to feed the entry file into cavern,
@@ -300,6 +313,13 @@ struct ScanResult {
      */
     QList<ScannedFix> fixes;
 
+    /**
+     * Every .mak in the closure that CaveWhere's copy gave Compass's default
+     * datum, in walk order. Empty when the scan reads a source rather than
+     * the project's copy.
+     */
+    QList<DefaultedDatum> defaultedDatums;
+
     bool hasFixWithoutCoordinateSystem() const
     {
         return std::any_of(fixes.cbegin(), fixes.cend(), [](const ScannedFix& fix) {
@@ -317,7 +337,8 @@ struct ScanResult {
             && rootDate == other.rootDate
             && entryHasOwnShots == other.entryHasOwnShots
             && seededMetadata == other.seededMetadata
-            && fixes == other.fixes;
+            && fixes == other.fixes
+            && defaultedDatums == other.defaultedDatums;
     }
     bool operator!=(const ScanResult& other) const { return !(*this == other); }
 };
@@ -388,6 +409,21 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryF
  * path returns Monad::Result error.
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanWalls(const QString& entryFile);
+
+/**
+ * True when \a path names a Compass project file (.mak, any case).
+ */
+CAVEWHERE_LIB_EXPORT bool isCompassMak(const QString& path);
+
+/**
+ * The bytes of CaveWhere's project copy of a Compass .mak. A .mak that names
+ * a UTM zone ('$', or a base location's '@') and no datum ('&') anywhere gets
+ * a line setting Compass's own default datum, North American 1927, inserted
+ * before its first '$' or '@' line, so cavern and the scan read the zone in
+ * the datum Compass shows the project in. Every other .mak comes back
+ * byte-identical.
+ */
+CAVEWHERE_LIB_EXPORT QByteArray compassMakWithDefaultDatum(const QByteArray& makBytes);
 
 } // namespace cwExternalCenterlineScanner
 

@@ -14,6 +14,7 @@
 #include <Monad/Result.h>
 
 //Qt includes
+#include <QFileInfo>
 #include <QFuture>
 #include <QList>
 #include <QString>
@@ -168,6 +169,25 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> reconcile(
     const cwExternalCenterlineScanner::ScanResult& scan,
     const QString& attachmentDir,
     CopyPolicy copyPolicy = CopyPolicy::SkipUpToDate);
+
+/**
+ * The size the project's copy of `source` has once written: the source's own
+ * size, or for a Compass .mak the size of
+ * cwExternalCenterlineScanner::compassMakWithDefaultDatum's bytes, which
+ * grow by a datum line when the .mak names a UTM zone and no datum. The
+ * up-to-date tests compare a destination against this rather than the
+ * source's size.
+ */
+CAVEWHERE_LIB_EXPORT qint64 projectCopySize(const QFileInfo& source);
+
+/**
+ * Writes the project's copy of `source` to `destination`, which must not
+ * exist: the source's bytes, with a Compass .mak given
+ * cwExternalCenterlineScanner::compassMakWithDefaultDatum's datum line when
+ * it needs one. The source is only read. Returns false when the copy could
+ * not be written.
+ */
+CAVEWHERE_LIB_EXPORT bool writeProjectCopy(const QString& source, const QString& destination);
 
 /**
  * True when `path` resolves at or inside `boundaryDir`.

@@ -35,6 +35,7 @@ enum class cwErrorTypeId : int {
     AttachedFixWithoutCS = 599, //!< an attached file fixes stations with no input CS in a georeferenced project
     UnconnectedStations = 600,  //!< a trip's or attached file's stations that the solve could not tie to the cave
     AttachedFileUnfixed = 601,  //!< an attached file that fixes no station, placed at the origin in a georeferenced project
+    AttachedFileDefaultDatum = 602, //!< an attached Compass .mak that names a UTM zone but no datum, read in North American 1927
 };
 
 /**
