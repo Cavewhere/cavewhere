@@ -129,6 +129,13 @@ QtObject {
     readonly property int fontSizeLarge:   Math.round(24 * fontScale)
     readonly property int fontSizeXLarge:  Math.round(30 * fontScale)
 
+    // Body copy renders in the system family, so it scales from the UI family's
+    // default size rather than from fontScale, which bakes in the boost a condensed
+    // chrome face needs (Yanone Kaffeesatz at 16 reads like a regular face at 14).
+    readonly property real bodyTextScale: RootData.settings.fontSettings.fontBaseSize
+                                          / RootData.settings.fontSettings.defaultFontBaseSize
+    readonly property int fontSizeBodyText: Math.round(14 * bodyTextScale)
+
     // Responsive layout tiers
     enum LayoutSize { Narrow, Medium, Wide }
 
