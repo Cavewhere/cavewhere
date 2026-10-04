@@ -66,8 +66,7 @@ MainWindowTest {
             const menu = findChild(cavePage, "addTripMenu")
             verify(menu !== null, "addTripMenu must exist")
             tryVerify(() => menu.visible, 5000, "menu opens on chevron click")
-            compare(menu.count, 1, "menu shows exactly one item")
-            compare(menu.itemAt(0).objectName, "addExternalTripMenuItem")
+            verify(menu.count >= 1, "menu offers at least one verb")
 
             for (let i = 0; i < menu.count; ++i) {
                 if (menu.itemAt(i).objectName === itemObjectName) {
@@ -83,7 +82,10 @@ MainWindowTest {
         // choice button ("attachButton" or "importButton") is clicked.
         function addTripViaFileMenu(cavePage, choiceButtonName) {
             const externalItem = openAddTripMenu(cavePage, "addExternalTripMenuItem")
-            mouseClick(externalItem)
+            // Entered through the item's own trigger, like tst_CavePage: the
+            // three-entry menu can open with this last entry past the test
+            // window's edge, where a synthetic click lands on nothing.
+            externalItem.triggered()
 
             // Scope to the dialog - ExportImportButtons also has an
             // "importButton" on the cave page.
@@ -132,7 +134,10 @@ MainWindowTest {
             compare(currentCave().rowCount(), 1)
 
             const externalItem = openAddTripMenu(cavePage, "addExternalTripMenuItem")
-            mouseClick(externalItem)
+            // Entered through the item's own trigger, like tst_CavePage: the
+            // three-entry menu can open with this last entry past the test
+            // window's edge, where a synthetic click lands on nothing.
+            externalItem.triggered()
 
             const pathField = findChild(cavePage, "sourcePathField")
             verify(pathField !== null, "attach dialog must exist on the cave page")
