@@ -1,14 +1,5 @@
 import QtQuick as QQ
 import QtQuick.Controls as QC
-// The app runs the Fusion style (main.cpp). The segment panels
-// re-create Fusion's ButtonPanel from the style's color helpers
-// instead of reusing it directly: the stock panel draws its inner
-// contrast line on all four edges, and in dark mode that light line
-// on both sides of the shared border reads as a gap between the
-// segments. These panels push the inner line past the seam edge and
-// clip it away, so the highlight runs continuously across both
-// segments and only the single shared outline divides them.
-import QtQuick.Controls.Fusion as FusionStyle
 import cavewherelib
 
 // A primary action button and a chevron button joined into one
@@ -17,6 +8,12 @@ import cavewherelib
 // always fires clicked() directly - the menu never sits between the
 // user and the main action. The chevron only appears when a menu is
 // set and carries a tooltip naming what's behind it.
+//
+// Both segments are the style's Button, so padding, font, and icon
+// color come from CaveWhereStyle. Only the background is replaced:
+// SegmentPanel draws the style's button panel (CaveWhereStyle's
+// StyleButtonPanel, which cavewherelib cannot import) with the seam
+// corners squared off.
 QQ.Row {
     id: splitButtonId
 
@@ -36,91 +33,83 @@ QQ.Row {
         id: panelId
 
         required property QC.Button control
-        // Which edge joins the other segment: that corner pair is
-        // squared off and the inner contrast line skips that edge.
+        // The edge that joins the other segment: its corners are square.
         property bool seamOnLeft: false
         property bool seamOnRight: false
 
-        // Clips the inner line where it overshoots the seam edge.
-        clip: true
+        implicitWidth: Theme.controlHeight
+        implicitHeight: Theme.controlHeight
 
-        radius: 2
-        topLeftRadius: seamOnLeft ? 0 : radius
-        bottomLeftRadius: seamOnLeft ? 0 : radius
-        topRightRadius: seamOnRight ? 0 : radius
-        bottomRightRadius: seamOnRight ? 0 : radius
+        radius: Theme.controlRadius
+        topLeftRadius: panelId.seamOnLeft ? 0 : panelId.radius
+        bottomLeftRadius: panelId.seamOnLeft ? 0 : panelId.radius
+        topRightRadius: panelId.seamOnRight ? 0 : panelId.radius
+        bottomRightRadius: panelId.seamOnRight ? 0 : panelId.radius
 
-        color: FusionStyle.Fusion.buttonColor(
-                   panelId.control.palette, false, panelId.control.down,
-                   panelId.control.enabled && panelId.control.hovered)
-        gradient: panelId.control.down ? null : faceGradientId
-        border.color: FusionStyle.Fusion.buttonOutline(
-                          panelId.control.palette, false, panelId.control.enabled)
-
-        QQ.Gradient {
-            id: faceGradientId
-            QQ.GradientStop {
-                position: 0
-                color: FusionStyle.Fusion.gradientStart(
-                           FusionStyle.Fusion.buttonColor(
-                               panelId.control.palette, false, panelId.control.down,
-                               panelId.control.enabled && panelId.control.hovered))
+        opacity: enabled ? 1 : Theme.disabledOpacity
+        color: {
+            if (panelId.control.down) {
+                return Theme.buttonPressed
             }
-            QQ.GradientStop {
-                position: 1
-                color: FusionStyle.Fusion.gradientStop(
-                           FusionStyle.Fusion.buttonColor(
-                               panelId.control.palette, false, panelId.control.down,
-                               panelId.control.enabled && panelId.control.hovered))
+            return panelId.control.hovered ? Theme.buttonHover : Theme.buttonSurface
+        }
+        border.width: 1
+        border.color: {
+            if (panelId.control.down) {
+                return Theme.buttonPressedBorder
             }
+            return panelId.control.hovered ? Theme.buttonHoverBorder : Theme.buttonBorder
         }
 
+        // The one-pixel lip under a resting button.
         QQ.Rectangle {
-            x: panelId.seamOnLeft ? -2 : 1
-            y: 1
-            width: parent.width
-                   + (panelId.seamOnLeft || panelId.seamOnRight ? 1 : -2)
-            height: parent.height - 2
-            radius: 2
-            border.color: FusionStyle.Fusion.innerContrastLine
+            z: -1
+            anchors.fill: parent
+            anchors.topMargin: 1
+            anchors.bottomMargin: -1
+            topLeftRadius: panelId.topLeftRadius
+            bottomLeftRadius: panelId.bottomLeftRadius
+            topRightRadius: panelId.topRightRadius
+            bottomRightRadius: panelId.bottomRightRadius
+            color: Theme.buttonShadow
+            visible: !panelId.control.down
+        }
+
+        // Keyboard-focus outline, square on the seam side like the panel.
+        // Its seam edge sits on the divider, so it stays out of the other segment.
+        QQ.Rectangle {
+            id: focusRingId
+
+            readonly property int ringOutset: Theme.focusRingOffset + Theme.focusRingWidth
+
+            visible: panelId.control.visualFocus
+            anchors.fill: parent
+            anchors.topMargin: -focusRingId.ringOutset
+            anchors.bottomMargin: -focusRingId.ringOutset
+            anchors.leftMargin: panelId.seamOnLeft ? 0 : -focusRingId.ringOutset
+            anchors.rightMargin: panelId.seamOnRight ? 0 : -focusRingId.ringOutset
+            radius: panelId.radius + focusRingId.ringOutset
+            topLeftRadius: panelId.seamOnLeft ? 0 : focusRingId.radius
+            bottomLeftRadius: panelId.seamOnLeft ? 0 : focusRingId.radius
+            topRightRadius: panelId.seamOnRight ? 0 : focusRingId.radius
+            bottomRightRadius: panelId.seamOnRight ? 0 : focusRingId.radius
             color: "transparent"
-        }
-
-        // Repaint the seam column so the divider reads like the rest
-        // of the outline. On a light face the raw Fusion outline is
-        // what the eye sees as the button edge. On a dark face the
-        // near-black outline vanishes against the window and the
-        // visible "outline" is actually the inner contrast highlight
-        // composited over the face - so the seam paints that same
-        // composite. Branch on the face itself, not the app theme, so
-        // the divider follows whatever palette the button renders with.
-        QQ.Rectangle {
-            readonly property QQ.color faceColor:
-                FusionStyle.Fusion.buttonColor(panelId.control.palette,
-                                               false, false, false)
-            readonly property bool darkFace: faceColor.hslLightness < 0.5
-
-            visible: panelId.seamOnLeft || panelId.seamOnRight
-            x: panelId.seamOnLeft ? 0 : parent.width - 1
-            y: 1
-            width: 1
-            height: parent.height - 2
-            color: darkFace
-                   ? Qt.tint(faceColor, FusionStyle.Fusion.innerContrastLine)
-                   : FusionStyle.Fusion.buttonOutline(panelId.control.palette,
-                                                      false, panelId.control.enabled)
+            border.width: Theme.focusRingWidth
+            border.color: Theme.focusRing
         }
     }
 
     QC.Button {
         id: mainButtonId
 
-        icon.width: Theme.iconSizeButton
-        icon.height: Theme.iconSizeButton
+        // The active segment draws over the shared divider, so its hover,
+        // pressed, and focus outline stay unbroken along the seam.
+        z: hovered || down || visualFocus ? 1 : 0
+        // A whole-pixel width keeps the shared divider on a pixel column
+        // instead of blurring it across two.
+        width: Math.ceil(implicitWidth)
 
         background: SegmentPanel {
-            implicitWidth: 80
-            implicitHeight: 24
             control: mainButtonId
             seamOnRight: splitButtonId.menu !== null
         }
@@ -134,16 +123,13 @@ QQ.Row {
         id: menuButtonId
         objectName: "menuButton"
 
+        z: hovered || down || visualFocus ? 1 : 0
         visible: splitButtonId.menu !== null
         height: mainButtonId.height
 
         icon.source: "qrc:/twbs-icons/icons/chevron-down.svg"
-        icon.width: Theme.iconSizeButton
-        icon.height: Theme.iconSizeButton
 
         background: SegmentPanel {
-            implicitWidth: 24
-            implicitHeight: 24
             control: menuButtonId
             seamOnLeft: true
         }

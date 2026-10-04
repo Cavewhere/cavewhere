@@ -77,6 +77,7 @@ StandardPage {
 
     function closePopups() {
         galleryMenuId.close()
+        gallerySplitMenuId.close()
         removeDialogId.close()
     }
 
@@ -192,6 +193,33 @@ StandardPage {
                         QC.Button { text: "Checked"; checkable: true; checked: true }
                         QC.Button { text: "Disabled"; enabled: false }
                         QC.Button { text: "Delete"; palette.buttonText: Theme.errorText }
+                    }
+
+                    QQ.Flow {
+                        Layout.fillWidth: true
+                        spacing: Theme.flowSpacing
+
+                        SplitButton {
+                            buttonObjectName: "gallerySplitButton"
+                            text: "Add Fix"
+                            iconSource: "qrc:/twbs-icons/icons/plus.svg"
+                            menu: gallerySplitMenuId
+                            menuToolTip: "More ways to add a fix"
+                        }
+                        SplitButton {
+                            buttonObjectName: "gallerySplitButtonDisabled"
+                            text: "Disabled"
+                            menu: gallerySplitMenuId
+                            enabled: false
+                        }
+
+                        QC.Menu {
+                            id: gallerySplitMenuId
+                            objectName: "gallerySplitMenu"
+                            popupType: QC.Popup.Item
+
+                            QC.MenuItem { text: "Add from survey file…" }
+                        }
                     }
 
                     QQ.Flow {
