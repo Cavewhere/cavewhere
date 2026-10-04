@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "LoadProjectHelper.h"
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 using namespace Catch;
 
 //Our includes
@@ -8969,6 +8970,69 @@ TEST_CASE("SaveAs persists dataRoot updates for reload", "[cwProject][saveAs]") 
     CHECK(dataRootDir.dirName().toStdString() == projectName.toStdString());
     CHECK(reloaded->dataRoot().toStdString() == projectName.toStdString());
     CHECK(reloaded->dataRootDir().dirName().toStdString() == projectName.toStdString());
+}
+
+namespace {
+std::unique_ptr<cwProject> reloadProject(const QString& projectFile)
+{
+    auto reloaded = std::make_unique<cwProject>();
+    addTokenManager(reloaded.get());
+    reloaded->loadOrConvert(projectFile);
+    reloaded->waitLoadToFinish();
+    return reloaded;
+}
+}
+
+TEST_CASE("SaveAs to a cwproj persists the region name for reload", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+    REQUIRE(project->isTemporaryProject());
+
+    const bool renamedBeforeSave = GENERATE(false, true);
+    CAPTURE(renamedBeforeSave);
+
+    auto region = project->cavingRegion();
+    region->addCave();
+    region->cave(0)->setName(QStringLiteral("Region Name Cave"));
+    if (renamedBeforeSave) {
+        region->setName(QStringLiteral("Renamed Before Save"));
+    }
+    project->waitSaveToFinish();
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    const QString expectedName = QStringLiteral("MyProject");
+    REQUIRE(project->saveAs(destinationParent.filePath(expectedName + QStringLiteral(".cwproj"))));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+
+    CHECK(region->name().toStdString() == expectedName.toStdString());
+
+    const auto reloaded = reloadProject(project->filename());
+    CHECK(reloaded->cavingRegion()->caveCount() == 1);
+    CHECK(reloaded->cavingRegion()->name().toStdString() == expectedName.toStdString());
+}
+
+TEST_CASE("Renaming a saved project keeps a display name whose sanitized form matches the dataRoot", "[cwProject][saveAs]") {
+    auto rootData = std::make_unique<cwRootData>();
+    auto project = rootData->project();
+
+    QTemporaryDir destinationParent;
+    REQUIRE(destinationParent.isValid());
+
+    REQUIRE(project->saveAs(destinationParent.filePath(QStringLiteral("Big Cave.cwproj"))));
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE_FALSE(project->isTemporaryProject());
+
+    // sanitizeFileName chops trailing dots, so the dataRoot stays "Big Cave".
+    const QString displayName = QStringLiteral("Big Cave...");
+    project->cavingRegion()->setName(displayName);
+    project->waitSaveToFinish();
+
+    CHECK(project->dataRoot().toStdString() == "Big Cave");
+    CHECK(reloadProject(project->filename())->cavingRegion()->name().toStdString() == displayName.toStdString());
 }
 
 TEST_CASE("Non-temporary project saveAs reports error when destination exists", "[cwProject]") {

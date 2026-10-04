@@ -4096,21 +4096,27 @@ void cwSaveLoad::connectTreeModel()
 
     // React to project name changes: rename the dataRoot directory and .cwproj descriptor
     // on disk when the region name is edited by the user. Uses the same watch pattern as
-    // cave/trip nameChanged handlers. Re-entrancy is suppressed because transferProjectTo
-    // always sets d->projectMetadata.dataRoot to the new name before calling region->setName(),
-    // so the early-out fires and the handler does nothing.
+    // cave/trip nameChanged handlers. transferProjectTo sets d->projectMetadata.dataRoot to
+    // the new name before the caller calls region->setName(), so that rename takes the
+    // matching-dataRoot path and only rewrites the project file with the new display name.
     //
     // The actual filesystem renames are queued as Custom jobs so they run on the background
     // thread via the job queue, matching the async pattern used for cave/trip renames.
     if (auto* region = d->m_regionTreeModel->cavingRegion()) {
-        connect(region, &cwCavingRegion::nameChanged, this, [this, region]() {
+        const auto saveMetadata = [this, region]() {
+            saveProject(projectRootDir(), region);
+        };
+
+        connect(region, &cwCavingRegion::nameChanged, this, [this, region, saveMetadata]() {
             if (d->isTemporary) {
                 return;
             }
 
             const QString newName = region->name();
             const QString sanitizedName = sanitizeFileName(newName);
-            if (sanitizedName.isEmpty() || d->projectMetadata.dataRoot == sanitizedName) {
+            if (d->projectMetadata.dataRoot == sanitizedName) {
+                // Only the display name changed, so the project file is the one thing to rewrite.
+                saveMetadata();
                 return;
             }
 
@@ -4170,12 +4176,8 @@ void cwSaveLoad::connectTreeModel()
                             this);
             }
 
-            saveProject(projectRootDir(), region);
+            saveMetadata();
         });
-
-        const auto saveMetadata = [this, region]() {
-            saveProject(projectRootDir(), region);
-        };
 
         // The local projection lives in the project metadata file and is the one
         // piece of geo-reference state that is *not* recomputable from the data
