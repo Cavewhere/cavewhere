@@ -82,6 +82,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyNode : public QAbstractListModel, public cwUn
     Q_PROPERTY(int childNodeCount READ childNodeCount NOTIFY childNodeCountChanged)
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
     Q_PROPERTY(bool takesCaves READ takesCaves NOTIFY takesCavesChanged)
+    Q_PROPERTY(bool isSection READ isSection NOTIFY isSectionChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
     Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
     Q_PROPERTY(QAbstractItemModel* fixStationTable READ fixStationTable CONSTANT)
@@ -140,6 +141,11 @@ public:
     //! is never offered inside a Cave. The Add verbs read this; it is the one
     //! place the kind of a node decides what may be added under it.
     bool takesCaves() const { return m_takesCaves; }
+
+    //! True for a Folder that takes trips rather than caves (one inside a Cave
+    //! or a sourced node), which the UI calls a Section. Icons read this rather
+    //! than the kind, so the choice follows the same ancestry as takesCaves().
+    bool isSection() const { return m_isSection; }
 
     cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
     void setExternalCenterline(const cwExternalCenterline& value);
@@ -395,6 +401,9 @@ signals:
     //! ancestors' did, or the node moved.
     void takesCavesChanged();
 
+    //! isSection() moved, for the same reasons takesCaves() does.
+    void isSectionChanged();
+
     //! One of readOnly, sourceId, or sourcePath moved, so isSourced() and
     //! isSourceRoot() may have moved with them.
     void sourceChanged();
@@ -534,6 +543,7 @@ private:
 
     Kind m_kind = Kind::Cave;
     bool m_takesCaves = false;
+    bool m_isSection = false;
     bool m_readOnly = false;
     QUuid m_sourceId;
     QString m_sourcePath;
@@ -550,10 +560,11 @@ private:
     //! This node, then each node above it, ending at the topmost.
     QList<const cwSurveyNode*> ancestorsOrSelf() const;
 
-    //! Recomputes takesCaves() here and below: a change at this node moves the
-    //! answer for its whole subtree.
+    //! Recomputes takesCaves() and isSection() here and below: a change at
+    //! this node moves the answers for its whole subtree.
     void updateTakesCaves();
     bool computeTakesCaves() const;
+    bool computeIsSection() const;
 
     //! The chain path() and pathIds() read, root-most first, the root excluded.
     QList<const cwSurveyNode*> pathNodes() const;

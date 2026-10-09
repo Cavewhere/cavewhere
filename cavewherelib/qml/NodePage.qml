@@ -240,20 +240,16 @@ StandardPage {
 
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
 
-    // The header: the kind's icon, the name, the Kind chip (a Cave/Folder
-    // picker on a native node) and Rename. One instance serves both layouts.
+    // The header: the kind's icon and the name, which a double-click edits on
+    // a native node. One instance serves both layouts.
     RowLayout {
         id: nodeHeaderId
         spacing: Theme.delegatePadding
 
-        Icon {
+        KindIcon {
             objectName: "nodeKindIcon"
-            source: nodePageArea.currentNode !== null && nodePageArea.currentNode.kind === SurveyNodeKind.Folder
-                    ? "qrc:/twbs-icons/icons/folder.svg"
-                    : "qrc:/icons/svg/caveKind.svg"
+            node: nodePageArea.currentNode
             sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
-            colorizationColor: Theme.textSubtle
-            visible: nodePageArea.currentNode !== null && !nodePageArea.isSourced
         }
 
         DoubleClickTextInput {
@@ -262,17 +258,29 @@ StandardPage {
             text: nodePageArea.currentNode ? nodePageArea.currentNode.name : ""
             font.bold: true
             font.pixelSize: Theme.fontSizeTitle
-            wrapMode: QQ.Text.WordWrap
+            // The name wraps inside the stats column, a long word included,
+            // rather than running into the tree beside it.
+            autoResize: true
+            wrapMode: QQ.Text.Wrap
+            horizontalAlignment: Qt.AlignLeft
             readOnly: nodePageArea.isSourced
 
-            // Wraps once the row runs out of room, and otherwise keeps the
-            // chip and Rename right after the name.
             Layout.fillWidth: true
-            Layout.maximumWidth: caveNameText.implicitWidth
 
             onFinishedEditting: (newText) => {
                                     nodePageArea.currentNode.name = newText
                                 }
+        }
+    }
+
+    // The node's kind leads its stats: the Kind chip, a Cave/Folder picker on
+    // a native node.
+    RowLayout {
+        id: kindStatRow
+        spacing: Theme.delegatePadding
+
+        QC.Label {
+            text: qsTr("Kind:")
         }
 
         KindChip {
@@ -281,17 +289,6 @@ StandardPage {
             sourced: nodePageArea.isSourced
             node: nodePageArea.currentNode
         }
-
-        QC.Button {
-            objectName: "renameNodeButton"
-            text: qsTr("Rename…")
-            flat: true
-            visible: nodePageArea.currentNode !== null && !nodePageArea.isSourced
-
-            onClicked: caveNameText.openEditor()
-        }
-
-        QQ.Item { Layout.fillWidth: true }
     }
 
     // What the stats row needs beyond the node's own properties.
@@ -615,9 +612,12 @@ StandardPage {
             width: wideFlickableId.width - 2 * Theme.pageMargin
             spacing: Theme.columnGap
 
+            // The stats column is as wide as its stats need and no wider than
+            // the info column, unless the stats themselves need more: a cap
+            // below the stats' width would let them run into the tree.
             ColumnLayout {
                 Layout.minimumWidth: statsBoxId.implicitWidth
-                Layout.maximumWidth: Theme.infoColumnMaxWidth
+                Layout.maximumWidth: Math.max(Theme.infoColumnMaxWidth, statsBoxId.implicitWidth)
                 Layout.alignment: Qt.AlignTop
                 spacing: Theme.flowSpacing
 
@@ -639,6 +639,7 @@ StandardPage {
 
                 SectionGroupBox {
                     id: statsBoxId
+                    objectName: "nodeStatsBox"
                     Layout.fillWidth: true
 
                     ColumnLayout {
@@ -647,6 +648,7 @@ StandardPage {
                         anchors.right: parent.right
                         spacing: Theme.tightSpacing
 
+                        LayoutItemProxy { target: nodePageArea.isNarrow ? null : kindStatRow }
                         LayoutItemProxy { target: tripsStatRow }
                         LayoutItemProxy { target: lengthStat }
                         LayoutItemProxy { target: depthStat }
@@ -718,6 +720,10 @@ StandardPage {
                 target: nodePageArea.isNarrow ? warningsBannerId : null
                 visible: nodePageArea.hasWarnings
                 Layout.fillWidth: true
+            }
+
+            LayoutItemProxy {
+                target: nodePageArea.isNarrow ? kindStatRow : null
             }
 
             QQ.Flow {

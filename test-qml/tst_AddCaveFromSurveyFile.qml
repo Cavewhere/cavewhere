@@ -47,7 +47,7 @@ MainWindowTest {
         }
 
         // Opens the split button's chevron menu on the data page and
-        // returns its Attach survey file… item.
+        // returns its Add from Survey File… item.
         function openAddCaveMenu(dataPage) {
             const addBar = findChild(dataPage, "addCave")
             verify(addBar !== null, "addCave bar must exist")
@@ -59,7 +59,7 @@ MainWindowTest {
             verify(menu !== null, "addCaveMenu must exist")
             tryVerify(() => menu.visible, 5000, "menu opens on chevron click")
             const item = findChild(menu, "addExternalCaveMenuItem")
-            verify(item !== null, "the menu offers Attach survey file…")
+            verify(item !== null, "the menu offers Add from Survey File…")
             return item
         }
 
@@ -94,7 +94,7 @@ MainWindowTest {
             const dataPage = gotoDataMainPage()
 
             const item = openAddCaveMenu(dataPage)
-            compare(item.text, qsTr("Attach survey file…"))
+            compare(item.text, qsTr("Add from Survey File…"))
         }
 
         function test_happyPathCreatesNamedCaveWithScopeTrips() {
@@ -159,6 +159,40 @@ MainWindowTest {
             const cancelButton = findChild(dialog, "cancelButton")
             waitForRendering(rootId)
             mouseClick(cancelButton)
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        function test_importNamesCaveAndTripAfterTheFile() {
+            saveProjectAs("add-cave-import")
+            const dataPage = gotoDataMainPage()
+            const dialog = openDialog(dataPage)
+            const newCave = RootData.region.cave(0)
+
+            const pathField = findChild(dialog, "sourcePathField")
+            pathField.text = TestHelper.testcasesDatasetSourcePath(
+                "external-centerlines/survex_simple.svx")
+            const importButton = findChild(dialog, "importButton")
+            verify(importButton !== null, "importButton must exist")
+            tryVerify(() => importButton.enabled, 10000,
+                      "Import enables on a valid Survex scan")
+
+            importButton.clicked()
+            verify(dialog.importing, "import busy state is up")
+            const cancelButton = findChild(dialog, "cancelButton")
+            verify(!cancelButton.enabled, "no cancel path during import")
+
+            tryVerify(() => newCave.rowCount() === 1
+                            && newCave.trip(0).chunkCount > 0,
+                      10000, "the import lands chunks in one new trip")
+            compare(newCave.trip(0).externalCenterline.entryFile, "",
+                    "an imported trip stays Native")
+            tryCompare(newCave.trip(0), "name", "survex_simple")
+            tryCompare(newCave, "name", "survex_simple")
+            compare(newCave.externalCenterline.entryFile, "",
+                    "an imported cave stays Native")
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "cavePage",
+                      10000, "import navigates to the new cave's page")
             RootData.futureManagerModel.waitForFinished()
         }
 

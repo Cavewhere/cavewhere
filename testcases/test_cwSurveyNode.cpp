@@ -577,6 +577,64 @@ TEST_CASE("MoveNodeCommand restores the parent, row and name it left", "[SurveyN
     }
 }
 
+TEST_CASE("cwSurveyNode isSection names a Folder inside a cave", "[SurveyNode]")
+{
+    using Kind = cwSurveyNode::Kind;
+
+    cwCavingRegion region;
+    cwSurveyNode* root = region.rootNode();
+    CHECK_FALSE(root->isSection());
+
+    cwCave* topFolder = makeNode(QStringLiteral("Kentucky"), Kind::Folder);
+    root->addNode(topFolder);
+    cwCave* cave = makeNode(QStringLiteral("Side Cave"), Kind::Cave);
+    topFolder->addNode(cave);
+    cwCave* section = makeNode(QStringLiteral("Upper level"), Kind::Folder);
+    cave->addNode(section);
+    cwCave* innerSection = makeNode(QStringLiteral("Crawl"), Kind::Folder);
+    section->addNode(innerSection);
+
+    CHECK_FALSE(topFolder->isSection());
+    CHECK_FALSE(cave->isSection());
+    CHECK(section->isSection());
+    CHECK(innerSection->isSection());
+
+    SECTION("relabeling the cave turns its sections into folders") {
+        cwSignalSpy sectionSpy(section, &cwSurveyNode::isSectionChanged);
+        cwSignalSpy innerSpy(innerSection, &cwSurveyNode::isSectionChanged);
+
+        cave->setKind(Kind::Folder);
+        CHECK_FALSE(cave->isSection());
+        CHECK_FALSE(section->isSection());
+        CHECK_FALSE(innerSection->isSection());
+        CHECK(sectionSpy.count() == 1);
+        CHECK(innerSpy.count() == 1);
+
+        cave->setKind(Kind::Cave);
+        CHECK(section->isSection());
+        CHECK(innerSection->isSection());
+        CHECK(sectionSpy.count() == 2);
+    }
+
+    SECTION("relabeling a section as a cave leaves it a cave") {
+        section->setKind(Kind::Cave);
+        CHECK_FALSE(section->isSection());
+        CHECK(innerSection->isSection());
+    }
+
+    SECTION("a native Folder under a sourced node is a section") {
+        cwCave* sourced = makeNode(QStringLiteral("Survex file"), Kind::SurvexFile);
+        root->addNode(sourced);
+        cwCave* nativeFolder = makeNode(QStringLiteral("Native"), Kind::Folder);
+        sourced->addNode(nativeFolder);
+        CHECK_FALSE(nativeFolder->isSection());
+
+        sourced->setSourceId(QUuid::createUuid());
+        CHECK(nativeFolder->isSection());
+        CHECK_FALSE(sourced->isSection());
+    }
+}
+
 TEST_CASE("cwSurveyNode takesCaves follows position, not a question", "[SurveyNode]")
 {
     using Kind = cwSurveyNode::Kind;

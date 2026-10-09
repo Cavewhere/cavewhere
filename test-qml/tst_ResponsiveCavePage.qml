@@ -91,19 +91,66 @@ MainWindowTest {
             tryVerify(() => tree.visible, 5000, "and keeps showing it")
         }
 
-        // One header serves both layouts, as the tree does.
+        // One header and one Kind chip serve both layouts, as the tree does.
         function test_headerVisibleAtBothWidths() {
             rootId.width = 800
             waitForRendering(rootId)
             let chip = findChild(rootId, "nodeKindChip")
             verify(chip !== null, "the Kind chip should exist at wide width")
-            tryVerify(() => chip.visible, 5000, "the header shows at wide width")
+            tryVerify(() => chip.visible, 5000, "the chip shows at wide width")
+            const name = findChild(rootId, "nodeNameText")
+            tryVerify(() => name.visible, 5000, "the header shows at wide width")
 
             rootId.width = 400
             waitForRendering(rootId)
-            compare(findChild(rootId, "nodeKindChip"), chip, "the narrow layout proxies the same header")
+            compare(findChild(rootId, "nodeKindChip"), chip, "the narrow layout proxies the same chip")
             tryVerify(() => chip.visible, 5000, "and keeps showing it")
-            verify(findChild(rootId, "renameNodeButton").visible, "Rename stays reachable when narrow")
+            compare(findChild(rootId, "nodeNameText"), name, "the narrow layout proxies the same header")
+            tryVerify(() => name.visible, 5000, "and keeps showing it")
+        }
+
+        // The right edge of what \a item paints, in window coordinates: its
+        // own box, or wider where its text runs past it.
+        function paintedRight(item) {
+            let right = item.width
+            for (let i = 0; i < item.children.length; i++) {
+                const child = item.children[i]
+                if (child.visible && child.contentWidth !== undefined) {
+                    right = Math.max(right, child.x + child.contentWidth)
+                }
+            }
+            return item.mapToItem(null, right, 0).x
+        }
+
+        // In the wide layout the stats column sits left of the tree, a long
+        // node name included: the name wraps inside the column rather than
+        // running under the tree.
+        function test_wideSidebarStaysLeftOfTheTable() {
+            const page = findCavePage()
+            page.currentNode.name = "Fisher Ridge Cave System Upper Entrance Complex North"
+
+            for (let width of [1024, 800, 650]) {
+                rootId.width = width
+                waitForRendering(rootId)
+                verify(!page.isNarrow, "the wide layout shows at width " + width)
+
+                const tree = findChild(rootId, "tripTree")
+                const statsBox = findChild(rootId, "nodeStatsBox")
+                const name = findChild(rootId, "nodeNameText")
+                tryVerify(() => tree.visible && statsBox.visible && name.visible, 5000)
+                const sidebar = statsBox.parent
+                tryVerify(() => sidebar.mapToItem(null, sidebar.width, 0).x <= tree.mapToItem(null, 0, 0).x,
+                          5000, "the sidebar ends before the table at width " + width)
+                const tableLeft = tree.mapToItem(null, 0, 0).x
+
+                verify(statsBox.mapToItem(null, statsBox.width, 0).x <= tableLeft,
+                       "the stats end before the table at width " + width)
+                verify(statsBox.implicitWidth <= statsBox.width,
+                       "the stats fit their box at width " + width)
+                tryVerify(() => paintedRight(name) <= tableLeft, 5000,
+                          "the name ends before the table at width " + width
+                          + "; it reaches " + paintedRight(name) + ", the table starts at " + tableLeft)
+            }
         }
 
         // A Section is a second kind of row in the page's tree, ahead of the

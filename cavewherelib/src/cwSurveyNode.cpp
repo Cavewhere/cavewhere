@@ -100,6 +100,7 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     recomputeGridConvergence();
 
     m_takesCaves = computeTakesCaves();
+    m_isSection = computeIsSection();
 }
 
 cwSurveyNode::~cwSurveyNode() {
@@ -726,12 +727,23 @@ bool cwSurveyNode::computeTakesCaves() const
     return true;
 }
 
+bool cwSurveyNode::computeIsSection() const
+{
+    return m_kind == Kind::Folder && !m_takesCaves;
+}
+
 void cwSurveyNode::updateTakesCaves()
 {
     const bool takesCaves = computeTakesCaves();
     if(m_takesCaves != takesCaves) {
         m_takesCaves = takesCaves;
         emit takesCavesChanged();
+    }
+
+    const bool isSection = computeIsSection();
+    if(m_isSection != isSection) {
+        m_isSection = isSection;
+        emit isSectionChanged();
     }
 
     for(cwSurveyNode* child : std::as_const(m_childNodes)) {

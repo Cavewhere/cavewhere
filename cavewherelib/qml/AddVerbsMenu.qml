@@ -17,7 +17,7 @@ import cavewherelib
 //
 // The menu adds the node or trip itself and hands it to added(), so each host
 // decides only where the user lands afterwards. A host appends its own entries
-// below the verbs, the way the Data page appends Attach survey file….
+// below the verbs, the way the Data page appends Add from Survey File….
 QC.Menu {
     id: addVerbsMenuId
 
@@ -34,9 +34,13 @@ QC.Menu {
     readonly property bool takesCaves: addVerbsMenuId.node === null
                                        || addVerbsMenuId.node.takesCaves
 
-    readonly property list<int> verbs: addVerbsMenuId.takesCaves
-                                       ? [AddVerbsMenu.AddCave, AddVerbsMenu.AddFolder]
-                                       : [AddVerbsMenu.AddTrip, AddVerbsMenu.AddSection]
+    //Verbs the host's own button already runs, which the menu leaves out.
+    property list<int> hiddenVerbs: []
+
+    readonly property list<int> verbs: (addVerbsMenuId.takesCaves
+                                        ? [AddVerbsMenu.AddCave, AddVerbsMenu.AddFolder]
+                                        : [AddVerbsMenu.AddTrip, AddVerbsMenu.AddSection])
+                                       .filter(verb => !addVerbsMenuId.hiddenVerbs.includes(verb))
 
     //\a verb ran: \a object is the new cwSurveyNode or cwTrip.
     signal added(object: QQ.QtObject, verb: int)
@@ -66,6 +70,20 @@ QC.Menu {
             return "addTripMenuItem";
         case AddVerbsMenu.AddSection:
             return "addSectionMenuItem";
+        default:
+            return "";
+        }
+    }
+
+    //The glyph of what \a verb makes; a trip has none.
+    function verbIcon(verb: int) : url {
+        switch(verb) {
+        case AddVerbsMenu.AddCave:
+            return Theme.kindIconCave;
+        case AddVerbsMenu.AddFolder:
+            return Theme.kindIconFolder;
+        case AddVerbsMenu.AddSection:
+            return Theme.kindIconSection;
         default:
             return "";
         }
@@ -118,6 +136,7 @@ QC.Menu {
 
             objectName: addVerbsMenuId.verbObjectName(modelData)
             text: addVerbsMenuId.verbText(modelData)
+            icon.source: addVerbsMenuId.verbIcon(modelData)
 
             onTriggered: addVerbsMenuId.run(modelData)
         }

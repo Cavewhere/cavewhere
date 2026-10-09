@@ -72,10 +72,6 @@ QQ.Item {
     readonly property SurveyNode node: rowId.object as SurveyNode
     readonly property Trip trip: rowId.object as Trip
 
-    //A Folder row draws a folder ahead of its name.
-    readonly property bool isFolder: rowId.node !== null
-                                     && rowId.node.kind === SurveyNodeKind.Folder
-
     //A trip row sits under the cave it belongs to, so its cells are drawn
     //quieter than the cave's own.
     readonly property QQ.color textColor: rowId.muted ? Theme.textSubtle : Theme.text
@@ -441,13 +437,12 @@ QQ.Item {
                                    : ""
                 }
 
-                Icon {
-                    objectName: rowId.cellName("folderIcon")
+                //A native node row draws its kind ahead of its name.
+                KindIcon {
+                    objectName: rowId.cellName("kindIcon")
 
-                    visible: rowId.isFolder
-                    source: "qrc:/twbs-icons/icons/folder.svg"
+                    node: rowId.node
                     sourceSize: Qt.size(Theme.treeKindIconSize, Theme.treeKindIconSize)
-                    colorizationColor: Theme.textSubtle
                 }
 
                 LinkText {

@@ -11,38 +11,59 @@ import QtQuick.Layouts
 import cavewherelib
 
 // Add-cave-from-survey-file dialog (Phase 3 §3.1). Pick an entry file,
-// read the scan's verdict and its block tree - the trips the attach
-// will create - then Attach. There is no Import choice here: whole-file
-// native import is the existing Import Survex feature, and the cave
-// dialog has exactly one verb.
+// read the scan's verdict and its block tree - the trips an attach
+// will create - then choose how CaveWhere uses the file, the same two
+// choices the trip dialog offers: Attach (recommended - the file stays
+// the source, one trip per block) or Import a copy (Survex only - the
+// data lands in a native trip of the cave, editable here).
 //
 // The dialog owns no attach state of its own beyond the session, which
 // attributes the manager's shared attachCompleted report back to this
-// surface. A failed attach fires neither outcome signal: the error
-// shows inline and the dialog stays open for another attempt.
+// surface. A failed attach fires no outcome signal: the error shows
+// inline and the dialog stays open for another attempt.
 QQ.Item {
     id: root
     objectName: "addCaveSurveyFileDialog"
 
     property Cave cave: null
 
+    // Import adds the trip it fills, and importFinished names that trip,
+    // so the dialog keeps it to recognize its own report.
+    property bool importing: false
+    property Trip importingTrip: null
+
     property alias title: dialogId.title
 
     // True from the Attach click until the session's report lands.
-    readonly property bool busy: sessionId.busy
+    readonly property bool attaching: sessionId.busy
+    readonly property bool busy: root.attaching || root.importing
 
     // Outcome signals for hosts. Exactly one fires per open()d session
     // that ends: attached() when this dialog's attach succeeds,
-    // dismissed() when the user backs out (idle Cancel, or a canceled
-    // attach). The programmatic close() is silent so hosts and tests
-    // can reset state without triggering cleanup.
+    // imported(trip, sourcePath) when its import completes (the cave keeps
+    // no record of the file on this path, so the filled trip and the picked
+    // path ride the signal for naming), dismissed() when the user backs out (idle
+    // Cancel, or a canceled attach). The programmatic close() is silent
+    // so hosts and tests can reset state without triggering cleanup.
     signal attached()
+    signal imported(trip: Trip, sourcePath: string)
     signal dismissed()
 
     function open() {
         pickerId.clear()
         sessionId.reset()
+        root.importing = false
+        root.importingTrip = null
         dialogId.open()
+    }
+
+    // Import a copy: the parsed shots go into a new trip of the cave.
+    function startImport() {
+        sessionId.errorMessage = ""
+        root.cave.addTrip()
+        root.importingTrip = root.cave.trip(root.cave.tripCount - 1)
+        root.importing = true
+        RootData.surveyImportManager.importSurvexToTrip(pickerId.sourcePath, root.importingTrip)
     }
 
     function close() {
@@ -60,6 +81,22 @@ QQ.Item {
         onCanceled: {
             dialogId.close()
             root.dismissed()
+        }
+    }
+
+    QQ.Connections {
+        target: RootData.surveyImportManager
+
+        function onImportFinished(trip, hasErrors) {
+            if (root.importing && trip === root.importingTrip) {
+                const importedTrip = root.importingTrip
+                root.importing = false
+                root.importingTrip = null
+                // Parse warnings live in the global error model; the import
+                // lands whatever parsed, so the session is over either way.
+                dialogId.close()
+                root.imported(importedTrip, pickerId.sourcePath)
+            }
         }
     }
 
@@ -97,20 +134,6 @@ QQ.Item {
                 locked: root.busy
                 operationError: sessionId.errorMessage
                 onPathEdited: sessionId.errorMessage = ""
-            }
-
-            BodyText {
-                objectName: "attachExplainerText"
-                Layout.fillWidth: true
-                Layout.topMargin: Theme.sectionSpacing
-                wrapMode: QC.Label.WordWrap
-                text: qsTr("The file stays the source of truth — keep "
-                         + "editing it in your survey tool and CaveWhere "
-                         + "stays in sync. A copy travels with your "
-                         + "project for git sync, backups, and sharing; "
-                         + "CaveWhere never writes to your original "
-                         + "files. Survey data is read-only in "
-                         + "CaveWhere.")
             }
 
             // Disclosure, not a picker: auto-creation is silent, so this
@@ -240,6 +263,113 @@ QQ.Item {
                 }
             }
 
+            QC.Label {
+                Layout.topMargin: Theme.sectionSpacing
+                text: qsTr("How should CaveWhere use this file?")
+                font.bold: true
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: dialogId.compact ? 1 : 2
+                columnSpacing: Theme.flowSpacing
+                rowSpacing: Theme.flowSpacing
+
+                QC.GroupBox {
+                    Layout.fillWidth: true
+                    // Equalize heights only side by side; stacked boxes
+                    // keep their natural height.
+                    Layout.fillHeight: !dialogId.compact
+                    // Equal columns: let the grid split the width instead
+                    // of following each box's implicit (unwrapped) width.
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+
+                    contentItem: ColumnLayout {
+                        spacing: Theme.tightSpacing
+
+                        BodyText {
+                            objectName: "attachExplainerText"
+                            Layout.fillWidth: true
+                            wrapMode: QC.Label.WordWrap
+                            text: qsTr("The file stays the source of truth — keep "
+                                     + "editing it in your survey tool and CaveWhere "
+                                     + "stays in sync. A copy travels with your "
+                                     + "project for git sync, backups, and sharing; "
+                                     + "CaveWhere never writes to your original "
+                                     + "files. Survey data is read-only in "
+                                     + "CaveWhere.")
+                        }
+
+                        QQ.Item { Layout.fillHeight: true }
+
+                        RowLayout {
+                            Layout.alignment: Qt.AlignRight
+                            Layout.topMargin: Theme.sectionSpacing
+                            spacing: Theme.flowSpacing
+
+                            QC.Label {
+                                objectName: "recommendedLabel"
+                                text: qsTr("Recommended")
+                                font.bold: true
+                                color: Theme.accent
+                            }
+
+                            QC.Button {
+                                objectName: "attachButton"
+                                text: qsTr("Attach")
+                                enabled: root.cave !== null && pickerId.valid && !root.busy
+                                onClicked: {
+                                    sessionId.start(root.cave)
+                                    RootData.attachCaveCenterline(root.cave, pickerId.sourcePath)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                QC.GroupBox {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: !dialogId.compact
+                    Layout.preferredWidth: 1
+                    Layout.alignment: Qt.AlignTop
+
+                    contentItem: ColumnLayout {
+                        spacing: Theme.tightSpacing
+
+                        BodyText {
+                            objectName: "importExplainerText"
+                            Layout.fillWidth: true
+                            wrapMode: QC.Label.WordWrap
+                            text: qsTr("Copies the data into a trip of this cave. "
+                                     + "You edit it here; the original file is "
+                                     + "never read again.")
+                        }
+
+                        QC.Label {
+                            objectName: "importFormatNote"
+                            Layout.fillWidth: true
+                            visible: pickerId.valid && !pickerId.importSupported
+                            wrapMode: QC.Label.WordWrap
+                            color: Theme.textSubtle
+                            text: qsTr("Import supports Survex files only.")
+                        }
+
+                        QQ.Item { Layout.fillHeight: true }
+
+                        QC.Button {
+                            objectName: "importButton"
+                            Layout.alignment: Qt.AlignRight
+                            Layout.topMargin: Theme.sectionSpacing
+                            text: qsTr("Import a copy")
+                            enabled: root.cave !== null && pickerId.valid
+                                     && !root.busy && pickerId.importSupported
+                            onClicked: root.startImport()
+                        }
+                    }
+                }
+            }
+
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.sectionSpacing
@@ -254,7 +384,7 @@ QQ.Item {
 
                 QC.Label {
                     objectName: "busyLabel"
-                    text: qsTr("Attaching…")
+                    text: root.importing ? qsTr("Importing…") : qsTr("Attaching…")
                 }
             }
 
@@ -270,23 +400,15 @@ QQ.Item {
                 QC.Button {
                     objectName: "cancelButton"
                     text: qsTr("Cancel")
+                    // Import has no way back once it starts.
+                    enabled: !root.importing
                     onClicked: {
-                        if (root.busy) {
+                        if (root.attaching) {
                             sessionId.cancel()
                         } else {
                             dialogId.close()
                             root.dismissed()
                         }
-                    }
-                }
-
-                QC.Button {
-                    objectName: "attachButton"
-                    text: qsTr("Attach")
-                    enabled: root.cave !== null && pickerId.valid && !root.busy
-                    onClicked: {
-                        sessionId.start(root.cave)
-                        RootData.attachCaveCenterline(root.cave, pickerId.sourcePath)
                     }
                 }
             }

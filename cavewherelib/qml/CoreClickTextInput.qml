@@ -34,6 +34,7 @@ QQ.Item {
     property bool readOnly: false
     property bool autoResize: false
     property alias wrapMode: textAreaId.wrapMode
+    property alias horizontalAlignment: textAreaId.horizontalAlignment
     property string errorText
 
     //The editor host for whichever window this field is in. Resolved rather

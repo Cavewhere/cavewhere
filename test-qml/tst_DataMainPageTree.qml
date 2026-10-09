@@ -661,20 +661,6 @@ MainWindowTest {
             return names
         }
 
-        // The Add ▾ caret on the region's top level offers caves and folders,
-        // then the cave-level attach under its settled name.
-        function test_addCaretOffersAttachSurveyFile() {
-            const page = gotoDataMainPage()
-            const menu = openAddCaret(page)
-
-            compare(menuEntryNames(menu),
-                    ["addCaveMenuItem", "addFolderMenuItem", "addExternalCaveMenuItem"])
-            compare(menu.itemAt(0).text, "Add Cave")
-            compare(menu.itemAt(1).text, "Add Folder")
-            compare(menu.itemAt(2).text, "Attach survey file…")
-            menu.close()
-        }
-
         // --- C5.1: Add Folder / Add Section / the kind chip / delete counts ---
 
         // Opens the context menu of the row at view row \a viewRow and returns
@@ -726,8 +712,10 @@ MainWindowTest {
             tryCompare(tree, "rows", 1, 5000)
             const chip = findChild(findChild(page, "caveKind0"), "kindChip")
             compare(chip.text, "Folder")
-            const icon = findChild(findChild(page, "caveDelegate0"), "folderIcon")
-            verify(icon !== null && icon.visible, "a Folder row carries the folder icon")
+            const icon = findChild(findChild(page, "caveDelegate0"), "kindIcon")
+            verify(icon !== null && icon.visible, "a Folder row carries its kind icon")
+            verify(String(icon.source).indexOf("folder.svg") >= 0,
+                   "a top-level Folder draws the folder icon")
 
             const menu = openRowMenu(page, tree, 0)
             const submenu = openAddSubmenu(menu)
@@ -745,8 +733,9 @@ MainWindowTest {
             tryCompare(cave, "name", "Side Cave", 5000)
             tryCompare(tree, "rows", 2, 5000)
             tryCompare(tree, "currentRow", 1, 5000)
-            const caveIcon = findChild(findChild(page, "caveDelegate1"), "folderIcon")
-            verify(caveIcon !== null && !caveIcon.visible, "a Cave row draws no folder")
+            const caveIcon = findChild(findChild(page, "caveDelegate1"), "kindIcon")
+            verify(caveIcon !== null && caveIcon.visible, "a Cave row carries its kind icon")
+            verify(String(caveIcon.source).indexOf("caveKind.svg") >= 0, "a Cave draws the cave icon")
         }
 
         function test_insideACaveTheMenuOffersTripsAndSections() {
@@ -776,6 +765,10 @@ MainWindowTest {
             tryCompare(tree, "currentRow", 1, 5000)
             const sectionChip = findChild(findChild(page, "caveKind1"), "kindChip")
             compare(sectionChip.text, "Folder", "the chip says Folder everywhere")
+            const sectionIcon = findChild(findChild(page, "caveDelegate1"), "kindIcon")
+            verify(sectionIcon !== null && sectionIcon.visible, "a Section row carries its kind icon")
+            verify(String(sectionIcon.source).indexOf("signpost-split.svg") >= 0,
+                   "a Folder inside a cave draws the signpost, not the folder")
 
             submenu = openAddSubmenu(openRowMenu(page, tree, 1))
             compare(menuEntryNames(submenu), ["addTripMenuItem", "addSectionMenuItem"],
@@ -828,8 +821,9 @@ MainWindowTest {
                           return folderChip !== null && folderChip.text === "Folder"
                       }, 5000, "the chip reads Folder")
             tryVerify(() => {
-                          const icon = findChild(findChild(page, "caveDelegate0"), "folderIcon")
+                          const icon = findChild(findChild(page, "caveDelegate0"), "kindIcon")
                           return icon !== null && icon.visible
+                                  && String(icon.source).indexOf("folder.svg") >= 0
                       }, 5000, "the row draws the folder icon")
             compare(cave.tripCount, 2, "the node keeps its trips")
             compare(cave.length.value, lengthBefore, "the node keeps its length")

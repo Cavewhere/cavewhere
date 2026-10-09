@@ -27,6 +27,12 @@ QQ.Rectangle {
 
     readonly property bool pickable: chipId.node !== null && !chipId.sourced
 
+    //Where the node sits decides what a Folder there is called: a Folder
+    //where caves go, or a Section inside a cave.
+    readonly property bool parentTakesCaves: chipId.node !== null
+                                             && (chipId.node.parentNode === null
+                                                 || chipId.node.parentNode.takesCaves)
+
     implicitWidth: contentRowId.implicitWidth + 2 * Theme.chipPadding
     implicitHeight: contentRowId.implicitHeight + 2 * Theme.tightSpacing
     radius: Theme.chipRadius
@@ -92,6 +98,7 @@ QQ.Rectangle {
         QC.MenuItem {
             objectName: "kindPickerCave"
             text: chipId.pickerText(qsTr("Cave"), SurveyNodeKind.Cave)
+            icon.source: Theme.kindIconCave
 
             onTriggered: chipId.node.kind = SurveyNodeKind.Cave
         }
@@ -99,6 +106,7 @@ QQ.Rectangle {
         QC.MenuItem {
             objectName: "kindPickerFolder"
             text: chipId.pickerText(qsTr("Folder"), SurveyNodeKind.Folder)
+            icon.source: chipId.parentTakesCaves ? Theme.kindIconFolder : Theme.kindIconSection
 
             onTriggered: chipId.node.kind = SurveyNodeKind.Folder
         }

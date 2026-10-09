@@ -269,8 +269,14 @@ QtObject {
     //The arrow the header cell of the sorted column carries, sized to sit
     //beside a fontSizeSmall title rather than to stand on its own.
     readonly property int treeSortIndicatorSize: Math.round(10 * fontScale)
-    //The icon ahead of a Folder row's name.
+    //The icon ahead of a native node row's name.
     readonly property int treeKindIconSize: Math.round(14 * fontScale)
+
+    // Kind glyphs: a Cave, a Folder where caves go, and a Section (a Folder
+    // inside a cave). KindIcon picks one from where the node sits.
+    readonly property url kindIconCave: "qrc:/icons/svg/caveKind.svg"
+    readonly property url kindIconFolder: "qrc:/twbs-icons/icons/folder.svg"
+    readonly property url kindIconSection: "qrc:/twbs-icons/icons/signpost-split.svg"
 
     // Chips (the Kind chip on a tree row)
     readonly property int chipRadius: Math.round(3 * fontScale)

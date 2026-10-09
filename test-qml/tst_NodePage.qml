@@ -295,14 +295,65 @@ MainWindowTest {
             verify(findChild(page, "fixStationsLink").visible, "relabeling keeps the fix-station row")
         }
 
-        function test_renameButtonOpensTheNameEditor() {
+        // The header has no Rename button: the name edits inline on a
+        // double-click. The harness never delivers doubleTapped, so the test
+        // opens the editor the double-click opens.
+        function test_noRenameButtonTheNameEditsInline() {
             const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
             const page = gotoNodePage("Source/Data/Node=Side Cave", cave)
 
-            mouseClick(findChild(page, "renameNodeButton"))
+            compare(findChild(page, "renameNodeButton"), null, "the header carries no Rename button")
+            const nameText = findChild(page, "nodeNameText")
+            verify(!nameText.readOnly, "a native node's name is editable")
+            nameText.openEditor()
             commitNewName("Fisher Ridge")
             tryCompare(cave, "name", "Fisher Ridge", 5000)
-            tryCompare(findChild(page, "nodeNameText"), "text", "Fisher Ridge", 5000)
+            tryCompare(nameText, "text", "Fisher Ridge", 5000)
+        }
+
+        // The Kind chip sits with the stats, above Trips, rather than in the
+        // header beside the name.
+        function test_kindChipSitsInTheStatsAboveTrips() {
+            const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
+            const page = gotoNodePage("Source/Data/Node=Side Cave", cave)
+
+            const chip = findChild(page, "nodeKindChip")
+            const statsBox = findChild(page, "nodeStatsBox")
+            const tripCount = findChild(page, "tripCountValue")
+            const name = findChild(page, "nodeNameText")
+            tryVerify(() => chip.visible && statsBox.visible && tripCount.visible, 5000)
+
+            const chipTop = chip.mapToItem(statsBox, 0, 0)
+            verify(chipTop.x >= 0 && chipTop.y >= 0
+                   && chipTop.x + chip.width <= statsBox.width
+                   && chipTop.y + chip.height <= statsBox.height,
+                   "the chip lies inside the stats box")
+            verify(chip.mapToItem(null, 0, chip.height).y <= tripCount.mapToItem(null, 0, 0).y,
+                   "the chip sits above Trips")
+            verify(name.mapToItem(null, 0, name.height).y <= statsBox.mapToItem(null, 0, 0).y,
+                   "the header, above the stats, holds the name alone")
+        }
+
+        // A Section's page header draws the signpost; a top-level Folder's the
+        // folder; a Cave's the cave.
+        function test_headerIconFollowsWhereTheNodeSits() {
+            const nodes = setupCaveWithSection()
+            let page = gotoNodePage("Source/Data/Node=Side Cave/Node=Upper level", nodes.section)
+            let icon = findChild(page, "nodeKindIcon")
+            tryVerify(() => String(icon.source).indexOf("signpost-split.svg") >= 0, 5000,
+                      "a Section's header draws the signpost")
+            verify(icon.visible)
+
+            const folder = addNode(null, SurveyNodeKind.Folder, "Kentucky")
+            page = gotoNodePage("Source/Data/Node=Kentucky", folder)
+            icon = findChild(page, "nodeKindIcon")
+            tryVerify(() => String(icon.source).indexOf("folder.svg") >= 0, 5000,
+                      "a top-level Folder's header draws the folder")
+
+            page = gotoNodePage("Source/Data/Node=Side Cave", nodes.cave)
+            icon = findChild(page, "nodeKindIcon")
+            tryVerify(() => String(icon.source).indexOf("caveKind.svg") >= 0, 5000,
+                      "a Cave's header draws the cave")
         }
 
         function test_statsCountEveryTripBelowTheNode() {
