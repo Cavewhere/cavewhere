@@ -200,7 +200,8 @@ void cwPage::setNamingFunction(QObject *object,
     int renamePageSlot = metaObject()->indexOfMethod("renamePage()");
     Q_ASSERT(renamePageSlot != -1);
 
-    QMetaObject::connect(object, signalIndex, this, renamePageSlot);
+    //A kept page is handed its naming function again on every re-registration.
+    QMetaObject::connect(object, signalIndex, this, renamePageSlot, Qt::UniqueConnection);
 
     RenamingObject = functionObject;
     RenamingFunction = function;

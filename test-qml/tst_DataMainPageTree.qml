@@ -1326,6 +1326,135 @@ MainWindowTest {
             compare(RootData.region.equates.count, equatesBefore, "one undo takes the tie back too")
         }
 
+        // --- C5.5: Move to… follow-ups ---
+
+        // The view row drawing \a object, -1 while no row of the view does.
+        function viewRowOf(tree, object) {
+            for (let row = 0; row < tree.rows; row++) {
+                if (tree.surveyTree.objectAtRow(row) === object) {
+                    return row
+                }
+            }
+            return -1
+        }
+
+        // True while \a object has a row of the view and that row is current.
+        function isShownAndCurrent(tree, object) {
+            return viewRowOf(tree, object) >= 0 && tree.surveyTree.currentObject === object
+        }
+
+        // The armed row reads as lifted: full opacity and its own frame,
+        // distinct from the targets' frame and from the muted rows.
+        function test_theArmedSubjectReadsAsLifted() {
+            const t = setupMoveTree()
+            const page = gotoDataMainPage()
+            const tree = expandedMoveTree(page)
+
+            mouseClick(findChild(openMenuOn(page, tree, 3, "tripDelegate"), "surveyItemMoveMenuItem"))
+            tryVerify(() => moveBanner(page).visible, 5000, "Move to… shows the banner")
+
+            const subjectRow = rowFor(page, "tripDelegate", 3, t.trip)
+            tryVerify(() => subjectRow.isMoveSource, 5000, "the moving row is the move's source")
+            compare(findChild(subjectRow, "rowContent").opacity, 1.0, "the moving row keeps full opacity")
+            verify(findChild(subjectRow, "moveSourceOutline").visible, "the moving row draws its own frame")
+
+            const mutedRow = rowFor(page, "caveDelegate", 0, t.kentucky)
+            verify(!mutedRow.isMoveSource && !mutedRow.isMoveTarget)
+            compare(findChild(mutedRow, "rowContent").opacity, Theme.disabledOpacity,
+                    "a row that cannot take the move steps back")
+            verify(!findChild(mutedRow, "moveSourceOutline").visible)
+
+            const targetRow = rowFor(page, "caveDelegate", 2, t.upperLevel)
+            verify(targetRow.isMoveTarget)
+            verify(!findChild(targetRow, "moveSourceOutline").visible, "a target draws the targets' frame only")
+
+            RegionSurveyTree.cancelMove()
+            tryVerify(() => !findChild(subjectRow, "moveSourceOutline").visible, 5000,
+                      "disarming drops the frame")
+        }
+
+        // A trip moved into a collapsed Section opens that Section and is the
+        // current row afterward, and undo and redo each show it where they
+        // put it.
+        function test_aMovedTripIsShownAndCurrentWhereItLands() {
+            const t = setupMoveTree()
+            t.upperLevel.addTrip()
+            t.upperLevel.trip(0).name = "Upper survey"
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
+            tree.surveyTree.expandAll()
+            tryCompare(tree, "rows", 6, 5000)
+            const upperViewRow = viewRowOf(tree, t.upperLevel)
+            tree.collapse(upperViewRow)
+            tryCompare(tree, "rows", 5, 5000)
+
+            RegionSurveyTree.startMove(RegionSurveyTree.indexOf(t.trip))
+            tryVerify(() => moveBanner(page).visible, 5000)
+            clickRow(rowFor(page, "caveDelegate", upperViewRow, t.upperLevel))
+
+            tryCompare(t.trip, "parentNode", t.upperLevel, 5000)
+            tryVerify(() => isShownAndCurrent(tree, t.trip), 5000,
+                      "the moved trip is visible and current in the Section it landed in")
+            verify(tree.isExpanded(viewRowOf(tree, t.upperLevel)), "the Section opened to show it")
+
+            //Folded away again, so undo has to open Side Cave to show it.
+            tree.collapse(viewRowOf(tree, t.sideCave))
+            tryVerify(() => viewRowOf(tree, t.trip) < 0, 5000)
+            RootData.undoStack.undo()
+            tryCompare(t.trip, "parentNode", t.sideCave, 5000)
+            tryVerify(() => isShownAndCurrent(tree, t.trip), 5000,
+                      "undo shows the trip back in Side Cave")
+
+            tree.collapse(viewRowOf(tree, t.upperLevel))
+            RootData.undoStack.redo()
+            tryCompare(t.trip, "parentNode", t.upperLevel, 5000)
+            tryVerify(() => isShownAndCurrent(tree, t.trip), 5000,
+                      "redo shows the trip in the Section again")
+        }
+
+        // Renaming the armed row in place renames it in the banner too.
+        function test_renamingTheArmedRowUpdatesTheBanner() {
+            const t = setupMoveTree()
+            const page = gotoDataMainPage()
+            const tree = expandedMoveTree(page)
+            const banner = moveBanner(page)
+
+            RegionSurveyTree.startMove(RegionSurveyTree.indexOf(t.upperLevel))
+            tryVerify(() => banner.visible, 5000)
+            const label = findChild(banner, "surveyMoveBannerLabel")
+            compare(label.text, "Click where to move Upper level — Esc cancels")
+
+            const upperRow = rowFor(page, "caveDelegate", 2, t.upperLevel)
+            upperRow.startRename()
+            commitNewName("Lower level")
+            tryCompare(t.upperLevel, "name", "Lower level", 5000)
+            tryCompare(label, "text", "Click where to move Lower level — Esc cancels", 5000)
+            verify(RegionSurveyTree.moveActive, "renaming leaves the move armed")
+        }
+
+        // Move to… is a row verb only: the node page's header carries no
+        // button for it.
+        function test_theNodePageShowsNoMoveButton() {
+            const t = setupMoveTree()
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Kentucky/Node=Side Cave"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "cavePage"
+                            && RootData.pageView.currentPageItem.currentNode === t.sideCave,
+                      5000, "the Side Cave page must show")
+            const nodePage = RootData.pageView.currentPageItem
+            waitForRendering(nodePage)
+            const nameText = findChild(nodePage, "nodeNameText")
+            verify(nameText !== null, "the header is drawn")
+            compare(findChild(nodePage, "moveNodeButton"), null, "the node page shows no Move to… button")
+            const headerItems = nameText.parent.children
+            for (let i = 0; i < headerItems.length; ++i) {
+                verify(headerItems[i].text !== "Move to…",
+                       "no header control reads Move to…")
+            }
+        }
+
         // Survey data an attached file places stays where the file puts it:
         // its rows offer no Move to….
         function test_attachedRowsOfferNoMove() {

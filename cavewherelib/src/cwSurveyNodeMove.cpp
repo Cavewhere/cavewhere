@@ -389,6 +389,10 @@ void cwSurveyNode::MoveToCommand::redo()
     for(const FixEdit& edit : std::as_const(FixEdits)) {
         DestinationPtr->fixStations()->appendFixStation(edit.after);
     }
+
+    if(Region != nullptr) {
+        emit Region->surveyMoved(SubjectPtr);
+    }
 }
 
 void cwSurveyNode::MoveToCommand::undo()
@@ -414,4 +418,8 @@ void cwSurveyNode::MoveToCommand::undo()
     }
 
     Move->undo();
+
+    if(Region != nullptr) {
+        emit Region->surveyMoved(SubjectPtr);
+    }
 }

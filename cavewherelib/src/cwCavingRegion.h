@@ -249,6 +249,11 @@ signals:
     //! move to another cave or region.
     void ownersDeleted(const QList<QUuid>& ownerIds);
 
+    //! A Move to… landed \a subject, a cwSurveyNode or a cwTrip, in its new
+    //! place, or its undo put it back where it came from. Emitted once the
+    //! whole move — ties, re-keyed equates, traveling fixes — is in place.
+    void surveyMoved(QObject* subject);
+
 public slots:
 
 protected:

@@ -123,6 +123,56 @@ MainWindowTest {
                       5000, "clicking the Section row opens the Section's page")
         }
 
+        // The owner's repro: two Sections, each given a trip from its own
+        // page, then the first Section's trip opened from the cave page's
+        // tree. One node page item serves both Sections, so opening Trip 1
+        // swaps that item back to the first Section on the way.
+        function test_openingATripInTheFirstOfTwoSections() {
+            const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
+            const cavePage = gotoNodePage("Source/Data/Node=Side Cave", cave)
+
+            const firstSection = RootData.region.addNode(cave, SurveyNodeKind.Folder, "New Section")
+            const firstSectionPage = gotoNodePage("Source/Data/Node=Side Cave/Node=New Section", firstSection)
+            const firstTrip = firstSectionPage.addTripAndNavigate()
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.currentTrip === firstTrip,
+                      5000, "Add Trip opens the first Section's trip")
+
+            gotoNodePage("Source/Data/Node=Side Cave", cave)
+            const secondSection = RootData.region.addNode(cave, SurveyNodeKind.Folder, "New Section")
+            compare(secondSection.name, "New Section 2")
+            const secondSectionPage = gotoNodePage("Source/Data/Node=Side Cave/Node=New Section 2", secondSection)
+            const secondTrip = secondSectionPage.addTripAndNavigate()
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.currentTrip === secondTrip,
+                      5000, "Add Trip opens the second Section's trip")
+
+            gotoNodePage("Source/Data/Node=Side Cave", cave)
+            const view = tree(cavePage, "caveDelegate0")
+            tryCompare(view, "rows", 2, 5000)
+            const firstSectionRow = findChild(cavePage, "caveDelegate0")
+            compare(firstSectionRow.object, firstSection)
+            firstSectionRow.toggleExpanded()
+            tryCompare(view, "rows", 3, 5000)
+
+            let tripRow = null
+            tryVerify(() => {
+                          tripRow = findChild(cavePage, "tripDelegate1")
+                          return tripRow !== null && tripRow.object === firstTrip
+                      }, 5000, "the first Section opens onto Trip 1")
+            waitForRendering(tripRow)
+            mouseClick(findChild(tripRow, "tripLink"))
+
+            tryVerify(() => RootData.pageSelectionModel.currentPageAddress
+                            === "Source/Data/Node=Side Cave/Node=New Section/Trip=" + firstTrip.name
+                      && RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.currentTrip === firstTrip,
+                      5000, "clicking Trip 1 opens its trip page")
+            const tripPageItem = RootData.pageView.currentPageItem
+            compare(tripPageItem.PageView.page, RootData.pageSelectionModel.currentPage,
+                    "the trip page item holds the page the model shows")
+        }
+
         function test_childSectionStaysAwayWhileTheNodeHasNone() {
             const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
             addTrip(cave, "Entrance survey", new Date(2023, 10, 12))
@@ -267,21 +317,30 @@ MainWindowTest {
             tryCompare(findChild(page, "lastSurveyValue"), "text", "2025-05-10", 5000)
         }
 
-        // Move to… on the header opens the Data page with the move armed,
-        // where the whole tree picks the destination; the top level is offered
-        // as a button, since the region's root owns no row.
-        function test_moveToFromTheHeaderArmsTheDataPage() {
+        // Move to… on a row of the node page's tree opens the Data page with
+        // the move armed, where the whole tree picks the destination; the top
+        // level is offered as a button, since the region's root owns no row.
+        function test_moveToFromThePageTreeArmsTheDataPage() {
             const nodes = setupCaveWithSection()
-            const page = gotoNodePage("Source/Data/Node=Side Cave/Node=Upper level", nodes.section)
+            const page = gotoNodePage("Source/Data/Node=Side Cave", nodes.cave)
 
-            const moveButton = findChild(page, "moveNodeButton")
-            verify(moveButton !== null && moveButton.visible, "a native node offers Move to…")
-            mouseClick(moveButton)
+            tree(page, "caveDelegate0")
+            const sectionRow = findChild(page, "caveDelegate0")
+            compare(sectionRow.object, nodes.section)
+            sectionRow.showContextMenu(Theme.delegatePadding, sectionRow.height)
+            let menu = null
+            tryVerify(() => {
+                          menu = findChild(sectionRow, "surveyItemContextMenu")
+                          return menu !== null && menu.visible
+                      }, 5000, "the Section row opens its context menu")
+            const moveItem = findChild(menu, "surveyItemMoveMenuItem")
+            verify(moveItem !== null && moveItem.visible, "a native node offers Move to…")
+            mouseClick(moveItem)
 
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "dataMainPage",
                       5000, "Move to… opens the Data page")
-            verify(RegionSurveyTree.moveSubject === nodes.section, "the move carries the page's node")
+            verify(RegionSurveyTree.moveSubject === nodes.section, "the move carries the row's node")
 
             const dataPage = RootData.pageView.currentPageItem
             const banner = findChild(dataPage, "surveyMoveBanner")
@@ -300,14 +359,6 @@ MainWindowTest {
 
             RootData.undoStack.undo()
             tryCompare(nodes.section, "parentNode", nodes.cave, 5000)
-        }
-
-        // A top-level cave's header offers the move too: a folder can take it.
-        function test_moveToShowsOnATopLevelCaveHeader() {
-            const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
-            const page = gotoNodePage("Source/Data/Node=Side Cave", cave)
-            tryVerify(() => findChild(page, "moveNodeButton").visible, 5000,
-                      "a top-level cave can move into a folder")
         }
     }
 }

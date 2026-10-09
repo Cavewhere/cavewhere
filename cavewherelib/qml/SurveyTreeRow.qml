@@ -105,6 +105,12 @@ QQ.Item {
                                          ? RegionSurveyTree.moveTargetReason(RegionSurveyTree.indexOf(rowId.object))
                                          : ""
 
+    //True while an armed move carries this row: the moving row itself, or a
+    //row under the moving node. These rows read as lifted rather than muted.
+    readonly property bool isMoveSource: rowId.moveArmed
+                                         && rowId.object !== null
+                                         && RegionSurveyTree.isMoveSource(RegionSurveyTree.indexOf(rowId.object))
+
     //A target under the pointer draws its whole row lit, whichever cell the
     //pointer is in.
     readonly property bool moveHovered: rowId.isMoveTarget
@@ -225,62 +231,88 @@ QQ.Item {
         rowIndex: rowId.row
     }
 
-    //An armed move's target: one frame along the whole row, drawn a cell at a
-    //time, and lit while the pointer is on the row.
-    QQ.Item {
+    //A frame along the whole row, drawn a cell at a time: the Name cell
+    //carries the left edge and the Decl cell the right.
+    component RowFrame: QQ.Item {
+        id: rowFrameId
+
+        property QQ.color frameColor
+        property bool leftEdge: false
+        property bool rightEdge: false
+
+        anchors.fill: parent
+
+        QQ.Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: Theme.attentionBorderWidth
+            color: rowFrameId.frameColor
+        }
+
+        QQ.Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Theme.attentionBorderWidth
+            color: rowFrameId.frameColor
+        }
+
+        QQ.Rectangle {
+            visible: rowFrameId.leftEdge
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Theme.attentionBorderWidth
+            color: rowFrameId.frameColor
+        }
+
+        QQ.Rectangle {
+            visible: rowFrameId.rightEdge
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: Theme.attentionBorderWidth
+            color: rowFrameId.frameColor
+        }
+    }
+
+    //An armed move's target, lit while the pointer is on the row.
+    QQ.Rectangle {
         anchors.fill: parent
         visible: rowId.isMoveTarget
+        color: rowId.moveHovered ? Theme.highlight : Theme.transparent
 
-        QQ.Rectangle {
-            anchors.fill: parent
-            color: rowId.moveHovered ? Theme.highlight : Theme.transparent
+        RowFrame {
+            frameColor: Theme.focusRing
+            leftEdge: rowId.column === SurveyTreeModel.Name
+            rightEdge: rowId.column === SurveyTreeModel.Decl
         }
+    }
 
-        QQ.Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: Theme.attentionBorderWidth
-            color: Theme.focusRing
-        }
-
-        QQ.Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: Theme.attentionBorderWidth
-            color: Theme.focusRing
-        }
-
-        QQ.Rectangle {
-            visible: rowId.column === SurveyTreeModel.Name
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: Theme.attentionBorderWidth
-            color: Theme.focusRing
-        }
-
-        QQ.Rectangle {
-            visible: rowId.column === SurveyTreeModel.Decl
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: Theme.attentionBorderWidth
-            color: Theme.focusRing
-        }
+    //The row an armed move carries, lifted: its own frame, in the accent
+    //rather than the targets' focus ring.
+    RowFrame {
+        objectName: rowId.column === SurveyTreeModel.Name ? rowId.cellName("moveSourceOutline") : ""
+        visible: rowId.moveArmed && rowId.object === RegionSurveyTree.moveSubject
+        frameColor: Theme.accentMuted
+        leftEdge: rowId.column === SurveyTreeModel.Name
+        rightEdge: rowId.column === SurveyTreeModel.Decl
     }
 
     QQ.Loader {
         id: contentLoaderId
+        objectName: rowId.column === SurveyTreeModel.Name ? rowId.cellName("rowContent") : ""
 
         anchors.fill: parent
         anchors.leftMargin: Theme.delegatePadding
         anchors.rightMargin: Theme.delegatePadding
 
-        //Every row an armed move cannot land under steps back, the moving row
-        //and its subtree among them.
-        opacity: rowId.moveArmed && !rowId.isMoveTarget ? Theme.disabledOpacity : 1.0
+        //Every row an armed move cannot land under steps back, except the
+        //rows that are moving.
+        opacity: rowId.moveArmed && !rowId.isMoveTarget && !rowId.isMoveSource
+                 ? Theme.disabledOpacity
+                 : 1.0
 
         sourceComponent: {
             switch(rowId.column) {

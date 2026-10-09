@@ -373,16 +373,17 @@ ColumnLayout {
         }
     }
 
-    //Opens the tree down to what an armed move carries and makes its row
-    //current, so the move starts from where the thing moving sits.
-    function revealMoveSubject() {
-        const subject = RegionSurveyTree.moveSubject;
-        if(subject === null) {
+    //Opens the tree down to \a object and makes its row current: where an
+    //armed move starts from, and where a landed move, or its undo, put it.
+    function revealObject(object: QQ.QtObject) {
+        //A deferred reveal can arrive after its object left the region.
+        const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(object));
+        if(!proxyIndex.valid) {
             return;
         }
 
-        surveyTreeId.expandTo(subject);
-        const viewRow = treeViewId.rowAtIndex(filterModelId.mapFromSource(RegionSurveyTree.indexOf(subject)));
+        surveyTreeId.expandTo(object);
+        const viewRow = treeViewId.rowAtIndex(proxyIndex);
         if(viewRow >= 0) {
             surveyTreeId.setCurrentRow(viewRow);
         }
@@ -586,13 +587,20 @@ ColumnLayout {
         surveyTreeId.makeFirstRowCurrent();
     }
 
-    //The whole-region tree shows where an armed move starts from.
+    //The whole-region tree shows where an armed move starts from and where
+    //it lands.
     QQ.Connections {
         target: RegionSurveyTree
         enabled: surveyTreeId.moveBanner !== null
 
         function onMoveChanged() {
-            surveyTreeId.revealMoveSubject();
+            surveyTreeId.revealObject(RegionSurveyTree.moveSubject);
+        }
+
+        //Deferred: a click on a target row lands the move, and TableView
+        //makes the clicked row current once that click is through.
+        function onMoved(subject) {
+            Qt.callLater(surveyTreeId.revealObject, subject);
         }
     }
 

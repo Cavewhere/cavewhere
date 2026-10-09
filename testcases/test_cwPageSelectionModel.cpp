@@ -446,6 +446,101 @@ TEST_CASE("cwPageSelectionModel resolves node pages at any depth", "[cwPageSelec
     CHECK(model.currentPage() == nullptr);
 }
 
+//One node page item serves every Section of a cave, and pointing it at a
+//Section registers that Section's trip pages again. Opening Trip 1 of the
+//first Section after visiting the second one does exactly that while the
+//page view is still loading Trip 1's page, so the page Trip 1 already has
+//must be the one the re-registration hands back.
+TEST_CASE("cwPageSelectionModel keeps a trip page its Section registers again", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* staticComponent = makePageComponent(engine, &model);
+    auto* caveComponent = makePageComponent(engine, &model);
+    auto* sectionComponent = makePageComponent(engine, &model);
+    auto* tripComponent = makePageComponent(engine, &model);
+    auto* noteComponent = makePageComponent(engine, &model);
+
+    cwSurveyNode root(cwSurveyNode::RootNodeTag{});
+    cwCave* caveNode = makeNode(&root, QStringLiteral("Side Cave"));
+    cwCave* firstSectionNode = makeNode(caveNode, QStringLiteral("New Section"));
+    cwCave* secondSectionNode = makeNode(caveNode, QStringLiteral("New Section 2"));
+    auto* firstTrip = new cwTrip();
+    firstTrip->setName(QStringLiteral("Trip 1"));
+    firstSectionNode->addTrip(firstTrip);
+    auto* secondTrip = new cwTrip();
+    secondTrip->setName(QStringLiteral("Trip 1"));
+    secondSectionNode->addTrip(secondTrip);
+
+    const auto nodeProperties = [](cwSurveyNode* node) {
+        return QVariantMap{{QStringLiteral("currentNode"), QVariant::fromValue(node)}};
+    };
+    const auto tripProperties = [](cwTrip* trip) {
+        return QVariantMap{{QStringLiteral("currentTrip"), QVariant::fromValue(trip)}};
+    };
+
+    auto* source = model.registerPage(nullptr, QStringLiteral("Source"), staticComponent);
+    auto* data = model.registerPage(source, QStringLiteral("Data"), staticComponent);
+    auto* cave = model.registerPage(data, QStringLiteral("Node=Side Cave"), caveComponent,
+                                    nodeProperties(caveNode));
+    auto* firstSection = model.registerPage(cave, QStringLiteral("Node=New Section"), sectionComponent,
+                                            nodeProperties(firstSectionNode));
+    auto* secondSection = model.registerPage(cave, QStringLiteral("Node=New Section 2"), sectionComponent,
+                                             nodeProperties(secondSectionNode));
+
+    QPointer<cwPage> firstTripPage = model.registerPage(firstSection, QStringLiteral("Trip=Trip 1"),
+                                                        tripComponent, tripProperties(firstTrip));
+    model.gotoPage(firstTripPage);
+
+    //The Section page item moves to the second Section and gives up the first
+    //Section's trips; a page in the history stays registered.
+    model.unregisterPage(firstTripPage);
+    auto* secondTripPage = model.registerPage(secondSection, QStringLiteral("Trip=Trip 1"),
+                                              tripComponent, tripProperties(secondTrip));
+    model.gotoPage(secondTripPage);
+    model.gotoPage(cave);
+
+    const QString firstTripAddress = QStringLiteral("Source/Data/Node=Side Cave/Node=New Section/Trip=Trip 1");
+    model.setCurrentPageAddress(firstTripAddress);
+    REQUIRE(model.currentPage() == firstTripPage);
+
+    //The Section page item, pointed back at the first Section on the way.
+    cwPage* reregistered = model.registerPage(firstSection, QStringLiteral("Trip=Trip 1"),
+                                              tripComponent, tripProperties(firstTrip));
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    REQUIRE(!firstTripPage.isNull());
+    CHECK(reregistered == firstTripPage);
+    CHECK(model.currentPage() == firstTripPage);
+    CHECK(model.currentPageAddress() == firstTripAddress);
+    CHECK(model.history().contains(firstTripPage.data()));
+
+    //The trip page registers its own pages under the page it holds.
+    auto* note = model.registerPage(firstTripPage, QStringLiteral("Note=photo.png"), noteComponent);
+    model.setCurrentPageAddress(firstTripAddress + QStringLiteral("/Note=photo.png"));
+    CHECK(model.currentPage() == note);
+}
+
+TEST_CASE("cwPageSelectionModel replaces a page registered again with other properties", "[cwPageSelectionModel]")
+{
+    QQmlEngine engine;
+    cwPageSelectionModel model;
+    auto* component = makePageComponent(engine, &model);
+    auto pages = createPageTree(model, component);
+
+    model.gotoPage(pages.trip);
+    QPointer<cwPage> oldTrip = pages.trip;
+
+    cwPage* newTrip = model.registerPage(pages.cave, QStringLiteral("Trip=Trip 1"), component,
+                                         {{QStringLiteral("currentNoteIndex"), 1}});
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    CHECK(oldTrip.isNull());
+    CHECK(newTrip != nullptr);
+    CHECK(model.currentPage() == newTrip);
+    CHECK(model.history().contains(newTrip));
+}
+
 TEST_CASE("cwPageSelectionModel resolves an old Cave= link to the Node= page", "[cwPageSelectionModel]")
 {
     QQmlEngine engine;

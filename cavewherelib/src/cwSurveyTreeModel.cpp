@@ -71,6 +71,7 @@ void cwSurveyTreeModel::setRegion(cwCavingRegion* region)
     endResetModel();
 
     if(m_region) {
+        connect(m_region, &cwCavingRegion::surveyMoved, this, &cwSurveyTreeModel::moved);
         connect(m_region, &QObject::destroyed, this, [this]() {
             beginResetModel();
             m_connected.clear();
@@ -338,11 +339,23 @@ void cwSurveyTreeModel::startMove(const QModelIndex& index)
     //A subject destroyed while armed leaves the QPointer null with nothing
     //said, and the banner would keep asking about it.
     m_moveSubjectDestroyed = connect(subject, &QObject::destroyed, this, [this]() {
+        disconnect(m_moveSubjectRenamed);
         m_moveSubject = nullptr;
         emit moveChanged();
+        emit moveSubjectNameChanged();
     }, Qt::SingleShotConnection);
 
+    //An inline rename of the armed row is the banner's name too.
+    if(auto* node = qobject_cast<cwSurveyNode*>(subject)) {
+        m_moveSubjectRenamed = connect(node, &cwSurveyNode::nameChanged,
+                                       this, &cwSurveyTreeModel::moveSubjectNameChanged);
+    } else if(auto* trip = qobject_cast<cwTrip*>(subject)) {
+        m_moveSubjectRenamed = connect(trip, &cwTrip::nameChanged,
+                                       this, &cwSurveyTreeModel::moveSubjectNameChanged);
+    }
+
     emit moveChanged();
+    emit moveSubjectNameChanged();
 }
 
 void cwSurveyTreeModel::cancelMove()
@@ -350,8 +363,10 @@ void cwSurveyTreeModel::cancelMove()
     if(m_moveSubject.isNull()) { return; }
 
     disconnect(m_moveSubjectDestroyed);
+    disconnect(m_moveSubjectRenamed);
     m_moveSubject = nullptr;
     emit moveChanged();
+    emit moveSubjectNameChanged();
 }
 
 bool cwSurveyTreeModel::commitMove(const QModelIndex& targetIndex)

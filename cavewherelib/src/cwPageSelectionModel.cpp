@@ -43,10 +43,13 @@ cwPageSelectionModel::cwPageSelectionModel(QObject *parent) :
  * @param pageProperties - The properties of the instantiated component
  * @return cwPage that was registered in the model
  *
- * The page name can be change ofter the page has been registered by calling cwPage::setName. This
- * will update the link automatically. All other parameters of the cwPage are immutable. If you want
- * to change the paramaters of a page, you must unregister the page by calling unregisterPage(),
- * and recreate the page by calling registerPage again.
+ * The page name can be changed after the page has been registered by calling cwPage::setName. This
+ * updates the link automatically. All other parameters of the cwPage are immutable.
+ *
+ * Registering a name that parentPage already holds:
+ * - with the same component and properties returns the registered page unchanged.
+ * - with another component or other properties replaces the registered page; the history and
+ *   the current page move to the new page, and the old page is deleted later.
  *
  * The page's are owned by the cwPageSelectionModel and shouldn't be delete. If you want to delete
  * a page, call unregisterPage()
@@ -67,39 +70,43 @@ cwPage* cwPageSelectionModel::registerPage(cwPage *parentPage,
 
     Q_ASSERT(isPageInModel(parentPage)); //Make sure the parent page exists in the model
 
-    cwPage* newPage = nullptr;
-
-    //Try to update the history, when the page with the same name is re-registered
     cwPage* childPage = parentPage->childPage(pageName);
-    if(childPage != nullptr) {
-        parentPage->removeChild(childPage);
-        childPage->deleteLater();
-        newPage = new cwPage(parentPage, pageComponent, pageName, pageProperties);
+    if(childPage == nullptr) {
+        return new cwPage(parentPage, pageComponent, pageName, pageProperties);
+    }
 
-        for(int i = 0; i < PageHistory.size(); i++) {
-            cwPage* pastPage = PageHistory.at(i);
-            if(pastPage == childPage) {
-                PageHistory.replace(i, newPage);
-            }
-        }
+    //A page item re-registers its child pages each time it is pointed at a page
+    //again, often while cwPageView is still walking the chain it is loading, so
+    //the page standing for the same thing is kept for whatever already holds it.
+    if(childPage->component() == pageComponent
+        && childPage->pageProperties() == pageProperties) {
+        return childPage;
+    }
 
-        emit historyChanged();
+    //Replace the page with the same name, in the history too
+    parentPage->removeChild(childPage);
+    childPage->deleteLater();
+    cwPage* newPage = new cwPage(parentPage, pageComponent, pageName, pageProperties);
 
-        if(CurrentPage == childPage) {
-            //Re-emit so observers rebind: after the old cwPage is
-            //deleteLater'd, any QPointer to it silently goes null
-            //without notification.
-            CurrentPage = newPage;
-            updateCurrentPageNameConnections();
-            emit currentPageChanged();
-            emit currentPageAddressChanged();
+    for(int i = 0; i < PageHistory.size(); i++) {
+        cwPage* pastPage = PageHistory.at(i);
+        if(pastPage == childPage) {
+            PageHistory.replace(i, newPage);
         }
     }
 
-    if(newPage == nullptr) {
-        cwPage* page = new cwPage(parentPage, pageComponent, pageName, pageProperties);
-        return page;
+    emit historyChanged();
+
+    if(CurrentPage == childPage) {
+        //Re-emit so observers rebind: after the old cwPage is
+        //deleteLater'd, any QPointer to it silently goes null
+        //without notification.
+        CurrentPage = newPage;
+        updateCurrentPageNameConnections();
+        emit currentPageChanged();
+        emit currentPageAddressChanged();
     }
+
     return newPage;
 }
 

@@ -44,7 +44,7 @@ class CAVEWHERE_LIB_EXPORT cwSurveyTreeModel : public QAbstractItemModel
     Q_PROPERTY(cwCavingRegion* region READ region WRITE setRegion NOTIFY regionChanged)
     Q_PROPERTY(bool moveActive READ moveActive NOTIFY moveChanged)
     Q_PROPERTY(QObject* moveSubject READ moveSubject NOTIFY moveChanged)
-    Q_PROPERTY(QString moveSubjectName READ moveSubjectName NOTIFY moveChanged)
+    Q_PROPERTY(QString moveSubjectName READ moveSubjectName NOTIFY moveSubjectNameChanged)
     Q_PROPERTY(bool moveRootIsTarget READ moveRootIsTarget NOTIFY moveChanged)
 
 public:
@@ -159,12 +159,18 @@ public:
 signals:
     void regionChanged();
     void moveChanged();
+    //! The armed subject changed, or the subject was renamed while armed.
+    void moveSubjectNameChanged();
+    //! A Move to… or its undo or redo put \a subject in a new place: the row
+    //! a view reveals afterward.
+    void moved(QObject* subject);
 
 private:
     QPointer<cwCavingRegion> m_region;
     //! The node or trip an armed Move to… carries, null while none is armed.
     QPointer<QObject> m_moveSubject;
     QMetaObject::Connection m_moveSubjectDestroyed;
+    QMetaObject::Connection m_moveSubjectRenamed;
 
     //! Every node and trip this model holds connections to, so a second wiring
     //! of the same object is refused and a deleted one is forgotten.
