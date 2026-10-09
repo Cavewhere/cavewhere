@@ -94,6 +94,11 @@ public:
         // cavern would otherwise reject with error 46.
         QHash<QUuid, QStringList> externalFixedStations;
 
+        // Per cave or trip owner whose file fixes stations with no input *cs
+        // and names its own *cs out, that output system as the file writes
+        // it (see cwSurvexExporterRegion::Options::externalOutputSystems).
+        QHash<QUuid, QString> externalOutputSystems;
+
         // The previous solve's derived state, keyed by cwSurveyNode::id() for
         // every node of the tree. The worker
         // diffs its fresh solve against these to decide which stations actually
@@ -285,6 +290,9 @@ public:
         // Owners whose file fixes stations itself, and those stations (see
         // Input::externalFixedStations).
         QHash<QUuid, QStringList> externalFixedStations;
+        // Owners whose file fixes stations bare and names its own *cs out,
+        // and that system (see Input::externalOutputSystems).
+        QHash<QUuid, QString> externalOutputSystems;
         // Owners whose Compass .mak names a zone and no datum, and those
         // files. Read on the main thread when the solve starts, to say so.
         QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> defaultedDatums;

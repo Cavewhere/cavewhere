@@ -31,6 +31,7 @@
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "cwSignalSpy.h"
+#include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwSurveyNoteLiDARModel.h"
@@ -41,6 +42,7 @@
 #include <asyncfuture.h>
 
 // Qt
+#include <QConcatenateTablesProxyModel>
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
@@ -1313,4 +1315,224 @@ TEST_CASE("cave reload stays offered after the project is saved and reopened",
     CHECK(freshRoot->externalSourceSettings()->breadcrumbPath(caveId)
           == QFileInfo(source).absoluteFilePath());
     REQUIRE(freshRoot->externalCenterlineManager()->canReloadFromSource(reopened));
+}
+
+namespace {
+
+//! The attached rows a node lists on its Fix Stations page, by station.
+QStringList attachedFixStations(const cwSurveyNode* node)
+{
+    QStringList stations;
+    for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
+        stations.append(fix.station);
+    }
+    return stations;
+}
+
+//! A tree shaped like a large Survex dataset: an entry beside one include and
+//! below another, whose sanqiao/fixedpts/ents.svx fixes e1 with no *cs.
+QString bareFixTreeFixture(const QString& entry)
+{
+    return fixturePath(QStringLiteral("survex_bare_fix_tree/north/%1").arg(entry));
+}
+
+const QString kBareFixStation = QStringLiteral("sanqiao.e1");
+const QString kBareFixFile = QStringLiteral("sanqiao/fixedpts/ents.svx");
+constexpr int kBareFixLine = 3;
+constexpr double kBareFixEasting = 500100.0;
+constexpr double kBareFixNorthing = 3000100.0;
+constexpr double kBareFixElevation = 300.0;
+// Placement is exact up to the float the solved lookup stores.
+constexpr double kBareFixMarginMeters = 0.1;
+
+//! The attached row of \a node that names \a station.
+cwAttachedFix attachedFixFor(const cwSurveyNode* node, const QString& station)
+{
+    for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
+        if (fix.station == station) {
+            return fix;
+        }
+    }
+    FAIL("No attached row names " << station.toStdString());
+    return cwAttachedFix();
+}
+
+//! The read-in note \a node's Fix Stations table shows on its row for
+//! \a station, read through the concatenated table the page binds.
+QString readInWarningInTable(const cwSurveyNode* node, const QString& station)
+{
+    const QAbstractItemModel* table = node->fixStationTable();
+    const QHash<int, QByteArray> roles = table->roleNames();
+    const int stationRole = roles.key(QByteArrayLiteral("stationName"), -1);
+    const int warningRole = roles.key(QByteArrayLiteral("readInWarning"), -1);
+    REQUIRE(stationRole >= 0);
+    REQUIRE(warningRole >= 0);
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QModelIndex index = table->index(row, 0);
+        if (table->data(index, stationRole).toString() == station) {
+            return table->data(index, warningRole).toString();
+        }
+    }
+    FAIL("The fix station table holds no row for " << station.toStdString());
+    return QString();
+}
+
+} // namespace
+
+TEST_CASE("An attachment on a Section lists its file's fixes",
+          "[Attach][Cave][ExternalCenterline][cwAttachedFixModel]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("section-attached-fixes"));
+    cwCave* cave = freshCaveOf(fixture.get());
+    cwCave* section = addChildNode(cave, QStringLiteral("Upper level"),
+                                   cwSurveyNode::Kind::Folder);
+
+    SECTION("attached to the Section itself")
+    {
+        fixture->project->waitSaveToFinish();
+        REQUIRE(section->isSection());
+
+        auto future = managerOf(fixture.get())->attachCenterline(section, blocksFixture());
+        REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+        INFO("attach: " << future.result().errorMessage().toStdString());
+        REQUIRE_FALSE(future.result().hasError());
+        drainPipelines(fixture.get());
+
+        CHECK(attachedFixStations(section) == QStringList({QStringLiteral("doghill.d1")}));
+        CHECK(section->fixStationCount() == 1);
+        CHECK(attachedFixStations(cave).isEmpty());
+
+        // The Section's file is part of the solve too.
+        INFO("driver:\n" << fixture->rootData->linePlotManager()->driverSource().toStdString());
+        CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+        CHECK(section->stationPositionLookup().hasPosition(QStringLiteral("doghill.d1")));
+    }
+
+    SECTION("attached to a trip under the Section")
+    {
+        cwTrip* trip = addEmptyTrip(section, QStringLiteral("Dome climb"));
+        fixture->project->waitSaveToFinish();
+
+        attachThroughManager(fixture.get(), trip, blocksFixture());
+        drainPipelines(fixture.get());
+
+        CHECK(attachedFixStations(section)
+              == QStringList({trip->scopePrefix() + QStringLiteral("doghill.d1")}));
+        CHECK(attachedFixStations(cave).isEmpty());
+        INFO("driver:\n" << fixture->rootData->linePlotManager()->driverSource().toStdString());
+        CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+        CHECK(section->stationPositionLookup().hasPosition(trip->scopePrefix()
+                                                           + QStringLiteral("doghill.d1")));
+    }
+}
+
+TEST_CASE("A file's *fix with no *cs reads in the project's system and says so",
+          "[Attach][Cave][CS][ExternalCenterline][LinePlotManager]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-bare-fix-tree"));
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    region->geoReference()->restore(cwGeoReference::Frozen, kUtm13N, {}, QString());
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    attachAndSolve(fixture.get(), cave, bareFixTreeFixture(QStringLiteral("north.svx")));
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    // The fix's numbers land as written in the project's frame.
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    REQUIRE(lookup.hasPosition(kBareFixStation));
+    const QVector3D placed = lookup.position(kBareFixStation);
+    CHECK(placed.x() == Catch::Approx(kBareFixEasting).margin(kBareFixMarginMeters));
+    CHECK(placed.y() == Catch::Approx(kBareFixNorthing).margin(kBareFixMarginMeters));
+    CHECK(placed.z() == Catch::Approx(kBareFixElevation).margin(kBareFixMarginMeters));
+    CHECK(lookup.hasPosition(QStringLiteral("houping.h2")));
+
+    // The row names the file and line that left the fix without a system.
+    const cwAttachedFix fix = attachedFixFor(cave, kBareFixStation);
+    CHECK(fix.filePath == kBareFixFile);
+    CHECK(fix.line == kBareFixLine);
+    const QString expected =
+        QStringLiteral("Read in the system in force where the file is included (the project's, "
+                       "unless a fix above the file names one): %1 line %2 names no coordinate "
+                       "system for this fix.")
+            .arg(kBareFixFile).arg(kBareFixLine);
+    CHECK(fix.readInWarning() == expected);
+    CHECK(readInWarningInTable(cave, kBareFixStation) == expected);
+
+    SECTION("the note goes away with the project's frame")
+    {
+        region->geoReference()->clear();
+        drainPipelines(fixture.get());
+        CHECK(attachedFixFor(cave, kBareFixStation).readInWarning().isEmpty());
+        CHECK(readInWarningInTable(cave, kBareFixStation).isEmpty());
+    }
+}
+
+TEST_CASE("A file's *fix with no *cs reads in the *cs out the file names itself",
+          "[Attach][Cave][CS][ExternalCenterline][LinePlotManager]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-bare-fix-cs-out"));
+    REQUIRE_FALSE(fixture->project->cavingRegion()->geoReference()->hasCoordinateSystem());
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    attachAndSolve(fixture.get(), cave, bareFixTreeFixture(QStringLiteral("north_cs_out.svx")));
+    drainPipelines(fixture.get());
+
+    // Without the read-in, houping's *cs out leaves sanqiao's fix with no
+    // input system, and cavern fails the whole run on it.
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    CHECK(linePlot->driverSource().contains(QStringLiteral("*cs out UTM48N\n*cs UTM48N\n*include")));
+
+    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    REQUIRE(lookup.hasPosition(kBareFixStation));
+    CHECK(lookup.position(kBareFixStation).x()
+          == Catch::Approx(kBareFixEasting).margin(kBareFixMarginMeters));
+    CHECK(lookup.hasPosition(QStringLiteral("houping.h2")));
+
+    // The harvest reads it the same way, so the file's stations are known.
+    CHECK(cave->externalStations().contains(cwStation::canonicalKey(kBareFixStation)));
+
+    const cwAttachedFix fix = attachedFixFor(cave, kBareFixStation);
+    CHECK(fix.readInWarning()
+          == QStringLiteral("Read in UTM48N, the system the file's *cs out names: %1 line %2 "
+                            "names no coordinate system for this fix.")
+                 .arg(kBareFixFile).arg(kBareFixLine));
+    // houping's fix names its own system.
+    CHECK(attachedFixFor(cave, QStringLiteral("houping.h1")).readInWarning().isEmpty());
+}
+
+TEST_CASE("A file whose every *fix names its *cs is attached as written",
+          "[Attach][Cave][CS][ExternalCenterline][LinePlotManager]")
+{
+    auto fixture = makeProjectWithFreshCave(QStringLiteral("cave-own-cs-fix"));
+    cwCave* cave = freshCaveOf(fixture.get());
+
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString source = writeSurvey(sourceDir, QStringLiteral("own_cs.svx"),
+        "*cs out UTM48N\n"
+        "*begin own\n"
+        "*cs UTM48N\n"
+        "*fix a1 500000 3000000 100\n"
+        "*data normal from to tape compass clino\n"
+        "a1 a2 10.0 0 0\n"
+        "*end own\n");
+
+    attachAndSolve(fixture.get(), cave, source);
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    // The driver puts no system of its own around the file.
+    CHECK_FALSE(linePlot->driverSource().contains(QStringLiteral("*cs")));
+    CHECK(managerOf(fixture.get())->solveInputs().externalOutputSystems.isEmpty());
+    CHECK(attachedFixFor(cave, QStringLiteral("own.a1")).readInWarning().isEmpty());
 }

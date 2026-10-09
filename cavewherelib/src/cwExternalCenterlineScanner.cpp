@@ -486,6 +486,8 @@ struct ScanState {
     QList<cwExternalCenterlineScanner::ScannedFix> fixes;
     // every .mak that names a UTM zone and no datum
     QList<cwExternalCenterlineScanner::DefaultedDatum> defaultedDatums;
+    // the system the first Survex *cs out names, empty until one does
+    QString outputCoordinateSystem;
     // set when the entry file itself carries shot data
     bool entryHasOwnShots = false;
     // distinct station names written where no block is open - the
@@ -650,14 +652,15 @@ void scanByFormat(const QString& filePath, ScanState& state);
  * station as the file writes it.
  */
 void recordFix(ScanState& state, const QString& scopePath, const QString& station,
-               const QString& coordinate, const QString& coordinateSystem)
+               const QString& coordinate, const QString& coordinateSystem,
+               const QString& file, int line)
 {
     QStringList segments = state.blockSegments;
     if (!scopePath.isEmpty()) {
         segments.append(scopePath);
     }
     segments.append(station);
-    state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem});
+    state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem, file, line});
 }
 
 void recordWarning(ScanState& state, const QString& message)
@@ -751,8 +754,8 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
     const QDir baseDir = QFileInfo(canonical).absoluteDir();
     const QRegularExpression& regex = survexIncludeRegex();
     const QStringList lines = decoded.text.split(QLatin1Char('\n'));
-    for (const QString& rawLine : lines) {
-        const QString line = stripCommentAndWhitespace(rawLine);
+    for (qsizetype lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        const QString line = stripCommentAndWhitespace(lines.at(lineIndex));
         if (line.isEmpty()) {
             continue;
         }
@@ -785,13 +788,17 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
                 csMatch.captured(1).compare(QLatin1String("out"), Qt::CaseInsensitive) != 0;
             if (setsInput) {
                 state.coordinateSystems.last() = line.mid(csMatch.capturedStart(1)).trimmed();
+            } else if (state.outputCoordinateSystem.isEmpty()) {
+                state.outputCoordinateSystem =
+                    line.mid(csMatch.capturedEnd(1)).trimmed();
             }
             continue;
         }
         if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
             recordFix(state, QString(), fixMatch.captured(1),
                       line.mid(fixMatch.capturedEnd(1)).trimmed(),
-                      state.coordinateSystems.constLast());
+                      state.coordinateSystems.constLast(),
+                      canonical, static_cast<int>(lineIndex) + 1);
             continue;
         }
 
@@ -958,7 +965,8 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                     : reference.coordinateSystemName();
                 const QString datSurvey = cwCompassMakFile::datSurveyName(target);
                 for (const cwCompassMakFile::Fix& fix : reference.fixes) {
-                    recordFix(state, datSurvey, fix.station, fix.coordinate, system);
+                    recordFix(state, datSurvey, fix.station, fix.coordinate, system,
+                              canonical, 0);
                 }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
@@ -1100,8 +1108,8 @@ void collectWallsStations(const QString& canonical,
 {
     bool sawStation = false;
     const QStringList lines = readDecodedLines(canonical);
-    for (const QString& rawLine : lines) {
-        const QString line = rawLine.trimmed();
+    for (qsizetype lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        const QString line = lines.at(lineIndex).trimmed();
         if (line.isEmpty() || line.startsWith(QLatin1Char(';'))) {
             continue;
         }
@@ -1110,7 +1118,7 @@ void collectWallsStations(const QString& canonical,
                 const WallsStationName name = wallsStationName(prefix, fixMatch.captured(1));
                 recordFix(state, name.path, name.station,
                           stripCommentAndWhitespace(line.mid(fixMatch.capturedEnd(1))),
-                          coordinateSystem);
+                          coordinateSystem, canonical, static_cast<int>(lineIndex) + 1);
                 continue;
             }
             if (const auto dateMatch = wallsDateRegex().match(line);
@@ -1682,6 +1690,7 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     result.entryHasOwnShots = state.entryHasOwnShots;
     result.fixes = state.fixes;
     result.defaultedDatums = state.defaultedDatums;
+    result.outputCoordinateSystem = state.outputCoordinateSystem;
     parseSeededMetadata(result);
     return Monad::Result<ScanResult>(result);
 }

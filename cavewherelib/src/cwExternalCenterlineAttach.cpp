@@ -161,7 +161,8 @@ public:
     {
         if (isCave()) {
             const cwCavingRegion* region = m_cave->parentRegion();
-            return region != nullptr && region->caves().contains(m_cave.data());
+            return region != nullptr
+                   && region->rootNode()->allNodes().contains(m_cave.data());
         }
         const cwCave* parentCave = m_trip->parentCave();
         return parentCave != nullptr && parentCave->trips().contains(m_trip.data());

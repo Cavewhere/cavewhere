@@ -82,6 +82,12 @@ void CsScope::ensureAnySystem(QTextStream& stream, const QString& fallback)
     }
 }
 
+void CsScope::writeFileOutputSystem(QTextStream& stream, const QString& system)
+{
+    cwSurvexExporterUtils::writeFileOutputSystem(stream, system);
+    m_current = system.trimmed();
+}
+
 std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStation>& fixes)
 {
     // "Mark Station as Fixed" creates a row before the user types anything, and
@@ -197,6 +203,12 @@ void writeDeclinationCalibration(QTextStream& stream,
 void writeDeclinationReset(QTextStream& stream)
 {
     writeCalibrationLine(stream, QStringLiteral("DECLINATION"), 0.0, 1.0, /*skipZero*/ false);
+}
+
+void writeFileOutputSystem(QTextStream& stream, const QString& system)
+{
+    stream << "*cs out " << system << Qt::endl;
+    stream << "*cs " << system << Qt::endl;
 }
 
 double gridConvergenceForBlock(const std::optional<DeclinationContext>& ctx,

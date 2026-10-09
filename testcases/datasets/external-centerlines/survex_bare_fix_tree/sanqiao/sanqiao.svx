@@ -1,0 +1,6 @@
+*begin sanqiao
+*include fixedpts/ents
+*data normal from to tape compass clino
+e1 s1 5.0 0 0
+s1 s2 5.0 90 0
+*end sanqiao

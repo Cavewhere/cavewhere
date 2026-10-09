@@ -65,6 +65,13 @@ void writeDeclinationCalibration(QTextStream& stream,
 void writeDeclinationReset(QTextStream& stream);
 
 /**
+ * Emit `*cs out <system>` then `*cs <system>` ahead of the *include of a file
+ * that names \a system as its own *cs out and fixes stations with no *cs: the
+ * run outputs in \a system either way, and the file's bare fixes read in it.
+ */
+void writeFileOutputSystem(QTextStream& stream, const QString& system);
+
+/**
  * The *cs in scope in the block being written.
  *
  * Cavern scopes *cs to its *begin block (cmd_begin copies proj_str into the
@@ -89,6 +96,9 @@ public:
     //! *include'd file's bare *fix needs some input system once *cs out is
     //! set, and one the block already names serves it as well as \a fallback.
     void ensureAnySystem(QTextStream& stream, const QString& fallback);
+
+    //! writeFileOutputSystem(), with \a system recorded as the one in scope.
+    void writeFileOutputSystem(QTextStream& stream, const QString& system);
 
 private:
     cwSurvexCS::SidecarWriter& m_sidecars;

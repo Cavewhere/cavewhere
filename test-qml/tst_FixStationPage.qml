@@ -1693,5 +1693,29 @@ MainWindowTest {
                       5000, "should land on cavePage")
             tryCompare(waitForChild("fixStationsLink"), "text", "1")
         }
+
+        // A file fix with no *cs is read in the system the run outputs in, and
+        // its row says so, naming the file and line.
+        function test_aFixWithNoSystemSaysWhereItIsReadIn() {
+            saveProjectAs("fix-station-read-in")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_bare_fix_tree/north/north_cs_out.svx"))
+            tryVerify(() => cave.attachedFixes.count === 2, 20000, "the scan lists both fixes")
+
+            RootData.pageSelectionModel.currentPageAddress =
+                "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage")
+            tryCompare(findChild(RootData.pageView.currentPageItem, "fixStationTableView"), "count", 2)
+
+            // houping names its *cs; sanqiao's entrance names none.
+            compare(waitForChild("stationCell.0").text, "houping.h1")
+            compare(findChild(RootData.pageView.currentPageItem, "coordinateWarning.0").message, "")
+            compare(waitForChild("stationCell.1").text, "sanqiao.e1")
+            compare(waitForChild("coordinateWarning.1").message,
+                    "Read in UTM48N, the system the file's *cs out names: "
+                    + "sanqiao/fixedpts/ents.svx line 3 names no coordinate system for this fix.")
+        }
     }
 }

@@ -277,6 +277,7 @@ private:
         exportOptions.tripInjectedDeclinations = InputData.tripInjectedDeclinations;
         exportOptions.excludedExternalOwners = InputData.excludedExternalOwners;
         exportOptions.externalFixedStations = InputData.externalFixedStations;
+        exportOptions.externalOutputSystems = InputData.externalOutputSystems;
         // Cavern's positions come straight back into the scene, so *cs out has
         // to name the frame the scene is in, not one a reader would want.
         exportOptions.outputCSPolicy =
@@ -913,6 +914,7 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
     input.tripAttachmentDirs = external.tripAttachmentDirs;
     input.excludedExternalOwners = external.excludedExternalOwners;
     input.externalFixedStations = external.externalFixedStations;
+    input.externalOutputSystems = external.externalOutputSystems;
     const QHash<QUuid, bool>& fileOwnsDeclination = external.fileOwnsDeclination;
 
     if (region != nullptr) {

@@ -89,6 +89,13 @@ public:
      * file fixes itself, in the file's namespace. A node fix naming one of
      * them is dropped with an error rather than written: cavern rejects a
      * second fix at different coordinates (error 46) and fails the whole run.
+     *
+     * \c externalOutputSystems maps a cave or trip owner whose file fixes
+     * stations with no input \c *cs, and names a \c *cs \c out of its own, to
+     * that output system as the file writes it. In a run whose project names
+     * no frame, the file's \c *cs \c out is the run's output system, so the
+     * driver reads those fixes in it (see
+     * cwSurvexExporterCaveTask::writeIncludeSystem).
      */
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
@@ -96,6 +103,7 @@ public:
         QHash<QUuid, double> tripInjectedDeclinations;
         QSet<QUuid> excludedExternalOwners;
         QHash<QUuid, QStringList> externalFixedStations;
+        QHash<QUuid, QString> externalOutputSystems;
         OutputCSPolicy outputCSPolicy = OutputCSPolicy::Shareable;
     };
 

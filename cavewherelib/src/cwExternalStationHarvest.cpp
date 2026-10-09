@@ -95,7 +95,8 @@ Monad::Result<QStringList> namesOf(const Monad::Result<cwExternalStationHarvest:
 }
 
 Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
-                                                      const QStringList& seedStations)
+                                                      const QStringList& seedStations,
+                                                      const QString& bareFixSystem = QString())
 {
     const QString absoluteEntry = QFileInfo(entryFile).absoluteFilePath();
 
@@ -146,6 +147,9 @@ Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
                 stream << "*fix " << station << " 0 0 0" << Qt::endl;
             }
             stream << "*end" << Qt::endl;
+        }
+        if(!bareFixSystem.isEmpty()) {
+            cwSurvexExporterUtils::writeFileOutputSystem(stream, bareFixSystem);
         }
         stream << "*include \"" << absoluteEntry << "\"" << Qt::endl;
 
@@ -210,9 +214,10 @@ Monad::Result<QStringList> cwExternalStationHarvest::harvest(const QString& entr
 }
 
 Monad::Result<cwExternalStationHarvest::Stations>
-cwExternalStationHarvest::harvestWithFixes(const QString& entryFile)
+cwExternalStationHarvest::harvestWithFixes(const QString& entryFile,
+                                           const QString& bareFixSystem)
 {
-    return run(entryFile, {});
+    return run(entryFile, {}, bareFixSystem);
 }
 
 Monad::Result<QStringList> cwExternalStationHarvest::harvestComponents(const QString& entryFile,

@@ -1518,15 +1518,58 @@ namespace {
 
 using cwExternalCenterlineScanner::ScannedFix;
 
+//! \a fixes with where each was read cleared, so a case compares what a fix
+//! says rather than which line says it.
+QList<ScannedFix> withoutLocation(QList<ScannedFix> fixes)
+{
+    for (ScannedFix& fix : fixes) {
+        fix.file.clear();
+        fix.line = 0;
+    }
+    return fixes;
+}
+
 QList<ScannedFix> scannedFixes(const QString& entryFile)
 {
     auto result = cwExternalCenterlineScanner::scan(entryFile);
     INFO("scan: " << result.errorMessage().toStdString());
     REQUIRE_FALSE(result.hasError());
-    return result.value().fixes;
+    return withoutLocation(result.value().fixes);
 }
 
 } // namespace
+
+TEST_CASE("scanSurvex records where each *fix is written and the closure's *cs out",
+          "[Scanner][Attach]")
+{
+    constexpr int kEntsFixLine = 3;
+    constexpr int kHoupingFixLine = 4;
+    const auto scanOf = [](const QString& entry) {
+        auto result = cwExternalCenterlineScanner::scan(datasetExternalCenterlinePath(
+            QStringLiteral("survex_bare_fix_tree/north/%1").arg(entry)));
+        INFO("scan: " << result.errorMessage().toStdString());
+        REQUIRE_FALSE(result.hasError());
+        return result.value();
+    };
+
+    const auto plain = scanOf(QStringLiteral("north.svx"));
+    CHECK(plain.outputCoordinateSystem.isEmpty());
+    REQUIRE(plain.fixes.size() == 1);
+    const ScannedFix& bare = plain.fixes.first();
+    CHECK(bare.station == QStringLiteral("sanqiao.e1"));
+    CHECK_FALSE(bare.hasCoordinateSystem());
+    CHECK(bare.file.endsWith(QStringLiteral("/sanqiao/fixedpts/ents.svx")));
+    CHECK(bare.line == kEntsFixLine);
+
+    const auto withOut = scanOf(QStringLiteral("north_cs_out.svx"));
+    CHECK(withOut.outputCoordinateSystem == QStringLiteral("UTM48N"));
+    REQUIRE(withOut.fixes.size() == 2);
+    CHECK(withOut.fixes.at(0).station == QStringLiteral("houping.h1"));
+    CHECK(withOut.fixes.at(0).coordinateSystem == QStringLiteral("UTM48N"));
+    CHECK(withOut.fixes.at(0).line == kHoupingFixLine);
+    CHECK(withOut.fixes.at(1).station == QStringLiteral("sanqiao.e1"));
+    CHECK_FALSE(withOut.fixes.at(1).hasCoordinateSystem());
+}
 
 TEST_CASE("scanSurvex records each *fix's coordinate and the input *cs in force", "[Scanner][Attach]")
 {
@@ -1629,7 +1672,7 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
         const auto scan = cwExternalCenterlineScanner::scan(
             datasetExternalCenterlinePath(fixtureName + QStringLiteral(".mak")));
         REQUIRE_FALSE(scan.hasError());
-        CHECK(scan.value().fixes
+        CHECK(withoutLocation(scan.value().fixes)
               == QList<ScannedFix>{{QStringLiteral("compass_zone_no_datum.A1"),
                                     QStringLiteral("f,1568241.5,14534120.7,5429.8"), nad27Zone13}});
         CHECK(scan.value().defaultedDatums
@@ -1647,7 +1690,7 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
             QByteArrayLiteral("#a.dat;\n@1,2,3,16,0;\n#a.dat,B1[m,0,0,0];\n"));
         const auto scan = cwExternalCenterlineScanner::scan(makPath);
         REQUIRE_FALSE(scan.hasError());
-        CHECK(scan.value().fixes
+        CHECK(withoutLocation(scan.value().fixes)
               == QList<ScannedFix>{{QStringLiteral("a.B1"), QStringLiteral("m,0,0,0"),
                                     QStringLiteral("North American 1927, UTM zone 16N")}});
         CHECK(scan.value().defaultedDatums
@@ -1661,7 +1704,7 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
             QByteArrayLiteral("$16;\n#a.dat,A1[m,1,2,3];\n&North American 1983;\n"));
         const auto laterScan = cwExternalCenterlineScanner::scan(datumLater);
         REQUIRE_FALSE(laterScan.hasError());
-        CHECK(laterScan.value().fixes
+        CHECK(withoutLocation(laterScan.value().fixes)
               == QList<ScannedFix>{{QStringLiteral("a.A1"), QStringLiteral("m,1,2,3"), QString()}});
         CHECK(laterScan.value().defaultedDatums.isEmpty());
 
@@ -1693,7 +1736,7 @@ TEST_CASE("scanCompass reads a .mak '#' line that spans lines", "[Scanner][Attac
     const auto scan = cwExternalCenterlineScanner::scan(makPath);
     REQUIRE_FALSE(scan.hasError());
     const QString system = QStringLiteral("North American 1983, UTM zone 16N");
-    CHECK(scan.value().fixes
+    CHECK(withoutLocation(scan.value().fixes)
           == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("M,580661.57,4113846.34,219"), system},
                                {QStringLiteral("cave.A3"), QStringLiteral("F,1904992.0,13497526.0,718.5"), system}});
     CHECK(scan.value().dependencies.size() == 2);

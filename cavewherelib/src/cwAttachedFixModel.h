@@ -47,7 +47,11 @@ public:
         SourceFileRole = Qt::UserRole + 200,
         //! Whether a file, not the user, owns the row: always true here, false
         //! on the node's own rows (cwFixStationDiagnosticsModel answers it).
-        ReadOnlyRole
+        ReadOnlyRole,
+        //! cwAttachedFix::readInWarning(): where the solve reads a fix the file
+        //! gives no coordinate system, and which line left it without one.
+        //! Empty on every other row, the node's own included.
+        ReadInWarningRole
     };
     Q_ENUM(Roles)
 

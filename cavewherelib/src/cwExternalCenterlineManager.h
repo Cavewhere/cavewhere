@@ -388,6 +388,9 @@ private:
         // The .mak files each owner's file reads in Compass's default datum
         // (ScanResult::defaultedDatums), for owners with any.
         QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> ownerDefaultedDatums;
+        // The *cs out each owner's file names itself
+        // (ScanResult::outputCoordinateSystem), for owners whose file names one.
+        QHash<QUuid, QString> ownerOutputSystems;
         // Station names harvested from each owner's (cave or trip) in-project
         // entry file, and, for a trip owner, cavern's complaint when that
         // harvest failed. A trip owner appears in at most one of them; an
@@ -501,11 +504,13 @@ private:
     QHash<QUuid, bool> m_fileOwnsDeclination;
 
     // The fixes each owner's file carries, as the scan read them and as
-    // cavern names them, from the most recent recompute; handed to each
+    // cavern names them (each fix's file relative to the attachment's
+    // folder), from the most recent recompute; handed to each
     // solve through solveInputs(). Rebuilt wholesale on every recompute.
     QHash<QUuid, QList<cwExternalCenterlineScanner::ScannedFix>> m_ownerFixes;
     QHash<QUuid, QStringList> m_ownerFixedStations;
     QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> m_ownerDefaultedDatums;
+    QHash<QUuid, QString> m_ownerOutputSystems;
 
     // RAII completion guard for one owner operation, shared (via
     // shared_ptr) by the operation's completion and canceled
@@ -698,6 +703,20 @@ private:
     // Lists the files' own fixes (from m_ownerFixes) on the node, a trip's
     // under its live scopePrefix(), and the stations each file fixes.
     void refreshAttachedFixes(cwSurveyNode* node);
+
+    // refreshAttachedFixes() for every node in the region: what a fix with
+    // no *cs of its own is read in follows the project's frame.
+    void refreshAllAttachedFixes();
+
+    // The system the solve reads ownerId's bare fixes in, for the row's
+    // read-in note: the project's when it is georeferenced, else the *cs out
+    // the file names itself (cwSurvexExporterCaveTask::writeIncludeSystem).
+    // Empty when the solve reads them raw.
+    QString readInSystemFor(const QUuid& ownerId) const;
+
+    // Per owner whose file fixes stations bare and names its own *cs out,
+    // that system (solveInputs().externalOutputSystems).
+    QHash<QUuid, QString> bareFixOutputSystems() const;
 
     // Per owner whose file fixes stations with no input coordinate system,
     // those stations as the file writes them (from m_ownerFixes).

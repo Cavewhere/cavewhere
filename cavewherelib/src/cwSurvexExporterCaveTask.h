@@ -180,6 +180,15 @@ private:
                                   const QString& globalCS, bool anchoredAbove,
                                   cwSurvexExporterUtils::CsScope& scope);
 
+    //! Puts an input system in scope for the *include of \a ownerId's file, so
+    //! a *fix in it with no *cs of its own reads in the system the run outputs
+    //! in: the project's (\a globalCS), or, when the project names none, the
+    //! *cs out the file names itself (Options::externalOutputSystems), which
+    //! is written ahead of the file so every one of its fixes sees it.
+    void writeIncludeSystem(QTextStream& stream, const QUuid& ownerId,
+                            const QString& globalCS,
+                            cwSurvexExporterUtils::CsScope& scope);
+
     // Emits *include "<abs>" for the cave/trip's externalCenterline by
     // joining the owner's attachment dir with the project-relative
     // entry file. A Compass .mak is written as its Survex translation

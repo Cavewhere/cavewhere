@@ -1,0 +1,3 @@
+; Entrance positions, with no *cs of their own.
+
+*fix e1 500100 3000100 300

@@ -243,10 +243,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         cwSurvexExporterUtils::CsScope includeScope(enclosingScope);
         const WrittenFixes written =
             writeFixStations(stream, node, tree, globalCS, inherited.anchored, includeScope);
-        // A georeferenced run names *cs out, after which cavern refuses any
-        // *fix with no input system. The file's own *cs still wins inside
-        // its blocks; this only catches the bare ones.
-        includeScope.ensureAnySystem(stream, globalCS);
+        writeIncludeSystem(stream, node.id, globalCS, includeScope);
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
@@ -326,7 +323,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                 cwSurvexExporterUtils::writeFixStations(stream, {}, tripOriginStation, globalCS,
                                                         includeScope);
             }
-            includeScope.ensureAnySystem(stream, globalCS);
+            writeIncludeSystem(stream, tripData.id, globalCS, includeScope);
             if (!writeExternalInclude(stream, tripData.id,
                                       ExportOptions.tripAttachmentDirs,
                                       tripData.externalCenterline.entryFile(),
@@ -564,6 +561,25 @@ QString cwSurvexExporterCaveTask::writeStandaloneHeader(QTextStream& stream)
     cwSurvexCS::writeCsLine(stream, sidecars(), outputCS, true);
     stream << Qt::endl;
     return outputCS;
+}
+
+void cwSurvexExporterCaveTask::writeIncludeSystem(QTextStream& stream, const QUuid& ownerId,
+                                                  const QString& globalCS,
+                                                  cwSurvexExporterUtils::CsScope& scope)
+{
+    // Once any *cs out is set cavern refuses a *fix with no input system. The
+    // file's own *cs still wins inside its blocks; this only catches the bare
+    // ones.
+    if (!globalCS.isEmpty()) {
+        scope.ensureAnySystem(stream, globalCS);
+        return;
+    }
+
+    // The file's own *cs out, met later, names the same system and is a no-op.
+    const QString fileOutput = ExportOptions.externalOutputSystems.value(ownerId);
+    if (!fileOutput.isEmpty()) {
+        scope.writeFileOutputSystem(stream, fileOutput);
+    }
 }
 
 bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,

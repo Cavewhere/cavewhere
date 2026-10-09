@@ -1507,6 +1507,8 @@ constexpr double kPlacedEasting = 478000.0;
 constexpr double kPlacedNorthing = 4430000.0;
 constexpr double kPlacedElevation = 1655.0;
 constexpr double kPlacedMarginMeters = 0.05;
+// The line of survex_blocks.svx that fixes d1.
+constexpr int kBlocksFixLine = 16;
 
 cwFixStation placingFix(const QString& stationName)
 {
@@ -1696,8 +1698,13 @@ TEST_CASE("A node fix on a station the attached file fixes itself is refused",
     // fix on the same station is.
     const QList<cwAttachedFix> fileFixes = attached->attachedFixes()->attachedFixes();
     REQUIRE(fileFixes.size() == 1);
-    CHECK(fileFixes.first() == cwAttachedFix{QStringLiteral("doghill.d1"), QStringLiteral("0 0 0"),
-                                             QString(), QStringLiteral("survex_blocks.svx")});
+    const cwAttachedFix& fileFix = fileFixes.first();
+    CHECK(fileFix.station == QStringLiteral("doghill.d1"));
+    CHECK(fileFix.coordinate == QStringLiteral("0 0 0"));
+    CHECK(fileFix.coordinateSystem.isEmpty());
+    CHECK(fileFix.fileName == QStringLiteral("survex_blocks.svx"));
+    CHECK(fileFix.filePath == QStringLiteral("survex_blocks.svx"));
+    CHECK(fileFix.line == kBlocksFixLine);
 
     // Either way cavern sees one fix per station, so the solve runs, and the
     // file's bare fix keeps its warning: d1 is still anchored by it.

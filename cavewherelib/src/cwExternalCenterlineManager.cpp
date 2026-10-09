@@ -15,6 +15,7 @@
 #include "cwExternalCenterlineScanner.h"
 #include "cwExternalCenterlineSync.h"
 #include "cwExternalStationHarvest.h"
+#include "cwGeoReference.h"
 #include "cwSaveLoad.h"
 #include "cwSurveyChunkSignaler.h"
 #include "cwTrip.h"
@@ -295,6 +296,10 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
     m_signaler->addConnectionToCaves(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSet()));
     m_signaler->addConnectionToCaves(SIGNAL(insertedTrips(int,int)), this, SLOT(recomputeWatchSet()));
     m_signaler->addConnectionToCaves(SIGNAL(removedTrips(int,int)), this, SLOT(recomputeWatchSet()));
+    // The same for a node arriving or leaving below a cave, which the
+    // region's cave-list signals never hear.
+    m_signaler->addConnectionToCaves(SIGNAL(insertedNodes(int,int)), this, SLOT(recomputeWatchSet()));
+    m_signaler->addConnectionToCaves(SIGNAL(removedNodes(int,int)), this, SLOT(recomputeWatchSet()));
     m_signaler->addConnectionToTrips(SIGNAL(externalCenterlineChanged()), this, SLOT(recomputeWatchSet()));
 
     // Registering the scan with the future manager lets tests drain it
@@ -328,6 +333,8 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
                    this, &cwExternalCenterlineManager::recomputeWatchSet);
         disconnect(m_region.data(), &cwCavingRegion::ownersDeleted,
                    this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners);
+        disconnect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
+                   this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
     }
     m_region = region;
     m_signaler->setRegion(region);
@@ -344,6 +351,9 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
         // fires only on the delete verbs, which is what the store needs.
         connect(m_region.data(), &cwCavingRegion::ownersDeleted,
                 this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners);
+        // Gaining or losing a frame changes what a bare fix is read in.
+        connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
+                this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
     }
 
     if (m_region.isNull()) {
@@ -396,6 +406,7 @@ cwLinePlotTask::ExternalCenterlineInputs cwExternalCenterlineManager::solveInput
              std::move(excluded),
              bareFixedStations(),
              m_ownerFixedStations,
+             bareFixOutputSystems(),
              m_ownerDefaultedDatums };
 }
 
@@ -538,12 +549,15 @@ bool cwExternalCenterlineManager::refreshAttachmentDirsFromSaveLoad()
         dirs.insert(id, dir);
     };
 
-    for (cwCave* cave : m_region->caves()) {
-        if (!cave->externalCenterline().isEmpty()) {
+    // Every node at every depth is a cwCave while the tree migration runs
+    // (cwCave.h), so a Section's attachment lives where a cave's does.
+    for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
+        const auto* cave = qobject_cast<const cwCave*>(node);
+        if (cave != nullptr && !cave->externalCenterline().isEmpty()) {
             insertDir(caveDirs, m_caveAttachmentDirs, cave->id(),
                       m_saveLoad->externalCenterlineDir(cave).absolutePath());
         }
-        for (cwTrip* trip : cave->trips()) {
+        for (const cwTrip* trip : node->trips()) {
             if (!trip->externalCenterline().isEmpty()) {
                 insertDir(tripDirs, m_tripAttachmentDirs, trip->id(),
                           m_saveLoad->externalCenterlineDir(trip).absolutePath());
@@ -591,21 +605,21 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
                                        entryFile, attachmentDir, dataRootDir });
     };
 
-    for (cwCave* cave : m_region->caves()) {
-        if (!cave->externalCenterline().isEmpty()) {
-            appendOwner(cave->id(),
-                        m_caveAttachmentDirs.value(cave->id()),
-                        cave->externalCenterline().entryFile(),
-                        cave->name(),
-                        cave->name(),
+    for (const cwSurveyNode* node : m_region->rootNode()->allNodes()) {
+        if (!node->externalCenterline().isEmpty()) {
+            appendOwner(node->id(),
+                        m_caveAttachmentDirs.value(node->id()),
+                        node->externalCenterline().entryFile(),
+                        node->name(),
+                        node->name(),
                         QStringLiteral("Cave"));
         }
-        for (cwTrip* trip : cave->trips()) {
+        for (const cwTrip* trip : node->trips()) {
             if (!trip->externalCenterline().isEmpty()) {
                 appendOwner(trip->id(),
                             m_tripAttachmentDirs.value(trip->id()),
                             trip->externalCenterline().entryFile(),
-                            cave->name(),
+                            node->name(),
                             trip->name(),
                             QStringLiteral("Trip"));
             }
@@ -677,7 +691,12 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     // survey nothing fixes. A cave attachment's names are what its
                     // node's own fix stations are checked against. One cavern run
                     // per owner, cave or trip.
-                    const auto harvest = cwExternalStationHarvest::harvestWithFixes(projectEntry);
+                    const QString bareFixSystem =
+                        !scan.hasError() && scan.value().hasFixWithoutCoordinateSystem()
+                            ? scan.value().outputCoordinateSystem
+                            : QString();
+                    const auto harvest =
+                        cwExternalStationHarvest::harvestWithFixes(projectEntry, bareFixSystem);
                     if (harvest.hasError()) {
                         const QString harvestError =
                             withProjectRelativePaths(harvest.errorMessage(), owner.dataRootDir);
@@ -714,11 +733,24 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     result.fileOwnsDeclination.insert(
                         owner.ownerId, scan.value().seededMetadata.fileOwnsDeclination());
                     if (!scan.value().fixes.isEmpty()) {
-                        result.ownerFixes.insert(owner.ownerId, scan.value().fixes);
+                        // Kept relative to the attachment's folder, the way
+                        // the Fix Stations page names the file. The scan
+                        // names files canonically, so the folder is too.
+                        const QDir attachmentDir(
+                            QFileInfo(owner.attachmentDir).canonicalFilePath());
+                        QList<cwExternalCenterlineScanner::ScannedFix> fixes = scan.value().fixes;
+                        for (cwExternalCenterlineScanner::ScannedFix& fix : fixes) {
+                            fix.file = attachmentDir.relativeFilePath(fix.file);
+                        }
+                        result.ownerFixes.insert(owner.ownerId, fixes);
                     }
                     if (!scan.value().defaultedDatums.isEmpty()) {
                         result.ownerDefaultedDatums.insert(owner.ownerId,
                                                            scan.value().defaultedDatums);
+                    }
+                    if (!scan.value().outputCoordinateSystem.isEmpty()) {
+                        result.ownerOutputSystems.insert(owner.ownerId,
+                                                         scan.value().outputCoordinateSystem);
                     }
                     row.depCount = scan.value().dependencies.size();
                     row.warningCount = scan.value().warnings.size();
@@ -781,6 +813,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
         || result.ownerFixes != m_ownerFixes
         || result.ownerFixedStations != m_ownerFixedStations
         || result.ownerDefaultedDatums != m_ownerDefaultedDatums
+        || result.ownerOutputSystems != m_ownerOutputSystems
         || result.containmentErrors != m_containmentErrors
         || missingCopiesChangedNow;
     m_solveOnScanApply = false;
@@ -788,6 +821,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     m_ownerFixes = std::move(result.ownerFixes);
     m_ownerFixedStations = std::move(result.ownerFixedStations);
     m_ownerDefaultedDatums = std::move(result.ownerDefaultedDatums);
+    m_ownerOutputSystems = std::move(result.ownerOutputSystems);
     // An owner entering or leaving the excluded set changes the driver the
     // same way a declination flag does — its *include just vanished or
     // reappeared — so both halves of that set swap ahead of the solve
@@ -852,9 +886,11 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
     const auto addOwner = [&](const QUuid& ownerId, const QString& scope,
                               const cwExternalCenterline& centerline) {
         const QString fileName = QFileInfo(centerline.entryFile()).fileName();
+        const QString readInSystem = readInSystemFor(ownerId);
         for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
             attachedFixes.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
-                                  fileName});
+                                  fileName, fix.file, fix.line,
+                                  fix.hasCoordinateSystem() ? QString() : readInSystem});
         }
         const auto fixed = m_ownerFixedStations.constFind(ownerId);
         if (fixed != m_ownerFixedStations.constEnd()) {
@@ -870,6 +906,29 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
     node->setFileFixedStations(fileFixedStations);
 }
 
+void cwExternalCenterlineManager::refreshAllAttachedFixes()
+{
+    if (m_region.isNull()) {
+        return;
+    }
+    for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
+        refreshAttachedFixes(node);
+    }
+}
+
+QString cwExternalCenterlineManager::readInSystemFor(const QUuid& ownerId) const
+{
+    if (!m_region.isNull() && m_region->geoReference()->hasCoordinateSystem()) {
+        return QStringLiteral("the system in force where the file is included (the project's, "
+                              "unless a fix above the file names one)");
+    }
+    const QString fileOutput = m_ownerOutputSystems.value(ownerId);
+    if (!fileOutput.isEmpty()) {
+        return QStringLiteral("%1, the system the file's *cs out names").arg(fileOutput);
+    }
+    return QString();
+}
+
 void cwExternalCenterlineManager::refreshSenderAttachedFixes()
 {
     const auto* trip = qobject_cast<cwTrip*>(sender());
@@ -877,6 +936,19 @@ void cwExternalCenterlineManager::refreshSenderAttachedFixes()
     if (node) {
         refreshAttachedFixes(node);
     }
+}
+
+QHash<QUuid, QString> cwExternalCenterlineManager::bareFixOutputSystems() const
+{
+    QHash<QUuid, QString> systems;
+    const QHash<QUuid, QStringList> bare = bareFixedStations();
+    for (auto it = bare.constBegin(); it != bare.constEnd(); ++it) {
+        const QString system = m_ownerOutputSystems.value(it.key());
+        if (!system.isEmpty()) {
+            systems.insert(it.key(), system);
+        }
+    }
+    return systems;
 }
 
 QHash<QUuid, QStringList> cwExternalCenterlineManager::bareFixedStations() const
@@ -1336,11 +1408,9 @@ cwTrip* cwExternalCenterlineManager::tripForOwner(const QUuid& ownerId) const
         return nullptr;
     }
 
-    for (cwCave* cave : m_region->caves()) {
-        for (cwTrip* trip : cave->trips()) {
-            if (trip->id() == ownerId) {
-                return trip;
-            }
+    for (cwTrip* trip : m_region->rootNode()->allTrips()) {
+        if (trip->id() == ownerId) {
+            return trip;
         }
     }
     return nullptr;
@@ -1352,9 +1422,9 @@ cwCave* cwExternalCenterlineManager::caveForOwner(const QUuid& ownerId) const
         return nullptr;
     }
 
-    for (cwCave* cave : m_region->caves()) {
-        if (cave->id() == ownerId) {
-            return cave;
+    for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
+        if (node->id() == ownerId) {
+            return qobject_cast<cwCave*>(node);
         }
     }
     return nullptr;

@@ -492,14 +492,20 @@ StandardPage {
             //! Set on a row an attached file fixes itself, named by sourceFile.
             required property bool readOnly
             required property string sourceFile
+            //! On an attached row whose fix the file gives no system: what the
+            //! solve reads it in, and the line that left it without one.
+            required property string readInWarning
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
             // to judge. So they share the single warning beside the row rather
-            // than competing for space that only ever holds one of them.
+            // than competing for space that only ever holds one of them. The
+            // read-in note sits on an attached row, which has neither.
             readonly property string coordinateWarning: wideDelegateId.coordinateError !== ""
                                                         ? wideDelegateId.coordinateError
-                                                        : wideDelegateId.domainError
+                                                        : wideDelegateId.domainError !== ""
+                                                          ? wideDelegateId.domainError
+                                                          : wideDelegateId.readInWarning
 
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
             implicitWidth: rowLayoutId.implicitWidth
@@ -656,11 +662,15 @@ StandardPage {
             //! Set on a row an attached file fixes itself, named by sourceFile.
             required property bool readOnly
             required property string sourceFile
+            //! See the wide delegate.
+            required property string readInWarning
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
                                                         ? narrowDelegateId.coordinateError
-                                                        : narrowDelegateId.domainError
+                                                        : narrowDelegateId.domainError !== ""
+                                                          ? narrowDelegateId.domainError
+                                                          : narrowDelegateId.readInWarning
 
             width: QQ.ListView.view ? QQ.ListView.view.width : 0
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2

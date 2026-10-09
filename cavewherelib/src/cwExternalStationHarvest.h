@@ -77,8 +77,14 @@ struct Stations {
  * harvest(), plus the stations \a entryFile fixes itself. A driver fix on one
  * of those collides with the file's own: cavern raises error 46 when the two
  * coordinates differ, whichever comes first.
+ *
+ * \a bareFixSystem, when set, is the *cs out the file names itself
+ * (cwExternalCenterlineScanner::ScanResult::outputCoordinateSystem): the
+ * driver puts it in force as both output and input around the file, so a fix
+ * of the file's with no *cs reads in it instead of failing the run.
  */
-CAVEWHERE_LIB_EXPORT Monad::Result<Stations> harvestWithFixes(const QString& entryFile);
+CAVEWHERE_LIB_EXPORT Monad::Result<Stations> harvestWithFixes(const QString& entryFile,
+                                                              const QString& bareFixSystem = QString());
 
 /**
  * Returns the station names of every component of \a entryFile that holds one

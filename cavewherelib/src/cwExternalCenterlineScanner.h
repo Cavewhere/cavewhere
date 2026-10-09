@@ -219,6 +219,11 @@ struct ScannedFix {
     QString coordinate;
     //! Empty when no input coordinate system is in force.
     QString coordinateSystem;
+    //! The canonical absolute path of the file whose line fixes the station.
+    QString file;
+    //! That line, counting from 1; 0 when the format's reader keeps no line
+    //! (a Compass .mak).
+    int line = 0;
 
     bool hasCoordinateSystem() const { return !coordinateSystem.isEmpty(); }
 
@@ -319,6 +324,13 @@ struct ScanResult {
      */
     QList<DefaultedDatum> defaultedDatums;
 
+    /**
+     * The system the closure's first Survex "*cs out" names, as the file
+     * writes it; empty when it names none. Cavern ignores every later
+     * "*cs out", so this is the system a run of the closure outputs in.
+     */
+    QString outputCoordinateSystem;
+
     bool hasFixWithoutCoordinateSystem() const
     {
         return std::any_of(fixes.cbegin(), fixes.cend(), [](const ScannedFix& fix) {
@@ -337,7 +349,8 @@ struct ScanResult {
             && entryHasOwnShots == other.entryHasOwnShots
             && seededMetadata == other.seededMetadata
             && fixes == other.fixes
-            && defaultedDatums == other.defaultedDatums;
+            && defaultedDatums == other.defaultedDatums
+            && outputCoordinateSystem == other.outputCoordinateSystem;
     }
     bool operator!=(const ScanResult& other) const { return !(*this == other); }
 };

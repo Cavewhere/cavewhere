@@ -1,0 +1,7 @@
+; Entry of a small tree shaped like a large Survex dataset: one include
+; beside the entry and one that climbs out of the entry's directory. No
+; file in the tree names a *cs, so sanqiao's *fix is read in whatever
+; system the driver puts around the *include.
+*include houping
+*include ../sanqiao/sanqiao
+*equate houping.h1 sanqiao.s2

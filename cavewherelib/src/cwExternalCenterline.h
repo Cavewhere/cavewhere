@@ -87,12 +87,28 @@ class CAVEWHERE_LIB_EXPORT cwAttachedFix
     Q_PROPERTY(QString coordinateSystem MEMBER coordinateSystem FINAL)
     //! The attached entry file's name.
     Q_PROPERTY(QString fileName MEMBER fileName FINAL)
+    //! The file whose line fixes the station, relative to the attachment's
+    //! directory ("sanqiao/fixedpts/ents.svx").
+    Q_PROPERTY(QString filePath MEMBER filePath FINAL)
+    //! That line, counting from 1; 0 when the format's reader keeps no line.
+    Q_PROPERTY(int line MEMBER line FINAL)
+    //! For a fix with no coordinate system of its own, what the solve reads it
+    //! in ("UTM48N, the system the file's *cs out names"); empty when it reads the fix in
+    //! the fix's own system, or raw.
+    Q_PROPERTY(QString readInSystem MEMBER readInSystem FINAL)
 
 public:
     QString station;
     QString coordinate;
     QString coordinateSystem;
     QString fileName;
+    QString filePath;
+    int line = 0;
+    QString readInSystem;
+
+    //! The note the Fix Stations page shows on the row: where the fix is read
+    //! in and which line left it there. Empty when readInSystem is.
+    QString readInWarning() const;
 
     bool operator==(const cwAttachedFix& other) const = default;
 };
