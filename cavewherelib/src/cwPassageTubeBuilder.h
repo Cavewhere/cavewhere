@@ -26,9 +26,10 @@
 
 /**
  * One station occurrence's left/right/up/down in meters. A dimension that was
- * left empty is std::nullopt; a set whose four values are all zero or empty
- * is entirely std::nullopt, and a lone zero in an otherwise measured set
- * becomes cwPassageTubeBuilder::kMinRadiusMeters.
+ * left empty, or that exceeds cwPassageTubeBuilder::kMaxRadiusMeters, is
+ * std::nullopt; a set whose four values are all zero or empty is entirely
+ * std::nullopt, and a lone zero in an otherwise measured set becomes
+ * cwPassageTubeBuilder::kMinRadiusMeters.
  */
 struct cwStationLrud {
     std::optional<double> left;
@@ -49,6 +50,11 @@ struct cwStationLrud {
  * a run of legs skinned as one tube; it passes through degree-2 stations, and
  * exactly one chain passes straight through each junction (Loch's rule), so
  * every other arm starts or ends there.
+ *
+ * Each chain is sampled at its stations and evenly along its legs. A sample's
+ * cross-section frame keeps world up in the section plane for gentle passage
+ * and rolls toward a rotation-minimizing frame as the passage steepens into a
+ * pit, so rings stay continuous through vertical shots.
  */
 class CAVEWHERE_LIB_EXPORT cwPassageTubeBuilder
 {
@@ -57,6 +63,7 @@ public:
 
     static constexpr double kMinLegLength = 0.01;
     static constexpr double kMinRadiusMeters = 0.05;
+    static constexpr double kMaxRadiusMeters = 100.0;
 
     struct Options {
         double sampleSpacingMeters = 1.0;
@@ -88,8 +95,37 @@ public:
         bool reversed = false;
     };
 
+    // A cross-section frame. right = tangent × up; inclinationWeight is 0 for
+    // passage gentler than Options::blendLowDegrees and 1 for passage steeper
+    // than Options::blendHighDegrees, where up follows the chain rather than
+    // world up.
+    struct Frame {
+        QVector3D tangent;
+        QVector3D up;
+        QVector3D right;
+        double inclinationWeight = 0.0;
+    };
+
+    // A cross-section ring around center. Bin k lies at angle 2πk/N from
+    // frame.right toward frame.up, N = Options::ringResolution; measured[k]
+    // is true when survey data filled the bin, false when it was interpolated
+    // or borrowed from another ring.
+    struct Ring {
+        QVector3D center;
+        QVector<double> radii;
+        Frame frame;
+        QVector<bool> measured;
+    };
+
     struct Chain {
         QVector<ChainLeg> legs;
+        // In chain order: one ring per station and per sample along each leg.
+        QVector<Ring> rings;
+        // How far a pit dead-end cap sits past the end station: the station's
+        // up when the chain ends climbing, its down when it ends descending,
+        // scaled by the end's inclination weight so level ends sit flush.
+        double startCapOffsetMeters = 0.0;
+        double endCapOffsetMeters = 0.0;
     };
 
     // Diagnostics: the intermediate results of the pipeline, for inspecting
@@ -97,6 +133,7 @@ public:
     struct Debug {
         QVector<Leg> legs;
         QVector<Chain> chains;
+        QVector<cwPassageTubeMesh::Warning> warnings;
     };
 
     static cwPassageTubeMesh build(const cwCavingRegionData& region,
