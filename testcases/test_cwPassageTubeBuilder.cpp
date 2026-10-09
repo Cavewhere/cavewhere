@@ -8,6 +8,7 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 //Our includes
 #include "cwPassageTubeBuilder.h"
@@ -41,41 +42,49 @@ struct BuilderInput {
     QHash<QUuid, cwStationPositionLookup> positionsByCave;
 };
 
-BuilderInput makeInput(const SurveyInput& survey)
+// One cave with a trip per survey; station positions are shared by name.
+BuilderInput makeTripsInput(const QList<SurveyInput>& surveys)
 {
-    cwTripData trip;
-    trip.id = QUuid::createUuid();
-    trip.calibrations.setDistanceUnit(survey.distanceUnit);
-
-    cwStationPositionLookup positions;
-    for (const QList<StationInput>& stations : survey.chunks) {
-        cwSurveyChunkData chunk;
-        chunk.id = QUuid::createUuid();
-        for (const StationInput& input : stations) {
-            cwStation station(input.name);
-            station.setLeft(cwDistanceReading(input.lrud.at(0)));
-            station.setRight(cwDistanceReading(input.lrud.at(1)));
-            station.setUp(cwDistanceReading(input.lrud.at(2)));
-            station.setDown(cwDistanceReading(input.lrud.at(3)));
-            chunk.stations.append(station);
-            if (input.position) {
-                positions.setPosition(input.name, *input.position);
-            }
-        }
-        for (int i = 1; i < stations.size(); ++i) {
-            chunk.shots.append(cwShot());
-        }
-        trip.chunks.append(chunk);
-    }
-
     cwCaveData cave;
     cave.id = QUuid::createUuid();
-    cave.trips.append(trip);
+
+    cwStationPositionLookup positions;
+    for (const SurveyInput& survey : surveys) {
+        cwTripData trip;
+        trip.id = QUuid::createUuid();
+        trip.calibrations.setDistanceUnit(survey.distanceUnit);
+
+        for (const QList<StationInput>& stations : survey.chunks) {
+            cwSurveyChunkData chunk;
+            chunk.id = QUuid::createUuid();
+            for (const StationInput& input : stations) {
+                cwStation station(input.name);
+                station.setLeft(cwDistanceReading(input.lrud.at(0)));
+                station.setRight(cwDistanceReading(input.lrud.at(1)));
+                station.setUp(cwDistanceReading(input.lrud.at(2)));
+                station.setDown(cwDistanceReading(input.lrud.at(3)));
+                chunk.stations.append(station);
+                if (input.position) {
+                    positions.setPosition(input.name, *input.position);
+                }
+            }
+            for (int i = 1; i < stations.size(); ++i) {
+                chunk.shots.append(cwShot());
+            }
+            trip.chunks.append(chunk);
+        }
+        cave.trips.append(trip);
+    }
 
     BuilderInput input;
     input.region.caves.append(cave);
     input.positionsByCave.insert(cave.id, positions);
     return input;
+}
+
+BuilderInput makeInput(const SurveyInput& survey)
+{
+    return makeTripsInput({survey});
 }
 
 Builder::Debug buildDebug(const BuilderInput& input)
@@ -175,6 +184,73 @@ QStringList chainStations(const Builder::Debug& debug, const Builder::Chain& cha
         stations.append(chainEnd(debug, chainLeg));
     }
     return stations;
+}
+
+// Every directed edge of the triangles in [first, first + count) has exactly
+// one partner running the other way: the surface is closed and consistently
+// wound.
+bool isClosedSurface(const QVector<quint32>& indices, int first, int count)
+{
+    QHash<std::pair<quint32, quint32>, int> directedEdges;
+    for (int i = first; i < first + count; i += 3) {
+        for (int corner = 0; corner < 3; ++corner) {
+            const quint32 from = indices.at(i + corner);
+            const quint32 to = indices.at(i + (corner + 1) % 3);
+            directedEdges[{from, to}]++;
+        }
+    }
+    for (auto it = directedEdges.cbegin(); it != directedEdges.cend(); ++it) {
+        if (it.value() != 1 || directedEdges.value({it.key().second, it.key().first}) != 1) {
+            return false;
+        }
+    }
+    return !directedEdges.isEmpty();
+}
+
+bool isClosedSurface(const QVector<quint32>& indices)
+{
+    return isClosedSurface(indices, 0, indices.size());
+}
+
+// Positive when the triangles wind counter-clockwise seen from outside.
+double signedVolume(const cwPassageTubeMesh& mesh)
+{
+    double volume = 0.0;
+    for (int i = 0; i < mesh.indices.size(); i += 3) {
+        const QVector3D a = mesh.positions.at(mesh.indices.at(i));
+        const QVector3D b = mesh.positions.at(mesh.indices.at(i + 1));
+        const QVector3D c = mesh.positions.at(mesh.indices.at(i + 2));
+        volume += QVector3D::dotProduct(a, QVector3D::crossProduct(b, c)) / 6.0;
+    }
+    return volume;
+}
+
+void checkNoFoldBack(const Builder::Ring& previous, const Builder::Ring& ring)
+{
+    for (const QVector3D& vertex : ring.vertices) {
+        CHECK(QVector3D::dotProduct(vertex - previous.center, previous.frame.tangent) >= -1e-4f);
+    }
+}
+
+// A loop's last ring repeats its first, so the first ring is also checked
+// against the ring before the last.
+void checkNoFoldBack(const Builder::Chain& chain)
+{
+    for (int i = 1; i < chain.rings.size(); ++i) {
+        INFO("ring " << i);
+        checkNoFoldBack(chain.rings.at(i - 1), chain.rings.at(i));
+    }
+    if (chain.startCap == Builder::EndCap::None && chain.rings.size() >= 3) {
+        INFO("loop closure");
+        checkNoFoldBack(chain.rings.at(chain.rings.size() - 2), chain.rings.first());
+    }
+}
+
+bool hasPosition(const cwPassageTubeMesh& mesh, const QVector3D& position)
+{
+    return std::any_of(mesh.positions.cbegin(), mesh.positions.cend(), [&](const QVector3D& p) {
+        return p.distanceToPoint(position) < 1e-4f;
+    });
 }
 
 } // namespace
@@ -334,17 +410,6 @@ TEST_CASE("cwPassageTubeBuilder reads LRUD in meters with the zero rules", "[Pas
     SECTION("Zeros and empties together are no passage data") {
         CHECK_FALSE(debug.legs.at(1).toLrud.hasAny());
     }
-}
-
-TEST_CASE("cwPassageTubeBuilder build returns an empty mesh for now", "[PassageTube][cwPassageTubeBuilder]")
-{
-    const BuilderInput input = makeInput({{{
-        {QStringLiteral("a1"), QVector3D(0, 0, 0)},
-        {QStringLiteral("a2"), QVector3D(10, 0, 0)},
-    }}});
-
-    const cwPassageTubeMesh mesh = Builder::build(input.region, input.positionsByCave, {}, Builder::Options());
-    CHECK(mesh.isEmpty());
 }
 
 TEST_CASE("cwPassageTubeBuilder fits a horizontal LRUD ring to the quadrant ellipse", "[PassageTube][cwPassageTubeBuilder]")
@@ -606,4 +671,218 @@ TEST_CASE("cwPassageTubeBuilder places pit dead-end caps by up and down", "[Pass
 
     // Pit rings get no LRUD samples and fall back to the default radius.
     CHECK_FALSE(hasMeasuredBin(chain.rings.at(5)));
+}
+
+TEST_CASE("cwPassageTubeBuilder skins a straight leg into a closed tube", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(1, 0, 0), dimensions},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    const int resolution = Builder::Options().ringResolution;
+    REQUIRE(debug.chains.size() == 1);
+    REQUIRE(debug.chains.at(0).rings.size() == 2);
+    CHECK(debug.chains.at(0).startCap == Builder::EndCap::Fan);
+    CHECK(debug.chains.at(0).endCap == Builder::EndCap::Fan);
+
+    const cwPassageTubeMesh& mesh = debug.mesh;
+    // Two rings of vertices plus one fan center per end.
+    CHECK(mesh.positions.size() == 2 * resolution + 2);
+    // Two side triangles per bin plus one fan triangle per bin at each end.
+    CHECK(mesh.indices.size() == 3 * (2 * resolution + 2 * resolution));
+    CHECK(isClosedSurface(mesh.indices));
+    CHECK(signedVolume(mesh) > 0.0);
+
+    REQUIRE(mesh.tripIndexRanges.size() == 1);
+    CHECK(mesh.tripIndexRanges.at(0).first == 0);
+    CHECK(mesh.tripIndexRanges.at(0).count == mesh.indices.size());
+    CHECK(mesh.tripUuids == QVector<QUuid>({input.region.caves.at(0).trips.at(0).id}));
+
+    const cwPassageTubeMesh built = Builder::build(input.region, input.positionsByCave, {}, Builder::Options());
+    CHECK(built.positions == mesh.positions);
+    CHECK(built.indices == mesh.indices);
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps a 90 degree bend wound outward without folds", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const double radius = GENERATE(0.2, 3.0);
+    const QStringList dimensions = lrud(radius, radius, radius, radius);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions},
+        {QStringLiteral("c"), QVector3D(10, 10, 0), dimensions},
+    }}});
+
+    INFO("radius " << radius);
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    checkNoFoldBack(debug.chains.at(0));
+    CHECK(isClosedSurface(debug.mesh.indices));
+    CHECK(signedVolume(debug.mesh) > 0.0);
+}
+
+TEST_CASE("cwPassageTubeBuilder rounds a 120 degree bend with inset rings", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const QVector3D corner(10, 0, 0);
+    const QVector3D outgoing(-0.5f, std::sqrt(3.0f) / 2.0f, 0.0f);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), corner, dimensions},
+        {QStringLiteral("c"), corner + outgoing * 10.0f, dimensions},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+
+    const Builder::Ring& before = ringAt(chain, corner - QVector3D(0.5f, 0, 0));
+    checkVectorNear(before.frame.tangent, QVector3D(1, 0, 0));
+    const Builder::Ring& after = ringAt(chain, corner + outgoing * 0.5f);
+    checkVectorNear(after.frame.tangent, outgoing);
+    checkFramesContinuous(chain);
+    checkNoFoldBack(chain);
+
+    CHECK(isClosedSurface(debug.mesh.indices));
+    CHECK(signedVolume(debug.mesh) > 0.0);
+}
+
+TEST_CASE("cwPassageTubeBuilder leaves a gentle bend without inset rings", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0)},
+        {QStringLiteral("b"), QVector3D(2, 0, 0)},
+        {QStringLiteral("c"), QVector3D(4, 1, 0)},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    // The three stations and one mid-shot sample on each leg.
+    CHECK(debug.chains.at(0).rings.size() == 5);
+}
+
+TEST_CASE("cwPassageTubeBuilder pushes a junction arm into the through tube and domes it", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions};
+    const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions};
+    const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), dimensions};
+    const StationInput d {QStringLiteral("d"), QVector3D(10, 10, 0), dimensions};
+    const BuilderInput input = makeInput({{{a, b}, {b, d}, {b, c}}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 2);
+
+    const Builder::Chain& through = debug.chains.at(0);
+    CHECK(through.startCap == Builder::EndCap::Fan);
+    CHECK(through.endCap == Builder::EndCap::Fan);
+
+    // The arm walks d → b, south into the through tube.
+    const Builder::Chain& arm = debug.chains.at(1);
+    CHECK(arm.startCap == Builder::EndCap::Fan);
+    REQUIRE(arm.endCap == Builder::EndCap::Dome);
+    checkVectorNear(arm.rings.last().center, QVector3D(10, -0.5, 0));
+
+    // The dome's apex sits the ring's smallest radius past the pushed ring.
+    CHECK(hasPosition(debug.mesh, QVector3D(10, -1.5, 0)));
+    CHECK(isClosedSurface(debug.mesh.indices));
+    CHECK(signedVolume(debug.mesh) > 0.0);
+}
+
+TEST_CASE("cwPassageTubeBuilder caps each trip of a chain that spans two trips", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions};
+    const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions};
+    const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), dimensions};
+    const SurveyInput first {{{a, b}}};
+    const SurveyInput second {{{b, c}}};
+    const BuilderInput input = makeTripsInput({first, second});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+
+    const cwPassageTubeMesh& mesh = debug.mesh;
+    const QList<cwTripData>& trips = input.region.caves.at(0).trips;
+    CHECK(mesh.tripUuids == QVector<QUuid>({trips.at(0).id, trips.at(1).id}));
+    REQUIRE(mesh.tripIndexRanges.size() == 2);
+
+    int next = 0;
+    for (const cwPassageTubeMesh::VertexRange& range : mesh.tripIndexRanges) {
+        CHECK(range.first == next);
+        CHECK(range.count > 0);
+        CHECK(isClosedSurface(mesh.indices, range.first, range.count));
+        next = range.first + range.count;
+    }
+    CHECK(next == mesh.indices.size());
+    CHECK(signedVolume(mesh) > 0.0);
+}
+
+TEST_CASE("cwPassageTubeBuilder places two rings on a shot shorter than the spacing", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0)},
+        {QStringLiteral("b"), QVector3D(0.3f, 0, 0)},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    REQUIRE(debug.chains.at(0).rings.size() == 2);
+    CHECK(debug.chains.at(0).rings.at(0).center.distanceToPoint(debug.chains.at(0).rings.at(1).center) == Catch::Approx(0.3));
+    CHECK(isClosedSurface(debug.mesh.indices));
+}
+
+TEST_CASE("cwPassageTubeBuilder merges rings closer than the minimum spacing", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0)},
+        {QStringLiteral("b"), QVector3D(2, 0, 0)},
+        {QStringLiteral("c"), QVector3D(2.03f, 0, 0)},
+        {QStringLiteral("d"), QVector3D(4, 0, 0)},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+    for (int i = 1; i < chain.rings.size(); ++i) {
+        INFO("ring " << i);
+        CHECK(chain.rings.at(i).center.distanceToPoint(chain.rings.at(i - 1).center) >= 0.05f);
+    }
+    CHECK(isClosedSurface(debug.mesh.indices));
+}
+
+TEST_CASE("cwPassageTubeBuilder closes a loop without caps", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0)},
+        {QStringLiteral("b"), QVector3D(10, 0, 0)},
+        {QStringLiteral("c"), QVector3D(5, 8, 0)},
+        {QStringLiteral("a"), QVector3D(0, 0, 0)},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    CHECK(debug.chains.at(0).startCap == Builder::EndCap::None);
+    CHECK(debug.chains.at(0).endCap == Builder::EndCap::None);
+    CHECK(isClosedSurface(debug.mesh.indices));
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps a loop closing at a sharp bend without folds", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(3, 3, 3, 3);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions},
+        {QStringLiteral("c"), QVector3D(5, 8, 0), dimensions},
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    REQUIRE(debug.chains.at(0).startCap == Builder::EndCap::None);
+    checkNoFoldBack(debug.chains.at(0));
+    CHECK(isClosedSurface(debug.mesh.indices));
 }

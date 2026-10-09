@@ -10,6 +10,7 @@
 #include "cwUnits.h"
 
 //Qt includes
+#include <QSet>
 #include <QtMath>
 
 //Std includes
@@ -17,6 +18,7 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <numeric>
 
 namespace {
 
@@ -26,6 +28,13 @@ constexpr int kTwistDistributionSamples = 4;
 constexpr double kMinSampleWeight = 0.05;
 constexpr double kSteepWeight = 0.5;
 constexpr double kMinSampleSpacingMeters = 0.01;
+constexpr double kMinRingSpacingMeters = 0.05;
+constexpr double kCornerInsetMeters = 0.5;
+constexpr double kCornerInsetLegFraction = 0.25;
+constexpr double kArmInsetFactor = 0.5;
+constexpr int kDomeRings = 3;
+constexpr int kMinLoopRings = 3;
+constexpr float kMinAxisLengthSquared = 0.25f;
 constexpr double kAxisEpsilon = 1e-9;
 constexpr float kMinProjectedLength = 1e-6f;
 constexpr float kDegenerateLengthSquared = 1e-12f;
@@ -281,12 +290,14 @@ using Options = cwPassageTubeBuilder::Options;
 
 // One place along a chain where a ring is fitted. lruds are already oriented
 // to the chain's direction of travel (left and right swapped on legs walked
-// backwards).
+// backwards). chainLeg indexes Chain::legs: the leg the sample lies on or ends.
 struct ChainSample {
     QVector3D position;
     QVector3D tangent;
     double distanceAlongChain = 0.0;
     QVector<cwStationLrud> lruds;
+    int chainLeg = 0;
+    bool isStation = false;
 };
 
 cwStationLrud swappedLeftRight(const cwStationLrud& lrud)
@@ -348,10 +359,41 @@ bool isLoop(const QVector<WalkedLeg>& walked)
     return walked.size() > 1 && walked.first().start == walked.last().end;
 }
 
+// Appends sample unless it lies within kMinRingSpacingMeters of the last
+// one; a station then takes the place of a nearby mid-shot sample, and two
+// nearby stations merge into the first.
+void appendSample(QVector<ChainSample>& samples, const ChainSample& sample)
+{
+    if (samples.isEmpty()
+        || samples.last().position.distanceToPoint(sample.position) >= kMinRingSpacingMeters) {
+        samples.append(sample);
+        return;
+    }
+
+    ChainSample& last = samples.last();
+    if (sample.isStation) {
+        if (last.isStation) {
+            last.lruds.append(sample.lruds);
+        } else {
+            last = sample;
+        }
+    }
+}
+
 QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Options& options)
 {
     const bool loop = isLoop(walked);
     const double spacing = std::max(options.sampleSpacingMeters, kMinSampleSpacingMeters);
+    const float minBendCosine = static_cast<float>(std::cos(qDegreesToRadians(options.subdivideBendDegrees)));
+
+    const auto isSharpBendAfter = [&](int legIndex) {
+        const bool hasNext = loop || legIndex + 1 < walked.size();
+        if (!hasNext) {
+            return false;
+        }
+        const WalkedLeg& next = walked.at((legIndex + 1) % walked.size());
+        return QVector3D::dotProduct(walked.at(legIndex).direction(), next.direction()) < minBendCosine;
+    };
 
     QVector<ChainSample> samples;
     double distance = 0.0;
@@ -361,18 +403,35 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
 
         if (legIndex == 0) {
             const QVector3D tangent = loop ? bisector(walked.last().direction(), direction) : direction;
-            samples.append(ChainSample {leg.start, tangent, 0.0, {leg.startLrud}});
+            appendSample(samples, ChainSample {leg.start, tangent, 0.0, {leg.startLrud}, legIndex, true});
         }
 
         const double length = leg.start.distanceToPoint(leg.end);
         const int intervals = std::max(1, static_cast<int>(std::lround(length / spacing)));
+        QVector<double> fractions;
         for (int i = 1; i < intervals; ++i) {
-            const double t = static_cast<double>(i) / intervals;
-            samples.append(ChainSample {
+            fractions.append(static_cast<double>(i) / intervals);
+        }
+
+        const double cornerInsetFraction = std::min(kCornerInsetMeters, kCornerInsetLegFraction * length) / length;
+        const bool startsAtSharpBend = legIndex > 0 ? isSharpBendAfter(legIndex - 1)
+                                                    : loop && isSharpBendAfter(walked.size() - 1);
+        if (startsAtSharpBend) {
+            fractions.append(cornerInsetFraction);
+        }
+        if (isSharpBendAfter(legIndex)) {
+            fractions.append(1.0 - cornerInsetFraction);
+        }
+        std::sort(fractions.begin(), fractions.end());
+
+        for (double t : std::as_const(fractions)) {
+            appendSample(samples, ChainSample {
                 leg.start + (leg.end - leg.start) * static_cast<float>(t),
                 direction,
                 distance + length * t,
-                {lerpLrud(leg.startLrud, leg.endLrud, t)}
+                {lerpLrud(leg.startLrud, leg.endLrud, t)},
+                legIndex,
+                false
             });
         }
 
@@ -389,7 +448,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
             endTangent = bisector(direction, next.direction());
             endLruds.append(next.startLrud);
         }
-        samples.append(ChainSample {leg.end, endTangent, distance, endLruds});
+        appendSample(samples, ChainSample {leg.end, endTangent, distance, endLruds, legIndex, true});
     }
     return samples;
 }
@@ -604,6 +663,27 @@ double capOffset(const cwStationLrud& lrud, const QVector3D& outward, const Fram
     return endFrame.inclinationWeight * offset.value_or(0.0);
 }
 
+QString chainStartStation(const QVector<Leg>& legs, const ChainLeg& chainLeg)
+{
+    const Leg& leg = legs.at(chainLeg.legIndex);
+    return chainLeg.reversed ? leg.to : leg.from;
+}
+
+QString chainEndStation(const QVector<Leg>& legs, const ChainLeg& chainLeg)
+{
+    const Leg& leg = legs.at(chainLeg.legIndex);
+    return chainLeg.reversed ? leg.from : leg.to;
+}
+
+// A warning about the chain, reported at its first station. message takes
+// the station name as %1.
+Warning chainWarning(const QVector<Leg>& legs, const Chain& chain, Warning::Type type, const QString& message)
+{
+    const ChainLeg& firstLeg = chain.legs.first();
+    const QString station = chainStartStation(legs, firstLeg);
+    return Warning {type, legs.at(firstLeg.legIndex).tripId, station, message.arg(station)};
+}
+
 void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, QVector<Warning>& warnings)
 {
     const QVector<WalkedLeg> walked = walkedLegs(legs, chain);
@@ -621,16 +701,9 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
         }
     }
 
-    const ChainLeg& firstLeg = chain.legs.first();
     if (fittedSamples.isEmpty()) {
-        const Leg& leg = legs.at(firstLeg.legIndex);
-        const QString station = firstLeg.reversed ? leg.to : leg.from;
-        warnings.append(Warning {
-            Warning::NoPassageData,
-            leg.tripId,
-            station,
-            QStringLiteral("The passage from station %1 has no LRUD; the tube uses the default radius.").arg(station)
-        });
+        warnings.append(chainWarning(legs, chain, Warning::NoPassageData,
+                                     QStringLiteral("The passage from station %1 has no LRUD; the tube uses the default radius.")));
     }
 
     const auto nearestFitted = [&](int index) {
@@ -644,7 +717,7 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
     chain.rings.clear();
     chain.rings.reserve(samples.size());
     for (int i = 0; i < samples.size(); ++i) {
-        Ring ring {samples.at(i).position, fits.at(i).radii, frames.at(i), fits.at(i).measured};
+        Ring ring {samples.at(i).position, fits.at(i).radii, frames.at(i), fits.at(i).measured, samples.at(i).chainLeg};
         if (fits.at(i).filledBins < kMinFilledBins) {
             ring.measured = QVector<bool>(resolution, false);
             ring.radii = fittedSamples.isEmpty()
@@ -663,6 +736,333 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
     }
 }
 
+using EndCap = cwPassageTubeBuilder::EndCap;
+
+// A chain end at a junction that another chain passes through is an arm and
+// gets a dome; every other open end gets a fan, and loops get no caps.
+void classifyChainEnds(const QVector<Leg>& legs, QVector<Chain>& chains)
+{
+    using StationKey = std::pair<QUuid, QString>;
+    const auto key = [&](const ChainLeg& chainLeg, const QString& station) {
+        return StationKey {legs.at(chainLeg.legIndex).caveId, cwStation::canonicalKey(station)};
+    };
+
+    QHash<StationKey, int> degree;
+    for (const Leg& leg : legs) {
+        degree[{leg.caveId, cwStation::canonicalKey(leg.from)}]++;
+        degree[{leg.caveId, cwStation::canonicalKey(leg.to)}]++;
+    }
+
+    QSet<StationKey> passedThrough;
+    for (const Chain& chain : std::as_const(chains)) {
+        for (int i = 1; i < chain.legs.size(); ++i) {
+            passedThrough.insert(key(chain.legs.at(i), chainStartStation(legs, chain.legs.at(i))));
+        }
+    }
+
+    const auto endCap = [&](const StationKey& station) {
+        const bool isArm = degree.value(station) > 2 && passedThrough.contains(station);
+        return isArm ? EndCap::Dome : EndCap::Fan;
+    };
+
+    for (Chain& chain : chains) {
+        const ChainLeg& first = chain.legs.first();
+        const ChainLeg& last = chain.legs.last();
+        const StationKey start = key(first, chainStartStation(legs, first));
+        const StationKey end = key(last, chainEndStation(legs, last));
+        if (chain.legs.size() > 1 && start == end) {
+            chain.startCap = EndCap::None;
+            chain.endCap = EndCap::None;
+        } else {
+            chain.startCap = endCap(start);
+            chain.endCap = endCap(end);
+        }
+    }
+}
+
+double meanRadius(const Ring& ring)
+{
+    if (ring.radii.isEmpty()) {
+        return 0.0;
+    }
+    return std::accumulate(ring.radii.cbegin(), ring.radii.cend(), 0.0) / ring.radii.size();
+}
+
+// Pushes an arm's end ring past its junction, along the arm, so the seam is
+// buried inside the through tube.
+void insetJunctionArms(Chain& chain)
+{
+    if (chain.rings.isEmpty()) {
+        return;
+    }
+    const auto push = [](Ring& ring, const QVector3D& outward) {
+        ring.center += outward * static_cast<float>(kArmInsetFactor * meanRadius(ring));
+    };
+    if (chain.startCap == EndCap::Dome) {
+        push(chain.rings.first(), -chain.rings.first().frame.tangent);
+    }
+    if (chain.endCap == EndCap::Dome) {
+        push(chain.rings.last(), chain.rings.last().frame.tangent);
+    }
+}
+
+bool isFinite(const QVector3D& v)
+{
+    return std::isfinite(v.x()) && std::isfinite(v.y()) && std::isfinite(v.z());
+}
+
+// A ring whose frame could not be built tears the chain.
+bool hasValidFrame(const Ring& ring)
+{
+    return isFinite(ring.center)
+           && isFinite(ring.frame.tangent)
+           && isFinite(ring.frame.up)
+           && isFinite(ring.frame.right)
+           && ring.frame.right.lengthSquared() > kMinAxisLengthSquared;
+}
+
+// Places the ring's vertices. A vertex that would land behind the previous
+// ring's plane, folding the tube inside out on the inside of a bend, slides
+// along its own ray onto that plane.
+void placeRingVertices(Ring& ring, const Ring* previous)
+{
+    const int resolution = ring.radii.size();
+    ring.vertices.resize(resolution);
+    for (int bin = 0; bin < resolution; ++bin) {
+        const double theta = kTwoPi * bin / resolution;
+        const QVector3D direction = ring.frame.right * static_cast<float>(std::cos(theta))
+                                    + ring.frame.up * static_cast<float>(std::sin(theta));
+        double radius = ring.radii.at(bin);
+        if (previous != nullptr) {
+            const QVector3D& planeNormal = previous->frame.tangent;
+            const QVector3D vertex = ring.center + direction * static_cast<float>(radius);
+            if (QVector3D::dotProduct(vertex - previous->center, planeNormal) < 0.0f) {
+                const float approach = QVector3D::dotProduct(direction, planeNormal);
+                const double toPlane = approach < 0.0f
+                                           ? QVector3D::dotProduct(previous->center - ring.center, planeNormal) / approach
+                                           : 0.0;
+                radius = std::max(toPlane, cwPassageTubeBuilder::kMinRadiusMeters);
+            }
+        }
+        ring.vertices[bin] = ring.center + direction * static_cast<float>(radius);
+    }
+}
+
+// A loop's last ring repeats its first, so the first ring folds against the
+// ring before that one.
+void placeChainVertices(Chain& chain)
+{
+    const bool isLoop = chain.startCap == EndCap::None && chain.rings.size() >= kMinLoopRings;
+    const Ring* previous = nullptr;
+    if (isLoop) {
+        const Ring& closing = chain.rings.at(chain.rings.size() - 2);
+        if (hasValidFrame(closing)) {
+            previous = &closing;
+        }
+    }
+    for (Ring& ring : chain.rings) {
+        if (hasValidFrame(ring)) {
+            placeRingVertices(ring, previous);
+            previous = &ring;
+        } else {
+            ring.vertices.clear();
+        }
+    }
+}
+
+// Collects triangles per trip so each trip's indices end up contiguous.
+class MeshWriter
+{
+public:
+    explicit MeshWriter(cwPassageTubeMesh& mesh) : m_mesh(mesh) {}
+
+    quint32 addVertex(const QVector3D& position)
+    {
+        return addRing({position});
+    }
+
+    quint32 addRing(const QVector<QVector3D>& vertices)
+    {
+        const quint32 first = static_cast<quint32>(m_mesh.positions.size());
+        m_mesh.positions.append(vertices);
+        return first;
+    }
+
+    void addTriangle(const QUuid& tripId, quint32 a, quint32 b, quint32 c)
+    {
+        auto it = m_trianglesByTrip.find(tripId);
+        if (it == m_trianglesByTrip.end()) {
+            m_tripOrder.append(tripId);
+            it = m_trianglesByTrip.insert(tripId, {});
+        }
+        it->append(QVector<quint32> {a, b, c});
+    }
+
+    // Side quads between two rings of resolution vertices, ring b further
+    // along the tangent than ring a. Each quad splits along its shorter
+    // diagonal, wound counter-clockwise seen from outside.
+    void addSides(const QUuid& tripId, quint32 a, quint32 b, int resolution)
+    {
+        const QVector<QVector3D>& positions = m_mesh.positions;
+        for (int k = 0; k < resolution; ++k) {
+            const quint32 next = static_cast<quint32>((k + 1) % resolution);
+            const quint32 a0 = a + k;
+            const quint32 a1 = a + next;
+            const quint32 b1 = b + next;
+            const quint32 b0 = b + k;
+            const float diagonalA0B1 = (positions.at(b1) - positions.at(a0)).lengthSquared();
+            const float diagonalA1B0 = (positions.at(b0) - positions.at(a1)).lengthSquared();
+            if (diagonalA0B1 <= diagonalA1B0) {
+                addTriangle(tripId, a0, b0, b1);
+                addTriangle(tripId, a0, b1, a1);
+            } else {
+                addTriangle(tripId, a0, b0, a1);
+                addTriangle(tripId, b0, b1, a1);
+            }
+        }
+    }
+
+    // A fan closing a ring. facingForward is true when the fan faces along
+    // the ring's tangent (the end of a run), false when it faces back.
+    void addFan(const QUuid& tripId, quint32 center, quint32 ring, int resolution, bool facingForward)
+    {
+        for (int k = 0; k < resolution; ++k) {
+            const quint32 current = ring + k;
+            const quint32 next = ring + (k + 1) % resolution;
+            if (facingForward) {
+                addTriangle(tripId, center, next, current);
+            } else {
+                addTriangle(tripId, center, current, next);
+            }
+        }
+    }
+
+    void finish()
+    {
+        for (const QUuid& tripId : std::as_const(m_tripOrder)) {
+            const QVector<quint32>& triangles = m_trianglesByTrip.value(tripId);
+            m_mesh.tripIndexRanges.append({static_cast<int>(m_mesh.indices.size()), static_cast<int>(triangles.size())});
+            m_mesh.tripUuids.append(tripId);
+            m_mesh.indices.append(triangles);
+        }
+    }
+
+private:
+    cwPassageTubeMesh& m_mesh;
+    QVector<QUuid> m_tripOrder;
+    QHash<QUuid, QVector<quint32>> m_trianglesByTrip;
+};
+
+// A Loch-style dome past the ring: kDomeRings rings shrinking on a quarter
+// ellipse out to an apex at the ring's smallest radius.
+void addDome(MeshWriter& writer, const QUuid& tripId, const Ring& ring, quint32 ringFirst, bool atEnd)
+{
+    const int resolution = ring.vertices.size();
+    const QVector3D outward = atEnd ? ring.frame.tangent : -ring.frame.tangent;
+    const double height = *std::min_element(ring.radii.cbegin(), ring.radii.cend());
+
+    quint32 previous = ringFirst;
+    for (int i = 1; i <= kDomeRings; ++i) {
+        const double angle = (std::numbers::pi / 2.0) * i / (kDomeRings + 1);
+        const QVector3D center = ring.center + outward * static_cast<float>(height * std::sin(angle));
+        const float scale = static_cast<float>(std::cos(angle));
+        QVector<QVector3D> vertices;
+        vertices.reserve(resolution);
+        for (const QVector3D& vertex : ring.vertices) {
+            vertices.append(center + (vertex - ring.center) * scale);
+        }
+        const quint32 current = writer.addRing(vertices);
+        if (atEnd) {
+            writer.addSides(tripId, previous, current, resolution);
+        } else {
+            writer.addSides(tripId, current, previous, resolution);
+        }
+        previous = current;
+    }
+    const quint32 apex = writer.addVertex(ring.center + outward * static_cast<float>(height));
+    writer.addFan(tripId, apex, previous, resolution, atEnd);
+}
+
+void addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const Chain& chain, QVector<Warning>& warnings)
+{
+    const auto tripOfRing = [&](int ringIndex) {
+        const ChainLeg& chainLeg = chain.legs.at(chain.rings.at(ringIndex).chainLeg);
+        return legs.at(chainLeg.legIndex).tripId;
+    };
+
+    // Runs of consecutive rings with valid frames; a torn chain has several.
+    QVector<QVector<int>> runs(1);
+    for (int i = 0; i < chain.rings.size(); ++i) {
+        if (hasValidFrame(chain.rings.at(i))) {
+            runs.last().append(i);
+        } else if (!runs.last().isEmpty()) {
+            runs.append(QVector<int>());
+        }
+    }
+    const bool isTorn = runs.size() > 1 || runs.first().size() < chain.rings.size();
+    if (isTorn) {
+        warnings.append(chainWarning(legs, chain, Warning::ChainTorn,
+                                     QStringLiteral("The passage from station %1 breaks where its cross-section could not be oriented.")));
+    }
+
+    const bool isClosedLoop = chain.startCap == EndCap::None && !isTorn;
+    const int lastRing = chain.rings.size() - 1;
+
+    for (const QVector<int>& run : std::as_const(runs)) {
+        if (run.size() < 2) {
+            continue;
+        }
+        const int resolution = chain.rings.at(run.first()).vertices.size();
+
+        QVector<quint32> firstVertex;
+        firstVertex.reserve(run.size());
+        for (int i = 0; i < run.size(); ++i) {
+            const bool closesLoop = isClosedLoop && i == run.size() - 1;
+            firstVertex.append(closesLoop ? firstVertex.first() : writer.addRing(chain.rings.at(run.at(i)).vertices));
+        }
+
+        // Segment s joins ring s - 1 to ring s and belongs to ring s's leg.
+        for (int s = 1; s < run.size(); ++s) {
+            writer.addSides(tripOfRing(run.at(s)), firstVertex.at(s - 1), firstVertex.at(s), resolution);
+        }
+
+        // Where the trip changes, each trip closes its own side of the
+        // shared ring so hiding either one leaves the other capped.
+        const auto addTripBoundary = [&](int position, const QUuid& before, const QUuid& after) {
+            if (before == after) {
+                return;
+            }
+            const quint32 center = writer.addVertex(chain.rings.at(run.at(position)).center);
+            writer.addFan(before, center, firstVertex.at(position), resolution, true);
+            writer.addFan(after, center, firstVertex.at(position), resolution, false);
+        };
+        for (int s = 1; s + 1 < run.size(); ++s) {
+            addTripBoundary(s, tripOfRing(run.at(s)), tripOfRing(run.at(s + 1)));
+        }
+        if (isClosedLoop) {
+            addTripBoundary(0, tripOfRing(run.last()), tripOfRing(run.at(1)));
+            continue;
+        }
+
+        const auto addCap = [&](int position, EndCap cap, double pitOffset, bool atEnd) {
+            const Ring& ring = chain.rings.at(run.at(position));
+            const QUuid tripId = tripOfRing(run.at(atEnd ? position : position + 1));
+            if (cap == EndCap::Dome) {
+                addDome(writer, tripId, ring, firstVertex.at(position), atEnd);
+                return;
+            }
+            const double offset = ring.frame.inclinationWeight > kSteepWeight ? pitOffset : 0.0;
+            const QVector3D outward = atEnd ? ring.frame.tangent : -ring.frame.tangent;
+            const quint32 center = writer.addVertex(ring.center + outward * static_cast<float>(offset));
+            writer.addFan(tripId, center, firstVertex.at(position), resolution, atEnd);
+        };
+        const bool isChainStart = run.first() == 0;
+        const bool isChainEnd = run.last() == lastRing;
+        addCap(0, isChainStart ? chain.startCap : EndCap::Fan, isChainStart ? chain.startCapOffsetMeters : 0.0, false);
+        addCap(run.size() - 1, isChainEnd ? chain.endCap : EndCap::Fan, isChainEnd ? chain.endCapOffsetMeters : 0.0, true);
+    }
+}
+
 } // namespace
 
 cwPassageTubeMesh cwPassageTubeBuilder::build(const cwCavingRegionData& region,
@@ -670,9 +1070,7 @@ cwPassageTubeMesh cwPassageTubeBuilder::build(const cwCavingRegionData& region,
                                               const QHash<QUuid, cwSplayTipsByStation>& splaysByCave,
                                               const Options& options)
 {
-    cwPassageTubeMesh mesh;
-    mesh.warnings = buildDebug(region, positionsByCave, splaysByCave, options).warnings;
-    return mesh;
+    return buildDebug(region, positionsByCave, splaysByCave, options).mesh;
 }
 
 cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildDebug(const cwCavingRegionData& region,
@@ -685,8 +1083,16 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildDebug(const cwCavingRegio
     Debug debug;
     debug.legs = extractLegs(region, positionsByCave, debug.warnings);
     debug.chains = buildChains(debug.legs);
+    classifyChainEnds(debug.legs, debug.chains);
+
+    MeshWriter writer(debug.mesh);
     for (Chain& chain : debug.chains) {
         buildRings(debug.legs, chain, options, debug.warnings);
+        insetJunctionArms(chain);
+        placeChainVertices(chain);
+        addChainMesh(writer, debug.legs, chain, debug.warnings);
     }
+    writer.finish();
+    debug.mesh.warnings = debug.warnings;
     return debug;
 }

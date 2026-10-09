@@ -109,12 +109,26 @@ public:
     // A cross-section ring around center. Bin k lies at angle 2πk/N from
     // frame.right toward frame.up, N = Options::ringResolution; measured[k]
     // is true when survey data filled the bin, false when it was interpolated
-    // or borrowed from another ring.
+    // or borrowed from another ring. chainLeg is the index into Chain::legs of
+    // the leg the ring lies on or ends. vertices are the ring's mesh vertices,
+    // one per bin, pulled onto the previous ring's plane where they would fold
+    // behind it.
     struct Ring {
         QVector3D center;
         QVector<double> radii;
         Frame frame;
         QVector<bool> measured;
+        int chainLeg = 0;
+        QVector<QVector3D> vertices;
+    };
+
+    // How a chain end is closed: a fan at a dead end, a dome on an arm pushed
+    // into the tube of the chain that passes through its junction, nothing on
+    // a loop.
+    enum class EndCap {
+        Fan,
+        Dome,
+        None
     };
 
     struct Chain {
@@ -126,6 +140,8 @@ public:
         // scaled by the end's inclination weight so level ends sit flush.
         double startCapOffsetMeters = 0.0;
         double endCapOffsetMeters = 0.0;
+        EndCap startCap = EndCap::Fan;
+        EndCap endCap = EndCap::Fan;
     };
 
     // Diagnostics: the intermediate results of the pipeline, for inspecting
@@ -134,6 +150,7 @@ public:
         QVector<Leg> legs;
         QVector<Chain> chains;
         QVector<cwPassageTubeMesh::Warning> warnings;
+        cwPassageTubeMesh mesh;
     };
 
     static cwPassageTubeMesh build(const cwCavingRegionData& region,
