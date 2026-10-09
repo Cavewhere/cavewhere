@@ -277,6 +277,8 @@ Item {
     }
 
     Row {
+        id: bottomRightChromeId
+
         anchors.bottom: parent.bottom
         anchors.bottomMargin: rootId.chromeMargin
         anchors.right: parent.right
@@ -303,14 +305,15 @@ Item {
         }
     }
 
-    // Color-by lives opposite the scale bar and compass: a chip when off, the
+    // Color-by sits above the scale bar and compass: a chip when off, the
     // colorbar when on. At zOverlay so its tap never reaches LeadView's or
     // LinePlotLabelView's tap-away handlers or the turntable camera.
     ColorByLegend {
         id: colorByLegendId
-        anchors.left: parent.left
-        anchors.bottom: parent.bottom
-        anchors.margins: rootId.chromeMargin
+        anchors.right: parent.right
+        anchors.bottom: bottomRightChromeId.top
+        anchors.rightMargin: rootId.chromeMargin
+        anchors.bottomMargin: Theme.flowSpacing
         z: rootId.zOverlay
         onClicked: colorByPopupId.open()
     }
@@ -318,8 +321,8 @@ Item {
     ColorByPopup {
         id: colorByPopupId
         parent: rendererId
-        // Above the legend's top-left corner, kept inside the view
-        x: colorByLegendId.x
+        // Right-aligned with the legend, above it, kept inside the view
+        x: Math.max(0, colorByLegendId.x + colorByLegendId.width - width)
         y: Math.max(0, colorByLegendId.y - height - Theme.linkBarButtonSpacing)
     }
 

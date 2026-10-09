@@ -10,7 +10,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-ColumnLayout {
+GridLayout {
     id: rootId
     objectName: "colorByOptions"
 
@@ -22,15 +22,21 @@ ColumnLayout {
     // Source combo rows: None, Depth, then the keys
     readonly property int depthIndex: 1
     readonly property int firstKeyIndex: 2
-    readonly property int rowSpacing: 4
-    // Meters; wide enough for georeferenced elevations
-    readonly property int pivotLimit: 10000
+    // Whole meters or feet; covers about 9 km either way in both units
+    readonly property int pivotLimit: 30000
+    readonly property int depthUnit: Units.depthDisplayUnit(ProjectUnits.unitSystem)
+    readonly property string depthUnitName: Units.lengthUnitName(depthUnit)
 
-    spacing: rowSpacing
+    columns: 2
+    columnSpacing: Theme.delegatePadding
+    rowSpacing: Theme.tightSpacing
 
-    QC.Label {
+    component RowLabel: QC.Label {
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+    }
+
+    RowLabel {
         text: qsTr("Color by")
-        font.pixelSize: Theme.fontSizeUI
     }
 
     QC.ComboBox {
@@ -64,6 +70,11 @@ ColumnLayout {
         }
     }
 
+    RowLabel {
+        visible: rootId.depthActive
+        text: qsTr("Palette")
+    }
+
     QC.ComboBox {
         id: rampComboId
         objectName: "colorByRampCombo"
@@ -83,46 +94,50 @@ ColumnLayout {
         onActivated: (index) => rootId.colorBy.rampId = rootId.colorBy.rampIds[index]
     }
 
-    RowLayout {
+    RowLabel {
         visible: rootId.depthActive
+        text: qsTr("White at")
+    }
 
-        QC.Label {
-            text: qsTr("White at")
-        }
+    RowLayout {
+        Layout.fillWidth: true
+        visible: rootId.depthActive
 
         QC.SpinBox {
             objectName: "colorByPivotSpin"
 
+            Layout.fillWidth: true
+            editable: true
             from: -rootId.pivotLimit
             to: rootId.pivotLimit
 
-            value: Math.round(rootId.colorBy.pivot)
+            // pivot is stored in meters; the spin shows the project's depth unit
+            value: Math.round(Units.convertLength(rootId.colorBy.pivot, Units.Meters, rootId.depthUnit))
 
-            onValueModified: rootId.colorBy.pivot = value
+            onValueModified: rootId.colorBy.pivot = Units.convertLength(value, rootId.depthUnit, Units.Meters)
         }
 
         QC.Label {
-            text: qsTr("m")
+            objectName: "colorByPivotUnit"
+            text: rootId.depthUnitName
         }
     }
 
-    RowLayout {
+    RowLabel {
         visible: rootId.active
+        text: qsTr("Scrap tint")
+    }
 
-        QC.Label {
-            text: qsTr("Scrap tint")
-        }
+    QC.Slider {
+        objectName: "colorByStrengthSlider"
 
-        QC.Slider {
-            objectName: "colorByStrengthSlider"
+        Layout.fillWidth: true
+        visible: rootId.active
+        from: 0
+        to: 1
 
-            Layout.fillWidth: true
-            from: 0
-            to: 1
+        value: rootId.colorBy.scrapStrength
 
-            value: rootId.colorBy.scrapStrength
-
-            onMoved: rootId.colorBy.scrapStrength = value
-        }
+        onMoved: rootId.colorBy.scrapStrength = value
     }
 }
