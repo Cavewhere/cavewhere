@@ -138,10 +138,11 @@ TEST_CASE("cwFixStationDiagnosticsModel merges the source's role names with its 
     // it answers the attached-fix roles too, as an editable row.
     CHECK(roles.value(cwAttachedFixModel::SourceFileRole) == "sourceFile");
     CHECK(roles.value(cwAttachedFixModel::ReadOnlyRole) == "readOnly");
+    CHECK(roles.value(cwAttachedFixModel::ReadInWarningRole) == "readInWarning");
 
     // The three role blocks must not collide, or the merge would silently drop
     // one side: every name in the merged hash is still reachable by its own value.
-    CHECK(roles.size() == fixture.source->roleNames().size() + 10);
+    CHECK(roles.size() == fixture.source->roleNames().size() + 11);
 }
 
 TEST_CASE("cwFixStationDiagnosticsModel passes persisted rows through untouched",
