@@ -24,6 +24,7 @@ cwRHILinePlot::~cwRHILinePlot()
     delete m_segmentBuffer;
     delete m_typeBuffer;
     delete m_visibilityBuffer;
+    delete m_colorByBuffer;
     delete m_srb;
     // m_pipelines releases its held pipeline references on destruction.
 }
@@ -50,6 +51,13 @@ void cwRHILinePlot::initializeResources(const ResourceUpdateData& data)
     m_visibilityBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, 0);
     m_visibilityBuffer->create();
 
+    // cwTracked starts unchanged, so upload the current block once; otherwise
+    // the first frame would read uninitialized memory.
+    const auto colorByBufferSize = rhi->ubufAligned(sizeof(cwColorByUniform));
+    m_colorByBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, colorByBufferSize);
+    m_colorByBuffer->create();
+    uploadColorBy(data.resourceUpdateBatch);
+
     // All bindings step per instance; binding 0 reuses the point-pair layout
     // as one {from, to} per segment, and the uint attributes stay 4-byte
     // aligned across every RHI backend.
@@ -75,6 +83,9 @@ void cwRHILinePlot::synchronize(const SynchronizeData& data)
 
     m_data = linePlot->m_data;
     linePlot->m_data.resetChanged();
+
+    m_colorBy = linePlot->m_colorBy;
+    linePlot->m_colorBy.resetChanged();
 }
 
 void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
@@ -108,8 +119,18 @@ void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
 
     m_data.resetChanged();
 
+    if (m_colorBy.isChanged() && m_colorByBuffer) {
+        uploadColorBy(batch);
+        m_colorBy.resetChanged();
+    }
+
     updateVisibilityBuffer(batch);
     reportGeometryBytes();
+}
+
+void cwRHILinePlot::uploadColorBy(QRhiResourceUpdateBatch* batch)
+{
+    batch->updateDynamicBuffer(m_colorByBuffer, 0, sizeof(cwColorByUniform), &m_colorBy.value());
 }
 
 void cwRHILinePlot::reportGeometryBytes()
@@ -192,7 +213,8 @@ bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>&
     }
 
     auto* pipeline = m_pipelineRecord ? m_pipelineRecord->pipeline : nullptr;
-    if (!pipeline || !m_segmentBuffer || !m_typeBuffer || !m_visibilityBuffer || !m_srb) {
+    if (!pipeline || !m_segmentBuffer || !m_typeBuffer || !m_visibilityBuffer
+        || !m_colorByBuffer || !m_srb) {
         return false;
     }
 
@@ -264,7 +286,8 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
 
         record->layout = localRhi->newShaderResourceBindings();
         record->layout->setBindings({
-            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride)
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride),
+            QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, nullptr)
         });
         record->layout->create();
 
@@ -312,7 +335,8 @@ bool cwRHILinePlot::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer
 
     m_srb = rhi->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer(), renderer->globalUniformBufferStride())
+        QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(0, QRhiShaderResourceBinding::VertexStage, renderer->globalUniformBuffer(), renderer->globalUniformBufferStride()),
+        QRhiShaderResourceBinding::uniformBuffer(1, QRhiShaderResourceBinding::FragmentStage, m_colorByBuffer)
     });
     m_srb->create();
 
@@ -337,12 +361,12 @@ cwRhiPipelineKey cwRHILinePlot::buildPipelineKey(QRhiRenderPassDescriptor* rende
     key.depthTest = 1;
     key.depthWrite = 1;
     key.globalBinding = 0;
-    key.perDrawBinding = 0xFF;
+    key.perDrawBinding = 1;
     key.textureBinding = 0xFF;
     key.globalStages = cwShaderStageMask(cwRenderMaterialState::ShaderStage::Vertex);
-    key.perDrawStages = 0;
+    key.perDrawStages = cwShaderStageMask(cwRenderMaterialState::ShaderStage::Fragment);
     key.textureStages = 0;
-    key.hasPerDraw = 0;
+    key.hasPerDraw = 1;
     key.topology = static_cast<quint8>(QRhiGraphicsPipeline::TriangleStrip);
     return key;
 }

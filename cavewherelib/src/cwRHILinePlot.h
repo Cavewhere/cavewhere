@@ -48,6 +48,8 @@ private:
     QRhiBuffer* m_segmentBuffer = nullptr;
     QRhiBuffer* m_typeBuffer = nullptr;
     QRhiBuffer* m_visibilityBuffer = nullptr;
+    // Fragment-stage ColorByBlock at binding 1.
+    QRhiBuffer* m_colorByBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
     cwLedgeredBytes m_geometryBytes {cwRenderMemoryLedger::Category::LinePlotGeometry,
@@ -55,6 +57,7 @@ private:
 
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;
+    cwTracked<cwColorByUniform> m_colorBy;
 
     // Upload gate for the visibility attribute: the store entryVersion and
     // segment count the buffer was last filled for. The mask itself is read
@@ -64,6 +67,7 @@ private:
     qsizetype m_uploadedMaskSegmentCount = -1;
 
     void updateVisibilityBuffer(QRhiResourceUpdateBatch* batch);
+    void uploadColorBy(QRhiResourceUpdateBatch* batch);
     void reportGeometryBytes();
 
     bool ensurePipeline(const RenderData& data);

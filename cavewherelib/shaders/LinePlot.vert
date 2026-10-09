@@ -21,6 +21,7 @@ layout(location = 2) in uint iType;
 layout(location = 3) in uint iVisibility;
 
 layout(location = 0) flat out uint vType;
+layout(location = 1) out float vValue;
 
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
@@ -48,6 +49,7 @@ void main(void)
     if (iVisibility == 0u) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside [-w,w] clip volume -> discarded
         vType = 0u;
+        vValue = 0.0;
         return;
     }
 
@@ -58,6 +60,7 @@ void main(void)
     if (clipFrom.w < kMinClipW && clipTo.w < kMinClipW) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         vType = 0u;
+        vValue = 0.0;
         return;
     }
     // One endpoint behind the eye: truncate the segment at the eye plane so
@@ -98,6 +101,8 @@ void main(void)
     clip.xy += offsetPx * (2.0 / viewportSize) * clip.w;
     clip.z -= isSplay ? kSplayDepthBias : kCenterlineDepthBias;
 
+    // The world elevation of this corner, so depth coloring grades along a shot.
+    vValue = mix(iFrom.z, iTo.z, endSelect);
     gl_Position = clip;
     vType = iType;
 }
