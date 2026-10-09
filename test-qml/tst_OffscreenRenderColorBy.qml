@@ -129,6 +129,31 @@ MainWindowTest {
             console.log("color-by depth render: " + path);
         }
 
+        function test_keywordRemovesRedAndAddsOrange() {
+            let regionViewer = loadAndFindViewer();
+            let colorBy = RootData.regionSceneManager.colorBy;
+            colorBy.keywordKey = "Cave";
+            colorBy.source = ColorBy.Keyword;
+            tryVerify(() => colorBy.legendSlotCount > 0, 5000, "the caves own slots");
+
+            let path = OffscreenRenderTester.tempPngPath("offscreen_colorby_keyword");
+            // Okabe-Ito orange, slot 0: the only cave's color.
+            let orange = Qt.rgba(0xE6 / 255, 0x9F / 255, 0x00 / 255, 1.0);
+            let orangeFraction = function(p) {
+                return OffscreenRenderTester.colorFraction(p, orange, rampTolerance);
+            };
+            renderUntil(regionViewer, path, function(p) {
+                return redFraction(p, noRedTolerance) === 0.0 && orangeFraction(p) > 0.0;
+            });
+
+            let red = redFraction(path, noRedTolerance);
+            compare(red, 0.0, "no centerline red under keyword coloring (got " + red + ")");
+            let fraction = orangeFraction(path);
+            verify(fraction > 0.0, "Okabe-Ito orange for the cave is in the render (got " + fraction + ")");
+            // The PNG stays in the temp dir so the checkpoint report can show it.
+            console.log("color-by keyword render: " + path);
+        }
+
         function test_scrapTintFollowsDepth() {
             let regionViewer = loadAndFindViewer();
             // Scraps triangulate after the solve; render only once they exist.

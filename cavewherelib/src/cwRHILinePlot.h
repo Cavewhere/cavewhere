@@ -38,17 +38,20 @@ private:
 
     bool m_resourcesInitialized = false;
 
-    // QRhi resources — all three vertex buffers are per-instance:
+    // QRhi resources — all four vertex buffers are per-instance:
     //   binding 0: the segment endpoints, uploaded straight from the point
     //              pairs (stride 2 * vec3 = one {from, to} per instance)
     //   binding 1: uint segment type (0 = centerline, 1 = splay)
     //   binding 2: uint visibility (0 = hidden), dynamic so a keyword toggle
     //              re-uploads only this buffer
+    //   binding 3: float color-by value (cwColorByUniform::PerElement)
     QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_segmentBuffer = nullptr;
     QRhiBuffer* m_typeBuffer = nullptr;
     QRhiBuffer* m_visibilityBuffer = nullptr;
-    // Fragment-stage ColorByBlock at binding 1.
+    QRhiBuffer* m_valueBuffer = nullptr;
+    // ColorByBlock at binding 1, read in both stages: the vertex stage picks
+    // the value, the fragment stage maps it to a color.
     QRhiBuffer* m_colorByBuffer = nullptr;
     QRhiShaderResourceBindings* m_srb = nullptr;
 
@@ -58,6 +61,7 @@ private:
     //The front end data that will be rendered
     cwTracked<cwRenderLinePlot::Data> m_data;
     cwTracked<cwColorByUniform> m_colorBy;
+    cwTracked<QVector<float>> m_colorValues;
 
     // Upload gate for the visibility attribute: the store entryVersion and
     // segment count the buffer was last filled for. The mask itself is read
@@ -65,8 +69,11 @@ private:
     // RHI-side copy. Count -1 forces the first upload (a real plot has >= 0).
     quint64 m_uploadedMaskVersion = 0;
     qsizetype m_uploadedMaskSegmentCount = -1;
+    // Segment count the value buffer was last filled for; -1 forces the first upload.
+    qsizetype m_uploadedValueSegmentCount = -1;
 
     void updateVisibilityBuffer(QRhiResourceUpdateBatch* batch);
+    void updateValueBuffer(QRhiResourceUpdateBatch* batch);
     void uploadColorBy(QRhiResourceUpdateBatch* batch);
     void reportGeometryBytes();
 

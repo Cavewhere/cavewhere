@@ -1,6 +1,8 @@
 // Our includes
 #include "cwColorBy.h"
 #include "cwColorRamp.h"
+#include "cwKeywordColorBy.h"
+#include "cwKeywordItemModel.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderTexturedItems.h"
 
@@ -15,6 +17,7 @@ QString sourceKey() { return QStringLiteral("colorBy/source"); }
 QString rampIdKey() { return QStringLiteral("colorBy/rampId"); }
 QString pivotKey() { return QStringLiteral("colorBy/pivot"); }
 QString scrapStrengthKey() { return QStringLiteral("colorBy/scrapStrength"); }
+QString keywordKeyKey() { return QStringLiteral("colorBy/keywordKey"); }
 
 // How strongly the ramp tints scrap paper; ink stays dark at any strength.
 constexpr double kDefaultScrapStrength = 0.6;
@@ -47,15 +50,42 @@ double clampedStrength(double strength)
 {
     return std::clamp(strength, 0.0, 1.0);
 }
+
+cwColorBy::Source sourceFromInt(int stored)
+{
+    switch (stored) {
+    case static_cast<int>(cwColorBy::Source::Depth):
+        return cwColorBy::Source::Depth;
+    case static_cast<int>(cwColorBy::Source::Keyword):
+        return cwColorBy::Source::Keyword;
+    default:
+        return cwColorBy::Source::None;
+    }
+}
 }
 
 cwColorBy::cwColorBy(QObject* parent) :
     QObject(parent),
+    m_keywordColorBy(new cwKeywordColorBy(this)),
     m_rampId(cwColorRamp::defaultDepthRampId()),
     m_pivot(kDefaultPivot),
     m_scrapStrength(kDefaultScrapStrength)
 {
+    // The slot count rides in the uniform, and the values feed the legend.
+    connect(m_keywordColorBy, &cwKeywordColorBy::slotsChanged, this, [this]() {
+        rebuildUniform();
+        emit legendChanged();
+    });
+
     loadSettings();
+    rebuildUniform();
+}
+
+void cwColorBy::setKeywordItemModel(cwKeywordItemModel* model)
+{
+    m_keywordItemModel = model;
+    m_keywordColorBy->setKeywordItemModel(model);
+    updateKeywordGrouping();
     rebuildUniform();
 }
 
@@ -84,8 +114,58 @@ void cwColorBy::setSource(Source source)
     }
     m_source = source;
     saveSettings();
+    updateKeywordGrouping();
     rebuildUniform();
     emit sourceChanged();
+    emit legendChanged();
+}
+
+void cwColorBy::setKeywordKey(const QString& key)
+{
+    if (m_keywordKey == key) {
+        return;
+    }
+    m_keywordKey = key;
+    saveSettings();
+    updateKeywordGrouping();
+    rebuildUniform();
+    emit keywordKeyChanged();
+}
+
+QStringList cwColorBy::legendValues() const
+{
+    if (m_source == Source::Keyword) {
+        return m_keywordColorBy->values();
+    }
+    return {};
+}
+
+int cwColorBy::legendSlotCount() const
+{
+    if (m_source == Source::Keyword) {
+        return m_keywordColorBy->slotCount();
+    }
+    return 0;
+}
+
+QColor cwColorBy::slotColor(int slot) const
+{
+    // The categorical preset is fixed, so bake it once for every legend row.
+    static const QVector<QColor> samples = cwColorRamp::preset(cwColorRamp::defaultCategoricalRampId())
+                                               .bake(cwColorByUniform::kRampStops);
+    return samples.at(std::clamp(slot, 0, static_cast<int>(samples.size()) - 1));
+}
+
+int cwColorBy::legendSlot(int row) const
+{
+    return row < legendSlotCount() ? row : cwKeywordColorBy::kOtherSlot;
+}
+
+void cwColorBy::updateKeywordGrouping()
+{
+    // Grouping walks every keyword item, so it runs only while it is shown.
+    const bool grouping = m_source == Source::Keyword && m_keywordItemModel;
+    m_keywordColorBy->setKey(grouping ? m_keywordKey : QString());
 }
 
 void cwColorBy::setRampId(const QString& id)
@@ -183,7 +263,10 @@ void cwColorBy::updateRangeFromLinePlot()
 
 void cwColorBy::rebuildUniform()
 {
-    const cwColorRamp ramp = resolvedRamp(m_rampId);
+    const bool keywordMode = m_source == Source::Keyword;
+    const cwColorRamp ramp = keywordMode
+        ? cwColorRamp::preset(cwColorRamp::defaultCategoricalRampId())
+        : resolvedRamp(m_rampId);
 
     cwColorByUniform uniform;
 
@@ -208,14 +291,23 @@ void cwColorBy::rebuildUniform()
     const bool rangeIsUsable = m_rangeMax > m_rangeMin;
 
     int mode = cwColorByUniform::Off;
-    if (m_source != Source::None && rangeIsUsable) {
+    int slotCount = 0;
+    int valueSource = cwColorByUniform::WorldZ;
+    if (keywordMode) {
+        // Slots are pushed into the proxies only while a key groups them.
+        if (!m_keywordColorBy->key().isEmpty()) {
+            mode = cwColorByUniform::Categorical;
+        }
+        slotCount = m_keywordColorBy->slotCount();
+        valueSource = cwColorByUniform::PerElement;
+    } else if (m_source == Source::Depth && rangeIsUsable) {
         mode = diverging ? cwColorByUniform::Diverging : cwColorByUniform::Sequential;
     }
 
     uniform.params[ParamMode] = static_cast<float>(mode);
     uniform.params[ParamStrength] = static_cast<float>(m_scrapStrength);
-    uniform.params[ParamSlotCount] = 0.0f;
-    uniform.params[ParamValueSource] = static_cast<float>(cwColorByUniform::WorldZ);
+    uniform.params[ParamSlotCount] = static_cast<float>(slotCount);
+    uniform.params[ParamValueSource] = static_cast<float>(valueSource);
 
     m_uniform = uniform;
     push();
@@ -234,8 +326,8 @@ void cwColorBy::push()
 void cwColorBy::loadSettings()
 {
     QSettings settings;
-    const int storedSource = settings.value(sourceKey(), static_cast<int>(Source::None)).toInt();
-    m_source = storedSource == static_cast<int>(Source::Depth) ? Source::Depth : Source::None;
+    m_source = sourceFromInt(settings.value(sourceKey(), static_cast<int>(Source::None)).toInt());
+    m_keywordKey = settings.value(keywordKeyKey()).toString();
     const QString storedRampId = settings.value(rampIdKey(), cwColorRamp::defaultDepthRampId()).toString();
     // An id from another build snaps to the default so the ramp picker shows a selection
     m_rampId = cwColorRamp::preset(storedRampId).isValid() ? storedRampId : cwColorRamp::defaultDepthRampId();
@@ -250,4 +342,5 @@ void cwColorBy::saveSettings() const
     settings.setValue(rampIdKey(), m_rampId);
     settings.setValue(pivotKey(), m_pivot);
     settings.setValue(scrapStrengthKey(), m_scrapStrength);
+    settings.setValue(keywordKeyKey(), m_keywordKey);
 }

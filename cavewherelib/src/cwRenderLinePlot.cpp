@@ -6,6 +6,7 @@
 **************************************************************************/
 
 // Std includes
+#include <algorithm>
 #include <limits>
 #include <numeric>
 
@@ -94,6 +95,9 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
     // owner re-applies hidden ranges right after
     // (cwLinePlotManager::reconcileTripKeywordItems).
     m_visibility = QVector<quint8>(vertexCount, kVisible);
+    // Color values map to vertices too; the owner re-applies them with the
+    // hidden ranges.
+    m_colorValues.setValue(QVector<float>(vertexCount, 0.0f));
 
     // The published store mask is keyed to the old vertex layout, which no
     // longer maps to the right vertices; clear it to the all-visible default.
@@ -160,6 +164,31 @@ void cwRenderLinePlot::setRangeVisible(int start, int count, bool visible)
                                  anyHidden ? visibility : QVector<quint8>());
     }
 
+    update();
+}
+
+void cwRenderLinePlot::setRangeColorValue(int start, int count, float value)
+{
+    // Same guard as setRangeVisible: a free read of the live buffer first, so
+    // an out-of-range or unchanged span never pays for a copy.
+    const QVector<float>& current = m_colorValues.value();
+    const qsizetype vertexCount = current.size();
+    if (start < 0 || count <= 0 || count > vertexCount - start) {
+        return;
+    }
+
+    const auto first = current.constBegin() + start;
+    const auto last = first + count;
+    const bool spanHoldsValue = std::all_of(first, last, [value](float stored) {
+        return stored == value;
+    });
+    if (spanHoldsValue) {
+        return;
+    }
+
+    QVector<float> colorValues = current;
+    std::fill(colorValues.begin() + start, colorValues.begin() + start + count, value);
+    m_colorValues.setValue(std::move(colorValues));
     update();
 }
 

@@ -16,6 +16,14 @@ ColumnLayout {
 
     readonly property ColorBy colorBy: RootData.regionSceneManager.colorBy
     readonly property bool active: colorBy.source !== ColorBy.None
+    readonly property bool depthActive: colorBy.source === ColorBy.Depth
+    // Keys whose values are unique per item or meaningless as colors
+    readonly property list<string> hiddenKeys: ["Object id", "File Name"]
+    readonly property list<string> keywordKeys: RootData.keywordFilterPipelineModel.possibleKeys
+        .filter(key => !hiddenKeys.includes(key))
+    // Source combo rows: None, Depth, then the keys
+    readonly property int depthIndex: 1
+    readonly property int firstKeyIndex: 2
     readonly property int rowSpacing: 4
     // Meters; wide enough for georeferenced elevations
     readonly property int pivotLimit: 10000
@@ -32,11 +40,30 @@ ColumnLayout {
         objectName: "colorBySourceCombo"
 
         Layout.fillWidth: true
-        model: [qsTr("None"), qsTr("Depth")]
+        model: [qsTr("None"), qsTr("Depth")].concat(rootId.keywordKeys)
 
-        currentIndex: rootId.colorBy.source === ColorBy.Depth ? 1 : 0
+        currentIndex: {
+            switch (rootId.colorBy.source) {
+            case ColorBy.Depth:
+                return rootId.depthIndex;
+            case ColorBy.Keyword: {
+                // A stored key the project lacks selects nothing
+                const keyIndex = rootId.keywordKeys.indexOf(rootId.colorBy.keywordKey);
+                return keyIndex >= 0 ? rootId.firstKeyIndex + keyIndex : -1;
+            }
+            default:
+                return 0;
+            }
+        }
 
-        onActivated: (index) => rootId.colorBy.source = index === 1 ? ColorBy.Depth : ColorBy.None
+        onActivated: (index) => {
+            if (index >= rootId.firstKeyIndex) {
+                rootId.colorBy.keywordKey = rootId.keywordKeys[index - rootId.firstKeyIndex];
+                rootId.colorBy.source = ColorBy.Keyword;
+            } else {
+                rootId.colorBy.source = index === rootId.depthIndex ? ColorBy.Depth : ColorBy.None;
+            }
+        }
     }
 
     QC.ComboBox {
@@ -51,7 +78,7 @@ ColumnLayout {
             text: rootId.colorBy.rampName(modelData)
         }
 
-        visible: rootId.active
+        visible: rootId.depthActive
         displayText: rootId.colorBy.rampName(currentText)
         currentIndex: rootId.colorBy.rampIds.indexOf(rootId.colorBy.rampId)
 
@@ -59,7 +86,7 @@ ColumnLayout {
     }
 
     RowLayout {
-        visible: rootId.active
+        visible: rootId.depthActive
 
         QC.Label {
             text: qsTr("White at")

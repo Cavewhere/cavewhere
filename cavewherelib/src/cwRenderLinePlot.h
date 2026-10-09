@@ -56,11 +56,18 @@ public:
     // it, never mutate it in place.
     void setRangeVisible(int start, int count, bool visible);
 
+    // Per-vertex color-by value (cwColorByUniform::PerElement), both vertices
+    // of a shot share it; setGeometry resets every vertex to 0. Like
+    // setRangeVisible it flips one trip's span and ignores an out-of-range span.
+    // The render thread holds a copy, so it is published by write-to-a-copy.
+    void setRangeColorValue(int start, int count, float value);
+
     float maxZValue() const;
     float minZValue() const;
 
     QVector<QVector3D> points() const;
     QVector<quint8> visibility() const;
+    QVector<float> colorValues() const;
 
     // Endpoints of the line segment whose first vertex is firstIndex — the value
     // cwRayHit::firstIndex carries for a line hit (under the iota index list it is
@@ -101,6 +108,7 @@ private:
 
     cwTracked<Data> m_data;
     cwTracked<cwColorByUniform> m_colorBy;
+    cwTracked<QVector<float>> m_colorValues;
 
     // Authoring copy of the per-vertex mask — the source for setRangeVisible's
     // range-flip math and for updateVisibility's re-seed. Consumers read the
@@ -148,6 +156,11 @@ inline cwColorByUniform cwRenderLinePlot::colorBy() const
 inline QVector<quint8> cwRenderLinePlot::visibility() const
 {
     return m_visibility;
+}
+
+inline QVector<float> cwRenderLinePlot::colorValues() const
+{
+    return m_colorValues.value();
 }
 
 #endif // CWRENDERLINEPLOT_H

@@ -21,6 +21,7 @@ public:
 
 protected:
     void applyVisible(bool visible) override;
+    void applyColorValue(float value) override;
 
 private:
     QPointer<cwRenderTexturedItems> m_items;
