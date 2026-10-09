@@ -80,6 +80,8 @@ Item {
     // LinePlotLabelView fill this item and carry tap-away handlers, so anything
     // clickable left below them never sees a press.
     readonly property int zOverlay: 3
+    // Gap between the view's edges and the floating chrome
+    readonly property int chromeMargin: 20
 
     clip: true
 
@@ -252,7 +254,7 @@ Item {
         id: fixStationOutlierBox
         objectName: "fixStationOutlierBox"
         anchors.top: parent.top
-        anchors.topMargin: 20
+        anchors.topMargin: rootId.chromeMargin
         anchors.bottom: undefined
         // The banner carries a link, so it needs the chrome layer, not just a
         // spot above the scene: LeadView's tap-away handler fills this item at
@@ -276,9 +278,9 @@ Item {
 
     Row {
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 20
+        anchors.bottomMargin: rootId.chromeMargin
         anchors.right: parent.right
-        anchors.rightMargin: 20
+        anchors.rightMargin: rootId.chromeMargin
         z: rootId.zOverlay
         spacing: 10
 
@@ -299,6 +301,26 @@ Item {
             compassRotation: turnTableInteractionId.cameraRotation
             // Don't set sampleCount; cwRenderingSettings drives it.
         }
+    }
+
+    // Color-by lives opposite the scale bar and compass: a chip when off, the
+    // colorbar when on. At zOverlay so its tap never reaches LeadView's or
+    // LinePlotLabelView's tap-away handlers or the turntable camera.
+    ColorByLegend {
+        id: colorByLegendId
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        anchors.margins: rootId.chromeMargin
+        z: rootId.zOverlay
+        onClicked: colorByPopupId.open()
+    }
+
+    ColorByPopup {
+        id: colorByPopupId
+        parent: rendererId
+        // Above the legend's top-left corner, kept inside the view
+        x: colorByLegendId.x
+        y: Math.max(0, colorByLegendId.y - height - Theme.linkBarButtonSpacing)
     }
 
     // Built only while the setting is on, so a hidden HUD costs nothing — not
@@ -337,8 +359,8 @@ Item {
         interaction: measurementInteractionId
         visible: interactionManagerId.activeInteraction === measurementInteractionId
                  && measurementInteractionId.hasMeasurement
-        x: Math.max(0, parent.width - width - 20)
-        y: 20
+        x: Math.max(0, parent.width - width - rootId.chromeMargin)
+        y: rootId.chromeMargin
     }
 }
 

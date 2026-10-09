@@ -176,3 +176,14 @@ TEST_CASE("cwColorBy persists its settings", "[ColorBy]")
     reloaded.setScrapStrength(2.0);
     CHECK(reloaded.scrapStrength() == Approx(1.0));
 }
+
+TEST_CASE("cwColorBy snaps an unknown stored ramp to the depth preset", "[ColorBy]")
+{
+    ScopedColorBySettings settings;
+
+    QSettings().setValue(QStringLiteral("colorBy/rampId"), QStringLiteral("noSuchRamp"));
+
+    cwColorBy colorBy;
+    CHECK(colorBy.rampId() == cwColorRamp::defaultDepthRampId());
+    CHECK(colorBy.rampIds().contains(colorBy.rampId()));
+}

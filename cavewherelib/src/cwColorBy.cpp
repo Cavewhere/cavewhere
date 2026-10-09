@@ -84,8 +84,8 @@ void cwColorBy::setSource(Source source)
     }
     m_source = source;
     saveSettings();
-    emit sourceChanged();
     rebuildUniform();
+    emit sourceChanged();
 }
 
 void cwColorBy::setRampId(const QString& id)
@@ -95,8 +95,8 @@ void cwColorBy::setRampId(const QString& id)
     }
     m_rampId = id;
     saveSettings();
-    emit rampIdChanged();
     rebuildUniform();
+    emit rampIdChanged();
 }
 
 QStringList cwColorBy::rampIds() const
@@ -123,8 +123,8 @@ void cwColorBy::setPivot(double pivot)
     }
     m_pivot = pivot;
     saveSettings();
-    emit pivotChanged();
     rebuildUniform();
+    emit pivotChanged();
 }
 
 void cwColorBy::setScrapStrength(double strength)
@@ -135,8 +135,8 @@ void cwColorBy::setScrapStrength(double strength)
     }
     m_scrapStrength = clamped;
     saveSettings();
-    emit scrapStrengthChanged();
     rebuildUniform();
+    emit scrapStrengthChanged();
 }
 
 double cwColorBy::normalized(double value) const
@@ -164,16 +164,21 @@ QColor cwColorBy::colorAt(double t) const
 
 void cwColorBy::updateRangeFromLinePlot()
 {
+    bool rangeMoved = false;
     if (m_linePlot && m_linePlot->minZValue() <= m_linePlot->maxZValue()) {
         const double rangeMin = m_linePlot->minZValue();
         const double rangeMax = m_linePlot->maxZValue();
         if (m_rangeMin != rangeMin || m_rangeMax != rangeMax) {
             m_rangeMin = rangeMin;
             m_rangeMax = rangeMax;
-            emit rangeChanged();
+            rangeMoved = true;
         }
     }
+    // normalized() reads the mode from the uniform, so rebuild before listeners re-read it
     rebuildUniform();
+    if (rangeMoved) {
+        emit rangeChanged();
+    }
 }
 
 void cwColorBy::rebuildUniform()
@@ -231,7 +236,9 @@ void cwColorBy::loadSettings()
     QSettings settings;
     const int storedSource = settings.value(sourceKey(), static_cast<int>(Source::None)).toInt();
     m_source = storedSource == static_cast<int>(Source::Depth) ? Source::Depth : Source::None;
-    m_rampId = settings.value(rampIdKey(), cwColorRamp::defaultDepthRampId()).toString();
+    const QString storedRampId = settings.value(rampIdKey(), cwColorRamp::defaultDepthRampId()).toString();
+    // An id from another build snaps to the default so the ramp picker shows a selection
+    m_rampId = cwColorRamp::preset(storedRampId).isValid() ? storedRampId : cwColorRamp::defaultDepthRampId();
     m_pivot = settings.value(pivotKey(), kDefaultPivot).toDouble();
     m_scrapStrength = clampedStrength(settings.value(scrapStrengthKey(), kDefaultScrapStrength).toDouble());
 }
