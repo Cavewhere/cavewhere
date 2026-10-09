@@ -315,15 +315,20 @@ Item {
         anchors.rightMargin: rootId.chromeMargin
         anchors.bottomMargin: Theme.flowSpacing
         z: rootId.zOverlay
-        onClicked: colorByPopupId.open()
+        popupOpen: colorByPopupId.opened
+        onClicked: colorByPopupId.opened ? colorByPopupId.close() : colorByPopupId.open()
     }
 
     ColorByPopup {
         id: colorByPopupId
-        parent: rendererId
+        // Parented to the legend so a press on the Edit/Done pill counts as
+        // inside the parent: the popup stays open through that press and the
+        // pill's tap then toggles it. A press elsewhere in the view closes it.
+        parent: colorByLegendId
+        closePolicy: QC.Popup.CloseOnEscape | QC.Popup.CloseOnPressOutsideParent
         // Right-aligned with the legend, above it, kept inside the view
-        x: Math.max(0, colorByLegendId.x + colorByLegendId.width - width)
-        y: Math.max(0, colorByLegendId.y - height - Theme.linkBarButtonSpacing)
+        x: Math.max(-colorByLegendId.x, colorByLegendId.width - width)
+        y: Math.max(-colorByLegendId.y, -height - Theme.linkBarButtonSpacing)
     }
 
     // Built only while the setting is on, so a hidden HUD costs nothing — not

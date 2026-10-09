@@ -17,7 +17,6 @@ QC.Popup {
 
     modal: false
     focus: true
-    closePolicy: QC.Popup.CloseOnEscape | QC.Popup.CloseOnPressOutside
     padding: Theme.dialogPadding
 
     contentItem: ColorByOptions {

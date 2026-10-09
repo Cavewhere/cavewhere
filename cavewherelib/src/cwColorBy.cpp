@@ -26,11 +26,11 @@ QString keywordKeyKey() { return QStringLiteral("colorBy/keywordKey"); }
 
 // How strongly the ramp tints scrap paper; ink stays dark at any strength.
 constexpr double kDefaultScrapStrength = 0.6;
-constexpr double kDefaultPivot = 0.0;
 constexpr float kOpaque = 1.0f;
 
 // Diverging normalize: the pivot sits at the middle of the bar.
 constexpr double kPivotPosition = 0.5;
+constexpr double kHalf = 0.5;
 
 // Legend ticks: {1,2,5} x 10^n steps, n in kMinTickExponent..kMaxTickExponent
 constexpr int kMaxTicks = 7;
@@ -108,25 +108,12 @@ QList<double> legendTicksFor(double rangeMin, double rangeMax, cwUnits::UnitSyst
     }
     return ticks;
 }
-
-cwColorBy::Source sourceFromInt(int stored)
-{
-    switch (stored) {
-    case static_cast<int>(cwColorBy::Source::Depth):
-        return cwColorBy::Source::Depth;
-    case static_cast<int>(cwColorBy::Source::Keyword):
-        return cwColorBy::Source::Keyword;
-    default:
-        return cwColorBy::Source::None;
-    }
-}
 }
 
 cwColorBy::cwColorBy(QObject* parent) :
     QObject(parent),
     m_keywordColorBy(new cwKeywordColorBy(this)),
     m_rampId(cwColorRamp::defaultDepthRampId()),
-    m_pivot(kDefaultPivot),
     m_scrapStrength(kDefaultScrapStrength)
 {
     // The slot count rides in the uniform, and the values feed the legend.
@@ -234,7 +221,6 @@ void cwColorBy::setSource(Source source)
         return;
     }
     m_source = source;
-    saveSettings();
     updateKeywordGrouping();
     rebuildUniform();
     emit sourceChanged();
@@ -322,16 +308,40 @@ QString cwColorBy::rampName(const QString& id) const
     return cwColorRamp::preset(id).name();
 }
 
-void cwColorBy::setPivot(double pivot)
+double cwColorBy::pivot() const
 {
-    if (m_pivot == pivot) {
+    if (m_hasPivotManual) {
+        return m_pivotManual;
+    }
+    return (m_rangeMin + m_rangeMax) * kHalf;
+}
+
+void cwColorBy::setPivotManual(double pivot)
+{
+    if (m_hasPivotManual && m_pivotManual == pivot) {
         return;
     }
-    m_pivot = pivot;
-    saveSettings();
+    applyPivotManual(true, pivot);
+}
+
+void cwColorBy::clearPivotManual()
+{
+    if (!m_hasPivotManual) {
+        return;
+    }
+    applyPivotManual(false, m_pivotManual);
+}
+
+void cwColorBy::applyPivotManual(bool hasManual, double manual)
+{
+    const double oldPivot = pivot();
+    m_hasPivotManual = hasManual;
+    m_pivotManual = manual;
     rebuildUniform();
-    updateLegendTicks();
-    emit pivotChanged();
+    emit pivotManualChanged();
+    if (oldPivot != pivot()) {
+        emit pivotChanged();
+    }
 }
 
 void cwColorBy::setUnitSystem(cwUnits::UnitSystem system)
@@ -382,9 +392,11 @@ double cwColorBy::normalized(double value) const
     case cwColorByUniform::Sequential:
         t = (value - m_rangeMin) / (m_rangeMax - m_rangeMin);
         break;
-    case cwColorByUniform::Diverging:
-        t = kPivotPosition + kPivotPosition * (value - m_pivot) / halfExtentOf(m_rangeMin, m_rangeMax, m_pivot);
+    case cwColorByUniform::Diverging: {
+        const double resolvedPivot = pivot();
+        t = kPivotPosition + kPivotPosition * (value - resolvedPivot) / halfExtentOf(m_rangeMin, m_rangeMax, resolvedPivot);
         break;
+    }
     default:
         // Off, and Categorical, whose value is a slot index rather than a position
         return 0.0;
@@ -429,12 +441,16 @@ void cwColorBy::setRange(double rangeMin, double rangeMax)
     if (m_rangeMin == rangeMin && m_rangeMax == rangeMax) {
         return;
     }
+    const double oldPivot = pivot();
     m_rangeMin = rangeMin;
     m_rangeMax = rangeMax;
     // normalized() reads the mode from the uniform, so rebuild before listeners re-read it
     rebuildUniform();
     updateLegendTicks();
     emit rangeChanged();
+    if (oldPivot != pivot()) {
+        emit pivotChanged();
+    }
 }
 
 void cwColorBy::rebuildUniform()
@@ -455,10 +471,11 @@ void cwColorBy::rebuildUniform()
         uniform.ramp[i][3] = kOpaque;
     }
 
-    const double halfExtent = halfExtentOf(m_rangeMin, m_rangeMax, m_pivot);
+    const double resolvedPivot = pivot();
+    const double halfExtent = halfExtentOf(m_rangeMin, m_rangeMax, resolvedPivot);
     uniform.range[RangeMin] = static_cast<float>(m_rangeMin);
     uniform.range[RangeMax] = static_cast<float>(m_rangeMax);
-    uniform.range[RangePivot] = static_cast<float>(m_pivot);
+    uniform.range[RangePivot] = static_cast<float>(resolvedPivot);
     uniform.range[RangeHalfExtent] = static_cast<float>(halfExtent);
 
     const bool diverging = ramp.kind() == cwColorRamp::Kind::Diverging;
@@ -502,21 +519,20 @@ void cwColorBy::push()
 void cwColorBy::loadSettings()
 {
     QSettings settings;
-    m_source = sourceFromInt(settings.value(sourceKey(), static_cast<int>(Source::None)).toInt());
+    // The source and a manual pivot are session-only; drop values older builds stored
+    settings.remove(sourceKey());
+    settings.remove(pivotKey());
     m_keywordKey = settings.value(keywordKeyKey()).toString();
     const QString storedRampId = settings.value(rampIdKey(), cwColorRamp::defaultDepthRampId()).toString();
     // An id from another build snaps to the default so the ramp picker shows a selection
     m_rampId = cwColorRamp::preset(storedRampId).isValid() ? storedRampId : cwColorRamp::defaultDepthRampId();
-    m_pivot = settings.value(pivotKey(), kDefaultPivot).toDouble();
     m_scrapStrength = clampedStrength(settings.value(scrapStrengthKey(), kDefaultScrapStrength).toDouble());
 }
 
 void cwColorBy::saveSettings() const
 {
     QSettings settings;
-    settings.setValue(sourceKey(), static_cast<int>(m_source));
     settings.setValue(rampIdKey(), m_rampId);
-    settings.setValue(pivotKey(), m_pivot);
     settings.setValue(scrapStrengthKey(), m_scrapStrength);
     settings.setValue(keywordKeyKey(), m_keywordKey);
 }

@@ -114,12 +114,29 @@ GridLayout {
             // pivot is stored in meters; the spin shows the project's depth unit
             value: Math.round(Units.convertLength(rootId.colorBy.pivot, Units.Meters, rootId.depthUnit))
 
-            onValueModified: rootId.colorBy.pivot = Units.convertLength(value, rootId.depthUnit, Units.Meters)
+            onValueModified: rootId.colorBy.pivotManual = Units.convertLength(value, rootId.depthUnit, Units.Meters)
         }
 
         QC.Label {
             objectName: "colorByPivotUnit"
             text: rootId.depthUnitName
+        }
+
+        // Back to the middle of the depth range
+        QC.Button {
+            id: pivotAutoButtonId
+            objectName: "colorByPivotAutoButton"
+
+            visible: rootId.colorBy.hasPivotManual
+            flat: true
+            text: qsTr("Auto")
+
+            onClicked: rootId.colorBy.clearPivotManual()
+
+            contentItem: QC.Label {
+                text: pivotAutoButtonId.text
+                color: Theme.textLink
+            }
         }
     }
 

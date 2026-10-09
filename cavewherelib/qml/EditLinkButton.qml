@@ -10,10 +10,13 @@ import QtQuick.Layouts
 import QtQuick.Controls as QC
 import cavewherelib
 
-// The stateless sibling of EditToggleButton: the same pencil/"Edit" pill,
-// but a tap only emits clicked() so the caller decides what editing means.
+// The caller-driven sibling of EditToggleButton: the same pencil/"Edit" pill
+// that reads check/"Done" while active, but a tap only emits clicked() so the
+// caller decides what editing means and binds active to it.
 QQ.Rectangle {
     id: rootId
+
+    property bool active: false
 
     // Matches the pencil in EditToggleButton
     readonly property int iconSize: 13
@@ -36,11 +39,14 @@ QQ.Rectangle {
         Icon {
             sourceSize: Qt.size(rootId.iconSize, rootId.iconSize)
             colorizationColor: Theme.textLink
-            source: "qrc:/twbs-icons/icons/pencil.svg"
+            source: rootId.active
+                ? "qrc:/twbs-icons/icons/check-lg.svg"
+                : "qrc:/twbs-icons/icons/pencil.svg"
         }
 
         QC.Label {
-            text: qsTr("Edit")
+            objectName: "editLinkLabel"
+            text: rootId.active ? qsTr("Done") : qsTr("Edit")
             color: Theme.textLink
             font.pixelSize: Theme.fontSizeSmall
         }

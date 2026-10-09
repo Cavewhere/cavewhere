@@ -14,6 +14,8 @@ QQ.Item {
     id: rootId
     objectName: "colorByLegend"
 
+    property bool popupOpen: false
+
     readonly property ColorBy colorBy: RootData.regionSceneManager.colorBy
     readonly property bool active: colorBy.source !== ColorBy.None
     readonly property bool showsBar: colorBy.source === ColorBy.Depth
@@ -89,12 +91,6 @@ QQ.Item {
     width: contentId.width
     height: contentId.height
 
-    // A plain tap opens the controls; right-click too, for people who try it.
-    QQ.TapHandler {
-        acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onTapped: rootId.clicked()
-    }
-
     QQ.Rectangle {
         anchors.fill: parent
         radius: Theme.floatingWidgetRadius
@@ -113,7 +109,7 @@ QQ.Item {
 
         // The title line names the source on the left and carries the Edit
         // pill on the right. Off, it is the whole widget: a compact chip that
-        // names the feature, so there is always something to click.
+        // names the feature beside the pill that opens the controls.
         RowLayout {
             id: titleLineId
             objectName: "colorByTitleLine"
@@ -158,6 +154,8 @@ QQ.Item {
 
             EditLinkButton {
                 objectName: "colorByEditButton"
+
+                active: rootId.popupOpen
 
                 onClicked: rootId.clicked()
             }

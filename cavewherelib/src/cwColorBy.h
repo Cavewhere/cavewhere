@@ -23,7 +23,9 @@ class QAbstractItemModel;
 
 // The color-by view preference: which value colors the 3D view, through which
 // ramp, around which pivot. Builds the cwColorByUniform block and pushes it to
-// the render objects. Persisted in QSettings as an app-level preference.
+// the render objects. The ramp, scrap strength and keyword key persist in
+// QSettings as app-level preferences; the source and a manual pivot last for
+// the session.
 class CAVEWHERE_LIB_EXPORT cwColorBy : public QObject
 {
     Q_OBJECT
@@ -33,7 +35,9 @@ class CAVEWHERE_LIB_EXPORT cwColorBy : public QObject
     Q_PROPERTY(Source source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(QString rampId READ rampId WRITE setRampId NOTIFY rampIdChanged)
     Q_PROPERTY(QStringList rampIds READ rampIds CONSTANT)
-    Q_PROPERTY(double pivot READ pivot WRITE setPivot NOTIFY pivotChanged)
+    Q_PROPERTY(double pivot READ pivot NOTIFY pivotChanged)
+    Q_PROPERTY(double pivotManual READ pivotManual WRITE setPivotManual NOTIFY pivotManualChanged)
+    Q_PROPERTY(bool hasPivotManual READ hasPivotManual NOTIFY pivotManualChanged)
     Q_PROPERTY(double rangeMin READ rangeMin NOTIFY rangeChanged)
     Q_PROPERTY(double rangeMax READ rangeMax NOTIFY rangeChanged)
     Q_PROPERTY(double scrapStrength READ scrapStrength WRITE setScrapStrength NOTIFY scrapStrengthChanged)
@@ -68,8 +72,13 @@ public:
     void setRampId(const QString& id);
     QStringList rampIds() const;
     Q_INVOKABLE QString rampName(const QString& id) const;
-    double pivot() const { return m_pivot; }
-    void setPivot(double pivot);
+    // The user's pivot while one is set, otherwise the middle of the range.
+    double pivot() const;
+    // The pivot the user chose for this session; meaningful while hasPivotManual.
+    double pivotManual() const { return m_pivotManual; }
+    void setPivotManual(double pivot);
+    bool hasPivotManual() const { return m_hasPivotManual; }
+    Q_INVOKABLE void clearPivotManual();
     double rangeMin() const { return m_rangeMin; }
     double rangeMax() const { return m_rangeMax; }
     double scrapStrength() const { return m_scrapStrength; }
@@ -111,6 +120,7 @@ signals:
     void sourceChanged();
     void rampIdChanged();
     void pivotChanged();
+    void pivotManualChanged();
     void rangeChanged();
     void scrapStrengthChanged();
     void keywordKeyChanged();
@@ -124,6 +134,7 @@ private:
     void setRange(double rangeMin, double rangeMax);
     void rebuildUniform();
     void updateLegendTicks();
+    void applyPivotManual(bool hasManual, double manual);
     void push();
     QAbstractItemModel* groupingModel() const;
     void updateGroupingModel();
@@ -140,7 +151,8 @@ private:
     cwKeywordColorBy* m_keywordColorBy;
     Source m_source = Source::None;
     QString m_rampId;
-    double m_pivot = 0.0;
+    double m_pivotManual = 0.0;
+    bool m_hasPivotManual = false;
     double m_rangeMin = 0.0;
     double m_rangeMax = 0.0;
     double m_scrapStrength = 0.0;

@@ -15,6 +15,7 @@
 //Qt includes
 #include <QCoreApplication>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QVector2D>
 #include <QVector3D>
 
@@ -28,8 +29,9 @@ namespace {
 constexpr float kDeepest = -500.0f;
 constexpr float kHighest = 100.0f;
 constexpr float kFlatZ = -42.0f;
-constexpr double kMovedPivot = -200.0;
-constexpr double kMovedHalfExtent = 300.0;
+constexpr double kMidpointPivot = -200.0;
+constexpr double kMovedPivot = -300.0;
+constexpr double kMovedHalfExtent = 400.0;
 constexpr double kStoredPivot = -75.5;
 constexpr double kStoredScrapStrength = 0.25;
 constexpr float kNarrowLow = -37.0f;
@@ -180,7 +182,7 @@ TEST_CASE("cwColorBy normalizes depth around the pivot", "[ColorBy]")
     fixture.setGeometryAndSettle(deepToHighGeometry());
     colorBy.setSource(cwColorBy::Source::Depth);
     colorBy.setRampId(cwColorRamp::defaultDepthRampId());
-    colorBy.setPivot(0.0);
+    colorBy.setPivotManual(0.0);
 
     CHECK(colorBy.rangeMin() == Approx(kDeepest));
     CHECK(colorBy.rangeMax() == Approx(kHighest));
@@ -211,7 +213,7 @@ TEST_CASE("cwColorBy normalizes depth around the pivot", "[ColorBy]")
     }
 
     SECTION("moving the pivot keeps it white and resizes the half extent") {
-        colorBy.setPivot(kMovedPivot);
+        colorBy.setPivotManual(kMovedPivot);
         CHECK(colorBy.normalized(kMovedPivot) == Approx(0.5));
         CHECK(colorBy.uniform().range[3] == Approx(kMovedHalfExtent));
     }
@@ -220,6 +222,60 @@ TEST_CASE("cwColorBy normalizes depth around the pivot", "[ColorBy]")
         colorBy.setSource(cwColorBy::Source::None);
         CHECK(modeOf(colorBy) == cwColorByUniform::Off);
         CHECK(linePlot.colorBy() == colorBy.uniform());
+    }
+}
+
+TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]")
+{
+    ScopedColorBySettings settings;
+
+    ColorByScene fixture;
+    cwColorBy& colorBy = fixture.colorBy;
+    colorBy.setSource(cwColorBy::Source::Depth);
+    colorBy.setRampId(cwColorRamp::defaultDepthRampId());
+    fixture.setGeometryAndSettle(deepToHighGeometry());
+
+    CHECK_FALSE(colorBy.hasPivotManual());
+    CHECK(colorBy.pivot() == Approx(kMidpointPivot));
+    CHECK(colorBy.normalized(kMidpointPivot) == Approx(0.5));
+    CHECK(colorBy.uniform().range[2] == Approx(kMidpointPivot));
+
+    SECTION("a manual pivot wins until it is cleared") {
+        QSignalSpy pivotSpy(&colorBy, &cwColorBy::pivotChanged);
+        QSignalSpy manualSpy(&colorBy, &cwColorBy::pivotManualChanged);
+
+        colorBy.setPivotManual(0.0);
+        CHECK(colorBy.hasPivotManual());
+        CHECK(colorBy.pivot() == Approx(0.0));
+        CHECK(colorBy.normalized(0.0) == Approx(0.5));
+        CHECK(pivotSpy.count() == 1);
+        CHECK(manualSpy.count() == 1);
+
+        colorBy.clearPivotManual();
+        CHECK_FALSE(colorBy.hasPivotManual());
+        CHECK(colorBy.pivot() == Approx(kMidpointPivot));
+        CHECK(colorBy.uniform().range[2] == Approx(kMidpointPivot));
+        CHECK(pivotSpy.count() == 2);
+        CHECK(manualSpy.count() == 2);
+    }
+
+    SECTION("a range change moves the automatic pivot") {
+        QSignalSpy pivotSpy(&colorBy, &cwColorBy::pivotChanged);
+        fixture.setGeometryAndSettle(threeShotGeometry());
+
+        const double midpoint = (kShotTopZ + kShotDeepZ) * 0.5;
+        CHECK(pivotSpy.count() == 1);
+        CHECK(colorBy.pivot() == Approx(midpoint));
+        CHECK(colorBy.uniform().range[2] == Approx(midpoint));
+    }
+
+    SECTION("a range change keeps a manual pivot") {
+        colorBy.setPivotManual(0.0);
+        QSignalSpy pivotSpy(&colorBy, &cwColorBy::pivotChanged);
+        fixture.setGeometryAndSettle(threeShotGeometry());
+
+        CHECK(pivotSpy.count() == 0);
+        CHECK(colorBy.pivot() == Approx(0.0));
     }
 }
 
@@ -251,18 +307,35 @@ TEST_CASE("cwColorBy persists its settings", "[ColorBy]")
         cwColorBy colorBy;
         colorBy.setSource(cwColorBy::Source::Depth);
         colorBy.setRampId(QStringLiteral("viridis"));
-        colorBy.setPivot(kStoredPivot);
+        colorBy.setPivotManual(kStoredPivot);
         colorBy.setScrapStrength(kStoredScrapStrength);
     }
 
+    // The source and the manual pivot last only for the session
     cwColorBy reloaded;
-    CHECK(reloaded.source() == cwColorBy::Source::Depth);
+    CHECK(reloaded.source() == cwColorBy::Source::None);
+    CHECK_FALSE(reloaded.hasPivotManual());
     CHECK(reloaded.rampId() == QStringLiteral("viridis"));
-    CHECK(reloaded.pivot() == Approx(kStoredPivot));
     CHECK(reloaded.scrapStrength() == Approx(kStoredScrapStrength));
 
     reloaded.setScrapStrength(2.0);
     CHECK(reloaded.scrapStrength() == Approx(1.0));
+}
+
+TEST_CASE("cwColorBy drops a source and pivot stored by an older build", "[ColorBy]")
+{
+    ScopedColorBySettings settings;
+
+    const QString sourceKey = QStringLiteral("colorBy/source");
+    const QString pivotKey = QStringLiteral("colorBy/pivot");
+    QSettings().setValue(sourceKey, static_cast<int>(cwColorBy::Source::Depth));
+    QSettings().setValue(pivotKey, kStoredPivot);
+
+    cwColorBy colorBy;
+    CHECK(colorBy.source() == cwColorBy::Source::None);
+    CHECK_FALSE(colorBy.hasPivotManual());
+    CHECK_FALSE(QSettings().contains(sourceKey));
+    CHECK_FALSE(QSettings().contains(pivotKey));
 }
 
 TEST_CASE("cwColorBy snaps an unknown stored ramp to the depth preset", "[ColorBy]")

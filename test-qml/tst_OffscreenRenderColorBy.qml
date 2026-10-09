@@ -83,6 +83,7 @@ MainWindowTest {
         function cleanup() {
             let colorBy = RootData.regionSceneManager.colorBy;
             colorBy.source = ColorBy.None;
+            colorBy.clearPivotManual();
             if (savedScrapStrength >= 0.0) {
                 colorBy.scrapStrength = savedScrapStrength;
                 savedScrapStrength = -1.0;
@@ -106,7 +107,7 @@ MainWindowTest {
             let regionViewer = loadAndFindViewer();
             let colorBy = RootData.regionSceneManager.colorBy;
             colorBy.rampId = "depth";
-            colorBy.pivot = 0;
+            colorBy.pivotManual = 0;
             colorBy.source = ColorBy.Depth;
 
             let path = OffscreenRenderTester.tempPngPath("offscreen_colorby_depth");
@@ -162,7 +163,7 @@ MainWindowTest {
             savedScrapStrength = colorBy.scrapStrength;
             colorBy.scrapStrength = fullScrapStrength;
             colorBy.rampId = "depth";
-            colorBy.pivot = 0;
+            colorBy.pivotManual = 0;
 
             colorBy.source = ColorBy.None;
             let offPath = OffscreenRenderTester.tempPngPath("offscreen_colorby_scrap_off");
