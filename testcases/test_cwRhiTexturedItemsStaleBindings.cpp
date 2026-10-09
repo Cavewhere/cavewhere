@@ -199,19 +199,21 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     auto* render = new cwRenderTexturedItems();
     render->setScene(&scene);
 
-    cwRenderMaterialState material;
+    cwRenderMaterialState material = cwRenderTexturedItems::scrapMaterial();
     material.cullMode = cwRenderMaterialState::CullMode::None;
 
     cwRenderTexturedItems::Item itemA;
     itemA.geometry = quadAt(kItemACenter);
     itemA.streamedTexture = textureA;
     itemA.material = material;
+    itemA.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
     render->addItem(itemA);
 
     cwRenderTexturedItems::Item itemB;
     itemB.geometry = quadAt(kItemBCenter);
     itemB.streamedTexture = textureB;
     itemB.material = material;
+    itemB.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
     render->addItem(itemB);
 
     const auto framesFrom = [&](int count) {

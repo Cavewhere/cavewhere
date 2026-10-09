@@ -64,6 +64,16 @@ public:
     void setSharedUniformBlock(const QByteArray& block);
     QByteArray sharedUniformBlock() const { return m_sharedUniformBlock.value(); }
 
+    // Material for items drawn with the default scrap shaders: their per-draw
+    // block (model matrix, shared color-by block, item tail) at binding 2 in
+    // the fragment stage.
+    static cwRenderMaterialState scrapMaterial();
+
+    // The per-item tail of the scrap per-draw block: vec4 item (x = color-by value).
+    // Items always carry it so the GPU buffer is never shorter than the GLSL block.
+    static QByteArray emptyItemBlock();
+    void setItemColorValue(uint32_t id, float value);
+
     //For testing
     Item item(uint32_t id) const;
     bool hasItem(uint32_t id) const;

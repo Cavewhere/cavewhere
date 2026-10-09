@@ -7,7 +7,14 @@
 
 #include <QtGlobal>
 
+#include <cstring>
+
 namespace {
+
+// Binding 1 is the scrap texture, so the per-draw block sits at 2.
+constexpr int kScrapPerDrawBinding = 2;
+// std140 vec4 item: x = color-by value, yzw reserved.
+constexpr int kItemBlockFloats = 4;
 
 Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
                                                 const QVector<cwGeometry::AttributeDesc>& layout)
@@ -446,6 +453,34 @@ void cwRenderTexturedItems::setSharedUniformBlock(const QByteArray& block)
 {
     m_sharedUniformBlock.setValue(block);
     update();
+}
+
+cwRenderMaterialState cwRenderTexturedItems::scrapMaterial()
+{
+    cwRenderMaterialState material;
+    material.perDrawUniformBinding = kScrapPerDrawBinding;
+    material.perDrawUniformStages = cwRenderMaterialState::ShaderStage::Fragment;
+    return material;
+}
+
+QByteArray cwRenderTexturedItems::emptyItemBlock()
+{
+    return QByteArray(sizeof(float) * kItemBlockFloats, '\0');
+}
+
+void cwRenderTexturedItems::setItemColorValue(uint32_t id, float value)
+{
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
+        return;
+    }
+
+    QByteArray block = entry->uniformBlock;
+    if (block.size() < static_cast<qsizetype>(sizeof(float))) {
+        block = emptyItemBlock();
+    }
+    std::memcpy(block.data(), &value, sizeof(float));
+    setUniformBlock(id, block);
 }
 
 void cwRenderTexturedItems::removeItem(uint32_t id)

@@ -3,6 +3,7 @@
 
 //Our includes
 #include "cwRHIObject.h"
+#include "cwColorByUniform.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiPipelineSet.h"
@@ -187,6 +188,10 @@ private:
     void publishStreamingStats() const;
 
     QHash<uint32_t, Item*> m_items;
+    // The color-by block every per-draw payload carries between the model
+    // matrix and the item's own block. Starts as the Off block so scraps draw
+    // untinted until cwColorBy pushes one.
+    QByteArray m_sharedUniformBlock = cwColorByUniform::toBytes(cwColorByUniform());
     cwTextureStreamer m_streamer;
     bool m_resourcesInitialized = false;
     // True while the budget is over and no streamed item has detail it can give

@@ -186,6 +186,16 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
     }
 
     renderItems->m_pendingChanges.clear();
+
+    if (renderItems->m_sharedUniformBlock.isChanged()) {
+        m_sharedUniformBlock = renderItems->m_sharedUniformBlock.value();
+        renderItems->m_sharedUniformBlock.resetChanged();
+        for (Item* item : std::as_const(m_items)) {
+            if (item->material.wantsPerDrawUniform()) {
+                item->uniformNeedsUpdate = true;
+            }
+        }
+    }
 }
 
 void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
@@ -1100,15 +1110,15 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
 
 QByteArray cwRhiTexturedItems::Item::buildPerDrawUniformPayload() const
 {
-    QByteArray payload;
+    // modelMatrix, then the shared color-by block, then the item's own block.
+    // Shaders that declare only the matrix ignore the rest.
+    const QByteArray sharedBlock = owner ? owner->m_sharedUniformBlock : QByteArray();
     const int matrixBytes = sizeof(float) * 16;
-    payload.resize(matrixBytes + uniformBlock.size());
-
-    std::memcpy(payload.data(), modelMatrix.constData(), matrixBytes);
-    if (!uniformBlock.isEmpty()) {
-        std::memcpy(payload.data() + matrixBytes, uniformBlock.constData(), uniformBlock.size());
-    }
-
+    QByteArray payload;
+    payload.reserve(matrixBytes + sharedBlock.size() + uniformBlock.size());
+    payload.append(reinterpret_cast<const char*>(modelMatrix.constData()), matrixBytes);
+    payload.append(sharedBlock);
+    payload.append(uniformBlock);
     return payload;
 }
 

@@ -23,10 +23,23 @@ MainWindowTest {
         readonly property int pollIntervalMs: 50
         readonly property int pngWriteTimeoutMs: 10000
         readonly property size outputSize: Qt.size(800, 600)
+        // Phake Cave 3000's scrap paper renders as a neutral gray. The tint
+        // recolors it toward the ramp; only the scraps near the pivot stay gray.
+        readonly property double paperGray: 0.66
+        readonly property int paperTolerance: 16
+        readonly property double fullScrapStrength: 1.0
+        property double savedScrapStrength: -1.0
+        // Loaded once for the whole file: reloading the same project fails to
+        // read its note image, and the scrap's streamed texture then never
+        // becomes resident, which stalls every offscreen render.
+        property bool projectLoaded: false
 
         function loadAndFindViewer() {
-            TestHelper.loadProjectFromFile(RootData.project,
-                TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+            if (!projectLoaded) {
+                TestHelper.loadProjectFromFile(RootData.project,
+                    TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+                projectLoaded = true;
+            }
 
             let glTerrain = ObjectFinder.findObjectByChain(rootId.mainWindow,
                 "rootId->viewPage->SplitView->renderer");
@@ -62,8 +75,18 @@ MainWindowTest {
             return OffscreenRenderTester.colorFraction(path, Qt.rgba(1.0, 0.0, 0.0, 1.0), tolerance);
         }
 
+        function paperFraction(path) {
+            return OffscreenRenderTester.colorFraction(path, Qt.rgba(paperGray, paperGray, paperGray, 1.0),
+                                                       paperTolerance);
+        }
+
         function cleanup() {
-            RootData.regionSceneManager.colorBy.source = ColorBy.None;
+            let colorBy = RootData.regionSceneManager.colorBy;
+            colorBy.source = ColorBy.None;
+            if (savedScrapStrength >= 0.0) {
+                colorBy.scrapStrength = savedScrapStrength;
+                savedScrapStrength = -1.0;
+            }
         }
 
         function test_defaultStaysRed() {
@@ -104,6 +127,39 @@ MainWindowTest {
             verify(ramp > 0.0, "white or deep navy from the depth ramp is in the render (got " + ramp + ")");
             // The PNG stays in the temp dir so the checkpoint report can show it.
             console.log("color-by depth render: " + path);
+        }
+
+        function test_scrapTintFollowsDepth() {
+            let regionViewer = loadAndFindViewer();
+            // Scraps triangulate after the solve; render only once they exist.
+            TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel);
+            let colorBy = RootData.regionSceneManager.colorBy;
+            savedScrapStrength = colorBy.scrapStrength;
+            colorBy.scrapStrength = fullScrapStrength;
+            colorBy.rampId = "depth";
+            colorBy.pivot = 0;
+
+            colorBy.source = ColorBy.None;
+            let offPath = OffscreenRenderTester.tempPngPath("offscreen_colorby_scrap_off");
+            renderUntil(regionViewer, offPath, function(p) {
+                return redFraction(p, redTolerance) > 0.0 && paperFraction(p) > 0.0;
+            });
+            let offPaper = paperFraction(offPath);
+            verify(offPaper > 0.0, "untinted scrap paper is in the render (got " + offPaper + ")");
+
+            colorBy.source = ColorBy.Depth;
+            let onPath = OffscreenRenderTester.tempPngPath("offscreen_colorby_scrap_on");
+            renderUntil(regionViewer, onPath, function(p) {
+                return redFraction(p, noRedTolerance) === 0.0 && paperFraction(p) < offPaper;
+            });
+
+            verify(!OffscreenRenderTester.imagesEqual(offPath, onPath), "depth coloring changes the render");
+            let onPaper = paperFraction(onPath);
+            verify(onPaper < offPaper,
+                   "depth tints the scrap paper (paper fraction off " + offPaper + ", on " + onPaper + ")");
+            // Both PNGs stay in the temp dir so the checkpoint report can show them.
+            console.log("color-by scrap render off: " + offPath);
+            console.log("color-by scrap render on: " + onPath);
         }
     }
 }
