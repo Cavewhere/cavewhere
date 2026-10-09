@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtQuick.Layouts
 import QtQuick.Controls as QC
 import cavewherelib
 
@@ -85,8 +86,8 @@ QQ.Item {
         return colorBy.formatDepth(value)
     }
 
-    width: showsBar ? legendId.width : (showsSwatches ? swatchLegendId.width : chipId.width)
-    height: showsBar ? legendId.height : (showsSwatches ? swatchLegendId.height : chipId.height)
+    width: contentId.width
+    height: contentId.height
 
     // A plain tap opens the controls; right-click too, for people who try it.
     QQ.TapHandler {
@@ -101,145 +102,174 @@ QQ.Item {
         opacity: rootId.backdropOpacity
     }
 
-    // Off state: a compact chip that names the feature, so there is always
-    // something to click when no legend is showing.
-    QQ.Row {
-        id: chipId
-        objectName: "colorByChip"
-
-        visible: !rootId.active
-        padding: rootId.contentPadding
-        spacing: rootId.contentPadding
-
-        Icon {
-            anchors.verticalCenter: parent.verticalCenter
-            width: Theme.iconSizeButton
-            height: Theme.iconSizeButton
-            sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
-            source: "qrc:/twbs-icons/icons/palette.svg"
-        }
-
-        QC.Label {
-            anchors.verticalCenter: parent.verticalCenter
-            text: qsTr("Color by: None")
-            font.pixelSize: Theme.fontSizeSmall
-        }
-    }
-
-    // On state: the colorbar with rounded depth ticks.
-    QQ.Row {
-        id: legendId
-        objectName: "colorByBar"
-
-        visible: rootId.showsBar
-        padding: rootId.contentPadding
-        spacing: Theme.linkBarButtonSpacing
-
-        QQ.Column {
-            QQ.Repeater {
-                objectName: "colorByStrips"
-
-                model: rootId.stripCount
-
-                QQ.Rectangle {
-                    required property int index
-
-                    width: rootId.barWidth
-                    height: rootId.barHeight / rootId.stripCount
-                    color: rootId.stripColor(index)
-                }
-            }
-        }
-
-        QQ.Item {
-            width: rootId.labelWidth
-            height: rootId.barHeight
-
-            QQ.Repeater {
-                objectName: "colorByTicks"
-
-                model: rootId.tickValues
-
-                QQ.Item {
-                    id: tickId
-
-                    required property real modelData
-
-                    readonly property real markY: rootId.tickY(modelData)
-
-                    width: parent.width
-                    height: rootId.barHeight
-
-                    QQ.Rectangle {
-                        x: 0
-                        y: tickId.markY - height / 2
-                        width: rootId.tickLength
-                        height: rootId.tickThickness
-                        color: Theme.text
-                    }
-
-                    // Centered on its mark, clamped so the end labels stay inside the bar
-                    QC.Label {
-                        x: rootId.tickLength + rootId.tickLabelGap
-                        y: Math.max(0, Math.min(tickId.height - height, tickId.markY - height / 2))
-                        text: rootId.tickText(tickId.modelData)
-                        font.pixelSize: Theme.fontSizeCaption
-                    }
-                }
-            }
-        }
-    }
-
-    // Keyword state: the key, then one swatch per value in slot order.
     QQ.Column {
-        id: swatchLegendId
-        objectName: "colorBySwatchLegend"
+        id: contentId
 
-        visible: rootId.showsSwatches
+        readonly property real bodyWidth: rootId.showsBar ? legendId.width
+                                          : (rootId.showsSwatches ? swatchLegendId.width : 0)
+
         padding: rootId.contentPadding
         spacing: rootId.contentPadding
 
-        QC.Label {
-            text: rootId.colorBy.keywordKey
-            font.pixelSize: Theme.fontSizeSmall
-            font.bold: true
+        // The title line names the source on the left and carries the Edit
+        // pill on the right. Off, it is the whole widget: a compact chip that
+        // names the feature, so there is always something to click.
+        RowLayout {
+            id: titleLineId
+            objectName: "colorByTitleLine"
+
+            width: Math.max(implicitWidth, contentId.bodyWidth)
+            spacing: rootId.contentPadding
+
+            QQ.Row {
+                id: chipId
+                objectName: "colorByChip"
+
+                visible: !rootId.active
+                spacing: rootId.contentPadding
+
+                Icon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.iconSizeButton
+                    height: Theme.iconSizeButton
+                    sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
+                    source: "qrc:/twbs-icons/icons/palette.svg"
+                }
+
+                QC.Label {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: qsTr("Color by: None")
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+            }
+
+            QC.Label {
+                objectName: "colorByTitle"
+
+                visible: rootId.active
+                text: rootId.showsBar ? qsTr("Depth") : rootId.colorBy.keywordKey
+                font.pixelSize: Theme.fontSizeSmall
+                font.bold: true
+            }
+
+            QQ.Item {
+                Layout.fillWidth: true
+            }
+
+            EditLinkButton {
+                objectName: "colorByEditButton"
+
+                onClicked: rootId.clicked()
+            }
         }
 
-        QC.ScrollView {
-            readonly property int rowCount: rootId.colorBy.legendValues.length
+        // On state: the colorbar with rounded depth ticks.
+        QQ.Row {
+            id: legendId
+            objectName: "colorByBar"
 
-            width: contentWidth + effectiveScrollBarWidth
-            height: Math.min(rowCount, rootId.maxVisibleSwatchRows)
-                    * (rootId.swatchRowHeight + rootId.swatchSpacing)
+            visible: rootId.showsBar
+            spacing: Theme.linkBarButtonSpacing
 
             QQ.Column {
-                spacing: rootId.swatchSpacing
-
                 QQ.Repeater {
-                    objectName: "colorBySwatches"
+                    objectName: "colorByStrips"
 
-                    model: rootId.colorBy.legendValues
+                    model: rootId.stripCount
 
-                    QQ.Row {
-                        id: swatchRowId
-
-                        required property string modelData
+                    QQ.Rectangle {
                         required property int index
 
-                        height: rootId.swatchRowHeight
-                        spacing: rootId.contentPadding
+                        width: rootId.barWidth
+                        height: rootId.barHeight / rootId.stripCount
+                        color: rootId.stripColor(index)
+                    }
+                }
+            }
+
+            QQ.Item {
+                width: rootId.labelWidth
+                height: rootId.barHeight
+
+                QQ.Repeater {
+                    objectName: "colorByTicks"
+
+                    model: rootId.tickValues
+
+                    QQ.Item {
+                        id: tickId
+
+                        required property real modelData
+
+                        readonly property real markY: rootId.tickY(modelData)
+
+                        width: parent.width
+                        height: rootId.barHeight
 
                         QQ.Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: rootId.swatchSize
-                            height: rootId.swatchSize
-                            color: rootId.colorBy.slotColor(rootId.colorBy.legendSlot(swatchRowId.index))
+                            x: 0
+                            y: tickId.markY - height / 2
+                            width: rootId.tickLength
+                            height: rootId.tickThickness
+                            color: Theme.text
                         }
 
+                        // Centered on its mark, clamped so the end labels stay inside the bar
                         QC.Label {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: swatchRowId.modelData
+                            x: rootId.tickLength + rootId.tickLabelGap
+                            y: Math.max(0, Math.min(tickId.height - height, tickId.markY - height / 2))
+                            text: rootId.tickText(tickId.modelData)
                             font.pixelSize: Theme.fontSizeCaption
+                        }
+                    }
+                }
+            }
+        }
+
+        // Keyword state: one swatch per value in slot order.
+        QQ.Column {
+            id: swatchLegendId
+            objectName: "colorBySwatchLegend"
+
+            visible: rootId.showsSwatches
+            spacing: rootId.contentPadding
+
+            QC.ScrollView {
+                readonly property int rowCount: rootId.colorBy.legendValues.length
+
+                width: contentWidth + effectiveScrollBarWidth
+                height: Math.min(rowCount, rootId.maxVisibleSwatchRows)
+                        * (rootId.swatchRowHeight + rootId.swatchSpacing)
+
+                QQ.Column {
+                    spacing: rootId.swatchSpacing
+
+                    QQ.Repeater {
+                        objectName: "colorBySwatches"
+
+                        model: rootId.colorBy.legendValues
+
+                        QQ.Row {
+                            id: swatchRowId
+
+                            required property string modelData
+                            required property int index
+
+                            height: rootId.swatchRowHeight
+                            spacing: rootId.contentPadding
+
+                            QQ.Rectangle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: rootId.swatchSize
+                                height: rootId.swatchSize
+                                color: rootId.colorBy.slotColor(rootId.colorBy.legendSlot(swatchRowId.index))
+                            }
+
+                            QC.Label {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: swatchRowId.modelData
+                                font.pixelSize: Theme.fontSizeCaption
+                            }
                         }
                     }
                 }

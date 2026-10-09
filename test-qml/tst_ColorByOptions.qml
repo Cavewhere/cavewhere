@@ -183,6 +183,38 @@ MainWindowTest {
             tryVerify(labelEndsInMeters, 5000, "a tick label reads in meters");
         }
 
+        function clickEditPill(legend, popup) {
+            let pill = findChild(legend, "colorByEditButton");
+            verify(pill, "found the Edit pill");
+            tryVerify(() => pill.visible && pill.width > 0, 5000, "the Edit pill is showing");
+            verify(!popup.opened);
+            mouseClick(pill);
+            tryVerify(() => popup.opened, 5000, "the Edit pill opens the popup");
+            keyClick(Qt.Key_Escape);
+            tryVerify(() => !popup.opened, 5000, "Escape closes the popup");
+        }
+
+        function test_editPillOpensPopup() {
+            let colorBy = RootData.regionSceneManager.colorBy;
+            colorBy.source = ColorBy.None;
+
+            let legend = findLegend();
+            let popup = findPopup();
+            let chip = findChild(legend, "colorByChip");
+            verify(chip, "found the chip");
+            tryVerify(() => chip.visible, 5000, "chip shows while color-by is off");
+            clickEditPill(legend, popup);
+
+            colorBy.source = ColorBy.Depth;
+            let bar = findChild(legend, "colorByBar");
+            verify(bar, "found the colorbar");
+            tryVerify(() => bar.visible, 5000, "colorbar shows once color-by is on");
+            let title = findChild(legend, "colorByTitle");
+            verify(title, "found the legend title");
+            tryCompare(title, "text", "Depth");
+            clickEditPill(legend, popup);
+        }
+
         function test_legendSitsAboveCompass() {
             let legend = findLegend();
             let renderer = legend.parent;
