@@ -34,6 +34,8 @@ private:
     struct Row {
         QObject* object = nullptr;
         QPersistentModelIndex sourceIndex;
+        // Removes the row when object dies; dropped with the row.
+        QMetaObject::Connection destroyedConnection;
     };
 
     // Sorted by QObject* for fast lookup
@@ -46,6 +48,7 @@ private:
     QVector<Row>::const_iterator lowerBound(QObject* object) const;
     void removeByObject(QObject* object);
     void removeBySourceIndex(const QModelIndex& sourceIndex);
+    void eraseRow(QVector<Row>::iterator iter);
     void disconnectSource();
 
     static QObject* toObject(const QModelIndex& sourceIndex)

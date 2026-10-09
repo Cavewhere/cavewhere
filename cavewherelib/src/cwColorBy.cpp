@@ -3,6 +3,7 @@
 #include "cwColorRamp.h"
 #include "cwKeywordColorBy.h"
 #include "cwKeywordItemModel.h"
+#include "cwKeywordModel.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderTexturedItems.h"
 
@@ -118,6 +119,11 @@ void cwColorBy::setSource(Source source)
     rebuildUniform();
     emit sourceChanged();
     emit legendChanged();
+}
+
+QStringList cwColorBy::hiddenKeywordKeys()
+{
+    return {cwKeywordModel::ObjectIdKey, cwKeywordModel::FileNameKey};
 }
 
 void cwColorBy::setKeywordKey(const QString& key)

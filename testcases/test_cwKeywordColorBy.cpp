@@ -13,6 +13,7 @@
 //Qt includes
 #include <QCoreApplication>
 #include <QSettings>
+#include <QSignalSpy>
 
 //Std includes
 #include <memory>
@@ -48,8 +49,13 @@ class Fixture
 public:
     RecordingProxy* add(const QString& caveName)
     {
+        return add(caveName.isEmpty() ? QStringList() : QStringList({caveName}));
+    }
+
+    RecordingProxy* add(const QStringList& caveNames)
+    {
         auto item = std::make_unique<cwKeywordItem>();
-        if (!caveName.isEmpty()) {
+        for (const QString& caveName : caveNames) {
             item->keywordModel()->add(cwKeyword(cwKeywordModel::CaveKey, caveName));
         }
         auto* proxy = new RecordingProxy(item.get());
@@ -86,6 +92,12 @@ private:
     QString m_previousApplicationName;
 };
 
+// cwKeywordColorBy coalesces model signals onto the next event-loop turn.
+void settle()
+{
+    QCoreApplication::processEvents();
+}
+
 } // namespace
 
 TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy]")
@@ -99,6 +111,7 @@ TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy
     cwKeywordColorBy colorBy;
     colorBy.setKeywordItemModel(&fixture.model);
     colorBy.setKey(cwKeywordModel::CaveKey);
+    settle();
 
     CHECK(firstA->colorValue() == 0.0f);
     CHECK(b->colorValue() == 1.0f);
@@ -112,6 +125,7 @@ TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy
 
     SECTION("A value that sorts in between shifts the later slots") {
         RecordingProxy* between = fixture.add(QStringLiteral("AB"));
+        settle();
         CHECK(between->colorValue() == 1.0f);
         CHECK(b->colorValue() == 2.0f);
         CHECK(firstA->colorValue() == 0.0f);
@@ -121,6 +135,7 @@ TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy
 
     SECTION("An empty key assigns nothing and clears the legend") {
         colorBy.setKey(QString());
+        settle();
         CHECK(colorBy.slotCount() == 0);
         CHECK(colorBy.values().isEmpty());
         CHECK(b->colorValue() == 1.0f);
@@ -142,6 +157,7 @@ TEST_CASE("cwColorBy keyword mode builds a categorical per-element block", "[Col
     CHECK(colorBy.legendValues().isEmpty());
 
     colorBy.setSource(cwColorBy::Source::Keyword);
+    settle();
     const cwColorByUniform uniform = colorBy.uniform();
     CHECK(uniform.params[kParamMode] == static_cast<float>(cwColorByUniform::Categorical));
     CHECK(uniform.params[kParamSlotCount] == 2.0f);
@@ -156,6 +172,54 @@ TEST_CASE("cwColorBy keyword mode builds a categorical per-element block", "[Col
     CHECK(QColor::fromRgbF(uniform.ramp[0][0], uniform.ramp[0][1], uniform.ramp[0][2]) == colorBy.slotColor(0));
 
     colorBy.setSource(cwColorBy::Source::None);
+    settle();
     CHECK(colorBy.uniform().params[kParamMode] == static_cast<float>(cwColorByUniform::Off));
     CHECK(colorBy.legendValues().isEmpty());
+}
+
+TEST_CASE("cwKeywordColorBy puts an item with two values for the key in Others", "[ColorBy]")
+{
+    Fixture fixture;
+    RecordingProxy* a = fixture.add(QStringLiteral("A"));
+    RecordingProxy* both = fixture.add(QStringList({QStringLiteral("A"), QStringLiteral("B")}));
+    RecordingProxy* b = fixture.add(QStringLiteral("B"));
+
+    cwKeywordColorBy colorBy;
+    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setKey(cwKeywordModel::CaveKey);
+    settle();
+
+    CHECK(a->colorValue() == 0.0f);
+    CHECK(b->colorValue() == 1.0f);
+    CHECK(both->colorValue() == kOtherSlot);
+    CHECK(both->lastApplied == kOtherSlot);
+
+    // No item lacks the key, yet the two-valued item is drawn as "Others".
+    CHECK(colorBy.slotCount() == 2);
+    CHECK(colorBy.values() == QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("Others")}));
+}
+
+TEST_CASE("cwKeywordColorBy assigns a burst of inserts in one pass", "[ColorBy]")
+{
+    Fixture fixture;
+    cwKeywordColorBy colorBy;
+    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setKey(cwKeywordModel::CaveKey);
+    settle();
+
+    QSignalSpy slotsSpy(&colorBy, &cwKeywordColorBy::slotsChanged);
+    RecordingProxy* c = fixture.add(QStringLiteral("C"));
+    RecordingProxy* b = fixture.add(QStringLiteral("B"));
+    RecordingProxy* a = fixture.add(QStringLiteral("A"));
+
+    // Nothing is pushed until the event loop turns, so no item passes
+    // through a transient slot.
+    CHECK(c->lastApplied == kNothingApplied);
+    CHECK(slotsSpy.isEmpty());
+
+    settle();
+    CHECK(slotsSpy.size() == 1);
+    CHECK(a->colorValue() == 0.0f);
+    CHECK(b->lastApplied == 1.0f);
+    CHECK(c->lastApplied == 2.0f);
 }

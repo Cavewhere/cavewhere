@@ -9,6 +9,13 @@
 #include "SignalSpyChecker.h"
 #include "TestHelper.h"
 
+//Qt includes
+#include <QMetaMethod>
+#include <QStandardItemModel>
+
+//Std includes
+#include <memory>
+
 TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows correctly", "[cwKeywordFilterModel]") {
 
     auto model = std::make_unique<cwKeywordItemModel>();
@@ -217,5 +224,69 @@ TEST_CASE("cwKeywordFilterModel should filter and sort cwKeywordItemModel rows c
 
             spyChecker.checkSpies();
         }
+    }
+}
+
+namespace {
+
+// Reports whether anything listens to its destroyed signal.
+class DestroyWatchedObject : public QObject
+{
+public:
+    bool hasDestroyedReceiver() const
+    {
+        return isSignalConnected(QMetaMethod::fromSignal(&QObject::destroyed));
+    }
+};
+
+} // namespace
+
+TEST_CASE("cwKeywordFilterModel drops its destroyed connection with the row", "[cwKeywordFilterModel]") {
+    // A plain source model, so the filter is the only destroyed listener.
+    QStandardItemModel source;
+    DestroyWatchedObject object;
+    auto* sourceItem = new QStandardItem();
+    sourceItem->setData(QVariant::fromValue<QObject*>(&object), cwKeywordItemModel::ObjectRole);
+    source.appendRow(sourceItem);
+    const QModelIndex sourceIndex = source.index(0, 0);
+
+    cwKeywordFilterModel filter;
+    filter.setSourceModel(&source);
+    REQUIRE(!object.hasDestroyedReceiver());
+
+    filter.insert(sourceIndex);
+    CHECK(filter.rowCount() == 1);
+    CHECK(object.hasDestroyedReceiver());
+
+    SECTION("remove") {
+        filter.remove(sourceIndex);
+        CHECK(filter.rowCount() == 0);
+        CHECK(!object.hasDestroyedReceiver());
+    }
+
+    SECTION("clear") {
+        filter.clear();
+        CHECK(filter.rowCount() == 0);
+        CHECK(!object.hasDestroyedReceiver());
+    }
+
+    SECTION("changing the source model") {
+        filter.setSourceModel(nullptr);
+        CHECK(filter.rowCount() == 0);
+        CHECK(!object.hasDestroyedReceiver());
+    }
+
+    SECTION("an object destroyed after re-inserts leaves no row") {
+        auto doomed = std::make_unique<QObject>();
+        sourceItem->setData(QVariant::fromValue<QObject*>(doomed.get()), cwKeywordItemModel::ObjectRole);
+        filter.clear();
+        for (int i = 0; i < 3; ++i) {
+            filter.insert(sourceIndex);
+            filter.remove(sourceIndex);
+        }
+        filter.insert(sourceIndex);
+        CHECK(filter.rowCount() == 1);
+        doomed.reset();
+        CHECK(filter.rowCount() == 0);
     }
 }

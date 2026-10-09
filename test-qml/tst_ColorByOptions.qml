@@ -78,5 +78,23 @@ MainWindowTest {
             mouseClick(legend, legend.width / 2, legend.height / 2, Qt.RightButton);
             tryVerify(() => popup.opened, 5000, "a right-click opens the popup");
         }
+
+        function test_sourceComboListsKeysButHidesIdKeys() {
+            let legend = findLegend();
+            let popup = findPopup();
+            mouseClick(legend);
+            tryVerify(() => popup.opened, 5000, "a click opens the popup");
+
+            let sourceCombo = findChild(popup.contentItem, "colorBySourceCombo");
+            verify(sourceCombo, "found the source combo");
+            tryVerify(() => sourceCombo.model.indexOf("Cave") >= 0, 5000, "the Cave key is listed");
+            verify(RootData.keywordFilterPipelineModel.possibleKeys.indexOf("Object id") >= 0,
+                   "the project carries the Object id key");
+            let hidden = RootData.regionSceneManager.colorBy.hiddenKeywordKeys;
+            compare(hidden, ["Object id", "File Name"]);
+            for (let key of hidden) {
+                compare(sourceCombo.model.indexOf(key), -1, key + " is hidden");
+            }
+        }
     }
 }

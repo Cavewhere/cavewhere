@@ -15,6 +15,7 @@ namespace {
 constexpr int kScrapPerDrawBinding = 2;
 // std140 vec4 item: x = color-by value, yzw reserved.
 constexpr int kItemBlockFloats = 4;
+constexpr qsizetype kColorValueBytes = sizeof(float);
 
 Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
                                                 const QVector<cwGeometry::AttributeDesc>& layout)
@@ -270,8 +271,24 @@ void cwRenderTexturedItems::updateItem(uint32_t id, const Item& item)
         updateTexture(id, item.texture);
     }
     setMaterial(id, item.material);
-    setUniformBlock(id, item.uniformBlock);
+    setUniformBlock(id, withColorValueOf(id, item.uniformBlock));
     setModelMatrix(id, item.modelMatrix);
+}
+
+QByteArray cwRenderTexturedItems::withColorValueOf(uint32_t id, const QByteArray& uniformBlock) const
+{
+    // The color-by value belongs to the item's visibility proxy, which pushes
+    // it only when it changes; a re-triangulated item must keep it.
+    const auto entry = m_frontState.constFind(id);
+    if (entry == m_frontState.cend()
+        || entry->uniformBlock.size() < kColorValueBytes
+        || uniformBlock.size() < kColorValueBytes) {
+        return uniformBlock;
+    }
+
+    QByteArray block = uniformBlock;
+    std::memcpy(block.data(), entry->uniformBlock.constData(), kColorValueBytes);
+    return block;
 }
 
 void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geometry)
@@ -476,10 +493,10 @@ void cwRenderTexturedItems::setItemColorValue(uint32_t id, float value)
     }
 
     QByteArray block = entry->uniformBlock;
-    if (block.size() < static_cast<qsizetype>(sizeof(float))) {
+    if (block.size() < kColorValueBytes) {
         block = emptyItemBlock();
     }
-    std::memcpy(block.data(), &value, sizeof(float));
+    std::memcpy(block.data(), &value, kColorValueBytes);
     setUniformBlock(id, block);
 }
 

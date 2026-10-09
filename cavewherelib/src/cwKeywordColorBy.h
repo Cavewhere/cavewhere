@@ -18,11 +18,13 @@
 
 class cwKeywordGroupByKeyModel;
 class cwKeywordItemModel;
+class QTimer;
 
 // Categorical color-by: groups the keyword items by one key and hands each
 // item's cwVisibilityProxy the slot of its value. Slot i is the i-th value in
 // sorted order across the unfiltered item model, so hiding items never
-// repaints the rest. Items lacking the key take kOtherSlot.
+// repaints the rest. Items lacking the key, or carrying more than one value
+// for it, take kOtherSlot.
 class CAVEWHERE_LIB_EXPORT cwKeywordColorBy : public QObject
 {
     Q_OBJECT
@@ -54,9 +56,12 @@ signals:
 
 private:
     void assignSlots();
-    void updateValues();
+    void updateValues(bool hasOthers);
 
     cwKeywordGroupByKeyModel* m_groups;
+    // Collapses a burst of group-model signals (a project load inserts items
+    // one by one) into one walk on the next event-loop turn.
+    QTimer* m_assignTimer;
     QStringList m_values;
     int m_slotCount = 0;
 };

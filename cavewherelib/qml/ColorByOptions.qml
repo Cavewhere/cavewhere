@@ -17,10 +17,8 @@ ColumnLayout {
     readonly property ColorBy colorBy: RootData.regionSceneManager.colorBy
     readonly property bool active: colorBy.source !== ColorBy.None
     readonly property bool depthActive: colorBy.source === ColorBy.Depth
-    // Keys whose values are unique per item or meaningless as colors
-    readonly property list<string> hiddenKeys: ["Object id", "File Name"]
     readonly property list<string> keywordKeys: RootData.keywordFilterPipelineModel.possibleKeys
-        .filter(key => !hiddenKeys.includes(key))
+        .filter(key => !colorBy.hiddenKeywordKeys.includes(key))
     // Source combo rows: None, Depth, then the keys
     readonly property int depthIndex: 1
     readonly property int firstKeyIndex: 2

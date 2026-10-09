@@ -43,6 +43,7 @@ public:
     // partner of addItem. Keeps add/update field-complete by construction: a
     // field added to Item is wired into both here and addItem, side by side,
     // instead of being easy to forget in a caller's hand-rolled setter loop.
+    // The item keeps its color-by value (see setItemColorValue).
     void updateItem(uint32_t id, const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
@@ -84,6 +85,8 @@ protected:
     void updateVisibility() override;
 
 private:
+    QByteArray withColorValueOf(uint32_t id, const QByteArray& uniformBlock) const;
+
     // What travels to the render thread. Item additionally carries
     // visible/storeGeometry/storeTexture, which are authoring state only —
     // visibility publishes through the scene visibility store, never on a

@@ -14,6 +14,9 @@
 #include <QSettings>
 #include <QVector3D>
 
+//Std includes
+#include <cstring>
+
 using namespace Catch;
 
 namespace {
@@ -186,4 +189,27 @@ TEST_CASE("cwColorBy snaps an unknown stored ramp to the depth preset", "[ColorB
     cwColorBy colorBy;
     CHECK(colorBy.rampId() == cwColorRamp::defaultDepthRampId());
     CHECK(colorBy.rampIds().contains(colorBy.rampId()));
+}
+
+TEST_CASE("cwRenderTexturedItems keeps an item's color value through updateItem", "[ColorBy]")
+{
+    constexpr float kSlot = 3.0f;
+    const auto colorValueOf = [](const cwRenderTexturedItems& items, uint32_t id) {
+        float value = 0.0f;
+        // x of the item's vec4 is the color-by value.
+        std::memcpy(&value, items.item(id).uniformBlock.constData(), sizeof(float));
+        return value;
+    };
+
+    cwRenderTexturedItems items;
+    cwRenderTexturedItems::Item item;
+    item.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
+    const uint32_t id = items.addItem(item);
+    items.setItemColorValue(id, kSlot);
+    REQUIRE(colorValueOf(items, id) == kSlot);
+
+    // A re-triangulated LiDAR note arrives with a fresh, zeroed block.
+    items.updateItem(id, item);
+    CHECK(colorValueOf(items, id) == kSlot);
+    CHECK(items.item(id).uniformBlock.size() == cwRenderTexturedItems::emptyItemBlock().size());
 }

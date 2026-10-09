@@ -34,6 +34,7 @@ class CAVEWHERE_LIB_EXPORT cwColorBy : public QObject
     Q_PROPERTY(double rangeMax READ rangeMax NOTIFY rangeChanged)
     Q_PROPERTY(double scrapStrength READ scrapStrength WRITE setScrapStrength NOTIFY scrapStrengthChanged)
     Q_PROPERTY(QString keywordKey READ keywordKey WRITE setKeywordKey NOTIFY keywordKeyChanged)
+    Q_PROPERTY(QStringList hiddenKeywordKeys READ hiddenKeywordKeys CONSTANT)
     Q_PROPERTY(QStringList legendValues READ legendValues NOTIFY legendChanged)
     Q_PROPERTY(int legendSlotCount READ legendSlotCount NOTIFY legendChanged)
 
@@ -63,6 +64,8 @@ public:
     void setScrapStrength(double strength);
     QString keywordKey() const { return m_keywordKey; }
     void setKeywordKey(const QString& key);
+    // Keys whose values are unique per item or meaningless as colors.
+    static QStringList hiddenKeywordKeys();
 
     // Keyword mode's legend: the values in slot order, then "Others" when some
     // item lacks the key. Empty in the other modes.

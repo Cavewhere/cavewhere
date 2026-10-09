@@ -12,18 +12,25 @@
 #include "cwVisibilityProxy.h"
 
 // Qt includes
-#include <QSet>
+#include <QHash>
+#include <QTimer>
 
 cwKeywordColorBy::cwKeywordColorBy(QObject* parent) :
     QObject(parent),
-    m_groups(new cwKeywordGroupByKeyModel(this))
+    m_groups(new cwKeywordGroupByKeyModel(this)),
+    m_assignTimer(new QTimer(this))
 {
+    m_assignTimer->setSingleShot(true);
+    m_assignTimer->setInterval(0);
+    connect(m_assignTimer, &QTimer::timeout, this, &cwKeywordColorBy::assignSlots);
+
     // A value appearing or disappearing shifts every later slot, so each
     // change re-walks all rows.
-    connect(m_groups, &QAbstractItemModel::rowsInserted, this, &cwKeywordColorBy::assignSlots);
-    connect(m_groups, &QAbstractItemModel::rowsRemoved, this, &cwKeywordColorBy::assignSlots);
-    connect(m_groups, &QAbstractItemModel::modelReset, this, &cwKeywordColorBy::assignSlots);
-    connect(m_groups, &QAbstractItemModel::dataChanged, this, &cwKeywordColorBy::assignSlots);
+    const auto scheduleAssign = [this]() { m_assignTimer->start(); };
+    connect(m_groups, &QAbstractItemModel::rowsInserted, this, scheduleAssign);
+    connect(m_groups, &QAbstractItemModel::rowsRemoved, this, scheduleAssign);
+    connect(m_groups, &QAbstractItemModel::modelReset, this, scheduleAssign);
+    connect(m_groups, &QAbstractItemModel::dataChanged, this, scheduleAssign);
 }
 
 void cwKeywordColorBy::setKeywordItemModel(cwKeywordItemModel* model)
@@ -43,31 +50,56 @@ void cwKeywordColorBy::setKey(const QString& key)
 
 void cwKeywordColorBy::assignSlots()
 {
+    bool hasOthers = false;
     if (!m_groups->key().isEmpty()) {
-        // An item moving between rows sits in both its value row and "Others"
-        // for one signal, so a value row's slot wins. "Others" is always last.
-        QSet<QObject*> assigned;
-        const int otherRow = m_groups->rowCount() - 1;
-        for (int row = 0; row <= otherRow; ++row) {
-            const bool isOther = row == otherRow;
-            const float slot = static_cast<float>(isOther ? kOtherSlot : row);
+        const auto rowProxies = [this](int row) {
+            QVector<cwVisibilityProxy*> proxies;
             const QVector<QObject*> objects = m_groups->index(row)
                 .data(cwKeywordGroupByKeyModel::ObjectsRole).value<QVector<QObject*>>();
             for (QObject* object : objects) {
                 // Point clouds, label groups and the like carry no proxy.
-                auto* proxy = qobject_cast<cwVisibilityProxy*>(object);
-                if (proxy == nullptr || (isOther && assigned.contains(proxy))) {
-                    continue;
+                if (auto* proxy = qobject_cast<cwVisibilityProxy*>(object)) {
+                    proxies.append(proxy);
                 }
-                assigned.insert(proxy);
-                proxy->setColorValue(slot);
+            }
+            return proxies;
+        };
+
+        // An item with two values for the key (two cavers on one trip) sits
+        // in both value rows; one color cannot show both, so it goes to
+        // "Others". "Others" is always the last row.
+        QHash<cwVisibilityProxy*, int> slotByProxy;
+        const int otherRow = m_groups->rowCount() - 1;
+        for (int row = 0; row < otherRow; ++row) {
+            for (cwVisibilityProxy* proxy : rowProxies(row)) {
+                const auto existing = slotByProxy.constFind(proxy);
+                if (existing == slotByProxy.cend()) {
+                    slotByProxy.insert(proxy, row);
+                } else {
+                    slotByProxy.insert(proxy, kOtherSlot);
+                    hasOthers = true;
+                }
             }
         }
+        // An item moving between rows sits in a value row and "Others" for
+        // one signal, so a value row's slot wins.
+        for (cwVisibilityProxy* proxy : rowProxies(otherRow)) {
+            if (!slotByProxy.contains(proxy)) {
+                slotByProxy.insert(proxy, kOtherSlot);
+            }
+        }
+
+        for (auto it = slotByProxy.cbegin(); it != slotByProxy.cend(); ++it) {
+            it.key()->setColorValue(static_cast<float>(it.value()));
+        }
+
+        hasOthers = hasOthers
+                    || m_groups->index(otherRow).data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() > 0;
     }
-    updateValues();
+    updateValues(hasOthers);
 }
 
-void cwKeywordColorBy::updateValues()
+void cwKeywordColorBy::updateValues(bool hasOthers)
 {
     QStringList values;
     int slotCount = 0;
@@ -77,9 +109,8 @@ void cwKeywordColorBy::updateValues()
             values.append(m_groups->index(row).data(cwKeywordGroupByKeyModel::ValueRole).toString());
         }
         slotCount = values.size();
-        const QModelIndex other = m_groups->index(otherRow);
-        if (other.data(cwKeywordGroupByKeyModel::ObjectCountRole).toInt() > 0) {
-            values.append(other.data(cwKeywordGroupByKeyModel::ValueRole).toString());
+        if (hasOthers) {
+            values.append(m_groups->index(otherRow).data(cwKeywordGroupByKeyModel::ValueRole).toString());
         }
     }
 
