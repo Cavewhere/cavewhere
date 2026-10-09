@@ -142,8 +142,63 @@ cwColorBy::cwColorBy(QObject* parent) :
 
 void cwColorBy::setKeywordItemModel(cwKeywordItemModel* model)
 {
+    if (m_keywordItemModel) {
+        disconnect(m_keywordItemModel, nullptr, this, nullptr);
+    }
     m_keywordItemModel = model;
-    m_keywordColorBy->setKeywordItemModel(model);
+
+    // The visible model forwards only rows entering and leaving the filter, so
+    // a keyword edit on an item that stays visible arrives through here.
+    if (m_keywordItemModel) {
+        connect(m_keywordItemModel, &QAbstractItemModel::dataChanged, this,
+                [this](const QModelIndex&, const QModelIndex&, const QList<int>& roles) {
+            if (roles.contains(cwKeywordItemModel::KeywordsRole)) {
+                scheduleRegroup();
+            }
+        });
+        const auto keywordRowsChanged = [this](const QModelIndex& parent) {
+            if (parent.isValid()) {
+                scheduleRegroup();
+            }
+        };
+        connect(m_keywordItemModel, &QAbstractItemModel::rowsInserted, this, keywordRowsChanged);
+        connect(m_keywordItemModel, &QAbstractItemModel::rowsRemoved, this, keywordRowsChanged);
+    }
+    updateGroupingModel();
+}
+
+void cwColorBy::setVisibleKeywordModel(QAbstractItemModel* model)
+{
+    m_visibleKeywordModel = model;
+    updateGroupingModel();
+}
+
+QAbstractItemModel* cwColorBy::groupingModel() const
+{
+    // Slots follow the visible items; with no filter wired, every item is visible.
+    if (m_visibleKeywordModel) {
+        return m_visibleKeywordModel;
+    }
+    return m_keywordItemModel;
+}
+
+void cwColorBy::scheduleRegroup()
+{
+    // The full item model is the grouping model when no filter is wired, and
+    // then it reports its own edits.
+    if (m_visibleKeywordModel == nullptr || m_regroupPending) {
+        return;
+    }
+    m_regroupPending = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_regroupPending = false;
+        m_keywordColorBy->regroup();
+    }, Qt::QueuedConnection);
+}
+
+void cwColorBy::updateGroupingModel()
+{
+    m_keywordColorBy->setItemModel(groupingModel());
     updateKeywordGrouping();
     rebuildUniform();
 }
@@ -234,8 +289,8 @@ int cwColorBy::legendSlot(int row) const
 
 void cwColorBy::updateKeywordGrouping()
 {
-    // Grouping walks every keyword item, so it runs only while it is shown.
-    const bool grouping = m_source == Source::Keyword && m_keywordItemModel;
+    // Grouping walks every visible keyword item, so it runs only while it is shown.
+    const bool grouping = m_source == Source::Keyword && groupingModel() != nullptr;
     m_keywordColorBy->setKey(grouping ? m_keywordKey : QString());
 }
 

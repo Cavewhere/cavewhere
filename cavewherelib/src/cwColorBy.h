@@ -19,6 +19,7 @@ class cwKeywordItemModel;
 class cwRenderLinePlot;
 class cwRenderTexturedItems;
 class cwScene;
+class QAbstractItemModel;
 
 // The color-by view preference: which value colors the 3D view, through which
 // ramp, around which pivot. Builds the cwColorByUniform block and pushes it to
@@ -55,8 +56,11 @@ public:
     // The depth range follows the z extent of this scene's visible bounds.
     void setScene(cwScene* scene);
 
-    // The keyword items Keyword mode groups by keywordKey.
+    // Every keyword item. Keyword mode groups these when no visible model is set.
     void setKeywordItemModel(cwKeywordItemModel* model);
+    // The keyword items that pass the keyword filter. Keyword mode groups these,
+    // so slots and the legend follow what is visible.
+    void setVisibleKeywordModel(QAbstractItemModel* model);
 
     Source source() const { return m_source; }
     void setSource(Source source);
@@ -121,7 +125,10 @@ private:
     void rebuildUniform();
     void updateLegendTicks();
     void push();
+    QAbstractItemModel* groupingModel() const;
+    void updateGroupingModel();
     void updateKeywordGrouping();
+    void scheduleRegroup();
     void loadSettings();
     void saveSettings() const;
 
@@ -129,6 +136,7 @@ private:
     QPointer<cwRenderTexturedItems> m_items;
     QPointer<cwScene> m_scene;
     QPointer<cwKeywordItemModel> m_keywordItemModel;
+    QPointer<QAbstractItemModel> m_visibleKeywordModel;
     cwKeywordColorBy* m_keywordColorBy;
     Source m_source = Source::None;
     QString m_rampId;
@@ -141,6 +149,7 @@ private:
     QList<double> m_legendTicks;
     cwColorByUniform m_uniform;
     bool m_rangeUpdatePending = false;
+    bool m_regroupPending = false;
 };
 
 #endif // CWCOLORBY_H

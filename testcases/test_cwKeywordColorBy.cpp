@@ -5,6 +5,7 @@
 #include "cwColorBy.h"
 #include "cwColorByUniform.h"
 #include "cwKeywordColorBy.h"
+#include "cwKeywordFilterModel.h"
 #include "cwKeywordItem.h"
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
@@ -69,6 +70,18 @@ public:
     std::vector<std::unique_ptr<cwKeywordItem>> items;
 };
 
+// The fixture model's row for the item wrapping proxy.
+QModelIndex itemIndex(const cwKeywordItemModel& model, QObject* proxy)
+{
+    for (int row = 0; row < model.rowCount(); ++row) {
+        const QModelIndex index = model.index(row, 0, QModelIndex());
+        if (index.data(cwKeywordItemModel::ObjectRole).value<QObject*>() == proxy) {
+            return index;
+        }
+    }
+    return {};
+}
+
 // Points cwColorBy at its own QSettings store, unique to this process so
 // parallel runs never collide, and clears it on both ends.
 class ScopedSettings
@@ -109,7 +122,7 @@ TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy
     RecordingProxy* noCave = fixture.add(QString());
 
     cwKeywordColorBy colorBy;
-    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setItemModel(&fixture.model);
     colorBy.setKey(cwKeywordModel::CaveKey);
     settle();
 
@@ -185,7 +198,7 @@ TEST_CASE("cwKeywordColorBy puts an item with two values for the key in Others",
     RecordingProxy* b = fixture.add(QStringLiteral("B"));
 
     cwKeywordColorBy colorBy;
-    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setItemModel(&fixture.model);
     colorBy.setKey(cwKeywordModel::CaveKey);
     settle();
 
@@ -203,7 +216,7 @@ TEST_CASE("cwKeywordColorBy assigns a burst of inserts in one pass", "[ColorBy]"
 {
     Fixture fixture;
     cwKeywordColorBy colorBy;
-    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setItemModel(&fixture.model);
     colorBy.setKey(cwKeywordModel::CaveKey);
     settle();
 
@@ -222,4 +235,113 @@ TEST_CASE("cwKeywordColorBy assigns a burst of inserts in one pass", "[ColorBy]"
     CHECK(a->colorValue() == 0.0f);
     CHECK(b->lastApplied == 1.0f);
     CHECK(c->lastApplied == 2.0f);
+}
+
+TEST_CASE("cwKeywordColorBy slots follow the visible items", "[ColorBy]")
+{
+    Fixture fixture;
+    RecordingProxy* a = fixture.add(QStringLiteral("A"));
+    RecordingProxy* b = fixture.add(QStringLiteral("B"));
+    RecordingProxy* c = fixture.add(QStringLiteral("C"));
+
+    // Stands in for the keyword filter's accepted model.
+    cwKeywordFilterModel visible;
+    visible.setSourceModel(&fixture.model);
+    visible.insert(itemIndex(fixture.model, a));
+    visible.insert(itemIndex(fixture.model, b));
+
+    cwKeywordColorBy colorBy;
+    colorBy.setItemModel(&visible);
+    colorBy.setKey(cwKeywordModel::CaveKey);
+    settle();
+
+    CHECK(a->colorValue() == 0.0f);
+    CHECK(b->colorValue() == 1.0f);
+    CHECK(c->lastApplied == kNothingApplied);
+    CHECK(colorBy.slotCount() == 2);
+    CHECK(colorBy.values() == QStringList({QStringLiteral("A"), QStringLiteral("B")}));
+
+    visible.insert(itemIndex(fixture.model, c));
+    settle();
+    CHECK(a->colorValue() == 0.0f);
+    CHECK(b->colorValue() == 1.0f);
+    CHECK(c->colorValue() == 2.0f);
+    CHECK(colorBy.slotCount() == 3);
+    CHECK(colorBy.values() == QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
+
+    visible.remove(itemIndex(fixture.model, a));
+    settle();
+    CHECK(b->colorValue() == 0.0f);
+    CHECK(c->colorValue() == 1.0f);
+    // A hidden item keeps its last slot.
+    CHECK(a->colorValue() == 0.0f);
+    CHECK(colorBy.slotCount() == 2);
+    CHECK(colorBy.values() == QStringList({QStringLiteral("B"), QStringLiteral("C")}));
+}
+
+TEST_CASE("cwColorBy keyword mode groups the visible keyword model", "[ColorBy]")
+{
+    ScopedSettings settings;
+    Fixture fixture;
+    RecordingProxy* a = fixture.add(QStringLiteral("A"));
+    RecordingProxy* b = fixture.add(QStringLiteral("B"));
+    RecordingProxy* c = fixture.add(QStringLiteral("C"));
+
+    cwKeywordFilterModel visible;
+    visible.setSourceModel(&fixture.model);
+    visible.insert(itemIndex(fixture.model, a));
+    visible.insert(itemIndex(fixture.model, b));
+
+    cwColorBy colorBy;
+    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setVisibleKeywordModel(&visible);
+    colorBy.setKeywordKey(cwKeywordModel::CaveKey);
+    colorBy.setSource(cwColorBy::Source::Keyword);
+    settle();
+
+    CHECK(colorBy.uniform().params[kParamSlotCount] == 2.0f);
+    CHECK(colorBy.legendValues() == QStringList({QStringLiteral("A"), QStringLiteral("B")}));
+
+    visible.insert(itemIndex(fixture.model, c));
+    settle();
+    CHECK(colorBy.uniform().params[kParamSlotCount] == 3.0f);
+    CHECK(colorBy.legendValues() == QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
+}
+
+TEST_CASE("cwColorBy keyword mode follows keyword edits on visible items", "[ColorBy]")
+{
+    ScopedSettings settings;
+    Fixture fixture;
+    RecordingProxy* a = fixture.add(QStringLiteral("A"));
+    RecordingProxy* b = fixture.add(QStringLiteral("B"));
+
+    // The filter model reports only rows entering and leaving, as the
+    // keyword filter's accepted model does.
+    cwKeywordFilterModel visible;
+    visible.setSourceModel(&fixture.model);
+    visible.insert(itemIndex(fixture.model, a));
+    visible.insert(itemIndex(fixture.model, b));
+
+    cwColorBy colorBy;
+    colorBy.setKeywordItemModel(&fixture.model);
+    colorBy.setVisibleKeywordModel(&visible);
+    colorBy.setKeywordKey(cwKeywordModel::CaveKey);
+    colorBy.setSource(cwColorBy::Source::Keyword);
+    settle();
+    CHECK(colorBy.legendValues() == QStringList({QStringLiteral("A"), QStringLiteral("B")}));
+
+    // Rename A to Z in place.
+    cwKeywordModel* aKeywords = fixture.items.at(0)->keywordModel();
+    aKeywords->setData(aKeywords->index(0), QStringLiteral("Z"), cwKeywordModel::ValueRole);
+    settle();
+    CHECK(colorBy.legendValues() == QStringList({QStringLiteral("B"), QStringLiteral("Z")}));
+    CHECK(b->colorValue() == 0.0f);
+    CHECK(a->colorValue() == 1.0f);
+
+    // Replace B's keyword, which removes and inserts a keyword row.
+    fixture.items.at(1)->keywordModel()->replace(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Y")));
+    settle();
+    CHECK(colorBy.legendValues() == QStringList({QStringLiteral("Y"), QStringLiteral("Z")}));
+    CHECK(b->colorValue() == 0.0f);
+    CHECK(a->colorValue() == 1.0f);
 }

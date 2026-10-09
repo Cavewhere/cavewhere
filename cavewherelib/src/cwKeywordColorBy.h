@@ -17,14 +17,15 @@
 #include <QStringList>
 
 class cwKeywordGroupByKeyModel;
-class cwKeywordItemModel;
+class QAbstractItemModel;
 class QTimer;
 
 // Categorical color-by: groups the keyword items by one key and hands each
 // item's cwVisibilityProxy the slot of its value. Slot i is the i-th value in
-// sorted order across the unfiltered item model, so hiding items never
-// repaints the rest. Items lacking the key, or carrying more than one value
-// for it, take kOtherSlot.
+// sorted order across the visible items, so a filter that leaves eight values
+// gives each its own color. Hidden items keep their last slot until they
+// reappear. Items lacking the key, or carrying more than one value for it,
+// take kOtherSlot.
 class CAVEWHERE_LIB_EXPORT cwKeywordColorBy : public QObject
 {
     Q_OBJECT
@@ -36,7 +37,12 @@ public:
 
     explicit cwKeywordColorBy(QObject* parent = nullptr);
 
-    void setKeywordItemModel(cwKeywordItemModel* model);
+    // The keyword items to group, typically the keyword filter's accepted
+    // model. Any model exposing cwKeywordItemModel's roles works.
+    void setItemModel(QAbstractItemModel* model);
+
+    // Re-reads every item's keywords, for edits the item model never reported.
+    void regroup();
 
     // An empty key assigns nothing; the proxies keep their last value, which
     // the shader ignores outside keyword mode.

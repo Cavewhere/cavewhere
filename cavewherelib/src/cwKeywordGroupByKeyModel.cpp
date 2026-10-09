@@ -367,11 +367,8 @@ bool cwKeywordGroupByKeyModel::setData(const QModelIndex &index, const QVariant 
 }
 
 void cwKeywordGroupByKeyModel::setSourceModel(QAbstractItemModel* source) {
-    //Source must be a cwKeywordItemModel or cwKeywordFilterModel
-    Q_ASSERT(dynamic_cast<cwKeywordItemModel*>(source)
-             || dynamic_cast<cwKeywordFilterModel*>(source)
-             || source == nullptr);
-
+    // Any flat model exposing cwKeywordItemModel's roles works: the item model,
+    // a cwKeywordFilterModel, or the filter pipeline's accepted model.
     if(mSourceModel != source) {
         if(mSourceModel) {
             disconnect(mSourceModel, nullptr, this, nullptr);

@@ -8,7 +8,6 @@
 // Our includes
 #include "cwKeywordColorBy.h"
 #include "cwKeywordGroupByKeyModel.h"
-#include "cwKeywordItemModel.h"
 #include "cwVisibilityProxy.h"
 
 // Qt includes
@@ -33,9 +32,17 @@ cwKeywordColorBy::cwKeywordColorBy(QObject* parent) :
     connect(m_groups, &QAbstractItemModel::dataChanged, this, scheduleAssign);
 }
 
-void cwKeywordColorBy::setKeywordItemModel(cwKeywordItemModel* model)
+void cwKeywordColorBy::setItemModel(QAbstractItemModel* model)
 {
     m_groups->setSourceModel(model);
+}
+
+void cwKeywordColorBy::regroup()
+{
+    if (m_groups->key().isEmpty()) {
+        return;
+    }
+    m_groups->updateAllRows();
 }
 
 QString cwKeywordColorBy::key() const

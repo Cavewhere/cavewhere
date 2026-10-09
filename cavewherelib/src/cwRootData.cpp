@@ -171,6 +171,7 @@ cwRootData::cwRootData(QObject *parent) :
     RegionSceneManager = new cwRegionSceneManager(this);
     RegionSceneManager->lazLayersSceneNode()->setKeywordItemModel(m_keywordItemModel);
     RegionSceneManager->colorBy()->setKeywordItemModel(m_keywordItemModel);
+    RegionSceneManager->colorBy()->setVisibleKeywordModel(m_keywordFilterPipelineModel->acceptedModel());
     RegionSceneManager->setCavingRegion(Region);
 
     // The picking BVH builds asynchronously and publishes progress as
