@@ -39,6 +39,9 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     m_lazLayers = new cwLazLayersSceneNode(this);
     m_lazLayers->setScene(scene());
 
+    m_colorBy = new cwColorBy(this);
+    m_colorBy->setTargets(m_linePlot, m_items);
+
     //Keep the grid plane sitting at the lowest cave depth (issue #534). The
     //plane's default elevation already covers the no-geometry state, so only the
     //signal wiring is needed here.

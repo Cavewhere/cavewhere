@@ -30,6 +30,7 @@ class cwRenderScraps;
 #include "cwRenderRadialGradient.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRenderGridPlane.h"
+#include "cwColorBy.h"
 
 class cwRegionSceneManager : public QObject
 {
@@ -44,6 +45,7 @@ class cwRegionSceneManager : public QObject
     Q_PROPERTY(cwRenderTexturedItems* items READ items CONSTANT)
     Q_PROPERTY(cwRenderRadialGradient* background READ background CONSTANT)
     Q_PROPERTY(cwLazLayersSceneNode* lazLayersSceneNode READ lazLayersSceneNode CONSTANT)
+    Q_PROPERTY(cwColorBy* colorBy READ colorBy CONSTANT)
 
 public:
     explicit cwRegionSceneManager(QObject *parent = 0);
@@ -70,6 +72,8 @@ public:
 
     cwRenderRadialGradient* background() const;
 
+    cwColorBy* colorBy() const { return m_colorBy; }
+
 signals:
     void sceneChanged();
     void cavingRegionChanged();
@@ -91,6 +95,8 @@ private:
     cwRenderRadialGradient* m_background;
 
     cwLazLayersSceneNode* m_lazLayers;
+
+    cwColorBy* m_colorBy;
 
     //For rendering label
     QPointer<cwCavingRegion> Region;

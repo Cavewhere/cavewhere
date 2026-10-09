@@ -442,6 +442,12 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
     }
 }
 
+void cwRenderTexturedItems::setSharedUniformBlock(const QByteArray& block)
+{
+    m_sharedUniformBlock.setValue(block);
+    update();
+}
+
 void cwRenderTexturedItems::removeItem(uint32_t id)
 {
     if (!m_frontState.contains(id)) {

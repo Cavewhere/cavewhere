@@ -5,6 +5,7 @@
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
 #include "cwStreamedTexture.h"
+#include "cwTracked.h"
 #include "CaveWhereLibExport.h"
 #include <QHash>
 #include <QByteArray>
@@ -58,6 +59,10 @@ public:
     void setUniformBlock(uint32_t id, const QByteArray& uniformBlock);
     void setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix);
     void removeItem(uint32_t id);
+
+    // The color-by block shared by every scrap draw (pushed by cwColorBy).
+    void setSharedUniformBlock(const QByteArray& block);
+    QByteArray sharedUniformBlock() const { return m_sharedUniformBlock.value(); }
 
     //For testing
     Item item(uint32_t id) const;
@@ -122,6 +127,8 @@ private:
     };
 
     QHash<uint32_t, PendingItemState> m_pendingChanges;
+
+    cwTracked<QByteArray> m_sharedUniformBlock;
 
     // Simple ID generator for items
     uint32_t m_nextId = 1;

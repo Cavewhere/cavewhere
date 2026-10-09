@@ -16,6 +16,7 @@
 #include "cwRenderObject.h"
 #include "cwTracked.h"
 #include "cwLinePlotGeometry.h"
+#include "cwColorByUniform.h"
 
 // Qt includes
 #include <QVector3D>
@@ -68,6 +69,10 @@ public:
     // clamp-to-station picking reads to snap a centerline hit onto a survey station.
     std::optional<std::pair<QVector3D, QVector3D>> segmentEndpoints(int firstIndex) const;
 
+    // The color-by block the centerline shader reads (pushed by cwColorBy).
+    void setColorBy(const cwColorByUniform& uniform);
+    cwColorByUniform colorBy() const;
+
 signals:
     // Emitted whenever setGeometry() replaces the vertex data (and therefore the
     // min/max Z extents). Lets owners reposition dependent objects, e.g. the grid
@@ -95,6 +100,7 @@ private:
     };
 
     cwTracked<Data> m_data;
+    cwTracked<cwColorByUniform> m_colorBy;
 
     // Authoring copy of the per-vertex mask — the source for setRangeVisible's
     // range-flip math and for updateVisibility's re-seed. Consumers read the
@@ -132,6 +138,11 @@ inline float cwRenderLinePlot::minZValue() const
 inline QVector<QVector3D> cwRenderLinePlot::points() const
 {
     return m_data.value().points;
+}
+
+inline cwColorByUniform cwRenderLinePlot::colorBy() const
+{
+    return m_colorBy.value();
 }
 
 inline QVector<quint8> cwRenderLinePlot::visibility() const

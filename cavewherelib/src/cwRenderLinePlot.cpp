@@ -188,4 +188,8 @@ cwRHIObject* cwRenderLinePlot::createRHIObject()
     return new cwRHILinePlot();
 }
 
-
+void cwRenderLinePlot::setColorBy(const cwColorByUniform& uniform)
+{
+    m_colorBy.setValue(uniform);
+    update();
+}
