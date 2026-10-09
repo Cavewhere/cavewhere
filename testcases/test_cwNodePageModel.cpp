@@ -146,3 +146,21 @@ TEST_CASE("cwNodePageModel names the node's kind as its chip does", "[NodePageMo
     CHECK(model.kindLabel() == QStringLiteral("Folder"));
     CHECK(kindSpy.count() == 1);
 }
+
+TEST_CASE("cwNodePageModel calls a Folder inside a cave a Section", "[NodePageModel]")
+{
+    cwCave cave;
+    cwCave* section = makeChild(&cave, QStringLiteral("Upper Level"));
+    section->setKind(cwSurveyNode::Kind::Folder);
+
+    cwNodePageModel model;
+    model.setNode(section);
+    CHECK(model.kindLabel() == QStringLiteral("Section"));
+
+    //The cave turning into a Folder puts the section where caves go
+    QSignalSpy kindSpy(&model, &cwNodePageModel::kindLabelChanged);
+    cave.setKind(cwSurveyNode::Kind::Folder);
+
+    CHECK(model.kindLabel() == QStringLiteral("Folder"));
+    CHECK(kindSpy.count() == 1);
+}

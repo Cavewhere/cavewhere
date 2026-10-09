@@ -37,8 +37,9 @@ MainWindowTest {
 
             let caveLink = null
             tryVerify(() => {
-                caveLink = ObjectFinder.findObjectByChain(mainWindow,
-                    "rootId->dataMainPage->caveDelegate0->caveLink")
+                const page = RootData.pageView.currentPageItem
+                const row = page === null ? null : findChild(page, "caveDelegate0")
+                caveLink = row === null ? null : findChild(row, "caveLink")
                 return caveLink !== null
             }, 5000, "caveLink should exist")
 

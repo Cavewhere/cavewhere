@@ -65,6 +65,7 @@ private:
     QPointer<cwSurveyNode> m_node;
     QMetaObject::Connection m_subtreeConnection;
     QMetaObject::Connection m_kindConnection;
+    QMetaObject::Connection m_sectionConnection;
     QMetaObject::Connection m_destroyedConnection;
     QList<QMetaObject::Connection> m_tripConnections;
 

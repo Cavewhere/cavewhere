@@ -242,8 +242,9 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::IsSourceRootRole).toBool() == false);
         CHECK(model.isSourceRootIndex(alphaIndex) == false);
 
-        //A Folder's stats are its children's, so its row reads muted
-        CHECK(model.data(upperIndex, cwSurveyTreeModel::KindLabelRole).toString() == QStringLiteral("Folder"));
+        //A Folder's stats are its children's, so its row reads muted. Inside a
+        //cave a Folder is a Section.
+        CHECK(model.data(upperIndex, cwSurveyTreeModel::KindLabelRole).toString() == QStringLiteral("Section"));
         CHECK(model.data(upperIndex, cwSurveyTreeModel::MutedRole).toBool());
         CHECK(model.data(upperIndex, cwSurveyTreeModel::TripCountRole).toInt() == 2);
 
@@ -278,6 +279,26 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(cwSurveyTreeModel::kindLabel(cwSurveyNode::Kind::WallsBook) == QStringLiteral("Walls book"));
         CHECK(cwSurveyTreeModel::kindLabel(cwSurveyNode::Kind::SurvexFile) == QStringLiteral("Survex file"));
         CHECK(cwSurveyTreeModel::kindLabel(cwSurveyNode::Kind::SurvexBlock) == QStringLiteral("Survex block"));
+    }
+
+    SECTION("a Folder's label follows its ancestry") {
+        QSignalSpy dataChanged(&model, &QAbstractItemModel::dataChanged);
+
+        //Alpha turning into a Folder puts Upper Level where caves go
+        alpha->setKind(cwSurveyNode::Kind::Folder);
+        CHECK(sawChange(dataChanged, upperIndex, cwSurveyTreeModel::Kind, cwSurveyTreeModel::KindLabelRole));
+        CHECK(model.data(upperIndex, cwSurveyTreeModel::KindLabelRole).toString() == QStringLiteral("Folder"));
+
+        alpha->setKind(cwSurveyNode::Kind::Cave);
+        CHECK(model.data(upperIndex, cwSurveyTreeModel::KindLabelRole).toString() == QStringLiteral("Section"));
+
+        //A Section moved to the top level reads Folder
+        region.moveNode(upperLevel, nullptr, 0);
+        const QModelIndex movedIndex = model.indexOf(upperLevel);
+        REQUIRE(movedIndex.isValid());
+        CHECK(movedIndex.parent().isValid() == false);
+        CHECK(model.data(movedIndex, cwSurveyTreeModel::KindLabelRole).toString() == QStringLiteral("Folder"));
+        CHECK(cwSurveyTreeModel::kindLabel(upperLevel) == QStringLiteral("Folder"));
     }
 
     SECTION("a node inserted with a subtree announces one pair of rows") {

@@ -291,7 +291,7 @@ ColumnLayout {
         const subject = contents.length === 0
                       ? qsTr("<b>%1</b>").arg(name)
                       : qsTr("<b>%1</b> and its %2").arg(name).arg(contents.join(qsTr(" and ")));
-        return qsTr("Delete %1? Git history is the way back.").arg(subject);
+        return qsTr("Delete %1?").arg(subject);
     }
 
     //Shows a node or trip one of the Add verbs just made. A trip directly

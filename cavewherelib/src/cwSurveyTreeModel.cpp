@@ -107,6 +107,14 @@ QString cwSurveyTreeModel::kindLabel(cwSurveyNode::Kind kind)
     return QString();
 }
 
+QString cwSurveyTreeModel::kindLabel(const cwSurveyNode* node)
+{
+    if(node->isSection()) {
+        return QStringLiteral("Section");
+    }
+    return kindLabel(node->kind());
+}
+
 QModelIndex cwSurveyTreeModel::index(int row, int column, const QModelIndex& parent) const
 {
     if(row < 0 || column < 0 || column >= kColumnCount) { return QModelIndex(); }
@@ -185,7 +193,7 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
     case KindRole:
         return node != nullptr ? QVariant::fromValue(node->kind()) : QVariant();
     case KindLabelRole:
-        return node != nullptr ? kindLabel(node->kind()) : QString();
+        return node != nullptr ? kindLabel(node) : QString();
     case IsSourcedRole:
         return node != nullptr ? node->isSourced() : false;
     case IsSourceRootRole:
@@ -574,6 +582,9 @@ void cwSurveyTreeModel::connectNode(cwSurveyNode* node)
         //A Folder draws its aggregated stats muted, so MutedRole reaches the
         //Trips, Stations, Length and Depth cells as well as the Kind chip.
         emitRowDataChanged(indexOfNode(node), Kind, Depth, kKindRoles);
+    });
+    connect(node, &cwSurveyNode::isSectionChanged, this, [this, node]() {
+        emitRowDataChanged(indexOfNode(node), Kind, Kind, {KindLabelRole});
     });
     connect(node, &cwSurveyNode::sourceChanged, this, [this, node]() {
         //The Kind chip reads the source as well as the Name cell's badge.

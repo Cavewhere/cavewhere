@@ -100,6 +100,11 @@ public:
     //! The text a Kind is drawn as. The only place a Kind becomes words.
     static QString kindLabel(cwSurveyNode::Kind kind);
 
+    //! The text \a node's kind is drawn as: "Section" for a Folder that
+    //! isSection(), the kindLabel() of its kind otherwise.
+    //! \a node is never null.
+    static QString kindLabel(const cwSurveyNode* node);
+
     QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex& index) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;

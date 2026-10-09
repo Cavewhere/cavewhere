@@ -208,8 +208,8 @@ MainWindowTest {
             compare(findChild(findChild(page, "addTrip"), "addButton").text, "Add Trip")
             const menu = openAddCaret(page)
             compare(visibleEntryNames(menu),
-                    ["addTripMenuItem", "addSectionMenuItem", "addExternalTripMenuItem"],
-                    "inside a cave the page adds trips and sections")
+                    ["addSectionMenuItem", "addExternalTripMenuItem"],
+                    "inside a cave the button adds the trip and the menu the rest")
 
             mouseClick(findChild(menu, "addSectionMenuItem"))
             tryCompare(cave, "childNodeCount", 1, 5000)
@@ -232,8 +232,8 @@ MainWindowTest {
             compare(addButton.text, "Add Cave")
 
             const menu = openAddCaret(page)
-            compare(visibleEntryNames(menu), ["addCaveMenuItem", "addFolderMenuItem"],
-                    "a Folder outside every cave takes caves and folders")
+            compare(visibleEntryNames(menu), ["addFolderMenuItem"],
+                    "a Folder outside every cave takes caves from the button and folders from the menu")
             menu.close()
             tryVerify(() => !menu.opened, 5000)
 
@@ -293,6 +293,39 @@ MainWindowTest {
             tryCompare(chip, "text", "Folder", 5000)
             verify(String(icon.source).indexOf("folder") >= 0, "a Folder draws the folder icon")
             verify(findChild(page, "fixStationsLink").visible, "relabeling keeps the fix-station row")
+            compare(findChild(kindMenu, "kindPickerFolder").text, "✓ Folder",
+                    "where caves go the Folder entry reads Folder")
+        }
+
+        // Inside a cave a Folder is a Section, and the picker's entry says so.
+        function test_thePickerCallsAFolderInsideACaveASection() {
+            const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
+            const section = addNode(cave, SurveyNodeKind.Folder, "Upper Level")
+            const page = gotoNodePage("Source/Data/Node=Side Cave/Node=Upper Level", section)
+
+            const chip = findChild(page, "nodeKindChip")
+            mouseClick(chip)
+            const kindMenu = findChild(chip, "kindPickerMenu")
+            tryVerify(() => kindMenu.opened, 5000, "the chip opens the picker")
+            compare(findChild(kindMenu, "kindPickerFolder").text, "✓ Section")
+            compare(findChild(kindMenu, "kindPickerCave").text, " Cave")
+            kindMenu.close()
+            tryVerify(() => !kindMenu.opened, 5000)
+        }
+
+        // The chip's own label agrees with its picker: a Folder inside a cave
+        // reads Section, and Folder again once it moves to the top level.
+        function test_theChipCallsAFolderInsideACaveASection() {
+            const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
+            const section = addNode(cave, SurveyNodeKind.Folder, "Upper Level")
+            const page = gotoNodePage("Source/Data/Node=Side Cave/Node=Upper Level", section)
+
+            const chip = findChild(page, "nodeKindChip")
+            tryCompare(chip, "text", "Section", 5000)
+
+            RootData.region.moveNode(section, null, 0)
+            tryVerify(() => section.parentNode !== cave, 5000, "the Section leaves the cave")
+            tryCompare(chip, "text", "Folder", 5000)
         }
 
         // The header has no Rename button: the name edits inline on a

@@ -119,7 +119,9 @@ MainWindowTest {
             // frame after the page becomes current, so wait for the delegate.
             let caveButton = null
             tryVerify(() => {
-                caveButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->dataMainPage->caveDelegate0->caveLink")
+                const page = RootData.pageView.currentPageItem
+                const row = page === null ? null : findChild(page, "caveDelegate0")
+                caveButton = row === null ? null : findChild(row, "caveLink")
                 return caveButton !== null
             }, 5000, "caveLink should exist on dataMainPage")
             // The proxied cave list can be found before it is positioned, so let
@@ -133,7 +135,7 @@ MainWindowTest {
             // clicking; otherwise the click lands on a stale (0,0) position over the
             // trip table and navigates to the trip page instead of the lead page.
             waitForRendering(rootId)
-            let leadsButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
+            let leadsButton = findChild(RootData.pageView.currentPageItem, "leadsLink")
             mouseClick(leadsButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "leadPage" });
@@ -159,7 +161,7 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
                       5000, "should land on cavePage");
 
-            let leadsLink = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->leadsLink")
+            let leadsLink = findChild(RootData.pageView.currentPageItem, "leadsLink")
             tryVerify(() => leadsLink !== null && leadsLink.visible,
                       5000, "leadsLink should be present on cavePage");
             waitForRendering(mainWindow)

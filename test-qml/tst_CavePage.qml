@@ -458,7 +458,7 @@ MainWindowTest {
                           askBox = findChild(cavePage, "removeChallange")
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
-            compare(askBox.message, "Delete <b>C-Trip</b>? Git history is the way back.")
+            compare(askBox.message, "Delete <b>C-Trip</b>?")
 
             mouseClick(findChild(askBox, "removeButton"))
 
@@ -572,7 +572,7 @@ MainWindowTest {
                           askBox = findChild(cavePage, "removeChallange")
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
-            compare(askBox.message, "Delete <b>A-Trip</b>? Git history is the way back.")
+            compare(askBox.message, "Delete <b>A-Trip</b>?")
 
             mouseClick(findChild(askBox, "removeButton"))
 

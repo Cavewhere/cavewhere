@@ -24,6 +24,7 @@ void cwNodePageModel::setNode(cwSurveyNode* node)
 
     disconnect(m_subtreeConnection);
     disconnect(m_kindConnection);
+    disconnect(m_sectionConnection);
     disconnect(m_destroyedConnection);
     m_node = node;
 
@@ -32,6 +33,8 @@ void cwNodePageModel::setNode(cwSurveyNode* node)
                                       this, &cwNodePageModel::rewireTrips);
         m_kindConnection = connect(m_node, &cwSurveyNode::kindChanged,
                                    this, &cwNodePageModel::kindLabelChanged);
+        m_sectionConnection = connect(m_node, &cwSurveyNode::isSectionChanged,
+                                      this, &cwNodePageModel::kindLabelChanged);
         //The QPointer is already null here, so the rewire reads an empty node.
         m_destroyedConnection = connect(m_node, &QObject::destroyed, this, [this]() {
             rewireTrips();
@@ -47,7 +50,7 @@ void cwNodePageModel::setNode(cwSurveyNode* node)
 
 QString cwNodePageModel::kindLabel() const
 {
-    return m_node != nullptr ? cwSurveyTreeModel::kindLabel(m_node->kind()) : QString();
+    return m_node != nullptr ? cwSurveyTreeModel::kindLabel(m_node.data()) : QString();
 }
 
 void cwNodePageModel::rewireTrips()

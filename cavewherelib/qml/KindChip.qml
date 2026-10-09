@@ -14,8 +14,8 @@ import cavewherelib
 // behind a lock, because a copied survey file owns its shape.
 //
 // Handed a native node, the chip is also the picker between the two native
-// labels, Cave and Folder. Picking one changes the label and the icon; the
-// node's trips, stats and fix stations stay as they were.
+// labels, Cave and Folder (Section inside a cave). Picking one changes the
+// label and the icon; the node's trips, stats and fix stations stay as they were.
 QQ.Rectangle {
     id: chipId
 
@@ -105,7 +105,8 @@ QQ.Rectangle {
 
         QC.MenuItem {
             objectName: "kindPickerFolder"
-            text: chipId.pickerText(qsTr("Folder"), SurveyNodeKind.Folder)
+            text: chipId.pickerText(chipId.parentTakesCaves ? qsTr("Folder") : qsTr("Section"),
+                                    SurveyNodeKind.Folder)
             icon.source: chipId.parentTakesCaves ? Theme.kindIconFolder : Theme.kindIconSection
 
             onTriggered: chipId.node.kind = SurveyNodeKind.Folder

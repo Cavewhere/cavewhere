@@ -529,6 +529,8 @@ StandardPage {
         objectName: "addTripMenu"
 
         node: nodePageArea.currentNode
+        // The button itself runs the primary verb, so the menu holds the rest.
+        hiddenVerbs: [nodePageArea.takesCaves ? AddVerbsMenu.AddCave : AddVerbsMenu.AddTrip]
 
         onAdded: (object, verb) => nodePageArea.showAdded(object, verb)
 

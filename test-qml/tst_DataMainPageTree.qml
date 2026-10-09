@@ -436,7 +436,7 @@ MainWindowTest {
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
             compare(askBox.message,
-                    "Delete <b>Alpha Cave</b> and its 2 trips? Git history is the way back.")
+                    "Delete <b>Alpha Cave</b> and its 2 trips?")
 
             const removeButton = findChild(askBox, "removeButton")
             verify(removeButton !== null, "the prompt must offer Remove")
@@ -482,7 +482,7 @@ MainWindowTest {
                           askBox = findChild(page, "removeChallange")
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
-            compare(askBox.message, "Delete <b>Trip A</b>? Git history is the way back.")
+            compare(askBox.message, "Delete <b>Trip A</b>?")
 
             mouseClick(findChild(askBox, "removeButton"))
 
@@ -764,7 +764,7 @@ MainWindowTest {
             tryCompare(tree, "rows", 3, 5000)
             tryCompare(tree, "currentRow", 1, 5000)
             const sectionChip = findChild(findChild(page, "caveKind1"), "kindChip")
-            compare(sectionChip.text, "Folder", "the chip says Folder everywhere")
+            compare(sectionChip.text, "Section", "a Folder inside a cave reads Section")
             const sectionIcon = findChild(findChild(page, "caveDelegate1"), "kindIcon")
             verify(sectionIcon !== null && sectionIcon.visible, "a Section row carries its kind icon")
             verify(String(sectionIcon.source).indexOf("signpost-split.svg") >= 0,
@@ -780,6 +780,40 @@ MainWindowTest {
             tryCompare(tree, "currentRow", 2, 5000)
             verify(tree.surveyTree.currentObject === section.trip(0),
                    "the new trip's row is current")
+        }
+
+        // A Folder's chip follows where the Folder sits: Section inside a
+        // cave, Folder at the top level, relabeled as it moves between them.
+        function test_folderChipReadsSectionInsideACave() {
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "Side Cave")
+            const section = RootData.region.addNode(cave, SurveyNodeKind.Folder, "Upper level")
+            const folder = RootData.region.addNode(null, SurveyNodeKind.Folder, "Kentucky")
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
+            tree.surveyTree.expandAll()
+            tryCompare(tree, "rows", 3, 5000)
+
+            // The kind chip text of the row that draws object.
+            const chipTextFor = (object) => {
+                for (let row = 0; row < tree.rows; row++) {
+                    const nameCell = findChild(page, "caveDelegate" + row)
+                    if (nameCell !== null && nameCell.object === object) {
+                        const kindCell = findChild(page, "caveKind" + row)
+                        const chip = kindCell === null ? null : findChild(kindCell, "kindChip")
+                        return chip === null ? "" : chip.text
+                    }
+                }
+                return ""
+            }
+            tryVerify(() => chipTextFor(folder) === "Folder", 5000, "a top-level Folder's chip reads Folder")
+            tryVerify(() => chipTextFor(section) === "Section", 5000, "a Folder inside a cave reads Section")
+
+            RootData.region.moveNode(section, null, 0)
+            tryVerify(() => section.parentNode !== cave, 5000, "the Section leaves the cave")
+            tryVerify(() => chipTextFor(section) === "Folder", 5000,
+                      "a Section moved to the top level reads Folder")
         }
 
         // The chip relabels a native node: label and icon change, the node's
@@ -864,7 +898,7 @@ MainWindowTest {
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
             compare(askBox.message,
-                    "Delete <b>Kentucky</b> and its 2 nodes and 2 trips? Git history is the way back.")
+                    "Delete <b>Kentucky</b> and its 2 nodes and 2 trips?")
 
             mouseClick(findChild(askBox, "removeButton"))
             tryCompare(tree, "rows", 0, 5000)
