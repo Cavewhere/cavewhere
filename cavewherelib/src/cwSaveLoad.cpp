@@ -55,6 +55,7 @@
 
 //Google protobuffer
 #include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/message_differencer.h>
 #include "google/protobuf/message.h"
 #include "cavewhere.pb.h"
 #include "qt.pb.h"
@@ -3084,6 +3085,102 @@ QFuture<ResultString> cwSaveLoad::saveAllFromV6(
             .future();
 }
 
+namespace {
+
+//! The single descriptor ending in \a suffix directly inside \a dir, or an empty string.
+QString ownDescriptor(const QDir& dir, const QString& suffix)
+{
+    const QStringList descriptors = dir.entryList({QStringLiteral("*.") + suffix}, QDir::Files);
+    if (descriptors.size() == 1) {
+        return QDir::cleanPath(dir.absoluteFilePath(descriptors.first()));
+    }
+    return QString();
+}
+
+//! The descriptor at \a path with its name cleared, so the two sides of a rename
+//! compare equal when the name is all that differs.
+template<typename ProtoType>
+std::optional<ProtoType> unnamedDescriptor(const QString& path)
+{
+    const auto loaded = loadMessage<ProtoType>(path);
+    if (loaded.hasError()) {
+        return std::nullopt;
+    }
+    ProtoType proto = loaded.value();
+    proto.clear_name();
+    proto.clear_legacy_name();
+    return proto;
+}
+
+bool sameFileContent(const QString& path, const QString& otherPath)
+{
+    QFile file(path);
+    QFile otherFile(otherPath);
+    if (file.open(QIODevice::ReadOnly) && otherFile.open(QIODevice::ReadOnly)) {
+        return file.size() == otherFile.size() && file.readAll() == otherFile.readAll();
+    }
+    return false;
+}
+
+//! True when every file under \a orphanDir besides \a orphanDescriptor has an
+//! identical copy at the same relative path under \a winnerDir.
+bool winnerHoldsEveryFile(const QDir& orphanDir, const QString& orphanDescriptor, const QDir& winnerDir)
+{
+    QDirIterator it(orphanDir.absolutePath(),
+                    QDir::Files | QDir::Hidden | QDir::NoDotAndDotDot,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString path = QDir::cleanPath(it.next());
+        if (path != orphanDescriptor
+            && !sameFileContent(path, winnerDir.absoluteFilePath(orphanDir.relativeFilePath(path)))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template<typename ProtoType>
+bool siblingCoversOrphan(const QDir& orphanDir, const QString& suffix)
+{
+    const QString orphanDescriptor = ownDescriptor(orphanDir, suffix);
+    if (orphanDescriptor.isEmpty()) {
+        return false;
+    }
+    const auto orphanProto = unnamedDescriptor<ProtoType>(orphanDescriptor);
+    if (!orphanProto.has_value() || orphanProto->id().empty()) {
+        return false;
+    }
+
+    const QString orphanPath = QDir::cleanPath(orphanDir.absolutePath());
+    const QFileInfoList siblings = QFileInfo(orphanPath).dir().entryInfoList(QDir::Dirs
+                                                                            | QDir::NoDotAndDotDot);
+    return std::any_of(siblings.cbegin(), siblings.cend(), [&](const QFileInfo& sibling) {
+        if (sibling.isSymLink() || QDir::cleanPath(sibling.absoluteFilePath()) == orphanPath) {
+            return false;
+        }
+        const QDir winnerDir(sibling.absoluteFilePath());
+        const QString winnerDescriptor = ownDescriptor(winnerDir, suffix);
+        if (winnerDescriptor.isEmpty()) {
+            return false;
+        }
+        const auto winnerProto = unnamedDescriptor<ProtoType>(winnerDescriptor);
+        return winnerProto.has_value()
+               && google::protobuf::util::MessageDifferencer::Equals(*orphanProto, *winnerProto)
+               && winnerHoldsEveryFile(orphanDir, orphanDescriptor, winnerDir);
+    });
+}
+
+//! True when a sibling of \a orphanDir holds the same node or trip under its other
+//! name, with every file of the orphan's subtree identical, so removing the orphan
+//! leaves out nothing a load of the sibling misses.
+bool siblingCoversOrphan(const QDir& orphanDir)
+{
+    return siblingCoversOrphan<CavewhereProto::Cave>(orphanDir, QStringLiteral("cwcave"))
+           || siblingCoversOrphan<CavewhereProto::Trip>(orphanDir, QStringLiteral("cwtrip"));
+}
+
+} // namespace
+
 template<typename ProtoType>
 static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const QString& filename, int& maxFileVersion)
 {
@@ -3110,312 +3207,324 @@ static std::optional<cwError> checkEntityVersion(const ProtoType& proto, const Q
 QFuture<Monad::Result<cwSaveLoad::ProjectLoadData>> cwSaveLoad::loadAll(const QString &filename)
 {
     return cwConcurrent::run([filename]() {
-        auto projectResult = loadProject(filename);
+        return loadAllSkipping(filename, {});
+    });
+}
 
-        return projectResult.then([filename](Result<ProjectLoadData> result) {
-            ProjectLoadData loadData = result.value();
+Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadAllSkipping(const QString& filename,
+                                                                     const QStringList& skippedDirectories)
+{
+    auto projectResult = loadProject(filename);
 
-            QDir projectRootDir = projectRootDirForFile(filename);
-            QDir regionDir = QDir(projectRootDir.absoluteFilePath(loadData.metadata.dataRoot));
+    return projectResult.then([filename, &skippedDirectories](Result<ProjectLoadData> result) {
+        ProjectLoadData loadData = result.value();
 
-            auto filePathLess = [](const QFileInfo& a, const QFileInfo& b) {
-                return a.absoluteFilePath() < b.absoluteFilePath();
-            };
+        QDir projectRootDir = projectRootDirForFile(filename);
+        QDir regionDir = QDir(projectRootDir.absoluteFilePath(loadData.metadata.dataRoot));
 
-            // Every descriptor of one suffix under the data root, pruning the
-            // content directories the layout puts a node's or a trip's payload
-            // in. The prune is positional (childScanRole), so a node or trip the
-            // user happened to name "trips" or "notes" is still walked into.
-            // Symlinked directories stay out of the walk: a link to another
-            // project's data root would hand this project that project's nodes
-            // and trips, and a link that points at an ancestor would loop.
-            // Symlinked descriptor files are still read, so a survey tracked as
-            // a link keeps loading.
-            const auto scanForFiles = [](const QDir& rootDir,
-                                         const QString& suffix,
-                                         bool scanTrips)
-            {
-                QFileInfoList found;
-                const auto walk = [&](const QDir& dir, ScanRole role, auto&& self) -> void {
-                    const QFileInfoList entries = dir.entryInfoList(QDir::Dirs
-                                                                   | QDir::Files
-                                                                   | QDir::NoDotAndDotDot);
-                    for (const QFileInfo& entry : entries) {
-                        if (entry.isDir()) {
-                            if (entry.isSymLink()) {
-                                continue;
-                            }
-                            const auto childRole = childScanRole(role, entry.fileName(), scanTrips);
-                            if (childRole.has_value()) {
-                                self(QDir(entry.absoluteFilePath()), *childRole, self);
-                            }
+        QSet<QString> skippedDirPaths;
+        for (const QString& skippedDirectory : skippedDirectories) {
+            skippedDirPaths.insert(QDir::cleanPath(projectRootDir.absoluteFilePath(skippedDirectory)));
+        }
+
+        auto filePathLess = [](const QFileInfo& a, const QFileInfo& b) {
+            return a.absoluteFilePath() < b.absoluteFilePath();
+        };
+
+        // Every descriptor of one suffix under the data root, pruning the
+        // content directories the layout puts a node's or a trip's payload
+        // in. The prune is positional (childScanRole), so a node or trip the
+        // user happened to name "trips" or "notes" is still walked into.
+        // Symlinked directories stay out of the walk: a link to another
+        // project's data root would hand this project that project's nodes
+        // and trips, and a link that points at an ancestor would loop.
+        // Symlinked descriptor files are still read, so a survey tracked as
+        // a link keeps loading.
+        const auto scanForFiles = [&skippedDirPaths](const QDir& rootDir,
+                                     const QString& suffix,
+                                     bool scanTrips)
+        {
+            QFileInfoList found;
+            const auto walk = [&](const QDir& dir, ScanRole role, auto&& self) -> void {
+                const QFileInfoList entries = dir.entryInfoList(QDir::Dirs
+                                                               | QDir::Files
+                                                               | QDir::NoDotAndDotDot);
+                for (const QFileInfo& entry : entries) {
+                    if (entry.isDir()) {
+                        if (entry.isSymLink()
+                            || skippedDirPaths.contains(QDir::cleanPath(entry.absoluteFilePath()))) {
                             continue;
                         }
-                        if (entry.suffix().compare(suffix, Qt::CaseInsensitive) == 0) {
-                            found.append(entry);
+                        const auto childRole = childScanRole(role, entry.fileName(), scanTrips);
+                        if (childRole.has_value()) {
+                            self(QDir(entry.absoluteFilePath()), *childRole, self);
                         }
+                        continue;
                     }
-                };
-                walk(rootDir, ScanRole::DataRoot, walk);
-                return found;
-            };
-
-            const auto parentDirPathOf = [](const QString& path) {
-                return QDir::cleanPath(QFileInfo(path).absoluteDir().absolutePath());
-            };
-
-            // A node and its children are separate files, so the tree is grown
-            // out of these entries and folded into cwCaveData::nodes at the end:
-            // a cwCaveData* into a QList would dangle the moment the list grew.
-            struct NodeEntry {
-                cwCaveData data;
-                QList<NodeEntry*> children;
-            };
-
-            std::vector<std::unique_ptr<NodeEntry>> nodeEntries;
-            QHash<QString, NodeEntry*> nodeByDir;
-            QList<NodeEntry*> rootEntries;
-
-            const QString regionDirPath = QDir::cleanPath(regionDir.absolutePath());
-
-            QFileInfoList caveFiles = scanForFiles(regionDir, QStringLiteral("cwcave"), false);
-
-            // Sorted by directory path with a trailing separator, so a parent —
-            // whose directory, with that separator, is a prefix of every child's
-            // — is always placed before its children, whatever the descriptors
-            // themselves are named.
-            // Two descriptors in one directory fall back to the file path, so
-            // which of them is kept and which is reported stays the same on
-            // every open.
-            const auto caveDirPathLess = [](const QFileInfo& a, const QFileInfo& b) {
-                const auto dirKey = [](const QFileInfo& info) {
-                    return QDir::cleanPath(info.absoluteDir().absolutePath()) + QLatin1Char('/');
-                };
-                const QString keyA = dirKey(a);
-                const QString keyB = dirKey(b);
-                if (keyA != keyB) {
-                    return keyA < keyB;
+                    if (entry.suffix().compare(suffix, Qt::CaseInsensitive) == 0) {
+                        found.append(entry);
+                    }
                 }
-                return a.absoluteFilePath() < b.absoluteFilePath();
             };
-            std::sort(caveFiles.begin(), caveFiles.end(), caveDirPathLess);
+            walk(rootDir, ScanRole::DataRoot, walk);
+            return found;
+        };
 
-            for (const QFileInfo &caveFileInfo : caveFiles) {
-                const QString cavePath = caveFileInfo.absoluteFilePath();
-                const QString caveDirPath = QDir::cleanPath(caveFileInfo.absoluteDir().absolutePath());
+        const auto parentDirPathOf = [](const QString& path) {
+            return QDir::cleanPath(QFileInfo(path).absoluteDir().absolutePath());
+        };
 
-                if (nodeByDir.contains(caveDirPath)) {
+        // A node and its children are separate files, so the tree is grown
+        // out of these entries and folded into cwCaveData::nodes at the end:
+        // a cwCaveData* into a QList would dangle the moment the list grew.
+        struct NodeEntry {
+            cwCaveData data;
+            QList<NodeEntry*> children;
+        };
+
+        std::vector<std::unique_ptr<NodeEntry>> nodeEntries;
+        QHash<QString, NodeEntry*> nodeByDir;
+        QList<NodeEntry*> rootEntries;
+
+        const QString regionDirPath = QDir::cleanPath(regionDir.absolutePath());
+
+        QFileInfoList caveFiles = scanForFiles(regionDir, QStringLiteral("cwcave"), false);
+
+        // Sorted by directory path with a trailing separator, so a parent —
+        // whose directory, with that separator, is a prefix of every child's
+        // — is always placed before its children, whatever the descriptors
+        // themselves are named.
+        // Two descriptors in one directory fall back to the file path, so
+        // which of them is kept and which is reported stays the same on
+        // every open.
+        const auto caveDirPathLess = [](const QFileInfo& a, const QFileInfo& b) {
+            const auto dirKey = [](const QFileInfo& info) {
+                return QDir::cleanPath(info.absoluteDir().absolutePath()) + QLatin1Char('/');
+            };
+            const QString keyA = dirKey(a);
+            const QString keyB = dirKey(b);
+            if (keyA != keyB) {
+                return keyA < keyB;
+            }
+            return a.absoluteFilePath() < b.absoluteFilePath();
+        };
+        std::sort(caveFiles.begin(), caveFiles.end(), caveDirPathLess);
+
+        for (const QFileInfo &caveFileInfo : caveFiles) {
+            const QString cavePath = caveFileInfo.absoluteFilePath();
+            const QString caveDirPath = QDir::cleanPath(caveFileInfo.absoluteDir().absolutePath());
+
+            if (nodeByDir.contains(caveDirPath)) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Ignoring \"%1\": its directory already holds another survey node.")
+                                           .arg(cavePath),
+                                           cwError::Fatal));
+                continue;
+            }
+
+            // The loader never guesses a parent: a descriptor sits either in
+            // the data root or in a node's sub/ directory, and anything
+            // else is reported and skipped.
+            NodeEntry* parentEntry = nullptr;
+            const QString parentPath = parentDirPathOf(caveDirPath);
+            if (parentPath != regionDirPath) {
+                const bool inSubNodeDir = QFileInfo(parentPath).fileName().compare(kSubNodeDirName, Qt::CaseInsensitive) == 0;
+                const auto parentIt = inSubNodeDir ? nodeByDir.constFind(parentDirPathOf(parentPath))
+                                                   : nodeByDir.constEnd();
+                if (parentIt == nodeByDir.constEnd()) {
                     loadData.errors.append(cwError(
-                                               QStringLiteral("Ignoring \"%1\": its directory already holds another survey node.")
-                                               .arg(cavePath),
+                                               QStringLiteral("Ignoring \"%1\": it is not in the project's data root or in a survey node's \"%2\" directory.")
+                                               .arg(cavePath, kSubNodeDirName),
                                                cwError::Fatal));
                     continue;
                 }
+                parentEntry = parentIt.value();
+            }
 
-                // The loader never guesses a parent: a descriptor sits either in
-                // the data root or in a node's sub/ directory, and anything
-                // else is reported and skipped.
-                NodeEntry* parentEntry = nullptr;
-                const QString parentPath = parentDirPathOf(caveDirPath);
-                if (parentPath != regionDirPath) {
-                    const bool inSubNodeDir = QFileInfo(parentPath).fileName().compare(kSubNodeDirName, Qt::CaseInsensitive) == 0;
-                    const auto parentIt = inSubNodeDir ? nodeByDir.constFind(parentDirPathOf(parentPath))
-                                                       : nodeByDir.constEnd();
-                    if (parentIt == nodeByDir.constEnd()) {
+            auto caveProtoResult = loadMessage<CavewhereProto::Cave>(cavePath);
+            if (caveProtoResult.hasError()) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Could not load cave \"%1\": %2")
+                                           .arg(caveFileInfo.fileName(), caveProtoResult.errorMessage()),
+                                           cwError::Fatal));
+                continue;
+            }
+
+            const auto& caveProto = caveProtoResult.value();
+            auto caveVersionWarning = checkEntityVersion(caveProto, cavePath, loadData.maxFileVersion);
+            if (caveVersionWarning) {
+                loadData.errors.append(*caveVersionWarning);
+            }
+
+            nodeEntries.push_back(std::make_unique<NodeEntry>());
+            NodeEntry* entry = nodeEntries.back().get();
+            entry->data = caveDataFromProtoCave(caveProto);
+            nodeByDir.insert(caveDirPath, entry);
+            if (parentEntry != nullptr) {
+                parentEntry->children.append(entry);
+            } else {
+                rootEntries.append(entry);
+            }
+        }
+
+        const auto loadTripData = [&loadData, &filePathLess](const QFileInfo& tripFileInfo) -> std::optional<cwTripData> {
+            const QString tripPath = tripFileInfo.absoluteFilePath();
+            auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
+
+            if (tripProtoResult.hasError()) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Could not load trip \"%1\": %2")
+                                           .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
+                                           cwError::Fatal));
+                return std::nullopt;
+            }
+
+            const auto& tripProto = tripProtoResult.value();
+            auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
+            if (tripVersionWarning) {
+                loadData.errors.append(*tripVersionWarning);
+            }
+
+            cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
+
+            QDir tripDir = tripFileInfo.absoluteDir();
+
+            auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
+                    auto&& loadProtoFunc,
+                    auto&& convertFunc,
+                    auto& destinationList)
+            {
+                QDir notesDir = tripDir.filePath("notes");
+                if (!notesDir.exists()) {
+                    return;
+                }
+
+                QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix),
+                                                             QDir::Files,
+                                                             QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
+                std::sort(files.begin(), files.end(), filePathLess);
+                for (const QFileInfo& fileInfo : files) {
+                    const QString notePath = fileInfo.absoluteFilePath();
+                    auto protoResult = loadProtoFunc(notePath);
+                    if (protoResult.hasError()) {
                         loadData.errors.append(cwError(
-                                                   QStringLiteral("Ignoring \"%1\": it is not in the project's data root or in a survey node's \"%2\" directory.")
-                                                   .arg(cavePath, kSubNodeDirName),
+                                                   QStringLiteral("Could not load \"%1\": %2")
+                                                   .arg(fileInfo.fileName(), protoResult.errorMessage()),
                                                    cwError::Fatal));
                         continue;
                     }
-                    parentEntry = parentIt.value();
-                }
 
-                auto caveProtoResult = loadMessage<CavewhereProto::Cave>(cavePath);
-                if (caveProtoResult.hasError()) {
-                    loadData.errors.append(cwError(
-                                               QStringLiteral("Could not load cave \"%1\": %2")
-                                               .arg(caveFileInfo.fileName(), caveProtoResult.errorMessage()),
-                                               cwError::Fatal));
-                    continue;
-                }
-
-                const auto& caveProto = caveProtoResult.value();
-                auto caveVersionWarning = checkEntityVersion(caveProto, cavePath, loadData.maxFileVersion);
-                if (caveVersionWarning) {
-                    loadData.errors.append(*caveVersionWarning);
-                }
-
-                nodeEntries.push_back(std::make_unique<NodeEntry>());
-                NodeEntry* entry = nodeEntries.back().get();
-                entry->data = caveDataFromProtoCave(caveProto);
-                nodeByDir.insert(caveDirPath, entry);
-                if (parentEntry != nullptr) {
-                    parentEntry->children.append(entry);
-                } else {
-                    rootEntries.append(entry);
-                }
-            }
-
-            const auto loadTripData = [&loadData, &filePathLess](const QFileInfo& tripFileInfo) -> std::optional<cwTripData> {
-                const QString tripPath = tripFileInfo.absoluteFilePath();
-                auto tripProtoResult = loadMessage<CavewhereProto::Trip>(tripPath);
-
-                if (tripProtoResult.hasError()) {
-                    loadData.errors.append(cwError(
-                                               QStringLiteral("Could not load trip \"%1\": %2")
-                                               .arg(tripFileInfo.fileName(), tripProtoResult.errorMessage()),
-                                               cwError::Fatal));
-                    return std::nullopt;
-                }
-
-                const auto& tripProto = tripProtoResult.value();
-                auto tripVersionWarning = checkEntityVersion(tripProto, tripPath, loadData.maxFileVersion);
-                if (tripVersionWarning) {
-                    loadData.errors.append(*tripVersionWarning);
-                }
-
-                cwTripData trip = cwSaveLoad::tripDataFromProtoTrip(tripProto);
-
-                QDir tripDir = tripFileInfo.absoluteDir();
-
-                auto loadObjectsFromNotesDir = [tripDir, &filePathLess, &loadData](const QString& fileSuffix,
-                        auto&& loadProtoFunc,
-                        auto&& convertFunc,
-                        auto& destinationList)
-                {
-                    QDir notesDir = tripDir.filePath("notes");
-                    if (!notesDir.exists()) {
-                        return;
+                    auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
+                    if (versionWarning) {
+                        loadData.errors.append(*versionWarning);
                     }
 
-                    QFileInfoList files = notesDir.entryInfoList(QStringList() << ("*" + fileSuffix),
-                                                                 QDir::Files,
-                                                                 QDir::Name | QDir::IgnoreCase | QDir::LocaleAware);
-                    std::sort(files.begin(), files.end(), filePathLess);
-                    for (const QFileInfo& fileInfo : files) {
-                        const QString notePath = fileInfo.absoluteFilePath();
-                        auto protoResult = loadProtoFunc(notePath);
-                        if (protoResult.hasError()) {
-                            loadData.errors.append(cwError(
-                                                       QStringLiteral("Could not load \"%1\": %2")
-                                                       .arg(fileInfo.fileName(), protoResult.errorMessage()),
-                                                       cwError::Fatal));
-                            continue;
-                        }
-
-                        auto versionWarning = checkEntityVersion(protoResult.value(), notePath, loadData.maxFileVersion);
-                        if (versionWarning) {
-                            loadData.errors.append(*versionWarning);
-                        }
-
-                        destinationList.append(convertFunc(protoResult.value(), notePath));
-                    }
-                };
-
-                //Load 2D notes
-                loadObjectsFromNotesDir(QStringLiteral("cwnote"),
-                                        [](const QString& path) {
-                    return loadMessage<CavewhereProto::Note>(path);
-                },
-                [](const CavewhereProto::Note& proto, const QString& path) {
-                    return cwSaveLoad::noteDataFromProtoNote(proto, path);
-                },
-                trip.noteModel.notes);
-
-                //Load 3D lidar notes
-                loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
-                                        [](const QString& path) {
-                    return loadMessage<CavewhereProto::NoteLiDAR>(path);
-                },
-                [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
-                    return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
-                },
-                trip.noteLiDARModel.notes);
-
-                //Load sketches
-                loadObjectsFromNotesDir(QStringLiteral("cwsketch"),
-                                        [](const QString& path) {
-                    return loadMessage<CavewhereProto::Sketch>(path);
-                },
-                [](const CavewhereProto::Sketch& proto, const QString& path) {
-                    return cwSaveLoad::sketchDataFromProtoSketch(proto, path);
-                },
-                trip.sketchModel.notes);
-
-                return trip;
+                    destinationList.append(convertFunc(protoResult.value(), notePath));
+                }
             };
 
-            // Every trip descriptor, matched to the node that holds it. A
-            // .cwtrip whose nearest node ancestor is not its own trips/ parent
-            // is an orphan (a peer moved the node while this side added the
-            // trip): it attaches to that nearest node and is reported, so no
-            // survey is ever dropped on load.
-            QFileInfoList tripFiles = scanForFiles(regionDir,
-                                                   QStringLiteral("cwtrip"),
-                                                   true);
-            std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
+            //Load 2D notes
+            loadObjectsFromNotesDir(QStringLiteral("cwnote"),
+                                    [](const QString& path) {
+                return loadMessage<CavewhereProto::Note>(path);
+            },
+            [](const CavewhereProto::Note& proto, const QString& path) {
+                return cwSaveLoad::noteDataFromProtoNote(proto, path);
+            },
+            trip.noteModel.notes);
 
-            for (const QFileInfo& tripFileInfo : tripFiles) {
-                NodeEntry* owner = nullptr;
-                bool inOwnTripsDir = false;
-                QString candidate = QDir::cleanPath(tripFileInfo.absoluteDir().absolutePath());
-                QString segmentBelow;
-                while (candidate.startsWith(regionDirPath)) {
-                    const auto ownerIt = nodeByDir.constFind(candidate);
-                    if (ownerIt != nodeByDir.constEnd()) {
-                        owner = ownerIt.value();
-                        inOwnTripsDir = segmentBelow.compare(kTripsDirName, Qt::CaseInsensitive) == 0;
-                        break;
-                    }
-                    if (candidate == regionDirPath) {
-                        break;
-                    }
-                    segmentBelow = QFileInfo(candidate).fileName();
-                    candidate = parentDirPathOf(candidate);
+            //Load 3D lidar notes
+            loadObjectsFromNotesDir(QStringLiteral("cwnote3d"),
+                                    [](const QString& path) {
+                return loadMessage<CavewhereProto::NoteLiDAR>(path);
+            },
+            [](const CavewhereProto::NoteLiDAR& proto, const QString& path) {
+                return cwSaveLoad::noteLiDARDataFromProtoNoteLiDAR(proto, path);
+            },
+            trip.noteLiDARModel.notes);
+
+            //Load sketches
+            loadObjectsFromNotesDir(QStringLiteral("cwsketch"),
+                                    [](const QString& path) {
+                return loadMessage<CavewhereProto::Sketch>(path);
+            },
+            [](const CavewhereProto::Sketch& proto, const QString& path) {
+                return cwSaveLoad::sketchDataFromProtoSketch(proto, path);
+            },
+            trip.sketchModel.notes);
+
+            return trip;
+        };
+
+        // Every trip descriptor, matched to the node that holds it. A
+        // .cwtrip whose nearest node ancestor is not its own trips/ parent
+        // is an orphan (a peer moved the node while this side added the
+        // trip): it attaches to that nearest node and is reported, so no
+        // survey is ever dropped on load.
+        QFileInfoList tripFiles = scanForFiles(regionDir,
+                                               QStringLiteral("cwtrip"),
+                                               true);
+        std::sort(tripFiles.begin(), tripFiles.end(), filePathLess);
+
+        for (const QFileInfo& tripFileInfo : tripFiles) {
+            NodeEntry* owner = nullptr;
+            bool inOwnTripsDir = false;
+            QString candidate = QDir::cleanPath(tripFileInfo.absoluteDir().absolutePath());
+            QString segmentBelow;
+            while (candidate.startsWith(regionDirPath)) {
+                const auto ownerIt = nodeByDir.constFind(candidate);
+                if (ownerIt != nodeByDir.constEnd()) {
+                    owner = ownerIt.value();
+                    inOwnTripsDir = segmentBelow.compare(kTripsDirName, Qt::CaseInsensitive) == 0;
+                    break;
                 }
-
-                if (owner == nullptr) {
-                    loadData.errors.append(cwError(
-                                               QStringLiteral("Ignoring \"%1\": it belongs to no survey node.")
-                                               .arg(tripFileInfo.absoluteFilePath()),
-                                               cwError::Fatal));
-                    continue;
+                if (candidate == regionDirPath) {
+                    break;
                 }
-
-                auto tripData = loadTripData(tripFileInfo);
-                if (!tripData.has_value()) {
-                    continue;
-                }
-
-                if (!inOwnTripsDir) {
-                    loadData.errors.append(cwError(
-                                               QStringLiteral("Trip \"%1\" was found outside a \"trips\" directory and was loaded into \"%2\".")
-                                               .arg(tripFileInfo.absoluteFilePath(), owner->data.name),
-                                               cwError::Warning));
-                }
-
-                owner->data.trips.append(tripData.value());
+                segmentBelow = QFileInfo(candidate).fileName();
+                candidate = parentDirPathOf(candidate);
             }
 
-            const auto foldNodeTree = [](NodeEntry* entry, auto&& self) -> cwCaveData {
-                cwCaveData data = std::move(entry->data);
-                data.nodes.reserve(entry->children.size());
-                for (NodeEntry* child : entry->children) {
-                    data.nodes.append(self(child, self));
-                }
-                return data;
-            };
-
-            loadData.region.caves.reserve(rootEntries.size());
-            for (NodeEntry* rootEntry : rootEntries) {
-                loadData.region.caves.append(foldNodeTree(rootEntry, foldNodeTree));
+            if (owner == nullptr) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Ignoring \"%1\": it belongs to no survey node.")
+                                           .arg(tripFileInfo.absoluteFilePath()),
+                                           cwError::Fatal));
+                continue;
             }
-            repairTopLevelIds(loadData);
-            repairNestedScrapIds(loadData);
-            repairNameCollisions(loadData);
-            return Result(loadData);
-        });
+
+            auto tripData = loadTripData(tripFileInfo);
+            if (!tripData.has_value()) {
+                continue;
+            }
+
+            if (!inOwnTripsDir) {
+                loadData.errors.append(cwError(
+                                           QStringLiteral("Trip \"%1\" was found outside a \"trips\" directory and was loaded into \"%2\".")
+                                           .arg(tripFileInfo.absoluteFilePath(), owner->data.name),
+                                           cwError::Warning));
+            }
+
+            owner->data.trips.append(tripData.value());
+        }
+
+        const auto foldNodeTree = [](NodeEntry* entry, auto&& self) -> cwCaveData {
+            cwCaveData data = std::move(entry->data);
+            data.nodes.reserve(entry->children.size());
+            for (NodeEntry* child : entry->children) {
+                data.nodes.append(self(child, self));
+            }
+            return data;
+        };
+
+        loadData.region.caves.reserve(rootEntries.size());
+        for (NodeEntry* rootEntry : rootEntries) {
+            loadData.region.caves.append(foldNodeTree(rootEntry, foldNodeTree));
+        }
+        repairTopLevelIds(loadData);
+        repairNestedScrapIds(loadData);
+        repairNameCollisions(loadData);
+        return Result(loadData);
     });
 }
 
@@ -6316,7 +6425,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         bool persistLiDARNoteDescriptors = false;
         QString reconcileDiagnostic;
         QStringList mergeDiagnostics;
-        QStringList restoreDiagnostics;
+        QStringList applyDiagnostics;
         SyncReport handlerReport = report;
         const cwReconcileMergeContext mergeContext {
             this,
@@ -6332,9 +6441,9 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         const bool fullReloadApplied = (mergeResult.outcome != cwReconcileMergeResult::Outcome::Applied);
         if (!fullReloadApplied) {
             // A subtree a local change won whole is written back only once the registry
-            // settled on Applied, for the same reason as the orphan removals below: a
-            // later handler's full reload discards this result, and files already written
-            // would outlive that decision while the model went back to the loaded data.
+            // settled on Applied: a later handler's full reload discards this result, and
+            // files already written would outlive that decision while the model went back
+            // to the loaded data.
             for (const cwRestoreFilesFromCommit& restore : mergeResult.filesToRestore) {
                 const auto restoreOutcome = restoreFilesFromCommit(projectRootDir(),
                                                                    restore.commit,
@@ -6342,19 +6451,18 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                                                                    d->repository != nullptr
                                                                    ? d->repository->lfsStore()
                                                                    : nullptr);
-                restoreDiagnostics.append(QStringLiteral("restore from %1 wrote %2 files")
+                applyDiagnostics.append(QStringLiteral("restore from %1 wrote %2 files")
                                           .arg(restore.commit)
                                           .arg(restoreOutcome.writtenFileCount));
                 if (!restoreOutcome.skippedPaths.isEmpty()) {
-                    restoreDiagnostics.append(QStringLiteral("restore from %1 could not write: %2")
+                    applyDiagnostics.append(QStringLiteral("restore from %1 could not write: %2")
                                               .arg(restore.commit,
                                                    restoreOutcome.skippedPaths.join(QStringLiteral(", "))));
                 }
             }
 
-            // Orphan removals are queued only once the registry settled on Applied: a
-            // handler that reported one may still be overruled by a later handler's
-            // full reload, and a queued recursive delete would outlive that decision.
+            // Orphan removals are queued here rather than by the handler that found them,
+            // so the full-reload branch below can load the project without them first.
             for (const QString& orphanDir : mergeResult.orphanDirectoriesToRemove) {
                 enqueueOrphanDirectoryCleanup(orphanDir);
             }
@@ -6389,12 +6497,53 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                          ? QStringLiteral("mutated")
                          : QStringLiteral("projection-only"));
         } else {
-            region->setData(loadData.region);
+            // The Applied path merges a change found only inside an orphan into its
+            // winner; the reload has no such merge, so an orphan holding anything its
+            // winner lacks stays and loads as a node of its own.
+            QStringList orphanDirs;
+            QStringList keptOrphanDirs;
+            const QDir rootDir = projectRootDir();
+            for (const QString& orphanDir : mergeResult.orphanDirectoriesToRemove) {
+                if (siblingCoversOrphan(QDir(rootDir.absoluteFilePath(orphanDir)))) {
+                    orphanDirs.append(orphanDir);
+                } else {
+                    keptOrphanDirs.append(orphanDir);
+                }
+            }
+            if (!keptOrphanDirs.isEmpty()) {
+                applyDiagnostics.append(QStringLiteral("full reload kept orphan directories holding changes of their own: %1")
+                                          .arg(keptOrphanDirs.join(QStringLiteral(", "))));
+            }
+
+            if (orphanDirs.isEmpty()) {
+                region->setData(loadData.region);
+            } else {
+                // loadData was read before the handlers ran, so it holds each orphan's
+                // node beside its winner, and identity repair minted that copy a fresh
+                // id. Reloading without the orphans leaves one node per id and nothing
+                // for identity repair to mint. The reload runs here on the UI thread:
+                // the tree model is disconnected and the model half merged, so yielding
+                // to the event loop before setData would expose that state.
+                const auto reloadResult = loadAllSkipping(d->projectFileName, orphanDirs);
+                if (reloadResult.hasError()) {
+                    return Monad::Result<ReconcileExternalResult>(reloadResult.errorMessage(),
+                                                                  reloadResult.errorCode());
+                }
+                const ProjectLoadData& reloadData = reloadResult.value();
+                d->projectMetadata = reloadData.metadata;
+                d->pendingIdentityRepairSave = reloadData.identityRepair.required;
+                region->setData(reloadData.region);
+                for (const QString& orphanDir : orphanDirs) {
+                    enqueueOrphanDirectoryCleanup(orphanDir);
+                }
+                applyDiagnostics.append(QStringLiteral("full reload left out orphan directories: %1")
+                                          .arg(orphanDirs.join(QStringLiteral(", "))));
+            }
             seedStampedVersion();
             modelMutated = true;
             // Full-reload fallback applies merged commit content from disk directly into
-            // the model. Unless identity repair is required, there is nothing to persist.
-            requiresPersistence = false;
+            // the model. Only identity repair or a removed orphan leaves something to persist.
+            requiresPersistence = !orphanDirs.isEmpty();
             persistNoteDescriptors = false;
             persistLiDARNoteDescriptors = false;
 
@@ -6407,7 +6556,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         }
 
         mergeDiagnostics = mergeResult.diagnostics;
-        mergeDiagnostics.append(restoreDiagnostics);
+        mergeDiagnostics.append(applyDiagnostics);
 
         if (!reconcileDiagnostic.isEmpty() && d->lastSyncReport.has_value()) {
             d->lastSyncReport->diagnostics.append(reconcileDiagnostic);

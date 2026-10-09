@@ -1,6 +1,7 @@
 // Catch2 includes
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 using namespace Catch;
 
 // Our includes
@@ -1201,4 +1202,276 @@ TEST_CASE("A merged note descriptor reaches disk when other handlers apply too",
     //The model took the peer's rotation on top of our name; so must the descriptor on disk.
     CHECK(reloadedNoteRotation(clones->authorProject()->filename(), kSectionTripName)
           == Catch::Approx(kPeerNoteRotation));
+}
+
+// ---------------------------------------------------------------------------
+// Scenario K — cavewhere#694: a rename/rename conflict merged in the same sync
+// as a change a later handler can only take by a full reload. The peer renames
+// the contested node and, in the same push, adds a trip to Sibling Cave; the
+// trip handler finds no current trip for that descriptor and asks for a full
+// reload. The node handler's orphan directory for the losing name must still be
+// removed, and the reload must leave exactly one node for the contested id.
+//
+// Depth 1 contests a top-level cave both sides share; depth 2 contests Side Cave
+// (its subtree holds the depth-3 section's trip); depth 3 contests that section.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+const QString kTopCaveName = QStringLiteral("Top Cave");
+const QString kTopTripName = QStringLiteral("Top survey");
+const QString kPeerAddedTripName = QStringLiteral("Peer added survey");
+const QString kAuthorRenamePrefix = QStringLiteral("Author ");
+const QString kPeerRenamePrefix = QStringLiteral("Peer ");
+
+//! The node-name path from the data root to the node contested at \a depth.
+QStringList contestedNodePath(int depth)
+{
+    switch (depth) {
+    case 1:
+        return {kTopCaveName};
+    case 2:
+        return {kFolderName, kSideCaveName};
+    default:
+        return {kFolderName, kSideCaveName, kSectionName};
+    }
+}
+
+//! The trip inside the contested node's subtree at \a depth.
+QString contestedTripName(int depth)
+{
+    return depth == 1 ? kTopTripName : kSectionTripName;
+}
+
+cwCave* nodeAtPath(const cwCavingRegion* region, const QStringList& path)
+{
+    const cwSurveyNode* parent = region->rootNode();
+    cwCave* node = nullptr;
+    for (const QString& name : path) {
+        node = childNamed(parent, name);
+        REQUIRE(node != nullptr);
+        parent = node;
+    }
+    return node;
+}
+
+const cwSurveyNode* parentAtPath(const cwCavingRegion* region, const QStringList& path)
+{
+    const QStringList parentPath = path.mid(0, path.size() - 1);
+    if (parentPath.isEmpty()) {
+        return region->rootNode();
+    }
+    return nodeAtPath(region, parentPath);
+}
+
+//! The directory holding the node directories of \a path's parent.
+QDir parentSubDir(const QDir& dataRoot, const QStringList& path)
+{
+    const QStringList parentPath = path.mid(0, path.size() - 1);
+    if (parentPath.isEmpty()) {
+        return dataRoot;
+    }
+    return QDir(dataRoot.absoluteFilePath(parentPath.join(QStringLiteral("/sub/")) + QStringLiteral("/sub")));
+}
+
+int nodesWithId(const cwCavingRegion* region, const QUuid& id)
+{
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    return static_cast<int>(std::count_if(nodes.cbegin(), nodes.cend(), [&id](const cwSurveyNode* node) {
+        return node->id() == id;
+    }));
+}
+
+int tripsNamed(const cwCavingRegion* region, const QString& tripName)
+{
+    const QList<cwTrip*> trips = region->rootNode()->allTrips();
+    return static_cast<int>(std::count_if(trips.cbegin(), trips.cend(), [&tripName](const cwTrip* trip) {
+        return trip->name() == tripName;
+    }));
+}
+
+//! The names of \a parent's children that are one of \a names.
+QStringList childrenNamedAnyOf(const cwSurveyNode* parent, const QStringList& names)
+{
+    QStringList found;
+    const QList<cwSurveyNode*> children = parent->childNodes();
+    for (const cwSurveyNode* child : children) {
+        if (names.contains(child->name())) {
+            found.append(child->name());
+        }
+    }
+    return found;
+}
+
+//! The "<name>/<name>.cwcave" descriptors directly under \a subDir for any of \a names.
+QStringList renamePairDescriptors(const QDir& subDir, const QStringList& names)
+{
+    QStringList found;
+    for (const QString& name : names) {
+        const QString descriptor = QStringLiteral("%1/%1.cwcave").arg(name);
+        if (QFileInfo::exists(subDir.absoluteFilePath(descriptor))) {
+            found.append(descriptor);
+        }
+    }
+    return found;
+}
+
+void pullPeer(TwoClones* clones)
+{
+    auto* peerProject = clones->peerProject();
+    peerProject->errorModel()->clear();
+    REQUIRE(peerProject->sync());
+    clones->peerRootData->futureManagerModel()->waitForFinished();
+    peerProject->waitSaveToFinish();
+}
+
+//! Gives both clones a top-level cave with one trip, for the depth-1 case.
+void addSharedTopCave(TwoClones* clones)
+{
+    auto* authorRegion = clones->authorProject()->cavingRegion();
+    cwCave* topCave = addNode(authorRegion, nullptr, cwSurveyNode::Kind::Cave, kTopCaveName);
+    SurveyTreeTestHelper::addTrip(topCave, kTopTripName, QStringLiteral("T"));
+    clones->authorProject()->waitSaveToFinish();
+    syncAuthor(clones);
+
+    pullPeer(clones);
+    REQUIRE(childNamed(clones->peerProject()->cavingRegion()->rootNode(), kTopCaveName) != nullptr);
+}
+
+} // namespace
+
+TEST_CASE("A full-reload fallback keeps one node for a rename/rename conflict",
+          "[cwSurveyNodeSyncMergeHandler][sync][issue694]")
+{
+    const int depth = GENERATE(1, 2, 3);
+    DYNAMIC_SECTION("contested node at depth " << depth)
+    {
+        auto clones = makeTwoClones(true, true);
+        if (depth == 1) {
+            addSharedTopCave(clones.get());
+        }
+
+        const QStringList path = contestedNodePath(depth);
+        const QString baseName = path.last();
+        const QString authorName = kAuthorRenamePrefix + baseName;
+        const QString peerName = kPeerRenamePrefix + baseName;
+        const QStringList renamePair = {authorName, peerName};
+        const QString tripName = contestedTripName(depth);
+
+        //--- The peer renames the contested node, adds a trip elsewhere, and pushes ---
+        //The added trip is the full-reload trigger: its descriptor names a trip the
+        //author's model has never held, so the trip handler cannot merge it in place.
+        auto* peerRegion = clones->peerProject()->cavingRegion();
+        nodeAtPath(peerRegion, path)->setName(peerName);
+        cwCave* peerSibling = childNamed(folderOf(peerRegion), kSiblingCaveName);
+        REQUIRE(peerSibling != nullptr);
+        SurveyTreeTestHelper::addTrip(peerSibling, kPeerAddedTripName, QStringLiteral("P"));
+        pushPeer(clones.get());
+
+        //--- The author renames the same node, then syncs ---
+        auto* authorRegion = clones->authorProject()->cavingRegion();
+        cwCave* authorNode = nodeAtPath(authorRegion, path);
+        const QUuid contestedId = authorNode->id();
+        authorNode->setName(authorName);
+        clones->authorProject()->waitSaveToFinish();
+        REQUIRE(tripsNamed(authorRegion, tripName) == 1);
+
+        syncAuthor(clones.get());
+
+        const auto syncReport = clones->authorProject()->lastSyncReport();
+        REQUIRE(syncReport.has_value());
+        const QString diagnostics = syncReport->diagnostics.join(QStringLiteral(" | "));
+        INFO("Diagnostics: " << diagnostics.toStdString());
+        REQUIRE(fellBackToFullReload(syncReport->diagnostics));
+        CHECK(diagnostics.contains(QStringLiteral("No current trip matches changed trip descriptor id.")));
+
+        //The peer's added trip arrived through the reload.
+        CHECK(tripsNamed(authorRegion, kPeerAddedTripName) == 1);
+
+        //--- Model: one node for the contested id, one child from the rename pair ---
+        CHECK(nodesWithId(authorRegion, contestedId) == 1);
+        const QStringList liveRenames = childrenNamedAnyOf(parentAtPath(authorRegion, path), renamePair);
+        INFO("Children from the rename pair: " << liveRenames.join(QStringLiteral(", ")).toStdString());
+        CHECK(liveRenames.size() == 1);
+        CHECK(tripsNamed(authorRegion, tripName) == 1);
+
+        //--- Disk: one descriptor from the rename pair, the losing directory gone ---
+        const QStringList descriptors =
+            renamePairDescriptors(parentSubDir(clones->authorDataRoot(), path), renamePair);
+        INFO("Rename-pair descriptors on disk: " << descriptors.join(QStringLiteral(", ")).toStdString());
+        CHECK(descriptors.size() == 1);
+        const int nodeDescriptorCount =
+            static_cast<int>(filesWithSuffix(clones->authorDataRoot(), QStringLiteral(".cwcave")).size());
+        CHECK(nodeDescriptorCount == authorRegion->rootNode()->allNodes().size());
+
+        //--- The peer pulls the author's result and sees one node too ---
+        pullPeer(clones.get());
+        const QStringList peerRenames = childrenNamedAnyOf(parentAtPath(peerRegion, path), renamePair);
+        INFO("Peer's children from the rename pair: " << peerRenames.join(QStringLiteral(", ")).toStdString());
+        CHECK(peerRenames.size() == 1);
+        CHECK(tripsNamed(peerRegion, tripName) == 1);
+    }
+}
+
+namespace {
+
+//! The largest chunk count among \a region's trips named \a tripName.
+int mostChunksInTripNamed(const cwCavingRegion* region, const QString& tripName)
+{
+    int mostChunks = 0;
+    const QList<cwTrip*> trips = region->rootNode()->allTrips();
+    for (const cwTrip* trip : trips) {
+        if (trip->name() == tripName) {
+            mostChunks = std::max(mostChunks, trip->chunkCount());
+        }
+    }
+    return mostChunks;
+}
+
+} // namespace
+
+TEST_CASE("A full-reload fallback keeps a peer edit inside the losing rename directory",
+          "[cwSurveyNodeSyncMergeHandler][sync][issue694]")
+{
+    const int depth = 2;
+    auto clones = makeTwoClones(true, true);
+
+    const QStringList path = contestedNodePath(depth);
+    const QString authorName = kAuthorRenamePrefix + path.last();
+    const QString peerName = kPeerRenamePrefix + path.last();
+
+    //--- The peer renames Side Cave, edits the section trip inside it, adds a trip
+    //    elsewhere to force the full reload, and pushes ---
+    auto* peerRegion = clones->peerProject()->cavingRegion();
+    cwCave* peerNode = nodeAtPath(peerRegion, path);
+    peerNode->setName(peerName);
+    cwCave* peerSection = childNamed(peerNode, kSectionName);
+    REQUIRE(peerSection != nullptr);
+    REQUIRE(peerSection->tripCount() == 1);
+    SurveyTreeTestHelper::addShot(peerSection->trip(0), QStringLiteral("E1"), QStringLiteral("E2"));
+    const int editedChunkCount = peerSection->trip(0)->chunkCount();
+    cwCave* peerSibling = childNamed(folderOf(peerRegion), kSiblingCaveName);
+    REQUIRE(peerSibling != nullptr);
+    SurveyTreeTestHelper::addTrip(peerSibling, kPeerAddedTripName, QStringLiteral("P"));
+    pushPeer(clones.get());
+
+    //--- The author renames the same node, then syncs ---
+    auto* authorRegion = clones->authorProject()->cavingRegion();
+    nodeAtPath(authorRegion, path)->setName(authorName);
+    clones->authorProject()->waitSaveToFinish();
+    REQUIRE(mostChunksInTripNamed(authorRegion, kSectionTripName) < editedChunkCount);
+
+    syncAuthor(clones.get());
+
+    const auto syncReport = clones->authorProject()->lastSyncReport();
+    REQUIRE(syncReport.has_value());
+    INFO("Diagnostics: " << syncReport->diagnostics.join(QStringLiteral(" | ")).toStdString());
+    REQUIRE(fellBackToFullReload(syncReport->diagnostics));
+
+    CHECK(tripsNamed(authorRegion, kPeerAddedTripName) == 1);
+    CHECK(mostChunksInTripNamed(authorRegion, kSectionTripName) == editedChunkCount);
+
+    //--- The peer pulls the author's result and still has its edit ---
+    pullPeer(clones.get());
+    CHECK(mostChunksInTripNamed(peerRegion, kSectionTripName) == editedChunkCount);
 }

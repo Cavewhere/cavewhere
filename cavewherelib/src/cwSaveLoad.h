@@ -215,6 +215,10 @@ public:
     QFuture<Monad::ResultString> saveAllFromV6(const QDir& dir, const cwProject* region, const QString& projectFileName);
 
     static QFuture<Monad::Result<ProjectLoadData>> loadAll(const QString& filename);
+    //! Loads like loadAll, on the calling thread, leaving out every descriptor
+    //! under \a skippedDirectories (project-root relative).
+    static Monad::Result<ProjectLoadData> loadAllSkipping(const QString& filename,
+                                                          const QStringList& skippedDirectories);
 
     QList<cwError> lastLoadErrors() const;
     int lastLoadMaxFileVersion() const;

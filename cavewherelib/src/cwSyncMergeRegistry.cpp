@@ -52,6 +52,11 @@ cwReconcileMergeResult cwSyncMergeRegistry::reconcile(const cwReconcileMergeCont
         }
 
         if (result.outcome == cwReconcileMergeResult::Outcome::RequiresFullReload) {
+            // The reload replaces the model, but the cleanup earlier handlers decided on
+            // still describes the merged disk: an orphan left in place would load as a
+            // second node beside its winner.
+            result.orphanDirectoriesToRemove =
+                aggregateResult.orphanDirectoriesToRemove + result.orphanDirectoriesToRemove;
             return result;
         }
 

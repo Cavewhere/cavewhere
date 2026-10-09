@@ -109,8 +109,9 @@ struct cwReconcileMergeResult {
     bool persistNoteDescriptors = false;
     bool persistLiDARNoteDescriptors = false;
     // Directories (repository-root relative) a handler found orphaned by a merge and wants
-    // removed. Handlers record them here instead of queuing the removal themselves, so a
-    // later handler's RequiresFullReload discards them along with the rest of the result.
+    // removed. Handlers record them here instead of queuing the removal themselves, so
+    // cwSaveLoad removes them once it knows how the model is rebuilt: a full reload carries
+    // them through and loads the project without them.
     QStringList orphanDirectoriesToRemove;
     // Subtrees a handler wants written back from a commit, applied by cwSaveLoad once the
     // registry settled on Applied.
