@@ -6,6 +6,7 @@
 #include "cwAppearanceSettings.h"
 #include "cwSketchSettings.h"
 #include "cwRenderingSettings.h"
+#include "cwPassageTubeSettings.h"
 #include "cwUnitSettings.h"
 
 //Qt includes
@@ -34,6 +35,7 @@ void cwSettings::initialize()
     cwAppearanceSettings::initialize();
     cwSketchSettings::initialize();
     cwRenderingSettings::initialize();
+    cwPassageTubeSettings::initialize();
     cwUnitSettings::initialize();
 }
 
@@ -64,6 +66,10 @@ cwSketchSettings* cwSettings::sketchSettings() const {
 
 cwRenderingSettings* cwSettings::renderingSettings() const {
     return cwRenderingSettings::instance();
+}
+
+cwPassageTubeSettings* cwSettings::passageTubeSettings() const {
+    return cwPassageTubeSettings::instance();
 }
 
 cwUnitSettings* cwSettings::unitSettings() const {

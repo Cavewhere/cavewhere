@@ -17,18 +17,22 @@ MainWindowTest {
         when: windowShown
 
         readonly property var settings: RootData.settings.renderingSettings
+        readonly property PassageTubeSettings passageTubeSettings: RootData.settings.passageTubeSettings
 
         // The screen-space error lives in a QC.SpinBox scaled by this much,
         // since a SpinBox counts in integers.
         readonly property int screenSpaceErrorScale: 10
+        readonly property int sampleSpacingScale: 10
 
         function init() {
             settings.resetToDefaults()
+            passageTubeSettings.resetToDefaults()
             waitForRendering(rootId)
         }
 
         function cleanup() {
             settings.resetToDefaults()
+            passageTubeSettings.resetToDefaults()
         }
 
         function findComboBox() {
@@ -112,6 +116,36 @@ MainWindowTest {
             tryCompare(settings, "cpuCacheBudgetMb", 2048)
             tryCompare(settings, "uploadBudgetMbPerFrame", 32)
             tryCompare(settings, "screenSpaceErrorPx", 2.5)
+        }
+
+        function test_passageTubeSpinBoxesTrackTheSettings() {
+            let spacing = findSpinBox("sampleSpacingSpinBox")
+            let resolution = findSpinBox("ringResolutionSpinBox")
+
+            compare(spacing.value, Math.round(passageTubeSettings.sampleSpacingMeters * sampleSpacingScale))
+            compare(resolution.value, passageTubeSettings.ringResolution)
+
+            passageTubeSettings.sampleSpacingMeters = 2.5
+            passageTubeSettings.ringResolution = 32
+            tryCompare(spacing, "value", 25)
+            tryCompare(resolution, "value", 32)
+
+            passageTubeSettings.resetToDefaults()
+            tryCompare(spacing, "value", 10)
+            tryCompare(resolution, "value", 16)
+        }
+
+        function test_editingThePassageTubeSpinBoxesWritesTheSettings() {
+            let spacing = findSpinBox("sampleSpacingSpinBox")
+            let resolution = findSpinBox("ringResolutionSpinBox")
+
+            spacing.value = 35
+            spacing.valueModified()
+            resolution.value = 24
+            resolution.valueModified()
+
+            tryCompare(passageTubeSettings, "sampleSpacingMeters", 3.5)
+            tryCompare(passageTubeSettings, "ringResolution", 24)
         }
     }
 }

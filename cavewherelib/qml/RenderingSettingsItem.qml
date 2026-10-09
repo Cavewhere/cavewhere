@@ -7,6 +7,7 @@ ColumnLayout {
     id: itemId
 
     property RenderingSettings renderingSettings: RootData.settings.renderingSettings
+    property PassageTubeSettings passageTubeSettings: RootData.settings.passageTubeSettings
 
     readonly property int minimumGpuMemoryBudgetMb: 256
     readonly property int maximumGpuMemoryBudgetMb: 65536
@@ -26,6 +27,16 @@ ColumnLayout {
     readonly property real minimumScreenSpaceErrorPx: 0.5
     readonly property real maximumScreenSpaceErrorPx: 8.0
     readonly property real screenSpaceErrorStepPx: 0.1
+
+    // Sample spacing is held scaled like the screen-space error above.
+    readonly property int sampleSpacingScale: 10
+    readonly property int sampleSpacingDecimals: 1
+    readonly property real minimumSampleSpacingMeters: 0.1
+    readonly property real maximumSampleSpacingMeters: 50.0
+    readonly property real sampleSpacingStepMeters: 0.1
+
+    readonly property int minimumRingResolution: 4
+    readonly property int maximumRingResolution: 64
 
     QC.GroupBox {
         title: "Anti-aliasing"
@@ -280,6 +291,115 @@ ColumnLayout {
                 id: screenSpaceErrorHelpId
                 Layout.fillWidth: true
                 text: "How far a note texture may fall short of screen resolution before CaveWhere loads a sharper mip level. Smaller values keep notes crisper and use more video memory; larger values settle for softer notes and load less."
+            }
+        }
+    }
+
+    QC.GroupBox {
+        title: "Passage tubes"
+        Layout.fillWidth: true
+
+        ColumnLayout {
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: sampleSpacingHelpId
+                }
+
+                QC.Label {
+                    text: "Sample spacing (m)"
+                }
+
+                QC.SpinBox {
+                    id: sampleSpacingSpinBoxId
+                    objectName: "sampleSpacingSpinBox"
+
+                    from: Math.round(itemId.minimumSampleSpacingMeters * itemId.sampleSpacingScale)
+                    to: Math.round(itemId.maximumSampleSpacingMeters * itemId.sampleSpacingScale)
+                    stepSize: Math.round(itemId.sampleSpacingStepMeters * itemId.sampleSpacingScale)
+                    editable: true
+
+                    validator: QQ.DoubleValidator {
+                        bottom: itemId.minimumSampleSpacingMeters
+                        top: itemId.maximumSampleSpacingMeters
+                        decimals: itemId.sampleSpacingDecimals
+                        notation: QQ.DoubleValidator.StandardNotation
+                    }
+
+                    textFromValue: function(value, locale) {
+                        return Number(value / itemId.sampleSpacingScale)
+                            .toLocaleString(locale, 'f', itemId.sampleSpacingDecimals);
+                    }
+
+                    valueFromText: function(text, locale) {
+                        return Math.round(Number.fromLocaleString(locale, text)
+                                          * itemId.sampleSpacingScale);
+                    }
+
+                    function syncToSettings() {
+                        value = Math.round(itemId.passageTubeSettings.sampleSpacingMeters
+                                           * itemId.sampleSpacingScale);
+                    }
+
+                    QQ.Component.onCompleted: syncToSettings()
+                    onValueModified: {
+                        itemId.passageTubeSettings.sampleSpacingMeters = value / itemId.sampleSpacingScale
+                    }
+
+                    QQ.Connections {
+                        target: itemId.passageTubeSettings
+                        function onSampleSpacingMetersChanged() { sampleSpacingSpinBoxId.syncToSettings() }
+                    }
+                }
+            }
+
+            HelpArea {
+                id: sampleSpacingHelpId
+                Layout.fillWidth: true
+                text: "How far apart the passage tube places its cross-sections along each shot. Smaller spacing follows the walls more closely and builds a heavier mesh."
+            }
+
+            RowLayout {
+                InformationButton {
+                    showItemOnClick: ringResolutionHelpId
+                }
+
+                QC.Label {
+                    text: "Ring resolution (points)"
+                }
+
+                QC.SpinBox {
+                    id: ringResolutionSpinBoxId
+                    objectName: "ringResolutionSpinBox"
+
+                    from: itemId.minimumRingResolution
+                    to: itemId.maximumRingResolution
+                    editable: true
+
+                    function syncToSettings() {
+                        value = itemId.passageTubeSettings.ringResolution;
+                    }
+
+                    QQ.Component.onCompleted: syncToSettings()
+                    onValueModified: {
+                        itemId.passageTubeSettings.ringResolution = value
+                    }
+
+                    QQ.Connections {
+                        target: itemId.passageTubeSettings
+                        function onRingResolutionChanged() { ringResolutionSpinBoxId.syncToSettings() }
+                    }
+                }
+            }
+
+            HelpArea {
+                id: ringResolutionHelpId
+                Layout.fillWidth: true
+                text: "How many points go around each cross-section of the passage tube. More points give rounder passages and a heavier mesh."
+            }
+
+            RestoreDefaultsButton {
+                objectName: "passageTubeRestoreDefaults"
+                settings: itemId.passageTubeSettings
             }
         }
     }
