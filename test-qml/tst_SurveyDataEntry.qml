@@ -25,8 +25,17 @@ MainWindowTest {
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "cavePage" });
 
-            let addCaveButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->addTrip->addButton")
-            mouseClick(addCaveButton)
+            // On the first test the sidebar is still animating open, which
+            // slides the cave page; click only once the button stops moving.
+            let addTripButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->cavePage->addTrip->addButton")
+            let lastX = Number.NaN
+            tryVerify(() => {
+                let x = addTripButton.mapToItem(null, 0, 0).x
+                let settled = x === lastX
+                lastX = x
+                return settled
+            })
+            mouseClick(addTripButton)
 
             tryVerify(()=>{ return RootData.pageView.currentPageItem.objectName === "tripPage" });
 
@@ -508,6 +517,20 @@ MainWindowTest {
             let tab = 16777218;
             let modifier = 33554432;
             return navHelper(currentItem, index, nextRole, tab, modifier);
+        }
+
+        function test_addTeamMemberButton() {
+            addSurvey()
+
+            let teamTable = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->teamTable")
+            let team = teamTable.model
+            let startCount = team.count
+
+            let addTeamMemberButton = ObjectFinder.findObjectByChain(mainWindow, "rootId->tripPage->surveyEditor->view->teamTable->addTeamMember")
+            compare(addTeamMemberButton.text, "Add Team Member")
+            mouseClick(addTeamMemberButton)
+
+            tryCompare(team, "count", startCount + 1)
         }
 
         function test_enterSurveyData() {
