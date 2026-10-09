@@ -41,6 +41,7 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
 
     m_colorBy = new cwColorBy(this);
     m_colorBy->setTargets(m_linePlot, m_items);
+    m_colorBy->setScene(scene());
 
     //Keep the grid plane sitting at the lowest cave depth (issue #534). The
     //plane's default elevation already covers the no-geometry state, so only the

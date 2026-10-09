@@ -6,8 +6,10 @@
 #include "cwKeywordModel.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderTexturedItems.h"
+#include "cwScene.h"
 
 // Qt includes
+#include <QBox3D>
 #include <QSettings>
 
 // Std includes
@@ -148,20 +150,27 @@ void cwColorBy::setKeywordItemModel(cwKeywordItemModel* model)
 
 void cwColorBy::setTargets(cwRenderLinePlot* linePlot, cwRenderTexturedItems* items)
 {
-    if (m_linePlot) {
-        disconnect(m_linePlot, &cwRenderLinePlot::geometryChanged,
-                   this, &cwColorBy::updateRangeFromLinePlot);
-    }
-
     m_linePlot = linePlot;
     m_items = items;
+    push();
+}
 
-    if (m_linePlot) {
-        connect(m_linePlot, &cwRenderLinePlot::geometryChanged,
-                this, &cwColorBy::updateRangeFromLinePlot);
+void cwColorBy::setScene(cwScene* scene)
+{
+    if (m_scene == scene) {
+        return;
     }
 
-    updateRangeFromLinePlot();
+    if (m_scene) {
+        disconnect(m_scene, &cwScene::visibleBoundsChanged, this, &cwColorBy::scheduleRangeUpdate);
+    }
+
+    m_scene = scene;
+
+    if (m_scene) {
+        connect(m_scene, &cwScene::visibleBoundsChanged, this, &cwColorBy::scheduleRangeUpdate);
+        scheduleRangeUpdate();
+    }
 }
 
 void cwColorBy::setSource(Source source)
@@ -333,24 +342,44 @@ QColor cwColorBy::colorAt(double t) const
     return resolvedRamp(m_rampId).colorAt(t);
 }
 
-void cwColorBy::updateRangeFromLinePlot()
+void cwColorBy::scheduleRangeUpdate()
 {
-    bool rangeMoved = false;
-    if (m_linePlot && m_linePlot->minZValue() <= m_linePlot->maxZValue()) {
-        const double rangeMin = m_linePlot->minZValue();
-        const double rangeMax = m_linePlot->maxZValue();
-        if (m_rangeMin != rangeMin || m_rangeMax != rangeMax) {
-            m_rangeMin = rangeMin;
-            m_rangeMax = rangeMax;
-            rangeMoved = true;
-        }
+    // A burst of visibility and geometry signals collapses into one recompute.
+    if (m_rangeUpdatePending) {
+        return;
     }
+    m_rangeUpdatePending = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_rangeUpdatePending = false;
+        updateRangeFromScene();
+    }, Qt::QueuedConnection);
+}
+
+void cwColorBy::updateRangeFromScene()
+{
+    if (m_scene == nullptr) {
+        return;
+    }
+
+    const QBox3D box = m_scene->visibleFramingBounds();
+    if (box.isNull()) {
+        // Nothing visible: keep the last range
+        return;
+    }
+    setRange(box.minimum().z(), box.maximum().z());
+}
+
+void cwColorBy::setRange(double rangeMin, double rangeMax)
+{
+    if (m_rangeMin == rangeMin && m_rangeMax == rangeMax) {
+        return;
+    }
+    m_rangeMin = rangeMin;
+    m_rangeMax = rangeMax;
     // normalized() reads the mode from the uniform, so rebuild before listeners re-read it
     rebuildUniform();
-    if (rangeMoved) {
-        updateLegendTicks();
-        emit rangeChanged();
-    }
+    updateLegendTicks();
+    emit rangeChanged();
 }
 
 void cwColorBy::rebuildUniform()

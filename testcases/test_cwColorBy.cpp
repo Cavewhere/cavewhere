@@ -8,10 +8,14 @@
 #include "cwColorRamp.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderTexturedItems.h"
+#include "cwScene.h"
+#include "cwGeometryItersecter.h"
+#include "cwGeometry.h"
 
 //Qt includes
 #include <QCoreApplication>
 #include <QSettings>
+#include <QVector2D>
 #include <QVector3D>
 
 //Std includes
@@ -31,6 +35,19 @@ constexpr double kStoredScrapStrength = 0.25;
 constexpr float kNarrowLow = -37.0f;
 constexpr float kNarrowHigh = 12.0f;
 constexpr double kTickMargin = 1e-6;
+
+// Visible-bounds scene: a centerline of three shots at z 10 -> 0 -> -100 -> -400
+// and a scrap triangle reaching up to z +30
+constexpr float kShotTopZ = 10.0f;
+constexpr float kShotMidZ = 0.0f;
+constexpr float kShotLowZ = -100.0f;
+constexpr float kShotDeepZ = -400.0f;
+constexpr float kScrapLowZ = 0.0f;
+constexpr float kScrapHighZ = 30.0f;
+constexpr float kScrapExtent = 10.0f;
+// Line-list vertices of the shot reaching kShotDeepZ
+constexpr int kDeepShotFirstVertex = 4;
+constexpr int kVerticesPerShot = 2;
 
 // Points every cwColorBy in the test at its own QSettings store, unique to this
 // process so parallel runs never collide, and clears it on both ends.
@@ -66,6 +83,71 @@ QVector<QVector3D> deepToHighGeometry()
     };
 }
 
+// A line plot and textured items in a real scene, with cwColorBy pushing to
+// both and following the scene's visible bounds.
+struct ColorByScene
+{
+    ColorByScene()
+    {
+        linePlot.setScene(&scene);
+        items.setScene(&scene);
+        colorBy.setTargets(&linePlot, &items);
+        colorBy.setScene(&scene);
+    }
+
+    // Publishes the geometry, lets the pick structure build, then runs the
+    // queued range update.
+    void setGeometryAndSettle(const QVector<QVector3D>& geometry)
+    {
+        linePlot.setGeometry(geometry);
+        scene.geometryItersecter()->waitForFinish();
+        QCoreApplication::processEvents();
+    }
+
+    cwScene scene;
+    cwRenderLinePlot linePlot;
+    cwRenderTexturedItems items;
+    cwColorBy colorBy;
+};
+
+QVector<QVector3D> threeShotGeometry()
+{
+    return {
+        QVector3D(0.0f, 0.0f, kShotTopZ),
+        QVector3D(10.0f, 0.0f, kShotMidZ),
+        QVector3D(10.0f, 0.0f, kShotMidZ),
+        QVector3D(20.0f, 0.0f, kShotLowZ),
+        QVector3D(20.0f, 0.0f, kShotLowZ),
+        QVector3D(30.0f, 0.0f, kShotDeepZ)
+    };
+}
+
+// One triangle spanning kScrapLowZ..kScrapHighZ
+cwGeometry scrapTriangle()
+{
+    cwGeometry geometry({
+        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 },
+        { cwGeometry::Semantic::TexCoord0, cwGeometry::AttributeFormat::Vec2 }
+    });
+
+    const QVector<QVector3D> positions = {
+        QVector3D(-kScrapExtent, -kScrapExtent, kScrapLowZ),
+        QVector3D(kScrapExtent, -kScrapExtent, kScrapLowZ),
+        QVector3D(0.0f, kScrapExtent, kScrapHighZ),
+    };
+    geometry.resizeVertices(static_cast<int>(positions.size()));
+    const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
+    const auto* texCoordAttribute = geometry.attribute(cwGeometry::Semantic::TexCoord0);
+    for (int i = 0; i < positions.size(); ++i) {
+        geometry.set(positionAttribute, i, positions.at(i));
+        geometry.set(texCoordAttribute, i, QVector2D(0.0f, 0.0f));
+    }
+
+    geometry.setIndices({0u, 1u, 2u});
+    geometry.setType(cwGeometry::Type::Triangles);
+    return geometry;
+}
+
 int modeOf(const cwColorBy& colorBy)
 {
     return static_cast<int>(colorBy.uniform().params[0]);
@@ -90,12 +172,12 @@ TEST_CASE("cwColorBy normalizes depth around the pivot", "[ColorBy]")
 {
     ScopedColorBySettings settings;
 
-    cwRenderLinePlot linePlot;
-    cwRenderTexturedItems items;
-    cwColorBy colorBy;
-    colorBy.setTargets(&linePlot, &items);
+    ColorByScene fixture;
+    cwRenderLinePlot& linePlot = fixture.linePlot;
+    cwColorBy& colorBy = fixture.colorBy;
+    cwRenderTexturedItems& items = fixture.items;
 
-    linePlot.setGeometry(deepToHighGeometry());
+    fixture.setGeometryAndSettle(deepToHighGeometry());
     colorBy.setSource(cwColorBy::Source::Depth);
     colorBy.setRampId(cwColorRamp::defaultDepthRampId());
     colorBy.setPivot(0.0);
@@ -145,12 +227,12 @@ TEST_CASE("cwColorBy is off for flat geometry", "[ColorBy]")
 {
     ScopedColorBySettings settings;
 
-    cwRenderLinePlot linePlot;
-    cwColorBy colorBy;
-    colorBy.setTargets(&linePlot, nullptr);
+    ColorByScene fixture;
+    cwRenderLinePlot& linePlot = fixture.linePlot;
+    cwColorBy& colorBy = fixture.colorBy;
     colorBy.setSource(cwColorBy::Source::Depth);
 
-    linePlot.setGeometry({
+    fixture.setGeometryAndSettle({
         QVector3D(0.0f, 0.0f, kFlatZ),
         QVector3D(10.0f, 0.0f, kFlatZ)
     });
@@ -235,25 +317,25 @@ TEST_CASE("cwColorBy rounds legend ticks like the scale bar", "[ColorBy]")
         }
     };
 
-    cwRenderLinePlot linePlot;
-    cwColorBy colorBy;
-    colorBy.setTargets(&linePlot, nullptr);
+    ColorByScene fixture;
+    cwRenderLinePlot& linePlot = fixture.linePlot;
+    cwColorBy& colorBy = fixture.colorBy;
     colorBy.setSource(cwColorBy::Source::Depth);
 
     SECTION("metric -500..100 m steps by 100 m") {
-        linePlot.setGeometry(spanGeometry(kDeepest, kHighest));
+        fixture.setGeometryAndSettle(spanGeometry(kDeepest, kHighest));
         checkTicks(colorBy.legendTicks(), {-500.0, -400.0, -300.0, -200.0, -100.0, 0.0, 100.0});
         CHECK(colorBy.formatDepth(-500.0) == QStringLiteral("-500 m"));
     }
 
     SECTION("metric -37..12 m steps by 10 m") {
-        linePlot.setGeometry(spanGeometry(kNarrowLow, kNarrowHigh));
+        fixture.setGeometryAndSettle(spanGeometry(kNarrowLow, kNarrowHigh));
         checkTicks(colorBy.legendTicks(), {-30.0, -20.0, -10.0, 0.0, 10.0});
     }
 
     SECTION("imperial -500..100 m steps by 500 ft, returned in meters") {
         constexpr double kMetersPerFoot = 0.3048;
-        linePlot.setGeometry(spanGeometry(kDeepest, kHighest));
+        fixture.setGeometryAndSettle(spanGeometry(kDeepest, kHighest));
         colorBy.setUnitSystem(cwUnits::Imperial);
         checkTicks(colorBy.legendTicks(), {-1500.0 * kMetersPerFoot,
                                            -1000.0 * kMetersPerFoot,
@@ -264,7 +346,44 @@ TEST_CASE("cwColorBy rounds legend ticks like the scale bar", "[ColorBy]")
     }
 
     SECTION("a flat range gets one tick") {
-        linePlot.setGeometry(spanGeometry(kFlatZ, kFlatZ));
+        fixture.setGeometryAndSettle(spanGeometry(kFlatZ, kFlatZ));
         checkTicks(colorBy.legendTicks(), {kFlatZ});
     }
+}
+
+TEST_CASE("cwColorBy depth range follows the visible bounds", "[ColorBy]")
+{
+    ScopedColorBySettings settings;
+
+    ColorByScene fixture;
+    cwRenderLinePlot& linePlot = fixture.linePlot;
+    cwColorBy& colorBy = fixture.colorBy;
+    cwRenderTexturedItems& items = fixture.items;
+    colorBy.setSource(cwColorBy::Source::Depth);
+
+    cwRenderTexturedItems::Item scrap;
+    scrap.geometry = scrapTriangle();
+    const uint32_t scrapId = items.addItem(scrap);
+    fixture.setGeometryAndSettle(threeShotGeometry());
+
+    CHECK(colorBy.rangeMin() == Approx(kShotDeepZ));
+    CHECK(colorBy.rangeMax() == Approx(kScrapHighZ));
+
+    linePlot.setRangeVisible(kDeepShotFirstVertex, kVerticesPerShot, false);
+    QCoreApplication::processEvents();
+    CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
+    CHECK(colorBy.rangeMax() == Approx(kScrapHighZ));
+
+    items.setItemVisible(scrapId, false);
+    QCoreApplication::processEvents();
+    CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
+    CHECK(colorBy.rangeMax() == Approx(kShotTopZ));
+
+    // Nothing visible keeps the last range
+    const int vertexCount = static_cast<int>(threeShotGeometry().size());
+    linePlot.setRangeVisible(0, vertexCount, false);
+    QCoreApplication::processEvents();
+    REQUIRE(fixture.scene.visibleFramingBounds().isNull());
+    CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
+    CHECK(colorBy.rangeMax() == Approx(kShotTopZ));
 }

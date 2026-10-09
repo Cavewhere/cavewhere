@@ -18,6 +18,7 @@ class cwKeywordColorBy;
 class cwKeywordItemModel;
 class cwRenderLinePlot;
 class cwRenderTexturedItems;
+class cwScene;
 
 // The color-by view preference: which value colors the 3D view, through which
 // ramp, around which pivot. Builds the cwColorByUniform block and pushes it to
@@ -50,6 +51,9 @@ public:
 
     // Render objects the uniform is pushed to. Either may be null.
     void setTargets(cwRenderLinePlot* linePlot, cwRenderTexturedItems* items);
+
+    // The depth range follows the z extent of this scene's visible bounds.
+    void setScene(cwScene* scene);
 
     // The keyword items Keyword mode groups by keywordKey.
     void setKeywordItemModel(cwKeywordItemModel* model);
@@ -111,7 +115,9 @@ signals:
     void legendTicksChanged();
 
 private:
-    void updateRangeFromLinePlot();
+    void scheduleRangeUpdate();
+    void updateRangeFromScene();
+    void setRange(double rangeMin, double rangeMax);
     void rebuildUniform();
     void updateLegendTicks();
     void push();
@@ -121,6 +127,7 @@ private:
 
     QPointer<cwRenderLinePlot> m_linePlot;
     QPointer<cwRenderTexturedItems> m_items;
+    QPointer<cwScene> m_scene;
     QPointer<cwKeywordItemModel> m_keywordItemModel;
     cwKeywordColorBy* m_keywordColorBy;
     Source m_source = Source::None;
@@ -133,6 +140,7 @@ private:
     cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
     QList<double> m_legendTicks;
     cwColorByUniform m_uniform;
+    bool m_rangeUpdatePending = false;
 };
 
 #endif // CWCOLORBY_H
