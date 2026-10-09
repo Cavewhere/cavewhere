@@ -158,6 +158,31 @@ MainWindowTest {
             compare(spin.value, typedFeet);
         }
 
+        function test_legendShowsRoundedTicks() {
+            let popup = openPopupWithDepth();
+            RootData.region.unitSystem = Units.Metric;
+            popup.close();
+
+            let legend = findLegend();
+            let ticks = findChild(legend, "colorByTicks");
+            verify(ticks, "found the tick repeater");
+            tryVerify(() => ticks.count >= 3, 5000, "the legend shows at least three ticks");
+
+            const labelEndsInMeters = () => {
+                for (let i = 0; i < ticks.count; ++i) {
+                    let tick = ticks.itemAt(i);
+                    for (let j = 0; j < tick.children.length; ++j) {
+                        const text = tick.children[j].text;
+                        if (text !== undefined && text.endsWith(" m")) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            tryVerify(labelEndsInMeters, 5000, "a tick label reads in meters");
+        }
+
         function test_legendSitsAboveCompass() {
             let legend = findLegend();
             let renderer = legend.parent;

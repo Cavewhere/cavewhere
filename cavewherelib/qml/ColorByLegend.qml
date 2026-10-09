@@ -19,7 +19,10 @@ QQ.Item {
     readonly property bool showsSwatches: colorBy.source === ColorBy.Keyword
     readonly property int stripCount: 48
     readonly property int barWidth: 14
-    readonly property int barHeight: 160
+    readonly property int barHeight: 200
+    readonly property int tickLength: 4
+    readonly property int tickThickness: 1
+    readonly property int tickLabelGap: 2
     readonly property int labelWidth: 56
     readonly property int contentPadding: 6
     readonly property real backdropOpacity: 0.8
@@ -29,6 +32,25 @@ QQ.Item {
     // Longer swatch lists scroll
     readonly property int maxVisibleSwatchRows: 12
     readonly property bool pivotInside: colorBy.rangeMin < colorBy.pivot && colorBy.pivot < colorBy.rangeMax
+    // Ticks come back from feet as meters, so match the pivot within a millimeter
+    readonly property real tickMatchTolerance: 0.001
+    // The rounded ticks, plus the pivot as its own labeled tick when it falls
+    // between them.
+    readonly property list<real> tickValues: {
+        let values = []
+        let pivotIsTick = false
+        for (let i = 0; i < colorBy.legendTicks.length; ++i) {
+            const value = colorBy.legendTicks[i]
+            values.push(value)
+            if (Math.abs(value - colorBy.pivot) < tickMatchTolerance) {
+                pivotIsTick = true
+            }
+        }
+        if (pivotInside && !pivotIsTick) {
+            values.push(colorBy.pivot)
+        }
+        return values
+    }
 
     signal clicked()
 
@@ -47,8 +69,20 @@ QQ.Item {
         return colorBy.colorAt(colorBy.normalized(valueAtStrip(i)))
     }
 
-    function metersText(value) {
-        return qsTr("%1 m").arg(Math.round(value))
+    // Where a value sits along the bar, top (rangeMax) to bottom (rangeMin)
+    function tickY(value) {
+        const span = colorBy.rangeMax - colorBy.rangeMin
+        if (span <= 0) {
+            return barHeight / 2
+        }
+        return barHeight * (colorBy.rangeMax - value) / span
+    }
+
+    // formatDepth() is an invokable QML cannot track, so name the unit system
+    // to re-evaluate when it changes.
+    function tickText(value) {
+        colorBy.unitSystem
+        return colorBy.formatDepth(value)
     }
 
     width: showsBar ? legendId.width : (showsSwatches ? swatchLegendId.width : chipId.width)
@@ -92,7 +126,7 @@ QQ.Item {
         }
     }
 
-    // On state: the colorbar with min / pivot / max labels.
+    // On state: the colorbar with rounded depth ticks.
     QQ.Row {
         id: legendId
         objectName: "colorByBar"
@@ -121,24 +155,37 @@ QQ.Item {
             width: rootId.labelWidth
             height: rootId.barHeight
 
-            QC.Label {
-                anchors.top: parent.top
-                text: rootId.metersText(rootId.colorBy.rangeMax)
-                font.pixelSize: Theme.fontSizeCaption
-            }
+            QQ.Repeater {
+                objectName: "colorByTicks"
 
-            QC.Label {
-                visible: rootId.pivotInside
-                y: parent.height * (rootId.colorBy.rangeMax - rootId.colorBy.pivot)
-                   / (rootId.colorBy.rangeMax - rootId.colorBy.rangeMin) - height / 2
-                text: rootId.metersText(rootId.colorBy.pivot)
-                font.pixelSize: Theme.fontSizeCaption
-            }
+                model: rootId.tickValues
 
-            QC.Label {
-                anchors.bottom: parent.bottom
-                text: rootId.metersText(rootId.colorBy.rangeMin)
-                font.pixelSize: Theme.fontSizeCaption
+                QQ.Item {
+                    id: tickId
+
+                    required property real modelData
+
+                    readonly property real markY: rootId.tickY(modelData)
+
+                    width: parent.width
+                    height: rootId.barHeight
+
+                    QQ.Rectangle {
+                        x: 0
+                        y: tickId.markY - height / 2
+                        width: rootId.tickLength
+                        height: rootId.tickThickness
+                        color: Theme.text
+                    }
+
+                    // Centered on its mark, clamped so the end labels stay inside the bar
+                    QC.Label {
+                        x: rootId.tickLength + rootId.tickLabelGap
+                        y: Math.max(0, Math.min(tickId.height - height, tickId.markY - height / 2))
+                        text: rootId.tickText(tickId.modelData)
+                        font.pixelSize: Theme.fontSizeCaption
+                    }
+                }
             }
         }
     }

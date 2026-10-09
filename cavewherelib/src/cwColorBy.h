@@ -4,9 +4,11 @@
 // Our includes
 #include "cwGlobals.h"
 #include "cwColorByUniform.h"
+#include "cwUnits.h"
 
 // Qt includes
 #include <QColor>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
@@ -37,6 +39,8 @@ class CAVEWHERE_LIB_EXPORT cwColorBy : public QObject
     Q_PROPERTY(QStringList hiddenKeywordKeys READ hiddenKeywordKeys CONSTANT)
     Q_PROPERTY(QStringList legendValues READ legendValues NOTIFY legendChanged)
     Q_PROPERTY(int legendSlotCount READ legendSlotCount NOTIFY legendChanged)
+    Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
+    Q_PROPERTY(QList<double> legendTicks READ legendTicks NOTIFY legendTicksChanged)
 
 public:
     enum class Source { None, Depth, Keyword };
@@ -77,6 +81,16 @@ public:
     // The slot a legend row stands for.
     Q_INVOKABLE int legendSlot(int row) const;
 
+    // The unit system the depth legend labels and rounds in.
+    cwUnits::UnitSystem unitSystem() const { return m_unitSystem; }
+    void setUnitSystem(cwUnits::UnitSystem system);
+
+    // Depth legend ticks, in meters: every multiple of a {1,2,5}x10^n step
+    // (picked in the depth unit) that falls inside the range, at most seven.
+    QList<double> legendTicks() const { return m_legendTicks; }
+    // A depth in the unit system's depth unit, whole numbers: "-500 m", "-1640 ft".
+    Q_INVOKABLE QString formatDepth(double meters) const;
+
     // Where a value sits on the bar (0..1, the same rule as the shader), and
     // the color at that position.
     Q_INVOKABLE double normalized(double value) const;
@@ -93,10 +107,13 @@ signals:
     void scrapStrengthChanged();
     void keywordKeyChanged();
     void legendChanged();
+    void unitSystemChanged();
+    void legendTicksChanged();
 
 private:
     void updateRangeFromLinePlot();
     void rebuildUniform();
+    void updateLegendTicks();
     void push();
     void updateKeywordGrouping();
     void loadSettings();
@@ -113,6 +130,8 @@ private:
     double m_rangeMax = 0.0;
     double m_scrapStrength = 0.0;
     QString m_keywordKey;
+    cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
+    QList<double> m_legendTicks;
     cwColorByUniform m_uniform;
 };
 

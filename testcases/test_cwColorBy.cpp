@@ -28,6 +28,9 @@ constexpr double kMovedPivot = -200.0;
 constexpr double kMovedHalfExtent = 300.0;
 constexpr double kStoredPivot = -75.5;
 constexpr double kStoredScrapStrength = 0.25;
+constexpr float kNarrowLow = -37.0f;
+constexpr float kNarrowHigh = 12.0f;
+constexpr double kTickMargin = 1e-6;
 
 // Points every cwColorBy in the test at its own QSettings store, unique to this
 // process so parallel runs never collide, and clears it on both ends.
@@ -212,4 +215,56 @@ TEST_CASE("cwRenderTexturedItems keeps an item's color value through updateItem"
     items.updateItem(id, item);
     CHECK(colorValueOf(items, id) == kSlot);
     CHECK(items.item(id).uniformBlock.size() == cwRenderTexturedItems::emptyItemBlock().size());
+}
+
+TEST_CASE("cwColorBy rounds legend ticks like the scale bar", "[ColorBy]")
+{
+    ScopedColorBySettings settings;
+
+    const auto spanGeometry = [](float lowZ, float highZ) {
+        return QVector<QVector3D>{
+            QVector3D(0.0f, 0.0f, highZ),
+            QVector3D(10.0f, 0.0f, lowZ)
+        };
+    };
+
+    const auto checkTicks = [](const QList<double>& ticks, const QList<double>& expected) {
+        REQUIRE(ticks.size() == expected.size());
+        for (int i = 0; i < expected.size(); ++i) {
+            CHECK(ticks.at(i) == Approx(expected.at(i)).margin(kTickMargin));
+        }
+    };
+
+    cwRenderLinePlot linePlot;
+    cwColorBy colorBy;
+    colorBy.setTargets(&linePlot, nullptr);
+    colorBy.setSource(cwColorBy::Source::Depth);
+
+    SECTION("metric -500..100 m steps by 100 m") {
+        linePlot.setGeometry(spanGeometry(kDeepest, kHighest));
+        checkTicks(colorBy.legendTicks(), {-500.0, -400.0, -300.0, -200.0, -100.0, 0.0, 100.0});
+        CHECK(colorBy.formatDepth(-500.0) == QStringLiteral("-500 m"));
+    }
+
+    SECTION("metric -37..12 m steps by 10 m") {
+        linePlot.setGeometry(spanGeometry(kNarrowLow, kNarrowHigh));
+        checkTicks(colorBy.legendTicks(), {-30.0, -20.0, -10.0, 0.0, 10.0});
+    }
+
+    SECTION("imperial -500..100 m steps by 500 ft, returned in meters") {
+        constexpr double kMetersPerFoot = 0.3048;
+        linePlot.setGeometry(spanGeometry(kDeepest, kHighest));
+        colorBy.setUnitSystem(cwUnits::Imperial);
+        checkTicks(colorBy.legendTicks(), {-1500.0 * kMetersPerFoot,
+                                           -1000.0 * kMetersPerFoot,
+                                           -500.0 * kMetersPerFoot,
+                                           0.0});
+        CHECK(colorBy.formatDepth(colorBy.legendTicks().first()) == QStringLiteral("-1500 ft"));
+        CHECK(colorBy.formatDepth(-0.1) == QStringLiteral("0 ft"));
+    }
+
+    SECTION("a flat range gets one tick") {
+        linePlot.setGeometry(spanGeometry(kFlatZ, kFlatZ));
+        checkTicks(colorBy.legendTicks(), {kFlatZ});
+    }
 }

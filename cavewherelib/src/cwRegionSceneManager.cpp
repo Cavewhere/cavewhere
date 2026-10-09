@@ -76,8 +76,16 @@ void cwRegionSceneManager::updateGridPlaneElevation()
   */
 void cwRegionSceneManager::setCavingRegion(cwCavingRegion* region) {
     if(Region != region) {
+        if(Region) {
+            disconnect(Region, &cwCavingRegion::unitSystemChanged, this, nullptr);
+        }
         Region = region;
         m_lazLayers->setLazLayerModel(region ? region->lazLayers() : nullptr);
+        if(Region) {
+            const auto syncUnitSystem = [this]() { m_colorBy->setUnitSystem(Region->unitSystem()); };
+            connect(Region, &cwCavingRegion::unitSystemChanged, this, syncUnitSystem);
+            syncUnitSystem();
+        }
         emit cavingRegionChanged();
     }
 }

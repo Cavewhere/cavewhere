@@ -12,6 +12,8 @@
 
 // Std includes
 #include <algorithm>
+#include <array>
+#include <cmath>
 
 namespace {
 QString sourceKey() { return QStringLiteral("colorBy/source"); }
@@ -27,6 +29,15 @@ constexpr float kOpaque = 1.0f;
 
 // Diverging normalize: the pivot sits at the middle of the bar.
 constexpr double kPivotPosition = 0.5;
+
+// Legend ticks: {1,2,5} x 10^n steps, n in kMinTickExponent..kMaxTickExponent
+constexpr int kMaxTicks = 7;
+constexpr std::array<double, 3> kTickMantissas = {1.0, 2.0, 5.0};
+constexpr int kMinTickExponent = -1;
+constexpr int kMaxTickExponent = 5;
+constexpr double kTickBase = 10.0;
+// Absorbs unit-conversion round-off so a range end that is a tick stays one
+constexpr double kTickEpsilon = 1e-9;
 
 enum RangeIndex { RangeMin = 0, RangeMax = 1, RangePivot = 2, RangeHalfExtent = 3 };
 enum ParamIndex { ParamMode = 0, ParamStrength = 1, ParamSlotCount = 2, ParamValueSource = 3 };
@@ -50,6 +61,50 @@ double halfExtentOf(double rangeMin, double rangeMax, double pivot)
 double clampedStrength(double strength)
 {
     return std::clamp(strength, 0.0, 1.0);
+}
+
+// Every multiple of the smallest nice step that leaves at most kMaxTicks
+// inside [rangeMin, rangeMax], picked in the system's depth unit and
+// returned in meters.
+QList<double> legendTicksFor(double rangeMin, double rangeMax, cwUnits::UnitSystem system)
+{
+    const cwUnits::LengthUnit unit = cwUnits::depthUnit(system);
+    const double lo = cwUnits::convert(rangeMin, cwUnits::Meters, unit);
+    const double hi = cwUnits::convert(rangeMax, cwUnits::Meters, unit);
+    if (hi - lo <= 0.0) {
+        return {rangeMin};
+    }
+
+    const auto firstIndex = [&](double interval) { return std::ceil(lo / interval - kTickEpsilon); };
+    const auto lastIndex = [&](double interval) { return std::floor(hi / interval + kTickEpsilon); };
+
+    const auto pickInterval = [&]() {
+        double interval = 0.0;
+        for (int exponent = kMinTickExponent; exponent <= kMaxTickExponent; ++exponent) {
+            for (double mantissa : kTickMantissas) {
+                interval = mantissa * std::pow(kTickBase, exponent);
+                if (lastIndex(interval) - firstIndex(interval) + 1 <= kMaxTicks) {
+                    return interval;
+                }
+            }
+        }
+        // A range wider than the largest step allows: use the largest anyway
+        return interval;
+    };
+
+    const double interval = pickInterval();
+    QList<double> ticks;
+    const int first = static_cast<int>(firstIndex(interval));
+    const int last = static_cast<int>(lastIndex(interval));
+    for (int i = first; i <= last; ++i) {
+        ticks.append(cwUnits::convert(i * interval, unit, cwUnits::Meters));
+    }
+
+    if (ticks.isEmpty()) {
+        // A range narrower than the smallest step holds no multiple; label its ends
+        return {rangeMin, rangeMax};
+    }
+    return ticks;
 }
 
 cwColorBy::Source sourceFromInt(int stored)
@@ -80,6 +135,7 @@ cwColorBy::cwColorBy(QObject* parent) :
 
     loadSettings();
     rebuildUniform();
+    updateLegendTicks();
 }
 
 void cwColorBy::setKeywordItemModel(cwKeywordItemModel* model)
@@ -210,7 +266,36 @@ void cwColorBy::setPivot(double pivot)
     m_pivot = pivot;
     saveSettings();
     rebuildUniform();
+    updateLegendTicks();
     emit pivotChanged();
+}
+
+void cwColorBy::setUnitSystem(cwUnits::UnitSystem system)
+{
+    if (m_unitSystem == system) {
+        return;
+    }
+    m_unitSystem = system;
+    updateLegendTicks();
+    emit unitSystemChanged();
+}
+
+QString cwColorBy::formatDepth(double meters) const
+{
+    const cwUnits::LengthUnit unit = cwUnits::depthUnit(m_unitSystem);
+    // IEEE: -0.0 + 0.0 == +0.0, so a value that rounds to zero shows no sign
+    const double value = std::round(cwUnits::convert(meters, cwUnits::Meters, unit)) + 0.0;
+    return QStringLiteral("%1 %2").arg(value, 0, 'f', 0).arg(cwUnits::unitName(unit));
+}
+
+void cwColorBy::updateLegendTicks()
+{
+    const QList<double> ticks = legendTicksFor(m_rangeMin, m_rangeMax, m_unitSystem);
+    if (m_legendTicks == ticks) {
+        return;
+    }
+    m_legendTicks = ticks;
+    emit legendTicksChanged();
 }
 
 void cwColorBy::setScrapStrength(double strength)
@@ -263,6 +348,7 @@ void cwColorBy::updateRangeFromLinePlot()
     // normalized() reads the mode from the uniform, so rebuild before listeners re-read it
     rebuildUniform();
     if (rangeMoved) {
+        updateLegendTicks();
         emit rangeChanged();
     }
 }
