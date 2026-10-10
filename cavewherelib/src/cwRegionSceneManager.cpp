@@ -26,11 +26,13 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
     //Renders the background, should be drawn first
     m_background = new cwRenderRadialGradient();
     m_linePlot = new cwRenderLinePlot();
+    m_passageTube = new cwRenderPassageTube();
     m_plane = new cwRenderGridPlane();
     m_items = new cwRenderTexturedItems();
 
     m_background->setScene(scene());
     m_linePlot->setScene(scene());
+    m_passageTube->setScene(scene());
     m_items->setScene(scene());
 
     //Render the plane last

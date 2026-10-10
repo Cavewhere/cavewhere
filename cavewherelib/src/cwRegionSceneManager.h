@@ -30,6 +30,7 @@ class cwRenderScraps;
 #include "cwRenderRadialGradient.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRenderGridPlane.h"
+#include "cwRenderPassageTube.h"
 
 class cwRegionSceneManager : public QObject
 {
@@ -38,6 +39,7 @@ class cwRegionSceneManager : public QObject
 
     Q_PROPERTY(cwCavingRegion* cavingRegion READ cavingRegion WRITE setCavingRegion NOTIFY cavingRegionChanged)
     Q_PROPERTY(cwRenderLinePlot* linePlot READ linePlot NOTIFY linePlotChanged)
+    Q_PROPERTY(cwRenderPassageTube* passageTube READ passageTube CONSTANT)
     Q_PROPERTY(cwRenderTexturedItems* scraps READ scraps NOTIFY scrapsChanged)
     Q_PROPERTY(cwScene* scene READ scene NOTIFY sceneChanged)
     Q_PROPERTY(cwRenderGridPlane* gridPlane READ gridPlane CONSTANT)
@@ -49,6 +51,7 @@ public:
     explicit cwRegionSceneManager(QObject *parent = 0);
 
     cwRenderLinePlot* linePlot();
+    cwRenderPassageTube* passageTube() const { return m_passageTube; }
     cwRenderTexturedItems* scraps() const { return m_items; }
 
     void setCavingRegion(cwCavingRegion* region);
@@ -86,6 +89,7 @@ private:
     //The terrain that's rendered
     cwGLTerrain* Terrain;
     cwRenderLinePlot* m_linePlot;
+    cwRenderPassageTube* m_passageTube;
     cwRenderTexturedItems* m_items;
     cwRenderGridPlane* m_plane;
     cwRenderRadialGradient* m_background;

@@ -12,6 +12,7 @@
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
+#include "cwPassageTubeSettings.h"
 #include "cwProject.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
@@ -117,6 +118,13 @@ cwRootData::cwRootData(QObject *parent) :
     ScrapManager->setFutureManagerToken(FutureManagerModel->token());
     ScrapManager->setKeywordItemModel(m_keywordItemModel);
 
+    //Setup the passage tube manager
+    PassageTubeManager = new cwPassageTubeManager(Project);
+    PassageTubeManager->setRegion(Region);
+    PassageTubeManager->setLinePlotManager(LinePlotManager);
+    PassageTubeManager->setSettings(cwSettings::instance()->passageTubeSettings());
+    PassageTubeManager->setKeywordItemModel(m_keywordItemModel);
+
     //Setup the note lidar manager
     NoteLiDARManager = new cwNoteLiDARManager(Project);
     NoteLiDARManager->setProject(Project);
@@ -183,6 +191,7 @@ cwRootData::cwRootData(QObject *parent) :
 
     ScrapManager->setRenderScraps(RegionSceneManager->items()); //scraps());
     LinePlotManager->setRenderLinePlot(RegionSceneManager->linePlot());
+    PassageTubeManager->setRenderPassageTube(RegionSceneManager->passageTube());
     NoteLiDARManager->setRender(RegionSceneManager->items());
 
     PageSelectionModel = new cwPageSelectionModel(this);
@@ -205,6 +214,7 @@ cwRootData::cwRootData(QObject *parent) :
     UpdateCoordinator->add(LinePlotManager);
     UpdateCoordinator->add(ScrapManager, {LinePlotManager});
     UpdateCoordinator->add(NoteLiDARManager, {LinePlotManager});
+    UpdateCoordinator->add(PassageTubeManager, {LinePlotManager});
 
     connect(Project, &cwProject::filenameChanged, this, [this]() {
         // Reset the filter pipeline UI state when the project file changes.

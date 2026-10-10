@@ -702,6 +702,8 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
             cave->setStationPositionLookup(caveData.stationPositions());
         }
 
+        cave->setSplayTips(caveData.splayTips());
+
         if(caveData.hasNetworkChanged()) {
             cave->setSurveyNetwork(caveData.network());
         }

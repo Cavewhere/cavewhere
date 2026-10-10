@@ -128,6 +128,9 @@ public:
     cwStationPositionLookup stationPositionLookup() const;
     void setStationPositionLookup(const cwStationPositionLookup& model);
 
+    cwSplayTipsByStation splayTips() const;
+    void setSplayTips(const cwSplayTipsByStation& splayTips);
+
     cwSurveyNetwork network() const;
     void setSurveyNetwork(const cwSurveyNetwork& network);
 
@@ -171,6 +174,7 @@ private:
     cwFixStationModel* FixStations;
 
     cwStationPositionLookup StationPositionModel;
+    cwSplayTipsByStation m_splayTips;
     bool StationPositionModelStale;
     QUuid Id;
 
@@ -317,6 +321,19 @@ inline int cwCave::indexOf(cwTrip* trip) const {
 inline cwStationPositionLookup cwCave::stationPositionLookup() const
 {
     return StationPositionModel;
+}
+
+/**
+  \brief Where the cave's splays end, from the last line-plot solve
+  */
+inline cwSplayTipsByStation cwCave::splayTips() const
+{
+    return m_splayTips;
+}
+
+inline void cwCave::setSplayTips(const cwSplayTipsByStation& splayTips)
+{
+    m_splayTips = splayTips;
 }
 
 /**

@@ -166,6 +166,15 @@ QC.Menu {
         }
 
         QC.MenuItem {
+            text: "Passage Tubes"
+            checked: RootData.passageTubeManager.visible
+            checkable: true
+            onTriggered: {
+                RootData.passageTubeManager.visible = !RootData.passageTubeManager.visible
+            }
+        }
+
+        QC.MenuItem {
             text: "Leads Visible"
             checked: RootData.leadsVisible
             checkable: true

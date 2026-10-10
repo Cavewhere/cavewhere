@@ -23,6 +23,7 @@
 #include "cwCavingRegion.h"
 #include "cwLinePlotManager.h"
 #include "cwScrapManager.h"
+#include "cwPassageTubeManager.h"
 #include "cwUpdateCoordinator.h"
 #include "cwNoteLiDARManager.h"
 #include "cwSketchManager.h"
@@ -62,6 +63,7 @@ class CAVEWHERE_LIB_EXPORT cwRootData : public QObject
     Q_PROPERTY(cwCavingRegion* region READ region NOTIFY regionChanged)
     Q_PROPERTY(cwLinePlotManager* linePlotManager READ linePlotManager NOTIFY linePlotManagerChanged)
     Q_PROPERTY(cwScrapManager* scrapManager READ scrapManager NOTIFY scrapManagerChanged)
+    Q_PROPERTY(cwPassageTubeManager* passageTubeManager READ passageTubeManager CONSTANT)
     Q_PROPERTY(cwUpdateCoordinator* updateCoordinator READ updateCoordinator CONSTANT)
     Q_PROPERTY(cwNoteLiDARManager* noteLiDARManager READ noteLiDARManager NOTIFY noteLiDARManagerChanged FINAL)
     Q_PROPERTY(cwSketchManager* sketchManager READ sketchManager CONSTANT)
@@ -111,6 +113,7 @@ public:
     cwCavingRegion* region() const;
     cwLinePlotManager* linePlotManager() const;
     cwScrapManager* scrapManager() const;
+    cwPassageTubeManager* passageTubeManager() const { return PassageTubeManager; }
     cwUpdateCoordinator* updateCoordinator() const;
     cwProject* project() const;
     cwSurveyImportManager* surveyImportManager() const;
@@ -214,6 +217,7 @@ private:
     cwCavingRegion* Region; //!< Where all the data is stored
     cwLinePlotManager* LinePlotManager; //!< For keeping the lineplot updated
     cwScrapManager* ScrapManager; //!< For keeping all the scraps updated (carpeting)
+    cwPassageTubeManager* PassageTubeManager; //!< Rebuilds the passage tube after each solve
     cwUpdateCoordinator* UpdateCoordinator; //!< Owns the auto-update policy + staleness aggregate
     cwNoteLiDARManager* NoteLiDARManager; //!< For carpeting lidar scans
     cwSketchManager* SketchManager = nullptr; //!< Rasterises sketch thumbnails into the disk cache
