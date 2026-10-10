@@ -8,7 +8,9 @@
 #include "LoadProjectHelper.h"
 
 //Qt includes
+#include <QFile>
 #include <QFileInfo>
+#include <QTemporaryDir>
 
 TEST_CASE("cwSurvex3DFileReader should return empty lookup for missing file", "[cwSurvex3DFileReader]") {
     cwSurvex3DFileReader reader;
@@ -87,4 +89,51 @@ TEST_CASE("cwSurvex3DFileReader should build a survey network from .3d file", "[
     auto neighbors26e = parsed.network.neighbors("26e");
     CHECK(neighbors26e.size() == 1);
     CHECK(neighbors26e.contains("26c"));
+}
+
+TEST_CASE("cwSurvex3DFileReader keys a leg the same in either direction", "[cwSurvex3DFileReader]") {
+    CHECK(cwSurvex3DFileReader::legKey(QStringLiteral("A2"), QStringLiteral("a1"))
+          == cwSurvex3DFileReader::legKey(QStringLiteral("a1"), QStringLiteral("a2")));
+}
+
+TEST_CASE("cwSurvex3DFileReader reads the loop closure error of each loop leg", "[cwSurvex3DFileReader]") {
+    // A misclosed triangle a1->a2->a3->a1 with a dead end a3->a4 hanging off it.
+    // Cavern writes one img_ERROR_INFO for the loop's traverse and none for
+    // the dead end.
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+
+    const QString svxPath = dir.filePath(QStringLiteral("loop.svx"));
+    const QString output3dPath = dir.filePath(QStringLiteral("loop.3d"));
+
+    QFile svx(svxPath);
+    REQUIRE(svx.open(QIODevice::WriteOnly));
+    svx.write("*fix a1 0 0 0\n"
+              "*data normal from to tape compass clino\n"
+              "a1 a2 10.0 0.0 0.0\n"
+              "a2 a3 10.0 90.0 0.0\n"
+              "a3 a1 15.0 225.0 0.0\n"
+              "a3 a4 5.0 90.0 0.0\n");
+    svx.close();
+
+    const auto cavernResult = cwCavernRunner::run(svxPath, output3dPath);
+    REQUIRE_FALSE(cavernResult.hasError());
+
+    cwSurvex3DFileReader reader;
+    const auto parsed = reader.readNetworkAndLookup(cavernResult.value().output3dPath);
+
+    const auto key = [](const char* from, const char* to) {
+        return cwSurvex3DFileReader::legKey(QString::fromLatin1(from), QString::fromLatin1(to));
+    };
+
+    CHECK(parsed.legErrors.size() == 3);
+    REQUIRE(parsed.legErrors.contains(key("a1", "a2")));
+    REQUIRE(parsed.legErrors.contains(key("a2", "a3")));
+    REQUIRE(parsed.legErrors.contains(key("a3", "a1")));
+    CHECK_FALSE(parsed.legErrors.contains(key("a3", "a4")));
+
+    const cwLegError error = parsed.legErrors.value(key("a1", "a2"));
+    CHECK(error.e > 0.0f);
+    CHECK(parsed.legErrors.value(key("a2", "a3")).e == error.e);
+    CHECK(parsed.legErrors.value(key("a1", "a3")).e == error.e);
 }

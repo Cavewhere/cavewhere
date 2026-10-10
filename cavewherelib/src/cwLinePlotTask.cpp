@@ -121,6 +121,7 @@ void cwLinePlotTask::LinePlotResultData::clear()
     StationPositions.clear();
     TripVertexRanges.clear();
     TripUuids.clear();
+    SegmentErrors.clear();
 }
 
 cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwCave *cave)
@@ -223,17 +224,20 @@ struct cwLinePlotTask::LinePlotWorker {
         const QHash<QUuid, cwSplayTipsByStation> caveSplayTips =
             splitSplayTipsByCave(parsed.splayTips);
         updateSplayTipsForCaves(caveSplayTips, result);
+        const QHash<QUuid, cwLegErrorsByShot> caveLegErrors =
+            splitLegErrorsByCave(parsed.legErrors);
         result.setRegionNetwork(std::move(parsed.network));
 
         if (IsCanceled()) {
             return result;
         }
 
-        cwLinePlotGeometry::Result geometry = generateGeometry(caveSplayTips);
+        cwLinePlotGeometry::Result geometry = generateGeometry(caveSplayTips, caveLegErrors);
         result.setPositions(geometry.points);
         result.setTripVertexRanges(geometry.tripVertexRanges);
         result.setTripSplayVertexRanges(geometry.tripSplayVertexRanges);
         result.setTripUuids(geometry.tripUuids);
+        result.setSegmentErrors(geometry.segmentErrors);
 
         updateDepthLength(geometry.cavesLengthAndDepths, result);
         updateCaveNetworks(result);
@@ -355,10 +359,11 @@ private:
     }
 
     cwLinePlotGeometry::Result generateGeometry(
-        const QHash<QUuid, cwSplayTipsByStation>& caveSplayTips)
+        const QHash<QUuid, cwSplayTipsByStation>& caveSplayTips,
+        const QHash<QUuid, cwLegErrorsByShot>& caveLegErrors)
     {
         const Monad::Result<cwLinePlotGeometry::Result> result =
-            cwLinePlotGeometry::generate(Region.data(), caveSplayTips);
+            cwLinePlotGeometry::generate(Region.data(), caveSplayTips, caveLegErrors);
         if (result.hasError()) {
             return cwLinePlotGeometry::Result();
         }
@@ -523,6 +528,28 @@ private:
         }
 
         return caveSplayTips;
+    }
+
+    // Same prefix split for the leg errors. A leg is kept only when both ends
+    // parse to the same cave; its key is rebuilt from the station names inside
+    // that cave so it matches the geometry's lookup.
+    QHash<QUuid, cwLegErrorsByShot> splitLegErrorsByCave(
+        const cwLegErrorsByShot& legErrors) const
+    {
+        QHash<QUuid, cwLegErrorsByShot> caveLegErrors;
+        for (auto iter = legErrors.constBegin(); iter != legErrors.constEnd(); ++iter) {
+            const auto from = parseCavernStationName(iter.key().first);
+            const auto to = parseCavernStationName(iter.key().second);
+            if (!from.has_value() || !to.has_value() || from->caveId != to->caveId) {
+                continue;
+            }
+
+            caveLegErrors[from->caveId].insert(
+                cwSurvex3DFileReader::legKey(from->stationName, to->stationName),
+                iter.value());
+        }
+
+        return caveLegErrors;
     }
 
     // Splays move exactly when the station they hang off does, so they ride out
