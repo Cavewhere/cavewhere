@@ -77,6 +77,9 @@ public:
     // One surveyed shot with both endpoints positioned. LRUD come from the
     // station occurrences on the chunk that owns the shot; the passage LRUD
     // are the same readings with shaft depths replaced, and feed the rings.
+    // A facing is the unit horizontal direction its station's LRUD were read
+    // looking along: the chord between the station's chunk neighbors. The
+    // reading's right wall lies clockwise of it.
     struct Leg {
         QUuid caveId;
         QUuid tripId;
@@ -90,6 +93,8 @@ public:
         cwStationLrud toLrud;
         cwStationLrud fromPassageLrud;
         cwStationLrud toPassageLrud;
+        QVector3D fromFacing;
+        QVector3D toFacing;
     };
 
     // A leg as a chain walks it; reversed means it is walked to → from.
@@ -125,9 +130,8 @@ public:
         QVector<QVector3D> vertices;
     };
 
-    // How a chain end is closed: a fan at a dead end, a dome on an arm pushed
-    // into the tube of the chain that passes through its junction, nothing on
-    // a loop.
+    // How a chain end is closed: a fan at a dead end, a dome on an arm ending
+    // at a junction that another chain passes through, nothing on a loop.
     enum class EndCap {
         Fan,
         Dome,
@@ -143,6 +147,10 @@ public:
         // scaled by the end's inclination weight so level ends sit flush.
         double startCapOffsetMeters = 0.0;
         double endCapOffsetMeters = 0.0;
+        // How far a dome reaches past its junction: to the through passage's
+        // far wall along the arm.
+        double startDomeHeightMeters = 0.0;
+        double endDomeHeightMeters = 0.0;
         EndCap startCap = EndCap::Fan;
         EndCap endCap = EndCap::Fan;
     };
