@@ -86,6 +86,10 @@ ColumnLayout {
     //rather than by row, since filtering rebuilds every row.
     property list<string> expansionBeforeFilter: []
 
+    //The source roots that arrived since the view last took rows in, opened
+    //one level once it has. Held by object, since the indexes move.
+    property list<SurveyNode> pendingSourceRoots: []
+
     //The view row under the pointer, -1 for none. A move target draws its
     //whole row hovered, and a row is one cell per column.
     property int hoveredRow: -1
@@ -237,9 +241,9 @@ ColumnLayout {
     }
 
     //Asks before removing what the SurveyTreeRow \a row stands for. The row
-    //already carries its object, its name and the trips under it, so the
-    //prompt is filled in from the row itself. It opens over the spot \a x,
-    //\a y names in the row's coordinates.
+    //already carries its object and its name, so the prompt is filled in from
+    //the row itself. It opens over the spot \a x, \a y names in the row's
+    //coordinates.
     function askRemove(row: QQ.Item, x: real, y: real) {
         if(surveyTreeId.removeAskBox === null || row === null) {
             return;
@@ -249,11 +253,7 @@ ColumnLayout {
         surveyTreeId.removeAskBox.x = position.x;
         surveyTreeId.removeAskBox.y = position.y;
         surveyTreeId.removeAskBox.removeName = row.name;
-        surveyTreeId.removeAskBox.message =
-                surveyTreeId.removeMessage(row.name,
-                                           row.isNode,
-                                           surveyTreeId.descendantNodeCount(row.node),
-                                           row.tripCount);
+        surveyTreeId.removeAskBox.message = surveyTreeId.removeMessage(row.object);
         surveyTreeId.pendingRemoveObject = row.object;
         surveyTreeId.removeAskBox.show();
     }
@@ -271,26 +271,131 @@ ColumnLayout {
         return count;
     }
 
+    //Every trip under \a node, at any depth, split into the trips its file
+    //derives and the trips the user added: { derived, native }.
+    function subtreeTripCounts(node: SurveyNode) : var {
+        let counts = { derived: 0, native: 0 };
+        for(let i = 0; i < node.tripCount; i++) {
+            if(node.trip(i).sourcePath !== "") {
+                counts.derived++;
+            } else {
+                counts.native++;
+            }
+        }
+        for(let i = 0; i < node.childNodeCount; i++) {
+            const childCounts = surveyTreeId.subtreeTripCounts(node.childNode(i));
+            counts.derived += childCounts.derived;
+            counts.native += childCounts.native;
+        }
+        return counts;
+    }
+
+    //The name of the file \a node's source root copied into the project,
+    //without its folder.
+    function sourceFileName(node: SurveyNode) : string {
+        const sourceRoot = node.sourceRoot();
+        return sourceRoot !== null ? RootData.fileName(sourceRoot.externalCenterline.entryFile) : "";
+    }
+
     //"1 trip", "3 trips".
     function countText(count: int, singular: string, plural: string) : string {
         return count === 1 ? qsTr("1 %1").arg(singular)
                            : qsTr("%1 %2").arg(count).arg(plural);
     }
 
-    //What the prompt says. A node takes everything under it along, so the
-    //question counts the children and trips that go with it.
-    function removeMessage(name: string, isNode: bool, nodeCount: int, tripCount: int) : string {
+    //What a source root's nodes are called in its prompt: the files of a
+    //Compass project, the blocks of a Survex file, the books of a Walls book.
+    function sourceNodeNoun(root: SurveyNode) : list<string> {
+        switch(root.kind) {
+        case SurveyNodeKind.CompassProject:
+        case SurveyNodeKind.CompassFile:
+            return [qsTr("file"), qsTr("files")];
+        case SurveyNodeKind.SurvexFile:
+        case SurveyNodeKind.SurvexBlock:
+            return [qsTr("block"), qsTr("blocks")];
+        default:
+            return [qsTr("book"), qsTr("books")];
+        }
+    }
+
+    //"3 derived trips and 1 native trip", the trips a source root's prompt
+    //names. Native trips are named only when there are some.
+    function sourcedTripsText(counts: var) : string {
+        const derived = surveyTreeId.countText(counts.derived, qsTr("derived trip"), qsTr("derived trips"));
+        return counts.native > 0
+                ? qsTr("%1 and %2").arg(derived)
+                      .arg(surveyTreeId.countText(counts.native, qsTr("native trip"), qsTr("native trips")))
+                : derived;
+    }
+
+    //What the prompt says. Deleting a source root takes its subtree and its
+    //copied file along; deleting a node or trip its file derives hides it, so
+    //the prompt says it stays hidden; anything else is the ordinary delete,
+    //which counts the children and trips that go with it.
+    function removeMessage(object: QQ.QtObject) : string {
+        const node = object as SurveyNode;
+        const trip = object as Trip;
+
+        if(trip !== null) {
+            return trip.sourcePath !== ""
+                    ? qsTr("Delete trip <b>%1</b>? Hides it from the project; it stays hidden across Reload of %2.")
+                          .arg(trip.name)
+                          .arg(surveyTreeId.sourceFileName(trip.parentNode))
+                    : qsTr("Delete <b>%1</b>?").arg(trip.name);
+        }
+
+        if(node === null) {
+            return "";
+        }
+
+        if(node.isSourceRoot) {
+            const noun = surveyTreeId.sourceNodeNoun(node);
+            const nodeCount = surveyTreeId.descendantNodeCount(node);
+            const tripsText = surveyTreeId.sourcedTripsText(surveyTreeId.subtreeTripCounts(node));
+            const parts = nodeCount > 0
+                    ? qsTr("%1, %2").arg(surveyTreeId.countText(nodeCount, noun[0], noun[1])).arg(tripsText)
+                    : tripsText;
+            return qsTr("Delete <b>%1</b>? Removes %2. The copied %3 is removed from the project.")
+                      .arg(node.name)
+                      .arg(parts)
+                      .arg(surveyTreeId.sourceFileName(node));
+        }
+
+        //Hiding removes the node outright, so native trips under it are
+        //deleted; Restore rebuilds only what the file derives.
+        if(node.isSourced) {
+            const kindLabel = RegionSurveyTree.data(RegionSurveyTree.indexOf(node),
+                                                    SurveyTreeModel.KindLabelRole);
+            const counts = surveyTreeId.subtreeTripCounts(node);
+            const fileName = surveyTreeId.sourceFileName(node);
+            const hideText = qsTr("Delete <b>%1</b>? Hides this %2 and its %3 from the project. It stays hidden across Reload; Restore… on %4 brings it back.")
+                      .arg(node.name)
+                      .arg(kindLabel)
+                      .arg(surveyTreeId.countText(counts.derived, qsTr("derived trip"), qsTr("derived trips")))
+                      .arg(fileName);
+            if(counts.native === 0) {
+                return hideText;
+            }
+            const nativeText = counts.native === 1
+                    ? qsTr("Its 1 native trip is deleted for good; Restore… brings back only what %1 derives.").arg(fileName)
+                    : qsTr("Its %1 native trips are deleted for good; Restore… brings back only what %2 derives.").arg(counts.native).arg(fileName);
+            return qsTr("%1 %2").arg(hideText).arg(nativeText);
+        }
+
+        const nodeCount = surveyTreeId.descendantNodeCount(node);
+        const counts = surveyTreeId.subtreeTripCounts(node);
+        const tripCount = counts.derived + counts.native;
         let contents = [];
-        if(isNode && nodeCount > 0) {
+        if(nodeCount > 0) {
             contents.push(surveyTreeId.countText(nodeCount, qsTr("child"), qsTr("children")));
         }
-        if(isNode && tripCount > 0) {
+        if(tripCount > 0) {
             contents.push(surveyTreeId.countText(tripCount, qsTr("trip"), qsTr("trips")));
         }
 
         const subject = contents.length === 0
-                      ? qsTr("<b>%1</b>").arg(name)
-                      : qsTr("<b>%1</b> and its %2").arg(name).arg(contents.join(qsTr(" and ")));
+                      ? qsTr("<b>%1</b>").arg(node.name)
+                      : qsTr("<b>%1</b> and its %2").arg(node.name).arg(contents.join(qsTr(" and ")));
         return qsTr("Delete %1?").arg(subject);
     }
 
@@ -325,9 +430,11 @@ ColumnLayout {
         }
     }
 
-    //Removes whatever the prompt asked about. A top-level node is a row of the
-    //region, which is the undoable way to remove a cave; anything deeper is a
-    //row of its own parent.
+    //Removes whatever the prompt asked about. A source root goes with its
+    //copied file and its source record, and a node or trip its file derives is
+    //hidden so Reload keeps it out. A top-level node is a row of the region,
+    //which is the undoable way to remove a cave; anything deeper is a row of
+    //its own parent.
     function removePending() {
         const object = surveyTreeId.pendingRemoveObject;
         surveyTreeId.pendingRemoveObject = null;
@@ -336,6 +443,18 @@ ColumnLayout {
         }
 
         const node = object as SurveyNode;
+        const trip = object as Trip;
+
+        if(node !== null && node.isSourceRoot) {
+            RootData.deleteSourceRoot(node);
+            return;
+        }
+
+        if((node !== null && node.isSourced) || (trip !== null && trip.sourcePath !== "")) {
+            RootData.hideDerived(object);
+            return;
+        }
+
         if(node !== null) {
             const cave = object as Cave;
             const regionRow = cave !== null ? RootData.region.indexOf(cave) : -1;
@@ -351,10 +470,42 @@ ColumnLayout {
             return;
         }
 
-        const trip = object as Trip;
         if(trip !== null && trip.parentNode !== null) {
             trip.parentNode.removeTrip(trip.parentNode.indexOf(trip));
         }
+    }
+
+    //Opens the Attach survey file dialog with \a node as the place the
+    //file's subtree goes.
+    function attachSurveyFile(node: SurveyNode) {
+        attachDialogLoaderId.active = true;
+        const dialog = attachDialogLoaderId.item as AttachSurveyFileDialog;
+        dialog.target = node;
+        dialog.open();
+    }
+
+    //Shows the source root an attach just built: opened up to, open one level,
+    //and current.
+    function revealAttached(sourceRoot: SurveyNode) {
+        if(sourceRoot === null) {
+            return;
+        }
+
+        surveyTreeId.revealObject(sourceRoot);
+        const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(sourceRoot));
+        const viewRow = treeViewId.rowAtIndex(proxyIndex);
+        if(viewRow >= 0) {
+            treeViewId.expand(viewRow);
+            treeViewId.forceLayout();
+        }
+    }
+
+    //Opens the Replace dialog for \a sourceRoot.
+    function replaceSource(sourceRoot: SurveyNode) {
+        replaceDialogLoaderId.active = true;
+        const dialog = replaceDialogLoaderId.item as ReplaceCenterlineDialog;
+        dialog.owner = sourceRoot;
+        dialog.open();
     }
 
     //Arms Move to… for \a object. The whole-region tree is where a move picks
@@ -458,6 +609,57 @@ ColumnLayout {
             surveyTreeId.collapseAll();
             surveyTreeId.restoreExpansion(surveyTreeId.expansionBeforeFilter);
             surveyTreeId.expansionBeforeFilter = [];
+        }
+    }
+
+    //True when the proxy index \a proxyIndex is a node row that owns a copied
+    //survey file.
+    function isSourceRootProxyIndex(proxyIndex) : bool {
+        return RegionSurveyTree.isSourceRootIndex(filterModelId.mapToSource(proxyIndex));
+    }
+
+    //Queues every source root at or under \a proxyIndex, the invalid index
+    //standing for the whole tree, to open one level: a node that owns a
+    //copied survey file shows what the file holds as it arrives.
+    function collectSourceRoots(proxyIndex) {
+        if(proxyIndex.valid && surveyTreeId.isSourceRootProxyIndex(proxyIndex)) {
+            surveyTreeId.pendingSourceRoots.push(surveyTreeId.objectAt(proxyIndex));
+        }
+
+        const childCount = filterModelId.rowCount(proxyIndex);
+        for(let row = 0; row < childCount; row++) {
+            surveyTreeId.collectSourceRoots(filterModelId.index(row, SurveyTreeModel.Name, proxyIndex));
+        }
+    }
+
+    //Opens the queued source roots one level each. A root that left the tree
+    //in the meantime has no row, and is skipped. A row under a closed parent
+    //is no row of the view, so its ancestors open first.
+    function expandPendingSourceRoots() {
+        //A copy: a list property read is a reference to the property itself,
+        //which the clear below would empty.
+        const roots = Array.from(surveyTreeId.pendingSourceRoots);
+        surveyTreeId.pendingSourceRoots = [];
+        for(let i = 0; i < roots.length; i++) {
+            const proxyIndex = filterModelId.mapFromSource(RegionSurveyTree.indexOf(roots[i]));
+            if(proxyIndex.valid) {
+                treeViewId.expandToIndex(proxyIndex);
+                treeViewId.forceLayout();
+
+                const viewRow = treeViewId.rowAtIndex(proxyIndex);
+                if(viewRow >= 0) {
+                    treeViewId.expand(viewRow);
+                }
+            }
+        }
+    }
+
+    //Opens the queued source roots once the view has taken in the rows that
+    //queued them: a row expanded before then leaves the view with rows that
+    //name nothing.
+    function expandPendingSourceRootsLater() {
+        if(surveyTreeId.pendingSourceRoots.length > 0) {
+            Qt.callLater(surveyTreeId.expandPendingSourceRoots);
         }
     }
 
@@ -584,6 +786,8 @@ ColumnLayout {
     //A tree built over a region that already holds caves sees no insert.
     QQ.Component.onCompleted: {
         surveyTreeId.applyRootIndex();
+        surveyTreeId.collectSourceRoots(surveyTreeId.rootProxyIndex());
+        surveyTreeId.expandPendingSourceRoots();
         surveyTreeId.makeFirstRowCurrent();
     }
 
@@ -610,6 +814,43 @@ ColumnLayout {
 
         function onRemove() {
             surveyTreeId.removePending();
+        }
+    }
+
+    //Built on the first Attach survey file…: the dialog carries a file dialog
+    //and a scan preview that most visits to a page never open. It sits in the
+    //layout but has no size, and draws itself as a popup.
+    QQ.Loader {
+        id: attachDialogLoaderId
+
+        active: false
+
+        Layout.preferredWidth: 0
+        Layout.preferredHeight: 0
+
+        sourceComponent: QQ.Component {
+            AttachSurveyFileDialog {
+                onAttached: (sourceRoot) => surveyTreeId.revealAttached(sourceRoot)
+                onImported: (cave) => surveyTreeId.openObject(cave)
+            }
+        }
+    }
+
+    //Built on the first Replace… a source root's menu asks for, for the same
+    //reason. Freed once it is off the screen, deferred out of its own close
+    //so the popup is not destroyed from inside its emission.
+    QQ.Loader {
+        id: replaceDialogLoaderId
+
+        active: false
+
+        Layout.preferredWidth: 0
+        Layout.preferredHeight: 0
+
+        sourceComponent: QQ.Component {
+            ReplaceCenterlineDialog {
+                onClosed: Qt.callLater(() => replaceDialogLoaderId.active = false)
+            }
         }
     }
 
@@ -808,19 +1049,19 @@ ColumnLayout {
                 surveyTreeId.ensureRootIndex();
 
                 for(let row = first; row <= last; row++) {
-                    const proxyIndex = filterModelId.index(row, SurveyTreeModel.Name, parent);
-                    if(RegionSurveyTree.isSourceRootIndex(filterModelId.mapToSource(proxyIndex))) {
-                        //A row under a closed parent is no row of the view, so
-                        //its ancestors open before the view is asked for it.
-                        treeViewId.expandToIndex(proxyIndex);
-                        treeViewId.forceLayout();
-
-                        const viewRow = treeViewId.rowAtIndex(proxyIndex);
-                        if(viewRow >= 0) {
-                            treeViewId.expand(viewRow);
-                        }
-                    }
+                    surveyTreeId.collectSourceRoots(filterModelId.index(row, SurveyTreeModel.Name, parent));
                 }
+
+                //An attach adds its root before the file's nodes, and a row
+                //opens only once it has rows to show, so the root opens as its
+                //first children arrive.
+                if(first === 0 && parent.valid
+                        && filterModelId.rowCount(parent) === last - first + 1
+                        && surveyTreeId.isSourceRootProxyIndex(parent)) {
+                    surveyTreeId.pendingSourceRoots.push(surveyTreeId.objectAt(parent));
+                }
+
+                surveyTreeId.expandPendingSourceRootsLater();
 
                 surveyTreeId.makeFirstRowCurrent();
             }
@@ -832,8 +1073,11 @@ ColumnLayout {
             function onModelReset() {
                 //A reset throws every index away, rootIndex included; the rows
                 //the root is looked up in arrive afterwards, which is what
-                //onRowsInserted answers for.
+                //onRowsInserted answers for. A loaded project's rows can also
+                //arrive with the reset itself, source roots among them.
                 surveyTreeId.applyRootIndex();
+                surveyTreeId.collectSourceRoots(surveyTreeId.rootProxyIndex());
+                surveyTreeId.expandPendingSourceRootsLater();
                 surveyTreeId.makeFirstRowCurrent();
             }
 

@@ -87,7 +87,8 @@ public:
         DeclinationRole,
         AutoDeclinationRole,
         MutedRole,
-        NameRole
+        NameRole,
+        HasSurveyContentRole //!< False for a sourced node with no trip under it, which draws gray
     };
     Q_ENUM(RoleItem)
 
@@ -232,6 +233,14 @@ private:
     //! The trip and station counts of \a node and of every node above it moved,
     //! because those two fold over a whole subtree.
     void emitAggregateChanged(cwSurveyNode* node);
+
+    //! Whether \a node and every node above it hold survey content may have
+    //! moved, so their whole rows are announced for HasSurveyContentRole.
+    void emitSurveyContentChanged(cwSurveyNode* node);
+
+    //! A sourced node holds survey content once a trip sits anywhere under it,
+    //! which is the scan's own rule for a gray book; a native node always does.
+    static bool hasSurveyContent(const cwSurveyNode* node);
 
     //! The number of trips over \a node's subtree, its own trips included.
     static int subtreeTripCount(const cwSurveyNode* node);

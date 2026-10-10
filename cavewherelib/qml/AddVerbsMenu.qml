@@ -15,9 +15,13 @@ import cavewherelib
 // Section, a Section being a Folder named for where it sits. A cave is
 // therefore never offered inside a cave.
 //
+// Every place also offers Attach survey file…, which builds the file's subtree
+// under the menu's node.
+//
 // The menu adds the node or trip itself and hands it to added(), so each host
-// decides only where the user lands afterwards. A host appends its own entries
-// below the verbs, the way the Data page appends Add from Survey File….
+// decides only where the user lands afterwards. Attach needs a dialog first, so
+// the menu hands that verb to attachSurveyFileRequested() and the host opens
+// its dialog. A host appends its own entries below the verbs.
 QC.Menu {
     id: addVerbsMenuId
 
@@ -25,7 +29,8 @@ QC.Menu {
         AddCave,
         AddFolder,
         AddTrip,
-        AddSection
+        AddSection,
+        AttachSurveyFile
     }
 
     //The node the verbs add under, null for the region's top level.
@@ -40,10 +45,15 @@ QC.Menu {
     readonly property list<int> verbs: (addVerbsMenuId.takesCaves
                                         ? [AddVerbsMenu.AddCave, AddVerbsMenu.AddFolder]
                                         : [AddVerbsMenu.AddTrip, AddVerbsMenu.AddSection])
+                                       .concat([AddVerbsMenu.AttachSurveyFile])
                                        .filter(verb => !addVerbsMenuId.hiddenVerbs.includes(verb))
 
     //\a verb ran: \a object is the new cwSurveyNode or cwTrip.
     signal added(object: QQ.QtObject, verb: int)
+
+    //Attach survey file… ran: the host opens its dialog with \a node as the
+    //target, the region's root for the top level.
+    signal attachSurveyFileRequested(node: SurveyNode)
 
     function verbText(verb: int) : string {
         switch(verb) {
@@ -55,6 +65,8 @@ QC.Menu {
             return qsTr("Add Trip");
         case AddVerbsMenu.AddSection:
             return qsTr("Add Section");
+        case AddVerbsMenu.AttachSurveyFile:
+            return qsTr("Attach survey file…");
         default:
             return "";
         }
@@ -70,6 +82,8 @@ QC.Menu {
             return "addTripMenuItem";
         case AddVerbsMenu.AddSection:
             return "addSectionMenuItem";
+        case AddVerbsMenu.AttachSurveyFile:
+            return "attachSurveyFileMenuItem";
         default:
             return "";
         }
@@ -107,6 +121,9 @@ QC.Menu {
         case AddVerbsMenu.AddTrip:
             node.addTrip();
             object = node.trip(node.tripCount - 1);
+            break;
+        case AddVerbsMenu.AttachSurveyFile:
+            addVerbsMenuId.attachSurveyFileRequested(node !== null ? node : region.rootNode);
             break;
         default:
             break;

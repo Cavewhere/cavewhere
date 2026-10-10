@@ -11,6 +11,7 @@
 //Our includes
 #include "cwExternalCenterlineScanner.h"
 #include "cwGlobals.h"
+#include "cwSurveyNode.h"
 
 //Qt includes
 #include <QDate>
@@ -102,6 +103,13 @@ public:
     // unit-only row (the trip an attach derives from it).
     Q_INVOKABLE QString kindLabel(const cwScanRow& row) const;
 
+    // What Replace with the scanned file costs \a root's derived trips (§6.11
+    // case 5): a scrap loses an anchor when one of its stations is a name the
+    // scanned file holds nowhere. The notes count is the notes holding at least
+    // one such scrap. Both are zero until the scan is valid.
+    Q_INVOKABLE int notesLosingAnchors(cwSurveyNode* root) const;
+    Q_INVOKABLE int scrapsLosingAnchors(cwSurveyNode* root) const;
+
     // Counted from blocks() rather than stored, so the two can never
     // disagree. With entryHasOwnShots it drives the multi-cave
     // heuristic: several top-level blocks and no shots of the entry's
@@ -135,6 +143,14 @@ signals:
     void scanChanged();
 
 private:
+    struct AnchorLoss
+    {
+        int notes = 0;
+        int scraps = 0;
+    };
+
+    AnchorLoss anchorLoss(const cwSurveyNode* root) const;
+
     void setScanning(bool scanning);
     // Takes the whole scan so a cleared or failed path applies a
     // default-constructed ScanResult and wipes every derived field at

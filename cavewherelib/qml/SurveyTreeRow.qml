@@ -59,6 +59,7 @@ QQ.Item {
     required property real declination
     required property bool autoDeclination
     required property bool muted
+    required property bool hasSurveyContent
 
     //A pooled delegate keeps the row it last drew, so it gives up its name
     //until TreeView hands it a new row.
@@ -72,9 +73,14 @@ QQ.Item {
     readonly property SurveyNode node: rowId.object as SurveyNode
     readonly property Trip trip: rowId.object as Trip
 
+    //A node from a copied file with no survey data under it, such as a Walls
+    //book of drawings, stays in the tree so the file's structure reads whole,
+    //and draws gray so it reads as holding nothing.
+    readonly property bool grayed: !rowId.hasSurveyContent
+
     //A trip row sits under the cave it belongs to, so its cells are drawn
     //quieter than the cave's own.
-    readonly property QQ.color textColor: rowId.muted ? Theme.textSubtle : Theme.text
+    readonly property QQ.color textColor: rowId.muted || rowId.grayed ? Theme.textSubtle : Theme.text
 
     //True while the row's survey data comes from an attached file: a node owns
     //an external centerline, a trip is a window into one.
@@ -451,7 +457,7 @@ QQ.Item {
                     //a node says so with its Kind chip instead.
                     text: (rowId.externallyBacked && !rowId.isNode ? "📎 " : "")
                           + rowId.name
-                    color: rowId.isNode ? Theme.textLink : Theme.textSubtle
+                    color: rowId.isNode && !rowId.grayed ? Theme.textLink : Theme.textSubtle
                     elide: QQ.Text.ElideRight
                     visible: !rowId.renaming
                     //An armed move takes the click instead of the page.

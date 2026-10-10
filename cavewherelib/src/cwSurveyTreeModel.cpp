@@ -29,6 +29,7 @@ namespace {
                                      cwSurveyTreeModel::IsSourceRootRole};
     const QList<int> kAggregateRoles = {cwSurveyTreeModel::TripCountRole,
                                         cwSurveyTreeModel::StationCountRole};
+    const QList<int> kSurveyContentRoles = {cwSurveyTreeModel::HasSurveyContentRole};
 }
 
 cwSurveyTreeModel::cwSurveyTreeModel(QObject* parent) :
@@ -228,6 +229,8 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
                 ? false
                 : trip->calibrations()->autoDeclination()
                       && trip->calibrations()->autoDeclinationAvailable();
+    case HasSurveyContentRole:
+        return node != nullptr ? hasSurveyContent(node) : true;
     case MutedRole:
         //A trip reads as a leaf of the node above it, and a Folder's stats are
         //its children's rather than its own.
@@ -301,7 +304,8 @@ QHash<int, QByteArray> cwSurveyTreeModel::roleNames() const
         {DeclinationRole, "declination"},
         {AutoDeclinationRole, "autoDeclination"},
         {MutedRole, "muted"},
-        {NameRole, "name"}
+        {NameRole, "name"},
+        {HasSurveyContentRole, "hasSurveyContent"}
     };
 }
 
@@ -589,12 +593,15 @@ void cwSurveyTreeModel::connectNode(cwSurveyNode* node)
     connect(node, &cwSurveyNode::sourceChanged, this, [this, node]() {
         //The Kind chip reads the source as well as the Name cell's badge.
         emitRowDataChanged(indexOfNode(node), Name, Kind, kSourceRoles);
+        emitSurveyContentChanged(node);
     });
     connect(node, &cwSurveyNode::childNodeCountChanged, this, [this, node]() {
         emitAggregateChanged(node);
+        emitSurveyContentChanged(node);
     });
     connect(node, &cwSurveyNode::tripCountChanged, this, [this, node]() {
         emitAggregateChanged(node);
+        emitSurveyContentChanged(node);
     });
     connect(node->length(), &cwUnitValue::valueChanged, this, [this, node]() {
         emitRowDataChanged(indexOfNode(node), Length, Length, {LengthRole});
@@ -771,6 +778,24 @@ void cwSurveyTreeModel::emitAggregateChanged(cwSurveyNode* node)
     for(cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
         emitRowDataChanged(indexOfNode(current), Trips, Stations, kAggregateRoles);
     }
+}
+
+//A native node always has survey content, so only \a node and its sourced
+//ancestors can change.
+void cwSurveyTreeModel::emitSurveyContentChanged(cwSurveyNode* node)
+{
+    emitRowDataChanged(indexOfNode(node), Name, Decl, kSurveyContentRoles);
+    for(cwSurveyNode* current = node->parentNode();
+        current != nullptr && current->isSourced();
+        current = current->parentNode())
+    {
+        emitRowDataChanged(indexOfNode(current), Name, Decl, kSurveyContentRoles);
+    }
+}
+
+bool cwSurveyTreeModel::hasSurveyContent(const cwSurveyNode* node)
+{
+    return !node->isSourced() || subtreeTripCount(node) > 0;
 }
 
 int cwSurveyTreeModel::subtreeTripCount(const cwSurveyNode* node)

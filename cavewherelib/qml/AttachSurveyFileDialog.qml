@@ -10,29 +10,29 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Add-cave-from-survey-file dialog (Phase 3 §3.1). Pick an entry file,
-// read the scan's verdict and the file's tree of books, files, blocks,
-// and surveys, then choose how CaveWhere uses the file, the same two
-// choices the trip dialog offers: Attach (recommended - the file stays
-// the source) or Import a copy (Survex only - the
-// data lands in a native trip of the cave, editable here).
+// The Attach survey file dialog (SURVEY_TREE_PLAN C7.4a). Pick an entry file,
+// read the scan's summary, see where the subtree goes and the subtree itself,
+// then Attach: the file's tree becomes a read-only subtree under target. Import
+// a copy stays beside it for Survex files, where the target takes caves: the
+// parsed shots land in a native trip of a new cave there.
 //
 // The dialog owns no attach state of its own beyond the session, which
 // attributes the manager's shared attachCompleted report back to this
-// surface. A failed attach fires no outcome signal: the error shows
-// inline and the dialog stays open for another attempt.
+// surface. A failed attach fires no outcome signal: the error shows inline and
+// the dialog stays open for another attempt.
 QQ.Item {
     id: root
-    objectName: "addCaveSurveyFileDialog"
+    objectName: "attachSurveyFileDialog"
 
-    // Where Attach builds the file's subtree. Import adds a cave of its own.
+    // Where Attach builds the file's subtree, the region's root for the top
+    // level. Import adds its cave here too.
     property SurveyNode target: null
 
-    // The cave Import created and filled, for the host to name.
+    // The cave Import created and filled.
     property Cave importedCave: null
 
-    // Import adds the trip it fills, and importFinished names that trip,
-    // so the dialog keeps it to recognize its own report.
+    // Import adds the trip it fills, and importFinished names that trip, so
+    // the dialog keeps it to recognize its own report.
     property bool importing: false
     property Trip importingTrip: null
 
@@ -42,15 +42,17 @@ QQ.Item {
     readonly property bool attaching: sessionId.busy
     readonly property bool busy: root.attaching || root.importing
 
-    // Outcome signals for hosts. Exactly one fires per open()d session
-    // that ends: attached(sourceRoot) when this dialog's attach succeeds,
-    // imported(trip, sourcePath) when its import completes (the cave keeps
-    // no record of the file on this path, so the filled trip and the picked
-    // path ride the signal for naming), dismissed() when the user backs out (idle
-    // Cancel, or a canceled attach). The programmatic close() is silent
-    // so hosts and tests can reset state without triggering cleanup.
+    // A cave goes only where caves go, so Import is offered there alone.
+    readonly property bool targetTakesCaves: root.target !== null && root.target.takesCaves
+
+    // Outcome signals for hosts. Exactly one fires per open()d session that
+    // ends: attached(sourceRoot) when this dialog's attach succeeds,
+    // imported(cave) when its import completes, named after the file,
+    // dismissed() when the user backs out (idle Cancel, or a canceled attach).
+    // The programmatic close() is silent so hosts and tests can reset state
+    // without triggering cleanup.
     signal attached(sourceRoot: SurveyNode)
-    signal imported(trip: Trip, sourcePath: string)
+    signal imported(cave: Cave)
     signal dismissed()
 
     function open() {
@@ -62,19 +64,19 @@ QQ.Item {
         dialogId.open()
     }
 
-    // Import a copy: the parsed shots go into a new trip of a new cave.
+    function close() {
+        dialogId.close()
+    }
+
+    // Import a copy: the parsed shots go into a new trip of a new cave under
+    // the target.
     function startImport() {
         sessionId.errorMessage = ""
-        RootData.region.addCave()
-        root.importedCave = RootData.region.cave(RootData.region.caveCount - 1)
+        root.importedCave = RootData.region.addNode(root.target, SurveyNodeKind.Cave) as Cave
         root.importedCave.addTrip()
         root.importingTrip = root.importedCave.trip(root.importedCave.tripCount - 1)
         root.importing = true
         RootData.surveyImportManager.importSurvexToTrip(pickerId.sourcePath, root.importingTrip)
-    }
-
-    function close() {
-        dialogId.close()
     }
 
     // The child of target whose id reads as nodeId, or null.
@@ -89,6 +91,60 @@ QQ.Item {
             }
         }
         return null
+    }
+
+    // "Region root (top level)", or the target's path from the top with its
+    // kind: "Kentucky › Side Cave (Cave)".
+    function placeUnderText() : string {
+        if (root.target === null || root.target === RootData.region.rootNode) {
+            return qsTr("Region root (top level)")
+        }
+        let names = []
+        for (let node = root.target;
+             node !== null && node !== RootData.region.rootNode;
+             node = node.parentNode) {
+            names.unshift(node.name)
+        }
+        const kindLabel = RegionSurveyTree.data(RegionSurveyTree.indexOf(root.target),
+                                                SurveyTreeModel.KindLabelRole)
+        return qsTr("%1 (%2)").arg(names.join(" › ")).arg(kindLabel)
+    }
+
+    // "1 file", "4 files".
+    function countText(count: int, singular: string, plural: string) : string {
+        return qsTr("%1 %2").arg(count).arg(count === 1 ? singular : plural)
+    }
+
+    // One line for what the scan found: the kind, the files, the surveys and
+    // stations they hold, and the listed files the disk lacks.
+    function summaryText() : string {
+        if (pickerId.rows.length === 0) {
+            return ""
+        }
+        const counts = [root.countText(pickerId.fileCount, qsTr("file"), qsTr("files")),
+                        root.countText(pickerId.surveyCount, qsTr("survey"), qsTr("surveys")),
+                        root.countText(pickerId.stationCount, qsTr("station"), qsTr("stations"))]
+        const found = qsTr("✓ %1 — %2").arg(pickerId.kindLabel(pickerId.rows[0])).arg(counts.join(", "))
+        return pickerId.missingFileCount > 0
+                ? qsTr("%1 · %2 missing").arg(found)
+                      .arg(root.countText(pickerId.missingFileCount, qsTr("listed file"), qsTr("listed files")))
+                : found
+    }
+
+    // How the scan's tree becomes nodes and trips, said for the format of the
+    // subtree's root, the scan's first row.
+    function previewHintText() : string {
+        switch (pickerId.rows.length > 0 ? pickerId.rows[0].kind : SurveyNodeKind.Folder) {
+        case SurveyNodeKind.CompassProject:
+        case SurveyNodeKind.CompassFile:
+            return qsTr("One node per .dat file, one trip per survey.")
+        case SurveyNodeKind.WallsBook:
+            return qsTr("One node per book, at the depth the project file gives it; "
+                        + "one trip per survey file with shots. Books without "
+                        + "surveys stay in the tree, grayed.")
+        default:
+            return qsTr("One node per block; a block with its own shots also gets a trip.")
+        }
     }
 
     ExternalCenterlineAttachSession {
@@ -110,20 +166,27 @@ QQ.Item {
 
         function onImportFinished(trip, hasErrors) {
             if (root.importing && trip === root.importingTrip) {
-                const importedTrip = root.importingTrip
                 root.importing = false
                 root.importingTrip = null
                 // Parse warnings live in the global error model; the import
                 // lands whatever parsed, so the session is over either way.
+                // The file's name without its directory or extension names
+                // both; uniqueTripName and uniqueChildName dedupe, since
+                // setName silently refuses a name a sibling holds.
+                const fileName = RootData.fileName(pickerId.sourcePath)
+                const dotIndex = fileName.lastIndexOf(".")
+                const baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
+                trip.name = root.importedCave.uniqueTripName(baseName)
+                root.importedCave.name = root.importedCave.parentNode.uniqueChildName(baseName)
                 dialogId.close()
-                root.imported(importedTrip, pickerId.sourcePath)
+                root.imported(root.importedCave)
             }
         }
     }
 
     QC.Dialog {
         id: dialogId
-        objectName: "addCaveAttachDialog"
+        objectName: "attachDialog"
 
         readonly property QQ.Item overlayItem: QC.Overlay.overlay
         readonly property bool compact: overlayItem !== null
@@ -141,7 +204,7 @@ QQ.Item {
                     ? Math.min(target, overlayItem.width - 2 * Theme.actionBarSpacing)
                     : target
         }
-        title: qsTr("Add cave from survey file")
+        title: qsTr("Attach survey file")
         closePolicy: QC.Popup.NoAutoClose
 
         contentItem: ColumnLayout {
@@ -157,8 +220,36 @@ QQ.Item {
                 onPathEdited: sessionId.errorMessage = ""
             }
 
-            // Disclosure, not a picker: auto-creation is silent, so this
-            // is where the user sees what the attach is about to make.
+            QC.Label {
+                objectName: "scanSummaryText"
+                Layout.fillWidth: true
+                visible: pickerId.valid && pickerId.rows.length > 0
+                wrapMode: QC.Label.WordWrap
+                color: Theme.textSecondary
+                text: root.summaryText()
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.sectionSpacing
+                spacing: Theme.tightSpacing
+
+                QC.Label {
+                    text: qsTr("Place under")
+                    font.bold: true
+                }
+
+                QC.Label {
+                    objectName: "placeUnderText"
+                    Layout.fillWidth: true
+                    elide: QC.Label.ElideMiddle
+                    color: Theme.textSecondary
+                    text: root.placeUnderText()
+                }
+            }
+
+            // Disclosure, not a picker: the subtree is built as scanned, so
+            // this is where the user sees what the attach is about to make.
             ColumnLayout {
                 objectName: "blockPreview"
                 Layout.fillWidth: true
@@ -167,26 +258,22 @@ QQ.Item {
                 visible: pickerId.valid && pickerId.rows.length > 0
 
                 QC.Label {
-                    text: qsTr("What the file holds")
+                    objectName: "blockPreviewTitle"
+                    text: qsTr("Subtree CaveWhere will create")
                     font.bold: true
                 }
 
-                // The stations no block claims - every station of a
-                // Compass or prefix-less Walls file - get one
-                // whole-file trip, listed first because it stands
-                // above the block tree.
                 QC.Label {
-                    objectName: "wholeFileRow"
+                    objectName: "blockPreviewHint"
                     Layout.fillWidth: true
-                    visible: pickerId.rootStationCount > 0
-                    elide: QC.Label.ElideRight
-                    text: qsTr("Whole file — %n station(s)", "",
-                               pickerId.rootStationCount)
+                    wrapMode: QC.Label.WordWrap
+                    color: Theme.textSubtle
+                    font.pixelSize: Theme.fontSizeSmall
+                    text: root.previewHintText()
                 }
 
-                // The tree scrolls once it outgrows the shared list cap,
-                // so a whole survey project's blocks never push the
-                // buttons off the screen.
+                // The tree scrolls once it outgrows the shared list cap, so a
+                // whole survey project never pushes the buttons off the screen.
                 QQ.ListView {
                     objectName: "blockPreviewList"
                     Layout.fillWidth: true
@@ -222,72 +309,6 @@ QQ.Item {
                                     .arg(blockRowId.kindText)
                     }
                 }
-
-                QC.Label {
-                    objectName: "blockPreviewHint"
-                    Layout.fillWidth: true
-                    wrapMode: QC.Label.WordWrap
-                    color: Theme.textSubtle
-                    font.pixelSize: Theme.fontSizeSmall
-                    text: qsTr("One trip per survey block with stations, plus "
-                             + "one for the stations no block claims. "
-                             + "Rename or delete any of them afterward.")
-                }
-            }
-
-            // Guidance, not refusal (§5 Q4): a two-entrance system
-            // legitimately looks like this, so Attach stays enabled.
-            ColumnLayout {
-                objectName: "multiCaveHeuristicPanel"
-                Layout.fillWidth: true
-                Layout.topMargin: Theme.sectionSpacing
-                spacing: Theme.tightSpacing
-                visible: pickerId.valid && pickerId.topLevelBlockCount >= 2
-                         && !pickerId.entryHasOwnShots
-
-                QC.Label {
-                    Layout.fillWidth: true
-                    wrapMode: QC.Label.WordWrap
-                    font.bold: true
-                    color: Theme.warning
-                    text: qsTr("This file looks like a whole survey project, not one cave")
-                }
-
-                BodyText {
-                    objectName: "multiCaveHeuristicBody"
-                    Layout.fillWidth: true
-                    wrapMode: QC.Label.WordWrap
-                    text: qsTr("It holds %n top-level survey block(s) and no "
-                             + "survey data of its own. Attaching it makes a "
-                             + "single cave that contains all of them. To make "
-                             + "one cave per survey, attach that survey's own "
-                             + "file instead:", "", pickerId.topLevelBlockCount)
-                }
-
-                QQ.Repeater {
-                    objectName: "heuristicSuggestions"
-                    model: pickerId.entryDirectIncludes
-
-                    delegate: LinkText {
-                        id: suggestionId
-                        objectName: "heuristicSuggestion"
-
-                        required property string modelData
-
-                        Layout.leftMargin: Theme.sectionSpacing
-                        text: RootData.fileName(suggestionId.modelData)
-                        onClicked: pickerId.setPath(suggestionId.modelData)
-                    }
-                }
-
-                QC.Label {
-                    Layout.fillWidth: true
-                    wrapMode: QC.Label.WordWrap
-                    color: Theme.textSubtle
-                    font.pixelSize: Theme.fontSizeSmall
-                    text: qsTr("Splitting one file into several caves arrives "
-                             + "with region-level attach.")
-                }
             }
 
             QC.Label {
@@ -320,12 +341,12 @@ QQ.Item {
                             Layout.fillWidth: true
                             wrapMode: QC.Label.WordWrap
                             text: qsTr("The file stays the source of truth — keep "
-                                     + "editing it in your survey tool and CaveWhere "
-                                     + "stays in sync. A copy travels with your "
-                                     + "project for git sync, backups, and sharing; "
-                                     + "CaveWhere never writes to your original "
-                                     + "files. Survey data is read-only in "
-                                     + "CaveWhere.")
+                                     + "editing it in your survey tool and Reload "
+                                     + "brings the changes in. A copy travels with "
+                                     + "your project for git sync, backups, and "
+                                     + "sharing; CaveWhere never writes to your "
+                                     + "original files. Survey data is read-only "
+                                     + "in CaveWhere.")
                         }
 
                         QQ.Item { Layout.fillHeight: true }
@@ -368,7 +389,7 @@ QQ.Item {
                             objectName: "importExplainerText"
                             Layout.fillWidth: true
                             wrapMode: QC.Label.WordWrap
-                            text: qsTr("Copies the data into a trip of this cave. "
+                            text: qsTr("Copies the data into a trip of a new cave. "
                                      + "You edit it here; the original file is "
                                      + "never read again.")
                         }
@@ -382,6 +403,15 @@ QQ.Item {
                             text: qsTr("Import supports Survex files only.")
                         }
 
+                        QC.Label {
+                            objectName: "importPlacementNote"
+                            Layout.fillWidth: true
+                            visible: root.target !== null && !root.targetTakesCaves
+                            wrapMode: QC.Label.WordWrap
+                            color: Theme.textSubtle
+                            text: qsTr("Import adds a cave, so it works only where caves go.")
+                        }
+
                         QQ.Item { Layout.fillHeight: true }
 
                         QC.Button {
@@ -390,6 +420,7 @@ QQ.Item {
                             Layout.topMargin: Theme.sectionSpacing
                             text: qsTr("Import a copy")
                             enabled: pickerId.valid && !root.busy && pickerId.importSupported
+                                     && root.targetTakesCaves
                             onClicked: root.startImport()
                         }
                     }

@@ -9,6 +9,14 @@
 #include "cwExternalCenterlineScanPreview.h"
 #include "cwConcurrent.h"
 #include "cwSurveyTreeModel.h"
+#include "cwTrip.h"
+#include "cwSurveyNoteModel.h"
+#include "cwNote.h"
+#include "cwScrap.h"
+#include "cwStation.h"
+
+//Qt includes
+#include <QSet>
 
 //Std includes
 #include <algorithm>
@@ -134,6 +142,58 @@ QString cwExternalCenterlineScanPreview::kindLabel(const cwScanRow& row) const
         return cwSurveyTreeModel::kindLabel(row.kind);
     }
     return QStringLiteral("Trip");
+}
+
+int cwExternalCenterlineScanPreview::notesLosingAnchors(cwSurveyNode* root) const
+{
+    return anchorLoss(root).notes;
+}
+
+int cwExternalCenterlineScanPreview::scrapsLosingAnchors(cwSurveyNode* root) const
+{
+    return anchorLoss(root).scraps;
+}
+
+cwExternalCenterlineScanPreview::AnchorLoss
+cwExternalCenterlineScanPreview::anchorLoss(const cwSurveyNode* root) const
+{
+    AnchorLoss loss;
+    if (root == nullptr || !m_valid) {
+        return loss;
+    }
+
+    // A scrap resolves through the source root's whole view (§6.11 case 3), so
+    // a station anywhere in the new file still anchors it.
+    QSet<QString> scannedStations;
+    for (const cwScanRow& row : m_rows) {
+        for (const QString& station : row.stations) {
+            scannedStations.insert(cwStation::canonicalKey(station));
+        }
+    }
+    const auto isMissingFromScan = [&scannedStations](const cwNoteStation& station) {
+        return !scannedStations.contains(cwStation::canonicalKey(station.name()));
+    };
+
+    const QList<cwTrip*> trips = root->allTrips();
+    for (const cwTrip* trip : trips) {
+        if (!trip->isDerived() || trip->parentNode()->sourceRoot() != root) {
+            continue;
+        }
+        const QList<cwNote*> notes = trip->notes()->notes();
+        for (const cwNote* note : notes) {
+            const QList<cwScrap*> scraps = note->scraps();
+            const int losing = static_cast<int>(std::count_if(scraps.cbegin(), scraps.cend(),
+                                                              [&isMissingFromScan](const cwScrap* scrap) {
+                const QList<cwNoteStation>& stations = scrap->stations();
+                return std::any_of(stations.cbegin(), stations.cend(), isMissingFromScan);
+            }));
+            if (losing > 0) {
+                ++loss.notes;
+                loss.scraps += losing;
+            }
+        }
+    }
+    return loss;
 }
 
 void cwExternalCenterlineScanPreview::applyResult(

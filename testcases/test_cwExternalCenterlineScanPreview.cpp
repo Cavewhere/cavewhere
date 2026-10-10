@@ -10,12 +10,19 @@
 
 // Our
 #include "cwExternalCenterlineScanPreview.h"
+#include "cwCave.h"
+#include "cwNote.h"
+#include "cwNoteStation.h"
+#include "cwScrap.h"
+#include "cwSurveyNoteModel.h"
+#include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
 
 // Qt
 #include <QDate>
 #include <QDir>
 #include <QTemporaryDir>
+#include <QUuid>
 
 namespace {
 
@@ -206,4 +213,64 @@ TEST_CASE("scan preview exposes the tree's rows and summary counts for compass_p
     CHECK(preview.surveyCount() == 0);
     CHECK(preview.stationCount() == 0);
     CHECK(preview.missingFileCount() == 0);
+}
+
+namespace {
+
+// A note on \a trip holding one scrap per entry of \a scrapStations.
+void addNoteWithScraps(cwTrip* trip, const QList<QStringList>& scrapStations)
+{
+    auto* note = new cwNote();
+    trip->notes()->addNotes({note});
+    for (const QStringList& names : scrapStations) {
+        auto* scrap = new cwScrap();
+        note->addScrap(scrap);
+        QList<cwNoteStation> stations;
+        for (const QString& name : names) {
+            cwNoteStation station;
+            station.setName(name);
+            stations.append(station);
+        }
+        scrap->setStations(stations);
+    }
+}
+
+} // namespace
+
+TEST_CASE("scan preview counts the notes and scraps a Replace strands",
+          "[ScanPreview]")
+{
+    // A source root holding one derived trip and one native trip.
+    cwCave root;
+    root.setSourceId(QUuid::createUuid());
+    root.setReadOnly(true);
+
+    auto* derived = new cwTrip();
+    derived->setSourcePath(QStringLiteral("ALPHA.DAT/ALPHA1"));
+    root.addTrip(derived);
+    auto* native = new cwTrip();
+    root.addTrip(native);
+
+    // The first note keeps both scraps: every station is in compass_project,
+    // spelled in another case. The second loses one scrap of two to ZZ9,
+    // which the file names nowhere. The third loses its one scrap.
+    addNoteWithScraps(derived, {{QStringLiteral("ALPHA.A1"), QStringLiteral("alpha.a2")},
+                                {QStringLiteral("bravo.B1")}});
+    addNoteWithScraps(derived, {{QStringLiteral("alpha.A1"), QStringLiteral("ZZ9")},
+                                {QStringLiteral("charlie.C1")}});
+    addNoteWithScraps(derived, {{QStringLiteral("QQ1")}});
+    // A native trip's scraps sit on its own chunks, which Replace leaves alone.
+    addNoteWithScraps(native, {{QStringLiteral("QQ2")}});
+
+    cwExternalCenterlineScanPreview preview;
+    CHECK(preview.notesLosingAnchors(&root) == 0);
+    CHECK(preview.scrapsLosingAnchors(&root) == 0);
+
+    preview.setSourcePath(fixturePath(QStringLiteral("compass_project/PROJECT.MAK")));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !preview.scanning(); }));
+    REQUIRE(preview.valid());
+
+    CHECK(preview.notesLosingAnchors(&root) == 2);
+    CHECK(preview.scrapsLosingAnchors(&root) == 2);
+    CHECK(preview.notesLosingAnchors(nullptr) == 0);
 }

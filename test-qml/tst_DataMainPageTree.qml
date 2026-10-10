@@ -719,8 +719,9 @@ MainWindowTest {
 
             const menu = openRowMenu(page, tree, 0)
             const submenu = openAddSubmenu(menu)
-            compare(menuEntryNames(submenu), ["addCaveMenuItem", "addFolderMenuItem"],
-                    "a Folder outside every cave takes caves and folders")
+            compare(menuEntryNames(submenu),
+                    ["addCaveMenuItem", "addFolderMenuItem", "attachSurveyFileMenuItem"],
+                    "a Folder outside every cave takes caves, folders and survey files")
 
             mouseClick(findChild(submenu, "addCaveMenuItem"))
             tryCompare(folder, "childNodeCount", 1, 5000)
@@ -746,8 +747,9 @@ MainWindowTest {
             tryCompare(tree, "rows", 1, 5000)
 
             let submenu = openAddSubmenu(openRowMenu(page, tree, 0))
-            compare(menuEntryNames(submenu), ["addTripMenuItem", "addSectionMenuItem"],
-                    "a Cave takes trips and sections, never a cave")
+            compare(menuEntryNames(submenu),
+                    ["addTripMenuItem", "addSectionMenuItem", "attachSurveyFileMenuItem"],
+                    "a Cave takes trips, sections and survey files, never a cave")
             compare(submenu.itemAt(1).text, "Add Section")
 
             mouseClick(findChild(submenu, "addSectionMenuItem"))
@@ -771,7 +773,8 @@ MainWindowTest {
                    "a Folder inside a cave draws the signpost, not the folder")
 
             submenu = openAddSubmenu(openRowMenu(page, tree, 1))
-            compare(menuEntryNames(submenu), ["addTripMenuItem", "addSectionMenuItem"],
+            compare(menuEntryNames(submenu),
+                    ["addTripMenuItem", "addSectionMenuItem", "attachSurveyFileMenuItem"],
                     "a Section offers no cave either")
 
             mouseClick(findChild(submenu, "addTripMenuItem"))
@@ -1481,6 +1484,231 @@ MainWindowTest {
                 verify(headerItems[i].text !== "Move to…",
                        "no header control reads Move to…")
             }
+        }
+
+        // --- C7.4a: sourced rows, gray books, and the sourced Delete… texts ---
+
+        // Saves the project, attaches walls_project under the region's root and
+        // adds a native trip to its Surveys book. Returns the source root.
+        function attachWallsProject() {
+            RootData.account.name = "Sourced Test"
+            RootData.account.email = "sourced.test@example.com"
+            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            verify(RootData.project.saveAs(tmpPath + "/sourcedTree.cwproj"), "saveAs should succeed")
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            const regionRoot = RootData.region.rootNode
+            RootData.attachSource(regionRoot,
+                                  TestHelper.testcasesDatasetSourcePath("external-centerlines/walls_project/KAUA.WPJ"))
+            tryVerify(() => regionRoot.childNodeCount === 1
+                            && regionRoot.childNode(0).externalCenterline.entryFile !== ""
+                            && regionRoot.childNode(0).childNodeCount === 3,
+                      10000, "the attach must build the subtree")
+            RootData.futureManagerModel.waitForFinished()
+
+            const surveys = regionRoot.childNode(0).childNode(2)
+            compare(surveys.name, "Surveys")
+            surveys.addTrip()
+            surveys.trip(surveys.tripCount - 1).name = "Native trip"
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+            return regionRoot.childNode(0)
+        }
+
+        // attachWallsProject(), then the project opened again from disk.
+        // Returns the reloaded source root.
+        function attachWallsProjectAndReload() {
+            attachWallsProject()
+            TestHelper.loadProjectFromPath(RootData.project, RootData.project.filename)
+            tryVerify(() => RootData.region.rootNode.childNodeCount === 1
+                            && RootData.region.rootNode.childNode(0).childNodeCount === 3,
+                      10000, "the project must load its subtree")
+            RootData.futureManagerModel.waitForFinished()
+            return RootData.region.rootNode.childNode(0)
+        }
+
+        // The child of \a node named \a name.
+        function childNamed(node, name) {
+            for (let i = 0; i < node.childNodeCount; i++) {
+                if (node.childNode(i).name === name) {
+                    return node.childNode(i)
+                }
+            }
+            return null
+        }
+
+        // The Delete… prompt's message for the row at \a viewRow, closed again
+        // without removing anything.
+        function deletePromptFor(page, tree, viewRow, prefix) {
+            const menu = openMenuOn(page, tree, viewRow, prefix)
+            // Triggered rather than clicked: on the cached Data page, after a
+            // project is opened again, a synthetic click on the menu reaches
+            // the item's press and never its trigger offscreen.
+            // test_sourcedDeleteClickAsksFirst covers the click itself.
+            findChild(menu, "surveyItemDeleteMenuItem").triggered()
+            let askBox = null
+            tryVerify(() => {
+                          askBox = findChild(page, "removeChallange")
+                          return askBox !== null && askBox.visible
+                      }, 5000, "Delete… on " + prefix + viewRow + " must ask first")
+            return askBox
+        }
+
+        // A source root opens one level as the project loads, its books with
+        // no survey data draw gray, and a sourced node offers no rename.
+        function test_sourcedRowsOpenOneLevelOnLoadAndGrayTheEmptyBooks() {
+            const root = attachWallsProjectAndReload()
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+
+            tryCompare(tree, "rows", 4, 10000)
+            verify(tree.isExpanded(0), "the source root opens one level on load")
+            verify(!tree.isExpanded(viewRowOf(tree, childNamed(root, "Surveys"))),
+                   "the levels below stay closed")
+
+            const drawingsRow = rowFor(page, "caveDelegate", viewRowOf(tree, childNamed(root, "Drawings")),
+                                       childNamed(root, "Drawings"))
+            verify(drawingsRow.grayed, "a book with no survey data draws gray")
+            compare(drawingsRow.textColor, Theme.textSubtle)
+            const fixedRow = rowFor(page, "caveDelegate", viewRowOf(tree, childNamed(root, "Fixed Points")),
+                                    childNamed(root, "Fixed Points"))
+            verify(fixedRow.grayed, "a book holding only a fix draws gray")
+            const surveysRow = rowFor(page, "caveDelegate", viewRowOf(tree, childNamed(root, "Surveys")),
+                                      childNamed(root, "Surveys"))
+            verify(!surveysRow.grayed, "a book with surveys under it reads normally")
+            verify(!rowFor(page, "caveDelegate", 0, root).grayed, "the root reads normally")
+
+            // The kind chip names the file the node's shape comes from.
+            const chip = findChild(findChild(page, "caveKind" + viewRowOf(tree, childNamed(root, "Surveys"))),
+                                   "kindChip")
+            verify(chip.sourced, "a derived node's chip is the sourced one")
+            compare(chip.sourceFileName, "KAUA.WPJ")
+
+            // F2 renames a native row in place; a sourced row keeps its file's name.
+            verify(!surveysRow.canRename, "a sourced node offers no rename")
+            tree.surveyTree.setCurrentRow(surveysRow.row)
+            tree.forceActiveFocus()
+            tryVerify(() => tree.activeFocus && tree.currentRow === surveysRow.row, 5000)
+            keyClick(Qt.Key_F2)
+            verify(!surveysRow.renaming, "F2 opens no editor on a sourced node")
+
+            const rootMenu = openMenuOn(page, tree, 0, "caveDelegate")
+            verify(findChild(rootMenu, "surveyItemRenameMenuItem") === null, "no Rename on the root")
+            const reload = findChild(rootMenu, "surveyItemReloadMenuItem")
+            verify(reload !== null, "the root's menu offers Reload")
+            tryVerify(() => reload.enabled, 5000, "Reload is offered for a file still on disk")
+            verify(findChild(rootMenu, "surveyItemReplaceMenuItem") !== null,
+                   "the root's menu offers Replace…")
+            rootMenu.close()
+            tryVerify(() => !rootMenu.visible, 5000)
+
+            const bookMenu = openMenuOn(page, tree, surveysRow.row, "caveDelegate")
+            verify(findChild(bookMenu, "surveyItemReloadMenuItem") === null,
+                   "Reload lives on the root alone")
+            bookMenu.close()
+            tryVerify(() => !bookMenu.visible, 5000)
+        }
+
+        // Deleting a source root, a derived node and a derived trip each asks
+        // in its own words: the root and its copied file go, the derived ones
+        // are hidden across Reload.
+        function test_sourcedDeletePromptsSayWhatHappens() {
+            const root = attachWallsProjectAndReload()
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 4, 10000)
+            tree.surveyTree.expandAll()
+            tryVerify(() => tree.rows === 9, 5000, "every row of the subtree shows")
+
+            let askBox = deletePromptFor(page, tree, 0, "caveDelegate")
+            compare(askBox.message,
+                    "Delete <b>KAUA</b>? Removes 4 books, 3 derived trips and 1 native trip. "
+                    + "The copied KAUA.WPJ is removed from the project.")
+            mouseClick(findChild(askBox, "cancelButton"))
+            tryVerify(() => !askBox.visible, 5000)
+
+            const surveys = childNamed(root, "Surveys")
+            askBox = deletePromptFor(page, tree, viewRowOf(tree, surveys), "caveDelegate")
+            compare(askBox.message,
+                    "Delete <b>Surveys</b>? Hides this Walls book and its 3 derived trips "
+                    + "from the project. It stays hidden across Reload; Restore… on KAUA.WPJ brings it back. "
+                    + "Its 1 native trip is deleted for good; Restore… brings back only what KAUA.WPJ derives.")
+            mouseClick(findChild(askBox, "cancelButton"))
+            tryVerify(() => !askBox.visible, 5000)
+
+            const dec2001 = childNamed(surveys, "Dec 2001 Surveys")
+            const derivedTrip = dec2001.trip(0)
+            compare(derivedTrip.name, "D Survey 1")
+            askBox = deletePromptFor(page, tree, viewRowOf(tree, derivedTrip), "tripDelegate")
+            compare(askBox.message,
+                    "Delete trip <b>D Survey 1</b>? Hides it from the project; "
+                    + "it stays hidden across Reload of KAUA.WPJ.")
+
+            // Removing hides it: the trip leaves the tree, and the source
+            // remembers it so Reload keeps it out.
+            mouseClick(findChild(askBox, "removeButton"))
+            tryCompare(dec2001, "tripCount", 2, 5000)
+            tryVerify(() => tree.rows === 8, 5000, "the hidden trip's row is gone")
+        }
+
+        // Clicking Delete… on a freshly attached source root asks first.
+        function test_sourcedDeleteClickAsksFirst() {
+            attachWallsProject()
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryVerify(() => tree.rows >= 1, 10000)
+            const menu = openMenuOn(page, tree, 0, "caveDelegate")
+            mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
+            let askBox = null
+            tryVerify(() => {
+                          askBox = findChild(page, "removeChallange")
+                          return askBox !== null && askBox.visible
+                      }, 5000, "a clicked Delete… must ask first")
+            verify(askBox.message.startsWith("Delete <b>KAUA</b>? Removes "))
+            mouseClick(findChild(askBox, "cancelButton"))
+            tryVerify(() => !askBox.visible, 5000)
+        }
+
+        // Replace… on a source root asks first and counts the scraps on its
+        // derived trips that the picked file would strand (§6.11 case 5).
+        function test_replaceCountsTheScrapsThatLoseAnchors() {
+            const root = attachWallsProject()
+            const dec2001 = childNamed(childNamed(root, "Surveys"), "Dec 2001 Surveys")
+            const note = TestHelper.addNoteWithScrap(dec2001.trip(0), "Sketch")
+            verify(TestHelper.addScrapStation(note, 0, "D2", Qt.point(0.5, 0.5)),
+                   "the scrap anchors on one of the file's stations")
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            const menu = openMenuOn(page, tree, 0, "caveDelegate")
+            mouseClick(findChild(menu, "surveyItemReplaceMenuItem"))
+
+            let dialog = null
+            tryVerify(() => {
+                          dialog = findChild(page, "replaceCenterlineDialog")
+                          return dialog !== null && findChild(dialog, "sourcePathField").visible
+                      }, 5000, "Replace… opens its dialog")
+            compare(dialog.owner, root, "the dialog replaces the root's file")
+
+            const anchorLoss = findChild(dialog, "replaceAnchorLossText")
+            verify(!anchorLoss.visible, "nothing is stranded before a file is picked")
+
+            // The same file names D2, so nothing is stranded.
+            findChild(dialog, "sourcePathField").text =
+                    TestHelper.testcasesDatasetSourcePath("external-centerlines/walls_project/KAUA.WPJ")
+            tryVerify(() => findChild(dialog, "replaceConfirmButton").enabled, 10000, "the scan lands")
+            verify(!anchorLoss.visible, "a file that names every station strands nothing")
+
+            // An unrelated file names none of them.
+            findChild(dialog, "sourcePathField").text =
+                    TestHelper.testcasesDatasetSourcePath("external-centerlines/survex_simple.svx")
+            tryVerify(() => anchorLoss.visible, 10000, "the confirm counts what Replace strands")
+            compare(anchorLoss.text,
+                    "Replacing strands 1 scrap on 1 note: they sit on stations the new file does not name.")
+
+            mouseClick(findChild(dialog, "replaceCancelButton"))
+            tryVerify(() => findChild(page, "replaceCenterlineDialog") === null
+                            || !findChild(findChild(page, "replaceCenterlineDialog"), "sourcePathField").visible,
+                      5000, "Cancel closes the dialog")
         }
 
         // Survey data an attached file places stays where the file puts it:

@@ -375,7 +375,7 @@ public:
 
     //! The nearest ancestor-or-self that is a source root, nullptr for a fully
     //! native node. Keyed off the source fields, never off kind().
-    cwSurveyNode* sourceRoot() const;
+    Q_INVOKABLE cwSurveyNode* sourceRoot() const;
 
     //! The deepest node that holds both this node and \a other, nullptr when
     //! they belong to different trees. A node is its own ancestor, so

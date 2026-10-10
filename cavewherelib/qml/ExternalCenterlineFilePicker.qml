@@ -41,17 +41,15 @@ ColumnLayout {
     readonly property alias valid: previewId.valid
     readonly property alias importSupported: previewId.importSupported
 
-    // The scanned block tree and the structural facts the cave dialog's
-    // preview and multi-cave heuristic read. Aliased off the one preview
-    // the picker already owns, so the gate and the disclosure can never
-    // disagree about the file in the field.
-    readonly property alias blocks: previewId.blocks
+    // The scanned tree and the counts the attach dialog's summary and
+    // preview read. Aliased off the one preview the picker already owns, so
+    // the gate and the disclosure can never disagree about the file in the
+    // field.
     readonly property alias rows: previewId.rows
-    readonly property alias topLevelBlockCount: previewId.topLevelBlockCount
-    readonly property alias rootStationCount: previewId.rootStationCount
-    readonly property alias rootDate: previewId.rootDate
-    readonly property alias entryHasOwnShots: previewId.entryHasOwnShots
-    readonly property alias entryDirectIncludes: previewId.entryDirectIncludes
+    readonly property alias fileCount: previewId.fileCount
+    readonly property alias surveyCount: previewId.surveyCount
+    readonly property alias stationCount: previewId.stationCount
+    readonly property alias missingFileCount: previewId.missingFileCount
 
     signal pathEdited()
 
@@ -61,6 +59,16 @@ ColumnLayout {
 
     function kindLabel(row: cwScanRow): string {
         return previewId.kindLabel(row)
+    }
+
+    // What replacing \a root with the picked file costs its derived trips'
+    // scraps; zero until the scan lands.
+    function notesLosingAnchors(root: SurveyNode): int {
+        return previewId.notesLosingAnchors(root)
+    }
+
+    function scrapsLosingAnchors(root: SurveyNode): int {
+        return previewId.scrapsLosingAnchors(root)
     }
 
     // Re-points the picker the way Browse does — through the path

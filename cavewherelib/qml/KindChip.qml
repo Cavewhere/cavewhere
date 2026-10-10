@@ -11,7 +11,8 @@ import cavewherelib
 
 // The small label on a survey-tree row naming what the node is: "Cave",
 // "Folder", "Compass project", … A sourced node reads in the accent color
-// behind a lock, because a copied survey file owns its shape.
+// behind a lock, because a copied survey file owns its shape, and its tool tip
+// names that file.
 //
 // Handed a native node, the chip is also the picker between the two native
 // labels, Cave and Folder (Section inside a cave). Picking one changes the
@@ -26,6 +27,13 @@ QQ.Rectangle {
     property SurveyNode node: null
 
     readonly property bool pickable: chipId.node !== null && !chipId.sourced
+
+    //The file a sourced node's shape comes from: its source root's copy,
+    //without its folder.
+    readonly property string sourceFileName: {
+        const sourceRoot = chipId.sourced && chipId.node !== null ? chipId.node.sourceRoot() : null;
+        return sourceRoot !== null ? RootData.fileName(sourceRoot.externalCenterline.entryFile) : "";
+    }
 
     //Where the node sits decides what a Folder there is called: a Folder
     //where caves go, or a Section inside a cave.
@@ -51,11 +59,15 @@ QQ.Rectangle {
         return (current ? "✓ " : "\u2003") + label;
     }
 
+    QC.ToolTip.visible: chipId.sourced && chipId.sourceFileName !== "" && chipHoverId.hovered
+    QC.ToolTip.text: qsTr("🔒 Read-only: it comes from %1").arg(chipId.sourceFileName)
+    QC.ToolTip.delay: Theme.toolTipDelay
+
     QQ.HoverHandler {
         id: chipHoverId
 
-        enabled: chipId.pickable
-        cursorShape: Qt.PointingHandCursor
+        enabled: chipId.pickable || chipId.sourced
+        cursorShape: chipId.pickable ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 
     QQ.TapHandler {

@@ -522,8 +522,9 @@ StandardPage {
                                : Qt.point(0, 0)
     }
 
-    // The Add verbs for this node's position, then the survey-file entry,
-    // which makes a trip and so belongs only where trips go.
+    // The Add verbs for this node's position, Attach survey file… among them,
+    // then the trip's survey-file entry, which makes a trip and so belongs only
+    // where trips go.
     AddVerbsMenu {
         id: addTripMenuId
         objectName: "addTripMenu"
@@ -533,6 +534,7 @@ StandardPage {
         hiddenVerbs: [nodePageArea.takesCaves ? AddVerbsMenu.AddCave : AddVerbsMenu.AddTrip]
 
         onAdded: (object, verb) => nodePageArea.showAdded(object, verb)
+        onAttachSurveyFileRequested: (node) => tripTreeId.attachSurveyFile(node)
 
         QC.MenuItem {
             objectName: "addExternalTripMenuItem"

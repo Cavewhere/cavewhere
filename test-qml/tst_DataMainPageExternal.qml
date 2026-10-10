@@ -60,8 +60,8 @@ MainWindowTest {
             return menu
         }
 
-        // The Add button adds a cave itself, so its menu holds Add Folder, a
-        // separator, and Add from Survey File…, and nothing else.
+        // The Add button adds a cave itself, so its menu holds Add Folder and
+        // Attach survey file…, and nothing else.
         function test_addMenuHoldsFolderAndSurveyFileOnly() {
             const dataPage = gotoDataMainPage()
             const menu = openAddMenu(dataPage)
@@ -70,31 +70,35 @@ MainWindowTest {
             for (let i = 0; i < menu.count; i++) {
                 names.push(menu.itemAt(i).objectName)
             }
-            compare(names, ["addFolderMenuItem", "addMenuSeparator", "addExternalCaveMenuItem"])
+            compare(names, ["addFolderMenuItem", "attachSurveyFileMenuItem"])
             compare(menu.itemAt(0).text, "Add Folder")
-            compare(menu.itemAt(2).text, "Add from Survey File…")
+            compare(menu.itemAt(1).text, "Attach survey file…")
             verify(String(menu.itemAt(0).icon.source).indexOf("folder.svg") >= 0,
                    "Add Folder carries the folder glyph")
             menu.close()
         }
 
-        // Add from Survey File… opens the cave dialog with both choices: Attach
-        // keeps the file as the source, Import copies it into a native trip.
+        // Attach survey file… opens the dialog with both choices: Attach keeps
+        // the file as the source, Import copies it into a native trip.
         function test_addFromSurveyFileOffersAttachAndImport() {
             const dataPage = gotoDataMainPage()
             const menu = openAddMenu(dataPage)
-            mouseClick(findChild(menu, "addExternalCaveMenuItem"))
+            mouseClick(findChild(menu, "attachSurveyFileMenuItem"))
 
-            const dialog = findChild(dataPage, "addCaveSurveyFileDialog")
-            verify(dialog !== null, "the dialog lives on the Data page")
+            let dialog = null
+            tryVerify(() => {
+                          dialog = findChild(dataPage, "attachSurveyFileDialog")
+                          return dialog !== null
+                      }, 5000, "the dialog lives on the Data page")
             const pathField = findChild(dialog, "sourcePathField")
             tryVerify(() => pathField !== null && pathField.visible, 5000, "the dialog opens")
             verify(findChild(dialog, "attachButton") !== null, "the dialog offers Attach")
             verify(findChild(dialog, "importButton") !== null, "the dialog offers Import a copy")
-            compare(RootData.region.caveCount, 1, "the flow makes its cave up front")
+            compare(RootData.region.caveCount, 0, "opening the dialog creates nothing")
 
             mouseClick(findChild(dialog, "cancelButton"))
-            tryCompare(RootData.region, "caveCount", 0, 5000, "Cancel removes the cave it made")
+            tryVerify(() => !pathField.visible, 5000, "Cancel closes the dialog")
+            compare(RootData.region.caveCount, 0)
         }
 
         // The primary half of the split button adds a cave and opens its page.

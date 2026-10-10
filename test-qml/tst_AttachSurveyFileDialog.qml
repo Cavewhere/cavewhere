@@ -4,16 +4,17 @@ import cavewherelib
 import cw.TestLib
 import QmlTestRecorder
 
-// P3.7 tests: DataMainPage's [Add Cave] split-button menu and the
-// AddCaveSurveyFileDialog it opens - the block preview, the multi-cave
-// heuristic and its one-click alternate targets, the happy path
-// (a source root under the region, named from the file, with the file's
-// blocks as nodes) and a dismissal that leaves the project as it was.
+// C7.4a: the Data page's Add ▾ → Attach survey file… and the
+// AttachSurveyFileDialog it opens - the summary line, "Place under", the
+// subtree preview with its gray rows, the happy path (a source root under the
+// target, named from the file, with the file's blocks as nodes), Attach under
+// a Folder through a row's Add submenu, Import a copy, and a dismissal that
+// leaves the project as it was.
 MainWindowTest {
     id: rootId
 
     ExternalCenterlineTestCase {
-        name: "AddCaveFromSurveyFile"
+        name: "AttachSurveyFileDialog"
         when: windowShown
 
         function init() {
@@ -26,7 +27,7 @@ MainWindowTest {
         function cleanup() {
             // A dialog left open by a failed assertion is modal: its
             // overlay would eat the next test's clicks.
-            const dialog = findChild(mainWindow, "addCaveSurveyFileDialog")
+            const dialog = findChild(mainWindow, "attachSurveyFileDialog")
             if (dialog !== null) {
                 dialog.close()
             }
@@ -47,7 +48,7 @@ MainWindowTest {
         }
 
         // Opens the split button's chevron menu on the data page and
-        // returns its Add from Survey File… item.
+        // returns its Attach survey file… item.
         function openAddCaveMenu(dataPage) {
             const addBar = findChild(dataPage, "addCave")
             verify(addBar !== null, "addCave bar must exist")
@@ -57,23 +58,30 @@ MainWindowTest {
 
             const menu = findChild(dataPage, "addCaveMenu")
             verify(menu !== null, "addCaveMenu must exist")
-            tryVerify(() => menu.visible, 5000, "menu opens on chevron click")
-            const item = findChild(menu, "addExternalCaveMenuItem")
-            verify(item !== null, "the menu offers Add from Survey File…")
+            tryVerify(() => menu.opened, 5000, "menu opens on chevron click")
+            const item = findChild(menu, "attachSurveyFileMenuItem")
+            verify(item !== null, "the menu offers Attach survey file…")
             return item
         }
 
-        // Runs the menu item and returns the opened dialog, ready for a
-        // path to be typed into its field.
-        function openDialog(dataPage) {
-            mouseClick(openAddCaveMenu(dataPage))
-
-            const dialog = findChild(dataPage, "addCaveSurveyFileDialog")
-            verify(dialog !== null, "the dialog must exist on the data page")
+        // The page's dialog once it is open, ready for a path to be typed
+        // into its field.
+        function openedDialog(page) {
+            let dialog = null
+            tryVerify(() => {
+                          dialog = findChild(page, "attachSurveyFileDialog")
+                          return dialog !== null
+                      }, 5000, "the dialog must exist on the page")
             const pathField = findChild(dialog, "sourcePathField")
             verify(pathField !== null, "sourcePathField must exist")
             tryVerify(() => pathField.visible, 5000, "dialog opens")
             return dialog
+        }
+
+        // Runs the menu item and returns the opened dialog.
+        function openDialog(dataPage) {
+            mouseClick(openAddCaveMenu(dataPage))
+            return openedDialog(dataPage)
         }
 
         // Points the dialog's picker at a fixture and waits for the
@@ -89,32 +97,39 @@ MainWindowTest {
             return attachButton
         }
 
+        function cancelDialog(dialog) {
+            const cancelButton = findChild(dialog, "cancelButton")
+            waitForRendering(rootId)
+            mouseClick(cancelButton)
+            RootData.futureManagerModel.waitForFinished()
+        }
+
         function test_menuItemPresent() {
-            saveProjectAs("add-cave-menu")
+            saveProjectAs("attach-menu")
             const dataPage = gotoDataMainPage()
 
             const item = openAddCaveMenu(dataPage)
-            compare(item.text, qsTr("Add from Survey File…"))
+            compare(item.text, "Attach survey file…")
         }
 
         function test_happyPathBuildsTheSubtreeUnderTheRegion() {
-            saveProjectAs("add-cave-happy")
+            saveProjectAs("attach-happy")
             const dataPage = gotoDataMainPage()
             compare(RootData.region.rowCount(), 0)
 
             const dialog = openDialog(dataPage)
             compare(dialog.target, RootData.region.rootNode,
                     "Attach builds under the region's root")
+            compare(findChild(dialog, "placeUnderText").text, "Region root (top level)")
             compare(RootData.region.rowCount(), 0,
                     "opening the dialog creates nothing")
 
             const attachButton = pickFixture(dialog, "survex_blocks.svx")
 
-            // Every block is previewed, sump included - shown so the
-            // structure reads whole (§5 Q3).
             const preview = findChild(dialog, "blockPreview")
             verify(preview !== null, "block preview must exist")
-            tryVerify(() => preview.visible, 5000, "the preview shows the block tree")
+            tryVerify(() => preview.visible, 5000, "the preview shows the subtree")
+            compare(findChild(dialog, "blockPreviewTitle").text, "Subtree CaveWhere will create")
 
             waitForRendering(rootId)
             mouseClick(attachButton)
@@ -135,41 +150,31 @@ MainWindowTest {
             compare(doghill.kind, SurveyNodeKind.SurvexBlock)
             compare(doghill.tripCount, 1, "doghill's own shots are one derived trip")
 
-            tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "cavePage",
-                      10000, "attach navigates to the new root's page")
+            // The Data page stays in front with the new root shown open.
+            compare(RootData.pageView.currentPageItem, dataPage)
+            const tree = findChild(dataPage, "caveDelegate0").treeView
+            tryVerify(() => tree.surveyTree.currentObject === sourceRoot, 10000,
+                      "the new root's row is current")
+            tryVerify(() => tree.isExpanded(0), 10000, "the new root shows its blocks")
             RootData.futureManagerModel.waitForFinished()
         }
 
-        // P3.15: the stations no block claims get one whole-file trip,
-        // so a Compass project explains its single trip before Attach.
-        function test_wholeFileRowShowsForRootStationsOnly() {
-            saveProjectAs("add-cave-whole-file")
+        // The summary line counts what the scan found and names the listed
+        // file the disk lacks.
+        function test_summaryCountsFilesSurveysAndMissingFiles() {
+            saveProjectAs("attach-summary")
             const dataPage = gotoDataMainPage()
             const dialog = openDialog(dataPage)
 
-            pickFixture(dialog, "compass_multi.mak")
-            const wholeFileRow = findChild(dialog, "wholeFileRow")
-            verify(wholeFileRow !== null, "the whole-file row must exist")
-            tryVerify(() => wholeFileRow.visible, 10000,
-                      "a Compass project's stations all sit in the file root")
-            verify(wholeFileRow.text.indexOf("5") >= 0,
-                   "the row names the root station count; got: " + wholeFileRow.text)
-            // The tree lists the project root, its two DATs, and one
-            // survey under each.
-            const list = findChild(dialog, "blockPreviewList")
-            tryCompare(list, "count", 5, 5000)
+            pickFixture(dialog, "compass_project/PROJECT.MAK")
+            const summary = findChild(dialog, "scanSummaryText")
+            tryVerify(() => summary.visible, 10000, "the summary shows once the scan lands")
+            compare(summary.text,
+                    "✓ Compass project — 4 files, 4 surveys, 14 stations · 1 listed file missing")
+            compare(findChild(dialog, "blockPreviewHint").text,
+                    "One node per .dat file, one trip per survey.")
 
-            // Every station of a *begin tree belongs to a block, so
-            // there is nothing left for a whole-file trip to own.
-            pickFixture(dialog, "survex_blocks.svx")
-            tryVerify(() => !wholeFileRow.visible, 10000,
-                      "a blocks-only file shows no whole-file row")
-
-            const cancelButton = findChild(dialog, "cancelButton")
-            waitForRendering(rootId)
-            mouseClick(cancelButton)
-            RootData.futureManagerModel.waitForFinished()
+            cancelDialog(dialog)
         }
 
         // The preview row the list draws for \a name, once the scan lands.
@@ -190,10 +195,10 @@ MainWindowTest {
             return row
         }
 
-        // C7.1: rows name their kind and station count, and gray out a
-        // book with no survey data under it and a file the disk lacks.
+        // Rows name their kind and station count, and gray out a book with no
+        // survey data under it and a file the disk lacks.
         function test_previewGraysEmptyBooksAndMissingFiles() {
-            saveProjectAs("add-cave-preview-rows")
+            saveProjectAs("attach-preview-rows")
             const dataPage = gotoDataMainPage()
             const dialog = openDialog(dataPage)
 
@@ -221,14 +226,59 @@ MainWindowTest {
             verify(!alpha.grayed, "a present file with surveys reads normally")
             verify(alpha.text.startsWith("Alpha · Compass file — 7 station"), alpha.text)
 
-            const cancelButton = findChild(dialog, "cancelButton")
+            cancelDialog(dialog)
+        }
+
+        // A row's Add submenu opens the dialog with that row's node as the
+        // place, and the attach lands there.
+        function test_attachUnderAFolderLandsUnderIt() {
+            saveProjectAs("attach-under-folder")
+            const folder = RootData.region.addNode(null, SurveyNodeKind.Folder, "Kentucky")
+            const dataPage = gotoDataMainPage()
+
+            let row = null
+            tryVerify(() => {
+                          row = findChild(dataPage, "caveDelegate0")
+                          return row !== null && row.object === folder
+                      }, 5000, "the Folder's row shows")
+            const tree = row.treeView
+            tree.surveyTree.setCurrentRow(0)
+            tree.forceActiveFocus()
+            tryVerify(() => tree.activeFocus && tree.currentRow === 0, 5000)
+            keyClick(Qt.Key_F10, Qt.ShiftModifier)
+
+            // The menu belongs to the row, so it is found under the row.
+            let menu = null
+            tryVerify(() => {
+                          menu = findChild(row, "surveyItemContextMenu")
+                          return menu !== null && menu.visible
+                      }, 5000, "the row's menu opens")
+            const submenu = menu.menuAt(0)
+            compare(submenu.objectName, "addVerbsSubmenu")
+            mouseClick(menu.itemAt(0))
+            tryVerify(() => submenu.opened, 5000, "Add opens its verbs")
+            mouseClick(findChild(submenu, "attachSurveyFileMenuItem"))
+
+            const dialog = openedDialog(dataPage)
+            compare(dialog.target, folder, "the dialog places the file under the row's node")
+            compare(findChild(dialog, "placeUnderText").text, "Kentucky (Folder)")
+
+            const attachButton = pickFixture(dialog, "survex_master/master.svx")
             waitForRendering(rootId)
-            mouseClick(cancelButton)
+            mouseClick(attachButton)
+
+            tryVerify(() => folder.childNodeCount === 1, 10000, "the root lands under the Folder")
+            const sourceRoot = folder.childNode(0)
+            tryVerify(() => sourceRoot.isSourceRoot && sourceRoot.childNodeCount === 3, 10000,
+                      "the Survex master's three blocks land as nodes")
+            compare(RootData.region.rowCount(), 1, "nothing lands at the top level")
+            tryVerify(() => tree.surveyTree.currentObject === sourceRoot, 10000,
+                      "the new root's row is current")
             RootData.futureManagerModel.waitForFinished()
         }
 
         function test_importNamesCaveAndTripAfterTheFile() {
-            saveProjectAs("add-cave-import")
+            saveProjectAs("attach-import")
             const dataPage = gotoDataMainPage()
             const dialog = openDialog(dataPage)
 
@@ -244,6 +294,7 @@ MainWindowTest {
             verify(dialog.importing, "import busy state is up")
             const newCave = dialog.importedCave
             verify(newCave !== null, "import adds a cave of its own")
+            compare(newCave.parentNode, RootData.region.rootNode, "the cave goes where the dialog places it")
             const cancelButton = findChild(dialog, "cancelButton")
             verify(!cancelButton.enabled, "no cancel path during import")
 
@@ -263,7 +314,7 @@ MainWindowTest {
         }
 
         function test_dismissLeavesTheProjectAsItWas() {
-            saveProjectAs("add-cave-dismiss")
+            saveProjectAs("attach-dismiss")
             const dataPage = gotoDataMainPage()
             const rowsBefore = RootData.region.rowCount()
 
@@ -279,69 +330,6 @@ MainWindowTest {
             tryVerify(() => !findChild(dialog, "sourcePathField").visible, 5000,
                       "the dialog closes")
             compare(RootData.region.rowCount(), rowsBefore)
-            RootData.futureManagerModel.waitForFinished()
-        }
-
-        function test_heuristicShowsForMasterOnly() {
-            saveProjectAs("add-cave-heuristic")
-            const dataPage = gotoDataMainPage()
-            const dialog = openDialog(dataPage)
-
-            const panel = findChild(dialog, "multiCaveHeuristicPanel")
-            verify(panel !== null, "heuristic panel must exist")
-            verify(!panel.visible, "nothing scanned yet, nothing to warn about")
-
-            const attachButton = pickFixture(dialog, "survex_master/master.svx")
-            tryVerify(() => panel.visible, 10000,
-                      "a project master trips the heuristic")
-            const body = findChild(dialog, "multiCaveHeuristicBody")
-            verify(body.text.indexOf("3") >= 0,
-                   "the body names the top-level block count; got: " + body.text)
-            verify(attachButton.enabled,
-                   "the heuristic is guidance - Attach stays enabled (§5 Q4)")
-
-            pickFixture(dialog, "survex_blocks.svx")
-            tryVerify(() => !panel.visible, 10000,
-                      "a single-cave file does not trip the heuristic")
-
-            const cancelButton = findChild(dialog, "cancelButton")
-            waitForRendering(rootId)
-            mouseClick(cancelButton)
-            RootData.futureManagerModel.waitForFinished()
-        }
-
-        function test_suggestionClickRepointsPicker() {
-            saveProjectAs("add-cave-suggestion")
-            const dataPage = gotoDataMainPage()
-            const dialog = openDialog(dataPage)
-
-            pickFixture(dialog, "survex_master/master.svx")
-            const panel = findChild(dialog, "multiCaveHeuristicPanel")
-            tryVerify(() => panel.visible, 10000, "the heuristic shows")
-
-            // Through the Repeater, not findChild: delegate items are
-            // parented into the layout, where findChild misses them.
-            const suggestions = findChild(dialog, "heuristicSuggestions")
-            verify(suggestions !== null, "the panel repeats the entry's direct includes")
-            tryVerify(() => suggestions.count === 3, 5000,
-                      "one suggestion per direct include")
-            const suggestion = suggestions.itemAt(0)
-            compare(suggestion.objectName, "heuristicSuggestion")
-            compare(suggestion.text, "alpha.svx",
-                    "suggestions read as file names, not full paths")
-
-            waitForRendering(rootId)
-            mouseClick(suggestion)
-
-            const pathField = findChild(dialog, "sourcePathField")
-            tryVerify(() => pathField.text.endsWith("alpha.svx"), 5000,
-                      "clicking a suggestion re-points the picker")
-            tryVerify(() => !panel.visible, 10000,
-                      "the rescanned single-cave file retires the panel")
-
-            const cancelButton = findChild(dialog, "cancelButton")
-            waitForRendering(rootId)
-            mouseClick(cancelButton)
             RootData.futureManagerModel.waitForFinished()
         }
     }

@@ -9,8 +9,8 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// The context menu of a survey-tree row: Add on a node, Move to…, Delete…,
-// and Declination on a trip.
+// The context menu of a survey-tree row: Add on a node, Move to…, Reload and
+// Replace… on a source root, Delete…, and Declination on a trip.
 //
 // A click on the row's name opens it and the name cell renames it, so the menu
 // is left holding the verbs no cell of the row carries — the Add verbs for the
@@ -60,6 +60,16 @@ QC.Menu {
     readonly property bool isNodeRow: contextMenuId.row !== null
                                       && contextMenuId.row.isNode
 
+    //Reload and Replace act on a copied file's whole subtree, so only its
+    //root's menu offers them.
+    readonly property bool isSourceRootRow: contextMenuId.isNodeRow
+                                            && contextMenuId.row.node !== null
+                                            && contextMenuId.row.node.isSourceRoot
+
+    //Whether Reload can find the file the root was copied from. That follows
+    //the disk and has no change signal, so it is read when the menu opens.
+    property bool canReload: false
+
     //The position of the submenu \a menu among this menu's entries, -1 when
     //it holds none.
     function indexOfMenu(menu: QC.Menu) : int {
@@ -97,6 +107,9 @@ QC.Menu {
                 contextMenuId.surveyTree.tripCalibrationsFor(contextMenuId.row.object);
         contextMenuId.canMove =
                 RegionSurveyTree.isMovableIndex(RegionSurveyTree.indexOf(contextMenuId.row.object));
+        contextMenuId.canReload = contextMenuId.isSourceRootRow
+                && RootData.externalCenterlineManager.canReloadFromSource(contextMenuId.row.node)
+                && !RootData.externalCenterlineManager.isOwnerBusy(contextMenuId.row.node.id);
         contextMenuId.popup(x, y);
     }
 
@@ -112,6 +125,7 @@ QC.Menu {
             node: contextMenuId.row !== null ? contextMenuId.row.node : null
 
             onAdded: (object) => contextMenuId.surveyTree.revealAdded(object)
+            onAttachSurveyFileRequested: (node) => contextMenuId.surveyTree.attachSurveyFile(node)
         }
 
         onObjectAdded: (index, object) => contextMenuId.insertMenu(0, object as QC.Menu)
@@ -129,6 +143,41 @@ QC.Menu {
             text: qsTr("Move to…")
 
             onTriggered: contextMenuId.surveyTree.moveObject(contextMenuId.row.object)
+        }
+
+        onObjectAdded: (index, object) => contextMenuId.insertItem(contextMenuId.indexOfItem(deleteMenuItemId),
+                                                                   object as QC.MenuItem)
+        onObjectRemoved: (index, object) => {
+            const position = contextMenuId.indexOfItem(object as QC.MenuItem);
+            if(position >= 0) {
+                contextMenuId.takeItem(position);
+            }
+        }
+    }
+
+    //Reload and Replace… join a source root's menu ahead of Delete…, the way
+    //Move to… joins a movable row's.
+    QQ.Instantiator {
+        model: contextMenuId.isSourceRootRow ? ["reload", "replace"] : []
+
+        delegate: QC.MenuItem {
+            id: sourceVerbItemId
+
+            required property string modelData
+
+            readonly property bool isReload: sourceVerbItemId.modelData === "reload"
+
+            objectName: sourceVerbItemId.isReload ? "surveyItemReloadMenuItem" : "surveyItemReplaceMenuItem"
+            text: sourceVerbItemId.isReload ? qsTr("Reload") : qsTr("Replace…")
+            enabled: sourceVerbItemId.isReload ? contextMenuId.canReload : true
+
+            onTriggered: {
+                if(sourceVerbItemId.isReload) {
+                    RootData.reloadSource(contextMenuId.row.node);
+                } else {
+                    contextMenuId.surveyTree.replaceSource(contextMenuId.row.node);
+                }
+            }
         }
 
         onObjectAdded: (index, object) => contextMenuId.insertItem(contextMenuId.indexOfItem(deleteMenuItemId),

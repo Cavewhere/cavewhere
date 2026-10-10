@@ -28,33 +28,6 @@ StandardPage {
         return "Node=" + cave.name;
     }
 
-    // Add ▾ → Add from Survey File…: Attach builds the file's subtree under
-    // the region's root, Import a cave of its own; the dialog's outcome
-    // decides where to navigate.
-    function addCaveFromSurveyFileWithDialog() {
-        addCaveSurveyFileDialogId.target = RootData.region.rootNode
-        addCaveSurveyFileDialogId.open()
-    }
-
-    // A file's name without its directory or extension.
-    function baseNameOf(fileName: string) : string {
-        const baseName = RootData.fileName(fileName)
-        const dotIndex = baseName.lastIndexOf(".")
-        return dotIndex > 0 ? baseName.substring(0, dotIndex) : baseName
-    }
-
-    // The cave name comes from the entry file (directory and extension
-    // stripped) — which can be a subpath, since the attachment remembers
-    // its entry relative to the copied closure's base. uniqueCaveName()
-    // sanitizes and dedupes; setName silently rejects anything else. The
-    // rename happens before navigation, because the page address embeds
-    // the name.
-    function nameCaveFromFileAndNavigate(newCave: Cave, fileName: string) {
-        newCave.name = RootData.region.uniqueCaveName(pageId.baseNameOf(fileName))
-        RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                   pageId.cavePageName(newCave))
-    }
-
     function registerGeospatialPage() {
         if (PageView.page === null) return
         if (PageView.page.childPage("Geospatial Layers") !== null) return
@@ -503,7 +476,7 @@ StandardPage {
     }
 
     // The Add button's menu: Add Cave is the button itself, so the menu
-    // holds Add Folder and then the survey-file entry.
+    // holds Add Folder and Attach survey file….
     AddVerbsMenu {
         id: addCaveMenuId
         objectName: "addCaveMenu"
@@ -512,37 +485,7 @@ StandardPage {
 
         //A new folder stays on this page with its name ready to type.
         onAdded: (object) => caveTreeId.revealAdded(object)
-
-        QC.MenuSeparator {
-            objectName: "addMenuSeparator"
-        }
-
-        QC.MenuItem {
-            objectName: "addExternalCaveMenuItem"
-            text: qsTr("Add from Survey File…")
-            onTriggered: pageId.addCaveFromSurveyFileWithDialog()
-        }
-    }
-
-    AddCaveSurveyFileDialog {
-        id: addCaveSurveyFileDialogId
-
-        onAttached: (sourceRoot) => {
-            if (sourceRoot === null) {
-                return
-            }
-            RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
-                                                       pageId.cavePageName(sourceRoot))
-        }
-
-        onImported: (importedTrip, sourcePath) => {
-            const newCave = addCaveSurveyFileDialogId.importedCave
-            if (newCave === null) {
-                return
-            }
-            importedTrip.name = newCave.uniqueTripName(pageId.baseNameOf(sourcePath))
-            pageId.nameCaveFromFileAndNavigate(newCave, sourcePath)
-        }
+        onAttachSurveyFileRequested: (node) => caveTreeId.attachSurveyFile(node)
     }
 
     QQ.Component {
