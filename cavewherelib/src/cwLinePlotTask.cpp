@@ -350,29 +350,30 @@ private:
         int unconnectedChunkCount = 0;
         QStringList offendingCaveNames;
 
+        const QHash<QUuid, QList<cwFindUnconnectedSurveyChunks::Result>> unconnected =
+            cwFindUnconnectedSurveyChunks::find(InputData.regionData,
+                                                InputData.excludedExternalOwners);
+
         for (cwSurveyNode* node : std::as_const(Nodes)) {
-            // Each node is its own *begin block, so its chunks join only each
-            // other: a child node's trips are checked as that child. Built from
-            // the node's own trips, since node->data() would copy its subtree.
+            const auto nodeResults = unconnected.constFind(node->id());
+            if (nodeResults == unconnected.constEnd()) {
+                continue;
+            }
+            const QList<cwFindUnconnectedSurveyChunks::Result>& errorResults = nodeResults.value();
+
+            // The results index the node's own trips, so the snapshot holds
+            // just those; node->data() would copy its subtree too.
             cwCaveData nodeSnapshot;
             nodeSnapshot.id = node->id();
             nodeSnapshot.name = node->name();
             nodeSnapshot.trips = cwData::toDataList<cwTripData>(node->trips());
 
-            const Monad::Result<QList<cwFindUnconnectedSurveyChunks::Result>> unconnectedResult =
-                cwFindUnconnectedSurveyChunks::find(nodeSnapshot);
-            if (unconnectedResult.hasError()) {
-                continue;
-            }
-            const QList<cwFindUnconnectedSurveyChunks::Result> errorResults = unconnectedResult.value();
-            if (!errorResults.isEmpty()) {
-                cwLinePlotTask::LinePlotCaveData& nodeData = createLinePlotCaveDataFor(node->id(), result);
-                nodeData.setUnconnectedChunkError(errorResults);
-                unconnectedChunkCount += errorResults.size();
-                offendingCaveNames.append(node->name());
-                result.FloatingSurveys.append(
-                    cwFindFloatingSurveys::fromUnconnectedChunks(nodeSnapshot, errorResults));
-            }
+            cwLinePlotTask::LinePlotCaveData& nodeData = createLinePlotCaveDataFor(node->id(), result);
+            nodeData.setUnconnectedChunkError(errorResults);
+            unconnectedChunkCount += errorResults.size();
+            offendingCaveNames.append(node->name());
+            result.FloatingSurveys.append(
+                cwFindFloatingSurveys::fromUnconnectedChunks(nodeSnapshot, errorResults));
         }
 
         if (unconnectedChunkCount > 0) {
@@ -382,7 +383,7 @@ private:
             cwLinePlotTask::SolveError error;
             error.step = cwLinePlotTask::SolveError::Step::Validation;
             error.message = QStringLiteral(
-                "Cannot solve: %1 survey leg(s) are not connected to the cave network (%2). "
+                "Cannot solve: %1 survey leg(s) are not connected to the rest of the project (%2). "
                 "Open the affected chunks and fix the disconnected station names.")
                 .arg(unconnectedChunkCount)
                 .arg(offendingCaveNames.join(QStringLiteral(", ")));

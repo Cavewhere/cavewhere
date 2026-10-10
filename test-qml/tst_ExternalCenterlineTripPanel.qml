@@ -648,8 +648,9 @@ MainWindowTest {
 
             const detail = findChild(banner, "floatingSurveyDetail")
             verify(detail !== null, "floatingSurveyDetail must exist")
-            verify(detail.text.indexOf("can't be placed with the others") >= 0,
-                   "the copy stops short of claiming they were placed; got: " + detail.text)
+            compare(detail.text,
+                    "Nothing joins it to the rest of the project, so it can't be placed with the others.",
+                    "the copy stops short of claiming they were placed")
 
             // And the names are worth having because they are tieable: before
             // the harvest this banner listed nothing and offered nothing for

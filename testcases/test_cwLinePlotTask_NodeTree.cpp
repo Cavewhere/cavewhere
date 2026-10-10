@@ -473,31 +473,39 @@ TEST_CASE("The depth-2 fixture's unconnected surveys warn on their trips",
     manager->waitToFinish();
     INFO("solve error: " << manager->solveErrorMessage().toStdString());
 
-    SECTION("The unconnected Entrance survey warns on its trip and rolls up to Fisher Ridge")
+    SECTION("The untied Section warns on its trip and rolls up to its node")
     {
-        const std::optional<cwError> entry = unconnectedStationsEntry(entranceSurvey->errorModel());
+        // Entrance survey shares no station with Crystal crawl, but the
+        // fixture's region tie joins it to Side Cave, which the solve places,
+        // so it is tied in. The Section is tied to nothing; cavern drops it.
+        INFO("cavern log:\n" << manager->cavernLog().toStdString());
+        REQUIRE_FALSE(manager->hasSolveError());
+        CHECK_FALSE(unconnectedStationsEntry(entranceSurvey->errorModel()).has_value());
+        CHECK_FALSE(unconnectedStationsEntry(crystalCrawl->errorModel()).has_value());
+
+        const std::optional<cwError> entry = unconnectedStationsEntry(upperSurvey->errorModel());
         REQUIRE(entry.has_value());
         CHECK(entry->type() == cwError::Warning);
-        CHECK(entry->message() == QStringLiteral("2 stations in Entrance survey are not tied to the cave"));
-        CHECK(entry->detail() == QStringLiteral("a1, a2"));
-        CHECK_FALSE(unconnectedStationsEntry(crystalCrawl->errorModel()).has_value());
-        CHECK_FALSE(unconnectedStationsEntry(fisherRidge->errorModel()).has_value());
+        CHECK(entry->message()
+              == QStringLiteral("2 stations in %1 are not tied to the cave").arg(upperSurvey->name()));
+        CHECK(entry->detail() == QStringLiteral("d1, d2"));
+        CHECK_FALSE(unconnectedStationsEntry(section->errorModel()).has_value());
 
         // The node counts its trips' warnings, so silencing the trip's entry
         // takes exactly one off the node.
-        cwErrorListModel* entranceErrors = entranceSurvey->errorModel()->errors();
-        const int nodeWarnings = fisherRidge->errorModel()->warningCount();
-        const int row = entranceErrors->indexOf(*entry);
+        cwErrorListModel* upperErrors = upperSurvey->errorModel()->errors();
+        const int nodeWarnings = section->errorModel()->warningCount();
+        const int row = upperErrors->indexOf(*entry);
         REQUIRE(row >= 0);
-        REQUIRE(entranceErrors->setData(entranceErrors->index(row), true,
-                                        static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole)));
-        CHECK(fisherRidge->errorModel()->warningCount() == nodeWarnings - 1);
+        REQUIRE(upperErrors->setData(upperErrors->index(row), true,
+                                     static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole)));
+        CHECK(section->errorModel()->warningCount() == nodeWarnings - 1);
     }
 
     SECTION("Tying the surveys in clears each warning on the next solve")
     {
-        // Joining Fisher Ridge lets cavern run, and cavern then drops the
-        // Section, which nothing ties to its Cave yet.
+        // Joining Fisher Ridge's two surveys leaves the Section dropped, since
+        // nothing ties it to its Cave yet.
         SurveyTreeTestHelper::addShot(crystalCrawl, QStringLiteral("A2"), QStringLiteral("B1"));
         manager->waitToFinish();
         INFO("cavern log:\n" << manager->cavernLog().toStdString());

@@ -24,12 +24,13 @@ struct cwCavingRegionData;
  * \brief The one "this survey is floating" answer, from either of the two
  *        places CaveWhere can learn it.
  *
- * A survey floats when nothing joins it to the rest of its cave, and that fact
- * arrives from two unrelated passes:
+ * A survey floats when nothing joins it to the rest of the project, and that
+ * fact arrives from two unrelated passes:
  *
  * - **Native chunks, before the solve.** cwFindUnconnectedSurveyChunks walks
- *   shared station names and finds chunks no name reaches. It runs first and
- *   stops the solve, so cavern never sees the cave at all.
+ *   shared station names and ties across the region and finds chunks that
+ *   reach no fixed, attached, or origin station. It runs first and stops the
+ *   solve, so cavern never sees the region at all.
  * - **External scopes, after the solve.** An attached .svx owns no
  *   cwSurveyChunk, so the pre-solve pass is blind to it, and only a completed
  *   run knows whether cavern placed its stations at all.

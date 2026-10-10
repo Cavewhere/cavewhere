@@ -108,15 +108,16 @@ Type something a cell cannot accept and you get the cell's own message:
 ### Survey leg isn't connected to the cave
 
 The plot could not run, because a block of shots fails to reach the rest of the
-cave:
+project:
 
-> Cannot solve: *n* survey leg(s) are not connected to the cave network
+> Cannot solve: *n* survey leg(s) are not connected to the rest of the project
 > (*cave*). Open the affected chunks and fix the disconnected station names.
 
-Every block has to join the network *somewhere*, through a station name it
-shares with another block. A block sharing none floats free, and CaveWhere
-cannot know where in the cave it belongs, so it refuses to plot rather than drop
-it somewhere arbitrary.
+Every block has to join the network *somewhere*: through a station name it
+shares with another block in the same cave, through a tie to a station in
+another cave or an attached file, or through a fixed station of its own. A block
+with none of these floats free, and CaveWhere cannot know where it belongs, so
+it refuses to plot rather than drop it somewhere arbitrary.
 
 A name that does not match what you think it matches nearly always causes this.
 Check the first station of the orphaned block against the station it should tie

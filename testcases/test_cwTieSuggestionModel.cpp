@@ -35,6 +35,9 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
+// Std
+#include <algorithm>
+
 namespace {
 
 QString stationAt(const cwTieSuggestionModel& model, int row)
@@ -430,4 +433,50 @@ TEST_CASE("Rebinding after the bound trip is destroyed keeps one rebuild per pul
     QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
     candidate->setExternalStations({QStringLiteral("hanging.h2")});
     CHECK(resetSpy.count() == 1);
+}
+
+TEST_CASE("A trip two levels down is offered ties from its node's solved stations",
+          "[TieSuggestionModel]")
+{
+    cwCavingRegion region;
+    cwCave* folder = addChildNode(region.rootNode(), QStringLiteral("Field seasons"),
+                                  cwSurveyNode::Kind::Folder);
+    cwCave* sideCave = addChildNode(folder, QStringLiteral("Side Cave"), cwSurveyNode::Kind::Cave);
+    addNativeTripWithShot(sideCave, QStringLiteral("Sump dig"),
+                          QStringLiteral("S1"), QStringLiteral("S2"));
+    cwCave* section = addChildNode(sideCave, QStringLiteral("Upper level"), cwSurveyNode::Kind::Cave);
+    cwTrip* first = addNativeTripWithShot(section, QStringLiteral("First"),
+                                          QStringLiteral("D1"), QStringLiteral("D2"));
+    addNativeTripWithShot(section, QStringLiteral("Second"),
+                          QStringLiteral("D2"), QStringLiteral("D3"));
+    region.equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, section->id(), QStringLiteral("D1")),
+        cwStationHandle(cwStationHandle::NativeCave, sideCave->id(), QStringLiteral("S2"))}));
+
+    cwLinePlotManager manager;
+    solveRegion(manager, region, {});
+    INFO("solve error: " << manager.solveErrorMessage().toStdString());
+    REQUIRE_FALSE(manager.hasSolveError());
+
+    // Only the solve's half of the known stations carries a position, so D1
+    // and D2 arriving positioned is the region lookup reaching a trip at depth two.
+    REQUIRE(first->solvedStations().size() == 2);
+    const QList<cwTrip::KnownStation> known = first->knownStations();
+    for (const QString& name : {QStringLiteral("D1"), QStringLiteral("D2")}) {
+        INFO("station: " << name.toStdString());
+        const auto match = std::find_if(known.cbegin(), known.cend(),
+                                        [&name](const cwTrip::KnownStation& station) {
+                                            return cwStation::canonicalKey(station.name)
+                                                   == cwStation::canonicalKey(name);
+                                        });
+        REQUIRE(match != known.cend());
+        CHECK(match->position.has_value());
+    }
+
+    cwTieSuggestionModel model;
+    model.setTrip(first);
+    REQUIRE(model.rowCount() > 0);
+    CHECK(stationAt(model, 0) == QStringLiteral("D2"));
+    CHECK(candidateTripAt(model, 0) == QStringLiteral("Second"));
+    CHECK(matchAt(model, 0) == cwTieSuggestionModel::SameName);
 }

@@ -46,8 +46,8 @@ NoticeBanner {
         // survey's names now arrive from the scan's harvest as well as from
         // the solve, and a harvested one was placed nowhere at all.
         text: root.stations.length > 0
-              ? qsTr("Nothing joins it to the rest of the cave, so it can't be placed with the others.")
-              : qsTr("Nothing joins it to the rest of the cave, and its stations couldn't be read from its file.")
+              ? qsTr("Nothing joins it to the rest of the project, so it can't be placed with the others.")
+              : qsTr("Nothing joins it to the rest of the project, and its stations couldn't be read from its file.")
     }
 
     QC.Label {

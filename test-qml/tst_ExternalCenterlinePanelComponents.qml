@@ -838,8 +838,9 @@ MainWindowTest {
             verify(floatingBannerId.visible, "a floating survey banners itself")
             const detail = findChild(floatingBannerId, "floatingSurveyDetail")
             verify(detail !== null, "floatingSurveyDetail must exist")
-            verify(detail.text.indexOf("can't be placed with the others") >= 0,
-                   "adrift-with-names copy; got: " + detail.text)
+            compare(detail.text,
+                    "Nothing joins it to the rest of the project, so it can't be placed with the others.",
+                    "adrift-with-names copy")
 
             const stations = findChild(floatingBannerId, "floatingSurveyStations")
             verify(stations !== null, "floatingSurveyStations must exist")
@@ -882,8 +883,9 @@ MainWindowTest {
             // `floating` and not by the station list.
             floatingBannerId.stations = []
             verify(floatingBannerId.visible, "a survey with no readable names still banners")
-            verify(detail.text.indexOf("couldn't be read from its file") >= 0,
-                   "unreadable copy; got: " + detail.text)
+            compare(detail.text,
+                    "Nothing joins it to the rest of the project, and its stations couldn't be read from its file.",
+                    "unreadable copy")
             verify(!stations.visible, "no stations line when no name could be read")
             verify(!noTies.visible,
                    "no names to tie means nothing to say about renaming them")
