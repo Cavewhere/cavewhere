@@ -52,6 +52,11 @@ public:
 
     static Monad::Result<Result> run(const QString& svxPath,
                                      const QString& output3dPath);
+
+    //! The first trimmed line of a cavern log that reports an error
+    //! ("<file>:<line>: error: ..." or "error: ..."), else its first
+    //! non-empty line.
+    static QString firstErrorLine(const QString& logText);
 };
 
 #endif // CWCAVERNRUNNER_H

@@ -24,6 +24,7 @@ extern "C" int msg_warnings;
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QRegularExpression>
 #include <QTextStream>
 
 #include <array>
@@ -100,4 +101,27 @@ cwCavernRunner::run(const QString& svxPath, const QString& output3dPath)
     result.exitCode = returnCode;
     result.warningCount = msg_warnings;
     return Monad::Result<Result>(result);
+}
+
+QString cwCavernRunner::firstErrorLine(const QString& logText)
+{
+    // "error:" opens the line or follows cavern's "<file>:<line>: " location.
+    static const QRegularExpression errorMarker(QStringLiteral(R"((^|:\s)error:)"),
+                                                QRegularExpression::CaseInsensitiveOption);
+
+    QString firstNonEmpty;
+    const QStringList lines = logText.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        if (trimmed.isEmpty()) {
+            continue;
+        }
+        if (errorMarker.match(trimmed).hasMatch()) {
+            return trimmed;
+        }
+        if (firstNonEmpty.isEmpty()) {
+            firstNonEmpty = trimmed;
+        }
+    }
+    return firstNonEmpty;
 }

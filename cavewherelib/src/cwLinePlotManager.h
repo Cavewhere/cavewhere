@@ -57,6 +57,8 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotManager : public QObject, public cwUpdatabl
     Q_PROPERTY(cwSurveyNetworkSource* surveyNetworkSource READ surveyNetworkSource CONSTANT)
     Q_PROPERTY(bool hasSolveError READ hasSolveError NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString solveErrorMessage READ solveErrorMessage NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString solveErrorStep READ solveErrorStep NOTIFY cavernOutputChanged FINAL)
+    Q_PROPERTY(QString solveErrorSummary READ solveErrorSummary NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString cavernLog READ cavernLog NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString loopClosureStats READ loopClosureStats NOTIFY cavernOutputChanged FINAL)
     Q_PROPERTY(QString driverSource READ driverSource NOTIFY cavernOutputChanged FINAL)
@@ -70,6 +72,10 @@ public:
 
     bool hasSolveError() const { return m_lastSolveError.has_value(); }
     QString solveErrorMessage() const { return m_lastSolveError ? m_lastSolveError->message : QString(); }
+
+    // One-line form of the last solve error, for the Cavern page's status line.
+    QString solveErrorStep() const;
+    QString solveErrorSummary() const;
     QString cavernLog() const { return m_lastCavernLog; }
     QString loopClosureStats() const { return m_lastLoopClosureStats; }
 

@@ -88,6 +88,51 @@ MainWindowTest {
             tryCompare(rowLabel, "text", "Survex file AttachedCave — survex_blocks.svx", 5000)
         }
 
+        // A source root whose cavern run fails with many warnings: the row's
+        // error stays short enough that the cavern log keeps a readable
+        // viewport inside the page.
+        function test_noisyFailureKeepsTheCavernLogReadable() {
+            const minViewportHeight = 150
+            makeSavedCaveAttach("cavern-noisy-failure",
+                                "external-centerlines/survex_noisy_failure/noisy_failure.svx")
+            const page = gotoCavernOutput()
+
+            let errorLabel = null
+            tryVerify(() => {
+                          errorLabel = findChild(page, "attachedRowError")
+                          return errorLabel !== null && errorLabel.visible
+                      }, 10000, "the root's row must carry its cavern error")
+            tryVerify(() => RootData.linePlotManager.hasSolveError
+                            && RootData.linePlotManager.cavernLog.length > 0,
+                      10000, "the region solve fails and publishes its log")
+
+            const scrollView = findChild(page, "cavernOutputScrollView")
+            verify(scrollView !== null, "cavernOutputScrollView must exist")
+            tryVerify(() => errorLabel.height > 0, 5000, "the row error is laid out")
+            waitForRendering(page)
+            verify(scrollView.height >= minViewportHeight,
+                   "the cavern log viewport keeps at least " + minViewportHeight
+                   + " px; got " + scrollView.height + " (row error " + errorLabel.height
+                   + " px tall, page " + page.height + " px)")
+
+            const top = scrollView.mapToItem(page, 0, 0).y
+            verify(top >= 0 && top + minViewportHeight <= page.height,
+                   "the cavern log viewport sits inside the page; top " + top
+                   + ", page height " + page.height)
+
+            const maxStatusLines = 2
+            const statusLabel = findChild(page, "statusLabel")
+            verify(statusLabel !== null, "statusLabel must exist")
+            tryVerify(() => statusLabel.text.startsWith("Cavern failed:"), 5000,
+                      "the status names the failing step; got " + statusLabel.text)
+            verify(statusLabel.text.indexOf("error:") >= 0,
+                   "the status carries cavern's first error line; got " + statusLabel.text)
+            verify(statusLabel.text.indexOf("warning:") < 0,
+                   "the status leaves cavern's warnings to the log; got " + statusLabel.text)
+            verify(statusLabel.lineCount <= maxStatusLines,
+                   "the status fits in " + maxStatusLines + " lines; got " + statusLabel.lineCount)
+        }
+
         function test_attachedRowShowsTheExclusionReason() {
             const attached = attachFixtureTrip("cavern-attached-error")
 

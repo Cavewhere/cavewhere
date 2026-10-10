@@ -8,6 +8,7 @@
 //Our includes
 #include "cwLinePlotManager.h"
 #include "cwRestarterTracking.h"
+#include "cwCavernRunner.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -828,6 +829,18 @@ void cwLinePlotManager::publishUnconnectedStationWarnings()
             publish(trip->errorModel(), trip->id(), displayName(trip->externalCenterline(), trip->name()));
         }
     }
+}
+
+QString cwLinePlotManager::solveErrorStep() const
+{
+    return m_lastSolveError ? QString::fromLatin1(solveErrorStepName(m_lastSolveError->step))
+                            : QString();
+}
+
+QString cwLinePlotManager::solveErrorSummary() const
+{
+    return m_lastSolveError ? cwCavernRunner::firstErrorLine(m_lastSolveError->message)
+                            : QString();
 }
 
 void cwLinePlotManager::publishCavernOutput(QString cavernLog,

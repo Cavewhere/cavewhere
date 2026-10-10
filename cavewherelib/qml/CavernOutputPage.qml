@@ -36,8 +36,15 @@ StandardPage {
                 font.pixelSize: Theme.fontSizeMedium
                 color: root.hasError ? Theme.errorText : Theme.text
                 wrapMode: QC.Label.WordWrap
+                maximumLineCount: 2
+                elide: QC.Label.ElideRight
                 text: {
                     if (root.hasError) {
+                        if (root.linePlotManager.solveErrorSummary.length > 0) {
+                            return qsTr("%1 failed: %2")
+                                .arg(root.linePlotManager.solveErrorStep)
+                                .arg(root.linePlotManager.solveErrorSummary)
+                        }
                         return qsTr("Cavern reported an error during the last solve.")
                     }
                     if (root.linePlotManager !== null
@@ -63,75 +70,96 @@ StandardPage {
             }
         }
 
-        ColumnLayout {
-            objectName: "attachedCenterlinesSection"
-            Layout.fillWidth: true
-            visible: attachedRepeater.count > 0
-            spacing: Theme.tightSpacing
+        // Bounded so a long list of rows scrolls on its own and the cavern
+        // log below keeps its room.
+        QQ.Flickable {
+            id: attachedAreaId
 
-            // One row per source root, which stands for its whole subtree,
-            // and one per trip with a file of its own.
-            QC.Label {
-                text: qsTr("Attached external centerlines")
-                font.bold: true
+            Layout.fillWidth: true
+            Layout.preferredHeight: Math.min(contentHeight, Theme.floatingListMaxHeight)
+            visible: attachedRepeater.count > 0
+            contentWidth: width
+            contentHeight: attachedSectionId.implicitHeight
+            clip: true
+            boundsBehavior: QQ.Flickable.StopAtBounds
+
+            QC.ScrollBar.vertical: QC.ScrollBar {
+                policy: attachedAreaId.contentHeight > attachedAreaId.height
+                        ? QC.ScrollBar.AlwaysOn
+                        : QC.ScrollBar.AlwaysOff
             }
 
-            QQ.Repeater {
-                id: attachedRepeater
-                model: root.externalManager !== null
-                       ? root.externalManager.attachedCenterlinesModel : null
+            ColumnLayout {
+                id: attachedSectionId
+                objectName: "attachedCenterlinesSection"
 
-                delegate: ColumnLayout {
-                    id: attachedRowId
-                    objectName: "attachedCenterlineRow" + index
+                width: attachedAreaId.width
+                spacing: Theme.tightSpacing
 
-                    required property int index
-                    required property string ownerName
-                    required property string kindLabel
-                    required property string entryFile
-                    required property int depCount
-                    required property int warningCount
-                    // Why this owner was left out of the solve. A trip also
-                    // says so in its own banner; for a source root this row
-                    // is the only place it is ever said.
-                    required property string error
+                // One row per source root, which stands for its whole subtree,
+                // and one per trip with a file of its own.
+                QC.Label {
+                    text: qsTr("Attached external centerlines")
+                    font.bold: true
+                }
 
-                    Layout.fillWidth: true
-                    spacing: Theme.tightSpacing
+                QQ.Repeater {
+                    id: attachedRepeater
+                    model: root.externalManager !== null
+                           ? root.externalManager.attachedCenterlinesModel : null
 
-                    RowLayout {
+                    delegate: ColumnLayout {
+                        id: attachedRowId
+                        objectName: "attachedCenterlineRow" + index
+
+                        required property int index
+                        required property string ownerName
+                        required property string kindLabel
+                        required property string entryFile
+                        required property int depCount
+                        required property int warningCount
+                        // Why this owner was left out of the solve. A trip also
+                        // says so in its own banner; for a source root this row
+                        // is the only place it is ever said.
+                        required property string error
+
                         Layout.fillWidth: true
-                        spacing: Theme.sectionSpacing
+                        spacing: Theme.tightSpacing
 
-                        QC.Label {
-                            objectName: "attachedRowLabel"
+                        RowLayout {
                             Layout.fillWidth: true
-                            elide: QC.Label.ElideMiddle
-                            text: qsTr("%1 %2 — %3")
-                                  .arg(attachedRowId.kindLabel)
-                                  .arg(attachedRowId.ownerName)
-                                  .arg(attachedRowId.entryFile)
+                            spacing: Theme.sectionSpacing
+
+                            QC.Label {
+                                objectName: "attachedRowLabel"
+                                Layout.fillWidth: true
+                                elide: QC.Label.ElideMiddle
+                                text: qsTr("%1 %2 — %3")
+                                      .arg(attachedRowId.kindLabel)
+                                      .arg(attachedRowId.ownerName)
+                                      .arg(attachedRowId.entryFile)
+                            }
+
+                            QC.Label {
+                                color: Theme.textSubtle
+                                text: attachedRowId.warningCount > 0
+                                      ? qsTr("%1 files, %2 warnings")
+                                            .arg(attachedRowId.depCount)
+                                            .arg(attachedRowId.warningCount)
+                                      : qsTr("%1 files").arg(attachedRowId.depCount)
+                            }
                         }
 
                         QC.Label {
-                            color: Theme.textSubtle
-                            text: attachedRowId.warningCount > 0
-                                  ? qsTr("%1 files, %2 warnings")
-                                        .arg(attachedRowId.depCount)
-                                        .arg(attachedRowId.warningCount)
-                                  : qsTr("%1 files").arg(attachedRowId.depCount)
+                            objectName: "attachedRowError"
+
+                            Layout.fillWidth: true
+                            visible: attachedRowId.error.length > 0
+                            wrapMode: QC.Label.WordWrap
+                            color: Theme.danger
+                            font.pixelSize: Theme.fontSizeSmall
+                            text: attachedRowId.error
                         }
-                    }
-
-                    QC.Label {
-                        objectName: "attachedRowError"
-
-                        Layout.fillWidth: true
-                        visible: attachedRowId.error.length > 0
-                        wrapMode: QC.Label.WordWrap
-                        color: Theme.danger
-                        font.pixelSize: Theme.fontSizeSmall
-                        text: attachedRowId.error
                     }
                 }
             }
@@ -195,6 +223,7 @@ StandardPage {
         }
 
         QC.ScrollView {
+            objectName: "cavernOutputScrollView"
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true

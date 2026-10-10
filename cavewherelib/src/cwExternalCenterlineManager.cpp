@@ -8,6 +8,7 @@
 //Our includes
 #include "cwExternalCenterlineManager.h"
 #include "cwCave.h"
+#include "cwCavernRunner.h"
 #include "cwCavingRegion.h"
 #include "cwConcurrent.h"
 #include "cwExternalCenterline.h"
@@ -713,8 +714,10 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                         } else {
                             // The row is a cave owner's only surface (see above),
                             // and without names every fix on the cave's file
-                            // stations is dropped as unknown.
-                            row.error = harvestError;
+                            // stations is dropped as unknown. The row keeps one
+                            // line; the region solve, which normally fails on
+                            // the same error, carries the full log.
+                            row.error = cwCavernRunner::firstErrorLine(harvestError);
                         }
                     } else {
                         result.ownerStations.insert(owner.ownerId, harvest.value().names);

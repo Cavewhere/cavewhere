@@ -10,6 +10,7 @@
 
 // Our
 #include "cwCave.h"
+#include "cwCavernRunner.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineManager.h"
@@ -485,4 +486,48 @@ TEST_CASE("isExcluded matches an excluded path and its descendants",
                                                        {QStringLiteral("ALPHA.DAT")}));
     CHECK_FALSE(cwExternalCenterlineAttach::isExcluded(QStringLiteral("ALPHA.DAT"),
                                                        {QStringLiteral("ALPHA.DAT/ALPHA1")}));
+}
+
+TEST_CASE("A source root whose harvest fails keeps cavern's warnings off its row",
+          "[Attach][HarvestErrorRow]")
+{
+    // A row error sits under the row on the Cavern page; a few lines is
+    // all the page has room for beside the cavern log itself.
+    constexpr int kMaxRowErrorLines = 5;
+
+    auto fixture = makeProject(QStringLiteral("subtree-noisy-failure"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        fixture.get(), regionRoot(fixture.get()),
+        fixturePath(QStringLiteral("survex_noisy_failure/noisy_failure.svx")));
+    drainPipelines(fixture.get());
+
+    const cwAttachedCenterlinesModel* model = managerOf(fixture.get())->attachedCenterlinesModel();
+    REQUIRE(tryWait(kAttachWaitMs, [&] { return !model->errorFor(root->id()).isEmpty(); }));
+
+    const QString rowError = model->errorFor(root->id());
+    INFO("row error:\n" << rowError.toStdString());
+    CHECK_FALSE(rowError.contains(QStringLiteral("warning:")));
+    CHECK(rowError.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size() <= kMaxRowErrorLines);
+}
+
+TEST_CASE("firstErrorLine picks cavern's error out of a noisy log",
+          "[Attach][HarvestErrorRow]")
+{
+    const QString log = QStringLiteral(
+        "Survex 1.4.11\n"
+        "\n"
+        "cave/entry.svx:3:13: warning: Suspicious compass reading\n"
+        " S2 S3 5.0 400 0\n"
+        "            ^~~\n"
+        "  cave/entry.svx:75: error: Couldn't open file \"not_on_disk.svx\"\n"
+        " *include \"not_on_disk.svx\"\n"
+        "error: Second error\n");
+
+    CHECK(cwCavernRunner::firstErrorLine(log)
+          == QStringLiteral("cave/entry.svx:75: error: Couldn't open file \"not_on_disk.svx\""));
+    CHECK(cwCavernRunner::firstErrorLine(QStringLiteral("x\nerror: bare\n"))
+          == QStringLiteral("error: bare"));
+    CHECK(cwCavernRunner::firstErrorLine(QStringLiteral("\n  Export failed  \nmore\n"))
+          == QStringLiteral("Export failed"));
+    CHECK(cwCavernRunner::firstErrorLine(QString()).isEmpty());
 }
