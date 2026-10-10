@@ -80,6 +80,25 @@ CWTestCase {
                                 TestHelper.testcasesDatasetPath(fixture))
     }
 
+    // Saves the fresh project as .cwproj and attaches compass_project at the
+    // top level: the root PROJECT holds Alpha (ALPHA1, ALPHA2), Bravo
+    // (BRAVO1), and Charlie (CHARLIE1). Returns the root.
+    function attachCompassProject(projectBaseName) {
+        saveProjectAs(projectBaseName)
+        return attachSourceToRegion(
+                    TestHelper.testcasesDatasetSourcePath(
+                        "external-centerlines/compass_project/PROJECT.MAK"))
+    }
+
+    function childNamed(node, name) {
+        for (let i = 0; i < node.childNodeCount; i++) {
+            if (node.childNode(i).name === name) {
+                return node.childNode(i)
+            }
+        }
+        return null
+    }
+
     // Saves the fresh project as .cwproj and attaches the
     // survex_simple.svx fixture to a new trip via the cwRootData
     // wrapper. Returns { trip, source }.

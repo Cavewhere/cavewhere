@@ -9,7 +9,7 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
-    TestCase {
+    ExternalCenterlineTestCase {
         name: "NodePage"
         when: windowShown
 
@@ -443,6 +443,59 @@ MainWindowTest {
 
             RootData.undoStack.undo()
             tryCompare(nodes.section, "parentNode", nodes.cave, 5000)
+        }
+
+        // A derived node's page says what the node is in the file and links to
+        // its root; the root owns the fixed positions, so the node offers none.
+        function test_derivedNodeCardNamesTheNodeAndOpensTheRoot() {
+            const sourceRoot = attachCompassProject("node-page-derived")
+            const alpha = childNamed(sourceRoot, "Alpha")
+            verify(alpha !== null)
+            const page = gotoNodePage("Source/Data/Node=PROJECT/Node=Alpha", alpha)
+
+            const card = findChild(page, "derivedNodeCard")
+            tryVerify(() => card.visible, 5000, "a derived node shows its source card")
+            verify(!findChild(page, "sourceRootCard").visible, "the root's card stays on the root")
+            compare(findChild(card, "derivedNodeFileLabel").text, "PROJECT.MAK")
+            compare(findChild(card, "derivedNodeUnitLabel").text, "This node is ALPHA.DAT in the project")
+            compare(findChild(card, "derivedNodeCountsLabel").text.indexOf("2 unit(s) · "), 0,
+                    "ALPHA1 and ALPHA2 are Alpha's units")
+
+            verify(!findChild(page, "fixStationsLink").visible, "a derived node offers no fix stations")
+            const fixLabel = findChild(page, "derivedFixStationsLabel")
+            verify(fixLabel.visible)
+            compare(fixLabel.text, "Fixed positions come from the survey file")
+
+            const openRoot = findChild(card, "derivedNodeOpenRootLink")
+            compare(openRoot.text, "Open PROJECT")
+            mouseClick(openRoot)
+            tryVerify(() => RootData.pageSelectionModel.currentPageAddress === "Source/Data/Node=PROJECT"
+                      && RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.currentNode === sourceRoot,
+                      5000, "Open PROJECT opens the root's page")
+            const rootPage = RootData.pageView.currentPageItem
+            tryVerify(() => findChild(rootPage, "sourceRootCard").visible, 5000,
+                      "the root's page shows the root's card")
+            verify(findChild(rootPage, "fixStationsLink").visible, "the root keeps its fix-station row")
+        }
+
+        // A sourced node takes native trips and sections and further files,
+        // never a trip copied from a file of its own.
+        function test_addVerbsOnASourcedNode() {
+            const sourceRoot = attachCompassProject("node-page-sourced-add")
+            const alpha = childNamed(sourceRoot, "Alpha")
+
+            for (const entry of [{ address: "Source/Data/Node=PROJECT", node: sourceRoot },
+                                 { address: "Source/Data/Node=PROJECT/Node=Alpha", node: alpha }]) {
+                const page = gotoNodePage(entry.address, entry.node)
+                compare(findChild(findChild(page, "addTrip"), "addButton").text, "Add Trip",
+                        entry.address + " adds a trip from the button")
+                const menu = openAddCaret(page)
+                compare(visibleEntryNames(menu), ["addSectionMenuItem", "attachSurveyFileMenuItem"],
+                        entry.address + " offers Add Section and Attach survey file… beside it")
+                menu.close()
+                tryVerify(() => !menu.opened, 5000)
+            }
         }
     }
 }

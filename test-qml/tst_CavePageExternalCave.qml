@@ -3,10 +3,9 @@ import QtTest
 import cavewherelib
 import cw.TestLib
 
-// CavePage for a cave whose centerline comes from an attached survey
-// file (plans/EXTERNAL_FILE_PHASE3.html P3.8): the cave-level summary
-// card, the paperclip and em-dash the externally-backed trip rows
-// carry, and the Detach flow.
+// The page of a source root, the node an attached survey file builds its
+// subtree under (SURVEY_TREE_PLAN C7.4b): the source card, and the paperclip
+// and em-dash the derived trip rows below it carry.
 MainWindowTest {
     id: rootId
 
@@ -49,24 +48,59 @@ MainWindowTest {
             return RootData.pageView.currentPageItem
         }
 
+        // survex_blocks.svx as a source root named AttachedCave: the block
+        // doghill and, below it, big-passage with east and the empty sump.
+        // doghill, big-passage, and east each hold the unit of their own shots.
         function attachedCave(projectBaseName) {
             return makeSavedCaveAttach(
                         projectBaseName,
                         "external-centerlines/survex_blocks.svx")
         }
 
+        // The page's tree with every row open, so the derived trips under the
+        // root's nodes have rows: `rows` of them once every one is drawn.
+        function expandedTree(cavePage, rows) {
+            let firstRow = null
+            tryVerify(() => {
+                          firstRow = findChild(cavePage, "caveDelegate0")
+                          return firstRow !== null
+                      }, 5000, "the root's page draws its first node row")
+            const view = firstRow.treeView
+            //Each opened row brings its children in below it, so the walk
+            //reaches every depth. Asked again on each try: the attach's own
+            //landing can reset the rows under the first expansion.
+            tryVerify(() => {
+                          for (let row = 0; row < view.rows; row++) {
+                              view.expand(row)
+                          }
+                          return view.rows === rows
+                      }, 5000, "every node of the subtree is open; rows: " + view.rows)
+            waitForRendering(rootId)
+            return view
+        }
+
+        // The cells named `objectName` once `count` of them are drawn.
+        function cellsNamed(cavePage, objectName, count) {
+            let cells = []
+            tryVerify(() => {
+                          cells = collectByName(cavePage, objectName, [])
+                          return cells.length === count
+                      }, 5000, count + " " + objectName + " cells should be drawn")
+            return cells
+        }
+
         function test_cardVisibleOnlyForAttachedCave() {
             const cave = attachedCave("cavepage-external-card")
             let cavePage = gotoCavePage(cave)
 
-            const card = findChild(cavePage, "externalCaveSummary")
-            verify(card !== null, "an attached cave shows its summary card")
+            const card = findChild(cavePage, "sourceRootCard")
+            verify(card !== null, "a source root shows its source card")
             tryVerify(() => card.visible, 5000, "the card renders on the page")
 
             const header = findChild(card, "attachedHeader")
             verify(header !== null, "the card carries the attached header")
             compare(header.fileName, "survex_blocks.svx",
-                    "the header names the cave's entry file")
+                    "the header names the root's entry file")
 
             // A cave that holds its own trips has nothing attached, so the
             // page keeps its native shape.
@@ -76,71 +110,67 @@ MainWindowTest {
             nativeCave.addTrip()
 
             cavePage = gotoCavePage(nativeCave)
-            const nativeCard = findChild(cavePage, "externalCaveSummary")
+            const nativeCard = findChild(cavePage, "sourceRootCard")
             verify(nativeCard === null || !nativeCard.visible,
-                   "a native cave shows no attachment card")
+                   "a native cave shows no source card")
         }
 
-        function test_scopeRowsShowPaperclipAndEmDash() {
+        function test_derivedTripRowsShowPaperclipAndEmDash() {
             const cave = attachedCave("cavepage-external-rows")
-            compare(cave.rowCount(), 3, "the attach created one trip per block")
+            compare(cave.tripCount, 0, "the root's shots all sit inside doghill")
+            compare(cave.childNodeCount, 1, "doghill is the root's one block")
 
             const cavePage = gotoCavePage(cave)
+            //doghill, big-passage, east, sump, and the three trips
+            expandedTree(cavePage, 7)
 
-            const nameLinks = collectByName(cavePage, "tripLink", [])
-            compare(nameLinks.length, 3, "every trip has a name cell")
+            const nameLinks = cellsNamed(cavePage, "tripLink", 3)
             for (let i = 0; i < nameLinks.length; i++) {
                 verify(nameLinks[i].text.indexOf("📎 ") === 0,
-                       "a Scope row is marked as externally backed: "
+                       "a derived trip row is marked as externally backed: "
                        + nameLinks[i].text)
             }
 
-            const emDashes = collectByName(cavePage, "declinationEmDash", [])
-            compare(emDashes.length, 3, "every trip has a declination cell")
+            const emDashes = cellsNamed(cavePage, "declinationEmDash", 3)
             for (let j = 0; j < emDashes.length; j++) {
                 verify(emDashes[j].visible,
                        "the file owns the declination, so the row shows an em dash")
             }
         }
 
-        // A file whose shots sit outside every *begin gets a whole-cave window
-        // alongside its block windows (P3.16), and that row is externally
-        // backed like any other: same paperclip, same em-dash declination.
-        function test_wholeCaveWindowRowIsMarkedLikeAnyScopeRow() {
+        // A file whose shots sit outside every *begin gives the root a unit of
+        // its own, which windows the whole file beside the side block's trip
+        // (§7.2 step 6), and that row is externally backed like any other: same
+        // paperclip, same em-dash declination.
+        function test_wholeNodeWindowRowIsMarkedLikeAnyDerivedRow() {
             const cave = makeSavedCaveAttach(
                            "cavepage-whole-cave-row",
                            "external-centerlines/survex_root_and_block.svx")
-            compare(cave.rowCount(), 2,
-                    "the root got a window of its own beside the side block")
-
-            let windows = 0
-            for (let row = 0; row < cave.rowCount(); row++) {
-                if (cave.trip(row).windowsWholeNode) {
-                    windows++
-                }
-            }
-            compare(windows, 1, "exactly one trip windows the whole cave")
+            compare(cave.tripCount, 1, "the root holds the unit of its own shots")
+            compare(cave.childNodeCount, 1, "the side block is the root's one node")
+            verify(cave.trip(0).windowsWholeNode, "the root's own unit windows the whole file")
+            verify(!cave.childNode(0).trip(0).windowsWholeNode, "the side block's trip windows only side")
 
             const cavePage = gotoCavePage(cave)
+            //side, its trip, and the root's own trip
+            expandedTree(cavePage, 3)
 
-            const nameLinks = collectByName(cavePage, "tripLink", [])
-            compare(nameLinks.length, 2, "every trip has a name cell")
+            const nameLinks = cellsNamed(cavePage, "tripLink", 2)
             for (let i = 0; i < nameLinks.length; i++) {
                 verify(nameLinks[i].text.indexOf("📎 ") === 0,
                        "a window row is marked as externally backed: "
                        + nameLinks[i].text)
             }
 
-            const emDashes = collectByName(cavePage, "declinationEmDash", [])
-            compare(emDashes.length, 2, "every trip has a declination cell")
+            const emDashes = cellsNamed(cavePage, "declinationEmDash", 2)
             for (let j = 0; j < emDashes.length; j++) {
                 verify(emDashes[j].visible,
                        "the file owns the declination, so the row shows an em dash")
             }
         }
 
-        // externallyBacked covers a Phase-2 trip-level attachment too, so
-        // its row on the cave page is marked the same way.
+        // externallyBacked covers a trip-level attachment too, so its row on a
+        // native cave's page is marked the same way.
         function test_phase2AttachedTripRowShowsPaperclipToo() {
             const fixture = attachFixtureTrip("cavepage-external-p2")
             verify(fixture.trip.externallyBacked, "the attached trip is externally backed")
@@ -158,27 +188,29 @@ MainWindowTest {
             verify(emDashes[0].visible, "the file owns its declination")
         }
 
-        // Each Scope trip's row shows the date its block wrote, not the day
+        // Each derived trip's row shows the date its block wrote, not the day
         // of the import: big-passage and the east block that inherits its
         // date read the fixture's date, doghill writes none and reads today.
         function test_tripRowsShowTheirBlockDates() {
             const dayOfAttach = Qt.formatDate(new Date(), "yyyy-MM-dd")
             const cave = attachedCave("cavepage-external-dates")
             const cavePage = gotoCavePage(cave)
+            const view = expandedTree(cavePage, 7)
 
-            //A trip row's Date cell names itself by its row, and draws the
-            //date as its "value".
+            //A trip row's Date cell names itself by its view row, and draws
+            //the date as its "value"; node rows sit between the trip rows.
             const dateCells = []
-            for (let row = 0; row < 3; row++) {
-                let value = null
-                tryVerify(() => {
+            tryVerify(() => {
+                          dateCells.length = 0
+                          for (let row = 0; row < view.rows; row++) {
                               const cell = findChild(cavePage, "tripDate" + row)
-                              value = cell === null ? null : findChild(cell, "value")
-                              return value !== null
-                          }, 5000, "trip row " + row + " must draw its date")
-                dateCells.push(value)
-            }
-            compare(dateCells.length, 3, "every trip has a date cell")
+                              const value = cell === null ? null : findChild(cell, "value")
+                              if (value !== null) {
+                                  dateCells.push(value)
+                              }
+                          }
+                          return dateCells.length === 3
+                      }, 5000, "every derived trip row must draw its date")
 
             let seeded = 0
             let today = 0
@@ -197,14 +229,15 @@ MainWindowTest {
             compare(today, 1, "the block that writes no date keeps today")
         }
 
-        // The cave's Length and Depth come from the solved external centerline
-        // (P3.13). A cave that resolved nothing measures 0, never a sentinel.
+        // The root's Length and Depth come from the solved file, folded over
+        // its subtree. A node that resolved nothing measures 0, never a
+        // sentinel.
         function test_statsShowSolvedNumbers() {
             const cave = attachedCave("cavepage-external-stats")
             const cavePage = gotoCavePage(cave)
 
             tryVerify(() => cave.length.value > 0, 20000,
-                      "the attached centerline gives the cave a length")
+                      "the attached file gives the root a length")
 
             const valueCells = collectByName(cavePage, "value", [])
             verify(valueCells.length >= 2, "the page shows the Length and Depth stats")
@@ -218,7 +251,7 @@ MainWindowTest {
             const cave = attachedCave("cavepage-external-replace")
             const cavePage = gotoCavePage(cave)
 
-            const card = findChild(cavePage, "externalCaveSummary")
+            const card = findChild(cavePage, "sourceRootCard")
             verify(card !== null, "the card must exist")
             tryVerify(() => card.visible, 5000)
 
@@ -238,7 +271,7 @@ MainWindowTest {
             const currentEntry = findChild(dialog, "currentEntryLabel")
             verify(currentEntry !== null, "currentEntryLabel must exist")
             verify(currentEntry.text.indexOf("survex_blocks.svx") >= 0,
-                   "the dialog names the cave's current file: " + currentEntry.text)
+                   "the dialog names the root's current file: " + currentEntry.text)
 
             const cancelButton = findChild(dialog, "replaceCancelButton")
             verify(cancelButton !== null, "replaceCancelButton must exist")

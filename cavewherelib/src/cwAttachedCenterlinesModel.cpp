@@ -75,6 +75,8 @@ QVariant cwAttachedCenterlinesModel::data(const QModelIndex& index, int role) co
         return row.lastSolved;
     case ErrorRole:
         return row.error;
+    case KindLabelRole:
+        return row.kindLabel;
     }
     return QVariant();
 }
@@ -88,7 +90,8 @@ QHash<int, QByteArray> cwAttachedCenterlinesModel::roleNames() const
         { DepCountRole, QByteArrayLiteral("depCount") },
         { WarningCountRole, QByteArrayLiteral("warningCount") },
         { LastSolvedRole, QByteArrayLiteral("lastSolved") },
-        { ErrorRole, QByteArrayLiteral("error") }
+        { ErrorRole, QByteArrayLiteral("error") },
+        { KindLabelRole, QByteArrayLiteral("kindLabel") }
     };
 }
 
@@ -98,6 +101,7 @@ bool cwAttachedCenterlinesModel::rowDataEqual(const Row& left, const Row& right)
         && left.caveName == right.caveName
         && left.ownerName == right.ownerName
         && left.ownerKind == right.ownerKind
+        && left.kindLabel == right.kindLabel
         && left.entryFile == right.entryFile
         && left.depCount == right.depCount
         && left.warningCount == right.warningCount

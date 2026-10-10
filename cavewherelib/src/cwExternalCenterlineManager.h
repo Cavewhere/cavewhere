@@ -379,6 +379,8 @@ private:
         // disables the check — scan-only tests have no project on disk to
         // be contained by.
         QString dataRootDir;
+        // The owner's kind as the survey tree's chip names it.
+        QString kindLabel;
     };
 
     // Everything the worker derives from an OwnerScanInput batch; the

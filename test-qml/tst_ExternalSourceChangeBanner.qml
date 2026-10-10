@@ -285,22 +285,30 @@ MainWindowTest {
                               ExternalSourceStatusModel.OwnerIdRole)
         }
 
-        function test_caveRowUpdatesTheCave() {
+        // A source root is one owner for its whole subtree: its row names the
+        // root with its node count, says the notes on its trips are there
+        // (§6.11 case 6), and its Update reloads the root.
+        function test_sourceRootRowUpdatesTheRoot() {
             const host = sourceChangeHost()
-            makeSavedTrip("banner-cave-row")
+            makeSavedTrip("banner-root-row")
 
             const source = tempSource()
-            makeAttachedCave("BannerCave", source)
+            const sourceRoot = makeAttachedCave("BannerRoot", source)
             attachCompletedSpyId.clear()
 
             tryVerify(() => statusModel().rowCount() === 1, 15000,
-                      "the cave is the only attached owner")
-            const caveId = statusRowOwnerId(0)
+                      "the root is the only attached owner")
+            const ownerId = statusRowOwnerId(0)
+            compare(ownerId.toString(), sourceRoot.id.toString(), "the root is the owner")
+
+            compare(sourceRoot.childNodeCount, 1, "survex_simple's block Simple is the root's one node")
+            const derivedTrip = sourceRoot.childNode(0).trip(0)
+            TestHelper.addNoteWithScrap(derivedTrip, "Sketch")
 
             rewriteSource(source, "survex_no_metadata.svx")
-            tryVerify(() => statusModel().statusFor(caveId)
+            tryVerify(() => statusModel().statusFor(ownerId)
                             === ExternalSourceStatusModel.Changed, 15000,
-                      "the edited cave source reads Changed")
+                      "the edited root source reads Changed")
             tryVerify(() => host.hasUndismissedChange, 15000, "the banner is up")
             waitForRendering(rootId)
 
@@ -308,25 +316,56 @@ MainWindowTest {
             waitForRendering(rootId)
 
             const rows = findInHost("externalSourceChangeRows")
-            tryCompare(rows, "count", 1, 15000, "the cave is the only owner listed")
-            const caveRow = rows.itemAtIndex(0)
-            verify(caveRow !== null, "the cave row must be realized")
-            compare(findChild(caveRow, "externalSourceChangeRowOwner").text,
-                    "BannerCave", "a cave row is named by the cave alone")
-            const updateButton = findChild(caveRow, "externalSourceChangeRowUpdateButton")
-            verify(updateButton.enabled, "a changed cave source can be updated")
+            tryCompare(rows, "count", 1, 15000, "the root is the only owner listed")
+            const rootRow = rows.itemAtIndex(0)
+            verify(rootRow !== null, "the root row must be realized")
+            compare(findChild(rootRow, "externalSourceChangeRowOwner").text,
+                    "BannerRoot (2 nodes)", "a root row counts the nodes it stands for")
+            const notes = findChild(rootRow, "externalSourceChangeRowNotes")
+            verify(notes.visible, "the row says notes are on the root's trips")
+            compare(notes.text, "1 note(s) on its trips")
+            const updateButton = findChild(rootRow, "externalSourceChangeRowUpdateButton")
+            verify(updateButton.enabled, "a changed root source can be updated")
 
             mouseClick(updateButton)
             tryVerify(() => attachCompletedSpyId.count === 1, 30000,
-                      "the row's Update runs the cave's copy")
+                      "the row's Update reloads the root")
             const report = attachCompletedSpyId.signalArguments[0][0]
-            verify(report.success, "the cave update succeeds; got: " + report.errorMessage)
-            compare(report.ownerId.toString(), caveId.toString(),
-                    "the cave is the owner that was updated")
+            verify(report.success, "the root update succeeds; got: " + report.errorMessage)
+            compare(report.ownerId.toString(), ownerId.toString(),
+                    "the root is the owner that was updated")
 
-            tryVerify(() => statusModel().statusFor(caveId)
+            tryVerify(() => statusModel().statusFor(ownerId)
                             === ExternalSourceStatusModel.UpToDate, 15000,
-                      "the cave's copy matches its source again")
+                      "the root's copy matches its source again")
+        }
+
+        // A trip row stays quiet about notes until the trip holds some.
+        function test_tripRowSaysWhenNotesAreOnTheTrip() {
+            const host = sourceChangeHost()
+            const attached = attachTrips("banner-trip-notes", 2)
+            TestHelper.addNoteWithScrap(attached.trips[0], "Sketch")
+
+            rewriteSource(attached.sources[0], "survex_no_metadata.svx")
+            rewriteSource(attached.sources[1], "survex_with_metadata.svx")
+            tryVerify(() => host.changedCount === 2, 15000, "both sources read Changed")
+            waitForRendering(rootId)
+            mouseClick(findInHost("externalSourceShowButton"))
+            waitForRendering(rootId)
+
+            const rows = findInHost("externalSourceChangeRows")
+            tryCompare(rows, "count", 2, 15000, "both owners are listed")
+            let withNotes = 0
+            for (let i = 0; i < rows.count; ++i) {
+                const row = rows.itemAtIndex(i)
+                verify(row !== null, "row " + i + " must be realized")
+                const notes = findChild(row, "externalSourceChangeRowNotes")
+                if (notes.visible) {
+                    withNotes += 1
+                    compare(notes.text, "1 note(s) on this trip")
+                }
+            }
+            compare(withNotes, 1, "only the trip holding a note says so")
         }
 
         function test_rowUpdateUpdatesJustThatOwner() {

@@ -15,6 +15,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
+#include <QStringList>
 
 //Our includes
 #include "cwGlobals.h"
@@ -29,6 +30,11 @@ class cwSurveyNode;
  *
  * The trip count and the date follow the whole subtree: a trip or node added
  * or removed at any depth, and any trip's date edit, refresh them.
+ *
+ * A node of a sourced subtree also gets what its source card shows: how many
+ * derived trips (units of the survey file) sit at or below it, how many solved
+ * stations its view holds, and, on a source root, the names of the derived
+ * nodes and trips the user hid from the project.
  */
 class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
 {
@@ -39,6 +45,9 @@ class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
     Q_PROPERTY(QString kindLabel READ kindLabel NOTIFY kindLabelChanged)
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
     Q_PROPERTY(QDateTime lastSurvey READ lastSurvey NOTIFY lastSurveyChanged)
+    Q_PROPERTY(int sourceUnitCount READ sourceUnitCount NOTIFY sourceUnitCountChanged)
+    Q_PROPERTY(int stationCount READ stationCount NOTIFY stationCountChanged)
+    Q_PROPERTY(QStringList hiddenNames READ hiddenNames NOTIFY hiddenNamesChanged)
 
 public:
     explicit cwNodePageModel(QObject* parent = nullptr);
@@ -55,11 +64,26 @@ public:
     //! there has a date.
     QDateTime lastSurvey() const { return m_lastSurvey; }
 
+    //! The derived trips at or below a sourced node; 0 for a native node.
+    int sourceUnitCount() const { return m_sourceUnitCount; }
+
+    //! The solved stations in a sourced node's scopedPositions(); 0 for a
+    //! native node.
+    int stationCount() const { return m_stationCount; }
+
+    //! On a source root, one name per path its source excludes: the last
+    //! segment of the hidden node's or trip's source path, its node's segment
+    //! for a node's own unit. Empty for every other node.
+    QStringList hiddenNames() const { return m_hiddenNames; }
+
 signals:
     void nodeChanged();
     void kindLabelChanged();
     void tripCountChanged();
     void lastSurveyChanged();
+    void sourceUnitCountChanged();
+    void stationCountChanged();
+    void hiddenNamesChanged();
 
 private:
     QPointer<cwSurveyNode> m_node;
@@ -67,16 +91,25 @@ private:
     QMetaObject::Connection m_kindConnection;
     QMetaObject::Connection m_sectionConnection;
     QMetaObject::Connection m_destroyedConnection;
+    QList<QMetaObject::Connection> m_sourceConnections;
     QList<QMetaObject::Connection> m_tripConnections;
 
     int m_tripCount = 0;
     QDateTime m_lastSurvey;
+    int m_sourceUnitCount = 0;
+    int m_stationCount = 0;
+    QStringList m_hiddenNames;
 
     void rewireTrips();
     void updateLastSurvey();
     void disconnectTrips();
     void setTripCount(int count);
     void setLastSurvey(const QDateTime& date);
+    void rewireSource();
+    void disconnectSource();
+    void updateSourceUnitCount();
+    void updateStationCount();
+    void updateHiddenNames();
 };
 
 #endif // CWNODEPAGEMODEL_H

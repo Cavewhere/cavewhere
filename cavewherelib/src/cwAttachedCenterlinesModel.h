@@ -20,7 +20,7 @@
 #include <QtQml/qqmlregistration.h>
 
 /**
- * One row per cave or trip with an attached external centerline, owned
+ * One row per source root or trip with an attached external centerline, owned
  * and populated by cwLinePlotManager (rebuilt on every watch-set
  * recompute, i.e. on attach / detach / attachment-dir changes).
  * CavernOutputPage's attached-centerlines section binds to this.
@@ -46,7 +46,8 @@ public:
         DepCountRole,
         WarningCountRole,
         LastSolvedRole,
-        ErrorRole
+        ErrorRole,
+        KindLabelRole
     };
     Q_ENUM(Roles)
 
@@ -54,7 +55,9 @@ public:
         QUuid ownerId;
         QString caveName;   // sort key only, not exposed as a role
         QString ownerName;  // cave name for cave owners, trip name for trips
-        QString ownerKind;  // "Cave" or "Trip"
+        QString ownerKind;  // "Trip", or a source root's cwSurveyNodeKind name
+        // The owner's kind as the survey tree's chip names it.
+        QString kindLabel;
         QString entryFile;
         int depCount = 0;
         int warningCount = 0;

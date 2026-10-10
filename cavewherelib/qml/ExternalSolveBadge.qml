@@ -9,10 +9,10 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// A single dot on a cave or trip row saying that the owner's external
-// centerline kept it out of the solve (danger) or solved with warnings
-// (warning). Hidden for a clean owner and for an owner with no external
-// centerline at all, so a native row's layout is untouched.
+// A single dot on a source root's or trip's row saying that the owner's
+// external centerline kept it out of the solve (danger) or solved with
+// warnings (warning). Hidden for a clean owner and for an owner with no
+// external centerline at all, so a native row's layout is untouched.
 //
 // The attached-centerlines model answers per owner imperatively
 // (errorFor / warningCountFor are Q_INVOKABLE reads with no property
@@ -22,7 +22,7 @@ QQ.Rectangle {
     id: root
     objectName: "externalSolveBadge"
 
-    // A Cave or a Trip — both expose a QUuid id.
+    // A survey node or a Trip — both expose a QUuid id.
     property QQ.QtObject owner: null
 
     // Whether this owner is backed by an external centerline at all. The

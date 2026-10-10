@@ -364,7 +364,7 @@ MainWindowTest {
         // and leave the attached file's source line on screen, pulsing, in the
         // wide layout and then the narrow one.
         function verifyOpensSourceLine(cavePage, bannerItem, entry) {
-            const summary = findChild(cavePage, "externalCaveSummary")
+            const summary = findChild(cavePage, "sourceRootCard")
             verify(summary !== null)
             tryVerify(() => !summary.attentionActive, 5000, "the source line starts at rest")
 

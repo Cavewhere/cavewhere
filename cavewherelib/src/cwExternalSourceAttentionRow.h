@@ -25,6 +25,10 @@
  * model's path, status, and source revision. Consumed by the source-change
  * banner's review list (ExternalSourceChangeHost.qml).
  *
+ * noteCount counts the notes on the owner's trips (the trip itself, or every
+ * trip under a source root), which a Reload can move off their stations
+ * (plans/SURVEY_TREE_PLAN.html §6.11 case 6).
+ *
  * ownerKey is the owner UUID spelled for JavaScript
  * (QUuid::WithoutBraces), which has no QUuid to compare or to key a map
  * with; it parses back into a QUuid on its way into updateFromSource.
@@ -41,6 +45,7 @@ class CAVEWHERE_LIB_EXPORT cwExternalSourceAttentionRow
     Q_PROPERTY(QString sourcePath READ sourcePath FINAL)
     Q_PROPERTY(QString sourceRevision READ sourceRevision FINAL)
     Q_PROPERTY(cwExternalSourceStatusModel::Status status READ status FINAL)
+    Q_PROPERTY(int noteCount READ noteCount FINAL)
 
 public:
     cwExternalSourceAttentionRow() = default;
@@ -50,7 +55,8 @@ public:
                                  const QString& caveName,
                                  const QString& sourcePath,
                                  const QString& sourceRevision,
-                                 cwExternalSourceStatusModel::Status status)
+                                 cwExternalSourceStatusModel::Status status,
+                                 int noteCount)
         : m_ownerKey(ownerKey)
         , m_ownerName(ownerName)
         , m_ownerKind(ownerKind)
@@ -58,6 +64,7 @@ public:
         , m_sourcePath(sourcePath)
         , m_sourceRevision(sourceRevision)
         , m_status(status)
+        , m_noteCount(noteCount)
     {
     }
 
@@ -68,6 +75,7 @@ public:
     const QString& sourcePath() const { return m_sourcePath; }
     const QString& sourceRevision() const { return m_sourceRevision; }
     cwExternalSourceStatusModel::Status status() const { return m_status; }
+    int noteCount() const { return m_noteCount; }
 
 private:
     QString m_ownerKey;
@@ -78,6 +86,7 @@ private:
     QString m_sourceRevision;
     cwExternalSourceStatusModel::Status m_status =
         cwExternalSourceStatusModel::Status::UpToDate;
+    int m_noteCount = 0;
 };
 
 //The review list walks the whole result in qml, so the list itself has to

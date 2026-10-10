@@ -18,6 +18,8 @@
 #include "cwGeoReference.h"
 #include "cwSaveLoad.h"
 #include "cwSurveyChunkSignaler.h"
+#include "cwSurveyNoteModel.h"
+#include "cwSurveyTreeModel.h"
 #include "cwTrip.h"
 #include "asyncfuture.h"
 
@@ -597,12 +599,14 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
                                  const QString& entryFile,
                                  const QString& caveName,
                                  const QString& ownerName,
-                                 const QString& ownerKind) {
+                                 const QString& ownerKind,
+                                 const QString& kindLabel) {
         if (entryFile.isEmpty()) {
             return;
         }
         owners.append(OwnerScanInput { ownerId, caveName, ownerName, ownerKind,
-                                       entryFile, attachmentDir, dataRootDir });
+                                       entryFile, attachmentDir, dataRootDir,
+                                       kindLabel });
     };
 
     for (const cwSurveyNode* node : m_region->rootNode()->allNodes()) {
@@ -613,7 +617,8 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
                         node->name(),
                         node->name(),
                         QString::fromLatin1(QMetaEnum::fromType<cwSurveyNodeKind::Kind>()
-                                                .valueToKey(static_cast<int>(node->kind()))));
+                                                .valueToKey(static_cast<int>(node->kind()))),
+                        cwSurveyTreeModel::kindLabel(node));
         }
         for (const cwTrip* trip : node->trips()) {
             if (!trip->externalCenterline().isEmpty()) {
@@ -622,6 +627,7 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
                             trip->externalCenterline().entryFile(),
                             node->name(),
                             trip->name(),
+                            QStringLiteral("Trip"),
                             QStringLiteral("Trip"));
             }
         }
@@ -636,6 +642,7 @@ cwAttachedCenterlinesModel::Row cwExternalCenterlineManager::rowFromOwner(const 
     row.caveName = owner.caveName;
     row.ownerName = owner.ownerName;
     row.ownerKind = owner.ownerKind;
+    row.kindLabel = owner.kindLabel;
     row.entryFile = owner.entryFile;
     return row;
 }
@@ -1586,14 +1593,20 @@ QList<cwExternalSourceAttentionRow> cwExternalCenterlineManager::sourcesNeedingA
         }
 
         // A source root stands for its whole subtree, so its row counts the
-        // nodes the attachment built.
+        // nodes the attachment built and the notes on every trip under it.
         QString ownerName = attached.ownerName;
-        if (attached.ownerKind != kTripOwnerKind) {
-            if (const cwSurveyNode* root = nodeForOwner(attached.ownerId)) {
-                const int nodeCount = root->allNodes().size() + 1;
-                if (nodeCount > 1) {
-                    ownerName = tr("%1 (%n nodes)", nullptr, nodeCount).arg(ownerName);
-                }
+        int noteCount = 0;
+        if (attached.ownerKind == kTripOwnerKind) {
+            if (const cwTrip* trip = tripForOwner(attached.ownerId)) {
+                noteCount = trip->notes()->rowCount();
+            }
+        } else if (const cwSurveyNode* root = nodeForOwner(attached.ownerId)) {
+            const int nodeCount = root->allNodes().size() + 1;
+            if (nodeCount > 1) {
+                ownerName = tr("%1 (%n nodes)", nullptr, nodeCount).arg(ownerName);
+            }
+            for (const cwTrip* trip : root->allTrips()) {
+                noteCount += trip->notes()->rowCount();
             }
         }
 
@@ -1604,7 +1617,8 @@ QList<cwExternalSourceAttentionRow> cwExternalCenterlineManager::sourcesNeedingA
             attached.caveName,
             statusRow.sourcePath,
             statusRow.sourceRevision,
-            statusRow.status));
+            statusRow.status,
+            noteCount));
     }
     return sources;
 }

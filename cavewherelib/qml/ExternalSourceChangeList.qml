@@ -12,7 +12,8 @@ import cavewherelib
 
 // The banner's [Show] list (plans/EXTERNAL_SOURCE_CHANGE_NOTIFY.html §4):
 // one compact row per attachment whose source needs attention — who owns
-// it, where it was copied from, how it stands — with the per-row Update
+// it (a trip, or a source root with its node count), where it was copied
+// from, the notes on its trips, how it stands — with the per-row Update
 // for the user who diverged one file on purpose.
 //
 // Dumb like the banner: rows in, updateRequested out. The host builds the
@@ -62,6 +63,7 @@ QQ.Rectangle {
                 required property string caveName
                 required property string sourcePath
                 required property int status
+                required property int noteCount
 
                 width: rowsViewId.width
                 spacing: Theme.flowSpacing
@@ -91,6 +93,21 @@ QQ.Rectangle {
                         color: Theme.textSubtle
                         font.pixelSize: Theme.fontSizeSmall
                         text: rowId.sourcePath
+                    }
+
+                    // Update moves stations under the notes placed on them
+                    // (§6.11 case 6), so the row says the notes are there.
+                    QC.Label {
+                        objectName: "externalSourceChangeRowNotes"
+
+                        Layout.fillWidth: true
+                        visible: rowId.noteCount > 0
+                        wrapMode: QC.Label.WordWrap
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.fontSizeSmall
+                        text: rowId.ownerKind === "Trip"
+                              ? qsTr("%n note(s) on this trip", "", rowId.noteCount)
+                              : qsTr("%n note(s) on its trips", "", rowId.noteCount)
                     }
                 }
 

@@ -89,7 +89,8 @@ QQ.Item {
                 caveName: source.caveName,
                 sourcePath: source.sourcePath,
                 sourceRevision: source.sourceRevision,
-                status: source.status
+                status: source.status,
+                noteCount: source.noteCount
             })
 
             if (source.status === ExternalSourceStatusModel.Changed

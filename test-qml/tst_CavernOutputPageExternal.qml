@@ -67,6 +67,27 @@ MainWindowTest {
                    "row shows the entry file; got: " + rowLabel.text)
         }
 
+        // A source root stands for its whole subtree: one row names its kind,
+        // the root, and the file, and its derived nodes add none of their own.
+        function test_sourceRootShowsOneRow() {
+            const sourceRoot = makeSavedCaveAttach("cavern-source-root-row",
+                                                   "external-centerlines/survex_blocks.svx")
+            verify(sourceRoot.childNodeCount > 0, "the root holds derived nodes")
+            const page = gotoCavernOutput()
+
+            const section = findChild(page, "attachedCenterlinesSection")
+            tryVerify(() => section.visible, 5000, "the attached section shows the root")
+            const model = RootData.externalCenterlineManager.attachedCenterlinesModel
+            compare(model.rowCount(), 1, "one row for the root and everything below it")
+
+            let rowLabel = null
+            tryVerify(() => {
+                          rowLabel = findChild(page, "attachedRowLabel")
+                          return rowLabel !== null
+                      }, 5000, "the root's row must be drawn")
+            tryCompare(rowLabel, "text", "Survex file AttachedCave — survex_blocks.svx", 5000)
+        }
+
         function test_attachedRowShowsTheExclusionReason() {
             const attached = attachFixtureTrip("cavern-attached-error")
 

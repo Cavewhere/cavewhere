@@ -202,12 +202,14 @@ StandardPage {
     readonly property bool showsTripTree: nodePageArea.currentNode !== null
                                           && !nodePageArea.isEmpty
 
-    // True while this cave's centerline comes from an attached survey
-    // file. The trips such a cave holds are windows into that file, so
-    // the page shows the attachment's own state and stops inviting
-    // native trips.
-    readonly property bool caveAttached: nodePageArea.currentNode !== null
-                                         && nodePageArea.currentNode.externalCenterline.entryFile.length > 0
+    // The node an attached survey file built its subtree under: its page
+    // shows the source card with Reload, Replace…, and Restore….
+    readonly property bool isSourceRoot: nodePageArea.currentNode !== null
+                                         && nodePageArea.currentNode.isSourceRoot
+
+    // A node below a source root that the file describes: its page names
+    // what it is in the file and links to the root.
+    readonly property bool isDerived: nodePageArea.isSourced && !nodePageArea.isSourceRoot
 
     // Whether the warnings banner has anything to list. Drives the banner
     // proxies' visibility directly — the banner's own visibility is controlled
@@ -231,11 +233,11 @@ StandardPage {
     // the stats.
     function showSourceLine() {
         if (!nodePageArea.isNarrow) {
-            const top = caveSummaryId.mapToItem(wideFlickableId.contentItem, 0, 0).y - Theme.pageMargin
+            const top = sourceRootCardId.mapToItem(wideFlickableId.contentItem, 0, 0).y - Theme.pageMargin
             const maxContentY = Math.max(0, wideFlickableId.contentHeight - wideFlickableId.height)
             wideFlickableId.contentY = Math.min(Math.max(0, top), maxContentY)
         }
-        caveSummaryId.drawAttention()
+        sourceRootCardId.drawAttention()
     }
 
     // --- Standalone items (defined once, proxied into wide/narrow layouts) ---
@@ -363,16 +365,20 @@ StandardPage {
         }
     }
 
+    // A derived node takes its fixed positions from the file, so it offers no
+    // fix stations of its own; its source root keeps the row (W4d).
     RowLayout {
         id: fixStationsRow
         spacing: Theme.delegatePadding
 
         QC.Label {
             text: "Fix stations:"
+            visible: !nodePageArea.isDerived
         }
 
         LinkText {
             objectName: "fixStationsLink"
+            visible: !nodePageArea.isDerived
             text: nodePageArea.currentNode ? nodePageArea.currentNode.fixStationCount : 0
             onClicked: {
                 RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
@@ -381,8 +387,16 @@ StandardPage {
 
         FixStationErrorBadge {
             objectName: "fixStationsBadge"
+            visible: !nodePageArea.isDerived
             errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
             errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
+        }
+
+        QC.Label {
+            objectName: "derivedFixStationsLabel"
+            visible: nodePageArea.isDerived
+            color: Theme.textSecondary
+            text: qsTr("Fixed positions come from the survey file")
         }
     }
 
@@ -436,10 +450,18 @@ StandardPage {
         }
     }
 
-    ExternalCenterlineCaveSummary {
-        id: caveSummaryId
+    SourceRootCard {
+        id: sourceRootCardId
         Layout.fillWidth: true
-        cave: nodePageArea.currentNode as Cave
+        node: nodePageArea.isSourceRoot ? nodePageArea.currentNode : null
+        pageModel: nodePageModelId
+    }
+
+    DerivedNodeCard {
+        id: derivedNodeCardId
+        Layout.fillWidth: true
+        node: nodePageArea.isDerived ? nodePageArea.currentNode : null
+        pageModel: nodePageModelId
     }
 
     // The node's contents, in the same tree the Data page shows, rooted at
@@ -513,7 +535,7 @@ StandardPage {
         text: nodePageArea.takesCaves
               ? qsTr("Nothing here yet — add a cave here, or use the menu beside this button to add a folder.")
               : qsTr("No trips yet — add one here, or use the menu beside this button to add one from a survey file.")
-        visible: nodePageArea.isEmpty && !nodePageArea.caveAttached
+        visible: nodePageArea.isEmpty && !nodePageArea.isSourced
                  && noTripsHintId.targetBar !== null
         pointAtObject: noTripsHintId.targetBar
         pointAtObjectPosition: noTripsHintId.targetBar !== null
@@ -524,7 +546,7 @@ StandardPage {
 
     // The Add verbs for this node's position, Attach survey file… among them,
     // then the trip's survey-file entry, which makes a trip and so belongs only
-    // where trips go.
+    // where native trips go: a sourced node takes its files through Attach.
     AddVerbsMenu {
         id: addTripMenuId
         objectName: "addTripMenu"
@@ -539,8 +561,8 @@ StandardPage {
         QC.MenuItem {
             objectName: "addExternalTripMenuItem"
             text: qsTr("Add trip from survey file…")
-            visible: !nodePageArea.takesCaves
-            enabled: !nodePageArea.takesCaves
+            visible: !nodePageArea.takesCaves && !nodePageArea.isSourced
+            enabled: visible
             height: visible ? implicitHeight : 0
             onTriggered: nodePageArea.addTripFromSurveyFileWithDialog()
         }
@@ -675,8 +697,13 @@ StandardPage {
                 LayoutItemProxy { target: actionBar }
 
                 LayoutItemProxy {
-                    target: caveSummaryId
-                    visible: nodePageArea.caveAttached && !nodePageArea.isNarrow
+                    target: sourceRootCardId
+                    visible: nodePageArea.isSourceRoot && !nodePageArea.isNarrow
+                }
+
+                LayoutItemProxy {
+                    target: derivedNodeCardId
+                    visible: nodePageArea.isDerived && !nodePageArea.isNarrow
                 }
 
                 // An empty cave has nothing to tabulate, so the tree stays
@@ -769,6 +796,7 @@ StandardPage {
 
                 RowLayout {
                     spacing: Theme.delegatePadding
+                    visible: !nodePageArea.isDerived
 
                     QC.Label { text: "Fix stations:" }
 
@@ -783,6 +811,12 @@ StandardPage {
                         errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
                         errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
                     }
+                }
+
+                QC.Label {
+                    visible: nodePageArea.isDerived
+                    color: Theme.textSecondary
+                    text: qsTr("Fixed positions come from the survey file")
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
@@ -814,8 +848,13 @@ StandardPage {
             }
 
             LayoutItemProxy {
-                target: caveSummaryId
-                visible: nodePageArea.caveAttached && nodePageArea.isNarrow
+                target: sourceRootCardId
+                visible: nodePageArea.isSourceRoot && nodePageArea.isNarrow
+            }
+
+            LayoutItemProxy {
+                target: derivedNodeCardId
+                visible: nodePageArea.isDerived && nodePageArea.isNarrow
             }
 
             LayoutItemProxy {

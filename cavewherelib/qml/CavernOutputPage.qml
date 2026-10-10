@@ -69,6 +69,8 @@ StandardPage {
             visible: attachedRepeater.count > 0
             spacing: Theme.tightSpacing
 
+            // One row per source root, which stands for its whole subtree,
+            // and one per trip with a file of its own.
             QC.Label {
                 text: qsTr("Attached external centerlines")
                 font.bold: true
@@ -85,13 +87,13 @@ StandardPage {
 
                     required property int index
                     required property string ownerName
-                    required property string ownerKind
+                    required property string kindLabel
                     required property string entryFile
                     required property int depCount
                     required property int warningCount
                     // Why this owner was left out of the solve. A trip also
-                    // says so in its own banner; for a cave this row is the
-                    // only place it is ever said.
+                    // says so in its own banner; for a source root this row
+                    // is the only place it is ever said.
                     required property string error
 
                     Layout.fillWidth: true
@@ -106,7 +108,7 @@ StandardPage {
                             Layout.fillWidth: true
                             elide: QC.Label.ElideMiddle
                             text: qsTr("%1 %2 — %3")
-                                  .arg(attachedRowId.ownerKind)
+                                  .arg(attachedRowId.kindLabel)
                                   .arg(attachedRowId.ownerName)
                                   .arg(attachedRowId.entryFile)
                         }
