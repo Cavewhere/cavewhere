@@ -553,11 +553,6 @@ QFuture<Monad::ResultBase> attachmentDirRemoved(const QString& verb,
 
 namespace cwExternalCenterlineAttach {
 
-namespace {
-//! The segment that names a node's own unit apart from the node.
-const QString kOwnUnitSegment = QStringLiteral("#own");
-}
-
 QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
                                             const QString& sourceFile,
                                             cwSaveLoad* saveLoad,
@@ -645,8 +640,9 @@ QString unitSourcePath(const cwScanRow& row)
     if (!row.isNode) {
         return row.sourcePath;
     }
-    return row.sourcePath.isEmpty() ? kOwnUnitSegment
-                                    : row.sourcePath + QLatin1Char('/') + kOwnUnitSegment;
+    const QString ownUnit = cwTrip::ownUnitSourcePath();
+    return row.sourcePath.isEmpty() ? ownUnit
+                                    : row.sourcePath + QLatin1Char('/') + ownUnit;
 }
 
 bool isExcluded(const QString& sourcePath, const QStringList& exclusions)

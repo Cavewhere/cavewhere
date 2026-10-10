@@ -726,6 +726,18 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                 // only way the exclusion ever clears itself. The escaping
                 // paths stay unwatched: the project cannot use them.
                 if (!scan.hasError()) {
+                    if (owner.ownerKind != kTripOwnerKind) {
+                        // The rows units.json was written from, read off this
+                        // very scan of the copy so they keep the file's
+                        // spelling: cavern reads a Compass or Walls name as
+                        // written, and a tie has to name it the same way.
+                        const auto format = cwExternalCenterlineScanner::formatFor(owner.entryFile);
+                        const bool preserveCase = format == cwExternalCenterlineScanner::Format::Compass
+                                                  || format == cwExternalCenterlineScanner::Format::Walls;
+                        result.sourceViews.insert(
+                            owner.ownerId,
+                            cwExternalUnitManifest::solveView(scan.value().rows, preserveCase));
+                    }
                     for (const QString& dep : scan.value().dependencies) {
                         if (!escaping.contains(dep)) {
                             result.watchedFiles.append(dep);
@@ -860,10 +872,33 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
         return;
     }
 
+    // A derived node's cavernLabel and a derived trip's unit set come from its
+    // source root's manifest; the member views read both, so a change drops
+    // them ahead of the solve.
+    bool memberViewsMoved = false;
     for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
         node->setExternalStations(result.ownerStations.value(node->id()));
 
+        const cwSurveyNode* sourceRoot = node->sourceRoot();
+        const cwExternalUnitManifest::SolveView sourceView =
+            sourceRoot != nullptr ? result.sourceViews.value(sourceRoot->id())
+                                  : cwExternalUnitManifest::SolveView();
+        const QString cavernLabel = node->isSourced() && !node->isSourceRoot()
+            ? sourceView.cavernLabels.value(node->sourcePath())
+            : QString();
+        if (node->cavernLabel() != cavernLabel) {
+            node->setCavernLabel(cavernLabel);
+            memberViewsMoved = true;
+        }
+
         for (cwTrip* trip : node->trips()) {
+            if (trip->isDerived()) {
+                const QStringList unitStations = sourceView.unitStations.value(trip->sourcePath());
+                memberViewsMoved = memberViewsMoved || trip->externalStations() != unitStations;
+                trip->setExternalStations(unitStations);
+                trip->setExternalStationsError(QString());
+                continue;
+            }
             trip->setExternalStations(result.ownerStations.value(trip->id()));
             // A containment failure skipped the harvest, so the two are
             // never both present; naming it first keeps that explicit.
@@ -875,6 +910,10 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
         }
 
         refreshAttachedFixes(node);
+    }
+
+    if (memberViewsMoved) {
+        m_region->invalidateMemberViews();
     }
 }
 

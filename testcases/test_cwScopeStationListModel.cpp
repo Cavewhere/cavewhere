@@ -62,12 +62,14 @@ cwStation namedStation(const QString& name)
     return station;
 }
 
-//A trip scoped by a station prefix, with the cave lookup keyed by the
-//prefixed names the solver produces. The model must hand back the tails.
+//A native trip in a source root, scoped by its label "a" in the root's block,
+//with the root lookup keyed by the prefixed names the solver produces. The
+//model must hand back the tails.
 cwTrip* addPrefixedTrip(cwCave* cave, const QStringList& prefixedNames)
 {
+    cave->setSourceId(QUuid::createUuid());
     cwTrip* trip = new cwTrip();
-    trip->setStationPrefix(QStringLiteral("A"));
+    trip->setName(QStringLiteral("A"));
     cave->addTrip(trip);
 
     cwStationPositionLookup lookup;

@@ -8,6 +8,8 @@
 //Our includes
 #include "cwExternalUnitManifest.h"
 #include "cwStation.h"
+#include "cwCavernNaming.h"
+#include "cwExternalCenterlineAttach.h"
 
 //Qt includes
 #include <QFile>
@@ -174,6 +176,46 @@ Monad::Result<QList<cwScanRow>> read(const QString& path)
             QStringLiteral("cannot read %1: %2").arg(path, file.errorString()));
     }
     return fromJson(file.readAll());
+}
+
+SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase)
+{
+    SolveView view;
+
+    // Pre-order, so one cavern path per depth: a row's is its parent's plus
+    // its own label.
+    QStringList cavernPathAtDepth;
+    for (const cwScanRow& row : rows) {
+        cavernPathAtDepth.resize(row.depth + 1);
+        const QString parentPath = row.depth == 0 ? QString() : cavernPathAtDepth.at(row.depth - 1);
+        const QString rowPath = row.isNode
+            ? parentPath + cwCavernNaming::scopePrefix(cwStation::canonicalKey(row.cavernLabel))
+            : parentPath;
+        cavernPathAtDepth[row.depth] = rowPath;
+
+        if (row.isNode && row.depth > 0) {
+            view.cavernLabels.insert(row.sourcePath, row.cavernLabel);
+        }
+        if (!row.isUnit) {
+            continue;
+        }
+
+        // A node that is also a unit holds its own trip, so the trip's node
+        // path is the row's; a unit-only row's trip sits in its parent node.
+        QSet<QString> seen;
+        QStringList sorted;
+        for (const QString& station : row.stations) {
+            const QString key = cwStation::canonicalKey(station);
+            if (!key.startsWith(rowPath) || seen.contains(key)) {
+                continue;
+            }
+            seen.insert(key);
+            sorted.append((preserveCase ? station : key).sliced(rowPath.size()));
+        }
+        sorted.sort();
+        view.unitStations.insert(cwExternalCenterlineAttach::unitSourcePath(row), sorted);
+    }
+    return view;
 }
 
 } // namespace cwExternalUnitManifest

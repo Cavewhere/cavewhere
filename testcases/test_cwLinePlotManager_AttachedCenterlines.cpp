@@ -18,9 +18,12 @@
 #include "cwLength.h"
 #include "cwLinePlotManager.h"
 #include "cwCavernNaming.h"
+#include "cwScopeLabels.h"
 #include "cwEquate.h"
 #include "cwEquateModel.h"
 #include "cwError.h"
+#include "cwFixStation.h"
+#include "cwFixStationModel.h"
 #include "cwErrorModel.h"
 #include "cwStationHandle.h"
 #include "cwShot.h"
@@ -65,23 +68,16 @@ cwTrip* addTripWithShot(cwCave* cave, const QString& name)
     return trip;
 }
 
-// A cave attached to an external file at cave level: the file supplies the whole
-// cave body, and each of its *begin blocks is windowed by a Scope trip. Mirrors
-// what reconcileScopeTrips builds after a real cave attach.
+// A node attached to an external file: the file supplies the node's whole
+// body, read through its one *include.
 cwCave* addCaveAttachedTo(cwCavingRegion& region,
                           const QString& name,
                           const QString& fixture,
-                          const QStringList& blockPaths,
                           const QTemporaryDir& tempRoot,
                           QHash<QUuid, QString>& caveDirs)
 {
     cwCave* cave = addEmptyCave(region, name);
     cave->setExternalCenterline(cwExternalCenterline(fixture));
-
-    for (const QString& blockPath : blockPaths) {
-        cwTrip* trip = addEmptyTrip(cave, blockPath);
-        trip->setStationPrefix(blockPath);
-    }
 
     const QString attachDir = tempSubdir(tempRoot, name);
     seedAttachment(attachDir, fixturePath(fixture));
@@ -291,62 +287,6 @@ TEST_CASE("Attached model answers errorFor and warningCountFor by owner",
     CHECK(model.warningCountFor(unknownOwner) == 0);
 }
 
-TEST_CASE("A cave-level attach measures its length and depth from the solved centerline",
-          "[LinePlotManager][AttachedCenterlinesModel]")
-{
-    // survex_mixed_case.svx is 19 m of passage — 10 m and a 5 m tie in the
-    // parent block, a 4 m drop in the nested one — and 4 m deep. Its blocks are
-    // named with authored uppercase, so this also holds the case-matching fix
-    // (P3.12) to a number rather than to "something was drawn".
-    QTemporaryDir tempRoot;
-    REQUIRE(tempRoot.isValid());
-
-    cwCavingRegion region;
-    QHash<QUuid, QString> caveDirs;
-    cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Feng"),
-                                     QStringLiteral("survex_mixed_case.svx"),
-                                     {QStringLiteral("48H-Feng"),
-                                      QStringLiteral("48H-Feng.Lower")},
-                                     tempRoot, caveDirs);
-
-    cwLinePlotManager manager;
-    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
-    manager.setRegion(&region);
-    manager.waitToFinish();
-
-    REQUIRE_FALSE(manager.hasSolveError());
-    CHECK(cave->length()->value() == Catch::Approx(19.0).margin(kSolvedLengthMarginMeters));
-    CHECK(cave->depth()->value() == Catch::Approx(4.0).margin(kSolvedLengthMarginMeters));
-}
-
-TEST_CASE("Nested Scope trips count each leg once in the cave's length",
-          "[LinePlotManager][AttachedCenterlinesModel]")
-{
-    // survex_blocks.svx nests three levels deep and totals 34 m. A parent scope
-    // matches every station of its children by prefix, so a cave whose blocks
-    // each get a Scope trip would otherwise measure the deep passage two and
-    // three times over.
-    QTemporaryDir tempRoot;
-    REQUIRE(tempRoot.isValid());
-
-    cwCavingRegion region;
-    QHash<QUuid, QString> caveDirs;
-    cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Doghill"),
-                                     QStringLiteral("survex_blocks.svx"),
-                                     {QStringLiteral("doghill"),
-                                      QStringLiteral("doghill.big-passage"),
-                                      QStringLiteral("doghill.big-passage.east")},
-                                     tempRoot, caveDirs);
-
-    cwLinePlotManager manager;
-    manager.externalCenterlineManager()->setCaveAttachmentDirs(caveDirs);
-    manager.setRegion(&region);
-    manager.waitToFinish();
-
-    REQUIRE_FALSE(manager.hasSolveError());
-    CHECK(cave->length()->value() == Catch::Approx(34.0).margin(kSolvedLengthMarginMeters));
-}
-
 TEST_CASE("A cave-level Compass attach with an untied survey warns on its node",
           "[LinePlotManager][Attach]")
 {
@@ -358,7 +298,7 @@ TEST_CASE("A cave-level Compass attach with an untied survey warns on its node",
     cwCavingRegion region;
     QHash<QUuid, QString> caveDirs;
     cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Untied"),
-                                     QStringLiteral("compass_untied.dat"), {},
+                                     QStringLiteral("compass_untied.dat"),
                                      tempRoot, caveDirs);
 
     cwLinePlotManager manager;
@@ -387,7 +327,7 @@ TEST_CASE("Tying an attached file's dropped survey in clears its warning on the 
     cwCavingRegion region;
     QHash<QUuid, QString> caveDirs;
     cwCave* cave = addCaveAttachedTo(region, QStringLiteral("Two parts"),
-                                     QStringLiteral("survex_two_parts.svx"), {},
+                                     QStringLiteral("survex_two_parts.svx"),
                                      tempRoot, caveDirs);
 
     cwLinePlotManager manager;
@@ -417,16 +357,27 @@ namespace {
 
 constexpr double kFeetToMeters = 0.3048;
 constexpr double kCompassTapeFeet = 10.0;
+// ALPHA's six legs, BRAVO's three, and CHARLIE's two, each one tape.
+constexpr int kCompassProjectLegCount = 11;
+constexpr int kCompassAlphaLegCount = 6;
 constexpr double kCompassAlphaEasting = 500000.0;
 constexpr double kCompassCharlieEasting = 500200.0;
 constexpr double kCompassNorthing = 4000000.0;
 constexpr double kCompassElevation = 100.0;
+// PROJECT.MAK's datum and zone, and a free spot east of ALPHA for a fixed
+// native trip.
+const QString kCompassProjectCS = QStringLiteral("EPSG:32616");
+constexpr double kCompassBravoDigEasting = 500100.0;
 
 constexpr double kWallsProjectFixEasting = 1000.0;
 constexpr double kWallsProjectFixNorthing = 2000.0;
 constexpr double kWallsFixElevation = 100.0;
 constexpr double kWallsTapeMeters = 10.0;
+// D01 and D02's four legs and N01's three.
+constexpr int kWallsProjectLegCount = 7;
 constexpr double kWallsWestFixEasting = 500.0;
+// E1.SRV's two legs and the West files' four.
+constexpr int kWallsTwoCavesLegCount = 6;
 
 constexpr double kSurvexUtmEasting = 500000.0;
 constexpr double kSurvexUtmNorthing = 4000000.0;
@@ -438,6 +389,26 @@ constexpr double kUtmFloatMarginMeters = 0.5;
 
 //! Attaches \a fixture as a source root under the region's root in
 //! \a project and drains the pipelines; requireSolved() checks the solve.
+//! The (name, position) pairs a trip's solvedStations() yields, by name.
+QMap<QString, QVector3D> solvedByName(const cwTrip* trip)
+{
+    QMap<QString, QVector3D> named;
+    for (const auto& station : trip->solvedStations()) {
+        named.insert(station.first, station.second);
+    }
+    return named;
+}
+
+cwTrip* tripNamedIn(const cwSurveyNode* node, const QString& name)
+{
+    for (cwTrip* trip : node->trips()) {
+        if (trip->name() == name) {
+            return trip;
+        }
+    }
+    return nullptr;
+}
+
 cwSurveyNode* attachSourceAndSolve(SavedProjectFixture* project, const QString& fixture)
 {
     cwSurveyNode* root = attachSourceThroughManager(
@@ -505,6 +476,11 @@ TEST_CASE("compass_project solves as a source root",
     checkPosition(lookup, QStringLiteral("bravo.B3"),
                   kCompassAlphaEasting + 4.0 * tape, kCompassNorthing + 3.0 * tape,
                   kCompassElevation, kUtmFloatMarginMeters);
+
+    CHECK(cave->length()->value()
+          == Catch::Approx(kCompassProjectLegCount * tape).margin(kUtmFloatMarginMeters));
+    CHECK(childNodeNamed(cave, QStringLiteral("Alpha"))->length()->value()
+          == Catch::Approx(kCompassAlphaLegCount * tape).margin(kUtmFloatMarginMeters));
 }
 
 TEST_CASE("walls_project solves as a source root",
@@ -526,6 +502,8 @@ TEST_CASE("walls_project solves as a source root",
                   kWallsProjectFixEasting + 3.0 * kWallsTapeMeters,
                   kWallsProjectFixNorthing, kWallsFixElevation);
     CHECK(lookup.positions().size() == 8);
+    CHECK(cave->length()->value()
+          == Catch::Approx(kWallsProjectLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
 }
 
 TEST_CASE("walls_two_caves solves as a source root",
@@ -544,6 +522,8 @@ TEST_CASE("walls_two_caves solves as a source root",
                   kWallsWestFixEasting - 2.0 * kWallsTapeMeters, 2.0 * kWallsTapeMeters,
                   kWallsFixElevation);
     CHECK(lookup.positions().size() == 8);
+    CHECK(cave->length()->value()
+          == Catch::Approx(kWallsTwoCavesLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
 }
 
 TEST_CASE("survex_two_cs solves as two source roots in one output system",
@@ -567,4 +547,201 @@ TEST_CASE("survex_two_cs solves as two source roots in one output system",
     CHECK(l1.x() == Catch::Approx(kSurvexUtmEasting).margin(kUtmFloatMarginMeters));
     CHECK(l1.z() == Catch::Approx(kSurvexLatLongElevation).margin(kUtmFloatMarginMeters));
     CHECK(latLong.positions().size() == 2);
+}
+
+TEST_CASE("compass_project's derived trips yield their stations under local names",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("compass-project-derived"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), QStringLiteral("compass_project/PROJECT.MAK"));
+    requireSolved(project.get());
+
+    const cwSurveyNode* alpha = childNodeNamed(root, QStringLiteral("Alpha"));
+    const cwSurveyNode* bravo = childNodeNamed(root, QStringLiteral("Bravo"));
+    REQUIRE(alpha != nullptr);
+    REQUIRE(bravo != nullptr);
+    CHECK(alpha->cavernPath() == QStringLiteral("alpha."));
+
+    // ALPHA1 and ALPHA2 share A5, and BRAVO1 starts from its link station.
+    // Compass names keep the file's case, as cavern reads them.
+    CHECK(solvedByName(tripNamedIn(alpha, QStringLiteral("ALPHA1"))).keys()
+          == QStringList({QStringLiteral("A1"), QStringLiteral("A2"), QStringLiteral("A3"),
+                          QStringLiteral("A4"), QStringLiteral("A5")}));
+    CHECK(solvedByName(tripNamedIn(alpha, QStringLiteral("ALPHA2"))).keys()
+          == QStringList({QStringLiteral("A5"), QStringLiteral("A6"), QStringLiteral("A7")}));
+    CHECK(solvedByName(tripNamedIn(bravo, QStringLiteral("BRAVO1"))).keys()
+          == QStringList({QStringLiteral("A5"), QStringLiteral("B1"), QStringLiteral("B2"),
+                          QStringLiteral("B3")}));
+
+    // A derived node's view is its members, named below its cavern path.
+    const cwStationPositionLookup alphaView = alpha->scopedPositions();
+    CHECK(alphaView.positions().size() == 7);
+    CHECK(alphaView.position(QStringLiteral("A5")) == root->scopedPositions().position(QStringLiteral("alpha.A5")));
+
+    // Every station of the root's view belongs to some derived trip's unit,
+    // read back through the derived views (§7.3).
+    QSet<QString> covered;
+    for (const cwTrip* trip : root->allTrips()) {
+        const QString cavernPath = trip->parentNode()->cavernPath();
+        for (const auto& station : trip->solvedStations()) {
+            covered.insert(cwStation::canonicalKey(cavernPath + station.first));
+        }
+    }
+    const QStringList rootKeys = root->scopedPositions().positions().keys();
+    CHECK(covered == QSet<QString>(rootKeys.cbegin(), rootKeys.cend()));
+
+    // Decode stays at the root: every name under the root's label resolves to
+    // the root or below it, and the root owns it.
+    const cwScopeLabels labels(project->project->cavingRegion()->data());
+    const QString rootPrefix = root->scopePrefix();
+    for (const QString& key : rootKeys) {
+        const cwScopeLabels::Resolution resolution = labels.resolve(rootPrefix + key);
+        INFO("station " << key.toStdString());
+        CHECK(labels.sourceRoot(resolution.nodeId) == root->id());
+    }
+}
+
+TEST_CASE("walls_project's books take their stations by unit membership",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("walls-project-derived"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), QStringLiteral("walls_project/KAUA.WPJ"));
+    requireSolved(project.get());
+
+    const cwSurveyNode* surveys = childNodeNamed(root, QStringLiteral("Surveys"));
+    REQUIRE(surveys != nullptr);
+    const cwSurveyNode* dec2001 = childNodeNamed(surveys, QStringLiteral("Dec 2001 Surveys"));
+    REQUIRE(dec2001 != nullptr);
+
+    // Books make no naming level, so their cavern path is empty and the
+    // #PREFIX stays on the name.
+    CHECK(dec2001->cavernPath().isEmpty());
+    CHECK(solvedByName(tripNamedIn(dec2001, QStringLiteral("D Survey 1"))).keys()
+          == QStringList({QStringLiteral("D1"), QStringLiteral("D2"), QStringLiteral("K1")}));
+    CHECK(solvedByName(tripNamedIn(dec2001, QStringLiteral("N Surveys"))).keys()
+          == QStringList({QStringLiteral("D4"), QStringLiteral("N.1"), QStringLiteral("N.2"),
+                          QStringLiteral("N.3")}));
+
+    CHECK(dec2001->length()->value()
+          == Catch::Approx(kWallsProjectLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
+    CHECK(childNodeNamed(root, QStringLiteral("Drawings"))->length()->value() == 0.0);
+
+    // Every station of the root's view belongs to some unit (§7.3).
+    QSet<QString> covered;
+    for (const cwTrip* trip : root->allTrips()) {
+        const QString cavernPath = trip->parentNode()->cavernPath();
+        for (const auto& station : trip->solvedStations()) {
+            covered.insert(cwStation::canonicalKey(cavernPath + station.first));
+        }
+    }
+    const QStringList rootKeys = root->scopedPositions().positions().keys();
+    CHECK(covered == QSet<QString>(rootKeys.cbegin(), rootKeys.cend()));
+}
+
+TEST_CASE("A native trip under a derived node solves in place once a region equate ties it",
+          "[LinePlotManager][Attach][SourcedFixtures][Equate]")
+{
+    auto project = makeSavedProject(QStringLiteral("compass-project-native"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), QStringLiteral("compass_project/PROJECT.MAK"));
+    requireSolved(project.get());
+
+    auto* alpha = qobject_cast<cwCave*>(childNodeNamed(root, QStringLiteral("Alpha")));
+    REQUIRE(alpha != nullptr);
+    cwTrip* dig = addNativeTripWithShot(alpha, QStringLiteral("Dig"),
+                                        QStringLiteral("D1"), QStringLiteral("D2"));
+    REQUIRE(dig->scopePrefix() == QStringLiteral("dig."));
+    drainPipelines(project.get());
+
+    // Nothing joins it to the rest of the project yet.
+    cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    CHECK(linePlot->hasSolveError());
+
+    // The root's block writes the trip after its *include, under its label.
+    cwTrip* alpha1 = tripNamedIn(alpha, QStringLiteral("ALPHA1"));
+    project->project->cavingRegion()->equates()->appendEquate(
+        cwEquate({dig->stationHandle(QStringLiteral("D1")),
+                  alpha1->stationHandle(QStringLiteral("A5"))}));
+    drainPipelines(project.get());
+    requireSolved(project.get());
+
+    const QString driver = linePlot->driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    const qsizetype includeAt = driver.indexOf(QStringLiteral("*include"));
+    const qsizetype digAt = driver.indexOf(QStringLiteral("*begin dig ; Dig"));
+    const qsizetype rootEndAt = driver.indexOf(QStringLiteral("*end ") + root->scopePrefix().chopped(1));
+    CHECK(includeAt >= 0);
+    CHECK(digAt > includeAt);
+    CHECK(rootEndAt > digAt);
+    CHECK(driver.contains(QStringLiteral("*end dig")));
+    // The Compass name keeps its case, so the tie is read under *case preserve.
+    CHECK(driver.contains(QStringLiteral("*case preserve\n*equate ") + root->scopePrefix()
+                          + QStringLiteral("dig.d1 ") + root->scopePrefix() + QStringLiteral("alpha.A5")));
+
+    // The trip's stations solve where the tie puts them, and Alpha's view
+    // holds them under the trip's label.
+    const QMap<QString, QVector3D> digStations = solvedByName(dig);
+    REQUIRE(digStations.contains(QStringLiteral("d1")));
+    REQUIRE(digStations.contains(QStringLiteral("d2")));
+    CHECK(digStations.value(QStringLiteral("d1"))
+          == root->scopedPositions().position(QStringLiteral("alpha.a5")));
+    CHECK(alpha->scopedPositions().hasPosition(QStringLiteral("dig.d2")));
+
+    // A like-named trip under Bravo takes the next label of the subtree's one
+    // pool, and the root's own fix may name its station: both are written in
+    // the root's block.
+    auto* bravo = qobject_cast<cwCave*>(childNodeNamed(root, QStringLiteral("Bravo")));
+    REQUIRE(bravo != nullptr);
+    cwTrip* bravoDig = addNativeTripWithShot(bravo, QStringLiteral("Dig"),
+                                             QStringLiteral("E1"), QStringLiteral("E2"));
+    REQUIRE(bravoDig->scopePrefix() == QStringLiteral("dig_2."));
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("dig_2.e1"));
+    fix.setInputCS(kCompassProjectCS);
+    fix.setCoordinate(kCompassBravoDigEasting, kCompassNorthing, kCompassElevation);
+    root->fixStations()->appendFixStation(fix);
+    drainPipelines(project.get());
+    requireSolved(project.get());
+
+    const QString fixedDriver = linePlot->driverSource();
+    INFO("driver with the fix:\n" << fixedDriver.toStdString());
+    CHECK(fixedDriver.count(QStringLiteral("*begin dig ; Dig")) == 1);
+    CHECK(fixedDriver.count(QStringLiteral("*begin dig_2 ; Dig")) == 1);
+    CHECK(fixedDriver.contains(QStringLiteral("*fix dig_2.e1")));
+    const QMap<QString, QVector3D> bravoDigStations = solvedByName(bravoDig);
+    REQUIRE(bravoDigStations.contains(QStringLiteral("e1")));
+    CHECK(bravoDigStations.contains(QStringLiteral("e2")));
+    CHECK(solvedByName(dig).contains(QStringLiteral("d1")));
+}
+
+TEST_CASE("survex_mixed_case measures its length and depth as a source root",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    // survex_mixed_case.svx is 19 m of passage — 10 m and a 5 m tie in the
+    // parent block, a 4 m drop in the nested one — and 4 m deep. Its blocks
+    // are named with authored uppercase, so this holds the case matching to a
+    // number rather than to "something was drawn".
+    auto project = makeSavedProject(QStringLiteral("mixed-case-length"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), QStringLiteral("survex_mixed_case.svx"));
+    requireSolved(project.get());
+
+    CHECK(root->length()->value() == Catch::Approx(19.0).margin(kSolvedLengthMarginMeters));
+    CHECK(root->depth()->value() == Catch::Approx(4.0).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("Nested blocks count each leg once in a source root's length",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    // survex_blocks.svx nests three levels deep and totals 34 m. Each block is
+    // a derived node, and a parent's fold takes in its children's legs once.
+    auto project = makeSavedProject(QStringLiteral("nested-blocks-length"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceAndSolve(project.get(), QStringLiteral("survex_blocks.svx"));
+    requireSolved(project.get());
+
+    CHECK(root->length()->value() == Catch::Approx(34.0).margin(kSolvedLengthMarginMeters));
 }

@@ -784,7 +784,7 @@ MainWindowTest {
             bindScopeTrip("trip-panel-scope")
 
             verify(!panelId.isAttached, "a Scope trip owns no file to be attached to")
-            verify(panelId.isScope, "its prefix is what makes it a Scope trip")
+            verify(panelId.isScope, "its place in the file is what makes it a Scope trip")
 
             const scopeHeader = findChild(panelId, "scopeHeader")
             const solveStatus = findChild(panelId, "solveStatus")
@@ -870,8 +870,8 @@ MainWindowTest {
                       "the block's stations reach the Scope trip's list")
         }
 
-        // Both verbs the scope header adds act on the real trip through the
-        // panel: the prefix it windows the block with, and its removal.
+        // The verb the scope header adds acts on the real trip through the
+        // panel: its removal.
         function test_theScopeHeadersVerbsReachTheTrip() {
             bindScopeTrip("trip-panel-scope-verbs")
             const trip = rootId.trip
@@ -879,11 +879,6 @@ MainWindowTest {
             const rowsBefore = cave.rowCount()
 
             const scopeHeader = findChild(panelId, "scopeHeader")
-            const prefixInput = findChild(scopeHeader, "prefixInput")
-            verify(prefixInput !== null, "prefixInput must exist")
-            prefixInput.finishedEditting("panelprefix")
-            tryCompare(trip, "stationPrefix", "panelprefix",
-                       5000, "the header's prefix edit lands on the trip")
 
             const removeButton = findChild(scopeHeader, "removeTripButton")
             verify(removeButton !== null, "removeTripButton must exist")
@@ -908,51 +903,31 @@ MainWindowTest {
             rootId.trip = null
         }
 
-        // The whole-cave window (P3.16): a trip under an attached cave that
-        // carries no prefix at all, because the stations it owns get no naming
-        // level below the cave. The panel has to read it as scope mode even so
-        // — an empty prefix is what names the cave itself.
-        function test_aWholeCaveWindowRendersInScopeMode() {
-            const cave = makeSavedCaveAttach(
-                           "trip-panel-whole-cave",
+        // The whole-node window (§7.2 step 6): the source root's own unit,
+        // which owns every station no other unit claims. The panel reads it as
+        // scope mode like any derived trip.
+        function test_aWholeNodeWindowRendersInScopeMode() {
+            const root = makeSavedCaveAttach(
+                           "trip-panel-whole-node",
                            "external-centerlines/survex_root_and_block.svx")
-            compare(cave.rowCount(), 2, "the root and the side block each got a window")
 
             let window = null
-            for (let row = 0; row < cave.rowCount(); row++) {
-                if (cave.trip(row).windowsWholeCave) {
-                    window = cave.trip(row)
+            for (let row = 0; row < root.rowCount(); row++) {
+                if (root.trip(row).windowsWholeNode) {
+                    window = root.trip(row)
                 }
             }
-            verify(window !== null, "the attach created the whole-cave window")
+            verify(window !== null, "the attach created the whole-node window")
 
             rootId.trip = window
             waitForRendering(panelId)
 
             verify(!panelId.isAttached, "the window owns no file of its own")
-            verify(panelId.isScope, "an empty prefix still windows the cave")
+            verify(panelId.isScope, "the window is a derived trip")
 
             const scopeHeader = findChild(panelId, "scopeHeader")
             verify(scopeHeader !== null && scopeHeader.visible,
-                   "the scope header renders for the whole-cave window")
-
-            const prefixInput = findChild(scopeHeader, "prefixInput")
-            verify(prefixInput !== null, "prefixInput must exist")
-            compare(prefixInput.text, "", "the window carries no prefix")
-
-            const placeholder = findChild(scopeHeader, "wholeFilePlaceholder")
-            verify(placeholder !== null, "wholeFilePlaceholder must exist")
-            verify(placeholder.visible, "the empty prefix reads as the whole file")
-            compare(placeholder.text, "whole file")
-
-            // Naming a block path turns it into an ordinary window, and the
-            // placeholder goes away with the emptiness it stood for.
-            prefixInput.finishedEditting("side")
-            tryCompare(window, "stationPrefix", "side",
-                       5000, "the header's prefix edit lands on the trip")
-            tryVerify(() => !placeholder.visible, 5000,
-                      "a named prefix needs no placeholder")
-            verify(!window.windowsWholeCave, "the trip now windows one block")
+                   "the scope header renders for the whole-node window")
         }
     }
 }

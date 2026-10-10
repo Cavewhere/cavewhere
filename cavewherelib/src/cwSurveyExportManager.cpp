@@ -345,14 +345,8 @@ void cwSurveyExportManager::rewireExternalCenterlineTracking() {
 
         const QList<cwTrip*> trips = root->allTrips();
         for (cwTrip* trip : trips) {
-            // The two inputs to cwTrip::isScoped(), which the gate reads.
-            // Its NOTIFY, scopeChanged(), also pulses on renames and on
-            // sibling churn, so listen to the exact pair instead.
             m_externalCenterlineConnections.append(connect(
                 trip, &cwTrip::externalCenterlineChanged,
-                this, &cwSurveyExportManager::recomputeCanExport));
-            m_externalCenterlineConnections.append(connect(
-                trip, &cwTrip::stationPrefixChanged,
                 this, &cwSurveyExportManager::recomputeCanExport));
         }
     }
@@ -364,11 +358,9 @@ void cwSurveyExportManager::rewireExternalCenterlineTracking() {
   \brief Walks every node and trip in the current region, at every depth,
   looking for an attachment. Updates m_canExport / m_exportDisabledReason and
   emits canExportChanged() only when the gate flips. The gate closes on a
-  node's external-centerline attachment and on any scoped trip
-  (cwTrip::isScoped(): the trip's own attachment or a station prefix — Scope
-  trips and native equates prefixes alike), since neither the *include topology
-  an attached entry brings in nor a station prefix can round-trip through a
-  Compass export.
+  node's external-centerline attachment (every source root carries one) and on
+  any attached trip, since the *include topology an attached entry brings in
+  cannot round-trip through a Compass export.
   */
 void cwSurveyExportManager::recomputeCanExport() {
     const auto anyAttachment = [this]() {
@@ -384,7 +376,7 @@ void cwSurveyExportManager::recomputeCanExport() {
         }
         const QList<cwTrip*> trips = root->allTrips();
         for (const cwTrip* trip : trips) {
-            if (trip->isScoped()) {
+            if (!trip->externalCenterline().isEmpty()) {
                 return true;
             }
         }

@@ -219,10 +219,6 @@ message Trip {
     // Native trips; present (and entry_file set) for Attached.
     optional ExternalCenterline external_centerline = 10;
 
-    // Scope prefix for a native-prefixed (Scope) trip. Empty/absent for flat
-    // native trips and Attached trips (whose scope is derived from the trip id).
-    optional string station_prefix = 11;
-
     // Where a derived trip sits inside its source's scan. Absent on a native
     // trip, including a native trip under a derived node.
     optional string source_path = 12;

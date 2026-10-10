@@ -76,12 +76,22 @@ cwSurvexExporterCaveTask::DriverTree::DriverTree(const QList<cwCaveData>& nodes,
 }
 
 // Returns whether \a node emits. A container under an excluded owner has no
-// scope, and neither does one below a sourced root's own level: the root is
-// one *include, and nothing beneath it is a block.
+// scope, and neither does a node below a sourced root's own level: the root is
+// one *include, and nothing beneath it is a block. The trips inside a sourced
+// subtree keep a scope through the root (indexSourcedSubtree).
 bool cwSurvexExporterCaveTask::DriverTree::index(const cwCaveData& node, bool scopeClosedAbove)
 {
     const bool scopeClosed = scopeClosedAbove || m_excludedExternalOwners.contains(node.id);
     const bool sourced = !node.externalCenterline.isEmpty();
+
+    if (sourced && isSourceRoot(node)) {
+        indexSourcedSubtree(node, node, scopeClosed);
+        const bool emits = !m_excludedExternalOwners.contains(node.id);
+        if (emits) {
+            m_emittingNodeIds.insert(node.id);
+        }
+        return emits;
+    }
 
     m_nodeOwners.insert(node.id, {&node, nullptr, !scopeClosed});
 
@@ -109,6 +119,56 @@ bool cwSurvexExporterCaveTask::DriverTree::index(const cwCaveData& node, bool sc
     return emits;
 }
 
+// Registers every node of \a root's subtree as a scope-less owner (none is a
+// block) and every trip as an owner the root's block names, pre-order.
+void cwSurvexExporterCaveTask::DriverTree::indexSourcedSubtree(const cwCaveData& root,
+                                                               const cwCaveData& node,
+                                                               bool scopeClosed)
+{
+    m_nodeOwners.insert(node.id, {&node, nullptr, &node == &root && !scopeClosed, &root});
+    for (const cwTripData& trip : node.trips) {
+        m_tripOwners.insert(trip.id, {&node, &trip, !scopeClosed, &root});
+        if (isNativeTrip(trip) && chunksHoldStations(trip)) {
+            m_sourcedNativeTrips[root.id].append({&node, &trip});
+        }
+    }
+    for (const cwCaveData& child : node.nodes) {
+        indexSourcedSubtree(root, child, scopeClosed);
+    }
+}
+
+// A derived trip's station sits in its unit set, named below its node's cavern
+// path; a native trip's below its label in the root's block.
+QString cwSurvexExporterCaveTask::DriverTree::sourcedTripOperand(const Owner& owner,
+                                                                 const QString& tail) const
+{
+    const QString rootPrefix = m_labels.prefix(owner.sourceRoot->id);
+    if (rootPrefix.isEmpty()) {
+        return QString();
+    }
+
+    if (!owner.trip->sourcePath.isEmpty()) {
+        // The unit spells each name the way cavern reads it from the file, so
+        // that spelling, not the handle's, is what the tie names.
+        const QString key = cwStation::canonicalKey(tail);
+        const auto spelled = std::find_if(owner.trip->externalStations.cbegin(),
+                                          owner.trip->externalStations.cend(),
+                                          [&key](const QString& station) {
+                                              return cwStation::canonicalKey(station) == key;
+                                          });
+        if (spelled == owner.trip->externalStations.cend()) {
+            return QString();
+        }
+        return cwStation::canonicalKey(rootPrefix + m_labels.cavernPath(owner.node->id)) + *spelled;
+    }
+
+    const QString tripScope = cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id);
+    if (tripScope.isEmpty()) {
+        return QString();
+    }
+    return cwStation::canonicalKey(rootPrefix + tripScope + tail);
+}
+
 QString cwSurvexExporterCaveTask::DriverTree::operand(const cwStationHandle& handle) const
 {
     // A tie to an owner whose attachment was excluded names a scope the
@@ -126,22 +186,33 @@ QString cwSurvexExporterCaveTask::DriverTree::operand(const cwStationHandle& han
     const QHash<QUuid, Owner>& owners =
         handle.scope() == cwStationHandle::Trip ? m_tripOwners : m_nodeOwners;
     const auto ownerIt = owners.constFind(handle.containerId());
-    if (ownerIt == owners.constEnd() || !ownerIt->hasScope || !emits(ownerIt->node->id)) {
+    if (ownerIt == owners.constEnd() || !ownerIt->hasScope) {
+        return QString();
+    }
+    // Inside a sourced subtree the root's block is the one that opens a scope.
+    const cwCaveData* block = ownerIt->sourceRoot != nullptr ? ownerIt->sourceRoot : ownerIt->node;
+    if (!emits(block->id)) {
         return QString();
     }
 
     const Owner& owner = ownerIt.value();
+    if (owner.trip != nullptr && owner.sourceRoot != nullptr) {
+        return sourcedTripOperand(owner, handle.tail());
+    }
+
     const QString nodePrefix = m_labels.prefix(owner.node->id);
     if (nodePrefix.isEmpty()) {
         return QString();
     }
 
+    // Cavern reads a name the driver writes under *case lower, so the
+    // canonical spelling names the same station.
     if (owner.trip == nullptr) {
-        return nodePrefix + handle.tail();
+        return cwStation::canonicalKey(nodePrefix + handle.tail());
     }
-    return nodePrefix
-           + cwTrip::scopePrefix(*owner.trip, m_labels.tripLabels(owner.node->id))
-           + handle.tail();
+    return cwStation::canonicalKey(nodePrefix
+                                   + cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id)
+                                   + handle.tail());
 }
 
 cwSurvexExporterCaveTask::cwSurvexExporterCaveTask(QObject *parent) :
@@ -227,11 +298,11 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         stream << "*end " << label << " ; End of " << node.name << Qt::endl << Qt::endl;
     };
 
-    // Sourced root: the node's own fixes, then the *include; calibrations,
-    // trips and child nodes are skipped. The included file carries its own
-    // *cs, *fix, and *begin/*end structure; emitting our own would either
-    // silently shadow theirs (no-op) or fight them (cavern error). Per master
-    // plan §6, native + external are not mixed inside the same node body.
+    // Sourced root: the node's own fixes, the *include, then the subtree's
+    // native trips; calibrations and child nodes are skipped. The included
+    // file carries its own *cs, *fix, and *begin/*end structure; emitting our
+    // own would either silently shadow theirs (no-op) or fight them (cavern
+    // error).
     if (!node.externalCenterline.isEmpty()) {
         if (inherited.autoDeclinationInScope) {
             cwSurvexExporterUtils::writeDeclinationReset(stream);
@@ -251,6 +322,18 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                                   written.makFixes.value(node.id))) {
             return false;
         }
+
+        // The native trips anywhere in the subtree, each its own block in the
+        // root's scope under a label no scope of the file takes (§7.2 step 5).
+        // The reset above took any auto declination out of scope.
+        for (const DriverTree::SourcedTrip& sourced : tree.sourcedNativeTrips(node.id)) {
+            const QString tripLabel = labels.tripLabels(sourced.node->id).value(sourced.trip->id);
+            stream << "*begin " << tripLabel << " ; " << sourced.trip->name << Qt::endl;
+            TripExporter->writeTrip(stream, *sourced.trip, false, inherited.gridConvergence);
+            TotalProgress += cwSurvexExporter::stationCount(*sourced.trip);
+            stream << "*end " << tripLabel << Qt::endl << Qt::endl;
+        }
+
         writeEnd();
         return true;
     }
@@ -385,8 +468,8 @@ void cwSurvexExporterCaveTask::writeEquates(
  * Emit one `*equate` line from operands already rendered for the tie's scope.
  * An empty operand marks a handle that couldn't be resolved (out-of-cave, or
  * an unknown trip), so the whole tie is dropped rather than emit a name cavern
- * can't bind. Two distinct handles can still render to the same string (two
- * trips sharing a stationPrefix), so the line is de-duplicated and skipped
+ * can't bind. Two distinct handles can still render to the same string (a
+ * station two derived units share), so the line is de-duplicated and skipped
  * unless at least two distinct operands survive — cavern rejects `*equate X X`.
  */
 void cwSurvexExporterCaveTask::writeEquateLine(QTextStream& stream, const QStringList& operands)
@@ -406,7 +489,20 @@ void cwSurvexExporterCaveTask::writeEquateLine(QTextStream& stream, const QStrin
         return;
     }
 
+    // An operand naming a Compass or Walls station keeps the file's case,
+    // which cavern's default *case lower would fold away; the block keeps
+    // the *case preserve to this one line.
+    const bool keepsCase = std::any_of(distinct.cbegin(), distinct.cend(),
+                                       [](const QString& operand) {
+                                           return operand != cwStation::canonicalKey(operand);
+                                       });
+    if (keepsCase) {
+        stream << "*begin" << Qt::endl << "*case preserve" << Qt::endl;
+    }
     stream << "*equate " << distinct.join(QLatin1Char(' ')) << Qt::endl;
+    if (keepsCase) {
+        stream << "*end" << Qt::endl;
+    }
 }
 
 /**
@@ -432,16 +528,32 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
 {
     QSet<QString> stationNamesLower;
     QString firstValidStation;
-    for (const cwTripData& trip : node.trips) {
+    const auto addChunkStations = [&](const cwTripData& trip, const QString& tripScope) {
         for (const cwSurveyChunkData& chunk : trip.chunks) {
             for (const cwStation& station : chunk.stations) {
                 if (station.isValid()) {
-                    stationNamesLower.insert(cwStation::canonicalKey(station.name()));
+                    stationNamesLower.insert(cwStation::canonicalKey(tripScope + station.name()));
                     if (firstValidStation.isEmpty()) {
                         firstValidStation = station.name();
                     }
                 }
             }
+        }
+    };
+    if (isSourceRoot(node)) {
+        // Every native trip of the subtree sits under its label in the root's
+        // block, so the root's fixes may name any of them.
+        for (const DriverTree::SourcedTrip& sourced : tree.sourcedNativeTrips(node.id)) {
+            addChunkStations(*sourced.trip,
+                             cwTrip::scopePrefix(*sourced.trip, tree.labels(), sourced.node->id));
+        }
+    } else {
+        for (const cwTripData& trip : node.trips) {
+            // Empty for a native trip in a native node.
+            const QString tripScope = trip.externalCenterline.isEmpty()
+                ? cwTrip::scopePrefix(trip, tree.labels(), node.id)
+                : QString();
+            addChunkStations(trip, tripScope);
         }
     }
 
@@ -474,13 +586,12 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
         }
     };
 
-    const QHash<QUuid, QString>& tripLabels = tree.labels().tripLabels(node.id);
     for (const cwTripData& trip : node.trips) {
         if (trip.externalCenterline.isEmpty()
             || tree.excludedExternalOwners().contains(trip.id)) {
             continue;
         }
-        addFileStations(trip.id, cwTrip::scopePrefix(trip, tripLabels),
+        addFileStations(trip.id, cwTrip::scopePrefix(trip, tree.labels(), node.id),
                         trip.externalCenterline, trip.externalStations);
     }
     addFileStations(node.id, QString(), node.externalCenterline, node.externalStations);

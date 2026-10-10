@@ -56,13 +56,14 @@ QString cwCavernNaming::sanitizeToCavernIdentifier(const QString& name)
     return label;
 }
 
-QHash<QUuid, QString> cwCavernNaming::scopeLabels(const QList<ScopeEntry>& siblings)
+QHash<QUuid, QString> cwCavernNaming::scopeLabels(const QList<ScopeEntry>& siblings,
+                                                  const QSet<QString>& reserved)
 {
     QHash<QUuid, QString> labels;
     labels.reserve(siblings.size());
 
-    QSet<QString> used;
-    used.reserve(siblings.size());
+    QSet<QString> used = reserved;
+    used.reserve(reserved.size() + siblings.size());
 
     for (const ScopeEntry& entry : siblings) {
         const QString base = sanitizeToCavernIdentifier(entry.name);

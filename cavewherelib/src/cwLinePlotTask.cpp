@@ -8,6 +8,7 @@
 // Our includes
 #include "cwLinePlotTask.h"
 #include "cwScopeLabels.h"
+#include "cwCavernNaming.h"
 #include "cwConcurrent.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwCavernRunner.h"
@@ -53,16 +54,28 @@ cwLinePlotTask::LinePlotCaveData::LinePlotCaveData() :
     Length(0.0)
 {
 }
-cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* node)
+cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* node,
+                                                                const cwScopeLabels& labels)
 {
     // Keys are matched against the changed-station names reported by
     // setStationAsChanged, which are node-local cavern names. Every key here is
     // spelled the way the exporter spells it: the trip's scope prefix, then the
     // station name. Resolved once per trip rather than per station:
     // cwTrip::scopePrefix has to look at the trip's siblings to know its label.
-    for(cwTrip* trip : node->trips()) {
+    //
+    // A source root answers for its whole subtree, and its scopes come from the
+    // snapshot's labels: a derived trip's stations sit under its node's cavern
+    // path, a native trip's under its label in the root's block.
+    const bool sourceRoot = labels.sourceRoot(node->id()) == node->id();
+    const QList<cwTrip*> trips = sourceRoot ? node->allTrips() : node->trips();
+    for(cwTrip* trip : trips) {
         const QUuid tripId = trip->id();
-        const QString tripScope = trip->scopePrefix();
+        const QUuid tripNodeId = trip->parentNode()->id();
+        const QString tripScope = sourceRoot
+            ? (trip->isDerived()
+                   ? labels.cavernPath(tripNodeId)
+                   : cwCavernNaming::scopePrefix(labels.tripLabels(tripNodeId).value(tripId)))
+            : trip->scopePrefix();
 
         foreach(cwSurveyChunk* surveyChunk, trip->chunks()) {
             foreach(cwStation station, surveyChunk->stations()) {
@@ -338,7 +351,10 @@ private:
         const QHash<QUuid, cwSplayTipsByStation>& nodeSplayTips)
     {
         const Monad::Result<cwLinePlotGeometry::Result> result =
-            cwLinePlotGeometry::generate(Region.data(), stationPositions, network, nodeSplayTips);
+            // The input snapshot rather than Region.data(): the worker's
+            // region is rebuilt through setData, which leaves out the derived
+            // fields (unit sets, cavernLabels) a sourced subtree draws from.
+            cwLinePlotGeometry::generate(InputData.regionData, stationPositions, network, nodeSplayTips);
         if (result.hasError()) {
             return cwLinePlotGeometry::Result();
         }
@@ -415,7 +431,7 @@ private:
         TripLookups.reserve(Nodes.size());
 
         for (cwSurveyNode* node : std::as_const(Nodes)) {
-            TripLookups.insert(node->id(), cwLinePlotTask::StationTripScrapLookup(node));
+            TripLookups.insert(node->id(), cwLinePlotTask::StationTripScrapLookup(node, ScopeLabels));
         }
     }
 

@@ -14,6 +14,7 @@
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwCavernNaming.h"
+#include "cwScopeLabels.h"
 #include "cwData.h"
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
@@ -1425,7 +1426,8 @@ cwCaveData cwSurveyNode::data() const
         m_readOnly,
         m_sourceId,
         m_sourcePath,
-        m_externalStations
+        m_externalStations,
+        m_cavernLabel
     };
 }
 
@@ -1487,6 +1489,9 @@ cwStationPositionLookup cwSurveyNode::scopedPositions() const
     if (isRoot()) {
         return region->stationPositions();
     }
+    if (!isSourceRoot() && sourceRoot() != nullptr) {
+        return region->memberPositions(this);
+    }
     const QString prefix = scopePrefix();
     return prefix.isEmpty() ? cwStationPositionLookup() : region->scopedPositions(prefix);
 }
@@ -1500,6 +1505,83 @@ cwSurveyNetwork cwSurveyNode::scopedNetwork() const
     if (isRoot()) {
         return region->network();
     }
+    if (!isSourceRoot() && sourceRoot() != nullptr) {
+        return region->memberNetwork(this);
+    }
     const QString prefix = scopePrefix();
     return prefix.isEmpty() ? cwSurveyNetwork() : region->scopedNetwork(prefix);
+}
+
+QString cwSurveyNode::cavernPath() const
+{
+    const cwSurveyNode* root = sourceRoot();
+    if (root == nullptr) {
+        return QString();
+    }
+    QString path;
+    for (const cwSurveyNode* node = this; node != nullptr && node != root;
+         node = node->parentNode()) {
+        path.prepend(cwCavernNaming::scopePrefix(node->cavernLabel()));
+    }
+    return path;
+}
+
+bool cwSurveyNode::SourceMembers::contains(const QString& canonicalKey) const
+{
+    return stations.contains(canonicalKey)
+           || std::any_of(scopePrefixes.cbegin(), scopePrefixes.cend(),
+                          [&canonicalKey](const QString& prefix) {
+                              return canonicalKey.startsWith(prefix);
+                          });
+}
+
+cwSurveyNode::SourceMembers cwSurveyNode::sourceMembers() const
+{
+    SourceMembers members;
+    const cwSurveyNode* root = sourceRoot();
+    if (root == nullptr) {
+        return members;
+    }
+
+    const QHash<QUuid, QString> nativeLabels = root->sourcedTripScopeLabels();
+    walk([&](const cwSurveyNode* node) {
+        const QString nodePath = cwStation::canonicalKey(node->cavernPath());
+        for (const cwTrip* trip : node->trips()) {
+            if (!trip->sourcePath().isEmpty()) {
+                for (const QString& station : trip->externalStations()) {
+                    members.stations.insert(nodePath + cwStation::canonicalKey(station));
+                }
+                continue;
+            }
+            const QString label = nativeLabels.value(trip->id());
+            if (!label.isEmpty()) {
+                members.scopePrefixes.append(cwCavernNaming::scopePrefix(label));
+            }
+        }
+    });
+    return members;
+}
+
+QHash<QUuid, QString> cwSurveyNode::sourcedTripScopeLabels() const
+{
+    const cwSurveyNode* root = sourceRoot();
+    if (root == nullptr) {
+        return QHash<QUuid, QString>();
+    }
+
+    //The live twin of cwScopeLabels' pool, in the same pre-order and with the
+    //same reserved heads, so a native trip's live label is the one the driver
+    //writes.
+    QList<cwCavernNaming::ScopeEntry> entries;
+    QStringList cavernLabels;
+    root->walk([&](const cwSurveyNode* node) {
+        cavernLabels.append(node->cavernLabel());
+        for (const cwTrip* trip : node->trips()) {
+            if (trip->sourcePath().isEmpty() && trip->externalCenterline().isEmpty()) {
+                entries.append({trip->id(), trip->name()});
+            }
+        }
+    });
+    return cwCavernNaming::scopeLabels(
+        entries, cwScopeLabels::includedScopeHeads(root->externalStations(), cavernLabels));
 }

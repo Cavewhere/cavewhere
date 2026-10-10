@@ -52,6 +52,10 @@ constexpr qint64 kFreshOffsetSeconds = 120;
 // Pause between an mtime baseline and the change under test, so a rewrite of
 // the file is unambiguous rather than lost to timestamp resolution.
 constexpr unsigned long kMtimeGapMs = 50;
+// A trip date, which is a save trigger, for the control half of a no-save test.
+constexpr int kControlYear = 2001;
+constexpr int kControlMonth = 2;
+constexpr int kControlDay = 3;
 
 std::unique_ptr<SavedProjectFixture> makeSavedProject(
     const QString& projectFileBase,
@@ -81,35 +85,6 @@ QString plantExternalCenterlineFile(const QDir& ownerDir)
 }
 
 } // namespace
-
-TEST_CASE("trip station prefix round-trips through save/load",
-          "[SaveLoad][scope]")
-{
-    constexpr const char* kPrefix = "A";
-
-    auto fixture = makeSavedProject(QStringLiteral("station-prefix-roundtrip"));
-    fixture->trip->setStationPrefix(QString::fromLatin1(kPrefix));
-    REQUIRE(fixture->project->save());
-    fixture->project->waitSaveToFinish();
-    fixture->rootData->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-
-    const QString projectPath = fixture->project->filename();
-
-    // A fresh session opening the project must see the prefix survive
-    // serialization (proto Trip.station_prefix) and re-derive isScoped from it.
-    auto freshRoot = std::make_unique<cwRootData>();
-    freshRoot->project()->loadFile(projectPath);
-    freshRoot->project()->waitLoadToFinish();
-
-    auto region = freshRoot->project()->cavingRegion();
-    REQUIRE(region->caveCount() == 1);
-    cwCave* loadedCave = region->cave(0);
-    REQUIRE(loadedCave->tripCount() == 1);
-    cwTrip* loadedTrip = loadedCave->trip(0);
-    CHECK(loadedTrip->stationPrefix() == QString::fromLatin1(kPrefix));
-    CHECK(loadedTrip->isScoped());
-}
 
 TEST_CASE("harvested station names never trigger a save",
           "[SaveLoad][External][StationHarvest]")
@@ -142,7 +117,7 @@ TEST_CASE("harvested station names never trigger a save",
 
     // Control: a field that IS a save trigger moves the same file, so the
     // assertion above can't pass just because nothing ever writes here.
-    fixture->trip->setStationPrefix(QStringLiteral("P"));
+    fixture->trip->setDate(QDateTime(QDate(kControlYear, kControlMonth, kControlDay), QTime()));
     fixture->project->waitSaveToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();

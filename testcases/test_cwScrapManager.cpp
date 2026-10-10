@@ -1065,16 +1065,6 @@ void settleScraps(SavedProjectFixture* fixture)
     drainPipelines(fixture);
 }
 
-cwTrip* wholeCaveWindowOf(const cwSurveyNode* node)
-{
-    for (cwTrip* trip : node->trips()) {
-        if (trip->windowsWholeCave()) {
-            return trip;
-        }
-    }
-    return nullptr;
-}
-
 } // namespace
 
 // The trip-level attach path, which keeps computing alongside the source
@@ -1113,9 +1103,10 @@ TEST_CASE("auto-calculate computes the note transform on the survey trip of a lo
         fixturePath(QStringLiteral("compass_solvable.dat")));
     settleScraps(fixture.get());
 
-    // A lone .dat is a one-node subtree whose one survey windows the file.
-    cwTrip* window = wholeCaveWindowOf(root);
-    REQUIRE(window != nullptr);
+    // A lone .dat is a one-node subtree whose one survey is a derived trip.
+    REQUIRE(root->tripCount() == 1);
+    cwTrip* window = root->trip(0);
+    REQUIRE(window->isDerived());
     INFO("known stations: " << knownNames(window).join(QStringLiteral(", ")).toStdString());
     REQUIRE(window->solvedStationPositions().hasPosition(QStringLiteral("S1")));
     REQUIRE(window->solvedStationPositions().hasPosition(QStringLiteral("S2")));

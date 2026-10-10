@@ -26,7 +26,6 @@ struct cwTripData {
     cwSurveyNoteSketchModelData sketchModel;
     QUuid id;
     cwExternalCenterline externalCenterline;
-    QString stationPrefix;
 
     //! Where a derived trip sits inside its source's scan, empty on a native
     //! trip.
@@ -39,6 +38,14 @@ struct cwTripData {
     //! reads it back.
     QStringList externalStations;
 };
+
+//! True for a trip whose shots are the user's own: neither derived from a
+//! source nor attached to a file. Inside a sourced subtree, the driver writes
+//! each one as its own block in the root's.
+inline bool isNativeTrip(const cwTripData& trip)
+{
+    return trip.sourcePath.isEmpty() && trip.externalCenterline.isEmpty();
+}
 
 
 #endif // CWTRIPDATA_H

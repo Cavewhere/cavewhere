@@ -4,9 +4,9 @@ import cavewherelib
 import cw.TestLib
 
 // ExternalCenterlineScopeHeader on its own (plans/EXTERNAL_FILE_PHASE3.html
-// P3.9): the trip windows a block of its cave's survey file, so the header
-// names the cave, shows the prefix that selects the block, and offers the
-// one destructive verb the trip still answers to.
+// P3.9): the trip is one unit of its source root's survey file, so the
+// header names the node it belongs to and offers the one destructive verb
+// the trip still answers to.
 MainWindowTest {
     id: rootId
 
@@ -46,8 +46,8 @@ MainWindowTest {
             verify(cave.rowCount() > 0, "the attach created Scope trips")
 
             rootId.trip = cave.trip(0)
-            verify(rootId.trip.stationPrefix.length > 0,
-                   "a Scope trip carries the prefix that windows its block")
+            verify(rootId.trip.sourcePath.length > 0,
+                   "a derived trip names its place in the file")
             waitForRendering(headerId)
             return cave
         }
@@ -65,30 +65,6 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
                       10000, "clicking Part of lands on the cave page")
             waitForRendering(rootId)
-        }
-
-        function test_changePrefixEditsTheTripsPrefix() {
-            bindFirstScopeTrip("scope-header-prefix")
-            const trip = rootId.trip
-
-            const prefixInput = findChild(headerId, "prefixInput")
-            verify(prefixInput !== null, "prefixInput must exist")
-            tryCompare(prefixInput, "text", trip.stationPrefix,
-                       5000, "the field shows the trip's prefix")
-
-            // Change prefix… opens the same editor the field itself opens.
-            const changeButton = findChild(headerId, "changePrefixButton")
-            verify(changeButton !== null, "changePrefixButton must exist")
-            mouseClick(changeButton)
-            tryVerify(() => rootId.shadowEditor.coreClickInput === prefixInput,
-                      5000, "Change prefix… opens the field's editor")
-            rootId.closeAnyOpenEditor()
-
-            prefixInput.finishedEditting("newprefix")
-            tryCompare(trip, "stationPrefix", "newprefix",
-                       5000, "the committed text lands on the trip")
-            tryCompare(prefixInput, "text", "newprefix",
-                       5000, "the field shows what the trip now carries")
         }
 
         function test_removeTripRemovesItFromTheCave() {

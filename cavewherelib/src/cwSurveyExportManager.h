@@ -38,11 +38,11 @@ class cwSurveyExportManager : public QObject
     Q_PROPERTY(cwCave* cave READ cave WRITE setCave NOTIFY caveChanged)
     Q_PROPERTY(cwTrip* trip READ trip WRITE setTrip NOTIFY tripChanged)
 
-    // True when every cave and trip in the region is free of an
-    // external-centerline attachment and of a station prefix (Scope trips and
-    // native equates prefixes alike). The Survex and Compass exports refuse to
-    // run when this is false because those output formats cannot round-trip the
-    // *include topology the attached entry brought in, nor a station prefix.
+    // True when every node and trip in the region is free of an
+    // external-centerline attachment (every source root carries one). The
+    // Survex and Compass exports refuse to run when this is false because
+    // those output formats cannot round-trip the *include topology the
+    // attached entry brought in.
     // See master plan §7.5.
     Q_PROPERTY(bool canExport READ canExport NOTIFY canExportChanged FINAL)
 
@@ -96,8 +96,7 @@ private:
 
     // Cached gate state. Recomputed by recomputeCanExport() whenever the
     // region's node/trip set changes, any node/trip's externalCenterline
-    // changes, or a trip's stationPrefix changes. Defaults to true
-    // (pure-Native projects export normally).
+    // changes. Defaults to true (pure-Native projects export normally).
     bool m_canExport = true;
     QString m_exportDisabledReason;
 
@@ -115,9 +114,8 @@ private:
     cwTrip* currentTrip() const;
 
     // Tears down and re-establishes every signal connection used to drive
-    // recomputeCanExport(): the root node's subtreeChanged, per-node /
-    // per-trip externalCenterlineChanged, and per-trip stationPrefixChanged,
-    // at every depth.
+    // recomputeCanExport(): the root node's subtreeChanged and per-node /
+    // per-trip externalCenterlineChanged, at every depth.
     // Cheap (a handful of nodes and trips in normal projects) and run only
     // on structural changes.
     void rewireExternalCenterlineTracking();

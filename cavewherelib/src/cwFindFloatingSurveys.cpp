@@ -225,10 +225,10 @@ ScopeKey anchorScopeOf(const cwCaveData& cave, const SolvedScopes& solved)
 //! one the exporter wraps around the same "*include" — goes back on.
 //!
 //! Only an attachment's own trip reaches here: the pass below skips every trip
-//! with no external centerline, which is what keeps a cave's windows — the
-//! blocks' and the whole cave's (cwTrip::windowsWholeCave) — out of the banner
-//! entirely. A window is a view onto stations the cave already solved, so
-//! neither pass has anything to report about one.
+//! with no external centerline, which is what keeps a source's derived trips —
+//! the whole-node window (cwTrip::windowsWholeNode) among them — out of the
+//! banner entirely. A derived trip is a view onto stations its root already
+//! solved, so neither pass has anything to report about one.
 //!
 //! Canonicalized, because Result::stations promises a spelling a caller can
 //! look up. The accessor keeps the authored spelling instead, which is right for
@@ -236,10 +236,11 @@ ScopeKey anchorScopeOf(const cwCaveData& cave, const SolvedScopes& solved)
 //! difference is invisible today only because an external scope has no chunks to
 //! author one.
 QStringList caveLocalStationsOf(const cwTripData& trip,
-                                const QHash<QUuid, QString>& tripLabels,
+                                const cwScopeLabels& labels,
+                                const QUuid& caveId,
                                 const QStringList& scopeLocalSolved)
 {
-    const QString prefix = cwStation::canonicalKey(cwTrip::scopePrefix(trip, tripLabels));
+    const QString prefix = cwStation::canonicalKey(cwTrip::scopePrefix(trip, labels, caveId));
     const QStringList names = cwTrip::knownStationNames(trip, scopeLocalSolved);
 
     QStringList stations;
@@ -284,9 +285,7 @@ void appendFloatingSurveysOf(const cwCaveData& cave,
         //attachment loses components in the harvest (issue #651) that the solve
         //did place. The scan's per-file harvest read its names straight out of
         //the attachment.
-        result.stations = caveLocalStationsOf(trip,
-                                              labels.tripLabels(cave.id),
-                                              solved.stations(trip.id));
+        result.stations = caveLocalStationsOf(trip, labels, cave.id, solved.stations(trip.id));
         results.append(result);
     }
 }

@@ -20,6 +20,7 @@ class cwTrip;
 #include "cwExternalSourceAttentionRow.h"
 #include "cwExternalSourceSettings.h"
 #include "cwExternalSourceStatusModel.h"
+#include "cwExternalUnitManifest.h"
 #include "cwFutureManagerToken.h"
 #include "cwGlobals.h"
 #include "cwLinePlotTask.h"
@@ -421,6 +422,10 @@ private:
         // should be there (the file name alone when no saveLoad gives the
         // scan a project root).
         QHash<QUuid, QString> missingCopies;
+        // Per source root, the derived nodes' cavernLabels and the derived
+        // trips' unit station sets, from the rows of the scan above (the
+        // rows units.json holds, in the file's own spelling).
+        QHash<QUuid, cwExternalUnitManifest::SolveView> sourceViews;
         QVector<cwAttachedCenterlinesModel::Row> rows;
     };
 

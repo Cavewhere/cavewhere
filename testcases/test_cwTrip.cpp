@@ -12,12 +12,59 @@
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
+#include "cwScopeLabels.h"
 #include "SurveyTreeTestHelper.h"
 
 //Qt inculdes
 #include "cwSignalSpy.h"
 #include <QUndoStack>
 #include <QVector3D>
+
+namespace {
+
+//! Makes \a node a source root: sourced, with no path of its own.
+void makeSourceRoot(cwSurveyNode* node)
+{
+    node->setSourceId(QUuid::createUuid());
+    node->setSourcePath(QString());
+}
+
+//! A derived node under \a root named \a name, at \a sourcePath in the scan,
+//! whose cavern level is \a cavernLabel.
+cwCave* addDerivedNode(cwSurveyNode* root, const QString& name, const QString& sourcePath,
+                       const QString& cavernLabel)
+{
+    auto* node = new cwCave();
+    node->setName(name);
+    node->setSourceId(root->sourceId());
+    node->setSourcePath(sourcePath);
+    node->setCavernLabel(cavernLabel);
+    root->addNode(node);
+    return node;
+}
+
+//! A derived trip under \a node, at \a sourcePath, holding \a stations.
+cwTrip* addDerivedTrip(cwSurveyNode* node, const QString& name, const QString& sourcePath,
+                       const QStringList& stations)
+{
+    auto* trip = new cwTrip();
+    trip->setName(name);
+    trip->setSourcePath(sourcePath);
+    trip->setExternalStations(stations);
+    node->addTrip(trip);
+    return trip;
+}
+
+QMap<QString, QVector3D> byName(const QList<QPair<QString, QVector3D>>& stations)
+{
+    QMap<QString, QVector3D> named;
+    for (const auto& station : stations) {
+        named.insert(station.first, station.second);
+    }
+    return named;
+}
+
+} // namespace
 
 TEST_CASE("cwTrip should strip the datestamp away from date", "[cwTrip]") {
     cwTrip trip;
@@ -56,17 +103,55 @@ TEST_CASE("cwTrip::scopePrefix unifies the three trip kinds", "[cwTrip][scope]")
         CHECK(trip.isScoped());
     }
 
-    SECTION("a native-prefixed trip scopes to <stationPrefix>.") {
-        trip.setStationPrefix(QStringLiteral("A"));
-        CHECK(trip.scopePrefix() == QStringLiteral("A."));
-        CHECK(trip.isScoped());
+    SECTION("a derived trip is unscoped: its node's view names its stations") {
+        trip.setSourcePath(QStringLiteral("ALPHA.DAT/ALPHA1"));
+        CHECK(trip.scopePrefix().isEmpty());
+        CHECK_FALSE(trip.isScoped());
     }
+}
 
-    SECTION("external centerline wins over a station prefix") {
-        trip.setName(QStringLiteral("Topo 1"));
-        trip.setStationPrefix(QStringLiteral("A"));
-        trip.setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
-        CHECK(trip.scopePrefix() == QStringLiteral("topo_1."));
+TEST_CASE("cwTrip::scopePrefix labels a native trip inside a sourced subtree",
+          "[cwTrip][scope]")
+{
+    // The driver writes such a trip as its own block in the source root's,
+    // under a label unique across the subtree's native trips and apart from
+    // the scopes the root's file opens (§7.2 step 5).
+    cwCavingRegion region;
+    cwCave* root = new cwCave();
+    root->setName(QStringLiteral("Project"));
+    region.addCave(root);
+    makeSourceRoot(root);
+    root->setExternalStations({QStringLiteral("alpha.a1"), QStringLiteral("r1")});
+    cwCave* alpha = addDerivedNode(root, QStringLiteral("Alpha"), QStringLiteral("ALPHA.DAT"),
+                                   QStringLiteral("alpha"));
+    cwCave* bravo = addDerivedNode(root, QStringLiteral("Bravo"), QStringLiteral("BRAVO.DAT"),
+                                   QStringLiteral("bravo"));
+
+    cwTrip* underAlpha = new cwTrip();
+    underAlpha->setName(QStringLiteral("Dig"));
+    alpha->addTrip(underAlpha);
+    cwTrip* underBravo = new cwTrip();
+    underBravo->setName(QStringLiteral("Dig"));
+    bravo->addTrip(underBravo);
+    cwTrip* namedLikeAFile = new cwTrip();
+    namedLikeAFile->setName(QStringLiteral("Alpha"));
+    bravo->addTrip(namedLikeAFile);
+
+    CHECK(underAlpha->isScoped());
+    CHECK(underAlpha->scopePrefix() == QStringLiteral("dig."));
+    CHECK(underBravo->scopePrefix() == QStringLiteral("dig_2."));
+    CHECK(namedLikeAFile->scopePrefix() == QStringLiteral("alpha_2."));
+
+    SECTION("the snapshot assigns the same labels") {
+        const cwCavingRegionData data = region.data();
+        const cwScopeLabels labels(data);
+        const cwCaveData& rootData = data.caves.first();
+        CHECK(labels.sourceRoot(rootData.nodes.at(1).id) == root->id());
+        CHECK(labels.cavernPath(rootData.nodes.at(1).id) == QStringLiteral("bravo."));
+        CHECK(cwTrip::scopePrefix(rootData.nodes.at(1).trips.at(0), labels, bravo->id())
+              == QStringLiteral("dig_2."));
+        CHECK(cwTrip::scopePrefix(rootData.nodes.at(1).trips.at(1), labels, bravo->id())
+              == QStringLiteral("alpha_2."));
     }
 }
 
@@ -337,45 +422,47 @@ TEST_CASE("cwCavingRegion::scopeLabelsChanged covers cave and trip label moves",
     CHECK(region.caveScopeLabels().value(second->id()) == QStringLiteral("fisher_ridge"));
 }
 
-TEST_CASE("cwTrip scope changes emit stationPrefixChanged and scopeChanged", "[cwTrip][scope]")
+TEST_CASE("cwTrip scope changes emit scopeChanged", "[cwTrip][scope]")
 {
     cwTrip trip;
-    cwSignalSpy prefixSpy(&trip, &cwTrip::stationPrefixChanged);
     cwSignalSpy scopeSpy(&trip, &cwTrip::scopeChanged);
 
-    trip.setStationPrefix(QStringLiteral("A"));
-    CHECK(prefixSpy.count() == 1);
+    // A source path turns a native trip derived, which moves its scope.
+    trip.setSourcePath(QStringLiteral("ALPHA.DAT/ALPHA1"));
     CHECK(scopeSpy.count() == 1);
 
-    // Setting the same prefix is a no-op.
-    trip.setStationPrefix(QStringLiteral("A"));
-    CHECK(prefixSpy.count() == 1);
+    // Setting the same path is a no-op.
+    trip.setSourcePath(QStringLiteral("ALPHA.DAT/ALPHA1"));
     CHECK(scopeSpy.count() == 1);
+    trip.setSourcePath(QString());
+    CHECK(scopeSpy.count() == 2);
 
     // The external centerline also moves the scope, so it fires scopeChanged.
     trip.setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
-    CHECK(prefixSpy.count() == 1);
-    CHECK(scopeSpy.count() == 2);
+    CHECK(scopeSpy.count() == 3);
 
     // An external trip's scope is its own survey label, so a rename moves it.
     trip.setName(QStringLiteral("Topo 1"));
     CHECK(trip.scopePrefix() == QStringLiteral("topo_1."));
-    CHECK(scopeSpy.count() == 3);
+    CHECK(scopeSpy.count() == 4);
 }
 
-TEST_CASE("cwTrip solved-* accessors strip a native station prefix", "[cwTrip][scope]")
+TEST_CASE("cwTrip solved-* accessors strip a native trip's label in a sourced root",
+          "[cwTrip][scope]")
 {
-    // Seed a cave lookup as the solver would leave it for a native-prefixed
-    // (Scope) trip: the trip's stations keyed <prefix>.<tail>, plus an unrelated
-    // native station. The accessors must strip the prefix so bare note/scrap
-    // names resolve, while keeping the full cave data as a superset.
+    // Seed a root lookup as the solver would leave it for a native trip a
+    // source root holds: the trip's stations keyed <label>.<tail>, plus a
+    // station of the root's file. The accessors must strip the label so bare
+    // note/scrap names resolve, while keeping the full root data as a superset.
     cwCavingRegion region;
     cwCave* cave = new cwCave();
     cave->setName(QStringLiteral("Cave"));
     region.addCave(cave);
+    makeSourceRoot(cave);
     cwTrip* trip = new cwTrip();
-    trip->setStationPrefix(QStringLiteral("A"));
+    trip->setName(QStringLiteral("A"));
     cave->addTrip(trip);
+    REQUIRE(trip->scopePrefix() == QStringLiteral("a."));
 
     cwStationPositionLookup lookup;
     lookup.setPosition(QStringLiteral("A.s1"), QVector3D(1, 2, 3));
@@ -506,8 +593,9 @@ TEST_CASE("cwTrip::knownStations unions every source that names a station",
     SECTION("the authored spelling outranks the solver's lowercased echo") {
         // A person typed "S1"; the cave lookup keys it canonically. Listing the
         // key back would show the station in a case its author never used.
+        makeSourceRoot(cave);
         cwTrip* trip = new cwTrip();
-        trip->setStationPrefix(QStringLiteral("A"));
+        trip->setName(QStringLiteral("A"));
         cave->addTrip(trip);
         addShot(trip, QStringLiteral("S1"), QStringLiteral("S2"));
 
@@ -640,8 +728,9 @@ TEST_CASE("cwTrip::externallyBacked covers the trip's own attachment and its cav
           "[cwTrip][scope]")
 {
     // The predicate the note-station validator and TripPage's panel swap both
-    // ask. It has to answer for a Scope trip — no attachment, no chunks, all its
-    // stations coming from the cave's file — as well as for an attached trip.
+    // ask. It has to answer for a derived trip — no attachment, no chunks, all
+    // its stations coming from its root's file — as well as for an attached
+    // trip.
     cwCavingRegion region;
     cwCave* cave = new cwCave();
     cave->setName(QStringLiteral("Fisher Ridge"));
@@ -656,38 +745,37 @@ TEST_CASE("cwTrip::externallyBacked covers the trip's own attachment and its cav
     // A native trip in a native cave owns nothing external.
     CHECK_FALSE(trip->externallyBacked());
 
-    // Its own station prefix backs it (a Scope trip's only own field).
-    trip->setStationPrefix(QStringLiteral("doghill.big-passage"));
-    CHECK(trip->externallyBacked());
-    CHECK(backedSpy.count() == 1);
-
-    trip->setStationPrefix(QString());
-    CHECK_FALSE(trip->externallyBacked());
-    CHECK(backedSpy.count() == 2);
-
     // Its own attachment backs it.
     trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
     CHECK(trip->externallyBacked());
-    CHECK(backedSpy.count() == 3);
+    CHECK(backedSpy.count() == 1);
 
     trip->setExternalCenterline(cwExternalCenterline());
     CHECK_FALSE(trip->externallyBacked());
-    CHECK(backedSpy.count() == 4);
+    CHECK(backedSpy.count() == 2);
 
     // The cave's attachment backs every trip in it, both directions, and the
     // trip hears about it through the cave's relay.
     cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
     CHECK(trip->externallyBacked());
-    CHECK(backedSpy.count() == 5);
+    CHECK(backedSpy.count() == 3);
+
+    // Inside a sourced subtree a native trip is the user's own survey, while a
+    // derived one comes from the file.
+    makeSourceRoot(cave);
+    CHECK_FALSE(trip->externallyBacked());
+    trip->setSourcePath(QStringLiteral("#own"));
+    CHECK(trip->externallyBacked());
+    trip->setSourcePath(QString());
+    cave->setSourceId(QUuid());
 
     cave->setExternalCenterline(cwExternalCenterline());
     CHECK_FALSE(trip->externallyBacked());
-    CHECK(backedSpy.count() == 6);
 
     // A trip with no cave answers from its own fields alone.
     cwTrip orphan;
     CHECK_FALSE(orphan.externallyBacked());
-    orphan.setStationPrefix(QStringLiteral("east"));
+    orphan.setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/east.svx")));
     CHECK(orphan.externallyBacked());
 }
 
@@ -724,13 +812,12 @@ TEST_CASE("A trip the cave no longer lists stops hearing its attachment",
     CHECK(removedSpy.count() == 0);
 }
 
-TEST_CASE("cwTrip::windowsWholeCave names the one window of an attached cave",
+TEST_CASE("cwTrip::windowsWholeNode names the source root's own unit",
           "[cwTrip][scope]")
 {
-    // An attached cave has no native trips, so a trip under one that owns
-    // neither a file nor a prefix is the whole-cave window by construction —
-    // the trip that owns every station no block window claims. The truth table
-    // is what the geometry pass, the trip panel and reconcile all branch on.
+    // The root's own unit (the entry file's own shots) owns every station no
+    // other unit claims. The truth table is what the geometry pass and the trip
+    // panel branch on.
     cwCavingRegion region;
     cwCave* cave = new cwCave();
     cave->setName(QStringLiteral("Fisher Ridge"));
@@ -743,96 +830,141 @@ TEST_CASE("cwTrip::windowsWholeCave names the one window of an attached cave",
     const auto snapshotSaysWindow = [&]() {
         const cwCaveData caveData = cave->data();
         REQUIRE(caveData.trips.size() == 1);
-        return cwTrip::windowsWholeCave(caveData.trips.first(), caveData);
+        return cwTrip::windowsWholeNode(caveData.trips.first(), caveData);
     };
 
-    SECTION("a trip in a native cave is no window") {
-        CHECK_FALSE(trip->windowsWholeCave());
+    SECTION("a trip in a native node is no window") {
+        trip->setSourcePath(cwTrip::ownUnitSourcePath());
+        CHECK_FALSE(trip->windowsWholeNode());
         CHECK_FALSE(snapshotSaysWindow());
     }
 
-    SECTION("a prefix-less trip under an attached cave is the window") {
-        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
-        CHECK(trip->windowsWholeCave());
+    SECTION("the root's own unit is the window") {
+        makeSourceRoot(cave);
+        trip->setSourcePath(cwTrip::ownUnitSourcePath());
+        CHECK(trip->windowsWholeNode());
         CHECK(snapshotSaysWindow());
-        //Its scope, relative to the cave, is the cave itself.
+        //Its scope is the root itself.
         CHECK(trip->scopePrefix().isEmpty());
     }
 
-    SECTION("a Scope trip windows its block, not the cave") {
-        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
-        trip->setStationPrefix(QStringLiteral("doghill"));
-        CHECK_FALSE(trip->windowsWholeCave());
+    SECTION("another unit of the root windows only its own stations") {
+        makeSourceRoot(cave);
+        trip->setSourcePath(QStringLiteral("ALPHA1"));
+        CHECK_FALSE(trip->windowsWholeNode());
         CHECK_FALSE(snapshotSaysWindow());
     }
 
-    SECTION("a trip with its own attachment windows that file") {
-        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
-        trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/topo1.svx")));
-        CHECK_FALSE(trip->windowsWholeCave());
+    SECTION("a native trip under the root is no window") {
+        makeSourceRoot(cave);
+        CHECK_FALSE(trip->windowsWholeNode());
         CHECK_FALSE(snapshotSaysWindow());
     }
 
-    SECTION("detaching the cave leaves no window behind") {
-        cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("blocks.svx")));
-        REQUIRE(trip->windowsWholeCave());
-        cave->setExternalCenterline(cwExternalCenterline());
-        CHECK_FALSE(trip->windowsWholeCave());
-        CHECK_FALSE(snapshotSaysWindow());
-    }
-
-    SECTION("a trip with no cave at all answers no") {
+    SECTION("a trip with no node at all answers no") {
         cwTrip orphan;
-        CHECK_FALSE(orphan.windowsWholeCave());
+        orphan.setSourcePath(cwTrip::ownUnitSourcePath());
+        CHECK_FALSE(orphan.windowsWholeNode());
     }
 }
 
-TEST_CASE("The whole-cave window owns every station no sibling prefix claims",
+TEST_CASE("Derived trips read their stations by unit-set membership",
           "[cwTrip][scope]")
 {
-    // The window's namespace is the cave's, so its stations come back keyed
-    // exactly as the cave keys them — no tail to strip. What it must not do is
-    // list the stations a block window already owns, or parent and child would
-    // both claim the same passage.
+    // A Survex root with shots of its own and one block: the root's view holds
+    // every station of the file, keyed by its cavern-relative name.
     cwCavingRegion region;
-    cwCave* cave = new cwCave();
-    cave->setName(QStringLiteral("Fisher Ridge"));
-    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("root_and_block.svx")));
-    region.addCave(cave);
+    cwCave* root = new cwCave();
+    root->setName(QStringLiteral("Fisher Ridge"));
+    root->setExternalCenterline(cwExternalCenterline(QStringLiteral("root_and_block.svx")));
+    region.addCave(root);
+    makeSourceRoot(root);
 
-    cwTrip* window = new cwTrip();
-    window->setName(QStringLiteral("root_and_block"));
-    cave->addTrip(window);
-
-    cwTrip* block = new cwTrip();
-    block->setName(QStringLiteral("Side"));
-    //Authored case, while the cave lookup keys canonically.
-    block->setStationPrefix(QStringLiteral("Side"));
-    cave->addTrip(block);
+    cwTrip* window = addDerivedTrip(root, QStringLiteral("root_and_block"),
+                                    cwTrip::ownUnitSourcePath(), {QStringLiteral("r1")});
+    cwCave* side = addDerivedNode(root, QStringLiteral("Side"), QStringLiteral("side"),
+                                  QStringLiteral("side"));
+    cwTrip* block = addDerivedTrip(side, QStringLiteral("Side"),
+                                   QStringLiteral("side/#own"),
+                                   {QStringLiteral("s1"), QStringLiteral("s2")});
+    cwTrip* shared = addDerivedTrip(side, QStringLiteral("Shared"), QStringLiteral("side/b"),
+                                    {QStringLiteral("s2"), QStringLiteral("s3")});
 
     cwStationPositionLookup lookup;
     lookup.setPosition(QStringLiteral("r1"), QVector3D(1, 2, 3));
     lookup.setPosition(QStringLiteral("r2"), QVector3D(4, 5, 6));
     lookup.setPosition(QStringLiteral("side.s1"), QVector3D(7, 8, 9));
-    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+    lookup.setPosition(QStringLiteral("side.s2"), QVector3D(10, 11, 12));
+    lookup.setPosition(QStringLiteral("side.s3"), QVector3D(13, 14, 15));
+    SurveyTreeTestHelper::setScopedPositions(root, lookup);
 
-    QMap<QString, QVector3D> byName;
-    for (const auto& station : window->solvedStations()) {
-        byName.insert(station.first, station.second);
+    SECTION("the whole-node window owns every station no unit claims") {
+        const QMap<QString, QVector3D> stations = byName(window->solvedStations());
+        CHECK(stations.keys() == QStringList({QStringLiteral("r1"), QStringLiteral("r2")}));
+        CHECK(stations.value(QStringLiteral("r2")) == QVector3D(4, 5, 6));
     }
 
-    REQUIRE(byName.size() == 2);
-    CHECK(byName.value(QStringLiteral("r1")) == QVector3D(1, 2, 3));
-    CHECK(byName.value(QStringLiteral("r2")) == QVector3D(4, 5, 6));
-    CHECK_FALSE(byName.contains(QStringLiteral("side.s1")));
+    SECTION("a unit's stations come back named below its node's cavern path") {
+        const QMap<QString, QVector3D> stations = byName(block->solvedStations());
+        CHECK(stations.keys() == QStringList({QStringLiteral("s1"), QStringLiteral("s2")}));
+        CHECK(stations.value(QStringLiteral("s1")) == QVector3D(7, 8, 9));
+    }
 
-    //The block window still owns its own, by the tail it opened.
-    const QList<QPair<QString, QVector3D>> blockStations = block->solvedStations();
-    REQUIRE(blockStations.size() == 1);
-    CHECK(blockStations.first().first == QStringLiteral("s1"));
+    SECTION("a station two units share belongs to both") {
+        CHECK(byName(shared->solvedStations()).contains(QStringLiteral("s2")));
+        CHECK(byName(block->solvedStations()).contains(QStringLiteral("s2")));
+    }
 
-    //And the window's stations are named in the cave's namespace, so the handle
-    //they travel as names the cave.
-    CHECK(window->stationHandle(QStringLiteral("r1")).containerId() == cave->id());
-    CHECK(window->stationHandle(QStringLiteral("r1")).scope() == cwStationHandle::NativeCave);
+    SECTION("the derived node's view is its members, its cavern path stripped") {
+        const cwStationPositionLookup view = side->scopedPositions();
+        CHECK(view.positions().keys()
+              == QStringList({QStringLiteral("s1"), QStringLiteral("s2"), QStringLiteral("s3")}));
+        CHECK(block->solvedStationPositions().hasPosition(QStringLiteral("s3")));
+    }
+
+    SECTION("a derived trip's stations travel as handles on the trip") {
+        const cwStationHandle handle = block->stationHandle(QStringLiteral("s1"));
+        CHECK(handle.scope() == cwStationHandle::Trip);
+        CHECK(handle.containerId() == block->id());
+    }
+
+    SECTION("a native trip under the derived node reads its label scope") {
+        cwTrip* native = new cwTrip();
+        native->setName(QStringLiteral("Side"));
+        side->addTrip(native);
+        //"side" is a scope the file opens itself.
+        REQUIRE(native->scopePrefix() == QStringLiteral("side_2."));
+
+        cwStationPositionLookup withNative = lookup;
+        withNative.setPosition(QStringLiteral("side_2.n1"), QVector3D(16, 17, 18));
+        SurveyTreeTestHelper::setScopedPositions(root, withNative);
+
+        CHECK(side->scopedPositions().hasPosition(QStringLiteral("side_2.n1")));
+        const QMap<QString, QVector3D> stations = byName(native->solvedStations());
+        CHECK(stations.keys() == QStringList({QStringLiteral("n1")}));
+        // The window leaves a native trip's stations to it.
+        CHECK_FALSE(byName(window->solvedStations()).contains(QStringLiteral("side_2.n1")));
+    }
+
+    SECTION("a native trip under a native Folder inside the subtree reads the root's block") {
+        auto* folder = new cwCave();
+        folder->setName(QStringLiteral("Folder"));
+        side->addNode(folder);
+        REQUIRE(folder->sourceRoot() == root);
+
+        cwTrip* dig = new cwTrip();
+        dig->setName(QStringLiteral("Dig"));
+        folder->addTrip(dig);
+        REQUIRE(dig->scopePrefix() == QStringLiteral("dig."));
+
+        cwStationPositionLookup withDig = lookup;
+        withDig.setPosition(QStringLiteral("dig.d1"), QVector3D(19, 20, 21));
+        SurveyTreeTestHelper::setScopedPositions(root, withDig);
+
+        CHECK(folder->scopedPositions().positions().keys()
+              == QStringList({QStringLiteral("dig.d1")}));
+        const QMap<QString, QVector3D> stations = byName(dig->solvedStations());
+        CHECK(stations.keys() == QStringList({QStringLiteral("d1")}));
+        CHECK(stations.value(QStringLiteral("d1")) == QVector3D(19, 20, 21));
+    }
 }

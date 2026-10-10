@@ -71,6 +71,12 @@
  * that owns it (tips from an external .svx include have no stored splays to
  * match). Splays never count toward length or depth.
  *
+ * A sourced subtree draws from its root's view. A derived trip draws the legs
+ * whose two ends its unit holds (a leg two units both hold draws in both), the
+ * root's whole-node window (cwTrip::windowsWholeNode) draws the legs no unit
+ * drew, and a native trip draws its chunks under its label in the root's
+ * block. Every node of the subtree folds its trips' legs, each leg once.
+ *
  * Pure compute — no file I/O, no Qt object machinery. Caller invokes from
  * any thread; only reads the const region snapshot.
  */

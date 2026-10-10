@@ -75,9 +75,27 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
         return keys;
     };
 
+    // Each chunk's named stations as cavern keys under \a tripScope, every
+    // chunk's keys joined into one component.
+    const auto joinChunkKeys = [&](const cwTripData& trip, const QString& tripScope) {
+        QList<QStringList> tripChunkKeys;
+        tripChunkKeys.reserve(trip.chunks.size());
+        for (const cwSurveyChunkData& chunk : trip.chunks) {
+            QStringList& keys = tripChunkKeys.emplaceBack();
+            for (const cwStation& station : chunk.stations) {
+                if (station.isValid()) {
+                    keys.append(cwStation::canonicalKey(tripScope + station.name()));
+                }
+            }
+            for (const QString& key : std::as_const(keys)) {
+                stations.join(keys.first(), key);
+            }
+        }
+        return tripChunkKeys;
+    };
+
     const auto visitNative = [&](const cwCaveData& node) {
         const QString nodePrefix = labels.prefix(node.id);
-        const QHash<QUuid, QString>& tripLabels = labels.tripLabels(node.id);
 
         NativeNode native;
         native.node = &node;
@@ -88,7 +106,7 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
 
         for (const cwTripData& trip : node.trips) {
             QList<QStringList>& tripChunkKeys = native.chunkKeys.emplaceBack();
-            const QString tripScope = nodePrefix + cwTrip::scopePrefix(trip, tripLabels);
+            const QString tripScope = nodePrefix + cwTrip::scopePrefix(trip, labels, node.id);
 
             if (!trip.externalCenterline.isEmpty()) {
                 if (!excludedExternalOwners.contains(trip.id)) {
@@ -97,19 +115,12 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
                 continue;
             }
 
-            tripChunkKeys.reserve(trip.chunks.size());
-            for (const cwSurveyChunkData& chunk : trip.chunks) {
-                QStringList& keys = tripChunkKeys.emplaceBack();
-                for (const cwStation& station : chunk.stations) {
-                    if (station.isValid()) {
-                        keys.append(cwStation::canonicalKey(tripScope + station.name()));
-                    }
-                }
-                for (const QString& key : std::as_const(keys)) {
-                    stations.join(keys.first(), key);
-                    nodeKeys.insert(key);
-                }
-                if (originKey.isEmpty() && cwSurveyChunk::isValid(chunk) && !keys.isEmpty()) {
+            tripChunkKeys = joinChunkKeys(trip, tripScope);
+            for (int i = 0; i < tripChunkKeys.size(); ++i) {
+                const QStringList& keys = tripChunkKeys.at(i);
+                nodeKeys.unite(QSet<QString>(keys.cbegin(), keys.cend()));
+                if (originKey.isEmpty() && cwSurveyChunk::isValid(trip.chunks.at(i))
+                    && !keys.isEmpty()) {
                     originKey = keys.first();
                 }
             }
@@ -132,8 +143,38 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
         nativeNodes.append(native);
     };
 
-    // A sourced root is its *include alone, so its file's stations anchor and
-    // nothing beneath it is a native block.
+    // The native trips anywhere in a sourced subtree, keyed as the root's block
+    // writes them: the root's label path, the trip's label, then the station.
+    // They take no origin fix of their own, so only a tie to an anchored
+    // station or a root fix on one of their stations connects one; a derived
+    // trip's stations are the root's file stations, anchored above. Collects
+    // the native keys into \a nativeKeys.
+    const auto visitSourcedSubtree = [&](const auto& self, const QString& rootPrefix,
+                                         const cwCaveData& node,
+                                         QSet<QString>& nativeKeys) -> void {
+        NativeNode native;
+        native.node = &node;
+        native.chunkKeys.reserve(node.trips.size());
+        for (const cwTripData& trip : node.trips) {
+            if (isNativeTrip(trip)) {
+                const QList<QStringList> tripChunkKeys =
+                    joinChunkKeys(trip, rootPrefix + cwTrip::scopePrefix(trip, labels, node.id));
+                for (const QStringList& keys : tripChunkKeys) {
+                    nativeKeys.unite(QSet<QString>(keys.cbegin(), keys.cend()));
+                }
+                native.chunkKeys.append(tripChunkKeys);
+            } else {
+                native.chunkKeys.emplaceBack();
+            }
+        }
+        nativeNodes.append(native);
+        for (const cwCaveData& child : node.nodes) {
+            self(self, rootPrefix, child, nativeKeys);
+        }
+    };
+
+    // A sourced root is its *include and its subtree's native trips: its
+    // file's stations anchor, and nothing beneath it is a native block.
     const auto visit = [&](const auto& self, const cwCaveData& node) -> void {
         if (node.externalCenterline.isEmpty()) {
             visitNative(node);
@@ -141,7 +182,19 @@ cwFindUnconnectedSurveyChunks::find(const cwCavingRegionData& region,
                 self(self, child);
             }
         } else if (!excludedExternalOwners.contains(node.id)) {
-            addSourcedStations(labels.prefix(node.id), node.externalStations);
+            const QString rootPrefix = labels.prefix(node.id);
+            addSourcedStations(rootPrefix, node.externalStations);
+            if (isSourceRoot(node)) {
+                QSet<QString> nativeKeys;
+                visitSourcedSubtree(visitSourcedSubtree, rootPrefix, node, nativeKeys);
+                for (const cwFixStation& fix : node.fixStations) {
+                    const QString key =
+                        cwStation::canonicalKey(rootPrefix + fix.stationName().trimmed());
+                    if (nativeKeys.contains(key)) {
+                        anchors.insert(key);
+                    }
+                }
+            }
         }
     };
     for (const cwCaveData& cave : region.caves) {

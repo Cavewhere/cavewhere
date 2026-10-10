@@ -57,20 +57,39 @@ public:
 
         //! The station name cavern knows \a handle by from region scope: every
         //! label from the top-level node down to the handle's node, then a Trip
-        //! handle's trip scope, then the tail.
+        //! handle's trip scope, then the tail. Inside a sourced subtree a
+        //! derived trip's station is the root's label path, the trip's node's
+        //! cavern path, then the tail, and a native trip's is the root's label
+        //! path, the trip's label in the root's block, then the tail.
         //!
         //! Empty when the driver opens no scope for the handle: its container is
         //! in no node of the tree, sits inside an excluded owner or below a
-        //! sourced root's own level, or is a node that emits nothing. Cavern
-        //! does not reject an unknown equate operand — it creates the station —
-        //! so the caller drops the whole tie instead.
+        //! sourced root's own level, or is a node that emits nothing; and for a
+        //! derived trip's tail outside its unit set. Cavern does not reject an
+        //! unknown equate operand — it creates the station — so the caller
+        //! drops the whole tie instead.
         QString operand(const cwStationHandle& handle) const;
+
+        //! The native trips of the sourced subtree under \a rootId, pre-order,
+        //! each with the node that holds it: what the root's block writes after
+        //! its *include.
+        struct SourcedTrip {
+            const cwCaveData* node = nullptr;
+            const cwTripData* trip = nullptr;
+        };
+        QList<SourcedTrip> sourcedNativeTrips(const QUuid& rootId) const
+        {
+            return m_sourcedNativeTrips.value(rootId);
+        }
 
     private:
         struct Owner {
             const cwCaveData* node = nullptr;
             const cwTripData* trip = nullptr;
             bool hasScope = false;
+            //! The source root whose subtree holds the owner, for a trip inside
+            //! one.
+            const cwCaveData* sourceRoot = nullptr;
         };
 
         //! Holds the buffer the Owner pointers point into.
@@ -80,8 +99,12 @@ public:
         QSet<QUuid> m_emittingNodeIds;
         QHash<QUuid, Owner> m_nodeOwners;
         QHash<QUuid, Owner> m_tripOwners;
+        QHash<QUuid, QList<SourcedTrip>> m_sourcedNativeTrips;
 
         bool index(const cwCaveData& node, bool scopeClosedAbove);
+        void indexSourcedSubtree(const cwCaveData& root, const cwCaveData& node,
+                                 bool scopeClosed);
+        QString sourcedTripOperand(const Owner& owner, const QString& tail) const;
     };
 
     //! The single-cave export: \a cave and its subtree, standing alone, labeled
@@ -96,7 +119,8 @@ public:
     // Writes \a node as "*begin <label>", its fixes, its own trips, then each
     // child node the same way, then its "*end" — one block per native node, so
     // a station's cavern name is its node's label path. A sourced root writes
-    // its *include and nothing below it. A node that emits nothing
+    // its *include, then every native trip of its subtree as a block of its
+    // own; its derived nodes are never blocks. A node that emits nothing
     // (DriverTree::emits) writes nothing at all. \a node is one of \a tree's
     // top-level nodes.
     bool writeNode(QTextStream& stream,
@@ -113,7 +137,8 @@ public:
     // Emit one "*equate <a> <b> ..." line from pre-rendered operands. An empty
     // operand (an unresolvable handle) drops the whole tie; operands are
     // de-duplicated and the line is skipped unless at least two distinct
-    // survive, since cavern rejects a self-equate.
+    // survive, since cavern rejects a self-equate. A line with an operand in
+    // mixed case is read under *case preserve.
     static void writeEquateLine(QTextStream& stream, const QStringList& operands);
 
     // Emit one "*equate" line per structurally-valid tie in `equates`, each

@@ -231,6 +231,20 @@ public:
     //! network() restricted the same way, cached until the network changes.
     cwSurveyNetwork scopedNetwork(const QString& prefix) const;
 
+    //! A derived node's view: its source root's scopedPositions() kept to the
+    //! node's cwSurveyNode::sourceMembers(), keyed with the node's cavernPath()
+    //! stripped. Cached per node id until the positions change or
+    //! invalidateMemberViews() runs.
+    cwStationPositionLookup memberPositions(const cwSurveyNode* node) const;
+
+    //! The source root's scopedNetwork() kept to the same members. A neighbor
+    //! outside them keeps its name in the root's view.
+    cwSurveyNetwork memberNetwork(const cwSurveyNode* node) const;
+
+    //! The member sets moved without a solve (a harvest named a derived
+    //! trip's stations), so every cached member view is dropped.
+    void invalidateMemberViews();
+
     //! True while a solve is under way, so stationPositions() describes the
     //! survey as it was before the latest edit.
     bool isStationPositionsStale() const { return m_stationPositionsStale; }
@@ -322,6 +336,10 @@ private:
     // by a rename or move lingers until the re-solve lands.
     mutable QHash<QString, cwStationPositionLookup> m_scopedPositions;
     mutable QHash<QString, cwSurveyNetwork> m_scopedNetworks;
+    // Keyed by derived node id beside the per-prefix caches, and cleared with
+    // them.
+    mutable QHash<QUuid, cwStationPositionLookup> m_memberPositions;
+    mutable QHash<QUuid, cwSurveyNetwork> m_memberNetworks;
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
 

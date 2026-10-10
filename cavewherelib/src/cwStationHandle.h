@@ -31,10 +31,11 @@
  *   - NativeCave: containerId is the owning cave's id; the station is a bare
  *     native station (or a cave-level-externalCenterline station directly
  *     under the cave scope).
- *   - Trip: containerId is the owning trip's id; covers both attached external
- *     trips (their own survey label) and native-prefixed Scope trips
- *     (stationPrefix). The concrete prefix is rendered at emission time via
- *     cwTrip::scopePrefix().
+ *   - Trip: containerId is the owning trip's id; covers attached external
+ *     trips (their own survey label), native trips inside a sourced subtree
+ *     (their label in the root's block), and derived trips (their unit's
+ *     stations). The concrete name is rendered at emission time by
+ *     cwSurvexExporterCaveTask::DriverTree::operand().
  */
 class CAVEWHERE_LIB_EXPORT cwStationHandle
 {

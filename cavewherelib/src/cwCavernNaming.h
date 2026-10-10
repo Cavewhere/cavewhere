@@ -8,6 +8,7 @@
 #include <QString>
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QUuid>
 
 /**
@@ -46,8 +47,12 @@ struct ScopeEntry {
 //! Folds a user-facing name into a legal, lowercase cavern survey identifier.
 CAVEWHERE_LIB_EXPORT QString sanitizeToCavernIdentifier(const QString& name);
 
-//! A unique label per sibling, assigned in iteration order.
-CAVEWHERE_LIB_EXPORT QHash<QUuid, QString> scopeLabels(const QList<ScopeEntry>& siblings);
+//! A unique label per sibling, assigned in iteration order, with every label
+//! in \a reserved already taken: a scope the siblings share with blocks
+//! CaveWhere does not write (an included file's own surveys) must never reopen
+//! one of them.
+CAVEWHERE_LIB_EXPORT QHash<QUuid, QString> scopeLabels(const QList<ScopeEntry>& siblings,
+                                                       const QSet<QString>& reserved = {});
 
 //! "<label>." — the prefix a name nested in \a label's scope carries, or empty
 //! when \a label is. The one place the separator is spelled, so a caller that

@@ -18,6 +18,7 @@
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
 #include "cwTripData.h"
+class cwScopeLabels;
 // #include "cwTripCalibration.h"
 class cwTripCalibration;
 #include "cwUndoer.h"
@@ -71,12 +72,11 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(cwErrorModel* errorModel READ errorModel CONSTANT)
     Q_PROPERTY(cwKeywordModel* keywordModel READ keywordModel CONSTANT)
     Q_PROPERTY(cwExternalCenterline externalCenterline READ externalCenterline WRITE setExternalCenterline NOTIFY externalCenterlineChanged)
-    Q_PROPERTY(QString stationPrefix READ stationPrefix WRITE setStationPrefix NOTIFY stationPrefixChanged)
     Q_PROPERTY(QString sourcePath READ sourcePath NOTIFY sourcePathChanged)
     Q_PROPERTY(QString scopePrefix READ scopePrefix NOTIFY scopeChanged)
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
-    Q_PROPERTY(bool windowsWholeCave READ windowsWholeCave NOTIFY externallyBackedChanged)
+    Q_PROPERTY(bool windowsWholeNode READ windowsWholeNode NOTIFY externallyBackedChanged)
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
 
@@ -99,9 +99,6 @@ public:
     cwExternalCenterline externalCenterline() const { return m_externalCenterline; }
     void setExternalCenterline(const cwExternalCenterline& value);
 
-    QString stationPrefix() const { return m_stationPrefix; }
-    void setStationPrefix(const QString& stationPrefix);
-
     //! Where this trip sits inside its source's scan ("BLOWING3.DAT/OF50-87"),
     //! empty on a native trip — including a native trip under a derived node.
     //! Persisted so a derived trip keeps its identity across a save; the
@@ -109,9 +106,19 @@ public:
     QString sourcePath() const { return m_sourcePath; }
     void setSourcePath(const QString& sourcePath);
 
+    //! The sourcePath() of a source root's own unit: the entry file's own
+    //! shots, which the root's whole-node window owns.
+    static QString ownUnitSourcePath();
+
+    //! True when a survey file derives this trip: its stations are one unit of
+    //! the file's scan, pushed into externalStations() by the harvest.
+    bool isDerived() const { return !m_sourcePath.isEmpty(); }
+
     //! The station names this trip's attached external centerline declares, in
     //! the trip's own namespace — canonical and sorted, the same spelling
     //! solvedStations() yields once the region solve does place the survey.
+    //! A derived trip holds its unit's station set instead, from its source's
+    //! units.json, with its node's cavern path stripped ("a5" under Alpha).
     //! Learned at scan time by running cavern over the attachment alone
     //! (cwExternalStationHarvest), so they exist whether or not the region solve
     //! placed it: cavern drops a survey nothing fixes and nothing ties in, which
@@ -136,24 +143,26 @@ public:
     QString externalStationsError() const { return m_externalStationsError; }
     void setExternalStationsError(const QString& error);
 
-    //! The scope prefix this trip's stations carry in the cave namespace: empty
-    //! for a flat native trip, "<tripLabel>." for an externally-attached trip
-    //! (see cwCavernNaming), or "<stationPrefix>." for a native-prefixed (Scope)
-    //! trip. The one accessor every scope consumer — equates, the solved-*
-    //! accessors, and the geometry enumeration — speaks, so the three trip kinds
-    //! never diverge.
+    //! The scope prefix this trip's stations carry in its node's namespace:
+    //! "<tripLabel>." for an externally-attached trip (see cwCavernNaming) and
+    //! for a native trip inside a sourced subtree, which the driver writes as
+    //! its own block in the root's (cwScopeLabels); empty for a flat native trip
+    //! and a derived trip, whose stations sit in its node's view as they are.
+    //! The one accessor every scope consumer — equates, the solved-* accessors,
+    //! and the geometry enumeration — speaks, so the trip kinds never diverge.
     QString scopePrefix() const;
 
-    //! Snapshot overload: the same policy computed from a cwTripData, so the
-    //! worker-thread geometry pass shares this one source of truth. Takes the
-    //! labels cwScopeLabels assigned for the trip's node — an external trip's
-    //! label is unique only among its node's trips — so an emitter that already
-    //! holds that pool (the survex exporter's "*begin" loop, its equate
+    //! Snapshot overload: the same policy computed from a cwTripData held by
+    //! the node \a nodeId, so the worker-thread passes share this one source of
+    //! truth. Takes the labels cwScopeLabels assigned, so an emitter that
+    //! already holds that pool (the survex exporter's "*begin" loop, its equate
     //! operands, the geometry pass) names the very same scope it opened rather
     //! than deriving a second answer that then has to agree.
-    static QString scopePrefix(const cwTripData& data, const QHash<QUuid, QString>& tripLabels);
+    static QString scopePrefix(const cwTripData& data, const cwScopeLabels& labels,
+                               const QUuid& nodeId);
 
-    //! True when this trip's stations carry a scope prefix (external or prefixed).
+    //! True when this trip's stations carry a scope prefix: an attached trip,
+    //! or a native trip inside a sourced subtree.
     bool isScoped() const;
 
     //! True when an external survey file — this trip's own attachment, or the
@@ -162,29 +171,25 @@ public:
     //! panel instead of the shot editor, and carry the 📎 marker; this is the
     //! one predicate all three surfaces ask.
     //!
-    //! Derived from isScoped() and the parent cave's externalCenterline, so it
-    //! can never disagree with either.
+    //! Derived from the trip's own attachment and its node's, so it can never
+    //! disagree with either. A native trip inside a sourced subtree is the
+    //! user's own survey, so it answers false.
     bool externallyBacked() const;
 
-    //! True when this trip is its cave's whole-cave window: the one trip that
-    //! owns every station of an attached cave that no sibling Scope prefix
-    //! claims — a Compass station, a Walls station with no prefix in force, a
-    //! Survex station outside every named "*begin".
+    //! True when this trip is its source root's whole-node window: the root's
+    //! own unit (ownUnitSourcePath()), which owns every station of the root's
+    //! view no other unit and no native trip claims — a Survex station outside
+    //! every named "*begin", a Walls station with no prefix in force.
     //!
-    //! A trip directly under an attached node with no external centerline of
-    //! its own and an empty stationPrefix is that window. Derived state:
+    //! Its scope is the root itself, so scopePrefix() stays empty. What the
+    //! predicate changes is who lists and draws those stations. Derived state:
     //! nothing persists it.
-    //!
-    //! Its scope, relative to its cave, is the cave itself, so scopePrefix()
-    //! stays empty and everything reading "empty prefix = the cave's own
-    //! namespace" is already right for it. What the predicate changes is who
-    //! lists and draws those stations.
-    bool windowsWholeCave() const;
+    bool windowsWholeNode() const;
 
     //! Snapshot overload: the same policy over a cwTripData and the cwCaveData
     //! that holds it, so the worker-thread geometry pass and the UI decide
     //! alike.
-    static bool windowsWholeCave(const cwTripData& trip, const cwCaveData& cave);
+    static bool windowsWholeNode(const cwTripData& trip, const cwCaveData& node);
 
     QDateTime date() const;
     void setDate(QDateTime date);
@@ -237,7 +242,8 @@ public:
     QSet<cwStation> neighboringStations(QString stationName) const;
 
     //! This trip's solved station positions, keyed in the trip's own local
-    //! namespace. A native trip returns the cave lookup unchanged. An
+    //! namespace. A native trip returns the cave lookup unchanged, and so does
+    //! a derived trip, whose node's view already names its stations locally. An
     //! externally-attached trip (whose solved stations are keyed
     //! "<scopePrefix><tail>" in the cave) gets a stripped-tail alias for each of
     //! its scoped entries so bare note/scrap/lead station names resolve, while
@@ -257,9 +263,10 @@ public:
     //! solvedStationPositions() — a resolution lookup that carries the full cave
     //! as a superset — this enumerates only the stations this trip owns, in the
     //! trip's local namespace: a native trip's chunk stations that have a solved
-    //! position, a scoped trip's scope-relative tails, or — for the whole-cave
-    //! window (windowsWholeCave()) — every solved cave station no sibling's
-    //! prefix claims, named as the cave keys it. The
+    //! position, a scoped trip's scope-relative tails, a derived trip's unit
+    //! set (a station two units share belongs to both), or — for the
+    //! whole-node window (windowsWholeNode()) — every solved root station no
+    //! other unit or native trip claims, named as the root's view keys it. The
     //! authoritative answer to "what are my stations, and where are they?" for
     //! the line-plot geometry and label views, native or external alike.
     QList<QPair<QString, QVector3D>> solvedStations() const;
@@ -331,7 +338,6 @@ signals:
     void parentNodeChanged();
     void parentCaveChanged();
     void externalCenterlineChanged();
-    void stationPrefixChanged();
 
     void sourcePathChanged();
 
@@ -344,8 +350,8 @@ signals:
     void externalStationsChanged();
     void externalStationsErrorChanged();
 
-    //! Fired when this trip's scope may have moved: its own externalCenterline,
-    //! stationPrefix or name changed, or — chained from
+    //! Fired when this trip's scope may have moved: its own externalCenterline
+    //! or name changed, or — chained from
     //! cwCave::tripScopeLabelsChanged — a *sibling* was renamed, added or
     //! removed, which can move this trip's collision suffix. The NOTIFY for both
     //! derived properties, and safe to bind against.
@@ -356,7 +362,7 @@ signals:
     void scopeChanged();
 
     //! The NOTIFY for externallyBacked(). Fired when this trip's own
-    //! externalCenterline, stationPrefix or parent cave changed, and — chained
+    //! externalCenterline or parent cave changed, and — chained
     //! from cwCave::externalCenterlineChanged in cwCave::connectTrip — when the
     //! cave that backs it attached or detached a source. May fire when the
     //! answer did not move, as scopeChanged() notes.
@@ -429,7 +435,6 @@ protected:
 
     QUuid Id;
     cwExternalCenterline m_externalCenterline;
-    QString m_stationPrefix;
     QString m_sourcePath;
     QStringList m_externalStations;
     QString m_externalStationsError;

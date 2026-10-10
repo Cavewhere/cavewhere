@@ -39,16 +39,13 @@ QQ.Item {
     readonly property string entryFilePath: ownerStateId.entryFilePath
     readonly property bool sourceChangedSinceCopy: ownerStateId.sourceChangedSinceCopy
 
-    // The two modes, discriminated on the fields that hold them apart:
-    // scopePrefix() answers non-empty for both, so it cannot tell them
-    // apart. Attached wins when a trip somehow carries both, matching
-    // cwTrip::isScoped's own field pair. A whole-cave window carries no
-    // prefix at all, so the trip answers for that one.
+    // The two modes, discriminated on the fields that hold them apart: an
+    // attached trip owns a file, and a derived trip names its place in its
+    // source root's file. Attached wins when a trip somehow carries both.
     readonly property bool isAttached: trip !== null
                                        && trip.externalCenterline.entryFile.length > 0
     readonly property bool isScope: !isAttached && trip !== null
-                                    && (trip.stationPrefix.length > 0
-                                        || trip.windowsWholeCave)
+                                    && trip.sourcePath.length > 0
 
     signal stationClicked(cwStationHandle stationHandle)
 

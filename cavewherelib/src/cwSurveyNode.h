@@ -161,6 +161,37 @@ public:
     QStringList externalStations() const { return m_externalStations; }
     void setExternalStations(const QStringList& stations) { m_externalStations = stations; }
 
+    //! The naming level cavern builds for this derived node, from its source's
+    //! units.json: the lower-cased .dat stem of a Compass file, the block name
+    //! of a Survex block, empty for a Walls book and a source root. Derived like
+    //! externalStations().
+    QString cavernLabel() const { return m_cavernLabel; }
+    void setCavernLabel(const QString& label) { m_cavernLabel = label; }
+
+    //! The cavernLabels from this node's source root down to it, each followed
+    //! by "." — the scope this node's stations carry in the root's view
+    //! ("alpha." for a Compass file). Empty for a root and a native node.
+    QString cavernPath() const;
+
+    //! The stations a node of a sourced subtree holds, in its source root's
+    //! view (cavern-relative names, canonical): every derived trip's unit set
+    //! below it, and the label scope of every native trip below it.
+    struct SourceMembers {
+        QSet<QString> stations;
+        QStringList scopePrefixes;
+
+        bool contains(const QString& canonicalKey) const;
+    };
+
+    //! This node's SourceMembers, computed on each call. Empty for a native
+    //! node.
+    SourceMembers sourceMembers() const;
+
+    //! The label each native trip of this node's sourced subtree takes, keyed
+    //! by trip id: one set across the whole subtree, apart from the scopes the
+    //! root's file opens (cwScopeLabels). Empty for a native node.
+    QHash<QUuid, QString> sourcedTripScopeLabels() const;
+
     //! The fixes the files attached to this node and to its trips carry
     //! themselves, as the attach scan read them, for the Fix Stations page to
     //! list read-only. Derived like externalStations().
@@ -372,7 +403,9 @@ public:
 
     //! The region's solved positions for this node's subtree, keyed by the
     //! name below this node ("upper.a1" in a cave holding a section "upper").
-    //! Empty for a node outside a region or one no parent lists.
+    //! Empty for a node outside a region or one no parent lists. Any node below
+    //! a source root (derived, or a native Folder there) answers its source root's view filtered by sourceMembers(), its own
+    //! cavernPath() stripped (cwCavingRegion::memberPositions).
     cwStationPositionLookup scopedPositions() const;
 
     //! The region's solved network, scoped the same way.
@@ -540,6 +573,7 @@ private:
 
     cwExternalCenterline m_externalCenterline;
     QStringList m_externalStations;
+    QString m_cavernLabel;
     QHash<QUuid, QStringList> m_fileFixedStations;
 
     cwKeywordModel* m_keywordModel = nullptr;

@@ -584,6 +584,7 @@ void cwCavingRegion::setStationPositions(const cwStationPositionLookup& position
     }
     m_stationPositions = positions;
     m_scopedPositions.clear();
+    m_memberPositions.clear();
     emit positionsChanged();
 }
 
@@ -596,6 +597,7 @@ void cwCavingRegion::setNetwork(const cwSurveyNetwork& network)
     }
     m_network = network;
     m_scopedNetworks.clear();
+    m_memberNetworks.clear();
     emit networkChanged();
 }
 
@@ -615,4 +617,78 @@ cwSurveyNetwork cwCavingRegion::scopedNetwork(const QString& prefix) const
         return it.value();
     }
     return *m_scopedNetworks.insert(prefix, m_network.scoped(prefix));
+}
+
+namespace {
+
+//! \a key, a canonical name in a source root's view, as \a node's view names
+//! it: the node's cavern path comes off when the name carries it.
+QString memberLocalKey(const QString& key, const QString& nodeCavernPath)
+{
+    return key.startsWith(nodeCavernPath) ? key.sliced(nodeCavernPath.size()) : key;
+}
+
+}
+
+cwStationPositionLookup cwCavingRegion::memberPositions(const cwSurveyNode* node) const
+{
+    const auto it = m_memberPositions.constFind(node->id());
+    if (it != m_memberPositions.constEnd()) {
+        return it.value();
+    }
+
+    cwStationPositionLookup lookup;
+    const cwSurveyNode* root = node->sourceRoot();
+    const QString rootPrefix = root != nullptr ? root->scopePrefix() : QString();
+    if (!rootPrefix.isEmpty()) {
+        const cwSurveyNode::SourceMembers members = node->sourceMembers();
+        const QString cavernPath = cwStation::canonicalKey(node->cavernPath());
+        const QMap<QString, QVector3D> positions = scopedPositions(rootPrefix).positions();
+        for (auto position = positions.constBegin(); position != positions.constEnd(); ++position) {
+            if (members.contains(position.key())) {
+                lookup.setPosition(memberLocalKey(position.key(), cavernPath), position.value());
+            }
+        }
+    }
+    return *m_memberPositions.insert(node->id(), lookup);
+}
+
+cwSurveyNetwork cwCavingRegion::memberNetwork(const cwSurveyNode* node) const
+{
+    const auto it = m_memberNetworks.constFind(node->id());
+    if (it != m_memberNetworks.constEnd()) {
+        return it.value();
+    }
+
+    cwSurveyNetwork network;
+    const cwSurveyNode* root = node->sourceRoot();
+    const QString rootPrefix = root != nullptr ? root->scopePrefix() : QString();
+    if (!rootPrefix.isEmpty()) {
+        const cwSurveyNode::SourceMembers members = node->sourceMembers();
+        const QString cavernPath = cwStation::canonicalKey(node->cavernPath());
+        const cwSurveyNetwork rootNetwork = scopedNetwork(rootPrefix);
+        const QStringList stations = rootNetwork.stations();
+        for (const QString& station : stations) {
+            if (!members.contains(station)) {
+                continue;
+            }
+            const QString local = memberLocalKey(station, cavernPath);
+            const QStringList neighbors = rootNetwork.neighbors(station);
+            for (const QString& neighbor : neighbors) {
+                network.addShot(local, members.contains(neighbor)
+                                           ? memberLocalKey(neighbor, cavernPath)
+                                           : neighbor);
+            }
+            if (rootNetwork.hasPosition(station)) {
+                network.setPosition(local, rootNetwork.position(station));
+            }
+        }
+    }
+    return *m_memberNetworks.insert(node->id(), network);
+}
+
+void cwCavingRegion::invalidateMemberViews()
+{
+    m_memberPositions.clear();
+    m_memberNetworks.clear();
 }

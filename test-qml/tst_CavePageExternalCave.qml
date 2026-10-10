@@ -115,10 +115,8 @@ MainWindowTest {
 
             let windows = 0
             for (let row = 0; row < cave.rowCount(); row++) {
-                if (cave.trip(row).windowsWholeCave) {
+                if (cave.trip(row).windowsWholeNode) {
                     windows++
-                    compare(cave.trip(row).stationPrefix, "",
-                            "the whole-cave window carries no prefix")
                 }
             }
             compare(windows, 1, "exactly one trip windows the whole cave")

@@ -20,6 +20,7 @@ class cwCavingRegion;
 class cwScrap;
 class cwTrip;
 class cwSurveyNode;
+class cwScopeLabels;
 
 
 //Qt includes
@@ -301,11 +302,13 @@ public:
      * @brief The StationCaveLookup class
      *
      * Stores a lookup for all the stations and scraps in one node's own trips.
-     * It maps a station to multiple trips / scraps
+     * It maps a station to multiple trips / scraps. A source root's lookup
+     * holds every trip of its subtree, named as the root's view names them,
+     * since decode hands every name under the root to the root.
      */
     class StationTripScrapLookup {
     public:
-        explicit StationTripScrapLookup(cwSurveyNode* node);
+        StationTripScrapLookup(cwSurveyNode* node, const cwScopeLabels& labels);
         StationTripScrapLookup() { }
 
         // Trip UUIDs, and (tripId, scrapId) pairs, of every trip/scrap that

@@ -2337,10 +2337,6 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
                 trip->externalCenterline().entryFile().toStdString();
     }
 
-    if (!trip->stationPrefix().isEmpty()) {
-        *(protoTrip->mutable_station_prefix()) = trip->stationPrefix().toStdString();
-    }
-
     if (!trip->sourcePath().isEmpty()) {
         *(protoTrip->mutable_source_path()) = trip->sourcePath().toStdString();
     }
@@ -3709,10 +3705,6 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
                     QString::fromStdString(tripProto.external_centerline().entry_file()));
     }
 
-    if (tripProto.has_station_prefix()) {
-        tripData.stationPrefix = QString::fromStdString(tripProto.station_prefix());
-    }
-
     if (tripProto.has_source_path()) {
         tripData.sourcePath = QString::fromStdString(tripProto.source_path());
     }
@@ -5044,7 +5036,6 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
     // Trip-level changes
     connect(trip, &cwTrip::dateChanged, this, saveTrip);
     connect(trip, &cwTrip::externalCenterlineChanged, this, saveTrip);
-    connect(trip, &cwTrip::stationPrefixChanged, this, saveTrip);
     //A trip's stored source path is part of what decides the project's file
     //format, so it rewrites the whole project when it appears (§6.8).
     const auto saveTripAndRestamp = [saveTrip, this]() {

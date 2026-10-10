@@ -10,6 +10,7 @@ struct cwTripData;
 //Qt includes
 #include <QHash>
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -28,6 +29,12 @@ struct cwTripData;
  *
  * The top-level nodes (the region's caves) are children of the root, which
  * carries no label and answers to the null QUuid.
+ *
+ * A sourced subtree is one "*include" at its source root, so its derived nodes
+ * open no block. The native trips anywhere inside it are written in the root's
+ * block, each as "*begin <tripLabel>", so they share one label set across the
+ * whole subtree (§13 Q7), kept apart from the scopes the included file opens
+ * itself. tripLabels() answers that one set for every node of the subtree.
  *
  * Holds no live model object and copies cheaply (implicitly-shared hashes), so
  * it travels with the cwCavingRegionData it was built from.
@@ -72,8 +79,25 @@ public:
     Resolution resolve(const QString& scopedName) const;
 
     //! The labels \a nodeId's own trips take, keyed by trip id. Empty for a node
-    //! this pool never saw.
+    //! this pool never saw. For a node of a sourced subtree, the labels of
+    //! every native trip in the subtree.
     const QHash<QUuid, QString>& tripLabels(const QUuid& nodeId) const;
+
+    //! The source root whose subtree holds \a nodeId (the node itself for a
+    //! root), or a null QUuid for a native node.
+    QUuid sourceRoot(const QUuid& nodeId) const;
+
+    //! The cavernLabels from \a nodeId's source root down to it, each followed
+    //! by "." — the scope a derived node's stations carry below the root's
+    //! label path ("alpha." for a Compass file). Empty for a root, a Walls
+    //! book, and a native node.
+    QString cavernPath(const QUuid& nodeId) const;
+
+    //! The scope heads an included file opens itself, lowercased: the first
+    //! segment of each dotted station it holds and each derived node's
+    //! cavernLabel. A native trip written beside the *include never takes one.
+    static QSet<QString> includedScopeHeads(const QStringList& rootStations,
+                                            const QStringList& cavernLabels);
 
 private:
     QHash<QUuid, QString> m_nodeLabels;
@@ -81,12 +105,16 @@ private:
     //! Keyed by parent id (null for the root), then by lowercased label.
     QHash<QUuid, QHash<QString, QUuid>> m_childIdsByLabel;
     QHash<QUuid, QHash<QUuid, QString>> m_tripLabelsByNode;
+    QHash<QUuid, QUuid> m_sourceRoots;
+    QHash<QUuid, QString> m_cavernPaths;
 
     void addSiblings(const QUuid& parentId, const QString& parentPrefix,
                      const QList<cwCaveData>& siblings,
-                     const QList<cwTripData>& siblingTrips);
+                     const QList<cwTripData>& siblingTrips,
+                     const QUuid& sourceRootId);
     void addNode(const QUuid& parentId, const QString& parentPrefix,
-                 const cwCaveData& node, const QString& label);
+                 const cwCaveData& node, const QString& label,
+                 const QUuid& sourceRootId);
     QUuid childId(const QUuid& parentId, const QString& label) const;
 };
 

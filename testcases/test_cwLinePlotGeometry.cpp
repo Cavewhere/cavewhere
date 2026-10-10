@@ -61,6 +61,34 @@ int tripForVertex(const QVector<cwLinePlotGeometry::VertexRange>& ranges, int ve
     return -1;
 }
 
+void makeSourceRoot(cwSurveyNode* node)
+{
+    node->setSourceId(QUuid::createUuid());
+}
+
+cwCave* addDerivedNode(cwSurveyNode* root, const QString& name, const QString& sourcePath,
+                       const QString& cavernLabel)
+{
+    auto* node = new cwCave();
+    node->setName(name);
+    node->setSourceId(root->sourceId());
+    node->setSourcePath(sourcePath);
+    node->setCavernLabel(cavernLabel);
+    root->addNode(node);
+    return node;
+}
+
+cwTrip* addDerivedTrip(cwSurveyNode* node, const QString& name, const QString& sourcePath,
+                       const QStringList& stations)
+{
+    auto* trip = new cwTrip();
+    trip->setName(name);
+    trip->setSourcePath(sourcePath);
+    trip->setExternalStations(stations);
+    node->addTrip(trip);
+    return trip;
+}
+
 } // namespace
 
 TEST_CASE("cwLinePlotGeometry de-shares vertices per shot", "[cwLinePlotGeometry]")
@@ -178,152 +206,11 @@ TEST_CASE("cwLinePlotGeometry duplicates a station shared by consecutive shots",
     CHECK(geometry.tripVertexRanges.at(0).count == 4);
 }
 
-TEST_CASE("cwLinePlotGeometry windows a Scope trip whose prefix carries authored case",
-          "[cwLinePlotGeometry]")
-{
-    // A Scope trip stores its stationPrefix exactly as the survey file authored
-    // the *begin block ("48H-Feng"), while cavern lowercases every label it
-    // writes to the .3d — so the solved network keys are lowercase. The
-    // scope-membership filter has to bridge the two, or the trip emits no line
-    // geometry at all (stations still get labels, which is what made this look
-    // like a rendering bug rather than a matching one).
-    cwCavingRegion region;
-
-    cwCave* cave = new cwCave();
-    cave->setName(QStringLiteral("cave1")); //sanitizes to itself: cavePrefix is "cave1."
-    region.addCave(cave);
-
-    cwTrip* scopeTrip = new cwTrip();
-    scopeTrip->setName(QStringLiteral("48H-Feng"));
-    scopeTrip->setStationPrefix(QStringLiteral("48H-Feng")); //what reconcileScopeTrips stores
-    cave->addTrip(scopeTrip);
-
-    const QVector3D f1Position(0.0f, 0.0f, 0.0f);
-    const QVector3D f2Position(0.0f, 10.0f, 0.0f);
-    const QVector3D l1Position(5.0f, 10.0f, 0.0f);
-
-    // Cave-local lookup keys — the network's cave prefix is stripped before the
-    // position lookup.
-    cwStationPositionLookup lookup;
-    lookup.setPosition(QStringLiteral("48h-feng.f1"), f1Position);
-    lookup.setPosition(QStringLiteral("48h-feng.f2"), f2Position);
-    lookup.setPosition(QStringLiteral("48h-feng.lower.l1"), l1Position);
-    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
-
-    // Cavern-shaped network keys: region-wide and lowercase.
-    cwSurveyNetwork network;
-    network.addShot(QStringLiteral("cave1.48h-feng.f1"), QStringLiteral("cave1.48h-feng.f2"));
-    network.addShot(QStringLiteral("cave1.48h-feng.f2"), QStringLiteral("cave1.48h-feng.lower.l1"));
-
-    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
-    REQUIRE_FALSE(result.hasError());
-    const cwLinePlotGeometry::Result geometry = result.value();
-
-    // Find the range by trip identity rather than list position.
-    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
-    const qsizetype tripIndex = geometry.tripUuids.indexOf(scopeTrip->id());
-    REQUIRE(tripIndex >= 0);
-
-    const cwLinePlotGeometry::VertexRange range = geometry.tripVertexRanges.at(tripIndex);
-    CHECK(range.count > 0);
-    CHECK(range.count % 2 == 0);
-
-    // Every emitted vertex resolved through the cave lookup.
-    for (int i = range.start; i < range.start + range.count; ++i) {
-        const QVector3D point = geometry.points.at(i);
-        INFO("vertex index: " << i);
-        CHECK((point == f1Position || point == f2Position || point == l1Position));
-    }
-
-    // Both legs are drawn, each with its own endpoints.
-    CHECK(countPositions(geometry.points, f1Position) == 1);
-    CHECK(countPositions(geometry.points, l1Position) == 1);
-    CHECK(countPositions(geometry.points, f2Position) == 2);
-}
-
-TEST_CASE("cwLinePlotGeometry gives each leg of nested Scope trips one owner",
-          "[cwLinePlotGeometry]")
-{
-    // A nested *begin block's stations carry their parent's prefix too, so a
-    // parent Scope trip string-matches every station of its children. Left
-    // alone, parent and child each draw the child's legs: doubled render
-    // segments, two trips toggling the same leg, and a cave length that counts
-    // nested passage twice.
-    cwCavingRegion region;
-
-    cwCave* cave = new cwCave();
-    cave->setName(QStringLiteral("cave1")); //sanitizes to itself: cavePrefix is "cave1."
-    region.addCave(cave);
-
-    cwTrip* parentTrip = new cwTrip();
-    parentTrip->setName(QStringLiteral("doghill"));
-    parentTrip->setStationPrefix(QStringLiteral("doghill"));
-    cave->addTrip(parentTrip);
-
-    cwTrip* childTrip = new cwTrip();
-    childTrip->setName(QStringLiteral("big-passage"));
-    childTrip->setStationPrefix(QStringLiteral("doghill.big-passage"));
-    cave->addTrip(childTrip);
-
-    const QVector3D d1Position(0.0f, 0.0f, 0.0f);
-    const QVector3D d2Position(0.0f, 10.0f, 0.0f);
-    const QVector3D p1Position(0.0f, 12.0f, 0.0f);
-    const QVector3D p2Position(5.0f, 12.0f, 0.0f);
-
-    cwStationPositionLookup lookup;
-    lookup.setPosition(QStringLiteral("doghill.d1"), d1Position);
-    lookup.setPosition(QStringLiteral("doghill.d2"), d2Position);
-    lookup.setPosition(QStringLiteral("doghill.big-passage.p1"), p1Position);
-    lookup.setPosition(QStringLiteral("doghill.big-passage.p2"), p2Position);
-    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
-
-    // 10 m inside the parent, a 2 m tie into the child block, 5 m inside the
-    // child: 17 m of passage in all.
-    cwSurveyNetwork network;
-    network.addShot(QStringLiteral("cave1.doghill.d1"), QStringLiteral("cave1.doghill.d2"));
-    network.addShot(QStringLiteral("cave1.doghill.d2"),
-                    QStringLiteral("cave1.doghill.big-passage.p1"));
-    network.addShot(QStringLiteral("cave1.doghill.big-passage.p1"),
-                    QStringLiteral("cave1.doghill.big-passage.p2"));
-
-    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
-    REQUIRE_FALSE(result.hasError());
-    const cwLinePlotGeometry::Result geometry = result.value();
-
-    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
-    const qsizetype parentIndex = geometry.tripUuids.indexOf(parentTrip->id());
-    const qsizetype childIndex = geometry.tripUuids.indexOf(childTrip->id());
-    REQUIRE(parentIndex >= 0);
-    REQUIRE(childIndex >= 0);
-
-    SECTION("the innermost scope owns a nested block's legs") {
-        // Parent draws d1-d2 and the d2-p1 tie; the child draws p1-p2 alone.
-        CHECK(geometry.tripVertexRanges.at(parentIndex).count == 4);
-        CHECK(geometry.tripVertexRanges.at(childIndex).count == 2);
-    }
-
-    SECTION("three legs are drawn, the tie among them exactly once") {
-        CHECK(geometry.points.size() == 6);
-        // p1 is an endpoint of the tie and of the child's own leg — twice, and
-        // four times if the tie were drawn from both sides of the boundary.
-        CHECK(countPositions(geometry.points, p1Position) == 2);
-        CHECK(countPositions(geometry.points, d1Position) == 1);
-        CHECK(countPositions(geometry.points, p2Position) == 1);
-    }
-
-    SECTION("cave length counts each leg once") {
-        REQUIRE(geometry.nodeLengthAndDepths.size() == 1);
-        const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
-        CHECK(measured.length() == Catch::Approx(17.0));
-        CHECK(measured.depth() == Catch::Approx(0.0));
-    }
-}
-
 TEST_CASE("cwLinePlotGeometry measures a cave that resolved nothing as zero",
           "[cwLinePlotGeometry]")
 {
-    // A Scope trip whose prefix selects no network station (a broken attach, a
-    // renamed block) leaves the cave with no geometry at all. Length and depth
+    // A derived trip whose unit holds no network station (a broken attach, a
+    // renamed block) leaves the root with no geometry at all. Length and depth
     // still have to be real numbers: they travel straight to cave->length() and
     // cave->depth(), which the cave page renders.
     cwCavingRegion region;
@@ -332,10 +219,9 @@ TEST_CASE("cwLinePlotGeometry measures a cave that resolved nothing as zero",
     cave->setName(QStringLiteral("cave1"));
     region.addCave(cave);
 
-    cwTrip* scopeTrip = new cwTrip();
-    scopeTrip->setName(QStringLiteral("missing"));
-    scopeTrip->setStationPrefix(QStringLiteral("missing"));
-    cave->addTrip(scopeTrip);
+    makeSourceRoot(cave);
+    addDerivedTrip(cave, QStringLiteral("missing"), QStringLiteral("MISSING"),
+                   {QStringLiteral("m1"), QStringLiteral("m2")});
 
     const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), cwSurveyNetwork());
     REQUIRE_FALSE(result.hasError());
@@ -348,85 +234,121 @@ TEST_CASE("cwLinePlotGeometry measures a cave that resolved nothing as zero",
     CHECK(measured.depth() == 0.0);
 }
 
-TEST_CASE("cwLinePlotGeometry draws an attached cave through its whole-cave window",
+TEST_CASE("cwLinePlotGeometry draws each unit trip by two-endpoint membership",
           "[cwLinePlotGeometry]")
 {
-    // A Compass file, a prefix-less Walls project, or a Survex file with shots
-    // outside every *begin gives cavern no naming level below the cave, so the
-    // cave's one window carries no prefix at all. Left as an unscoped native
-    // trip it walks its (nonexistent) chunks and the cave draws nothing, which
-    // is exactly the blank lineplot P3.16 fixes.
+    // The compass_project shape: two surveys of one Compass file share A3, and
+    // cavern names every station below the file's level. A unit draws the legs
+    // whose two ends it holds, so the shared station's legs split between the
+    // surveys and none goes to both.
     cwCavingRegion region;
 
-    cwCave* cave = new cwCave();
-    cave->setName(QStringLiteral("cave1")); //sanitizes to itself: cavePrefix is "cave1."
-    cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("compass_multi.mak")));
-    region.addCave(cave);
+    cwCave* root = new cwCave();
+    root->setName(QStringLiteral("project"));
+    root->setExternalCenterline(cwExternalCenterline(QStringLiteral("PROJECT.MAK")));
+    region.addCave(root);
+    makeSourceRoot(root);
 
-    cwTrip* window = new cwTrip();
-    window->setName(QStringLiteral("compass_multi"));
-    cave->addTrip(window);
+    cwCave* alpha = addDerivedNode(root, QStringLiteral("Alpha"), QStringLiteral("ALPHA.DAT"),
+                                   QStringLiteral("alpha"));
+    cwTrip* first = addDerivedTrip(alpha, QStringLiteral("ALPHA1"), QStringLiteral("ALPHA.DAT/ALPHA1"),
+                                   {QStringLiteral("a1"), QStringLiteral("a2"), QStringLiteral("a3")});
+    cwTrip* second = addDerivedTrip(alpha, QStringLiteral("ALPHA2"), QStringLiteral("ALPHA.DAT/ALPHA2"),
+                                    {QStringLiteral("a3"), QStringLiteral("a4")});
 
     const QVector3D a1Position(0.0f, 0.0f, 0.0f);
     const QVector3D a2Position(0.0f, 10.0f, 0.0f);
-    const QVector3D a3Position(8.0f, 10.0f, 0.0f);
+    const QVector3D a3Position(10.0f, 10.0f, 0.0f);
+    const QVector3D a4Position(10.0f, 0.0f, -5.0f);
 
     cwStationPositionLookup lookup;
-    lookup.setPosition(QStringLiteral("a1"), a1Position);
-    lookup.setPosition(QStringLiteral("a2"), a2Position);
-    lookup.setPosition(QStringLiteral("a3"), a3Position);
-    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+    lookup.setPosition(QStringLiteral("alpha.a1"), a1Position);
+    lookup.setPosition(QStringLiteral("alpha.a2"), a2Position);
+    lookup.setPosition(QStringLiteral("alpha.a3"), a3Position);
+    lookup.setPosition(QStringLiteral("alpha.a4"), a4Position);
+    SurveyTreeTestHelper::setScopedPositions(root, lookup);
 
-    // Flat under the cave: cavern gives a Compass station no level of its own.
     cwSurveyNetwork network;
-    network.addShot(QStringLiteral("cave1.a1"), QStringLiteral("cave1.a2"));
-    network.addShot(QStringLiteral("cave1.a2"), QStringLiteral("cave1.a3"));
+    network.addShot(QStringLiteral("project.alpha.A1"), QStringLiteral("project.alpha.A2"));
+    network.addShot(QStringLiteral("project.alpha.A2"), QStringLiteral("project.alpha.A3"));
+    network.addShot(QStringLiteral("project.alpha.A3"), QStringLiteral("project.alpha.A4"));
 
     const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
-    REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
-    const qsizetype windowIndex = geometry.tripUuids.indexOf(window->id());
-    REQUIRE(windowIndex >= 0);
+    const qsizetype firstIndex = geometry.tripUuids.indexOf(first->id());
+    const qsizetype secondIndex = geometry.tripUuids.indexOf(second->id());
+    REQUIRE(firstIndex >= 0);
+    REQUIRE(secondIndex >= 0);
+    CHECK(geometry.tripVertexRanges.at(firstIndex).count == 4);
+    CHECK(geometry.tripVertexRanges.at(secondIndex).count == 2);
+    CHECK(countPositions(geometry.points, a3Position) == 2);
 
-    // Both legs, one owner.
-    CHECK(geometry.tripVertexRanges.at(windowIndex).count == 4);
-    CHECK(geometry.points.size() == 4);
-    CHECK(countPositions(geometry.points, a1Position) == 1);
-    CHECK(countPositions(geometry.points, a2Position) == 2);
-    CHECK(countPositions(geometry.points, a3Position) == 1);
-
-    REQUIRE(geometry.nodeLengthAndDepths.size() == 1);
-    const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
-    CHECK(measured.length() == Catch::Approx(18.0));
-    CHECK(measured.depth() == Catch::Approx(0.0));
+    // The derived node and the root both fold the three legs.
+    const double expectedLength = 10.0 + 10.0 + QVector3D(a4Position - a3Position).length();
+    CHECK(geometry.nodeLengthAndDepths.value(alpha->id()).length() == Catch::Approx(expectedLength));
+    CHECK(geometry.nodeLengthAndDepths.value(root->id()).length() == Catch::Approx(expectedLength));
+    CHECK(geometry.nodeLengthAndDepths.value(root->id()).depth() == Catch::Approx(5.0));
 }
 
-TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block windows",
+TEST_CASE("cwLinePlotGeometry draws a leg two units both hold in each of them",
+          "[cwLinePlotGeometry]")
+{
+    // A Walls station in two books: when both units hold both ends of a leg,
+    // the leg draws in both trips (§7.2 step 8), and every node still counts it
+    // once.
+    cwCavingRegion region;
+
+    cwCave* root = new cwCave();
+    root->setName(QStringLiteral("kaua"));
+    root->setExternalCenterline(cwExternalCenterline(QStringLiteral("KAUA.WPJ")));
+    region.addCave(root);
+    makeSourceRoot(root);
+
+    cwTrip* first = addDerivedTrip(root, QStringLiteral("D01"), QStringLiteral("SURVEYS/D01"),
+                                   {QStringLiteral("d1"), QStringLiteral("d2")});
+    cwTrip* second = addDerivedTrip(root, QStringLiteral("D02"), QStringLiteral("SURVEYS/D02"),
+                                    {QStringLiteral("d1"), QStringLiteral("d2"), QStringLiteral("d3")});
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("d1"), QVector3D(0.0f, 0.0f, 0.0f));
+    lookup.setPosition(QStringLiteral("d2"), QVector3D(0.0f, 10.0f, 0.0f));
+    lookup.setPosition(QStringLiteral("d3"), QVector3D(0.0f, 20.0f, 0.0f));
+    SurveyTreeTestHelper::setScopedPositions(root, lookup);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("kaua.d1"), QStringLiteral("kaua.d2"));
+    network.addShot(QStringLiteral("kaua.d2"), QStringLiteral("kaua.d3"));
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    CHECK(geometry.tripVertexRanges.at(geometry.tripUuids.indexOf(first->id())).count == 2);
+    CHECK(geometry.tripVertexRanges.at(geometry.tripUuids.indexOf(second->id())).count == 4);
+    CHECK(geometry.nodeLengthAndDepths.value(root->id()).length() == Catch::Approx(20.0));
+}
+
+TEST_CASE("cwLinePlotGeometry hands the whole-node window every leg no unit drew",
           "[cwLinePlotGeometry]")
 {
     // The Walls and root-plus-block shape: the file root owns some stations and
-    // a prefix block owns the rest, tied to each other by one leg. The
-    // whole-cave window's scope is the cave itself, so it string-matches the
-    // block's stations too — every sibling prefix is strictly longer, which is
-    // what hands those stations to the block's own window and draws the tie leg
-    // exactly once.
+    // a prefixed survey owns the rest, tied to each other by one leg. The
+    // prefixed survey draws its own leg; the root's own unit, the whole-node
+    // window, draws the root's leg and the tie, so each leg has one owner.
     cwCavingRegion region;
 
     cwCave* cave = new cwCave();
     cave->setName(QStringLiteral("cave1"));
     cave->setExternalCenterline(cwExternalCenterline(QStringLiteral("walls_prefixed.wpj")));
     region.addCave(cave);
+    makeSourceRoot(cave);
 
-    cwTrip* window = new cwTrip();
-    window->setName(QStringLiteral("walls_prefixed"));
-    cave->addTrip(window);
-
-    cwTrip* blockTrip = new cwTrip();
-    blockTrip->setName(QStringLiteral("XY"));
-    blockTrip->setStationPrefix(QStringLiteral("XY")); //authored case, as Walls spells it
-    cave->addTrip(blockTrip);
+    cwTrip* window = addDerivedTrip(cave, QStringLiteral("walls_prefixed"), cwTrip::ownUnitSourcePath(),
+                                    {QStringLiteral("a1"), QStringLiteral("a2")});
+    cwTrip* blockTrip = addDerivedTrip(cave, QStringLiteral("XY"), QStringLiteral("XY"),
+                                       {QStringLiteral("xy.p1"), QStringLiteral("xy.p2")});
 
     const QVector3D a1Position(0.0f, 0.0f, 0.0f);
     const QVector3D a2Position(0.0f, 10.0f, 0.0f);
@@ -441,10 +363,11 @@ TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block win
     SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     // 10 m at the root, a 4 m tie into the prefixed survey, 12 m inside it.
+    // Walls keeps the authored case of a prefix.
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("cave1.a1"), QStringLiteral("cave1.a2"));
-    network.addShot(QStringLiteral("cave1.a2"), QStringLiteral("cave1.xy.p1"));
-    network.addShot(QStringLiteral("cave1.xy.p1"), QStringLiteral("cave1.xy.p2"));
+    network.addShot(QStringLiteral("cave1.a2"), QStringLiteral("cave1.XY.p1"));
+    network.addShot(QStringLiteral("cave1.XY.p1"), QStringLiteral("cave1.XY.p2"));
 
     const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
     REQUIRE_FALSE(result.hasError());
@@ -466,9 +389,50 @@ TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block win
     CHECK(countPositions(geometry.points, a1Position) == 1);
     CHECK(countPositions(geometry.points, p2Position) == 1);
 
-    // And the cave length counts each leg once.
+    // And the root length counts each leg once.
     REQUIRE(geometry.nodeLengthAndDepths.size() == 1);
     const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
     CHECK(measured.length() == Catch::Approx(26.0));
     CHECK(measured.depth() == Catch::Approx(0.0));
+}
+
+TEST_CASE("cwLinePlotGeometry draws a native trip inside a sourced subtree from its chunks",
+          "[cwLinePlotGeometry]")
+{
+    // The trip is written in the root's block under its label, so its
+    // stations resolve below the root's label path, then the label.
+    cwCavingRegion region;
+
+    cwCave* root = new cwCave();
+    root->setName(QStringLiteral("project"));
+    root->setExternalCenterline(cwExternalCenterline(QStringLiteral("PROJECT.MAK")));
+    region.addCave(root);
+    makeSourceRoot(root);
+    cwCave* alpha = addDerivedNode(root, QStringLiteral("Alpha"), QStringLiteral("ALPHA.DAT"),
+                                   QStringLiteral("alpha"));
+
+    cwTrip* native = new cwTrip();
+    native->setName(QStringLiteral("Dig"));
+    alpha->addTrip(native);
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    native->addChunk(chunk);
+    chunk->appendShot(cwStation(QStringLiteral("n1")), cwStation(QStringLiteral("n2")),
+                      makeShot(QStringLiteral("10"), QStringLiteral("0"), QStringLiteral("0")));
+    REQUIRE(native->scopePrefix() == QStringLiteral("dig."));
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition(QStringLiteral("dig.n1"), QVector3D(0.0f, 0.0f, 0.0f));
+    lookup.setPosition(QStringLiteral("dig.n2"), QVector3D(0.0f, 10.0f, 0.0f));
+    SurveyTreeTestHelper::setScopedPositions(root, lookup);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("project.dig.n1"), QStringLiteral("project.dig.n2"));
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    CHECK(geometry.tripVertexRanges.at(geometry.tripUuids.indexOf(native->id())).count == 2);
+    CHECK(geometry.nodeLengthAndDepths.value(alpha->id()).length() == Catch::Approx(10.0));
+    CHECK(geometry.nodeLengthAndDepths.value(root->id()).length() == Catch::Approx(10.0));
 }

@@ -19,6 +19,7 @@
 #include "cwKeywordModel.h"
 #include "cwNameUtils.h"
 #include "cwCavernNaming.h"
+#include "cwScopeLabels.h"
 
 //Qt includes
 #include <QDebug>
@@ -32,64 +33,33 @@
 namespace {
     // The single scope-prefix policy, shared by the instance accessor and the
     // cwTripData snapshot overload so the UI-thread and worker-thread scope
-    // decisions can never diverge: an external centerline scopes to the trip's
-    // label among its node's trips, else a non-empty station prefix scopes to
-    // "<prefix>.", else unscoped.
+    // decisions can never diverge: a scoped trip (an attached one, or a native
+    // trip inside a sourced subtree) takes "<label>.", every other trip none.
     //
-    // The label arrives as a callable because only the first branch needs it:
+    // The label arrives as a callable because only a scoped trip needs it:
     // this is a Q_PROPERTY read, and an ordinary native trip should not make its
-    // cave build a label map only to be told it has no scope.
+    // node build a label map only to be told it has no scope.
     template <typename LabelProvider>
-    QString computeScopePrefix(bool hasExternalCenterline,
-                               const QString& stationPrefix,
-                               LabelProvider&& label)
+    QString computeScopePrefix(bool scoped, LabelProvider&& label)
     {
-        if (hasExternalCenterline) {
-            return cwCavernNaming::scopePrefix(label());
-        }
-        return cwCavernNaming::scopePrefix(stationPrefix);
+        return scoped ? cwCavernNaming::scopePrefix(label()) : QString();
     }
 
-    // The single whole-cave-window policy, shared by the instance accessor and
-    // the snapshot overload: a trip directly under an attached node that owns
-    // neither a file nor a prefix windows the node itself: a derived trip of a
-    // single-file source root, or a native trip added under a root.
-    bool computeWindowsWholeCave(bool hasExternalCenterline,
-                                 const QString& stationPrefix,
-                                 bool caveIsAttached)
+    // The single whole-node-window policy, shared by the instance accessor and
+    // the snapshot overload: the source root's own unit, directly under it.
+    bool computeWindowsWholeNode(const QString& sourcePath, bool parentIsSourceRoot)
     {
-        return caveIsAttached && !hasExternalCenterline && stationPrefix.isEmpty();
+        return parentIsSourceRoot && sourcePath == cwTrip::ownUnitSourcePath();
     }
 
-    // The prefixes of every Scope trip beside \a trip in the same cave, each
-    // already "<stationPrefix>." — what a whole-cave window has to leave to the
-    // deeper windows that own it.
-    QStringList siblingScopePrefixesOf(const cwTrip* trip)
+    // True for a trip the driver writes inside a sourced subtree's root block:
+    // neither derived from the source nor attached to a file of its own.
+    bool isWrittenInSourcedBlock(const QString& sourcePath,
+                                 const cwExternalCenterline& centerline,
+                                 const cwSurveyNode* node)
     {
-        const cwSurveyNode* node = trip->parentNode();
-        if (node == nullptr) {
-            return QStringList();
-        }
-
-        QStringList prefixes;
-        const QList<cwTrip*> siblings = node->trips();
-        for (const cwTrip* sibling : siblings) {
-            if (sibling == trip || sibling->stationPrefix().isEmpty()) {
-                continue;
-            }
-            prefixes.append(cwCavernNaming::scopePrefix(sibling->stationPrefix()));
-        }
-        return prefixes;
-    }
-
-    // Case-insensitive, because a station key is canonical (lowercased) while a
-    // stationPrefix is authored and may carry any case.
-    bool claimedBySibling(const QString& stationKey, const QStringList& siblingPrefixes)
-    {
-        return std::any_of(siblingPrefixes.cbegin(), siblingPrefixes.cend(),
-                           [&stationKey](const QString& prefix) {
-                               return stationKey.startsWith(prefix, Qt::CaseInsensitive);
-                           });
+        return sourcePath.isEmpty() && centerline.isEmpty()
+               && node != nullptr && node->sourceRoot() != nullptr;
     }
 
     // The single "what stations does this trip have?" policy, shared by
@@ -266,17 +236,6 @@ void cwTrip::setExternalCenterline(const cwExternalCenterline& value)
     emit externallyBackedChanged();
 }
 
-void cwTrip::setStationPrefix(const QString& stationPrefix)
-{
-    if (m_stationPrefix == stationPrefix) {
-        return;
-    }
-    m_stationPrefix = stationPrefix;
-    emit stationPrefixChanged();
-    emit scopeChanged();
-    emit externallyBackedChanged();
-}
-
 void cwTrip::setSourcePath(const QString& sourcePath)
 {
     if (m_sourcePath == sourcePath) {
@@ -284,6 +243,13 @@ void cwTrip::setSourcePath(const QString& sourcePath)
     }
     m_sourcePath = sourcePath;
     emit sourcePathChanged();
+    emit scopeChanged();
+    emit externallyBackedChanged();
+}
+
+QString cwTrip::ownUnitSourcePath()
+{
+    return QStringLiteral("#own");
 }
 
 void cwTrip::setExternalStations(const QStringList& stations)
@@ -306,65 +272,69 @@ void cwTrip::setExternalStationsError(const QString& error)
 
 QString cwTrip::scopePrefix() const
 {
-    //A trip's label is only unique among the trips of its node, so the node owns
-    //the assignment and this is a lookup in the map it keeps.
+    //A trip's label is only unique among its sibling set, so the node owns the
+    //assignment and this is a lookup in the map it keeps.
     const auto label = [this]() -> QString {
         const cwSurveyNode* node = parentNode();
         if (node == nullptr) {
-            //No cave means no sibling set, so this trip's own label is unique by
-            //construction — it is what it would take on being added to a cave
+            //No node means no sibling set, so this trip's own label is unique by
+            //construction — it is what it would take on being added to a node
             //with no name clash, and the only sensible answer for a trip being
             //built or imported before it is parented.
             return cwCavernNaming::sanitizeToCavernIdentifier(name());
         }
 
-        //Empty for a trip the cave still parents but no longer lists —
+        //Empty for a trip the node still parents but no longer lists —
         //InsertRemoveTrip leaves the parent set so undo can restore it. Here a
         //self-derived label would *not* be unique: it is exactly the label a live
         //sibling may now hold, and the solved-* accessors would strip by it and
         //hand back that sibling's stations as this trip's. Answering "no scope"
         //resolves nothing rather than the wrong thing.
+        if (isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, node)) {
+            return node->sourcedTripScopeLabels().value(id());
+        }
         return node->tripScopeLabels().value(id());
     };
 
-    return computeScopePrefix(!m_externalCenterline.isEmpty(), m_stationPrefix, label);
+    return computeScopePrefix(isScoped(), label);
 }
 
-QString cwTrip::scopePrefix(const cwTripData& data, const QHash<QUuid, QString>& tripLabels)
+QString cwTrip::scopePrefix(const cwTripData& data, const cwScopeLabels& labels,
+                            const QUuid& nodeId)
 {
-    return computeScopePrefix(!data.externalCenterline.isEmpty(), data.stationPrefix,
-                              [&data, &tripLabels]() { return tripLabels.value(data.id); });
+    const bool writtenInSourcedBlock = isNativeTrip(data) && !labels.sourceRoot(nodeId).isNull();
+    return computeScopePrefix(!data.externalCenterline.isEmpty() || writtenInSourcedBlock,
+                              [&]() { return labels.tripLabels(nodeId).value(data.id); });
 }
 
 bool cwTrip::isScoped() const
 {
     //Answered without building the label: whether there is a scope is decided by
-    //the same two fields scopePrefix() branches on, and this is read from QML
-    //bindings often enough that walking the cave's trips for it would be waste.
-    return !m_externalCenterline.isEmpty() || !m_stationPrefix.isEmpty();
+    //the same fields scopePrefix() branches on, and this is read from QML
+    //bindings often enough that walking the node's trips for it would be waste.
+    return !m_externalCenterline.isEmpty()
+           || isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, parentNode());
 }
 
 bool cwTrip::externallyBacked() const
 {
+    if (!m_externalCenterline.isEmpty()) {
+        return true;
+    }
     const cwSurveyNode* node = parentNode();
-    return isScoped() || (node != nullptr && node->externallyBacked());
+    return node != nullptr && node->externallyBacked()
+           && !isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, node);
 }
 
-bool cwTrip::windowsWholeCave() const
+bool cwTrip::windowsWholeNode() const
 {
-    //The node's OWN attachment, not externallyBacked(): the whole-cave window is
-    //about the node this trip hangs under having a file of its own.
     const cwSurveyNode* node = parentNode();
-    return computeWindowsWholeCave(!m_externalCenterline.isEmpty(),
-                                   m_stationPrefix,
-                                   node != nullptr && !node->externalCenterline().isEmpty());
+    return computeWindowsWholeNode(m_sourcePath, node != nullptr && node->isSourceRoot());
 }
 
-bool cwTrip::windowsWholeCave(const cwTripData& trip, const cwCaveData& cave)
+bool cwTrip::windowsWholeNode(const cwTripData& trip, const cwCaveData& node)
 {
-    return computeWindowsWholeCave(!trip.externalCenterline.isEmpty(),
-                                   trip.stationPrefix,
-                                   !cave.externalCenterline.isEmpty());
+    return computeWindowsWholeNode(trip.sourcePath, isSourceRoot(node));
 }
 
 void cwTrip::setId(const QUuid& id)
@@ -637,14 +607,10 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
         return lookup;
     }
 
-    //Scoped trip (external or native-prefixed): the cave keys retain the scope
-    //prefix ("<tripLabel>.<tail>" or "<stationPrefix>.<tail>") but note/scrap/lead
-    //stations carry only the tail. Add a stripped-tail alias for each scoped
-    //entry so bare names resolve, keeping the full cave data so a cross-trip
-    //tie-in neighbor still carries a position.
-    //The cave lookup keys canonically (lowercased); an authored stationPrefix may
-    //carry any case, so match case-insensitively. mid(prefix.size()) is still
-    //correct because a case-insensitive prefix match has the same length.
+    //Scoped trip: the node keys retain the scope prefix ("<tripLabel>.<tail>")
+    //but note/scrap/lead stations carry only the tail. Add a stripped-tail alias
+    //for each scoped entry so bare names resolve, keeping the full node data so
+    //a cross-trip tie-in neighbor still carries a position.
     const QMap<QString, QVector3D> positions = lookup.positions();
     for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
         if(it.key().startsWith(prefix, Qt::CaseInsensitive)) {
@@ -667,7 +633,7 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
         return network;
     }
 
-    //Scoped trip (external or native-prefixed): alias each scoped station to its
+    //Scoped trip: alias each scoped station to its
     //stripped tail so bare note names resolve. Neighbors that live in another
     //scope (native tie-ins) keep their names so their positions still resolve in
     //solvedStationPositions().
@@ -701,10 +667,36 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
     }
 
     const cwStationPositionLookup lookup = node->scopedPositions();
-    const QString prefix = scopePrefix();
-    const bool wholeCaveWindow = windowsWholeCave();
 
-    if(prefix.isEmpty() && !wholeCaveWindow) {
+    if(isDerived()) {
+        //A derived trip's stations are its unit set, which the node's view
+        //already names locally. Membership is the whole rule, so a station two
+        //units share belongs to both.
+        QSet<QString> listed;
+        for(const QString& station : m_externalStations) {
+            const QString key = cwStation::canonicalKey(station);
+            listed.insert(key);
+            if(lookup.hasPosition(key)) {
+                solved.append({station, lookup.position(key)});
+            }
+        }
+
+        if(windowsWholeNode()) {
+            //The root's own unit also owns every root station no other unit and
+            //no native trip claims.
+            const cwSurveyNode::SourceMembers members = node->sourceMembers();
+            const QMap<QString, QVector3D> positions = lookup.positions();
+            for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
+                if(!listed.contains(it.key()) && !members.contains(it.key())) {
+                    solved.append({it.key(), it.value()});
+                }
+            }
+        }
+        return solved;
+    }
+
+    const QString prefix = scopePrefix();
+    if(prefix.isEmpty()) {
         //Native trip: its own stations are its chunk stations that have a
         //solved position.
         const QList<cwStation> unique = uniqueStations();
@@ -717,22 +709,15 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
         return solved;
     }
 
-    //Scoped trip: its stations live in the cave lookup under the scope prefix
-    //("<tripLabel>.<tail>" or "<stationPrefix>.<tail>"); yield each as the
-    //scope-relative tail, the same local name the note/scrap/lead sites and
-    //cwScopeStationListModel speak.
-    //
-    //The whole-cave window is the same walk with an empty prefix — the cave's
-    //own namespace is this trip's namespace, so every key matches and none has
-    //a tail to strip — minus the keys a sibling window's prefix claims.
-    const QStringList siblingPrefixes = wholeCaveWindow ? siblingScopePrefixesOf(this)
-                                                        : QStringList();
+    //Scoped trip: its stations live in the node lookup under the scope prefix
+    //("<tripLabel>.<tail>"); yield each as the scope-relative tail, the same
+    //local name the note/scrap/lead sites and cwScopeStationListModel speak.
+    const QString prefixKey = cwStation::canonicalKey(prefix);
     const QMap<QString, QVector3D> positions = lookup.positions();
-    for(auto it = positions.constBegin(); it != positions.constEnd(); ++it) {
-        if(it.key().startsWith(prefix, Qt::CaseInsensitive)
-           && !claimedBySibling(it.key(), siblingPrefixes)) {
-            solved.append({it.key().mid(prefix.size()), it.value()});
-        }
+    for(auto it = positions.lowerBound(prefixKey);
+        it != positions.constEnd() && it.key().startsWith(prefixKey);
+        ++it) {
+        solved.append({it.key().sliced(prefixKey.size()), it.value()});
     }
     return solved;
 }
@@ -791,7 +776,9 @@ cwStationHandle cwTrip::stationHandle(const QString& tail) const
 {
     //Deliberately scopePrefix() and not isScoped(): the two disagree for a trip
     //its cave no longer lists, and solvedStations() above splits on the prefix.
-    if(scopePrefix().isEmpty()) {
+    //A derived trip has no prefix, but its stations are its unit's, which only
+    //a Trip handle can name (cwSurvexExporterCaveTask::DriverTree::operand).
+    if(scopePrefix().isEmpty() && !isDerived()) {
         cwSurveyNode* node = parentNode();
         return cwStationHandle(cwStationHandle::NativeCave,
                                node != nullptr ? node->id() : QUuid(),
@@ -826,7 +813,6 @@ cwTripData cwTrip::data() const
         NotesSketch->data(),
         Id,
         m_externalCenterline,
-        m_stationPrefix,
         m_sourcePath,
         m_externalStations
     };
@@ -838,7 +824,6 @@ void cwTrip::setData(const cwTripData &data)
     setId(data.id);
     setDate(data.date);
     setExternalCenterline(data.externalCenterline);
-    setStationPrefix(data.stationPrefix);
     setSourcePath(data.sourcePath);
     //externalStations is deliberately not restored. It is scan output, and every
     //cwTripData that reaches this setter either came off disk — where the field

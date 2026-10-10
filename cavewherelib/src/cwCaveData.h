@@ -35,7 +35,19 @@ struct cwCaveData {
     //! check a fix against the node's attached file. Derived scan output, never
     //! persisted.
     QStringList externalStations;
+
+    //! Snapshot of cwSurveyNode::cavernLabel(): the naming level cavern builds
+    //! for a derived node, from its source's units.json. Derived, never
+    //! persisted.
+    QString cavernLabel;
 };
+
+//! The node a sourced subtree hangs from: sourced, with no path of its own
+//! inside the source. The snapshot twin of cwSurveyNode::isSourceRoot().
+inline bool isSourceRoot(const cwCaveData& node)
+{
+    return !node.sourceId.isNull() && node.sourcePath.isEmpty();
+}
 
 /**
  * Calls visit(nodeData, nodePath) on every node in \a nodes and on their descendants,

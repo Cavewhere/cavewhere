@@ -394,3 +394,46 @@ TEST_CASE("A chunk tied to an attached file's station is connected",
         CHECK(results.value(cave.id).size() == 1);
     }
 }
+
+TEST_CASE("A native trip under a derived node connects only through a tie",
+          "[FindUnconnectedSurveyChunksTask][Equate]")
+{
+    // The trip is written in the source root's block under its label, so
+    // nothing anchors it but a tie to a station the root's file holds.
+    cwTripData derived = tripOf(QStringLiteral("ALPHA1"), {});
+    derived.sourcePath = QStringLiteral("ALPHA.DAT/ALPHA1");
+    derived.externalStations = {QStringLiteral("a1"), QStringLiteral("a5")};
+
+    cwTripData native = tripOf(QStringLiteral("Dig"),
+                               {chunkOf({QStringLiteral("D1"), QStringLiteral("D2")})});
+
+    cwCaveData alpha = nodeOf(QStringLiteral("Alpha"), {derived, native});
+    alpha.sourcePath = QStringLiteral("ALPHA.DAT");
+    alpha.cavernLabel = QStringLiteral("alpha");
+
+    cwCaveData root = nodeOf(QStringLiteral("Project"), {});
+    root.sourceId = QUuid::createUuid();
+    root.externalCenterline = cwExternalCenterline(QStringLiteral("PROJECT.MAK"));
+    root.externalStations = {QStringLiteral("alpha.a1"), QStringLiteral("alpha.a5")};
+    alpha.sourceId = root.sourceId;
+    root.nodes.append(alpha);
+
+    cwCavingRegionData region;
+    region.caves.append(root);
+
+    const Results untied = cwFindUnconnectedSurveyChunks::find(region);
+    REQUIRE(untied.value(alpha.id).size() == 1);
+    CHECK(untied.value(alpha.id).first().TripIndex == 1);
+
+    SECTION("a tie to the derived trip's station connects it") {
+        region.equates.append(cwEquate({cwStationHandle(cwStationHandle::Trip, native.id, QStringLiteral("D1")),
+                                        cwStationHandle(cwStationHandle::Trip, derived.id, QStringLiteral("a5"))}));
+        CHECK(cwFindUnconnectedSurveyChunks::find(region).isEmpty());
+    }
+
+    SECTION("a tie to a name outside the unit set joins nothing") {
+        region.equates.append(cwEquate({cwStationHandle(cwStationHandle::Trip, native.id, QStringLiteral("D1")),
+                                        cwStationHandle(cwStationHandle::Trip, derived.id, QStringLiteral("b9"))}));
+        CHECK(cwFindUnconnectedSurveyChunks::find(region).value(alpha.id).size() == 1);
+    }
+}
