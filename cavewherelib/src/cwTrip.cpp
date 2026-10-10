@@ -51,8 +51,9 @@ namespace {
     }
 
     // The single whole-cave-window policy, shared by the instance accessor and
-    // the snapshot overload: an attached cave has no native trips, so one of its
-    // trips that owns neither a file nor a prefix windows the cave itself.
+    // the snapshot overload: a trip directly under an attached node that owns
+    // neither a file nor a prefix windows the node itself: a derived trip of a
+    // single-file source root, or a native trip added under a root.
     bool computeWindowsWholeCave(bool hasExternalCenterline,
                                  const QString& stationPrefix,
                                  bool caveIsAttached)

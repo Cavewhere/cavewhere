@@ -42,18 +42,21 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineReport
     Q_PROPERTY(QString errorMessage READ errorMessage FINAL)
     Q_PROPERTY(QStringList warnings READ warnings FINAL)
     Q_PROPERTY(QString entryFile READ entryFile FINAL)
+    Q_PROPERTY(QUuid sourceRootId READ sourceRootId FINAL)
 
 public:
     cwExternalCenterlineReport() = default;
 
     static cwExternalCenterlineReport succeeded(const QUuid& ownerId,
                                                 const QString& entryFile = QString(),
-                                                const QStringList& warnings = QStringList())
+                                                const QStringList& warnings = QStringList(),
+                                                const QUuid& sourceRootId = QUuid())
     {
         cwExternalCenterlineReport report(ownerId);
         report.m_success = true;
         report.m_entryFile = entryFile;
         report.m_warnings = warnings;
+        report.m_sourceRootId = sourceRootId;
         return report;
     }
 
@@ -79,6 +82,11 @@ public:
     QStringList warnings() const { return m_warnings; }
     QString entryFile() const { return m_entryFile; }
 
+    //! The source root a successful attach or replace of a survey file built,
+    //! null otherwise. A source attach reports under its target node's id, so
+    //! this is how the caller learns which node it made.
+    QUuid sourceRootId() const { return m_sourceRootId; }
+
 private:
     explicit cwExternalCenterlineReport(const QUuid& ownerId)
         : m_ownerId(ownerId)
@@ -91,6 +99,7 @@ private:
     QString m_errorMessage;
     QStringList m_warnings;
     QString m_entryFile;
+    QUuid m_sourceRootId;
 };
 
 Q_DECLARE_METATYPE(cwExternalCenterlineReport)

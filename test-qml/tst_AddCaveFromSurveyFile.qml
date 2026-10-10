@@ -7,8 +7,8 @@ import QmlTestRecorder
 // P3.7 tests: DataMainPage's [Add Cave] split-button menu and the
 // AddCaveSurveyFileDialog it opens - the block preview, the multi-cave
 // heuristic and its one-click alternate targets, the happy path
-// (cave named from the file, one Scope trip per station-bearing block)
-// and the dismissal that deletes the cave the flow created up front.
+// (a source root under the region, named from the file, with the file's
+// blocks as nodes) and a dismissal that leaves the project as it was.
 MainWindowTest {
     id: rootId
 
@@ -97,39 +97,47 @@ MainWindowTest {
             compare(item.text, qsTr("Add from Survey File…"))
         }
 
-        function test_happyPathCreatesNamedCaveWithScopeTrips() {
+        function test_happyPathBuildsTheSubtreeUnderTheRegion() {
             saveProjectAs("add-cave-happy")
             const dataPage = gotoDataMainPage()
             compare(RootData.region.rowCount(), 0)
 
             const dialog = openDialog(dataPage)
-            compare(RootData.region.rowCount(), 1,
-                    "the flow creates the cave up front")
+            compare(dialog.target, RootData.region.rootNode,
+                    "Attach builds under the region's root")
+            compare(RootData.region.rowCount(), 0,
+                    "opening the dialog creates nothing")
 
             const attachButton = pickFixture(dialog, "survex_blocks.svx")
 
-            // Every station-bearing block is previewed, sump included -
-            // shown so the structure reads whole (§5 Q3).
+            // Every block is previewed, sump included - shown so the
+            // structure reads whole (§5 Q3).
             const preview = findChild(dialog, "blockPreview")
             verify(preview !== null, "block preview must exist")
             tryVerify(() => preview.visible, 5000, "the preview shows the block tree")
-            const hint = findChild(dialog, "blockPreviewHint")
-            verify(hint.text.indexOf("One trip per") === 0,
-                   "the preview explains the rule; got: " + hint.text)
 
             waitForRendering(rootId)
             mouseClick(attachButton)
 
-            const newCave = RootData.region.cave(0)
-            tryVerify(() => newCave.externalCenterline.entryFile === "survex_blocks.svx",
-                      10000, "the cave becomes Attached")
-            tryCompare(newCave, "name", "survex_blocks")
-            tryVerify(() => newCave.rowCount() === 3, 10000,
-                      "one Scope trip per station-bearing block")
+            tryVerify(() => RootData.region.rowCount() === 1, 10000,
+                      "the attach adds one source root")
+            // The root appears when the scan lands; its file and subtree once
+            // the copy is in the project.
+            const sourceRoot = RootData.region.rootNode.childNode(0)
+            compare(sourceRoot.name, "survex_blocks")
+            tryVerify(() => sourceRoot.externalCenterline.entryFile === "survex_blocks.svx",
+                      10000, "the root becomes attached")
+            verify(sourceRoot.isSourceRoot, "the new node is the file's source root")
+            compare(sourceRoot.kind, SurveyNodeKind.SurvexFile)
+            compare(sourceRoot.childNodeCount, 1, "doghill is the file's one top-level block")
+            const doghill = sourceRoot.childNode(0)
+            compare(doghill.name, "doghill")
+            compare(doghill.kind, SurveyNodeKind.SurvexBlock)
+            compare(doghill.tripCount, 1, "doghill's own shots are one derived trip")
 
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "cavePage",
-                      10000, "attach navigates to the new cave's page")
+                      10000, "attach navigates to the new root's page")
             RootData.futureManagerModel.waitForFinished()
         }
 
@@ -223,7 +231,6 @@ MainWindowTest {
             saveProjectAs("add-cave-import")
             const dataPage = gotoDataMainPage()
             const dialog = openDialog(dataPage)
-            const newCave = RootData.region.cave(0)
 
             const pathField = findChild(dialog, "sourcePathField")
             pathField.text = TestHelper.testcasesDatasetSourcePath(
@@ -235,6 +242,8 @@ MainWindowTest {
 
             importButton.clicked()
             verify(dialog.importing, "import busy state is up")
+            const newCave = dialog.importedCave
+            verify(newCave !== null, "import adds a cave of its own")
             const cancelButton = findChild(dialog, "cancelButton")
             verify(!cancelButton.enabled, "no cancel path during import")
 
@@ -253,22 +262,23 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
         }
 
-        function test_dismissRemovesTheJustCreatedCave() {
+        function test_dismissLeavesTheProjectAsItWas() {
             saveProjectAs("add-cave-dismiss")
             const dataPage = gotoDataMainPage()
             const rowsBefore = RootData.region.rowCount()
 
             const dialog = openDialog(dataPage)
-            compare(RootData.region.rowCount(), rowsBefore + 1,
-                    "the flow creates the cave up front")
+            compare(RootData.region.rowCount(), rowsBefore,
+                    "opening the dialog creates nothing")
 
             const cancelButton = findChild(dialog, "cancelButton")
             verify(cancelButton !== null, "dialog cancel button must exist")
             waitForRendering(rootId)
             mouseClick(cancelButton)
 
-            tryVerify(() => RootData.region.rowCount() === rowsBefore, 5000,
-                      "the orphan cave is removed on dismissal")
+            tryVerify(() => !findChild(dialog, "sourcePathField").visible, 5000,
+                      "the dialog closes")
+            compare(RootData.region.rowCount(), rowsBefore)
             RootData.futureManagerModel.waitForFinished()
         }
 

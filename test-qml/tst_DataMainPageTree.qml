@@ -1492,29 +1492,30 @@ MainWindowTest {
             verify(RootData.project.saveAs(tmpPath + "/moveTest.cwproj"), "saveAs should succeed")
             TestHelper.waitForProjectSaveToFinish(RootData.project)
 
-            RootData.region.addCave()
-            const cave = RootData.region.cave(0)
-            cave.name = "Attached Cave"
             const model = RootData.externalCenterlineManager.attachedCenterlinesModel
             const rowsBefore = model.rowCount()
-            RootData.attachCaveCenterline(cave,
-                                          TestHelper.testcasesDatasetPath("external-centerlines/survex_simple.svx"))
+            RootData.attachSource(RootData.region.rootNode,
+                                  TestHelper.testcasesDatasetPath("external-centerlines/survex_simple.svx"))
             tryVerify(() => model.rowCount() > rowsBefore, 10000, "the attach must land")
             RootData.futureManagerModel.waitForFinished()
+            const cave = RootData.region.cave(0)
 
             const page = gotoDataMainPage()
             const tree = surveyTree(page)
             const menu = openMenuOn(page, tree, 0, "caveDelegate")
             verify(findChild(menu, "surveyItemMoveMenuItem") === null,
-                   "an attached cave offers no Move to…")
+                   "a source root offers no Move to…")
             menu.close()
 
-            tryVerify(() => cave.tripCount > 0, 10000, "the attached cave windows its file in a trip")
+            // survex_simple's one block is a derived node holding the block's
+            // own shots as a derived trip.
+            tryVerify(() => cave.childNodeCount > 0 && cave.childNode(0).tripCount > 0, 10000,
+                      "the attached file's block holds a derived trip")
             tree.surveyTree.expandAll()
-            tryVerify(() => tree.rows > 1, 5000)
-            const tripMenu = openMenuOn(page, tree, 1, "tripDelegate")
+            tryVerify(() => tree.rows > 2, 5000)
+            const tripMenu = openMenuOn(page, tree, 2, "tripDelegate")
             verify(findChild(tripMenu, "surveyItemMoveMenuItem") === null,
-                   "a trip of an attached cave offers no Move to…")
+                   "a derived trip offers no Move to…")
             tripMenu.close()
         }
     }

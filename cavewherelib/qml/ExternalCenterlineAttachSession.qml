@@ -23,7 +23,7 @@ QQ.Item {
     id: root
 
     // Snapshot of the owner this session started with — a Trip or a
-    // Cave, both of which expose id. Held as an implementation detail
+    // SurveyNode, both of which expose id. Held as an implementation detail
     // of attribution; hosts read busy instead.
     property QQ.QtObject owner: null
     property string ownerId: ""
@@ -36,8 +36,9 @@ QQ.Item {
 
     // Exactly one fires per started session that ends. A failure fires
     // neither - errorMessage carries it and the surface stays open for
-    // another attempt.
-    signal succeeded()
+    // another attempt. sourceRootId names the source root an attach of a
+    // survey file built, the null id for any other operation.
+    signal succeeded(sourceRootId: string)
     signal canceled()
 
     function start(owner) {
@@ -74,7 +75,7 @@ QQ.Item {
             root.owner = null
             root.ownerId = ""
             if (report.success) {
-                root.succeeded()
+                root.succeeded(String(report.sourceRootId))
             } else if (report.canceled) {
                 root.canceled()
             } else {

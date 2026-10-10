@@ -25,7 +25,11 @@ QQ.Item {
     id: root
     objectName: "addCaveSurveyFileDialog"
 
-    property Cave cave: null
+    // Where Attach builds the file's subtree. Import adds a cave of its own.
+    property SurveyNode target: null
+
+    // The cave Import created and filled, for the host to name.
+    property Cave importedCave: null
 
     // Import adds the trip it fills, and importFinished names that trip,
     // so the dialog keeps it to recognize its own report.
@@ -39,13 +43,13 @@ QQ.Item {
     readonly property bool busy: root.attaching || root.importing
 
     // Outcome signals for hosts. Exactly one fires per open()d session
-    // that ends: attached() when this dialog's attach succeeds,
+    // that ends: attached(sourceRoot) when this dialog's attach succeeds,
     // imported(trip, sourcePath) when its import completes (the cave keeps
     // no record of the file on this path, so the filled trip and the picked
     // path ride the signal for naming), dismissed() when the user backs out (idle
     // Cancel, or a canceled attach). The programmatic close() is silent
     // so hosts and tests can reset state without triggering cleanup.
-    signal attached()
+    signal attached(sourceRoot: SurveyNode)
     signal imported(trip: Trip, sourcePath: string)
     signal dismissed()
 
@@ -54,14 +58,17 @@ QQ.Item {
         sessionId.reset()
         root.importing = false
         root.importingTrip = null
+        root.importedCave = null
         dialogId.open()
     }
 
-    // Import a copy: the parsed shots go into a new trip of the cave.
+    // Import a copy: the parsed shots go into a new trip of a new cave.
     function startImport() {
         sessionId.errorMessage = ""
-        root.cave.addTrip()
-        root.importingTrip = root.cave.trip(root.cave.tripCount - 1)
+        RootData.region.addCave()
+        root.importedCave = RootData.region.cave(RootData.region.caveCount - 1)
+        root.importedCave.addTrip()
+        root.importingTrip = root.importedCave.trip(root.importedCave.tripCount - 1)
         root.importing = true
         RootData.surveyImportManager.importSurvexToTrip(pickerId.sourcePath, root.importingTrip)
     }
@@ -70,12 +77,26 @@ QQ.Item {
         dialogId.close()
     }
 
+    // The child of target whose id reads as nodeId, or null.
+    function childWithId(nodeId: string) : SurveyNode {
+        if (root.target === null) {
+            return null
+        }
+        for (let i = 0; i < root.target.childNodeCount; ++i) {
+            const child = root.target.childNode(i)
+            if (String(child.id) === nodeId) {
+                return child
+            }
+        }
+        return null
+    }
+
     ExternalCenterlineAttachSession {
         id: sessionId
 
-        onSucceeded: {
+        onSucceeded: (sourceRootId) => {
             dialogId.close()
-            root.attached()
+            root.attached(root.childWithId(sourceRootId))
         }
 
         onCanceled: {
@@ -324,10 +345,10 @@ QQ.Item {
                             QC.Button {
                                 objectName: "attachButton"
                                 text: qsTr("Attach")
-                                enabled: root.cave !== null && pickerId.valid && !root.busy
+                                enabled: root.target !== null && pickerId.valid && !root.busy
                                 onClicked: {
-                                    sessionId.start(root.cave)
-                                    RootData.attachCaveCenterline(root.cave, pickerId.sourcePath)
+                                    sessionId.start(root.target)
+                                    RootData.attachSource(root.target, pickerId.sourcePath)
                                 }
                             }
                         }
@@ -368,8 +389,7 @@ QQ.Item {
                             Layout.alignment: Qt.AlignRight
                             Layout.topMargin: Theme.sectionSpacing
                             text: qsTr("Import a copy")
-                            enabled: root.cave !== null && pickerId.valid
-                                     && !root.busy && pickerId.importSupported
+                            enabled: pickerId.valid && !root.busy && pickerId.importSupported
                             onClicked: root.startImport()
                         }
                     }

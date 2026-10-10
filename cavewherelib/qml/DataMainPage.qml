@@ -28,14 +28,11 @@ StandardPage {
         return "Node=" + cave.name;
     }
 
-    // Add ▾ → Add from Survey File…: create the cave first (the dialog
-    // targets an existing cave), but don't navigate — the dialog's
-    // outcome decides. attached() and imported() name the cave after the
-    // picked file and navigate; dismissed() deletes the orphan, since
-    // the user asked for a cave from a file, not an empty native one.
+    // Add ▾ → Add from Survey File…: Attach builds the file's subtree under
+    // the region's root, Import a cave of its own; the dialog's outcome
+    // decides where to navigate.
     function addCaveFromSurveyFileWithDialog() {
-        RootData.region.addCave()
-        addCaveSurveyFileDialogId.cave = RootData.region.cave(RootData.region.rowCount() - 1)
+        addCaveSurveyFileDialogId.target = RootData.region.rootNode
         addCaveSurveyFileDialogId.open()
     }
 
@@ -530,34 +527,21 @@ StandardPage {
     AddCaveSurveyFileDialog {
         id: addCaveSurveyFileDialogId
 
-        onAttached: {
-            const newCave = addCaveSurveyFileDialogId.cave
-            if (newCave === null) {
+        onAttached: (sourceRoot) => {
+            if (sourceRoot === null) {
                 return
             }
-            pageId.nameCaveFromFileAndNavigate(
-                newCave, newCave.externalCenterline.entryFile)
+            RootData.pageSelectionModel.gotoPageByName(pageId.PageView.page,
+                                                       pageId.cavePageName(sourceRoot))
         }
 
         onImported: (importedTrip, sourcePath) => {
-            const newCave = addCaveSurveyFileDialogId.cave
+            const newCave = addCaveSurveyFileDialogId.importedCave
             if (newCave === null) {
                 return
             }
             importedTrip.name = newCave.uniqueTripName(pageId.baseNameOf(sourcePath))
             pageId.nameCaveFromFileAndNavigate(newCave, sourcePath)
-        }
-
-        onDismissed: {
-            const orphanCave = addCaveSurveyFileDialogId.cave
-            addCaveSurveyFileDialogId.cave = null
-            if (orphanCave === null) {
-                return
-            }
-            const index = RootData.region.indexOf(orphanCave)
-            if (index >= 0) {
-                RootData.region.removeCave(index)
-            }
         }
     }
 

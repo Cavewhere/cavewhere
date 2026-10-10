@@ -53,6 +53,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(QString defaultFixDatum READ defaultFixDatum NOTIFY defaultFixDatumChanged)
     Q_PROPERTY(cwEquateModel* equates READ equates CONSTANT)
     Q_PROPERTY(cwExternalSourceModel* externalSources READ externalSources CONSTANT)
+    Q_PROPERTY(cwSurveyNode* rootNode READ rootNode CONSTANT)
 
 public:
     enum Roles {

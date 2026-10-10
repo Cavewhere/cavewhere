@@ -16,6 +16,7 @@
 
 //Qt includes
 #include <QFuture>
+#include <QPointer>
 #include <QString>
 #include <QStringList>
 
@@ -23,7 +24,7 @@
 #include <atomic>
 #include <memory>
 
-class cwCave;
+class cwSurveyNode;
 class cwTrip;
 class cwSaveLoad;
 class cwExternalSourceSettings;
@@ -49,21 +50,9 @@ class cwExternalSourceSettings;
  */
 namespace cwExternalCenterlineAttach {
 
-/**
- * One Scope trip the cave-level attach created: a trip that owns no
- * chunks and no file, and whose stations come from filtering the
- * cave's solved network by its stationPrefix. An empty stationPrefix
- * names the whole-cave window, which owns every station of the cave no
- * sibling prefix claims (cwTrip::windowsWholeCave).
- */
-struct ScopeTripDescription {
-    QString name;          //!< The trip's name after uniqueTripName dedup
-    QString stationPrefix; //!< Dotted path of the block the trip windows into
-};
-
 struct AttachReport {
     cwExternalCenterlineScanner::ScanResult scan; //!< Copy of the scanner result
-    cwExternalCenterline persisted;               //!< Entry file that landed on the trip
+    cwExternalCenterline persisted;               //!< Entry file that landed on the owner
     QStringList warnings;                         //!< Scanner warnings + reconcile plan warnings
 
     /**
@@ -72,17 +61,13 @@ struct AttachReport {
      * value is still the default, so re-attach over user-edited
      * metadata never clobbers (master plan section 8.8 q4/q7). Fields
      * that were skipped stay empty here even when scan.seededMetadata
-     * carries them.
+     * carries them. Empty for a source root.
      */
     cwExternalCenterlineScanner::SeededTripMetadata metadata;
 
-    /**
-     * The Scope trips a cave-level attach created, in the scan's
-     * document order with the whole-cave window last. Empty for a trip
-     * attach, and empty for the blocks a replace kept - a trip that
-     * already windows a block is left exactly as it is.
-     */
-    QList<ScopeTripDescription> createdScopeTrips;
+    //! The source root a node-level attach created or refreshed; null for a
+    //! trip attach.
+    QPointer<cwSurveyNode> root;
 };
 
 /**
@@ -130,50 +115,95 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> detach(
     cwExternalSourceSettings* externalSourceSettings);
 
 /**
- * Cave-level attach: the same scan -> reconcile -> verify -> set model
- * pipeline as the trip overload, run against
- * saveLoad->externalCenterlineDir(cave), plus Scope-trip
- * auto-creation - one trip per scanned block that has at least one
- * station of its own, named from the block and carrying the block's
- * dotted path as its stationPrefix
- * (plans/EXTERNAL_FILE_PHASE3.html section 3.4). The created trips are
- * listed in AttachReport::createdScopeTrips.
+ * Source attach: scan sourceFile, then create a read-only source root under
+ * target (its kind from the scan's root row, a fresh source id, the copied
+ * entry file as its external centerline), copy the closure into
+ * saveLoad->externalCenterlineDir(root), write units.json beside the copy, add
+ * the root's cwExternalSource row, and build the subtree with
+ * reconcileSubtree. A lone .dat, .srv, or .svx is a one-node subtree: a
+ * CompassFile, WallsBook, or SurvexFile root holding its units.
  *
- * Refuses a cave that already holds trips while owning no attachment:
- * the cave-level verb is for a cave created for this file, and an
- * attached cave's exporter skips the trip loop, so native trips would
- * silently stop reaching the driver. Attaching over a cave that is
- * already attached is a replace - its trips are the Scope trips the
- * previous attach created - and reconciles against the new block set:
- * blocks that still have a trip keep it, new blocks get new trips, and
- * a trip whose block is gone stays in place with an empty station list
- * (section 5 q5).
- *
- * Metadata seeding stays trip-only; a cave has no date, team, or
- * calibration to seed.
+ * The root exists only from the moment the scan lands; a copy that fails
+ * removes it again. AttachReport::root names it on success. cancelFlag works
+ * as for the trip overload.
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
-    cwCave* cave,
+    cwSurveyNode* target,
     const QString& sourceFile,
     cwSaveLoad* saveLoad,
     cwExternalSourceSettings* externalSourceSettings,
     std::shared_ptr<std::atomic_bool> cancelFlag = nullptr);
 
 /**
- * Cave-level detach: remove every Scope trip the attach created that
- * the user never put chunks in, then clear the cave's
- * externalCenterline, remove the attachment dir, and drop the
- * breadcrumb - the trip detach's tail, with the cascade in front. A
- * Scope trip the user gave chunks to survives, carrying its data into
- * the now-Native cave.
- *
- * The cave itself survives as an empty Native cave with its name
- * (section 5 q7); removing the cave is the separate remove-cave flow.
+ * Replace and Reload on a source root: re-copy sourceFile's closure into the
+ * root's attachment dir (overwriting the copy and removing what the new
+ * closure drops), re-write units.json, and reconcile the subtree against the
+ * fresh scan. The root's exclusions carry over by exact source path. A node
+ * with an external centerline and no source record yet becomes a root here.
  */
-CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> detach(
-    cwCave* cave,
+CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> replace(
+    cwSurveyNode* root,
+    const QString& sourceFile,
+    cwSaveLoad* saveLoad,
+    cwExternalSourceSettings* externalSourceSettings,
+    std::shared_ptr<std::atomic_bool> cancelFlag = nullptr);
+
+/**
+ * Brings the derived nodes and trips under \a root in line with \a rows, the
+ * scan's pre-order tree:
+ *  - a node row matches the derived node with its sourcePath, or creates one;
+ *  - a unit row matches the derived trip with unitSourcePath(row), or creates
+ *    one, its date seeded from the row (a dateless row takes its nearest dated
+ *    ancestor's);
+ *  - a row whose path, or an ancestor's, is in \a exclusions is skipped, and
+ *    so is a missing file;
+ *  - a derived trip no row matches is removed when it holds no native content
+ *    (chunks, notes, LiDAR scans, sketches); a derived node no row matches is
+ *    removed when its subtree holds none, and otherwise stays and turns native;
+ *  - native nodes and trips (no source path) are never touched.
+ * New names go through uniqueChildName / uniqueTripName.
+ */
+CAVEWHERE_LIB_EXPORT void reconcileSubtree(cwSurveyNode* root,
+                                           const QList<cwScanRow>& rows,
+                                           const QStringList& exclusions);
+
+/**
+ * The source path a derived trip carries for a unit row: the row's own path
+ * for a unit-only row, and the row's path plus "/#own" for a node that is also
+ * a unit (a Survex block or root with shots of its own), so the trip's path
+ * names it apart from its node's - an empty root path included.
+ */
+CAVEWHERE_LIB_EXPORT QString unitSourcePath(const cwScanRow& row);
+
+//! True when \a sourcePath, or one of its '/'-separated ancestors, is listed.
+CAVEWHERE_LIB_EXPORT bool isExcluded(const QString& sourcePath, const QStringList& exclusions);
+
+/**
+ * Removes a source root through the ordinary node delete (removeNode, so
+ * nodesDeleted clears the breadcrumbs, and the node's directory Remove job
+ * takes the attachment dir inside it), drops its cwExternalSource row and its
+ * breadcrumb. The future reports an error when the attachment dir is still on
+ * disk once the job queue drains.
+ */
+CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> deleteSourceRoot(
+    cwSurveyNode* root,
     cwSaveLoad* saveLoad,
     cwExternalSourceSettings* externalSourceSettings);
+
+/**
+ * Hides a derived node or trip: the ordinary delete plus its source path
+ * appended to its source's exclusions, so Reload leaves it out. Refuses a
+ * source root, a native item, and an item whose source has no record.
+ */
+CAVEWHERE_LIB_EXPORT Monad::ResultBase hideDerived(QObject* nodeOrTrip);
+
+/**
+ * Clears the root's exclusions and reconciles its subtree against a fresh
+ * scan of the in-project copy, which recreates every hidden node and trip.
+ * units.json is re-written on the way.
+ */
+CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root,
+                                                              cwSaveLoad* saveLoad);
 
 } // namespace cwExternalCenterlineAttach
 

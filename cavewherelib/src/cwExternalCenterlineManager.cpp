@@ -37,9 +37,9 @@
 
 namespace {
 
-// The ownerKind an OwnerScanInput carries for a trip-level attachment. Only
-// those are harvested: a cave-level attachment's Scope trips read their
-// station names from the solved network instead. Compare-side spelling
+// The ownerKind an OwnerScanInput carries for a trip-level attachment; a
+// node owner carries its cwSurveyNodeKind name. Only trips are harvested
+// onto the owner itself. Compare-side spelling
 // only — comparing a QString against this allocates nothing, whereas passing
 // it to appendOwner's QString parameter would convert on every call.
 constexpr QLatin1StringView kTripOwnerKind("Trip");
@@ -217,18 +217,18 @@ void collectSourceWatchPaths(const cwExternalSourceSettings::SourceFingerprint& 
     }
 }
 
-// Deterministic presentation order: cave display name, then trip
-// display name (cave-level owners sort ahead of their trips via the
+// Deterministic presentation order: node display name, then trip
+// display name (node owners sort ahead of their node's trips via the
 // empty trip key), with ownerId as a stable tiebreak for duplicates.
 void sortAttachedRows(QVector<cwAttachedCenterlinesModel::Row>& rows)
 {
     std::stable_sort(rows.begin(), rows.end(),
                      [](const cwAttachedCenterlinesModel::Row& left,
                         const cwAttachedCenterlinesModel::Row& right) {
-        const QString leftTripKey = left.ownerKind == QStringLiteral("Cave")
-            ? QString() : left.ownerName;
-        const QString rightTripKey = right.ownerKind == QStringLiteral("Cave")
-            ? QString() : right.ownerName;
+        const QString leftTripKey = left.ownerKind == kTripOwnerKind
+            ? left.ownerName : QString();
+        const QString rightTripKey = right.ownerKind == kTripOwnerKind
+            ? right.ownerName : QString();
         return std::tie(left.caveName, leftTripKey, left.ownerId)
              < std::tie(right.caveName, rightTripKey, right.ownerId);
     });
@@ -612,7 +612,8 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
                         node->externalCenterline().entryFile(),
                         node->name(),
                         node->name(),
-                        QStringLiteral("Cave"));
+                        QString::fromLatin1(QMetaEnum::fromType<cwSurveyNodeKind::Kind>()
+                                                .valueToKey(static_cast<int>(node->kind()))));
         }
         for (const cwTrip* trip : node->trips()) {
             if (!trip->externalCenterline().isEmpty()) {
@@ -1164,20 +1165,13 @@ void cwExternalCenterlineManager::onWatchedFileChanged(const QString& path)
     recomputeWatchSet();
 }
 
-template<typename OwnerT>
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::attachCenterlineForOwner(OwnerT* owner,
-                                                      const QString& sourcePath,
-                                                      const QString& ownerNoun)
+cwExternalCenterlineManager::runAttachOperation(const QUuid& ownerId,
+                                                const QString& ownerNoun,
+                                                const AttachStarter& start)
 {
     using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
 
-    if (owner == nullptr) {
-        return refuseOperation<ReportResult>(
-            &cwExternalCenterlineManager::attachCompleted, QUuid(),
-            QStringLiteral("attach: %1 is null").arg(ownerNoun));
-    }
-    const QUuid ownerId = owner->id();
     if (isOwnerBusy(ownerId)) {
         return refuseOperation<ReportResult>(
             &cwExternalCenterlineManager::attachCompleted, ownerId,
@@ -1189,9 +1183,7 @@ cwExternalCenterlineManager::attachCenterlineForOwner(OwnerT* owner,
     auto guard = std::make_shared<OperationGuard>(
         this, ownerId, OperationKind::Attach, cancelFlag,
         &cwExternalCenterlineManager::attachCompleted);
-    auto future = cwExternalCenterlineAttach::attach(
-        owner, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
-        std::move(cancelFlag));
+    auto future = start(std::move(cancelFlag));
     // The canceled path (project retired mid-attach, or cancelAttach
     // landing before the scan) must still release the token.
     AsyncFuture::observe(future).context(this,
@@ -1203,8 +1195,11 @@ cwExternalCenterlineManager::attachCenterlineForOwner(OwnerT* owner,
             m_solveOnScanApply = true;
             recomputeWatchSet();
             const auto& attachReport = result.value();
+            const QUuid sourceRootId =
+                attachReport.root.isNull() ? QUuid() : attachReport.root->id();
             guard->finish(cwExternalCenterlineReport::succeeded(
-                ownerId, attachReport.persisted.entryFile(), attachReport.warnings));
+                ownerId, attachReport.persisted.entryFile(), attachReport.warnings,
+                sourceRootId));
         } else {
             guard->finish(cwExternalCenterlineReport::failed(
                 ownerId, result.errorMessage()));
@@ -1216,44 +1211,14 @@ cwExternalCenterlineManager::attachCenterlineForOwner(OwnerT* owner,
     return future;
 }
 
-template<typename OwnerT>
-QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::replaceCenterlineForOwner(OwnerT* owner,
-                                                       const QString& sourcePath,
-                                                       const QString& ownerNoun)
-{
-    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
-
-    if (owner != nullptr && owner->externalCenterline().isEmpty()) {
-        return refuseOperation<ReportResult>(
-            &cwExternalCenterlineManager::attachCompleted, owner->id(),
-            QStringLiteral("replace: this %1 has no attached centerline to replace")
-                .arg(ownerNoun));
-    }
-
-    // Attach already is replace: its reconcile copies the new closure
-    // into the owner's existing attachment dir and GCs whatever the new
-    // entry file stops referencing, and for a cave its Scope-trip
-    // reconcile keeps the trips whose blocks survive. It also owns the
-    // null-owner and busy-owner refusals, so the nothing-attached guard
-    // above is the only one replace adds.
-    return attachCenterlineForOwner(owner, sourcePath, ownerNoun);
-}
-
-template<typename OwnerT>
 QFuture<Monad::ResultBase>
-cwExternalCenterlineManager::detachCenterlineForOwner(OwnerT* owner,
-                                                      const QString& ownerNoun,
-                                                      QHash<QUuid, QString>& attachmentDirs)
+cwExternalCenterlineManager::runDetachOperation(const QUuid& ownerId,
+                                                const QString& ownerNoun,
+                                                QHash<QUuid, QString>& attachmentDirs,
+                                                const std::function<QFuture<Monad::ResultBase>()>& start)
 {
     using Monad::ResultBase;
 
-    if (owner == nullptr) {
-        return refuseOperation<ResultBase>(
-            &cwExternalCenterlineManager::detachCompleted, QUuid(),
-            QStringLiteral("detach: %1 is null").arg(ownerNoun));
-    }
-    const QUuid ownerId = owner->id();
     if (isOwnerBusy(ownerId)) {
         return refuseOperation<ResultBase>(
             &cwExternalCenterlineManager::detachCompleted, ownerId,
@@ -1268,16 +1233,15 @@ cwExternalCenterlineManager::detachCenterlineForOwner(OwnerT* owner,
     // Queued-invoke hole (commit-7 review): anything already queued behind
     // this call would otherwise still see the owner's attachment dir and
     // could write into it. Drop the map entry in the same synchronous block
-    // as detach()'s settings and model clears, so a late caller finds the
-    // owner unattached rather than half-detached.
+    // as the operation's settings and model clears, so a late caller finds
+    // the owner unattached rather than half-detached.
     attachmentDirs.remove(ownerId);
 
-    auto future = cwExternalCenterlineAttach::detach(
-        owner, m_saveLoad.data(), m_externalSourceSettings.data());
+    auto future = start();
     AsyncFuture::observe(future).context(this,
             [this, guard, ownerId](const ResultBase& result) {
-        // Recompute once the remove-tree has drained, so the scan sees the
-        // dir gone, and request the solve that drops the owner's *include.
+        // Recompute once the remove has drained, so the scan sees the dir
+        // gone, and request the solve that drops the owner's *include.
         m_solveOnScanApply = true;
         recomputeWatchSet();
         if (!result.hasError()) {
@@ -1296,30 +1260,142 @@ cwExternalCenterlineManager::detachCenterlineForOwner(OwnerT* owner,
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
 cwExternalCenterlineManager::attachCenterline(cwTrip* trip, const QString& sourcePath)
 {
-    return attachCenterlineForOwner(trip, sourcePath, QStringLiteral("trip"));
+    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
+
+    if (trip == nullptr) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, QUuid(),
+            QStringLiteral("attach: trip is null"));
+    }
+    return runAttachOperation(trip->id(), QStringLiteral("trip"),
+                              [this, trip, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag) {
+        return cwExternalCenterlineAttach::attach(
+            trip, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
+            std::move(cancelFlag));
+    });
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
 cwExternalCenterlineManager::replaceCenterline(cwTrip* trip, const QString& sourcePath)
 {
-    return replaceCenterlineForOwner(trip, sourcePath, QStringLiteral("trip"));
+    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
+
+    if (trip != nullptr && trip->externalCenterline().isEmpty()) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, trip->id(),
+            QStringLiteral("replace: this trip has no attached centerline to replace"));
+    }
+
+    // Attach already is replace for a trip: its reconcile copies the new
+    // closure into the owner's existing attachment dir and GCs whatever the
+    // new entry file stops referencing. It also owns the null-owner and
+    // busy-owner refusals, so the nothing-attached guard above is the only
+    // one replace adds.
+    return attachCenterline(trip, sourcePath);
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::attachCenterline(cwCave* cave, const QString& sourcePath)
+cwExternalCenterlineManager::attachSource(cwSurveyNode* target, const QString& sourcePath)
 {
-    return attachCenterlineForOwner(cave, sourcePath, QStringLiteral("cave"));
+    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
+
+    if (target == nullptr) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, QUuid(),
+            QStringLiteral("attach: target node is null"));
+    }
+    return runAttachOperation(target->id(), QStringLiteral("node"),
+                              [this, target, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag) {
+        return cwExternalCenterlineAttach::attach(
+            target, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
+            std::move(cancelFlag));
+    });
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::replaceCenterline(cwCave* cave, const QString& sourcePath)
+cwExternalCenterlineManager::replaceSource(cwSurveyNode* root, const QString& sourcePath)
 {
-    return replaceCenterlineForOwner(cave, sourcePath, QStringLiteral("cave"));
+    using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
+
+    if (root == nullptr) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, QUuid(),
+            QStringLiteral("replace: source root is null"));
+    }
+    if (root->externalCenterline().isEmpty()) {
+        return refuseOperation<ReportResult>(
+            &cwExternalCenterlineManager::attachCompleted, root->id(),
+            QStringLiteral("replace: this node has no attached survey file to replace"));
+    }
+    return runAttachOperation(root->id(), QStringLiteral("source root"),
+                              [this, root, sourcePath](std::shared_ptr<std::atomic_bool> cancelFlag) {
+        return cwExternalCenterlineAttach::replace(
+            root, sourcePath, m_saveLoad.data(), m_externalSourceSettings.data(),
+            std::move(cancelFlag));
+    });
 }
 
-QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwCave* cave)
+QFuture<Monad::ResultBase> cwExternalCenterlineManager::deleteSourceRoot(cwSurveyNode* root)
 {
-    return detachCenterlineForOwner(cave, QStringLiteral("cave"), m_caveAttachmentDirs);
+    using Monad::ResultBase;
+
+    if (root == nullptr) {
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::detachCompleted, QUuid(),
+            QStringLiteral("delete: source root is null"));
+    }
+    return runDetachOperation(root->id(), QStringLiteral("source root"), m_caveAttachmentDirs,
+                              [this, root]() {
+        return cwExternalCenterlineAttach::deleteSourceRoot(
+            root, m_saveLoad.data(), m_externalSourceSettings.data());
+    });
+}
+
+bool cwExternalCenterlineManager::hideDerived(QObject* nodeOrTrip)
+{
+    const bool hidden = !cwExternalCenterlineAttach::hideDerived(nodeOrTrip).hasError();
+    if (hidden) {
+        m_solveOnScanApply = true;
+        recomputeWatchSet();
+    }
+    return hidden;
+}
+
+QFuture<Monad::ResultBase> cwExternalCenterlineManager::restoreHidden(cwSurveyNode* root)
+{
+    using Monad::ResultBase;
+
+    if (root == nullptr) {
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::attachCompleted, QUuid(),
+            QStringLiteral("restore: source root is null"));
+    }
+    const QUuid rootId = root->id();
+    if (isOwnerBusy(rootId)) {
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::attachCompleted, rootId,
+            QStringLiteral("restore: another operation for this source root is still in progress"));
+    }
+
+    auto guard = std::make_shared<OperationGuard>(
+        this, rootId, OperationKind::Attach, nullptr,
+        &cwExternalCenterlineManager::attachCompleted);
+    auto future = cwExternalCenterlineAttach::restoreHidden(root, m_saveLoad.data());
+    AsyncFuture::observe(future).context(this,
+            [this, guard, rootId](const ResultBase& result) {
+        if (!result.hasError()) {
+            // Restored derived trips need the recompute's station push and solve.
+            m_solveOnScanApply = true;
+            recomputeWatchSet();
+        }
+        guard->finish(result.hasError()
+                          ? cwExternalCenterlineReport::failed(rootId, result.errorMessage())
+                          : cwExternalCenterlineReport::succeeded(rootId));
+    },
+            [guard, rootId]() {
+        guard->finish(cwExternalCenterlineReport::wasCanceled(rootId));
+    });
+    return future;
 }
 
 template<typename OwnerT>
@@ -1355,14 +1431,16 @@ bool cwExternalCenterlineManager::canReloadFromSource(cwTrip* trip) const
     return !reloadSourcePathForOwner(trip).isEmpty();
 }
 
-bool cwExternalCenterlineManager::canReloadFromSource(cwCave* cave) const
+bool cwExternalCenterlineManager::canReloadFromSource(cwSurveyNode* root) const
 {
-    return !reloadSourcePathForOwner(cave).isEmpty();
+    return !reloadSourcePathForOwner(root).isEmpty();
 }
 
-template<typename OwnerT>
+template<typename OwnerT, typename ReplaceFn>
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::reloadFromSourceForOwner(OwnerT* owner, const QString& ownerNoun)
+cwExternalCenterlineManager::reloadFromSourceForOwner(OwnerT* owner,
+                                                      const QString& ownerNoun,
+                                                      ReplaceFn replace)
 {
     using ReportResult = Monad::Result<cwExternalCenterlineAttach::AttachReport>;
 
@@ -1387,19 +1465,25 @@ cwExternalCenterlineManager::reloadFromSourceForOwner(OwnerT* owner, const QStri
             QStringLiteral("reload: this machine has no source file to copy from"));
     }
 
-    return replaceCenterlineForOwner(owner, sourcePath, ownerNoun);
+    return replace(owner, sourcePath);
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
 cwExternalCenterlineManager::reloadFromSource(cwTrip* trip)
 {
-    return reloadFromSourceForOwner(trip, QStringLiteral("trip"));
+    return reloadFromSourceForOwner(trip, QStringLiteral("trip"),
+                                    [this](cwTrip* owner, const QString& path) {
+        return replaceCenterline(owner, path);
+    });
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwExternalCenterlineManager::reloadFromSource(cwCave* cave)
+cwExternalCenterlineManager::reloadFromSource(cwSurveyNode* root)
 {
-    return reloadFromSourceForOwner(cave, QStringLiteral("cave"));
+    return reloadFromSourceForOwner(root, QStringLiteral("source root"),
+                                    [this](cwSurveyNode* owner, const QString& path) {
+        return replaceSource(owner, path);
+    });
 }
 
 cwTrip* cwExternalCenterlineManager::tripForOwner(const QUuid& ownerId) const
@@ -1416,7 +1500,7 @@ cwTrip* cwExternalCenterlineManager::tripForOwner(const QUuid& ownerId) const
     return nullptr;
 }
 
-cwCave* cwExternalCenterlineManager::caveForOwner(const QUuid& ownerId) const
+cwSurveyNode* cwExternalCenterlineManager::nodeForOwner(const QUuid& ownerId) const
 {
     if (m_region.isNull()) {
         return nullptr;
@@ -1424,7 +1508,7 @@ cwCave* cwExternalCenterlineManager::caveForOwner(const QUuid& ownerId) const
 
     for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
         if (node->id() == ownerId) {
-            return qobject_cast<cwCave*>(node);
+            return node;
         }
     }
     return nullptr;
@@ -1436,8 +1520,8 @@ void cwExternalCenterlineManager::updateFromSource(const QUuid& ownerId)
         reloadFromSource(trip);
         return;
     }
-    if (cwCave* cave = caveForOwner(ownerId)) {
-        reloadFromSource(cave);
+    if (cwSurveyNode* root = nodeForOwner(ownerId)) {
+        reloadFromSource(root);
     }
 }
 
@@ -1462,9 +1546,21 @@ QList<cwExternalSourceAttentionRow> cwExternalCenterlineManager::sourcesNeedingA
             continue;
         }
 
+        // A source root stands for its whole subtree, so its row counts the
+        // nodes the attachment built.
+        QString ownerName = attached.ownerName;
+        if (attached.ownerKind != kTripOwnerKind) {
+            if (const cwSurveyNode* root = nodeForOwner(attached.ownerId)) {
+                const int nodeCount = root->allNodes().size() + 1;
+                if (nodeCount > 1) {
+                    ownerName = tr("%1 (%n nodes)", nullptr, nodeCount).arg(ownerName);
+                }
+            }
+        }
+
         sources.append(cwExternalSourceAttentionRow(
             attached.ownerId.toString(QUuid::WithoutBraces),
-            attached.ownerName,
+            ownerName,
             attached.ownerKind,
             attached.caveName,
             statusRow.sourcePath,
@@ -1487,6 +1583,16 @@ void cwExternalCenterlineManager::cancelAttach(const QUuid& ownerId)
 
 QFuture<Monad::ResultBase> cwExternalCenterlineManager::detachCenterline(cwTrip* trip)
 {
-    return detachCenterlineForOwner(trip, QStringLiteral("trip"), m_tripAttachmentDirs);
-}
+    using Monad::ResultBase;
 
+    if (trip == nullptr) {
+        return refuseOperation<ResultBase>(
+            &cwExternalCenterlineManager::detachCompleted, QUuid(),
+            QStringLiteral("detach: trip is null"));
+    }
+    return runDetachOperation(trip->id(), QStringLiteral("trip"), m_tripAttachmentDirs,
+                              [this, trip]() {
+        return cwExternalCenterlineAttach::detach(
+            trip, m_saveLoad.data(), m_externalSourceSettings.data());
+    });
+}

@@ -9,7 +9,6 @@
 #define CWEXTERNALCENTERLINEMANAGER_H
 
 //Our includes
-class cwCave;
 class cwCavingRegion;
 class cwSaveLoad;
 class cwSurveyChunkSignaler;
@@ -38,6 +37,7 @@ class cwTrip;
 
 //Std includes
 #include <atomic>
+#include <functional>
 #include <memory>
 
 QT_FORWARD_DECLARE_CLASS(QFileSystemWatcher)
@@ -154,36 +154,31 @@ public:
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     replaceCenterline(cwTrip* trip, const QString& sourcePath);
 
-    // Cave-level attach / replace / detach, the same three verbs run
-    // against a cave owner: one busy token per cave id, one scan →
-    // reconcile → verify pass into the cave's attachment dir, and the
-    // Scope-trip auto-creation the orchestrator does on the way
-    // (plans/EXTERNAL_FILE_PHASE3.html §3.4). Attach refuses a cave that
-    // already holds trips while owning no attachment — the cave-level
-    // verb is for a cave created for this file — while replace runs on a
-    // cave whose trips are the Scope trips a previous attach created and
-    // reconciles them against the new block set. Detach cascades the
-    // empty Scope trips away and leaves a Native cave holding only the
-    // trips the user put chunks or notes in.
+    // Source-root verbs (W7): a sourced subtree is one owner, its root node,
+    // with one busy token per root id. attachSource creates the root under
+    // target and builds the subtree; its busy token and report are keyed on
+    // target's id while the root does not exist yet, and the success report
+    // names the root through sourceRootId. replaceSource re-copies into the
+    // root's attachment dir and reconciles the subtree, so derived records the
+    // new file still lists keep their identity and native records are never
+    // touched.
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    attachCenterline(cwCave* cave, const QString& sourcePath);
+    attachSource(cwSurveyNode* target, const QString& sourcePath);
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    replaceCenterline(cwCave* cave, const QString& sourcePath);
-    QFuture<Monad::ResultBase> detachCenterline(cwCave* cave);
+    replaceSource(cwSurveyNode* root, const QString& sourcePath);
 
     // Re-copies the file this owner was last attached (or replaced) from
-    // into the project, through replaceCenterline — one scan → reconcile →
-    // GC → re-solve pass that brings the in-project copy back in line with
-    // its origin. The source is the breadcrumb this manager looks up
-    // itself, so QML asks for the verb rather than naming a path. Refuses a
-    // null owner, a busy owner, and an owner with no reloadable source, each
-    // through the attach bridge like every other refusal. For a cave the
-    // reload runs the cave replace, so the Scope trips are reconciled
-    // against the fresh block set on the way through.
+    // into the project — the replace verb with the breadcrumb as its path,
+    // one scan → reconcile → GC → re-solve pass that brings the in-project
+    // copy back in line with its origin. The source is the breadcrumb this
+    // manager looks up itself, so QML asks for the verb rather than naming
+    // a path. Refuses a null owner, a busy owner, and an owner with no
+    // reloadable source, each through the attach bridge like every other
+    // refusal. For a source root the subtree is reconciled on the way.
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     reloadFromSource(cwTrip* trip);
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    reloadFromSource(cwCave* cave);
+    reloadFromSource(cwSurveyNode* root);
 
     // True when reloadFromSource has a file to copy: this machine
     // remembers where the copy came from, that file is on disk here, and it
@@ -193,7 +188,20 @@ public:
     // the UI's own refresh points — the answer follows the disk, so it has
     // no change signal.
     Q_INVOKABLE bool canReloadFromSource(cwTrip* trip) const;
-    Q_INVOKABLE bool canReloadFromSource(cwCave* cave) const;
+    Q_INVOKABLE bool canReloadFromSource(cwSurveyNode* root) const;
+
+    // Deletes a source root: the ordinary node delete, which takes the
+    // subtree, its native trips, and the attachment dir, plus the root's
+    // cwExternalSource row. Reports through detachCompleted.
+    QFuture<Monad::ResultBase> deleteSourceRoot(cwSurveyNode* root);
+
+    // Hides a derived node or trip (cwExternalCenterlineAttach::hideDerived);
+    // returns false, leaving the tree as it was, for anything else.
+    Q_INVOKABLE bool hideDerived(QObject* nodeOrTrip);
+
+    // Clears a source root's exclusions and reconciles, which brings every
+    // hidden node and trip back. Reports through attachCompleted.
+    QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root);
 
     // Re-copies ownerId's remembered source into the project, the same
     // overwrite path the trip panel's Reload runs — the verb the app
@@ -618,47 +626,47 @@ private:
         return AsyncFuture::completed(ResultT(error));
     }
 
-    // The attach, replace, and detach verbs, written once for both owner
-    // kinds: a cave and a trip differ only in the noun their refusal
-    // messages use, which attachment-dir map a detach drops the owner
-    // from, and which cwExternalCenterlineAttach overload the owner
-    // resolves to. Everything else — the busy token, the cancel seam, the
-    // recompute-and-solve continuation, and the completion report — is one
-    // body, so the two owner kinds cannot drift apart.
-    template<typename OwnerT>
-    QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    attachCenterlineForOwner(OwnerT* owner, const QString& sourcePath,
-                             const QString& ownerNoun);
+    // Starts one attach-shaped operation (attach, replace, reload) with the
+    // cancel flag the busy token holds.
+    using AttachStarter = std::function<QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>(
+        std::shared_ptr<std::atomic_bool>)>;
 
-    template<typename OwnerT>
+    // The attach-shaped verbs, written once for every owner: the busy
+    // refusal, the busy token and cancel seam, the recompute-and-solve
+    // continuation, and the completion report are one body, so the owner
+    // kinds cannot drift apart. ownerId keys the token and the report.
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    replaceCenterlineForOwner(OwnerT* owner, const QString& sourcePath,
-                              const QString& ownerNoun);
+    runAttachOperation(const QUuid& ownerId, const QString& ownerNoun,
+                       const AttachStarter& start);
 
-    template<typename OwnerT>
+    // The detach-shaped verbs (trip detach, source-root delete): the same
+    // shape, reported through detachCompleted. The owner's attachment-dir
+    // entry is dropped before the operation starts, so anything queued
+    // behind it finds the owner unattached.
     QFuture<Monad::ResultBase>
-    detachCenterlineForOwner(OwnerT* owner, const QString& ownerNoun,
-                             QHash<QUuid, QString>& attachmentDirs);
+    runDetachOperation(const QUuid& ownerId, const QString& ownerNoun,
+                       QHash<QUuid, QString>& attachmentDirs,
+                       const std::function<QFuture<Monad::ResultBase>()>& start);
 
     // The file reloadFromSource would copy for `owner`, or an empty string
     // when this machine has none — the one place the eligibility rules
     // live, shared by the verb and canReloadFromSource, and written once
-    // for both owner kinds so a cave and a trip answer the same rules.
+    // for both owner kinds so a source root and a trip answer the same rules.
     template<typename OwnerT>
     QString reloadSourcePathForOwner(const OwnerT* owner) const;
 
     // The reload verb for both owner kinds: the three refusals (null owner,
     // busy owner, no reloadable source) with the noun the message names,
-    // ending in the owner's replace.
-    template<typename OwnerT>
+    // ending in the owner kind's replace.
+    template<typename OwnerT, typename ReplaceFn>
     QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    reloadFromSourceForOwner(OwnerT* owner, const QString& ownerNoun);
+    reloadFromSourceForOwner(OwnerT* owner, const QString& ownerNoun, ReplaceFn replace);
 
-    // The live trip or cave carrying ownerId, or null when this region has
+    // The live trip or node carrying ownerId, or null when this region has
     // none — the lookup the id-keyed verbs need to reach the object-shaped
     // API.
     cwTrip* tripForOwner(const QUuid& ownerId) const;
-    cwCave* caveForOwner(const QUuid& ownerId) const;
+    cwSurveyNode* nodeForOwner(const QUuid& ownerId) const;
 
     // Rebuilds both attachment-dir maps wholesale from the region walk
     // via cwSaveLoad::externalCenterlineDir (pure path math, no disk

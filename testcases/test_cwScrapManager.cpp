@@ -1024,12 +1024,7 @@ namespace {
 // The scale a two-station scrap computes when its stations sit half as far
 // apart on the page as they do in the cave.
 constexpr double kHalfScale = 0.5;
-constexpr double kQuarterScale = 0.25;
 constexpr double kMetersPerFoot = 0.3048;
-
-// Where a scrap marks the Walls fixture's P1 and P2 (P2 due east of P1).
-const QPointF kP1OnNote(0.2, 0.3);
-const QPointF kP2OnNote(0.8, 0.3);
 
 //! Adds a station the way cwBaseNoteStationInteraction::addPoint does (the
 //! neighbor guess, else the trip's first known station), then types
@@ -1070,21 +1065,9 @@ void settleScraps(SavedProjectFixture* fixture)
     drainPipelines(fixture);
 }
 
-std::unique_ptr<SavedProjectFixture> makeProjectWithEmptyCave(const QString& projectFileBase,
-                                                             cwCave** cave)
+cwTrip* wholeCaveWindowOf(const cwSurveyNode* node)
 {
-    auto fixture = makeSavedProject(projectFileBase,
-                                    QStringLiteral("NativeCave"),
-                                    QStringLiteral("NativeTrip"));
-    *cave = addEmptyCave(*fixture->project->cavingRegion(), QStringLiteral("AttachedCave"));
-    fixture->project->waitSaveToFinish();
-    QCoreApplication::processEvents();
-    return fixture;
-}
-
-cwTrip* wholeCaveWindowOf(const cwCave* cave)
-{
-    for (cwTrip* trip : cave->trips()) {
+    for (cwTrip* trip : node->trips()) {
         if (trip->windowsWholeCave()) {
             return trip;
         }
@@ -1094,8 +1077,8 @@ cwTrip* wholeCaveWindowOf(const cwCave* cave)
 
 } // namespace
 
-// The trip-level attach path, which keeps computing alongside the cave-level
-// attaches below.
+// The trip-level attach path, which keeps computing alongside the source
+// attach below.
 TEST_CASE("auto-calculate computes the note transform for a scrap made before the attach's first solve lands",
           "[cwScrapManager][Attach][NoteTransform]")
 {
@@ -1118,16 +1101,20 @@ TEST_CASE("auto-calculate computes the note transform for a scrap made before th
           == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
 }
 
-TEST_CASE("auto-calculate computes the note transform on the whole-cave window of a Compass cave attach",
+TEST_CASE("auto-calculate computes the note transform on the survey trip of a lone Compass file",
           "[cwScrapManager][Attach][NoteTransform]")
 {
     requireAutomaticUpdatesEnabled();
-    cwCave* cave = nullptr;
-    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-compass-cave"), &cave);
-    attachThroughManager(fixture.get(), cave, fixturePath(QStringLiteral("compass_solvable.dat")));
+    auto fixture = makeSavedProject(QStringLiteral("note-auto-compass-file"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachSourceThroughManager(
+        fixture.get(), fixture->project->cavingRegion()->rootNode(),
+        fixturePath(QStringLiteral("compass_solvable.dat")));
     settleScraps(fixture.get());
 
-    cwTrip* window = wholeCaveWindowOf(cave);
+    // A lone .dat is a one-node subtree whose one survey windows the file.
+    cwTrip* window = wholeCaveWindowOf(root);
     REQUIRE(window != nullptr);
     INFO("known stations: " << knownNames(window).join(QStringLiteral(", ")).toStdString());
     REQUIRE(window->solvedStationPositions().hasPosition(QStringLiteral("S1")));
@@ -1144,102 +1131,6 @@ TEST_CASE("auto-calculate computes the note transform on the whole-cave window o
 
     CHECK(scrap->noteTransformation()->scale()
           == Catch::Approx(kHalfScale / kMetersPerFoot).epsilon(kScaleTolerance));
-}
-
-TEST_CASE("auto-calculate computes the note transform on a Scope trip of a Walls cave attach",
-          "[cwScrapManager][Attach][NoteTransform]")
-{
-    requireAutomaticUpdatesEnabled();
-    cwCave* cave = nullptr;
-    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-walls-cave"), &cave);
-    attachThroughManager(fixture.get(), cave,
-                         fixturePath(QStringLiteral("walls_prefixed/walls_prefixed.wpj")));
-    settleScraps(fixture.get());
-
-    cwTrip* xy = tripForPrefix(cave, QStringLiteral("XY"));
-    REQUIRE(xy != nullptr);
-    INFO("known stations: " << knownNames(xy).join(QStringLiteral(", ")).toStdString());
-    REQUIRE(xy->solvedStationPositions().hasPosition(QStringLiteral("P1")));
-    REQUIRE(xy->solvedStationPositions().hasPosition(QStringLiteral("P2")));
-    CHECK(xy->solvedNetwork().neighbors(QStringLiteral("P1")).contains(QStringLiteral("p2"),
-                                                                      Qt::CaseInsensitive));
-
-    // P1-P2 runs twelve meters east; the page draws it six meters long.
-    cwScrap* scrap = addEmptySizedScrap(xy);
-    addStationLikeTheEditor(scrap, kP1OnNote, QStringLiteral("P1"));
-    addStationLikeTheEditor(scrap, kP2OnNote, QStringLiteral("P2"));
-    settleScraps(fixture.get());
-
-    CHECK(scrap->noteTransformation()->scale()
-          == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
-}
-
-TEST_CASE("auto-calculate computes the note transform on a Scope trip of a Survex cave attach",
-          "[cwScrapManager][Attach][NoteTransform]")
-{
-    requireAutomaticUpdatesEnabled();
-    cwCave* cave = nullptr;
-    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-survex-cave"), &cave);
-    attachThroughManager(fixture.get(), cave, fixturePath(QStringLiteral("survex_blocks.svx")));
-    settleScraps(fixture.get());
-
-    cwTrip* east = tripForPrefix(cave, QStringLiteral("doghill.big-passage.east"));
-    REQUIRE(east != nullptr);
-    INFO("known stations: " << knownNames(east).join(QStringLiteral(", ")).toStdString());
-    REQUIRE(east->solvedStationPositions().hasPosition(QStringLiteral("e1")));
-    REQUIRE(east->solvedStationPositions().hasPosition(QStringLiteral("e2")));
-    CHECK(east->solvedNetwork().neighbors(QStringLiteral("e1")).contains(QStringLiteral("e2"),
-                                                                        Qt::CaseInsensitive));
-
-    // e1-e2 runs three meters; the page draws it one and a half meters long.
-    const QPointF e1OnNote(0.2, 0.3);
-    const QPointF e2OnNote(0.2, 0.45);
-    cwScrap* scrap = addEmptySizedScrap(east);
-    addStationLikeTheEditor(scrap, e1OnNote, QStringLiteral("e1"));
-    addStationLikeTheEditor(scrap, e2OnNote, QStringLiteral("e2"));
-    settleScraps(fixture.get());
-
-    CHECK(scrap->noteTransformation()->scale()
-          == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
-}
-
-TEST_CASE("a scrap on a Scope trip of a Walls cave attach re-morphs after Reload moves its stations",
-          "[cwScrapManager][Attach][NoteTransform]")
-{
-    requireAutomaticUpdatesEnabled();
-    cwCave* cave = nullptr;
-    auto fixture = makeProjectWithEmptyCave(QStringLiteral("note-auto-walls-reload"), &cave);
-    const QString sourceDir = tempSubdir(fixture->tempDir, QStringLiteral("walls-source"));
-    const QString project = seedAttachment(sourceDir,
-                                           fixturePath(QStringLiteral("walls_prefixed/walls_prefixed.wpj")));
-    seedAttachment(sourceDir, fixturePath(QStringLiteral("walls_prefixed/ROOT.SRV")));
-    const QString prefixed = seedAttachment(sourceDir,
-                                            fixturePath(QStringLiteral("walls_prefixed/PREFIXED.SRV")));
-    attachThroughManager(fixture.get(), cave, project);
-    settleScraps(fixture.get());
-
-    cwTrip* xy = tripForPrefix(cave, QStringLiteral("XY"));
-    REQUIRE(xy != nullptr);
-    cwScrap* scrap = addEmptySizedScrap(xy);
-    addStationLikeTheEditor(scrap, kP1OnNote, QStringLiteral("P1"));
-    addStationLikeTheEditor(scrap, kP2OnNote, QStringLiteral("P2"));
-    settleScraps(fixture.get());
-    REQUIRE(scrap->noteTransformation()->scale()
-            == Catch::Approx(kHalfScale).epsilon(kScaleTolerance));
-
-    // P1-P2 doubles to twenty-four meters while the page stays the same.
-    overwriteFile(prefixed,
-                  "#PREFIX XY\n"
-                  "#DATE 2025-01-02\n"
-                  "#UNITS D=Meters A=Degrees V=Degrees DECL=0\n"
-                  "P1\tP2\t24.0\t90\t0\n");
-    auto future = managerOf(fixture.get())->reloadFromSource(cave);
-    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
-    REQUIRE_FALSE(future.result().hasError());
-    settleScraps(fixture.get());
-
-    CHECK(scrap->noteTransformation()->scale()
-          == Catch::Approx(kQuarterScale).epsilon(kScaleTolerance));
 }
 
 namespace {

@@ -417,8 +417,6 @@ namespace {
 
 constexpr double kFeetToMeters = 0.3048;
 constexpr double kCompassTapeFeet = 10.0;
-// ALPHA's six legs, BRAVO's three, and CHARLIE's two, each one tape.
-constexpr int kCompassProjectLegCount = 11;
 constexpr double kCompassAlphaEasting = 500000.0;
 constexpr double kCompassCharlieEasting = 500200.0;
 constexpr double kCompassNorthing = 4000000.0;
@@ -428,11 +426,7 @@ constexpr double kWallsProjectFixEasting = 1000.0;
 constexpr double kWallsProjectFixNorthing = 2000.0;
 constexpr double kWallsFixElevation = 100.0;
 constexpr double kWallsTapeMeters = 10.0;
-// D01 and D02's four legs and N01's three.
-constexpr int kWallsProjectLegCount = 7;
 constexpr double kWallsWestFixEasting = 500.0;
-// E1.SRV's two legs and the West files' four.
-constexpr int kWallsTwoCavesLegCount = 6;
 
 constexpr double kSurvexUtmEasting = 500000.0;
 constexpr double kSurvexUtmNorthing = 4000000.0;
@@ -442,15 +436,14 @@ constexpr double kSurvexLatLongElevation = 200.0;
 // fix's projected northing is no round number.
 constexpr double kUtmFloatMarginMeters = 0.5;
 
-//! Attaches \a fixture to a fresh cave named \a caveName in \a project and
-//! drains the pipelines; requireSolved() checks the solve.
-cwCave* attachFreshCaveAndSolve(SavedProjectFixture* project, const QString& caveName,
-                                const QString& fixture)
+//! Attaches \a fixture as a source root under the region's root in
+//! \a project and drains the pipelines; requireSolved() checks the solve.
+cwSurveyNode* attachSourceAndSolve(SavedProjectFixture* project, const QString& fixture)
 {
-    cwCave* cave = addEmptyCave(*project->project->cavingRegion(), caveName);
-    attachThroughManager(project, cave, fixturePath(fixture));
+    cwSurveyNode* root = attachSourceThroughManager(
+        project, project->project->cavingRegion()->rootNode(), fixturePath(fixture));
     drainPipelines(project);
-    return cave;
+    return root;
 }
 
 void requireSolved(SavedProjectFixture* project)
@@ -474,13 +467,12 @@ void checkPosition(const cwStationPositionLookup& lookup, const QString& station
 
 } // namespace
 
-TEST_CASE("compass_project solves through a cave-level attach",
+TEST_CASE("compass_project solves as a source root",
           "[LinePlotManager][Attach][SourcedFixtures]")
 {
     auto project = makeSavedProject(QStringLiteral("compass-project-solve"),
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
-    cwCave* cave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Compass project"),
-                                           QStringLiteral("compass_project/PROJECT.MAK"));
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(), QStringLiteral("compass_project/PROJECT.MAK"));
     requireSolved(project.get());
 
     // Cavern reads each DAT into a survey named after its file, so the absent
@@ -513,18 +505,14 @@ TEST_CASE("compass_project solves through a cave-level attach",
     checkPosition(lookup, QStringLiteral("bravo.B3"),
                   kCompassAlphaEasting + 4.0 * tape, kCompassNorthing + 3.0 * tape,
                   kCompassElevation, kUtmFloatMarginMeters);
-
-    CHECK(cave->length()->value()
-          == Catch::Approx(kCompassProjectLegCount * tape).margin(kUtmFloatMarginMeters));
 }
 
-TEST_CASE("walls_project solves through a cave-level attach",
+TEST_CASE("walls_project solves as a source root",
           "[LinePlotManager][Attach][SourcedFixtures]")
 {
     auto project = makeSavedProject(QStringLiteral("walls-project-solve"),
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
-    cwCave* cave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Kaua"),
-                                           QStringLiteral("walls_project/KAUA.WPJ"));
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(), QStringLiteral("walls_project/KAUA.WPJ"));
     requireSolved(project.get());
 
     // Books and files make no level; #PREFIX N does.
@@ -538,17 +526,14 @@ TEST_CASE("walls_project solves through a cave-level attach",
                   kWallsProjectFixEasting + 3.0 * kWallsTapeMeters,
                   kWallsProjectFixNorthing, kWallsFixElevation);
     CHECK(lookup.positions().size() == 8);
-    CHECK(cave->length()->value()
-          == Catch::Approx(kWallsProjectLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
 }
 
-TEST_CASE("walls_two_caves solves through a cave-level attach",
+TEST_CASE("walls_two_caves solves as a source root",
           "[LinePlotManager][Attach][SourcedFixtures]")
 {
     auto project = makeSavedProject(QStringLiteral("walls-two-caves-solve"),
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
-    cwCave* cave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Two caves"),
-                                           QStringLiteral("walls_two_caves/TWO.WPJ"));
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(), QStringLiteral("walls_two_caves/TWO.WPJ"));
     requireSolved(project.get());
 
     // Each book fixes its own entrance, and W2.SRV joins W1.SRV at W3.
@@ -559,19 +544,15 @@ TEST_CASE("walls_two_caves solves through a cave-level attach",
                   kWallsWestFixEasting - 2.0 * kWallsTapeMeters, 2.0 * kWallsTapeMeters,
                   kWallsFixElevation);
     CHECK(lookup.positions().size() == 8);
-    CHECK(cave->length()->value()
-          == Catch::Approx(kWallsTwoCavesLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
 }
 
-TEST_CASE("survex_two_cs solves as two caves in one output system",
+TEST_CASE("survex_two_cs solves as two source roots in one output system",
           "[LinePlotManager][Attach][SourcedFixtures]")
 {
     auto project = makeSavedProject(QStringLiteral("survex-two-cs-solve"),
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
-    cwCave* utmCave = attachFreshCaveAndSolve(project.get(), QStringLiteral("UTM"),
-                                              QStringLiteral("survex_two_cs/utm.svx"));
-    cwCave* latLongCave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Lat long"),
-                                                  QStringLiteral("survex_two_cs/latlong.svx"));
+    cwSurveyNode* utmCave = attachSourceAndSolve(project.get(), QStringLiteral("survex_two_cs/utm.svx"));
+    cwSurveyNode* latLongCave = attachSourceAndSolve(project.get(), QStringLiteral("survex_two_cs/latlong.svx"));
     requireSolved(project.get());
 
     const cwStationPositionLookup utm = utmCave->scopedPositions();

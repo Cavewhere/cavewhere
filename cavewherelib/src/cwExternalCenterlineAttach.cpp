@@ -11,9 +11,10 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwExternalCenterlineSync.h"
+#include "cwExternalSourceModel.h"
 #include "cwExternalSourceSettings.h"
+#include "cwExternalUnitManifest.h"
 #include "cwSaveLoad.h"
-#include "cwStation.h"
 #include "cwSurveyNoteLiDARModel.h"
 #include "cwSurveyNoteModel.h"
 #include "cwSurveyNoteSketchModel.h"
@@ -32,9 +33,12 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QHash>
+#include <QList>
 #include <QPointer>
-#include <QSet>
 #include <QtConcurrent>
+
+//Std includes
+#include <algorithm>
 
 namespace {
 
@@ -95,11 +99,11 @@ SeededTripMetadata seedTripMetadata(cwTrip* trip, const SeededTripMetadata& meta
 
 
 /**
- * The owner an attach or detach is running for - exactly one of a cave
- * or a trip. Everything the pipeline needs from its owner goes through
- * here, so the scan -> reconcile -> verify -> set-model body is written
- * once and the two owner kinds differ only where they genuinely do:
- * the guards in front, and what the success continuation seeds.
+ * The owner an attach or detach is running for - exactly one of a source root
+ * or a trip. Everything the pipeline needs from its owner goes through here,
+ * so the scan -> reconcile -> verify -> set-model body is written once and the
+ * two owner kinds differ only where they genuinely do: the guards in front,
+ * and what the success continuation builds or seeds.
  */
 class OwnerTarget
 {
@@ -112,38 +116,40 @@ public:
         return owner;
     }
 
-    static OwnerTarget forCave(cwCave* cave)
+    //! Every node below the region's root is a cwCave while the tree migration
+    //! runs (cwCave.h), which is the type cwSaveLoad derives a dir from.
+    static OwnerTarget forNode(cwSurveyNode* node)
     {
         OwnerTarget owner;
-        owner.m_kind = Kind::Cave;
-        owner.m_cave = cave;
+        owner.m_kind = Kind::Node;
+        owner.m_node = qobject_cast<cwCave*>(node);
         return owner;
     }
 
-    bool isCave() const { return m_kind == Kind::Cave; }
+    bool isNode() const { return m_kind == Kind::Node; }
 
     cwTrip* trip() const { return m_trip.data(); }
-    cwCave* cave() const { return m_cave.data(); }
+    cwCave* node() const { return m_node.data(); }
 
     bool isAlive() const
     {
-        return isCave() ? !m_cave.isNull() : !m_trip.isNull();
+        return isNode() ? !m_node.isNull() : !m_trip.isNull();
     }
 
     QUuid id() const
     {
-        return isCave() ? m_cave->id() : m_trip->id();
+        return isNode() ? m_node->id() : m_trip->id();
     }
 
     cwExternalCenterline externalCenterline() const
     {
-        return isCave() ? m_cave->externalCenterline() : m_trip->externalCenterline();
+        return isNode() ? m_node->externalCenterline() : m_trip->externalCenterline();
     }
 
     void setExternalCenterline(const cwExternalCenterline& centerline) const
     {
-        if (isCave()) {
-            m_cave->setExternalCenterline(centerline);
+        if (isNode()) {
+            m_node->setExternalCenterline(centerline);
         } else {
             m_trip->setExternalCenterline(centerline);
         }
@@ -154,15 +160,15 @@ public:
      * while the scan ran is kept alive by the undo stack with its
      * parentCave still set (see the deliberately-commented
      * setParentCave(nullptr) in cwCave's remove command), so QPointer
-     * liveness alone is not enough; a cave answers the same question
+     * liveness alone is not enough; a node answers the same question
      * against its region.
      */
     bool membershipIntact() const
     {
-        if (isCave()) {
-            const cwCavingRegion* region = m_cave->parentRegion();
+        if (isNode()) {
+            const cwCavingRegion* region = m_node->parentRegion();
             return region != nullptr
-                   && region->rootNode()->allNodes().contains(m_cave.data());
+                   && region->rootNode()->allNodes().contains(m_node.data());
         }
         const cwCave* parentCave = m_trip->parentCave();
         return parentCave != nullptr && parentCave->trips().contains(m_trip.data());
@@ -170,35 +176,24 @@ public:
 
     QString membershipLostError() const
     {
-        return isCave()
-            ? QStringLiteral("attach: cave was removed from its region mid-attach")
+        return isNode()
+            ? QStringLiteral("attach: node was removed from its region mid-attach")
             : QStringLiteral("attach: trip was removed from its cave mid-attach");
-    }
-
-    /**
-     * True when the owner sits where an attachment dir can be derived -
-     * a trip in a cave, a cave in a region. A detach of an owner that
-     * has already left the model clears the data model alone.
-     */
-    bool hasResolvableAttachmentDir() const
-    {
-        return isCave() ? m_cave->parentRegion() != nullptr
-                        : m_trip->parentCave() != nullptr;
     }
 
     //! Where the closure is mirrored - pure path math, no disk I/O.
     QString attachmentDir(cwSaveLoad* saveLoad) const
     {
-        return isCave() ? saveLoad->externalCenterlineDir(m_cave.data()).absolutePath()
+        return isNode() ? saveLoad->externalCenterlineDir(m_node.data()).absolutePath()
                         : saveLoad->externalCenterlineDir(m_trip.data()).absolutePath();
     }
 
 private:
-    enum class Kind { Trip, Cave };
+    enum class Kind { Trip, Node };
 
     Kind m_kind = Kind::Trip;
     QPointer<cwTrip> m_trip;
-    QPointer<cwCave> m_cave;
+    QPointer<cwCave> m_node;
 };
 
 /**
@@ -215,165 +210,77 @@ bool holdsNativeContent(const cwTrip* trip)
            || trip->notesSketch()->hasNotes();
 }
 
-/**
- * Brings the cave's windows in line with what the scan found: a block
- * that already has a trip windowing it keeps that trip, a block with no
- * trip gets one, a station-bearing file root gets the one whole-cave
- * window (empty stationPrefix), and an empty window the file no longer
- * accounts for is removed. A window the user put chunks or notes in is
- * survey data and stays, orphaned prefix and all. Fresh attach is the
- * degenerate case where no window exists yet, so attach and replace run
- * the same reconcile. Returns the trips it created, in block order, the
- * whole-cave window last.
- *
- * Removing first is what lets an attachment made before the whole-cave
- * window existed repair itself on Reload or Replace: its stale
- * survey-named windows go, and one whole-cave window takes their place.
- */
-QList<cwExternalCenterlineAttach::ScopeTripDescription> reconcileScopeTrips(
-    cwCave* cave,
-    const cwExternalCenterlineScanner::ScanResult& scan)
+//! The row of \a sourceId in \a region's source list, or -1.
+int sourceRowOf(const cwCavingRegion* region, const QUuid& sourceId)
 {
-    const QList<cwScanBlock>& blocks = scan.blocks;
-
-    // Keyed the way every consumer of a prefix matches it — case-insensitively
-    // (cwTrip::solvedStations, cwLinePlotGeometry's scope ownership) — so a
-    // window whose prefix the user re-cased still names its block and is kept.
-    QSet<QString> stationBearingPaths;
-    for (const cwScanBlock& block : blocks) {
-        if (block.stationCount >= 1) {
-            stationBearingPaths.insert(cwStation::canonicalKey(block.path));
-        }
+    if (region == nullptr || sourceId.isNull()) {
+        return -1;
     }
+    return region->externalSources()->indexOf(sourceId);
+}
 
-    // removeTrip() is the G1 boundary: it emits tripsDeleted(), and with no
-    // undo stack it destroys the trip outright, so nothing below reads the
-    // pointer afterward. An empty prefix names the file root, which the scan
-    // accounts for only while the root bears stations.
-    for (int i = cave->tripCount() - 1; i >= 0; --i) {
-        const cwTrip* trip = cave->trip(i);
-        if (holdsNativeContent(trip)) {
-            continue;
-        }
-        const QString prefix = trip->stationPrefix();
-        const bool accountedFor =
-            prefix.isEmpty() ? scan.rootStationCount > 0
-                             : stationBearingPaths.contains(cwStation::canonicalKey(prefix));
-        if (!accountedFor) {
-            cave->removeTrip(i);
-        }
+//! The exclusions recorded for \a root's source, empty when it has no record.
+QStringList exclusionsOf(const cwSurveyNode* root)
+{
+    const cwCavingRegion* region = root->parentRegion();
+    const int row = sourceRowOf(region, root->sourceId());
+    if (row < 0) {
+        return QStringList();
     }
+    return region->externalSources()->sourceAt(row).excludedSourcePaths();
+}
 
-    // Every prefix already windowed, the empty one — the whole-cave window —
-    // included, so both creation sites below ask the same question.
-    QSet<QString> windowedPrefixes;
-    const QList<cwTrip*> existingTrips = cave->trips();
-    for (const cwTrip* trip : existingTrips) {
-        windowedPrefixes.insert(cwStation::canonicalKey(trip->stationPrefix()));
+/**
+ * Makes \a root the read-only source root its scan describes: a fresh source id
+ * when it has none yet, the scan root's kind, and a cwExternalSource row.
+ */
+void ensureSourceRecord(cwSurveyNode* root, cwSurveyNodeKind::Kind kind)
+{
+    if (root->sourceId().isNull()) {
+        root->setSourceId(QUuid::createUuid());
     }
+    root->setSourcePath(QString());
+    root->setReadOnly(true);
+    root->setKind(kind);
 
-    QHash<QString, QDate> datesByPath;
-    for (const cwScanBlock& block : blocks) {
-        if (block.date.isValid()) {
-            datesByPath.insert(block.path, block.date);
-        }
+    cwCavingRegion* region = root->parentRegion();
+    if (region != nullptr && sourceRowOf(region, root->sourceId()) < 0) {
+        region->externalSources()->appendSource(cwExternalSource(root->sourceId(), root->id()));
     }
+}
 
-    // Survex dates scope downward, so a dateless nested block takes its
-    // nearest dated ancestor's date. Only a nested block inherits: a flat
-    // Compass survey may spell a dot inside its own name, and that dot
-    // names no parent to inherit from.
-    const auto effectiveDate = [&datesByPath](const cwScanBlock& block) {
-        if (block.date.isValid()) {
-            return block.date;
+/**
+ * True when \a node's subtree holds anything the source does not derive: a
+ * native trip, a derived trip holding native content, or a node that came from
+ * elsewhere (a native Folder, another source's root).
+ */
+bool subtreeHoldsNativeContent(const cwSurveyNode* node, const QUuid& sourceId)
+{
+    bool holds = false;
+    node->walk([&holds, &sourceId](const cwSurveyNode* visited) {
+        if (visited->sourceId() != sourceId) {
+            holds = true;
         }
-        if (block.depth < 1) {
-            return QDate();
-        }
-        QString path = block.path;
-        // A block name may spell a dot of its own, so every dot prefix is a
-        // candidate rather than one prefix per level of nesting.
-        for (int lastDot = path.lastIndexOf(QLatin1Char('.'));
-             lastDot >= 0;
-             lastDot = path.lastIndexOf(QLatin1Char('.'))) {
-            path.truncate(lastDot);
-            const auto found = datesByPath.constFind(path);
-            if (found != datesByPath.constEnd()) {
-                return found.value();
+        const QList<cwTrip*> trips = visited->trips();
+        for (const cwTrip* trip : trips) {
+            if (trip->sourcePath().isEmpty() || holdsNativeContent(trip)) {
+                holds = true;
             }
         }
-        return QDate();
-    };
-
-    QList<cwExternalCenterlineAttach::ScopeTripDescription> created;
-
-    // One window: a trip that owns no chunks and no file, named after what it
-    // windows and carrying the prefix that selects it — empty for the
-    // whole-cave window.
-    const auto addWindow = [&](const QString& baseName,
-                               const QString& prefix,
-                               const QDate& date) {
-        cwTrip* trip = new cwTrip();
-        // Seed the survey-entry unit the way cwCave does for a UI-created
-        // trip, so chunks the user later adds to this Scope trip read in
-        // the project's unit.
-        trip->calibrations()->setDistanceUnit(cwUnits::surveyUnit(cave->unitSystem()));
-        // uniqueTripName is consulted per window: windows that share a leaf
-        // name dedupe against the trips this same pass already added.
-        trip->setName(cave->uniqueTripName(baseName));
-        trip->setStationPrefix(prefix);
-        // Seeding is create-only: a window that already exists was skipped, so
-        // a replace never writes over a date the user set.
-        if (date.isValid()) {
-            trip->setDate(QDateTime(date, QTime()));
-        }
-        cave->addTrip(trip);
-
-        windowedPrefixes.insert(cwStation::canonicalKey(prefix));
-        created.append({trip->name(), prefix});
-    };
-
-    for (const cwScanBlock& block : blocks) {
-        // A block with no stations of its own has nothing for a trip to
-        // window (section 5 q3); the dialog still shows it in the tree.
-        if (block.stationCount < 1
-            || windowedPrefixes.contains(cwStation::canonicalKey(block.path))) {
-            continue;
-        }
-        addWindow(block.name(), block.path, effectiveDate(block));
-    }
-
-    // The root's stations get no naming level of their own, so the window that
-    // owns them carries no prefix - it windows the cave itself (P3.16). Named
-    // after the entry file, which is dependencies' documented first element.
-    if (scan.rootStationCount > 0 && !windowedPrefixes.contains(QString())) {
-        addWindow(QFileInfo(scan.dependencies.value(0)).completeBaseName(),
-                  QString(),
-                  scan.rootDate);
-    }
-    return created;
+    });
+    return holds;
 }
 
-/**
- * Removes the windows a cave-level detach leaves nothing behind for:
- * every empty trip of the cave, which under an attached cave is exactly
- * its windows - the blocks' and the whole cave's alike. A window the
- * user put chunks or notes in is real survey data and stays.
- *
- * removeTrip() is the boundary on purpose - it emits tripsDeleted(),
- * which is what clears each trip's breadcrumb and wakes the manager.
- * With no undo stack it also destroys the trip outright, so nothing
- * here reads the pointer afterward.
- */
-void removeEmptyScopeTrips(cwCave* cave)
+//! Writes units.json for \a rows into \a attachmentDir, as a scan warning on failure.
+QStringList writeManifest(const QString& attachmentDir, const QList<cwScanRow>& rows)
 {
-    for (int i = cave->tripCount() - 1; i >= 0; --i) {
-        if (!holdsNativeContent(cave->trip(i))) {
-            cave->removeTrip(i);
-        }
+    const auto written = cwExternalUnitManifest::write(
+        QDir(attachmentDir).absoluteFilePath(cwExternalUnitManifest::fileName()), rows);
+    if (written.hasError()) {
+        return { written.errorMessage() };
     }
+    return {};
 }
-
 
 /**
  * The dependency guards every verb shares, prefixed with the verb's own
@@ -398,12 +305,18 @@ QString dependencyError(const QString& verb,
 /**
  * The whole attach pipeline, owner-generic: scan on a worker, then on
  * the main thread reconcile the closure into the owner's attachment
- * dir, verify it, and only then set the model, seed what the owner kind
- * asks for, and stamp the breadcrumb. The public overloads run their
- * owner-specific guards and hand the owner in here.
+ * dir, verify it, and only then set the model, seed or build what the
+ * owner kind asks for, and stamp the breadcrumb. The public overloads run
+ * their owner-specific guards and hand the owner in here.
+ *
+ * A source attach has no owner yet: \a newRootParent names where the scan's
+ * root node is created once the scan lands, and a copy that then fails
+ * removes it again. Every other verb passes \a existingOwner and a null
+ * \a newRootParent.
  */
 QFuture<Monad::Result<AttachReport>> attachOwner(
-    const OwnerTarget& owner,
+    const OwnerTarget& existingOwner,
+    cwSurveyNode* newRootParent,
     const QString& sourceFile,
     cwSaveLoad* saveLoad,
     cwExternalSourceSettings* externalSourceSettings,
@@ -442,14 +355,16 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
 
     const QPointer<cwSaveLoad> saveLoadPtr(saveLoad);
     const QPointer<cwExternalSourceSettings> settingsPtr(externalSourceSettings);
+    const QPointer<cwSurveyNode> newRootParentPtr(newRootParent);
+    const bool createsRoot = newRootParent != nullptr;
 
     auto scanFuture = QtConcurrent::run([sourceFile]() {
         return cwExternalCenterlineScanner::scan(sourceFile);
     });
 
     AsyncFuture::observe(scanFuture).context(saveLoad,
-            [deferred, resultFuture, owner, saveLoadPtr, settingsPtr, sourceFile,
-             cancelFlag = std::move(cancelFlag)]
+            [deferred, resultFuture, existingOwner, newRootParentPtr, createsRoot,
+             saveLoadPtr, settingsPtr, sourceFile, cancelFlag = std::move(cancelFlag)]
             (const Monad::Result<ScanResult>& scanResult) mutable {
         if (resultFuture.isCanceled()) {
             // Cancelled before the scan landed - nothing has mutated.
@@ -463,7 +378,8 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
             deferred.cancel();
             return;
         }
-        if (!owner.isAlive() || settingsPtr.isNull() || saveLoadPtr.isNull()) {
+        const bool ownerGone = createsRoot ? newRootParentPtr.isNull() : !existingOwner.isAlive();
+        if (ownerGone || settingsPtr.isNull() || saveLoadPtr.isNull()) {
             deferred.complete(ReportResult(QStringLiteral("attach: owner was deleted mid-attach")));
             return;
         }
@@ -473,7 +389,7 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
             return;
         }
         const ScanResult scan = scanResult.value();
-        if (scan.dependencies.isEmpty()) {
+        if (scan.dependencies.isEmpty() || scan.rows.isEmpty()) {
             deferred.complete(ReportResult(
                 QStringLiteral("attach: scan found no files for %1").arg(sourceFile)));
             return;
@@ -481,7 +397,24 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
 
         cwSaveLoad* saveLoad = saveLoadPtr.data();
 
-        if (!owner.membershipIntact()) {
+        OwnerTarget owner = existingOwner;
+        if (createsRoot) {
+            cwSurveyNode* parent = newRootParentPtr.data();
+            if (parent->parentRegion() == nullptr) {
+                deferred.complete(ReportResult(
+                    QStringLiteral("attach: the target node left its region mid-attach")));
+                return;
+            }
+            // The root takes the scan root's name, deduped among its siblings.
+            const cwScanRow& rootRow = scan.rows.first();
+            auto* root = new cwCave();
+            root->setName(parent->uniqueChildName(rootRow.displayName));
+            root->setKind(rootRow.kind);
+            root->setReadOnly(true);
+            root->setSourceId(QUuid::createUuid());
+            parent->addNode(root);
+            owner = OwnerTarget::forNode(root);
+        } else if (!owner.membershipIntact()) {
             deferred.complete(ReportResult(owner.membershipLostError()));
             return;
         }
@@ -501,7 +434,7 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
         // the filesystem mutation has started, so the attach runs to
         // completion (success or failure).
         AsyncFuture::observe(reconcileFuture).context(saveLoad,
-                [deferred, owner, settingsPtr, scan, attachmentDir, sourceFile]
+                [deferred, owner, createsRoot, settingsPtr, scan, attachmentDir, sourceFile]
                 (const Monad::ResultBase& reconcileResult) mutable {
             if (!owner.isAlive() || settingsPtr.isNull()) {
                 deferred.complete(ReportResult(
@@ -537,7 +470,12 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
                 // the owner exactly as it was. Partial files may remain
                 // on disk (the next reconcile's GC problem) and the
                 // project stays modified - the copy jobs already flipped
-                // the bit at enqueue.
+                // the bit at enqueue. A root this attach created goes again,
+                // and its directory Remove job takes the partial copies.
+                if (createsRoot) {
+                    cwSurveyNode* parent = owner.node()->parentNode();
+                    parent->removeNode(parent->indexOfNode(owner.node()));
+                }
                 deferred.complete(ReportResult(
                     QStringLiteral("attach: reconcile into the project failed:\n%1")
                         .arg(failures.join(QLatin1Char('\n')))));
@@ -562,10 +500,14 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
             // verifyPlan.warnings are all omissions, and any of those failed
             // the attach above, so only the scan's advisories reach here.
             report.warnings = scan.warnings;
-            if (owner.isCave()) {
+            if (owner.isNode()) {
                 // Before the future completes, so the manager's recompute
-                // and the solve it chains already see the Scope trips.
-                report.createdScopeTrips = reconcileScopeTrips(owner.cave(), scan);
+                // and the solve it chains already see the subtree.
+                cwSurveyNode* root = owner.node();
+                ensureSourceRecord(root, scan.rows.first().kind);
+                report.warnings += writeManifest(attachmentDir, scan.rows);
+                cwExternalCenterlineAttach::reconcileSubtree(root, scan.rows, exclusionsOf(root));
+                report.root = root;
             } else {
                 report.metadata = seedTripMetadata(owner.trip(), scan.seededMetadata);
             }
@@ -586,48 +528,21 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
 }
 
 /**
- * The whole detach, owner-generic: drop the breadcrumb, cascade away a
- * cave's empty Scope trips, clear the model, and remove the
- * attachment dir through the job queue.
+ * Settles once saveLoad's job queue drains, with an error when \a attachmentDir
+ * is still on disk. The queue reports Ok on drain even when a remove job
+ * failed (job errors go to the save-flush channel), so the dir's absence is
+ * what is checked.
  */
-QFuture<Monad::ResultBase> detachOwner(const OwnerTarget& owner,
-                                       cwSaveLoad* saveLoad,
-                                       cwExternalSourceSettings* externalSourceSettings)
+QFuture<Monad::ResultBase> attachmentDirRemoved(const QString& verb,
+                                                cwSaveLoad* saveLoad,
+                                                const QString& attachmentDir)
 {
-    using Monad::ResultBase;
-
-    externalSourceSettings->clearBreadcrumb(owner.id());
-
-    if (owner.externalCenterline().isEmpty()) {
-        // Native owner: nothing to remove and no mutation to report, so
-        // the modified bit stays untouched.
-        return AsyncFuture::completed(ResultBase());
-    }
-
-    if (owner.isCave()) {
-        removeEmptyScopeTrips(owner.cave());
-    }
-
-    if (!owner.hasResolvableAttachmentDir()) {
-        // No attachment dir can be resolved; just clear the model.
-        owner.setExternalCenterline(cwExternalCenterline());
-        return AsyncFuture::completed(ResultBase());
-    }
-
-    const QString attachmentDir = owner.attachmentDir(saveLoad);
-    owner.setExternalCenterline(cwExternalCenterline());
-    saveLoad->enqueueExternalCenterlineRemoveTree(attachmentDir);
-
-    // The job queue reports Ok on drain even when the RemoveTree job
-    // failed (job errors go to the save-flush channel), so verify the
-    // dir is actually gone. The model and settings stay cleared either
-    // way - the error only reports the stranded files.
     return AsyncFuture::observe(saveLoad->pendingJobsFinished())
-        .context(saveLoad, [attachmentDir]() {
+        .context(saveLoad, [verb, attachmentDir]() {
             if (QDir(attachmentDir).exists()) {
                 return Monad::ResultBase(
-                    QStringLiteral("detach: could not remove the attachment directory %1")
-                        .arg(attachmentDir));
+                    QStringLiteral("%1: could not remove the attachment directory %2")
+                        .arg(verb, attachmentDir));
             }
             return Monad::ResultBase();
         })
@@ -637,6 +552,11 @@ QFuture<Monad::ResultBase> detachOwner(const OwnerTarget& owner,
 } // namespace
 
 namespace cwExternalCenterlineAttach {
+
+namespace {
+//! The segment that names a node's own unit apart from the node.
+const QString kOwnUnitSegment = QStringLiteral("#own");
+}
 
 QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
                                             const QString& sourceFile,
@@ -660,11 +580,11 @@ QFuture<Monad::Result<AttachReport>> attach(cwTrip* trip,
             ReportResult(QStringLiteral("attach: trip is not part of a cave yet")));
     }
 
-    return attachOwner(OwnerTarget::forTrip(trip), sourceFile, saveLoad,
+    return attachOwner(OwnerTarget::forTrip(trip), nullptr, sourceFile, saveLoad,
                        externalSourceSettings, std::move(cancelFlag));
 }
 
-QFuture<Monad::Result<AttachReport>> attach(cwCave* cave,
+QFuture<Monad::Result<AttachReport>> attach(cwSurveyNode* target,
                                             const QString& sourceFile,
                                             cwSaveLoad* saveLoad,
                                             cwExternalSourceSettings* externalSourceSettings,
@@ -672,33 +592,198 @@ QFuture<Monad::Result<AttachReport>> attach(cwCave* cave,
 {
     using ReportResult = Monad::Result<AttachReport>;
 
-    if (cave == nullptr) {
+    if (target == nullptr) {
         return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: cave is null")));
+            ReportResult(QStringLiteral("attach: target node is null")));
     }
     const QString dependencyFailure =
         dependencyError(QStringLiteral("attach"), saveLoad, externalSourceSettings);
     if (!dependencyFailure.isEmpty()) {
         return AsyncFuture::completed(ReportResult(dependencyFailure));
     }
-    if (cave->parentRegion() == nullptr) {
+    if (target->parentRegion() == nullptr) {
         return AsyncFuture::completed(
-            ReportResult(QStringLiteral("attach: cave is not part of a region yet")));
+            ReportResult(QStringLiteral("attach: target node is not part of a region yet")));
     }
 
-    // Fresh-cave guard (section 3.3): the exporter skips the trip loop for
-    // an attached cave, so native trips under one would silently stop
-    // reaching the driver. A cave that is already attached passes - its
-    // trips are the Scope trips the previous attach created, and this call
-    // is the replace that reconciles them.
-    if (cave->hasTrips() && cave->externalCenterline().isEmpty()) {
-        return AsyncFuture::completed(ReportResult(
-            QStringLiteral("attach: cave already has trips — cave-level attach is "
-                           "for a new cave")));
-    }
-
-    return attachOwner(OwnerTarget::forCave(cave), sourceFile, saveLoad,
+    return attachOwner(OwnerTarget(), target, sourceFile, saveLoad,
                        externalSourceSettings, std::move(cancelFlag));
+}
+
+QFuture<Monad::Result<AttachReport>> replace(cwSurveyNode* root,
+                                             const QString& sourceFile,
+                                             cwSaveLoad* saveLoad,
+                                             cwExternalSourceSettings* externalSourceSettings,
+                                             std::shared_ptr<std::atomic_bool> cancelFlag)
+{
+    using ReportResult = Monad::Result<AttachReport>;
+
+    if (root == nullptr) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("replace: source root is null")));
+    }
+    const QString dependencyFailure =
+        dependencyError(QStringLiteral("replace"), saveLoad, externalSourceSettings);
+    if (!dependencyFailure.isEmpty()) {
+        return AsyncFuture::completed(ReportResult(dependencyFailure));
+    }
+    if (root->parentRegion() == nullptr || qobject_cast<cwCave*>(root) == nullptr) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("replace: source root is not part of a region")));
+    }
+    if (root->externalCenterline().isEmpty()) {
+        return AsyncFuture::completed(
+            ReportResult(QStringLiteral("replace: this node has no attached survey file")));
+    }
+
+    return attachOwner(OwnerTarget::forNode(root), nullptr, sourceFile, saveLoad,
+                       externalSourceSettings, std::move(cancelFlag));
+}
+
+QString unitSourcePath(const cwScanRow& row)
+{
+    if (!row.isNode) {
+        return row.sourcePath;
+    }
+    return row.sourcePath.isEmpty() ? kOwnUnitSegment
+                                    : row.sourcePath + QLatin1Char('/') + kOwnUnitSegment;
+}
+
+bool isExcluded(const QString& sourcePath, const QStringList& exclusions)
+{
+    return std::any_of(exclusions.cbegin(), exclusions.cend(),
+                       [&sourcePath](const QString& excluded) {
+        return !excluded.isEmpty()
+               && (sourcePath == excluded
+                   || sourcePath.startsWith(excluded + QLatin1Char('/')));
+    });
+}
+
+void reconcileSubtree(cwSurveyNode* root,
+                      const QList<cwScanRow>& rows,
+                      const QStringList& exclusions)
+{
+    if (root == nullptr || rows.isEmpty()) {
+        return;
+    }
+    const QUuid sourceId = root->sourceId();
+
+    // Every derived record under the root, by the path that names it in the
+    // scan. A match is taken out, so what is left at the end is what the scan
+    // no longer lists, or now excludes.
+    QHash<QString, cwSurveyNode*> nodesByPath;
+    QHash<QString, cwTrip*> tripsByPath;
+    const QList<cwSurveyNode*> descendants = root->allNodes();
+    for (cwSurveyNode* node : descendants) {
+        if (node->sourceId() == sourceId && !node->sourcePath().isEmpty()) {
+            nodesByPath.insert(node->sourcePath(), node);
+        }
+    }
+    // A nested source root's derived trips belong to that root's reconcile.
+    for (cwTrip* trip : root->allTrips()) {
+        if (!trip->sourcePath().isEmpty() && trip->parentNode()->sourceRoot() == root) {
+            tripsByPath.insert(trip->sourcePath(), trip);
+        }
+    }
+
+    // The pre-order walk keeps one live node and one inherited date per depth;
+    // a skipped node row skips every row below it.
+    QList<cwSurveyNode*> nodeAtDepth;
+    QList<QDate> dateAtDepth;
+    int skipBelowDepth = -1;
+
+    for (const cwScanRow& row : rows) {
+        if (skipBelowDepth >= 0 && row.depth > skipBelowDepth) {
+            continue;
+        }
+        skipBelowDepth = -1;
+
+        const bool isRootRow = row.depth == 0;
+        if (!isRootRow && (row.missing || isExcluded(row.sourcePath, exclusions))) {
+            if (row.isNode) {
+                skipBelowDepth = row.depth;
+            }
+            continue;
+        }
+
+        nodeAtDepth.resize(row.depth + 1);
+        dateAtDepth.resize(row.depth + 1);
+        cwSurveyNode* parent = isRootRow ? nullptr : nodeAtDepth.at(row.depth - 1);
+        const QDate inheritedDate = isRootRow ? QDate() : dateAtDepth.at(row.depth - 1);
+        dateAtDepth[row.depth] = row.date.isValid() ? row.date : inheritedDate;
+
+        cwSurveyNode* unitParent = parent;
+        if (isRootRow) {
+            nodeAtDepth[0] = root;
+            unitParent = root;
+        } else if (row.isNode) {
+            cwSurveyNode* node = nodesByPath.take(row.sourcePath);
+            if (node == nullptr) {
+                auto* created = new cwCave();
+                created->setName(parent->uniqueChildName(row.displayName));
+                created->setKind(row.kind);
+                created->setReadOnly(true);
+                created->setSourceId(sourceId);
+                created->setSourcePath(row.sourcePath);
+                parent->addNode(created);
+                node = created;
+            }
+            nodeAtDepth[row.depth] = node;
+            unitParent = node;
+        }
+
+        if (!row.isUnit) {
+            continue;
+        }
+        const QString tripPath = unitSourcePath(row);
+        if (isExcluded(tripPath, exclusions) || tripsByPath.take(tripPath) != nullptr) {
+            continue;
+        }
+        auto* trip = new cwTrip();
+        // Seed the survey-entry unit the way cwCave does for a UI-created
+        // trip, so chunks the user later adds read in the project's unit.
+        trip->calibrations()->setDistanceUnit(cwUnits::surveyUnit(root->unitSystem()));
+        trip->setName(unitParent->uniqueTripName(row.displayName));
+        trip->setSourcePath(tripPath);
+        // Seeding is create-only: a trip that already exists was matched
+        // above, so a reload never writes over a date the user set.
+        const QDate unitDate = dateAtDepth.at(row.depth);
+        if (unitDate.isValid()) {
+            SeededTripMetadata metadata;
+            metadata.date = unitDate;
+            seedTripMetadata(trip, metadata);
+        }
+        unitParent->addTrip(trip);
+    }
+
+    // removeTrip() and removeNode() are the G1 boundary: they emit
+    // tripsDeleted()/nodesDeleted(), and with no undo stack they destroy the
+    // object outright, so nothing below reads a pointer it removed.
+    for (cwTrip* trip : std::as_const(tripsByPath)) {
+        if (holdsNativeContent(trip)) {
+            continue;
+        }
+        cwSurveyNode* parent = trip->parentNode();
+        parent->removeTrip(parent->indexOf(trip));
+    }
+
+    // allNodes() lists a parent before its children, so the reverse walk
+    // visits the deepest first, and a node that turns native keeps its
+    // ancestors too.
+    for (auto it = descendants.crbegin(); it != descendants.crend(); ++it) {
+        cwSurveyNode* node = nodesByPath.value((*it)->sourcePath());
+        if (node != *it) {
+            continue;
+        }
+        if (subtreeHoldsNativeContent(node, sourceId)) {
+            node->setSourceId(QUuid());
+            node->setSourcePath(QString());
+            node->setReadOnly(false);
+            continue;
+        }
+        cwSurveyNode* parent = node->parentNode();
+        parent->removeNode(parent->indexOfNode(node));
+    }
 }
 
 QFuture<Monad::ResultBase> detach(cwTrip* trip,
@@ -716,25 +801,154 @@ QFuture<Monad::ResultBase> detach(cwTrip* trip,
         return AsyncFuture::completed(ResultBase(dependencyFailure));
     }
 
-    return detachOwner(OwnerTarget::forTrip(trip), saveLoad, externalSourceSettings);
+    externalSourceSettings->clearBreadcrumb(trip->id());
+
+    if (trip->externalCenterline().isEmpty()) {
+        // Native trip: nothing to remove and no mutation to report, so the
+        // modified bit stays untouched.
+        return AsyncFuture::completed(ResultBase());
+    }
+
+    if (trip->parentCave() == nullptr) {
+        // No attachment dir can be resolved; just clear the model.
+        trip->setExternalCenterline(cwExternalCenterline());
+        return AsyncFuture::completed(ResultBase());
+    }
+
+    // The model and settings stay cleared whatever the remove reports - an
+    // error only names the stranded files.
+    const QString attachmentDir = saveLoad->externalCenterlineDir(trip).absolutePath();
+    trip->setExternalCenterline(cwExternalCenterline());
+    saveLoad->enqueueExternalCenterlineRemoveTree(attachmentDir);
+    return attachmentDirRemoved(QStringLiteral("detach"), saveLoad, attachmentDir);
 }
 
-QFuture<Monad::ResultBase> detach(cwCave* cave,
-                                  cwSaveLoad* saveLoad,
-                                  cwExternalSourceSettings* externalSourceSettings)
+QFuture<Monad::ResultBase> deleteSourceRoot(cwSurveyNode* root,
+                                            cwSaveLoad* saveLoad,
+                                            cwExternalSourceSettings* externalSourceSettings)
 {
     using Monad::ResultBase;
 
-    if (cave == nullptr) {
-        return AsyncFuture::completed(ResultBase(QStringLiteral("detach: cave is null")));
+    if (root == nullptr) {
+        return AsyncFuture::completed(ResultBase(QStringLiteral("delete: source root is null")));
     }
     const QString dependencyFailure =
-        dependencyError(QStringLiteral("detach"), saveLoad, externalSourceSettings);
+        dependencyError(QStringLiteral("delete"), saveLoad, externalSourceSettings);
     if (!dependencyFailure.isEmpty()) {
         return AsyncFuture::completed(ResultBase(dependencyFailure));
     }
+    cwSurveyNode* parent = root->parentNode();
+    cwCavingRegion* region = root->parentRegion();
+    if (parent == nullptr || region == nullptr || !root->isSourceRoot()) {
+        return AsyncFuture::completed(
+            ResultBase(QStringLiteral("delete: the node is not a source root in a region")));
+    }
 
-    return detachOwner(OwnerTarget::forCave(cave), saveLoad, externalSourceSettings);
+    const int sourceRow = sourceRowOf(region, root->sourceId());
+    if (sourceRow >= 0) {
+        region->externalSources()->removeAt(sourceRow);
+    }
+    externalSourceSettings->clearBreadcrumb(root->id());
+
+    const QString attachmentDir =
+        OwnerTarget::forNode(root).attachmentDir(saveLoad);
+    parent->removeNode(parent->indexOfNode(root));
+
+    // The node's directory Remove job takes the attachment dir with it.
+    return attachmentDirRemoved(QStringLiteral("delete"), saveLoad, attachmentDir);
+}
+
+Monad::ResultBase hideDerived(QObject* nodeOrTrip)
+{
+    using Monad::ResultBase;
+
+    auto* trip = qobject_cast<cwTrip*>(nodeOrTrip);
+    auto* node = qobject_cast<cwSurveyNode*>(nodeOrTrip);
+    cwSurveyNode* root = nullptr;
+    QString sourcePath;
+    if (trip != nullptr) {
+        if (trip->parentNode() != nullptr) {
+            root = trip->parentNode()->sourceRoot();
+        }
+        sourcePath = trip->sourcePath();
+    } else if (node != nullptr) {
+        root = node->sourceRoot();
+        sourcePath = node->sourcePath();
+    }
+    if (root == nullptr || sourcePath.isEmpty()) {
+        return ResultBase(QStringLiteral("hide: only a node or trip a survey file derives can be hidden"));
+    }
+
+    cwCavingRegion* region = root->parentRegion();
+    const int sourceRow = sourceRowOf(region, root->sourceId());
+    if (sourceRow < 0) {
+        return ResultBase(QStringLiteral("hide: the survey file this came from has no source record"));
+    }
+
+    cwExternalSource source = region->externalSources()->sourceAt(sourceRow);
+    QStringList exclusions = source.excludedSourcePaths();
+    if (!exclusions.contains(sourcePath)) {
+        exclusions.append(sourcePath);
+        source.setExcludedSourcePaths(exclusions);
+        region->externalSources()->replaceAt(sourceRow, source);
+    }
+
+    if (trip != nullptr) {
+        cwSurveyNode* parent = trip->parentNode();
+        parent->removeTrip(parent->indexOf(trip));
+    } else {
+        cwSurveyNode* parent = node->parentNode();
+        parent->removeNode(parent->indexOfNode(node));
+    }
+    return ResultBase();
+}
+
+QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root, cwSaveLoad* saveLoad)
+{
+    using Monad::ResultBase;
+
+    if (root == nullptr || saveLoad == nullptr) {
+        return AsyncFuture::completed(
+            ResultBase(QStringLiteral("restore: source root or saveLoad is null")));
+    }
+    cwCavingRegion* region = root->parentRegion();
+    const int sourceRow = sourceRowOf(region, root->sourceId());
+    if (!root->isSourceRoot() || sourceRow < 0 || root->externalCenterline().isEmpty()) {
+        return AsyncFuture::completed(
+            ResultBase(QStringLiteral("restore: the node is not an attached source root")));
+    }
+
+    cwExternalSource source = region->externalSources()->sourceAt(sourceRow);
+    source.setExcludedSourcePaths(QStringList());
+    region->externalSources()->replaceAt(sourceRow, source);
+
+    // The in-project copy is what the subtree mirrors, so it is what the
+    // restore scans.
+    const QString attachmentDir = OwnerTarget::forNode(root).attachmentDir(saveLoad);
+    const QString entryFile =
+        QDir(attachmentDir).absoluteFilePath(root->externalCenterline().entryFile());
+    auto scanFuture = QtConcurrent::run([entryFile]() {
+        return cwExternalCenterlineScanner::scan(entryFile);
+    });
+
+    const QPointer<cwSurveyNode> rootPtr(root);
+    return AsyncFuture::observe(scanFuture)
+        .context(saveLoad, [rootPtr, attachmentDir](const Monad::Result<ScanResult>& scanResult) {
+            if (rootPtr.isNull()) {
+                return ResultBase(QStringLiteral("restore: source root was deleted mid-restore"));
+            }
+            if (scanResult.hasError()) {
+                return ResultBase(scanResult.errorMessage(), scanResult.errorCode());
+            }
+            const QList<cwScanRow>& rows = scanResult.value().rows;
+            const QStringList manifestWarnings = writeManifest(attachmentDir, rows);
+            cwExternalCenterlineAttach::reconcileSubtree(rootPtr.data(), rows, exclusionsOf(rootPtr.data()));
+            if (!manifestWarnings.isEmpty()) {
+                return ResultBase(manifestWarnings.join(QLatin1Char('\n')));
+            }
+            return ResultBase();
+        })
+        .future();
 }
 
 } // namespace cwExternalCenterlineAttach

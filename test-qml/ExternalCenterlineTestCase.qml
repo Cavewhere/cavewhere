@@ -50,29 +50,30 @@ CWTestCase {
         attachAndWaitForRow(() => RootData.attachTripCenterline(trip, source))
     }
 
-    // The cave-level twin: a cave attachment lands a row of its own, so
-    // the wait is the same one.
-    function attachSourceToCave(cave, source) {
-        attachAndWaitForRow(() => RootData.attachCaveCenterline(cave, source))
+    // Attaches `source` as a source root under the region's root and waits
+    // for the attachment to land. Returns the root the attach built.
+    function attachSourceToRegion(source) {
+        const regionRoot = RootData.region.rootNode
+        const childCountBefore = regionRoot.childNodeCount
+        attachAndWaitForRow(() => RootData.attachSource(regionRoot, source))
+        verify(regionRoot.childNodeCount > childCountBefore, "the attach adds a source root")
+        return regionRoot.childNode(regionRoot.childNodeCount - 1)
     }
 
-    // Creates the cave the Add Cave flow creates — holding no trips of
-    // its own, which is what the cave-level verb accepts — and attaches
-    // `source` to it. Returns the cave.
+    // Attaches `source` as a source root under the region's root, renames
+    // the root to `caveName`, and returns it.
     function makeAttachedCave(caveName, source) {
-        RootData.region.addCave()
-        const cave = RootData.region.cave(RootData.region.rowCount() - 1)
-        cave.name = caveName
-        attachSourceToCave(cave, source)
-        return cave
+        const sourceRoot = attachSourceToRegion(source)
+        sourceRoot.name = caveName
+        return sourceRoot
     }
 
     // Saves the fresh project as .cwproj and attaches `fixture` - a path
     // relative to testcases/datasets - to a new cave via the cwRootData
-    // wrapper. Returns the attached cave. The fixture is copied to a temp
-    // folder on its own, so pass a single self-contained file; a fixture
-    // that *includes its siblings needs testcasesDatasetSourcePath and
-    // attachSourceToCave directly.
+    // wrapper. Returns the attached source root. The fixture is copied to a
+    // temp folder on its own, so pass a single self-contained file; a
+    // fixture that *includes its siblings needs testcasesDatasetSourcePath
+    // and attachSourceToRegion directly.
     function makeSavedCaveAttach(projectBaseName, fixture) {
         saveProjectAs(projectBaseName)
         return makeAttachedCave("AttachedCave",

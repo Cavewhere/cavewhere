@@ -141,8 +141,8 @@ QQ.Item {
                     enabled: root.owner !== null && pickerId.valid && !sessionId.busy
                     onClicked: {
                         sessionId.start(root.owner)
-                        if (root.owner instanceof Cave) {
-                            RootData.replaceCaveCenterline(root.owner, pickerId.sourcePath)
+                        if (root.owner instanceof SurveyNode) {
+                            RootData.replaceSource(root.owner, pickerId.sourcePath)
                         } else {
                             RootData.replaceTripCenterline(root.owner, pickerId.sourcePath)
                         }

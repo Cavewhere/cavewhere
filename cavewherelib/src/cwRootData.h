@@ -170,14 +170,19 @@ public:
     replaceTripCenterline(cwTrip* trip, const QString& sourcePath);
     Q_INVOKABLE QFuture<Monad::ResultBase> detachTripCenterline(cwTrip* trip);
 
-    // The same three verbs for a cave owner — attach is for a cave
-    // created for the file, and detach cascades away the Scope trips
-    // the attach made (plans/EXTERNAL_FILE_PHASE3.html §3.3, §3.4).
+    // The verbs for a survey file attached as a sourced subtree (W7): attach
+    // builds a read-only subtree under target; replace, reload, delete, and
+    // restore act on its root; hide removes one derived node or trip and keeps
+    // it out across Reload.
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    attachCaveCenterline(cwCave* cave, const QString& sourcePath);
+    attachSource(cwSurveyNode* target, const QString& sourcePath);
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-    replaceCaveCenterline(cwCave* cave, const QString& sourcePath);
-    Q_INVOKABLE QFuture<Monad::ResultBase> detachCaveCenterline(cwCave* cave);
+    replaceSource(cwSurveyNode* root, const QString& sourcePath);
+    Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+    reloadSource(cwSurveyNode* root);
+    Q_INVOKABLE QFuture<Monad::ResultBase> deleteSourceRoot(cwSurveyNode* root);
+    Q_INVOKABLE bool hideDerived(QObject* nodeOrTrip);
+    Q_INVOKABLE QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root);
 
     //Helper functions for creating things
     Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }

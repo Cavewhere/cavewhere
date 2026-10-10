@@ -332,19 +332,6 @@ TEST_CASE("an owner with no attachment has no status row",
 
 namespace {
 
-// A cave with no trips: what the Add Cave flow hands the cave-level
-// attach verb, which refuses a cave that already holds trips.
-cwCave* attachFreshCave(SavedProjectFixture* fixture, const QString& caveName,
-                        const QString& sourcePath)
-{
-    cwCave* cave = addEmptyCave(*fixture->project->cavingRegion(), caveName);
-    auto future = fixture->rootData->externalCenterlineManager()
-                      ->attachCenterline(cave, sourcePath);
-    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
-    REQUIRE_FALSE(future.result().hasError());
-    return cave;
-}
-
 // The update verbs are void, so the test waits for the operations' own
 // reports rather than assuming the copies already landed.
 void waitForAttachReports(SavedProjectFixture* fixture, QSignalSpy& attachSpy,
@@ -358,7 +345,7 @@ void waitForAttachReports(SavedProjectFixture* fixture, QSignalSpy& attachSpy,
 
 } // namespace
 
-TEST_CASE("updateFromSource re-copies a cave owner's changed source",
+TEST_CASE("updateFromSource re-copies a source root's changed source",
           "[ExternalSourceStatus]")
 {
     auto fixture = makeStatusProject(QStringLiteral("status-cave-update"));
@@ -366,7 +353,7 @@ TEST_CASE("updateFromSource re-copies a cave owner's changed source",
         writeSource(sourcePathIn(sourceDirOf(fixture.get()), QStringLiteral("cave.svx")),
                     kOneShot);
 
-    cwCave* cave = attachFreshCave(fixture.get(), QStringLiteral("UpdateCave"), caveSource);
+    cwCave* cave = attachSourceUnderRegion(fixture.get(), caveSource);
     drainPipelines(fixture.get());
 
     auto* statuses = statusModelOf(fixture.get());
@@ -391,7 +378,7 @@ TEST_CASE("updateFromSource re-copies a cave owner's changed source",
     CHECK(fileContents(copyPath).contains(kTwoShots));
 }
 
-TEST_CASE("update all covers cave rows alongside trip rows",
+TEST_CASE("update all covers source-root rows alongside trip rows",
           "[ExternalSourceStatus]")
 {
     auto fixture = makeStatusProject(QStringLiteral("status-update-all-mixed"));
@@ -404,7 +391,7 @@ TEST_CASE("update all covers cave rows alongside trip rows",
 
     const QString caveSource =
         writeSource(sourcePathIn(sourceDir, QStringLiteral("cave.svx")), kOneShot);
-    cwCave* cave = attachFreshCave(fixture.get(), QStringLiteral("BatchCave"), caveSource);
+    cwCave* cave = attachSourceUnderRegion(fixture.get(), caveSource);
     drainPipelines(fixture.get());
 
     auto* statuses = statusModelOf(fixture.get());

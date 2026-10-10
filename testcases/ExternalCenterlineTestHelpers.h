@@ -265,25 +265,56 @@ inline void attachThroughManager(SavedProjectFixture* fixture, cwTrip* trip,
     REQUIRE_FALSE(future.result().hasError());
 }
 
-// The cave-level twin of the prologue above: a cave attach also creates
-// the cave's Scope trips, so tests about those start here.
-inline void attachThroughManager(SavedProjectFixture* fixture, cwCave* cave,
-                                 const QString& sourcePath)
+// The source twin of the prologue above: attaches sourcePath as a sourced
+// subtree under target and returns the root node the attach built.
+inline cwSurveyNode* attachSourceThroughManager(SavedProjectFixture* fixture,
+                                                cwSurveyNode* target,
+                                                const QString& sourcePath)
 {
-    auto future = managerOf(fixture)->attachCenterline(cave, sourcePath);
+    auto future = managerOf(fixture)->attachSource(target, sourcePath);
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
     REQUIRE_FALSE(future.result().hasError());
+    cwSurveyNode* root = future.result().value().root.data();
+    REQUIRE(root != nullptr);
+    return root;
 }
 
-//! The trip windowing `stationPrefix`, or null when the cave has none.
-inline cwTrip* tripForPrefix(const cwCave* cave, const QString& stationPrefix)
+//! Attaches sourcePath as a source root under the region's root. Every node
+//! below the root is a cwCave, the type cwSaveLoad derives the copy's dir from.
+inline cwCave* attachSourceUnderRegion(SavedProjectFixture* fixture, const QString& sourcePath)
 {
-    for (cwTrip* trip : cave->trips()) {
-        if (trip->stationPrefix() == stationPrefix) {
-            return trip;
+    auto* root = qobject_cast<cwCave*>(attachSourceThroughManager(
+        fixture, fixture->project->cavingRegion()->rootNode(), sourcePath));
+    REQUIRE(root != nullptr);
+    return root;
+}
+
+inline cwSurveyNode* childNodeNamed(const cwSurveyNode* parent, const QString& name)
+{
+    for (cwSurveyNode* child : parent->childNodes()) {
+        if (child->name() == name) {
+            return child;
         }
     }
     return nullptr;
+}
+
+inline QStringList childNodeNames(const cwSurveyNode* node)
+{
+    QStringList names;
+    for (const cwSurveyNode* child : node->childNodes()) {
+        names.append(child->name());
+    }
+    return names;
+}
+
+inline QStringList tripNames(const cwSurveyNode* node)
+{
+    QStringList names;
+    for (const cwTrip* trip : node->trips()) {
+        names.append(trip->name());
+    }
+    return names;
 }
 
 inline cwCave* addEmptyCave(cwCavingRegion& region, const QString& name)

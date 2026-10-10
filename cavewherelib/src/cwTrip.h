@@ -171,10 +171,9 @@ public:
     //! claims — a Compass station, a Walls station with no prefix in force, a
     //! Survex station outside every named "*begin".
     //!
-    //! An attached cave has no native trips, so a trip under one with no
-    //! external centerline of its own and an empty stationPrefix is that window
-    //! by construction. Derived state: nothing persists it, and an attachment
-    //! made before it existed grows one on the next Reload or Replace.
+    //! A trip directly under an attached node with no external centerline of
+    //! its own and an empty stationPrefix is that window. Derived state:
+    //! nothing persists it.
     //!
     //! Its scope, relative to its cave, is the cave itself, so scopePrefix()
     //! stays empty and everything reading "empty prefix = the cave's own

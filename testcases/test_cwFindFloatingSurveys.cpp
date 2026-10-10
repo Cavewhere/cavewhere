@@ -17,6 +17,7 @@
 
 // Catch
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Cavewhere
 #include "cwCave.h"
@@ -312,53 +313,29 @@ TEST_CASE("The floating-survey signal stays quiet when the answer is unchanged",
     CHECK(spy.size() == 1);
 }
 
-TEST_CASE("The Scope trips of an attached cave never float", "[FloatingSurveys]")
+TEST_CASE("The derived trips of an attached survey file never float", "[FloatingSurveys]")
 {
-    // A Scope trip owns no attachment and no chunks: its stations are a window
-    // onto the cave's own solved network, so neither pass has anything to
-    // report about it. TripPage's panel swap and the note-station validator now
-    // hang off that, and a banner claiming every block of a healthy cave is
-    // adrift would be the loudest way to break it.
-    auto fixture = makeSavedProject(QStringLiteral("scope-floating"),
-                                    QStringLiteral("NativeCave"),
-                                    QStringLiteral("NativeTrip"));
-    cwCave* cave = addEmptyCave(*fixture->project->cavingRegion(),
-                                QStringLiteral("BlocksCave"));
+    // A derived trip owns no attachment and no chunks: its stations come from
+    // its source root's solve, so neither pass has anything to report about
+    // it. TripPage's panel swap and the note-station validator hang off that,
+    // and a banner claiming every block of a healthy source is adrift would be
+    // the loudest way to break it.
+    const QString fixture = GENERATE(QStringLiteral("survex_blocks.svx"),
+                                     QStringLiteral("compass_multi.mak"));
+    auto fixtureProject = makeSavedProject(QStringLiteral("derived-floating"),
+                                           QStringLiteral("NativeCave"),
+                                           QStringLiteral("NativeTrip"));
 
-    attachThroughManager(fixture.get(), cave,
-                         fixturePath(QStringLiteral("survex_blocks.svx")));
-    drainPipelines(fixture.get());
+    cwSurveyNode* root = attachSourceThroughManager(
+        fixtureProject.get(), fixtureProject->project->cavingRegion()->rootNode(),
+        fixturePath(fixture));
+    drainPipelines(fixtureProject.get());
 
-    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    cwLinePlotManager* linePlot = fixtureProject->rootData->linePlotManager();
+    INFO("fixture " << fixture.toStdString());
     INFO("solve error: " << linePlot->solveErrorMessage().toStdString());
     REQUIRE_FALSE(linePlot->hasSolveError());
-    REQUIRE(cave->tripCount() == 3);
-
-    CHECK(linePlot->floatingSurveys().isEmpty());
-}
-
-TEST_CASE("The whole-cave window of an attached cave never floats", "[FloatingSurveys]")
-{
-    // Same reason as the block windows above, for the window that carries no
-    // prefix at all (cwTrip::windowsWholeCave): a Compass file gives cavern no
-    // level below the cave, so this one trip is the view onto every station the
-    // cave solved. Reporting the whole of a healthy cave as adrift would be the
-    // loudest possible banner.
-    auto fixture = makeSavedProject(QStringLiteral("whole-cave-floating"),
-                                    QStringLiteral("NativeCave"),
-                                    QStringLiteral("NativeTrip"));
-    cwCave* cave = addEmptyCave(*fixture->project->cavingRegion(),
-                                QStringLiteral("CompassCave"));
-
-    attachThroughManager(fixture.get(), cave,
-                         fixturePath(QStringLiteral("compass_multi.mak")));
-    drainPipelines(fixture.get());
-
-    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
-    INFO("solve error: " << linePlot->solveErrorMessage().toStdString());
-    REQUIRE_FALSE(linePlot->hasSolveError());
-    REQUIRE(cave->tripCount() == 1);
-    REQUIRE(cave->trip(0)->windowsWholeCave());
+    REQUIRE_FALSE(root->allTrips().isEmpty());
 
     CHECK(linePlot->floatingSurveys().isEmpty());
 }

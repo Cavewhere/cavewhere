@@ -13,6 +13,7 @@
 #include "cwCavingRegion.h"
 #include "cwEquate.h"
 #include "cwEquateModel.h"
+#include "cwExternalSourceModel.h"
 #include "cwFutureManagerModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
@@ -506,4 +507,78 @@ TEST_CASE("enqueueExternalCenterlineRemoveTree recursively deletes a subtree",
     // Removing an attachment tree (the future detach flow) is a project
     // mutation and must dirty the project.
     CHECK(fixture->project->modified());
+}
+
+namespace {
+
+//! Copies \a source to \a destination; the fixture carries no git repository.
+void copyFixtureDirectory(const QDir& source, const QDir& destination)
+{
+    REQUIRE(QDir().mkpath(destination.absolutePath()));
+    const QFileInfoList entries =
+        source.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo& entry : entries) {
+        const QString destinationPath = destination.absoluteFilePath(entry.fileName());
+        if (entry.isDir()) {
+            copyFixtureDirectory(QDir(entry.absoluteFilePath()), QDir(destinationPath));
+        } else {
+            REQUIRE(QFile::copy(entry.absoluteFilePath(), destinationPath));
+        }
+    }
+}
+
+} // namespace
+
+TEST_CASE("sourced_excluded keeps its hidden items and native trip across Reload",
+          "[SaveLoad][External][Attach]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QDir workingRoot(QDir(tempDir.path()).absoluteFilePath(QStringLiteral("sourced_excluded")));
+    copyFixtureDirectory(QDir(testcasesDatasetSourcePath(QStringLiteral("survey-tree/sourced_excluded"))),
+                         workingRoot);
+
+    auto rootData = std::make_unique<cwRootData>();
+    addTokenManager(rootData->project());
+    rootData->project()->loadOrConvert(
+        workingRoot.absoluteFilePath(QStringLiteral("sourced_excluded.cwproj")));
+    rootData->project()->waitLoadToFinish();
+    rootData->linePlotManager()->waitToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+
+    cwCavingRegion* region = rootData->project()->cavingRegion();
+    cwSurveyNode* folder = childNodeNamed(region->rootNode(), QStringLiteral("Field seasons"));
+    REQUIRE(folder != nullptr);
+    cwSurveyNode* root = childNodeNamed(folder, QStringLiteral("PROJECT"));
+    REQUIRE(root != nullptr);
+    REQUIRE(root->isSourceRoot());
+    cwSurveyNode* alpha = childNodeNamed(root, QStringLiteral("Alpha"));
+    REQUIRE(alpha != nullptr);
+    const QUuid alphaId = alpha->id();
+    const QStringList exclusionsBefore = region->externalSources()->sourceAt(0).excludedSourcePaths();
+
+    // A project received through sync remembers no source on this machine;
+    // this one is pointed at the fixture the copy came from.
+    const QString source = fixturePath(QStringLiteral("compass_project/PROJECT.MAK"));
+    rootData->externalSourceSettings()->setBreadcrumb(
+        root->id(), source,
+        cwExternalSourceSettings::computeFingerprint({source}));
+    auto* manager = rootData->externalCenterlineManager();
+    REQUIRE(manager->canReloadFromSource(root));
+
+    auto future = manager->reloadFromSource(root);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    INFO("reload: " << future.result().errorMessage().toStdString());
+    REQUIRE_FALSE(future.result().hasError());
+    rootData->project()->waitSaveToFinish();
+    rootData->linePlotManager()->waitToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+
+    // The hidden node and unit stay hidden, the native trip stays, and the
+    // derived records the file still lists keep their identity.
+    CHECK(childNodeNames(root) == QStringList({QStringLiteral("Alpha"), QStringLiteral("Charlie")}));
+    CHECK(alpha->id() == alphaId);
+    CHECK(tripNames(alpha) == QStringList({QStringLiteral("ALPHA1"), QStringLiteral("Alpha resurvey")}));
+    CHECK(region->externalSources()->sourceAt(0).excludedSourcePaths() == exclusionsBefore);
 }

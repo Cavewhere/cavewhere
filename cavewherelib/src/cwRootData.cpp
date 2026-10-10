@@ -417,20 +417,36 @@ QFuture<Monad::ResultBase> cwRootData::detachTripCenterline(cwTrip* trip)
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwRootData::attachCaveCenterline(cwCave* cave, const QString& sourcePath)
+cwRootData::attachSource(cwSurveyNode* target, const QString& sourcePath)
 {
-    return externalCenterlineManager()->attachCenterline(cave, sourcePath);
+    return externalCenterlineManager()->attachSource(target, sourcePath);
 }
 
 QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
-cwRootData::replaceCaveCenterline(cwCave* cave, const QString& sourcePath)
+cwRootData::replaceSource(cwSurveyNode* root, const QString& sourcePath)
 {
-    return externalCenterlineManager()->replaceCenterline(cave, sourcePath);
+    return externalCenterlineManager()->replaceSource(root, sourcePath);
 }
 
-QFuture<Monad::ResultBase> cwRootData::detachCaveCenterline(cwCave* cave)
+QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
+cwRootData::reloadSource(cwSurveyNode* root)
 {
-    return externalCenterlineManager()->detachCenterline(cave);
+    return externalCenterlineManager()->reloadFromSource(root);
+}
+
+QFuture<Monad::ResultBase> cwRootData::deleteSourceRoot(cwSurveyNode* root)
+{
+    return externalCenterlineManager()->deleteSourceRoot(root);
+}
+
+bool cwRootData::hideDerived(QObject* nodeOrTrip)
+{
+    return externalCenterlineManager()->hideDerived(nodeOrTrip);
+}
+
+QFuture<Monad::ResultBase> cwRootData::restoreHidden(cwSurveyNode* root)
+{
+    return externalCenterlineManager()->restoreHidden(root);
 }
 
 void cwRootData::showInFolder(const QString &path) const
