@@ -63,9 +63,13 @@ constexpr double kShotsOnlySnappedHigh = 20.0;
 constexpr int kDeepShotFirstVertex = 4;
 constexpr int kVerticesPerShot = 2;
 // Loop error: the bar is fixed at 0..3 sigma
+constexpr double kGoodSigma = 1.0;
+constexpr double kOkaySigma = 2.0;
 constexpr double kBadSigma = 3.0;
 constexpr double kMidSigma = 1.5;
 constexpr float kLoopLegSigma = 0.8f;
+// LinePlot.frag's kNoDataColor
+constexpr double kNoDataGray = 0.55;
 
 // Points every cwColorBy in the test at its own QSettings store, unique to this
 // process so parallel runs never collide, and clears it on both ends.
@@ -283,6 +287,60 @@ TEST_CASE("cwColorBy colors loop error on a fixed sigma scale", "[ColorBy]")
         colorBy.setSource(cwColorBy::Source::Depth);
         CHECK(colorBy.uniform().params[cwColorByUniform::ParamStrength] == Approx(kStoredScrapStrength));
         CHECK(static_cast<int>(colorBy.uniform().params[cwColorByUniform::ParamValueSource]) == cwColorByUniform::WorldZ);
+    }
+}
+
+TEST_CASE("cwColorBy labels the loop error bar in sigma", "[ColorBy]")
+{
+    ScopedColorBySettings settings;
+
+    ColorByScene fixture;
+    cwColorBy& colorBy = fixture.colorBy;
+    colorBy.setSource(cwColorBy::Source::Depth);
+    fixture.setGeometryAndSettle(deepToHighGeometry());
+    REQUIRE(colorBy.rangeMin() == Approx(kDeepest));
+    REQUIRE(colorBy.rangeMax() == Approx(kHighest));
+    CHECK(colorBy.bandName(kGoodSigma) == QString());
+
+    QSignalSpy rangeSpy(&colorBy, &cwColorBy::rangeChanged);
+    QSignalSpy ticksSpy(&colorBy, &cwColorBy::legendTicksChanged);
+    colorBy.setSource(cwColorBy::Source::LoopError);
+    CHECK(rangeSpy.count() == 1);
+    CHECK(ticksSpy.count() == 1);
+
+    CHECK(colorBy.rangeMin() == Approx(0.0));
+    CHECK(colorBy.rangeMax() == Approx(kBadSigma));
+    CHECK(colorBy.legendTicks() == QList<double>{0.0, kGoodSigma, kOkaySigma, kBadSigma});
+    CHECK(colorBy.normalized(kMidSigma) == Approx(0.5));
+    CHECK(colorBy.normalized(kBadSigma * 2.0) == Approx(1.0));
+
+    CHECK(colorBy.formatTick(0.0) == QStringLiteral(u"0 \u03c3"));
+    CHECK(colorBy.formatTick(kGoodSigma) == QStringLiteral(u"1 \u03c3"));
+    CHECK(colorBy.formatTick(kOkaySigma) == QStringLiteral(u"2 \u03c3"));
+    CHECK(colorBy.formatTick(kBadSigma) == QStringLiteral(u"\u22653 \u03c3"));
+
+    CHECK(colorBy.bandName(0.0) == QStringLiteral("Perfect"));
+    CHECK(colorBy.bandName(kLoopLegSigma) == QStringLiteral("Perfect"));
+    CHECK(colorBy.bandName(kGoodSigma) == QStringLiteral("Good"));
+    CHECK(colorBy.bandName(kMidSigma) == QStringLiteral("Good"));
+    CHECK(colorBy.bandName(kOkaySigma) == QStringLiteral("Okay"));
+    CHECK(colorBy.bandName(kBadSigma) == QStringLiteral("Bad"));
+    CHECK(colorBy.bandName(kBadSigma * 3.0) == QStringLiteral("Bad"));
+
+    CHECK(colorBy.noDataColor() == QColor::fromRgbF(kNoDataGray, kNoDataGray, kNoDataGray));
+
+    SECTION("switching back to depth restores the snapped depth range") {
+        rangeSpy.clear();
+        ticksSpy.clear();
+        colorBy.setSource(cwColorBy::Source::Depth);
+        CHECK(rangeSpy.count() == 1);
+        CHECK(ticksSpy.count() == 1);
+        CHECK(colorBy.rangeMin() == Approx(kDeepest));
+        CHECK(colorBy.rangeMax() == Approx(kHighest));
+        CHECK(colorBy.legendTicks().first() == Approx(kDeepest));
+        CHECK(colorBy.legendTicks().last() == Approx(kHighest));
+        CHECK(colorBy.formatTick(kDeepest) == QStringLiteral(u"\u2212500 m"));
+        CHECK(colorBy.uniform().range[cwColorByUniform::RangeMin] == Approx(kDeepest));
     }
 }
 

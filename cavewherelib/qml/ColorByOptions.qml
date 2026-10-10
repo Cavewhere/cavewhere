@@ -17,11 +17,14 @@ GridLayout {
     readonly property ColorBy colorBy: RootData.regionSceneManager.colorBy
     readonly property bool active: colorBy.source !== ColorBy.None
     readonly property bool depthActive: colorBy.source === ColorBy.Depth
+    // Scraps carry no loop error, so their tint is off in that mode
+    readonly property bool scrapTintActive: active && colorBy.source !== ColorBy.LoopError
     readonly property list<string> keywordKeys: RootData.keywordFilterPipelineModel.possibleKeys
         .filter(key => !colorBy.hiddenKeywordKeys.includes(key))
-    // Source combo rows: None, Depth, then the keys
+    // Source combo rows: None, Depth, Loop error, then the keys
     readonly property int depthIndex: 1
-    readonly property int firstKeyIndex: 2
+    readonly property int loopErrorIndex: 2
+    readonly property int firstKeyIndex: 3
     // Whole meters or feet; covers about 9 km either way in both units
     readonly property int pivotLimit: 30000
     readonly property int depthUnit: Units.depthDisplayUnit(ProjectUnits.unitSystem)
@@ -44,12 +47,14 @@ GridLayout {
         objectName: "colorBySourceCombo"
 
         Layout.fillWidth: true
-        model: [qsTr("None"), qsTr("Depth")].concat(rootId.keywordKeys)
+        model: [qsTr("None"), qsTr("Depth"), qsTr("Loop error")].concat(rootId.keywordKeys)
 
         currentIndex: {
             switch (rootId.colorBy.source) {
             case ColorBy.Depth:
                 return rootId.depthIndex;
+            case ColorBy.LoopError:
+                return rootId.loopErrorIndex;
             case ColorBy.Keyword: {
                 // A stored key the project lacks selects nothing
                 const keyIndex = rootId.keywordKeys.indexOf(rootId.colorBy.keywordKey);
@@ -64,8 +69,12 @@ GridLayout {
             if (index >= rootId.firstKeyIndex) {
                 rootId.colorBy.keywordKey = rootId.keywordKeys[index - rootId.firstKeyIndex];
                 rootId.colorBy.source = ColorBy.Keyword;
+            } else if (index === rootId.depthIndex) {
+                rootId.colorBy.source = ColorBy.Depth;
+            } else if (index === rootId.loopErrorIndex) {
+                rootId.colorBy.source = ColorBy.LoopError;
             } else {
-                rootId.colorBy.source = index === rootId.depthIndex ? ColorBy.Depth : ColorBy.None;
+                rootId.colorBy.source = ColorBy.None;
             }
         }
     }
@@ -141,7 +150,7 @@ GridLayout {
     }
 
     RowLabel {
-        visible: rootId.active
+        visible: rootId.scrapTintActive
         text: qsTr("Scrap tint")
     }
 
@@ -149,7 +158,7 @@ GridLayout {
         objectName: "colorByStrengthSlider"
 
         Layout.fillWidth: true
-        visible: rootId.active
+        visible: rootId.scrapTintActive
         from: 0
         to: 1
 

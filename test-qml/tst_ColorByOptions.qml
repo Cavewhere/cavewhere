@@ -12,6 +12,8 @@ MainWindowTest {
         when: windowShown
 
         readonly property int depthIndex: 1
+        readonly property int loopErrorIndex: 2
+        readonly property int sigmaTickCount: 4
         readonly property real feetPerMeter: 3.28084
         readonly property real pivotTolerance: 0.01
         readonly property real edgeTolerance: 1
@@ -412,6 +414,57 @@ MainWindowTest {
             verify(title, "found the legend title");
             tryCompare(title, "text", "Depth");
             clickEditPill(legend, popup);
+        }
+
+        function test_loopErrorHidesDepthRowsAndTicksInSigma() {
+            let colorBy = RootData.regionSceneManager.colorBy;
+            let popup = openPopupWithDepth();
+            let content = popup.contentItem;
+            let palette = findChild(content, "colorByRampCombo");
+            let spin = findChild(content, "colorByPivotSpin");
+            let slider = findChild(content, "colorByStrengthSlider");
+            verify(palette && spin && slider, "found the palette, White at and scrap tint rows");
+            tryVerify(() => palette.visible && spin.visible && slider.visible, 5000,
+                      "depth shows the palette, White at and scrap tint rows");
+
+            let sourceCombo = findChild(content, "colorBySourceCombo");
+            verify(sourceCombo, "found the source combo");
+            compare(sourceCombo.model[loopErrorIndex], "Loop error");
+            sourceCombo.currentIndex = loopErrorIndex;
+            sourceCombo.activated(loopErrorIndex);
+            tryCompare(colorBy, "source", ColorBy.LoopError);
+            tryVerify(() => !palette.visible && !spin.visible && !slider.visible, 5000,
+                      "loop error hides the palette, White at and scrap tint rows");
+            compare(sourceCombo.currentIndex, loopErrorIndex);
+            popup.close();
+
+            let legend = findLegend();
+            let title = findChild(legend, "colorByTitle");
+            verify(title, "found the legend title");
+            tryCompare(title, "text", "Loop error");
+            let bar = findChild(legend, "colorByBar");
+            verify(bar, "found the colorbar");
+            tryVerify(() => bar.visible, 5000, "the colorbar shows for loop error");
+
+            let ticks = findChild(legend, "colorByTicks");
+            verify(ticks, "found the tick repeater");
+            tryCompare(ticks, "count", sigmaTickCount);
+            const expected = ["0 \u03c3", "1 \u03c3", "2 \u03c3", "\u22653 \u03c3"];
+            for (let i = 0; i < sigmaTickCount; ++i) {
+                let label = tickLabel(ticks.itemAt(i));
+                compare(label.text, expected[i]);
+                verify(label.visible, "sigma tick " + i + " shows its label");
+            }
+            // 0 sigma sits at the bottom of the bar, the top tick at the top
+            verify(ticks.itemAt(0).markY > ticks.itemAt(sigmaTickCount - 1).markY,
+                   "0 sigma sits below the top tick");
+
+            // Saved so the legend can be eyeballed
+            const path = OffscreenRenderTester.tempPngPath("colorby_cp17");
+            let saved = false;
+            legend.grabToImage(result => { saved = result.saveToFile(path); });
+            tryVerify(() => saved, 5000, "saved the legend image");
+            console.log("color-by loop error legend render: " + path);
         }
 
         function test_legendSitsAboveCompass() {

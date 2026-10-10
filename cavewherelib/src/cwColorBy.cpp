@@ -28,8 +28,15 @@ QString keywordKeyKey() { return QStringLiteral("colorBy/keywordKey"); }
 constexpr double kDefaultScrapStrength = 0.6;
 constexpr float kOpaque = 1.0f;
 
-// Loop error bar: fixed 0..kBadSigma standard deviations
+// Loop error bar: fixed 0..kBadSigma standard deviations, one tick per
+// sigma. A value lands in the band of the highest threshold it reaches.
+constexpr double kPerfectSigma = 0.0;
+constexpr double kGoodSigma = 1.0;
+constexpr double kOkaySigma = 2.0;
 constexpr double kBadSigma = 3.0;
+
+// Matches kNoDataColor in LinePlot.frag
+constexpr double kNoDataGray = 0.55;
 
 // Diverging normalize: the pivot sits at the middle of the bar.
 constexpr double kPivotPosition = 0.5;
@@ -108,6 +115,15 @@ SnappedRange snapRange(double lo, double hi)
     }
     // A range wider than the largest step allows: use the largest anyway
     return snappedWith(interval);
+}
+
+// A whole number with a real minus sign (U+2212). IEEE: -0.0 + 0.0 == +0.0,
+// so a value that rounds to zero shows no sign.
+QString wholeNumberText(double value)
+{
+    const double rounded = std::round(value) + 0.0;
+    const QString sign = rounded < 0.0 ? QStringLiteral(u"\u2212") : QString();
+    return QStringLiteral("%1%2").arg(sign).arg(std::abs(rounded), 0, 'f', 0);
 }
 
 // Every multiple of the snapped range's interval from lo to hi inclusive, in meters
@@ -237,6 +253,25 @@ void cwColorBy::setSource(Source source)
     rebuildUniform();
     emit sourceChanged();
     emit legendChanged();
+    // Loop error has its own fixed range and ticks
+    emit rangeChanged();
+    emit legendTicksChanged();
+}
+
+cwColorBy::Range cwColorBy::activeRange() const
+{
+    if (m_source == Source::LoopError) {
+        return {kPerfectSigma, kBadSigma};
+    }
+    return {m_rangeMin, m_rangeMax};
+}
+
+QList<double> cwColorBy::legendTicks() const
+{
+    if (m_source == Source::LoopError) {
+        return {kPerfectSigma, kGoodSigma, kOkaySigma, kBadSigma};
+    }
+    return m_legendTicks;
 }
 
 QStringList cwColorBy::hiddenKeywordKeys()
@@ -370,10 +405,40 @@ void cwColorBy::setUnitSystem(cwUnits::UnitSystem system)
 QString cwColorBy::formatDepth(double meters) const
 {
     const cwUnits::LengthUnit unit = cwUnits::depthUnit(m_unitSystem);
-    // IEEE: -0.0 + 0.0 == +0.0, so a value that rounds to zero shows no sign
-    const double value = std::round(cwUnits::convert(meters, cwUnits::Meters, unit)) + 0.0;
-    const QString sign = value < 0.0 ? QStringLiteral(u"\u2212") : QString();
-    return QStringLiteral("%1%2 %3").arg(sign).arg(std::abs(value), 0, 'f', 0).arg(cwUnits::unitName(unit));
+    return QStringLiteral("%1 %2").arg(wholeNumberText(cwUnits::convert(meters, cwUnits::Meters, unit)),
+                                       cwUnits::unitName(unit));
+}
+
+QString cwColorBy::formatTick(double value) const
+{
+    if (m_source == Source::LoopError) {
+        // The top of the scale also stands for every larger error
+        const QString atLeast = value >= kBadSigma ? QStringLiteral(u"\u2265") : QString();
+        return QStringLiteral(u"%1%2 \u03c3").arg(atLeast, wholeNumberText(value));
+    }
+    return formatDepth(value);
+}
+
+QString cwColorBy::bandName(double sigma) const
+{
+    if (m_source != Source::LoopError) {
+        return {};
+    }
+    if (sigma >= kBadSigma) {
+        return tr("Bad");
+    }
+    if (sigma >= kOkaySigma) {
+        return tr("Okay");
+    }
+    if (sigma >= kGoodSigma) {
+        return tr("Good");
+    }
+    return tr("Perfect");
+}
+
+QColor cwColorBy::noDataColor() const
+{
+    return QColor::fromRgbF(kNoDataGray, kNoDataGray, kNoDataGray);
 }
 
 void cwColorBy::setScrapStrength(double strength)
@@ -391,14 +456,15 @@ void cwColorBy::setScrapStrength(double strength)
 double cwColorBy::normalized(double value) const
 {
     const int mode = static_cast<int>(m_uniform.params[ParamMode]);
+    const Range range = activeRange();
     double t = 0.0;
     switch (mode) {
     case cwColorByUniform::Sequential:
-        t = (value - m_rangeMin) / (m_rangeMax - m_rangeMin);
+        t = (value - range.lo) / (range.hi - range.lo);
         break;
     case cwColorByUniform::Diverging: {
         const double resolvedPivot = pivot();
-        t = kPivotPosition + kPivotPosition * (value - resolvedPivot) / halfExtentOf(m_rangeMin, m_rangeMax, resolvedPivot);
+        t = kPivotPosition + kPivotPosition * (value - resolvedPivot) / halfExtentOf(range.lo, range.hi, resolvedPivot);
         break;
     }
     default:
@@ -410,6 +476,9 @@ double cwColorBy::normalized(double value) const
 
 QColor cwColorBy::colorAt(double t) const
 {
+    if (m_source == Source::LoopError) {
+        return cwColorRamp::loopErrorRamp().colorAt(t);
+    }
     return resolvedRamp(m_rampId).colorAt(t);
 }
 
@@ -473,11 +542,16 @@ void cwColorBy::applyDataRange()
         // normalized() reads the mode from the uniform, so rebuild before listeners re-read it
         rebuildUniform();
     }
-    if (ticksMoved) {
+    // Loop error's range and ticks are fixed; setSource announces the depth
+    // ones on the way back.
+    const bool depthRangeShown = m_source != Source::LoopError;
+    if (ticksMoved && depthRangeShown) {
         emit legendTicksChanged();
     }
     if (rangeMoved) {
-        emit rangeChanged();
+        if (depthRangeShown) {
+            emit rangeChanged();
+        }
         if (oldPivot != pivot()) {
             emit pivotChanged();
         }
@@ -509,26 +583,18 @@ void cwColorBy::rebuildUniform()
         uniform.ramp[i][3] = kOpaque;
     }
 
-    if (loopErrorMode) {
-        // A fixed sigma scale; the pivot and half extent sit mid-bar and go unread
-        constexpr double kMidSigma = kBadSigma * kHalf;
-        uniform.range[RangeMin] = 0.0f;
-        uniform.range[RangeMax] = static_cast<float>(kBadSigma);
-        uniform.range[RangePivot] = static_cast<float>(kMidSigma);
-        uniform.range[RangeHalfExtent] = static_cast<float>(kMidSigma);
-    } else {
-        const double resolvedPivot = pivot();
-        const double halfExtent = halfExtentOf(m_rangeMin, m_rangeMax, resolvedPivot);
-        uniform.range[RangeMin] = static_cast<float>(m_rangeMin);
-        uniform.range[RangeMax] = static_cast<float>(m_rangeMax);
-        uniform.range[RangePivot] = static_cast<float>(resolvedPivot);
-        uniform.range[RangeHalfExtent] = static_cast<float>(halfExtent);
-    }
+    const Range range = activeRange();
+    // Loop error's sigma scale has no pivot; it sits mid-bar and goes unread.
+    const double resolvedPivot = loopErrorMode ? (range.lo + range.hi) * kHalf : pivot();
+    uniform.range[RangeMin] = static_cast<float>(range.lo);
+    uniform.range[RangeMax] = static_cast<float>(range.hi);
+    uniform.range[RangePivot] = static_cast<float>(resolvedPivot);
+    uniform.range[RangeHalfExtent] = static_cast<float>(halfExtentOf(range.lo, range.hi, resolvedPivot));
 
     const bool diverging = ramp.kind() == cwColorRamp::Kind::Diverging;
     // A non-empty range also gives the diverging half extent a positive size:
     // it is at least half the range wherever the pivot sits.
-    const bool rangeIsUsable = m_rangeMax > m_rangeMin;
+    const bool rangeIsUsable = range.hi > range.lo;
 
     int mode = cwColorByUniform::Off;
     int slotCount = 0;

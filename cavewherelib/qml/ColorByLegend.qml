@@ -18,7 +18,9 @@ QQ.Item {
 
     readonly property ColorBy colorBy: RootData.regionSceneManager.colorBy
     readonly property bool active: colorBy.source !== ColorBy.None
-    readonly property bool showsBar: colorBy.source === ColorBy.Depth
+    readonly property bool depthActive: colorBy.source === ColorBy.Depth
+    readonly property bool loopErrorActive: colorBy.source === ColorBy.LoopError
+    readonly property bool showsBar: depthActive || loopErrorActive
     readonly property bool showsSwatches: colorBy.source === ColorBy.Keyword
     readonly property int stripCount: 48
     readonly property int barWidth: 14
@@ -30,7 +32,7 @@ QQ.Item {
     readonly property int tickMarkWidth: barWidth + tickOverhang
     readonly property int tickLabelX: tickMarkWidth + tickLabelGap
     // Sized from the end labels in the default label font, so the widest
-    // depth fits and the end labels center on the bar's end ticks.
+    // depth or sigma label fits and the end labels center on the bar's end ticks.
     readonly property int labelHeight: Math.ceil(tickMetricsId.height)
     readonly property int labelWidth: Math.ceil(Math.max(tickMetricsId.advanceWidth(tickText(colorBy.rangeMin)),
                                                          tickMetricsId.advanceWidth(tickText(colorBy.rangeMax))))
@@ -44,7 +46,9 @@ QQ.Item {
     readonly property int swatchSpacing: 2
     // Longer swatch lists scroll
     readonly property int maxVisibleSwatchRows: 12
-    readonly property bool pivotInside: colorBy.rangeMin < colorBy.pivot && colorBy.pivot < colorBy.rangeMax
+    // Loop error's sigma scale has no pivot tick
+    readonly property bool pivotInside: depthActive
+                                        && colorBy.rangeMin < colorBy.pivot && colorBy.pivot < colorBy.rangeMax
     // Ticks come back from feet as meters, so match the pivot within a millimeter
     readonly property real tickMatchTolerance: 0.001
     // The rounded ticks, plus the pivot as its own labeled tick when it falls
@@ -104,11 +108,12 @@ QQ.Item {
         return nearestDistance >= minLabelSpacing
     }
 
-    // formatDepth() is an invokable QML cannot track, so name the unit system
-    // to re-evaluate when it changes.
+    // formatTick() is an invokable QML cannot track, so name the unit system
+    // and source to re-evaluate when either changes.
     function tickText(value) {
         colorBy.unitSystem
-        return colorBy.formatDepth(value)
+        colorBy.source
+        return colorBy.formatTick(value)
     }
 
     width: contentId.width
@@ -179,7 +184,15 @@ QQ.Item {
                 objectName: "colorByTitle"
 
                 visible: rootId.active
-                text: rootId.showsBar ? qsTr("Depth") : rootId.colorBy.keywordKey
+                text: {
+                    if (rootId.depthActive) {
+                        return qsTr("Depth")
+                    }
+                    if (rootId.loopErrorActive) {
+                        return qsTr("Loop error")
+                    }
+                    return rootId.colorBy.keywordKey
+                }
                 font.bold: true
             }
 
@@ -196,7 +209,7 @@ QQ.Item {
             }
         }
 
-        // On state: the colorbar, with rounded depth ticks drawn across it and
+        // On state: the colorbar, with rounded depth or sigma ticks drawn across it and
         // labeled on its right.
         QQ.Item {
             id: legendId

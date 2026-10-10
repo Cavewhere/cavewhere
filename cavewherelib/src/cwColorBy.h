@@ -47,6 +47,7 @@ class CAVEWHERE_LIB_EXPORT cwColorBy : public QObject
     Q_PROPERTY(int legendSlotCount READ legendSlotCount NOTIFY legendChanged)
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
     Q_PROPERTY(QList<double> legendTicks READ legendTicks NOTIFY legendTicksChanged)
+    Q_PROPERTY(QColor noDataColor READ noDataColor CONSTANT)
 
 public:
     enum class Source { None, Depth, Keyword, LoopError };
@@ -79,9 +80,10 @@ public:
     void setPivotManual(double pivot);
     bool hasPivotManual() const { return m_hasPivotManual; }
     Q_INVOKABLE void clearPivotManual();
-    // The visible z extent snapped outward to the legend's tick interval, in meters.
-    double rangeMin() const { return m_rangeMin; }
-    double rangeMax() const { return m_rangeMax; }
+    // The bar's range: 0..3 sigma for loop error, otherwise the visible z
+    // extent snapped outward to the legend's tick interval, in meters.
+    double rangeMin() const { return activeRange().lo; }
+    double rangeMax() const { return activeRange().hi; }
     double scrapStrength() const { return m_scrapStrength; }
     void setScrapStrength(double strength);
     QString keywordKey() const { return m_keywordKey; }
@@ -103,13 +105,23 @@ public:
     cwUnits::UnitSystem unitSystem() const { return m_unitSystem; }
     void setUnitSystem(cwUnits::UnitSystem system);
 
-    // Depth legend ticks, in meters: every multiple of a {1,2,5}x10^n step
-    // (picked in the depth unit) from rangeMin to rangeMax inclusive, at most
-    // seven. The range is snapped to the step, so both ends are ticks.
-    QList<double> legendTicks() const { return m_legendTicks; }
+    // Loop error ticks are 0, 1, 2, 3 sigma. Depth ticks are in meters: every
+    // multiple of a {1,2,5}x10^n step (picked in the depth unit) from rangeMin
+    // to rangeMax inclusive, at most seven. The range is snapped to the step,
+    // so both ends are ticks.
+    QList<double> legendTicks() const;
     // A depth in the unit system's depth unit, whole numbers, with a real
     // minus sign (U+2212): "−500 m", "−1640 ft".
     Q_INVOKABLE QString formatDepth(double meters) const;
+    // A legend tick label: whole sigma for loop error ("0 σ", "≥3 σ" at the
+    // top of the scale), formatDepth otherwise.
+    Q_INVOKABLE QString formatTick(double value) const;
+    // The loop error band a sigma value falls in: Perfect, Good, Okay or Bad.
+    // Empty in the other sources.
+    Q_INVOKABLE QString bandName(double sigma) const;
+    // The gray the centerline draws legs without a loop in. Keep in sync with
+    // kNoDataColor in LinePlot.frag.
+    QColor noDataColor() const;
 
     // Where a value sits on the bar (0..1, the same rule as the shader), and
     // the color at that position.
@@ -132,6 +144,14 @@ signals:
     void legendTicksChanged();
 
 private:
+    struct Range
+    {
+        double lo;
+        double hi;
+    };
+
+    // The range the current source's values are normalized over
+    Range activeRange() const;
     void scheduleRangeUpdate();
     void updateRangeFromScene();
     void setRange(double dataMin, double dataMax);
