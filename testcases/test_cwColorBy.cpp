@@ -32,6 +32,9 @@ constexpr float kHighest = 100.0f;
 constexpr float kFlatZ = 3.4f;
 constexpr double kFlatSnappedLow = 3.0;
 constexpr double kFlatSnappedHigh = 4.0;
+constexpr float kWholeFlatZ = 4.0f;
+constexpr double kWholeFlatSnappedLow = 3.0;
+constexpr double kWholeFlatSnappedHigh = 5.0;
 constexpr double kMidpointPivot = -200.0;
 constexpr double kMovedPivot = -300.0;
 constexpr double kMovedHalfExtent = 400.0;
@@ -288,7 +291,7 @@ TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]"
     }
 }
 
-TEST_CASE("cwColorBy gives flat geometry a one-unit bar", "[ColorBy]")
+TEST_CASE("cwColorBy brackets flat geometry with whole units", "[ColorBy]")
 {
     ScopedColorBySettings settings;
 
@@ -297,18 +300,37 @@ TEST_CASE("cwColorBy gives flat geometry a one-unit bar", "[ColorBy]")
     cwColorBy& colorBy = fixture.colorBy;
     colorBy.setSource(cwColorBy::Source::Depth);
 
-    fixture.setGeometryAndSettle({
-        QVector3D(0.0f, 0.0f, kFlatZ),
-        QVector3D(10.0f, 0.0f, kFlatZ)
-    });
+    SECTION("fractional data snaps to the unit below and above") {
+        fixture.setGeometryAndSettle({
+            QVector3D(0.0f, 0.0f, kFlatZ),
+            QVector3D(10.0f, 0.0f, kFlatZ)
+        });
 
-    CHECK(colorBy.rangeMin() == Approx(kFlatSnappedLow));
-    CHECK(colorBy.rangeMax() == Approx(kFlatSnappedHigh));
-    REQUIRE(colorBy.legendTicks().size() == 2);
-    CHECK(colorBy.legendTicks().at(0) == Approx(kFlatSnappedLow));
-    CHECK(colorBy.legendTicks().at(1) == Approx(kFlatSnappedHigh));
-    CHECK(std::isfinite(colorBy.normalized(kFlatZ)));
-    CHECK(modeOf(colorBy) != cwColorByUniform::Off);
+        CHECK(colorBy.rangeMin() == Approx(kFlatSnappedLow));
+        CHECK(colorBy.rangeMax() == Approx(kFlatSnappedHigh));
+        REQUIRE(colorBy.legendTicks().size() == 2);
+        CHECK(colorBy.legendTicks().at(0) == Approx(kFlatSnappedLow));
+        CHECK(colorBy.legendTicks().at(1) == Approx(kFlatSnappedHigh));
+        CHECK(std::isfinite(colorBy.normalized(kFlatZ)));
+    }
+
+    SECTION("whole-unit data sits in the middle of the bar") {
+        fixture.setGeometryAndSettle({
+            QVector3D(0.0f, 0.0f, kWholeFlatZ),
+            QVector3D(10.0f, 0.0f, kWholeFlatZ)
+        });
+
+        CHECK(colorBy.rangeMin() == Approx(kWholeFlatSnappedLow));
+        CHECK(colorBy.rangeMax() == Approx(kWholeFlatSnappedHigh));
+        REQUIRE(colorBy.legendTicks().size() == 3);
+        CHECK(colorBy.legendTicks().at(0) == Approx(kWholeFlatSnappedLow));
+        CHECK(colorBy.legendTicks().at(1) == Approx(kWholeFlatZ));
+        CHECK(colorBy.legendTicks().at(2) == Approx(kWholeFlatSnappedHigh));
+        CHECK(colorBy.normalized(kWholeFlatZ) == Approx(0.5));
+    }
+
+    // The default depth ramp is diverging
+    CHECK(modeOf(colorBy) == cwColorByUniform::Diverging);
     CHECK(linePlot.colorBy() == colorBy.uniform());
 }
 

@@ -41,8 +41,8 @@ constexpr int kMaxTickExponent = 5;
 constexpr double kTickBase = 10.0;
 // Absorbs unit-conversion round-off so a range end that is a tick stays one
 constexpr double kTickEpsilon = 1e-9;
-// A flat range snaps to the whole unit below it and this many units above that
-constexpr double kFlatRangeSpan = 1.0;
+// A flat range snaps out to the whole units strictly below and above it
+constexpr double kFlatRangeStep = 1.0;
 
 enum RangeIndex { RangeMin = 0, RangeMax = 1, RangePivot = 2, RangeHalfExtent = 3 };
 enum ParamIndex { ParamMode = 0, ParamStrength = 1, ParamSlotCount = 2, ParamValueSource = 3 };
@@ -82,8 +82,10 @@ struct SnappedRange
 SnappedRange snapRange(double lo, double hi)
 {
     if (hi - lo <= 0.0) {
-        const double flatLo = std::floor(lo + kTickEpsilon);
-        return {flatLo, flatLo + kFlatRangeSpan, kFlatRangeSpan};
+        // 3.4 -> 3..4, and a whole 4.0 -> 3..5 so the data sits mid-bar
+        const double flatLo = std::ceil(lo - kTickEpsilon) - kFlatRangeStep;
+        const double flatHi = std::floor(lo + kTickEpsilon) + kFlatRangeStep;
+        return {flatLo, flatHi, kFlatRangeStep};
     }
 
     const auto firstIndex = [&](double interval) { return std::floor(lo / interval + kTickEpsilon); };

@@ -318,12 +318,39 @@ MainWindowTest {
                 verify(mark.width >= legend.barWidth, "tick " + i + " spans the bar");
             }
 
+            // The end inset centers the end labels on the bar's end ticks
+            const centerY = item => item.y + item.height / 2;
+            const lastIndex = RootData.regionSceneManager.colorBy.legendTicks.length - 1;
+            for (const index of [0, lastIndex]) {
+                const tick = ticks.itemAt(index);
+                const label = tickLabel(tick);
+                verify(label.visible, "end tick " + index + " shows its label");
+                verify(Math.abs(centerY(label) - centerY(tickMark(tick))) <= edgeTolerance,
+                       "end label " + index + " centers on its mark: label " + centerY(label)
+                       + ", mark " + centerY(tickMark(tick)));
+                verify(label.y >= 0 && label.y + label.height <= tick.height,
+                       "end label " + index + " stays inside the legend");
+            }
+
             // Saved so the ticks can be eyeballed
             const path = OffscreenRenderTester.tempPngPath("colorby_legend_ticks");
             let saved = false;
             legend.grabToImage(result => { saved = result.saveToFile(path); });
             tryVerify(() => saved, 5000, "saved the legend image");
             console.log("color-by legend render: " + path);
+        }
+
+        function test_tickLabelsUseDefaultLabelSize() {
+            let ticks = showDepthTicks();
+            let legend = findLegend();
+            let plainLabel = Qt.createQmlObject("import QtQuick.Controls as QC; QC.Label {}", legend);
+            verify(plainLabel, "created a plain label");
+
+            compare(tickLabel(ticks.itemAt(0)).font.pixelSize, plainLabel.font.pixelSize);
+            let title = findChild(legend, "colorByTitle");
+            verify(title, "found the legend title");
+            compare(title.font.pixelSize, plainLabel.font.pixelSize);
+            plainLabel.destroy();
         }
 
         function test_pivotLabelHidesNearTick() {

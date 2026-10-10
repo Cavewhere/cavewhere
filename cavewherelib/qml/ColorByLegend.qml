@@ -29,13 +29,18 @@ QQ.Item {
     readonly property int tickLabelGap: 6
     readonly property int tickMarkWidth: barWidth + tickOverhang
     readonly property int tickLabelX: tickMarkWidth + tickLabelGap
+    // Sized from the end labels in the default label font, so the widest
+    // depth fits and the end labels center on the bar's end ticks.
+    readonly property int labelHeight: Math.ceil(tickMetricsId.height)
+    readonly property int labelWidth: Math.ceil(Math.max(tickMetricsId.advanceWidth(tickText(colorBy.rangeMin)),
+                                                         tickMetricsId.advanceWidth(tickText(colorBy.rangeMax))))
+    readonly property int endInset: Math.ceil(labelHeight / 2)
     // The pivot's label hides when its mark is closer than this to a rounded tick
-    readonly property int minLabelSpacing: Theme.fontSizeCaption
-    readonly property int labelWidth: 56
+    readonly property int minLabelSpacing: labelHeight
     readonly property int contentPadding: 6
     readonly property real backdropOpacity: 0.8
     readonly property int swatchSize: 12
-    readonly property int swatchRowHeight: 16
+    readonly property int swatchRowHeight: labelHeight
     readonly property int swatchSpacing: 2
     // Longer swatch lists scroll
     readonly property int maxVisibleSwatchRows: 12
@@ -77,13 +82,12 @@ QQ.Item {
         return colorBy.colorAt(colorBy.normalized(valueAtStrip(i)))
     }
 
-    // Where a value sits along the bar, top (rangeMax) to bottom (rangeMin)
+    // Where a value sits along the bar, top (rangeMax) to bottom (rangeMin),
+    // in legend coordinates (the bar starts endInset down)
     function tickY(value) {
         const span = colorBy.rangeMax - colorBy.rangeMin
-        if (span <= 0) {
-            return barHeight / 2
-        }
-        return barHeight * (colorBy.rangeMax - value) / span
+        const fraction = span > 0 ? (colorBy.rangeMax - value) / span : 0.5
+        return endInset + barHeight * fraction
     }
 
     // Rounded ticks always show their label; the pivot's label hides when it
@@ -109,6 +113,19 @@ QQ.Item {
 
     width: contentId.width
     height: contentId.height
+
+    // Carries the default label font for tickMetricsId
+    QC.Label {
+        id: defaultFontLabelId
+
+        visible: false
+    }
+
+    QQ.FontMetrics {
+        id: tickMetricsId
+
+        font: defaultFontLabelId.font
+    }
 
     QQ.Rectangle {
         anchors.fill: parent
@@ -163,7 +180,6 @@ QQ.Item {
 
                 visible: rootId.active
                 text: rootId.showsBar ? qsTr("Depth") : rootId.colorBy.keywordKey
-                font.pixelSize: Theme.fontSizeSmall
                 font.bold: true
             }
 
@@ -188,9 +204,11 @@ QQ.Item {
 
             visible: rootId.showsBar
             width: rootId.tickLabelX + rootId.labelWidth
-            height: rootId.barHeight
+            height: rootId.barHeight + 2 * rootId.endInset
 
             QQ.Column {
+                y: rootId.endInset
+
                 QQ.Repeater {
                     objectName: "colorByStrips"
 
@@ -220,24 +238,24 @@ QQ.Item {
                     readonly property bool labelVisible: rootId.tickLabelVisible(modelData)
 
                     width: legendId.width
-                    height: rootId.barHeight
+                    height: legendId.height
 
                     // Clamped so the end ticks draw a full-thickness line on the bar's edges
                     QQ.Rectangle {
                         x: 0
-                        y: Math.max(0, Math.min(rootId.barHeight - height, tickId.markY - height / 2))
+                        y: Math.max(rootId.endInset,
+                                    Math.min(rootId.endInset + rootId.barHeight - height, tickId.markY - height / 2))
                         width: rootId.tickMarkWidth
                         height: rootId.tickThickness
                         color: Theme.text
                     }
 
-                    // Centered on its mark, clamped so the end labels stay inside the bar
+                    // Centered on its mark; the end inset keeps the end labels inside the legend
                     QC.Label {
                         visible: tickId.labelVisible
                         x: rootId.tickLabelX
-                        y: Math.max(0, Math.min(tickId.height - height, tickId.markY - height / 2))
+                        y: tickId.markY - height / 2
                         text: rootId.tickText(tickId.modelData)
-                        font.pixelSize: Theme.fontSizeCaption
                     }
                 }
             }
@@ -285,7 +303,6 @@ QQ.Item {
                             QC.Label {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: swatchRowId.modelData
-                                font.pixelSize: Theme.fontSizeCaption
                             }
                         }
                     }
