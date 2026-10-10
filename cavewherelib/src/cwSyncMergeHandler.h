@@ -108,6 +108,10 @@ struct cwReconcileMergeResult {
     // than cwSaveLoad matching handler names, which the registry joins into one string.
     bool persistNoteDescriptors = false;
     bool persistLiDARNoteDescriptors = false;
+    // Set by a handler whose merge left the project file's content (the Project
+    // message) different from the file on disk, so the reconcile save rewrites it
+    // even when git placed every other file.
+    bool persistProjectFile = false;
     // Directories (repository-root relative) a handler found orphaned by a merge and wants
     // removed. Handlers record them here instead of queuing the removal themselves, so
     // cwSaveLoad removes them once it knows how the model is rebuilt: a full reload carries

@@ -1,0 +1,14 @@
+{
+ "lengthUnit": "Meters",
+ "depthUnit": "Meters",
+ "name": "Alpha",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-1164-gc6136ce3"
+ },
+ "id": "54148612-746c-4881-a264-7c06d3ec98df",
+ "kind": "NODE_COMPASS_FILE",
+ "readOnly": true,
+ "sourceId": "5b943628-4e15-44c2-9f67-eda60bbc2364",
+ "sourcePath": "ALPHA.DAT"
+}

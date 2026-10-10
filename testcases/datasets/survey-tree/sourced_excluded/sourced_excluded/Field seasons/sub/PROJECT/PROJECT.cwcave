@@ -1,0 +1,16 @@
+{
+ "lengthUnit": "Meters",
+ "depthUnit": "Meters",
+ "name": "PROJECT",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-1164-gc6136ce3"
+ },
+ "id": "34288279-a43b-4860-a310-610b266e19a5",
+ "externalCenterline": {
+  "entryFile": "PROJECT.MAK"
+ },
+ "kind": "NODE_COMPASS_PROJECT",
+ "readOnly": true,
+ "sourceId": "5b943628-4e15-44c2-9f67-eda60bbc2364"
+}

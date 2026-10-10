@@ -79,6 +79,10 @@ message Project {
     // directory format stores each node in its own file and has no separate
     // CavingRegion message on disk.
     repeated Equate equates = 5;
+
+    // Every attached survey source: the root node it builds and the derived
+    // nodes and trips the user hid from it.
+    repeated ExternalSource external_sources = 6;
 }
 
 //This is a legacy message, do not use
@@ -141,6 +145,17 @@ message StationHandle {
 // point. Emitted as a bare *equate line at solve time (commits 4/5).
 message Equate {
     repeated StationHandle stations = 1;
+}
+
+// One attached survey source. Its root node and every derived node carry
+// this id as Cave.source_id; the entry file stays on the root's
+// external_centerline.
+message ExternalSource {
+    optional string id = 1;
+    optional string root_node_id = 2;  // Cave.id of the source's root node
+    // source_path of each derived node or trip the user hid; a hidden node
+    // hides its derived descendants too. Survives Reload.
+    repeated string excluded_source_paths = 3;
 }
 
 // What a survey node is called and drawn as. Absent on an older file means

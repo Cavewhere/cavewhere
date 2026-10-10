@@ -1735,7 +1735,8 @@ QFuture<ResultBase> cwSaveLoad::saveFlushImpl()
 }
 
 QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescriptors,
-                                                          bool persistLiDARNoteDescriptors)
+                                                          bool persistLiDARNoteDescriptors,
+                                                          bool persistProjectFile)
 {
     auto* region = d->m_regionTreeModel->cavingRegion();
     if (region == nullptr) {
@@ -1751,7 +1752,7 @@ QFuture<ResultBase> cwSaveLoad::persistIdentityRepairSave(bool persistNoteDescri
     // Avoid rewriting project metadata for every reconcile apply. This can create
     // unnecessary sync churn (for example, cavewhereVersion-only diffs) when the
     // reconcile only touches cave/trip/note payload paths.
-    if (d->pendingIdentityRepairSave) {
+    if (d->pendingIdentityRepairSave || persistProjectFile) {
         saveProject(projectRootDir(), region);
     }
     const bool persistAllDescriptors = d->pendingIdentityRepairSave;
@@ -1937,7 +1938,8 @@ QFuture<ResultBase> cwSaveLoad::enqueueFinalizePhase(const QFuture<ResultBase>& 
 
         auto repairFuture = persistIdentityRepairSave(
                     attemptState->reconcileOutcome->persistNoteDescriptors,
-                    attemptState->reconcileOutcome->persistLiDARNoteDescriptors);
+                    attemptState->reconcileOutcome->persistLiDARNoteDescriptors,
+                    attemptState->reconcileOutcome->persistProjectFile);
         return AsyncFuture::observe(repairFuture)
                 .context(this, [this, repairFuture, pushWithoutRetry, staleFromRemoteApplyGuard, syncGeneration, mode]() -> QFuture<ResultBase> {
             if (d->operationGeneration != syncGeneration || d->retiring) {
@@ -2210,6 +2212,10 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
 
         for (const cwEquate& equate : region->equates()->equates()) {
             cwProtoUtils::saveEquate(protoProject->add_equates(), equate);
+        }
+
+        for (const cwExternalSource& source : region->externalSources()->sources()) {
+            cwProtoUtils::saveExternalSource(protoProject->add_external_sources(), source);
         }
     }
 
@@ -3603,6 +3609,8 @@ Monad::Result<cwSaveLoad::ProjectLoadData> cwSaveLoad::loadProject(const QString
             loadData.region.equates.append(cwProtoUtils::fromProtoEquate(protoEquate));
         }
 
+        loadData.region.externalSources = cwProtoUtils::fromProtoExternalSources(projectProto.external_sources());
+
         return Result(loadData);
     });
 }
@@ -4003,7 +4011,7 @@ void cwSaveLoad::disconnectTreeModel()
         if (auto* lazLayers = region->lazLayers()) {
             disconnect(lazLayers, nullptr, this, nullptr);
         }
-        // geoReference and the equate model are children of region too, so their
+        // geoReference and the equate and source models are children of region too, so their
         // this-bound saveMetadata connections (wired in connectTreeModel) survive
         // the disconnect(region, ...) above. Each reconcile disconnects then
         // reconnects the tree, so without an explicit teardown they accumulate a
@@ -4013,6 +4021,9 @@ void cwSaveLoad::disconnectTreeModel()
         }
         if (auto* equateModel = region->equates()) {
             disconnect(equateModel, nullptr, this, nullptr);
+        }
+        if (auto* sourceModel = region->externalSources()) {
+            disconnect(sourceModel, nullptr, this, nullptr);
         }
     }
 
@@ -4307,6 +4318,14 @@ void cwSaveLoad::connectTreeModel()
         // setEquates() (the bulk load path) resets the model, and saving then
         // would overwrite the on-disk project with a half-built one mid-load.
         connectListModelSaveTrigger(region->equates(), WatchReset::No, saveMetadata);
+
+        // The external sources share that file, and setSources() is their bulk
+        // load path, so the same WatchReset::No reasoning applies. A source
+        // counts toward stampVersion, so the first one restamps the project.
+        connectListModelSaveTrigger(region->externalSources(), WatchReset::No, [this, saveMetadata]() {
+            saveMetadata();
+            restampProjectIfVersionChanged();
+        });
 
         // LAZ layers live in "GIS Layers/" inside the project root and are
         // discovered by directory scan, so adds go through cwProject::addFiles
@@ -5465,7 +5484,9 @@ int cwSaveLoad::stampVersion(const cwCavingRegion* region)
         return false;
     };
 
-    return holdsHierarchy(root, holdsHierarchy) ? cwRegionIOTask::protoVersion() : kFlatProjectVersion;
+    const bool needsTree = region->externalSources()->count() > 0
+            || holdsHierarchy(root, holdsHierarchy);
+    return needsTree ? cwRegionIOTask::protoVersion() : kFlatProjectVersion;
 }
 
 
@@ -6423,6 +6444,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
         bool requiresPersistence = false;
         bool persistNoteDescriptors = false;
         bool persistLiDARNoteDescriptors = false;
+        bool persistProjectFile = false;
         QString reconcileDiagnostic;
         QStringList mergeDiagnostics;
         QStringList applyDiagnostics;
@@ -6488,8 +6510,10 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                     mergeResult.diskAlreadySynchronized || gitPlacedAllFiles;
 
             requiresPersistence = (mergeResult.modelMutated && !effectiveDiskAlreadySynchronized)
-                    || mergeResult.pendingConflictCleanup;
+                    || mergeResult.pendingConflictCleanup
+                    || mergeResult.persistProjectFile;
             persistNoteDescriptors = mergeResult.persistNoteDescriptors;
+            persistProjectFile = mergeResult.persistProjectFile;
             persistLiDARNoteDescriptors = mergeResult.persistLiDARNoteDescriptors;
             reconcileDiagnostic = QStringLiteral("reconcile handler %1 applied (%2)")
                     .arg(mergeResult.handlerName,
@@ -6583,6 +6607,7 @@ QFuture<Monad::Result<cwSaveLoad::ReconcileExternalResult>> cwSaveLoad::reconcil
                 : ReconcileExternalResult::Outcome::NoOp;
         reconcileResult.persistNoteDescriptors = persistNoteDescriptors;
         reconcileResult.persistLiDARNoteDescriptors = persistLiDARNoteDescriptors;
+        reconcileResult.persistProjectFile = persistProjectFile;
         return Monad::Result<ReconcileExternalResult>(reconcileResult);
     })
             .future();

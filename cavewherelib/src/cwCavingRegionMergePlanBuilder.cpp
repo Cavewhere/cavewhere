@@ -5,7 +5,9 @@
 Monad::Result<cwCavingRegionMergePlan> cwCavingRegionMergePlanBuilder::build(
     cwCavingRegion* currentRegion,
     const cwCavingRegionData* loadedRegionData,
-    std::optional<QString> baseName)
+    std::optional<QString> baseName,
+    std::optional<QList<cwExternalSource>> theirExternalSources,
+    std::optional<QList<cwExternalSource>> baseExternalSources)
 {
     if (currentRegion == nullptr) {
         return Monad::Result<cwCavingRegionMergePlan>(
@@ -21,6 +23,8 @@ Monad::Result<cwCavingRegionMergePlan> cwCavingRegionMergePlanBuilder::build(
     plan.currentRegion = currentRegion;
     plan.loadedRegionData = loadedRegionData;
     plan.baseName = baseName;
+    plan.theirExternalSources = std::move(theirExternalSources);
+    plan.baseExternalSources = std::move(baseExternalSources);
 
     return Monad::Result<cwCavingRegionMergePlan>(plan);
 }

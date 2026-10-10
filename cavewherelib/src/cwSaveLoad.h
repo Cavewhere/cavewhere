@@ -475,6 +475,7 @@ private:
         Outcome outcome = Outcome::NoOp;
         bool persistNoteDescriptors = false;
         bool persistLiDARNoteDescriptors = false;
+        bool persistProjectFile = false;
     };
 
     struct ReconcileAttemptState {
@@ -612,7 +613,8 @@ private:
                                                                            quint64 planEpoch,
                                                                            ReconcileApplyMode applyMode);
     QFuture<Monad::ResultBase> persistIdentityRepairSave(bool persistNoteDescriptors = true,
-                                                         bool persistLiDARNoteDescriptors = true);
+                                                         bool persistLiDARNoteDescriptors = true,
+                                                         bool persistProjectFile = false);
 
 
 

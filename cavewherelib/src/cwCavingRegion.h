@@ -26,6 +26,7 @@ class cwCave;
 class cwProject;
 #include "cwCavingRegionData.h"
 #include "cwEquateModel.h"
+#include "cwExternalSourceModel.h"
 #include "cwFixStationValidator.h"
 #include "cwGeoReference.h"
 #include "cwLocalProjectionManager.h"
@@ -51,6 +52,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
     Q_PROPERTY(QString defaultFixDatum READ defaultFixDatum NOTIFY defaultFixDatumChanged)
     Q_PROPERTY(cwEquateModel* equates READ equates CONSTANT)
+    Q_PROPERTY(cwExternalSourceModel* externalSources READ externalSources CONSTANT)
 
 public:
     enum Roles {
@@ -113,6 +115,10 @@ public:
     //! node, across nodes, or across caves. The exporter emits each one at
     //! region scope with fully qualified operands.
     cwEquateModel* equates() const { return m_equates; }
+
+    //! Every attached survey source in the project, each with its root node
+    //! and the derived items the user hid from it.
+    cwExternalSourceModel* externalSources() const { return m_externalSources; }
 
     //! The cave holding the container a handle names, or nullptr when no cave in
     //! this region does. A NativeCave handle names its cave outright; a Trip
@@ -303,6 +309,8 @@ private:
     cwLocalProjectionManager* m_localProjectionManager = nullptr;
 
     cwEquateModel* m_equates = nullptr;
+
+    cwExternalSourceModel* m_externalSources = nullptr;
 
     cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
 

@@ -1,0 +1,29 @@
+{
+ "date": {
+  "year": 2026,
+  "month": 10,
+  "day": 10
+ },
+ "tripCalibration": {
+  "correctedCompassBacksight": false,
+  "correctedClinoBacksight": false,
+  "tapeCalibration": 0,
+  "frontCompassCalibration": 0,
+  "frontClinoCalibration": 0,
+  "backClinoCalibration": 0,
+  "declination": 0,
+  "distanceUnit": "Meters",
+  "frontSights": true,
+  "backSights": true,
+  "correctedCompassFrontsight": false,
+  "correctedClinoFrontsight": false,
+  "backCompassCalibration": 0,
+  "autoDeclination": true
+ },
+ "name": "Alpha resurvey",
+ "fileVersion": {
+  "version": 10,
+  "cavewhereVersion": "2026.4.3-1164-gc6136ce3"
+ },
+ "id": "24716f68-d3cb-4bfe-8e46-6107ea994a19"
+}

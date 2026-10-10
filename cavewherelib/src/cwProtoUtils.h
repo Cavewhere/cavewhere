@@ -24,6 +24,7 @@
 #include "cwScale.h"
 #include "cwSketchData.h"
 #include "cwEquate.h"
+#include "cwExternalSource.h"
 #include "cwFixStation.h"
 #include "cwGeoPoint.h"
 
@@ -58,6 +59,7 @@ class Sketch;
 class FixStation;
 class DoubleVector3d;
 class Equate;
+class ExternalSource;
 class StationHandle;
 }
 
@@ -180,6 +182,11 @@ CAVEWHERE_LIB_EXPORT cwFixStation fromProtoFixStation(const CavewhereProto::FixS
 // Equates
 CAVEWHERE_LIB_EXPORT void saveEquate(CavewhereProto::Equate* protoEquate, const cwEquate& equate);
 CAVEWHERE_LIB_EXPORT cwEquate fromProtoEquate(const CavewhereProto::Equate& protoEquate);
+
+// External sources
+CAVEWHERE_LIB_EXPORT void saveExternalSource(CavewhereProto::ExternalSource* protoSource, const cwExternalSource& source);
+CAVEWHERE_LIB_EXPORT QList<cwExternalSource> fromProtoExternalSources(
+    const google::protobuf::RepeatedPtrField<CavewhereProto::ExternalSource>& protoSources);
 CAVEWHERE_LIB_EXPORT void saveDoubleVector3d(CavewhereProto::DoubleVector3d* protoVec, const cwGeoPoint& point);
 CAVEWHERE_LIB_EXPORT cwGeoPoint fromProtoDoubleVector3d(const CavewhereProto::DoubleVector3d& protoVec);
 

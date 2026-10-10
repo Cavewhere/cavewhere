@@ -32,7 +32,8 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     QAbstractListModel(parent),
     m_geoReference(new cwGeoReference(this)),
     m_lazLayers(new cwLazLayerModel(this)),
-    m_equates(new cwEquateModel(this))
+    m_equates(new cwEquateModel(this)),
+    m_externalSources(new cwExternalSourceModel(this))
 {
     //Built in the body rather than the init list: the node asks its parent
     //region for the coordinate system as it constructs, and only here is this
@@ -447,6 +448,7 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
     m_localProjectionManager->setLoading(true);
 
     m_equates->setEquates(data.equates);
+    m_externalSources->setSources(data.externalSources);
 
     clearCaves();
     setStationPositions(cwStationPositionLookup());
@@ -553,7 +555,8 @@ cwCavingRegionData cwCavingRegion::data() const
             .anchor = m_geoReference->anchor(),
             .verticalDatum = m_geoReference->verticalDatum()
         },
-        .equates = m_equates->equates()
+        .equates = m_equates->equates(),
+        .externalSources = m_externalSources->sources()
     };
 }
 

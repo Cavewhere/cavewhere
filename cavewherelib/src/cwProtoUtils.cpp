@@ -907,6 +907,26 @@ cwEquate fromProtoEquate(const CavewhereProto::Equate& protoEquate)
     return cwEquate(handles);
 }
 
+void saveExternalSource(CavewhereProto::ExternalSource* protoSource, const cwExternalSource& source)
+{
+    saveQUuid(protoSource->mutable_id(), source.id());
+    saveQUuid(protoSource->mutable_root_node_id(), source.rootNodeId());
+    saveStringList(protoSource->mutable_excluded_source_paths(), source.excludedSourcePaths());
+}
+
+QList<cwExternalSource> fromProtoExternalSources(
+    const google::protobuf::RepeatedPtrField<CavewhereProto::ExternalSource>& protoSources)
+{
+    QList<cwExternalSource> sources;
+    sources.reserve(protoSources.size());
+    for (const auto& protoSource : protoSources) {
+        sources.append(cwExternalSource(toUuid(protoSource.id()),
+                                        toUuid(protoSource.root_node_id()),
+                                        fromProtoStringList(protoSource.excluded_source_paths())));
+    }
+    return sources;
+}
+
 void saveDoubleVector3d(CavewhereProto::DoubleVector3d* protoVec, const cwGeoPoint& point)
 {
     protoVec->set_x(point.x);

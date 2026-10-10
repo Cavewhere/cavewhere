@@ -3,6 +3,7 @@
 
 #include "cwCaveData.h"
 #include "cwEquate.h"
+#include "cwExternalSource.h"
 #include "cwGeoReference.h"
 #include "cwUnits.h"
 
@@ -23,6 +24,7 @@ struct cwCavingRegionData {
     cwUnits::UnitSystem unitSystem = cwUnits::Metric;
     cwGeoReferenceData geoReference;
     QList<cwEquate> equates;
+    QList<cwExternalSource> externalSources;
 };
 
 

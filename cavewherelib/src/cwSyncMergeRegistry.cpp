@@ -68,6 +68,8 @@ cwReconcileMergeResult cwSyncMergeRegistry::reconcile(const cwReconcileMergeCont
             aggregateResult.persistNoteDescriptors || result.persistNoteDescriptors;
         aggregateResult.persistLiDARNoteDescriptors =
             aggregateResult.persistLiDARNoteDescriptors || result.persistLiDARNoteDescriptors;
+        aggregateResult.persistProjectFile =
+            aggregateResult.persistProjectFile || result.persistProjectFile;
         aggregateResult.orphanDirectoriesToRemove.append(result.orphanDirectoriesToRemove);
         aggregateResult.filesToRestore.append(result.filesToRestore);
         aggregateResult.diagnostics.append(result.diagnostics);
