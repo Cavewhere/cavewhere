@@ -1,0 +1,6 @@
+; East Cave fixes its own entrance.
+#DATE 2010-06-01
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+#FIX E1 0.0 0.0 100.0
+E1	E2	10.0	0	0
+E2	E3	10.0	90	0

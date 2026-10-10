@@ -1,0 +1,7 @@
+; The N survey sits under #PREFIX N and ties to the root station D4.
+#DATE 2001-12-03
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+#PREFIX N
+:D4	1	10.0	180	0
+1	2	10.0	180	0
+2	3	10.0	90	0

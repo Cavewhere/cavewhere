@@ -1,0 +1,9 @@
+; UTM block - 3 stations, u1 fixed in WGS 84 / UTM zone 16N.
+*cs out EPSG:32616
+*begin utm
+*cs EPSG:32616
+*fix u1 500000 4000000 100
+*data normal from to tape compass clino
+u1 u2 10.0 0 0
+u2 u3 10.0 90 0
+*end utm

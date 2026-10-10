@@ -1822,3 +1822,133 @@ TEST_CASE("A scanned fix names the station the harvest says the file fixes", "[S
     REQUIRE(harvest.value().fixedNames.size() == 1);
     CHECK(cwStation::canonicalKey(fixes.first().station) == harvest.value().fixedNames.first());
 }
+
+namespace {
+
+//! \a scan's dependencies relative to the fixture directory \a fixtureDir,
+//! in walk order.
+QStringList dependenciesUnder(const ScanResult& scan, const QString& fixtureDir)
+{
+    const QDir dir(QFileInfo(datasetExternalCenterlinePath(fixtureDir)).canonicalFilePath());
+    QStringList relative;
+    for (const QString& path : scan.dependencies) {
+        relative.append(dir.relativeFilePath(path));
+    }
+    return relative;
+}
+
+QStringList fixStations(const ScanResult& scan)
+{
+    QStringList stations;
+    for (const ScannedFix& fix : scan.fixes) {
+        stations.append(fix.station);
+    }
+    return stations;
+}
+
+} // namespace
+
+TEST_CASE("compass_project scans its three DATs and warns on the absent DELTA.DAT",
+          "[Scanner][Compass][SourcedFixtures]")
+{
+    auto result = cwExternalCenterlineScanner::scan(
+        datasetExternalCenterlinePath(QStringLiteral("compass_project/PROJECT.MAK")));
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(dependenciesUnder(scan, QStringLiteral("compass_project"))
+          == QStringList({QStringLiteral("PROJECT.MAK"), QStringLiteral("ALPHA.DAT"),
+                          QStringLiteral("BRAVO.DAT"), QStringLiteral("CHARLIE.DAT")}));
+    REQUIRE(scan.warnings.size() == 1);
+    CHECK(scan.warnings.first().contains(QStringLiteral("missing Compass reference")));
+    CHECK(scan.warnings.first().contains(QStringLiteral("DELTA.DAT")));
+
+    // ALPHA: A1..A7 over two surveys sharing A5; BRAVO: A5 (the link) and
+    // B1..B3; CHARLIE: C1..C3. Every Compass station is a root station.
+    CHECK(scan.blocks.isEmpty());
+    CHECK(scan.rootStationCount == 13);
+    CHECK_FALSE(scan.entryHasOwnShots);
+    CHECK(scan.rootDate == QDate(2020, 3, 14));
+    CHECK(fixStations(scan) == QStringList({QStringLiteral("alpha.A1"), QStringLiteral("charlie.C1")}));
+}
+
+TEST_CASE("walls_project scans its nested books' surveys and the N prefix level",
+          "[Scanner][Walls][SourcedFixtures]")
+{
+    auto result = cwExternalCenterlineScanner::scan(
+        datasetExternalCenterlinePath(QStringLiteral("walls_project/KAUA.WPJ")));
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    // NOTES.TXT has an unknown format, so the scanner warns and records no
+    // dependency for it. Skipping .STATUS other-type entries belongs to C7.1.
+    CHECK(dependenciesUnder(scan, QStringLiteral("walls_project"))
+          == QStringList({QStringLiteral("KAUA.WPJ"), QStringLiteral("FIX.SRV"),
+                          QStringLiteral("SURVEYS/D01.SRV"), QStringLiteral("SURVEYS/D02.SRV"),
+                          QStringLiteral("SURVEYS/N01.SRV")}));
+    REQUIRE(scan.warnings.size() == 1);
+    CHECK(scan.warnings.first().contains(QStringLiteral("unknown format")));
+    CHECK(scan.warnings.first().contains(QStringLiteral("NOTES.TXT")));
+
+    // K1 and D1..D4 have no prefix; N01.SRV's 1..3 sit under #PREFIX N, and
+    // its ":D4" names the root's D4.
+    REQUIRE(scan.blocks.size() == 1);
+    CHECK(scan.blocks.first().path == QStringLiteral("N"));
+    CHECK(scan.blocks.first().depth == 0);
+    CHECK(scan.blocks.first().stationCount == 3);
+    CHECK(scan.rootStationCount == 5);
+    CHECK_FALSE(scan.entryHasOwnShots);
+    CHECK(fixStations(scan) == QStringList({QStringLiteral("K1")}));
+}
+
+TEST_CASE("walls_two_caves scans one survey under East and two under West",
+          "[Scanner][Walls][SourcedFixtures]")
+{
+    auto result = cwExternalCenterlineScanner::scan(
+        datasetExternalCenterlinePath(QStringLiteral("walls_two_caves/TWO.WPJ")));
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(dependenciesUnder(scan, QStringLiteral("walls_two_caves"))
+          == QStringList({QStringLiteral("TWO.WPJ"), QStringLiteral("EAST/E1.SRV"),
+                          QStringLiteral("WEST/W1.SRV"), QStringLiteral("WEST/W2.SRV")}));
+    CHECK(scan.warnings.isEmpty());
+
+    // E1..E3 and W1..W5 (W3 shared by W1.SRV and W2.SRV), none prefixed.
+    CHECK(scan.blocks.isEmpty());
+    CHECK(scan.rootStationCount == 8);
+    CHECK_FALSE(scan.entryHasOwnShots);
+    CHECK(fixStations(scan) == QStringList({QStringLiteral("E1"), QStringLiteral("W1")}));
+}
+
+TEST_CASE("survex_two_cs scans two blocks, each fixed in its own input system",
+          "[Scanner][Survex][SourcedFixtures]")
+{
+    auto result = cwExternalCenterlineScanner::scan(
+        datasetExternalCenterlinePath(QStringLiteral("survex_two_cs/master.svx")));
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+
+    CHECK(dependenciesUnder(scan, QStringLiteral("survex_two_cs"))
+          == QStringList({QStringLiteral("master.svx"), QStringLiteral("utm.svx"),
+                          QStringLiteral("latlong.svx")}));
+    CHECK(scan.warnings.isEmpty());
+    CHECK(scan.entryDirectIncludes.size() == 2);
+
+    REQUIRE(scan.blocks.size() == 2);
+    CHECK(scan.blocks.at(0).path == QStringLiteral("utm"));
+    CHECK(scan.blocks.at(0).depth == 0);
+    CHECK(scan.blocks.at(0).stationCount == 3);
+    CHECK(scan.blocks.at(1).path == QStringLiteral("latlong"));
+    CHECK(scan.blocks.at(1).depth == 0);
+    CHECK(scan.blocks.at(1).stationCount == 2);
+    CHECK(scan.rootStationCount == 0);
+    CHECK_FALSE(scan.entryHasOwnShots);
+
+    REQUIRE(scan.fixes.size() == 2);
+    CHECK(scan.fixes.at(0).station == QStringLiteral("utm.u1"));
+    CHECK(scan.fixes.at(0).coordinateSystem == QStringLiteral("EPSG:32616"));
+    CHECK(scan.fixes.at(1).station == QStringLiteral("latlong.l1"));
+    CHECK(scan.fixes.at(1).coordinateSystem == QStringLiteral("LONG-LAT"));
+    CHECK(scan.outputCoordinateSystem == QStringLiteral("EPSG:32616"));
+}

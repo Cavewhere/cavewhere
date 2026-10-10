@@ -1,0 +1,5 @@
+; Shares W3 with W1.SRV.
+#DATE 2010-06-03
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+W3	W4	10.0	0	0
+W4	W5	10.0	270	0

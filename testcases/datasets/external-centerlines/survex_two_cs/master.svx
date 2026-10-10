@@ -1,0 +1,5 @@
+; Two blocks, each fixed in its own input system. Both files name the
+; same *cs out, so cavern solves them into one output system whether
+; they come in through this master or are attached one by one.
+*include "utm.svx"
+*include "latlong.svx"

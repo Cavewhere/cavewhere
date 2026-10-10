@@ -25,6 +25,7 @@
 #include "cwStationHandle.h"
 #include "cwShot.h"
 #include "cwStation.h"
+#include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
 #include "cwTrip.h"
 
@@ -43,6 +44,7 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QUuid>
+#include <QVector3D>
 
 namespace {
 
@@ -409,4 +411,179 @@ TEST_CASE("Tying an attached file's dropped survey in clears its warning on the 
 
     CHECK(cave->scopedPositions().hasPosition(QStringLiteral("partb.b3")));
     CHECK_FALSE(unconnectedStationsEntry(cave->errorModel()).has_value());
+}
+
+namespace {
+
+constexpr double kFeetToMeters = 0.3048;
+constexpr double kCompassTapeFeet = 10.0;
+// ALPHA's six legs, BRAVO's three, and CHARLIE's two, each one tape.
+constexpr int kCompassProjectLegCount = 11;
+constexpr double kCompassAlphaEasting = 500000.0;
+constexpr double kCompassCharlieEasting = 500200.0;
+constexpr double kCompassNorthing = 4000000.0;
+constexpr double kCompassElevation = 100.0;
+
+constexpr double kWallsProjectFixEasting = 1000.0;
+constexpr double kWallsProjectFixNorthing = 2000.0;
+constexpr double kWallsFixElevation = 100.0;
+constexpr double kWallsTapeMeters = 10.0;
+// D01 and D02's four legs and N01's three.
+constexpr int kWallsProjectLegCount = 7;
+constexpr double kWallsWestFixEasting = 500.0;
+// E1.SRV's two legs and the West files' four.
+constexpr int kWallsTwoCavesLegCount = 6;
+
+constexpr double kSurvexUtmEasting = 500000.0;
+constexpr double kSurvexUtmNorthing = 4000000.0;
+constexpr double kSurvexUtmElevation = 100.0;
+constexpr double kSurvexLatLongElevation = 200.0;
+// A float32 holds a UTM northing to within a quarter meter, and the latitude
+// fix's projected northing is no round number.
+constexpr double kUtmFloatMarginMeters = 0.5;
+
+//! Attaches \a fixture to a fresh cave named \a caveName in \a project and
+//! drains the pipelines; requireSolved() checks the solve.
+cwCave* attachFreshCaveAndSolve(SavedProjectFixture* project, const QString& caveName,
+                                const QString& fixture)
+{
+    cwCave* cave = addEmptyCave(*project->project->cavingRegion(), caveName);
+    attachThroughManager(project, cave, fixturePath(fixture));
+    drainPipelines(project);
+    return cave;
+}
+
+void requireSolved(SavedProjectFixture* project)
+{
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+}
+
+void checkPosition(const cwStationPositionLookup& lookup, const QString& station,
+                   double x, double y, double z, double margin = kSolvedLengthMarginMeters)
+{
+    INFO("station " << station.toStdString());
+    REQUIRE(lookup.hasPosition(station));
+    const QVector3D position = lookup.position(station);
+    CHECK(position.x() == Catch::Approx(x).margin(margin));
+    CHECK(position.y() == Catch::Approx(y).margin(margin));
+    CHECK(position.z() == Catch::Approx(z).margin(margin));
+}
+
+} // namespace
+
+TEST_CASE("compass_project solves through a cave-level attach",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("compass-project-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwCave* cave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Compass project"),
+                                           QStringLiteral("compass_project/PROJECT.MAK"));
+    requireSolved(project.get());
+
+    // Cavern reads each DAT into a survey named after its file, so the absent
+    // DELTA.DAT leaves the three present ones solving.
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    for (const QString& station : {QStringLiteral("alpha.A1"), QStringLiteral("alpha.A2"),
+                                   QStringLiteral("alpha.A3"), QStringLiteral("alpha.A4"),
+                                   QStringLiteral("alpha.A5"), QStringLiteral("alpha.A6"),
+                                   QStringLiteral("alpha.A7"), QStringLiteral("bravo.A5"),
+                                   QStringLiteral("bravo.B1"), QStringLiteral("bravo.B2"),
+                                   QStringLiteral("bravo.B3"), QStringLiteral("charlie.C1"),
+                                   QStringLiteral("charlie.C2"), QStringLiteral("charlie.C3")}) {
+        INFO("station " << station.toStdString());
+        CHECK(lookup.hasPosition(station));
+    }
+    CHECK(lookup.positions().size() == 14);
+
+    const double tape = kCompassTapeFeet * kFeetToMeters;
+    checkPosition(lookup, QStringLiteral("alpha.A1"),
+                  kCompassAlphaEasting, kCompassNorthing, kCompassElevation, kUtmFloatMarginMeters);
+    checkPosition(lookup, QStringLiteral("charlie.C1"),
+                  kCompassCharlieEasting, kCompassNorthing, kCompassElevation, kUtmFloatMarginMeters);
+    // BRAVO's link station is ALPHA's A5, two tapes east and two north of A1;
+    // B3 is two tapes east and one north of it.
+    for (const QString& linkStation : {QStringLiteral("alpha.A5"), QStringLiteral("bravo.A5")}) {
+        checkPosition(lookup, linkStation,
+                      kCompassAlphaEasting + 2.0 * tape, kCompassNorthing + 2.0 * tape,
+                      kCompassElevation, kUtmFloatMarginMeters);
+    }
+    checkPosition(lookup, QStringLiteral("bravo.B3"),
+                  kCompassAlphaEasting + 4.0 * tape, kCompassNorthing + 3.0 * tape,
+                  kCompassElevation, kUtmFloatMarginMeters);
+
+    CHECK(cave->length()->value()
+          == Catch::Approx(kCompassProjectLegCount * tape).margin(kUtmFloatMarginMeters));
+}
+
+TEST_CASE("walls_project solves through a cave-level attach",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("walls-project-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwCave* cave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Kaua"),
+                                           QStringLiteral("walls_project/KAUA.WPJ"));
+    requireSolved(project.get());
+
+    // Books and files make no level; #PREFIX N does.
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    checkPosition(lookup, QStringLiteral("K1"),
+                  kWallsProjectFixEasting, kWallsProjectFixNorthing, kWallsFixElevation);
+    checkPosition(lookup, QStringLiteral("D4"),
+                  kWallsProjectFixEasting + 2.0 * kWallsTapeMeters,
+                  kWallsProjectFixNorthing + 2.0 * kWallsTapeMeters, kWallsFixElevation);
+    checkPosition(lookup, QStringLiteral("N.3"),
+                  kWallsProjectFixEasting + 3.0 * kWallsTapeMeters,
+                  kWallsProjectFixNorthing, kWallsFixElevation);
+    CHECK(lookup.positions().size() == 8);
+    CHECK(cave->length()->value()
+          == Catch::Approx(kWallsProjectLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("walls_two_caves solves through a cave-level attach",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("walls-two-caves-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwCave* cave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Two caves"),
+                                           QStringLiteral("walls_two_caves/TWO.WPJ"));
+    requireSolved(project.get());
+
+    // Each book fixes its own entrance, and W2.SRV joins W1.SRV at W3.
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    checkPosition(lookup, QStringLiteral("E1"), 0.0, 0.0, kWallsFixElevation);
+    checkPosition(lookup, QStringLiteral("E3"), kWallsTapeMeters, kWallsTapeMeters, kWallsFixElevation);
+    checkPosition(lookup, QStringLiteral("W5"),
+                  kWallsWestFixEasting - 2.0 * kWallsTapeMeters, 2.0 * kWallsTapeMeters,
+                  kWallsFixElevation);
+    CHECK(lookup.positions().size() == 8);
+    CHECK(cave->length()->value()
+          == Catch::Approx(kWallsTwoCavesLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("survex_two_cs solves as two caves in one output system",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("survex-two-cs-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwCave* utmCave = attachFreshCaveAndSolve(project.get(), QStringLiteral("UTM"),
+                                              QStringLiteral("survex_two_cs/utm.svx"));
+    cwCave* latLongCave = attachFreshCaveAndSolve(project.get(), QStringLiteral("Lat long"),
+                                                  QStringLiteral("survex_two_cs/latlong.svx"));
+    requireSolved(project.get());
+
+    const cwStationPositionLookup utm = utmCave->scopedPositions();
+    checkPosition(utm, QStringLiteral("utm.u1"),
+                  kSurvexUtmEasting, kSurvexUtmNorthing, kSurvexUtmElevation, kUtmFloatMarginMeters);
+    CHECK(utm.positions().size() == 3);
+
+    // l1 sits on zone 16N's central meridian, so it lands on the false easting.
+    const cwStationPositionLookup latLong = latLongCave->scopedPositions();
+    REQUIRE(latLong.hasPosition(QStringLiteral("latlong.l1")));
+    const QVector3D l1 = latLong.position(QStringLiteral("latlong.l1"));
+    CHECK(l1.x() == Catch::Approx(kSurvexUtmEasting).margin(kUtmFloatMarginMeters));
+    CHECK(l1.z() == Catch::Approx(kSurvexLatLongElevation).margin(kUtmFloatMarginMeters));
+    CHECK(latLong.positions().size() == 2);
 }
