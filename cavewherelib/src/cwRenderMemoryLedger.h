@@ -30,6 +30,7 @@ public:
         TexturedItemGeometry,
         TexturedItemTexture,
         LinePlotGeometry,
+        PassageTubeGeometry,
         Other
     };
 

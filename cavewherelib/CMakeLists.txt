@@ -436,9 +436,9 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders"
     )
 
 # LinePlot reads a per-vertex unsigned-integer visibility attribute in the
-# vertex shader, which the legacy 120 / 100es targets reject (integer vertex
-# inputs need GLSL 150 / GLSL ES 300). Target those plus the usual HLSL SM5 /
-# MSL 1.2; Vulkan SPIR-V is always emitted.
+# vertex shader, and PassageTube.frag derives its flat normal with dFdx/dFdy;
+# the legacy 120 / 100es targets reject both (they need GLSL 150 / GLSL ES 300).
+# Target those plus the usual HLSL SM5 / MSL 1.2; Vulkan SPIR-V is always emitted.
 qt_add_shaders(cavewherelib "cavewherelib_shaders_lineplot"
     PREFIX "/"
     GLSL "150,300es"
@@ -447,6 +447,22 @@ qt_add_shaders(cavewherelib "cavewherelib_shaders_lineplot"
     FILES
         "shaders/LinePlot.frag"
         "shaders/LinePlot.vert"
+        "shaders/PassageTube.frag"
+        "shaders/PassageTube.vert"
+    )
+
+# Wireframe variant of PassageTube.frag (flat line color), aliased to
+# :/shaders/PassageTubeWireframe.frag.qsb for cwRHIPassageTube's line-mode pipeline.
+qt_add_shaders(cavewherelib "cavewherelib_shaders_passagetube_wireframe"
+    PREFIX "/"
+    GLSL "150,300es"
+    HLSL 50
+    MSL 12
+    DEFINES "WIREFRAME=1"
+    FILES
+        "shaders/PassageTube.frag"
+    OUTPUTS
+        "shaders/PassageTubeWireframe.frag.qsb"
     )
 
 # Second EDL.frag variant: same source, compiled with MSAA=1 so it samples the

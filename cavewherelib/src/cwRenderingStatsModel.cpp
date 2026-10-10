@@ -33,6 +33,7 @@ constexpr CategoryDescription kCategories[] = {
     {Category::TexturedItemGeometry, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Textured item geometry")},
     {Category::TexturedItemTexture, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Textured item textures")},
     {Category::LinePlotGeometry, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Line plot geometry")},
+    {Category::PassageTubeGeometry, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Passage tube geometry")},
     {Category::Other, QT_TRANSLATE_NOOP("cwRenderingStatsModel", "Other")}
 };
 
