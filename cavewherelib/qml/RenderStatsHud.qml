@@ -23,6 +23,8 @@ QQ.Rectangle {
     readonly property int bytesPerMegabyte: 1024 * 1024
     readonly property int gpuMemoryBudgetMb: RootData.settings.renderingSettings.gpuMemoryBudgetMb
     readonly property bool overBudget: statsModelId.totalGpuBytes > hudRootId.gpuMemoryBudgetMb * hudRootId.bytesPerMegabyte
+    readonly property int maxShownPassageTubeWarnings: 5
+    property list<string> passageTubeWarnings: RootData.passageTubeManager.warnings
 
     visible: RootData.settings.renderingSettings.showRenderStatsHud
 
@@ -145,6 +147,28 @@ QQ.Rectangle {
                 .arg(statsModelId.readyCpuText)
             color: Theme.text
             font.pixelSize: Theme.fontSizeCaption
+        }
+
+        QC.Label {
+            objectName: "renderStatsHudPassageTubeWarnings"
+            text: qsTr("Passage tubes: %n warning(s)", "", hudRootId.passageTubeWarnings.length)
+            color: Theme.warning
+            font.pixelSize: Theme.fontSizeCaption
+            visible: hudRootId.passageTubeWarnings.length > 0
+        }
+
+        QQ.Repeater {
+            model: hudRootId.passageTubeWarnings.slice(0, hudRootId.maxShownPassageTubeWarnings)
+
+            delegate: QC.Label {
+                required property string modelData
+
+                text: modelData
+                color: Theme.text
+                font.pixelSize: Theme.fontSizeCaption
+                wrapMode: QQ.Text.WordWrap
+                Layout.maximumWidth: hudRootId.categoryColumnWidth + hudRootId.byteColumnWidth * 2
+            }
         }
     }
 }

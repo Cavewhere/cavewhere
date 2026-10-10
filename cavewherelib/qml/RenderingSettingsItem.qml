@@ -313,6 +313,10 @@ ColumnLayout {
                     id: sampleSpacingSpinBoxId
                     objectName: "sampleSpacingSpinBox"
 
+                    QC.ToolTip.text: "Distance between passage tube cross-sections along a shot"
+                    QC.ToolTip.visible: hovered
+                    QC.ToolTip.delay: Theme.toolTipDelay
+
                     from: Math.round(itemId.minimumSampleSpacingMeters * itemId.sampleSpacingScale)
                     to: Math.round(itemId.maximumSampleSpacingMeters * itemId.sampleSpacingScale)
                     stepSize: Math.round(itemId.sampleSpacingStepMeters * itemId.sampleSpacingScale)
@@ -370,6 +374,10 @@ ColumnLayout {
                 QC.SpinBox {
                     id: ringResolutionSpinBoxId
                     objectName: "ringResolutionSpinBox"
+
+                    QC.ToolTip.text: "Points around each passage tube cross-section"
+                    QC.ToolTip.visible: hovered
+                    QC.ToolTip.delay: Theme.toolTipDelay
 
                     from: itemId.minimumRingResolution
                     to: itemId.maximumRingResolution

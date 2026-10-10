@@ -10,11 +10,13 @@
 #include "cwKeywordItemModel.h"
 #include "cwKeywordModel.h"
 #include "cwLinePlotManager.h"
+#include "cwPassageTubeBuilder.h"
 #include "cwPassageTubeManager.h"
 #include "cwPassageTubeSettings.h"
 #include "cwProject.h"
 #include "cwRenderPassageTube.h"
 #include "cwSignalSpy.h"
+#include "cwSurveyChunk.h"
 #include "cwTrip.h"
 
 //Qt includes
@@ -29,6 +31,8 @@ namespace {
 
 constexpr int kCoarseRingResolution = 8;
 constexpr int kDeliveryWaitMs = 1000;
+// Far past the limit in either meters or feet.
+constexpr double kOutOfRangeLrud = cwPassageTubeBuilder::kMaxRadiusMeters * 10.0;
 
 const cwKeyword kPassageType(cwKeywordModel::TypeKey, QStringLiteral("Passage"));
 
@@ -146,6 +150,41 @@ TEST_CASE("cwPassageTubeManager builds the tube after a solve and filters it by 
         CHECK(linePlotStateSpy.count() == 0);
         CHECK(positionsSpy.count() == 0);
         CHECK(linePlotManager->updateState() == cwUpdatable::State::Clean);
+    }
+
+    SECTION("an out-of-range LRUD shows in warnings until it is fixed") {
+        const auto outOfRangeWarnings = [&]() {
+            QStringList matches;
+            for (const QString& warning : tubeManager->warnings()) {
+                if (warning.contains(QStringLiteral("passage dimension"))) {
+                    matches.append(warning);
+                }
+            }
+            return matches;
+        };
+
+        cwSurveyChunk* chunk = region->cave(0)->trip(0)->chunk(0);
+        const cwStation original = chunk->station(0);
+        CHECK(outOfRangeWarnings().isEmpty());
+
+        cwSignalSpy warningsSpy(tubeManager.get(), &cwPassageTubeManager::warningsChanged);
+
+        chunk->setData(cwSurveyChunk::StationLeftRole, 0, kOutOfRangeLrud);
+        linePlotManager->waitToFinish();
+        tubeManager->waitToFinish();
+
+        CHECK(tubeManager->property("warnings").toStringList() == tubeManager->warnings());
+        const QStringList warnings = outOfRangeWarnings();
+        REQUIRE(warnings.size() == 1);
+        CHECK(warnings.first().contains(original.name()));
+        CHECK(warningsSpy.count() == 1);
+
+        chunk->setStation(original, 0);
+        linePlotManager->waitToFinish();
+        tubeManager->waitToFinish();
+
+        CHECK(outOfRangeWarnings().isEmpty());
+        CHECK(warningsSpy.count() == 2);
     }
 
     SECTION("the visible flag drives the render object and persists") {

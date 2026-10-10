@@ -247,7 +247,16 @@ void cwPassageTubeManager::startBuild()
 
 void cwPassageTubeManager::deliverMesh(const cwPassageTubeMesh& mesh)
 {
-    m_warnings = mesh.warnings;
+    QStringList warnings;
+    warnings.reserve(mesh.warnings.size());
+    for (const cwPassageTubeMesh::Warning& warning : mesh.warnings) {
+        warnings.append(warning.message);
+    }
+    if (m_warnings != warnings) {
+        m_warnings = warnings;
+        emit warningsChanged();
+    }
+
     m_meshEmpty = mesh.isEmpty();
 
     if (m_tube) {

@@ -81,6 +81,21 @@ QQ.Item {
                    "unexpected streaming row text: " + streaming.text)
         }
 
+        function test_passageTubeWarningsAreListed() {
+            rootId.renderingSettings.showRenderStatsHud = true
+            let summary = ObjectFinder.findObjectByChain(rootId, "rootId->hud->renderStatsHudPassageTubeWarnings")
+            verify(summary !== null, "renderStatsHudPassageTubeWarnings not found")
+
+            hudId.passageTubeWarnings = ["The passage from station a1 has no LRUD; the tube uses the default radius."]
+            tryCompare(summary, "visible", true)
+            verify(summary.text.indexOf("1 warning") >= 0, "unexpected summary text: " + summary.text)
+
+            hudId.passageTubeWarnings = []
+            tryCompare(summary, "visible", false)
+
+            hudId.passageTubeWarnings = Qt.binding(() => RootData.passageTubeManager.warnings)
+        }
+
         function test_menuItemChecksAndWritesTheSetting() {
             compare(hudMenuItemId.checked, false)
 

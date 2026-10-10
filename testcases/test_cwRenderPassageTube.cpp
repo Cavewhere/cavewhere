@@ -10,6 +10,7 @@
 #include "cwRHIPassageTube.h"
 #include "cwRenderMemoryLedger.h"
 #include "cwRenderPassageTube.h"
+#include "cwRenderingStatsModel.h"
 #include "cwRhiScene.h"
 #include "cwScene.h"
 #include "cwSceneVisibility.h"
@@ -94,6 +95,32 @@ TEST_CASE("cwRenderPassageTube setMesh populates data and the ledger",
     }
 
     CHECK(cpuLedgerBytes() == startBytes);
+}
+
+TEST_CASE("cwRenderPassageTube bytes show in the render stats HUD",
+          "[PassageTube][cwRenderPassageTube]")
+{
+    const auto passageTubeRow = [](const cwRenderingStatsModel& model) {
+        for (int row = 0; row < model.rowCount(); ++row) {
+            const QModelIndex index = model.index(row);
+            if (model.data(index, cwRenderingStatsModel::NameRole).toString() == QStringLiteral("Passage tubes")) {
+                return index;
+            }
+        }
+        return QModelIndex();
+    };
+
+    cwRenderingStatsModel model;
+    const QModelIndex row = passageTubeRow(model);
+    REQUIRE(row.isValid());
+    const qint64 startBytes = model.data(row, cwRenderingStatsModel::CpuBytesRole).toLongLong();
+
+    const cwPassageTubeMesh mesh = twoTripMesh();
+    cwRenderPassageTube tube;
+    tube.setMesh(mesh);
+    model.refresh();
+
+    CHECK(model.data(row, cwRenderingStatsModel::CpuBytesRole).toLongLong() == startBytes + meshBytes(mesh));
 }
 
 TEST_CASE("cwRenderPassageTube clear resets data and the ledger",

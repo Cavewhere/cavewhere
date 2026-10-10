@@ -28,6 +28,7 @@ class cwTrip;
 #include <QPointer>
 #include <QQmlEngine>
 #include <QSet>
+#include <QStringList>
 #include <QTimer>
 #include <QUuid>
 #include <QVector>
@@ -72,6 +73,7 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeManager : public QObject, public cwUpdat
     QML_UNCREATABLE("PassageTubeManager is owned by RootData")
 
     Q_PROPERTY(bool visible READ isVisible WRITE setVisible NOTIFY visibleChanged)
+    Q_PROPERTY(QStringList warnings READ warnings NOTIFY warningsChanged)
 
 public:
     static constexpr int kRebuildDebounceMs = 150;
@@ -88,7 +90,7 @@ public:
     bool isVisible() const { return m_visible; }
     void setVisible(bool visible);
 
-    QVector<cwPassageTubeMesh::Warning> warnings() const { return m_warnings; }
+    QStringList warnings() const { return m_warnings; }
 
     // Test-only: starts any pending rebuild now and blocks until it is delivered.
     void waitToFinish();
@@ -97,6 +99,7 @@ signals:
     void updateStateChanged();
     void meshChanged();
     void visibleChanged();
+    void warningsChanged();
 
 private:
     cwUpdatable::State doUpdateState() const override;
@@ -122,7 +125,7 @@ private:
     QTimer m_debounce;
     AsyncFuture::Restarter<cwPassageTubeMesh> m_restarter;
 
-    QVector<cwPassageTubeMesh::Warning> m_warnings;
+    QStringList m_warnings;
 
     cwKeywordItemRegistry<cwTrip*> m_keywordRegistry;
     QSet<cwTrip*> m_trackedTrips;

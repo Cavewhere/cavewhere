@@ -707,6 +707,41 @@ MainWindowTest {
                    "layers screenshot is not blank");
         }
 
+        // Scraps are hidden so the tube reads on its own; a second grab with the
+        // tubes hidden proves the tube reached the frame.
+        function test_view3dPassageTubes() {
+            let regionViewer = loadRhiViewer();
+            if (!regionViewer) { return; }
+
+            const prevScrapsVisible = RootData.regionSceneManager.scraps.visible;
+            const prevTubesVisible = RootData.passageTubeManager.visible;
+
+            RootData.regionSceneManager.scraps.visible = false;
+            RootData.passageTubeManager.visible = true;
+            tryVerify(() => !RootData.updateCoordinator.running
+                      && !RootData.updateCoordinator.needsUpdate,
+                      30000, "the passage tube build finished");
+            highlightOverlayId.target = null;
+            settle();
+
+            let path = WindowGrabber.grabToFile(rootId.mainWindow, "view-3d-passage-tubes");
+            verify(path.length > 0, "grabToFile wrote the passage tube screenshot");
+            verify(OffscreenRenderTester.nonBlackFraction(path) > 0.5,
+                   "passage tube screenshot is not blank");
+
+            RootData.passageTubeManager.visible = false;
+            settle();
+            let hiddenPath = WindowGrabber.grabToFile(rootId.mainWindow, "view-3d-passage-tubes-hidden");
+            verify(hiddenPath.length > 0, "grabToFile wrote the hidden-tube comparison");
+            verify(!OffscreenRenderTester.imagesEqual(path, hiddenPath),
+                   "the passage tube changes the rendered frame");
+            WindowGrabber.removeFile(hiddenPath);
+
+            RootData.regionSceneManager.scraps.visible = prevScrapsVisible;
+            RootData.passageTubeManager.visible = prevTubesVisible;
+            settle();
+        }
+
         // Tick only `value` in a KeywordGroupByKeyModel column, unticking the rest —
         // the model-level equivalent of clicking one value's checkbox in KeywordTab.
         function checkOnlyValue(group, value) {

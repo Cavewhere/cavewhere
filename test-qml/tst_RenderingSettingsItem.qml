@@ -135,6 +135,20 @@ MainWindowTest {
             tryCompare(resolution, "value", 16)
         }
 
+        function test_passageTubeRestoreDefaultsResetsTheSettings() {
+            let button = ObjectFinder.findObjectByChain(
+                rootId, "rootId->renderingSettings->GroupBox->passageTubeRestoreDefaults->restoreDefaultsButton")
+            verify(button !== null, "passage tube restore defaults button not found")
+            verify(!button.enabled, "the button is disabled at the defaults")
+
+            passageTubeSettings.ringResolution = 32
+            tryCompare(button, "enabled", true)
+
+            mouseClick(button)
+            tryCompare(passageTubeSettings, "ringResolution", 16)
+            tryCompare(button, "enabled", false)
+        }
+
         function test_editingThePassageTubeSpinBoxesWritesTheSettings() {
             let spacing = findSpinBox("sampleSpacingSpinBox")
             let resolution = findSpinBox("ringResolutionSpinBox")
