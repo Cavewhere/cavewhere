@@ -44,7 +44,8 @@ private:
     //   binding 1: uint segment type (0 = centerline, 1 = splay)
     //   binding 2: uint visibility (0 = hidden), dynamic so a keyword toggle
     //              re-uploads only this buffer
-    //   binding 3: float color-by value (cwColorByUniform::PerElement)
+    //   binding 3: float color-by value, the keyword slot (PerElement) or
+    //              the loop closure error (PerSegmentError)
     QRhiVertexInputLayout m_inputLayout;
     QRhiBuffer* m_segmentBuffer = nullptr;
     QRhiBuffer* m_typeBuffer = nullptr;
@@ -62,6 +63,7 @@ private:
     cwTracked<cwRenderLinePlot::Data> m_data;
     cwTracked<cwColorByUniform> m_colorBy;
     cwTracked<QVector<float>> m_colorValues;
+    cwTracked<QVector<float>> m_segmentErrors;
 
     // Upload gate for the visibility attribute: the store entryVersion and
     // segment count the buffer was last filled for. The mask itself is read
@@ -69,8 +71,10 @@ private:
     // RHI-side copy. Count -1 forces the first upload (a real plot has >= 0).
     quint64 m_uploadedMaskVersion = 0;
     qsizetype m_uploadedMaskSegmentCount = -1;
-    // Segment count the value buffer was last filled for; -1 forces the first upload.
+    // Segment count and value source the value buffer was last filled for;
+    // count -1 forces the first upload.
     qsizetype m_uploadedValueSegmentCount = -1;
+    int m_uploadedValueSource = cwColorByUniform::WorldZ;
 
     void updateVisibilityBuffer(QRhiResourceUpdateBatch* batch);
     void updateValueBuffer(QRhiResourceUpdateBatch* batch);

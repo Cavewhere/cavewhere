@@ -25,11 +25,15 @@ const float kModeSequential = 1.0;
 const float kModeDiverging = 2.0;
 const float kModeCategorical = 3.0;
 
+const float kValueSourcePerSegmentError = 2.0;
+
 const vec4 kCenterlineColor = vec4(1.0, 0.0, 0.0, 1.0);
 const vec4 kSplayColor = vec4(1.0, 0.6, 0.6, 1.0);
 // Splays keep reading as secondary under color-by: their ramp color is pulled
 // this far toward white.
 const float kSplayLighten = 0.5;
+// A leg outside any loop under the loop error source.
+const vec4 kNoDataColor = vec4(0.55, 0.55, 0.55, 1.0);
 
 float normalizeValue(float v)
 {
@@ -63,8 +67,11 @@ void main(void)
         return;
     }
 
-    vec4 color = mode == kModeCategorical
-        ? slotColor(vValue)
+    // Depth values are negative z, so "below zero means no data" holds only
+    // for the loop error source.
+    bool noData = params.w == kValueSourcePerSegmentError && vValue < 0.0;
+    vec4 color = noData ? kNoDataColor
+        : mode == kModeCategorical ? slotColor(vValue)
         : rampColor(normalizeValue(vValue));
     if (isSplay) {
         color.rgb = mix(color.rgb, vec3(1.0), kSplayLighten);

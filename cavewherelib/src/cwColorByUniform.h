@@ -14,7 +14,9 @@ struct cwColorByUniform
     static constexpr int kRampStops = 32;
 
     enum Mode : int { Off = 0, Sequential = 1, Diverging = 2, Categorical = 3 };
-    enum ValueSource : int { WorldZ = 0, PerElement = 1 };
+    enum ValueSource : int { WorldZ = 0, PerElement = 1, PerSegmentError = 2 };
+    enum RangeIndex : int { RangeMin = 0, RangeMax = 1, RangePivot = 2, RangeHalfExtent = 3 };
+    enum ParamIndex : int { ParamMode = 0, ParamStrength = 1, ParamSlotCount = 2, ParamValueSource = 3 };
 
     float ramp[kRampStops][4] = {};
     float range[4] = {};   // rangeMin, rangeMax, pivot, halfExtent

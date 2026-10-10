@@ -49,7 +49,7 @@ class CAVEWHERE_LIB_EXPORT cwColorBy : public QObject
     Q_PROPERTY(QList<double> legendTicks READ legendTicks NOTIFY legendTicksChanged)
 
 public:
-    enum class Source { None, Depth, Keyword };
+    enum class Source { None, Depth, Keyword, LoopError };
     Q_ENUM(Source)
 
     explicit cwColorBy(QObject* parent = nullptr);

@@ -718,6 +718,7 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     if(m_linePlot != nullptr) {
         m_linePlot->setGeometry(results.stationPositions(),
                                 results.tripSplayVertexRanges());
+        m_linePlot->setSegmentErrors(results.segmentErrors());
     }
 
     // Re-attach per-trip keyword items (centerline + splays) to the new

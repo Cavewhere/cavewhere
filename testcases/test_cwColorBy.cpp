@@ -62,6 +62,10 @@ constexpr double kShotsOnlySnappedHigh = 20.0;
 // Line-list vertices of the shot reaching kShotDeepZ
 constexpr int kDeepShotFirstVertex = 4;
 constexpr int kVerticesPerShot = 2;
+// Loop error: the bar is fixed at 0..3 sigma
+constexpr double kBadSigma = 3.0;
+constexpr double kMidSigma = 1.5;
+constexpr float kLoopLegSigma = 0.8f;
 
 // Points every cwColorBy in the test at its own QSettings store, unique to this
 // process so parallel runs never collide, and clears it on both ends.
@@ -164,7 +168,7 @@ cwGeometry scrapTriangle()
 
 int modeOf(const cwColorBy& colorBy)
 {
-    return static_cast<int>(colorBy.uniform().params[0]);
+    return static_cast<int>(colorBy.uniform().params[cwColorByUniform::ParamMode]);
 }
 
 }
@@ -205,12 +209,12 @@ TEST_CASE("cwColorBy normalizes depth around the pivot", "[ColorBy]")
         CHECK(colorBy.normalized(kHighest) == Approx(0.6));
 
         const cwColorByUniform uniform = colorBy.uniform();
-        CHECK(uniform.range[0] == Approx(kDeepest));
-        CHECK(uniform.range[1] == Approx(kHighest));
-        CHECK(uniform.range[2] == Approx(0.0));
-        CHECK(uniform.range[3] == Approx(-kDeepest));
+        CHECK(uniform.range[cwColorByUniform::RangeMin] == Approx(kDeepest));
+        CHECK(uniform.range[cwColorByUniform::RangeMax] == Approx(kHighest));
+        CHECK(uniform.range[cwColorByUniform::RangePivot] == Approx(0.0));
+        CHECK(uniform.range[cwColorByUniform::RangeHalfExtent] == Approx(-kDeepest));
         CHECK(modeOf(colorBy) == cwColorByUniform::Diverging);
-        CHECK(static_cast<int>(uniform.params[3]) == cwColorByUniform::WorldZ);
+        CHECK(static_cast<int>(uniform.params[cwColorByUniform::ParamValueSource]) == cwColorByUniform::WorldZ);
 
         CHECK(linePlot.colorBy() == uniform);
         CHECK(items.sharedUniformBlock() == cwColorByUniform::toBytes(uniform));
@@ -227,7 +231,7 @@ TEST_CASE("cwColorBy normalizes depth around the pivot", "[ColorBy]")
     SECTION("moving the pivot keeps it white and resizes the half extent") {
         colorBy.setPivotManual(kMovedPivot);
         CHECK(colorBy.normalized(kMovedPivot) == Approx(0.5));
-        CHECK(colorBy.uniform().range[3] == Approx(kMovedHalfExtent));
+        CHECK(colorBy.uniform().range[cwColorByUniform::RangeHalfExtent] == Approx(kMovedHalfExtent));
     }
 
     SECTION("source None turns the block off") {
@@ -235,6 +239,68 @@ TEST_CASE("cwColorBy normalizes depth around the pivot", "[ColorBy]")
         CHECK(modeOf(colorBy) == cwColorByUniform::Off);
         CHECK(linePlot.colorBy() == colorBy.uniform());
     }
+}
+
+TEST_CASE("cwColorBy colors loop error on a fixed sigma scale", "[ColorBy]")
+{
+    ScopedColorBySettings settings;
+
+    ColorByScene fixture;
+    cwRenderLinePlot& linePlot = fixture.linePlot;
+    cwColorBy& colorBy = fixture.colorBy;
+    cwRenderTexturedItems& items = fixture.items;
+
+    fixture.setGeometryAndSettle(deepToHighGeometry());
+    colorBy.setScrapStrength(kStoredScrapStrength);
+    colorBy.setSource(cwColorBy::Source::LoopError);
+
+    const cwColorByUniform uniform = colorBy.uniform();
+    CHECK(modeOf(colorBy) == cwColorByUniform::Sequential);
+    CHECK(static_cast<int>(uniform.params[cwColorByUniform::ParamValueSource]) == cwColorByUniform::PerSegmentError);
+    CHECK(uniform.range[cwColorByUniform::RangeMin] == Approx(0.0));
+    CHECK(uniform.range[cwColorByUniform::RangeMax] == Approx(kBadSigma));
+    CHECK(uniform.range[cwColorByUniform::RangePivot] == Approx(kMidSigma));
+    CHECK(uniform.range[cwColorByUniform::RangeHalfExtent] == Approx(kMidSigma));
+
+    // Scraps have no error, so the pushed strength is 0 while the stored one stays
+    CHECK(uniform.params[cwColorByUniform::ParamStrength] == 0.0f);
+    CHECK(colorBy.scrapStrength() == Approx(kStoredScrapStrength));
+
+    CHECK(linePlot.colorBy() == uniform);
+    CHECK(items.sharedUniformBlock() == cwColorByUniform::toBytes(uniform));
+
+    // The ramp the shader samples is the loop error ramp, light at 0 and dark at the top
+    const cwColorRamp loopRamp = cwColorRamp::loopErrorRamp();
+    const QColor first = loopRamp.colorAt(0.0);
+    CHECK(uniform.ramp[0][0] == Approx(first.redF()));
+    CHECK(uniform.ramp[0][1] == Approx(first.greenF()));
+    CHECK(uniform.ramp[0][2] == Approx(first.blueF()));
+    CHECK(loopRamp.colorAt(0.0).lightnessF() > loopRamp.colorAt(1.0).lightnessF());
+    CHECK_FALSE(colorBy.rampIds().contains(loopRamp.id()));
+    CHECK_FALSE(cwColorRamp::preset(loopRamp.id()).isValid());
+
+    SECTION("returning to depth restores the stored scrap strength") {
+        colorBy.setSource(cwColorBy::Source::Depth);
+        CHECK(colorBy.uniform().params[cwColorByUniform::ParamStrength] == Approx(kStoredScrapStrength));
+        CHECK(static_cast<int>(colorBy.uniform().params[cwColorByUniform::ParamValueSource]) == cwColorByUniform::WorldZ);
+    }
+}
+
+TEST_CASE("cwRenderLinePlot replaces segment errors and new geometry clears them", "[ColorBy]")
+{
+    cwRenderLinePlot linePlot;
+    linePlot.setGeometry(deepToHighGeometry());
+    CHECK(linePlot.segmentErrors().isEmpty());
+
+    const QVector<float> errors = {kLoopLegSigma, cwLinePlotGeometry::kNoErrorValue};
+    linePlot.setSegmentErrors(errors);
+    CHECK(linePlot.segmentErrors() == errors);
+
+    // The color values stay apart from the errors
+    CHECK(linePlot.colorValues() == QVector<float>(deepToHighGeometry().size(), 0.0f));
+
+    linePlot.setGeometry(deepToHighGeometry());
+    CHECK(linePlot.segmentErrors().isEmpty());
 }
 
 TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]")
@@ -250,7 +316,7 @@ TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]"
     CHECK_FALSE(colorBy.hasPivotManual());
     CHECK(colorBy.pivot() == Approx(kMidpointPivot));
     CHECK(colorBy.normalized(kMidpointPivot) == Approx(0.5));
-    CHECK(colorBy.uniform().range[2] == Approx(kMidpointPivot));
+    CHECK(colorBy.uniform().range[cwColorByUniform::RangePivot] == Approx(kMidpointPivot));
 
     SECTION("a manual pivot wins until it is cleared") {
         QSignalSpy pivotSpy(&colorBy, &cwColorBy::pivotChanged);
@@ -266,7 +332,7 @@ TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]"
         colorBy.clearPivotManual();
         CHECK_FALSE(colorBy.hasPivotManual());
         CHECK(colorBy.pivot() == Approx(kMidpointPivot));
-        CHECK(colorBy.uniform().range[2] == Approx(kMidpointPivot));
+        CHECK(colorBy.uniform().range[cwColorByUniform::RangePivot] == Approx(kMidpointPivot));
         CHECK(pivotSpy.count() == 2);
         CHECK(manualSpy.count() == 2);
     }
@@ -278,7 +344,7 @@ TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]"
         const double midpoint = (kAllSnappedLow + kAllSnappedHigh) * 0.5;
         CHECK(pivotSpy.count() == 1);
         CHECK(colorBy.pivot() == Approx(midpoint));
-        CHECK(colorBy.uniform().range[2] == Approx(midpoint));
+        CHECK(colorBy.uniform().range[cwColorByUniform::RangePivot] == Approx(midpoint));
     }
 
     SECTION("a range change keeps a manual pivot") {

@@ -28,6 +28,9 @@ QString keywordKeyKey() { return QStringLiteral("colorBy/keywordKey"); }
 constexpr double kDefaultScrapStrength = 0.6;
 constexpr float kOpaque = 1.0f;
 
+// Loop error bar: fixed 0..kBadSigma standard deviations
+constexpr double kBadSigma = 3.0;
+
 // Diverging normalize: the pivot sits at the middle of the bar.
 constexpr double kPivotPosition = 0.5;
 constexpr double kHalf = 0.5;
@@ -44,8 +47,8 @@ constexpr double kTickEpsilon = 1e-9;
 // A flat range snaps out to the whole units strictly below and above it
 constexpr double kFlatRangeStep = 1.0;
 
-enum RangeIndex { RangeMin = 0, RangeMax = 1, RangePivot = 2, RangeHalfExtent = 3 };
-enum ParamIndex { ParamMode = 0, ParamStrength = 1, ParamSlotCount = 2, ParamValueSource = 3 };
+using enum cwColorByUniform::RangeIndex;
+using enum cwColorByUniform::ParamIndex;
 
 // The stored ramp, or the depth preset when the id is unknown
 cwColorRamp resolvedRamp(const QString& id)
@@ -484,9 +487,16 @@ void cwColorBy::applyDataRange()
 void cwColorBy::rebuildUniform()
 {
     const bool keywordMode = m_source == Source::Keyword;
-    const cwColorRamp ramp = keywordMode
-        ? cwColorRamp::preset(cwColorRamp::defaultCategoricalRampId())
-        : resolvedRamp(m_rampId);
+    const bool loopErrorMode = m_source == Source::LoopError;
+    const cwColorRamp ramp = [&]() {
+        if (keywordMode) {
+            return cwColorRamp::preset(cwColorRamp::defaultCategoricalRampId());
+        }
+        if (loopErrorMode) {
+            return cwColorRamp::loopErrorRamp();
+        }
+        return resolvedRamp(m_rampId);
+    }();
 
     cwColorByUniform uniform;
 
@@ -499,12 +509,21 @@ void cwColorBy::rebuildUniform()
         uniform.ramp[i][3] = kOpaque;
     }
 
-    const double resolvedPivot = pivot();
-    const double halfExtent = halfExtentOf(m_rangeMin, m_rangeMax, resolvedPivot);
-    uniform.range[RangeMin] = static_cast<float>(m_rangeMin);
-    uniform.range[RangeMax] = static_cast<float>(m_rangeMax);
-    uniform.range[RangePivot] = static_cast<float>(resolvedPivot);
-    uniform.range[RangeHalfExtent] = static_cast<float>(halfExtent);
+    if (loopErrorMode) {
+        // A fixed sigma scale; the pivot and half extent sit mid-bar and go unread
+        constexpr double kMidSigma = kBadSigma * kHalf;
+        uniform.range[RangeMin] = 0.0f;
+        uniform.range[RangeMax] = static_cast<float>(kBadSigma);
+        uniform.range[RangePivot] = static_cast<float>(kMidSigma);
+        uniform.range[RangeHalfExtent] = static_cast<float>(kMidSigma);
+    } else {
+        const double resolvedPivot = pivot();
+        const double halfExtent = halfExtentOf(m_rangeMin, m_rangeMax, resolvedPivot);
+        uniform.range[RangeMin] = static_cast<float>(m_rangeMin);
+        uniform.range[RangeMax] = static_cast<float>(m_rangeMax);
+        uniform.range[RangePivot] = static_cast<float>(resolvedPivot);
+        uniform.range[RangeHalfExtent] = static_cast<float>(halfExtent);
+    }
 
     const bool diverging = ramp.kind() == cwColorRamp::Kind::Diverging;
     // A non-empty range also gives the diverging half extent a positive size:
@@ -514,7 +533,14 @@ void cwColorBy::rebuildUniform()
     int mode = cwColorByUniform::Off;
     int slotCount = 0;
     int valueSource = cwColorByUniform::WorldZ;
-    if (keywordMode) {
+    // Scraps carry no loop error, so their tint is off in that mode; the stored
+    // strength is kept for the other modes.
+    double strength = m_scrapStrength;
+    if (loopErrorMode) {
+        mode = cwColorByUniform::Sequential;
+        valueSource = cwColorByUniform::PerSegmentError;
+        strength = 0.0;
+    } else if (keywordMode) {
         // Slots are pushed into the proxies only while a key groups them.
         if (!m_keywordColorBy->key().isEmpty()) {
             mode = cwColorByUniform::Categorical;
@@ -526,7 +552,7 @@ void cwColorBy::rebuildUniform()
     }
 
     uniform.params[ParamMode] = static_cast<float>(mode);
-    uniform.params[ParamStrength] = static_cast<float>(m_scrapStrength);
+    uniform.params[ParamStrength] = static_cast<float>(strength);
     uniform.params[ParamSlotCount] = static_cast<float>(slotCount);
     uniform.params[ParamValueSource] = static_cast<float>(valueSource);
 

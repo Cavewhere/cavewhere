@@ -19,7 +19,8 @@ layout(location = 2) in uint iType;
 // 0 = hidden, non-zero = visible. A hidden segment collapses outside the
 // clip volume and the whole quad is discarded.
 layout(location = 3) in uint iVisibility;
-// Per-segment color-by value (keyword slot), read when valueSource is PerElement.
+// Per-segment color-by value (keyword slot or loop closure error), read for
+// every value source except WorldZ.
 layout(location = 4) in float iValue;
 
 layout(location = 0) flat out uint vType;
@@ -42,7 +43,7 @@ layout(std140, binding = 1) uniform ColorByBlock {
     vec4 params;  // mode, strength, slotCount, valueSource
 };
 
-const float kValueSourcePerElement = 1.0;
+const float kValueSourceWorldZ = 0.0;
 
 const float kCenterlineHalfWidthPx = 1.0; // logical px -> 2 px wide line
 const float kSplayHalfWidthPx = 0.5;      // logical px -> 1 px wide line
@@ -114,9 +115,9 @@ void main(void)
     clip.xy += offsetPx * (2.0 / viewportSize) * clip.w;
     clip.z -= isSplay ? kSplayDepthBias : kCenterlineDepthBias;
 
-    // The segment's own value, or the world elevation of this corner so depth
-    // coloring grades along a shot.
-    vValue = params.w == kValueSourcePerElement ? iValue : mix(iFrom.z, iTo.z, endSelect);
+    // The world elevation of this corner so depth coloring grades along a
+    // shot, or the segment's own value.
+    vValue = params.w == kValueSourceWorldZ ? mix(iFrom.z, iTo.z, endSelect) : iValue;
     gl_Position = clip;
     vType = iType;
 }

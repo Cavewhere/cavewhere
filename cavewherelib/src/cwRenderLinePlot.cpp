@@ -98,6 +98,8 @@ void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
     // Color values map to vertices too; the owner re-applies them with the
     // hidden ranges.
     m_colorValues.setValue(QVector<float>(vertexCount, 0.0f));
+    // Errors map to segments of the old layout; the owner sets them after each solve.
+    m_segmentErrors.setValue(QVector<float>());
 
     // The published store mask is keyed to the old vertex layout, which no
     // longer maps to the right vertices; clear it to the all-visible default.
@@ -189,6 +191,12 @@ void cwRenderLinePlot::setRangeColorValue(int start, int count, float value)
     QVector<float> colorValues = current;
     std::fill(colorValues.begin() + start, colorValues.begin() + start + count, value);
     m_colorValues.setValue(std::move(colorValues));
+    update();
+}
+
+void cwRenderLinePlot::setSegmentErrors(QVector<float> errors)
+{
+    m_segmentErrors.setValue(std::move(errors));
     update();
 }
 

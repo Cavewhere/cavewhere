@@ -70,6 +70,11 @@ constexpr const char* kOkabeIto[] = {
     "#0072B2", "#D55E00", "#CC79A7", "#999999"
 };
 
+// Loop error: light green, yellow, orange, dark red
+constexpr const char* kLoopError[] = {
+    "#a6d96a", "#fee08b", "#f46d43", "#a50026"
+};
+
 constexpr double kQuarter = 0.25;
 constexpr double kHalf = 0.5;
 constexpr double kThreeQuarters = 0.75;
@@ -210,6 +215,13 @@ cwColorRamp cwColorRamp::preset(const QString& id)
 QString cwColorRamp::defaultDepthRampId()
 {
     return QStringLiteral("depth");
+}
+
+cwColorRamp cwColorRamp::loopErrorRamp()
+{
+    static const cwColorRamp ramp(QStringLiteral("loop-error"), QStringLiteral("Loop error"), Kind::Sequential,
+                                  evenStops(kLoopError));
+    return ramp;
 }
 
 QString cwColorRamp::defaultCategoricalRampId()

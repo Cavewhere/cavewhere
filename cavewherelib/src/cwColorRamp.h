@@ -47,6 +47,10 @@ public:
     static cwColorRamp preset(const QString& id); // invalid ramp when unknown
     static QString defaultDepthRampId();
     static QString defaultCategoricalRampId();
+    // Loop closure error, light green at 0 to dark red at the top. Lightness
+    // falls along it, so it reads as a sequence without hue. Kept out of
+    // presets() so the depth palette picker never lists it.
+    static cwColorRamp loopErrorRamp();
 
     struct Lab { double l = 0.0; double a = 0.0; double b = 0.0; };
     static Lab toOklab(const QColor& color);

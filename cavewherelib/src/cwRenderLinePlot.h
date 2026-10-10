@@ -62,12 +62,23 @@ public:
     // The render thread holds a copy, so it is published by write-to-a-copy.
     void setRangeColorValue(int start, int count, float value);
 
+    // Per-segment loop closure error in sigma (cwColorByUniform::PerSegmentError),
+    // one float per segment as cwLinePlotGeometry::Result::segmentErrors lays it
+    // out; cwLinePlotGeometry::kNoErrorValue marks a leg outside any loop.
+    // setGeometry resets it to empty, and each solve replaces the whole vector.
+    // It is its own buffer, apart from the color values: setRangeColorValue is
+    // change-guarded, so sharing one buffer would leave stale errors wherever a
+    // keyword slot did not change on the way back to Keyword mode. The render
+    // thread holds a copy, so it is published by write-to-a-copy.
+    void setSegmentErrors(QVector<float> errors);
+
     float maxZValue() const;
     float minZValue() const;
 
     QVector<QVector3D> points() const;
     QVector<quint8> visibility() const;
     QVector<float> colorValues() const;
+    QVector<float> segmentErrors() const;
 
     // Endpoints of the line segment whose first vertex is firstIndex — the value
     // cwRayHit::firstIndex carries for a line hit (under the iota index list it is
@@ -109,6 +120,7 @@ private:
     cwTracked<Data> m_data;
     cwTracked<cwColorByUniform> m_colorBy;
     cwTracked<QVector<float>> m_colorValues;
+    cwTracked<QVector<float>> m_segmentErrors;
 
     // Authoring copy of the per-vertex mask — the source for setRangeVisible's
     // range-flip math and for updateVisibility's re-seed. Consumers read the
@@ -161,6 +173,11 @@ inline QVector<quint8> cwRenderLinePlot::visibility() const
 inline QVector<float> cwRenderLinePlot::colorValues() const
 {
     return m_colorValues.value();
+}
+
+inline QVector<float> cwRenderLinePlot::segmentErrors() const
+{
+    return m_segmentErrors.value();
 }
 
 #endif // CWRENDERLINEPLOT_H

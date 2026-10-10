@@ -113,6 +113,9 @@ void cwRHILinePlot::synchronize(const SynchronizeData& data)
 
     m_colorValues = linePlot->m_colorValues;
     linePlot->m_colorValues.resetChanged();
+
+    m_segmentErrors = linePlot->m_segmentErrors;
+    linePlot->m_segmentErrors.resetChanged();
 }
 
 void cwRHILinePlot::updateResources(const ResourceUpdateData& data)
@@ -217,10 +220,12 @@ void cwRHILinePlot::updateVisibilityBuffer(QRhiResourceUpdateBatch* batch)
     m_uploadedMaskSegmentCount = segmentCount;
 }
 
-// Uploads the per-instance color-by value. The authoring buffer is per-vertex
-// and both vertices of a segment share their value, so segment i takes vertex
-// 2i. A value buffer from older geometry (the counts disagree) uploads zeros
-// so the instance count and the buffer always agree.
+// Uploads the per-instance color-by value from the buffer the uniform's value
+// source names. Loop errors are already per segment; a vector from older
+// geometry (the counts disagree) uploads kNoErrorValue. The color values are
+// per-vertex and both vertices of a segment share their value, so segment i
+// takes vertex 2i; a buffer from older geometry uploads zeros. Either way the
+// instance count and the buffer always agree.
 void cwRHILinePlot::updateValueBuffer(QRhiResourceUpdateBatch* batch)
 {
     if (!m_valueBuffer) {
@@ -228,22 +233,35 @@ void cwRHILinePlot::updateValueBuffer(QRhiResourceUpdateBatch* batch)
     }
 
     const qsizetype segmentCount = m_data.value().points.size() / 2;
-    if (!m_colorValues.isChanged() && segmentCount == m_uploadedValueSegmentCount) {
+    const int valueSource = static_cast<int>(m_colorBy.value().params[cwColorByUniform::ParamValueSource]);
+    const bool errorSource = valueSource == cwColorByUniform::PerSegmentError;
+    cwTracked<QVector<float>>& source = errorSource ? m_segmentErrors : m_colorValues;
+    if (!source.isChanged()
+        && segmentCount == m_uploadedValueSegmentCount
+        && valueSource == m_uploadedValueSource) {
         return;
     }
 
-    const QVector<float>& values = m_colorValues.value();
-    QVector<float> perInstance(segmentCount, 0.0f);
-    if (values.size() == 2 * segmentCount) {
-        for (qsizetype segment = 0; segment < segmentCount; ++segment) {
-            perInstance[segment] = values.at(2 * segment);
+    const QVector<float>& values = source.value();
+    QVector<float> perInstance;
+    if (errorSource) {
+        perInstance = values.size() == segmentCount
+            ? values
+            : QVector<float>(segmentCount, cwLinePlotGeometry::kNoErrorValue);
+    } else {
+        perInstance = QVector<float>(segmentCount, 0.0f);
+        if (values.size() == 2 * segmentCount) {
+            for (qsizetype segment = 0; segment < segmentCount; ++segment) {
+                perInstance[segment] = values.at(2 * segment);
+            }
         }
     }
 
     uploadPerInstance(m_valueBuffer, batch, perInstance);
 
-    m_colorValues.resetChanged();
+    source.resetChanged();
     m_uploadedValueSegmentCount = segmentCount;
+    m_uploadedValueSource = valueSource;
 }
 
 bool cwRHILinePlot::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
