@@ -37,6 +37,18 @@ QQ.Item {
     readonly property int labelWidth: Math.ceil(Math.max(tickMetricsId.advanceWidth(tickText(colorBy.rangeMin)),
                                                          tickMetricsId.advanceWidth(tickText(colorBy.rangeMax))))
     readonly property int endInset: Math.ceil(labelHeight / 2)
+    // Loop error names each sigma tick's band in a column right of the labels
+    readonly property int bandLabelX: tickLabelX + labelWidth + tickLabelGap
+    readonly property int bandColumnWidth: {
+        if (!loopErrorActive) {
+            return 0
+        }
+        let widest = 0
+        for (let i = 0; i < colorBy.legendTicks.length; ++i) {
+            widest = Math.max(widest, tickMetricsId.advanceWidth(bandText(colorBy.legendTicks[i])))
+        }
+        return tickLabelGap + Math.ceil(widest)
+    }
     // The pivot's label hides when its mark is closer than this to a rounded tick
     readonly property int minLabelSpacing: labelHeight
     readonly property int contentPadding: 6
@@ -116,6 +128,13 @@ QQ.Item {
         return colorBy.formatTick(value)
     }
 
+    // bandName() is an invokable QML cannot track, so name the source to
+    // re-evaluate when it changes.
+    function bandText(value) {
+        colorBy.source
+        return colorBy.bandName(value)
+    }
+
     width: contentId.width
     height: contentId.height
 
@@ -142,7 +161,8 @@ QQ.Item {
     QQ.Column {
         id: contentId
 
-        readonly property real bodyWidth: rootId.showsBar ? legendId.width
+        readonly property real bodyWidth: rootId.showsBar
+                                          ? Math.max(legendId.width, rootId.loopErrorActive ? noLoopRowId.width : 0)
                                           : (rootId.showsSwatches ? swatchLegendId.width : 0)
 
         padding: rootId.contentPadding
@@ -216,7 +236,7 @@ QQ.Item {
             objectName: "colorByBar"
 
             visible: rootId.showsBar
-            width: rootId.tickLabelX + rootId.labelWidth
+            width: rootId.tickLabelX + rootId.labelWidth + rootId.bandColumnWidth
             height: rootId.barHeight + 2 * rootId.endInset
 
             QQ.Column {
@@ -270,7 +290,42 @@ QQ.Item {
                         y: tickId.markY - height / 2
                         text: rootId.tickText(tickId.modelData)
                     }
+
+                    QC.Label {
+                        objectName: "colorByBandLabel"
+
+                        visible: rootId.loopErrorActive
+                        x: rootId.bandLabelX
+                        y: tickId.markY - height / 2
+                        text: rootId.bandText(tickId.modelData)
+                    }
                 }
+            }
+        }
+
+        // Loop error: legs outside any loop draw in the no-data gray
+        QQ.Row {
+            id: noLoopRowId
+            objectName: "colorByNoLoopRow"
+
+            visible: rootId.loopErrorActive
+            height: rootId.swatchRowHeight
+            spacing: rootId.contentPadding
+
+            QQ.Rectangle {
+                objectName: "colorByNoLoopSwatch"
+
+                anchors.verticalCenter: parent.verticalCenter
+                width: rootId.swatchSize
+                height: rootId.swatchSize
+                color: rootId.colorBy.noDataColor
+            }
+
+            QC.Label {
+                objectName: "colorByNoLoopLabel"
+
+                anchors.verticalCenter: parent.verticalCenter
+                text: qsTr("No loop")
             }
         }
 

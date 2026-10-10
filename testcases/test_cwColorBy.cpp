@@ -273,13 +273,16 @@ TEST_CASE("cwColorBy colors loop error on a fixed sigma scale", "[ColorBy]")
     CHECK(linePlot.colorBy() == uniform);
     CHECK(items.sharedUniformBlock() == cwColorByUniform::toBytes(uniform));
 
-    // The ramp the shader samples is the loop error ramp, light at 0 and dark at the top
+    // The ramp the shader samples is the loop error ramp: dark green at 0,
+    // lighter green at 1 sigma, dark red at the top
     const cwColorRamp loopRamp = cwColorRamp::loopErrorRamp();
     const QColor first = loopRamp.colorAt(0.0);
     CHECK(uniform.ramp[0][0] == Approx(first.redF()));
     CHECK(uniform.ramp[0][1] == Approx(first.greenF()));
     CHECK(uniform.ramp[0][2] == Approx(first.blueF()));
-    CHECK(loopRamp.colorAt(0.0).lightnessF() > loopRamp.colorAt(1.0).lightnessF());
+    CHECK(first.name() == QStringLiteral("#1a9850"));
+    CHECK(loopRamp.colorAt(1.0).name() == QStringLiteral("#a50026"));
+    CHECK(loopRamp.colorAt(kGoodSigma / kBadSigma).lightnessF() > first.lightnessF());
     CHECK_FALSE(colorBy.rampIds().contains(loopRamp.id()));
     CHECK_FALSE(cwColorRamp::preset(loopRamp.id()).isValid());
 

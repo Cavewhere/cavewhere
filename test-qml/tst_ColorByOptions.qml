@@ -467,6 +467,69 @@ MainWindowTest {
             console.log("color-by loop error legend render: " + path);
         }
 
+        function bandLabel(tick) {
+            let label = findChild(tick, "colorByBandLabel");
+            verify(label, "found the band label");
+            return label;
+        }
+
+        function test_loopErrorShowsBandWordsAndNoLoopSwatch() {
+            let colorBy = RootData.regionSceneManager.colorBy;
+            let popup = openPopupWithDepth();
+            popup.close();
+            let legend = findLegend();
+            let noLoopRow = findChild(legend, "colorByNoLoopRow");
+            verify(noLoopRow, "found the No loop row");
+            let ticks = findChild(legend, "colorByTicks");
+            verify(ticks, "found the tick repeater");
+            tryVerify(() => ticks.count >= 3, 5000, "depth shows its ticks");
+            verify(!noLoopRow.visible, "depth hides the No loop row");
+            verify(!bandLabel(ticks.itemAt(0)).visible, "depth hides the band words");
+
+            colorBy.source = ColorBy.LoopError;
+            tryCompare(ticks, "count", sigmaTickCount);
+            tryVerify(() => noLoopRow.visible, 5000, "loop error shows the No loop row");
+
+            // Ticks run bottom (0 sigma) to top, and each band word centers on its mark
+            const expected = ["Perfect", "Good", "Okay", "Bad"];
+            const centerY = item => item.y + item.height / 2;
+            for (let i = 0; i < sigmaTickCount; ++i) {
+                const tick = ticks.itemAt(i);
+                const band = bandLabel(tick);
+                compare(band.text, expected[i]);
+                verify(band.visible, "band word " + i + " shows");
+                verify(Math.abs(centerY(band) - tick.markY) <= edgeTolerance,
+                       "band word " + i + " centers on its mark: label " + centerY(band)
+                       + ", mark " + tick.markY);
+                const sigmaLabel = tickLabel(tick);
+                verify(band.x >= sigmaLabel.x + sigmaLabel.width,
+                       "band word " + i + " sits right of the sigma label");
+                verify(band.x + band.width <= tick.width + edgeTolerance,
+                       "band word " + i + " fits inside the legend");
+            }
+            for (let i = 1; i < sigmaTickCount; ++i) {
+                verify(ticks.itemAt(i - 1).markY > ticks.itemAt(i).markY,
+                       "band " + expected[i - 1] + " sits below " + expected[i]);
+            }
+
+            let swatch = findChild(noLoopRow, "colorByNoLoopSwatch");
+            let noLoopLabel = findChild(noLoopRow, "colorByNoLoopLabel");
+            verify(swatch && noLoopLabel, "found the No loop swatch and label");
+            compare(noLoopLabel.text, "No loop");
+            verify(Qt.colorEqual(swatch.color, colorBy.noDataColor), "the swatch is the no-data gray");
+
+            // Saved so the legend can be eyeballed
+            tryVerify(() => legend.height > legend.barHeight, 5000, "the legend has laid out the bar");
+            const path = OffscreenRenderTester.tempPngPath("colorby_cp18");
+            let saved = false;
+            legend.grabToImage(result => { saved = result.saveToFile(path); });
+            tryVerify(() => saved, 5000, "saved the legend image");
+            console.log("color-by loop error legend render: " + path);
+
+            colorBy.source = ColorBy.Depth;
+            tryVerify(() => !noLoopRow.visible, 5000, "back on depth, the No loop row hides");
+        }
+
         function test_legendSitsAboveCompass() {
             let legend = findLegend();
             let renderer = legend.parent;

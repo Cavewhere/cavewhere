@@ -31,9 +31,9 @@ MainWindowTest {
         // Tape added to the repeated a1-a2 leg, in meters: a small misclosure
         // that stays near the ramp's low end
         readonly property double repeatShotOffset: 0.1
-        // The low end of cwColorRamp::loopErrorRamp: light green at 0, yellow at 1 sigma
-        readonly property QQ.color rampZeroSigma: "#a6d96a"
-        readonly property QQ.color rampOneSigma: "#fee08b"
+        // The low end of cwColorRamp::loopErrorRamp: dark green at 0, light green at 1 sigma
+        readonly property QQ.color rampZeroSigma: "#1a9850"
+        readonly property QQ.color rampOneSigma: "#a6d96a"
 
         function loadAndFindViewer() {
             TestHelper.loadProjectFromFile(RootData.project,

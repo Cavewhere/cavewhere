@@ -70,9 +70,9 @@ constexpr const char* kOkabeIto[] = {
     "#0072B2", "#D55E00", "#CC79A7", "#999999"
 };
 
-// Loop error: light green, yellow, orange, dark red
+// Loop error: dark green, light green, orange, dark red
 constexpr const char* kLoopError[] = {
-    "#a6d96a", "#fee08b", "#f46d43", "#a50026"
+    "#1a9850", "#a6d96a", "#fdae61", "#a50026"
 };
 
 constexpr double kQuarter = 0.25;
