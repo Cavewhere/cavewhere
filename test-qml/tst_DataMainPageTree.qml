@@ -898,7 +898,7 @@ MainWindowTest {
                           return askBox !== null && askBox.visible
                       }, 5000, "Delete… must ask first")
             compare(askBox.message,
-                    "Delete <b>Kentucky</b> and its 2 nodes and 2 trips?")
+                    "Delete <b>Kentucky</b> and its 2 children and 2 trips?")
 
             mouseClick(findChild(askBox, "removeButton"))
             tryCompare(tree, "rows", 0, 5000)

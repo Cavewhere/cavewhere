@@ -278,11 +278,11 @@ ColumnLayout {
     }
 
     //What the prompt says. A node takes everything under it along, so the
-    //question counts the nodes and trips that go with it.
+    //question counts the children and trips that go with it.
     function removeMessage(name: string, isNode: bool, nodeCount: int, tripCount: int) : string {
         let contents = [];
         if(isNode && nodeCount > 0) {
-            contents.push(surveyTreeId.countText(nodeCount, qsTr("node"), qsTr("nodes")));
+            contents.push(surveyTreeId.countText(nodeCount, qsTr("child"), qsTr("children")));
         }
         if(isNode && tripCount > 0) {
             contents.push(surveyTreeId.countText(tripCount, qsTr("trip"), qsTr("trips")));
