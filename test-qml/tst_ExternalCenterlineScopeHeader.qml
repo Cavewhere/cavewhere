@@ -37,40 +37,44 @@ MainWindowTest {
             RootData.newProject()
         }
 
-        // The attach creates one Scope trip per block with stations; each
-        // owns no file and carries the prefix that windows its block.
-        function bindFirstScopeTrip(projectBaseName) {
-            const cave = makeSavedCaveAttach(
-                           projectBaseName,
-                           "external-centerlines/survex_blocks.svx")
-            verify(cave.rowCount() > 0, "the attach created Scope trips")
+        // survex_blocks.svx attaches as a SurvexFile root whose first block,
+        // doghill, is a derived node holding its own shots as one derived
+        // trip. Binds the header to that trip and returns its node.
+        function bindFirstDerivedTrip(projectBaseName) {
+            const sourceRoot = makeSavedCaveAttach(
+                                 projectBaseName,
+                                 "external-centerlines/survex_blocks.svx")
+            const doghill = childNamed(sourceRoot, "doghill")
+            verify(doghill !== null, "the attach derived the doghill block")
+            compare(doghill.rowCount(), 1, "doghill's own shots are one derived trip")
 
-            rootId.trip = cave.trip(0)
+            rootId.trip = doghill.trip(0)
             verify(rootId.trip.sourcePath.length > 0,
                    "a derived trip names its place in the file")
             waitForRendering(headerId)
-            return cave
+            return doghill
         }
 
-        function test_partOfNamesTheCaveAndLinksToItsPage() {
-            const cave = bindFirstScopeTrip("scope-header-partof")
+        function test_partOfNamesTheParentNodeAndLinksToItsPage() {
+            const node = bindFirstDerivedTrip("scope-header-partof")
 
             const link = findChild(headerId, "parentCaveLink")
             verify(link !== null, "parentCaveLink must exist")
-            tryCompare(link, "text", cave.name,
-                       5000, "the link names the cave the trip belongs to")
+            tryCompare(link, "text", node.name,
+                       5000, "the link names the node the trip belongs to")
 
             mouseClick(link)
             tryVerify(() => RootData.pageView.currentPageItem !== null
-                            && RootData.pageView.currentPageItem.objectName === "cavePage",
-                      10000, "clicking Part of lands on the cave page")
+                            && RootData.pageView.currentPageItem.objectName === "cavePage"
+                            && RootData.pageView.currentPageItem.currentNode === node,
+                      10000, "clicking Part of lands on the node's page")
             waitForRendering(rootId)
         }
 
-        function test_removeTripRemovesItFromTheCave() {
-            const cave = bindFirstScopeTrip("scope-header-remove")
+        function test_removeTripRemovesItFromItsNode() {
+            const node = bindFirstDerivedTrip("scope-header-remove")
             const tripName = rootId.trip.name
-            const rowsBefore = cave.rowCount()
+            const rowsBefore = node.rowCount()
 
             const removeButton = findChild(headerId, "removeTripButton")
             verify(removeButton !== null, "removeTripButton must exist")
@@ -94,8 +98,8 @@ MainWindowTest {
             // no undo stack destroys it on the spot.
             mouseClick(confirm)
 
-            tryVerify(() => cave.rowCount() === rowsBefore - 1,
-                      10000, "confirming removes the trip from the cave")
+            tryVerify(() => node.rowCount() === rowsBefore - 1,
+                      10000, "confirming removes the trip from its node")
             rootId.trip = null
         }
     }

@@ -371,25 +371,27 @@ StandardPage {
         id: fixStationsRow
         spacing: Theme.delegatePadding
 
-        QC.Label {
-            text: "Fix stations:"
+        RowLayout {
+            spacing: Theme.delegatePadding
             visible: !nodePageArea.isDerived
-        }
 
-        LinkText {
-            objectName: "fixStationsLink"
-            visible: !nodePageArea.isDerived
-            text: nodePageArea.currentNode ? nodePageArea.currentNode.fixStationCount : 0
-            onClicked: {
-                RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
+            QC.Label {
+                text: "Fix stations:"
             }
-        }
 
-        FixStationErrorBadge {
-            objectName: "fixStationsBadge"
-            visible: !nodePageArea.isDerived
-            errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
-            errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
+            LinkText {
+                objectName: "fixStationsLink"
+                text: nodePageArea.currentNode ? nodePageArea.currentNode.fixStationCount : 0
+                onClicked: {
+                    RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
+                }
+            }
+
+            FixStationErrorBadge {
+                objectName: "fixStationsBadge"
+                errorModel: nodePageArea.currentNode ? nodePageArea.currentNode.errorModel : null
+                errorTypeIds: RootData.region.fixStationValidator.fixStationErrorTypeIds
+            }
         }
 
         QC.Label {

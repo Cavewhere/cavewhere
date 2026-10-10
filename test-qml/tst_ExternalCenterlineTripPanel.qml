@@ -756,35 +756,44 @@ MainWindowTest {
                       "the tied attachment is no longer floating")
         }
 
-        // Binds the panel to a Scope trip: one created by a cave-level
-        // attach, which windows a block of the cave's file and owns no
-        // file of its own. Returns the cave.
-        function bindScopeTrip(projectBaseName) {
-            const cave = makeSavedCaveAttach(
-                           projectBaseName,
-                           "external-centerlines/survex_blocks.svx")
+        // survex_blocks.svx attaches as a SurvexFile root with no shots of its
+        // own; each block with shots is a derived node holding one derived
+        // trip. Binds the panel to east's, the deepest block. Returns the
+        // source root.
+        function bindDerivedTrip(projectBaseName) {
+            const sourceRoot = makeSavedCaveAttach(
+                                 projectBaseName,
+                                 "external-centerlines/survex_blocks.svx")
 
-            compare(cave.rowCount(), 3, "the attach created one Scope trip per block")
-            const scopeTrip = cave.trip(2)
-            verify(scopeTrip.externallyBacked,
-                   "a Scope trip is backed by the file its cave attached")
-            compare(scopeTrip.externalCenterline.entryFile, "",
-                    "a Scope trip owns no file of its own")
+            compare(sourceRoot.rowCount(), 0, "the file's root holds no shots of its own")
+            const doghill = childNamed(sourceRoot, "doghill")
+            const bigPassage = childNamed(doghill, "big-passage")
+            const east = childNamed(bigPassage, "east")
+            const sump = childNamed(bigPassage, "sump")
+            verify(east !== null && sump !== null, "each block is a derived node")
+            compare([doghill.rowCount(), bigPassage.rowCount(), east.rowCount(), sump.rowCount()],
+                    [1, 1, 1, 0], "one derived trip per block with shots")
 
-            rootId.trip = scopeTrip
+            const trip = east.trip(0)
+            verify(trip.externallyBacked,
+                   "a derived trip is backed by its source root's file")
+            compare(trip.externalCenterline.entryFile, "",
+                    "a derived trip owns no file of its own")
+
+            rootId.trip = trip
             waitForRendering(panelId)
-            return cave
+            return sourceRoot
         }
 
-        // A Scope trip is externally backed by its cave's file and owns none
+        // A derived trip is externally backed by its root's file and owns none
         // of its own, so every manager lookup the panel makes misses: they
         // render as empty rather than tearing the panel down, and the header
         // Loader carries the scope header instead of the attached one.
-        function test_aScopeTripRendersThePanelWithNoFileOfItsOwn() {
-            bindScopeTrip("trip-panel-scope")
+        function test_aDerivedTripRendersThePanelWithNoFileOfItsOwn() {
+            bindDerivedTrip("trip-panel-scope")
 
-            verify(!panelId.isAttached, "a Scope trip owns no file to be attached to")
-            verify(panelId.isScope, "its place in the file is what makes it a Scope trip")
+            verify(!panelId.isAttached, "a derived trip owns no file to be attached to")
+            verify(panelId.isScope, "a derived trip renders in scope mode")
 
             const scopeHeader = findChild(panelId, "scopeHeader")
             const solveStatus = findChild(panelId, "solveStatus")
@@ -806,9 +815,9 @@ MainWindowTest {
 
         // The trip has no file, so the whole attached-only surface is gone:
         // no Replace, no provenance line, and neither banner about a file of
-        // the trip's own. Declination comes from the cave's file (§5 Q6).
-        function test_aScopeTripHidesTheAttachedOnlySurface() {
-            bindScopeTrip("trip-panel-scope-surface")
+        // the trip's own. Declination comes from the survey file (§5 Q6).
+        function test_aDerivedTripHidesTheAttachedOnlySurface() {
+            bindDerivedTrip("trip-panel-scope-surface")
 
             compare(findChild(panelId, "replaceButton"), null,
                     "there is nothing of the trip's own to replace")
@@ -826,7 +835,7 @@ MainWindowTest {
             const metadata = findChild(panelId, "tripMetadata")
             const declEditor = findChild(metadata, "tripMetadataDeclination")
             verify(declEditor !== null, "tripMetadataDeclination must exist")
-            verify(!declEditor.visible, "cavern owns a Scope trip's declination")
+            verify(!declEditor.visible, "cavern owns a derived trip's declination")
 
             const caveHint = findChild(metadata, "caveOwnsDeclinationHint")
             verify(caveHint !== null, "caveOwnsDeclinationHint must exist")
@@ -841,15 +850,15 @@ MainWindowTest {
         // The file seeds the date and the user owns it from there: east
         // inherits its ancestor block's *date, and an edit lands on the trip
         // (§5 Q6).
-        function test_aScopeTripDateShowsTheSeedAndStaysEditable() {
-            bindScopeTrip("trip-panel-scope-date")
+        function test_aDerivedTripDateShowsTheSeedAndStaysEditable() {
+            bindDerivedTrip("trip-panel-scope-date")
             const trip = rootId.trip
 
             const metadata = findChild(panelId, "tripMetadata")
             const dateField = findChild(metadata, "tripMetadataDate")
             verify(dateField !== null, "tripMetadataDate must exist")
             tryCompare(dateField, "text", "2024-01-05", 5000,
-                       "the block's date seeded the Scope trip")
+                       "the block's date seeded the derived trip")
             verify(!dateField.readOnly, "the date is the user's to correct")
 
             dateField.finishedEditting("2020-02-02")
@@ -857,26 +866,26 @@ MainWindowTest {
                       5000, "the edit lands on the trip")
         }
 
-        // The station list is the one block the two modes share: it filters
-        // the cave's solved network by the trip's prefix.
-        function test_aScopeTripListsItsOwnBlocksStations() {
-            bindScopeTrip("trip-panel-scope-stations")
+        // The station list is the one block the two modes share: a derived
+        // trip lists the solved stations of its own unit.
+        function test_aDerivedTripListsItsOwnBlocksStations() {
+            bindDerivedTrip("trip-panel-scope-stations")
 
             const stationsList = findChild(panelId, "stationsList")
             verify(stationsList !== null, "stationsList must exist")
             tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
-                      10000, "the cave attach's chained solve publishes stations")
+                      10000, "the attach's chained solve publishes stations")
             tryVerify(() => stationsList.count > 0, 10000,
-                      "the block's stations reach the Scope trip's list")
+                      "the block's stations reach the derived trip's list")
         }
 
         // The verb the scope header adds acts on the real trip through the
         // panel: its removal.
         function test_theScopeHeadersVerbsReachTheTrip() {
-            bindScopeTrip("trip-panel-scope-verbs")
+            bindDerivedTrip("trip-panel-scope-verbs")
             const trip = rootId.trip
-            const cave = trip.parentCave
-            const rowsBefore = cave.rowCount()
+            const node = trip.parentNode
+            const rowsBefore = node.rowCount()
 
             const scopeHeader = findChild(panelId, "scopeHeader")
 
@@ -898,8 +907,8 @@ MainWindowTest {
             // Nothing may touch the trip after this click: removeTrip with
             // no undo stack destroys it on the spot.
             mouseClick(confirm)
-            tryVerify(() => cave.rowCount() === rowsBefore - 1,
-                      10000, "confirming removes the trip from the cave")
+            tryVerify(() => node.rowCount() === rowsBefore - 1,
+                      10000, "confirming removes the trip from its node")
             rootId.trip = null
         }
 

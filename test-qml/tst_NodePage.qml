@@ -265,6 +265,8 @@ MainWindowTest {
             const link = findChild(page, "fixStationsLink")
             verify(link !== null && link.visible, "a Folder page shows its fix stations")
             compare(link.text, "0")
+            verify(!findChild(page, "fixStationsBadge").visible,
+                   "a node with no fix-station error shows no badge")
 
             mouseClick(link)
             tryVerify(() => {
@@ -462,6 +464,8 @@ MainWindowTest {
                     "ALPHA1 and ALPHA2 are Alpha's units")
 
             verify(!findChild(page, "fixStationsLink").visible, "a derived node offers no fix stations")
+            verify(!findChild(page, "fixStationsBadge").parent.visible,
+                   "a derived node hides the whole fix-station group, badge included")
             const fixLabel = findChild(page, "derivedFixStationsLabel")
             verify(fixLabel.visible)
             compare(fixLabel.text, "Fixed positions come from the survey file")
