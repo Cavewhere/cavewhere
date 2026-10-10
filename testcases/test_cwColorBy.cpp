@@ -20,6 +20,7 @@
 #include <QVector3D>
 
 //Std includes
+#include <cmath>
 #include <cstring>
 
 using namespace Catch;
@@ -28,7 +29,9 @@ namespace {
 
 constexpr float kDeepest = -500.0f;
 constexpr float kHighest = 100.0f;
-constexpr float kFlatZ = -42.0f;
+constexpr float kFlatZ = 3.4f;
+constexpr double kFlatSnappedLow = 3.0;
+constexpr double kFlatSnappedHigh = 4.0;
 constexpr double kMidpointPivot = -200.0;
 constexpr double kMovedPivot = -300.0;
 constexpr double kMovedHalfExtent = 400.0;
@@ -37,6 +40,7 @@ constexpr double kStoredScrapStrength = 0.25;
 constexpr float kNarrowLow = -37.0f;
 constexpr float kNarrowHigh = 12.0f;
 constexpr double kTickMargin = 1e-6;
+constexpr double kMetersPerFoot = 0.3048;
 
 // Visible-bounds scene: a centerline of three shots at z 10 -> 0 -> -100 -> -400
 // and a scrap triangle reaching up to z +30
@@ -47,6 +51,11 @@ constexpr float kShotDeepZ = -400.0f;
 constexpr float kScrapLowZ = 0.0f;
 constexpr float kScrapHighZ = 30.0f;
 constexpr float kScrapExtent = 10.0f;
+// The visible extents above, snapped outward to their tick intervals
+constexpr double kAllSnappedLow = -400.0;
+constexpr double kAllSnappedHigh = 100.0;
+constexpr double kNoDeepSnappedHigh = 50.0;
+constexpr double kShotsOnlySnappedHigh = 20.0;
 // Line-list vertices of the shot reaching kShotDeepZ
 constexpr int kDeepShotFirstVertex = 4;
 constexpr int kVerticesPerShot = 2;
@@ -263,7 +272,7 @@ TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]"
         QSignalSpy pivotSpy(&colorBy, &cwColorBy::pivotChanged);
         fixture.setGeometryAndSettle(threeShotGeometry());
 
-        const double midpoint = (kShotTopZ + kShotDeepZ) * 0.5;
+        const double midpoint = (kAllSnappedLow + kAllSnappedHigh) * 0.5;
         CHECK(pivotSpy.count() == 1);
         CHECK(colorBy.pivot() == Approx(midpoint));
         CHECK(colorBy.uniform().range[2] == Approx(midpoint));
@@ -279,7 +288,7 @@ TEST_CASE("cwColorBy defaults the pivot to the middle of the range", "[ColorBy]"
     }
 }
 
-TEST_CASE("cwColorBy is off for flat geometry", "[ColorBy]")
+TEST_CASE("cwColorBy gives flat geometry a one-unit bar", "[ColorBy]")
 {
     ScopedColorBySettings settings;
 
@@ -293,9 +302,13 @@ TEST_CASE("cwColorBy is off for flat geometry", "[ColorBy]")
         QVector3D(10.0f, 0.0f, kFlatZ)
     });
 
-    CHECK(colorBy.rangeMin() == Approx(kFlatZ));
-    CHECK(colorBy.rangeMax() == Approx(kFlatZ));
-    CHECK(modeOf(colorBy) == cwColorByUniform::Off);
+    CHECK(colorBy.rangeMin() == Approx(kFlatSnappedLow));
+    CHECK(colorBy.rangeMax() == Approx(kFlatSnappedHigh));
+    REQUIRE(colorBy.legendTicks().size() == 2);
+    CHECK(colorBy.legendTicks().at(0) == Approx(kFlatSnappedLow));
+    CHECK(colorBy.legendTicks().at(1) == Approx(kFlatSnappedHigh));
+    CHECK(std::isfinite(colorBy.normalized(kFlatZ)));
+    CHECK(modeOf(colorBy) != cwColorByUniform::Off);
     CHECK(linePlot.colorBy() == colorBy.uniform());
 }
 
@@ -395,32 +408,60 @@ TEST_CASE("cwColorBy rounds legend ticks like the scale bar", "[ColorBy]")
     cwColorBy& colorBy = fixture.colorBy;
     colorBy.setSource(cwColorBy::Source::Depth);
 
-    SECTION("metric -500..100 m steps by 100 m") {
+    SECTION("metric -500..100 m snaps to itself and steps by 100 m") {
         fixture.setGeometryAndSettle(spanGeometry(kDeepest, kHighest));
+        CHECK(colorBy.rangeMin() == Approx(kDeepest));
+        CHECK(colorBy.rangeMax() == Approx(kHighest));
         checkTicks(colorBy.legendTicks(), {-500.0, -400.0, -300.0, -200.0, -100.0, 0.0, 100.0});
-        CHECK(colorBy.formatDepth(-500.0) == QStringLiteral("-500 m"));
+        CHECK(colorBy.formatDepth(-500.0) == QStringLiteral(u"\u2212500 m"));
     }
 
-    SECTION("metric -37..12 m steps by 10 m") {
+    SECTION("metric -37..12 m snaps to -40..20 and steps by 10 m") {
         fixture.setGeometryAndSettle(spanGeometry(kNarrowLow, kNarrowHigh));
-        checkTicks(colorBy.legendTicks(), {-30.0, -20.0, -10.0, 0.0, 10.0});
+        CHECK(colorBy.rangeMin() == Approx(-40.0));
+        CHECK(colorBy.rangeMax() == Approx(20.0));
+        CHECK(colorBy.pivot() == Approx(-10.0));
+        checkTicks(colorBy.legendTicks(), {-40.0, -30.0, -20.0, -10.0, 0.0, 10.0, 20.0});
     }
 
-    SECTION("imperial -500..100 m steps by 500 ft, returned in meters") {
-        constexpr double kMetersPerFoot = 0.3048;
+    SECTION("imperial -500..100 m snaps to -2000..500 ft, returned in meters") {
         fixture.setGeometryAndSettle(spanGeometry(kDeepest, kHighest));
         colorBy.setUnitSystem(cwUnits::Imperial);
-        checkTicks(colorBy.legendTicks(), {-1500.0 * kMetersPerFoot,
+        checkTicks(colorBy.legendTicks(), {-2000.0 * kMetersPerFoot,
+                                           -1500.0 * kMetersPerFoot,
                                            -1000.0 * kMetersPerFoot,
                                            -500.0 * kMetersPerFoot,
-                                           0.0});
-        CHECK(colorBy.formatDepth(colorBy.legendTicks().first()) == QStringLiteral("-1500 ft"));
+                                           0.0,
+                                           500.0 * kMetersPerFoot});
+        CHECK(colorBy.formatDepth(colorBy.legendTicks().first()) == QStringLiteral(u"\u22122000 ft"));
         CHECK(colorBy.formatDepth(-0.1) == QStringLiteral("0 ft"));
     }
 
-    SECTION("a flat range gets one tick") {
-        fixture.setGeometryAndSettle(spanGeometry(kFlatZ, kFlatZ));
-        checkTicks(colorBy.legendTicks(), {kFlatZ});
+    SECTION("positive 12..37 m snaps to 10..40 with no sign") {
+        fixture.setGeometryAndSettle(spanGeometry(kNarrowHigh, -kNarrowLow));
+        CHECK(colorBy.rangeMin() == Approx(10.0));
+        CHECK(colorBy.rangeMax() == Approx(40.0));
+        CHECK(colorBy.legendTicks().first() == Approx(10.0));
+        CHECK(colorBy.legendTicks().last() == Approx(40.0));
+        CHECK(colorBy.formatDepth(10.0) == QStringLiteral("10 m"));
+    }
+
+    SECTION("a data change inside the snapped range emits nothing") {
+        fixture.setGeometryAndSettle(spanGeometry(kDeepest, kHighest));
+        QSignalSpy rangeSpy(&colorBy, &cwColorBy::rangeChanged);
+        fixture.setGeometryAndSettle(spanGeometry(kDeepest + 10.0f, kHighest - 10.0f));
+        CHECK(rangeSpy.count() == 0);
+        CHECK(colorBy.rangeMin() == Approx(kDeepest));
+        CHECK(colorBy.rangeMax() == Approx(kHighest));
+    }
+
+    SECTION("switching to imperial re-snaps the range") {
+        fixture.setGeometryAndSettle(spanGeometry(kDeepest, kHighest));
+        QSignalSpy rangeSpy(&colorBy, &cwColorBy::rangeChanged);
+        colorBy.setUnitSystem(cwUnits::Imperial);
+        CHECK(rangeSpy.count() == 1);
+        CHECK(colorBy.rangeMin() == Approx(-2000.0 * kMetersPerFoot));
+        CHECK(colorBy.rangeMax() == Approx(500.0 * kMetersPerFoot));
     }
 }
 
@@ -439,18 +480,18 @@ TEST_CASE("cwColorBy depth range follows the visible bounds", "[ColorBy]")
     const uint32_t scrapId = items.addItem(scrap);
     fixture.setGeometryAndSettle(threeShotGeometry());
 
-    CHECK(colorBy.rangeMin() == Approx(kShotDeepZ));
-    CHECK(colorBy.rangeMax() == Approx(kScrapHighZ));
+    CHECK(colorBy.rangeMin() == Approx(kAllSnappedLow));
+    CHECK(colorBy.rangeMax() == Approx(kAllSnappedHigh));
 
     linePlot.setRangeVisible(kDeepShotFirstVertex, kVerticesPerShot, false);
     QCoreApplication::processEvents();
     CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
-    CHECK(colorBy.rangeMax() == Approx(kScrapHighZ));
+    CHECK(colorBy.rangeMax() == Approx(kNoDeepSnappedHigh));
 
     items.setItemVisible(scrapId, false);
     QCoreApplication::processEvents();
     CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
-    CHECK(colorBy.rangeMax() == Approx(kShotTopZ));
+    CHECK(colorBy.rangeMax() == Approx(kShotsOnlySnappedHigh));
 
     // Nothing visible keeps the last range
     const int vertexCount = static_cast<int>(threeShotGeometry().size());
@@ -458,5 +499,5 @@ TEST_CASE("cwColorBy depth range follows the visible bounds", "[ColorBy]")
     QCoreApplication::processEvents();
     REQUIRE(fixture.scene.visibleFramingBounds().isNull());
     CHECK(colorBy.rangeMin() == Approx(kShotLowZ));
-    CHECK(colorBy.rangeMax() == Approx(kShotTopZ));
+    CHECK(colorBy.rangeMax() == Approx(kShotsOnlySnappedHigh));
 }

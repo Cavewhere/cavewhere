@@ -23,9 +23,14 @@ QQ.Item {
     readonly property int stripCount: 48
     readonly property int barWidth: 14
     readonly property int barHeight: 200
-    readonly property int tickLength: 4
+    // Ticks span the bar and overhang its right edge by this much
+    readonly property int tickOverhang: 4
     readonly property int tickThickness: 1
-    readonly property int tickLabelGap: 2
+    readonly property int tickLabelGap: 6
+    readonly property int tickMarkWidth: barWidth + tickOverhang
+    readonly property int tickLabelX: tickMarkWidth + tickLabelGap
+    // The pivot's label hides when its mark is closer than this to a rounded tick
+    readonly property int minLabelSpacing: Theme.fontSizeCaption
     readonly property int labelWidth: 56
     readonly property int contentPadding: 6
     readonly property real backdropOpacity: 0.8
@@ -79,6 +84,20 @@ QQ.Item {
             return barHeight / 2
         }
         return barHeight * (colorBy.rangeMax - value) / span
+    }
+
+    // Rounded ticks always show their label; the pivot's label hides when it
+    // would crowd a rounded tick's.
+    function tickLabelVisible(value) {
+        const ticks = colorBy.legendTicks
+        let nearestDistance = Infinity
+        for (let i = 0; i < ticks.length; ++i) {
+            if (Math.abs(ticks[i] - value) < tickMatchTolerance) {
+                return true
+            }
+            nearestDistance = Math.min(nearestDistance, Math.abs(tickY(ticks[i]) - tickY(value)))
+        }
+        return nearestDistance >= minLabelSpacing
     }
 
     // formatDepth() is an invokable QML cannot track, so name the unit system
@@ -161,13 +180,15 @@ QQ.Item {
             }
         }
 
-        // On state: the colorbar with rounded depth ticks.
-        QQ.Row {
+        // On state: the colorbar, with rounded depth ticks drawn across it and
+        // labeled on its right.
+        QQ.Item {
             id: legendId
             objectName: "colorByBar"
 
             visible: rootId.showsBar
-            spacing: Theme.linkBarButtonSpacing
+            width: rootId.tickLabelX + rootId.labelWidth
+            height: rootId.barHeight
 
             QQ.Column {
                 QQ.Repeater {
@@ -185,40 +206,38 @@ QQ.Item {
                 }
             }
 
-            QQ.Item {
-                width: rootId.labelWidth
-                height: rootId.barHeight
+            QQ.Repeater {
+                objectName: "colorByTicks"
 
-                QQ.Repeater {
-                    objectName: "colorByTicks"
+                model: rootId.tickValues
 
-                    model: rootId.tickValues
+                QQ.Item {
+                    id: tickId
 
-                    QQ.Item {
-                        id: tickId
+                    required property real modelData
 
-                        required property real modelData
+                    readonly property real markY: rootId.tickY(modelData)
+                    readonly property bool labelVisible: rootId.tickLabelVisible(modelData)
 
-                        readonly property real markY: rootId.tickY(modelData)
+                    width: legendId.width
+                    height: rootId.barHeight
 
-                        width: parent.width
-                        height: rootId.barHeight
+                    // Clamped so the end ticks draw a full-thickness line on the bar's edges
+                    QQ.Rectangle {
+                        x: 0
+                        y: Math.max(0, Math.min(rootId.barHeight - height, tickId.markY - height / 2))
+                        width: rootId.tickMarkWidth
+                        height: rootId.tickThickness
+                        color: Theme.text
+                    }
 
-                        QQ.Rectangle {
-                            x: 0
-                            y: tickId.markY - height / 2
-                            width: rootId.tickLength
-                            height: rootId.tickThickness
-                            color: Theme.text
-                        }
-
-                        // Centered on its mark, clamped so the end labels stay inside the bar
-                        QC.Label {
-                            x: rootId.tickLength + rootId.tickLabelGap
-                            y: Math.max(0, Math.min(tickId.height - height, tickId.markY - height / 2))
-                            text: rootId.tickText(tickId.modelData)
-                            font.pixelSize: Theme.fontSizeCaption
-                        }
+                    // Centered on its mark, clamped so the end labels stay inside the bar
+                    QC.Label {
+                        visible: tickId.labelVisible
+                        x: rootId.tickLabelX
+                        y: Math.max(0, Math.min(tickId.height - height, tickId.markY - height / 2))
+                        text: rootId.tickText(tickId.modelData)
+                        font.pixelSize: Theme.fontSizeCaption
                     }
                 }
             }

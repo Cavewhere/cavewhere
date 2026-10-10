@@ -259,6 +259,44 @@ MainWindowTest {
         }
 
         function test_legendShowsRoundedTicks() {
+            let ticks = showDepthTicks();
+
+            const labelEndsInMeters = () => {
+                for (let i = 0; i < ticks.count; ++i) {
+                    if (tickLabel(ticks.itemAt(i)).text.endsWith(" m")) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            tryVerify(labelEndsInMeters, 5000, "a tick label reads in meters");
+
+            // The range is snapped to the tick interval, so the end ticks label the bar's ends
+            let colorBy = RootData.regionSceneManager.colorBy;
+            compare(tickLabel(ticks.itemAt(0)).text, colorBy.formatDepth(colorBy.rangeMin));
+            compare(tickLabel(ticks.itemAt(colorBy.legendTicks.length - 1)).text,
+                    colorBy.formatDepth(colorBy.rangeMax));
+        }
+
+        function tickLabel(tick) {
+            for (let i = 0; i < tick.children.length; ++i) {
+                if (tick.children[i].text !== undefined) {
+                    return tick.children[i];
+                }
+            }
+            return null;
+        }
+
+        function tickMark(tick) {
+            for (let i = 0; i < tick.children.length; ++i) {
+                if (tick.children[i].text === undefined) {
+                    return tick.children[i];
+                }
+            }
+            return null;
+        }
+
+        function showDepthTicks() {
             let popup = openPopupWithDepth();
             RootData.region.unitSystem = Units.Metric;
             popup.close();
@@ -267,20 +305,56 @@ MainWindowTest {
             let ticks = findChild(legend, "colorByTicks");
             verify(ticks, "found the tick repeater");
             tryVerify(() => ticks.count >= 3, 5000, "the legend shows at least three ticks");
+            return ticks;
+        }
 
-            const labelEndsInMeters = () => {
+        function test_tickMarksSpanTheBar() {
+            let ticks = showDepthTicks();
+            let legend = findLegend();
+            for (let i = 0; i < ticks.count; ++i) {
+                let mark = tickMark(ticks.itemAt(i));
+                verify(mark, "tick " + i + " has a mark");
+                compare(mark.x, 0);
+                verify(mark.width >= legend.barWidth, "tick " + i + " spans the bar");
+            }
+
+            // Saved so the ticks can be eyeballed
+            const path = OffscreenRenderTester.tempPngPath("colorby_legend_ticks");
+            let saved = false;
+            legend.grabToImage(result => { saved = result.saveToFile(path); });
+            tryVerify(() => saved, 5000, "saved the legend image");
+            console.log("color-by legend render: " + path);
+        }
+
+        function test_pivotLabelHidesNearTick() {
+            let ticks = showDepthTicks();
+            let colorBy = RootData.regionSceneManager.colorBy;
+            const roundedCount = colorBy.legendTicks.length;
+            verify(roundedCount >= 3, "at least three rounded ticks");
+            const inner = colorBy.legendTicks[1];
+            const next = colorBy.legendTicks[2];
+
+            const pivotTick = () => {
                 for (let i = 0; i < ticks.count; ++i) {
                     let tick = ticks.itemAt(i);
-                    for (let j = 0; j < tick.children.length; ++j) {
-                        const text = tick.children[j].text;
-                        if (text !== undefined && text.endsWith(" m")) {
-                            return true;
-                        }
+                    if (tick && Math.abs(tick.modelData - colorBy.pivotManual) < pivotTolerance) {
+                        return tick;
                     }
                 }
-                return false;
+                return null;
             };
-            tryVerify(labelEndsInMeters, 5000, "a tick label reads in meters");
+
+            colorBy.pivotManual = inner + 1;
+            tryCompare(ticks, "count", roundedCount + 1);
+            tryVerify(() => pivotTick() !== null, 5000, "the pivot has its own tick");
+            tryVerify(() => !tickLabel(pivotTick()).visible, 5000,
+                      "the pivot label hides next to a rounded tick");
+
+            colorBy.pivotManual = (inner + next) / 2;
+            tryCompare(ticks, "count", roundedCount + 1);
+            tryVerify(() => pivotTick() !== null, 5000, "the pivot moved");
+            tryVerify(() => tickLabel(pivotTick()).visible, 5000,
+                      "the pivot label shows halfway between ticks");
         }
 
         function clickEditPill(legend, popup) {

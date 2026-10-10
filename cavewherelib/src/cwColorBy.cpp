@@ -32,14 +32,17 @@ constexpr float kOpaque = 1.0f;
 constexpr double kPivotPosition = 0.5;
 constexpr double kHalf = 0.5;
 
-// Legend ticks: {1,2,5} x 10^n steps, n in kMinTickExponent..kMaxTickExponent
+// Legend ticks: {1,2,5} x 10^n steps, n in kMinTickExponent..kMaxTickExponent.
+// The smallest step is one whole meter or foot.
 constexpr int kMaxTicks = 7;
 constexpr std::array<double, 3> kTickMantissas = {1.0, 2.0, 5.0};
-constexpr int kMinTickExponent = -1;
+constexpr int kMinTickExponent = 0;
 constexpr int kMaxTickExponent = 5;
 constexpr double kTickBase = 10.0;
 // Absorbs unit-conversion round-off so a range end that is a tick stays one
 constexpr double kTickEpsilon = 1e-9;
+// A flat range snaps to the whole unit below it and this many units above that
+constexpr double kFlatRangeSpan = 1.0;
 
 enum RangeIndex { RangeMin = 0, RangeMax = 1, RangePivot = 2, RangeHalfExtent = 3 };
 enum ParamIndex { ParamMode = 0, ParamStrength = 1, ParamSlotCount = 2, ParamValueSource = 3 };
@@ -65,46 +68,51 @@ double clampedStrength(double strength)
     return std::clamp(strength, 0.0, 1.0);
 }
 
-// Every multiple of the smallest nice step that leaves at most kMaxTicks
-// inside [rangeMin, rangeMax], picked in the system's depth unit and
-// returned in meters.
-QList<double> legendTicksFor(double rangeMin, double rangeMax, cwUnits::UnitSystem system)
+// A range in depth-unit values, snapped outward to multiples of interval
+struct SnappedRange
 {
-    const cwUnits::LengthUnit unit = cwUnits::depthUnit(system);
-    const double lo = cwUnits::convert(rangeMin, cwUnits::Meters, unit);
-    const double hi = cwUnits::convert(rangeMax, cwUnits::Meters, unit);
+    double lo;
+    double hi;
+    double interval;
+};
+
+// Smallest {1,2,5}x10^n step (n from 0, whole units, up to kMaxTickExponent)
+// whose multiples bracket [lo, hi] with at most kMaxTicks ticks inclusive;
+// lo floors and hi ceils to that step.
+SnappedRange snapRange(double lo, double hi)
+{
     if (hi - lo <= 0.0) {
-        return {rangeMin};
+        const double flatLo = std::floor(lo + kTickEpsilon);
+        return {flatLo, flatLo + kFlatRangeSpan, kFlatRangeSpan};
     }
 
-    const auto firstIndex = [&](double interval) { return std::ceil(lo / interval - kTickEpsilon); };
-    const auto lastIndex = [&](double interval) { return std::floor(hi / interval + kTickEpsilon); };
-
-    const auto pickInterval = [&]() {
-        double interval = 0.0;
-        for (int exponent = kMinTickExponent; exponent <= kMaxTickExponent; ++exponent) {
-            for (double mantissa : kTickMantissas) {
-                interval = mantissa * std::pow(kTickBase, exponent);
-                if (lastIndex(interval) - firstIndex(interval) + 1 <= kMaxTicks) {
-                    return interval;
-                }
-            }
-        }
-        // A range wider than the largest step allows: use the largest anyway
-        return interval;
+    const auto firstIndex = [&](double interval) { return std::floor(lo / interval + kTickEpsilon); };
+    const auto lastIndex = [&](double interval) { return std::ceil(hi / interval - kTickEpsilon); };
+    const auto snappedWith = [&](double interval) {
+        return SnappedRange{firstIndex(interval) * interval, lastIndex(interval) * interval, interval};
     };
 
-    const double interval = pickInterval();
-    QList<double> ticks;
-    const int first = static_cast<int>(firstIndex(interval));
-    const int last = static_cast<int>(lastIndex(interval));
-    for (int i = first; i <= last; ++i) {
-        ticks.append(cwUnits::convert(i * interval, unit, cwUnits::Meters));
+    double interval = 0.0;
+    for (int exponent = kMinTickExponent; exponent <= kMaxTickExponent; ++exponent) {
+        for (double mantissa : kTickMantissas) {
+            interval = mantissa * std::pow(kTickBase, exponent);
+            if (lastIndex(interval) - firstIndex(interval) + 1 <= kMaxTicks) {
+                return snappedWith(interval);
+            }
+        }
     }
+    // A range wider than the largest step allows: use the largest anyway
+    return snappedWith(interval);
+}
 
-    if (ticks.isEmpty()) {
-        // A range narrower than the smallest step holds no multiple; label its ends
-        return {rangeMin, rangeMax};
+// Every multiple of the snapped range's interval from lo to hi inclusive, in meters
+QList<double> ticksOf(const SnappedRange& range, cwUnits::LengthUnit unit)
+{
+    QList<double> ticks;
+    const int first = static_cast<int>(std::round(range.lo / range.interval));
+    const int last = static_cast<int>(std::round(range.hi / range.interval));
+    for (int i = first; i <= last; ++i) {
+        ticks.append(cwUnits::convert(i * range.interval, unit, cwUnits::Meters));
     }
     return ticks;
 }
@@ -124,7 +132,6 @@ cwColorBy::cwColorBy(QObject* parent) :
 
     loadSettings();
     rebuildUniform();
-    updateLegendTicks();
 }
 
 void cwColorBy::setKeywordItemModel(cwKeywordItemModel* model)
@@ -350,7 +357,8 @@ void cwColorBy::setUnitSystem(cwUnits::UnitSystem system)
         return;
     }
     m_unitSystem = system;
-    updateLegendTicks();
+    // Feet and meters snap to different round numbers
+    applyDataRange();
     emit unitSystemChanged();
 }
 
@@ -359,17 +367,8 @@ QString cwColorBy::formatDepth(double meters) const
     const cwUnits::LengthUnit unit = cwUnits::depthUnit(m_unitSystem);
     // IEEE: -0.0 + 0.0 == +0.0, so a value that rounds to zero shows no sign
     const double value = std::round(cwUnits::convert(meters, cwUnits::Meters, unit)) + 0.0;
-    return QStringLiteral("%1 %2").arg(value, 0, 'f', 0).arg(cwUnits::unitName(unit));
-}
-
-void cwColorBy::updateLegendTicks()
-{
-    const QList<double> ticks = legendTicksFor(m_rangeMin, m_rangeMax, m_unitSystem);
-    if (m_legendTicks == ticks) {
-        return;
-    }
-    m_legendTicks = ticks;
-    emit legendTicksChanged();
+    const QString sign = value < 0.0 ? QStringLiteral(u"\u2212") : QString();
+    return QStringLiteral("%1%2 %3").arg(sign).arg(std::abs(value), 0, 'f', 0).arg(cwUnits::unitName(unit));
 }
 
 void cwColorBy::setScrapStrength(double strength)
@@ -436,20 +435,47 @@ void cwColorBy::updateRangeFromScene()
     setRange(box.minimum().z(), box.maximum().z());
 }
 
-void cwColorBy::setRange(double rangeMin, double rangeMax)
+void cwColorBy::setRange(double dataMin, double dataMax)
 {
-    if (m_rangeMin == rangeMin && m_rangeMax == rangeMax) {
+    m_dataMin = dataMin;
+    m_dataMax = dataMax;
+    m_hasDataRange = true;
+    applyDataRange();
+}
+
+void cwColorBy::applyDataRange()
+{
+    if (!m_hasDataRange) {
         return;
     }
+
+    const cwUnits::LengthUnit unit = cwUnits::depthUnit(m_unitSystem);
+    const SnappedRange snapped = snapRange(cwUnits::convert(m_dataMin, cwUnits::Meters, unit),
+                                           cwUnits::convert(m_dataMax, cwUnits::Meters, unit));
+    const double rangeMin = cwUnits::convert(snapped.lo, unit, cwUnits::Meters);
+    const double rangeMax = cwUnits::convert(snapped.hi, unit, cwUnits::Meters);
+    const QList<double> ticks = ticksOf(snapped, unit);
+
+    const bool rangeMoved = m_rangeMin != rangeMin || m_rangeMax != rangeMax;
+    const bool ticksMoved = m_legendTicks != ticks;
     const double oldPivot = pivot();
+
     m_rangeMin = rangeMin;
     m_rangeMax = rangeMax;
-    // normalized() reads the mode from the uniform, so rebuild before listeners re-read it
-    rebuildUniform();
-    updateLegendTicks();
-    emit rangeChanged();
-    if (oldPivot != pivot()) {
-        emit pivotChanged();
+    m_legendTicks = ticks;
+
+    if (rangeMoved) {
+        // normalized() reads the mode from the uniform, so rebuild before listeners re-read it
+        rebuildUniform();
+    }
+    if (ticksMoved) {
+        emit legendTicksChanged();
+    }
+    if (rangeMoved) {
+        emit rangeChanged();
+        if (oldPivot != pivot()) {
+            emit pivotChanged();
+        }
     }
 }
 

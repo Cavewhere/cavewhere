@@ -79,6 +79,7 @@ public:
     void setPivotManual(double pivot);
     bool hasPivotManual() const { return m_hasPivotManual; }
     Q_INVOKABLE void clearPivotManual();
+    // The visible z extent snapped outward to the legend's tick interval, in meters.
     double rangeMin() const { return m_rangeMin; }
     double rangeMax() const { return m_rangeMax; }
     double scrapStrength() const { return m_scrapStrength; }
@@ -103,9 +104,11 @@ public:
     void setUnitSystem(cwUnits::UnitSystem system);
 
     // Depth legend ticks, in meters: every multiple of a {1,2,5}x10^n step
-    // (picked in the depth unit) that falls inside the range, at most seven.
+    // (picked in the depth unit) from rangeMin to rangeMax inclusive, at most
+    // seven. The range is snapped to the step, so both ends are ticks.
     QList<double> legendTicks() const { return m_legendTicks; }
-    // A depth in the unit system's depth unit, whole numbers: "-500 m", "-1640 ft".
+    // A depth in the unit system's depth unit, whole numbers, with a real
+    // minus sign (U+2212): "−500 m", "−1640 ft".
     Q_INVOKABLE QString formatDepth(double meters) const;
 
     // Where a value sits on the bar (0..1, the same rule as the shader), and
@@ -131,9 +134,9 @@ signals:
 private:
     void scheduleRangeUpdate();
     void updateRangeFromScene();
-    void setRange(double rangeMin, double rangeMax);
+    void setRange(double dataMin, double dataMax);
+    void applyDataRange();
     void rebuildUniform();
-    void updateLegendTicks();
     void applyPivotManual(bool hasManual, double manual);
     void push();
     QAbstractItemModel* groupingModel() const;
@@ -153,6 +156,10 @@ private:
     QString m_rampId;
     double m_pivotManual = 0.0;
     bool m_hasPivotManual = false;
+    // The visible z extent as the scene reports it; meaningful while m_hasDataRange
+    double m_dataMin = 0.0;
+    double m_dataMax = 0.0;
+    bool m_hasDataRange = false;
     double m_rangeMin = 0.0;
     double m_rangeMax = 0.0;
     double m_scrapStrength = 0.0;
