@@ -27,6 +27,8 @@ constexpr int kMinFilledBins = 4;
 constexpr int kTwistDistributionSamples = 4;
 constexpr double kMinSampleWeight = 0.05;
 constexpr double kSteepWeight = 0.5;
+constexpr double kAlongLegDegrees = 45.0;
+constexpr double kShaftRatio = 3.0;
 constexpr double kMinSampleSpacingMeters = 0.01;
 constexpr double kMinRingSpacingMeters = 0.05;
 constexpr double kCornerInsetMeters = 0.5;
@@ -150,6 +152,8 @@ QVector<Leg> extractLegs(const cwCavingRegionData& region,
                         fromPosition,
                         toPosition,
                         lruds.at(shotIndex),
+                        lruds.at(shotIndex + 1),
+                        lruds.at(shotIndex),
                         lruds.at(shotIndex + 1)
                     });
                 }
@@ -157,6 +161,116 @@ QVector<Leg> extractLegs(const cwCavingRegionData& region,
         }
     }
     return legs;
+}
+
+std::optional<double> median(QVector<double> values)
+{
+    if (values.isEmpty()) {
+        return std::nullopt;
+    }
+    std::sort(values.begin(), values.end());
+    const int middle = values.size() / 2;
+    if (values.size() % 2 == 1) {
+        return values.at(middle);
+    }
+    return (values.at(middle - 1) + values.at(middle)) / 2.0;
+}
+
+using StationKey = QPair<QUuid, QString>;
+
+// The ups and downs at the far end of every leg at a station.
+struct NeighborReadings {
+    QVector<double> ups;
+    QVector<double> downs;
+};
+
+QHash<StationKey, NeighborReadings> neighborReadings(const QVector<Leg>& legs)
+{
+    QHash<StationKey, NeighborReadings> readings;
+    const auto add = [&](const StationKey& station, const cwStationLrud& farEnd) {
+        NeighborReadings& neighbors = readings[station];
+        if (farEnd.up) {
+            neighbors.ups.append(*farEnd.up);
+        }
+        if (farEnd.down) {
+            neighbors.downs.append(*farEnd.down);
+        }
+    };
+    for (const Leg& leg : legs) {
+        add({leg.caveId, leg.from}, leg.toLrud);
+        add({leg.caveId, leg.to}, leg.fromLrud);
+    }
+    return readings;
+}
+
+// An up or down far beyond both the passage's width and the same reading at
+// the neighboring stations is a pit depth or aven height. The ring takes the
+// neighbors' reading in its place, or half the width when they have none.
+std::optional<double> shaftReplacement(const std::optional<double>& reading,
+                                       const std::optional<double>& width,
+                                       const std::optional<double>& neighbor)
+{
+    const bool hasReference = width || neighbor;
+    if (reading && hasReference) {
+        const double reference = std::max(width.value_or(0.0), neighbor.value_or(0.0));
+        if (*reading > kShaftRatio * reference) {
+            return neighbor ? *neighbor : *width / 2.0;
+        }
+    }
+    return std::nullopt;
+}
+
+void replaceShaftReadings(QVector<Leg>& legs, QVector<Warning>& warnings)
+{
+    const QHash<StationKey, NeighborReadings> neighbors = neighborReadings(legs);
+
+    // A station occurrence ends two legs of its chunk; it warns once.
+    using Occurrence = std::pair<QUuid, std::pair<int, int>>;
+    QSet<Occurrence> visited;
+
+    const auto passageLrud = [&](const Leg& leg, const QString& station, const cwStationLrud& lrud, int stationIndex) {
+        const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
+        const bool isFirstVisit = !visited.contains(occurrence);
+        visited.insert(occurrence);
+
+        const std::optional<double> width = lrud.left || lrud.right
+            ? std::optional<double>(lrud.left.value_or(0.0) + lrud.right.value_or(0.0))
+            : std::nullopt;
+        const NeighborReadings near = neighbors.value({leg.caveId, station});
+
+        cwStationLrud passage = lrud;
+        const auto replaceShaft = [&](std::optional<double>& reading,
+                                      const QVector<double>& neighborValues,
+                                      const QString& readingName,
+                                      const QString& shaftName,
+                                      const QString& surfaceName) {
+            const std::optional<double> replacement = shaftReplacement(reading, width, median(neighborValues));
+            if (!replacement) {
+                return;
+            }
+            if (isFirstVisit) {
+                warnings.append(Warning {
+                    Warning::ShaftReading,
+                    leg.tripId,
+                    station,
+                    QStringLiteral("Station %1's %2 of %3 m reads as %4; the tube %5 uses %6 m.")
+                        .arg(station, readingName)
+                        .arg(*reading)
+                        .arg(shaftName, surfaceName)
+                        .arg(*replacement)
+                });
+            }
+            reading = replacement;
+        };
+        replaceShaft(passage.up, near.ups, QStringLiteral("up"), QStringLiteral("an aven"), QStringLiteral("ceiling"));
+        replaceShaft(passage.down, near.downs, QStringLiteral("down"), QStringLiteral("a pit"), QStringLiteral("floor"));
+        return passage;
+    };
+
+    for (Leg& leg : legs) {
+        leg.fromPassageLrud = passageLrud(leg, leg.from, leg.fromLrud, leg.shotIndex);
+        leg.toPassageLrud = passageLrud(leg, leg.to, leg.toLrud, leg.shotIndex + 1);
+    }
 }
 
 QVector<Chain> buildChains(const QVector<Leg>& legs)
@@ -316,23 +430,94 @@ cwStationLrud lerpLrud(const cwStationLrud& a, const cwStationLrud& b, double t)
     return {lerp(a.left, b.left), lerp(a.right, b.right), lerp(a.up, b.up), lerp(a.down, b.down)};
 }
 
+// Unit directions of every leg leaving each station, keyed by cave and name.
+using StationLegDirections = QHash<StationKey, QVector<QVector3D>>;
+
+StationLegDirections stationLegDirections(const QVector<Leg>& legs)
+{
+    StationLegDirections directions;
+    for (const Leg& leg : legs) {
+        const QVector3D direction = (leg.toPosition - leg.fromPosition).normalized();
+        directions[{leg.caveId, leg.from}].append(direction);
+        directions[{leg.caveId, leg.to}].append(-direction);
+    }
+    return directions;
+}
+
+bool isAlongLeg(const QVector3D& readingDirection, const QVector<QVector3D>& legDirections)
+{
+    const float minCosine = static_cast<float>(std::cos(qDegreesToRadians(kAlongLegDegrees)));
+    return std::any_of(legDirections.cbegin(), legDirections.cend(), [&](const QVector3D& legDirection) {
+        return QVector3D::dotProduct(readingDirection, legDirection) > minCosine;
+    });
+}
+
+bool isSteep(const QVector3D& direction)
+{
+    return isAlongLeg(kWorldUp, {direction}) || isAlongLeg(-kWorldUp, {direction});
+}
+
+// An up or down reading that runs along a leg leaving the station measures
+// the pit that leg already surveys, so the ring leaves it out.
+cwStationLrud ringLrud(const cwStationLrud& lrud, const QVector<QVector3D>& legDirections)
+{
+    cwStationLrud ring = lrud;
+    if (isAlongLeg(kWorldUp, legDirections)) {
+        ring.up.reset();
+    }
+    if (isAlongLeg(-kWorldUp, legDirections)) {
+        ring.down.reset();
+    }
+    return ring;
+}
+
 // A chain leg as walked: start and end in travel order, LRUD oriented.
+// The ring LRUD leave out readings that run along a leg at the station; on a
+// gentle leg the other end's floor or ceiling continues to the station.
 struct WalkedLeg {
     QVector3D start;
     QVector3D end;
     cwStationLrud startLrud;
     cwStationLrud endLrud;
+    cwStationLrud startRingLrud;
+    cwStationLrud endRingLrud;
 
     QVector3D direction() const { return (end - start).normalized(); }
 };
 
-WalkedLeg walkedLeg(const QVector<Leg>& legs, const ChainLeg& chainLeg)
+void continueAlongGentleLeg(WalkedLeg& leg)
+{
+    if (isSteep(leg.direction())) {
+        return;
+    }
+    const auto fillDropped = [](std::optional<double>& ring,
+                                const std::optional<double>& measured,
+                                const std::optional<double>& otherEnd) {
+        if (measured && !ring) {
+            ring = otherEnd;
+        }
+    };
+    const cwStationLrud startRing = leg.startRingLrud;
+    const cwStationLrud endRing = leg.endRingLrud;
+    fillDropped(leg.startRingLrud.up, leg.startLrud.up, endRing.up);
+    fillDropped(leg.startRingLrud.down, leg.startLrud.down, endRing.down);
+    fillDropped(leg.endRingLrud.up, leg.endLrud.up, startRing.up);
+    fillDropped(leg.endRingLrud.down, leg.endLrud.down, startRing.down);
+}
+
+WalkedLeg walkedLeg(const QVector<Leg>& legs, const ChainLeg& chainLeg, const StationLegDirections& directions)
 {
     const Leg& leg = legs.at(chainLeg.legIndex);
-    if (chainLeg.reversed) {
-        return {leg.toPosition, leg.fromPosition, swappedLeftRight(leg.toLrud), swappedLeftRight(leg.fromLrud)};
-    }
-    return {leg.fromPosition, leg.toPosition, leg.fromLrud, leg.toLrud};
+    const cwStationLrud fromRing = ringLrud(leg.fromPassageLrud, directions.value({leg.caveId, leg.from}));
+    const cwStationLrud toRing = ringLrud(leg.toPassageLrud, directions.value({leg.caveId, leg.to}));
+
+    WalkedLeg walked = chainLeg.reversed
+        ? WalkedLeg {leg.toPosition, leg.fromPosition,
+                     swappedLeftRight(leg.toLrud), swappedLeftRight(leg.fromLrud),
+                     swappedLeftRight(toRing), swappedLeftRight(fromRing)}
+        : WalkedLeg {leg.fromPosition, leg.toPosition, leg.fromLrud, leg.toLrud, fromRing, toRing};
+    continueAlongGentleLeg(walked);
+    return walked;
 }
 
 QVector3D bisector(const QVector3D& incoming, const QVector3D& outgoing)
@@ -344,12 +529,12 @@ QVector3D bisector(const QVector3D& incoming, const QVector3D& outgoing)
     return sum.normalized();
 }
 
-QVector<WalkedLeg> walkedLegs(const QVector<Leg>& legs, const Chain& chain)
+QVector<WalkedLeg> walkedLegs(const QVector<Leg>& legs, const Chain& chain, const StationLegDirections& directions)
 {
     QVector<WalkedLeg> walked;
     walked.reserve(chain.legs.size());
     for (const ChainLeg& chainLeg : chain.legs) {
-        walked.append(walkedLeg(legs, chainLeg));
+        walked.append(walkedLeg(legs, chainLeg, directions));
     }
     return walked;
 }
@@ -403,7 +588,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
 
         if (legIndex == 0) {
             const QVector3D tangent = loop ? bisector(walked.last().direction(), direction) : direction;
-            appendSample(samples, ChainSample {leg.start, tangent, 0.0, {leg.startLrud}, legIndex, true});
+            appendSample(samples, ChainSample {leg.start, tangent, 0.0, {leg.startRingLrud}, legIndex, true});
         }
 
         const double length = leg.start.distanceToPoint(leg.end);
@@ -429,7 +614,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
                 leg.start + (leg.end - leg.start) * static_cast<float>(t),
                 direction,
                 distance + length * t,
-                {lerpLrud(leg.startLrud, leg.endLrud, t)},
+                {lerpLrud(leg.startRingLrud, leg.endRingLrud, t)},
                 legIndex,
                 false
             });
@@ -438,7 +623,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
         distance += length;
         const bool isLast = legIndex == walked.size() - 1;
         QVector3D endTangent = direction;
-        QVector<cwStationLrud> endLruds {leg.endLrud};
+        QVector<cwStationLrud> endLruds {leg.endRingLrud};
         if (isLast) {
             if (loop) {
                 endTangent = samples.first().tangent;
@@ -446,7 +631,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
         } else {
             const WalkedLeg& next = walked.at(legIndex + 1);
             endTangent = bisector(direction, next.direction());
-            endLruds.append(next.startLrud);
+            endLruds.append(next.startRingLrud);
         }
         appendSample(samples, ChainSample {leg.end, endTangent, distance, endLruds, legIndex, true});
     }
@@ -598,6 +783,13 @@ QVector<Frame> chainFrames(const QVector<ChainSample>& samples, const Options& o
     return frames;
 }
 
+// Distance from the center to the ellipse with semi-axes a and b along the
+// direction (cosTheta, sinTheta).
+double ellipsePolarRadius(double a, double b, double cosTheta, double sinTheta)
+{
+    return a * b / std::hypot(b * cosTheta, a * sinTheta);
+}
+
 struct RingFit {
     QVector<double> radii;
     QVector<bool> measured;
@@ -624,7 +816,10 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
                 if ((usesHorizontal && !a) || (usesVertical && !b)) {
                     continue;
                 }
-                const double radius = std::hypot(a.value_or(0.0) * cosTheta, b.value_or(0.0) * sinTheta);
+                double radius = usesHorizontal ? *a : *b;
+                if (usesHorizontal && usesVertical) {
+                    radius = ellipsePolarRadius(*a, *b, cosTheta, sinTheta);
+                }
                 fit.radii[bin] = fit.measured.at(bin) ? std::max(fit.radii.at(bin), radius) : radius;
                 fit.measured[bin] = true;
             }
@@ -656,6 +851,21 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
     return fit;
 }
 
+// A ring without data takes the nearest fitted ring. In a pit that ring's
+// ceiling and floor would land on horizontal axes through the rolled frame,
+// so the pit is round at the fitted ring's horizontal half-width instead.
+QVector<double> borrowedRadii(const RingFit& fitted, const Frame& frame)
+{
+    if (frame.inclinationWeight <= kSteepWeight) {
+        return fitted.radii;
+    }
+    const int resolution = fitted.radii.size();
+    const int rightBin = 0;
+    const int leftBin = resolution / 2;
+    const double halfWidth = (fitted.radii.at(rightBin) + fitted.radii.at(leftBin)) / 2.0;
+    return QVector<double>(resolution, halfWidth);
+}
+
 // Level dead ends sit flush with the end station; pits extend by up or down.
 double capOffset(const cwStationLrud& lrud, const QVector3D& outward, const Frame& endFrame)
 {
@@ -684,9 +894,13 @@ Warning chainWarning(const QVector<Leg>& legs, const Chain& chain, Warning::Type
     return Warning {type, legs.at(firstLeg.legIndex).tripId, station, message.arg(station)};
 }
 
-void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, QVector<Warning>& warnings)
+void buildRings(const QVector<Leg>& legs,
+                const StationLegDirections& directions,
+                Chain& chain,
+                const Options& options,
+                QVector<Warning>& warnings)
 {
-    const QVector<WalkedLeg> walked = walkedLegs(legs, chain);
+    const QVector<WalkedLeg> walked = walkedLegs(legs, chain, directions);
     const QVector<ChainSample> samples = chainSamples(walked, options);
     const QVector<Frame> frames = chainFrames(samples, options);
     const int resolution = std::max(options.ringResolution, 1);
@@ -722,7 +936,7 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
             ring.measured = QVector<bool>(resolution, false);
             ring.radii = fittedSamples.isEmpty()
                              ? QVector<double>(resolution, options.defaultRadiusMeters)
-                             : fits.at(nearestFitted(i)).radii;
+                             : borrowedRadii(fits.at(nearestFitted(i)), frames.at(i));
         }
         chain.rings.append(ring);
     }
@@ -1082,12 +1296,14 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildDebug(const cwCavingRegio
 
     Debug debug;
     debug.legs = extractLegs(region, positionsByCave, debug.warnings);
+    replaceShaftReadings(debug.legs, debug.warnings);
     debug.chains = buildChains(debug.legs);
     classifyChainEnds(debug.legs, debug.chains);
 
+    const StationLegDirections directions = stationLegDirections(debug.legs);
     MeshWriter writer(debug.mesh);
     for (Chain& chain : debug.chains) {
-        buildRings(debug.legs, chain, options, debug.warnings);
+        buildRings(debug.legs, directions, chain, options, debug.warnings);
         insetJunctionArms(chain);
         placeChainVertices(chain);
         addChainMesh(writer, debug.legs, chain, debug.warnings);

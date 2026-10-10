@@ -75,7 +75,8 @@ public:
     };
 
     // One surveyed shot with both endpoints positioned. LRUD come from the
-    // station occurrences on the chunk that owns the shot.
+    // station occurrences on the chunk that owns the shot; the passage LRUD
+    // are the same readings with shaft depths replaced, and feed the rings.
     struct Leg {
         QUuid caveId;
         QUuid tripId;
@@ -87,6 +88,8 @@ public:
         QVector3D toPosition;
         cwStationLrud fromLrud;
         cwStationLrud toLrud;
+        cwStationLrud fromPassageLrud;
+        cwStationLrud toPassageLrud;
     };
 
     // A leg as a chain walks it; reversed means it is walked to → from.

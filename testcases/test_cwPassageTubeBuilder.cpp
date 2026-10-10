@@ -15,6 +15,7 @@
 
 //Qt includes
 #include <QStringList>
+#include <QtMath>
 
 //Std includes
 #include <algorithm>
@@ -246,6 +247,19 @@ void checkNoFoldBack(const Builder::Chain& chain)
     }
 }
 
+// The stations of the ShaftReading warnings, sorted.
+QStringList shaftWarningStations(const Builder::Debug& debug)
+{
+    QStringList stations;
+    for (const cwPassageTubeMesh::Warning& warning : debug.warnings) {
+        if (warning.type == cwPassageTubeMesh::Warning::ShaftReading) {
+            stations.append(warning.station);
+        }
+    }
+    stations.sort();
+    return stations;
+}
+
 bool hasPosition(const cwPassageTubeMesh& mesh, const QVector3D& position)
 {
     return std::any_of(mesh.positions.cbegin(), mesh.positions.cend(), [&](const QVector3D& p) {
@@ -442,14 +456,31 @@ TEST_CASE("cwPassageTubeBuilder fits a horizontal LRUD ring to the quadrant elli
         CHECK_FALSE(ring.measured.contains(false));
     }
 
-    // Between the axes the ring follows the ellipse of the two adjacent dimensions.
-    const double diagonal = std::hypot(2.0 * std::cos(std::numbers::pi / 4.0), 3.0 * std::sin(std::numbers::pi / 4.0));
-    CHECK(chain.rings.at(0).radii.at(binAt(45)) == Catch::Approx(diagonal));
+    // Between the axes the ring follows the ellipse of the two adjacent
+    // dimensions: its polar radius 2·3 / hypot(3·cos45°, 2·sin45°).
+    CHECK(chain.rings.at(0).radii.at(binAt(45)) == Catch::Approx(2.3534).margin(1e-4));
     CHECK(debug.warnings.isEmpty());
 
     // Level dead ends sit flush with their stations.
     CHECK(chain.startCapOffsetMeters == Catch::Approx(0.0));
     CHECK(chain.endCapOffsetMeters == Catch::Approx(0.0));
+}
+
+TEST_CASE("cwPassageTubeBuilder fits a circle to equal LRUD", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(1.5, 1.5, 1.5, 1.5);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    for (const Builder::Ring& ring : debug.chains.at(0).rings) {
+        for (double radius : ring.radii) {
+            CHECK(radius == Catch::Approx(1.5));
+        }
+    }
 }
 
 TEST_CASE("cwPassageTubeBuilder keeps frames continuous through a vertical pit", "[PassageTube][cwPassageTubeBuilder]")
@@ -673,6 +704,187 @@ TEST_CASE("cwPassageTubeBuilder places pit dead-end caps by up and down", "[Pass
     CHECK_FALSE(hasMeasuredBin(chain.rings.at(5)));
 }
 
+TEST_CASE("cwPassageTubeBuilder keeps the pit depth out of the lip ring and rounds the shaft", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // The lip's down and the bottom's up measure the 20 m shaft, which the
+    // b→c leg already surveys.
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), lrud(2, 2, 1, 0.5)},
+        {QStringLiteral("b"), QVector3D(0, 10, 0), lrud(2, 2, 1, 20)},
+        {QStringLiteral("c"), QVector3D(0, 10, -20), lrud(2, 2, 20, 0.5)},
+        {QStringLiteral("d"), QVector3D(0, 20, -20), lrud(2, 2, 1, 0.5)},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+
+    // The approach floor continues to the lip in place of the dropped reading.
+    const Builder::Ring& lip = ringAt(chain, QVector3D(0, 10, 0));
+    CHECK(lip.radii.at(binAt(90)) == Catch::Approx(1.0));
+    CHECK(lip.radii.at(binAt(270)) == Catch::Approx(0.5));
+    const Builder::Ring& approach = ringAt(chain, QVector3D(0, 9, 0));
+    CHECK(approach.radii.at(binAt(270)) == Catch::Approx(0.5));
+
+    const Builder::Ring& bottom = ringAt(chain, QVector3D(0, 10, -20));
+    CHECK(bottom.radii.at(binAt(90)) == Catch::Approx(1.0));
+    CHECK(bottom.radii.at(binAt(270)) == Catch::Approx(0.5));
+
+    // The shaft is round at the lip's horizontal half-width.
+    const Builder::Ring& shaft = ringAt(chain, QVector3D(0, 10, -10));
+    CHECK_FALSE(hasMeasuredBin(shaft));
+    for (double radius : shaft.radii) {
+        CHECK(radius == Catch::Approx(2.0));
+    }
+    for (const Builder::Ring& ring : chain.rings) {
+        for (double radius : ring.radii) {
+            CHECK(radius <= 2.0 + 1e-6);
+        }
+    }
+    CHECK(shaftWarningStations(debug) == QStringList {QStringLiteral("b"), QStringLiteral("c")});
+}
+
+TEST_CASE("cwPassageTubeBuilder drops up and down that run along a steep leg", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // A 60° ramp: the top's down and the bottom's up point along the leg and
+    // are left out; the ramp is too steep to continue the other end's reading.
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("top"), QVector3D(0, 0, 0), lrud(1, 1, 1, 9)},
+        {QStringLiteral("bottom"), QVector3D(0, 10, -17.3205), lrud(1, 1, 9, 1)},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+
+    const Builder::Ring& top = ringAt(chain, QVector3D(0, 0, 0));
+    CHECK(top.measured.at(binAt(90)));
+    CHECK(top.radii.at(binAt(90)) == Catch::Approx(1.0));
+    CHECK_FALSE(top.measured.at(binAt(270)));
+    CHECK(top.radii.at(binAt(270)) == Catch::Approx(1.0));
+
+    const Builder::Ring& bottom = ringAt(chain, QVector3D(0, 10, -17.3205));
+    CHECK(bottom.measured.at(binAt(270)));
+    CHECK_FALSE(bottom.measured.at(binAt(90)));
+    CHECK(bottom.radii.at(binAt(90)) == Catch::Approx(1.0));
+
+    // The caps still use the raw outward readings, scaled by the ramp's weight.
+    CHECK(chain.startCapOffsetMeters == Catch::Approx(0.5).margin(1e-4));
+    CHECK(chain.endCapOffsetMeters == Catch::Approx(0.5).margin(1e-4));
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps a side pit's depth out of the through passage ring", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const BuilderInput input = makeInput({{
+        {
+            {QStringLiteral("a"), QVector3D(0, 0, 0), lrud(1, 1, 1, 1)},
+            {QStringLiteral("b"), QVector3D(0, 10, 0), lrud(1, 1, 1, 20)},
+            {QStringLiteral("c"), QVector3D(0, 20, 0), lrud(1, 1, 1, 1)},
+        },
+        {
+            {QStringLiteral("b"), QVector3D(0, 10, 0), lrud(1, 1, 1, 20)},
+            {QStringLiteral("p"), QVector3D(0, 10, -20), lrud(1, 1, 20, 1)},
+        },
+    }});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 2);
+    const auto isThrough = [](const Builder::Chain& chain) { return chain.rings.first().center == QVector3D(0, 0, 0); };
+    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), isThrough);
+    REQUIRE(through != debug.chains.cend());
+    for (const Builder::Ring& ring : through->rings) {
+        for (double radius : ring.radii) {
+            CHECK(radius == Catch::Approx(1.0));
+        }
+    }
+    const auto arm = std::find_if_not(debug.chains.cbegin(), debug.chains.cend(), isThrough);
+    REQUIRE(arm != debug.chains.cend());
+    for (const Builder::Ring& ring : arm->rings) {
+        for (double radius : ring.radii) {
+            CHECK(radius <= 1.0 + 1e-6);
+        }
+    }
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps a dead end's pit depth out of the passage floor", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // b's 35 m down is the depth of an unsurveyed pit at the dead end.
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), lrud(1, 0.2, 3, 0.5)},
+        {QStringLiteral("b"), QVector3D(0, 10, 0), lrud(0, 2, 8, 35)},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+    for (int i = 0; i < chain.rings.size(); ++i) {
+        INFO("ring " << i);
+        CHECK(chain.rings.at(i).radii.at(binAt(270)) == Catch::Approx(0.5));
+    }
+    CHECK(ringAt(chain, QVector3D(0, 10, 0)).radii.at(binAt(90)) == Catch::Approx(8.0));
+
+    REQUIRE(debug.warnings.size() == 1);
+    const cwPassageTubeMesh::Warning& warning = debug.warnings.first();
+    CHECK(warning.type == cwPassageTubeMesh::Warning::ShaftReading);
+    CHECK(warning.station == QStringLiteral("b"));
+    CHECK(warning.tripId == input.region.caves.first().trips.first().id);
+    CHECK(debug.mesh.warnings.size() == 1);
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps a tall canyon's ceiling", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(0.5, 0.5, 10, 0.5);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(0, 10, 0), dimensions},
+        {QStringLiteral("c"), QVector3D(0, 20, 0), dimensions},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    for (const Builder::Ring& ring : debug.chains.at(0).rings) {
+        CHECK(ring.radii.at(binAt(90)) == Catch::Approx(10.0));
+    }
+    CHECK(debug.warnings.isEmpty());
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps a shaft depth repeated on both stations of a leg out of its rings", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // As at Phake Cave's a4 and a6: both ends of x→y carry the 23 m depth of
+    // the pit that y→q drops down.
+    constexpr double kWidth = 5.0 + Builder::kMinRadiusMeters;
+    const BuilderInput input = makeInput({{
+        {
+            {QStringLiteral("w"), QVector3D(0, -10, 0), lrud(1, 1, 2, 1)},
+            {QStringLiteral("x"), QVector3D(0, 0, 0), lrud(1, 1, 2, 1.7)},
+            {QStringLiteral("v"), QVector3D(10, 0, 0), lrud(1, 1, 2, 2)},
+        },
+        {
+            {QStringLiteral("x"), QVector3D(0, 0, 0), lrud(5, 0, 3, 23)},
+            {QStringLiteral("y"), QVector3D(0, 15, 0), lrud(5, 0, 3, 23)},
+            {QStringLiteral("z"), QVector3D(0, 25, 0), lrud(1, 1, 2, 1)},
+        },
+        {
+            {QStringLiteral("y"), QVector3D(0, 15, 0), lrud(1, 5, 2, 1.2)},
+            {QStringLiteral("q"), QVector3D(0, 15, -23), lrud(1, 1, 1, 1)},
+        },
+    }});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE_FALSE(debug.chains.isEmpty());
+    for (int c = 0; c < debug.chains.size(); ++c) {
+        const Builder::Chain& chain = debug.chains.at(c);
+        for (int i = 0; i < chain.rings.size(); ++i) {
+            INFO("chain " << c << " ring " << i);
+            for (double radius : chain.rings.at(i).radii) {
+                CHECK(radius <= kWidth + 1e-6);
+            }
+        }
+    }
+
+    CHECK(shaftWarningStations(debug) == QStringList {QStringLiteral("x"), QStringLiteral("y")});
+}
+
 TEST_CASE("cwPassageTubeBuilder skins a straight leg into a closed tube", "[PassageTube][cwPassageTubeBuilder]")
 {
     const QStringList dimensions = lrud(1, 1, 1, 1);
@@ -884,5 +1096,154 @@ TEST_CASE("cwPassageTubeBuilder keeps a loop closing at a sharp bend without fol
     REQUIRE(debug.chains.size() == 1);
     REQUIRE(debug.chains.at(0).startCap == Builder::EndCap::None);
     checkNoFoldBack(debug.chains.at(0));
+    CHECK(isClosedSurface(debug.mesh.indices));
+}
+
+namespace {
+
+// The "Down" clino: the shot drops straight down whatever its azimuth.
+constexpr double kClinoDown = -90.0;
+
+struct PhakeShot {
+    const char* from;
+    const char* to;
+    double distance;
+    double azimuth;
+    double clino;
+};
+
+// Phake Cave, trip "2025.2 Release": meters, frontsights only, declination 0.
+// In survey order, so every shot starts at an already placed station.
+constexpr PhakeShot kPhakeShots[] = {
+    {"a1", "a2", 14.52, 49.0, -3.0},
+    {"a2", "a3", 9.13, 352.0, -17.3},
+    {"a3", "a4", 11.05, 82.0, -4.5},
+    {"a4", "a5", 6.97, 41.0, 11.2},
+    {"a4", "a6", 16.54, 147.5, -7.5},
+    {"a6", "a7", 9.81, 43.0, 26.0},
+    {"a7", "a8", 10.23, 74.0, 17.4},
+    {"a6", "a9", 23.44, 0.0, kClinoDown},
+    {"a9", "a10", 5.85, 230.0, -8.4},
+    {"a10", "a11", 10.56, 172.0, -21.7},
+    {"a11", "a12", 9.17, 200.0, -5.3},
+    {"a10", "a13", 18.28, 116.0, -4.1},
+    {"a13", "a14", 6.99, 91.0, -1.2},
+};
+
+// Station positions from the shots (x east, y north, z up), a1 at the origin.
+QHash<QString, QVector3D> phakeCavePositions()
+{
+    QHash<QString, QVector3D> positions {{QStringLiteral("a1"), QVector3D(0, 0, 0)}};
+    for (const PhakeShot& shot : kPhakeShots) {
+        const double azimuth = qDegreesToRadians(shot.azimuth);
+        const double clino = qDegreesToRadians(shot.clino);
+        const double horizontal = shot.clino == kClinoDown ? 0.0 : shot.distance * std::cos(clino);
+        const QVector3D delta(static_cast<float>(horizontal * std::sin(azimuth)),
+                              static_cast<float>(horizontal * std::cos(azimuth)),
+                              static_cast<float>(shot.distance * std::sin(clino)));
+        positions.insert(QString::fromLatin1(shot.to), positions.value(QString::fromLatin1(shot.from)) + delta);
+    }
+    return positions;
+}
+
+// The trip's four chunks as the file has them: a4 and a6 both carry the a6
+// pit's 23 m as down, a9 and a10 its 24 m as up, the dead end a12 has 35 m
+// down into an unsurveyed pit, a10 repeats in chunk 3 without LRUD, and
+// chunk 3 ends in two empty shots.
+SurveyInput phakeCaveSurvey()
+{
+    const QHash<QString, QVector3D> positions = phakeCavePositions();
+    const auto station = [&](const char* name, const QStringList& dimensions = {QString(), QString(), QString(), QString()}) {
+        const QString stationName = QString::fromLatin1(name);
+        return StationInput {stationName, positions.value(stationName), dimensions};
+    };
+    const StationInput empty {QString(), std::nullopt};
+
+    return {{
+        {station("a1", lrud(0, 5, 2, 1.3)), station("a2", lrud(2.5, 0, 1.5, 2)), station("a3", lrud(1.5, 3, 4.5, 1)),
+         station("a4", lrud(0, 2, 2, 1.7)), station("a5", lrud(2.5, 2.5, 11, 2))},
+        {station("a4", lrud(5, 0, 3, 23)), station("a6", lrud(5, 0, 3, 23)), station("a7", lrud(0.2, 3.5, 2.5, 1)),
+         station("a8", lrud(1, 5, 2, 1.2))},
+        {station("a6", lrud(1, 5, 2, 1.2)), station("a9", lrud(2.3, 2, 24, 0)), station("a10", lrud(2.3, 2, 24, 0)),
+         station("a11", lrud(1, 0.2, 3, 0.5)), station("a12", lrud(0, 2, 8, 35))},
+        {station("a10"), station("a13", lrud(1.8, 0, 1.8, 1.7)), station("a14", lrud(0, 2, 2, 1.9)), empty, empty},
+    }};
+}
+
+} // namespace
+
+TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single sane tube", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // The largest wall readings on the leg: a11's left, a12's right and
+    // ceiling. a12's 35 m down is the depth of an unsurveyed pit, not a wall.
+    constexpr double kMaxLeftMeters = 1.0;
+    constexpr double kMaxRightMeters = 2.0;
+    constexpr double kMaxRadiusMeters = 8.0;
+    constexpr double kToleranceMeters = 1e-3;
+
+    const BuilderInput input = makeInput(phakeCaveSurvey());
+    const Builder::Debug debug = buildDebug(input);
+
+    const auto legIt = std::find_if(debug.legs.cbegin(), debug.legs.cend(), [](const Builder::Leg& leg) {
+        return leg.from == QStringLiteral("a11") && leg.to == QStringLiteral("a12");
+    });
+    REQUIRE(legIt != debug.legs.cend());
+    const int legIndex = static_cast<int>(legIt - debug.legs.cbegin());
+    const QVector3D a11 = legIt->fromPosition;
+    const QVector3D a12 = legIt->toPosition;
+
+    QVector<int> chainsWithLeg;
+    for (int c = 0; c < debug.chains.size(); ++c) {
+        const QVector<Builder::ChainLeg>& legs = debug.chains.at(c).legs;
+        if (std::any_of(legs.cbegin(), legs.cend(), [&](const Builder::ChainLeg& chainLeg) { return chainLeg.legIndex == legIndex; })) {
+            chainsWithLeg.append(c);
+        }
+    }
+    REQUIRE(chainsWithLeg.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(chainsWithLeg.first());
+
+    const auto ringIndexAt = [&](const QVector3D& center) {
+        const auto it = std::find_if(chain.rings.cbegin(), chain.rings.cend(), [&](const Builder::Ring& ring) {
+            return ring.center.distanceToPoint(center) < kToleranceMeters;
+        });
+        REQUIRE(it != chain.rings.cend());
+        return static_cast<int>(it - chain.rings.cbegin());
+    };
+    const int a11Ring = ringIndexAt(a11);
+    const int a12Ring = ringIndexAt(a12);
+    const int step = a11Ring <= a12Ring ? 1 : -1;
+
+    const QVector3D legVector = a12 - a11;
+    const float legLength = legVector.length();
+    const QVector3D legDirection = legVector / legLength;
+    float previousAlong = -kToleranceMeters;
+    for (int i = a11Ring; i != a12Ring + step; i += step) {
+        const Builder::Ring& ring = chain.rings.at(i);
+        INFO("ring " << i << " at (" << ring.center.x() << ", " << ring.center.y() << ", " << ring.center.z() << ")");
+
+        // The rings run from a11 to a12 in order, on the shot.
+        const float along = QVector3D::dotProduct(ring.center - a11, legDirection);
+        CHECK(along > previousAlong);
+        CHECK(along <= legLength + kToleranceMeters);
+        CHECK(ring.center.distanceToPoint(a11 + legDirection * along) < kToleranceMeters);
+        previousAlong = along;
+
+        for (int bin = 0; bin < ring.radii.size(); ++bin) {
+            INFO("bin " << bin);
+            CHECK(ring.radii.at(bin) <= kMaxRadiusMeters + kToleranceMeters);
+        }
+
+        // One tube inside the measured walls: no vertex reaches past the
+        // widest left or right wall or above the highest ceiling.
+        for (int bin = 0; bin < ring.vertices.size(); ++bin) {
+            INFO("vertex " << bin);
+            const QVector3D offset = ring.vertices.at(bin) - ring.center;
+            const float sideways = QVector3D::dotProduct(offset, ring.frame.right);
+            CHECK(sideways <= kMaxRightMeters + kToleranceMeters);
+            CHECK(-sideways <= kMaxLeftMeters + kToleranceMeters);
+            CHECK(QVector3D::dotProduct(offset, ring.frame.up) <= kMaxRadiusMeters + kToleranceMeters);
+        }
+    }
+
     CHECK(isClosedSurface(debug.mesh.indices));
 }
