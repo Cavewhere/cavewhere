@@ -360,7 +360,7 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
         if (node == nullptr || node->fixStations() == nullptr) {
             continue;
         }
-        const cwSurveyNetwork network = node->network();
+        const cwSurveyNetwork network = node->scopedNetwork();
         const QHash<QString, QString> fileFixedStations = node->fileFixedStations();
         const QList<cwFixStation>& fixes = node->fixStations()->fixStations();
         QStringList unknownNames;
@@ -486,7 +486,7 @@ void cwFixStationValidator::syncNodeConnections()
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         // The survey network decides which fix references are broken, so a
         // recompute (a station appearing/disappearing) must re-attribute.
-        connect(node, &cwSurveyNode::surveyNetworkChanged,
+        connect(node, &cwSurveyNode::scopedNetworkChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         // So do the stations the node's attached files fix themselves.
         connect(node, &cwSurveyNode::attachedFixesChanged,

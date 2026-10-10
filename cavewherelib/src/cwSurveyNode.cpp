@@ -13,6 +13,7 @@
 #include "cwErrorModel.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
+#include "cwCavernNaming.h"
 #include "cwData.h"
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
@@ -55,7 +56,6 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
     m_fixStationDiagnostics(new cwFixStationDiagnosticsModel(this)),
     m_attachedFixes(new cwAttachedFixModel(this)),
     m_fixStationTable(new QConcatenateTablesProxyModel(this)),
-    m_stationPositionLookupStale(false),
     m_id(QUuid::createUuid()),
     m_gridConvergence(new cwGridConvergence(this)),
     m_keywordModel(new cwKeywordModel(this)),
@@ -590,9 +590,9 @@ void cwSurveyNode::connectTrip(cwTrip* trip)
     connect(this, &cwSurveyNode::tripScopeLabelsChanged,
             trip, &cwTrip::scopeChanged, Qt::UniqueConnection);
 
-    //The trip owns solvedStations() but this node owns the lookup it reads, so
-    //this node is the only object that can say when the answer moved.
-    connect(this, &cwSurveyNode::stationPositionPositionChanged,
+    //The trip owns solvedStations() but reads this node's scoped view, so the
+    //region's pulse reaches it through this node.
+    connect(this, &cwSurveyNode::scopedPositionsChanged,
             trip, &cwTrip::solvedStationsChanged, Qt::UniqueConnection);
 
     //A harvest is one trip's news, but knownStations() is read across the node,
@@ -617,7 +617,7 @@ void cwSurveyNode::disconnectTrip(cwTrip* trip)
                this, &cwSurveyNode::invalidateTripScopeLabels);
     disconnect(this, &cwSurveyNode::tripScopeLabelsChanged,
                trip, &cwTrip::scopeChanged);
-    disconnect(this, &cwSurveyNode::stationPositionPositionChanged,
+    disconnect(this, &cwSurveyNode::scopedPositionsChanged,
                trip, &cwTrip::solvedStationsChanged);
     disconnect(trip, &cwTrip::externalStationsChanged,
                this, &cwSurveyNode::tripExternalStationsChanged);
@@ -648,6 +648,13 @@ void cwSurveyNode::connectNode(cwSurveyNode* node)
     //directions cannot loop.
     connect(this, &cwSurveyNode::externallyBackedChanged,
             node, &cwSurveyNode::externallyBackedChanged, Qt::UniqueConnection);
+
+    //The region's solve reaches every node through these, so a moved node
+    //hears it from its new parent with no wiring of its own.
+    connect(this, &cwSurveyNode::scopedPositionsChanged,
+            node, &cwSurveyNode::scopedPositionsChanged, Qt::UniqueConnection);
+    connect(this, &cwSurveyNode::scopedNetworkChanged,
+            node, &cwSurveyNode::scopedNetworkChanged, Qt::UniqueConnection);
 }
 
 void cwSurveyNode::disconnectNode(cwSurveyNode* node)
@@ -664,6 +671,10 @@ void cwSurveyNode::disconnectNode(cwSurveyNode* node)
                this, &cwSurveyNode::invalidateChildScopeLabels);
     disconnect(this, &cwSurveyNode::externallyBackedChanged,
                node, &cwSurveyNode::externallyBackedChanged);
+    disconnect(this, &cwSurveyNode::scopedPositionsChanged,
+               node, &cwSurveyNode::scopedPositionsChanged);
+    disconnect(this, &cwSurveyNode::scopedNetworkChanged,
+               node, &cwSurveyNode::scopedNetworkChanged);
 }
 
 void cwSurveyNode::setParentNode(cwSurveyNode* node)
@@ -1404,7 +1415,6 @@ cwCaveData cwSurveyNode::data() const
     return {
         m_name,
         cwData::toDataList<cwTripData>(m_trips),
-        m_stationPositionLookup,
         m_id,
         static_cast<cwUnits::LengthUnit>(length()->unit()),
         static_cast<cwUnits::LengthUnit>(depth()->unit()),
@@ -1453,59 +1463,43 @@ void cwSurveyNode::setData(const cwCaveData &data)
     }
 }
 
-/**
-  \brief Sets the station position model for the node
-
-  This holds all the position for al the stations in the node (this is populated
-  after the loop closure has completed)
-  */
-void cwSurveyNode::setStationPositionLookup(const cwStationPositionLookup &model) {
-    m_stationPositionLookup = model;
-
-    emit stationPositionPositionChanged();
-}
-
-
-
-/**
- * @brief cwSurveyNode::setSurveyNetwork
- * @param network
- *
- * Holds the calculated survey network for the node. This is a look up for stations and
- * thier neighoring stations
- */
-void cwSurveyNode::setSurveyNetwork(const cwSurveyNetwork &network)
+QString cwSurveyNode::scopePrefix() const
 {
-    // The line-plot worker rebuilds the network on every solve and cannot see
-    // the node's current one (its region snapshot carries no network), so it
-    // reports "changed" every time. Guard here so surveyNetworkChanged only
-    // fires on a genuine change — otherwise every solve re-notifies listeners,
-    // and any listener that re-runs the solve (fix-station error refresh,
-    // declination) would feed back into an endless re-solve loop.
-    if (m_network == network) {
-        return;
+    QString prefix;
+    for (const cwSurveyNode* node : pathNodes()) {
+        const cwSurveyNode* parent = node->parentNode();
+        const QString label = parent != nullptr ? parent->childScopeLabels().value(node->id())
+                                                : QString();
+        if (label.isEmpty()) {
+            return QString();
+        }
+        prefix += cwCavernNaming::scopePrefix(label);
     }
-    m_network = network;
-    emit surveyNetworkChanged();
+    return prefix;
 }
 
-/**
- * @brief cwSurveyNode::setStationPositionLookupStale
- * @param isStale
- *
- * Sets the station position lookup as stale. If true, the station position lookup, should
- * be recalculated, else, it shouldn't be recalculated.
- */
-void cwSurveyNode::setStationPositionLookupStale(bool isStale)
+cwStationPositionLookup cwSurveyNode::scopedPositions() const
 {
-    m_stationPositionLookupStale = isStale;
+    const cwCavingRegion* region = parentRegion();
+    if (region == nullptr) {
+        return cwStationPositionLookup();
+    }
+    if (isRoot()) {
+        return region->stationPositions();
+    }
+    const QString prefix = scopePrefix();
+    return prefix.isEmpty() ? cwStationPositionLookup() : region->scopedPositions(prefix);
 }
 
-/**
- * @brief cwSurveyNode::isStationPositionLookupStale
- * @return True if the station position lookup is old and stale, false it is up to date
- */
-bool cwSurveyNode::isStationPositionLookupStale() const
+cwSurveyNetwork cwSurveyNode::scopedNetwork() const
 {
-    return m_stationPositionLookupStale;
+    const cwCavingRegion* region = parentRegion();
+    if (region == nullptr) {
+        return cwSurveyNetwork();
+    }
+    if (isRoot()) {
+        return region->network();
+    }
+    const QString prefix = scopePrefix();
+    return prefix.isEmpty() ? cwSurveyNetwork() : region->scopedNetwork(prefix);
 }

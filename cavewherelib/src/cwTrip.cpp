@@ -627,7 +627,9 @@ cwStationPositionLookup cwTrip::solvedStationPositions() const {
         return cwStationPositionLookup();
     }
 
-    cwStationPositionLookup lookup = node->stationPositionLookup();
+    //The node's scoped view is the region lookup under the node's label path,
+    //so its keys speak the node's namespace; the trip's scope comes off next.
+    cwStationPositionLookup lookup = node->scopedPositions();
     const QString prefix = scopePrefix();
     if(prefix.isEmpty()) {
         //Native trip: the cave keys already speak this trip's namespace.
@@ -657,7 +659,7 @@ cwSurveyNetwork cwTrip::solvedNetwork() const {
         return cwSurveyNetwork();
     }
 
-    cwSurveyNetwork network = node->network();
+    cwSurveyNetwork network = node->scopedNetwork();
     const QString prefix = scopePrefix();
     if(prefix.isEmpty()) {
         //Native trip: pass through, cross-trip junction neighbors intact.
@@ -697,7 +699,7 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
         return solved;
     }
 
-    const cwStationPositionLookup lookup = node->stationPositionLookup();
+    const cwStationPositionLookup lookup = node->scopedPositions();
     const QString prefix = scopePrefix();
     const bool wholeCaveWindow = windowsWholeCave();
 

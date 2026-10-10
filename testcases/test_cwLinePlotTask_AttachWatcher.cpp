@@ -122,8 +122,8 @@ TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new s
     const QString tripPrefix = tripScopeLabel(attached);
     const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
     const QString a4Key = tripPrefix + QStringLiteral(".simple.a4");
-    REQUIRE(cave->stationPositionLookup().hasPosition(a3Key));
-    REQUIRE_FALSE(cave->stationPositionLookup().hasPosition(a4Key));
+    REQUIRE(cave->scopedPositions().hasPosition(a3Key));
+    REQUIRE_FALSE(cave->scopedPositions().hasPosition(a4Key));
 
     // Now overwrite the in-project copy with content that adds an a4
     // station. The watcher should fire (project-side path), recompute the
@@ -133,9 +133,9 @@ TEST_CASE("Editing the in-project copy triggers a re-run that picks up the new s
 
     REQUIRE(tryWait(kWatcherWaitMs, [&] {
         QCoreApplication::processEvents(QEventLoop::AllEvents, kInnerPollEventsMs);
-        return cave->stationPositionLookup().hasPosition(a4Key);
+        return cave->scopedPositions().hasPosition(a4Key);
     }));
-    CHECK(cave->stationPositionLookup().hasPosition(a4Key));
+    CHECK(cave->scopedPositions().hasPosition(a4Key));
 }
 
 TEST_CASE("Detach mid-solve does not crash and empties the watch set",
@@ -345,8 +345,8 @@ TEST_CASE("Editing a remembered source file changes nothing observable",
     const QString tripPrefix = tripScopeLabel(fixture->trip);
     const QString a3Key = tripPrefix + QStringLiteral(".simple.a3");
     const QString a4Key = tripPrefix + QStringLiteral(".simple.a4");
-    REQUIRE(fixture->cave->stationPositionLookup().hasPosition(a3Key));
-    REQUIRE_FALSE(fixture->cave->stationPositionLookup().hasPosition(a4Key));
+    REQUIRE(fixture->cave->scopedPositions().hasPosition(a3Key));
+    REQUIRE_FALSE(fixture->cave->scopedPositions().hasPosition(a4Key));
 
     const QString destPath =
         QDir(fixture->attachmentDir).filePath(QStringLiteral("source.svx"));
@@ -383,5 +383,5 @@ TEST_CASE("Editing a remembered source file changes nothing observable",
     // save-thread timing.
     CHECK_FALSE(fixture->project->modified());
     CHECK(fileContents(destPath) == fileContents(fixturePath(QStringLiteral("survex_simple.svx"))));
-    CHECK_FALSE(fixture->cave->stationPositionLookup().hasPosition(a4Key));
+    CHECK_FALSE(fixture->cave->scopedPositions().hasPosition(a4Key));
 }

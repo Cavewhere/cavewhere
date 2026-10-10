@@ -8,6 +8,7 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 #include "LoadProjectHelper.h"
+#include "SurveyTreeTestHelper.h"
 #include "BoulderFixtureHelper.h"
 #include "FixStationFixtureHelper.h"
 #include "SplayFixtureHelper.h"
@@ -64,13 +65,13 @@ TEST_CASE("Survey network are returned", "[LinePlotManager]") {
     REQUIRE(project->cavingRegion()->caveCount() == 1);
 
     cwCave* cave = project->cavingRegion()->cave(0);
-    cave->setStationPositionLookup(cwStationPositionLookup());
+    SurveyTreeTestHelper::setScopedPositions(cave, cwStationPositionLookup());
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
     plotManager->setRegion(project->cavingRegion());
     plotManager->waitToFinish();
 
-    cwSurveyNetwork network = cave->network();
+    cwSurveyNetwork network = cave->scopedNetwork();
 
     auto testStationNeigbors = [=](QString stationName, QStringList neighbors) {
         auto neighborsAtStation = network.neighbors(stationName);
@@ -120,8 +121,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
         CHECK(cave->length()->value() == 10.0);
         CHECK(cave->depth()->value() == 0.0);
-        CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-        CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+        CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+        CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
         CHECK(cave->errorModel()->fatalCount() == 0);
 
@@ -133,9 +134,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 0.0)); //a2 should no-longer exists
-            CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 0.0, 0.0)); //a2 should no-longer exists
+            CHECK(cave->scopedPositions().position("b2") == QVector3D(0.0, 10.0, 0.0));
         }
 
         SECTION("Setting shot distance data should re-run line plot") {
@@ -145,8 +146,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 20.0);
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 20.0, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 20.0, 0.0));
         }
 
         SECTION("Setting compass data should re-run line plot") {
@@ -156,8 +157,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(10.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(10.0, 0.0, 0.0));
         }
 
         SECTION("Setting back compass data should re-run line plot") {
@@ -167,8 +168,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == Catch::Approx(9.9984903336));
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-7.07, 7.07, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(-7.07, 7.07, 0.0));
         }
 
         SECTION("Setting clino data should re-run line plot") {
@@ -178,8 +179,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == Catch::Approx(10.0));
             CHECK(cave->depth()->value() == 10.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 10.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 0.0, 10.0));
         }
 
         SECTION("Setting clino data should re-run line plot") {
@@ -189,8 +190,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == Catch::Approx(10.0).epsilon(0.01));
             CHECK(cave->depth()->value() == Catch::Approx(3.8299).epsilon(0.01));
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 9.24, -3.83));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 9.24, -3.83));
         }
 
         SECTION("Setting exclude length should re-run line plot") {
@@ -200,8 +201,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == Catch::Approx(0.0).epsilon(0.01));
             CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
         }
 
         SECTION("Adding a shot re-run line plot") {
@@ -225,11 +226,11 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 CHECK(cave->length()->value() == Catch::Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
                 CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
                 for(int ii = 0; ii <= i; ii++) {
-                    CHECK(cave->stationPositionLookup().position(QString("a3-%1").arg(ii)) == QVector3D(20.0 * (ii+1), 10.0, 0.0));
+                    CHECK(cave->scopedPositions().position(QString("a3-%1").arg(ii)) == QVector3D(20.0 * (ii+1), 10.0, 0.0));
                 }
             }
 
@@ -243,11 +244,11 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 CHECK(cave->length()->value() == Catch::Approx(10.0 + 20.0 * (i + 1)).epsilon(0.01));
                 CHECK(cave->depth()->value() == Catch::Approx(0.0).epsilon(0.01));
 
-                CHECK(cave->stationPositionLookup().hasPosition(QString("a3-%1").arg(i)) == true);
+                CHECK(cave->scopedPositions().hasPosition(QString("a3-%1").arg(i)) == true);
 
                 for(int ii = 0; ii < total - 1; ii++) {
-                    CHECK(cave->stationPositionLookup().hasPosition(QString("a3-%1").arg(ii)) == true);
-                    CHECK(cave->stationPositionLookup().position(QString("a3-%1").arg(ii)) == QVector3D(20.0 * (ii+1), 10.0, 0.0));
+                    CHECK(cave->scopedPositions().hasPosition(QString("a3-%1").arg(ii)) == true);
+                    CHECK(cave->scopedPositions().position(QString("a3-%1").arg(ii)) == QVector3D(20.0 * (ii+1), 10.0, 0.0));
                 }
             }
         }
@@ -273,9 +274,9 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 25.0);
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a3") == QVector3D(0.0, 25.0, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave->scopedPositions().position("a3") == QVector3D(0.0, 25.0, 0.0));
 
             SECTION("Remove a trip re-run line plot") {
                 cave->removeTrip(1);
@@ -284,8 +285,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 CHECK(cave->length()->value() == 10.0);
                 CHECK(cave->depth()->value() == 0.0);
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
             }
         }
 
@@ -296,8 +297,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
         }
 
         SECTION("Trip calibration changed re-runs line plot") {
@@ -307,8 +308,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == Catch::Approx(10.0).epsilon(0.01));
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(7.07, 7.07, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(7.07, 7.07, 0.0));
         }
 
         SECTION("Adding Cave re-runs line plot") {
@@ -336,13 +337,13 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 0.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
             CHECK(cave2->length()->value() == 10.0);
             CHECK(cave2->depth()->value() == 0.0);
-            CHECK(cave2->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave2->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave2->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave2->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
             SECTION("Removing Cave re-runs line plot") {
                 region.removeCave(1);
@@ -351,8 +352,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 CHECK(cave->length()->value() == 10.0);
                 CHECK(cave->depth()->value() == 0.0);
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
             }
         }
 
@@ -364,8 +365,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 10.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, -10.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 0.0, -10.0));
 
             chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "UP");
             chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "DOWN");
@@ -374,8 +375,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             CHECK(cave->length()->value() == 10.0);
             CHECK(cave->depth()->value() == 10.0);
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 10.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 0.0, 10.0));
 
             chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "0");
             chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "0");
@@ -388,16 +389,16 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, 10.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 0.0, 10.0));
 
             chunk->setData(cwSurveyChunk::ShotClinoRole, 0, "DOWN");
             chunk->setData(cwSurveyChunk::ShotBackClinoRole, 0, "DOWN");
 
             plotManager->waitToFinish();
 
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 0.0, -10.0));
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 0.0, -10.0));
         }
 
         SECTION("Trip calibration should cause the cave to re-run") {
@@ -409,8 +410,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             QVector3D originalA2 = QVector3D(0.17, 10.0, -0.26);
 
-            CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+            CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+            CHECK(cave->scopedPositions().position("a2") == originalA2);
 
             SECTION("Turn off backsights") {
 
@@ -418,16 +419,16 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, -0.17));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, -0.17));
 
                 SECTION("Turn the back on") {
                     trip->calibrations()->setBackSights(true);
 
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -436,16 +437,16 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.35, 9.99, -0.35));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.35, 9.99, -0.35));
 
                 SECTION("Turn the back on") {
                     trip->calibrations()->setFrontSights(true);
 
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -456,8 +457,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setCorrectedCompassBacksight(true);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-0.35, -9.99, -0.35));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(-0.35, -9.99, -0.35));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setFrontSights(true);
@@ -466,8 +467,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                     trip->calibrations()->setCorrectedCompassBacksight(false);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -478,8 +479,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setCorrectedClinoBacksight(true);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.35, 9.99, 0.35));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.35, 9.99, 0.35));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setFrontSights(true);
@@ -488,8 +489,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                     trip->calibrations()->setCorrectedClinoBacksight(false);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -500,8 +501,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setCorrectedCompassFrontsight(true);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, -10.0, -0.17));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, -10.0, -0.17));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setBackSights(true);
@@ -510,8 +511,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                     trip->calibrations()->setCorrectedCompassFrontsight(false);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -522,8 +523,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setCorrectedClinoFrontsight(true);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.17));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.17));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setBackSights(true);
@@ -532,8 +533,8 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                     trip->calibrations()->setCorrectedClinoFrontsight(false);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -541,15 +542,15 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setTapeCalibration(1.0);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.19, 10.99, -0.29));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.19, 10.99, -0.29));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setTapeCalibration(0.0);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -557,15 +558,15 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setFrontCompassCalibration(-2.0);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, -0.26));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, -0.26));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setFrontCompassCalibration(0.0);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -573,15 +574,15 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setFrontClinoCalibration(3.0);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.17, 10.0, 0.0));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.17, 10.0, 0.0));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setFrontClinoCalibration(0.0);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -589,15 +590,15 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setBackCompassCalibration(-2.0);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, -0.26));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, -0.26));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setBackCompassCalibration(0.0);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -605,15 +606,15 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setBackClinoCalibration(-3.0);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.17, 10.0, 0.0));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.17, 10.0, 0.0));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setBackClinoCalibration(0.0);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -621,15 +622,15 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setDeclinationManual(180.0);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(-0.17, -10.0, -0.26));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(-0.17, -10.0, -0.26));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setDeclinationManual(0.0);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
 
@@ -637,15 +638,15 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
                 trip->calibrations()->setDistanceUnit(cwUnits::Feet);
                 plotManager->waitToFinish();
 
-                CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.05, 3.05, -0.08));
+                CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                CHECK(cave->scopedPositions().position("a2") == QVector3D(0.05, 3.05, -0.08));
 
                 SECTION("Turn it off") {
                     trip->calibrations()->setDistanceUnit(cwUnits::Meters);
                     plotManager->waitToFinish();
 
-                    CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-                    CHECK(cave->stationPositionLookup().position("a2") == originalA2);
+                    CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+                    CHECK(cave->scopedPositions().position("a2") == originalA2);
                 }
             }
         }
@@ -679,10 +680,10 @@ TEST_CASE("Changing data adding and removing caves trips survey chunks should ru
 
             plotManager->waitToFinish();
 
-            CHECK(cave->stationPositionLookup().position("b2") == QVector3D(0.0, 10.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("b3") == QVector3D(5.0, 10.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("b4") == QVector3D(5.0, -5.0, 0.0));
-            CHECK(cave->stationPositionLookup().position("b5") == QVector3D(-15.0, -5.0, 0.0));
+            CHECK(cave->scopedPositions().position("b2") == QVector3D(0.0, 10.0, 0.0));
+            CHECK(cave->scopedPositions().position("b3") == QVector3D(5.0, 10.0, 0.0));
+            CHECK(cave->scopedPositions().position("b4") == QVector3D(5.0, -5.0, 0.0));
+            CHECK(cave->scopedPositions().position("b5") == QVector3D(-15.0, -5.0, 0.0));
 
 
         }
@@ -776,7 +777,7 @@ TEST_CASE("cwLinePlotManager defers solving to the update coordinator", "[cwLine
     cwJobSettings::initialize();
     cwJobSettings::instance()->setAutomaticUpdate(false);
 
-    cwSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
+    cwSignalSpy stationPositionSpy(cave, &cwCave::scopedPositionsChanged);
     stationPositionSpy.setObjectName("stationPositionSpy");
 
     SpyChecker spyChecker {
@@ -844,7 +845,7 @@ TEST_CASE("cwLinePlotManager clears geometry when all caves are removed", "[Line
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+    REQUIRE(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
     cwSignalSpy stationPositionInCavesSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
     stationPositionInCavesSpy.setObjectName("stationPositionInCavesSpy");
@@ -873,7 +874,7 @@ TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[Lin
 
     auto plotManager = std::make_unique<cwLinePlotManager>();
 
-    cwSignalSpy stationPositionSpy(cave, &cwCave::stationPositionPositionChanged);
+    cwSignalSpy stationPositionSpy(cave, &cwCave::scopedPositionsChanged);
     stationPositionSpy.setObjectName("stationPositionSpy");
     SpyChecker spyChecker {{&stationPositionSpy, 0}};
 
@@ -882,7 +883,7 @@ TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[Lin
         plotManager->waitToFinish();
 
         spyChecker.checkSpies();
-        CHECK(cave->stationPositionLookup().positions().isEmpty());
+        CHECK(cave->scopedPositions().positions().isEmpty());
     }
 
     SECTION("Cave with trip but no shots does not trigger cavern") {
@@ -897,7 +898,7 @@ TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[Lin
         plotManager->waitToFinish();
 
         spyChecker.checkSpies();
-        CHECK(cave->stationPositionLookup().positions().isEmpty());
+        CHECK(cave->scopedPositions().positions().isEmpty());
 
         // Adding a shot should now trigger cavern and produce positions
         cwStation s1("a1");
@@ -912,8 +913,8 @@ TEST_CASE("cwLinePlotManager skips cavern when cave or trip has no shots", "[Lin
 
         spyChecker[&stationPositionSpy]++;
         spyChecker.checkSpies();
-        CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-        CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+        CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+        CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
     }
 }
 
@@ -956,7 +957,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when the frame or fix stations chang
     plotManager->waitToFinish();
 
     // Sanity: with no frame and no fixes, a1 sits at the origin.
-    REQUIRE(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
+    REQUIRE(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
 
     cwSignalSpy positionSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
 
@@ -977,7 +978,7 @@ TEST_CASE("cwLinePlotManager re-runs cavern when the frame or fix stations chang
         // Positions come back in the project's frame, which is centered on the
         // anchor — so a1, the anchor, sits at its own origin.
         const auto position = [&](const QString& station) {
-            return cave->stationPositionLookup().position(station);
+            return cave->scopedPositions().position(station);
         };
 
         CHECK(positionSpy.count() >= 1);
@@ -1083,8 +1084,8 @@ TEST_CASE("cwLinePlotManager applies grid convergence to a manual declination (i
     REQUIRE_FALSE(convergence.hasError());
     REQUIRE(std::abs(convergence.value()) > 0.1); // meaningful convergence here
 
-    const QVector3D a1 = cave->stationPositionLookup().position(QStringLiteral("a1"));
-    const QVector3D a2 = cave->stationPositionLookup().position(QStringLiteral("a2"));
+    const QVector3D a1 = cave->scopedPositions().position(QStringLiteral("a1"));
+    const QVector3D a2 = cave->scopedPositions().position(QStringLiteral("a2"));
     const QVector3D delta = a2 - a1;
 
     // Grid north lies `convergence` east of true north, so a true-north shot
@@ -1146,8 +1147,8 @@ TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    REQUIRE(cave->stationPositionLookup().hasPosition("a2"));
-    const QVector3D a2Before = cave->stationPositionLookup().position("a2");
+    REQUIRE(cave->scopedPositions().hasPosition("a2"));
+    const QVector3D a2Before = cave->scopedPositions().position("a2");
     const double declBefore = trip->calibrations()->declination();
 
     cwSignalSpy positionSpy(plotManager.get(), &cwLinePlotManager::stationPositionInCavesChanged);
@@ -1161,7 +1162,7 @@ TEST_CASE("cwLinePlotManager re-solves when a trip's date changes (bug #581)",
 
     plotManager->waitToFinish();
 
-    const QVector3D a2After = cave->stationPositionLookup().position("a2");
+    const QVector3D a2After = cave->scopedPositions().position("a2");
 
     // a1 is fixed, so only the declination-rotated a2 should move.
     CHECK(positionSpy.count() >= 1);
@@ -1205,9 +1206,9 @@ TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[Line
         plotManager->setRegion(&region);
         plotManager->waitToFinish();
 
-        CHECK(cave->stationPositionLookup().hasPosition("a1"));
-        CHECK(cave->stationPositionLookup().hasPosition("a2"));
-        CHECK(cave->stationPositionLookup().hasPosition("a3"));
+        CHECK(cave->scopedPositions().hasPosition("a1"));
+        CHECK(cave->scopedPositions().hasPosition("a2"));
+        CHECK(cave->scopedPositions().hasPosition("a3"));
         // Geometry must include both chunk1 (10m) and chunk2's a2->a3 (5m).
         CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
     }
@@ -1238,12 +1239,12 @@ TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[Line
         plotManager->setRegion(&region);
         plotManager->waitToFinish();
 
-        CHECK(cave->stationPositionLookup().hasPosition("a1"));
-        CHECK(cave->stationPositionLookup().hasPosition("a2"));
-        CHECK(cave->stationPositionLookup().hasPosition("a3"));
-        CHECK(cave->stationPositionLookup().position("a1") == QVector3D(0.0, 0.0, 0.0));
-        CHECK(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
-        CHECK(cave->stationPositionLookup().position("a3") == QVector3D(5.0, 10.0, 0.0));
+        CHECK(cave->scopedPositions().hasPosition("a1"));
+        CHECK(cave->scopedPositions().hasPosition("a2"));
+        CHECK(cave->scopedPositions().hasPosition("a3"));
+        CHECK(cave->scopedPositions().position("a1") == QVector3D(0.0, 0.0, 0.0));
+        CHECK(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
+        CHECK(cave->scopedPositions().position("a3") == QVector3D(5.0, 10.0, 0.0));
         // Length covers a1->a2 + a2->a3 only; the dropped a3->x has no distance.
         CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
     }
@@ -1276,9 +1277,9 @@ TEST_CASE("cwLinePlotManager handles chunks with empty shots (bug #435)", "[Line
         plotManager->setRegion(&region);
         plotManager->waitToFinish();
 
-        CHECK(cave->stationPositionLookup().hasPosition("a1"));
-        CHECK(cave->stationPositionLookup().hasPosition("a2"));
-        CHECK(cave->stationPositionLookup().hasPosition("a4"));
+        CHECK(cave->scopedPositions().hasPosition("a1"));
+        CHECK(cave->scopedPositions().hasPosition("a2"));
+        CHECK(cave->scopedPositions().hasPosition("a4"));
         // Geometry must cover chunk1 (10m) + chunk3 (5m); chunk2 is dropped.
         CHECK(cave->length()->value() == Catch::Approx(15.0).epsilon(0.01));
     }
@@ -1882,7 +1883,7 @@ TEST_CASE("Line plot reports only the stations that actually moved", "[LinePlotM
     plotManager->setRegion(&region);
     plotManager->waitToFinish();
 
-    REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 10.0, 0.0));
+    REQUIRE(cave->scopedPositions().position("a2") == QVector3D(0.0, 10.0, 0.0));
 
     // Captured by lambda rather than QSignalSpy so the payload arrives as a
     // real QList<cwTrip*> instead of a QVariant needing a registered metatype.
@@ -1907,7 +1908,7 @@ TEST_CASE("Line plot reports only the stations that actually moved", "[LinePlotM
         chunk->setData(cwSurveyChunk::ShotDistanceRole, 0, 20.0);
         plotManager->waitToFinish();
 
-        REQUIRE(cave->stationPositionLookup().position("a2") == QVector3D(0.0, 20.0, 0.0));
+        REQUIRE(cave->scopedPositions().position("a2") == QVector3D(0.0, 20.0, 0.0));
         CHECK(changedTrips == QList<cwTrip*>({trip}));
     }
 
@@ -1921,7 +1922,7 @@ TEST_CASE("Line plot reports only the stations that actually moved", "[LinePlotM
         chunk->appendShot(cwStation("a2"), cwStation("a3"), secondShot);
         plotManager->waitToFinish();
 
-        REQUIRE(cave->stationPositionLookup().position("a3") == QVector3D(0.0, 15.0, 0.0));
+        REQUIRE(cave->scopedPositions().position("a3") == QVector3D(0.0, 15.0, 0.0));
         CHECK(changedTrips == QList<cwTrip*>({trip}));
     }
 }

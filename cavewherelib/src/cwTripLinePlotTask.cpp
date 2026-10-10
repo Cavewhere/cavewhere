@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwTripLinePlotTask.h"
+#include "cwScopeLabels.h"
 #include "cwConcurrent.h"
 #include "cwLinePlotTask.h"
 #include "cwCavingRegionData.h"
@@ -203,31 +204,38 @@ cwLinePlotTask::Input buildLinePlotInput(const QString &tripName,
     cwLinePlotTask::Input input;
     input.regionData.name = QStringLiteral("sketch-region");
     input.regionData.caves.append(caveData);
-    // previousStationPositions / previousNetworks are left empty on purpose, so
-    // the worker treats every station as changed and always populates
-    // result.Caves — which runLinePlot() below requires. That stays correct only
-    // while caveData.id is freshly generated per call; a caller that starts
-    // reusing a stable cave id here has to seed them to stay incremental.
+    // previousStationPositions / previousNetwork are left empty on purpose, so
+    // the worker treats every station as changed and always publishes the
+    // region lookup — which runLinePlot() below reads.
 
     return input;
 }
 
+struct SolvedComponent {
+    cwStationPositionLookup positions;
+    cwSurveyNetwork network;
+};
+
 // Runs cwLinePlotTask synchronously on the current (worker) thread and
-// returns the first (and only) cave's result. On cavern failure / empty
-// positions, returns default-constructed values — caller treats as skip.
-cwLinePlotTask::LinePlotCaveData runLinePlot(cwLinePlotTask::Input input)
+// returns the only cave's solve, named as the trip names its stations. On
+// cavern failure / empty positions, returns empty values — caller treats as
+// skip.
+SolvedComponent runLinePlot(cwLinePlotTask::Input input)
 {
+    // Synthetic input always has exactly one cave, holding one native trip, so
+    // the cave's label path is all that separates a region key from a trip's
+    // station name.
+    const QString cavePrefix =
+        cwScopeLabels(input.regionData).prefix(input.regionData.caves.constFirst().id);
+
     auto future = cwLinePlotTask::run(std::move(input));
     future.waitForFinished(); // worker-thread block, not a QEventLoop spin
     if (future.isCanceled() || future.resultCount() == 0) {
-        return cwLinePlotTask::LinePlotCaveData();
+        return SolvedComponent();
     }
     const auto result = future.result();
-    if (result.Caves.isEmpty()) {
-        return cwLinePlotTask::LinePlotCaveData();
-    }
-    // Synthetic input always has exactly one cave.
-    return *result.Caves.constBegin();
+    return SolvedComponent{result.regionStationPositions().scoped(cavePrefix),
+                           result.regionNetwork().scoped(cavePrefix)};
 }
 
 } // namespace
@@ -265,8 +273,8 @@ QFuture<QList<TripComponent>> run(Input pipelineInput)
             auto lpInput = buildLinePlotInput(input.tripName,
                                               input.calibration,
                                               broken.chunks);
-            auto caveResult = runLinePlot(std::move(lpInput));
-            if (caveResult.stationPositions().isEmpty()) {
+            const SolvedComponent caveResult = runLinePlot(std::move(lpInput));
+            if (caveResult.positions.isEmpty()) {
                 // cavern refused this component (unparseable shots, etc.).
                 // Skip — per the plan, we tolerate per-component failure
                 // rather than failing the whole trip.
@@ -274,8 +282,8 @@ QFuture<QList<TripComponent>> run(Input pipelineInput)
             }
 
             TripComponent tc;
-            tc.network   = caveResult.network();
-            tc.positions = caveResult.stationPositions();
+            tc.network   = caveResult.network;
+            tc.positions = caveResult.positions;
 
             if (!broken.internalToPublic.isEmpty()) {
                 // Rename internal "foo__DUP_N" keys back to the user-facing

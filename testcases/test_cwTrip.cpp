@@ -12,6 +12,7 @@
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyChunk.h"
+#include "SurveyTreeTestHelper.h"
 
 //Qt inculdes
 #include "cwSignalSpy.h"
@@ -368,16 +369,19 @@ TEST_CASE("cwTrip solved-* accessors strip a native station prefix", "[cwTrip][s
     // (Scope) trip: the trip's stations keyed <prefix>.<tail>, plus an unrelated
     // native station. The accessors must strip the prefix so bare note/scrap
     // names resolve, while keeping the full cave data as a superset.
-    cwCave cave;
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
     cwTrip* trip = new cwTrip();
     trip->setStationPrefix(QStringLiteral("A"));
-    cave.addTrip(trip);
+    cave->addTrip(trip);
 
     cwStationPositionLookup lookup;
     lookup.setPosition(QStringLiteral("A.s1"), QVector3D(1, 2, 3));
     lookup.setPosition(QStringLiteral("A.s2"), QVector3D(4, 5, 6));
     lookup.setPosition(QStringLiteral("outside"), QVector3D(7, 8, 9));
-    cave.setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     SECTION("solvedStationPositions aliases each scoped tail to a bare name") {
         const cwStationPositionLookup solved = trip->solvedStationPositions();
@@ -436,7 +440,7 @@ cwTrip* attachmentWithSplitSources(cwCave* cave)
     cwStationPositionLookup lookup;
     lookup.setPosition(QStringLiteral("topo_1.a2"), QVector3D(4, 5, 6));
     lookup.setPosition(QStringLiteral("topo_1.b1"), QVector3D(7, 8, 9));
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
     return trip;
 }
 
@@ -467,16 +471,19 @@ TEST_CASE("cwTrip::knownStations unions every source that names a station",
 {
     // The defect this accessor exists to end: consumers that each preferred a
     // different source disagreed about which stations a trip has, on one screen.
-    cwCave cave;
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
 
     SECTION("a native trip keeps a chunk station the solve never placed") {
         cwTrip* trip = new cwTrip();
-        cave.addTrip(trip);
+        cave->addTrip(trip);
         addShot(trip, QStringLiteral("s1"), QStringLiteral("s2"));
 
         cwStationPositionLookup lookup;
         lookup.setPosition(QStringLiteral("s1"), QVector3D(1, 2, 3));
-        cave.setStationPositionLookup(lookup);
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
         const QList<cwTrip::KnownStation> known = trip->knownStations();
         CHECK(namesOf(known) == QStringList({QStringLiteral("s1"), QStringLiteral("s2")}));
@@ -485,7 +492,7 @@ TEST_CASE("cwTrip::knownStations unions every source that names a station",
     }
 
     SECTION("an attachment gets the harvest's names and the solve's alike") {
-        cwTrip* trip = attachmentWithSplitSources(&cave);
+        cwTrip* trip = attachmentWithSplitSources(cave);
 
         const QList<cwTrip::KnownStation> known = trip->knownStations();
         CHECK(namesOf(known) == QStringList({QStringLiteral("a1"),
@@ -501,12 +508,12 @@ TEST_CASE("cwTrip::knownStations unions every source that names a station",
         // key back would show the station in a case its author never used.
         cwTrip* trip = new cwTrip();
         trip->setStationPrefix(QStringLiteral("A"));
-        cave.addTrip(trip);
+        cave->addTrip(trip);
         addShot(trip, QStringLiteral("S1"), QStringLiteral("S2"));
 
         cwStationPositionLookup lookup;
         lookup.setPosition(QStringLiteral("a.s1"), QVector3D(1, 2, 3));
-        cave.setStationPositionLookup(lookup);
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
         const QList<cwTrip::KnownStation> known = trip->knownStations();
         CHECK(namesOf(known) == QStringList({QStringLiteral("S1"), QStringLiteral("S2")}));
@@ -514,7 +521,7 @@ TEST_CASE("cwTrip::knownStations unions every source that names a station",
     }
 
     SECTION("stations come out in natural order, counting the way a caver does") {
-        cwTrip* trip = addExternalTrip(&cave, QStringLiteral("Topo 1"));
+        cwTrip* trip = addExternalTrip(cave, QStringLiteral("Topo 1"));
         trip->setExternalStations({QStringLiteral("a10"),
                                    QStringLiteral("a2"),
                                    QStringLiteral("a1")});
@@ -531,8 +538,11 @@ TEST_CASE("cwTrip::knownStationNames answers for a snapshot as the live trip doe
     // The worker-side passes hold a cwTripData, not a trip. They must not get a
     // second opinion — a snapshot carries no cave lookup, so the solved names it
     // cannot derive are handed in.
-    cwCave cave;
-    cwTrip* trip = attachmentWithSplitSources(&cave);
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = attachmentWithSplitSources(cave);
 
     const QStringList snapshot =
         cwTrip::knownStationNames(trip->data(), {QStringLiteral("a2"), QStringLiteral("b1")});
@@ -560,7 +570,7 @@ TEST_CASE("cwTrip::knownStationsChanged is the one pulse for knownStations",
     SECTION("the cave's solve fires it") {
         cwStationPositionLookup lookup;
         lookup.setPosition(QStringLiteral("topo_1.a1"), QVector3D(1, 2, 3));
-        cave->setStationPositionLookup(lookup);
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
         CHECK(spy.count() == 1);
     }
 
@@ -804,7 +814,7 @@ TEST_CASE("The whole-cave window owns every station no sibling prefix claims",
     lookup.setPosition(QStringLiteral("r1"), QVector3D(1, 2, 3));
     lookup.setPosition(QStringLiteral("r2"), QVector3D(4, 5, 6));
     lookup.setPosition(QStringLiteral("side.s1"), QVector3D(7, 8, 9));
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     QMap<QString, QVector3D> byName;
     for (const auto& station : window->solvedStations()) {

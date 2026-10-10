@@ -44,6 +44,12 @@ public:
 
     QMap<QString, QVector3D> positions() const;
 
+    //! The stations whose names start with \a prefix (case-insensitively),
+    //! keyed by the rest of the name. An empty prefix answers this lookup.
+    cwStationPositionLookup scoped(const QString& prefix) const;
+
+    bool operator==(const cwStationPositionLookup& other) const = default;
+
 private:
     QMap<QString, QVector3D> StationPositions;
 };

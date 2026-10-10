@@ -31,7 +31,8 @@ public:
 
     explicit cwCaptureCenterline(QGraphicsItem* parent = nullptr);
 
-    // One network per cave, each holding its stations' positions and shots.
+    // One network per node, each holding the stations the node owns, named
+    // as the node names them, with their positions and shots.
     static QList<cwSurveyNetwork> caveNetworks(const cwCavingRegion* region);
 
     void setNetworks(const QList<cwSurveyNetwork>& networks);

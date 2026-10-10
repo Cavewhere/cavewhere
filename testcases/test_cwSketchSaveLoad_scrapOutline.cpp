@@ -204,7 +204,7 @@ TEST_CASE("Sketch-derived scraps round trip through a full project save/load",
 
         // Drive the line plot so the cave's global station lookup populates.
         root->linePlotManager()->waitToFinish();
-        REQUIRE(!cave->stationPositionLookup().isEmpty());
+        REQUIRE(!cave->scopedPositions().isEmpty());
 
         // Name the sketch before inserting — a nameless sketch writes to
         // "cwsketch" (no stem), and cwSaveLoad's signal-driven save path

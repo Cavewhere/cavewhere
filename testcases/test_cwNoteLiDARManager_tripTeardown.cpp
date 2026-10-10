@@ -89,7 +89,7 @@ namespace {
 
             //A solved centerline is half of what makes a dirty note runnable;
             //stations on the note are the other half.
-            REQUIRE_FALSE(cave->stationPositionLookup().positions().isEmpty());
+            REQUIRE_FALSE(cave->scopedPositions().positions().isEmpty());
 
             auto model = trip->notesLiDAR();
             REQUIRE(model->rowCount() == 0);

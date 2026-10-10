@@ -212,7 +212,7 @@ void cwLinePlotLabelView::removeTrip(cwTrip* trip) {
  * @param node
  */
 void cwLinePlotLabelView::connectNode(const cwSurveyNode *node) {
-    connect(node, &cwSurveyNode::stationPositionPositionChanged, this, &cwLinePlotLabelView::updateStations);
+    connect(node, &cwSurveyNode::scopedPositionsChanged, this, &cwLinePlotLabelView::updateStations);
     connect(node, &cwSurveyNode::insertedTrips, this, &cwLinePlotLabelView::tripsInserted);
     connect(node, &cwSurveyNode::beginRemoveTrips, this, &cwLinePlotLabelView::tripsRemoved);
     connect(node, &cwSurveyNode::insertedNodes, this, &cwLinePlotLabelView::nodesInserted);

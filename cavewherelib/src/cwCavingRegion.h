@@ -207,6 +207,28 @@ public:
 
     cwProject* parentProject() const;
 
+    //! Every station the last solve placed, keyed by its full cavern name: the
+    //! node label path, then the trip scope, then the station
+    //! ("fisher_ridge.upper.a1"). Written by cwLinePlotManager after each solve.
+    cwStationPositionLookup stationPositions() const { return m_stationPositions; }
+    void setStationPositions(const cwStationPositionLookup& positions);
+
+    //! The last solve's shot topology, keyed like stationPositions().
+    cwSurveyNetwork network() const { return m_network; }
+    void setNetwork(const cwSurveyNetwork& network);
+
+    //! stationPositions() restricted to the names under \a prefix, keyed by
+    //! the rest of each name. Cached per prefix until the positions change.
+    cwStationPositionLookup scopedPositions(const QString& prefix) const;
+
+    //! network() restricted the same way, cached until the network changes.
+    cwSurveyNetwork scopedNetwork(const QString& prefix) const;
+
+    //! True while a solve is under way, so stationPositions() describes the
+    //! survey as it was before the latest edit.
+    bool isStationPositionsStale() const { return m_stationPositionsStale; }
+    void setStationPositionsStale(bool isStale) { m_stationPositionsStale = isStale; }
+
     void setData(const cwCavingRegionData &data);
     cwCavingRegionData data() const;
 
@@ -254,6 +276,14 @@ signals:
     //! whole move — ties, re-keyed equates, traveling fixes — is in place.
     void surveyMoved(QObject* subject);
 
+    //! stationPositions() changed. Relayed down the tree as each node's
+    //! cwSurveyNode::scopedPositionsChanged.
+    void positionsChanged();
+
+    //! network() changed. Relayed down the tree as each node's
+    //! cwSurveyNode::scopedNetworkChanged.
+    void networkChanged();
+
 public slots:
 
 protected:
@@ -275,6 +305,14 @@ private:
     cwEquateModel* m_equates = nullptr;
 
     cwUnits::UnitSystem m_unitSystem = cwUnits::Metric;
+
+    cwStationPositionLookup m_stationPositions;
+    cwSurveyNetwork m_network;
+    bool m_stationPositionsStale = false;
+    // Keyed by prefix and kept until the next publish, so a prefix left behind
+    // by a rename or move lingers until the re-solve lands.
+    mutable QHash<QString, cwStationPositionLookup> m_scopedPositions;
+    mutable QHash<QString, cwSurveyNetwork> m_scopedNetworks;
 
     // cwCavingRegion& copy(const cwCavingRegion& object);
 

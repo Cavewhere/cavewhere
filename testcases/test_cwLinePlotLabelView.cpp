@@ -3,6 +3,7 @@
 
 //Cavewhere includes
 #include "cwLinePlotLabelView.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwTrip.h"
@@ -95,7 +96,7 @@ TEST_CASE("Removing an empty cave before a cave with data does not crash cwLineP
     // next station-position update if the view kept a stale reference.
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 
-    dataCave->setStationPositionLookup(cwStationPositionLookup());
+    SurveyTreeTestHelper::setScopedPositions(dataCave, cwStationPositionLookup());
     plotManager->waitToFinish();
 }
 

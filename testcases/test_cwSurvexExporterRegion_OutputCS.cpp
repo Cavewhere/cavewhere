@@ -239,5 +239,5 @@ TEST_CASE("The solve runs in the project's own local projection",
 
     INFO(plotManager->solveErrorMessage().toStdString());
     CHECK_FALSE(plotManager->hasSolveError());
-    CHECK(region->cave(0)->stationPositionLookup().hasPosition(QStringLiteral("a2")));
+    CHECK(region->cave(0)->scopedPositions().hasPosition(QStringLiteral("a2")));
 }

@@ -1,5 +1,6 @@
 //Our includes
 #include "cwCave.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwFixStation.h"
@@ -189,7 +190,7 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole flags empty and unknown
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    fixture.cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
 
     // A blank row names no survey station — survex silently drops such a fix,
     // so it is flagged rather than treated as a valid anchor.
@@ -206,7 +207,7 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole flags empty and unknown
     // A station appearing in the survey clears the flag live.
     cwSurveyNetwork grown;
     grown.addShot(QStringLiteral("A1"), QStringLiteral("ZZ9"));
-    fixture.cave->setSurveyNetwork(grown);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, grown);
     CHECK(fixture.stationError().isEmpty());
 }
 
@@ -218,7 +219,7 @@ TEST_CASE("cwFixStationDiagnosticsModel StationErrorRole ignores surrounding whi
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    fixture.cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
 
     fixture.edit(cwFixStationModel::StationNameRole, QStringLiteral(" A1 "));
     CHECK(fixture.stationError().isEmpty());
@@ -303,7 +304,7 @@ TEST_CASE("A solve refreshes the diagnostics without touching the source model",
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    fixture.cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(fixture.cave, network);
 
     CHECK(sourceSpy.count() == 0);
     REQUIRE(proxySpy.count() == 1);

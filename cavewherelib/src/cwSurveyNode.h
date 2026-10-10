@@ -364,14 +364,19 @@ public:
     QHash<int, QByteArray> roleNames() const;
     Q_INVOKABLE QModelIndex index(int row, int column = 0, const QModelIndex &parent = QModelIndex()) const;
 
-    cwStationPositionLookup stationPositionLookup() const;
-    void setStationPositionLookup(const cwStationPositionLookup& model);
+    //! The label path from the top-level node down to this one, each label
+    //! followed by "." — the prefix every station in this node's subtree
+    //! carries in the region's lookup. Empty for the root, and for a node no
+    //! parent lists.
+    QString scopePrefix() const;
 
-    cwSurveyNetwork network() const;
-    void setSurveyNetwork(const cwSurveyNetwork& network);
+    //! The region's solved positions for this node's subtree, keyed by the
+    //! name below this node ("upper.a1" in a cave holding a section "upper").
+    //! Empty for a node outside a region or one no parent lists.
+    cwStationPositionLookup scopedPositions() const;
 
-    void setStationPositionLookupStale(bool isStale);
-    bool isStationPositionLookupStale() const;
+    //! The region's solved network, scoped the same way.
+    cwSurveyNetwork scopedNetwork() const;
 
     QList< cwStation > stations() const;
 
@@ -451,7 +456,7 @@ signals:
     //! nothing.
     //!
     //! Deliberately not relayed back into each trip's knownStationsChanged, the
-    //! way stationPositionPositionChanged is. A trip's harvest is its own field,
+    //! way scopedPositionsChanged is. A trip's harvest is its own field,
     //! so it already pulses for itself and the relay would double every one of
     //! those pulses; the asymmetry is honest, because positions do move for
     //! every trip at once and a harvest does not.
@@ -463,8 +468,14 @@ signals:
     //! fixStationTable()'s row count changed.
     void fixStationCountChanged();
 
-    void stationPositionPositionChanged();
-    void surveyNetworkChanged();
+    //! The region's positions changed, so scopedPositions() may have. Relayed
+    //! down from the region one hop per level, and from each node to its trips
+    //! as cwTrip::solvedStationsChanged.
+    void scopedPositionsChanged();
+
+    //! The region's network changed, so scopedNetwork() may have. Relayed down
+    //! the same way.
+    void scopedNetworkChanged();
 
     void externalCenterlineChanged();
 
@@ -520,11 +531,8 @@ private:
     //! Declared after the two models it concatenates.
     QConcatenateTablesProxyModel* const m_fixStationTable;
 
-    cwStationPositionLookup m_stationPositionLookup;
-    bool m_stationPositionLookupStale;
     QUuid m_id;
 
-    cwSurveyNetwork m_network;
     cwSanitizedNameSet m_tripNames;
     cwSanitizedNameSet m_childNames;
 
@@ -889,24 +897,6 @@ inline cwLength *cwSurveyNode::depth() const
   */
 inline int cwSurveyNode::indexOf(cwTrip* trip) const {
     return m_trips.indexOf(trip);
-}
-
-/**
-  \brief Gets the station position model for the node
-  */
-inline cwStationPositionLookup cwSurveyNode::stationPositionLookup() const
-{
-    return m_stationPositionLookup;
-}
-
-/**
- * @brief cwSurveyNode::network
- * @return This returns a lookup for stations to station neighbors. This is undirected graph
- * of stations.
- */
-inline cwSurveyNetwork cwSurveyNode::network() const
-{
-    return m_network;
 }
 
 /**

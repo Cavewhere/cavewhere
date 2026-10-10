@@ -90,9 +90,9 @@ TEST_CASE("Export/Import Compass", "[Compass]") {
 
     cwCave* importedCave = importedRegion->cave(0);
 
-    CHECK(loadedCave->stationPositionLookup().positions().size() == 60);
-    CHECK(importedCave->stationPositionLookup().positions().size() != 0);
-    checkStationLookup(loadedCave->stationPositionLookup(), importedCave->stationPositionLookup());
+    CHECK(loadedCave->scopedPositions().positions().size() == 60);
+    CHECK(importedCave->scopedPositions().positions().size() != 0);
+    checkStationLookup(loadedCave->scopedPositions(), importedCave->scopedPositions());
 }
 
 TEST_CASE("Export invalid data - ISSUE #115", "[Compass]") {

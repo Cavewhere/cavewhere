@@ -404,7 +404,7 @@ TEST_CASE("a mirrored up-directory include still solves from the project copy",
          << fixture->rootData->linePlotManager()->solveErrorMessage().toStdString());
     CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
 
-    const cwStationPositionLookup lookup = fixture->cave->stationPositionLookup();
+    const cwStationPositionLookup lookup = fixture->cave->scopedPositions();
     const QString scope = tripScopeLabel(fixture->trip);
     CHECK(lookup.hasPosition(scope + QStringLiteral(".dusk.d1")));
     CHECK(lookup.hasPosition(scope + QStringLiteral(".dusk.d3")));
@@ -711,7 +711,7 @@ void checkAttachmentIsReadable(SavedProjectFixture* fixture)
     INFO("solve error: "
          << fixture->rootData->linePlotManager()->solveErrorMessage().toStdString());
     CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
-    CHECK(fixture->cave->stationPositionLookup().hasPosition(
+    CHECK(fixture->cave->scopedPositions().hasPosition(
         tripScopeLabel(fixture->trip) + QStringLiteral(".simple.a1")));
 }
 
@@ -786,7 +786,7 @@ TEST_CASE("manager attach solves a Compass .dat whose station names contain dots
 
     // Both surveys of the multi-survey .dat land under the trip's scope,
     // dotted names intact.
-    const cwStationPositionLookup lookup = fixture->cave->stationPositionLookup();
+    const cwStationPositionLookup lookup = fixture->cave->scopedPositions();
     const QString scope = tripScopeLabel(fixture->trip);
     CHECK(lookup.hasPosition(scope + QStringLiteral(".s1")));
     CHECK(lookup.hasPosition(scope + QStringLiteral(".sa1.1")));
@@ -1523,8 +1523,8 @@ TEST_CASE("a missing copy costs its own survey, not the region's plot",
 
     INFO("solve error: " << linePlotManager->solveErrorMessage().toStdString());
     REQUIRE_FALSE(linePlotManager->hasSolveError());
-    REQUIRE(fixture->cave->stationPositionLookup().hasPosition(missingKey));
-    REQUIRE(fixture->cave->stationPositionLookup().hasPosition(survivorKey));
+    REQUIRE(fixture->cave->scopedPositions().hasPosition(missingKey));
+    REQUIRE(fixture->cave->scopedPositions().hasPosition(survivorKey));
 
     const QString copyPath = fixture->saveLoad()
         ->externalCenterlineDir(fixture->trip)
@@ -1547,8 +1547,8 @@ TEST_CASE("a missing copy costs its own survey, not the region's plot",
     INFO("solve error: " << linePlotManager->solveErrorMessage().toStdString());
     CHECK_FALSE(linePlotManager->hasSolveError());
     CHECK_FALSE(manager->missingCopyPath(missingOwnerId).isEmpty());
-    CHECK(fixture->cave->stationPositionLookup().hasPosition(survivorKey));
-    CHECK_FALSE(fixture->cave->stationPositionLookup().hasPosition(missingKey));
+    CHECK(fixture->cave->scopedPositions().hasPosition(survivorKey));
+    CHECK_FALSE(fixture->cave->scopedPositions().hasPosition(missingKey));
 
     // Putting the file back is the other way out, and a fresh scan is what
     // notices it — nothing watches a path that is not there.
@@ -1563,8 +1563,8 @@ TEST_CASE("a missing copy costs its own survey, not the region's plot",
     CHECK(manager->missingCopyPath(missingOwnerId).isEmpty());
     INFO("solve error: " << linePlotManager->solveErrorMessage().toStdString());
     CHECK_FALSE(linePlotManager->hasSolveError());
-    CHECK(fixture->cave->stationPositionLookup().hasPosition(missingKey));
-    CHECK(fixture->cave->stationPositionLookup().hasPosition(survivorKey));
+    CHECK(fixture->cave->scopedPositions().hasPosition(missingKey));
+    CHECK(fixture->cave->scopedPositions().hasPosition(survivorKey));
 }
 
 // ---------------------------------------------------------------------

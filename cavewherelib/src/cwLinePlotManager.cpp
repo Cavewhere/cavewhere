@@ -314,7 +314,7 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
     connectEquates(Region->equates());
     connectNodeInputs();
 
-    rerunIfAnyNodeIsStale(Region);
+    rerunIfStale(Region);
 
     // Recompute the external-centerline watch set + missing-source probe.
     // Done after the per-cave/trip connects so any subsequent attach/detach
@@ -528,30 +528,11 @@ void cwLinePlotManager::waitToFinish()
 }
 
 /**
-  \brief Re-solves when any node in the region holds a stale station lookup
+  \brief Re-solves when the region's station positions are stale
   */
-void cwLinePlotManager::rerunIfAnyNodeIsStale(cwCavingRegion* region) {
-    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
-    const bool anyNodeIsStale = std::any_of(nodes.cbegin(), nodes.cend(), [](const cwSurveyNode* node) {
-        return node->isStationPositionLookupStale();
-    });
-
-    if(anyNodeIsStale) {
+void cwLinePlotManager::rerunIfStale(cwCavingRegion* region) {
+    if(region->isStationPositionsStale()) {
         runSurvex();
-    }
-}
-
-/**
- * @brief cwLinePlotManager::markCaveStationsAsStale
- *
- * This will go through every node in the region and mark it as stale
- * This is useful, to make sure that the node data is up to date. If the user
- * closes cavewhere before the line plot is re-processed.
- */
-void cwLinePlotManager::setCaveStationLookupAsStale(bool isStale)
-{
-    for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
-        node->setStationPositionLookupStale(isStale);
     }
 }
 
@@ -665,7 +646,7 @@ QFuture<void> cwLinePlotManager::doRun() {
             return solve;
         }
 
-        setCaveStationLookupAsStale(true);
+        Region->setStationPositionsStale(true);
         m_restarter.restart([this]() {
             if (Region.isNull()) {
                 finishSolving();
@@ -1002,17 +983,17 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     // any cave/trip/scrap deleted before the task finished.
     const ResolvedResults resolved = resolveResultsToLive(Region, results);
 
-    //Update all the positions for all the nodes that need to be updated
-    //Also update the length and depth information
+    //One lookup and one network for the whole region; every node reads its
+    //own scoped view of them.
+    if(results.hasRegionStationPositionsChanged()) {
+        Region->setStationPositions(results.regionStationPositions());
+    }
+    if(results.hasRegionNetworkChanged()) {
+        Region->setNetwork(results.regionNetwork());
+    }
+
+    //Update the length and depth of every node the solve measured
     for(const auto& [node, nodeData] : resolved.nodes.asKeyValueRange()) {
-        if(nodeData.hasStationPositionsChanged()) {
-            node->setStationPositionLookup(nodeData.stationPositions());
-        }
-
-        if(nodeData.hasNetworkChanged()) {
-            node->setSurveyNetwork(nodeData.network());
-        }
-
         if(nodeData.hasDepthLengthChanged()) {
             //Update the node's depth and length
             double length = cwUnits::convert(nodeData.length(), cwUnits::Meters, (cwUnits::LengthUnit)node->length()->unit());
@@ -1041,16 +1022,15 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     // don't rebuild on every line-plot completion triggered by unrelated
     // cave data (labels, calibration, etc.). Note this compares topology only —
     // a positions-only re-solve lands here equal, which is why anything that
-    // cares about where a station moved watches the cave's lookup instead.
-    const cwSurveyNetwork newNetwork = results.regionNetwork();
+    // cares about where a station moved watches the region's lookup instead.
+    const cwSurveyNetwork newNetwork = Region->network();
     if (newNetwork != m_lastPublishedNetwork) {
         m_lastPublishedNetwork = newNetwork;
         m_surveyNetworkSource->setSurveyNetwork(
             QtFuture::makeReadyValueFuture(Monad::Result<cwSurveyNetwork>(newNetwork)));
     }
 
-    //Mark all nodes as up todate
-    setCaveStationLookupAsStale(false);
+    Region->setStationPositionsStale(false);
 
     emit stationPositionInCavesChanged(resolved.nodes.keys());
     emit stationPositionInTripsChanged(cw::toList(resolved.trips));

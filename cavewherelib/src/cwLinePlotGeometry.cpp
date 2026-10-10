@@ -23,16 +23,17 @@
 
 namespace {
 
-// A node's station positions keyed by canonical station name, built once per
-// node so each of its trips can resolve the world position of any station it
-// references.
-QHash<QString, QVector3D> nodeStationPositions(const cwCaveData& node)
+// The region's solved positions as one node's trips name them: keyed by the
+// canonical name below the node's label path, so each trip resolves the world
+// position of any station it references.
+QHash<QString, QVector3D> nodeStationPositions(const cwStationPositionLookup& stationPositions,
+                                               const QString& nodePrefix)
 {
-    const QMap<QString, QVector3D> positions = node.stationPositionModel.positions();
+    const QMap<QString, QVector3D> positions = stationPositions.scoped(nodePrefix).positions();
     QHash<QString, QVector3D> out;
     out.reserve(positions.size());
     for (auto iter = positions.constBegin(); iter != positions.constEnd(); ++iter) {
-        out.insert(cwStation::canonicalKey(iter.key()), iter.value());
+        out.insert(iter.key(), iter.value());
     }
     return out;
 }
@@ -234,15 +235,16 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
 // and returns their extent.
 ScopeExtent emitOwnTrips(const cwCaveData& node,
                          const cwScopeLabels& scopeLabels,
+                         const cwStationPositionLookup& regionPositions,
                          const cwSurveyNetwork& network,
                          const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode,
                          cwLinePlotGeometry::Result& result)
 {
-    const QHash<QString, QVector3D> stationPositions = nodeStationPositions(node);
-
     // Network keys are region-wide ("fisher_ridge.topo1.<tail>"); the node's
-    // lookup strips this node's prefix, so external scopes bridge through it.
+    // positions strip this node's prefix, so external scopes bridge through it.
     const QString nodePrefix = scopeLabels.prefix(node.id);
+    const QHash<QString, QVector3D> stationPositions =
+        nodeStationPositions(regionPositions, nodePrefix);
     const QHash<QUuid, QString>& tripLabels = scopeLabels.tripLabels(node.id);
 
     ScopeExtent nodeExtent;
@@ -419,13 +421,16 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
 // length and depth, and returns that subtree extent for the parent to fold.
 ScopeExtent emitSubtree(const cwCaveData& node,
                         const cwScopeLabels& scopeLabels,
+                        const cwStationPositionLookup& regionPositions,
                         const cwSurveyNetwork& network,
                         const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode,
                         cwLinePlotGeometry::Result& result)
 {
-    ScopeExtent subtreeExtent = emitOwnTrips(node, scopeLabels, network, splayTipsByNode, result);
+    ScopeExtent subtreeExtent =
+        emitOwnTrips(node, scopeLabels, regionPositions, network, splayTipsByNode, result);
     for (const cwCaveData& child : node.nodes) {
-        subtreeExtent.absorb(emitSubtree(child, scopeLabels, network, splayTipsByNode, result));
+        subtreeExtent.absorb(
+            emitSubtree(child, scopeLabels, regionPositions, network, splayTipsByNode, result));
     }
 
     // Always a real measurement: a node that resolved no centerline is length
@@ -445,6 +450,7 @@ ScopeExtent emitSubtree(const cwCaveData& node,
 
 Monad::Result<cwLinePlotGeometry::Result>
 cwLinePlotGeometry::generate(const cwCavingRegionData& region,
+                             const cwStationPositionLookup& stationPositions,
                              const cwSurveyNetwork& network,
                              const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode)
 {
@@ -455,7 +461,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
     const cwScopeLabels scopeLabels(region);
 
     for (const cwCaveData& cave : region.caves) {
-        emitSubtree(cave, scopeLabels, network, splayTipsByNode, result);
+        emitSubtree(cave, scopeLabels, stationPositions, network, splayTipsByNode, result);
     }
 
     result.points.squeeze();

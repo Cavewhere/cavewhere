@@ -8,6 +8,7 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 #include "LoadProjectHelper.h"
+#include "SurveyTreeTestHelper.h"
 #include <catch2/catch_approx.hpp>
 
 //Cavewhere includes
@@ -262,7 +263,7 @@ TEST_CASE("Check that auto calculate work outside of trip", "[cwScrap]") {
         // auto plotManager = root->linePlotManager();
         // plotManager->waitToFinish();
 
-        // CHECK(!project->cavingRegion()->cave(0)->stationPositionLookup().isEmpty());
+        // CHECK(!project->cavingRegion()->cave(0)->scopedPositions().isEmpty());
 
         root->futureManagerModel()->waitForFinished();
 
@@ -592,11 +593,11 @@ TEST_CASE("Auto-calculated note transform accounts for grid convergence", "[cwSc
         cwStationPositionLookup lookup;
         lookup.setPosition(QStringLiteral("a1"), QVector3D(0.0f, 0.0f, 0.0f));
         lookup.setPosition(QStringLiteral("a2"), QVector3D(0.0f, 10.0f, 0.0f));
-        cave->setStationPositionLookup(lookup);
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
         cwSurveyNetwork network;
         network.addShot(QStringLiteral("a1"), QStringLiteral("a2"));
-        cave->setSurveyNetwork(network);
+        SurveyTreeTestHelper::setScopedNetwork(cave, network);
 
         cwNoteStation s1;
         s1.setName(QStringLiteral("a1"));

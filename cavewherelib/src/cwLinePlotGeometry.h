@@ -30,9 +30,13 @@
  *
  * A trip attached to an external centerline owns no cwSurveyChunk — its shot
  * topology exists only in the solved survey network. For those scopes the
- * segments are read from `network` instead (coordinates still come from the
- * node's position lookup, so both paths are in the project's local
- * projection frame). Pass an empty network when there are no external scopes.
+ * segments are read from `network` instead (coordinates still come from
+ * `stationPositions`, so both paths are in the project's local projection
+ * frame). Pass an empty network when there are no external scopes.
+ *
+ * `stationPositions` is the region's solved lookup, keyed by full cavern name
+ * (cwCavingRegion::stationPositions): a node's station resolves under the
+ * node's label path, then its trip's scope.
  *
  * Vertices are de-shared per shot: each drawn shot owns its own two endpoint
  * vertices (points[2i] = from, points[2i+1] = to), so a station reused by
@@ -106,6 +110,7 @@ public:
 
     static Monad::Result<Result> generate(
         const cwCavingRegionData& region,
+        const cwStationPositionLookup& stationPositions,
         const cwSurveyNetwork& network = cwSurveyNetwork(),
         const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode = {});
 };

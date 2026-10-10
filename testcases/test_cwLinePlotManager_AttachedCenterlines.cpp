@@ -407,6 +407,6 @@ TEST_CASE("Tying an attached file's dropped survey in clears its warning on the 
     INFO("cavern log after the tie:\n" << manager.cavernLog().toStdString());
     REQUIRE_FALSE(manager.hasSolveError());
 
-    CHECK(cave->stationPositionLookup().hasPosition(QStringLiteral("partb.b3")));
+    CHECK(cave->scopedPositions().hasPosition(QStringLiteral("partb.b3")));
     CHECK_FALSE(unconnectedStationsEntry(cave->errorModel()).has_value());
 }

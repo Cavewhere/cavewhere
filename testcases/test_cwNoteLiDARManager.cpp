@@ -70,7 +70,7 @@ TEST_CASE("cwNoteLiDARManager no crash when caves cleared during triangulation",
     auto* trip = cave->trip(0);
     auto* lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
-    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+    REQUIRE(cave->scopedPositions().positions().size() == 10);
 
     const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());
@@ -269,7 +269,7 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
     auto* lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
 
-    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+    REQUIRE(cave->scopedPositions().positions().size() == 10);
 
     const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());
@@ -347,7 +347,7 @@ TEST_CASE("cwNoteLiDARManager triangulates LiDAR notes and keeps geometry access
     auto* renderItems = root->regionSceneManager()->items();
     REQUIRE(renderItems != nullptr);
 
-    const cwStationPositionLookup lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup lookup = cave->scopedPositions();
 
     const QList<cwNoteLiDARStation> stations = note->stations();
     for (const StationInput& input : inputs) {
@@ -427,7 +427,7 @@ TEST_CASE("cwNoteLiDARManager reuses render ids when re-triangulating a note", "
     REQUIRE(trip != nullptr);
     auto* lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
-    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+    REQUIRE(cave->scopedPositions().positions().size() == 10);
 
     const QString lidarFile = helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));
     REQUIRE_FALSE(lidarFile.isEmpty());

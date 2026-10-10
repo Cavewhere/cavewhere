@@ -133,7 +133,7 @@ bool cwNoteLiDARManager::DirtyNote::isRunnable() const
         && !trip.isNull()
         && !cave.isNull()
         && note->rowCount() > 0
-        && !cave->stationPositionLookup().positions().isEmpty();
+        && !cave->scopedPositions().isEmpty();
 }
 
 cwNoteLiDARManager::cwNoteLiDARManager(QObject* parent) :

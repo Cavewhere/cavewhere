@@ -76,6 +76,36 @@ bool cwSurveyNetwork::hasPosition(const QString& stationName) const {
     return (dataIterator != stationDataMap.constEnd() && dataIterator->positionIsSet);
 }
 
+cwSurveyNetwork cwSurveyNetwork::scoped(const QString& prefix) const
+{
+    if (prefix.isEmpty()) {
+        return *this;
+    }
+
+    const QString key = cwStation::canonicalKey(prefix);
+    const auto local = [&key](const QString& station) {
+        return station.startsWith(key) ? station.sliced(key.size()) : station;
+    };
+
+    cwSurveyNetwork network;
+    for (auto it = stationDataMap.constBegin(); it != stationDataMap.constEnd(); ++it) {
+        if (!it.key().startsWith(key)) {
+            continue;
+        }
+        const QString station = it.key().sliced(key.size());
+        if (station.isEmpty()) {
+            continue;
+        }
+        for (const QString& neighbor : it.value().neighborList) {
+            network.addShot(station, local(neighbor));
+        }
+        if (it.value().positionIsSet) {
+            network.setPosition(station, it.value().stationPosition);
+        }
+    }
+    return network;
+}
+
 QStringList cwSurveyNetwork::changedStations(const cwSurveyNetwork& firstNetwork, const cwSurveyNetwork& secondNetwork) {
     if (firstNetwork.stationDataMap == secondNetwork.stationDataMap) {
         return {};

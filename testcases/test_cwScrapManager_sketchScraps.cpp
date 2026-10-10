@@ -9,6 +9,7 @@
 
 //Our includes
 #include "asyncfuture.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwClinoReading.h"
@@ -90,7 +91,7 @@ struct Fixture {
             global.setPosition(QString("a%1").arg(i + 1),
                                QVector3D(0.0, i * 10.0, 0.0));
         }
-        cave->setStationPositionLookup(global);
+        SurveyTreeTestHelper::setScopedPositions(cave, global);
 
         tree.setCavingRegion(&region);
         scrapManager.setRegionTreeModel(&tree);

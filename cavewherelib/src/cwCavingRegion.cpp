@@ -118,6 +118,13 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     connect(m_root, &cwSurveyNode::nodesDeleted,
             this, &cwCavingRegion::ownersDeleted);
 
+    //The root relays these down one hop per level, so every node and trip hears
+    //the solve through the tree's own wiring, which a move already rewires.
+    connect(this, &cwCavingRegion::positionsChanged,
+            m_root, &cwSurveyNode::scopedPositionsChanged);
+    connect(this, &cwCavingRegion::networkChanged,
+            m_root, &cwSurveyNode::scopedNetworkChanged);
+
     connect(m_geoReference, &cwGeoReference::localCoordinateSystemChanged,
             this, &cwCavingRegion::defaultFixDatumChanged);
 }
@@ -442,6 +449,8 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
     m_equates->setEquates(data.equates);
 
     clearCaves();
+    setStationPositions(cwStationPositionLookup());
+    setNetwork(cwSurveyNetwork());
 
     QList<cwCave*> newCaves;
     newCaves.reserve(data.caves.size());
@@ -563,4 +572,44 @@ void cwCavingRegion::setUndoStackForChildren() {
 const QHash<QUuid, QString>& cwCavingRegion::caveScopeLabels() const
 {
     return m_root->childScopeLabels();
+}
+
+void cwCavingRegion::setStationPositions(const cwStationPositionLookup& positions)
+{
+    if (m_stationPositions == positions) {
+        return;
+    }
+    m_stationPositions = positions;
+    m_scopedPositions.clear();
+    emit positionsChanged();
+}
+
+void cwCavingRegion::setNetwork(const cwSurveyNetwork& network)
+{
+    //A solve rebuilds the network every run, and a listener that re-solves on
+    //this (the fix-station refresh) would loop if an equal network re-notified.
+    if (m_network == network) {
+        return;
+    }
+    m_network = network;
+    m_scopedNetworks.clear();
+    emit networkChanged();
+}
+
+cwStationPositionLookup cwCavingRegion::scopedPositions(const QString& prefix) const
+{
+    const auto it = m_scopedPositions.constFind(prefix);
+    if (it != m_scopedPositions.constEnd()) {
+        return it.value();
+    }
+    return *m_scopedPositions.insert(prefix, m_stationPositions.scoped(prefix));
+}
+
+cwSurveyNetwork cwCavingRegion::scopedNetwork(const QString& prefix) const
+{
+    const auto it = m_scopedNetworks.constFind(prefix);
+    if (it != m_scopedNetworks.constEnd()) {
+        return it.value();
+    }
+    return *m_scopedNetworks.insert(prefix, m_network.scoped(prefix));
 }

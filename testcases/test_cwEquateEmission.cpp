@@ -322,7 +322,7 @@ TEST_CASE("A within-cave equate draws a native and an external station coinciden
     INFO("driver:\n" << manager.driverSource().toStdString());
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString externalKey = tripScopePrefix(attached) + QStringLiteral("simple.a1");
 
     REQUIRE(lookup.hasPosition(QStringLiteral("1")));
@@ -487,8 +487,8 @@ TEST_CASE("A region equate draws stations in two caves coincident",
     // The tie crosses the cave boundary: each qualified operand decodes back
     // into its own cave's lookup (splitLookupByNode), so the coincidence check
     // reads "2" from Alpha and "y" from Beta.
-    const cwStationPositionLookup& lookupA = caveA->stationPositionLookup();
-    const cwStationPositionLookup& lookupB = caveB->stationPositionLookup();
+    const cwStationPositionLookup& lookupA = caveA->scopedPositions();
+    const cwStationPositionLookup& lookupB = caveB->scopedPositions();
     REQUIRE(lookupA.hasPosition(QStringLiteral("2")));
     REQUIRE(lookupB.hasPosition(QStringLiteral("y")));
 
@@ -547,9 +547,9 @@ TEST_CASE("A region equate ties three caves' stations coincident in one line",
 
     // Each qualified operand decodes back into its own cave's lookup, all three
     // coincident.
-    const cwStationPositionLookup& lookupA = caveA->stationPositionLookup();
-    const cwStationPositionLookup& lookupB = caveB->stationPositionLookup();
-    const cwStationPositionLookup& lookupC = caveC->stationPositionLookup();
+    const cwStationPositionLookup& lookupA = caveA->scopedPositions();
+    const cwStationPositionLookup& lookupB = caveB->scopedPositions();
+    const cwStationPositionLookup& lookupC = caveC->scopedPositions();
     REQUIRE(lookupA.hasPosition(QStringLiteral("2")));
     REQUIRE(lookupB.hasPosition(QStringLiteral("y")));
     REQUIRE(lookupC.hasPosition(QStringLiteral("q")));

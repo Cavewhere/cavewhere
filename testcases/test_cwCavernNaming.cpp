@@ -257,14 +257,14 @@ TEST_CASE("Two-cave pipeline keeps each cave's positions keyed by its own label"
     // Each cave's a1 anchors at the origin; the colliding a2 must NOT
     // share a position across caves. The 10m vs 20m shot distances make
     // any accidental cross-write trivially detectable.
-    CHECK(caveA->stationPositionLookup().position(QStringLiteral("a1"))
+    CHECK(caveA->scopedPositions().position(QStringLiteral("a1"))
           == QVector3D(0.0f, 0.0f, 0.0f));
-    CHECK(caveA->stationPositionLookup().position(QStringLiteral("a2"))
+    CHECK(caveA->scopedPositions().position(QStringLiteral("a2"))
           == QVector3D(0.0f, 10.0f, 0.0f));
 
-    CHECK(caveB->stationPositionLookup().position(QStringLiteral("a1"))
+    CHECK(caveB->scopedPositions().position(QStringLiteral("a1"))
           == QVector3D(0.0f, 0.0f, 0.0f));
-    CHECK(caveB->stationPositionLookup().position(QStringLiteral("a2"))
+    CHECK(caveB->scopedPositions().position(QStringLiteral("a2"))
           == QVector3D(0.0f, 20.0f, 0.0f));
 
     // Per-cave length echoes the shot input; if both caves were merged
@@ -299,9 +299,9 @@ TEST_CASE("Two caves whose names sanitize alike still solve separately",
     INFO("driver:\n" << plotManager->driverSource().toStdString());
     REQUIRE_FALSE(plotManager->hasSolveError());
 
-    CHECK(caveA->stationPositionLookup().position(QStringLiteral("a2"))
+    CHECK(caveA->scopedPositions().position(QStringLiteral("a2"))
           == QVector3D(0.0f, 10.0f, 0.0f));
-    CHECK(caveB->stationPositionLookup().position(QStringLiteral("a2"))
+    CHECK(caveB->scopedPositions().position(QStringLiteral("a2"))
           == QVector3D(0.0f, 20.0f, 0.0f));
     CHECK(caveA->length()->value() == 10.0);
     CHECK(caveB->length()->value() == 20.0);

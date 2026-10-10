@@ -242,7 +242,7 @@ TEST_CASE("Trip-attached centerline resolves stations under <caveLabel>.<tripLab
     // survex_simple.svx defines *begin Simple with stations a1, a2, a3.
     // After cavern's tolower default and our prefix wrapping, the
     // lookup keys are "<tripLabel>.simple.a1" etc.
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString tripPrefix = tripScopeLabel(attached);
 
     const QStringList expectedTails = {QStringLiteral("simple.a1"),
@@ -313,7 +313,7 @@ TEST_CASE("A bare external file cannot collide with the cave's native stations",
     INFO("solve error: " << manager.solveErrorMessage().toStdString());
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
 
     // Four distinct keys: the natives keep the cave-local bare names, the
     // external pair sits one scope deeper with no *begin of its own to add.
@@ -381,7 +381,7 @@ TEST_CASE("Two trips whose names sanitize alike keep separate scopes end to end"
     // Both trips include the same file, so both carry a "simple.a1". They must
     // land under their own labels; if the two derivations disagreed, one set
     // would be missing entirely rather than merely misplaced.
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     for (const QString& label : {firstLabel, secondLabel}) {
         for (const QString& tail : {QStringLiteral("simple.a1"),
                                     QStringLiteral("simple.a3")}) {
@@ -437,7 +437,7 @@ TEST_CASE("Trip-attached centerline emits renderable line geometry",
 
     // The external stations solved and reached the cave lookup — this half
     // works today (it is why the trip's station-list panel populates).
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString tripPrefix = tripScopeLabel(attached);
     const QString a1Key = tripPrefix + QStringLiteral(".simple.a1");
     const QString a2Key = tripPrefix + QStringLiteral(".simple.a2");
@@ -597,7 +597,7 @@ TEST_CASE("Cave-attached centerline skips trip loop and resolves under <caveLabe
 
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     // cave-level attachment unwraps directly inside the cave scope, so the
     // lookup keys reflect the file's own *begin nesting:
     //   nested.entrance.e1 / e2 (from entrance.svx)
@@ -644,7 +644,7 @@ TEST_CASE("Mixed cave: native trip and attached trip both resolve",
 
     REQUIRE_FALSE(manager.hasSolveError());
 
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     // Native trip stations come from "<caveLabel>.N1" / N2 (cavern lowercases)
     // and the lookup strips the cave prefix.
     CHECK(lookup.hasPosition(QStringLiteral("n1")));
@@ -882,7 +882,7 @@ TEST_CASE("Injected manual declination rotates externally attached stations",
     // survex_no_metadata.svx shoots B1→B2 at compass 0 for 10 m with B1
     // fixed at the origin. Declination +90 east swings the true bearing
     // to 90°, so B2 lands 10 m east instead of 10 m north.
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString tripPrefix = tripScopeLabel(attached);
     const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
     REQUIRE(lookup.hasPosition(b2Key));
@@ -930,7 +930,7 @@ TEST_CASE("Project-side scan flag wins over a diverged live-link source",
     CHECK_FALSE(manager.externalCenterlineManager()->fileOwnsDeclination(attached->id()));
 
     // Injection applied → B2 swings east, exactly as in the undiverged case.
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString tripPrefix = tripScopeLabel(attached);
     const QString b2Key = tripPrefix + QStringLiteral(".nometadata.b2");
     REQUIRE(lookup.hasPosition(b2Key));
@@ -974,7 +974,7 @@ TEST_CASE("File-owned declination wins over the trip's CaveWhere setting",
     // (survex calibrate convention), so A2 resolves at bearing -7.2°:
     // x = 10·sin(-7.2°), y = 10·cos(-7.2°). The trip's 90° sentinel must
     // leave no trace.
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString tripPrefix = tripScopeLabel(attached);
     const QString a2Key = tripPrefix + QStringLiteral(".withmetadata.a2");
     REQUIRE(lookup.hasPosition(a2Key));
@@ -1017,8 +1017,8 @@ TEST_CASE("Solved accessors resolve an external trip's local tail names",
 
     // Precondition — the exact mismatch B5 fixes: the cave lookup keys are
     // scoped, so a bare tail misses it.
-    REQUIRE(cave->stationPositionLookup().hasPosition(a1Scoped));
-    REQUIRE_FALSE(cave->stationPositionLookup().hasPosition(QStringLiteral("simple.a1")));
+    REQUIRE(cave->scopedPositions().hasPosition(a1Scoped));
+    REQUIRE_FALSE(cave->scopedPositions().hasPosition(QStringLiteral("simple.a1")));
 
     const cwStationPositionLookup solvedPositions = attached->solvedStationPositions();
     // The trip resolves its own stations by their bare panel names...
@@ -1027,7 +1027,7 @@ TEST_CASE("Solved accessors resolve an external trip's local tail names",
     CHECK(solvedPositions.hasPosition(QStringLiteral("simple.a3")));
     // ...at the same world position the scoped key carries.
     CHECK(solvedPositions.position(QStringLiteral("simple.a1"))
-          == cave->stationPositionLookup().position(a1Scoped));
+          == cave->scopedPositions().position(a1Scoped));
     // The scoped key still resolves too — the view is a superset of the cave
     // data, so a cross-trip tie-in neighbor keeps its position.
     CHECK(solvedPositions.hasPosition(a1Scoped));
@@ -1062,11 +1062,11 @@ TEST_CASE("Native trip solved accessors pass through the cave data unchanged",
     const cwStationPositionLookup solvedPositions = nativeTrip->solvedStationPositions();
     CHECK(solvedPositions.hasPosition(QStringLiteral("n1")));
     CHECK(solvedPositions.hasPosition(QStringLiteral("n2")));
-    CHECK(solvedPositions.positions() == cave->stationPositionLookup().positions());
+    CHECK(solvedPositions.positions() == cave->scopedPositions().positions());
 
     const cwSurveyNetwork solvedNetwork = nativeTrip->solvedNetwork();
     CHECK(solvedNetwork.neighbors(QStringLiteral("n1")).contains(QStringLiteral("n2")));
-    CHECK(solvedNetwork == cave->network());
+    CHECK(solvedNetwork == cave->scopedNetwork());
 }
 
 // B5 site — the name-autocomplete trap. guessNeighborStationName resolves a
@@ -1156,7 +1156,7 @@ TEST_CASE("External scrap resolution keeps dots inside Compass station names",
     REQUIRE(solved.hasPosition(QStringLiteral("sa1.1")));
     REQUIRE(solved.hasPosition(QStringLiteral("sb2.1")));
     CHECK(solved.position(QStringLiteral("sa1.1"))
-          == cave->stationPositionLookup().position(scope + QStringLiteral(".sa1.1")));
+          == cave->scopedPositions().position(scope + QStringLiteral(".sa1.1")));
 
     // Neighbors speak dotted tails too.
     CHECK(attached->solvedNetwork().neighbors(QStringLiteral("sb2.1"))
@@ -1198,7 +1198,7 @@ TEST_CASE("Broken external centerline surfaces SolveError with Step::Cavern",
     // included file). The cavernLog property carries the diagnostic
     // text so CavernOutputPage can surface it.
     CHECK_FALSE(manager.cavernLog().isEmpty());
-    CHECK(lookupHasAnyStationFor(cave->stationPositionLookup()) == false);
+    CHECK(lookupHasAnyStationFor(cave->scopedPositions()) == false);
 }
 
 namespace {
@@ -1317,7 +1317,7 @@ TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
     CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs out")));
 
     // Placed where an ungeoreferenced project puts it: d1 at the frame's origin.
-    const cwStationPositionLookup& lookup = project.attached->stationPositionLookup();
+    const cwStationPositionLookup& lookup = project.attached->scopedPositions();
     REQUIRE(lookup.hasPosition(QStringLiteral("doghill.d1")));
     CHECK(lookup.position(QStringLiteral("doghill.d1")).x() == Catch::Approx(0.0).margin(0.01));
     CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
@@ -1614,7 +1614,7 @@ TEST_CASE("A node fix on a station of an attached file with no fix of its own pl
           > nodeBegin);
 
     REQUIRE_FALSE(manager.hasSolveError());
-    checkPlaced(attached->stationPositionLookup(), QStringLiteral("doghill.d1"));
+    checkPlaced(attached->scopedPositions(), QStringLiteral("doghill.d1"));
     CHECK(attachedFixWarnings(attached).isEmpty());
     CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
 }
@@ -1660,7 +1660,7 @@ TEST_CASE("A node fix on a station of a trip-attached file with no fix of its ow
     CHECK(fixAt < tripBegin);
 
     REQUIRE_FALSE(manager.hasSolveError());
-    checkPlaced(host->stationPositionLookup(), tripScope + QStringLiteral("doghill.d1"));
+    checkPlaced(host->scopedPositions(), tripScope + QStringLiteral("doghill.d1"));
     CHECK(attachedFixWarnings(host).isEmpty());
     CHECK(unconnectedWarnings(attached->errorModel()).isEmpty());
     CHECK(unconnectedWarnings(host->errorModel()).isEmpty());
@@ -1885,7 +1885,7 @@ TEST_CASE("An attached file with no fix of its own sits at the origin beside a f
     const QString originStation = attached->externalStations().first();
     CHECK(driverUpToInclude(manager.driverSource(), includePath)
               .contains(QStringLiteral("*fix %1 0 0 0").arg(originStation)));
-    checkAtOrigin(attached->stationPositionLookup(), originStation);
+    checkAtOrigin(attached->scopedPositions(), originStation);
 
     const QStringList warnings = unfixedFileWarnings(attached);
     REQUIRE(warnings.size() == 1);
@@ -1942,7 +1942,7 @@ TEST_CASE("A trip-attached file with no fix of its own sits at the origin under 
     REQUIRE(tripBegin >= 0);
     CHECK(beforeInclude.indexOf(QStringLiteral("*fix %1 0 0 0").arg(originStation), tripBegin)
           > tripBegin);
-    checkAtOrigin(host->stationPositionLookup(), attached->scopePrefix() + originStation);
+    checkAtOrigin(host->scopedPositions(), attached->scopePrefix() + originStation);
 
     const QStringList warnings = unfixedFileWarnings(host);
     REQUIRE(warnings.size() == 1);

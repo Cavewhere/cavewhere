@@ -9,7 +9,6 @@
 //Our includes
 #include "cwExternalCenterline.h"
 #include "cwTripData.h"
-#include "cwStationPositionLookup.h"
 #include "cwUnits.h"
 #include "cwFixStation.h"
 #include "cwSurveyNodeKind.h"
@@ -17,7 +16,6 @@
 struct cwCaveData {
     QString name;
     QList<cwTripData> trips;
-    cwStationPositionLookup stationPositionModel; //TODO: remove stationPositionModel?
     QUuid id;
     cwUnits::LengthUnit lengthUnit = cwUnits::Meters;
     cwUnits::LengthUnit depthUnit = cwUnits::Meters;

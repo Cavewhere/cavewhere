@@ -42,6 +42,12 @@ public:
     QVector3D position(const QString& stationName) const;
     bool hasPosition(const QString& stationName) const;
 
+    //! The stations whose names start with \a prefix (case-insensitively),
+    //! named by the rest of the name, with their shots and positions. A
+    //! neighbor outside the prefix keeps its full name, so a tie leaving the
+    //! scope still resolves. An empty prefix answers this network.
+    cwSurveyNetwork scoped(const QString& prefix) const;
+
     static QStringList changedStations(const cwSurveyNetwork& n1,
                                        const cwSurveyNetwork& n2);
 

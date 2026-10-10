@@ -5,9 +5,9 @@
 **
 **************************************************************************/
 
-// The line plot at depth N: cavern's names come back as label paths, every
-// station lands in its node's lookup and in each ancestor's (a node's slice is
-// its subtree), and a node's length and depth fold over its subtree.
+// The line plot at depth N: cavern's names come back as label paths into one
+// region lookup, every node's scoped view holds its subtree under the names
+// below it, and a node's length and depth fold over its subtree.
 
 // Catch
 #include <catch2/catch_approx.hpp>
@@ -35,6 +35,7 @@
 
 // Test helpers
 #include "ExternalCenterlineTestHelpers.h"
+#include "cwSignalSpy.h"
 #include "LoadProjectHelper.h"
 #include "SurveyTreeTestHelper.h"
 #include "TestHelper.h"
@@ -88,7 +89,7 @@ cwFixStation fixAt(const QString& station, double easting, double northing)
 QSet<QString> stationNames(const cwSurveyNode* node)
 {
     QSet<QString> names;
-    const QStringList keys = node->stationPositionLookup().positions().keys();
+    const QStringList keys = node->scopedPositions().positions().keys();
     for (const QString& key : keys) {
         names.insert(key.toLower());
     }
@@ -195,7 +196,7 @@ cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
 
 } // namespace
 
-TEST_CASE("A nested tree solves into one lookup per node, each holding its subtree",
+TEST_CASE("A nested tree solves into one region lookup, each node's view holding its subtree",
           "[LinePlotManager][NodeTree]")
 {
     QTemporaryDir tempRoot;
@@ -247,14 +248,15 @@ TEST_CASE("A nested tree solves into one lookup per node, each holding its subtr
           == QSet<QString>{QStringLiteral("a1"), QStringLiteral("a2")});
 
     // One station, three keys: each ancestor sees it under the labels between
-    // it and the station's own node.
-    const QVector3D u2 = tree.section->stationPositionLookup().position(QStringLiteral("u2"));
-    CHECK(tree.sideCave->stationPositionLookup().position(QStringLiteral("upper_level.u2")) == u2);
-    CHECK(tree.folder->stationPositionLookup().position(QStringLiteral("side_cave.upper_level.u2")) == u2);
+    // it and the station's own node, and the region under the whole path.
+    const QVector3D u2 = tree.section->scopedPositions().position(QStringLiteral("u2"));
+    CHECK(tree.sideCave->scopedPositions().position(QStringLiteral("upper_level.u2")) == u2);
+    CHECK(tree.folder->scopedPositions().position(QStringLiteral("side_cave.upper_level.u2")) == u2);
+    CHECK(region.stationPositions().position(tree.section->scopePrefix() + QStringLiteral("u2")) == u2);
 
     // The equates hold: u1 sits on s2, and s1 on k2.
-    const QVector3D u1 = tree.section->stationPositionLookup().position(QStringLiteral("u1"));
-    const QVector3D s2 = tree.sideCave->stationPositionLookup().position(QStringLiteral("s2"));
+    const QVector3D u1 = tree.section->scopedPositions().position(QStringLiteral("u1"));
+    const QVector3D s2 = tree.sideCave->scopedPositions().position(QStringLiteral("s2"));
     CHECK((u1 - s2).length() == Catch::Approx(0.0).margin(kPositionMarginMeters));
     CHECK((u1 - u2).length() == Catch::Approx(kDropLength).margin(kPositionMarginMeters));
 
@@ -273,7 +275,7 @@ TEST_CASE("A nested tree solves into one lookup per node, each holding its subtr
     CHECK(tree.fisherRidge->depth()->value() == Catch::Approx(0.0).margin(kPositionMarginMeters));
 
     // Every trip, at every depth, is drawn and reported as moved.
-    const auto result = cwLinePlotGeometry::generate(region.data(), manager.regionNetwork());
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), manager.regionNetwork());
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -282,6 +284,50 @@ TEST_CASE("A nested tree solves into one lookup per node, each holding its subtr
         CHECK(vertexCountOf(geometry, trip) > 0);
     }
     CHECK(movedTrips.contains(tree.section->trip(0)));
+}
+
+TEST_CASE("A trip two levels down hears exactly one solvedStationsChanged per solve",
+          "[LinePlotManager][NodeTree]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    cwCavingRegion region;
+    const NodeTree tree = buildNodeTree(region, tempRoot);
+    cwTrip* upperSurvey = tree.section->trip(0);
+    REQUIRE(upperSurvey != nullptr);
+    REQUIRE(tree.section->parentNode() == tree.sideCave);
+    REQUIRE(tree.sideCave->parentNode() == tree.folder);
+
+    cwSignalSpy pulseSpy(upperSurvey, &cwTrip::solvedStationsChanged);
+
+    cwLinePlotManager manager;
+    solveRegion(manager, region, tree.tripDirs);
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(pulseSpy.count() == 1);
+
+    // Lengthen the Folder's shot: k2 moves, and the equates carry every level
+    // below it along, the Section included.
+    const QVector3D u1Before = tree.section->scopedPositions().position(QStringLiteral("u1"));
+    cwSurveyChunk* ridgeWalk = tree.trips.first()->chunk(0);
+    ridgeWalk->setData(cwSurveyChunk::ShotDistanceRole, 0, QString::number(kShotLength * 2.0));
+    manager.waitToFinish();
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(tree.section->scopedPositions().position(QStringLiteral("u1")) != u1Before);
+    CHECK(pulseSpy.count() == 2);
+
+    // Move the Section under Fisher Ridge, still two levels down: the trip
+    // hears the pulse through its new parent alone, once per solve.
+    region.moveNode(tree.section, tree.fisherRidge, 0);
+    manager.waitToFinish();
+    REQUIRE_FALSE(manager.hasSolveError());
+    REQUIRE(tree.section->parentNode() == tree.fisherRidge);
+    CHECK(pulseSpy.count() == 3);
+
+    ridgeWalk->setData(cwSurveyChunk::ShotDistanceRole, 0, QString::number(kShotLength * 3.0));
+    manager.waitToFinish();
+    REQUIRE_FALSE(manager.hasSolveError());
+    CHECK(pulseSpy.count() == 4);
 }
 
 TEST_CASE("A Folder's length is the sum of its caves", "[cwLinePlotGeometry][NodeTree]")
@@ -298,20 +344,21 @@ TEST_CASE("A Folder's length is the sum of its caves", "[cwLinePlotGeometry][Nod
                                               cwDistanceReading(QString::number(kDropLength)),
                                               cwClinoReading(QString::number(kStraightDown)));
 
-    // Hand-set solved positions: the geometry reads each node's own lookup.
+    // Hand-set solved positions: the geometry reads each node's stations out
+    // of the region lookup under the node's label path.
     constexpr float kUpperFloor = 5.0f;
     constexpr float kLowerFloor = -20.0f;
     cwStationPositionLookup upperLookup;
     upperLookup.setPosition(QStringLiteral("a1"), QVector3D(0.0f, 0.0f, kUpperFloor));
     upperLookup.setPosition(QStringLiteral("a2"), QVector3D(0.0f, float(kShotLength), kUpperFloor));
-    upper->setStationPositionLookup(upperLookup);
+    SurveyTreeTestHelper::setScopedPositions(upper, upperLookup);
 
     cwStationPositionLookup lowerLookup;
     lowerLookup.setPosition(QStringLiteral("b1"), QVector3D(0.0f, 0.0f, kLowerFloor + float(kDropLength)));
     lowerLookup.setPosition(QStringLiteral("b2"), QVector3D(0.0f, 0.0f, kLowerFloor));
-    lower->setStationPositionLookup(lowerLookup);
+    SurveyTreeTestHelper::setScopedPositions(lower, lowerLookup);
 
-    const auto result = cwLinePlotGeometry::generate(region.data());
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions());
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -378,7 +425,7 @@ TEST_CASE("The depth-2 fixture loads and solves with every trip drawn",
     CHECK(stationNames(sideCave).contains(QStringLiteral("upper_level.d2")));
     CHECK(stationNames(folder).contains(QStringLiteral("side_cave.upper_level.d2")));
 
-    const auto result = cwLinePlotGeometry::generate(region->data(), manager->regionNetwork());
+    const auto result = cwLinePlotGeometry::generate(region->data(), region->stationPositions(), manager->regionNetwork());
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 

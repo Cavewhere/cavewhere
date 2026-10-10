@@ -201,7 +201,7 @@ private:
     // the solve, so every completion path has to reach here.
     void finishSolving();
 
-    void rerunIfAnyNodeIsStale(cwCavingRegion* region);
+    void rerunIfStale(cwCavingRegion* region);
     void connectFixStations(cwSurveyNode* node);
 
     //! Hooks the fix stations of every node in the tree. Safe to repeat: each
@@ -216,7 +216,6 @@ private:
     //! stays invisible.
     void connectEquates(cwEquateModel* equates);
 
-    void setCaveStationLookupAsStale(bool isStale);
     void updateUnconnectedChunkErrors(cwSurveyNode* node, const cwLinePlotTask::LinePlotCaveData& nodeData);
     void clearUnconnectedChunkErrors();
 

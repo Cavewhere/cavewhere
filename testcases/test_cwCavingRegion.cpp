@@ -130,8 +130,7 @@ TEST_CASE("cwCavingRegion setData should reset caves", "[cwCavingRegion]") {
     newData.name = "New Region";
     newData.caves.append(cwCaveData {
         "New Cave",
-        {},
-        cwStationPositionLookup()
+        {}
     });
 
     region.setData(newData);

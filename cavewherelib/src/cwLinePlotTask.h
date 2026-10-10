@@ -99,16 +99,14 @@ public:
         // it (see cwSurvexExporterRegion::Options::externalOutputSystems).
         QHash<QUuid, QString> externalOutputSystems;
 
-        // The previous solve's derived state, keyed by cwSurveyNode::id() for
-        // every node of the tree. The worker
-        // diffs its fresh solve against these to decide which stations actually
-        // moved. This is deliberately not part of cwCaveData: it is input to
-        // change detection, not something a cave is, and it is never saved or
-        // loaded. Empty maps mean "assume everything changed", which is both the
-        // correct answer for a first solve and a safe default for synthetic
-        // callers that build an Input by hand (cwTripLinePlotTask).
-        QHash<QUuid, cwStationPositionLookup> previousStationPositions;
-        QHash<QUuid, cwSurveyNetwork> previousNetworks;
+        // The previous solve's region lookup and network
+        // (cwCavingRegion::stationPositions / network). The worker diffs its
+        // fresh solve against these to decide which stations actually moved.
+        // Empty means "assume everything changed", which is both the correct
+        // answer for a first solve and a safe default for synthetic callers
+        // that build an Input by hand (cwTripLinePlotTask).
+        cwStationPositionLookup previousStationPositions;
+        cwSurveyNetwork previousNetwork;
     };
 
     class LinePlotCaveData {
@@ -117,45 +115,34 @@ public:
 
         void setDepth(double depth);
         void setLength(double length);
-        void setStationPositions(cwStationPositionLookup positionLookup);
         void setSplayTips(cwSplayTipsByStation splayTips);
         void setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results);
-        void setNetwork(cwSurveyNetwork network);
 
         double depth() const;
         double length() const;
-        cwStationPositionLookup stationPositions() const;
         cwSplayTipsByStation splayTips() const;
         QList<cwFindUnconnectedSurveyChunks::Result> unconnectedChunkError() const;
-        cwSurveyNetwork network() const;
 
         bool hasDepthLengthChanged() const;
-        bool hasStationPositionsChanged() const;
-        bool hasNetworkChanged() const;
 
     private:
         bool DepthLengthChanged;
         double Depth;
         double Length;
         QList<cwFindUnconnectedSurveyChunks::Result> UnconnectedChunksErrors;
-
-        bool StationPostionsChanged;
-        bool NetworkChanged;
-        cwStationPositionLookup Lookup;
         cwSplayTipsByStation SplayTips;
-        cwSurveyNetwork Network;
     };
 
     /**
-     * @brief The CaveStationData class
+     * @brief One solve's answer.
      *
      * Identifies the nodes, trips, and scraps whose station positions changed
      * by their stable cwSurveyNode/cwTrip/cwScrap::id() UUID rather than a raw
      * pointer. Only value-type identity crosses the worker boundary; the
      * manager resolves each UUID back to the live object on the main thread.
      *
-     * Also holds the new station lookup that the cave should be update with.  We don't update
-     * the original cave's data directly because of thread safety.
+     * Also holds the region's new station lookup and network, which the
+     * manager writes to the live cwCavingRegion on the main thread.
      */
     class LinePlotResultData {
     public:
@@ -183,6 +170,12 @@ public:
         cwSurveyNetwork regionNetwork() const;
         bool hasRegionNetworkChanged() const;
 
+        //! Every solved station keyed by its full cavern name, set only when
+        //! some station moved, appeared, or vanished since the previous solve.
+        void setRegionStationPositions(cwStationPositionLookup positions);
+        cwStationPositionLookup regionStationPositions() const;
+        bool hasRegionStationPositionsChanged() const;
+
         // Keyed by cwSurveyNode::id(), one entry per node at any depth.
         QHash<QUuid, LinePlotCaveData> Caves;
         QSet<QUuid> Trips;
@@ -193,6 +186,8 @@ public:
         QVector<QUuid> TripUuids;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
+        cwStationPositionLookup RegionStationPositions;
+        bool RegionStationPositionsChanged = false;
 
         void setSolveError(SolveError error) { LastSolveError = std::move(error); }
         bool hasSolveError() const { return LastSolveError.has_value(); }
@@ -360,6 +355,22 @@ inline bool cwLinePlotTask::LinePlotResultData::hasRegionNetworkChanged() const
     return RegionNetworkChanged;
 }
 
+inline void cwLinePlotTask::LinePlotResultData::setRegionStationPositions(cwStationPositionLookup positions)
+{
+    RegionStationPositions = std::move(positions);
+    RegionStationPositionsChanged = true;
+}
+
+inline cwStationPositionLookup cwLinePlotTask::LinePlotResultData::regionStationPositions() const
+{
+    return RegionStationPositions;
+}
+
+inline bool cwLinePlotTask::LinePlotResultData::hasRegionStationPositionsChanged() const
+{
+    return RegionStationPositionsChanged;
+}
+
 /**
  * @brief cwLinePlotTask::LinePlotResultData::setPositions
  * @param positions
@@ -418,21 +429,9 @@ inline void cwLinePlotTask::LinePlotCaveData::setLength(double length)
     DepthLengthChanged = true;
 }
 
-inline void cwLinePlotTask::LinePlotCaveData::setStationPositions(cwStationPositionLookup positionLookup)
-{
-    Lookup = positionLookup;
-    StationPostionsChanged = true;
-}
-
 inline void cwLinePlotTask::LinePlotCaveData::setUnconnectedChunkError(QList<cwFindUnconnectedSurveyChunks::Result> results)
 {
     UnconnectedChunksErrors = results;
-}
-
-inline void cwLinePlotTask::LinePlotCaveData::setNetwork(cwSurveyNetwork network)
-{
-    Network = network;
-    NetworkChanged = true;
 }
 
 inline double cwLinePlotTask::LinePlotCaveData::depth() const
@@ -443,11 +442,6 @@ inline double cwLinePlotTask::LinePlotCaveData::depth() const
 inline double cwLinePlotTask::LinePlotCaveData::length() const
 {
     return Length;
-}
-
-inline cwStationPositionLookup cwLinePlotTask::LinePlotCaveData::stationPositions() const
-{
-    return Lookup;
 }
 
 inline void cwLinePlotTask::LinePlotCaveData::setSplayTips(cwSplayTipsByStation splayTips)
@@ -465,24 +459,9 @@ inline QList<cwFindUnconnectedSurveyChunks::Result> cwLinePlotTask::LinePlotCave
     return UnconnectedChunksErrors;
 }
 
-inline cwSurveyNetwork cwLinePlotTask::LinePlotCaveData::network() const
-{
-    return Network;
-}
-
 inline bool cwLinePlotTask::LinePlotCaveData::hasDepthLengthChanged() const
 {
     return DepthLengthChanged;
-}
-
-inline bool cwLinePlotTask::LinePlotCaveData::hasStationPositionsChanged() const
-{
-    return StationPostionsChanged;
-}
-
-inline bool cwLinePlotTask::LinePlotCaveData::hasNetworkChanged() const
-{
-    return NetworkChanged;
 }
 
 #endif // CWLINEPLOTTASK_H

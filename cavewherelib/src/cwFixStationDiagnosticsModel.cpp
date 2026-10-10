@@ -128,7 +128,7 @@ cwFixStationDiagnosticsModel::cwFixStationDiagnosticsModel(cwSurveyNode* node) :
 
     // A station appearing or disappearing in the survey flips StationErrorRole
     // for any row that named it, so refresh every row when the network changes.
-    connect(m_node, &cwSurveyNode::surveyNetworkChanged, this, [this] {
+    connect(m_node, &cwSurveyNode::scopedNetworkChanged, this, [this] {
         refreshRoles({StationErrorRole});
     });
     // So does an attached file starting or stopping to fix a station, and a
@@ -207,7 +207,7 @@ QString cwFixStationDiagnosticsModel::stationErrorMessage(int row) const
     const QList<cwFixStation>& fixes = m_fixStations->fixStations();
     const cwFixStation& fix = fixes.at(row);
     switch (cwFixStationDiagnostics::classifyStationReference(fix.stationName(),
-                                                             m_node->network())) {
+                                                             m_node->scopedNetwork())) {
     case StationReference::Ok:
         return stationConflictMessage(fixes, row);
     case StationReference::Empty:

@@ -147,7 +147,6 @@ private:
     cwTeamMember loadTeamMember(const CavewhereProto::TeamMember& protoTeamMember);
     cwStation loadStation(const CavewhereProto::Station& protoStation);
     cwShot loadShot(const CavewhereProto::Shot& protoShot);
-    cwStationPositionLookup loadStationPositionLookup(const CavewhereProto::StationPositionLookup& protoStationLookup);
     cwLead loadLead(const CavewhereProto::Lead& protoLead);
     cwDistanceReading distanceReading(const CavewhereProto::DistanceReading& protoDistanceReading);
     cwCompassReading compassReading(const CavewhereProto::CompassReading& protoCompassReading);

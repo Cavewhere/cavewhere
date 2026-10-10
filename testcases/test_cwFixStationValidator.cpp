@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwCave.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
 #include "cwError.h"
@@ -912,7 +913,7 @@ TEST_CASE("revalidate flags a fix whose station name is not in the survey",
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
 
     // A fix on a real station raises nothing.
     cave->fixStations()->appendFixStation(
@@ -949,7 +950,7 @@ TEST_CASE("several broken fixes in one cave collapse into one plural sentence pe
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
 
     for (const QString& name : {QStringLiteral("XYZ"), QStringLiteral("PDQ"), QString(), QString()}) {
         cave->fixStations()->appendFixStation(
@@ -980,7 +981,7 @@ TEST_CASE("revalidate defers a named fix with no network but flags a blank fix",
     // flagged at the cave level.
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
     cave->fixStations()->addFixStation();
     REQUIRE(cave->errorModel()->warningCount() == 1);
     CHECK(warningText(cave)
@@ -1004,7 +1005,7 @@ TEST_CASE("a station appearing in the survey clears the reference warning",
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Depot"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
@@ -1014,7 +1015,7 @@ TEST_CASE("a station appearing in the survey clears the reference warning",
     // without touching the fix (surveyNetworkChanged re-attributes).
     cwSurveyNetwork grown;
     grown.addShot(QStringLiteral("A1"), QStringLiteral("Depot"));
-    cave->setSurveyNetwork(grown);
+    SurveyTreeTestHelper::setScopedNetwork(cave, grown);
     CHECK(cave->errorModel()->warningCount() == 0);
 }
 
@@ -1031,7 +1032,7 @@ TEST_CASE("each fix-station warning targets the first fix it names",
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
     network.addShot(QStringLiteral("A2"), QStringLiteral("A3"));
-    cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
 
     const auto targetOf = [cave](cwErrorTypeId errorTypeId) {
         const QList<cwError> errors = cave->errorModel()->errors()->toList();
@@ -1077,7 +1078,7 @@ TEST_CASE("a second fix on one station flags the later row",
 
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("A1"), QStringLiteral("A2"));
-    cave->setSurveyNetwork(network);
+    SurveyTreeTestHelper::setScopedNetwork(cave, network);
 
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A1"), QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));

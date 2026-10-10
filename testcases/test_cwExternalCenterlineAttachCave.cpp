@@ -178,7 +178,7 @@ void attachAndSolve(SavedProjectFixture* fixture, cwCave* cave, const QString& s
     attachCaveThroughManager(fixture, cave, source);
     drainPipelines(fixture);
     REQUIRE(tryWait(kAttachWaitMs, [cave]() {
-        return !cave->stationPositionLookup().positions().isEmpty();
+        return !cave->scopedPositions().positions().isEmpty();
     }));
 }
 
@@ -188,6 +188,7 @@ cwLinePlotGeometry::Result geometryOf(SavedProjectFixture* fixture)
 {
     const auto result =
         cwLinePlotGeometry::generate(fixture->project->cavingRegion()->data(),
+                                     fixture->project->cavingRegion()->stationPositions(),
                                      fixture->rootData->linePlotManager()->regionNetwork());
     REQUIRE_FALSE(result.hasError());
     return result.value();
@@ -689,18 +690,19 @@ TEST_CASE("Cave attach emits line geometry for Scope trips whose prefix carries 
     // The solve lands through the line-plot pipeline, so give it the attach
     // budget before reading the solved state back.
     REQUIRE(tryWait(kAttachWaitMs, [cave]() {
-        return !cave->stationPositionLookup().positions().isEmpty();
+        return !cave->scopedPositions().positions().isEmpty();
     }));
 
     const auto result =
         cwLinePlotGeometry::generate(fixture->project->cavingRegion()->data(),
+                                     fixture->project->cavingRegion()->stationPositions(),
                                      fixture->rootData->linePlotManager()->regionNetwork());
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
     REQUIRE(geometry.tripUuids.size() == geometry.tripVertexRanges.size());
 
     const QList<QVector3D> solvedPositions =
-        cave->stationPositionLookup().positions().values();
+        cave->scopedPositions().positions().values();
     const auto isSolvedPosition = [&solvedPositions](const QVector3D& point) {
         return std::any_of(solvedPositions.cbegin(), solvedPositions.cend(),
                            [&point](const QVector3D& solved) {
@@ -1193,7 +1195,7 @@ TEST_CASE("A Compass .mak that names a UTM zone but no datum is read in North Am
     INFO("driver:\n" << fixture->rootData->linePlotManager()->driverSource().toStdString());
     INFO("cavern log:\n" << fixture->rootData->linePlotManager()->cavernLog().toStdString());
     REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString a1 = QStringLiteral("compass_zone_no_datum.a1");
     REQUIRE(lookup.hasPosition(a1));
     const QVector3D placed = lookup.position(a1);
@@ -1405,7 +1407,7 @@ TEST_CASE("An attachment on a Section lists its file's fixes",
         // The Section's file is part of the solve too.
         INFO("driver:\n" << fixture->rootData->linePlotManager()->driverSource().toStdString());
         CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
-        CHECK(section->stationPositionLookup().hasPosition(QStringLiteral("doghill.d1")));
+        CHECK(section->scopedPositions().hasPosition(QStringLiteral("doghill.d1")));
     }
 
     SECTION("attached to a trip under the Section")
@@ -1421,7 +1423,7 @@ TEST_CASE("An attachment on a Section lists its file's fixes",
         CHECK(attachedFixStations(cave).isEmpty());
         INFO("driver:\n" << fixture->rootData->linePlotManager()->driverSource().toStdString());
         CHECK_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
-        CHECK(section->stationPositionLookup().hasPosition(trip->scopePrefix()
+        CHECK(section->scopedPositions().hasPosition(trip->scopePrefix()
                                                            + QStringLiteral("doghill.d1")));
     }
 }
@@ -1443,7 +1445,7 @@ TEST_CASE("A file's *fix with no *cs reads in the project's system and says so",
     REQUIRE_FALSE(linePlot->hasSolveError());
 
     // The fix's numbers land as written in the project's frame.
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     REQUIRE(lookup.hasPosition(kBareFixStation));
     const QVector3D placed = lookup.position(kBareFixStation);
     CHECK(placed.x() == Catch::Approx(kBareFixEasting).margin(kBareFixMarginMeters));
@@ -1490,7 +1492,7 @@ TEST_CASE("A file's *fix with no *cs reads in the *cs out the file names itself"
     REQUIRE_FALSE(linePlot->hasSolveError());
     CHECK(linePlot->driverSource().contains(QStringLiteral("*cs out UTM48N\n*cs UTM48N\n*include")));
 
-    const cwStationPositionLookup& lookup = cave->stationPositionLookup();
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
     REQUIRE(lookup.hasPosition(kBareFixStation));
     CHECK(lookup.position(kBareFixStation).x()
           == Catch::Approx(kBareFixEasting).margin(kBareFixMarginMeters));

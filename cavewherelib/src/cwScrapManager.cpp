@@ -1338,8 +1338,8 @@ cwTriangulateInData cwScrapManager::mapScrapToTriangulateInData(cwScrap *scrap) 
         data.setNoteTransform({});
         data.setNoteStation(scrap->stations());
         if(auto* cave = scrap->parentCave()) {
-            data.setStationLookup(cave->stationPositionLookup());
-            data.setSurveyNetwork(cave->network());
+            data.setStationLookup(cave->scopedPositions());
+            data.setSurveyNetwork(cave->scopedNetwork());
         }
         return data;
     }

@@ -112,7 +112,7 @@ TEST_CASE("issue #629: stepping declination with a GLB note does not grow memory
     REQUIRE(trip != nullptr);
     auto* lidarModel = trip->notesLiDAR();
     REQUIRE(lidarModel != nullptr);
-    REQUIRE(cave->stationPositionLookup().positions().size() == 10);
+    REQUIRE(cave->scopedPositions().positions().size() == 10);
 
     const QString lidarFile =
         helper.copyToTempDir(testcasesDatasetPath("lidarProjects/9_15_2025 3.glb"));

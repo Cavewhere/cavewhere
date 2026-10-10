@@ -6,6 +6,7 @@
 
 // Our includes
 #include "cwCaptureCenterline.h"
+#include "cwCavernNaming.h"
 #include "cwCaptureLabelPlacer.h"
 #include "cwSurveyNode.h"
 #include "cwCavingRegion.h"
@@ -44,16 +45,50 @@ QList<cwSurveyNetwork> cwCaptureCenterline::caveNetworks(const cwCavingRegion* r
         return {};
     }
 
+    // Each node draws the stations it owns, named as it names them, so a
+    // station name two caves share stays two stations and nested nodes'
+    // centerlines reach the export along with the top-level caves'. A node
+    // under an attached ancestor owns nothing: the attached node is one
+    // *include and draws its whole file.
+    const auto underAttachedAncestor = [](const cwSurveyNode* node) {
+        for(const cwSurveyNode* ancestor = node->parentNode(); ancestor != nullptr;
+            ancestor = ancestor->parentNode()) {
+            if(!ancestor->externalCenterline().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     QList<cwSurveyNetwork> networks;
-    // Every node in the tree carries its own solve, so nested nodes' centerlines
-    // reach the export as well as the top-level caves'.
     const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
     networks.reserve(nodes.size());
     for(const cwSurveyNode* node : nodes) {
-        cwSurveyNetwork network = node->network();
-        const cwStationPositionLookup stationLookup = node->stationPositionLookup();
-        const QStringList stations = network.stations();
-        for(const QString& station : stations) {
+        if(underAttachedAncestor(node)) {
+            continue;
+        }
+
+        QStringList childPrefixes;
+        if(node->externalCenterline().isEmpty()) {
+            for(const QString& label : node->childScopeLabels()) {
+                childPrefixes.append(cwStation::canonicalKey(cwCavernNaming::scopePrefix(label)));
+            }
+        }
+        const auto ownedByChild = [&childPrefixes](const QString& station) {
+            return std::any_of(childPrefixes.cbegin(), childPrefixes.cend(),
+                               [&station](const QString& prefix) { return station.startsWith(prefix); });
+        };
+
+        const cwSurveyNetwork scoped = node->scopedNetwork();
+        const cwStationPositionLookup stationLookup = node->scopedPositions();
+        cwSurveyNetwork network;
+        for(const QString& station : scoped.stations()) {
+            if(ownedByChild(station)) {
+                continue;
+            }
+            for(const QString& neighbor : scoped.neighbors(station)) {
+                network.addShot(station, neighbor);
+            }
             if(stationLookup.hasPosition(station)) {
                 network.setPosition(station, stationLookup.position(station));
             }

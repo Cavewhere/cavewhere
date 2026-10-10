@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwCave.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCavingRegion.h"
 #include "cwImage.h"
 #include "cwImageResolution.h"
@@ -114,11 +115,11 @@ namespace {
         cwStationPositionLookup lookup;
         lookup.setPosition(QStringLiteral("a1"), QVector3D(0.0f, 0.0f, 0.0f));
         lookup.setPosition(QStringLiteral("a2"), QVector3D(0.0f, 20.0f, 0.0f));
-        cave->setStationPositionLookup(lookup);
+        SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
         cwSurveyNetwork network;
         network.addShot(QStringLiteral("a1"), QStringLiteral("a2"));
-        cave->setSurveyNetwork(network);
+        SurveyTreeTestHelper::setScopedNetwork(cave, network);
 
         cwNoteStation station1;
         station1.setName(QStringLiteral("a1"));

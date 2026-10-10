@@ -1030,7 +1030,7 @@ TEST_CASE("cwSaveLoad should save and load old projects correctly", "[cwSaveLoad
 
         CHECK(cave1->name() == cave2->name());
         CHECK(cave1->tripCount() == cave2->tripCount());
-        checkStationLookup(cave1->stationPositionLookup(), cave2->stationPositionLookup());
+        checkStationLookup(cave1->scopedPositions(), cave2->scopedPositions());
 
         for (int tripIndex = 0; tripIndex < cave1->tripCount(); ++tripIndex) {
             compareTrips(cave1->trip(tripIndex), cave2->trip(tripIndex));

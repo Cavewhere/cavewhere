@@ -114,4 +114,62 @@ inline QByteArray readFile(const QString& path)
     return file.readAll();
 }
 
+//! Stands in for a solve of \a node's subtree: writes \a positions, named as
+//! the node names its stations, into the region's lookup in place of whatever
+//! the subtree held there. The node must hang in a region.
+inline void setScopedPositions(cwSurveyNode* node, const cwStationPositionLookup& positions)
+{
+    cwCavingRegion* region = node->parentRegion();
+    REQUIRE(region != nullptr);
+    const QString prefix = cwStation::canonicalKey(node->scopePrefix());
+    REQUIRE((node->isRoot() || !prefix.isEmpty()));
+
+    cwStationPositionLookup merged;
+    const QMap<QString, QVector3D> existing = region->stationPositions().positions();
+    for (auto it = existing.constBegin(); it != existing.constEnd(); ++it) {
+        if (!it.key().startsWith(prefix)) {
+            merged.setPosition(it.key(), it.value());
+        }
+    }
+    const QMap<QString, QVector3D> scoped = positions.positions();
+    for (auto it = scoped.constBegin(); it != scoped.constEnd(); ++it) {
+        merged.setPosition(prefix + it.key(), it.value());
+    }
+    region->setStationPositions(merged);
+}
+
+//! The same, for the region's network.
+inline void setScopedNetwork(cwSurveyNode* node, const cwSurveyNetwork& network)
+{
+    cwCavingRegion* region = node->parentRegion();
+    REQUIRE(region != nullptr);
+    const QString prefix = cwStation::canonicalKey(node->scopePrefix());
+    REQUIRE((node->isRoot() || !prefix.isEmpty()));
+
+    cwSurveyNetwork merged;
+    const cwSurveyNetwork existing = region->network();
+    for (const QString& station : existing.stations()) {
+        if (station.startsWith(prefix)) {
+            continue;
+        }
+        for (const QString& neighbor : existing.neighbors(station)) {
+            if (!neighbor.startsWith(prefix)) {
+                merged.addShot(station, neighbor);
+            }
+        }
+        if (existing.hasPosition(station)) {
+            merged.setPosition(station, existing.position(station));
+        }
+    }
+    for (const QString& station : network.stations()) {
+        for (const QString& neighbor : network.neighbors(station)) {
+            merged.addShot(prefix + station, prefix + neighbor);
+        }
+        if (network.hasPosition(station)) {
+            merged.setPosition(prefix + station, network.position(station));
+        }
+    }
+    region->setNetwork(merged);
+}
+
 }

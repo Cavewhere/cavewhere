@@ -11,6 +11,7 @@
 
 //Cavewhere includes
 #include "cwLinePlotGeometry.h"
+#include "SurveyTreeTestHelper.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwExternalCenterline.h"
@@ -90,9 +91,9 @@ TEST_CASE("cwLinePlotGeometry de-shares vertices per shot", "[cwLinePlotGeometry
     lookup.setPosition("a1", QVector3D(0.0f, 0.0f, 0.0f));
     lookup.setPosition("a2", QVector3D(0.0f, 10.0f, 0.0f));
     lookup.setPosition("a3", QVector3D(10.0f, 10.0f, 0.0f));
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
-    const auto result = cwLinePlotGeometry::generate(region.data());
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions());
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -160,9 +161,9 @@ TEST_CASE("cwLinePlotGeometry duplicates a station shared by consecutive shots",
     lookup.setPosition("a1", QVector3D(0.0f, 0.0f, 0.0f));
     lookup.setPosition("a2", QVector3D(0.0f, 10.0f, 0.0f));
     lookup.setPosition("a3", QVector3D(10.0f, 10.0f, 0.0f));
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
-    const auto result = cwLinePlotGeometry::generate(region.data());
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions());
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -207,14 +208,14 @@ TEST_CASE("cwLinePlotGeometry windows a Scope trip whose prefix carries authored
     lookup.setPosition(QStringLiteral("48h-feng.f1"), f1Position);
     lookup.setPosition(QStringLiteral("48h-feng.f2"), f2Position);
     lookup.setPosition(QStringLiteral("48h-feng.lower.l1"), l1Position);
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     // Cavern-shaped network keys: region-wide and lowercase.
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("cave1.48h-feng.f1"), QStringLiteral("cave1.48h-feng.f2"));
     network.addShot(QStringLiteral("cave1.48h-feng.f2"), QStringLiteral("cave1.48h-feng.lower.l1"));
 
-    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -274,7 +275,7 @@ TEST_CASE("cwLinePlotGeometry gives each leg of nested Scope trips one owner",
     lookup.setPosition(QStringLiteral("doghill.d2"), d2Position);
     lookup.setPosition(QStringLiteral("doghill.big-passage.p1"), p1Position);
     lookup.setPosition(QStringLiteral("doghill.big-passage.p2"), p2Position);
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     // 10 m inside the parent, a 2 m tie into the child block, 5 m inside the
     // child: 17 m of passage in all.
@@ -285,7 +286,7 @@ TEST_CASE("cwLinePlotGeometry gives each leg of nested Scope trips one owner",
     network.addShot(QStringLiteral("cave1.doghill.big-passage.p1"),
                     QStringLiteral("cave1.doghill.big-passage.p2"));
 
-    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -336,7 +337,7 @@ TEST_CASE("cwLinePlotGeometry measures a cave that resolved nothing as zero",
     scopeTrip->setStationPrefix(QStringLiteral("missing"));
     cave->addTrip(scopeTrip);
 
-    const auto result = cwLinePlotGeometry::generate(region.data(), cwSurveyNetwork());
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), cwSurveyNetwork());
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -374,14 +375,14 @@ TEST_CASE("cwLinePlotGeometry draws an attached cave through its whole-cave wind
     lookup.setPosition(QStringLiteral("a1"), a1Position);
     lookup.setPosition(QStringLiteral("a2"), a2Position);
     lookup.setPosition(QStringLiteral("a3"), a3Position);
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     // Flat under the cave: cavern gives a Compass station no level of its own.
     cwSurveyNetwork network;
     network.addShot(QStringLiteral("cave1.a1"), QStringLiteral("cave1.a2"));
     network.addShot(QStringLiteral("cave1.a2"), QStringLiteral("cave1.a3"));
 
-    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 
@@ -437,7 +438,7 @@ TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block win
     lookup.setPosition(QStringLiteral("a2"), a2Position);
     lookup.setPosition(QStringLiteral("xy.p1"), p1Position);
     lookup.setPosition(QStringLiteral("xy.p2"), p2Position);
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     // 10 m at the root, a 4 m tie into the prefixed survey, 12 m inside it.
     cwSurveyNetwork network;
@@ -445,7 +446,7 @@ TEST_CASE("cwLinePlotGeometry splits a cave between its whole-cave and block win
     network.addShot(QStringLiteral("cave1.a2"), QStringLiteral("cave1.xy.p1"));
     network.addShot(QStringLiteral("cave1.xy.p1"), QStringLiteral("cave1.xy.p2"));
 
-    const auto result = cwLinePlotGeometry::generate(region.data(), network);
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
     REQUIRE_FALSE(result.hasError());
     const cwLinePlotGeometry::Result geometry = result.value();
 

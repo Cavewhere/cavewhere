@@ -638,7 +638,7 @@ int TestHelper::liDARStationLookupSize(cwNoteLiDAR* note) const
         return 0;
     }
 
-    return cave->stationPositionLookup().positions().size();
+    return cave->scopedPositions().positions().size();
 }
 
 bool TestHelper::liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const
@@ -652,7 +652,7 @@ bool TestHelper::liDARSurveyNetworkIsEmpty(cwNoteLiDAR* note) const
         return true;
     }
 
-    return cave->network().isEmpty();
+    return cave->scopedNetwork().isEmpty();
 }
 
 void TestHelper::addStationSplay(cwSurveyChunk* chunk,

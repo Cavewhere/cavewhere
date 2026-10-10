@@ -363,10 +363,11 @@ signals:
     //! answer did not move, as scopeChanged() notes.
     void externallyBackedChanged();
 
-    //! The NOTIFY solvedStations() never had. Chained from the owning cave's
-    //! stationPositionPositionChanged in cwCave::connectTrip, because a trip's
-    //! solved positions physically live in its cave's lookup — so the getter is
-    //! here but only the cave knows when it moved.
+    //! The NOTIFY solvedStations() never had. Chained from the owning node's
+    //! scopedPositionsChanged in cwSurveyNode::connectTrip, which the region
+    //! relays down the tree once per solve: a trip's solved positions live in
+    //! the region's lookup, so the getter is here but only the region knows
+    //! when it moved.
     //!
     //! Deliberately not chained from scopeChanged: a scope move lands before the
     //! re-solve that follows it, and solvedStations() would match the new prefix

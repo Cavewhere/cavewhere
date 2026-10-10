@@ -20,6 +20,7 @@
 
 //Test helpers
 #include "ExternalCenterlineTestHelpers.h"
+#include "SurveyTreeTestHelper.h"
 
 namespace {
 
@@ -73,7 +74,7 @@ cwTrip* addPrefixedTrip(cwCave* cave, const QStringList& prefixedNames)
     for (int i = 0; i < prefixedNames.size(); ++i) {
         lookup.setPosition(prefixedNames.at(i), QVector3D(i, i, i));
     }
-    cave->setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
     return trip;
 }
 
@@ -83,9 +84,12 @@ TEST_CASE("A native (unprefixed) trip lists its solved chunk stations", "[Model]
 {
     // A native trip has no scope of its own: its stations are bare names in
     // the cave's scope, which is what the handles must say.
-    cwCave cave;
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
     cwTrip* trip = new cwTrip();
-    cave.addTrip(trip);
+    cave->addTrip(trip);
 
     cwSurveyChunk* chunk = new cwSurveyChunk();
     trip->addChunk(chunk);
@@ -96,7 +100,7 @@ TEST_CASE("A native (unprefixed) trip lists its solved chunk stations", "[Model]
     lookup.setPosition(QStringLiteral("s1"), QVector3D(1, 2, 3));
     lookup.setPosition(QStringLiteral("s2"), QVector3D(4, 5, 6));
     lookup.setPosition(QStringLiteral("outside"), QVector3D(7, 8, 9));
-    cave.setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     cwScopeStationListModel model;
     model.setTrip(trip);
@@ -106,8 +110,8 @@ TEST_CASE("A native (unprefixed) trip lists its solved chunk stations", "[Model]
           == QStringList({ QStringLiteral("s1"), QStringLiteral("s2") }));
     CHECK(handles(model)
           == QList<cwStationHandle>({
-                 cwStationHandle(cwStationHandle::NativeCave, cave.id(), QStringLiteral("s1")),
-                 cwStationHandle(cwStationHandle::NativeCave, cave.id(), QStringLiteral("s2"))
+                 cwStationHandle(cwStationHandle::NativeCave, cave->id(), QStringLiteral("s1")),
+                 cwStationHandle(cwStationHandle::NativeCave, cave->id(), QStringLiteral("s2"))
              }));
     CHECK(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole).value<QVector3D>()
           == QVector3D(1, 2, 3));
@@ -132,8 +136,11 @@ TEST_CASE("A native-prefixed trip lists scope-relative tails", "[Model][ScopeSta
 {
     // Prefix "A": the cave lookup keys stations A.s1/A.s2, and the trip is the
     // scope those tails hang off — so the handles name the trip, not the cave.
-    cwCave cave;
-    cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1"), QStringLiteral("A.s2") });
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addPrefixedTrip(cave, { QStringLiteral("A.s1"), QStringLiteral("A.s2") });
 
     cwScopeStationListModel model;
     model.setTrip(trip);
@@ -152,8 +159,11 @@ TEST_CASE("Rows are sorted in natural order by station name", "[Model][ScopeStat
     // The lookup hands stations back in lexicographic key order ("A.a10"
     // before "A.a2"), so an unsorted model can't pass by luck. The trailing
     // number must ascend numerically: "a2" before "a10".
-    cwCave cave;
-    cwTrip* trip = addPrefixedTrip(&cave, {
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addPrefixedTrip(cave, {
         QStringLiteral("A.b1"), QStringLiteral("A.a2"), QStringLiteral("A.a1"),
         QStringLiteral("A.c3"), QStringLiteral("A.a10"), QStringLiteral("A.b2"),
         QStringLiteral("A.aa1")
@@ -177,8 +187,11 @@ TEST_CASE("matchingStations filters in-scope names by typed prefix", "[Model][Sc
 {
     // A tail is everything below the trip's scope, so it can itself be dotted
     // when the scoped survey nests further ("sidepassage.b1").
-    cwCave cave;
-    cwTrip* trip = addPrefixedTrip(&cave, {
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addPrefixedTrip(cave, {
         QStringLiteral("A.a1"), QStringLiteral("A.a2"),
         QStringLiteral("A.sidepassage.b1")
     });
@@ -212,8 +225,11 @@ TEST_CASE("matchingStations filters in-scope names by typed prefix", "[Model][Sc
 
 TEST_CASE("Clearing the trip empties the model", "[Model][ScopeStations]")
 {
-    cwCave cave;
-    cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1") });
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addPrefixedTrip(cave, { QStringLiteral("A.s1") });
 
     cwScopeStationListModel model;
     CHECK(model.rowCount() == 0);
@@ -228,9 +244,9 @@ TEST_CASE("Clearing the trip empties the model", "[Model][ScopeStations]")
     // cave it used to watch cannot reach the model.
     QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
 
-    cwStationPositionLookup grown = cave.stationPositionLookup();
+    cwStationPositionLookup grown = cave->scopedPositions();
     grown.setPosition(QStringLiteral("A.s2"), QVector3D(4, 5, 6));
-    cave.setStationPositionLookup(grown);
+    SurveyTreeTestHelper::setScopedPositions(cave, grown);
 
     CHECK(resetSpy.count() == 0);
 }
@@ -238,10 +254,13 @@ TEST_CASE("Clearing the trip empties the model", "[Model][ScopeStations]")
 TEST_CASE("A re-solve re-pulls the trip's solved stations", "[Model][ScopeStations]")
 {
     // Setting the trip is the whole contract: the model subscribes to that
-    // trip's solvedStationsChanged, which its cave pulses when the solve lands
-    // in the lookup — so the rows refresh with no help from the caller.
-    cwCave cave;
-    cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1") });
+    // trip's solvedStationsChanged, which its cave relays when the solve lands
+    // in the region's lookup — so the rows refresh with no help from the caller.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addPrefixedTrip(cave, { QStringLiteral("A.s1") });
 
     cwScopeStationListModel model;
     model.setTrip(trip);
@@ -250,9 +269,9 @@ TEST_CASE("A re-solve re-pulls the trip's solved stations", "[Model][ScopeStatio
     QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
 
     // The solve advances: a second station appears in the cave lookup.
-    cwStationPositionLookup second = cave.stationPositionLookup();
+    cwStationPositionLookup second = cave->scopedPositions();
     second.setPosition(QStringLiteral("A.s2"), QVector3D(4, 5, 6));
-    cave.setStationPositionLookup(second);
+    SurveyTreeTestHelper::setScopedPositions(cave, second);
 
     CHECK(resetSpy.count() == 1);
     CHECK(roleValues(model, cwScopeStationListModel::StationNameRole)
@@ -264,32 +283,41 @@ TEST_CASE("A positions-only re-solve refreshes the rows", "[Model][ScopeStations
     // Re-surveying a shot moves stations without changing which stations exist
     // or what they connect to. The region network compares equal across such a
     // solve, so a network-change pulse would never fire and the rows would keep
-    // stale positions. The cave's lookup is the pulse, so this lands.
-    cwCave cave;
-    cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1") });
+    // stale positions. The region's lookup is the pulse, so this lands.
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cwTrip* trip = addPrefixedTrip(cave, { QStringLiteral("A.s1") });
 
     cwScopeStationListModel model;
     model.setTrip(trip);
     REQUIRE(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole)
             .value<QVector3D>() == QVector3D(0, 0, 0));
 
-    cwStationPositionLookup moved = cave.stationPositionLookup();
+    cwStationPositionLookup moved = cave->scopedPositions();
     moved.setPosition(QStringLiteral("A.s1"), QVector3D(9, 9, 9));
-    cave.setStationPositionLookup(moved);
+    SurveyTreeTestHelper::setScopedPositions(cave, moved);
 
     CHECK(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole)
           .value<QVector3D>() == QVector3D(9, 9, 9));
 }
 
-TEST_CASE("A foreign cave's solve leaves the model alone", "[Model][ScopeStations]")
+TEST_CASE("A foreign region's solve leaves the model alone", "[Model][ScopeStations]")
 {
-    // Two caves solve independently. Because the cave pulses only the trips it
-    // lists, a solve in one cannot reach a model watching a trip in the other.
-    cwCave first;
-    cwTrip* firstTrip = addPrefixedTrip(&first, { QStringLiteral("A.s1") });
+    // Two projects solve independently. A region pulses only the trips its tree
+    // lists, so a solve in one cannot reach a model watching a trip in the other.
+    cwCavingRegion firstRegion;
+    cwCave* first = new cwCave();
+    first->setName(QStringLiteral("First"));
+    firstRegion.addCave(first);
+    cwTrip* firstTrip = addPrefixedTrip(first, { QStringLiteral("A.s1") });
 
-    cwCave second;
-    addPrefixedTrip(&second, { QStringLiteral("A.s9") });
+    cwCavingRegion secondRegion;
+    cwCave* second = new cwCave();
+    second->setName(QStringLiteral("Second"));
+    secondRegion.addCave(second);
+    addPrefixedTrip(second, { QStringLiteral("A.s9") });
 
     cwScopeStationListModel model;
     model.setTrip(firstTrip);
@@ -298,9 +326,9 @@ TEST_CASE("A foreign cave's solve leaves the model alone", "[Model][ScopeStation
 
     QSignalSpy resetSpy(&model, &QAbstractItemModel::modelReset);
 
-    cwStationPositionLookup elsewhere = second.stationPositionLookup();
+    cwStationPositionLookup elsewhere = second->scopedPositions();
     elsewhere.setPosition(QStringLiteral("A.s8"), QVector3D(1, 1, 1));
-    second.setStationPositionLookup(elsewhere);
+    SurveyTreeTestHelper::setScopedPositions(second, elsewhere);
 
     CHECK(resetSpy.count() == 0);
 }
@@ -312,10 +340,13 @@ TEST_CASE("A station the solve never placed is still a row", "[Model][ScopeStati
     // nothing — a dozen lines from a banner naming those very stations. A
     // person referencing one from a note needs the name then, not after the
     // tie-in that places it.
-    cwCave cave;
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
     cwTrip* trip = new cwTrip();
     trip->setName(QStringLiteral("Topo 1"));
-    cave.addTrip(trip);
+    cave->addTrip(trip);
     trip->setExternalCenterline(cwExternalCenterline(QStringLiteral("/tmp/cave.svx")));
 
     cwScopeStationListModel model;
@@ -338,7 +369,7 @@ TEST_CASE("A station the solve never placed is still a row", "[Model][ScopeStati
     // second row for the same station.
     cwStationPositionLookup lookup;
     lookup.setPosition(QStringLiteral("topo_1.h1"), QVector3D(1, 2, 3));
-    cave.setStationPositionLookup(lookup);
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
 
     CHECK(model.rowCount() == 2);
     CHECK(model.data(model.index(0, 0), cwScopeStationListModel::PositionRole)
@@ -349,23 +380,26 @@ TEST_CASE("A cave pulses solvedStationsChanged only on the trips it lists",
           "[Trip][ScopeStations]")
 {
     // The forwarding the model rides on: the trip owns solvedStations() but the
-    // cave owns the lookup it reads, so the cave is what says the answer moved.
-    // A removed trip is cut off, the same way cwCave::disconnectTrip already
-    // cuts it off from scopeChanged.
+    // region owns the lookup it reads, and the cave relays the region's pulse
+    // to its trips. A removed trip is cut off, the same way
+    // cwSurveyNode::disconnectTrip already cuts it off from scopeChanged.
     //
     // The undo stack is what keeps the removed trip alive here — without one,
     // pushUndo redoes and deletes the command, which owns the trip it removed.
     QUndoStack undoStack;
-    cwCave cave;
-    cave.setUndoStack(&undoStack);
+    cwCavingRegion region;
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave"));
+    region.addCave(cave);
+    cave->setUndoStack(&undoStack);
 
-    cwTrip* trip = addPrefixedTrip(&cave, { QStringLiteral("A.s1") });
+    cwTrip* trip = addPrefixedTrip(cave, { QStringLiteral("A.s1") });
     QPointer<cwTrip> tripGuard(trip);
 
-    const auto advanceSolve = [&cave](const QString& station) {
-        cwStationPositionLookup grown = cave.stationPositionLookup();
+    const auto advanceSolve = [cave](const QString& station) {
+        cwStationPositionLookup grown = cave->scopedPositions();
         grown.setPosition(station, QVector3D(4, 5, 6));
-        cave.setStationPositionLookup(grown);
+        SurveyTreeTestHelper::setScopedPositions(cave, grown);
     };
 
     QSignalSpy pulseSpy(trip, &cwTrip::solvedStationsChanged);
@@ -373,7 +407,7 @@ TEST_CASE("A cave pulses solvedStationsChanged only on the trips it lists",
     advanceSolve(QStringLiteral("A.s2"));
     CHECK(pulseSpy.count() == 1);
 
-    cave.removeTrip(0);
+    cave->removeTrip(0);
     REQUIRE_FALSE(tripGuard.isNull());
 
     advanceSolve(QStringLiteral("A.s3"));
