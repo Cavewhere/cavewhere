@@ -147,14 +147,71 @@ MainWindowTest {
                       "a Compass project's stations all sit in the file root")
             verify(wholeFileRow.text.indexOf("5") >= 0,
                    "the row names the root station count; got: " + wholeFileRow.text)
+            // The tree lists the project root, its two DATs, and one
+            // survey under each.
             const list = findChild(dialog, "blockPreviewList")
-            tryCompare(list, "count", 0, 5000)
+            tryCompare(list, "count", 5, 5000)
 
             // Every station of a *begin tree belongs to a block, so
             // there is nothing left for a whole-file trip to own.
             pickFixture(dialog, "survex_blocks.svx")
             tryVerify(() => !wholeFileRow.visible, 10000,
                       "a blocks-only file shows no whole-file row")
+
+            const cancelButton = findChild(dialog, "cancelButton")
+            waitForRendering(rootId)
+            mouseClick(cancelButton)
+            RootData.futureManagerModel.waitForFinished()
+        }
+
+        // The preview row the list draws for \a name, once the scan lands.
+        function previewRow(dialog, name) {
+            const list = findChild(dialog, "blockPreviewList")
+            verify(list !== null, "blockPreviewList must exist")
+            let row = null
+            tryVerify(() => {
+                for (let i = 0; i < list.count; ++i) {
+                    const item = list.itemAtIndex(i)
+                    if (item !== null && item.modelData.displayName === name) {
+                        row = item
+                        return true
+                    }
+                }
+                return false
+            }, 10000, "the preview lists " + name)
+            return row
+        }
+
+        // C7.1: rows name their kind and station count, and gray out a
+        // book with no survey data under it and a file the disk lacks.
+        function test_previewGraysEmptyBooksAndMissingFiles() {
+            saveProjectAs("add-cave-preview-rows")
+            const dataPage = gotoDataMainPage()
+            const dialog = openDialog(dataPage)
+
+            pickFixture(dialog, "walls_project/KAUA.WPJ")
+            const drawings = previewRow(dialog, "Drawings")
+            verify(drawings.grayed, "a book holding no survey file is gray")
+            compare(drawings.color, Theme.textSubtle)
+            verify(drawings.text.startsWith("Drawings · Walls book — 0 station"), drawings.text)
+
+            const surveys = previewRow(dialog, "Surveys")
+            verify(!surveys.grayed, "a book with surveys under it reads normally")
+            compare(surveys.color, Theme.text)
+            verify(surveys.text.startsWith("Surveys · Walls book — 8 station"), surveys.text)
+
+            const unit = previewRow(dialog, "N Surveys")
+            verify(unit.text.startsWith("N Surveys · Trip — 4 station"), unit.text)
+
+            pickFixture(dialog, "compass_project/PROJECT.MAK")
+            const delta = previewRow(dialog, "Delta")
+            verify(delta.grayed, "an absent file is gray")
+            compare(delta.color, Theme.textSubtle)
+            compare(delta.text, "Delta · Compass file — missing")
+
+            const alpha = previewRow(dialog, "Alpha")
+            verify(!alpha.grayed, "a present file with surveys reads normally")
+            verify(alpha.text.startsWith("Alpha · Compass file — 7 station"), alpha.text)
 
             const cancelButton = findChild(dialog, "cancelButton")
             waitForRendering(rootId)

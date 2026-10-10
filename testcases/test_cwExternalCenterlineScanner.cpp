@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QMetaEnum>
 #include <QString>
 #include <QTemporaryDir>
 
@@ -1880,15 +1881,13 @@ TEST_CASE("walls_project scans its nested books' surveys and the N prefix level"
     REQUIRE_FALSE(result.hasError());
     const ScanResult scan = result.value();
 
-    // NOTES.TXT has an unknown format, so the scanner warns and records no
-    // dependency for it. Skipping .STATUS other-type entries belongs to C7.1.
+    // NOTES.TXT is an other-type entry, which cavern skips, so the scan
+    // neither reads it nor warns about it.
     CHECK(dependenciesUnder(scan, QStringLiteral("walls_project"))
           == QStringList({QStringLiteral("KAUA.WPJ"), QStringLiteral("FIX.SRV"),
                           QStringLiteral("SURVEYS/D01.SRV"), QStringLiteral("SURVEYS/D02.SRV"),
                           QStringLiteral("SURVEYS/N01.SRV")}));
-    REQUIRE(scan.warnings.size() == 1);
-    CHECK(scan.warnings.first().contains(QStringLiteral("unknown format")));
-    CHECK(scan.warnings.first().contains(QStringLiteral("NOTES.TXT")));
+    CHECK(scan.warnings.isEmpty());
 
     // K1 and D1..D4 have no prefix; N01.SRV's 1..3 sit under #PREFIX N, and
     // its ":D4" names the root's D4.
@@ -1951,4 +1950,287 @@ TEST_CASE("survex_two_cs scans two blocks, each fixed in its own input system",
     CHECK(scan.fixes.at(1).station == QStringLiteral("latlong.l1"));
     CHECK(scan.fixes.at(1).coordinateSystem == QStringLiteral("LONG-LAT"));
     CHECK(scan.outputCoordinateSystem == QStringLiteral("EPSG:32616"));
+}
+
+namespace {
+
+using cwSurveyNodeKind::Kind;
+
+//! One scan row in a form a list comparison prints readably: depth, kind,
+//! sourcePath, display name, cavernLabel, role, subtree station count, and the
+//! gray / missing flags.
+QString describe(const cwScanRow& row)
+{
+    const QString kindName = QString::fromLatin1(
+        QMetaEnum::fromType<Kind>().valueToKey(static_cast<int>(row.kind)));
+    QStringList roles;
+    if (row.isNode) {
+        roles.append(QStringLiteral("node"));
+    }
+    if (row.isUnit) {
+        roles.append(QStringLiteral("unit"));
+    }
+    QString text = QStringLiteral("%1 %2 '%3' '%4' '%5' %6 %7")
+                       .arg(row.depth)
+                       .arg(kindName, row.sourcePath, row.displayName, row.cavernLabel,
+                            roles.join(QLatin1Char('+')))
+                       .arg(row.stationCount);
+    if (!row.hasSurveyContent) {
+        text += QStringLiteral(" gray");
+    }
+    if (row.missing) {
+        text += QStringLiteral(" missing");
+    }
+    return text;
+}
+
+QStringList describe(const QList<cwScanRow>& rows)
+{
+    QStringList descriptions;
+    for (const cwScanRow& row : rows) {
+        descriptions.append(describe(row));
+    }
+    return descriptions;
+}
+
+cwScanRow rowAt(const ScanResult& scan, const QString& sourcePath)
+{
+    for (const cwScanRow& row : scan.rows) {
+        if (row.sourcePath == sourcePath) {
+            return row;
+        }
+    }
+    FAIL("no scan row has sourcePath " << sourcePath.toStdString());
+    return cwScanRow();
+}
+
+ScanResult scanFixture(const QString& fixture)
+{
+    auto result = cwExternalCenterlineScanner::scan(datasetExternalCenterlinePath(fixture));
+    REQUIRE_FALSE(result.hasError());
+    return result.value();
+}
+
+} // namespace
+
+TEST_CASE("compass_project's tree is a project root, one node per DAT, one unit per survey",
+          "[Scanner][Compass][SourcedFixtures]")
+{
+    const ScanResult scan = scanFixture(QStringLiteral("compass_project/PROJECT.MAK"));
+
+    // ALPHA's two surveys share A5 (7 names in the file), BRAVO's link
+    // station A5 is its own name until cavern equates it (4), CHARLIE
+    // holds 3; the absent DELTA.DAT stays listed, gray and missing.
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 CompassProject '' 'PROJECT' '' node 14"),
+        QStringLiteral("1 CompassFile 'ALPHA.DAT' 'Alpha' 'alpha' node 7"),
+        QStringLiteral("2 CompassFile 'ALPHA.DAT/ALPHA1' 'ALPHA1' '' unit 5"),
+        QStringLiteral("2 CompassFile 'ALPHA.DAT/ALPHA2' 'ALPHA2' '' unit 3"),
+        QStringLiteral("1 CompassFile 'BRAVO.DAT' 'Bravo' 'bravo' node 4"),
+        QStringLiteral("2 CompassFile 'BRAVO.DAT/BRAVO1' 'BRAVO1' '' unit 4"),
+        QStringLiteral("1 CompassFile 'CHARLIE.DAT' 'Charlie' 'charlie' node 3"),
+        QStringLiteral("2 CompassFile 'CHARLIE.DAT/CHARLIE1' 'CHARLIE1' '' unit 3"),
+        QStringLiteral("1 CompassFile 'DELTA.DAT' 'Delta' 'delta' node 0 gray missing"),
+    }));
+
+    // Unit stations are cavern-relative: the DAT's survey level, then the
+    // station. The two ALPHA surveys share alpha.A5.
+    const cwScanRow alpha1 = rowAt(scan, QStringLiteral("ALPHA.DAT/ALPHA1"));
+    const cwScanRow alpha2 = rowAt(scan, QStringLiteral("ALPHA.DAT/ALPHA2"));
+    CHECK(alpha1.stations == QStringList({QStringLiteral("alpha.A1"), QStringLiteral("alpha.A2"),
+                                          QStringLiteral("alpha.A3"), QStringLiteral("alpha.A4"),
+                                          QStringLiteral("alpha.A5")}));
+    CHECK(alpha2.stations == QStringList({QStringLiteral("alpha.A5"), QStringLiteral("alpha.A6"),
+                                          QStringLiteral("alpha.A7")}));
+    CHECK(rowAt(scan, QStringLiteral("BRAVO.DAT/BRAVO1")).stations
+          == QStringList({QStringLiteral("bravo.A5"), QStringLiteral("bravo.B1"),
+                          QStringLiteral("bravo.B2"), QStringLiteral("bravo.B3")}));
+
+    // Dates are each survey's own SURVEY DATE.
+    CHECK(alpha1.date == QDate(2020, 3, 14));
+    CHECK(alpha2.date == QDate(2020, 3, 15));
+    CHECK(rowAt(scan, QStringLiteral("CHARLIE.DAT/CHARLIE1")).date == QDate(2022, 5, 9));
+
+    // The Phase 3 fields keep their meaning until C7.2b.
+    CHECK(scan.blocks.isEmpty());
+    CHECK(scan.rootStationCount == 13);
+}
+
+TEST_CASE("A lone Compass .dat is a file root holding its surveys with bare names",
+          "[Scanner][Compass]")
+{
+    const ScanResult scan = scanFixture(QStringLiteral("compass_simple.dat"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 CompassFile '' 'compass_simple' '' node 3"),
+        QStringLiteral("1 CompassFile 'A' 'A' '' unit 3"),
+    }));
+    CHECK(scan.rows.at(1).stations == QStringList({QStringLiteral("A1"), QStringLiteral("A2"),
+                                                   QStringLiteral("A3")}));
+    CHECK(scan.rows.at(1).date == QDate(2025, 1, 1));
+}
+
+TEST_CASE("A Compass survey without a name takes a positional segment",
+          "[Scanner][Compass]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // The first survey is named "2"; the second writes no name and is the
+    // second section, so a bare position would collide with the first.
+    const QString path = tempPath(tempDir, QStringLiteral("unnamed.dat"));
+    writeUtf8File(path,
+                  QByteArrayLiteral("Cave\n"
+                                    "SURVEY NAME: 2\n"
+                                    "SURVEY TEAM:\n"
+                                    "\n"
+                                    "DECLINATION: 0.00  FORMAT: DDDDLRUDLADN\n"
+                                    "\n"
+                                    "FROM TO LENGTH BEARING INC\n"
+                                    "S1 S2 10.00 0.00 0.00\n"
+                                    "\f\n"
+                                    "Cave\n"
+                                    "SURVEY TEAM:\n"
+                                    "\n"
+                                    "DECLINATION: 0.00  FORMAT: DDDDLRUDLADN\n"
+                                    "\n"
+                                    "FROM TO LENGTH BEARING INC\n"
+                                    "T1 T2 10.00 0.00 0.00\n"));
+
+    auto result = cwExternalCenterlineScanner::scanCompass(path);
+    REQUIRE_FALSE(result.hasError());
+    const ScanResult scan = result.value();
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 CompassFile '' 'unnamed' '' node 4"),
+        QStringLiteral("1 CompassFile '2' '2' '' unit 2"),
+        QStringLiteral("1 CompassFile '#2' '#2' '' unit 2"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("#2")).stations
+          == QStringList({QStringLiteral("T1"), QStringLiteral("T2")}));
+}
+
+TEST_CASE("walls_project's tree nests books, grays the books with no survey data",
+          "[Scanner][Walls][SourcedFixtures]")
+{
+    const ScanResult scan = scanFixture(QStringLiteral("walls_project/KAUA.WPJ"));
+
+    // Drawings holds only the other-type NOTES.TXT and Fixed Points only a
+    // #FIX, so neither has a station-bearing unit. FIX.SRV writes no shots
+    // and makes no unit.
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 WallsBook '' 'KAUA' '' node 8"),
+        QStringLiteral("1 WallsBook 'DRAWINGS' 'Drawings' '' node 0 gray"),
+        QStringLiteral("1 WallsBook 'FIXED' 'Fixed Points' '' node 0 gray"),
+        QStringLiteral("1 WallsBook 'SURVEYS' 'Surveys' '' node 8"),
+        QStringLiteral("2 WallsBook 'SURVEYS/DEC2001' 'Dec 2001 Surveys' '' node 8"),
+        QStringLiteral("3 WallsBook 'SURVEYS/DEC2001/D01' 'D Survey 1' '' unit 3"),
+        QStringLiteral("3 WallsBook 'SURVEYS/DEC2001/D02' 'D Survey 2' '' unit 3"),
+        QStringLiteral("3 WallsBook 'SURVEYS/DEC2001/N01' 'N Surveys' '' unit 4"),
+    }));
+
+    // The #PREFIX in force is part of each name; ":D4" names the root's D4,
+    // the station D02 and N01 share.
+    CHECK(rowAt(scan, QStringLiteral("SURVEYS/DEC2001/N01")).stations
+          == QStringList({QStringLiteral("D4"), QStringLiteral("N.1"), QStringLiteral("N.2"),
+                          QStringLiteral("N.3")}));
+    CHECK(rowAt(scan, QStringLiteral("SURVEYS/DEC2001/D02")).stations
+          == QStringList({QStringLiteral("D2"), QStringLiteral("D3"), QStringLiteral("D4")}));
+    CHECK(rowAt(scan, QStringLiteral("SURVEYS/DEC2001/D01")).date == QDate(2001, 12, 1));
+    CHECK(rowAt(scan, QStringLiteral("SURVEYS/DEC2001/N01")).date == QDate(2001, 12, 3));
+}
+
+TEST_CASE("walls_two_caves' tree holds one unit under East and two under West",
+          "[Scanner][Walls][SourcedFixtures]")
+{
+    const ScanResult scan = scanFixture(QStringLiteral("walls_two_caves/TWO.WPJ"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 WallsBook '' 'TWO' '' node 8"),
+        QStringLiteral("1 WallsBook 'EAST' 'East Cave' '' node 3"),
+        QStringLiteral("2 WallsBook 'EAST/E1' 'East Survey' '' unit 3"),
+        QStringLiteral("1 WallsBook 'WEST' 'West Cave' '' node 5"),
+        QStringLiteral("2 WallsBook 'WEST/W1' 'West Survey 1' '' unit 3"),
+        QStringLiteral("2 WallsBook 'WEST/W2' 'West Survey 2' '' unit 3"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("WEST/W1")).stations.contains(QStringLiteral("W3")));
+    CHECK(rowAt(scan, QStringLiteral("WEST/W2")).stations.contains(QStringLiteral("W3")));
+    CHECK(rowAt(scan, QStringLiteral("WEST/W2")).date == QDate(2010, 6, 3));
+}
+
+TEST_CASE("A lone Walls .srv is a book root holding the file's unit",
+          "[Scanner][Walls]")
+{
+    const ScanResult scan = scanFixture(QStringLiteral("MAIN.SRV"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 WallsBook '' 'MAIN' '' node 4"),
+        QStringLiteral("1 WallsBook 'MAIN' 'MAIN' '' unit 4"),
+    }));
+    CHECK(scan.rows.at(1).date == QDate(2023, 5, 10));
+}
+
+TEST_CASE("survex_master's tree is a file root with one block node per included cave",
+          "[Scanner][Survex][SourcedFixtures]")
+{
+    const ScanResult scan = scanFixture(QStringLiteral("survex_master/master.svx"));
+
+    // The included files are transparent: each block is a node and, since it
+    // holds shots, a unit too. The master writes no shots of its own.
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'master' '' node 9"),
+        QStringLiteral("1 SurvexBlock 'alpha' 'alpha' 'alpha' node+unit 2"),
+        QStringLiteral("1 SurvexBlock 'bravo' 'bravo' 'bravo' node+unit 3"),
+        QStringLiteral("1 SurvexBlock 'charlie' 'charlie' 'charlie' node+unit 4"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("alpha")).stations
+          == QStringList({QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2")}));
+}
+
+TEST_CASE("survex_nested's tree nests blocks across *include boundaries",
+          "[Scanner][Survex][SourcedFixtures]")
+{
+    const ScanResult scan = scanFixture(QStringLiteral("survex_nested.svx"));
+
+    // Nested writes no shots of its own, so it is a node only. Entrance's
+    // "Passage.P1" tie is a name Entrance writes, so it counts there and in
+    // Passage alike.
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'survex_nested' '' node 5"),
+        QStringLiteral("1 SurvexBlock 'Nested' 'Nested' 'Nested' node 5"),
+        QStringLiteral("2 SurvexBlock 'Nested/Entrance' 'Entrance' 'Entrance' node+unit 5"),
+        QStringLiteral("3 SurvexBlock 'Nested/Entrance/Passage' 'Passage' 'Passage' node+unit 3"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("Nested/Entrance")).stations
+          == QStringList({QStringLiteral("Nested.Entrance.E1"), QStringLiteral("Nested.Entrance.E2"),
+                          QStringLiteral("Nested.Entrance.Passage.P1")}));
+    CHECK(rowAt(scan, QStringLiteral("Nested/Entrance/Passage")).stations
+          == QStringList({QStringLiteral("Nested.Entrance.Passage.P1"),
+                          QStringLiteral("Nested.Entrance.Passage.P2"),
+                          QStringLiteral("Nested.Entrance.Passage.P3")}));
+}
+
+TEST_CASE("A Survex root's own shots are the root's unit; an empty block is gray",
+          "[Scanner][Survex]")
+{
+    {
+        const ScanResult scan = scanFixture(QStringLiteral("survex_root_and_block.svx"));
+        // The root writes r1..r3 and the side.s1 tie, which names a station
+        // of side's and stays out of the root's unit.
+        CHECK(describe(scan.rows) == QStringList({
+            QStringLiteral("0 SurvexFile '' 'survex_root_and_block' '' node+unit 5"),
+            QStringLiteral("1 SurvexBlock 'side' 'side' 'side' node+unit 2"),
+        }));
+        CHECK(scan.rows.at(0).stations
+              == QStringList({QStringLiteral("r1"), QStringLiteral("r2"), QStringLiteral("r3")}));
+    }
+    {
+        const ScanResult scan = scanFixture(QStringLiteral("survex_blocks.svx"));
+        const cwScanRow sump = rowAt(scan, QStringLiteral("doghill/big-passage/sump"));
+        CHECK(sump.isNode);
+        CHECK_FALSE(sump.isUnit);
+        CHECK_FALSE(sump.hasSurveyContent);
+        CHECK(sump.date == QDate(2025, 3, 15));
+        // A range's start date, as the block takes it.
+        CHECK(rowAt(scan, QStringLiteral("doghill/big-passage")).date == QDate(2024, 1, 5));
+    }
 }

@@ -46,6 +46,7 @@ ColumnLayout {
     // the picker already owns, so the gate and the disclosure can never
     // disagree about the file in the field.
     readonly property alias blocks: previewId.blocks
+    readonly property alias rows: previewId.rows
     readonly property alias topLevelBlockCount: previewId.topLevelBlockCount
     readonly property alias rootStationCount: previewId.rootStationCount
     readonly property alias rootDate: previewId.rootDate
@@ -56,6 +57,10 @@ ColumnLayout {
 
     function clear() {
         root.setPath("")
+    }
+
+    function kindLabel(row: cwScanRow): string {
+        return previewId.kindLabel(row)
     }
 
     // Re-points the picker the way Browse does — through the path

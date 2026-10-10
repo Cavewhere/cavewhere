@@ -11,10 +11,10 @@ import QtQuick.Layouts
 import cavewherelib
 
 // Add-cave-from-survey-file dialog (Phase 3 §3.1). Pick an entry file,
-// read the scan's verdict and its block tree - the trips an attach
-// will create - then choose how CaveWhere uses the file, the same two
+// read the scan's verdict and the file's tree of books, files, blocks,
+// and surveys, then choose how CaveWhere uses the file, the same two
 // choices the trip dialog offers: Attach (recommended - the file stays
-// the source, one trip per block) or Import a copy (Survex only - the
+// the source) or Import a copy (Survex only - the
 // data lands in a native trip of the cave, editable here).
 //
 // The dialog owns no attach state of its own beyond the session, which
@@ -143,12 +143,10 @@ QQ.Item {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.sectionSpacing
                 spacing: Theme.tightSpacing
-                visible: pickerId.valid
-                         && (pickerId.blocks.length > 0
-                             || pickerId.rootStationCount > 0)
+                visible: pickerId.valid && pickerId.rows.length > 0
 
                 QC.Label {
-                    text: qsTr("Trips CaveWhere will create")
+                    text: qsTr("What the file holds")
                     font.bold: true
                 }
 
@@ -174,25 +172,33 @@ QQ.Item {
                     Layout.preferredHeight: Math.min(contentHeight,
                                                      Theme.floatingListMaxHeight)
                     clip: true
-                    model: pickerId.blocks
+                    model: pickerId.rows
 
                     delegate: QC.Label {
                         id: blockRowId
                         objectName: "blockRow"
 
-                        required property cwScanBlock modelData
+                        required property cwScanRow modelData
 
-                        // A block with no stations of its own makes no
-                        // trip (§5 Q3) - shown so the structure reads
-                        // whole, grayed so it reads as skipped.
-                        readonly property bool makesTrip: blockRowId.modelData.stationCount > 0
+                        // A row with no survey data under it, or a file the
+                        // source lists and the disk lacks, is shown so the
+                        // structure reads whole, grayed so it reads as skipped.
+                        readonly property bool grayed: !blockRowId.modelData.hasSurveyContent
+                                                       || blockRowId.modelData.missing
+                        readonly property string kindText: pickerId.kindLabel(blockRowId.modelData)
 
                         width: QQ.ListView.view.width
                         leftPadding: blockRowId.modelData.depth * dialogId.blockIndentWidth
                         elide: QC.Label.ElideRight
-                        color: blockRowId.makesTrip ? Theme.text : Theme.textSubtle
-                        text: qsTr("%1 — %n station(s)", "", blockRowId.modelData.stationCount)
-                                .arg(blockRowId.modelData.name)
+                        color: blockRowId.grayed ? Theme.textSubtle : Theme.text
+                        text: blockRowId.modelData.missing
+                              ? qsTr("%1 · %2 — missing")
+                                    .arg(blockRowId.modelData.displayName)
+                                    .arg(blockRowId.kindText)
+                              : qsTr("%1 · %2 — %n station(s)", "",
+                                     blockRowId.modelData.stationCount)
+                                    .arg(blockRowId.modelData.displayName)
+                                    .arg(blockRowId.kindText)
                     }
                 }
 

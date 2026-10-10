@@ -157,3 +157,53 @@ TEST_CASE("scan preview exposes the block tree and the multi-cave signals",
     CHECK_FALSE(preview.entryHasOwnShots());
     CHECK(preview.entryDirectIncludes().isEmpty());
 }
+
+TEST_CASE("scan preview exposes the tree's rows and summary counts for compass_project",
+          "[ScanPreview]")
+{
+    cwExternalCenterlineScanPreview preview;
+    CHECK(preview.rows().isEmpty());
+    CHECK(preview.surveyCount() == 0);
+    CHECK(preview.stationCount() == 0);
+    CHECK(preview.missingFileCount() == 0);
+
+    preview.setSourcePath(fixturePath(QStringLiteral("compass_project/PROJECT.MAK")));
+    REQUIRE(tryWait(kWatcherWaitMs, [&] { return !preview.scanning(); }));
+    REQUIRE(preview.valid());
+
+    // The .mak and its three present DATs.
+    CHECK(preview.fileCount() == 4);
+    // ALPHA1, ALPHA2, BRAVO1, CHARLIE1.
+    CHECK(preview.surveyCount() == 4);
+    // Distinct cavern-relative names: alpha's 7, bravo's 4 (its link
+    // station bravo.A5 included), charlie's 3.
+    CHECK(preview.stationCount() == 14);
+    CHECK(preview.missingFileCount() == 1);
+
+    const QList<cwScanRow> rows = preview.rows();
+    REQUIRE(rows.size() == 9);
+    CHECK(rows.at(0).kind == cwSurveyNodeKind::Kind::CompassProject);
+    CHECK(rows.at(0).displayName == QStringLiteral("PROJECT"));
+    CHECK(preview.kindLabel(rows.at(0)) == QStringLiteral("Compass project"));
+
+    CHECK(rows.at(1).displayName == QStringLiteral("Alpha"));
+    CHECK(rows.at(1).depth == 1);
+    CHECK(rows.at(1).stationCount == 7);
+    CHECK(preview.kindLabel(rows.at(1)) == QStringLiteral("Compass file"));
+
+    CHECK(rows.at(2).displayName == QStringLiteral("ALPHA1"));
+    CHECK(rows.at(2).depth == 2);
+    CHECK(preview.kindLabel(rows.at(2)) == QStringLiteral("Trip"));
+
+    const cwScanRow delta = rows.constLast();
+    CHECK(delta.displayName == QStringLiteral("Delta"));
+    CHECK(delta.missing);
+    CHECK_FALSE(delta.hasSurveyContent);
+
+    // Clearing the path wipes the rows and the counts with everything else.
+    preview.setSourcePath(QString());
+    CHECK(preview.rows().isEmpty());
+    CHECK(preview.surveyCount() == 0);
+    CHECK(preview.stationCount() == 0);
+    CHECK(preview.missingFileCount() == 0);
+}

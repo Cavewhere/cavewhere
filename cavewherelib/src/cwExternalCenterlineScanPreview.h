@@ -49,6 +49,10 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineScanPreview : public QObject
     Q_PROPERTY(QStringList warnings READ warnings NOTIFY scanChanged FINAL)
     Q_PROPERTY(int fileCount READ fileCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(QList<cwScanBlock> blocks READ blocks NOTIFY scanChanged FINAL)
+    Q_PROPERTY(QList<cwScanRow> rows READ rows NOTIFY scanChanged FINAL)
+    Q_PROPERTY(int surveyCount READ surveyCount NOTIFY scanChanged FINAL)
+    Q_PROPERTY(int stationCount READ stationCount NOTIFY scanChanged FINAL)
+    Q_PROPERTY(int missingFileCount READ missingFileCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(int topLevelBlockCount READ topLevelBlockCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(int rootStationCount READ rootStationCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(QDate rootDate READ rootDate NOTIFY scanChanged FINAL)
@@ -82,6 +86,22 @@ public:
     // children. The dialog's structure preview walks it directly.
     QList<cwScanBlock> blocks() const { return m_blocks; }
 
+    // The tree an attach builds, root first in pre-order. The dialog's
+    // structure preview walks it directly.
+    QList<cwScanRow> rows() const { return m_rows; }
+
+    // Summary counts over rows(): the units with a file on disk, the distinct
+    // cavern-relative station names they hold (a Compass link station is one
+    // name per file until cavern equates them), and the listed files the disk
+    // lacks.
+    int surveyCount() const;
+    int stationCount() const;
+    int missingFileCount() const;
+
+    // What a preview row reads as: its node kind for a node, "Trip" for a
+    // unit-only row (the trip an attach derives from it).
+    Q_INVOKABLE QString kindLabel(const cwScanRow& row) const;
+
     // Counted from blocks() rather than stored, so the two can never
     // disagree. With entryHasOwnShots it drives the multi-cave
     // heuristic: several top-level blocks and no shots of the entry's
@@ -109,7 +129,7 @@ signals:
     void scanningChanged();
 
     // One signal for the whole result payload (valid / errorMessage /
-    // warnings / fileCount / blocks / rootStationCount / rootDate /
+    // warnings / fileCount / blocks / rows / rootStationCount / rootDate /
     // entryHasOwnShots / entryDirectIncludes) - they only ever change
     // together.
     void scanChanged();
@@ -129,6 +149,7 @@ private:
     QStringList m_warnings;
     int m_fileCount = 0;
     QList<cwScanBlock> m_blocks;
+    QList<cwScanRow> m_rows;
     int m_rootStationCount = 0;
     QDate m_rootDate;
     bool m_entryHasOwnShots = false;

@@ -86,6 +86,15 @@ const QRegularExpression& compassSurveyDateRegex()
     return regex;
 }
 
+// "SURVEY NAME: ALPHA1"
+const QRegularExpression& compassSurveyNameRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^SURVEY\s+NAME:\s*(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
 /**
  * Builds the date a Compass "SURVEY DATE:" match names, applying the
  * same 2-digit-year pivot as cwCompassImporter so a .dat reads the
@@ -446,9 +455,23 @@ bool isAnonymousStation(const QString& token)
         || token == QLatin1String("..");
 }
 
+// The scan's tree under construction. Rows reference each other by index into
+// ScanState::tree; kRootRow is the entry file's row.
+constexpr int kNoRow = -1;
+constexpr int kRootRow = 0;
+
+struct TreeRow {
+    cwScanRow row;
+    int parent = kNoRow;
+    QList<int> children;
+    // the row's own unit, as cavern-relative names
+    QSet<QString> stations;
+};
+
 // One *begin currently on the block stack.
 struct OpenBlock {
     int blockIndex = kNoBlock;
+    int row = kNoRow;
     QSet<QString> stations;
 };
 
@@ -506,7 +529,99 @@ struct ScanState {
     WallsPrefixLevels pendingWallsPrefix;
     // the system that same entry's .REF georeference names, empty for none
     QString pendingWallsCoordinateSystem;
+    // the scan's tree, root first; empty when the walk builds none
+    QList<TreeRow> tree;
+    // the row the next file read fills - a .mak's Compass file row for its
+    // .dat, a .wpj's survey row for its .srv - handed over like
+    // pendingWallsPrefix
+    int pendingRow = kNoRow;
 };
+
+// \a tail under \a head, or \a tail alone when \a head is empty.
+QString joined(const QString& head, QChar separator, const QString& tail)
+{
+    return head.isEmpty() ? tail : head + separator + tail;
+}
+
+// The sourcePath segment of an entry that writes no name: '#' and its 1-based
+// position, which no written name collides with since '#' starts a reference.
+QString positionalSegment(qsizetype index)
+{
+    return QLatin1Char('#') + QString::number(index + 1);
+}
+
+/**
+ * The child of \a parent whose sourcePath ends in \a segment, created when the
+ * scan has not seen it yet, so a Survex block opened twice or a Compass survey
+ * name written twice stays one row.
+ */
+int childRow(ScanState& state, int parent, const QString& segment,
+             cwSurveyNodeKind::Kind kind, const QString& displayName,
+             const QString& cavernLabel)
+{
+    const QString sourcePath =
+        joined(state.tree.at(parent).row.sourcePath, QLatin1Char('/'), segment);
+    for (const int child : state.tree.at(parent).children) {
+        if (state.tree.at(child).row.sourcePath == sourcePath) {
+            return child;
+        }
+    }
+
+    TreeRow created;
+    created.parent = parent;
+    created.row.kind = kind;
+    created.row.sourcePath = sourcePath;
+    created.row.displayName = displayName;
+    created.row.cavernLabel = cavernLabel;
+    created.row.depth = state.tree.at(parent).row.depth + 1;
+
+    const int index = static_cast<int>(state.tree.size());
+    state.tree.append(created);
+    state.tree[parent].children.append(index);
+    return index;
+}
+
+int childNodeRow(ScanState& state, int parent, const QString& segment,
+                 cwSurveyNodeKind::Kind kind, const QString& displayName,
+                 const QString& cavernLabel)
+{
+    const int row = childRow(state, parent, segment, kind, displayName, cavernLabel);
+    state.tree[row].row.isNode = true;
+    return row;
+}
+
+// The row's own and its ancestors' cavernLabels, outermost first, joined '.'.
+QString cavernPath(const ScanState& state, int row)
+{
+    QStringList labels;
+    for (int current = row; current != kNoRow; current = state.tree.at(current).parent) {
+        const QString& label = state.tree.at(current).row.cavernLabel;
+        if (!label.isEmpty()) {
+            labels.prepend(label);
+        }
+    }
+    return labels.join(QLatin1Char('.'));
+}
+
+// Adds \a name, spelled relative to the row's cavern path, to the row's unit.
+void recordUnitStation(ScanState& state, int row, const QString& name)
+{
+    const QString path = cavernPath(state, row);
+    TreeRow& treeRow = state.tree[row];
+    treeRow.row.isUnit = true;
+    treeRow.stations.insert(joined(path, QLatin1Char('.'), name));
+}
+
+void stampRowDate(ScanState& state, int row, const QDate& date)
+{
+    if (!date.isValid()) {
+        return;
+    }
+    QDate& rowDate = state.tree[row].row.date;
+    if (!rowDate.isValid()) {
+        rowDate = date;
+    }
+}
 
 // inProgress is exactly the recursion stack, so a depth of one means
 // the file being read is the entry file itself.
@@ -534,6 +649,25 @@ OpenBlock* innermostNamedBlock(ScanState& state)
 }
 
 /**
+ * The row the file being read hangs its rows from when no pendingRow names
+ * one: the innermost named Survex block around the *include that reached it,
+ * or the entry file's root.
+ */
+int containerRow(ScanState& state)
+{
+    const OpenBlock* open = innermostNamedBlock(state);
+    return open == nullptr ? kRootRow : open->row;
+}
+
+// Takes the row a referencing file handed over, or the container row.
+int takePendingRow(ScanState& state)
+{
+    const int row = state.pendingRow == kNoRow ? containerRow(state) : state.pendingRow;
+    state.pendingRow = kNoRow;
+    return row;
+}
+
+/**
  * Records a station name against the innermost open named block, or
  * against the file root when no named block is open. Counts stay
  * current as they are recorded, so an unclosed *begin still reports
@@ -549,9 +683,11 @@ void recordStation(ScanState& state, const QString& station)
     if (open == nullptr) {
         if (!station.contains(QLatin1Char('.'))) {
             state.rootStations.insert(station);
+            recordUnitStation(state, kRootRow, station);
         }
         return;
     }
+    recordUnitStation(state, open->row, station);
     open->stations.insert(station);
     state.blocks[open->blockIndex].stationCount =
         static_cast<int>(open->stations.size());
@@ -569,8 +705,10 @@ void recordSurvexDate(ScanState& state, const QDate& date)
         if (!state.rootDate.isValid()) {
             state.rootDate = date;
         }
+        stampRowDate(state, kRootRow, date);
         return;
     }
+    stampRowDate(state, open->row, date);
     cwScanBlock& block = state.blocks[open->blockIndex];
     if (!block.date.isValid()) {
         block.date = date;
@@ -586,6 +724,8 @@ void pushSurvexBlock(ScanState& state, const QString& name)
 
     OpenBlock open;
     if (!name.isEmpty()) {
+        open.row = childNodeRow(state, containerRow(state), name,
+                                cwSurveyNodeKind::Kind::SurvexBlock, name, name);
         state.blockSegments.append(name);
 
         cwScanBlock block;
@@ -860,6 +1000,32 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
     state.visited.insert(canonical);
 }
 
+// A '#' reference's leaf name without its extension, as the .mak spells it.
+QString referenceStem(const QString& reference)
+{
+    const qsizetype lastSeparator =
+        qMax(reference.lastIndexOf(QLatin1Char('/')), reference.lastIndexOf(QLatin1Char('\\')));
+    const QString leaf = reference.mid(lastSeparator + 1);
+    const qsizetype extension = leaf.lastIndexOf(QLatin1Char('.'));
+    return extension >= 0 ? leaf.left(extension) : leaf;
+}
+
+// "ALPHA" -> "Alpha", "big cave" -> "Big Cave".
+QString titleCased(const QString& text)
+{
+    QString result = text.toLower();
+    bool startsWord = true;
+    for (qsizetype i = 0; i < result.size(); ++i) {
+        if (result.at(i).isSpace()) {
+            startsWord = true;
+        } else if (startsWord) {
+            result[i] = result.at(i).toUpper();
+            startsWord = false;
+        }
+    }
+    return result;
+}
+
 /**
  * Counts every station a Compass .dat spells as a root station, and
  * takes the first survey's "SURVEY DATE:" as the root date. Surveys
@@ -872,15 +1038,21 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
  * referenced .dat with no surrounding level, so a Compass survey is
  * no naming level and every station lands flat under whatever scope
  * the driver wraps the file in.
+ *
+ * For the scan's tree, each survey with shots becomes a unit under
+ * \a fileRow (kNoRow builds none), named by its "SURVEY NAME:" and dated
+ * by its own "SURVEY DATE:".
  */
-void collectCompassStations(const QString& text, ScanState& state)
+void collectCompassStations(const QString& text, ScanState& state, int fileRow = kNoRow)
 {
     const QStringList sections = text.split(QLatin1Char('\f'));
-    for (const QString& section : sections) {
-        bool sawStation = false;
+    for (qsizetype sectionIndex = 0; sectionIndex < sections.size(); ++sectionIndex) {
         bool inShots = false;
+        QString surveyName;
+        QDate surveyDate;
+        QStringList sectionStations;
 
-        const QStringList lines = section.split(QLatin1Char('\n'));
+        const QStringList lines = sections.at(sectionIndex).split(QLatin1Char('\n'));
         for (const QString& rawLine : lines) {
             const QString line = rawLine.trimmed();
             if (line.isEmpty()) {
@@ -889,9 +1061,13 @@ void collectCompassStations(const QString& text, ScanState& state)
             if (!inShots) {
                 if (const auto dateMatch = compassSurveyDateRegex().match(line);
                     dateMatch.hasMatch()) {
+                    surveyDate = compassSurveyDate(dateMatch);
                     if (!state.rootDate.isValid()) {
-                        state.rootDate = compassSurveyDate(dateMatch);
+                        state.rootDate = surveyDate;
                     }
+                } else if (const auto nameMatch = compassSurveyNameRegex().match(line);
+                           nameMatch.hasMatch()) {
+                    surveyName = nameMatch.captured(1);
                 } else if (line.startsWith(QLatin1String("FROM"), Qt::CaseInsensitive)) {
                     inShots = true;
                 }
@@ -900,12 +1076,26 @@ void collectCompassStations(const QString& text, ScanState& state)
             for (const QString& station :
                  leadingStationTokens(line, kStationsPerShotLine)) {
                 state.rootStations.insert(station);
-                sawStation = true;
+                sectionStations.append(station);
             }
         }
 
-        if (sawStation && scanningEntryFile(state)) {
+        if (sectionStations.isEmpty()) {
+            continue;
+        }
+        if (scanningEntryFile(state)) {
             state.entryHasOwnShots = true;
+        }
+        if (fileRow != kNoRow) {
+            const QString segment = surveyName.isEmpty()
+                ? positionalSegment(sectionIndex)
+                : surveyName;
+            const int unitRow = childRow(state, fileRow, segment,
+                                         state.tree.at(fileRow).row.kind, segment, QString());
+            stampRowDate(state, unitRow, surveyDate);
+            for (const QString& station : std::as_const(sectionStations)) {
+                recordUnitStation(state, unitRow, station);
+            }
         }
     }
 }
@@ -950,6 +1140,7 @@ void scanCompassFile(const QString& filePath, ScanState& state)
         }
 
         if (isMak) {
+            const int makRow = takePendingRow(state);
             const QDir baseDir = QFileInfo(canonical).absoluteDir();
             const QString outerSystem = state.coordinateSystems.constLast();
             const cwCompassMakFile::Project project = cwCompassMakFile::parse(decoded.text);
@@ -968,9 +1159,15 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                     recordFix(state, datSurvey, fix.station, fix.coordinate, system,
                               canonical, 0);
                 }
+                const int fileRow = childNodeRow(state, makRow,
+                                                 QString(target).replace(QLatin1Char('\\'),
+                                                                         QLatin1Char('/')),
+                                                 cwSurveyNodeKind::Kind::CompassFile,
+                                                 titleCased(referenceStem(target)), datSurvey);
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
                 if (resolution.resolved.isEmpty()) {
+                    state.tree[fileRow].row.missing = true;
                     recordWarning(state,
                                   QStringLiteral("missing Compass reference: %1").arg(target));
                     continue;
@@ -986,7 +1183,9 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                 // .mak entries point at .dat files, which never include
                 // anything else - but go through scanByFormat anyway so
                 // a .mak that nests another .mak still walks correctly.
+                state.pendingRow = fileRow;
                 scanByFormat(resolution.resolved, state);
+                state.pendingRow = kNoRow;
                 if (!state.error.isEmpty()) {
                     break;
                 }
@@ -998,7 +1197,7 @@ void scanCompassFile(const QString& filePath, ScanState& state)
         } else {
             // A .dat holds the surveys themselves; a .mak only points
             // at them, so it contributes no stations of its own.
-            collectCompassStations(decoded.text, state);
+            collectCompassStations(decoded.text, state, takePendingRow(state));
         }
     }
 
@@ -1104,7 +1303,8 @@ WallsStationName wallsStationName(const WallsPrefixLevels& prefix, const QString
 void collectWallsStations(const QString& canonical,
                           WallsPrefixLevels prefix,
                           const QString& coordinateSystem,
-                          ScanState& state)
+                          ScanState& state,
+                          int unitRow)
 {
     bool sawStation = false;
     const QStringList lines = readDecodedLines(canonical);
@@ -1123,8 +1323,9 @@ void collectWallsStations(const QString& canonical,
             }
             if (const auto dateMatch = wallsDateRegex().match(line);
                 dateMatch.hasMatch()) {
-                recordWallsDate(state, prefix.path(),
-                                parseWallsDate(dateMatch.captured(1)));
+                const QDate date = parseWallsDate(dateMatch.captured(1));
+                recordWallsDate(state, prefix.path(), date);
+                stampRowDate(state, unitRow, date);
                 continue;
             }
             if (const auto prefixMatch = wallsPrefixDirectiveRegex().match(line);
@@ -1149,6 +1350,8 @@ void collectWallsStations(const QString& canonical,
              leadingStationTokens(line, kStationsPerShotLine)) {
             const WallsStationName name = wallsStationName(prefix, token);
             recordWallsStation(state, name.path, name.station);
+            recordUnitStation(state, unitRow,
+                              joined(name.path, QLatin1Char('.'), name.station));
             sawStation = true;
         }
     }
@@ -1170,18 +1373,30 @@ WallsPrefixLevels wallsPrefixFromOptions(const QList<dewalls::Segment>& options)
     return prefix;
 }
 
+// A .wpj entry's segment of a sourcePath: its .NAME, else its title, else its
+// position among its siblings.
+QString wallsEntrySegment(const dewalls::WpjEntry& entry, qsizetype index)
+{
+    if (!entry.Name.isEmpty()) {
+        return entry.Name.value();
+    }
+    return entry.Title.isEmpty() ? positionalSegment(index) : entry.Title;
+}
+
 void collectWallsSurveys(const dewalls::WpjBookPtr& book,
                         const QDir& baseDir,
                         const QString& wpjPath,
-                        ScanState& state)
+                        ScanState& state,
+                        int bookRow)
 {
     if (book.isNull()) {
         return;
     }
-    for (const auto& child : book->Children) {
+    for (qsizetype childIndex = 0; childIndex < book->Children.size(); ++childIndex) {
         if (!state.error.isEmpty()) {
             return;
         }
+        const auto& child = book->Children.at(childIndex);
         if (child.isNull()) {
             continue;
         }
@@ -1192,12 +1407,16 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
             return;
         }
         if (child->isBook()) {
+            const int childBookRow = childNodeRow(state, bookRow, wallsEntrySegment(*child, childIndex),
+                                                  cwSurveyNodeKind::Kind::WallsBook,
+                                                  child->Title, QString());
             collectWallsSurveys(child.dynamicCast<dewalls::WpjBook>(), baseDir,
-                                wpjPath, state);
+                                wpjPath, state, childBookRow);
             continue;
         }
-        // .SURVEY / .OTHER both reference an external file by Name.
-        if (child->Name.isEmpty()) {
+        // An other-type entry (a drawing, a notes file) is no survey data:
+        // cavern skips it, and so does the scan.
+        if (child->isOther() || child->Name.isEmpty()) {
             continue;
         }
         const QString name = child->Name.value();
@@ -1214,7 +1433,13 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
         if (QFileInfo(absolutePath).suffix().isEmpty()) {
             absolutePath += QLatin1String(kWallsSrvExtension);
         }
+        // The survey's row turns into a unit once its file names a station.
+        const int unitRow = childRow(state, bookRow, wallsEntrySegment(*child, childIndex),
+                                     cwSurveyNodeKind::Kind::WallsBook,
+                                     child->Title.isEmpty() ? name : child->Title, QString());
         if (!QFileInfo::exists(absolutePath)) {
+            state.tree[unitRow].row.isUnit = true;
+            state.tree[unitRow].row.missing = true;
             recordWarning(state,
                           QStringLiteral("missing Walls reference: %1").arg(absolutePath));
             continue;
@@ -1228,7 +1453,9 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
         state.pendingWallsCoordinateSystem = reference.isNull()
             ? QString()
             : cwCompassMakFile::utmSystemName(reference->datumName, reference->zone);
+        state.pendingRow = unitRow;
         scanByFormat(absolutePath, state);
+        state.pendingRow = kNoRow;
     }
 }
 
@@ -1268,8 +1495,14 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         state.inProgress.insert(canonical);
         state.dependencies.append(canonical);
 
+        // The entry's root book is the scan's root; a .wpj an *include
+        // reaches is a book of the block around it.
+        const int bookRow = scanningEntryFile(state)
+            ? kRootRow
+            : childNodeRow(state, takePendingRow(state), wallsEntrySegment(*root, 0),
+                           cwSurveyNodeKind::Kind::WallsBook, root->Title, QString());
         const QDir baseDir = QFileInfo(canonical).absoluteDir();
-        collectWallsSurveys(root, baseDir, canonical, state);
+        collectWallsSurveys(root, baseDir, canonical, state, bookRow);
     } else {
         // Bare .srv: trust the file as-is, no parsing needed. A .srv
         // reached through a project starts from that entry's prefix
@@ -1280,7 +1513,16 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         const QString coordinateSystem = state.pendingWallsCoordinateSystem;
         state.pendingWallsPrefix = WallsPrefixLevels();
         state.pendingWallsCoordinateSystem.clear();
-        collectWallsStations(canonical, prefix, coordinateSystem, state);
+        // A .srv no project entry handed over is a unit of its own under the
+        // row around it, named after the file.
+        int unitRow = state.pendingRow;
+        state.pendingRow = kNoRow;
+        if (unitRow == kNoRow) {
+            const QString stem = QFileInfo(canonical).completeBaseName();
+            unitRow = childRow(state, containerRow(state), stem,
+                               cwSurveyNodeKind::Kind::WallsBook, stem, QString());
+        }
+        collectWallsStations(canonical, prefix, coordinateSystem, state, unitRow);
     }
 
     state.inProgress.remove(canonical);
@@ -1653,6 +1895,59 @@ void parseSeededMetadata(ScanResult& result)
     }
 }
 
+// The entry file's row: the root of the scan's tree, named after the file.
+TreeRow rootRow(const QString& entryFile)
+{
+    using cwSurveyNodeKind::Kind;
+    TreeRow root;
+    root.row.isNode = true;
+    root.row.displayName = QFileInfo(entryFile).completeBaseName();
+    switch (cwExternalCenterlineScanner::formatFor(entryFile)) {
+    case cwExternalCenterlineScanner::Format::Compass:
+        root.row.kind = cwCompassMakFile::isMakFile(entryFile) ? Kind::CompassProject
+                                                                : Kind::CompassFile;
+        break;
+    case cwExternalCenterlineScanner::Format::Walls:
+        root.row.kind = Kind::WallsBook;
+        break;
+    case cwExternalCenterlineScanner::Format::Survex:
+    case cwExternalCenterlineScanner::Format::Unknown:
+        root.row.kind = Kind::SurvexFile;
+        break;
+    }
+    return root;
+}
+
+/**
+ * Appends \a index and its descendants to \a rows in pre-order, filling
+ * each row's sorted stations, subtree station count, and content flag, and
+ * returns the distinct stations of the subtree. A row that turned into neither
+ * a node nor a unit (a .srv with no shots) is left out.
+ */
+QSet<QString> appendRows(const QList<TreeRow>& tree, int index, QList<cwScanRow>& rows)
+{
+    const TreeRow& treeRow = tree.at(index);
+    const cwScanRow& source = treeRow.row;
+    if (!source.isNode && !source.isUnit) {
+        return {};
+    }
+
+    const qsizetype position = rows.size();
+    rows.append(source);
+
+    QSet<QString> subtreeStations = treeRow.stations;
+    for (const int child : treeRow.children) {
+        subtreeStations.unite(appendRows(tree, child, rows));
+    }
+
+    cwScanRow& row = rows[position];
+    row.stations = QStringList(treeRow.stations.cbegin(), treeRow.stations.cend());
+    row.stations.sort();
+    row.stationCount = static_cast<int>(subtreeStations.size());
+    row.hasSurveyContent = !subtreeStations.isEmpty();
+    return subtreeStations;
+}
+
 Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
                                         void (*scanFn)(const QString&, ScanState&),
                                         const char* contextName)
@@ -1668,6 +1963,7 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     }
 
     ScanState state;
+    state.tree.append(rootRow(entryFile));
     scanFn(entryFile, state);
 
     if (!state.error.isEmpty()) {
@@ -1685,6 +1981,7 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
     result.warnings = state.warnings;
     result.entryDirectIncludes = state.entryDirectIncludes;
     result.blocks = state.blocks;
+    appendRows(state.tree, kRootRow, result.rows);
     result.rootStationCount = static_cast<int>(state.rootStations.size());
     result.rootDate = state.rootDate;
     result.entryHasOwnShots = state.entryHasOwnShots;

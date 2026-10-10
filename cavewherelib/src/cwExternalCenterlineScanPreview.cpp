@@ -8,6 +8,10 @@
 //Our includes
 #include "cwExternalCenterlineScanPreview.h"
 #include "cwConcurrent.h"
+#include "cwSurveyTreeModel.h"
+
+//Std includes
+#include <algorithm>
 
 cwExternalCenterlineScanPreview::cwExternalCenterlineScanPreview(QObject* parent) :
     QObject(parent),
@@ -105,6 +109,33 @@ int cwExternalCenterlineScanPreview::topLevelBlockCount() const
     return count;
 }
 
+int cwExternalCenterlineScanPreview::surveyCount() const
+{
+    return static_cast<int>(std::count_if(m_rows.cbegin(), m_rows.cend(), [](const cwScanRow& row) {
+        return row.isUnit && !row.missing;
+    }));
+}
+
+int cwExternalCenterlineScanPreview::stationCount() const
+{
+    return m_rows.isEmpty() ? 0 : m_rows.constFirst().stationCount;
+}
+
+int cwExternalCenterlineScanPreview::missingFileCount() const
+{
+    return static_cast<int>(std::count_if(m_rows.cbegin(), m_rows.cend(), [](const cwScanRow& row) {
+        return row.missing;
+    }));
+}
+
+QString cwExternalCenterlineScanPreview::kindLabel(const cwScanRow& row) const
+{
+    if (row.isNode) {
+        return cwSurveyTreeModel::kindLabel(row.kind);
+    }
+    return QStringLiteral("Trip");
+}
+
 void cwExternalCenterlineScanPreview::applyResult(
         bool valid, const QString& errorMessage,
         const cwExternalCenterlineScanner::ScanResult& scan)
@@ -113,6 +144,7 @@ void cwExternalCenterlineScanPreview::applyResult(
     if (m_valid == valid && m_errorMessage == errorMessage
         && m_warnings == scan.warnings && m_fileCount == fileCount
         && m_blocks == scan.blocks
+        && m_rows == scan.rows
         && m_rootStationCount == scan.rootStationCount
         && m_rootDate == scan.rootDate
         && m_entryHasOwnShots == scan.entryHasOwnShots
@@ -124,6 +156,7 @@ void cwExternalCenterlineScanPreview::applyResult(
     m_warnings = scan.warnings;
     m_fileCount = fileCount;
     m_blocks = scan.blocks;
+    m_rows = scan.rows;
     m_rootStationCount = scan.rootStationCount;
     m_rootDate = scan.rootDate;
     m_entryHasOwnShots = scan.entryHasOwnShots;

@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwSurveyNodeKind.h"
 #include <Monad/Result.h>
 
 //Qt includes
@@ -118,6 +119,84 @@ class cwScanBlockListRegistration
 };
 
 Q_DECLARE_METATYPE(cwScanBlock)
+
+/**
+ * One row of the tree an attach builds from a survey file: a node (a source
+ * root, a Compass file, a Walls book, a Survex block), a unit (the stations one
+ * future derived trip owns), or both (a Survex block or root with shots of its
+ * own). ScanResult::rows lists them in pre-order; depth is the number of
+ * ancestors, so the root is depth 0.
+ *
+ * sourcePath is the row's identity inside the source, the value a derived
+ * record's source_path holds: empty for the root, otherwise '/'-joined
+ * segments from the root down - a Compass '#' reference then a SURVEY NAME
+ * ("ALPHA.DAT/ALPHA1"), Walls book and survey .NAMEs ("SURVEYS/DEC2001/D01"),
+ * Survex block names ("doghill/big-passage"). An entry that writes no name
+ * takes '#' and its 1-based position among its siblings ("FILE.DAT/#3"), so
+ * its identity is positional.
+ *
+ * cavernLabel is the naming level cavern builds for a node: the lower-cased
+ * .dat stem for a Compass file inside a .mak, the block name for a Survex
+ * block, empty for the root, a Walls book, and a unit-only row. A row's
+ * cavern path is its ancestors' and its own cavernLabels joined with '.'.
+ *
+ * stations is the unit's station names relative to cavern's root label,
+ * spelled as the file spells them and sorted: the cavern path, then any Walls
+ * #PREFIX levels, then the station ("alpha.A5", "N.1", "doghill.d1").
+ * A Survex root's unit holds only its undotted names; a dotted name it ties
+ * to belongs to the whole-node window. stationCount counts the distinct names
+ * of the row's own unit and every descendant unit.
+ *
+ * missing marks a file the source lists and the disk lacks; such a row is
+ * shown and never made into a node or trip. hasSurveyContent is true when the
+ * row's own unit or a descendant unit holds stations.
+ *
+ * kind names a node row's node kind. A unit-only row carries its parent's.
+ */
+class CAVEWHERE_LIB_EXPORT cwScanRow
+{
+    Q_GADGET
+    QML_VALUE_TYPE(cwScanRow)
+
+    Q_PROPERTY(cwSurveyNodeKind::Kind kind MEMBER kind FINAL)
+    Q_PROPERTY(QString sourcePath MEMBER sourcePath FINAL)
+    Q_PROPERTY(QString displayName MEMBER displayName FINAL)
+    Q_PROPERTY(QString cavernLabel MEMBER cavernLabel FINAL)
+    Q_PROPERTY(int depth MEMBER depth FINAL)
+    Q_PROPERTY(bool isNode MEMBER isNode FINAL)
+    Q_PROPERTY(bool isUnit MEMBER isUnit FINAL)
+    Q_PROPERTY(bool hasSurveyContent MEMBER hasSurveyContent FINAL)
+    Q_PROPERTY(bool missing MEMBER missing FINAL)
+    Q_PROPERTY(int stationCount MEMBER stationCount FINAL)
+    Q_PROPERTY(QDate date MEMBER date FINAL)
+    Q_PROPERTY(QStringList stations MEMBER stations FINAL)
+
+public:
+    cwSurveyNodeKind::Kind kind = cwSurveyNodeKind::Kind::Cave;
+    QString sourcePath;
+    QString displayName;
+    QString cavernLabel;
+    int depth = 0;
+    bool isNode = false;
+    bool isUnit = false;
+    bool hasSurveyContent = false;
+    bool missing = false;
+    int stationCount = 0;
+    QDate date;
+    QStringList stations;
+
+    bool operator==(const cwScanRow& other) const = default;
+};
+
+class cwScanRowListRegistration
+{
+    Q_GADGET
+    QML_FOREIGN(QList<cwScanRow>)
+    QML_ANONYMOUS
+    QML_SEQUENTIAL_CONTAINER(cwScanRow)
+};
+
+Q_DECLARE_METATYPE(cwScanRow)
 
 /**
  * Free-function scanner that walks the dependency closure of an
@@ -281,6 +360,26 @@ struct ScanResult {
     QList<cwScanBlock> blocks;
 
     /**
+     * The tree an attach builds, in pre-order, root first. See cwScanRow
+     * for the per-format mapping. Empty only for a failed scan.
+     *
+     * Per format:
+     *   Compass - a .mak is a CompassProject root with one CompassFile per
+     *             '#' line (title-cased stem; an absent file is missing) and
+     *             one unit per SURVEY NAME section with shots. A lone .dat
+     *             is a CompassFile root holding its units.
+     *   Walls   - a .wpj's root book is the WallsBook root, nested books are
+     *             WallsBook nodes, and each .srv with shots is a unit under
+     *             its book. Other-type entries are skipped. A lone .srv is a
+     *             WallsBook root holding the file's unit.
+     *   Survex  - the entry file is a SurvexFile root and each named block a
+     *             SurvexBlock node (files are transparent, and a block opened
+     *             twice is one row). Shots outside every named block are the
+     *             root's own unit; a block with shots of its own is a unit too.
+     */
+    QList<cwScanRow> rows;
+
+    /**
      * How many distinct station names the closure spells outside
      * every block - a Compass station, a Walls station with no
      * prefix in force, a Survex station outside every named *begin.
@@ -344,6 +443,7 @@ struct ScanResult {
             && warnings == other.warnings
             && entryDirectIncludes == other.entryDirectIncludes
             && blocks == other.blocks
+            && rows == other.rows
             && rootStationCount == other.rootStationCount
             && rootDate == other.rootDate
             && entryHasOwnShots == other.entryHasOwnShots
