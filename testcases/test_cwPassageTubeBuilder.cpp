@@ -12,12 +12,12 @@
 
 //Our includes
 #include "cwPassageTubeBuilder.h"
+#include "cwPassageTubeCases.h"
 #include "cwPassageTubeMeshCheck.h"
 
 //Qt includes
 #include <QElapsedTimer>
 #include <QStringList>
-#include <QtMath>
 
 //Std includes
 #include <algorithm>
@@ -28,66 +28,13 @@ namespace {
 
 using Builder = cwPassageTubeBuilder;
 
-struct StationInput {
-    QString name;
-    std::optional<QVector3D> position;
-    QStringList lrud = {QString(), QString(), QString(), QString()};
-};
-
-// One cave, one trip; each inner list is a chunk of stations surveyed in order.
-struct SurveyInput {
-    QList<QList<StationInput>> chunks;
-    cwUnits::LengthUnit distanceUnit = cwUnits::Meters;
-};
-
-struct BuilderInput {
-    cwCavingRegionData region;
-    QHash<QUuid, cwStationPositionLookup> positionsByCave;
-};
-
-// One cave with a trip per survey; station positions are shared by name.
-BuilderInput makeTripsInput(const QList<SurveyInput>& surveys)
-{
-    cwCaveData cave;
-    cave.id = QUuid::createUuid();
-
-    cwStationPositionLookup positions;
-    for (const SurveyInput& survey : surveys) {
-        cwTripData trip;
-        trip.id = QUuid::createUuid();
-        trip.calibrations.setDistanceUnit(survey.distanceUnit);
-
-        for (const QList<StationInput>& stations : survey.chunks) {
-            cwSurveyChunkData chunk;
-            chunk.id = QUuid::createUuid();
-            for (const StationInput& input : stations) {
-                cwStation station(input.name);
-                station.setLeft(cwDistanceReading(input.lrud.at(0)));
-                station.setRight(cwDistanceReading(input.lrud.at(1)));
-                station.setUp(cwDistanceReading(input.lrud.at(2)));
-                station.setDown(cwDistanceReading(input.lrud.at(3)));
-                chunk.stations.append(station);
-                if (input.position) {
-                    positions.setPosition(input.name, *input.position);
-                }
-            }
-            for (int i = 1; i < stations.size(); ++i) {
-                chunk.shots.append(cwShot());
-            }
-            trip.chunks.append(chunk);
-        }
-        cave.trips.append(trip);
-    }
-
-    BuilderInput input;
-    input.region.caves.append(cave);
-    input.positionsByCave.insert(cave.id, positions);
-    return input;
-}
+using StationInput = cwPassageTubeCases::Station;
+using SurveyInput = cwPassageTubeCases::Trip;
+using BuilderInput = cwPassageTubeCases::Survey;
 
 BuilderInput makeInput(const SurveyInput& survey)
 {
-    return makeTripsInput({survey});
+    return cwPassageTubeCases::toSurvey(survey);
 }
 
 Builder::Debug buildDebug(const BuilderInput& input)
@@ -1117,7 +1064,7 @@ TEST_CASE("cwPassageTubeBuilder caps each trip of a chain that spans two trips",
     const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), dimensions};
     const SurveyInput first {{{a, b}}};
     const SurveyInput second {{{b, c}}};
-    const BuilderInput input = makeTripsInput({first, second});
+    const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {first, second});
 
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 1);
@@ -1208,79 +1155,6 @@ TEST_CASE("cwPassageTubeBuilder keeps the inner wall of a sharp bend clean", "[P
     }
 }
 
-namespace {
-
-// The "Down" clino: the shot drops straight down whatever its azimuth.
-constexpr double kClinoDown = -90.0;
-
-struct PhakeShot {
-    const char* from;
-    const char* to;
-    double distance;
-    double azimuth;
-    double clino;
-};
-
-// Phake Cave, trip "2025.2 Release": meters, frontsights only, declination 0.
-// In survey order, so every shot starts at an already placed station.
-constexpr PhakeShot kPhakeShots[] = {
-    {"a1", "a2", 14.52, 49.0, -3.0},
-    {"a2", "a3", 9.13, 352.0, -17.3},
-    {"a3", "a4", 11.05, 82.0, -4.5},
-    {"a4", "a5", 6.97, 41.0, 11.2},
-    {"a4", "a6", 16.54, 147.5, -7.5},
-    {"a6", "a7", 9.81, 43.0, 26.0},
-    {"a7", "a8", 10.23, 74.0, 17.4},
-    {"a6", "a9", 23.44, 0.0, kClinoDown},
-    {"a9", "a10", 5.85, 230.0, -8.4},
-    {"a10", "a11", 10.56, 172.0, -21.7},
-    {"a11", "a12", 9.17, 200.0, -5.3},
-    {"a10", "a13", 18.28, 116.0, -4.1},
-    {"a13", "a14", 6.99, 91.0, -1.2},
-};
-
-// Station positions from the shots (x east, y north, z up), a1 at the origin.
-QHash<QString, QVector3D> phakeCavePositions()
-{
-    QHash<QString, QVector3D> positions {{QStringLiteral("a1"), QVector3D(0, 0, 0)}};
-    for (const PhakeShot& shot : kPhakeShots) {
-        const double azimuth = qDegreesToRadians(shot.azimuth);
-        const double clino = qDegreesToRadians(shot.clino);
-        const double horizontal = shot.clino == kClinoDown ? 0.0 : shot.distance * std::cos(clino);
-        const QVector3D delta(static_cast<float>(horizontal * std::sin(azimuth)),
-                              static_cast<float>(horizontal * std::cos(azimuth)),
-                              static_cast<float>(shot.distance * std::sin(clino)));
-        positions.insert(QString::fromLatin1(shot.to), positions.value(QString::fromLatin1(shot.from)) + delta);
-    }
-    return positions;
-}
-
-// The trip's four chunks as the file has them: a4 and a6 both carry the a6
-// pit's 23 m as down, a9 and a10 its 24 m as up, the dead end a12 has 35 m
-// down into an unsurveyed pit, a10 repeats in chunk 3 without LRUD, and
-// chunk 3 ends in two empty shots.
-SurveyInput phakeCaveSurvey()
-{
-    const QHash<QString, QVector3D> positions = phakeCavePositions();
-    const auto station = [&](const char* name, const QStringList& dimensions = {QString(), QString(), QString(), QString()}) {
-        const QString stationName = QString::fromLatin1(name);
-        return StationInput {stationName, positions.value(stationName), dimensions};
-    };
-    const StationInput empty {QString(), std::nullopt};
-
-    return {{
-        {station("a1", lrud(0, 5, 2, 1.3)), station("a2", lrud(2.5, 0, 1.5, 2)), station("a3", lrud(1.5, 3, 4.5, 1)),
-         station("a4", lrud(0, 2, 2, 1.7)), station("a5", lrud(2.5, 2.5, 11, 2))},
-        {station("a4", lrud(5, 0, 3, 23)), station("a6", lrud(5, 0, 3, 23)), station("a7", lrud(0.2, 3.5, 2.5, 1)),
-         station("a8", lrud(1, 5, 2, 1.2))},
-        {station("a6", lrud(1, 5, 2, 1.2)), station("a9", lrud(2.3, 2, 24, 0)), station("a10", lrud(2.3, 2, 24, 0)),
-         station("a11", lrud(1, 0.2, 3, 0.5)), station("a12", lrud(0, 2, 8, 35))},
-        {station("a10"), station("a13", lrud(1.8, 0, 1.8, 1.7)), station("a14", lrud(0, 2, 2, 1.9)), empty, empty},
-    }};
-}
-
-} // namespace
-
 TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single sane tube", "[PassageTube][cwPassageTubeBuilder]")
 {
     // The largest wall readings on the leg: a11's left, a12's right and
@@ -1291,7 +1165,7 @@ TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single san
     constexpr double kToleranceMeters = 1e-3;
     constexpr qint64 kMaxCheckMilliseconds = 200;
 
-    const BuilderInput input = makeInput(phakeCaveSurvey());
+    const BuilderInput input = makeInput(cwPassageTubeCases::phakeCave());
     const Builder::Debug debug = buildDebug(input);
 
     const auto legIt = std::find_if(debug.legs.cbegin(), debug.legs.cend(), [](const Builder::Leg& leg) {
@@ -1370,7 +1244,7 @@ TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passa
     constexpr double kMinDomeHeightMeters = 1.5;
     constexpr double kMaxDomeHeightMeters = 2.5;
 
-    const BuilderInput input = makeInput(phakeCaveSurvey());
+    const BuilderInput input = makeInput(cwPassageTubeCases::phakeCave());
     const Builder::Debug debug = buildDebug(input);
 
     // The chain holding the leg between armStation and junction, which must
