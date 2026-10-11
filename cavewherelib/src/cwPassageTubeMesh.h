@@ -36,7 +36,8 @@ struct cwPassageTubeMesh {
             LrudOutOfRange,
             ScrapOpening,
             SourceChange,
-            ShaftReading
+            ShaftReading,
+            BendClamped
         };
 
         Type type = NoPassageData;

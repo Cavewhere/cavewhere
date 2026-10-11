@@ -18,6 +18,7 @@
 //Qt includes
 #include <QElapsedTimer>
 #include <QStringList>
+#include <QtMath>
 
 //Std includes
 #include <algorithm>
@@ -51,6 +52,12 @@ QStringList lrud(double left, double right, double up, double down)
 int binAt(int degrees)
 {
     return degrees * Builder::Options().ringResolution / 360;
+}
+
+QVector3D binDirection(const Builder::Ring& ring, int bin)
+{
+    const double theta = 2.0 * std::numbers::pi * bin / ring.radii.size();
+    return ring.frame.right * static_cast<float>(std::cos(theta)) + ring.frame.up * static_cast<float>(std::sin(theta));
 }
 
 const Builder::Ring& ringAt(const Builder::Chain& chain, const QVector3D& center)
@@ -438,6 +445,26 @@ BuilderInput rightAngleBendInput(double radius)
     }}});
 }
 
+// The 90 degree bend on legs of legLength meters, turning left at b.
+BuilderInput rightAngleBendInput(double radius, float legLength)
+{
+    const QStringList dimensions = lrud(radius, radius, radius, radius);
+    return makeInput({{{
+        {QStringLiteral("a"), QVector3D(10.0f - legLength, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions},
+        {QStringLiteral("c"), QVector3D(10, legLength, 0), dimensions},
+    }}});
+}
+
+// How far the rings beside a corner sit from it on long legs: far enough
+// that a ring of the passage's radius stays clear of the corner's ring.
+double cornerInset(double radius, double turnDegrees)
+{
+    constexpr double kInsetSafety = 1.1;
+    constexpr double kMinInsetMeters = 0.5;
+    return std::max(kMinInsetMeters, kInsetSafety * radius * std::tan(qDegreesToRadians(turnDegrees) / 2.0));
+}
+
 const QVector3D kBendCorner(10, 0, 0);
 const QVector3D kBend120Outgoing(-0.5f, std::sqrt(3.0f) / 2.0f, 0.0f);
 
@@ -763,15 +790,18 @@ TEST_CASE("cwPassageTubeBuilder keeps the pit depth out of the lip ring and roun
     const Builder::Chain& chain = debug.chains.at(0);
 
     // The approach floor continues to the lip in place of the dropped reading.
+    // The lip and the bottom turn 90°, so their rings lie at 45° and each
+    // vertical reading slides along the level leg onto them, √2 longer.
     const Builder::Ring& lip = ringAt(chain, QVector3D(0, 10, 0));
-    CHECK(lip.radii.at(binAt(90)) == Catch::Approx(1.0));
-    CHECK(lip.radii.at(binAt(270)) == Catch::Approx(0.5));
-    const Builder::Ring& approach = ringAt(chain, QVector3D(0, 9, 0));
+    CHECK(lip.radii.at(binAt(90)) == Catch::Approx(1.0 * std::numbers::sqrt2));
+    CHECK(lip.radii.at(binAt(270)) == Catch::Approx(0.5 * std::numbers::sqrt2));
+    // The corner inset is 1.1 × the 2 m walls × tan 45°.
+    const Builder::Ring& approach = ringAt(chain, QVector3D(0, 7.8f, 0));
     CHECK(approach.radii.at(binAt(270)) == Catch::Approx(0.5));
 
     const Builder::Ring& bottom = ringAt(chain, QVector3D(0, 10, -20));
-    CHECK(bottom.radii.at(binAt(90)) == Catch::Approx(1.0));
-    CHECK(bottom.radii.at(binAt(270)) == Catch::Approx(0.5));
+    CHECK(bottom.radii.at(binAt(90)) == Catch::Approx(1.0 * std::numbers::sqrt2));
+    CHECK(bottom.radii.at(binAt(270)) == Catch::Approx(0.5 * std::numbers::sqrt2));
 
     // The shaft is round at the lip's horizontal half-width.
     const Builder::Ring& shaft = ringAt(chain, QVector3D(0, 10, -10));
@@ -983,9 +1013,10 @@ TEST_CASE("cwPassageTubeBuilder rounds a 120 degree bend with inset rings", "[Pa
     REQUIRE(debug.chains.size() == 1);
     const Builder::Chain& chain = debug.chains.at(0);
 
-    const Builder::Ring& before = ringAt(chain, corner - QVector3D(0.5f, 0, 0));
+    const float inset = static_cast<float>(cornerInset(1.0, 120.0));
+    const Builder::Ring& before = ringAt(chain, corner - QVector3D(inset, 0, 0));
     checkVectorNear(before.frame.tangent, QVector3D(1, 0, 0));
-    const Builder::Ring& after = ringAt(chain, corner + outgoing * 0.5f);
+    const Builder::Ring& after = ringAt(chain, corner + outgoing * inset);
     checkVectorNear(after.frame.tangent, outgoing);
     checkFramesOrthonormal(chain);
     checkMeshClosedWithSaneRings(debug);
@@ -1134,12 +1165,24 @@ TEST_CASE("cwPassageTubeBuilder keeps a loop closing at a sharp bend without fol
     checkMeshClosedWithSaneRings(debug);
 }
 
-// The inner wall of a bend sharper than the tube's radius still crosses
-// itself: SelfIntersection, DegenerateTriangle and Crease fire where pulled
-// vertices land on the previous ring, and WallMissed where the inner wall
-// collapses. No plan task handles it yet; this records the failures until
-// one does.
-TEST_CASE("cwPassageTubeBuilder keeps the inner wall of a sharp bend clean", "[PassageTube][cwPassageTubeBuilder][!mayfail]")
+// Every ring vertex sits at its bin's radius: the bend rules kept each ring in
+// front of the one before, so the fold-back pull never moved a vertex.
+void checkNoVertexPulled(const Builder::Debug& debug)
+{
+    for (const Builder::Chain& chain : debug.chains) {
+        for (const Builder::Ring& ring : chain.rings) {
+            const int resolution = ring.radii.size();
+            REQUIRE(ring.vertices.size() == resolution);
+            for (int bin = 0; bin < resolution; ++bin) {
+                const QVector3D unpulled = ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
+                INFO("ring at (" << ring.center.x() << ", " << ring.center.y() << ", " << ring.center.z() << ") bin " << bin);
+                CHECK(ring.vertices.at(bin).distanceToPoint(unpulled) < 1e-4f);
+            }
+        }
+    }
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps the inner wall of a sharp bend clean", "[PassageTube][cwPassageTubeBuilder]")
 {
     const QList<std::pair<QString, BuilderInput>> bends = {
         {QStringLiteral("vertical pit"), verticalPitInput()},
@@ -1151,8 +1194,88 @@ TEST_CASE("cwPassageTubeBuilder keeps the inner wall of a sharp bend clean", "[P
     };
     for (const auto& [name, input] : bends) {
         INFO(name.toStdString());
-        checkMeshClean(buildDebug(input));
+        const Builder::Debug debug = buildDebug(input);
+        checkMeshClean(debug);
+        checkNoVertexPulled(debug);
     }
+}
+
+TEST_CASE("cwPassageTubeBuilder widens the corner inset with the ring radius", "[PassageTube][cwPassageTubeBuilder]")
+{
+    static constexpr double kWideRadius = 3.0;
+    static constexpr double kNarrowRadius = 0.3;
+    static constexpr double kWideInset = 3.3;
+    static constexpr double kNarrowInset = 0.5;
+    const auto [radius, expectedInset] = GENERATE(table<double, double>({
+        {kWideRadius, kWideInset},
+        {kNarrowRadius, kNarrowInset},
+    }));
+    INFO("radius " << radius);
+    const Builder::Debug debug = buildDebug(rightAngleBendInput(radius, 20.0f));
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+
+    const auto cornerIt = std::find_if(chain.rings.cbegin(), chain.rings.cend(), [](const Builder::Ring& ring) {
+        return ring.center.distanceToPoint(kBendCorner) < 1e-4f;
+    });
+    REQUIRE(cornerIt != chain.rings.cend());
+    REQUIRE(cornerIt != chain.rings.cbegin());
+    REQUIRE(cornerIt + 1 != chain.rings.cend());
+    CHECK((cornerIt - 1)->center.distanceToPoint(kBendCorner) == Catch::Approx(expectedInset).margin(0.05));
+    CHECK((cornerIt + 1)->center.distanceToPoint(kBendCorner) == Catch::Approx(expectedInset).margin(0.05));
+    checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder clamps the inner wall of a bend on a short leg", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // 4 m legs cap the inset at 0.45 × 4 = 1.8 m, short of the 3.3 m the
+    // 3 m walls need, so the inner wall is pulled in to 1.8 × 0.95 m.
+    constexpr double kRadius = 3.0;
+    constexpr float kLegLength = 4.0f;
+    constexpr double kInset = 1.8;
+    constexpr double kMaxInnerRadius = kInset * 0.95 + 1e-3;
+    const Builder::Debug debug = buildDebug(rightAngleBendInput(kRadius, kLegLength));
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+
+    const QVector3D incoming(1, 0, 0);
+    const QVector3D outgoing(0, 1, 0);
+    const QVector3D inside = (outgoing - incoming).normalized();
+    const auto checkInnerSide = [&](const Builder::Ring& ring, const QVector3D& legDirection) {
+        INFO("ring at (" << ring.center.x() << ", " << ring.center.y() << ")");
+        for (const QVector3D& vertex : ring.vertices) {
+            const QVector3D offset = vertex - kBendCorner;
+            if (QVector3D::dotProduct(vertex - ring.center, inside) > 1e-4f) {
+                // Distance from the leg's axis: the radius of a ring square to
+                // the leg, the section of the corner ring across the leg.
+                const QVector3D across = offset - legDirection * QVector3D::dotProduct(offset, legDirection);
+                CHECK(across.length() <= kMaxInnerRadius);
+            }
+        }
+    };
+
+    const Builder::Ring& before = ringAt(chain, kBendCorner - incoming * static_cast<float>(kInset));
+    const Builder::Ring& corner = ringAt(chain, kBendCorner);
+    const Builder::Ring& after = ringAt(chain, kBendCorner + outgoing * static_cast<float>(kInset));
+    checkInnerSide(before, incoming);
+    checkInnerSide(corner, incoming);
+    checkInnerSide(corner, outgoing);
+    checkInnerSide(after, outgoing);
+    for (const Builder::Ring* ring : {&before, &after}) {
+        for (int bin = 0; bin < ring->radii.size(); ++bin) {
+            if (QVector3D::dotProduct(binDirection(*ring, bin), inside) > 1e-4f) {
+                CHECK(ring->radii.at(bin) <= kMaxInnerRadius);
+                CHECK_FALSE(ring->measured.at(bin));
+            }
+        }
+    }
+
+    const auto clampWarnings = std::count_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
+        return warning.type == cwPassageTubeMesh::Warning::BendClamped;
+    });
+    CHECK(clampWarnings == 1);
+    checkMeshClean(debug);
+    checkNoVertexPulled(debug);
 }
 
 TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single sane tube", "[PassageTube][cwPassageTubeBuilder]")
@@ -1163,7 +1286,11 @@ TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single san
     constexpr double kMaxRightMeters = 2.0;
     constexpr double kMaxRadiusMeters = 8.0;
     constexpr double kToleranceMeters = 1e-3;
-    constexpr qint64 kMaxCheckMilliseconds = 200;
+    // The check takes about 140 ms alone in a Debug ASan build and runs up to
+    // eight times slower inside the full suite, where other tests' worker
+    // threads load the machine; the bound catches a check that grows by an
+    // order of magnitude.
+    constexpr qint64 kMaxCheckMilliseconds = 2000;
 
     const BuilderInput input = makeInput(cwPassageTubeCases::phakeCave());
     const Builder::Debug debug = buildDebug(input);

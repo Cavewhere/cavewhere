@@ -128,7 +128,8 @@ public:
     static QVector<Issue> ringIssues(const cwPassageTubeBuilder::Debug& debug,
                                      const Options& options = Options());
 
-    // Each passage LRUD wall point of every leg endpoint lies on debug.mesh.
+    // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
+    // apart from the stations where the builder warns BendClamped.
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 

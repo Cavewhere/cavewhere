@@ -9,6 +9,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/generators/catch_generators_adapters.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 
 //Our includes
@@ -22,8 +23,10 @@
 #include <QtMath>
 
 //Std includes
+#include <algorithm>
 #include <cmath>
 #include <functional>
+#include <numbers>
 #include <string>
 #include <vector>
 
@@ -34,6 +37,7 @@ using Cases = cwPassageTubeCases;
 constexpr int kSmokeStride = 25;
 constexpr int kRandomSeedCount = 50;
 constexpr int kMaxRandomJunctions = 6;
+constexpr float kPulledToleranceMeters = 1e-4f;
 
 const QVector<Cases::Case>& catalog()
 {
@@ -128,19 +132,52 @@ void checkCaseBuildsClosed(const std::string& name)
 // a plan task yet:
 // - a sloped through passage: the ring tilts with the slope while its up
 //   and down walls stay vertical, so WallMissed fires on them;
-// - a 90 degree bend: the inner wall crosses itself, as in the builder's
-//   "keeps the inner wall of a sharp bend clean";
 // - the straight passage doubling its section past J: SelfIntersection
-//   between neighboring strips as the tube widens;
-// - the loop: the closing station's walls follow a facing from one
-//   neighbor while its ring follows both, so WallMissed fires there.
+//   between neighboring strips as the tube widens.
 bool hasKnownBuilderDefect(const Cases::Case& entry)
 {
     const QStringList& tags = entry.tags;
     const bool sloped = tags.contains(QStringLiteral("through-profile:30")) || tags.contains(QStringLiteral("through-profile:-30"));
-    const bool sharpBend = tags.contains(QStringLiteral("bend:90"));
     const bool widensStraight = tags.contains(QStringLiteral("bend:0")) && tags.contains(QStringLiteral("section:x2"));
-    return sloped || sharpBend || widensStraight || tags.contains(QStringLiteral("loop"));
+    return sloped || widensStraight;
+}
+
+// Random seeds whose junction-free survey builds a clean mesh. The others
+// fail the full check for reasons the bend rules leave alone: random
+// bearings run passages through each other (SelfIntersection), each
+// station's four readings are drawn independently, so a ring can be a thin
+// ellipse whose tip folds (Crease) or a station's wall lies off a ring
+// tilted by the slope or the facing (WallMissed), and a hairpin on a small
+// passage leaves long, thin strips between its inset rings and the corner
+// (SliverTriangle).
+const QVector<int> kCleanRandomSeeds {19, 28, 49};
+
+bool isCleanRandomSeed(int seed)
+{
+    return kCleanRandomSeeds.contains(seed);
+}
+
+// Vertices the builder slid onto the previous ring's plane: the bend rules
+// keep every ring in front of the one before, so the fold-back pull in the
+// builder never moves one.
+int pulledVertexCount(const cwPassageTubeBuilder::Debug& debug)
+{
+    int count = 0;
+    for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
+        for (const cwPassageTubeBuilder::Ring& ring : chain.rings) {
+            const int resolution = ring.radii.size();
+            for (int bin = 0; bin < ring.vertices.size(); ++bin) {
+                const double theta = 2.0 * std::numbers::pi * bin / resolution;
+                const QVector3D direction = ring.frame.right * static_cast<float>(std::cos(theta))
+                                            + ring.frame.up * static_cast<float>(std::sin(theta));
+                const QVector3D unpulled = ring.center + direction * static_cast<float>(ring.radii.at(bin));
+                if (ring.vertices.at(bin).distanceToPoint(unpulled) > kPulledToleranceMeters) {
+                    ++count;
+                }
+            }
+        }
+    }
+    return count;
 }
 
 // Station names of degree above two: survey junctions.
@@ -220,6 +257,18 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction build clean meshe
     checkCaseBuildsClean(name);
 }
 
+TEST_CASE("cwPassageTubeCases catalog cases without a junction never pull a vertex onto the previous ring", "[PassageTube][cwPassageTubeCases]")
+{
+    const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
+        return !hasJunction(entry);
+    })));
+    INFO(name);
+    const Cases::Case& entry = catalogCase(name);
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    CHECK(pulledVertexCount(debug) == 0);
+}
+
 TEST_CASE("cwPassageTubeCases catalog cases without a junction build closed tubes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
@@ -229,7 +278,7 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction build closed tube
 }
 
 // See hasKnownBuilderDefect for what each case reports.
-TEST_CASE("cwPassageTubeCases catalog cases without a junction and with known builder defects build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+TEST_CASE("cwPassageTubeCases sloped or widening catalog cases without a junction build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
         return !hasJunction(entry) && hasKnownBuilderDefect(entry);
@@ -246,14 +295,35 @@ TEST_CASE("cwPassageTubeCases random surveys build clean meshes", "[PassageTube]
     checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), junctions));
 }
 
-// Random bearings bend the passage sharply at most stations, so the inner
-// walls cross as in the builder's "keeps the inner wall of a sharp bend
-// clean"; the tube is still watertight.
-TEST_CASE("cwPassageTubeCases random surveys without a junction build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+TEST_CASE("cwPassageTubeCases random surveys without a junction build clean meshes", "[PassageTube][cwPassageTubeCases]")
+{
+    const int seed = GENERATE(from_range(kCleanRandomSeeds));
+    INFO("seed " << seed);
+    checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), 0));
+}
+
+// See kCleanRandomSeeds for what the other seeds report.
+TEST_CASE("cwPassageTubeCases random surveys without a junction and with known builder defects build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+{
+    const int seed = GENERATE(filter([](int candidate) { return !isCleanRandomSeed(candidate); },
+                                     range(1, kRandomSeedCount + 1)));
+    INFO("seed " << seed);
+    checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), 0));
+}
+
+// Sharp random bends no longer fold the inner wall into zero-area triangles.
+TEST_CASE("cwPassageTubeCases random surveys without a junction build no degenerate triangles", "[PassageTube][cwPassageTubeCases]")
 {
     const int seed = GENERATE(range(1, kRandomSeedCount + 1));
     INFO("seed " << seed);
-    checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), 0));
+    const Cases::Survey survey = Cases::toSurvey(Cases::random(static_cast<unsigned int>(seed), 0));
+    const cwPassageTubeMesh mesh = cwPassageTubeBuilder::build(survey.region, survey.positionsByCave, {}, cwPassageTubeBuilder::Options());
+    const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::degenerateTriangles(mesh, cwPassageTubeMeshCheck::wholeMesh(mesh));
+    const auto degenerate = std::count_if(issues.cbegin(), issues.cend(), [](const cwPassageTubeMeshCheck::Issue& issue) {
+        return issue.type == cwPassageTubeMeshCheck::DegenerateTriangle;
+    });
+    INFO(cwPassageTubeMeshCheck::toText({issues, 0, {}}).toStdString());
+    CHECK(degenerate == 0);
 }
 
 TEST_CASE("cwPassageTubeCases random surveys without a junction build closed tubes", "[PassageTube][cwPassageTubeCases]")

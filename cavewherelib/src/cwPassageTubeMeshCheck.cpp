@@ -933,6 +933,15 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         legDirections[{leg.caveId, leg.to}].append(-direction);
     }
 
+    // The builder reshapes the inside of a bend too sharp for its walls and
+    // warns at the corner station; its walls there are no longer the tube's.
+    QSet<QString> bendClamped;
+    for (const cwPassageTubeMesh::Warning& warning : debug.warnings) {
+        if (warning.type == cwPassageTubeMesh::Warning::BendClamped) {
+            bendClamped.insert(cwStation::canonicalKey(warning.station));
+        }
+    }
+
     constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
     using Occurrence = std::pair<QUuid, std::pair<int, int>>;
     QSet<Occurrence> visited;
@@ -946,7 +955,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                                   const cwStationLrud& passage,
                                   const QVector3D& facing) {
         const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
-        if (visited.contains(occurrence)) {
+        if (visited.contains(occurrence) || bendClamped.contains(cwStation::canonicalKey(station))) {
             return;
         }
         visited.insert(occurrence);
