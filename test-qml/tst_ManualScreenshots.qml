@@ -271,9 +271,18 @@ MainWindowTest {
         // overlay) before grabbing. Re-aims the highlight ring last: its rect is
         // computed from the target's position, which only means anything once the
         // page has finished laying out.
+        //
+        // Layouts apply their geometry in the render loop's polish step, and a
+        // window macOS reports as unexposed (occluded or minimized) gets no
+        // frames, so its layouts keep the geometry of the last frame it drew.
+        // A grab polishes synchronously, so the clicks and mapToItem calls that
+        // follow see the current layout. Grab only then: it is slow.
         function settle() {
             RootData.futureManagerModel.waitForFinished();
             wait(150);
+            if (isPolishScheduled(rootId.QQ.Window.window)) {
+                grabImage(rootId);
+            }
             highlightOverlayId.refresh();
         }
 

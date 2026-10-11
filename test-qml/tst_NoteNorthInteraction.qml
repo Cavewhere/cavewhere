@@ -11,6 +11,25 @@ MainWindowTest {
         name: "NoteNorthInteraction"
         when: windowShown
 
+        // The "" → "SELECT" transition slides and scales the carpet toolbar in,
+        // and clicks miss while it moves.
+        function waitForSelectToolbar() {
+            let noteGallery = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery")
+            let transition = findChild(noteGallery, "toSelectTransition")
+            verify(transition !== null, "the gallery has the select transition")
+            tryVerify(() => !transition.running)
+        }
+
+        // Selecting a scrap shows the NoteTransformEditor overlay (z=2). Its
+        // column lays out in the next polish, and until then the editor and
+        // its buttons sit at the column origin, so clicks aimed at them land
+        // on whatever ends up there once the layout settles.
+        function waitForTransformEditor() {
+            let editor = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor")
+            tryVerify(() => editor.visible && !isPolishScheduled(editor.Window.window))
+            return editor
+        }
+
         function cleanup() {
             RootData.pageSelectionModel.gotoPageByName(null, "View")
             tryVerify(() => {
@@ -31,21 +50,15 @@ MainWindowTest {
 
             let _obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(_obj1)
-
-            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
-            // that reposition the toolbar; clicks miss during the animation
-            wait(200)
+            waitForSelectToolbar()
 
             //Select scrap
             let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(noteItem, 464.938, 829.673)
-
-            // wait() needed — noteTransformEditor overlay (z=2) must fully settle
-            // after scrap selection; without it, subsequent image clicks get intercepted
-            wait(200)
+            waitForTransformEditor()
 
             let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")
-            verify(typeComboBox.currentText === "Projected Profile")
+            tryCompare(typeComboBox, "currentText", "Projected Profile")
 
             //Select North arrow up
             let setNorthButton_obj1 = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->autoCalculate->setNorthButton")
@@ -89,17 +102,11 @@ MainWindowTest {
 
             let carpetButton = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->mainButtonArea->carpetButtonId")
             mouseClick(carpetButton)
-
-            // wait() needed — the "" → "SELECT" transition includes PropertyAnimations
-            // that reposition the toolbar; clicks miss during the animation
-            wait(200)
+            waitForSelectToolbar()
 
             let noteItem = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->imageId")
             mouseClick(noteItem, 121.341, 192.815)
-
-            // wait() needed — noteTransformEditor overlay (z=2) must fully settle
-            // after scrap selection; without it, subsequent image clicks get intercepted
-            wait(200)
+            waitForTransformEditor()
 
             let typeComboBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->tripPage->noteGallery->noteArea->noteTransformEditor->typeComboBox")
             tryVerify(() => typeComboBox.model !== null)
