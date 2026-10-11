@@ -1,0 +1,316 @@
+/**************************************************************************
+**
+**    Copyright (C) 2026 by Philip Schuchardt
+**    www.cavewhere.com
+**
+**************************************************************************/
+
+//Catch includes
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
+
+//Our includes
+#include "cwPassageTubeMeshCheck.h"
+
+//Std includes
+#include <algorithm>
+#include <utility>
+
+namespace {
+
+using Check = cwPassageTubeMeshCheck;
+
+// The corner of a box at bit x = 1, y = 2, z = 4 of the index.
+QVector3D boxCorner(const QVector3D& lo, const QVector3D& hi, int corner)
+{
+    return QVector3D(corner & 1 ? hi.x() : lo.x(),
+                     corner & 2 ? hi.y() : lo.y(),
+                     corner & 4 ? hi.z() : lo.z());
+}
+
+// An axis-aligned box of 12 triangles wound counter-clockwise from outside.
+void appendBox(cwPassageTubeMesh& mesh, const QVector3D& lo, const QVector3D& hi)
+{
+    constexpr quint32 kBoxTriangles[] = {
+        0, 2, 3, 0, 3, 1, // -z
+        4, 5, 7, 4, 7, 6, // +z
+        0, 1, 5, 0, 5, 4, // -y
+        2, 6, 7, 2, 7, 3, // +y
+        0, 4, 6, 0, 6, 2, // -x
+        1, 3, 7, 1, 7, 5, // +x
+    };
+    const quint32 first = static_cast<quint32>(mesh.positions.size());
+    for (int corner = 0; corner < 8; ++corner) {
+        mesh.positions.append(boxCorner(lo, hi, corner));
+    }
+    for (quint32 index : kBoxTriangles) {
+        mesh.indices.append(first + index);
+    }
+}
+
+cwPassageTubeMesh boxMesh(const QVector3D& lo, const QVector3D& hi)
+{
+    cwPassageTubeMesh mesh;
+    appendBox(mesh, lo, hi);
+    return mesh;
+}
+
+cwPassageTubeMesh unitCube()
+{
+    return boxMesh(QVector3D(0, 0, 0), QVector3D(1, 1, 1));
+}
+
+void reverseTriangle(cwPassageTubeMesh& mesh, int triangle)
+{
+    std::swap(mesh.indices[triangle * 3 + 1], mesh.indices[triangle * 3 + 2]);
+}
+
+// The tetrahedron p0 p1 p2 p3 with det(p1 − p0, p2 − p0, p3 − p0) > 0.
+void appendTetrahedron(cwPassageTubeMesh& mesh, quint32 p0, quint32 p1, quint32 p2, quint32 p3)
+{
+    mesh.indices.append({p0, p2, p1, p0, p1, p3, p0, p3, p2, p1, p2, p3});
+}
+
+QVector<Check::Type> issueTypes(const Check::Report& report)
+{
+    QVector<Check::Type> types;
+    for (const Check::Issue& issue : report.issues) {
+        types.append(issue.type);
+    }
+    return types;
+}
+
+void checkOnlyType(const Check::Report& report, Check::Type type, int count)
+{
+    INFO(Check::toText(report).toStdString());
+    CHECK(issueTypes(report) == QVector<Check::Type>(count, type));
+}
+
+} // namespace
+
+TEST_CASE("cwPassageTubeMeshCheck finds nothing on a closed cube", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    const cwPassageTubeMesh mesh = unitCube();
+    const Check::Report report = Check::check(mesh);
+    INFO(Check::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+    REQUIRE(report.componentCount == 1);
+    REQUIRE(report.components.size() == 1);
+    const Check::ComponentStats& cube = report.components.first();
+    CHECK(cube.vertexCount == 8);
+    CHECK(cube.edgeCount == 18);
+    CHECK(cube.triangleCount == 12);
+    CHECK(cube.genus == 0);
+    CHECK(cube.volume == Catch::Approx(1.0));
+    CHECK(Check::signedVolume(mesh, Check::wholeMesh(mesh)) == Catch::Approx(1.0));
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports each edge of an open cube's hole", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh mesh = unitCube();
+    mesh.indices.remove(mesh.indices.size() - 6, 6);
+    const Check::Report report = Check::check(mesh);
+    checkOnlyType(report, Check::OpenEdge, 4);
+    for (const Check::Issue& issue : report.issues) {
+        CHECK(issue.position.x() == 1.0f);
+    }
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports the edges around a flipped face", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh mesh = unitCube();
+    reverseTriangle(mesh, 10);
+    reverseTriangle(mesh, 11);
+    checkOnlyType(Check::check(mesh), Check::InconsistentWinding, 4);
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports a vertex joining two tetrahedra", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh mesh;
+    mesh.positions = {
+        QVector3D(0, 0, 0),
+        QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1),
+        QVector3D(-1, 0, 0), QVector3D(0, -1, 0), QVector3D(0, 0, -1),
+    };
+    appendTetrahedron(mesh, 0, 1, 2, 3);
+    appendTetrahedron(mesh, 0, 4, 6, 5);
+
+    const Check::Report report = Check::check(mesh);
+    checkOnlyType(report, Check::NonManifoldVertex, 1);
+    CHECK(report.issues.first().position == QVector3D(0, 0, 0));
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports an inside-out cube", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh mesh = unitCube();
+    for (int triangle = 0; triangle < mesh.indices.size() / 3; ++triangle) {
+        reverseTriangle(mesh, triangle);
+    }
+    checkOnlyType(Check::check(mesh), Check::NegativeVolume, 1);
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports zero-area and sliver triangles", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh mesh;
+    mesh.positions = {
+        QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0, 1, 0),
+        QVector3D(2, 0, 0),
+        QVector3D(10, 0, 0), QVector3D(5, 0.1f, 0),
+    };
+    mesh.indices = {0, 1, 2, 0, 1, 3};
+    const QVector<Check::Issue> degenerate = Check::degenerateTriangles(mesh, Check::wholeMesh(mesh));
+    REQUIRE(degenerate.size() == 1);
+    CHECK(degenerate.first().type == Check::DegenerateTriangle);
+    CHECK(degenerate.first().triangle == 1);
+
+    mesh.indices = {0, 1, 2, 0, 4, 5};
+    const QVector<Check::Issue> sliver = Check::degenerateTriangles(mesh, Check::wholeMesh(mesh));
+    REQUIRE(sliver.size() == 1);
+    CHECK(sliver.first().type == Check::SliverTriangle);
+    CHECK(sliver.first().triangle == 1);
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports interpenetrating boxes and passes them apart", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh crossing = unitCube();
+    appendBox(crossing, QVector3D(0.5f, 0.5f, 0.5f), QVector3D(1.5f, 1.5f, 1.5f));
+    const Check::Report crossingReport = Check::check(crossing);
+    INFO(Check::toText(crossingReport).toStdString());
+    CHECK(crossingReport.componentCount == 2);
+    CHECK_FALSE(crossingReport.issues.isEmpty());
+    CHECK(std::all_of(crossingReport.issues.cbegin(), crossingReport.issues.cend(), [](const Check::Issue& issue) {
+        return issue.type == Check::SelfIntersection;
+    }));
+    for (const Check::Issue& issue : crossingReport.issues) {
+        CHECK(issue.triangle < 12);
+        CHECK(issue.otherTriangle >= 12);
+    }
+
+    cwPassageTubeMesh apart = unitCube();
+    appendBox(apart, QVector3D(3, 0, 0), QVector3D(4, 1, 1));
+    const Check::Report apartReport = Check::check(apart);
+    INFO(Check::toText(apartReport).toStdString());
+    CHECK(apartReport.issues.isEmpty());
+    CHECK(apartReport.componentCount == 2);
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports a cube nested in another", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh mesh = boxMesh(QVector3D(0, 0, 0), QVector3D(4, 4, 4));
+    appendBox(mesh, QVector3D(1, 1, 1), QVector3D(2, 2, 2));
+    const Check::Report report = Check::check(mesh);
+    checkOnlyType(report, Check::NestedShell, 1);
+    CHECK(report.issues.first().triangle == 12);
+    CHECK(report.issues.first().otherTriangle == 0);
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports a sharp fold unless a vertex is an intended crease", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeMesh mesh;
+    mesh.positions = {QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0.5f, 1, 0), QVector3D(0.5f, 0.9f, 0.1f)};
+    mesh.indices = {0, 1, 2, 1, 0, 3};
+    const Check::Range range = Check::wholeMesh(mesh);
+
+    const QVector<Check::Issue> folded = Check::creases(mesh, range, {});
+    REQUIRE(folded.size() == 1);
+    CHECK(folded.first().type == Check::Crease);
+    CHECK(folded.first().position == QVector3D(0.5f, 0, 0));
+
+    CHECK(Check::creases(mesh, range, {0}).isEmpty());
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports twisted, folded and jumping rings", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    constexpr int kResolution = 4;
+    const auto ringAt = [](float x, double radius) {
+        cwPassageTubeBuilder::Ring ring;
+        ring.center = QVector3D(x, 0, 0);
+        ring.frame = {QVector3D(1, 0, 0), QVector3D(0, 0, 1), QVector3D(0, -1, 0), 0.0};
+        ring.radii = QVector<double>(kResolution, radius);
+        ring.measured = QVector<bool>(kResolution, true);
+        for (int bin = 0; bin < kResolution; ++bin) {
+            const QVector3D directions[] = {ring.frame.right, ring.frame.up, -ring.frame.right, -ring.frame.up};
+            ring.vertices.append(ring.center + directions[bin] * static_cast<float>(radius));
+        }
+        return ring;
+    };
+
+    cwPassageTubeBuilder::Debug debug;
+    cwPassageTubeBuilder::Leg leg;
+    leg.fromPosition = QVector3D(0, 0, 0);
+    leg.toPosition = QVector3D(10, 0, 0);
+    debug.legs = {leg};
+    cwPassageTubeBuilder::Chain chain;
+    chain.legs = {{0, false}};
+    chain.rings = {ringAt(0, 1), ringAt(1, 1), ringAt(2, 1), ringAt(3, 1), ringAt(10, 1)};
+    debug.chains = {chain};
+    CHECK(Check::ringIssues(debug).isEmpty());
+
+    SECTION("A ring turned half a turn") {
+        cwPassageTubeBuilder::Ring& twisted = debug.chains[0].rings[2];
+        twisted.frame.right = -twisted.frame.right;
+        const QVector<Check::Issue> issues = Check::ringIssues(debug);
+        REQUIRE(issues.size() == 2);
+        CHECK(issues.at(0).type == Check::FrameTwist);
+        CHECK(issues.at(1).type == Check::FrameTwist);
+    }
+
+    SECTION("A vertex behind the previous ring's plane") {
+        debug.chains[0].rings[3].vertices[0] = QVector3D(1.5f, -1, 0);
+        const QVector<Check::Issue> issues = Check::ringIssues(debug);
+        REQUIRE(issues.size() == 1);
+        CHECK(issues.first().type == Check::FoldBack);
+        CHECK(issues.first().position == QVector3D(1.5f, -1, 0));
+    }
+
+    SECTION("A radius jump between samples, but not at a station") {
+        debug.chains[0].rings[2].radii[1] = 4.0;
+        debug.chains[0].rings[0].radii[1] = 4.0;
+        const QVector<Check::Issue> issues = Check::ringIssues(debug);
+        REQUIRE(issues.size() == 2);
+        CHECK(issues.at(0).type == Check::RadiusJump);
+        CHECK(issues.at(0).position == QVector3D(2, 0, 0));
+        CHECK(issues.at(1).type == Check::RadiusJump);
+        CHECK(issues.at(1).position == QVector3D(3, 0, 0));
+    }
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports LRUD walls off the tube surface", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    const cwStationLrud lrud {1.0, 1.0, 1.0, 1.0};
+    cwPassageTubeBuilder::Leg leg;
+    leg.chunkIndex = 0;
+    leg.shotIndex = 0;
+    leg.from = QStringLiteral("a");
+    leg.to = QStringLiteral("b");
+    leg.fromPosition = QVector3D(0, 0, 0);
+    leg.toPosition = QVector3D(10, 0, 0);
+    leg.fromLrud = lrud;
+    leg.toLrud = lrud;
+    leg.fromPassageLrud = lrud;
+    leg.toPassageLrud = lrud;
+    leg.fromFacing = QVector3D(1, 0, 0);
+    leg.toFacing = QVector3D(1, 0, 0);
+
+    cwPassageTubeBuilder::Debug debug;
+    debug.legs = {leg};
+
+    debug.mesh = boxMesh(QVector3D(0, -1, -1), QVector3D(10, 1, 1));
+    CHECK(Check::wallsOnSurface(debug).isEmpty());
+
+    SECTION("A low ceiling misses both ups") {
+        debug.mesh = boxMesh(QVector3D(0, -1, -1), QVector3D(10, 1, 0.5f));
+        const QVector<Check::Issue> issues = Check::wallsOnSurface(debug);
+        REQUIRE(issues.size() == 2);
+        CHECK(issues.at(0).type == Check::WallMissed);
+        CHECK(issues.at(0).position == QVector3D(0, 0, 1));
+        CHECK(issues.at(1).position == QVector3D(10, 0, 1));
+    }
+
+    SECTION("A shaft reading the builder replaced is left out") {
+        debug.mesh = boxMesh(QVector3D(0, -1, -1), QVector3D(10, 1, 0.3f));
+        debug.legs[0].fromPassageLrud.up = 0.5;
+        debug.legs[0].toPassageLrud.up = 0.5;
+        CHECK(Check::wallsOnSurface(debug).isEmpty());
+    }
+}

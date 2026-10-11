@@ -1224,11 +1224,17 @@ void placeChainVertices(Chain& chain)
 class MeshWriter
 {
 public:
-    explicit MeshWriter(cwPassageTubeMesh& mesh) : m_mesh(mesh) {}
+    MeshWriter(cwPassageTubeMesh& mesh, QSet<quint32>& intendedCreaseVertices) :
+        m_mesh(mesh),
+        m_intendedCreaseVertices(intendedCreaseVertices)
+    {}
 
-    quint32 addVertex(const QVector3D& position)
+    // A cap's center, where the fan around it may fold sharply.
+    quint32 addCapCenter(const QVector3D& position)
     {
-        return addRing({position});
+        const quint32 index = addRing({position});
+        m_intendedCreaseVertices.insert(index);
+        return index;
     }
 
     quint32 addRing(const QVector<QVector3D>& vertices)
@@ -1299,6 +1305,7 @@ public:
 
 private:
     cwPassageTubeMesh& m_mesh;
+    QSet<quint32>& m_intendedCreaseVertices;
     QVector<QUuid> m_tripOrder;
     QHash<QUuid, QVector<quint32>> m_trianglesByTrip;
 };
@@ -1328,7 +1335,7 @@ void addDome(MeshWriter& writer, const QUuid& tripId, const Ring& ring, quint32 
         }
         previous = current;
     }
-    const quint32 apex = writer.addVertex(ring.center + outward * static_cast<float>(height));
+    const quint32 apex = writer.addCapCenter(ring.center + outward * static_cast<float>(height));
     writer.addFan(tripId, apex, previous, resolution, atEnd);
 }
 
@@ -1381,7 +1388,7 @@ void addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const Chain& cha
             if (before == after) {
                 return;
             }
-            const quint32 center = writer.addVertex(chain.rings.at(run.at(position)).center);
+            const quint32 center = writer.addCapCenter(chain.rings.at(run.at(position)).center);
             writer.addFan(before, center, firstVertex.at(position), resolution, true);
             writer.addFan(after, center, firstVertex.at(position), resolution, false);
         };
@@ -1403,7 +1410,7 @@ void addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const Chain& cha
             }
             const double offset = ring.frame.inclinationWeight > kSteepWeight ? pitOffset : 0.0;
             const QVector3D outward = atEnd ? ring.frame.tangent : -ring.frame.tangent;
-            const quint32 center = writer.addVertex(ring.center + outward * static_cast<float>(offset));
+            const quint32 center = writer.addCapCenter(ring.center + outward * static_cast<float>(offset));
             writer.addFan(tripId, center, firstVertex.at(position), resolution, atEnd);
         };
         const bool isChainStart = run.first() == 0;
@@ -1438,7 +1445,7 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildDebug(const cwCavingRegio
 
     const StationLegDirections directions = stationLegDirections(debug.legs);
     const StationRecords records = stationRecords(debug.legs);
-    MeshWriter writer(debug.mesh);
+    MeshWriter writer(debug.mesh, debug.intendedCreaseVertices);
     for (Chain& chain : debug.chains) {
         buildRings(debug.legs, directions, records, chain, options, debug.warnings);
         placeChainVertices(chain);

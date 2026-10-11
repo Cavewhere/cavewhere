@@ -16,6 +16,7 @@
 
 //Qt includes
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QUuid>
 #include <QVector>
@@ -162,6 +163,9 @@ public:
         QVector<Chain> chains;
         QVector<cwPassageTubeMesh::Warning> warnings;
         cwPassageTubeMesh mesh;
+        // Mesh vertices where a sharp fold is by design: the centers of fan
+        // caps, trip boundaries and dome apexes.
+        QSet<quint32> intendedCreaseVertices;
     };
 
     static cwPassageTubeMesh build(const cwCavingRegionData& region,
