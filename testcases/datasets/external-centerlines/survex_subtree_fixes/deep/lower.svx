@@ -1,0 +1,7 @@
+; A fix read in the coordinate system its own block names.
+*begin lower
+*cs UTM16N
+*fix L1 500100 3000100 50
+*data normal from to tape compass clino
+L1 L2 10.0 0 0
+*end lower

@@ -303,6 +303,39 @@ inline cwAttachedFix attachedFixFor(const cwSurveyNode* node, const QString& sta
     return cwAttachedFix();
 }
 
+//! The attached rows \a node lists on its Fix Stations page, by station.
+inline QStringList attachedFixStations(const cwSurveyNode* node)
+{
+    QStringList stations;
+    for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
+        stations.append(fix.station);
+    }
+    return stations;
+}
+
+//! \a node, then every node under it, pre-order.
+inline QList<const cwSurveyNode*> nodeAndDescendants(const cwSurveyNode* node)
+{
+    QList<const cwSurveyNode*> nodes;
+    node->walk([&nodes](const cwSurveyNode* current) { nodes.append(current); });
+    return nodes;
+}
+
+//! The attached row that names \a station on \a node or a node under it: a
+//! file's fix is listed on the derived node whose file holds it.
+inline cwAttachedFix subtreeAttachedFixFor(const cwSurveyNode* node, const QString& station)
+{
+    for (const cwSurveyNode* holder : nodeAndDescendants(node)) {
+        for (const cwAttachedFix& fix : holder->attachedFixes()->attachedFixes()) {
+            if (fix.station == station) {
+                return fix;
+            }
+        }
+    }
+    FAIL("No attached row in the subtree names " << station.toStdString());
+    return cwAttachedFix();
+}
+
 //! \a node's AttachedFileFixWithoutCS warnings.
 inline QStringList bareFixWarnings(const cwSurveyNode* node)
 {

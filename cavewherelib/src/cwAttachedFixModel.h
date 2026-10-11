@@ -75,8 +75,10 @@ public:
     //! Replaces every row, resetting the model when the list differs.
     void setAttachedFixes(const QList<cwAttachedFix>& fixes);
 
-    //! Row of the first fix with no coordinate system, -1 when every fix has one.
-    int firstFixWithoutCoordinateSystem() const;
+    //! Row of the first fix the solve reads in no coordinate system: it names
+    //! none, and none is chosen for it (cwAttachedFix::readInSystem is empty).
+    //! -1 when every fix has a system.
+    int firstFixWithoutReadInSystem() const;
 
     //! How many of the fixes in \a ownerId's attached file name no coordinate
     //! system.

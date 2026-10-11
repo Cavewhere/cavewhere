@@ -365,6 +365,13 @@ StandardPage {
         }
     }
 
+    // Counts what the Fix Stations page lists: the node's fixes and every
+    // fix under it.
+    FixStationTreeModel {
+        id: fixStationTreeId
+        rootNode: nodePageArea.currentNode
+    }
+
     // A derived node takes its fixed positions from the file, so it offers no
     // fix stations of its own; its source root keeps the row (W4d).
     RowLayout {
@@ -381,7 +388,7 @@ StandardPage {
 
             LinkText {
                 objectName: "fixStationsLink"
-                text: nodePageArea.currentNode ? nodePageArea.currentNode.fixStationCount : 0
+                text: fixStationTreeId.fixRowCount
                 onClicked: {
                     RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
                 }
@@ -803,7 +810,7 @@ StandardPage {
                     QC.Label { text: "Fix stations:" }
 
                     LinkText {
-                        text: nodePageArea.currentNode ? nodePageArea.currentNode.fixStationCount : 0
+                        text: fixStationTreeId.fixRowCount
                         onClicked: {
                             RootData.pageSelectionModel.gotoPageByName(nodePageArea.PageView.page, "Fix Stations");
                         }

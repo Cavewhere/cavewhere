@@ -22,6 +22,30 @@ bool isShownWarning(const cwError& error)
     return error.type() == cwError::Warning && !error.suppressed();
 }
 
+/**
+ * The Fix Stations page's row of the first fix read in no coordinate system under
+ * \a node, -1 when there is none. The page lists a node's fixStationTable()
+ * rows, then each child node's subtree in order, so a row's place counts every
+ * row listed ahead of it; \a rowsAhead carries that count down the walk.
+ */
+int firstBareFixPageRow(const cwSurveyNode* node, int& rowsAhead)
+{
+    const cwAttachedFixModel* attachedFixes = node->attachedFixes();
+    const int bareRow = attachedFixes->firstFixWithoutReadInSystem();
+    if (bareRow >= 0) {
+        return rowsAhead
+               + node->fixStationTable()->mapFromSource(attachedFixes->index(bareRow)).row();
+    }
+    rowsAhead += node->fixStationCount();
+    for (const cwSurveyNode* child : node->childNodes()) {
+        const int row = firstBareFixPageRow(child, rowsAhead);
+        if (row >= 0) {
+            return row;
+        }
+    }
+    return -1;
+}
+
 } // namespace
 
 cwNodeWarningModel::cwNodeWarningModel(QObject* parent)
@@ -187,16 +211,13 @@ cwNodeWarningModel::Entry cwNodeWarningModel::nodeEntry(const cwError& error) co
 {
     Entry entry{error.message(), error.detail()};
 
-    // The warning names the attached files' bare fixes in attachedFixes()
-    // order, so the entry picks the first one's row in the fix station table.
+    // The warning names the attached files' bare fixes in file order, which
+    // lists them on the nodes whose files hold them, so the entry picks the
+    // first one's row on this node's Fix Stations page.
     if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS)) {
         entry.target = Target::FixStationRow;
-        const cwAttachedFixModel* attachedFixes = m_node->attachedFixes();
-        const int bareRow = attachedFixes->firstFixWithoutCoordinateSystem();
-        if (bareRow >= 0) {
-            entry.fixStationRow =
-                m_node->fixStationTable()->mapFromSource(attachedFixes->index(bareRow)).row();
-        }
+        int rowsAhead = 0;
+        entry.fixStationRow = firstBareFixPageRow(m_node, rowsAhead);
         return entry;
     }
 

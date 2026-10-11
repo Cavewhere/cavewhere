@@ -1520,12 +1520,13 @@ namespace {
 using cwExternalCenterlineScanner::ScannedFix;
 
 //! \a fixes with where each was read cleared, so a case compares what a fix
-//! says rather than which line says it.
+//! says rather than which line or node holds it.
 QList<ScannedFix> withoutLocation(QList<ScannedFix> fixes)
 {
     for (ScannedFix& fix : fixes) {
         fix.file.clear();
         fix.line = 0;
+        fix.nodePath.clear();
     }
     return fixes;
 }

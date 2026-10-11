@@ -145,10 +145,10 @@ int cwAttachedFixModel::bareFixCount(const QUuid& ownerId) const
     }));
 }
 
-int cwAttachedFixModel::firstFixWithoutCoordinateSystem() const
+int cwAttachedFixModel::firstFixWithoutReadInSystem() const
 {
     const auto bare = std::find_if(m_fixes.cbegin(), m_fixes.cend(), [](const cwAttachedFix& fix) {
-        return fix.coordinateSystem.isEmpty();
+        return fix.coordinateSystem.isEmpty() && fix.readInSystem.isEmpty();
     });
     return bare == m_fixes.cend() ? -1 : static_cast<int>(std::distance(m_fixes.cbegin(), bare));
 }

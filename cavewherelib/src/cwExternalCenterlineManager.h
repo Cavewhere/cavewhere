@@ -721,9 +721,15 @@ private:
     // no longer owns.
     void applyHarvest(const ExternalScanResult& result);
 
-    // Lists the files' own fixes (from m_ownerFixes) on the node, a trip's
-    // under its live scopePrefix(), and the stations each file fixes.
+    // Lists the files' own fixes (from m_ownerFixes) on the node whose file
+    // holds them: a derived node lists its source root's fixes from its own
+    // file, the owner the rest, a trip's under its live scopePrefix(); and the
+    // stations each file fixes on the owner.
     void refreshAttachedFixes(cwSurveyNode* node);
+
+    // The sourcePaths of the derived nodes under \a owner, the source root
+    // whose file they come from; empty for an owner that is no source root.
+    static QSet<QString> derivedNodePaths(const cwSurveyNode* owner);
 
     // refreshAttachedFixes() for every node in the region: what a fix with
     // no *cs of its own is read in follows the project's frame.

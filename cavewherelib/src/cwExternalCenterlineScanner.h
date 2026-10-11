@@ -306,6 +306,11 @@ struct ScannedFix {
     //! Whether the *fix carries Survex's "reference" keyword, which keeps the
     //! fix in cavern's output even when no leg uses it.
     bool reference = false;
+    //! The cwScanRow::sourcePath of the node row whose file holds the fix: the
+    //! innermost named Survex *begin block around it, the Compass .dat its
+    //! .mak line fixes, the Walls book around its .srv. Empty for the entry
+    //! file's own root.
+    QString nodePath;
 
     bool hasCoordinateSystem() const { return !coordinateSystem.isEmpty(); }
 

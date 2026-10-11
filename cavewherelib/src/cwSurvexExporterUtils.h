@@ -95,6 +95,9 @@ public:
     //! writeFileOutputSystem(), with \a system recorded as the one in scope.
     void writeFileOutputSystem(QTextStream& stream, const QString& system);
 
+    //! The system in scope, empty for none.
+    const QString& system() const { return m_current; }
+
 private:
     cwSurvexCS::SidecarWriter& m_sidecars;
     QString m_current;

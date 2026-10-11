@@ -96,11 +96,16 @@ TEST_CASE("An attached fix model answers the fix station roles read-only", "[cwA
     CHECK_FALSE(model.setData(bare, QStringLiteral("x1"), cwFixStationModel::StationNameRole));
     CHECK(model.data(bare, cwFixStationModel::StationNameRole).toString() == QStringLiteral("doghill.d1"));
 
-    CHECK(model.firstFixWithoutCoordinateSystem() == 0);
+    CHECK(model.firstFixWithoutReadInSystem() == 0);
     model.setAttachedFixes({utm13NFix(QStringLiteral("a.p1")), bareFix(QStringLiteral("doghill.d1"))});
-    CHECK(model.firstFixWithoutCoordinateSystem() == 1);
+    CHECK(model.firstFixWithoutReadInSystem() == 1);
     model.setAttachedFixes({utm13NFix(QStringLiteral("a.p1"))});
-    CHECK(model.firstFixWithoutCoordinateSystem() == -1);
+    CHECK(model.firstFixWithoutReadInSystem() == -1);
+
+    cwAttachedFix readIn = bareFix(QStringLiteral("doghill.d0"));
+    readIn.readInSystem = QStringLiteral("EPSG:32648");
+    model.setAttachedFixes({readIn, bareFix(QStringLiteral("doghill.d1"))});
+    CHECK(model.firstFixWithoutReadInSystem() == 1);
 }
 
 TEST_CASE("A node's fix station table lists its own fixes, then the attached ones",
@@ -160,7 +165,10 @@ TEST_CASE("An attached file's reference fix reads back through the reference rol
         fixture.get(), fixturePath(QStringLiteral("survex_reference_fix/reference_fix.svx")));
     drainPipelines(fixture.get());
 
-    const cwAttachedFixModel* model = root->attachedFixes();
+    // The file's fixes sit inside *begin ref, so the derived node "ref" lists them.
+    const cwSurveyNode* holder = childNodeNamed(root, QStringLiteral("ref"));
+    REQUIRE(holder != nullptr);
+    const cwAttachedFixModel* model = holder->attachedFixes();
     REQUIRE(model->rowCount() == 2);
     const QList<cwAttachedFix>& fixes = model->attachedFixes();
     for (int row = 0; row < model->rowCount(); ++row) {
@@ -182,6 +190,6 @@ TEST_CASE("An attached file's reference fix reads back through the reference rol
     CHECK(model->data(plain, cwAttachedFixModel::ReferenceRole) == QVariant(false));
 
     // The page binds the concatenated table, which carries the role by name.
-    CHECK(root->fixStationTable()->roleNames().value(cwAttachedFixModel::ReferenceRole)
+    CHECK(holder->fixStationTable()->roleNames().value(cwAttachedFixModel::ReferenceRole)
           == QByteArrayLiteral("reference"));
 }

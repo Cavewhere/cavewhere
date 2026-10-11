@@ -11,6 +11,7 @@ import QtQuick as QQ
 import QtQml
 import QtQuick.Controls as QC
 import QtQuick.Layouts
+import QtQml.Models
 import cavewherelib
 
 StandardPage {
@@ -35,12 +36,9 @@ StandardPage {
                                                       fixStationPage.wideMinimumWidth)
     readonly property FixStationModel fixStationsModel: cave ? cave.fixStations : null
 
-    // Edits go to fixStationsModel; the rows the table shows come from the
-    // node's fix station table: its own rows (through the diagnostics proxy,
-    // which adds the warning roles) followed by the read-only rows its attached
-    // files fix themselves. The node's rows come first, so a table row below
-    // fixStationsModel.count is the same row in fixStationsModel.
-    readonly property AttachedFixModel attachedFixesModel: cave ? cave.attachedFixes : null
+    // How many tree levels the station column makes room for before the
+    // indentation starts to eat into the name.
+    readonly property int stationIndentLevels: 3
 
     // Cavern refuses a fix that names no system once the project has a frame,
     // so only then does a bare attached row with no system chosen warn.
@@ -71,6 +69,10 @@ StandardPage {
     // again after the user has moved on.
     property int currentFixRow: -1
 
+    // The node rows the user closed, by node id. Every other node row stays
+    // open, the ones that arrive later included.
+    property list<string> collapsedNodeIds: []
+
     PageView.defaultSelectionProperties: ({ "currentFixRow": -1 })
 
     function addFix() {
@@ -82,30 +84,55 @@ StandardPage {
     // Chooses the system attachmentOwners[ownerIndex]'s file's fixes with no
     // system of their own read in; empty unsets it.
     function setBareFixCoordinateSystem(ownerIndex: int, cs: string): void {
-        const owner = fixStationPage.attachmentOwners[ownerIndex]
+        fixStationPage.setOwnerFixCoordinateSystem(fixStationPage.attachmentOwners[ownerIndex], cs)
+    }
+
+    // The same for \a owner, a node or a trip with an attachment.
+    function setOwnerFixCoordinateSystem(owner: QtObject, cs: string): void {
         const centerline = owner.externalCenterline
         centerline.fixCoordinateSystem = cs
         owner.externalCenterline = centerline
     }
 
-    function removeFix(index) {
-        if (fixStationPage.fixStationsModel) {
-            fixStationPage.fixStationsModel.removeAt(index)
+    // The node whose fix station table holds page row \a fixRow, null when
+    // there is no such row.
+    function nodeOfFixRow(fixRow: int): SurveyNode {
+        const index = treeModelId.indexOfFixRow(fixRow)
+        return index.valid ? treeModelId.data(index, FixStationTreeModel.NodeObjectRole) : null
+    }
+
+    // Page row \a fixRow's row in its node's fix station table, which is the
+    // same row of the node's fixStations for one of the node's own fixes.
+    function rowInNode(fixRow: int): int {
+        const index = treeModelId.indexOfFixRow(fixRow)
+        return index.valid ? index.row : -1
+    }
+
+    function removeFix(fixRow: int): void {
+        const node = fixStationPage.nodeOfFixRow(fixRow)
+        if (node !== null) {
+            node.fixStations.removeAt(fixStationPage.rowInNode(fixRow))
         }
     }
 
-    function commitEdit(rowIndex, role, newText) {
-        fixStationPage.fixStationsModel.setData(
-            fixStationPage.fixStationsModel.index(rowIndex), newText, role)
+    function commitEdit(fixRow: int, role: int, newText: string): void {
+        const node = fixStationPage.nodeOfFixRow(fixRow)
+        if (node !== null) {
+            node.fixStations.setData(node.fixStations.index(fixStationPage.rowInNode(fixRow)),
+                                     newText, role)
+        }
     }
 
     // The whole coordinate in one write, so a pasted one re-solves the line plot
     // once. Text that won't parse never reaches here: the field's
     // CoordinateTextValidator holds the editor open and shows the reason, in the
     // row's own axis order.
-    function commitCoordinate(rowIndex, newText) {
-        fixStationPage.fixStationsModel.setCoordinateText(
-            rowIndex, newText, ProjectUnits.unitSystem)
+    function commitCoordinate(fixRow: int, newText: string): void {
+        const node = fixStationPage.nodeOfFixRow(fixRow)
+        if (node !== null) {
+            node.fixStations.setCoordinateText(fixStationPage.rowInNode(fixRow), newText,
+                                               ProjectUnits.unitSystem)
+        }
     }
 
     // Re-stores text the row already held, rather than text someone typed — so
@@ -115,14 +142,19 @@ StandardPage {
     // imperial project would re-read the same digits as feet and move the fix
     // vertically, which is not something the user asked for by exchanging two
     // horizontal numbers.
-    function commitStoredCoordinate(rowIndex: int, newText: string): void {
-        fixStationPage.fixStationsModel.setCoordinateText(rowIndex, newText, Units.Metric)
+    function commitStoredCoordinate(fixRow: int, newText: string): void {
+        const node = fixStationPage.nodeOfFixRow(fixRow)
+        if (node !== null) {
+            node.fixStations.setCoordinateText(fixStationPage.rowInNode(fixRow), newText,
+                                               Units.Metric)
+        }
     }
 
-    // Hands row \a rowIndex to the 3D view to be placed by clicking the terrain,
-    // the way the Map page's Add Layer hands its selection to the view.
-    function pickFromView(rowIndex: int): void {
-        FixStationPick.begin(fixStationPage.cave as Cave, rowIndex)
+    // Hands page row \a fixRow to the 3D view to be placed by clicking the
+    // terrain, the way the Map page's Add Layer hands its selection to the view.
+    function pickFromView(fixRow: int): void {
+        FixStationPick.begin(fixStationPage.nodeOfFixRow(fixRow) as Cave,
+                             fixStationPage.rowInNode(fixRow))
     }
 
     // Both coordinate-system cells commit through here so the transposition
@@ -140,26 +172,112 @@ StandardPage {
     // currentIndex changes (a row removed above the current one) would
     // race a link that is opening the page on another row.
     function pickRow(row: int): void {
-        tableView.currentIndex = row
+        treeViewId.currentIndex = row
         if (fixStationPage.PageView.page !== null) {
             fixStationPage.PageView.page.selectionProperties = { "currentFixRow": row }
         }
     }
 
+    // Opens the nodes above page row \a fixRow and scrolls it into view.
+    function revealFixRow(fixRow: int): void {
+        const index = treeModelId.indexOfFixRow(fixRow)
+        if (!index.valid) {
+            return
+        }
+        treeViewId.expandToIndex(index)
+        treeViewId.forceLayout()
+        treeViewId.positionViewAtIndex(index, QQ.TableView.Contain)
+    }
+
+    function isCollapsedNode(node: SurveyNode): bool {
+        return node !== null && fixStationPage.collapsedNodeIds.indexOf(String(node.id)) >= 0
+    }
+
+    // Opens every node row the user has not closed. The page's own node is
+    // the tree's root and always open. Walks the model rather than the view's
+    // rows, which the view only recounts at its next layout.
+    function applyExpansion(): void {
+        const open = (index, isRoot) => {
+            const row = treeViewId.rowAtIndex(index)
+            if (row < 0) {
+                return
+            }
+            const node = treeModelId.data(index, FixStationTreeModel.NodeObjectRole)
+            if (!isRoot && fixStationPage.isCollapsedNode(node)) {
+                return
+            }
+            if (!treeViewId.isExpanded(row)) {
+                treeViewId.expand(row)
+            }
+            for (let i = 0; i < treeModelId.rowCount(index); ++i) {
+                const child = treeModelId.index(i, 0, index)
+                if (treeModelId.data(child, FixStationTreeModel.RowKindRole) === FixStationTreeModel.NodeRow) {
+                    open(child, false)
+                }
+            }
+        }
+        if (treeModelId.rowCount() > 0) {
+            open(treeModelId.index(0, 0), true)
+        }
+    }
+
+    function toggleNode(row: int, node: SurveyNode): void {
+        const id = String(node.id)
+        const collapsed = fixStationPage.collapsedNodeIds.filter(collapsedId => collapsedId !== id)
+        if (treeViewId.isExpanded(row)) {
+            collapsed.push(id)
+            treeViewId.collapse(row)
+        } else {
+            treeViewId.expand(row)
+        }
+        fixStationPage.collapsedNodeIds = collapsed
+        fixStationPage.applyExpansion()
+    }
+
+    function expandAll(): void {
+        fixStationPage.collapsedNodeIds = []
+        fixStationPage.applyExpansion()
+    }
+
+    // Closes every node row under the page's own node.
+    function collapseAll(): void {
+        const ids = []
+        const collect = (node) => {
+            for (let i = 0; i < node.childNodeCount; ++i) {
+                const child = node.childNode(i)
+                ids.push(String(child.id))
+                collect(child)
+            }
+        }
+        if (fixStationPage.cave !== null) {
+            collect(fixStationPage.cave)
+        }
+        fixStationPage.collapsedNodeIds = ids
+        treeViewId.collapseRecursively()
+        fixStationPage.applyExpansion()
+    }
+
     onCurrentFixRowChanged: {
-        tableView.currentIndex = fixStationPage.currentFixRow
+        treeViewId.currentIndex = fixStationPage.currentFixRow
         if (fixStationPage.currentFixRow < 0) {
             return
         }
         // The rows may not be laid out yet when the page opens on a link.
-        Qt.callLater(() => tableView.positionViewAtIndex(tableView.currentIndex, QQ.ListView.Contain))
+        Qt.callLater(() => fixStationPage.revealFixRow(treeViewId.currentIndex))
     }
 
     // currentFixRow mirrors the view, so a link naming the row the page last
     // showed still counts as a change once the view has moved on.
     QQ.Connections {
-        target: tableView
-        function onCurrentIndexChanged() { fixStationPage.currentFixRow = tableView.currentIndex }
+        target: treeViewId
+        function onCurrentIndexChanged() { fixStationPage.currentFixRow = treeViewId.currentIndex }
+    }
+
+    // New node rows open as they arrive, so the whole subtree starts open.
+    QQ.Connections {
+        target: treeModelId
+        function onRowsInserted() { Qt.callLater(fixStationPage.applyExpansion) }
+        function onModelReset() { Qt.callLater(fixStationPage.applyExpansion) }
     }
 
     component FixField : DoubleClickTextInput {
@@ -506,54 +624,105 @@ StandardPage {
     }
 
     // Chooses the system an attachment's fixes with no system of their own read
-    // in. Shown while the owner's file has any such fix.
-    component BareFixSystemControl : RowLayout {
-        id: bareFixSystemControl
+    // in, on the owner's node row. Shown while the owner's files hold any such
+    // fix.
+    component OwnerSystemControl : RowLayout {
+        id: ownerSystemControl
 
-        required property QtObject modelData
-        required property int index
+        required property QtObject owner
+        required property bool isNodeOwner
+        property string value: ""
 
-        property int bareFixCount: 0
+        signal committed(string newCS)
 
-        function refresh(): void {
-            // The owner goes before its row does when it is deleted.
-            bareFixSystemControl.bareFixCount =
-                fixStationPage.attachedFixesModel && bareFixSystemControl.modelData
-                ? fixStationPage.attachedFixesModel.bareFixCount(bareFixSystemControl.modelData.id)
-                : 0
-        }
-
-        visible: bareFixSystemControl.bareFixCount > 0
         spacing: Theme.tightSpacing
 
-        QQ.Component.onCompleted: bareFixSystemControl.refresh()
-
-        QQ.Connections {
-            target: fixStationPage.attachedFixesModel
-
-            function onModelReset() { bareFixSystemControl.refresh() }
-            function onDataChanged() { bareFixSystemControl.refresh() }
-        }
-
         QC.Label {
-            text: bareFixSystemControl.modelData === fixStationPage.cave
+            text: ownerSystemControl.isNodeOwner
                   ? "Read fixes with no coordinate system as"
-                  : "Read " + (bareFixSystemControl.modelData?.name ?? "")
+                  : "Read " + (ownerSystemControl.owner?.name ?? "")
                     + "'s fixes with no coordinate system as"
             textFormat: QC.Label.PlainText
+            font.pixelSize: Theme.fontSizeSmall
         }
 
         CSComboBox {
-            objectName: "bareFixSystemCombo." + bareFixSystemControl.index
+            objectName: "bareFixSystemCombo." + (ownerSystemControl.owner?.name ?? "")
             offersUnset: true
-            value: bareFixSystemControl.modelData?.externalCenterline.fixCoordinateSystem ?? ""
-            onCommitted: (newCS) => fixStationPage.setBareFixCoordinateSystem(
-                bareFixSystemControl.index, newCS)
+            value: ownerSystemControl.value
+            onCommitted: (newCS) => ownerSystemControl.committed(newCS)
+        }
+    }
+
+    // The owner controls of a node's trips that carry attachments, each shown
+    // while its file has a fix with no system of its own.
+    component TripSystemControls : ColumnLayout {
+        id: tripSystemControls
+
+        required property SurveyNode node
+
+        // Recounted from the node's attached rows, which list every trip's
+        // fixes.
+        property int revision: 0
+
+        spacing: Theme.tightSpacing
+
+        QQ.Connections {
+            target: tripSystemControls.node?.attachedFixes ?? null
+
+            function onModelReset() { tripSystemControls.revision++ }
+            function onDataChanged() { tripSystemControls.revision++ }
         }
 
-        QQ.Item {
-            Layout.fillWidth: true
+        QQ.Repeater {
+            model: tripSystemControls.node?.tripCount ?? 0
+
+            delegate: OwnerSystemControl {
+                id: tripControl
+
+                required property int index
+
+                readonly property Trip trip: tripSystemControls.node?.trip(tripControl.index) ?? null
+
+                owner: tripControl.trip
+                isNodeOwner: false
+                value: tripControl.trip?.externalCenterline.fixCoordinateSystem ?? ""
+                visible: tripSystemControls.revision >= 0
+                         && tripControl.trip !== null
+                         && !tripControl.trip.externalCenterline.isEmpty
+                         && tripSystemControls.node.attachedFixes.bareFixCount(tripControl.trip.id) > 0
+
+                onCommitted: (newCS) => fixStationPage.setOwnerFixCoordinateSystem(tripControl.trip, newCS)
+            }
         }
+    }
+
+    // A small rounded label on a node row: its kind, its fix count.
+    component Chip : QC.Label {
+        textFormat: QC.Label.PlainText
+        color: Theme.chipText
+        font.pixelSize: Theme.fontSizeCaption
+        leftPadding: Theme.chipPadding
+        rightPadding: Theme.chipPadding
+
+        background: QQ.Rectangle {
+            radius: Theme.chipRadius
+            color: Theme.chipBackground
+        }
+    }
+
+    // The rows are a tree over the node and its subtree: a row per node, and
+    // under each its fix station table's rows (its own rows, then the
+    // read-only rows its files fix themselves) ahead of its child nodes.
+    //
+    // A fix row is addressed by its page row, its place among every fix row
+    // in depth-first order. The node's own rows come first, so a page row
+    // below fixStationsModel.count is the same row in fixStationsModel;
+    // currentFixRow, the cell objectNames, and the commit functions below
+    // all take page rows.
+    FixStationTreeModel {
+        id: treeModelId
+        rootNode: fixStationPage.cave
     }
 
     RemoveAskBox {
@@ -585,7 +754,9 @@ StandardPage {
         columns: [
             TableStaticColumn {
                 id: stationColumn
-                columnWidth: 130
+                // A name's width plus the indentation of the deepest tree
+                // level the column makes room for.
+                columnWidth: 130 + fixStationPage.stationIndentLevels * Theme.treeIndent
                 text: "Station"
             },
             TableStaticColumn {
@@ -628,44 +799,74 @@ StandardPage {
             Layout.fillWidth: true
         }
 
-        QQ.Repeater {
-            model: fixStationPage.attachmentOwners
+        RowLayout {
+            spacing: Theme.flowSpacing
+            Layout.fillWidth: true
 
-            delegate: BareFixSystemControl {
+            QC.Button {
+                objectName: "expandAllButton"
+                text: "Expand all"
+                flat: true
+                onClicked: fixStationPage.expandAll()
+            }
+
+            QC.Button {
+                objectName: "collapseAllButton"
+                text: "Collapse all"
+                flat: true
+                onClicked: fixStationPage.collapseAll()
+            }
+
+            QQ.Item {
                 Layout.fillWidth: true
             }
         }
 
-        HorizontalHeaderStaticView {
+        QQ.Row {
             visible: !fixStationPage.isNarrow
-            view: tableView
             Layout.fillWidth: true
-            delegate: TableStaticHeaderColumn {
-                model: tableView.model
+
+            QQ.Repeater {
+                model: columnModelId
+
+                delegate: TableStaticHeaderColumn {
+                    model: treeModelId
+                }
             }
         }
 
-        QC.ScrollView {
+        QQ.TreeView {
+            id: treeViewId
+            objectName: "fixStationTreeView"
+
+            //! The page row of the picked fix, -1 for none.
+            property int currentIndex: -1
+            //! How many fix rows the tree holds, every node's included.
+            readonly property int count: treeModelId.fixRowCount
+
+            model: treeModelId
+            // A pooled row keeps the names its cells last carried, which would
+            // answer for a row that is gone.
+            reuseItems: false
+            clip: true
+            boundsBehavior: QQ.Flickable.StopAtBounds
             Layout.fillWidth: true
             Layout.fillHeight: true
-            implicitWidth: fixStationPage.isNarrow
-                           ? 0
-                           : tableView.implicitWidth + QC.ScrollBar.vertical.implicitWidth
+            implicitWidth: fixStationPage.isNarrow ? 0 : columnModelId.totalWidth
 
-            TableStaticView {
-                id: tableView
-                objectName: "fixStationTableView"
+            delegate: fixStationPage.isNarrow ? narrowChooserId : wideChooserId
 
-                model: fixStationPage.cave ? fixStationPage.cave.fixStationTable : null
-                columnModel: columnModelId
-                // No row is picked until a link or the user picks one; a
-                // ListView would otherwise select the first row as it fills.
-                currentIndex: -1
-
-                implicitWidth: fixStationPage.isNarrow ? 0 : columnModelId.totalWidth
-
-                delegate: fixStationPage.isNarrow ? narrowDelegateComponent : wideDelegateComponent
+            columnWidthProvider: function(column) {
+                return fixStationPage.isNarrow
+                        ? treeViewId.width
+                        : Math.max(treeViewId.width, columnModelId.totalWidth)
             }
+
+            onWidthChanged: treeViewId.forceLayout()
+
+            QC.ScrollBar.vertical: QC.ScrollBar {}
+
+            QQ.Component.onCompleted: Qt.callLater(fixStationPage.applyExpansion)
         }
     }
 
@@ -673,9 +874,219 @@ StandardPage {
         objectName: "noFixStationsHelpBox"
         anchors.centerIn: parent
         text: "No fix stations yet. Click <b>Add Fix</b> to anchor a station to absolute coordinates."
-        visible: fixStationPage.fixStationsModel !== null
-                 && fixStationPage.fixStationsModel.count === 0
-                 && (fixStationPage.attachedFixesModel?.count ?? 0) === 0
+        visible: fixStationPage.cave !== null && treeModelId.fixRowCount === 0
+    }
+
+    DelegateChooser {
+        id: wideChooserId
+        role: "rowKind"
+
+        DelegateChoice {
+            roleValue: FixStationTreeModel.NodeRow
+            delegate: nodeRowComponent
+        }
+
+        DelegateChoice {
+            roleValue: FixStationTreeModel.FixRow
+            delegate: wideDelegateComponent
+        }
+    }
+
+    DelegateChooser {
+        id: narrowChooserId
+        role: "rowKind"
+
+        DelegateChoice {
+            roleValue: FixStationTreeModel.NodeRow
+            delegate: nodeRowComponent
+        }
+
+        DelegateChoice {
+            roleValue: FixStationTreeModel.FixRow
+            delegate: narrowDelegateComponent
+        }
+    }
+
+    // A node's row: chevron, kind, name, its fix counts, and the system its
+    // files' fixes with no system of their own read in, chosen on the
+    // attachment's owner and shown on the nodes under it.
+    QQ.Component {
+        id: nodeRowComponent
+
+        QQ.Item {
+            id: nodeRowId
+            objectName: "nodeRow." + nodeRowId.nodeName
+
+            required property QQ.TreeView treeView
+            required property bool expanded
+            required property bool hasChildren
+            required property int depth
+            required property int row
+            required property string nodeName
+            required property string nodeKindLabel
+            required property SurveyNode node
+            required property int ownFixCount
+            required property int subtreeFixCount
+            required property int subtreeBareFixCount
+            required property int subtreeUnsetFixCount
+            required property int attachmentBareFixCount
+            required property bool isAttachmentOwner
+            required property string fixCoordinateSystem
+            required property string inheritedFixCoordinateSystem
+            required property SurveyNode inheritedFromNode
+
+            readonly property bool isPageNode: nodeRowId.node === fixStationPage.cave
+            // The region's root node has no name of its own.
+            readonly property string displayName: nodeRowId.nodeName !== "" ? nodeRowId.nodeName : "Project"
+            // The system the node's bare fixes read in: its own choice on an
+            // owner, the owner's above it otherwise.
+            readonly property string bareFixSystem: nodeRowId.isAttachmentOwner
+                                                    ? nodeRowId.fixCoordinateSystem
+                                                    : nodeRowId.inheritedFixCoordinateSystem
+            readonly property bool showsInheritedSystem: !nodeRowId.isAttachmentOwner
+                                                         && nodeRowId.inheritedFromNode !== null
+                                                         && nodeRowId.subtreeBareFixCount > 0
+
+            implicitWidth: nodeColumnId.implicitWidth + nodeColumnId.anchors.leftMargin + Theme.delegatePadding
+            implicitHeight: nodeColumnId.implicitHeight + 2 * Theme.delegatePadding
+
+            QQ.Rectangle {
+                anchors.fill: parent
+                color: Theme.surfaceMuted
+            }
+
+            ColumnLayout {
+                id: nodeColumnId
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Theme.delegatePadding + nodeRowId.depth * Theme.treeIndent
+                anchors.rightMargin: Theme.delegatePadding
+                spacing: Theme.tightSpacing
+
+                RowLayout {
+                    spacing: Theme.flowSpacing
+                    Layout.fillWidth: true
+
+                    // The page's own node is the tree's root and stays open.
+                    QQ.Item {
+                        objectName: "nodeChevron." + nodeRowId.nodeName
+                        visible: !nodeRowId.isPageNode
+                        Layout.preferredWidth: Theme.treeCaretWidth
+                        Layout.preferredHeight: Theme.treeCaretWidth
+
+                        QC.Label {
+                            anchors.centerIn: parent
+                            visible: nodeRowId.hasChildren
+                            text: nodeRowId.expanded ? "\u25BE" : "\u25B8"
+                            color: Theme.textSubtle
+                        }
+
+                        QQ.TapHandler {
+                            enabled: nodeRowId.hasChildren
+                            onTapped: fixStationPage.toggleNode(nodeRowId.row, nodeRowId.node)
+                        }
+                    }
+
+                    Chip {
+                        visible: nodeRowId.node !== null && nodeRowId.node.parentNode !== null
+                        text: nodeRowId.nodeKindLabel
+                    }
+
+                    QC.Label {
+                        text: nodeRowId.displayName
+                        textFormat: QC.Label.PlainText
+                        font.bold: true
+                    }
+
+                    Chip {
+                        text: (nodeRowId.ownFixCount === 1 ? "1 fix" : nodeRowId.ownFixCount + " fixes")
+                              + (nodeRowId.subtreeFixCount !== nodeRowId.ownFixCount
+                                 ? " \u00B7 " + nodeRowId.subtreeFixCount + " with children"
+                                 : "")
+                    }
+
+                    QC.Label {
+                        visible: nodeRowId.ownFixCount === 0
+                        text: "No fixed stations"
+                        color: Theme.textSubtle
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    // Cavern refuses these until a system is chosen for them.
+                    QC.Label {
+                        visible: fixStationPage.projectHasFrame
+                                 && nodeRowId.subtreeUnsetFixCount > 0
+                        text: "\u26A0 " + nodeRowId.subtreeUnsetFixCount + " without coordinate system"
+                        color: Theme.errorText
+                        font.pixelSize: Theme.fontSizeSmall
+                        leftPadding: Theme.chipPadding
+                        rightPadding: Theme.chipPadding
+
+                        background: QQ.Rectangle {
+                            radius: Theme.chipRadius
+                            color: Theme.warningSurface
+                            border.color: Theme.warningBorder
+                        }
+                    }
+
+                    QQ.Item {
+                        Layout.fillWidth: true
+                    }
+
+                    LinkText {
+                        visible: !nodeRowId.isPageNode
+                        text: "Open page \u2192"
+                        onClicked: RootData.pageSelectionModel.currentPageAddress =
+                                   linkGeneratorId.fixStationsLink(nodeRowId.node)
+                    }
+                }
+
+                OwnerSystemControl {
+                    visible: nodeRowId.isAttachmentOwner && nodeRowId.attachmentBareFixCount > 0
+                    owner: nodeRowId.node
+                    isNodeOwner: true
+                    value: nodeRowId.fixCoordinateSystem
+                    Layout.leftMargin: Theme.treeCaretWidth
+
+                    onCommitted: (newCS) => treeModelId.setData(nodeRowId.treeView.index(nodeRowId.row, 0),
+                                                                newCS,
+                                                                FixStationTreeModel.FixCoordinateSystemRole)
+                }
+
+                TripSystemControls {
+                    node: nodeRowId.node
+                    Layout.leftMargin: Theme.treeCaretWidth
+                }
+
+                RowLayout {
+                    visible: nodeRowId.showsInheritedSystem
+                    spacing: Theme.tightSpacing
+                    Layout.leftMargin: Theme.treeCaretWidth
+
+                    QC.Label {
+                        objectName: "inheritedSystem." + nodeRowId.nodeName
+                        text: "Coordinate system for bare fixes: "
+                              + (nodeRowId.bareFixSystem !== "" ? nodeRowId.bareFixSystem : "unset")
+                              + " (set on " + (nodeRowId.inheritedFromNode?.name ?? "") + ")"
+                        textFormat: QC.Label.PlainText
+                        color: nodeRowId.bareFixSystem !== "" ? Theme.textSubtle : Theme.errorText
+                        font.pixelSize: Theme.fontSizeSmall
+                    }
+
+                    LinkText {
+                        text: "\u2191"
+                        onClicked: RootData.pageSelectionModel.currentPageAddress =
+                                   linkGeneratorId.fixStationsLink(nodeRowId.inheritedFromNode)
+                    }
+                }
+            }
+        }
+    }
+
+    LinkGenerator {
+        id: linkGeneratorId
+        pageSelectionModel: RootData.pageSelectionModel
     }
 
     QQ.Component {
@@ -683,8 +1094,11 @@ StandardPage {
 
         QQ.Item {
             id: wideDelegateId
+            objectName: "fixRow." + wideDelegateId.stationName
 
-            required property int index
+            //! The row's page row, which names its cells and every commit.
+            required property int fixRow
+            required property int depth
             required property string stationName
             required property string inputCS
             required property double easting
@@ -711,6 +1125,9 @@ StandardPage {
             //! the solve reads it in, empty while none is chosen.
             required property string readInSystem
 
+            readonly property int indent: Math.min(wideDelegateId.depth,
+                                                   fixStationPage.stationIndentLevels) * Theme.treeIndent
+
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
             // to judge. So they share the single warning beside the row rather
@@ -726,8 +1143,8 @@ StandardPage {
             implicitWidth: rowLayoutId.implicitWidth
 
             TableRowBackground {
-                isSelected: tableView.currentIndex === wideDelegateId.index
-                rowIndex: wideDelegateId.index
+                isSelected: treeViewId.currentIndex === wideDelegateId.fixRow
+                rowIndex: wideDelegateId.fixRow
                 anchors.fill: parent
             }
 
@@ -736,9 +1153,9 @@ StandardPage {
                 anchors.fill: parent
                 active: !wideDelegateId.readOnly
                 sourceComponent: DataRightClickMouseMenu {
-                    objectName: "fixRowMenu." + wideDelegateId.index
+                    objectName: "fixRowMenu." + wideDelegateId.fixRow
                     removeChallenge: removeChallengeId
-                    row: wideDelegateId.index
+                    row: wideDelegateId.fixRow
                     name: wideDelegateId.stationName
                 }
             }
@@ -746,7 +1163,7 @@ StandardPage {
             QQ.MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
-                onClicked: fixStationPage.pickRow(wideDelegateId.index)
+                onClicked: fixStationPage.pickRow(wideDelegateId.fixRow)
             }
 
             RowLayout {
@@ -754,13 +1171,20 @@ StandardPage {
                 spacing: 0
                 anchors.verticalCenter: parent.verticalCenter
 
+                // Only the station cell takes the tree's indentation, so the
+                // other columns line up at every depth.
+                QQ.Item {
+                    Layout.preferredWidth: wideDelegateId.indent
+                    Layout.preferredHeight: 1
+                }
+
                 WideCell {
-                    fieldObjectName: "stationCell." + wideDelegateId.index
-                    columnWidth: stationColumn.columnWidth
+                    fieldObjectName: "stationCell." + wideDelegateId.fixRow
+                    columnWidth: stationColumn.columnWidth - wideDelegateId.indent
                     leadingItem: wideDelegateId.readOnly ? wideLockLoader : null
                     value: wideDelegateId.stationName
                     role: FixStationModel.StationNameRole
-                    rowIndex: wideDelegateId.index
+                    rowIndex: wideDelegateId.fixRow
                     readOnly: wideDelegateId.readOnly
                     error: wideDelegateId.stationError !== ""
 
@@ -770,7 +1194,7 @@ StandardPage {
                         anchors.verticalCenter: parent.verticalCenter
                         active: wideDelegateId.readOnly
                         sourceComponent: ReadOnlyLock {
-                            objectName: "readOnlyLock." + wideDelegateId.index
+                            objectName: "readOnlyLock." + wideDelegateId.fixRow
                             sourceFile: wideDelegateId.sourceFile
                         }
                     }
@@ -779,7 +1203,7 @@ StandardPage {
                 CSCell {
                     columnWidth: csColumn.columnWidth
                     value: wideDelegateId.inputCS
-                    rowIndex: wideDelegateId.index
+                    rowIndex: wideDelegateId.fixRow
                     coordinateText: wideDelegateId.coordinateText
                     orderUnknown: wideDelegateId.coordinateOrderUnknown
                     availableDatums: wideDelegateId.availableDatums
@@ -791,7 +1215,7 @@ StandardPage {
                 }
 
                 WideCell {
-                    fieldObjectName: "coordinateCell." + wideDelegateId.index
+                    fieldObjectName: "coordinateCell." + wideDelegateId.fixRow
                     columnWidth: coordinateColumn.columnWidth
                     coordinate: true
                     readOnly: wideDelegateId.readOnly
@@ -818,7 +1242,7 @@ StandardPage {
                     // The cell above renders the numbers in the project's
                     // units; the editor re-offers the coordinate as written.
                     editValue: wideDelegateId.coordinateText
-                    rowIndex: wideDelegateId.index
+                    rowIndex: wideDelegateId.fixRow
                     axisOrder: CoordinateText.axisOrderFor(wideDelegateId.inputCS)
                     // One field now holds both horizontal components, so the
                     // two per-axis domain flags share the one tint — and so does
@@ -833,8 +1257,8 @@ StandardPage {
                         anchors.verticalCenter: parent.verticalCenter
                         active: !wideDelegateId.readOnly
                         sourceComponent: PickFromViewButton {
-                            objectName: "pickFromViewButton." + wideDelegateId.index
-                            onClicked: fixStationPage.pickFromView(wideDelegateId.index)
+                            objectName: "pickFromViewButton." + wideDelegateId.fixRow
+                            onClicked: fixStationPage.pickFromView(wideDelegateId.fixRow)
                         }
                     }
                 }
@@ -845,19 +1269,19 @@ StandardPage {
                     active: wideDelegateId.reference
                     visible: wideDelegateId.reference
                     sourceComponent: ReferenceChip {
-                        objectName: "referenceChip." + wideDelegateId.index
+                        objectName: "referenceChip." + wideDelegateId.fixRow
                     }
                 }
 
                 InlineWarning {
-                    objectName: "stationWarning." + wideDelegateId.index
+                    objectName: "stationWarning." + wideDelegateId.fixRow
                     Layout.leftMargin: Theme.tightSpacing
                     Layout.alignment: Qt.AlignVCenter
                     message: wideDelegateId.stationError
                 }
 
                 InlineWarning {
-                    objectName: "coordinateWarning." + wideDelegateId.index
+                    objectName: "coordinateWarning." + wideDelegateId.fixRow
                     Layout.leftMargin: Theme.tightSpacing
                     Layout.alignment: Qt.AlignVCenter
                     message: wideDelegateId.coordinateWarning
@@ -871,8 +1295,11 @@ StandardPage {
 
         QQ.Item {
             id: narrowDelegateId
+            objectName: "fixRow." + narrowDelegateId.stationName
 
-            required property int index
+            //! The row's page row, which names its cells and every commit.
+            required property int fixRow
+            required property int depth
             required property string stationName
             required property string inputCS
             required property double easting
@@ -902,12 +1329,11 @@ StandardPage {
                                                           ? narrowDelegateId.domainError
                                                           : narrowDelegateId.readInWarning
 
-            width: QQ.ListView.view ? QQ.ListView.view.width : 0
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
 
             TableRowBackground {
-                isSelected: tableView.currentIndex === narrowDelegateId.index
-                rowIndex: narrowDelegateId.index
+                isSelected: treeViewId.currentIndex === narrowDelegateId.fixRow
+                rowIndex: narrowDelegateId.fixRow
                 anchors.fill: parent
             }
 
@@ -915,9 +1341,9 @@ StandardPage {
                 anchors.fill: parent
                 active: !narrowDelegateId.readOnly
                 sourceComponent: DataRightClickMouseMenu {
-                    objectName: "fixRowMenu." + narrowDelegateId.index
+                    objectName: "fixRowMenu." + narrowDelegateId.fixRow
                     removeChallenge: removeChallengeId
-                    row: narrowDelegateId.index
+                    row: narrowDelegateId.fixRow
                     name: narrowDelegateId.stationName
                 }
             }
@@ -925,26 +1351,26 @@ StandardPage {
             QQ.MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
-                onClicked: fixStationPage.pickRow(narrowDelegateId.index)
+                onClicked: fixStationPage.pickRow(narrowDelegateId.fixRow)
             }
 
             QQ.Flow {
                 id: narrowFlow
-                objectName: "narrowFixRow." + narrowDelegateId.index
+                objectName: "narrowFixRow." + narrowDelegateId.fixRow
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: Theme.delegatePadding
+                anchors.leftMargin: Theme.delegatePadding + narrowDelegateId.depth * Theme.treeIndent
                 anchors.rightMargin: Theme.delegatePadding
                 spacing: Theme.flowSpacing
 
                 InlineWarning {
-                    objectName: "stationWarning." + narrowDelegateId.index
+                    objectName: "stationWarning." + narrowDelegateId.fixRow
                     message: narrowDelegateId.stationError
                 }
 
                 InlineWarning {
-                    objectName: "coordinateWarning." + narrowDelegateId.index
+                    objectName: "coordinateWarning." + narrowDelegateId.fixRow
                     message: narrowDelegateId.coordinateWarning
                 }
 
@@ -952,16 +1378,16 @@ StandardPage {
                     active: narrowDelegateId.readOnly
                     visible: narrowDelegateId.readOnly
                     sourceComponent: ReadOnlyLock {
-                        objectName: "readOnlyLock." + narrowDelegateId.index
+                        objectName: "readOnlyLock." + narrowDelegateId.fixRow
                         sourceFile: narrowDelegateId.sourceFile
                     }
                 }
 
                 FixField {
-                    objectName: "stationCell." + narrowDelegateId.index
+                    objectName: "stationCell." + narrowDelegateId.fixRow
                     value: narrowDelegateId.stationName
                     role: FixStationModel.StationNameRole
-                    rowIndex: narrowDelegateId.index
+                    rowIndex: narrowDelegateId.fixRow
                     readOnly: narrowDelegateId.readOnly
                     font.bold: true
                     error: narrowDelegateId.stationError !== ""
@@ -978,12 +1404,12 @@ StandardPage {
                     id: narrowComboComponent
 
                     CSComboBox {
-                        objectName: "inputCSComboBox." + narrowDelegateId.index
+                        objectName: "inputCSComboBox." + narrowDelegateId.fixRow
                         value: narrowDelegateId.inputCS
                         availableDatums: narrowDelegateId.availableDatums
                         datumEnabled: narrowDelegateId.datumEnabled
                         onCommitted: (newCS) => fixStationPage.commitCS(
-                            narrowDelegateId.index, newCS,
+                            narrowDelegateId.fixRow, newCS,
                             narrowDelegateId.coordinateOrderUnknown,
                             narrowDelegateId.coordinateText)
                     }
@@ -994,7 +1420,7 @@ StandardPage {
 
                     ReadOnlyCSCell {
                         value: narrowDelegateId.inputCS
-                        rowIndex: narrowDelegateId.index
+                        rowIndex: narrowDelegateId.fixRow
                         readInSystem: narrowDelegateId.readInSystem
                         readInWarning: narrowDelegateId.readInWarning
                         sourceFile: narrowDelegateId.sourceFile
@@ -1004,7 +1430,7 @@ StandardPage {
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
                 FixField {
-                    objectName: "coordinateCell." + narrowDelegateId.index
+                    objectName: "coordinateCell." + narrowDelegateId.fixRow
                     //! The text itself when there are no numbers to render —
                     //! see the wide delegate.
                     value: narrowDelegateId.coordinateError !== "" || narrowDelegateId.readOnly
@@ -1015,7 +1441,7 @@ StandardPage {
                                                    ProjectUnits.unitSystem,
                                                    CoordinateText.axisOrderFor(narrowDelegateId.inputCS))
                     editValue: narrowDelegateId.coordinateText
-                    rowIndex: narrowDelegateId.index
+                    rowIndex: narrowDelegateId.fixRow
                     coordinate: true
                     readOnly: narrowDelegateId.readOnly
                     axisOrder: CoordinateText.axisOrderFor(narrowDelegateId.inputCS)
@@ -1028,7 +1454,7 @@ StandardPage {
                     active: narrowDelegateId.reference
                     visible: narrowDelegateId.reference
                     sourceComponent: ReferenceChip {
-                        objectName: "referenceChip." + narrowDelegateId.index
+                        objectName: "referenceChip." + narrowDelegateId.fixRow
                     }
                 }
 
@@ -1036,13 +1462,13 @@ StandardPage {
                     active: !narrowDelegateId.readOnly
                     visible: !narrowDelegateId.readOnly
                     sourceComponent: PickFromViewButton {
-                        objectName: "pickFromViewButton." + narrowDelegateId.index
-                        onClicked: fixStationPage.pickFromView(narrowDelegateId.index)
+                        objectName: "pickFromViewButton." + narrowDelegateId.fixRow
+                        onClicked: fixStationPage.pickFromView(narrowDelegateId.fixRow)
                     }
                 }
 
                 QC.Label {
-                    objectName: "readOnlySource." + narrowDelegateId.index
+                    objectName: "readOnlySource." + narrowDelegateId.fixRow
                     visible: narrowDelegateId.readOnly
                     text: "from " + narrowDelegateId.sourceFile
                     textFormat: QC.Label.PlainText

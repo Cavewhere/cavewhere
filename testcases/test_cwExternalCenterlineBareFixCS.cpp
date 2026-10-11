@@ -143,7 +143,7 @@ TEST_CASE("A bare file fix in a georeferenced project with no system chosen fail
     CHECK(linePlot->solveErrorSummary().contains(kInputProjectionError));
 
     CHECK(bareFixWarnings(root).size() == 1);
-    const QString readInSystem = attachedFixFor(root, kFixedStation).readInSystem;
+    const QString readInSystem = subtreeAttachedFixFor(root, kFixedStation).readInSystem;
     INFO("readInSystem: " << readInSystem.toStdString());
     CHECK(readInSystem.isEmpty());
 }
@@ -181,7 +181,7 @@ TEST_CASE("A bare file fix reads in the system chosen for its attachment",
     CHECK(placed.z() == Catch::Approx(expected.z).margin(kPlacementMarginMeters));
 
     CHECK(bareFixWarnings(root).isEmpty());
-    const QString readInSystem = attachedFixFor(root, kFixedStation).readInSystem;
+    const QString readInSystem = subtreeAttachedFixFor(root, kFixedStation).readInSystem;
     INFO("readInSystem: " << readInSystem.toStdString());
     CHECK(readInSystem == kUtm48N);
 }
@@ -246,7 +246,7 @@ TEST_CASE("Reloading an attachment from its source keeps the system chosen for i
 
     CHECK(root->externalCenterline().entryFile() == kBareFixFileName);
     CHECK(root->externalCenterline().fixCoordinateSystem() == kUtm48N);
-    CHECK(attachedFixFor(root, kFixedStation).readInSystem == kUtm48N);
+    CHECK(subtreeAttachedFixFor(root, kFixedStation).readInSystem == kUtm48N);
     CHECK(bareFixWarnings(root).isEmpty());
 }
 

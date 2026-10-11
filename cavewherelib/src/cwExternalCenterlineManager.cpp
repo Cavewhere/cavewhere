@@ -36,6 +36,7 @@
 
 //Std includes
 #include <algorithm>
+#include <functional>
 #include <tuple>
 
 namespace {
@@ -938,13 +939,18 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
 {
     QList<cwAttachedFix> attachedFixes;
     QHash<QUuid, QStringList> fileFixedStations;
-    // Named the way a fix on this node names the station: a trip's file
-    // stations sit under its scopePrefix(), as in fileFixedStations().
-    const auto addOwner = [&](const QUuid& ownerId, const QString& scope,
-                              const cwExternalCenterline& centerline) {
+    // Named the way a fix on the owner names the station: a trip's file
+    // stations sit under its scopePrefix(), as in fileFixedStations(). A fix
+    // listed on a derived node keeps the owner's name for it.
+    const auto addFixes = [&](const QUuid& ownerId, const QString& scope,
+                              const cwExternalCenterline& centerline,
+                              const std::function<bool(const QString&)>& holdsNodePath) {
         const QString fileName = QFileInfo(centerline.entryFile()).fileName();
         const ReadInSystem readIn = readInSystemFor(ownerId, centerline);
         for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
+            if (!holdsNodePath(fix.nodePath)) {
+                continue;
+            }
             const bool bare = !fix.hasCoordinateSystem();
             attachedFixes.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
                                   fileName, fix.file, fix.line,
@@ -953,18 +959,54 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
                                   bare && readIn.fileOutput,
                                   ownerId});
         }
+    };
+    const auto addFileFixedStations = [&](const QUuid& ownerId) {
         const auto fixed = m_ownerFixedStations.constFind(ownerId);
         if (fixed != m_ownerFixedStations.constEnd()) {
             fileFixedStations.insert(ownerId, fixed.value());
         }
     };
-    addOwner(node->id(), QString(), node->externalCenterline());
+
+    // A fix lives on the derived node whose file holds it; the owner keeps the
+    // ones its derived nodes do not take (the entry file's own, a hidden node's).
+    if (!node->externalCenterline().isEmpty()) {
+        const QSet<QString> derivedPaths = derivedNodePaths(node);
+        addFixes(node->id(), QString(), node->externalCenterline(),
+                 [&derivedPaths](const QString& nodePath) {
+            return !derivedPaths.contains(nodePath);
+        });
+        addFileFixedStations(node->id());
+    }
+    if (node->isSourced() && !node->isSourceRoot()) {
+        const cwSurveyNode* owner = node->sourceRoot();
+        if (owner != nullptr && !owner->externalCenterline().isEmpty()) {
+            const QString sourcePath = node->sourcePath();
+            addFixes(owner->id(), QString(), owner->externalCenterline(),
+                     [&sourcePath](const QString& nodePath) { return nodePath == sourcePath; });
+        }
+    }
     for (const cwTrip* trip : node->trips()) {
-        addOwner(trip->id(), trip->scopePrefix(), trip->externalCenterline());
+        addFixes(trip->id(), trip->scopePrefix(), trip->externalCenterline(),
+                 [](const QString&) { return true; });
+        addFileFixedStations(trip->id());
     }
 
     node->setAttachedFixes(attachedFixes);
     node->setFileFixedStations(fileFixedStations);
+}
+
+QSet<QString> cwExternalCenterlineManager::derivedNodePaths(const cwSurveyNode* owner)
+{
+    QSet<QString> paths;
+    if (!owner->isSourceRoot()) {
+        return paths;
+    }
+    for (const cwSurveyNode* descendant : owner->allNodes()) {
+        if (descendant->isSourced() && descendant->sourceRoot() == owner) {
+            paths.insert(descendant->sourcePath());
+        }
+    }
+    return paths;
 }
 
 void cwExternalCenterlineManager::refreshAllAttachedFixes()
@@ -993,10 +1035,19 @@ cwExternalCenterlineManager::ReadInSystem cwExternalCenterlineManager::readInSys
 
 void cwExternalCenterlineManager::refreshSenderAttachedFixes()
 {
-    const auto* trip = qobject_cast<cwTrip*>(sender());
-    cwSurveyNode* node = trip ? trip->parentNode() : qobject_cast<cwSurveyNode*>(sender());
-    if (node) {
+    if (const auto* trip = qobject_cast<cwTrip*>(sender())) {
+        if (trip->parentNode() != nullptr) {
+            refreshAttachedFixes(trip->parentNode());
+        }
+        return;
+    }
+    // A node's attachment reaches the derived nodes under it, which list the
+    // fixes their files hold.
+    if (auto* node = qobject_cast<cwSurveyNode*>(sender())) {
         refreshAttachedFixes(node);
+        for (cwSurveyNode* descendant : node->allNodes()) {
+            refreshAttachedFixes(descendant);
+        }
     }
 }
 

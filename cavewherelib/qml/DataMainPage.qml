@@ -36,7 +36,21 @@ StandardPage {
                                                  geospatialLayerPageComponent);
     }
 
-    PageView.onPageChanged: registerGeospatialPage()
+    // The region's root node's page is this one, so its Fix Stations page,
+    // the one listing every fix in the project, hangs here.
+    function registerFixStationsPage() {
+        if (PageView.page === null) return
+        if (PageView.page.childPage("Fix Stations") !== null) return
+        RootData.pageSelectionModel.registerPage(PageView.page,
+                                                 "Fix Stations",
+                                                 fixStationsPageComponent,
+                                                 {"cave": RootData.region.rootNode});
+    }
+
+    PageView.onPageChanged: {
+        registerGeospatialPage()
+        registerFixStationsPage()
+    }
 
     // cwPageSelectionModel::clearHistory() (invoked by newProject/loadProject)
     // wipes "Data"'s child pages but keeps DataMainPage cached, so
@@ -46,6 +60,7 @@ StandardPage {
         target: RootData.pageSelectionModel
         function onCurrentPageChanged() {
             pageId.registerGeospatialPage()
+            pageId.registerFixStationsPage()
             // Leaving (or re-entering) the page drops the settings back to
             // read-only so the rarely-changed unit/CS editors are never left
             // exposed after navigating away.
@@ -62,6 +77,13 @@ StandardPage {
     QQ.Component {
         id: geospatialLayerPageComponent
         GeospatialLayerPage {
+            anchors.fill: parent
+        }
+    }
+
+    QQ.Component {
+        id: fixStationsPageComponent
+        FixStationPage {
             anchors.fill: parent
         }
     }

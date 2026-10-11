@@ -1,0 +1,13 @@
+; Entry of a small Survex tree whose fixes live in different files. The
+; entry writes no *begin of its own, so its fix R0 belongs to the source
+; root, and each included file's *begin block becomes a derived node:
+; entrances (two bare fixes, one a reference), deep/lower (a fix under its
+; own *cs), and deep/empty (no fix at all). No file names a *cs out.
+*fix R0 100 200 300
+*data normal from to tape compass clino
+R0 R1 10.0 0 0
+*include "entrances"
+*include "deep/lower"
+*include "deep/empty"
+; Ties the fixless block to the entry's fix so cavern can place it.
+*equate R1 empty.X1

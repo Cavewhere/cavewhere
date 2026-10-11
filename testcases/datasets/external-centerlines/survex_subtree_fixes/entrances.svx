@@ -1,0 +1,8 @@
+; Two entrance fixes with no coordinate system; E1 is a reference point.
+*begin entrances
+*fix E1 reference 110 210 310
+*fix E2 120 220 320
+*data normal from to tape compass clino
+E1 E2 10.0 90 0
+E2 E3 10.0 0 0
+*end entrances

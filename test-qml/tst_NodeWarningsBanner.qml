@@ -233,8 +233,8 @@ MainWindowTest {
             tryVerify(() => RootData.pageView.currentPageItem !== null
                       && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "the line opens the cave's Fix Stations page")
-            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
-            verify(tableView !== null, "fixStationTableView must exist")
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+            verify(tableView !== null, "fixStationTreeView must exist")
             tryCompare(tableView, "currentIndex", badRow,
                        5000, "the page selects the fix the warning names")
         }
@@ -250,7 +250,7 @@ MainWindowTest {
             waitForRendering(rootId)
             mouseClick(messageLabel(entries(b)[0]))
             tryVerify(() => RootData.pageView.currentPageItem.objectName === "fixStationPage")
-            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
             tryCompare(tableView, "currentIndex", badRow)
 
             RootData.pageView.currentPageItem.pickRow(0)
@@ -535,8 +535,8 @@ MainWindowTest {
                       && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "the line opens the cave's Fix Stations page")
             compare(RootData.pageView.currentPageItem.cave, cave, "the page is the attached cave's")
-            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
-            verify(tableView !== null, "fixStationTableView must exist")
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+            verify(tableView !== null, "fixStationTreeView must exist")
             compare(tableView.count, 0, "the file lists no fix of its own")
             compare(tableView.currentIndex, -1, "the page opens with no row selected")
         }
@@ -563,7 +563,7 @@ MainWindowTest {
             const text = messageLabel(entry).text
             verify(text.indexOf("survex_blocks.svx") >= 0, "the line names the file: " + text)
             verify(text.indexOf("fixes doghill.d1 without") >= 0, "the line names the station: " + text)
-            verify(text.indexOf("add one to the file or remove that fix") >= 0,
+            verify(text.indexOf("choose one on the Fix Stations page or add *cs to the file") >= 0,
                    "the line names the remedy: " + text)
 
             mouseClick(messageLabel(entry))
@@ -571,8 +571,8 @@ MainWindowTest {
                       && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "the line opens the cave's Fix Stations page")
             compare(RootData.pageView.currentPageItem.cave, cave, "the page is the attached cave's")
-            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
-            verify(tableView !== null, "fixStationTableView must exist")
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+            verify(tableView !== null, "fixStationTreeView must exist")
             tryCompare(tableView, "count", 2)
             tryCompare(tableView, "currentIndex", 1, 5000, "the page opens on the attached row")
             tryVerify(() => findChild(tableView, "stationCell.1") !== null

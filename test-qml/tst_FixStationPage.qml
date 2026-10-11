@@ -150,8 +150,8 @@ MainWindowTest {
             verify(help !== null, "noFixStationsHelpBox must exist")
             tryVerify(() => help.visible, 2000, "help box should be visible for empty fix list")
 
-            const tableView = findChild(fixPage, "fixStationTableView")
-            verify(tableView !== null, "fixStationTableView must exist")
+            const tableView = findChild(fixPage, "fixStationTreeView")
+            verify(tableView !== null, "fixStationTreeView must exist")
             tryCompare(tableView, "count", 0)
         }
 
@@ -170,7 +170,7 @@ MainWindowTest {
             mouseClick(addButton)
             tryCompare(cave.fixStations, "count", 1)
 
-            const tableView = findChild(fixPage, "fixStationTableView")
+            const tableView = findChild(fixPage, "fixStationTreeView")
             tryCompare(tableView, "count", 1)
 
             const help = findChild(fixPage, "noFixStationsHelpBox")
@@ -189,8 +189,8 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
 
-            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTableView")
-            verify(tableView !== null, "fixStationTableView must exist")
+            const tableView = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+            verify(tableView !== null, "fixStationTreeView must exist")
             tryCompare(tableView, "count", 2)
             compare(tableView.currentIndex, -1)
         }
@@ -1556,6 +1556,10 @@ MainWindowTest {
         name: "FixStationPageAttachedFixes"
         when: windowShown
 
+        readonly property string subtreeFixture:
+            "external-centerlines/survex_subtree_fixes/ridge.svx"
+        readonly property int subtreeFixCount: 4
+
         function init() {
             RootData.project.newProject()
             RootData.pageSelectionModel.currentPageAddress = "View"
@@ -1576,12 +1580,22 @@ MainWindowTest {
             return item
         }
 
-        // The attached file's own *fix is a row of the table after the node's
+        //! How many attached fixes \a node and its descendants list: a file's
+        //! fix sits on the derived node whose file holds it.
+        function subtreeAttachedFixCount(node) {
+            let count = node.attachedFixes.count
+            for (let i = 0; i < node.childNodeCount; ++i) {
+                count += subtreeAttachedFixCount(node.childNode(i))
+            }
+            return count
+        }
+
+        // The attached file's own *fix is a row of the page after the node's
         // own, read-only, named the way a node fix on that station is spelled.
         function test_attachedFileFixesAreReadOnlyRowsOfTheTable() {
             const cave = makeSavedCaveAttach("fix-station-attached-fixes",
                                              "external-centerlines/survex_blocks.svx")
-            tryVerify(() => cave.attachedFixes.count === 1, 20000, "the scan lists the file's fix")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
             cave.fixStations.addFixStation()
             const model = cave.fixStations
             model.setData(model.index(0), "EPSG:32613", FixStationModel.InputCSRole)
@@ -1594,7 +1608,7 @@ MainWindowTest {
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
             const page = RootData.pageView.currentPageItem
-            const tableView = findChild(page, "fixStationTableView")
+            const tableView = findChild(page, "fixStationTreeView")
             tryCompare(tableView, "count", 2)
             compare(findChild(page, "noFixStationsHelpBox").visible, false)
 
@@ -1654,7 +1668,7 @@ MainWindowTest {
             tryCompare(tableView, "count", 1)
             tryCompare(waitForChild("stationCell.0"), "text", "doghill.d1")
             verify(waitForChild("readOnlyLock.0") !== null, "the attached row is now row 0")
-            compare(cave.attachedFixes.count, 1, "and is still the file's")
+            compare(subtreeAttachedFixCount(cave), 1, "and is still the file's")
             compare(findChild(page, "noFixStationsHelpBox").visible, false,
                     "the table is not empty while the file's fix is listed")
 
@@ -1675,14 +1689,14 @@ MainWindowTest {
             saveProjectAs("fix-station-default-datum")
             const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
                                               "external-centerlines/compass_zone_no_datum.mak"))
-            tryVerify(() => cave.attachedFixes.count === 1, 20000, "the scan lists the file's fix")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
 
             RootData.pageSelectionModel.currentPageAddress =
                 "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
-            tryCompare(findChild(RootData.pageView.currentPageItem, "fixStationTableView"), "count", 1)
+            tryCompare(findChild(RootData.pageView.currentPageItem, "fixStationTreeView"), "count", 1)
             compare(waitForChild("stationCell.0").text, "compass_zone_no_datum.A1")
             compare(waitForChild("inputCSText.0").text, "North American 1927, UTM zone 13N")
             verify(waitForChild("readOnlyLock.0") !== null, "the row is the file's")
@@ -1700,14 +1714,14 @@ MainWindowTest {
             saveProjectAs("fix-station-read-in")
             const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
                                               "external-centerlines/survex_bare_fix_tree/north/north_cs_out.svx"))
-            tryVerify(() => cave.attachedFixes.count === 2, 20000, "the scan lists both fixes")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 2, 20000, "the scan lists both fixes")
 
             RootData.pageSelectionModel.currentPageAddress =
                 "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage",
                       5000, "should land on fixStationPage")
-            tryCompare(findChild(RootData.pageView.currentPageItem, "fixStationTableView"), "count", 2)
+            tryCompare(findChild(RootData.pageView.currentPageItem, "fixStationTreeView"), "count", 2)
 
             // houping names its *cs; sanqiao's entrance names none.
             compare(waitForChild("stationCell.0").text, "houping.h1")
@@ -1734,10 +1748,10 @@ MainWindowTest {
             saveProjectAs("fix-station-reference-chip")
             const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
                                               "external-centerlines/survex_reference_fix/reference_fix.svx"))
-            tryVerify(() => cave.attachedFixes.count === 2, 20000, "the scan lists both fixes")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 2, 20000, "the scan lists both fixes")
 
             const page = openFixStationsOf(cave)
-            tryCompare(findChild(page, "fixStationTableView"), "count", 2)
+            tryCompare(findChild(page, "fixStationTreeView"), "count", 2)
             compare(waitForChild("stationCell.0").text, "ref.A")
             verify(waitForChild("referenceChip.0") !== null, "the reference fix carries the chip")
             compare(waitForChild("coordinateCell.0").text, "10 20 30")
@@ -1767,13 +1781,13 @@ MainWindowTest {
 
             const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
                                               "external-centerlines/survex_bare_fix/bare_fix.svx"))
-            tryVerify(() => cave.attachedFixes.count === 1, 20000, "the scan lists the file's fix")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
 
             const page = openFixStationsOf(cave)
-            tryCompare(findChild(page, "fixStationTableView"), "count", 1)
+            tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
             compare(waitForChild("stationCell.0").text, "bare.A")
 
-            verify(waitForChild("bareFixSystemCombo.0") !== null,
+            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null,
                    "the owner's page offers a system for the file's bare fixes")
             const badge = waitForChild("noCoordinateSystemBadge.0")
 
@@ -1782,6 +1796,161 @@ MainWindowTest {
                       "the choice lands on the attachment")
             tryVerify(() => badge.text.indexOf("UTM48N") >= 0, 5000,
                       "the badge names the chosen system")
+        }
+
+        // The page as a tree over the node and its subtree: a row per node, the
+        // node's fixes under it, attached fixes under the node whose file holds
+        // them. survex_subtree_fixes/ridge.svx fixes R0 itself and includes
+        // entrances (E1 reference, E2), deep/lower (L1 under *cs UTM16N) and
+        // deep/empty (no fix), each one *begin block and so one derived node.
+
+        //! The first item under \a item whose objectName starts with \a prefix.
+        function findChildWithPrefix(item, prefix) {
+            if (item === null) {
+                return null
+            }
+            const children = item.children
+            for (let i = 0; i < children.length; ++i) {
+                const child = children[i]
+                if (String(child.objectName).startsWith(prefix)) {
+                    return child
+                }
+                const found = findChildWithPrefix(child, prefix)
+                if (found !== null) {
+                    return found
+                }
+            }
+            return null
+        }
+
+        //! Whether some item under \a item shows text containing \a text.
+        function showsText(item, text) {
+            if (item === null) {
+                return false
+            }
+            const children = item.children
+            for (let i = 0; i < children.length; ++i) {
+                const child = children[i]
+                if (child.visible && typeof child.text === "string" && child.text.indexOf(text) >= 0) {
+                    return true
+                }
+                if (showsText(child, text)) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        //! Attaches the subtree fixture under the region's root and waits for
+        //! the scan to list all of its fixes.
+        function attachSubtreeFixture() {
+            const root = attachSourceToRegion(TestHelper.testcasesDatasetSourcePath(subtreeFixture))
+            tryVerify(() => subtreeAttachedFixCount(root) === subtreeFixCount, 20000,
+                      "the scan lists every fix in the file tree")
+            return root
+        }
+
+        //! A native fix in UTM zone 48N on a new cave named \a caveName, which
+        //! gives the project its frame.
+        function addAnchorCave(caveName) {
+            RootData.region.addCave()
+            const anchorCave = RootData.region.cave(RootData.region.caveCount - 1)
+            anchorCave.name = caveName
+            const anchors = anchorCave.fixStations
+            compare(anchors.addFixStation("A1"), 0)
+            anchors.setData(anchors.index(0), "EPSG:32648", FixStationModel.InputCSRole)
+            anchors.setData(anchors.index(0), 500000.0, FixStationModel.EastingRole)
+            anchors.setData(anchors.index(0), 3000000.0, FixStationModel.NorthingRole)
+            anchors.setData(anchors.index(0), 100.0, FixStationModel.ElevationRole)
+            return anchorCave
+        }
+
+        function test_treeShowsSubtreeFixes() {
+            saveProjectAs("fix-station-tree")
+            const root = attachSubtreeFixture()
+            compare(root.name, "ridge")
+
+            const page = openFixStationsOf(root)
+            verify(waitForChild("fixStationTreeView") !== null, "the page is a tree")
+
+            for (const nodeName of ["ridge", "entrances", "lower", "empty"]) {
+                verify(waitForChild("nodeRow." + nodeName) !== null, nodeName + " has a row")
+            }
+            for (const station of ["R0", "entrances.E1", "entrances.E2", "lower.L1"]) {
+                verify(waitForChild("fixRow." + station) !== null, station + " has a row")
+            }
+            const emptyRow = waitForChild("nodeRow.empty")
+            tryVerify(() => showsText(emptyRow, "No fixed stations"), 5000,
+                      "the node with no fix says so")
+        }
+
+        function test_collapseHidesLeaves() {
+            saveProjectAs("fix-station-tree-collapse")
+            const root = attachSubtreeFixture()
+            openFixStationsOf(root)
+
+            verify(waitForChild("fixRow.entrances.E1") !== null)
+            const chevron = waitForChild("nodeChevron.entrances")
+            mouseClick(chevron)
+            tryVerify(() => {
+                const row = findChild(RootData.pageView.currentPageItem, "fixRow.entrances.E1")
+                return row === null || !row.visible
+            }, 5000, "collapsing entrances hides its fixes")
+
+            mouseClick(waitForChild("nodeChevron.entrances"))
+            verify(waitForChild("fixRow.entrances.E1") !== null, "expanding shows them again")
+        }
+
+        function test_ownerControlUpdatesDescendants() {
+            saveProjectAs("fix-station-tree-owner-control")
+            addAnchorCave("AnchorCave")
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 5000,
+                      "the anchoring fix gives the project a frame")
+
+            const root = attachSubtreeFixture()
+            const page = openFixStationsOf(root)
+
+            // The owner's control sits on the owner's node row.
+            const ownerRow = waitForChild("nodeRow.ridge")
+            tryVerify(() => findChild(ownerRow, "bareFixSystemCombo.ridge") !== null, 5000,
+                      "the owner's row offers a system for the file's bare fixes")
+
+            // The page's own node is attachmentOwners[0].
+            page.setBareFixCoordinateSystem(0, "UTM48N")
+            tryVerify(() => root.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
+                      "the choice lands on the attachment")
+
+            const e2Row = waitForChild("fixRow.entrances.E2")
+            tryVerify(() => {
+                const badge = findChildWithPrefix(e2Row, "noCoordinateSystemBadge")
+                return badge !== null && badge.text.indexOf("UTM48N") >= 0
+            }, 5000, "the descendant's bare fix reads in the owner's choice")
+
+            const inherited = waitForChild("inheritedSystem.entrances")
+            tryVerify(() => inherited.text.indexOf("UTM48N") >= 0
+                            && inherited.text.indexOf("ridge") >= 0, 5000,
+                      "the descendant names the system and the node it is set on")
+        }
+
+        function test_rootPageListsEveryFix() {
+            saveProjectAs("fix-station-tree-root-page")
+            const regionRoot = RootData.region.rootNode
+            RootData.region.addCave()
+            const nativeCave = RootData.region.cave(RootData.region.caveCount - 1)
+            nativeCave.name = "Pit"
+            compare(nativeCave.fixStations.addFixStation("p1"), 0)
+            attachSubtreeFixture()
+
+            // The region's root node's page is the Data page, so its Fix
+            // Stations page is the Data page's child.
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "the region root has a Fix Stations page")
+            compare(RootData.pageView.currentPageItem.cave, regionRoot)
+
+            verify(waitForChild("fixRow.R0") !== null, "the attached root's fix is listed")
+            verify(waitForChild("fixRow.p1") !== null, "a native cave's fix is listed")
         }
     }
 }

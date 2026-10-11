@@ -133,7 +133,11 @@ SevenOneTree buildSevenOneTree(cwCavingRegion& region, const QTemporaryDir& temp
     tree.options.tripAttachmentDirs.insert(tree.domeClimb->id(), domeDir);
 
     tree.omega2 = addEmptyCave(region, QStringLiteral("OMEGA2"));
-    tree.omega2->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    // survex_blocks.svx fixes d1 with no *cs of its own; the attachment names
+    // the system those bare fixes are read in.
+    cwExternalCenterline omega2Attachment(QStringLiteral("survex_blocks.svx"));
+    omega2Attachment.setFixCoordinateSystem(QStringLiteral("EPSG:32613"));
+    tree.omega2->setExternalCenterline(omega2Attachment);
     addEmptyTrip(tree.omega2, QStringLiteral("Window"));
     const QString omegaDir = tempSubdir(tempRoot, QStringLiteral("omega2"));
     tree.omega2Include = seedAttachment(omegaDir, fixturePath(QStringLiteral("survex_blocks.svx")));
@@ -182,8 +186,7 @@ TEST_CASE("Every native node exports as its own nested *begin block", "[Exporter
         QStringLiteral("*end side_cave ; End of Side Cave"),
         QStringLiteral("*end kentucky_field_seasons ; End of Kentucky field seasons"),
         QStringLiteral("*begin omega2 ;OMEGA2"),
-        // survex_blocks.svx fixes d1 with no *cs of its own, and *cs out is
-        // set, so the include inherits the run's system.
+        // The system the attachment chose for survex_blocks.svx's bare fix.
         QStringLiteral("*cs EPSG:32613"),
         QStringLiteral("*include \"%1\"").arg(tree.omega2Include),
         QStringLiteral("*end omega2 ; End of OMEGA2"),

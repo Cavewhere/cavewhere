@@ -539,16 +539,6 @@ TEST_CASE("source reload stays offered after the project is saved and reopened",
 
 namespace {
 
-//! The attached rows a node lists on its Fix Stations page, by station.
-QStringList attachedFixStations(const cwSurveyNode* node)
-{
-    QStringList stations;
-    for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
-        stations.append(fix.station);
-    }
-    return stations;
-}
-
 //! A tree shaped like a large Survex dataset: an entry beside one include and
 //! below another, whose sanqiao/fixedpts/ents.svx fixes e1 with no *cs.
 QString bareFixTreeFixture(const QString& entry)
@@ -565,23 +555,26 @@ constexpr double kBareFixElevation = 300.0;
 // Placement is exact up to the float the solved lookup stores.
 constexpr double kBareFixMarginMeters = 0.1;
 
-//! The read-in note \a node's Fix Stations table shows on its row for
-//! \a station, read through the concatenated table the page binds.
+//! The read-in note \a node's Fix Stations page shows on its row for
+//! \a station, read through the concatenated table the page binds on the node
+//! that lists the fix: \a node or one under it.
 QString readInWarningInTable(const cwSurveyNode* node, const QString& station)
 {
-    const QAbstractItemModel* table = node->fixStationTable();
-    const QHash<int, QByteArray> roles = table->roleNames();
-    const int stationRole = roles.key(QByteArrayLiteral("stationName"), -1);
-    const int warningRole = roles.key(QByteArrayLiteral("readInWarning"), -1);
-    REQUIRE(stationRole >= 0);
-    REQUIRE(warningRole >= 0);
-    for (int row = 0; row < table->rowCount(); ++row) {
-        const QModelIndex index = table->index(row, 0);
-        if (table->data(index, stationRole).toString() == station) {
-            return table->data(index, warningRole).toString();
+    for (const cwSurveyNode* holder : nodeAndDescendants(node)) {
+        const QAbstractItemModel* table = holder->fixStationTable();
+        const QHash<int, QByteArray> roles = table->roleNames();
+        const int stationRole = roles.key(QByteArrayLiteral("stationName"), -1);
+        const int warningRole = roles.key(QByteArrayLiteral("readInWarning"), -1);
+        REQUIRE(stationRole >= 0);
+        REQUIRE(warningRole >= 0);
+        for (int row = 0; row < table->rowCount(); ++row) {
+            const QModelIndex index = table->index(row, 0);
+            if (table->data(index, stationRole).toString() == station) {
+                return table->data(index, warningRole).toString();
+            }
         }
     }
-    FAIL("The fix station table holds no row for " << station.toStdString());
+    FAIL("No fix station table in the subtree holds a row for " << station.toStdString());
     return QString();
 }
 
@@ -604,8 +597,12 @@ TEST_CASE("An attachment on a Section lists its file's fixes",
         drainPipelines(fixture.get());
         REQUIRE(root->parentNode() == section);
 
-        CHECK(attachedFixStations(root) == QStringList({QStringLiteral("doghill.d1")}));
-        CHECK(root->fixStationCount() == 1);
+        // The file fixes d1 inside *begin doghill, so the derived node lists it.
+        const cwSurveyNode* doghill = childNodeNamed(root, QStringLiteral("doghill"));
+        REQUIRE(doghill != nullptr);
+        CHECK(attachedFixStations(root).isEmpty());
+        CHECK(attachedFixStations(doghill) == QStringList({QStringLiteral("doghill.d1")}));
+        CHECK(doghill->fixStationCount() == 1);
         CHECK(attachedFixStations(section).isEmpty());
         CHECK(attachedFixStations(cave).isEmpty());
 
@@ -657,7 +654,7 @@ TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachme
         CHECK(warnings.first().contains(
             QStringLiteral("fixes %1 without a coordinate system; choose one on the Fix Stations "
                            "page or add *cs to the file.").arg(kBareFixStation)));
-        CHECK(attachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
+        CHECK(subtreeAttachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
         CHECK(readInWarningInTable(cave, kBareFixStation).isEmpty());
     }
 
@@ -684,7 +681,7 @@ TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachme
 
     // The row names the system, the file, and the line that left the fix
     // without one.
-    const cwAttachedFix fix = attachedFixFor(cave, kBareFixStation);
+    const cwAttachedFix fix = subtreeAttachedFixFor(cave, kBareFixStation);
     CHECK(fix.filePath == kBareFixFile);
     CHECK(fix.line == kBareFixLine);
     CHECK(fix.readInSystem == kUtm13N);
@@ -701,7 +698,7 @@ TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachme
         drainPipelines(fixture.get());
         INFO("driver:\n" << linePlot->driverSource().toStdString());
         CHECK_FALSE(linePlot->hasSolveError());
-        CHECK(attachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
+        CHECK(subtreeAttachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
         CHECK(readInWarningInTable(cave, kBareFixStation).isEmpty());
         CHECK(bareFixWarnings(cave).isEmpty());
     }
@@ -733,13 +730,13 @@ TEST_CASE("A file's *fix with no *cs reads in the *cs out the file names itself"
     // The harvest reads it the same way, so the file's stations are known.
     CHECK(cave->externalStations().contains(cwStation::canonicalKey(kBareFixStation)));
 
-    const cwAttachedFix fix = attachedFixFor(cave, kBareFixStation);
+    const cwAttachedFix fix = subtreeAttachedFixFor(cave, kBareFixStation);
     CHECK(fix.readInWarning()
           == QStringLiteral("Read in UTM48N, the system the file's *cs out names: %1 line %2 "
                             "names no coordinate system for this fix.")
                  .arg(kBareFixFile).arg(kBareFixLine));
     // houping's fix names its own system.
-    CHECK(attachedFixFor(cave, QStringLiteral("houping.h1")).readInWarning().isEmpty());
+    CHECK(subtreeAttachedFixFor(cave, QStringLiteral("houping.h1")).readInWarning().isEmpty());
 }
 
 TEST_CASE("A file whose every *fix names its *cs is attached as written",
@@ -767,5 +764,5 @@ TEST_CASE("A file whose every *fix names its *cs is attached as written",
     // The driver puts no system of its own around the file.
     CHECK_FALSE(linePlot->driverSource().contains(QStringLiteral("*cs")));
     CHECK(managerOf(fixture.get())->solveInputs().externalOutputSystems.isEmpty());
-    CHECK(attachedFixFor(cave, QStringLiteral("own.a1")).readInWarning().isEmpty());
+    CHECK(subtreeAttachedFixFor(cave, QStringLiteral("own.a1")).readInWarning().isEmpty());
 }

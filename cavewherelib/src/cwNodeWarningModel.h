@@ -46,7 +46,7 @@ class CAVEWHERE_LIB_EXPORT cwNodeWarningModel : public QAbstractListModel
 public:
     enum class Target : int {
         NoTarget,      //!< the warning names nothing the user can open
-        FixStationRow, //!< fixStationRow of the node's fixStationTable, or the page itself at -1
+        FixStationRow, //!< fixStationRow of the node's Fix Stations page (cwFixStationTreeModel's fix rows), or the page itself at -1
         TripPage,      //!< the trip's page, which also shows a trip's attached file
         SourceLine     //!< the source line of the file attached to the node itself
     };

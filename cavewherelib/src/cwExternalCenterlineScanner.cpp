@@ -787,13 +787,23 @@ void scanCompassFile(const QString& filePath, ScanState& state);
 void scanWallsFile(const QString& filePath, ScanState& state);
 void scanByFormat(const QString& filePath, ScanState& state);
 
+// The sourcePath of the node row at or above \a row, empty for the root.
+QString nodeSourcePath(const ScanState& state, int row)
+{
+    while (row > kRootRow && row < state.tree.size() && !state.tree.at(row).row.isNode) {
+        row = state.tree.at(row).parent;
+    }
+    return row > kRootRow && row < state.tree.size() ? state.tree.at(row).row.sourcePath
+                                                     : QString();
+}
+
 /**
  * Records a fix under the name cavern gives its station: the open blocks'
  * dotted path, then \a scopePath (a Compass DAT's survey, a Walls prefix
  * path, empty for Survex, whose blocks are the open blocks), then the
- * station as the file writes it.
+ * station as the file writes it. \a row is the scan row whose file holds it.
  */
-void recordFix(ScanState& state, const QString& scopePath, const QString& station,
+void recordFix(ScanState& state, int row, const QString& scopePath, const QString& station,
                const QString& coordinate, const QString& coordinateSystem,
                const QString& file, int line, bool reference = false)
 {
@@ -803,7 +813,7 @@ void recordFix(ScanState& state, const QString& scopePath, const QString& statio
     }
     segments.append(station);
     state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem,
-                        file, line, reference});
+                        file, line, reference, nodeSourcePath(state, row)});
 }
 
 void recordWarning(ScanState& state, const QString& message)
@@ -938,7 +948,7 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             continue;
         }
         if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
-            recordFix(state, QString(), fixMatch.captured(1),
+            recordFix(state, containerRow(state), QString(), fixMatch.captured(1),
                       line.mid(fixMatch.capturedEnd(0)).trimmed(),
                       state.coordinateSystems.constLast(),
                       canonical, static_cast<int>(lineIndex) + 1,
@@ -1159,15 +1169,15 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                     ? outerSystem
                     : reference.coordinateSystemName();
                 const QString datSurvey = cwCompassMakFile::datSurveyName(target);
-                for (const cwCompassMakFile::Fix& fix : reference.fixes) {
-                    recordFix(state, datSurvey, fix.station, fix.coordinate, system,
-                              canonical, 0);
-                }
                 const int fileRow = childNodeRow(state, makRow,
                                                  QString(target).replace(QLatin1Char('\\'),
                                                                          QLatin1Char('/')),
                                                  cwSurveyNodeKind::Kind::CompassFile,
                                                  titleCased(referenceStem(target)), datSurvey);
+                for (const cwCompassMakFile::Fix& fix : reference.fixes) {
+                    recordFix(state, fileRow, datSurvey, fix.station, fix.coordinate, system,
+                              canonical, 0);
+                }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
                 if (resolution.resolved.isEmpty()) {
@@ -1320,7 +1330,7 @@ void collectWallsStations(const QString& canonical,
         if (line.startsWith(QLatin1Char('#'))) {
             if (const auto fixMatch = wallsFixRegex().match(line); fixMatch.hasMatch()) {
                 const WallsStationName name = wallsStationName(prefix, fixMatch.captured(1));
-                recordFix(state, name.path, name.station,
+                recordFix(state, unitRow, name.path, name.station,
                           stripCommentAndWhitespace(line.mid(fixMatch.capturedEnd(1))),
                           coordinateSystem, canonical, static_cast<int>(lineIndex) + 1);
                 continue;

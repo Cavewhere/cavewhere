@@ -312,13 +312,29 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         // drops. A file that fixes nothing sits at the origin, like a native
         // node with no fix.
         cwSurvexExporterUtils::CsScope includeScope(enclosingScope);
+        cwSurvexExporterUtils::CsScope fixesScope(includeScope);
+        QString fixesText;
+        QTextStream fixesStream(&fixesText);
         const WrittenFixes written =
-            writeFixStations(stream, node, tree, globalCS, inherited.anchored, includeScope);
-        writeIncludeSystem(stream, node.id, node.externalCenterline, globalCS, includeScope);
+            writeFixStations(fixesStream, node, tree, globalCS, inherited.anchored, fixesScope);
+        fixesStream.flush();
+        // A system the node's own fixes name would stay in force at the
+        // *include and read the file's bare fixes in it. With no system
+        // chosen for those, an anonymous block ends it after the fixes, so
+        // cavern refuses them as it would without the node's fixes.
+        const bool fixesLeaveSystem = fixesScope.system() != includeScope.system()
+                                      && node.externalCenterline.fixCoordinateSystem().isEmpty();
+        if (fixesLeaveSystem) {
+            stream << "*begin" << Qt::endl << fixesText << "*end" << Qt::endl;
+        } else {
+            stream << fixesText;
+        }
+        cwSurvexExporterUtils::CsScope& scopeAtInclude = fixesLeaveSystem ? includeScope : fixesScope;
+        writeIncludeSystem(stream, node.id, node.externalCenterline, globalCS, scopeAtInclude);
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
-                                  node.name, globalCS, includeScope,
+                                  node.name, globalCS, scopeAtInclude,
                                   written.makFixes.value(node.id))) {
             return false;
         }
