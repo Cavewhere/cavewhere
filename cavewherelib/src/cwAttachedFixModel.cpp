@@ -58,6 +58,8 @@ QVariant cwAttachedFixModel::data(const QModelIndex& index, int role) const
         return true;
     case ReadInWarningRole:
         return fix.readInWarning();
+    case ReferenceRole:
+        return fix.reference;
     case cwFixStationDiagnosticsModel::DomainErrorRole:
     case cwFixStationDiagnosticsModel::CoordinateErrorRole:
     case cwFixStationDiagnosticsModel::StationErrorRole:
@@ -93,6 +95,7 @@ QHash<int, QByteArray> cwAttachedFixModel::roleNames() const
         {SourceFileRole,                            "sourceFile"},
         {ReadOnlyRole,                              "readOnly"},
         {ReadInWarningRole,                         "readInWarning"},
+        {ReferenceRole,                             "reference"},
         {cwFixStationDiagnosticsModel::DomainErrorRole,            "domainError"},
         {cwFixStationDiagnosticsModel::EastingDomainErrorRole,     "eastingDomainError"},
         {cwFixStationDiagnosticsModel::NorthingDomainErrorRole,    "northingDomainError"},

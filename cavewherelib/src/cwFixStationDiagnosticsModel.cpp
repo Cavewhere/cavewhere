@@ -260,6 +260,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case cwAttachedFixModel::ReadOnlyRole:
     case cwAttachedFixModel::SourceFileRole:
     case cwAttachedFixModel::ReadInWarningRole:
+    case cwAttachedFixModel::ReferenceRole:
     case DomainErrorRole:
     case EastingDomainErrorRole:
     case NorthingDomainErrorRole:
@@ -281,7 +282,8 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     switch (role) {
     // The node's own rows: editable and carried by no file, beside
     // cwAttachedFixModel's rows in cwSurveyNode::fixStationTable.
-    case cwAttachedFixModel::ReadOnlyRole:   return false;
+    case cwAttachedFixModel::ReadOnlyRole:
+    case cwAttachedFixModel::ReferenceRole:  return false;
     case cwAttachedFixModel::SourceFileRole:
     case cwAttachedFixModel::ReadInWarningRole: return QString();
     case DomainErrorRole:            return domainErrorMessage(*fix);
@@ -316,5 +318,6 @@ QHash<int, QByteArray> cwFixStationDiagnosticsModel::roleNames() const
     names.insert(cwAttachedFixModel::SourceFileRole, "sourceFile");
     names.insert(cwAttachedFixModel::ReadOnlyRole, "readOnly");
     names.insert(cwAttachedFixModel::ReadInWarningRole, "readInWarning");
+    names.insert(cwAttachedFixModel::ReferenceRole, "reference");
     return names;
 }

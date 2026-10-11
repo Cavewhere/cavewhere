@@ -303,6 +303,9 @@ struct ScannedFix {
     //! That line, counting from 1; 0 when the format's reader keeps no line
     //! (a Compass .mak).
     int line = 0;
+    //! Whether the *fix carries Survex's "reference" keyword, which keeps the
+    //! fix in cavern's output even when no leg uses it.
+    bool reference = false;
 
     bool hasCoordinateSystem() const { return !coordinateSystem.isEmpty(); }
 

@@ -940,7 +940,8 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
         for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
             attachedFixes.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
                                   fileName, fix.file, fix.line,
-                                  fix.hasCoordinateSystem() ? QString() : readInSystem});
+                                  fix.hasCoordinateSystem() ? QString() : readInSystem,
+                                  fix.reference});
         }
         const auto fixed = m_ownerFixedStations.constFind(ownerId);
         if (fixed != m_ownerFixedStations.constEnd()) {

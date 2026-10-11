@@ -1717,5 +1717,33 @@ MainWindowTest {
                     "Read in UTM48N, the system the file's *cs out names: "
                     + "sanqiao/fixedpts/ents.svx line 3 names no coordinate system for this fix.")
         }
+
+        //! Opens the Fix Stations page of \a node and returns the page.
+        function openFixStationsOf(node) {
+            RootData.pageSelectionModel.currentPageAddress =
+                "Source/Data/Node=" + String(node.name) + "/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage")
+            return RootData.pageView.currentPageItem
+        }
+
+        // A *fix the file marks "reference" shows the coordinate alone and a
+        // chip saying so; a plain fix carries no chip.
+        function test_referenceChipOnAttachedRow() {
+            saveProjectAs("fix-station-reference-chip")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_reference_fix/reference_fix.svx"))
+            tryVerify(() => cave.attachedFixes.count === 2, 20000, "the scan lists both fixes")
+
+            const page = openFixStationsOf(cave)
+            tryCompare(findChild(page, "fixStationTableView"), "count", 2)
+            compare(waitForChild("stationCell.0").text, "ref.A")
+            verify(waitForChild("referenceChip.0") !== null, "the reference fix carries the chip")
+            compare(waitForChild("coordinateCell.0").text, "10 20 30")
+
+            compare(waitForChild("stationCell.1").text, "ref.B")
+            compare(findChild(page, "referenceChip.1"), null, "the plain fix carries none")
+        }
     }
 }

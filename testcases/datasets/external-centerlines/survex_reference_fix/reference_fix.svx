@@ -1,0 +1,9 @@
+; One block with two fixes: A carries cavern's "reference" keyword, which
+; marks a fix cavern keeps even when no leg uses it, and B is a plain fix.
+; The keyword is part of the *fix command, so the coordinate is "10 20 30".
+*begin ref
+*fix A reference 10 20 30
+*fix B 1 2 3
+*data normal from to tape compass clino
+A B 10.0 0 0
+*end ref

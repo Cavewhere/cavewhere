@@ -291,6 +291,32 @@ StandardPage {
         }
     }
 
+    // Marks an attached fix the file declares a reference point.
+    component ReferenceChip : QQ.Rectangle {
+        id: referenceChip
+
+        implicitWidth: referenceLabel.implicitWidth + 2 * Theme.chipPadding
+        implicitHeight: referenceLabel.implicitHeight + 2 * Theme.tightSpacing
+        radius: Theme.chipRadius
+        color: Theme.chipBackground
+
+        QC.ToolTip.visible: referenceHover.hovered
+        QC.ToolTip.text: "The file marks this fix as a reference point; cavern keeps it even when no leg uses it."
+        QC.ToolTip.delay: Theme.toolTipDelay
+
+        QQ.HoverHandler {
+            id: referenceHover
+        }
+
+        QC.Label {
+            id: referenceLabel
+            anchors.centerIn: parent
+            text: "reference"
+            color: Theme.chipText
+            font.pixelSize: Theme.fontSizeCaption
+        }
+    }
+
     // A read-only row's coordinate system, as the file wrote it, or "none".
     component ReadOnlyCSLabel : QC.Label {
         id: readOnlyCSLabel
@@ -495,6 +521,8 @@ StandardPage {
             //! On an attached row whose fix the file gives no system: what the
             //! solve reads it in, and the line that left it without one.
             required property string readInWarning
+            //! Set on an attached row the file marks as a reference point.
+            required property bool reference
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
@@ -621,6 +649,16 @@ StandardPage {
                     }
                 }
 
+                QQ.Loader {
+                    Layout.leftMargin: Theme.tightSpacing
+                    Layout.alignment: Qt.AlignVCenter
+                    active: wideDelegateId.reference
+                    visible: wideDelegateId.reference
+                    sourceComponent: ReferenceChip {
+                        objectName: "referenceChip." + wideDelegateId.index
+                    }
+                }
+
                 InlineWarning {
                     objectName: "stationWarning." + wideDelegateId.index
                     Layout.leftMargin: Theme.tightSpacing
@@ -664,6 +702,7 @@ StandardPage {
             required property string sourceFile
             //! See the wide delegate.
             required property string readInWarning
+            required property bool reference
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
@@ -789,6 +828,14 @@ StandardPage {
                     error: narrowDelegateId.coordinateError !== ""
                            || narrowDelegateId.eastingDomainError
                            || narrowDelegateId.northingDomainError
+                }
+
+                QQ.Loader {
+                    active: narrowDelegateId.reference
+                    visible: narrowDelegateId.reference
+                    sourceComponent: ReferenceChip {
+                        objectName: "referenceChip." + narrowDelegateId.index
+                    }
                 }
 
                 QQ.Loader {

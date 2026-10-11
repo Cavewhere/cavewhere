@@ -2234,3 +2234,41 @@ TEST_CASE("A Survex root's own shots are the root's unit; an empty block is gray
         CHECK(rowAt(scan, QStringLiteral("doghill/big-passage")).date == QDate(2024, 1, 5));
     }
 }
+
+TEST_CASE("scanSurvex reads a *fix's reference keyword as a flag, not as coordinate text",
+          "[ExternalCenterlineScanner][ReferenceFix]")
+{
+    auto result = cwExternalCenterlineScanner::scan(
+        datasetExternalCenterlinePath(QStringLiteral("survex_reference_fix/reference_fix.svx")));
+    INFO("scan: " << result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    const QList<ScannedFix>& fixes = result.value().fixes;
+    REQUIRE(fixes.size() == 2);
+
+    const ScannedFix& marked = fixes.at(0);
+    CHECK(marked.station == QStringLiteral("ref.A"));
+    INFO("A's coordinate: " << marked.coordinate.toStdString());
+    CHECK(marked.coordinate == QStringLiteral("10 20 30"));
+    CHECK(marked.reference);
+
+    const ScannedFix& plain = fixes.at(1);
+    CHECK(plain.station == QStringLiteral("ref.B"));
+    CHECK(plain.coordinate == QStringLiteral("1 2 3"));
+    CHECK_FALSE(plain.reference);
+}
+
+TEST_CASE("scanSurvex matches the reference keyword in any case, as cavern does",
+          "[ExternalCenterlineScanner][ReferenceFix]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString path = writeUtf8File(tempPath(tempDir, QStringLiteral("upper.svx")),
+                                       QByteArrayLiteral("*fix a REFERENCE 1 2 3\n"
+                                                         "*data normal from to tape compass clino\n"
+                                                         "a b 1.0 0 0\n"));
+    const QList<ScannedFix> fixes = scannedFixes(path);
+    REQUIRE(fixes.size() == 1);
+    INFO("coordinate: " << fixes.first().coordinate.toStdString());
+    CHECK(fixes.first().coordinate == QStringLiteral("1 2 3"));
+    CHECK(fixes.first().reference);
+}

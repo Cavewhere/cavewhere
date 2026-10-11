@@ -11,6 +11,7 @@
 #include "cwFixStation.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
+#include "ExternalCenterlineTestHelpers.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -147,4 +148,40 @@ TEST_CASE("A node's fix station table lists its own fixes, then the attached one
     cave.fixStations()->removeAt(0);
     CHECK(table->rowCount() == 3);
     CHECK(table->mapFromSource(cave.attachedFixes()->index(0)).row() == 1);
+}
+
+TEST_CASE("An attached file's reference fix reads back through the reference role",
+          "[AttachedFixModel][ReferenceFix]")
+{
+    auto fixture = makeSavedProject(QStringLiteral("attached-reference-fix"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwCave* root = attachSourceUnderRegion(
+        fixture.get(), fixturePath(QStringLiteral("survex_reference_fix/reference_fix.svx")));
+    drainPipelines(fixture.get());
+
+    const cwAttachedFixModel* model = root->attachedFixes();
+    REQUIRE(model->rowCount() == 2);
+    const QList<cwAttachedFix>& fixes = model->attachedFixes();
+    for (int row = 0; row < model->rowCount(); ++row) {
+        INFO("row " << row << ": " << fixes.at(row).station.toStdString());
+        CHECK(model->data(model->index(row), cwAttachedFixModel::ReferenceRole).toBool()
+              == fixes.at(row).reference);
+    }
+
+    const QModelIndex marked = model->index(0);
+    CHECK(model->data(marked, cwFixStationModel::StationNameRole).toString() == QStringLiteral("ref.A"));
+    const QString markedCoordinate =
+        model->data(marked, cwFixStationModel::CoordinateTextRole).toString();
+    INFO("A's coordinate: " << markedCoordinate.toStdString());
+    CHECK(markedCoordinate == QStringLiteral("10 20 30"));
+    CHECK(model->data(marked, cwAttachedFixModel::ReferenceRole) == QVariant(true));
+
+    const QModelIndex plain = model->index(1);
+    CHECK(model->data(plain, cwFixStationModel::StationNameRole).toString() == QStringLiteral("ref.B"));
+    CHECK(model->data(plain, cwAttachedFixModel::ReferenceRole) == QVariant(false));
+
+    // The page binds the concatenated table, which carries the role by name.
+    CHECK(root->fixStationTable()->roleNames().value(cwAttachedFixModel::ReferenceRole)
+          == QByteArrayLiteral("reference"));
 }

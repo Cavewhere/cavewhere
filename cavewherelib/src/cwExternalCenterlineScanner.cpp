@@ -368,10 +368,12 @@ const QRegularExpression& survexCsRegex()
     return regex;
 }
 
+// "*fix <station> reference ..." marks a reference point; the keyword is the
+// first word after the station, matched in any case as cavern does.
 const QRegularExpression& survexFixRegex()
 {
     static const QRegularExpression regex(
-        QStringLiteral(R"RX(^\*fix\s+(\S+))RX"),
+        QStringLiteral(R"RX(^\*fix\s+(\S+)(?:\s+(reference)(?=\s|$))?)RX"),
         QRegularExpression::CaseInsensitiveOption);
     return regex;
 }
@@ -793,14 +795,15 @@ void scanByFormat(const QString& filePath, ScanState& state);
  */
 void recordFix(ScanState& state, const QString& scopePath, const QString& station,
                const QString& coordinate, const QString& coordinateSystem,
-               const QString& file, int line)
+               const QString& file, int line, bool reference = false)
 {
     QStringList segments = state.blockSegments;
     if (!scopePath.isEmpty()) {
         segments.append(scopePath);
     }
     segments.append(station);
-    state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem, file, line});
+    state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem,
+                        file, line, reference});
 }
 
 void recordWarning(ScanState& state, const QString& message)
@@ -936,9 +939,10 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
         }
         if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
             recordFix(state, QString(), fixMatch.captured(1),
-                      line.mid(fixMatch.capturedEnd(1)).trimmed(),
+                      line.mid(fixMatch.capturedEnd(0)).trimmed(),
                       state.coordinateSystems.constLast(),
-                      canonical, static_cast<int>(lineIndex) + 1);
+                      canonical, static_cast<int>(lineIndex) + 1,
+                      fixMatch.hasCaptured(2));
             continue;
         }
 

@@ -96,6 +96,9 @@ class CAVEWHERE_LIB_EXPORT cwAttachedFix
     //! in ("UTM48N, the system the file's *cs out names"); empty when it reads the fix in
     //! the fix's own system, or raw.
     Q_PROPERTY(QString readInSystem MEMBER readInSystem FINAL)
+    //! Whether the file marks the fix as a reference point (Survex's
+    //! "*fix <station> reference …"), which cavern keeps even when no leg uses it.
+    Q_PROPERTY(bool reference MEMBER reference FINAL)
 
 public:
     QString station;
@@ -105,6 +108,7 @@ public:
     QString filePath;
     int line = 0;
     QString readInSystem;
+    bool reference = false;
 
     //! The note the Fix Stations page shows on the row: where the fix is read
     //! in and which line left it there. Empty when readInSystem is.

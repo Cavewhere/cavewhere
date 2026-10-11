@@ -51,7 +51,9 @@ public:
         //! cwAttachedFix::readInWarning(): where the solve reads a fix the file
         //! gives no coordinate system, and which line left it without one.
         //! Empty on every other row, the node's own included.
-        ReadInWarningRole
+        ReadInWarningRole,
+        //! cwAttachedFix::reference: the file marks the fix as a reference point.
+        ReferenceRole
     };
     Q_ENUM(Roles)
 
