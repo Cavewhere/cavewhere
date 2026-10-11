@@ -565,18 +565,6 @@ constexpr double kBareFixElevation = 300.0;
 // Placement is exact up to the float the solved lookup stores.
 constexpr double kBareFixMarginMeters = 0.1;
 
-//! The attached row of \a node that names \a station.
-cwAttachedFix attachedFixFor(const cwSurveyNode* node, const QString& station)
-{
-    for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
-        if (fix.station == station) {
-            return fix;
-        }
-    }
-    FAIL("No attached row names " << station.toStdString());
-    return cwAttachedFix();
-}
-
 //! The read-in note \a node's Fix Stations table shows on its row for
 //! \a station, read through the concatenated table the page binds.
 QString readInWarningInTable(const cwSurveyNode* node, const QString& station)
@@ -645,48 +633,77 @@ TEST_CASE("An attachment on a Section lists its file's fixes",
     }
 }
 
-TEST_CASE("A file's *fix with no *cs reads in the project's system and says so",
+TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachment and says so",
           "[Attach][CS][ExternalCenterline][LinePlotManager]")
 {
     auto fixture = makeProject(QStringLiteral("source-bare-fix-tree"));
     cwCavingRegion* region = fixture->project->cavingRegion();
     region->geoReference()->restore(cwGeoReference::Frozen, kUtm13N, {}, QString());
 
-    cwCave* cave = attachAndSolve(fixture.get(), bareFixTreeFixture(QStringLiteral("north.svx")));
+    cwCave* cave = attachSourceUnderRegion(fixture.get(), bareFixTreeFixture(QStringLiteral("north.svx")));
     drainPipelines(fixture.get());
 
     cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+
+    {
+        // With no system chosen the driver names none, and cavern refuses the
+        // fix under the project's *cs out.
+        INFO("driver:\n" << linePlot->driverSource().toStdString());
+        INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+        REQUIRE(tryWait(kAttachWaitMs, [linePlot]() { return linePlot->hasSolveError(); }));
+        CHECK(linePlot->solveErrorSummary().contains(QStringLiteral("input projection isn't")));
+        const QStringList warnings = bareFixWarnings(cave);
+        REQUIRE(warnings.size() == 1);
+        CHECK(warnings.first().contains(
+            QStringLiteral("fixes %1 without a coordinate system; choose one on the Fix Stations "
+                           "page or add *cs to the file.").arg(kBareFixStation)));
+        CHECK(attachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
+        CHECK(readInWarningInTable(cave, kBareFixStation).isEmpty());
+    }
+
+    auto centerline = cave->externalCenterline();
+    centerline.setFixCoordinateSystem(kUtm13N);
+    cave->setExternalCenterline(centerline);
+    REQUIRE(tryWait(kAttachWaitMs, [cave]() {
+        return cave->scopedPositions().hasPosition(kBareFixStation);
+    }));
+    drainPipelines(fixture.get());
+
     INFO("driver:\n" << linePlot->driverSource().toStdString());
     INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
     REQUIRE_FALSE(linePlot->hasSolveError());
+    CHECK(bareFixWarnings(cave).isEmpty());
 
-    // The fix's numbers land as written in the project's frame.
+    // The fix's numbers land as written in the chosen system, here the frame.
     const cwStationPositionLookup& lookup = cave->scopedPositions();
-    REQUIRE(lookup.hasPosition(kBareFixStation));
     const QVector3D placed = lookup.position(kBareFixStation);
     CHECK(placed.x() == Catch::Approx(kBareFixEasting).margin(kBareFixMarginMeters));
     CHECK(placed.y() == Catch::Approx(kBareFixNorthing).margin(kBareFixMarginMeters));
     CHECK(placed.z() == Catch::Approx(kBareFixElevation).margin(kBareFixMarginMeters));
     CHECK(lookup.hasPosition(QStringLiteral("houping.h2")));
 
-    // The row names the file and line that left the fix without a system.
+    // The row names the system, the file, and the line that left the fix
+    // without one.
     const cwAttachedFix fix = attachedFixFor(cave, kBareFixStation);
     CHECK(fix.filePath == kBareFixFile);
     CHECK(fix.line == kBareFixLine);
+    CHECK(fix.readInSystem == kUtm13N);
     const QString expected =
-        QStringLiteral("Read in the system in force where the file is included (the project's, "
-                       "unless a fix above the file names one): %1 line %2 names no coordinate "
-                       "system for this fix.")
-            .arg(kBareFixFile).arg(kBareFixLine);
+        QStringLiteral("Read in %1, the system chosen for north.svx: %2 line %3 names no "
+                       "coordinate system for this fix.")
+            .arg(kUtm13N, kBareFixFile).arg(kBareFixLine);
     CHECK(fix.readInWarning() == expected);
     CHECK(readInWarningInTable(cave, kBareFixStation) == expected);
 
-    SECTION("the note goes away with the project's frame")
+    SECTION("without the project's frame the fix reads as written")
     {
         region->geoReference()->clear();
         drainPipelines(fixture.get());
-        CHECK(attachedFixFor(cave, kBareFixStation).readInWarning().isEmpty());
+        INFO("driver:\n" << linePlot->driverSource().toStdString());
+        CHECK_FALSE(linePlot->hasSolveError());
+        CHECK(attachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
         CHECK(readInWarningInTable(cave, kBareFixStation).isEmpty());
+        CHECK(bareFixWarnings(cave).isEmpty());
     }
 }
 

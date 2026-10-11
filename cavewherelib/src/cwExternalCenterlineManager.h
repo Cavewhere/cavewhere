@@ -381,6 +381,9 @@ private:
         QString dataRootDir;
         // The owner's kind as the survey tree's chip names it.
         QString kindLabel;
+        // cwExternalCenterline::fixCoordinateSystem, carried through to the
+        // result so a new choice re-solves.
+        QString fixCoordinateSystem;
     };
 
     // Everything the worker derives from an OwnerScanInput batch; the
@@ -402,6 +405,8 @@ private:
         // The *cs out each owner's file names itself
         // (ScanResult::outputCoordinateSystem), for owners whose file names one.
         QHash<QUuid, QString> ownerOutputSystems;
+        // The system chosen for each owner's bare fixes, for owners with one.
+        QHash<QUuid, QString> ownerFixSystems;
         // Station names harvested from each owner's (cave or trip) in-project
         // entry file, and, for a trip owner, cavern's complaint when that
         // harvest failed. A trip owner appears in at most one of them; an
@@ -526,6 +531,7 @@ private:
     QHash<QUuid, QStringList> m_ownerFixedStations;
     QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> m_ownerDefaultedDatums;
     QHash<QUuid, QString> m_ownerOutputSystems;
+    QHash<QUuid, QString> m_ownerFixSystems;
 
     // RAII completion guard for one owner operation, shared (via
     // shared_ptr) by the operation's completion and canceled
@@ -724,10 +730,16 @@ private:
     void refreshAllAttachedFixes();
 
     // The system the solve reads ownerId's bare fixes in, for the row's
-    // read-in note: the project's when it is georeferenced, else the *cs out
-    // the file names itself (cwSurvexExporterCaveTask::writeIncludeSystem).
-    // Empty when the solve reads them raw.
-    QString readInSystemFor(const QUuid& ownerId) const;
+    // read-in note (cwSurvexExporterCaveTask::writeIncludeSystem): the one
+    // chosen for the attachment while a *cs out is in force, the project's or
+    // the file's own; else, in a project with no frame, the file's own *cs
+    // out. Empty when nothing names one: the solve reads them raw, or cavern
+    // refuses them under *cs out.
+    struct ReadInSystem {
+        QString system;
+        bool fileOutput = false;
+    };
+    ReadInSystem readInSystemFor(const QUuid& ownerId, const cwExternalCenterline& centerline) const;
 
     // Per owner whose file fixes stations bare and names its own *cs out,
     // that system (solveInputs().externalOutputSystems).

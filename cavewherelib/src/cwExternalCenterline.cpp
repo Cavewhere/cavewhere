@@ -32,6 +32,9 @@ QString cwAttachedFix::readInWarning() const
     const QString where = line > 0
         ? QStringLiteral("%1 line %2").arg(filePath).arg(line)
         : filePath;
-    return QStringLiteral("Read in %1: %2 names no coordinate system for this fix.")
-        .arg(readInSystem, where);
+    const QString source = readInFileOutput
+        ? QStringLiteral("the system the file's *cs out names")
+        : QStringLiteral("the system chosen for %1").arg(fileName);
+    return QStringLiteral("Read in %1, %2: %3 names no coordinate system for this fix.")
+        .arg(readInSystem, source, where);
 }

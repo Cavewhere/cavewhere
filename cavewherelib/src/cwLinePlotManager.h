@@ -256,11 +256,11 @@ private:
 
     //! Decided with the same fact as *cs out — whether the project has a
     //! frame — so it is set as each solve starts. Each node gets one
-    //! AttachedFixWithoutCS warning naming the attached files (its own or its
-    //! trips') that fix a station with no input coordinate system, with those
-    //! stations, and every other node has it cleared. It stays while the bare
-    //! fix does: the driver drops a node fix on that station, and a node fix
-    //! on another one leaves the file anchored twice.
+    //! AttachedFileFixWithoutCS warning naming the attached files (its own or
+    //! its trips') that fix a station with no input coordinate system and have
+    //! no system chosen for those fixes (cwExternalCenterline::
+    //! fixCoordinateSystem), with those stations; cavern refuses such a fix
+    //! under *cs out. Every other node has it cleared.
     //!
     //! Beside it, an AttachedFileUnfixed warning names each attached file the
     //! driver fixes at the origin because the file fixes no station of its

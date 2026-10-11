@@ -1275,7 +1275,7 @@ BareFixProject buildBareFixProject(cwCavingRegion& region,
 QStringList attachedFixWarnings(const cwSurveyNode* node)
 {
     return node->errorModel()->errors()->warningMessagesForTypeIds(
-        {static_cast<int>(cwErrorTypeId::AttachedFixWithoutCS)});
+        {static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS)});
 }
 
 //! The directive written just before the *include of \a includePath.
@@ -1293,7 +1293,7 @@ QString lineBeforeInclude(const QString& driver, const QString& includePath)
 
 } // namespace
 
-TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
+TEST_CASE("An attached file's bare *fix fails the solve in a georeferenced project until a system is chosen",
           "[Attach][Cave][CS]")
 {
     QTemporaryDir tempRoot;
@@ -1307,20 +1307,14 @@ TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
 
     INFO("driver:\n" << manager.driverSource().toStdString());
     INFO("solve error: " << manager.solveErrorMessage().toStdString());
-    REQUIRE_FALSE(manager.hasSolveError());
 
-    // The include opens under an input *cs, so cavern reads the file's bare
-    // *fix d1 0 0 0 in it rather than refusing it under *cs out.
+    // The include opens under the project's *cs out and no input *cs, so
+    // cavern refuses the file's bare *fix d1 0 0 0.
     CHECK(manager.driverSource().contains(QStringLiteral("*cs out ")));
     const QString beforeInclude = lineBeforeInclude(manager.driverSource(), project.includePath);
-    CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
-    CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs out")));
-
-    // Placed where an ungeoreferenced project puts it: d1 at the frame's origin.
-    const cwStationPositionLookup& lookup = project.attached->scopedPositions();
-    REQUIRE(lookup.hasPosition(QStringLiteral("doghill.d1")));
-    CHECK(lookup.position(QStringLiteral("doghill.d1")).x() == Catch::Approx(0.0).margin(0.01));
-    CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
+    CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs ")));
+    REQUIRE(manager.hasSolveError());
+    CHECK(manager.solveErrorSummary().contains(QStringLiteral("input projection isn't")));
 
     const QStringList warnings = attachedFixWarnings(project.attached);
     REQUIRE(warnings.size() == 1);
@@ -1328,7 +1322,8 @@ TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
     CHECK(attachedFixWarnings(project.beside).isEmpty());
 
     CHECK(warnings.first().contains(QStringLiteral("fixes doghill.d1 without a coordinate system; "
-                                                   "add one to the file or remove that fix.")));
+                                                   "choose one on the Fix Stations page or add "
+                                                   "*cs to the file.")));
 
     // A click on the warning opens the node's Fix Stations page on the file's
     // bare fix, the first attached row after the node's own fixes.
@@ -1340,6 +1335,27 @@ TEST_CASE("An attached file's bare *fix solves inside a georeferenced project",
           == static_cast<int>(cwNodeWarningModel::Target::FixStationRow));
     CHECK(warningModel.data(warningIndex, cwNodeWarningModel::FixStationRowRole).toInt()
           == project.attached->fixStations()->rowCount());
+
+    SECTION("a system chosen for the attachment solves the file and clears the warning")
+    {
+        cwExternalCenterline centerline = project.attached->externalCenterline();
+        centerline.setFixCoordinateSystem(kBareFixFrameCS);
+        project.attached->setExternalCenterline(centerline);
+        manager.waitToFinish();
+
+        INFO("driver after the choice:\n" << manager.driverSource().toStdString());
+        INFO("solve error after the choice: " << manager.solveErrorMessage().toStdString());
+        REQUIRE_FALSE(manager.hasSolveError());
+        CHECK(lineBeforeInclude(manager.driverSource(), project.includePath)
+                  .startsWith(QStringLiteral("*cs ")));
+        CHECK(attachedFixWarnings(project.attached).isEmpty());
+
+        // Read in the frame, d1 0 0 0 lands at the frame's origin.
+        const cwStationPositionLookup& lookup = project.attached->scopedPositions();
+        REQUIRE(lookup.hasPosition(QStringLiteral("doghill.d1")));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).x() == Catch::Approx(0.0).margin(0.01));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
+    }
 
     SECTION("the warning clears when the project loses its frame")
     {
@@ -1418,7 +1434,7 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
     const QString includePath =
         QDir(attachDir).absoluteFilePath(QStringLiteral("survex_blocks.svx"));
 
-    SECTION("under a cave with no fix of its own, the trip block opens the project's system")
+    SECTION("under a cave with no fix of its own, the trip block opens the system chosen for it")
     {
         cwCave* host = addEmptyCave(region, QStringLiteral("Host"));
         cwTrip* attached = addEmptyTrip(host, QStringLiteral("Attached"));
@@ -1428,18 +1444,40 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         manager.setRegion(&region);
         manager.waitToFinish();
 
-        const QString driver = manager.driverSource();
-        INFO("driver:\n" << driver.toStdString());
-        INFO("solve error: " << manager.solveErrorMessage().toStdString());
-        REQUIRE_FALSE(manager.hasSolveError());
+        {
+            // Nothing chosen: no input system at the include, and cavern
+            // refuses the bare fix under the project's *cs out.
+            const QString driver = manager.driverSource();
+            INFO("driver:\n" << driver.toStdString());
+            CHECK_FALSE(lineBeforeInclude(driver, includePath).startsWith(QStringLiteral("*cs ")));
+            CHECK(manager.hasSolveError());
+        }
 
-        const QString beforeInclude = lineBeforeInclude(driver, includePath);
-        CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
-        CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs out")));
-        const qsizetype tripBegin =
-            driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
-        REQUIRE(tripBegin >= 0);
-        CHECK(driver.indexOf(beforeInclude, tripBegin) > tripBegin);
+        cwExternalCenterline centerline = attached->externalCenterline();
+        centerline.setFixCoordinateSystem(kBareFixFrameCS);
+        attached->setExternalCenterline(centerline);
+        manager.waitToFinish();
+
+        {
+            const QString driver = manager.driverSource();
+            INFO("driver:\n" << driver.toStdString());
+            INFO("solve error: " << manager.solveErrorMessage().toStdString());
+            REQUIRE_FALSE(manager.hasSolveError());
+
+            const QString beforeInclude = lineBeforeInclude(driver, includePath);
+            CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
+            CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs out")));
+            const qsizetype tripBegin =
+                driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
+            REQUIRE(tripBegin >= 0);
+            CHECK(driver.indexOf(beforeInclude, tripBegin) > tripBegin);
+            CHECK(attachedFixWarnings(host).isEmpty());
+        }
+
+        // The rest follows the warning, which comes back with the choice unset.
+        centerline.setFixCoordinateSystem(QString());
+        attached->setExternalCenterline(centerline);
+        manager.waitToFinish();
 
         const QStringList warnings = attachedFixWarnings(host);
         REQUIRE(warnings.size() == 1);
@@ -1678,7 +1716,10 @@ TEST_CASE("A node fix on a station the attached file fixes itself is refused",
     cwCavingRegion region;
     region.geoReference()->restore(cwGeoReference::Frozen, kBoulderFrameCS, {}, QString());
     cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
-    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    // The file's bare d1 reads in the frame, so cavern takes it.
+    cwExternalCenterline centerline(QStringLiteral("survex_blocks.svx"));
+    centerline.setFixCoordinateSystem(kBoulderFrameCS);
+    attached->setExternalCenterline(centerline);
 
     const QString station = GENERATE(QStringLiteral("doghill.d1"), QStringLiteral("doghill.d2"));
     INFO("the node fixes " << station.toStdString());
@@ -1707,12 +1748,10 @@ TEST_CASE("A node fix on a station the attached file fixes itself is refused",
     CHECK(fileFix.line == kBlocksFixLine);
 
     // Either way cavern sees one fix per station, so the solve runs, and the
-    // file's bare fix keeps its warning: d1 is still anchored by it.
+    // file's bare fix reads in the system chosen for it.
     REQUIRE_FALSE(manager.hasSolveError());
-    const QStringList warnings = attachedFixWarnings(attached);
-    REQUIRE(warnings.size() == 1);
-    CHECK(warnings.first() == QStringLiteral("survex_blocks.svx fixes doghill.d1 without a coordinate "
-                                             "system; add one to the file or remove that fix."));
+    CHECK(fileFix.readInSystem == kBoulderFrameCS);
+    CHECK(attachedFixWarnings(attached).isEmpty());
 
     const cwFixStationDiagnosticsModel* diagnostics = attached->fixStationDiagnostics();
     const QString stationError =
@@ -1852,7 +1891,10 @@ TEST_CASE("An attached file with no fix of its own sits at the origin beside a f
     cwCavingRegion region;
     cwCave* native = addFixedNativeCave(region);
     cwCave* attached = addEmptyCave(region, QStringLiteral("Blocks"));
-    attached->setExternalCenterline(cwExternalCenterline(QStringLiteral("survex_blocks.svx")));
+    // The kept *fix d1 names no system; it reads in the frame.
+    cwExternalCenterline centerline(QStringLiteral("survex_blocks.svx"));
+    centerline.setFixCoordinateSystem(kBareFixFrameCS);
+    attached->setExternalCenterline(centerline);
 
     cwLinePlotManager manager;
     manager.externalCenterlineManager()->setCaveAttachmentDirs({{attached->id(), attachDir}});

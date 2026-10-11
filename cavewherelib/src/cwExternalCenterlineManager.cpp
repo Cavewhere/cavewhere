@@ -289,6 +289,8 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
     // A trip's own centerline change moves its scope too.
     m_signaler->addConnectionToCaves(SIGNAL(tripScopeLabelsChanged()), this, SLOT(refreshSenderAttachedFixes()));
     m_signaler->addConnectionToTrips(SIGNAL(externalCenterlineChanged()), this, SLOT(refreshSenderAttachedFixes()));
+    // The rows name the system chosen for the file's bare fixes.
+    m_signaler->addConnectionToCaves(SIGNAL(externalCenterlineChanged()), this, SLOT(refreshSenderAttachedFixes()));
 
     // Any attach/detach — the wrappers here, undo/redo, or protobuf load
     // populating a trip after insertion — re-derives the watch set, dir
@@ -597,24 +599,24 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
 
     const auto appendOwner = [&](const QUuid& ownerId,
                                  const QString& attachmentDir,
-                                 const QString& entryFile,
+                                 const cwExternalCenterline& centerline,
                                  const QString& caveName,
                                  const QString& ownerName,
                                  const QString& ownerKind,
                                  const QString& kindLabel) {
-        if (entryFile.isEmpty()) {
+        if (centerline.isEmpty()) {
             return;
         }
         owners.append(OwnerScanInput { ownerId, caveName, ownerName, ownerKind,
-                                       entryFile, attachmentDir, dataRootDir,
-                                       kindLabel });
+                                       centerline.entryFile(), attachmentDir, dataRootDir,
+                                       kindLabel, centerline.fixCoordinateSystem() });
     };
 
     for (const cwSurveyNode* node : m_region->rootNode()->allNodes()) {
         if (!node->externalCenterline().isEmpty()) {
             appendOwner(node->id(),
                         m_caveAttachmentDirs.value(node->id()),
-                        node->externalCenterline().entryFile(),
+                        node->externalCenterline(),
                         node->name(),
                         node->name(),
                         QString::fromLatin1(QMetaEnum::fromType<cwSurveyNodeKind::Kind>()
@@ -625,7 +627,7 @@ QVector<cwExternalCenterlineManager::OwnerScanInput> cwExternalCenterlineManager
             if (!trip->externalCenterline().isEmpty()) {
                 appendOwner(trip->id(),
                             m_tripAttachmentDirs.value(trip->id()),
-                            trip->externalCenterline().entryFile(),
+                            trip->externalCenterline(),
                             node->name(),
                             trip->name(),
                             QStringLiteral("Trip"),
@@ -671,6 +673,9 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
         }
 
         cwAttachedCenterlinesModel::Row row = rowFromOwner(owner);
+        if (!owner.fixCoordinateSystem.isEmpty()) {
+            result.ownerFixSystems.insert(owner.ownerId, owner.fixCoordinateSystem);
+        }
 
         if (!owner.attachmentDir.isEmpty()) {
             const QString projectEntry = QDir(owner.attachmentDir).filePath(owner.entryFile);
@@ -837,6 +842,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
         || result.ownerFixedStations != m_ownerFixedStations
         || result.ownerDefaultedDatums != m_ownerDefaultedDatums
         || result.ownerOutputSystems != m_ownerOutputSystems
+        || result.ownerFixSystems != m_ownerFixSystems
         || result.containmentErrors != m_containmentErrors
         || missingCopiesChangedNow;
     m_solveOnScanApply = false;
@@ -845,6 +851,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     m_ownerFixedStations = std::move(result.ownerFixedStations);
     m_ownerDefaultedDatums = std::move(result.ownerDefaultedDatums);
     m_ownerOutputSystems = std::move(result.ownerOutputSystems);
+    m_ownerFixSystems = std::move(result.ownerFixSystems);
     // An owner entering or leaving the excluded set changes the driver the
     // same way a declination flag does — its *include just vanished or
     // reappeared — so both halves of that set swap ahead of the solve
@@ -936,12 +943,15 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
     const auto addOwner = [&](const QUuid& ownerId, const QString& scope,
                               const cwExternalCenterline& centerline) {
         const QString fileName = QFileInfo(centerline.entryFile()).fileName();
-        const QString readInSystem = readInSystemFor(ownerId);
+        const ReadInSystem readIn = readInSystemFor(ownerId, centerline);
         for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
+            const bool bare = !fix.hasCoordinateSystem();
             attachedFixes.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
                                   fileName, fix.file, fix.line,
-                                  fix.hasCoordinateSystem() ? QString() : readInSystem,
-                                  fix.reference});
+                                  bare ? readIn.system : QString(),
+                                  fix.reference,
+                                  bare && readIn.fileOutput,
+                                  ownerId});
         }
         const auto fixed = m_ownerFixedStations.constFind(ownerId);
         if (fixed != m_ownerFixedStations.constEnd()) {
@@ -967,17 +977,18 @@ void cwExternalCenterlineManager::refreshAllAttachedFixes()
     }
 }
 
-QString cwExternalCenterlineManager::readInSystemFor(const QUuid& ownerId) const
+cwExternalCenterlineManager::ReadInSystem cwExternalCenterlineManager::readInSystemFor(
+    const QUuid& ownerId, const cwExternalCenterline& centerline) const
 {
-    if (!m_region.isNull() && m_region->geoReference()->hasCoordinateSystem()) {
-        return QStringLiteral("the system in force where the file is included (the project's, "
-                              "unless a fix above the file names one)");
+    const bool georeferenced =
+        !m_region.isNull() && m_region->geoReference()->hasCoordinateSystem();
+    const QString fileOutput = georeferenced ? QString() : m_ownerOutputSystems.value(ownerId);
+    // Like the driver, which names the chosen system only where some *cs out
+    // is in force for it.
+    if (!centerline.fixCoordinateSystem().isEmpty() && (georeferenced || !fileOutput.isEmpty())) {
+        return {centerline.fixCoordinateSystem(), false};
     }
-    const QString fileOutput = m_ownerOutputSystems.value(ownerId);
-    if (!fileOutput.isEmpty()) {
-        return QStringLiteral("%1, the system the file's *cs out names").arg(fileOutput);
-    }
-    return QString();
+    return {fileOutput, !fileOutput.isEmpty()};
 }
 
 void cwExternalCenterlineManager::refreshSenderAttachedFixes()

@@ -2281,9 +2281,8 @@ std::unique_ptr<CavewhereProto::Cave> cwSaveLoad::toProtoCave(const cwCave *cave
     }
 
     if (!cave->externalCenterline().isEmpty()) {
-        auto* protoExternal = protoCave->mutable_external_centerline();
-        *(protoExternal->mutable_entry_file()) =
-                cave->externalCenterline().entryFile().toStdString();
+        cwProtoUtils::saveExternalCenterline(protoCave->mutable_external_centerline(),
+                                             cave->externalCenterline());
     }
 
     //Survey-tree scalars. Each is written only when it differs from the default
@@ -2332,9 +2331,8 @@ std::unique_ptr<CavewhereProto::Trip> cwSaveLoad::toProtoTrip(const cwTrip *trip
     }
 
     if (!trip->externalCenterline().isEmpty()) {
-        auto* protoExternal = protoTrip->mutable_external_centerline();
-        *(protoExternal->mutable_entry_file()) =
-                trip->externalCenterline().entryFile().toStdString();
+        cwProtoUtils::saveExternalCenterline(protoTrip->mutable_external_centerline(),
+                                             trip->externalCenterline());
     }
 
     if (!trip->sourcePath().isEmpty()) {
@@ -3648,8 +3646,8 @@ cwCaveData cwSaveLoad::caveDataFromProtoCave(const CavewhereProto::Cave& cavePro
         cave.sourcePath = QString::fromStdString(caveProto.source_path());
     }
     if (caveProto.has_external_centerline()) {
-        cave.externalCenterline = cwExternalCenterline(
-                    QString::fromStdString(caveProto.external_centerline().entry_file()));
+        cave.externalCenterline =
+            cwProtoUtils::fromProtoExternalCenterline(caveProto.external_centerline());
     }
 
     cave.fixStations.reserve(caveProto.fixstations_size());
@@ -3701,8 +3699,8 @@ cwTripData cwSaveLoad::tripDataFromProtoTrip(const CavewhereProto::Trip& tripPro
     tripData.chunks = cwSaveLoadPrivate::fromProtoSurveyChunks(tripProto.chunks());
 
     if (tripProto.has_external_centerline()) {
-        tripData.externalCenterline = cwExternalCenterline(
-                    QString::fromStdString(tripProto.external_centerline().entry_file()));
+        tripData.externalCenterline =
+            cwProtoUtils::fromProtoExternalCenterline(tripProto.external_centerline());
     }
 
     if (tripProto.has_source_path()) {

@@ -32,10 +32,11 @@ enum class cwErrorTypeId : int {
     FixStationOutlier = 596,   //!< issue #596: a fix far from the survey cluster
     FixStationDomain = 597,    //!< issue #596: a fix outside its CS's valid domain
     FixStationReference = 598, //!< issue #596: a fix names a station not in the survey
-    AttachedFixWithoutCS = 599, //!< an attached file fixes stations with no input CS in a georeferenced project
+    // 599 is retired: AttachedFileFixWithoutCS replaced it.
     UnconnectedStations = 600,  //!< a trip's or attached file's stations that the solve could not tie to the cave
     AttachedFileUnfixed = 601,  //!< an attached file that fixes no station, placed at the origin in a georeferenced project
     AttachedFileDefaultDatum = 602, //!< an attached Compass .mak that names a UTM zone but no datum, read in North American 1927
+    AttachedFileFixWithoutCS = 603, //!< an attachment with fixes that name no coordinate system and no system chosen for them, in a georeferenced project
 };
 
 /**

@@ -206,11 +206,14 @@ private:
                                   cwSurvexExporterUtils::CsScope& scope);
 
     //! Puts an input system in scope for the *include of \a ownerId's file, so
-    //! a *fix in it with no *cs of its own reads in the system the run outputs
-    //! in: the project's (\a globalCS), or, when the project names none, the
-    //! *cs out the file names itself (Options::externalOutputSystems), which
-    //! is written ahead of the file so every one of its fixes sees it.
+    //! a *fix in it with no *cs of its own reads in the system chosen for the
+    //! attachment (cwExternalCenterline::fixCoordinateSystem). When the project
+    //! names no output system (\a globalCS empty), the file's own *cs out
+    //! (Options::externalOutputSystems) is written ahead of the file so every
+    //! one of its fixes sees it, and the chosen system, if any, follows it;
+    //! with neither, nothing is written and cavern reads the fixes raw.
     void writeIncludeSystem(QTextStream& stream, const QUuid& ownerId,
+                            const cwExternalCenterline& centerline,
                             const QString& globalCS,
                             cwSurvexExporterUtils::CsScope& scope);
 

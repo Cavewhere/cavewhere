@@ -30,7 +30,7 @@ class cwTrip;
  * Each row also says where the user fixes it, resolved from the warning's
  * targetId against the node: a row of the node's fix stations, one of its
  * trips' pages, or the node's own attached-file source line. An
- * AttachedFixWithoutCS warning opens the Fix Stations page on the first bare
+ * AttachedFileFixWithoutCS warning opens the Fix Stations page on the first bare
  * fix it names, a read-only row of cwSurveyNode::fixStationTable; an
  * AttachedFileUnfixed or AttachedFileDefaultDatum warning opens the page with
  * no row selected.

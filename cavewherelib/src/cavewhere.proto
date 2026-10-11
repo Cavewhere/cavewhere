@@ -128,6 +128,10 @@ message ExternalCenterline {
     // Project-relative path to the entry centerline file (.svx / .dat /
     // .mak / .wpj / .srv). Empty when the owner has no attachment.
     optional string entry_file = 1;
+    // The coordinate system the solve reads the file's fixes in when the file
+    // names none for them, as a fix station's input CS is stored. Absent when
+    // the user has chosen none.
+    optional string fix_coordinate_system = 2;
 }
 
 // One endpoint of an equate: a station named by the scope it lives in plus its

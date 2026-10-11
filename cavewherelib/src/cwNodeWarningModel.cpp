@@ -111,6 +111,8 @@ void cwNodeWarningModel::connectNode()
         // So does the attached fix the bare-fix warning points at.
         connect(m_node->attachedFixes(), &cwAttachedFixModel::modelReset,
                 this, &cwNodeWarningModel::rebuild),
+        connect(m_node->attachedFixes(), &cwAttachedFixModel::dataChanged,
+                this, &cwNodeWarningModel::rebuild),
 
         // m_node already reads null here, so setNode(nullptr) would return early.
         connect(m_node, &QObject::destroyed, this, [this]() {
@@ -187,7 +189,7 @@ cwNodeWarningModel::Entry cwNodeWarningModel::nodeEntry(const cwError& error) co
 
     // The warning names the attached files' bare fixes in attachedFixes()
     // order, so the entry picks the first one's row in the fix station table.
-    if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFixWithoutCS)) {
+    if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS)) {
         entry.target = Target::FixStationRow;
         const cwAttachedFixModel* attachedFixes = m_node->attachedFixes();
         const int bareRow = attachedFixes->firstFixWithoutCoordinateSystem();

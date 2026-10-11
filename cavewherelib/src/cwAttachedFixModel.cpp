@@ -60,6 +60,8 @@ QVariant cwAttachedFixModel::data(const QModelIndex& index, int role) const
         return fix.readInWarning();
     case ReferenceRole:
         return fix.reference;
+    case ReadInSystemRole:
+        return fix.readInSystem;
     case cwFixStationDiagnosticsModel::DomainErrorRole:
     case cwFixStationDiagnosticsModel::CoordinateErrorRole:
     case cwFixStationDiagnosticsModel::StationErrorRole:
@@ -96,6 +98,7 @@ QHash<int, QByteArray> cwAttachedFixModel::roleNames() const
         {ReadOnlyRole,                              "readOnly"},
         {ReadInWarningRole,                         "readInWarning"},
         {ReferenceRole,                             "reference"},
+        {ReadInSystemRole,                          "readInSystem"},
         {cwFixStationDiagnosticsModel::DomainErrorRole,            "domainError"},
         {cwFixStationDiagnosticsModel::EastingDomainErrorRole,     "eastingDomainError"},
         {cwFixStationDiagnosticsModel::NorthingDomainErrorRole,    "northingDomainError"},
@@ -113,6 +116,18 @@ void cwAttachedFixModel::setAttachedFixes(const QList<cwAttachedFix>& fixes)
         return;
     }
 
+    // The same stations in the same order only changed what is said about
+    // them (a new system chosen for the file's bare fixes, a renamed scope),
+    // so the rows on screen stay and update in place.
+    const auto sameStation = [](const cwAttachedFix& a, const cwAttachedFix& b) {
+        return a.ownerId == b.ownerId && a.filePath == b.filePath && a.line == b.line;
+    };
+    if (std::equal(m_fixes.cbegin(), m_fixes.cend(), fixes.cbegin(), fixes.cend(), sameStation)) {
+        m_fixes = fixes;
+        emit dataChanged(index(0), index(count() - 1));
+        return;
+    }
+
     const int oldCount = count();
     beginResetModel();
     m_fixes = fixes;
@@ -120,6 +135,14 @@ void cwAttachedFixModel::setAttachedFixes(const QList<cwAttachedFix>& fixes)
     if (count() != oldCount) {
         emit countChanged();
     }
+}
+
+int cwAttachedFixModel::bareFixCount(const QUuid& ownerId) const
+{
+    return static_cast<int>(std::count_if(m_fixes.cbegin(), m_fixes.cend(),
+                                          [&ownerId](const cwAttachedFix& fix) {
+        return fix.ownerId == ownerId && fix.coordinateSystem.isEmpty();
+    }));
 }
 
 int cwAttachedFixModel::firstFixWithoutCoordinateSystem() const

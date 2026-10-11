@@ -112,7 +112,7 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
                            QStringLiteral("EPSG:32613"), QStringLiteral("a.svx")},
              cwAttachedFix{QStringLiteral("a.p2"), QStringLiteral("0 0 0"), QString(),
                            QStringLiteral("a.svx")}});
-        errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
+        errors->setTypedWarning(cwErrorTypeId::AttachedFileFixWithoutCS,
                                 QStringLiteral("a.svx fixes a.p2 without a coordinate system."));
         REQUIRE(model.count() == 1);
         CHECK(targetAt(model, 0) == Target::FixStationRow);
@@ -148,7 +148,7 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
 
     SECTION("a suppressed warning leaves the list, and returns when unsuppressed")
     {
-        errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS, QStringLiteral("Plain"));
+        errors->setTypedWarning(cwErrorTypeId::AttachedFileFixWithoutCS, QStringLiteral("Plain"));
         REQUIRE(model.count() == 1);
 
         const auto suppressed = static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole);
@@ -198,7 +198,7 @@ TEST_CASE("A node warning lists the node's warnings and where each is fixed",
 
     SECTION("clearing the node empties the list")
     {
-        errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS, QStringLiteral("Plain"));
+        errors->setTypedWarning(cwErrorTypeId::AttachedFileFixWithoutCS, QStringLiteral("Plain"));
         REQUIRE(model.count() == 1);
         model.setNode(nullptr);
         CHECK(model.count() == 0);
@@ -235,7 +235,7 @@ TEST_CASE("A node warning model empties when its node is destroyed",
     {
         cwCave cave;
         model.setNode(&cave);
-        cave.errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
+        cave.errorModel()->errors()->setTypedWarning(cwErrorTypeId::AttachedFileFixWithoutCS,
                                                      QStringLiteral("Plain"));
         REQUIRE(model.count() == 1);
     }

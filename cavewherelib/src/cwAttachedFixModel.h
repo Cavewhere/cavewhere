@@ -53,7 +53,11 @@ public:
         //! Empty on every other row, the node's own included.
         ReadInWarningRole,
         //! cwAttachedFix::reference: the file marks the fix as a reference point.
-        ReferenceRole
+        ReferenceRole,
+        //! cwAttachedFix::readInSystem: the system the solve reads a fix the
+        //! file gives no coordinate system in; empty when none is chosen, and on
+        //! every other row.
+        ReadInSystemRole
     };
     Q_ENUM(Roles)
 
@@ -73,6 +77,10 @@ public:
 
     //! Row of the first fix with no coordinate system, -1 when every fix has one.
     int firstFixWithoutCoordinateSystem() const;
+
+    //! How many of the fixes in \a ownerId's attached file name no coordinate
+    //! system.
+    Q_INVOKABLE int bareFixCount(const QUuid& ownerId) const;
 
 signals:
     void countChanged();

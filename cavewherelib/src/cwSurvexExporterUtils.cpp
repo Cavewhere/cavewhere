@@ -75,13 +75,6 @@ void CsScope::ensure(QTextStream& stream, const QString& cs)
     m_current = trimmed;
 }
 
-void CsScope::ensureAnySystem(QTextStream& stream, const QString& fallback)
-{
-    if (m_current.isEmpty()) {
-        ensure(stream, fallback);
-    }
-}
-
 void CsScope::writeFileOutputSystem(QTextStream& stream, const QString& system)
 {
     cwSurvexExporterUtils::writeFileOutputSystem(stream, system);

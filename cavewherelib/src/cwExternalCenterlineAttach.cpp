@@ -491,8 +491,13 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
             // a bare filename for the common flat case, a subpath when the
             // closure reached above the entry's own directory. Reusing
             // verifyPlan's base keeps attach and the planner on one answer.
-            owner.setExternalCenterline(cwExternalCenterline(
-                QDir(verifyPlan.baseDir).relativeFilePath(scan.dependencies.first())));
+            // Replace and Reload rewrite the entry on the record the owner
+            // already holds, so the system chosen for its bare fixes stays;
+            // a first attach starts from an empty record, with none chosen.
+            cwExternalCenterline centerline = owner.externalCenterline();
+            centerline.setEntryFile(
+                QDir(verifyPlan.baseDir).relativeFilePath(scan.dependencies.first()));
+            owner.setExternalCenterline(centerline);
 
             AttachReport report;
             report.scan = scan;

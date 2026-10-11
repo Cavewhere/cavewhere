@@ -17,6 +17,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 // Cavewhere
+#include "cwAttachedFixModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwError.h"
@@ -58,6 +59,7 @@
 #include <QFileDevice>
 #include <QFileInfo>
 #include <QString>
+#include <QStringList>
 #include <QTemporaryDir>
 #include <QVariant>
 
@@ -287,6 +289,25 @@ inline cwCave* attachSourceUnderRegion(SavedProjectFixture* fixture, const QStri
         fixture, fixture->project->cavingRegion()->rootNode(), sourcePath));
     REQUIRE(root != nullptr);
     return root;
+}
+
+//! The attached row of \a node that names \a station.
+inline cwAttachedFix attachedFixFor(const cwSurveyNode* node, const QString& station)
+{
+    for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
+        if (fix.station == station) {
+            return fix;
+        }
+    }
+    FAIL("No attached row names " << station.toStdString());
+    return cwAttachedFix();
+}
+
+//! \a node's AttachedFileFixWithoutCS warnings.
+inline QStringList bareFixWarnings(const cwSurveyNode* node)
+{
+    return node->errorModel()->errors()->warningMessagesForTypeIds(
+        {static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS)});
 }
 
 inline cwSurveyNode* childNodeNamed(const cwSurveyNode* parent, const QString& name)

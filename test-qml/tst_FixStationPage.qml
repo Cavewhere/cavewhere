@@ -1745,5 +1745,43 @@ MainWindowTest {
             compare(waitForChild("stationCell.1").text, "ref.B")
             compare(findChild(page, "referenceChip.1"), null, "the plain fix carries none")
         }
+
+        // In a georeferenced project, a file fix with no coordinate system
+        // says so on its row, and the attachment owner's page picks the system
+        // the solve reads it in.
+        function test_bareFixControlAndBadge() {
+            saveProjectAs("fix-station-bare-fix")
+
+            // A native fix in UTM zone 48N gives the project its frame.
+            RootData.region.addCave()
+            const anchorCave = RootData.region.cave(RootData.region.caveCount - 1)
+            anchorCave.name = "AnchorCave"
+            const anchors = anchorCave.fixStations
+            compare(anchors.addFixStation("A1"), 0)
+            anchors.setData(anchors.index(0), "EPSG:32648", FixStationModel.InputCSRole)
+            anchors.setData(anchors.index(0), 500000.0, FixStationModel.EastingRole)
+            anchors.setData(anchors.index(0), 3000000.0, FixStationModel.NorthingRole)
+            anchors.setData(anchors.index(0), 100.0, FixStationModel.ElevationRole)
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 5000,
+                      "the anchoring fix gives the project a frame")
+
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_bare_fix/bare_fix.svx"))
+            tryVerify(() => cave.attachedFixes.count === 1, 20000, "the scan lists the file's fix")
+
+            const page = openFixStationsOf(cave)
+            tryCompare(findChild(page, "fixStationTableView"), "count", 1)
+            compare(waitForChild("stationCell.0").text, "bare.A")
+
+            verify(waitForChild("bareFixSystemCombo.0") !== null,
+                   "the owner's page offers a system for the file's bare fixes")
+            const badge = waitForChild("noCoordinateSystemBadge.0")
+
+            page.setBareFixCoordinateSystem(0, "UTM48N")
+            tryVerify(() => cave.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
+                      "the choice lands on the attachment")
+            tryVerify(() => badge.text.indexOf("UTM48N") >= 0, 5000,
+                      "the badge names the chosen system")
+        }
     }
 }

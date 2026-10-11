@@ -915,6 +915,9 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
     // trip's file stations sit under the trip's scopePrefix().
     const auto addWarning = [&](QStringList& messages, const QUuid& ownerId, const QString& scope,
                                 const cwExternalCenterline& centerline) {
+        if (!centerline.fixCoordinateSystem().isEmpty()) {
+            return;
+        }
         const auto stations = inputs.bareFixedStations.constFind(ownerId);
         if (stations == inputs.bareFixedStations.constEnd()) {
             return;
@@ -924,8 +927,8 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
         for (const QString& station : stations.value()) {
             scoped.append(scope + station);
         }
-        messages.append(QStringLiteral("%1 fixes %2 without a coordinate system; add one to the "
-                                       "file or remove that fix.")
+        messages.append(QStringLiteral("%1 fixes %2 without a coordinate system; choose one on "
+                                       "the Fix Stations page or add *cs to the file.")
                             .arg(entryFileName(centerline), scoped.join(QStringLiteral(", "))));
     };
 
@@ -973,7 +976,7 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
             // cwNodeWarningModel opens the node's Fix Stations page for these
             // types, where the file's own fixes are listed.
             cwErrorListModel* errors = node->errorModel()->errors();
-            errors->setTypedWarning(cwErrorTypeId::AttachedFixWithoutCS,
+            errors->setTypedWarning(cwErrorTypeId::AttachedFileFixWithoutCS,
                                     messages.join(QLatin1Char('\n')));
             errors->setTypedWarning(cwErrorTypeId::AttachedFileUnfixed,
                                     unfixedMessages.join(QLatin1Char('\n')));

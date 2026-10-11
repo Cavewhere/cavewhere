@@ -261,6 +261,7 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case cwAttachedFixModel::SourceFileRole:
     case cwAttachedFixModel::ReadInWarningRole:
     case cwAttachedFixModel::ReferenceRole:
+    case cwAttachedFixModel::ReadInSystemRole:
     case DomainErrorRole:
     case EastingDomainErrorRole:
     case NorthingDomainErrorRole:
@@ -285,7 +286,8 @@ QVariant cwFixStationDiagnosticsModel::data(const QModelIndex& index, int role) 
     case cwAttachedFixModel::ReadOnlyRole:
     case cwAttachedFixModel::ReferenceRole:  return false;
     case cwAttachedFixModel::SourceFileRole:
-    case cwAttachedFixModel::ReadInWarningRole: return QString();
+    case cwAttachedFixModel::ReadInWarningRole:
+    case cwAttachedFixModel::ReadInSystemRole: return QString();
     case DomainErrorRole:            return domainErrorMessage(*fix);
     case CoordinateErrorRole:        return coordinateErrorMessage(*fix);
     case CoordinateOrderUnknownRole: return fix->state() == cwFixStation::NoSystem;
@@ -319,5 +321,6 @@ QHash<int, QByteArray> cwFixStationDiagnosticsModel::roleNames() const
     names.insert(cwAttachedFixModel::ReadOnlyRole, "readOnly");
     names.insert(cwAttachedFixModel::ReadInWarningRole, "readInWarning");
     names.insert(cwAttachedFixModel::ReferenceRole, "reference");
+    names.insert(cwAttachedFixModel::ReadInSystemRole, "readInSystem");
     return names;
 }

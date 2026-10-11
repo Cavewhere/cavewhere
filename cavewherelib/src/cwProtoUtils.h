@@ -25,6 +25,7 @@
 #include "cwSketchData.h"
 #include "cwEquate.h"
 #include "cwExternalSource.h"
+#include "cwExternalCenterline.h"
 #include "cwFixStation.h"
 #include "cwGeoPoint.h"
 
@@ -60,6 +61,7 @@ class FixStation;
 class DoubleVector3d;
 class Equate;
 class ExternalSource;
+class ExternalCenterline;
 class StationHandle;
 }
 
@@ -182,6 +184,12 @@ CAVEWHERE_LIB_EXPORT cwFixStation fromProtoFixStation(const CavewhereProto::FixS
 // Equates
 CAVEWHERE_LIB_EXPORT void saveEquate(CavewhereProto::Equate* protoEquate, const cwEquate& equate);
 CAVEWHERE_LIB_EXPORT cwEquate fromProtoEquate(const CavewhereProto::Equate& protoEquate);
+
+// External centerlines
+CAVEWHERE_LIB_EXPORT void saveExternalCenterline(CavewhereProto::ExternalCenterline* protoCenterline,
+                                                 const cwExternalCenterline& centerline);
+CAVEWHERE_LIB_EXPORT cwExternalCenterline fromProtoExternalCenterline(
+    const CavewhereProto::ExternalCenterline& protoCenterline);
 
 // External sources
 CAVEWHERE_LIB_EXPORT void saveExternalSource(CavewhereProto::ExternalSource* protoSource, const cwExternalSource& source);

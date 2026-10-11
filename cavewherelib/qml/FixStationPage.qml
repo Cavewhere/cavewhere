@@ -42,6 +42,29 @@ StandardPage {
     // fixStationsModel.count is the same row in fixStationsModel.
     readonly property AttachedFixModel attachedFixesModel: cave ? cave.attachedFixes : null
 
+    // Cavern refuses a fix that names no system once the project has a frame,
+    // so only then does a bare attached row with no system chosen warn.
+    readonly property bool projectHasFrame: RootData.region.geoReference.hasCoordinateSystem
+
+    // The node and its trips that carry an attachment, the node first, then
+    // the trips in order. Each holds the system its file's bare fixes read in.
+    readonly property list<QtObject> attachmentOwners: {
+        const owners = []
+        if (fixStationPage.cave === null) {
+            return owners
+        }
+        if (!fixStationPage.cave.externalCenterline.isEmpty) {
+            owners.push(fixStationPage.cave)
+        }
+        for (let i = 0; i < fixStationPage.cave.tripCount; ++i) {
+            const trip = fixStationPage.cave.trip(i)
+            if (!trip.externalCenterline.isEmpty) {
+                owners.push(trip)
+            }
+        }
+        return owners
+    }
+
     // The row to select and scroll to, or -1 for none. A page selection property: a
     // link into the page (a node warning naming a fix) sets it through the
     // page, and a row the user picks writes it back, so the same link works
@@ -54,6 +77,15 @@ StandardPage {
         if (fixStationPage.fixStationsModel) {
             fixStationPage.fixStationsModel.addFixStation()
         }
+    }
+
+    // Chooses the system attachmentOwners[ownerIndex]'s file's fixes with no
+    // system of their own read in; empty unsets it.
+    function setBareFixCoordinateSystem(ownerIndex: int, cs: string): void {
+        const owner = fixStationPage.attachmentOwners[ownerIndex]
+        const centerline = owner.externalCenterline
+        centerline.fixCoordinateSystem = cs
+        owner.externalCenterline = centerline
     }
 
     function removeFix(index) {
@@ -328,6 +360,92 @@ StandardPage {
         color: Theme.textSubtle
     }
 
+    // An attached fix its file names no system for: the system the solve reads
+    // it in, or "unset" while cavern refuses it.
+    component BareFixBadge : QC.Label {
+        id: bareFixBadge
+        property string readInSystem: ""
+        //! The row's read-in note, which says where the system came from.
+        property string readInWarning: ""
+        property string sourceFile: ""
+        readonly property bool unset: bareFixBadge.readInSystem === ""
+
+        text: "none \u2192 " + (bareFixBadge.unset ? "unset" : bareFixBadge.readInSystem)
+        textFormat: QC.Label.PlainText
+        elide: QC.Label.ElideRight
+        color: bareFixBadge.unset ? Theme.errorText : Theme.warningText
+        font.pixelSize: Theme.fontSizeSmall
+        leftPadding: Theme.chipPadding
+        rightPadding: Theme.chipPadding
+
+        background: QQ.Rectangle {
+            radius: Theme.chipRadius
+            color: Theme.warningSurface
+            border.color: Theme.warningBorder
+        }
+
+        QQ.HoverHandler {
+            id: bareFixHover
+        }
+
+        QC.ToolTip {
+            visible: bareFixHover.hovered
+            delay: Theme.toolTipDelay
+
+            // The file name is the user's; see InlineWarning.
+            contentItem: QC.Label {
+                text: bareFixBadge.unset
+                      ? "Cavern rejects this fix until a coordinate system is chosen for "
+                        + bareFixBadge.sourceFile + "."
+                      : bareFixBadge.readInWarning
+                textFormat: QC.Label.PlainText
+            }
+        }
+    }
+
+    // A read-only row's system: the badge when the file names none and either
+    // a system reads it or cavern refuses it, else ReadOnlyCSLabel.
+    component ReadOnlyCSCell : QQ.Item {
+        id: readOnlyCSCell
+        property string value: ""
+        property int rowIndex
+        property string readInSystem: ""
+        property string readInWarning: ""
+        property string sourceFile: ""
+        readonly property bool showsBadge: readOnlyCSCell.value === ""
+                                           && (readOnlyCSCell.readInSystem !== ""
+                                               || fixStationPage.projectHasFrame)
+
+        implicitWidth: readOnlyCSCell.showsBadge ? badgeLoader.implicitWidth
+                                                 : readOnlyLabel.implicitWidth
+        implicitHeight: readOnlyCSCell.showsBadge ? badgeLoader.implicitHeight
+                                                  : readOnlyLabel.implicitHeight
+
+        ReadOnlyCSLabel {
+            id: readOnlyLabel
+            objectName: "inputCSText." + readOnlyCSCell.rowIndex
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !readOnlyCSCell.showsBadge
+            value: readOnlyCSCell.value
+        }
+
+        QQ.Loader {
+            id: badgeLoader
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, parent.width)
+            active: readOnlyCSCell.showsBadge
+            sourceComponent: BareFixBadge {
+                objectName: "noCoordinateSystemBadge." + readOnlyCSCell.rowIndex
+                readInSystem: readOnlyCSCell.readInSystem
+                readInWarning: readOnlyCSCell.readInWarning
+                sourceFile: readOnlyCSCell.sourceFile
+            }
+        }
+    }
+
     component CSCell : QQ.Item {
         id: csCell
         property int columnWidth: 0
@@ -344,6 +462,10 @@ StandardPage {
         //! A row an attached file fixes: the system is shown as text, with no
         //! combo to change it.
         property bool readOnly: false
+        //! See ReadOnlyCSCell.
+        property string readInSystem: ""
+        property string readInWarning: ""
+        property string sourceFile: ""
 
         implicitWidth: columnWidth
         implicitHeight: csLoader.implicitHeight
@@ -373,10 +495,64 @@ StandardPage {
         QQ.Component {
             id: readOnlyCSComponent
 
-            ReadOnlyCSLabel {
-                objectName: "inputCSText." + csCell.rowIndex
+            ReadOnlyCSCell {
                 value: csCell.value
+                rowIndex: csCell.rowIndex
+                readInSystem: csCell.readInSystem
+                readInWarning: csCell.readInWarning
+                sourceFile: csCell.sourceFile
             }
+        }
+    }
+
+    // Chooses the system an attachment's fixes with no system of their own read
+    // in. Shown while the owner's file has any such fix.
+    component BareFixSystemControl : RowLayout {
+        id: bareFixSystemControl
+
+        required property QtObject modelData
+        required property int index
+
+        property int bareFixCount: 0
+
+        function refresh(): void {
+            // The owner goes before its row does when it is deleted.
+            bareFixSystemControl.bareFixCount =
+                fixStationPage.attachedFixesModel && bareFixSystemControl.modelData
+                ? fixStationPage.attachedFixesModel.bareFixCount(bareFixSystemControl.modelData.id)
+                : 0
+        }
+
+        visible: bareFixSystemControl.bareFixCount > 0
+        spacing: Theme.tightSpacing
+
+        QQ.Component.onCompleted: bareFixSystemControl.refresh()
+
+        QQ.Connections {
+            target: fixStationPage.attachedFixesModel
+
+            function onModelReset() { bareFixSystemControl.refresh() }
+            function onDataChanged() { bareFixSystemControl.refresh() }
+        }
+
+        QC.Label {
+            text: bareFixSystemControl.modelData === fixStationPage.cave
+                  ? "Read fixes with no coordinate system as"
+                  : "Read " + (bareFixSystemControl.modelData?.name ?? "")
+                    + "'s fixes with no coordinate system as"
+            textFormat: QC.Label.PlainText
+        }
+
+        CSComboBox {
+            objectName: "bareFixSystemCombo." + bareFixSystemControl.index
+            offersUnset: true
+            value: bareFixSystemControl.modelData?.externalCenterline.fixCoordinateSystem ?? ""
+            onCommitted: (newCS) => fixStationPage.setBareFixCoordinateSystem(
+                bareFixSystemControl.index, newCS)
+        }
+
+        QQ.Item {
+            Layout.fillWidth: true
         }
     }
 
@@ -452,6 +628,14 @@ StandardPage {
             Layout.fillWidth: true
         }
 
+        QQ.Repeater {
+            model: fixStationPage.attachmentOwners
+
+            delegate: BareFixSystemControl {
+                Layout.fillWidth: true
+            }
+        }
+
         HorizontalHeaderStaticView {
             visible: !fixStationPage.isNarrow
             view: tableView
@@ -523,6 +707,9 @@ StandardPage {
             required property string readInWarning
             //! Set on an attached row the file marks as a reference point.
             required property bool reference
+            //! On an attached row whose fix the file gives no system: the system
+            //! the solve reads it in, empty while none is chosen.
+            required property string readInSystem
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
@@ -598,6 +785,9 @@ StandardPage {
                     availableDatums: wideDelegateId.availableDatums
                     datumEnabled: wideDelegateId.datumEnabled
                     readOnly: wideDelegateId.readOnly
+                    readInSystem: wideDelegateId.readInSystem
+                    readInWarning: wideDelegateId.readInWarning
+                    sourceFile: wideDelegateId.sourceFile
                 }
 
                 WideCell {
@@ -703,6 +893,7 @@ StandardPage {
             //! See the wide delegate.
             required property string readInWarning
             required property bool reference
+            required property string readInSystem
 
             //! Mutually exclusive with the domain error — see the wide delegate.
             readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
@@ -801,9 +992,12 @@ StandardPage {
                 QQ.Component {
                     id: narrowReadOnlyCSComponent
 
-                    ReadOnlyCSLabel {
-                        objectName: "inputCSText." + narrowDelegateId.index
+                    ReadOnlyCSCell {
                         value: narrowDelegateId.inputCS
+                        rowIndex: narrowDelegateId.index
+                        readInSystem: narrowDelegateId.readInSystem
+                        readInWarning: narrowDelegateId.readInWarning
+                        sourceFile: narrowDelegateId.sourceFile
                     }
                 }
 

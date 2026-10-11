@@ -314,7 +314,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         cwSurvexExporterUtils::CsScope includeScope(enclosingScope);
         const WrittenFixes written =
             writeFixStations(stream, node, tree, globalCS, inherited.anchored, includeScope);
-        writeIncludeSystem(stream, node.id, globalCS, includeScope);
+        writeIncludeSystem(stream, node.id, node.externalCenterline, globalCS, includeScope);
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
@@ -406,7 +406,8 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
                 cwSurvexExporterUtils::writeFixStations(stream, {}, tripOriginStation, globalCS,
                                                         includeScope);
             }
-            writeIncludeSystem(stream, tripData.id, globalCS, includeScope);
+            writeIncludeSystem(stream, tripData.id, tripData.externalCenterline, globalCS,
+                               includeScope);
             if (!writeExternalInclude(stream, tripData.id,
                                       ExportOptions.tripAttachmentDirs,
                                       tripData.externalCenterline.entryFile(),
@@ -675,22 +676,24 @@ QString cwSurvexExporterCaveTask::writeStandaloneHeader(QTextStream& stream)
 }
 
 void cwSurvexExporterCaveTask::writeIncludeSystem(QTextStream& stream, const QUuid& ownerId,
+                                                  const cwExternalCenterline& centerline,
                                                   const QString& globalCS,
                                                   cwSurvexExporterUtils::CsScope& scope)
 {
-    // Once any *cs out is set cavern refuses a *fix with no input system. The
-    // file's own *cs still wins inside its blocks; this only catches the bare
-    // ones.
-    if (!globalCS.isEmpty()) {
-        scope.ensureAnySystem(stream, globalCS);
-        return;
-    }
-
-    // The file's own *cs out, met later, names the same system and is a no-op.
-    const QString fileOutput = ExportOptions.externalOutputSystems.value(ownerId);
-    if (!fileOutput.isEmpty()) {
+    if (globalCS.isEmpty()) {
+        // The file's own *cs out, met later, names the same system and is a
+        // no-op. With no output system at all, cavern reads the fixes as
+        // written and refuses any input *cs, chosen or not.
+        const QString fileOutput = ExportOptions.externalOutputSystems.value(ownerId);
+        if (fileOutput.isEmpty()) {
+            return;
+        }
         scope.writeFileOutputSystem(stream, fileOutput);
     }
+
+    // The file's own *cs still wins inside its blocks; this only reaches the
+    // fixes that name none. With nothing chosen, cavern refuses them.
+    scope.ensure(stream, centerline.fixCoordinateSystem());
 }
 
 bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,

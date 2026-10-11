@@ -907,6 +907,22 @@ cwEquate fromProtoEquate(const CavewhereProto::Equate& protoEquate)
     return cwEquate(handles);
 }
 
+void saveExternalCenterline(CavewhereProto::ExternalCenterline* protoCenterline,
+                            const cwExternalCenterline& centerline)
+{
+    protoCenterline->set_entry_file(centerline.entryFile().toStdString());
+    if (!centerline.fixCoordinateSystem().isEmpty()) {
+        protoCenterline->set_fix_coordinate_system(centerline.fixCoordinateSystem().toStdString());
+    }
+}
+
+cwExternalCenterline fromProtoExternalCenterline(const CavewhereProto::ExternalCenterline& protoCenterline)
+{
+    cwExternalCenterline centerline(QString::fromStdString(protoCenterline.entry_file()));
+    centerline.setFixCoordinateSystem(QString::fromStdString(protoCenterline.fix_coordinate_system()));
+    return centerline;
+}
+
 void saveExternalSource(CavewhereProto::ExternalSource* protoSource, const cwExternalSource& source)
 {
     saveQUuid(protoSource->mutable_id(), source.id());

@@ -15,6 +15,7 @@
 #include <QHashFunctions>
 #include <QMetaType>
 #include <QString>
+#include <QUuid>
 #include <QtQml/qqmlregistration.h>
 
 /**
@@ -25,9 +26,9 @@
  *
  * An empty entry file means "no attachment" - the owner is Native
  * (per the data-model spec in
- * plans/EXTERNAL_FILE_INTEGRATION_PLAN.html section 3). Equality and
- * hash derive solely from the entry file path, which is the
- * canonical identity of an attachment for this commit.
+ * plans/EXTERNAL_FILE_INTEGRATION_PLAN.html section 3). Equality
+ * compares every field; the hash derives from the entry file path, the
+ * canonical identity of an attachment.
  */
 class CAVEWHERE_LIB_EXPORT cwExternalCenterline
 {
@@ -36,6 +37,9 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterline
     Q_PROPERTY(QString entryFile READ entryFile WRITE setEntryFile FINAL)
     Q_PROPERTY(bool isEmpty READ isEmpty FINAL)
     Q_PROPERTY(QString format READ format FINAL)
+    //! The coordinate system the solve reads the attachment's fixes in when
+    //! the file names none for them; empty when the user has chosen none.
+    Q_PROPERTY(QString fixCoordinateSystem READ fixCoordinateSystem WRITE setFixCoordinateSystem FINAL)
 
 public:
     cwExternalCenterline() = default;
@@ -43,6 +47,9 @@ public:
 
     QString entryFile() const { return m_entryFile; }
     void setEntryFile(const QString& entryFile) { m_entryFile = entryFile; }
+
+    QString fixCoordinateSystem() const { return m_fixCoordinateSystem; }
+    void setFixCoordinateSystem(const QString& system) { m_fixCoordinateSystem = system; }
 
     // Display name of the entry file's survey format ("Survex",
     // "Compass", "Walls"; empty when unrecognized or unattached),
@@ -53,7 +60,8 @@ public:
 
     bool operator==(const cwExternalCenterline& other) const
     {
-        return m_entryFile == other.m_entryFile;
+        return m_entryFile == other.m_entryFile
+               && m_fixCoordinateSystem == other.m_fixCoordinateSystem;
     }
     bool operator!=(const cwExternalCenterline& other) const
     {
@@ -62,6 +70,7 @@ public:
 
 private:
     QString m_entryFile;
+    QString m_fixCoordinateSystem;
 };
 
 CAVEWHERE_LIB_EXPORT size_t qHash(const cwExternalCenterline& value, size_t seed = 0) noexcept;
@@ -92,10 +101,17 @@ class CAVEWHERE_LIB_EXPORT cwAttachedFix
     Q_PROPERTY(QString filePath MEMBER filePath FINAL)
     //! That line, counting from 1; 0 when the format's reader keeps no line.
     Q_PROPERTY(int line MEMBER line FINAL)
-    //! For a fix with no coordinate system of its own, what the solve reads it
-    //! in ("UTM48N, the system the file's *cs out names"); empty when it reads the fix in
-    //! the fix's own system, or raw.
+    //! For a fix with no coordinate system of its own, the system the solve
+    //! reads it in: the one chosen for the attachment
+    //! (cwExternalCenterline::fixCoordinateSystem), or, when none is chosen
+    //! and the project has no frame, the *cs out the file names itself. Empty
+    //! when the fix names its own system, or when nothing names one for it.
     Q_PROPERTY(QString readInSystem MEMBER readInSystem FINAL)
+    //! Whether readInSystem is the *cs out the file names itself rather than
+    //! the system chosen for the attachment.
+    Q_PROPERTY(bool readInFileOutput MEMBER readInFileOutput FINAL)
+    //! The node or trip whose attachment holds the file.
+    Q_PROPERTY(QUuid ownerId MEMBER ownerId FINAL)
     //! Whether the file marks the fix as a reference point (Survex's
     //! "*fix <station> reference …"), which cavern keeps even when no leg uses it.
     Q_PROPERTY(bool reference MEMBER reference FINAL)
@@ -109,6 +125,8 @@ public:
     int line = 0;
     QString readInSystem;
     bool reference = false;
+    bool readInFileOutput = false;
+    QUuid ownerId;
 
     //! The note the Fix Stations page shows on the row: where the fix is read
     //! in and which line left it there. Empty when readInSystem is.
