@@ -21,6 +21,10 @@ constexpr int kTriangleCornerCount = 3;
 constexpr QVector4D kTubeColor(0.62f, 0.60f, 0.55f, 1.0f);
 constexpr float kTubeAmbient = 0.35f;
 
+constexpr float kFullyOpaque = 1.0f;
+constexpr float kClipOn = 1.0f;
+constexpr float kClipOff = 0.0f;
+
 constexpr float kYUpSign = 1.0f;
 constexpr float kYDownSign = -1.0f;
 
@@ -52,6 +56,15 @@ void cwRHIPassageTube::synchronize(const SynchronizeData& data)
     m_geometry = tube->m_geometry;
     m_wireframe = tube->m_wireframe;
     tube->m_geometry.resetChanged();
+
+    const float opacity = static_cast<float>(tube->m_opacity);
+    if (m_opacity != opacity || m_clipPlane != tube->m_clipPlane
+        || m_clipEnabled != tube->m_clipEnabled) {
+        m_opacity = opacity;
+        m_clipPlane = tube->m_clipPlane;
+        m_clipEnabled = tube->m_clipEnabled;
+        m_uniformStale = true;
+    }
 }
 
 void cwRHIPassageTube::updateResources(const ResourceUpdateData& data)
@@ -67,8 +80,8 @@ void cwRHIPassageTube::updateResources(const ResourceUpdateData& data)
 
     uploadVisibleIndices(rhi, batch);
 
-    if (!m_uniformBuffer) {
-        createUniform(rhi, batch);
+    if (m_uniformStale || !m_uniformBuffer) {
+        uploadUniform(rhi, batch);
     }
 
     reportGpuBytes();
@@ -143,19 +156,25 @@ void cwRHIPassageTube::uploadVisibleIndices(QRhi* rhi, QRhiResourceUpdateBatch* 
     m_indicesStale = false;
 }
 
-void cwRHIPassageTube::createUniform(QRhi* rhi, QRhiResourceUpdateBatch* batch)
+void cwRHIPassageTube::uploadUniform(QRhi* rhi, QRhiResourceUpdateBatch* batch)
 {
-    m_uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
-                                     sizeof(TubeUniform));
-    m_uniformBuffer->create();
+    if (!m_uniformBuffer) {
+        m_uniformBuffer = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer,
+                                         sizeof(TubeUniform));
+        m_uniformBuffer->create();
+    }
 
     const TubeUniform uniform {
-        { kTubeColor.x(), kTubeColor.y(), kTubeColor.z(), kTubeColor.w() },
+        { kTubeColor.x(), kTubeColor.y(), kTubeColor.z(), m_opacity },
         kTubeAmbient,
         rhi->isYUpInFramebuffer() ? kYUpSign : kYDownSign,
-        { 0.0f, 0.0f }
+        { 0.0f, 0.0f },
+        { m_clipPlane.x(), m_clipPlane.y(), m_clipPlane.z(), m_clipPlane.w() },
+        m_clipEnabled ? kClipOn : kClipOff,
+        { 0.0f, 0.0f, 0.0f }
     };
     batch->updateDynamicBuffer(m_uniformBuffer, 0, sizeof(TubeUniform), &uniform);
+    m_uniformStale = false;
 }
 
 void cwRHIPassageTube::reportGpuBytes()
@@ -171,21 +190,27 @@ void cwRHIPassageTube::reportGpuBytes()
 
 bool cwRHIPassageTube::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
-    if (context.renderPass != RenderPass::Opaque) {
-        return false;
-    }
-
     if (m_visibleIndexCount == 0 || !m_vertexBuffer || !m_indexBuffer || !m_uniformBuffer) {
         return false;
     }
 
     const RenderData& renderData = *context.renderData;
-    m_pipelineRecord = acquirePipeline(renderData, PipelineKind::Fill);
-    if (!m_pipelineRecord) {
+    if (!renderData.renderer) {
         return false;
     }
     QRhi* rhi = renderData.renderer->rhi();
-    ensureShaderResources(rhi, renderData.renderer);
+
+    // The wireframe stays opaque so its lines keep depth testing against the
+    // scene while a translucent fill draws later in the transparent pass.
+    const bool translucent = m_opacity < kFullyOpaque;
+    const RenderPass fillPass = translucent ? RenderPass::Transparent : RenderPass::Opaque;
+    const bool drawsFill = context.renderPass == fillPass;
+    const bool drawsWireframe = context.renderPass == RenderPass::Opaque
+                                && m_wireframe
+                                && rhi->isFeatureSupported(QRhi::NonFillPolygonMode);
+    if (!drawsFill && !drawsWireframe) {
+        return false;
+    }
 
     const auto appendDrawable = [&](QRhiGraphicsPipeline* pipeline) {
         cwRHIObject::PipelineState state;
@@ -204,16 +229,27 @@ bool cwRHIPassageTube::gather(const GatherContext& context, QVector<PipelineBatc
         acquirePipelineBatch(batches, state).drawables.append(drawable);
     };
 
-    appendDrawable(m_pipelineRecord->pipeline);
-
-    if (m_wireframe && rhi->isFeatureSupported(QRhi::NonFillPolygonMode)) {
-        m_wireframeRecord = acquirePipeline(renderData, PipelineKind::Wireframe);
-        if (m_wireframeRecord) {
-            appendDrawable(m_wireframeRecord->pipeline);
+    bool appended = false;
+    if (drawsFill) {
+        m_pipelineRecord = acquirePipeline(renderData, translucent ? PipelineKind::TranslucentFill
+                                                                   : PipelineKind::Fill);
+        if (m_pipelineRecord) {
+            ensureShaderResources(rhi, renderData.renderer, m_pipelineRecord);
+            appendDrawable(m_pipelineRecord->pipeline);
+            appended = true;
         }
     }
 
-    return true;
+    if (drawsWireframe) {
+        m_wireframeRecord = acquirePipeline(renderData, PipelineKind::Wireframe);
+        if (m_wireframeRecord) {
+            ensureShaderResources(rhi, renderData.renderer, m_wireframeRecord);
+            appendDrawable(m_wireframeRecord->pipeline);
+            appended = true;
+        }
+    }
+
+    return appended;
 }
 
 std::optional<QBox3D> cwRHIPassageTube::worldBounds() const
@@ -258,8 +294,9 @@ cwRhiPipelineRecord* cwRHIPassageTube::acquirePipeline(const RenderData& data, P
             { QRhiShaderStage::Fragment, loadShader(key.fragmentShader) }
         });
 
+        const bool translucent = kind == PipelineKind::TranslucentFill;
         record->pipeline->setDepthTest(true);
-        record->pipeline->setDepthWrite(true);
+        record->pipeline->setDepthWrite(!translucent);
         record->pipeline->setSampleCount(key.sampleCount);
         record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
         record->pipeline->setVertexInputLayout(m_inputLayout);
@@ -272,7 +309,13 @@ cwRhiPipelineRecord* cwRHIPassageTube::acquirePipeline(const RenderData& data, P
         }
 
         QRhiGraphicsPipeline::TargetBlend blendState;
-        blendState.enable = false;
+        blendState.enable = translucent;
+        if (translucent) {
+            blendState.srcColor = QRhiGraphicsPipeline::SrcAlpha;
+            blendState.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+            blendState.srcAlpha = QRhiGraphicsPipeline::One;
+            blendState.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+        }
         record->pipeline->setTargetBlends({ blendState });
 
         record->layout = localRhi->newShaderResourceBindings();
@@ -294,9 +337,10 @@ cwRhiPipelineRecord* cwRHIPassageTube::acquirePipeline(const RenderData& data, P
     });
 }
 
-void cwRHIPassageTube::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer)
+void cwRHIPassageTube::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer,
+                                             const cwRhiPipelineRecord* record)
 {
-    if (m_srb && m_pipelineRecord->layout->isLayoutCompatible(m_srb)) {
+    if (m_srb && record->layout->isLayoutCompatible(m_srb)) {
         return;
     }
 
@@ -327,9 +371,11 @@ cwRhiPipelineKey cwRHIPassageTube::buildPipelineKey(QRhiRenderPassDescriptor* re
                              : QStringLiteral(":/shaders/PassageTube.frag.qsb");
     key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);
     key.frontFace = static_cast<quint8>(cwRenderMaterialState::FrontFace::CCW);
-    key.blendMode = static_cast<quint8>(cwRenderMaterialState::BlendMode::None);
+    const bool translucent = kind == PipelineKind::TranslucentFill;
+    key.blendMode = static_cast<quint8>(translucent ? cwRenderMaterialState::BlendMode::Alpha
+                                                    : cwRenderMaterialState::BlendMode::None);
     key.depthTest = 1;
-    key.depthWrite = 1;
+    key.depthWrite = translucent ? 0 : 1;
     key.globalBinding = 0;
     key.perDrawBinding = 1;
     key.textureBinding = 0xFF;

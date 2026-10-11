@@ -14,15 +14,21 @@
 #include "cwRenderPassageTube.h"
 #include "cwRhiFrameRenderer.h"
 
+// Qt includes
+#include <QVector4D>
+
 class QRhiBuffer;
 class QRhiShaderResourceBindings;
 class QRhiResourceUpdateBatch;
 
-// Draws the passage tube as an indexed triangle list in the opaque pass with
-// culling off, so the walls light from inside and outside. Hidden trip ranges
-// are dropped by compacting the index buffer whenever the published mask
-// changes. The wireframe overlay is a second pipeline in line polygon mode,
-// available on backends that support QRhi::NonFillPolygonMode.
+// Draws the passage tube as an indexed triangle list with culling off, so the
+// walls light from inside and outside: in the opaque pass, or alpha blended
+// without depth writes in the transparent pass when the tube is translucent
+// (its triangles are not depth sorted, so overlapping walls blend in draw
+// order). Hidden trip ranges are dropped by compacting the index buffer
+// whenever the published mask changes. The wireframe overlay is a second
+// pipeline in line polygon mode, available on backends that support
+// QRhi::NonFillPolygonMode.
 class cwRHIPassageTube : public cwRHIObject
 {
 public:
@@ -43,20 +49,25 @@ private:
         float ambient;
         float yUp;
         float pad[2];
+        float clipPlane[4];
+        float clipEnabled;
+        float clipPad[3];
     };
 
     enum class PipelineKind {
         Fill,
+        TranslucentFill,
         Wireframe
     };
 
     void uploadVertices(QRhi* rhi, QRhiResourceUpdateBatch* batch);
     void uploadVisibleIndices(QRhi* rhi, QRhiResourceUpdateBatch* batch);
-    void createUniform(QRhi* rhi, QRhiResourceUpdateBatch* batch);
+    void uploadUniform(QRhi* rhi, QRhiResourceUpdateBatch* batch);
     void reportGpuBytes();
 
     cwRhiPipelineRecord* acquirePipeline(const RenderData& data, PipelineKind kind);
-    void ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer);
+    void ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* renderer,
+                               const cwRhiPipelineRecord* record);
     cwRhiPipelineKey buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
                                       int sampleCount,
                                       PipelineKind kind) const;
@@ -81,6 +92,10 @@ private:
 
     cwTracked<cwRenderPassageTube::GeometryState> m_geometry;
     bool m_wireframe = false;
+    float m_opacity = 1.0f;
+    QVector4D m_clipPlane;
+    bool m_clipEnabled = false;
+    bool m_uniformStale = true;
 };
 
 #endif // CWRHIPASSAGETUBE_H

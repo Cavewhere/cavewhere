@@ -10,6 +10,7 @@
 layout(location = 0) in vec3 position;
 
 layout(location = 0) out vec3 vViewPosition;
+layout(location = 1) out vec3 vWorldPosition;
 
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
@@ -23,5 +24,6 @@ void main(void)
 {
     vec4 worldPosition = vec4(position, 1.0);
     vViewPosition = (viewMatrix * worldPosition).xyz;
+    vWorldPosition = position;
     gl_Position = viewProjectionMatrix * worldPosition;
 }

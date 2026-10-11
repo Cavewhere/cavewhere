@@ -18,17 +18,22 @@
 #include <QBox3D>
 #include <QQmlEngine>
 #include <QVector3D>
+#include <QVector4D>
 #include <QVector>
 
-// Draws a cwPassageTubeMesh: flat shaded, two-sided, opaque. The tube is
-// deliberately absent from picking, so station snapping keeps hitting the
-// line plot inside it.
+// Draws a cwPassageTubeMesh: flat shaded and two-sided, opaque or translucent.
+// A clip plane cuts the tube open, discarding the side where
+// dot((world, 1), clipPlane) > 0. The tube is deliberately absent from
+// picking, so station snapping keeps hitting the line plot inside it.
 class cwRenderPassageTube : public cwRenderObject
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(RenderPassageTube)
 
     Q_PROPERTY(bool wireframe READ wireframe WRITE setWireframe NOTIFY wireframeChanged)
+    Q_PROPERTY(double opacity READ opacity WRITE setOpacity NOTIFY opacityChanged)
+    Q_PROPERTY(QVector4D clipPlane READ clipPlane WRITE setClipPlane NOTIFY clipPlaneChanged)
+    Q_PROPERTY(bool clipEnabled READ clipEnabled WRITE setClipEnabled NOTIFY clipEnabledChanged)
 
     friend class cwRHIPassageTube;
 
@@ -50,6 +55,17 @@ public:
     bool wireframe() const;
     void setWireframe(bool wireframe);
 
+    // Below 1 the walls draw blended in the transparent pass without writing
+    // depth, so interior faces show through.
+    double opacity() const;
+    void setOpacity(double opacity);
+
+    QVector4D clipPlane() const;
+    void setClipPlane(const QVector4D& clipPlane);
+
+    bool clipEnabled() const;
+    void setClipEnabled(bool clipEnabled);
+
     QVector<QVector3D> positions() const;
     QVector<quint32> indices() const;
     QVector<cwPassageTubeMesh::VertexRange> tripIndexRanges() const;
@@ -63,6 +79,9 @@ public:
 
 signals:
     void wireframeChanged();
+    void opacityChanged();
+    void clipPlaneChanged();
+    void clipEnabledChanged();
 
 protected:
     cwRHIObject* createRHIObject() override;
@@ -82,6 +101,9 @@ private:
 
     cwTracked<GeometryState> m_geometry;
     bool m_wireframe = false;
+    double m_opacity = 1.0;
+    QVector4D m_clipPlane;
+    bool m_clipEnabled = false;
     QVector<cwPassageTubeMesh::VertexRange> m_tripIndexRanges;
 
     // Authoring copy of the per-index mask; consumers read the published store entry.
@@ -94,6 +116,21 @@ private:
 inline bool cwRenderPassageTube::wireframe() const
 {
     return m_wireframe;
+}
+
+inline double cwRenderPassageTube::opacity() const
+{
+    return m_opacity;
+}
+
+inline QVector4D cwRenderPassageTube::clipPlane() const
+{
+    return m_clipPlane;
+}
+
+inline bool cwRenderPassageTube::clipEnabled() const
+{
+    return m_clipEnabled;
 }
 
 inline QVector<QVector3D> cwRenderPassageTube::positions() const

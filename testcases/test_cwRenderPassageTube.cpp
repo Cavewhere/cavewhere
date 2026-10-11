@@ -205,6 +205,33 @@ TEST_CASE("cwRenderPassageTube wireframe property notifies on change",
     CHECK(spy.count() == 2);
 }
 
+TEST_CASE("cwRenderPassageTube opacity and clip plane notify on change",
+          "[PassageTube][cwRenderPassageTube]")
+{
+    cwRenderPassageTube tube;
+    CHECK(tube.opacity() == 1.0);
+    CHECK_FALSE(tube.clipEnabled());
+
+    QSignalSpy opacitySpy(&tube, &cwRenderPassageTube::opacityChanged);
+    QSignalSpy planeSpy(&tube, &cwRenderPassageTube::clipPlaneChanged);
+    QSignalSpy enabledSpy(&tube, &cwRenderPassageTube::clipEnabledChanged);
+
+    const QVector4D plane(1.0f, 0.0f, 0.0f, -2.0f);
+    tube.setOpacity(0.5);
+    tube.setClipPlane(plane);
+    tube.setClipEnabled(true);
+    tube.setOpacity(0.5);
+    tube.setClipPlane(plane);
+    tube.setClipEnabled(true);
+
+    CHECK(tube.opacity() == 0.5);
+    CHECK(tube.clipPlane() == plane);
+    CHECK(tube.clipEnabled());
+    CHECK(opacitySpy.count() == 1);
+    CHECK(planeSpy.count() == 1);
+    CHECK(enabledSpy.count() == 1);
+}
+
 TEST_CASE("cwRenderPassageTube stays out of picking",
           "[PassageTube][cwRenderPassageTube]")
 {

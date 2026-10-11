@@ -76,6 +76,36 @@ void cwRenderPassageTube::setWireframe(bool wireframe)
     update();
 }
 
+void cwRenderPassageTube::setOpacity(double opacity)
+{
+    if (m_opacity == opacity) {
+        return;
+    }
+    m_opacity = opacity;
+    emit opacityChanged();
+    update();
+}
+
+void cwRenderPassageTube::setClipPlane(const QVector4D& clipPlane)
+{
+    if (m_clipPlane == clipPlane) {
+        return;
+    }
+    m_clipPlane = clipPlane;
+    emit clipPlaneChanged();
+    update();
+}
+
+void cwRenderPassageTube::setClipEnabled(bool clipEnabled)
+{
+    if (m_clipEnabled == clipEnabled) {
+        return;
+    }
+    m_clipEnabled = clipEnabled;
+    emit clipEnabledChanged();
+    update();
+}
+
 void cwRenderPassageTube::updateVisibility()
 {
     cwRenderObject::updateVisibility();

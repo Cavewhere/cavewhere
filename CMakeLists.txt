@@ -366,6 +366,11 @@ if(BUILD_TESTING)
     cw_bundle_proj_data(cavewhere-qml-test proj)
 endif()
 
+# Developer tool for checking passage tubes by eye; desktop only, not installed.
+if(NOT MOBILE_BUILD)
+    add_subdirectory(tube-gallery)
+endif()
+
 #### CaveWhere ####
 # if(APPLE)
 #     set(MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/Info.plist.in)
