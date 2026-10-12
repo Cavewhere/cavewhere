@@ -203,6 +203,23 @@ QC.ApplicationWindow {
         failingFirst: failingFirstId.checked
     }
 
+    component IssueMarker: QQ.Rectangle {
+        id: issueMarkerId
+
+        required property QQ.vector3d modelData
+        required property TransformUpdater transformUpdater
+
+        readonly property point viewPoint: {
+            issueMarkerId.transformUpdater.matrix
+            return issueMarkerId.transformUpdater.mapModelToViewport(issueMarkerId.modelData)
+        }
+
+        x: viewPoint.x - width / 2
+        y: viewPoint.y - height / 2
+        radius: width / 2
+        border.color: Theme.textInverse
+    }
+
     Scene {
         id: sceneId
     }
@@ -436,25 +453,24 @@ QC.ApplicationWindow {
                 }
 
                 QQ.Repeater {
-                    model: issuesId.checked ? galleryModelId.issuePositions : []
+                    model: issuesId.checked ? galleryModelId.warningPositions : []
 
-                    delegate: QQ.Rectangle {
-                        id: markerId
-
-                        required property QQ.vector3d modelData
-
-                        readonly property point viewPoint: {
-                            transformUpdaterId.matrix
-                            return transformUpdaterId.mapModelToViewport(markerId.modelData)
-                        }
-
-                        x: viewPoint.x - width / 2
-                        y: viewPoint.y - height / 2
+                    delegate: IssueMarker {
+                        transformUpdater: transformUpdaterId
                         width: rootId.markerSize
                         height: rootId.markerSize
-                        radius: width / 2
+                        color: Theme.warning
+                    }
+                }
+
+                QQ.Repeater {
+                    model: issuesId.checked ? galleryModelId.issuePositions : []
+
+                    delegate: IssueMarker {
+                        transformUpdater: transformUpdaterId
+                        width: rootId.markerSize
+                        height: rootId.markerSize
                         color: Theme.errorText
-                        border.color: Theme.textInverse
                     }
                 }
             }

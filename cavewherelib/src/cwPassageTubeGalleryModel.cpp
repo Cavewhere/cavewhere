@@ -47,6 +47,16 @@ QString vectorText(const QVector3D& vector)
         .arg(vector.z(), 0, 'f', 2);
 }
 
+QVector<QVector3D> positionsOf(const QVector<cwPassageTubeMeshCheck::Issue>& issues)
+{
+    QVector<QVector3D> positions;
+    positions.reserve(issues.size());
+    for (const cwPassageTubeMeshCheck::Issue& issue : issues) {
+        positions.append(issue.position);
+    }
+    return positions;
+}
+
 } // namespace
 
 cwPassageTubeGalleryModel::cwPassageTubeGalleryModel(QObject* parent) :
@@ -272,12 +282,12 @@ QString cwPassageTubeGalleryModel::reportText() const
 
 QVector<QVector3D> cwPassageTubeGalleryModel::issuePositions() const
 {
-    QVector<QVector3D> positions;
-    positions.reserve(m_current.report.issues.size());
-    for (const cwPassageTubeMeshCheck::Issue& issue : m_current.report.issues) {
-        positions.append(issue.position);
-    }
-    return positions;
+    return positionsOf(m_current.report.issues);
+}
+
+QVector<QVector3D> cwPassageTubeGalleryModel::warningPositions() const
+{
+    return positionsOf(m_current.report.warnings);
 }
 
 QStringList cwPassageTubeGalleryModel::issueTexts() const

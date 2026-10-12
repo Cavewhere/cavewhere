@@ -1998,20 +1998,28 @@ QVector<QPointF> planarPolygon(const Ring& ring)
     return polygon;
 }
 
-// Collects triangles per trip so each trip's indices end up contiguous.
+// Collects triangles per trip so each trip's indices end up contiguous, and
+// records the chain that emitted each one.
 class MeshWriter
 {
 public:
-    MeshWriter(cwPassageTubeMesh& mesh, QSet<quint32>& intendedCreaseVertices) :
-        m_mesh(mesh),
-        m_intendedCreaseVertices(intendedCreaseVertices)
+    explicit MeshWriter(cwPassageTubeBuilder::Debug& debug) :
+        m_debug(debug),
+        m_mesh(debug.mesh)
     {}
+
+    // The chain the following triangles belong to, and whether they are a
+    // zip band.
+    void setSource(int chain, bool isZipBand = false)
+    {
+        m_source = {chain, isZipBand};
+    }
 
     // A cap's center, where the fan around it may fold sharply.
     quint32 addCapCenter(const QVector3D& position)
     {
         const quint32 index = addRing({position});
-        m_intendedCreaseVertices.insert(index);
+        m_debug.intendedCreaseVertices.insert(index);
         return index;
     }
 
@@ -2029,7 +2037,8 @@ public:
             m_tripOrder.append(tripId);
             it = m_trianglesByTrip.insert(tripId, {});
         }
-        it->append(QVector<quint32> {a, b, c});
+        it->triangles.append(QVector<quint32> {a, b, c});
+        it->sources.append(m_source);
     }
 
     // Side quads between two rings of resolution vertices, ring b further
@@ -2100,10 +2109,14 @@ public:
     void finish()
     {
         for (const QUuid& tripId : std::as_const(m_tripOrder)) {
-            const QVector<quint32>& triangles = m_trianglesByTrip.value(tripId);
-            m_mesh.tripIndexRanges.append({static_cast<int>(m_mesh.indices.size()), static_cast<int>(triangles.size())});
+            const TripTriangles& trip = m_trianglesByTrip.value(tripId);
+            m_mesh.tripIndexRanges.append({static_cast<int>(m_mesh.indices.size()), static_cast<int>(trip.triangles.size())});
             m_mesh.tripUuids.append(tripId);
-            m_mesh.indices.append(triangles);
+            m_mesh.indices.append(trip.triangles);
+            for (const Source& source : trip.sources) {
+                m_debug.triangleChain.append(source.chain);
+                m_debug.triangleInZipBand.append(source.isZipBand);
+            }
         }
     }
 
@@ -2130,10 +2143,21 @@ private:
         }
     }
 
+    struct Source {
+        int chain = -1;
+        bool isZipBand = false;
+    };
+
+    struct TripTriangles {
+        QVector<quint32> triangles;
+        QVector<Source> sources;
+    };
+
+    cwPassageTubeBuilder::Debug& m_debug;
     cwPassageTubeMesh& m_mesh;
-    QSet<quint32>& m_intendedCreaseVertices;
+    Source m_source;
     QVector<QUuid> m_tripOrder;
-    QHash<QUuid, QVector<quint32>> m_trianglesByTrip;
+    QHash<QUuid, TripTriangles> m_trianglesByTrip;
 };
 
 // Where a chain's rings and mouths landed in the mesh, so the zip bands can
@@ -2303,6 +2327,7 @@ void addZipBands(MeshWriter& writer, const QVector<Chain>& chains, const QVector
                 return first < 0 ? first : first + corner.column;
             };
 
+            writer.setSource(window.armChain);
             const qint64 endRingFirst = window.isArmStart ? arm.ringFirst.first() : arm.ringFirst.last();
             if (mouthFirst >= 0 && endRingFirst >= 0) {
                 const int resolution = window.mouthCorners.size();
@@ -2323,6 +2348,7 @@ void addZipBands(MeshWriter& writer, const QVector<Chain>& chains, const QVector
                 }
             }
 
+            writer.setSource(c, true);
             for (const std::array<ZipCorner, 3>& triangle : window.zip) {
                 const qint64 a = indexOf(triangle.at(0));
                 const qint64 b = indexOf(triangle.at(1));
@@ -2364,11 +2390,13 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildDebug(const cwCavingRegio
     }
     cwPassageTubeJunction::stitchJunctions(debug.legs, debug.chains, options, debug.warnings);
 
-    MeshWriter writer(debug.mesh, debug.intendedCreaseVertices);
+    MeshWriter writer(debug);
     QVector<ChainVertices> placed;
     placed.reserve(debug.chains.size());
-    for (Chain& chain : debug.chains) {
+    for (int c = 0; c < debug.chains.size(); ++c) {
+        Chain& chain = debug.chains[c];
         placeChainVertices(chain);
+        writer.setSource(c);
         placed.append(addChainMesh(writer, debug.legs, chain, debug.warnings));
     }
     addZipBands(writer, debug.chains, placed);

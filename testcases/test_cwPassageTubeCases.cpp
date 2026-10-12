@@ -215,28 +215,17 @@ QVector3D position(const Cases::Trip& trip, const QString& name)
 
 const QString kPhakeCave = QStringLiteral("Phake Cave");
 
-// The issues Phake Cave keeps, by the station nearest each one. a2, a4, a6,
-// a9 and a10 read 0 on one side, so their rings and the a10 mouth bunch
-// vertices a few centimeters apart, and the strips and zip bands beside them
-// are thin, fold or cross; a3's walls lie off the tube beside a2, a defect it
-// had before the merge.
+// The issues Phake Cave keeps, by the station nearest each one. a10 reads 0
+// on one side, so its ring and mouth bunch vertices a few centimeters apart,
+// and the zip band beside them folds and crosses the arm's strip.
 struct AcceptedIssue {
     QString station;
     cwPassageTubeMeshCheck::Type type;
 };
 
 const QVector<AcceptedIssue> kPhakeCaveIssues {
-    {QStringLiteral("a2"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a2"), cwPassageTubeMeshCheck::SelfIntersection},
-    {QStringLiteral("a2"), cwPassageTubeMeshCheck::WallMissed},
-    {QStringLiteral("a3"), cwPassageTubeMeshCheck::WallMissed},
-    {QStringLiteral("a4"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a4"), cwPassageTubeMeshCheck::SelfIntersection},
-    {QStringLiteral("a6"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a9"), cwPassageTubeMeshCheck::SliverTriangle},
     {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
     {QStringLiteral("a10"), cwPassageTubeMeshCheck::SelfIntersection},
-    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SliverTriangle},
 };
 
 QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
@@ -406,15 +395,15 @@ std::pair<unsigned int, int> randomSurvey(int seed)
     return {static_cast<unsigned int>(seed), 1 + (seed - 1) % kMaxRandomJunctions};
 }
 
-// Random seeds whose junctions the merge leaves unclean, which T07l takes
-// up with the random clean tests. Their passages build clean without the
-// junctions (see the junction-free tests). Every one reports a Crease of
-// 150° to 180° where an arm's last strip meets its zip band at the mouth:
-// the arm is about as tall or wide as the through, its station reads a few
-// centimeters to the wall the arm leaves through, or it leaves a shaft
-// station or the inside of a bend. Most also report SliverTriangle and
-// SelfIntersection in the zip band, or where two arms' mouths share
-// through quads.
+// Random seeds whose junctions the merge leaves unclean. Their passages
+// build clean without the junctions (see the junction-free tests), and
+// passages that run into each other are warnings. Every one reports a
+// Crease of 150° to 180° where an arm's last strip meets its zip band at the
+// mouth: the arm is about as tall or wide as the through, its station reads
+// a few centimeters to the wall the arm leaves through, or it leaves a shaft
+// station or the inside of a bend. About half also report SelfIntersection
+// and SliverTriangle where the zip band crosses its arm or a second arm's
+// mouth, and seed 40 a WallMissed.
 const QVector<int> kJunctionLimitRandomSeeds {1, 2, 4, 5, 6, 8, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
                                              27, 28, 29, 30, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 46, 47, 48, 50};
 
@@ -643,7 +632,9 @@ TEST_CASE("cwPassageTubeCases sweep subsample builds clean meshes", "[PassageTub
 
 // A smoke subsample of the sweep cases at the stated junction limits or
 // with a junction the merge leaves unclean; see isOpenSweepCase and
-// overlapsMouths for what they report.
+// overlapsMouths for what they report. Passages that run into each other
+// are warnings; what fails is a zip band that crosses or folds against the
+// arm it joins or a second arm (SelfIntersection, Crease, SliverTriangle).
 TEST_CASE("cwPassageTubeCases sweep subsample at a junction limit builds clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
@@ -847,8 +838,10 @@ TEST_CASE("cwPassageTubeCases wild random surveys build no degenerate triangles"
     CHECK(degenerate == 0);
 }
 
-// Uniform bearings and independent readings make hairpin cones, passages run
-// through each other and walls off a ring that a station's facing tilts.
+// Uniform bearings and independent readings make hairpin cones (Crease,
+// SliverTriangle, SelfIntersection), radius jumps between samples
+// (RadiusJump) and walls off a ring that a station's facing tilts
+// (WallMissed).
 TEST_CASE("cwPassageTubeCases wild random surveys build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
 {
     const auto [seed, junctions] = randomSurvey(GENERATE(range(1, kRandomSeedCount + 1)));

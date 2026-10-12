@@ -221,6 +221,11 @@ public:
         // Mesh vertices where a sharp fold is by design: the centers of fan
         // caps and trip boundaries.
         QSet<quint32> intendedCreaseVertices;
+        // One entry per mesh triangle: the chain whose rings, cap or mouth
+        // strip emitted it. A zip band's triangles belong to the through
+        // chain and are marked in triangleInZipBand.
+        QVector<int> triangleChain;
+        QVector<bool> triangleInZipBand;
     };
 
     static cwPassageTubeMesh build(const cwCavingRegionData& region,

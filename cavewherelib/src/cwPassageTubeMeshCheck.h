@@ -38,6 +38,7 @@ public:
 
     static constexpr double kMinTriangleArea = 1e-6;
     static constexpr double kMaxAspectRatio = 50.0;
+    static constexpr double kMinSliverAltitude = 0.02;
     static constexpr double kWeldTolerance = 1e-5;
     static constexpr double kMaxCreaseDegrees = 150.0;
     static constexpr double kMaxRadiusRatio = 3.0;
@@ -51,6 +52,7 @@ public:
         DegenerateTriangle,
         SliverTriangle,
         SelfIntersection,
+        PassageOverlap,
         NestedShell,
         Crease,
         RadiusJump,
@@ -77,10 +79,14 @@ public:
         double volume = 0.0;
     };
 
+    // issues are the glitches a viewer would see. warnings are what a viewer
+    // sees as intended: two passages running into each other draw as their
+    // union, a hard seam.
     struct Report {
         QVector<Issue> issues;
         int componentCount = 0;
         QVector<ComponentStats> components;
+        QVector<Issue> warnings;
     };
 
     struct Options {
@@ -90,6 +96,7 @@ public:
 
         double minTriangleArea = kMinTriangleArea;
         double maxAspectRatio = kMaxAspectRatio;
+        double minSliverAltitudeMeters = kMinSliverAltitude;
         double maxCreaseDegrees = kMaxCreaseDegrees;
         double maxRadiusRatio = kMaxRadiusRatio;
         double wallToleranceMeters = kWallTolerance;
@@ -106,11 +113,19 @@ public:
     // Positive when the triangles wind counter-clockwise seen from outside.
     static double signedVolume(const cwPassageTubeMesh& mesh, const Range& range);
 
+    // A SliverTriangle is both thinner than maxAspectRatio allows and
+    // narrower than minSliverAltitudeMeters at its shortest altitude.
     static QVector<Issue> degenerateTriangles(const cwPassageTubeMesh& mesh,
                                               const Range& range,
                                               const Options& options = Options());
 
-    static QVector<Issue> selfIntersections(const cwPassageTubeMesh& mesh, const Range& range);
+    // Each crossing between two triangles. One between triangles of two
+    // chains, neither of them in a zip band, is a PassageOverlap; the rest
+    // are SelfIntersection, including every crossing of a triangle that
+    // debug.triangleChain leaves out.
+    static QVector<Issue> selfIntersections(const cwPassageTubeMesh& mesh,
+                                            const Range& range,
+                                            const cwPassageTubeBuilder::Debug& debug = cwPassageTubeBuilder::Debug());
 
     // Components, joined through shared vertices, that lie inside another.
     // A pair of components that crosses in selfIntersections is left out:
@@ -137,6 +152,7 @@ public:
                                          const Options& options = Options());
 
     // Runs every check; the ring and wall checks run when debug has chains.
+    // PassageOverlap goes to Report::warnings, every other kind to issues.
     static Report check(const cwPassageTubeMesh& mesh,
                         const cwPassageTubeBuilder::Debug& debug = cwPassageTubeBuilder::Debug(),
                         const Options& options = Options());

@@ -37,6 +37,7 @@ constexpr double kOrientEpsilon = 1e-12;
 // their planes a hair apart, where the line the planes cross along is noise.
 constexpr double kParallelEpsilon = 1e-5;
 constexpr double kRayEpsilon = 1e-9;
+constexpr int kNoChain = -1;
 constexpr double kStationTolerance = 1e-4;
 constexpr double kFoldBackTolerance = 1e-4;
 constexpr double kMinCellSize = 1e-3;
@@ -705,19 +706,36 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::degenerateTriangl
             issues.append(Issue {DegenerateTriangle, centroid, QStringLiteral("area %1 m²").arg(area), triangle.number});
             continue;
         }
-        // Longest edge over shortest altitude; the shortest altitude falls on the longest edge.
-        const double aspectRatio = longest * longest / (2.0 * area);
-        if (aspectRatio > options.maxAspectRatio) {
-            issues.append(Issue {SliverTriangle, centroid, QStringLiteral("aspect ratio %1").arg(aspectRatio), triangle.number});
+        // The shortest altitude falls on the longest edge.
+        const double altitude = 2.0 * area / longest;
+        const double aspectRatio = longest / altitude;
+        if (aspectRatio > options.maxAspectRatio && altitude < options.minSliverAltitudeMeters) {
+            issues.append(Issue {SliverTriangle, centroid,
+                                 QStringLiteral("aspect ratio %1, altitude %2 m").arg(aspectRatio).arg(altitude),
+                                 triangle.number});
         }
     }
     return issues;
 }
 
-QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::selfIntersections(const cwPassageTubeMesh& mesh, const Range& range)
+QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::selfIntersections(const cwPassageTubeMesh& mesh,
+                                                                                 const Range& range,
+                                                                                 const cwPassageTubeBuilder::Debug& debug)
 {
     const QVector<Triangle> triangles = trianglesOf(mesh, range);
     const TriangleGrid grid(triangles);
+
+    const auto passageChainOf = [&](int triangle) {
+        const bool isPassage = triangle < debug.triangleChain.size()
+                               && triangle < debug.triangleInZipBand.size()
+                               && !debug.triangleInZipBand.at(triangle);
+        return isPassage ? debug.triangleChain.at(triangle) : kNoChain;
+    };
+    const auto firstStation = [&](int chain) {
+        const cwPassageTubeBuilder::ChainLeg& chainLeg = debug.chains.at(chain).legs.first();
+        const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+        return chainLeg.reversed ? leg.to : leg.from;
+    };
 
     QVector<Issue> issues;
     for (auto it = grid.cells().cbegin(); it != grid.cells().cend(); ++it) {
@@ -740,9 +758,16 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::selfIntersections
                 if (crossing) {
                     const int first = std::min(a.number, b.number);
                     const int second = std::max(a.number, b.number);
-                    issues.append(Issue {SelfIntersection, crossing->toQVector3D(),
-                                         QStringLiteral("triangles %1 and %2 cross").arg(first).arg(second),
-                                         first, second});
+                    const int firstChain = passageChainOf(first);
+                    const int secondChain = passageChainOf(second);
+                    const bool isOverlap = firstChain != kNoChain && secondChain != kNoChain && firstChain != secondChain;
+                    const QString detail = isOverlap
+                        ? QStringLiteral("the passages from %1 and %2 run into each other at triangles %3 and %4")
+                              .arg(firstStation(firstChain), firstStation(secondChain))
+                              .arg(first).arg(second)
+                        : QStringLiteral("triangles %1 and %2 cross").arg(first).arg(second);
+                    issues.append(Issue {isOverlap ? PassageOverlap : SelfIntersection, crossing->toQVector3D(),
+                                         detail, first, second});
                 }
             }
         }
@@ -1037,8 +1062,14 @@ cwPassageTubeMeshCheck::Report cwPassageTubeMeshCheck::check(const cwPassageTube
 
     report.issues.append(degenerateTriangles(mesh, whole, options));
 
-    const QVector<Issue> crossings = selfIntersections(mesh, whole);
-    report.issues.append(crossings);
+    const QVector<Issue> crossings = selfIntersections(mesh, whole, debug);
+    for (const Issue& crossing : crossings) {
+        if (crossing.type == PassageOverlap) {
+            report.warnings.append(crossing);
+        } else {
+            report.issues.append(crossing);
+        }
+    }
     report.issues.append(nestedShells(mesh, whole, crossings));
 
     if (!debug.chains.isEmpty()) {
@@ -1065,6 +1096,8 @@ QString cwPassageTubeMeshCheck::typeName(Type type)
         return QStringLiteral("SliverTriangle");
     case SelfIntersection:
         return QStringLiteral("SelfIntersection");
+    case PassageOverlap:
+        return QStringLiteral("PassageOverlap");
     case NestedShell:
         return QStringLiteral("NestedShell");
     case Crease:
@@ -1084,14 +1117,18 @@ QString cwPassageTubeMeshCheck::typeName(Type type)
 QString cwPassageTubeMeshCheck::toText(const Report& report)
 {
     QStringList lines;
-    lines.reserve(report.issues.size());
-    for (const Issue& issue : report.issues) {
-        lines.append(QStringLiteral("%1 at (%2, %3, %4): %5")
-                         .arg(typeName(issue.type))
-                         .arg(issue.position.x())
-                         .arg(issue.position.y())
-                         .arg(issue.position.z())
-                         .arg(issue.detail));
-    }
+    lines.reserve(report.issues.size() + report.warnings.size());
+    const auto appendLines = [&](const QVector<Issue>& issues, const QString& prefix) {
+        for (const Issue& issue : issues) {
+            lines.append(QStringLiteral("%1%2 at (%3, %4, %5): %6")
+                             .arg(prefix, typeName(issue.type))
+                             .arg(issue.position.x())
+                             .arg(issue.position.y())
+                             .arg(issue.position.z())
+                             .arg(issue.detail));
+        }
+    };
+    appendLines(report.issues, QString());
+    appendLines(report.warnings, QStringLiteral("warning: "));
     return lines.join(QLatin1Char('\n'));
 }

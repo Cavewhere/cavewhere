@@ -55,6 +55,7 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(QString parameters READ parameters NOTIFY currentChanged)
     Q_PROPERTY(QString reportText READ reportText NOTIFY currentChanged)
     Q_PROPERTY(QVector<QVector3D> issuePositions READ issuePositions NOTIFY currentChanged)
+    Q_PROPERTY(QVector<QVector3D> warningPositions READ warningPositions NOTIFY currentChanged)
     Q_PROPERTY(QStringList issueTexts READ issueTexts NOTIFY currentChanged)
     Q_PROPERTY(QVector3D boundsCenter READ boundsCenter NOTIFY currentChanged)
     Q_PROPERTY(double boundsRadius READ boundsRadius NOTIFY currentChanged)
@@ -108,6 +109,7 @@ public:
     QString parameters() const;
     QString reportText() const;
     QVector<QVector3D> issuePositions() const;
+    QVector<QVector3D> warningPositions() const;
     QStringList issueTexts() const;
     QVector3D boundsCenter() const;
     double boundsRadius() const;

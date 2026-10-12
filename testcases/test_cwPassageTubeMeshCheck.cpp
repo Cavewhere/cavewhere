@@ -10,6 +10,7 @@
 #include <catch2/catch_approx.hpp>
 
 //Our includes
+#include "cwPassageTubeCases.h"
 #include "cwPassageTubeMeshCheck.h"
 
 //Std includes
@@ -19,6 +20,9 @@
 namespace {
 
 using Check = cwPassageTubeMeshCheck;
+using Cases = cwPassageTubeCases;
+
+constexpr int kBoxTriangleCount = 12;
 
 // The corner of a box at bit x = 1, y = 2, z = 4 of the index.
 QVector3D boxCorner(const QVector3D& lo, const QVector3D& hi, int corner)
@@ -84,6 +88,48 @@ void checkOnlyType(const Check::Report& report, Check::Type type, int count)
 {
     INFO(Check::toText(report).toStdString());
     CHECK(issueTypes(report) == QVector<Check::Type>(count, type));
+}
+
+bool allOfType(const QVector<Check::Issue>& issues, Check::Type type)
+{
+    return std::all_of(issues.cbegin(), issues.cend(), [type](const Check::Issue& issue) {
+        return issue.type == type;
+    });
+}
+
+bool anyOfType(const QVector<Check::Issue>& issues, Check::Type type)
+{
+    return std::any_of(issues.cbegin(), issues.cend(), [type](const Check::Issue& issue) {
+        return issue.type == type;
+    });
+}
+
+Cases::Station station(const QString& name, const QVector3D& position, const QString& radius)
+{
+    return Cases::Station {name, position, {radius, radius, radius, radius}};
+}
+
+// Two straight passages on separate chunks that cross at 90° without sharing
+// a station: a1-a2 east with 1 m walls and b1-b2 north with 0.8 m walls.
+cwPassageTubeBuilder::Debug crossingPassages()
+{
+    Cases::Trip trip;
+    trip.chunks = {
+        {station(QStringLiteral("a1"), QVector3D(-5, 0, 0), QStringLiteral("1")),
+         station(QStringLiteral("a2"), QVector3D(5, 0, 0), QStringLiteral("1"))},
+        {station(QStringLiteral("b1"), QVector3D(0, -5, 0), QStringLiteral("0.8")),
+         station(QStringLiteral("b2"), QVector3D(0, 5, 0), QStringLiteral("0.8"))},
+    };
+    const Cases::Survey survey = Cases::toSurvey(trip);
+    return cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, cwPassageTubeBuilder::Options());
+}
+
+int nearestVertex(const cwPassageTubeMesh& mesh, const QVector3D& point)
+{
+    const auto nearest = std::min_element(mesh.positions.cbegin(), mesh.positions.cend(), [&](const QVector3D& a, const QVector3D& b) {
+        return a.distanceToPoint(point) < b.distanceToPoint(point);
+    });
+    return static_cast<int>(std::distance(mesh.positions.cbegin(), nearest));
 }
 
 } // namespace
@@ -155,7 +201,7 @@ TEST_CASE("cwPassageTubeMeshCheck reports zero-area and sliver triangles", "[Pas
     mesh.positions = {
         QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0, 1, 0),
         QVector3D(2, 0, 0),
-        QVector3D(10, 0, 0), QVector3D(5, 0.1f, 0),
+        QVector3D(10, 0, 0), QVector3D(5, 0.005f, 0),
     };
     mesh.indices = {0, 1, 2, 0, 1, 3};
     const QVector<Check::Issue> degenerate = Check::degenerateTriangles(mesh, Check::wholeMesh(mesh));
@@ -192,6 +238,78 @@ TEST_CASE("cwPassageTubeMeshCheck reports interpenetrating boxes and passes them
     INFO(Check::toText(apartReport).toStdString());
     CHECK(apartReport.issues.isEmpty());
     CHECK(apartReport.componentCount == 2);
+}
+
+TEST_CASE("cwPassageTubeMeshCheck classifies a crossing between two passages as an overlap", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    SECTION("Two tubes crossing at 90°") {
+        const cwPassageTubeBuilder::Debug debug = crossingPassages();
+        REQUIRE(debug.triangleChain.size() == debug.mesh.indices.size() / 3);
+        const Check::Report report = Check::check(debug.mesh, debug);
+        INFO(Check::toText(report).toStdString());
+        CHECK(report.issues.isEmpty());
+        CHECK_FALSE(report.warnings.isEmpty());
+        CHECK(allOfType(report.warnings, Check::PassageOverlap));
+        CHECK(report.warnings.first().detail.contains(QStringLiteral("a1")));
+        CHECK(report.warnings.first().detail.contains(QStringLiteral("b1")));
+    }
+
+    SECTION("A tube whose ring is folded on itself") {
+        cwPassageTubeBuilder::Debug debug = crossingPassages();
+        // Pulls a vertex of a1-a2's right wall out through its left wall,
+        // away from b1-b2.
+        const int folded = nearestVertex(debug.mesh, QVector3D(-3, -1, 0));
+        debug.mesh.positions[folded] = QVector3D(-3, 2, 0);
+        const QVector<Check::Issue> crossings = Check::selfIntersections(debug.mesh, Check::wholeMesh(debug.mesh), debug);
+        INFO(Check::toText({crossings}).toStdString());
+        CHECK(anyOfType(crossings, Check::SelfIntersection));
+    }
+
+    SECTION("Crossing boxes by the chains that emitted them") {
+        cwPassageTubeMesh mesh = unitCube();
+        appendBox(mesh, QVector3D(0.5f, 0.5f, 0.5f), QVector3D(1.5f, 1.5f, 1.5f));
+        cwPassageTubeBuilder::Debug debug;
+        debug.triangleChain = QVector<int>(kBoxTriangleCount, 0) + QVector<int>(kBoxTriangleCount, 1);
+        debug.triangleInZipBand = QVector<bool>(2 * kBoxTriangleCount, false);
+        debug.legs = {cwPassageTubeBuilder::Leg {}};
+        cwPassageTubeBuilder::Chain chain;
+        chain.legs = {{0, false}};
+        debug.chains = {chain, chain};
+        const Check::Range whole = Check::wholeMesh(mesh);
+
+        const QVector<Check::Issue> overlaps = Check::selfIntersections(mesh, whole, debug);
+        CHECK_FALSE(overlaps.isEmpty());
+        CHECK(allOfType(overlaps, Check::PassageOverlap));
+
+        // A triangle of the first cube's +x face, which the second cube crosses.
+        constexpr int kZipTriangle = 10;
+        debug.triangleInZipBand[kZipTriangle] = true;
+        const QVector<Check::Issue> withZip = Check::selfIntersections(mesh, whole, debug);
+        CHECK(anyOfType(withZip, Check::SelfIntersection));
+        for (const Check::Issue& issue : withZip) {
+            CHECK((issue.type == Check::SelfIntersection) == (issue.triangle == kZipTriangle));
+        }
+
+        debug.triangleChain = QVector<int>(2 * kBoxTriangleCount, 0);
+        CHECK(allOfType(Check::selfIntersections(mesh, whole, debug), Check::SelfIntersection));
+    }
+}
+
+TEST_CASE("cwPassageTubeMeshCheck keeps large thin triangles", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    // A strip 0.05 m wide along a 3 m leg, where a ring's 0.05 m bin lies
+    // beside its 1 m neighbor: aspect ratio 60 at an altitude of 5 cm.
+    cwPassageTubeMesh mesh;
+    mesh.positions = {QVector3D(0, 0, 0), QVector3D(0, 0.05f, 0), QVector3D(3, 0, 0), QVector3D(3, 0.05f, 0)};
+    mesh.indices = {0, 2, 3, 0, 3, 1};
+    CHECK(Check::degenerateTriangles(mesh, Check::wholeMesh(mesh)).isEmpty());
+
+    // An altitude of 5 mm under a 1 m edge.
+    mesh.positions = {QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(0.5f, 0.005f, 0)};
+    mesh.indices = {0, 1, 2};
+    const QVector<Check::Issue> sliver = Check::degenerateTriangles(mesh, Check::wholeMesh(mesh));
+    REQUIRE(sliver.size() == 1);
+    CHECK(sliver.first().type == Check::SliverTriangle);
 }
 
 TEST_CASE("cwPassageTubeMeshCheck reports a cube nested in another", "[PassageTube][cwPassageTubeMeshCheck]")
