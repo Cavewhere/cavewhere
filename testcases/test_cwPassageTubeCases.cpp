@@ -286,7 +286,7 @@ double planJoinDegrees(const Cases::Trip& trip)
 // within 20° of the through in plan meets its wall in a wedge, and at the
 // mouth's far tip the arm's wall folds against the through's by about 160°,
 // past the crease check's limit (Crease). The other stated limit, two mouths
-// sharing through quads, shows only in the build: see overlapsMouths.
+// that cross, shows only in the build: see overlapsMouths.
 bool joinsAtGrazingAngle(const Cases::Case& entry)
 {
     return planJoinDegrees(entry.trip) <= kGrazingJoinDegrees + kAngleToleranceDegrees;
@@ -324,7 +324,18 @@ bool hasLargeTiltedArm(const Cases::Case& entry)
 //   160° (Crease, SelfIntersection);
 // - a sloped arm meets a through bent 40° at J, and the zip band bridges a
 //   bin jump with thin or folded triangles (Crease, SliverTriangle,
-//   SelfIntersection).
+//   SelfIntersection);
+// - two or three arms share one window at a through bent 40° at J, sloped
+//   or as big as the through, and the zip band folds against an arm's
+//   strip where their mouths come within a few centimeters (Crease,
+//   SliverTriangle, SelfIntersection);
+// - three arms 2.5 times the through's size, whose mouths meet on both
+//   sides of the through so no bridge joins the window's front and back
+//   boundaries: two arms end inside the through (JunctionUnzipped, and the
+//   cone's SelfIntersection);
+// - two arms that share one window at a straight through, oblique or
+//   steep, where the zip band folds against a strip at the neck between
+//   their mouths (Crease, SelfIntersection).
 const QStringList kOpenSweepCases {
     QStringLiteral("plan 90, profile 0, ratio 0.3, 3 arms, bend 0, section x2 past J"),
     QStringLiteral("plan 90, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
@@ -339,6 +350,41 @@ const QStringList kOpenSweepCases {
     QStringLiteral("plan 30, profile 30, ratio 1, 1 arm, bend 40, section x2 past J"),
     QStringLiteral("plan 30, profile -30, ratio 1, 1 arm, bend 40, same section"),
     QStringLiteral("plan 90, profile -30, ratio 1, 1 arm, bend 40, same section"),
+
+    QStringLiteral("plan 30, profile -60, ratio 0.3, 3 arms, bend 40, same section"),
+    QStringLiteral("plan 30, profile 0, ratio 1, 2 arms opposite, bend 40, same section"),
+    QStringLiteral("plan 30, profile 30, ratio 0.3, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 30, profile 30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
+    QStringLiteral("plan 30, profile 60, ratio 0.3, 3 arms, bend 40, same section"),
+    QStringLiteral("plan 45, profile -30, ratio 0.3, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 45, profile -30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
+    QStringLiteral("plan 45, profile -60, ratio 0.3, 2 arms opposite, bend 40, same section"),
+    QStringLiteral("plan 45, profile -60, ratio 0.3, 3 arms, bend 40, same section"),
+    QStringLiteral("plan 45, profile 30, ratio 0.3, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 45, profile 30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
+    QStringLiteral("plan 60, profile -30, ratio 0.3, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 60, profile -30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
+    QStringLiteral("plan 60, profile -60, ratio 0.3, 2 arms opposite, bend 40, same section"),
+    QStringLiteral("plan 60, profile -60, ratio 0.3, 3 arms, bend 40, same section"),
+    QStringLiteral("plan 60, profile 0, ratio 1, 2 arms opposite, bend 40, same section"),
+    QStringLiteral("plan 60, profile 0, ratio 1, 2 arms opposite, bend 40, section x2 past J"),
+    QStringLiteral("plan 60, profile 30, ratio 0.3, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 60, profile 30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
+    QStringLiteral("plan 90, profile -30, ratio 0.3, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 90, profile -30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
+    QStringLiteral("plan 90, profile -30, ratio 1, 2 arms opposite, bend 40, same section"),
+    QStringLiteral("plan 90, profile -60, ratio 0.3, 2 arms opposite, bend 40, same section"),
+    QStringLiteral("plan 90, profile 30, ratio 0.3, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 90, profile 30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
+
+    QStringLiteral("plan 30, profile 0, ratio 2.5, 3 arms, bend 0, section x2 past J"),
+    QStringLiteral("plan 90, profile 0, ratio 2.5, 3 arms, bend 0, same section"),
+    QStringLiteral("plan 90, profile 0, ratio 2.5, 3 arms, bend 0, section x2 past J"),
+
+    QStringLiteral("plan 30, profile -60, ratio 0.3, 2 arms opposite, bend 0, section x2 past J"),
+    QStringLiteral("plan 30, profile 0, ratio 1, 2 arms opposite, bend 0, same section"),
+    QStringLiteral("plan 30, profile 60, ratio 0.3, 2 arms same side, bend 0, section x2 past J"),
+    QStringLiteral("plan 45, profile 60, ratio 0.3, 2 arms same side, bend 0, section x2 past J"),
 };
 
 // Sweep cases kept out of the clean checks by their parameters or name.
@@ -350,13 +396,15 @@ bool isOpenSweepCase(const Cases::Case& entry)
            || kOpenSweepCases.contains(entry.name);
 }
 
-// Two arms whose mouths share through quads, the merge's other stated
-// limit: the second falls back to a fan cap inside the first
-// (SelfIntersection).
+// Two arms whose mouths cross on the through's surface, the merge's other
+// stated limit: the passages run into each other above the through and the
+// second falls back to a fan cap inside the first (SelfIntersection). Arms
+// whose mouths only share through quads are zipped in one window.
 bool overlapsMouths(const cwPassageTubeBuilder::Debug& debug)
 {
     return std::any_of(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
-        return warning.type == cwPassageTubeMesh::Warning::JunctionOverlap;
+        return warning.type == cwPassageTubeMesh::Warning::JunctionOverlap
+               && warning.message.contains(QStringLiteral("run into each other"));
     });
 }
 
@@ -437,9 +485,10 @@ TEST_CASE("cwPassageTubeCases zips a mouth that runs along the through's ceiling
     const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
     REQUIRE(debug.chains.size() == 2);
     REQUIRE(debug.chains.at(0).windows.size() == 1);
-    const cwPassageTubeBuilder::JunctionWindow& window = debug.chains.at(0).windows.first();
-    const cwPassageTubeBuilder::Chain& arm = debug.chains.at(window.armChain);
-    const QVector<QVector3D> mouth = mouthPositions(window.isArmStart ? arm.startMouth : arm.endMouth);
+    REQUIRE(debug.chains.at(0).windows.first().mouths.size() == 1);
+    const cwPassageTubeBuilder::WindowMouth& windowMouth = debug.chains.at(0).windows.first().mouths.first();
+    const cwPassageTubeBuilder::Chain& arm = debug.chains.at(windowMouth.armChain);
+    const QVector<QVector3D> mouth = mouthPositions(windowMouth.isArmStart ? arm.startMouth : arm.endMouth);
     REQUIRE(mouth.size() >= cwPassageTubeBuilder::Options().ringResolution);
 
     const auto isOnMouth = [&](const QVector3D& point) {
@@ -600,12 +649,83 @@ TEST_CASE("cwPassageTubeCases chains the big passage as the through", "[PassageT
     const bool endsAtJunction = isToJunction != small.legs.first().reversed;
     CHECK((endsAtJunction ? small.endCap : small.startCap) == cwPassageTubeBuilder::EndCap::Mouth);
     REQUIRE(through.windows.size() == 1);
-    CHECK(&debug.chains.at(through.windows.first().armChain) == &small);
+    REQUIRE(through.windows.first().mouths.size() == 1);
+    CHECK(&debug.chains.at(through.windows.first().mouths.first().armChain) == &small);
 
     checkCaseBuildsClosed(entry.name.toStdString());
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
     INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
     CHECK(report.issues.isEmpty());
+}
+
+// Two arms as big as the through leave it on opposite sides: each mouth
+// wraps more than half of it, so their windows share the roof and floor
+// quads, and one window zips both mouths.
+TEST_CASE("cwPassageTubeCases merges the windows of opposite arms", "[PassageTube][cwPassageTubeCases]")
+{
+    const Cases::Case& entry = catalogCase("plan 90, profile 0, ratio 1, 2 arms opposite, bend 0, same section");
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    CHECK(std::none_of(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
+        return warning.type == cwPassageTubeMesh::Warning::JunctionOverlap;
+    }));
+    REQUIRE(debug.chains.size() == 3);
+    REQUIRE(debug.chains.at(0).windows.size() == 1);
+    const cwPassageTubeBuilder::JunctionWindow& window = debug.chains.at(0).windows.first();
+    REQUIRE(window.mouths.size() == 2);
+    CHECK(window.mouths.at(0).armChain != window.mouths.at(1).armChain);
+
+    checkCaseBuildsClosed(entry.name.toStdString());
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+}
+
+// Two opposite arms as big as the through take every one of its columns
+// over the rings between their mouths, so the window's edge is two loops,
+// one before the mouths and one past them. Arms larger than the through
+// would continue each other as the through (see "chains the big passage as
+// the through"), so these match it; the through bends past J, so the bridge
+// between the two loops runs along a column over a turning through.
+TEST_CASE("cwPassageTubeCases zips a window that takes the whole circumference", "[PassageTube][cwPassageTubeCases]")
+{
+    const Cases::Case& entry = catalogCase("plan 90, profile 0, ratio 1, 2 arms opposite, bend 40, same section");
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    REQUIRE(debug.chains.size() == 3);
+    REQUIRE(debug.chains.at(0).windows.size() == 1);
+    const cwPassageTubeBuilder::JunctionWindow& window = debug.chains.at(0).windows.first();
+    CHECK(window.mouths.size() == 2);
+    REQUIRE(window.boundaries.size() == 2);
+    for (const QVector<QPair<int, int>>& boundary : window.boundaries) {
+        QSet<int> columns;
+        for (const QPair<int, int>& vertex : boundary) {
+            columns.insert(vertex.second);
+        }
+        CHECK(columns.size() == cwPassageTubeBuilder::Options().ringResolution);
+    }
+
+    checkCaseBuildsClosed(entry.name.toStdString());
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+}
+
+// Where the bridge between a whole-circumference window's two loops runs
+// along a column through the neck between two mouths, the zip band starts
+// on the copy of the bridge beside the inner loop's first vertex, so each
+// side of the bridge gets its own triangles.
+TEST_CASE("cwPassageTubeCases closes windows bridged between two mouths", "[PassageTube][cwPassageTubeCases]")
+{
+    const std::string name = GENERATE(as<std::string>(),
+                                      "plan 20, profile 0, ratio 1, 2 arms opposite, bend 0, same section",
+                                      "plan 20, profile 0, ratio 1, 3 arms, bend 90, same section",
+                                      "plan 30, profile 0, ratio 1, 2 arms opposite, bend 40, same section",
+                                      "plan 45, profile 0, ratio 1, 2 arms opposite, bend 40, same section",
+                                      "plan 60, profile 30, ratio 1, 3 arms, bend 40, same section",
+                                      "plan 90, profile 0, ratio 1, 2 arms same side, bend 90, same section",
+                                      "plan 20, profile -30, ratio 1, 3 arms, bend 90, section x2 past J");
+    checkCaseBuildsClosed(name);
 }
 
 TEST_CASE("cwPassageTubeCases catalog builds closed meshes", "[PassageTube][cwPassageTubeCases]")

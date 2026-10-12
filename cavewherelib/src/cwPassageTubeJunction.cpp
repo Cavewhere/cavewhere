@@ -17,6 +17,7 @@
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -33,6 +34,7 @@ using Leg = Builder::Leg;
 using Options = Builder::Options;
 using EndCap = Builder::EndCap;
 using JunctionWindow = Builder::JunctionWindow;
+using WindowMouth = Builder::WindowMouth;
 using ZipCorner = Builder::ZipCorner;
 using MouthPoint = Builder::MouthPoint;
 using Warning = cwPassageTubeMesh::Warning;
@@ -87,6 +89,11 @@ constexpr double kWeldQuads = 1.0;
 // most kMaxMouthDepth times.
 constexpr double kMouthStepFactor = 1.5;
 constexpr int kMaxMouthDepth = 4;
+// Two mouths of one window are each unwrapped on their own, so one may lie
+// up to this many turns of the through's columns from the other.
+constexpr int kMaxMouthWraps = 2;
+// A zip loop keeps at least a triangle's corners.
+constexpr int kMinLoopSize = 3;
 // How far into the through a fan closing an unzipped mouth reaches, as a
 // fraction of the arm's largest radius.
 constexpr double kFanDepthFactor = 0.5;
@@ -1486,38 +1493,19 @@ bool overlapsRectangle(const QVector<QPointF>& polygon, const QRectF& rectangle)
     return false;
 }
 
-// The through quads the mouth covers, widened so each column's removed
-// quads run unbroken and no two removed quads meet only at a corner.
-QSet<Vertex> removedQuads(const QVector<Ring>& rings, const ThroughSpan& span, const QVector<QPointF>& mouth)
+// Widens the removed quads so each column's removed quads run unbroken and
+// no two removed quads meet only at a corner.
+void closeRemovedQuads(QSet<Vertex>& removed, int ringCount, int resolution)
 {
-    const int resolution = rings.at(span.junctionRing).radii.size();
-    QSet<Vertex> removed;
-    for (int i = span.first; i < span.last; ++i) {
-        if (!hasValidFrame(rings.at(i)) || !hasValidFrame(rings.at(i + 1))) {
-            continue;
-        }
-        for (int column = 0; column < resolution; ++column) {
-            for (int wrap = -1; wrap <= 1; ++wrap) {
-                const QRectF quad(i - kWindowMarginQuads,
-                                  column + wrap * resolution - kWindowMarginQuads,
-                                  1.0 + 2.0 * kWindowMarginQuads,
-                                  1.0 + 2.0 * kWindowMarginQuads);
-                if (overlapsRectangle(mouth, quad)) {
-                    removed.insert({i, column});
-                    break;
-                }
-            }
-        }
-    }
-
+    const int last = ringCount - 1;
     const auto wrapped = [resolution](int column) { return (column + resolution) % resolution; };
     bool changed = true;
     while (changed) {
         changed = false;
         for (int column = 0; column < resolution; ++column) {
-            int low = span.last;
-            int high = span.first - 1;
-            for (int i = span.first; i < span.last; ++i) {
+            int low = last;
+            int high = -1;
+            for (int i = 0; i < last; ++i) {
                 if (removed.contains({i, column})) {
                     low = std::min(low, i);
                     high = std::max(high, i);
@@ -1530,7 +1518,7 @@ QSet<Vertex> removedQuads(const QVector<Ring>& rings, const ThroughSpan& span, c
                 }
             }
         }
-        for (int i = span.first + 1; i < span.last; ++i) {
+        for (int i = 1; i < last; ++i) {
             for (int column = 0; column < resolution; ++column) {
                 const Vertex lowLow {i - 1, wrapped(column - 1)};
                 const Vertex highLow {i, wrapped(column - 1)};
@@ -1547,13 +1535,40 @@ QSet<Vertex> removedQuads(const QVector<Ring>& rings, const ThroughSpan& span, c
             }
         }
     }
+}
+
+// The through quads the mouth covers, widened by closeRemovedQuads.
+QSet<Vertex> removedQuads(const QVector<Ring>& rings, const QVector<QPointF>& mouth, int resolution)
+{
+    QSet<Vertex> removed;
+    for (int i = 0; i + 1 < rings.size(); ++i) {
+        if (!hasValidFrame(rings.at(i)) || !hasValidFrame(rings.at(i + 1))) {
+            continue;
+        }
+        for (int column = 0; column < resolution; ++column) {
+            for (int wrap = -1; wrap <= 1; ++wrap) {
+                const QRectF quad(i - kWindowMarginQuads,
+                                  column + wrap * resolution - kWindowMarginQuads,
+                                  1.0 + 2.0 * kWindowMarginQuads,
+                                  1.0 + 2.0 * kWindowMarginQuads);
+                if (overlapsRectangle(mouth, quad)) {
+                    removed.insert({i, column});
+                    break;
+                }
+            }
+        }
+    }
+    closeRemovedQuads(removed, rings.size(), resolution);
     return removed;
 }
 
-// The edge of the removed quads as one loop of through vertices,
-// counter-clockwise in (ring, column) space, or nullopt when the quads leave
-// more than one edge loop or pinch at a vertex.
-std::optional<QVector<Vertex>> windowBoundary(const QSet<Vertex>& removed, int resolution)
+// Every edge loop of the removed quads as through vertices, the quads on
+// each loop's left in (ring, column) space: counter-clockwise around the
+// hole, clockwise around a kept island, and one loop at each end of a hole
+// that takes the whole circumference. Each loop starts at its lowest vertex
+// and the loops come in the order of those vertices. nullopt when the quads
+// pinch at a vertex.
+std::optional<QVector<QVector<Vertex>>> windowBoundaries(const QSet<Vertex>& removed, int resolution)
 {
     QSet<QPair<Vertex, Vertex>> edges;
     for (const Vertex& quad : removed) {
@@ -1580,24 +1595,28 @@ std::optional<QVector<Vertex>> windowBoundary(const QSet<Vertex>& removed, int r
         return std::nullopt;
     }
 
-    // Start at the lowest vertex so the loop is the same on every run.
-    Vertex start = nextVertex.cbegin().key();
-    for (auto it = nextVertex.cbegin(); it != nextVertex.cend(); ++it) {
-        start = std::min(start, it.key());
-    }
-    QVector<Vertex> boundary {start};
-    Vertex current = nextVertex.value(start);
-    while (current != start) {
-        if (boundary.size() > nextVertex.size() || !nextVertex.contains(current)) {
-            return std::nullopt;
+    QVector<Vertex> starts = nextVertex.keys();
+    std::sort(starts.begin(), starts.end());
+    QSet<Vertex> visited;
+    QVector<QVector<Vertex>> loops;
+    for (const Vertex& start : std::as_const(starts)) {
+        if (visited.contains(start)) {
+            continue;
         }
-        boundary.append(current);
-        current = nextVertex.value(current);
+        QVector<Vertex> loop {start};
+        visited.insert(start);
+        Vertex current = nextVertex.value(start);
+        while (current != start) {
+            if (!nextVertex.contains(current) || visited.contains(current)) {
+                return std::nullopt;
+            }
+            loop.append(current);
+            visited.insert(current);
+            current = nextVertex.value(current);
+        }
+        loops.append(loop);
     }
-    if (boundary.size() != nextVertex.size()) {
-        return std::nullopt;
-    }
-    return boundary;
+    return loops;
 }
 
 // How much a zip triangle costs: its bridging edge, plus a penalty when it
@@ -1623,40 +1642,151 @@ double zipTriangleCost(const QPointF& a, const QPointF& b, const QPointF& c,
     return cost;
 }
 
-// A vertex of the mouth loop: its corner, which is a window boundary vertex
-// where the mouth was welded to it, its place on the through's grid and its
-// position.
+// A vertex of a loop the zip band joins: its corner, a through vertex on a
+// window boundary or where a mouth was welded to one, else a mouth point;
+// its place on the through's grid and its position.
 struct LoopVertex {
     ZipCorner corner;
     QPointF parameter;
     QVector3D position;
 };
 
-// Triangulates the band between the window boundary and the mouth loop, both
-// counter-clockwise in (ring, column) space, starting from the boundary
-// vertex in the direction of the first mouth vertex from the mouth's
-// centroid. Of all the ways to step around the two loops, it takes the one
-// with the least total cost (Fuchs, Kedem and Uselton 1977): the shortest
-// bridging edges, with unfolded, well-shaped triangles. A triangle with two
-// equal corners, where the mouth is welded to the boundary, costs nothing
-// and is left out.
+double columnNear(double column, double reference, int resolution)
+{
+    return column + resolution * std::round((reference - column) / resolution);
+}
+
+QPointF parameterNear(const QPointF& parameter, double referenceColumn, int resolution)
+{
+    return QPointF(parameter.x(), columnNear(parameter.y(), referenceColumn, resolution));
+}
+
+bool isWithinWeldQuads(const QPointF& a, const QPointF& b)
+{
+    return std::abs(a.x() - b.x()) <= kWeldQuads && std::abs(a.y() - b.y()) <= kWeldQuads;
+}
+
+// Triangulates the band between the outer loop and the inner loop, which
+// run the same way round the band, starting from inner vertex 0 and outer
+// vertex offset. Of all the ways to step around the two loops, it takes the
+// one with the least total cost (Fuchs, Kedem and Uselton 1977): the
+// shortest bridging edges, with unfolded, well-shaped triangles. A triangle
+// with two equal corners, where a mouth is welded to the boundary, costs
+// nothing and is left out.
 QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
-                                          const QVector<Vertex>& boundary,
-                                          const QVector<LoopVertex>& mouth,
+                                          const QVector<LoopVertex>& outer,
+                                          const QVector<LoopVertex>& inner,
+                                          int offset,
                                           int resolution)
+{
+    const int innerCount = inner.size();
+    const int outerCount = outer.size();
+    const auto innerVertex = [&](int i) -> const LoopVertex& { return inner.at(i % innerCount); };
+    const auto outerVertex = [&](int j) -> const LoopVertex& { return outer.at((j + offset) % outerCount); };
+    // The through's outward direction at an outer vertex.
+    const auto outwardAt = [&](int j) {
+        const ZipCorner& corner = outerVertex(j).corner;
+        return binDirection(rings.at(corner.ring), corner.column);
+    };
+    const auto triangleCost = [&](const LoopVertex& a, const LoopVertex& b, const LoopVertex& c, const QVector3D& outward, double bridge) {
+        const double reference = a.parameter.y();
+        return zipTriangleCost(a.parameter, parameterNear(b.parameter, reference, resolution), parameterNear(c.parameter, reference, resolution),
+                               a.position, b.position, c.position, outward, bridge);
+    };
+
+    // State (i, j) has bridged inner vertex i to outer vertex j. The band
+    // either opens with an outer step and closes with an inner step, or the
+    // other way round, so no bridge between the two loops' first vertices is
+    // made twice; it takes the cheaper of the two.
+    const int columns = outerCount + 1;
+    const auto stateIndex = [columns](int i, int j) { return i * columns + j; };
+    struct Path {
+        QVector<double> cost;
+        QVector<bool> cameByOuterStep;
+    };
+    const auto cheapestPath = [&](bool opensWithOuterStep) {
+        const auto isAllowed = [&](int i, int j) {
+            if (opensWithOuterStep) {
+                return !(j == 0 && i > 0) && !(i == innerCount && j < outerCount);
+            }
+            return !(i == 0 && j > 0) && !(j == outerCount && i < innerCount);
+        };
+        Path path {QVector<double>((innerCount + 1) * columns, std::numeric_limits<double>::max()),
+                   QVector<bool>((innerCount + 1) * columns, false)};
+        path.cost[0] = 0.0;
+        for (int i = 0; i <= innerCount; ++i) {
+            for (int j = 0; j <= outerCount; ++j) {
+                const double here = path.cost.at(stateIndex(i, j));
+                if (here == std::numeric_limits<double>::max()) {
+                    continue;
+                }
+                const LoopVertex& in = innerVertex(i);
+                const LoopVertex& out = outerVertex(j);
+                if (j < outerCount && isAllowed(i, j + 1)) {
+                    const LoopVertex& outNext = outerVertex(j + 1);
+                    const bool isWelded = in.corner == out.corner || in.corner == outNext.corner;
+                    const double step = here + (isWelded ? 0.0
+                                                          : triangleCost(out, outNext, in, outwardAt(j) + outwardAt(j + 1),
+                                                                         in.position.distanceToPoint(outNext.position)));
+                    if (step < path.cost.at(stateIndex(i, j + 1))) {
+                        path.cost[stateIndex(i, j + 1)] = step;
+                        path.cameByOuterStep[stateIndex(i, j + 1)] = true;
+                    }
+                }
+                if (i < innerCount && isAllowed(i + 1, j)) {
+                    const LoopVertex& inNext = innerVertex(i + 1);
+                    const bool isWelded = in.corner == out.corner || inNext.corner == out.corner || in.corner == inNext.corner;
+                    const double step = here + (isWelded ? 0.0
+                                                          : triangleCost(in, out, inNext, outwardAt(j),
+                                                                         inNext.position.distanceToPoint(out.position)));
+                    if (step < path.cost.at(stateIndex(i + 1, j))) {
+                        path.cost[stateIndex(i + 1, j)] = step;
+                        path.cameByOuterStep[stateIndex(i + 1, j)] = false;
+                    }
+                }
+            }
+        }
+        return path;
+    };
+    const Path opensWithOuter = cheapestPath(true);
+    const Path opensWithInner = cheapestPath(false);
+    const int last = stateIndex(innerCount, outerCount);
+    const QVector<bool>& cameByOuterStep = opensWithOuter.cost.at(last) <= opensWithInner.cost.at(last)
+                                               ? opensWithOuter.cameByOuterStep
+                                               : opensWithInner.cameByOuterStep;
+
+    QVector<std::array<ZipCorner, 3>> triangles;
+    triangles.reserve(innerCount + outerCount);
+    const auto addTriangle = [&](const ZipCorner& a, const ZipCorner& b, const ZipCorner& c) {
+        if (a != b && b != c && c != a) {
+            triangles.append({a, b, c});
+        }
+    };
+    int i = innerCount;
+    int j = outerCount;
+    while (i > 0 || j > 0) {
+        if (cameByOuterStep.at(stateIndex(i, j))) {
+            --j;
+            addTriangle(outerVertex(j).corner, outerVertex(j + 1).corner, innerVertex(i).corner);
+        } else {
+            --i;
+            addTriangle(innerVertex(i).corner, outerVertex(j).corner, innerVertex(i + 1).corner);
+        }
+    }
+    std::reverse(triangles.begin(), triangles.end());
+    return triangles;
+}
+
+// The outer vertex the zip band starts from for a single mouth: the one in
+// the direction of the mouth's first vertex from its centroid, in (ring,
+// column) space.
+int centroidStartOffset(const QVector<LoopVertex>& outer, const QVector<LoopVertex>& mouth, int resolution)
 {
     QPointF center;
     for (const LoopVertex& vertex : mouth) {
         center += vertex.parameter;
     }
     center /= mouth.size();
-
-    const int mouthCount = mouth.size();
-    const int boundaryCount = boundary.size();
-    const auto boundaryParameter = [&](const Vertex& vertex) {
-        const double column = vertex.second + resolution * std::round((center.y() - vertex.second) / resolution);
-        return QPointF(vertex.first, column);
-    };
     const auto angleAbout = [&](const QPointF& point) {
         const QPointF toward = point - center;
         return std::atan2(toward.y(), toward.x());
@@ -1665,122 +1795,180 @@ QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
     const double startAngle = angleAbout(mouth.first().parameter);
     int offset = 0;
     double offsetGap = std::numeric_limits<double>::max();
-    for (int j = 0; j < boundaryCount; ++j) {
-        const double gap = std::abs(unwrapped(angleAbout(boundaryParameter(boundary.at(j))), startAngle) - startAngle);
+    for (int j = 0; j < outer.size(); ++j) {
+        const double angle = angleAbout(parameterNear(outer.at(j).parameter, center.y(), resolution));
+        const double gap = std::abs(unwrapped(angle, startAngle) - startAngle);
         if (gap < offsetGap) {
             offsetGap = gap;
             offset = j;
         }
     }
-
-    const auto mouthVertex = [&](int i) -> const LoopVertex& { return mouth.at(i % mouthCount); };
-    const auto boundaryVertex = [&](int j) { return boundary.at((j + offset) % boundaryCount); };
-    const auto boundaryAt = [&](int j) { return boundaryParameter(boundaryVertex(j)); };
-    const auto boundary3d = [&](int j) {
-        const Vertex& vertex = boundaryVertex(j);
-        return unpulledVertex(rings.at(vertex.first), vertex.second);
-    };
-    // The through's outward direction at a boundary vertex.
-    const auto outwardAt = [&](int j) {
-        const Vertex& vertex = boundaryVertex(j);
-        return binDirection(rings.at(vertex.first), vertex.second);
-    };
-    const auto boundaryCorner = [&](int j) {
-        const Vertex& vertex = boundaryVertex(j);
-        return ZipCorner {vertex.first, vertex.second};
-    };
-    const auto mouthCorner = [&](int i) { return mouthVertex(i).corner; };
-
-    // State (i, j) has bridged mouth vertex i to boundary vertex j. The band
-    // either opens with a boundary step and closes with a mouth step, or the
-    // other way round, so no bridge between the two loops' first vertices is
-    // made twice; it takes the cheaper of the two.
-    const int columns = boundaryCount + 1;
-    const auto stateIndex = [columns](int i, int j) { return i * columns + j; };
-    struct Path {
-        QVector<double> cost;
-        QVector<bool> cameByBoundaryStep;
-    };
-    const auto cheapestPath = [&](bool opensWithBoundaryStep) {
-        const auto isAllowed = [&](int i, int j) {
-            if (opensWithBoundaryStep) {
-                return !(j == 0 && i > 0) && !(i == mouthCount && j < boundaryCount);
-            }
-            return !(i == 0 && j > 0) && !(j == boundaryCount && i < mouthCount);
-        };
-        Path path {QVector<double>((mouthCount + 1) * columns, std::numeric_limits<double>::max()),
-                   QVector<bool>((mouthCount + 1) * columns, false)};
-        path.cost[0] = 0.0;
-        for (int i = 0; i <= mouthCount; ++i) {
-            for (int j = 0; j <= boundaryCount; ++j) {
-                const double here = path.cost.at(stateIndex(i, j));
-                if (here == std::numeric_limits<double>::max()) {
-                    continue;
-                }
-                if (j < boundaryCount && isAllowed(i, j + 1)) {
-                    const bool isWelded = mouthCorner(i) == boundaryCorner(j) || mouthCorner(i) == boundaryCorner(j + 1);
-                    const double step = here + (isWelded ? 0.0
-                                                          : zipTriangleCost(boundaryAt(j), boundaryAt(j + 1), mouthVertex(i).parameter,
-                                                                            boundary3d(j), boundary3d(j + 1), mouthVertex(i).position,
-                                                                            outwardAt(j) + outwardAt(j + 1),
-                                                                            mouthVertex(i).position.distanceToPoint(boundary3d(j + 1))));
-                    if (step < path.cost.at(stateIndex(i, j + 1))) {
-                        path.cost[stateIndex(i, j + 1)] = step;
-                        path.cameByBoundaryStep[stateIndex(i, j + 1)] = true;
-                    }
-                }
-                if (i < mouthCount && isAllowed(i + 1, j)) {
-                    const bool isWelded = mouthCorner(i) == boundaryCorner(j) || mouthCorner(i + 1) == boundaryCorner(j);
-                    const double step = here + (isWelded ? 0.0
-                                                          : zipTriangleCost(mouthVertex(i).parameter, boundaryAt(j), mouthVertex(i + 1).parameter,
-                                                                            mouthVertex(i).position, boundary3d(j), mouthVertex(i + 1).position,
-                                                                            outwardAt(j),
-                                                                            mouthVertex(i + 1).position.distanceToPoint(boundary3d(j))));
-                    if (step < path.cost.at(stateIndex(i + 1, j))) {
-                        path.cost[stateIndex(i + 1, j)] = step;
-                        path.cameByBoundaryStep[stateIndex(i + 1, j)] = false;
-                    }
-                }
-            }
-        }
-        return path;
-    };
-    const Path opensWithBoundary = cheapestPath(true);
-    const Path opensWithMouth = cheapestPath(false);
-    const int last = stateIndex(mouthCount, boundaryCount);
-    const QVector<bool>& cameByBoundaryStep = opensWithBoundary.cost.at(last) <= opensWithMouth.cost.at(last)
-                                                  ? opensWithBoundary.cameByBoundaryStep
-                                                  : opensWithMouth.cameByBoundaryStep;
-
-    QVector<std::array<ZipCorner, 3>> triangles;
-    triangles.reserve(mouthCount + boundaryCount);
-    const auto addTriangle = [&](const ZipCorner& a, const ZipCorner& b, const ZipCorner& c) {
-        if (a != b && b != c && c != a) {
-            triangles.append({a, b, c});
-        }
-    };
-    int i = mouthCount;
-    int j = boundaryCount;
-    while (i > 0 || j > 0) {
-        if (cameByBoundaryStep.at(stateIndex(i, j))) {
-            --j;
-            addTriangle(boundaryCorner(j), boundaryCorner(j + 1), mouthCorner(i));
-        } else {
-            --i;
-            addTriangle(mouthCorner(i), boundaryCorner(j), mouthCorner(i + 1));
-        }
-    }
-    std::reverse(triangles.begin(), triangles.end());
-    return triangles;
+    return offset;
 }
 
-// Whether the window shares a quad with any of windows. Windows that only
-// touch at a vertex or along an edge stay one surface once both are zipped.
-bool overlapsWindows(const QVector<JunctionWindow>& windows, const JunctionWindow& window)
+// Rotates the inner loop to start at the vertex of the closest pair between
+// the two loops, and returns the outer vertex of that pair. A pair qualifies
+// only when the band lies between the two loops' next edges from it, so where
+// a bridge runs both ways along one column the pair takes the copy of the
+// bridge on the inner vertex's side; with no such pair, any pair does.
+int closestStartOffset(const QVector<LoopVertex>& outer, QVector<LoopVertex>& inner, int resolution)
 {
-    return std::any_of(windows.cbegin(), windows.cend(), [&](const JunctionWindow& other) {
-        return other.removedQuads.intersects(window.removedQuads);
-    });
+    const auto facesBand = [&](int i, int j) {
+        const QPointF out = outer.at(j).parameter;
+        const QPointF outNext = parameterNear(outer.at((j + 1) % outer.size()).parameter, out.y(), resolution);
+        const QPointF in = parameterNear(inner.at(i).parameter, out.y(), resolution);
+        const QPointF inNext = parameterNear(inner.at((i + 1) % inner.size()).parameter, out.y(), resolution);
+        return cross2d(out, outNext, in) > 0.0 && cross2d(in, out, inNext) > 0.0;
+    };
+    const auto closestPair = [&](bool needsBandSide) -> std::optional<QPair<int, int>> {
+        std::optional<QPair<int, int>> pair;
+        double closest = std::numeric_limits<double>::max();
+        for (int i = 0; i < inner.size(); ++i) {
+            for (int j = 0; j < outer.size(); ++j) {
+                const double distance = inner.at(i).position.distanceToPoint(outer.at(j).position);
+                if (distance < closest && (!needsBandSide || facesBand(i, j))) {
+                    closest = distance;
+                    pair = qMakePair(i, j);
+                }
+            }
+        }
+        return pair;
+    };
+    std::optional<QPair<int, int>> pair = closestPair(true);
+    if (!pair) {
+        pair = closestPair(false);
+    }
+    std::rotate(inner.begin(), inner.begin() + pair->first, inner.end());
+    return pair->second;
+}
+
+// Whether the segment from one loop vertex to another crosses an edge of
+// any of loops in (ring, column) space, edges at either end aside.
+bool crossesLoops(const LoopVertex& from, const LoopVertex& to, const QVector<const QVector<LoopVertex>*>& loops, int resolution)
+{
+    const QPointF start = from.parameter;
+    const QPointF end = parameterNear(to.parameter, start.y(), resolution);
+    const auto touches = [&](const ZipCorner& corner) { return corner == from.corner || corner == to.corner; };
+    for (const QVector<LoopVertex>* loop : loops) {
+        for (int k = 0; k < loop->size(); ++k) {
+            const LoopVertex& u = loop->at(k);
+            const LoopVertex& v = loop->at((k + 1) % loop->size());
+            if (touches(u.corner) || touches(v.corner)) {
+                continue;
+            }
+            const QPointF a = parameterNear(u.parameter, start.y(), resolution);
+            const QPointF b = parameterNear(v.parameter, a.y(), resolution);
+            for (int wrap = -1; wrap <= 1; ++wrap) {
+                const QPointF shift(0.0, wrap * resolution);
+                if (segmentsCross(start, end, a + shift, b + shift)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// A bridge from vertex joinedIndex of a joined loop to vertex loopIndex of
+// loop number loop, length long in (ring, column) space.
+struct Bridge {
+    int loop = -1;
+    int joinedIndex = 0;
+    int loopIndex = 0;
+    double length = std::numeric_limits<double>::max();
+};
+
+// The shortest bridge from the joined loop to one of loops that crosses no
+// edge of the joined loop, of loops or of others.
+std::optional<Bridge> shortestBridge(const QVector<LoopVertex>& joined,
+                                     const QVector<QVector<LoopVertex>>& loops,
+                                     int loop,
+                                     const QVector<const QVector<LoopVertex>*>& others,
+                                     int resolution)
+{
+    const QVector<LoopVertex>& target = loops.at(loop);
+    QVector<Bridge> candidates;
+    candidates.reserve(joined.size() * target.size());
+    for (int i = 0; i < joined.size(); ++i) {
+        for (int k = 0; k < target.size(); ++k) {
+            const QPointF from = joined.at(i).parameter;
+            const QPointF to = parameterNear(target.at(k).parameter, from.y(), resolution);
+            candidates.append(Bridge {loop, i, k, std::hypot(to.x() - from.x(), to.y() - from.y())});
+        }
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const Bridge& a, const Bridge& b) { return a.length < b.length; });
+
+    QVector<const QVector<LoopVertex>*> crossed = others;
+    crossed.append(&joined);
+    for (const QVector<LoopVertex>& other : loops) {
+        crossed.append(&other);
+    }
+    for (const Bridge& candidate : std::as_const(candidates)) {
+        if (!crossesLoops(joined.at(candidate.joinedIndex), target.at(candidate.loopIndex), crossed, resolution)) {
+            return candidate;
+        }
+    }
+    return std::nullopt;
+}
+
+// The through vertices strictly between two through vertices of one column,
+// so a bridge between two window boundaries follows the through's surface
+// rather than cutting a chord across it; none when the bridge leaves the
+// column or a corner is a mouth point.
+QVector<LoopVertex> throughColumnPath(const QVector<Ring>& rings, const LoopVertex& from, const LoopVertex& to)
+{
+    QVector<LoopVertex> path;
+    const ZipCorner& a = from.corner;
+    const ZipCorner& b = to.corner;
+    if (rings.isEmpty() || a.ring == ZipCorner::kMouthRing || b.ring == ZipCorner::kMouthRing || a.column != b.column) {
+        return path;
+    }
+    const int step = b.ring > a.ring ? 1 : -1;
+    for (int ring = a.ring + step; ring != b.ring; ring += step) {
+        path.append(LoopVertex {ZipCorner {ring, a.column}, QPointF(ring, from.parameter.y()), unpulledVertex(rings.at(ring), a.column)});
+    }
+    return path;
+}
+
+// Joins loops that all keep the band on the same side into one loop:
+// starting from the first, it splices in the loop nearest the joined one
+// through the shortest bridge that crosses neither another loop nor others.
+// The bridge is walked once each way, so the zip band puts one triangle on
+// each side of it; between two through vertices of one column it runs over
+// the through's vertices between them. nullopt when a loop has no such
+// bridge.
+std::optional<QVector<LoopVertex>> joinedLoop(const QVector<Ring>& rings,
+                                              QVector<QVector<LoopVertex>> loops,
+                                              const QVector<const QVector<LoopVertex>*>& others,
+                                              int resolution)
+{
+    QVector<LoopVertex> joined = loops.takeFirst();
+    while (!loops.isEmpty()) {
+        Bridge best;
+        for (int loop = 0; loop < loops.size(); ++loop) {
+            const std::optional<Bridge> bridge = shortestBridge(joined, loops, loop, others, resolution);
+            if (bridge && bridge->length < best.length) {
+                best = *bridge;
+            }
+        }
+        if (best.loop < 0) {
+            return std::nullopt;
+        }
+        const QVector<LoopVertex> loop = loops.takeAt(best.loop);
+        const LoopVertex& from = joined.at(best.joinedIndex);
+        const LoopVertex& to = loop.at(best.loopIndex);
+        QVector<LoopVertex> path = throughColumnPath(rings, from, to);
+        QVector<LoopVertex> spliced = joined.mid(0, best.joinedIndex + 1);
+        spliced.append(path);
+        for (int k = 0; k <= loop.size(); ++k) {
+            spliced.append(loop.at((best.loopIndex + k) % loop.size()));
+        }
+        std::reverse(path.begin(), path.end());
+        spliced.append(path);
+        spliced.append(joined.mid(best.joinedIndex));
+        joined = spliced;
+    }
+    return joined;
 }
 
 // The arm meshes the strip to its mouth only when the two rings at that end
@@ -1846,33 +2034,29 @@ QVector<ZipCorner> weldedMouthCorners(const QVector<Ring>& rings,
                                       const QVector<Vertex>& boundary,
                                       const QVector<MouthPoint>& mouth,
                                       const QVector<QPointF>& polygon,
+                                      int mouthIndex,
                                       int resolution)
 {
     const int count = mouth.size();
     QVector<ZipCorner> corners(count);
     for (int k = 0; k < count; ++k) {
-        corners[k] = ZipCorner {ZipCorner::kMouthRing, k};
+        corners[k] = ZipCorner {ZipCorner::kMouthRing, k, mouthIndex};
     }
     const QVector<ZipCorner> unwelded = corners;
 
-    const auto columnNear = [resolution](const QPointF& parameter, double reference) {
-        return QPointF(parameter.x(), parameter.y() + resolution * std::round((reference - parameter.y()) / resolution));
-    };
     const auto positionOf = [&](const ZipCorner& corner) {
         return corner.ring == ZipCorner::kMouthRing ? mouth.at(corner.column).position : unpulledVertex(rings.at(corner.ring), corner.column);
     };
     const auto parameterOf = [&](const ZipCorner& corner, double reference) {
-        return corner.ring == ZipCorner::kMouthRing ? columnNear(polygon.at(corner.column), reference)
-                                                    : columnNear(QPointF(corner.ring, corner.column), reference);
+        return parameterNear(corner.ring == ZipCorner::kMouthRing ? polygon.at(corner.column) : QPointF(corner.ring, corner.column),
+                             reference, resolution);
     };
     // A through's end ring may close it or carry its own mouth strip, so a
     // mouth vertex welded there would join two fans.
     const auto isEndRing = [&](int ring) { return ring == 0 || ring == rings.size() - 1; };
     const auto isWeldable = [&](int k, const ZipCorner& corner) {
-        const QPointF parameter = parameterOf(corner, polygon.at(k).y());
         return positionOf(corner).distanceToPoint(mouth.at(k).position) <= kWeldMeters
-               && std::abs(parameter.x() - polygon.at(k).x()) <= kWeldQuads
-               && std::abs(parameter.y() - polygon.at(k).y()) <= kWeldQuads;
+               && isWithinWeldQuads(parameterOf(corner, polygon.at(k).y()), polygon.at(k));
     };
 
     for (int k = 0; k < count; ++k) {
@@ -1918,29 +2102,38 @@ QVector<ZipCorner> weldedMouthCorners(const QVector<Ring>& rings,
     for (const ZipCorner& corner : std::as_const(loop)) {
         visited.insert({corner.ring, corner.column});
     }
-    if (loop.size() < 3 || visited.size() != loop.size()) {
+    if (loop.size() < kMinLoopSize || visited.size() != loop.size()) {
         return unwelded;
     }
     return corners;
 }
 
-// A window cut for one arm's mouth, or why the mouth cannot be zipped: off
-// the through, or its columns run the wrong way around it.
-struct WindowCut {
-    std::optional<JunctionWindow> window;
+// An arm's mouth placed on its through's grid, with the through quads it
+// covers.
+struct MouthCut {
+    ArmEnd end;
+    QUuid tripId;
+    QString station;
+    QVector<QPointF> polygon;
+    QSet<Vertex> removed;
+};
+
+// One arm's mouth cut into the through, or why it cannot be zipped: off the
+// through, or its columns run the wrong way around it.
+struct MouthCutResult {
+    std::optional<MouthCut> cut;
     bool isMouthReversed = false;
 };
 
-// Cuts the window for one arm's mouth into the through and zips them.
+// Places one arm's mouth on the through and finds the quads it covers.
 // parameters place each mouth point on the through's grid.
-WindowCut cutWindow(const Chain& through,
-                    const ThroughSpan& span,
-                    const Chain& arm,
-                    const ArmEnd& end,
-                    const QVector<std::optional<QPointF>>& parameters)
+MouthCutResult cutMouth(const Chain& through,
+                        const ArmEnd& end,
+                        const QUuid& tripId,
+                        const QString& station,
+                        const QVector<std::optional<QPointF>>& parameters)
 {
-    const QVector<MouthPoint>& mouth = end.isStart ? arm.startMouth : arm.endMouth;
-    const int resolution = through.rings.at(span.junctionRing).radii.size();
+    const int resolution = through.rings.first().radii.size();
     const std::optional<QVector<QPointF>> polygon = mouthPolygon(parameters, resolution);
     if (!polygon) {
         return {};
@@ -1951,40 +2144,260 @@ WindowCut cutWindow(const Chain& through,
     // arm arriving at its end and clockwise around one leaving at its start.
     const bool isColumnOrderCounterClockwise = signedArea(*polygon) > 0.0;
     if (isColumnOrderCounterClockwise == end.isStart) {
-        return WindowCut {std::nullopt, true};
+        return MouthCutResult {std::nullopt, true};
     }
+    return MouthCutResult {MouthCut {end, tripId, station, *polygon, removedQuads(through.rings, *polygon, resolution)}, false};
+}
 
-    const QSet<Vertex> removed = removedQuads(through.rings, span, *polygon);
-    const std::optional<QVector<Vertex>> boundary = windowBoundary(removed, resolution);
-    if (!boundary) {
-        return {};
+// Whether two mouths cross or one holds the other in (ring, column) space,
+// on any turn of the through's columns.
+bool mouthsIntersect(const QVector<QPointF>& a, const QVector<QPointF>& b, int resolution)
+{
+    for (int wrap = -kMaxMouthWraps; wrap <= kMaxMouthWraps; ++wrap) {
+        QVector<QPointF> shifted = b;
+        for (QPointF& point : shifted) {
+            point.ry() += wrap * resolution;
+        }
+        if (containsPoint(a, shifted.first()) || containsPoint(shifted, a.first())) {
+            return true;
+        }
+        for (int i = 0; i < a.size(); ++i) {
+            for (int k = 0; k < shifted.size(); ++k) {
+                if (segmentsCross(a.at(i), a.at((i + 1) % a.size()), shifted.at(k), shifted.at((k + 1) % shifted.size()))) {
+                    return true;
+                }
+            }
+        }
     }
+    return false;
+}
 
-    const QVector<ZipCorner> corners = weldedMouthCorners(through.rings, *boundary, mouth, *polygon, resolution);
+// The points of a window's mouths and their places on the through's grid.
+struct WindowMouthPoints {
+    QVector<const QVector<MouthPoint>*> points;
+    QVector<QVector<QPointF>> polygons;
+
+    LoopVertex vertex(const QVector<Ring>& rings, const ZipCorner& corner, double referenceColumn, int resolution) const
+    {
+        if (corner.ring == ZipCorner::kMouthRing) {
+            return LoopVertex {corner, parameterNear(polygons.at(corner.mouth).at(corner.column), referenceColumn, resolution),
+                               points.at(corner.mouth)->at(corner.column).position};
+        }
+        return LoopVertex {corner, QPointF(corner.ring, columnNear(corner.column, referenceColumn, resolution)),
+                           unpulledVertex(rings.at(corner.ring), corner.column)};
+    }
+};
+
+// Mouth number mouthIndex's vertices as the zip band runs them: against the
+// arm's column order, so they run the same way round the band as the
+// window's outer boundary, with consecutive vertices welded to one corner
+// merged.
+QVector<LoopVertex> mouthLoop(const QVector<Ring>& rings,
+                              const WindowMouthPoints& mouths,
+                              int mouthIndex,
+                              const QVector<ZipCorner>& corners,
+                              bool isArmStart,
+                              int resolution)
+{
+    const QVector<QPointF>& polygon = mouths.polygons.at(mouthIndex);
+    const int count = corners.size();
     QVector<LoopVertex> loop;
-    loop.reserve(mouth.size());
-    for (int k = 0; k < mouth.size(); ++k) {
-        const int point = end.isStart ? (mouth.size() - k) % mouth.size() : k;
+    loop.reserve(count);
+    for (int k = 0; k < count; ++k) {
+        const int point = isArmStart ? (count - k) % count : k;
         const ZipCorner& corner = corners.at(point);
         if (!loop.isEmpty() && (loop.last().corner == corner || loop.first().corner == corner)) {
             continue;
         }
-        if (corner.ring == ZipCorner::kMouthRing) {
-            loop.append(LoopVertex {corner, polygon->at(corner.column), mouth.at(corner.column).position});
-        } else {
-            const double nearColumn = corner.column + resolution * std::round((polygon->at(point).y() - corner.column) / resolution);
-            loop.append(LoopVertex {corner, QPointF(corner.ring, nearColumn), unpulledVertex(through.rings.at(corner.ring), corner.column)});
+        loop.append(mouths.vertex(rings, corner, polygon.at(point).y(), resolution));
+    }
+    return loop;
+}
+
+// Welds each point of mouth number mouthIndex that still stands alone to a
+// point of an earlier mouth within kWeldMeters of it and kWeldQuads of it on
+// the through's grid, where two mouths touch, taking the points welded to it
+// along.
+void weldToEarlierMouths(QVector<ZipCorner>& corners,
+                         int mouthIndex,
+                         const WindowMouthPoints& mouths,
+                         const QVector<QVector<ZipCorner>>& earlierCorners,
+                         int resolution)
+{
+    const QVector<MouthPoint>& points = *mouths.points.at(mouthIndex);
+    const QVector<QPointF>& polygon = mouths.polygons.at(mouthIndex);
+    for (int k = 0; k < corners.size(); ++k) {
+        const ZipCorner self {ZipCorner::kMouthRing, k, mouthIndex};
+        if (corners.at(k) != self) {
+            continue;
         }
+        double nearest = kWeldMeters;
+        std::optional<ZipCorner> target;
+        for (int m = 0; m < earlierCorners.size(); ++m) {
+            for (int other = 0; other < earlierCorners.at(m).size(); ++other) {
+                const ZipCorner candidate {ZipCorner::kMouthRing, other, m};
+                if (earlierCorners.at(m).at(other) != candidate) {
+                    continue;
+                }
+                const double distance = points.at(k).position.distanceToPoint(mouths.points.at(m)->at(other).position);
+                const QPointF parameter = parameterNear(mouths.polygons.at(m).at(other), polygon.at(k).y(), resolution);
+                if (distance <= nearest && isWithinWeldQuads(parameter, polygon.at(k))) {
+                    nearest = distance;
+                    target = candidate;
+                }
+            }
+        }
+        if (target) {
+            std::replace(corners.begin(), corners.end(), self, *target);
+        }
+    }
+}
+
+// The loop without the walks that go out and straight back, as a joined
+// loop has where two holes were welded together: a corner repeated at once,
+// or one visited between two visits of its neighbor.
+QVector<LoopVertex> withoutSpikes(QVector<LoopVertex> loop)
+{
+    bool changed = true;
+    while (changed && loop.size() > kMinLoopSize) {
+        changed = false;
+        const int count = loop.size();
+        for (int i = 0; i < count; ++i) {
+            const int next = (i + 1) % count;
+            const int after = (i + 2) % count;
+            if (loop.at(i).corner == loop.at(next).corner) {
+                loop.removeAt(next);
+                changed = true;
+                break;
+            }
+            if (loop.at(i).corner == loop.at(after).corner) {
+                loop.removeAt(std::max(next, after));
+                loop.removeAt(std::min(next, after));
+                changed = true;
+                break;
+            }
+        }
+    }
+    return loop;
+}
+
+// A window boundary loop's vertices, their columns unwrapped along the loop.
+QVector<LoopVertex> boundaryLoop(const QVector<Ring>& rings, const QVector<Vertex>& boundary, int resolution)
+{
+    QVector<LoopVertex> loop;
+    loop.reserve(boundary.size());
+    for (const Vertex& vertex : boundary) {
+        const double column = loop.isEmpty() ? vertex.second : columnNear(vertex.second, loop.last().parameter.y(), resolution);
+        loop.append(LoopVertex {ZipCorner {vertex.first, vertex.second}, QPointF(vertex.first, column),
+                                unpulledVertex(rings.at(vertex.first), vertex.second)});
+    }
+    return loop;
+}
+
+// Whether the loop runs all the way around the through's columns.
+bool wrapsAround(const QVector<LoopVertex>& loop, int resolution)
+{
+    const double closingColumn = columnNear(loop.first().parameter.y(), loop.last().parameter.y(), resolution);
+    return std::abs(closingColumn - loop.first().parameter.y()) > resolution / 2.0;
+}
+
+// Whether the zip band lies outside the boundary loop: a loop that runs
+// clockwise around kept quads, an island of through inside the window. The
+// band lies inside a loop counter-clockwise around the hole and between the
+// two end loops of a hole that takes the whole circumference.
+bool isIsland(const QVector<LoopVertex>& loop, int resolution)
+{
+    if (wrapsAround(loop, resolution)) {
+        return false;
+    }
+    QVector<QPointF> polygon;
+    polygon.reserve(loop.size());
+    for (const LoopVertex& vertex : loop) {
+        polygon.append(vertex.parameter);
+    }
+    return signedArea(polygon) < 0.0;
+}
+
+// The window that zips the mouths of members into the through: the union of
+// their quads, its boundary loops and one zip band from the outer boundary
+// to the other loops and the mouths, joined into one inner loop. nullopt
+// when the union pinches or a loop cannot be joined.
+std::optional<JunctionWindow> zippedWindow(const Chain& through,
+                                           const QVector<Chain>& chains,
+                                           const QVector<MouthCut>& cuts,
+                                           const QVector<int>& members)
+{
+    const QVector<Ring>& rings = through.rings;
+    const int resolution = rings.first().radii.size();
+    QSet<Vertex> removed;
+    for (int member : members) {
+        removed.unite(cuts.at(member).removed);
+    }
+    closeRemovedQuads(removed, rings.size(), resolution);
+    const std::optional<QVector<QVector<Vertex>>> boundaries = windowBoundaries(removed, resolution);
+    if (!boundaries) {
+        return std::nullopt;
+    }
+    QVector<Vertex> boundaryVertices;
+    for (const QVector<Vertex>& boundary : *boundaries) {
+        boundaryVertices.append(boundary);
     }
 
     JunctionWindow window;
     window.removedQuads = removed;
-    window.boundary = *boundary;
-    window.zip = zipBand(through.rings, *boundary, loop, resolution);
-    window.mouthCorners = corners;
-    window.armChain = end.chain;
-    window.isArmStart = end.isStart;
-    return WindowCut {window, false};
+    window.boundaries = *boundaries;
+    window.tripId = cuts.at(members.first()).tripId;
+    WindowMouthPoints mouths;
+    for (int member : members) {
+        const MouthCut& cut = cuts.at(member);
+        const Chain& arm = chains.at(cut.end.chain);
+        mouths.points.append(cut.end.isStart ? &arm.startMouth : &arm.endMouth);
+        mouths.polygons.append(cut.polygon);
+    }
+    QVector<QVector<ZipCorner>> mouthCorners;
+    QVector<QVector<LoopVertex>> holes;
+    for (int m = 0; m < members.size(); ++m) {
+        const MouthCut& cut = cuts.at(members.at(m));
+        QVector<ZipCorner> corners = weldedMouthCorners(rings, boundaryVertices, *mouths.points.at(m), cut.polygon, m, resolution);
+        weldToEarlierMouths(corners, m, mouths, mouthCorners, resolution);
+        holes.append(mouthLoop(rings, mouths, m, corners, cut.end.isStart, resolution));
+        window.mouths.append(WindowMouth {cut.end.chain, cut.end.isStart, corners, cut.tripId});
+        mouthCorners.append(corners);
+    }
+
+    // The band lies left of the outer loops and right of the holes: the
+    // mouths and the islands, run backward.
+    QVector<QVector<LoopVertex>> outers;
+    for (const QVector<Vertex>& boundary : *boundaries) {
+        QVector<LoopVertex> loop = boundaryLoop(rings, boundary, resolution);
+        if (isIsland(loop, resolution)) {
+            std::reverse(loop.begin(), loop.end());
+            holes.append(loop);
+        } else {
+            outers.append(loop);
+        }
+    }
+    if (outers.isEmpty()) {
+        return std::nullopt;
+    }
+
+    const bool isSingleMouth = holes.size() == 1 && outers.size() == 1;
+    QVector<const QVector<LoopVertex>*> outerLoops;
+    for (const QVector<LoopVertex>& loop : std::as_const(outers)) {
+        outerLoops.append(&loop);
+    }
+    std::optional<QVector<LoopVertex>> inner = joinedLoop({}, holes, outerLoops, resolution);
+    if (!inner) {
+        return std::nullopt;
+    }
+    inner = withoutSpikes(*inner);
+    const std::optional<QVector<LoopVertex>> outer = joinedLoop(rings, outers, {&*inner}, resolution);
+    if (!outer) {
+        return std::nullopt;
+    }
+    const int offset = isSingleMouth ? centroidStartOffset(*outer, *inner, resolution) : closestStartOffset(*outer, *inner, resolution);
+    window.zip = zipBand(rings, *outer, *inner, offset, resolution);
+    return window;
 }
 
 using ArmKey = QPair<int, bool>;
@@ -2072,16 +2485,100 @@ Stitch growAndTrim(const QVector<Leg>& legs,
     return stitch;
 }
 
-// Moves each mouth point welded to a through vertex onto it, and each one
-// welded to an earlier mouth point onto that.
-void applyWelds(Chain& arm, const Chain& through, const JunctionWindow& window)
+// Moves each mouth point of the window welded to a through vertex onto it,
+// and each one welded to another mouth point onto that.
+void applyWelds(QVector<Chain>& chains, const Chain& through, const JunctionWindow& window)
 {
-    QVector<MouthPoint>& mouth = window.isArmStart ? arm.startMouth : arm.endMouth;
-    const QVector<MouthPoint> unwelded = mouth;
-    for (int k = 0; k < mouth.size(); ++k) {
-        const ZipCorner& corner = window.mouthCorners.at(k);
-        mouth[k].position = corner.ring == ZipCorner::kMouthRing ? unwelded.at(corner.column).position
-                                                                  : unpulledVertex(through.rings.at(corner.ring), corner.column);
+    const auto mouthOf = [&](const WindowMouth& windowMouth) -> QVector<MouthPoint>& {
+        Chain& arm = chains[windowMouth.armChain];
+        return windowMouth.isArmStart ? arm.startMouth : arm.endMouth;
+    };
+    QVector<QVector<QVector3D>> welded;
+    for (const WindowMouth& windowMouth : window.mouths) {
+        QVector<QVector3D> positions;
+        positions.reserve(windowMouth.mouthCorners.size());
+        for (const ZipCorner& corner : windowMouth.mouthCorners) {
+            positions.append(corner.ring == ZipCorner::kMouthRing ? mouthOf(window.mouths.at(corner.mouth)).at(corner.column).position
+                                                                   : unpulledVertex(through.rings.at(corner.ring), corner.column));
+        }
+        welded.append(positions);
+    }
+    for (int m = 0; m < window.mouths.size(); ++m) {
+        QVector<MouthPoint>& mouth = mouthOf(window.mouths.at(m));
+        for (int k = 0; k < mouth.size(); ++k) {
+            mouth[k].position = welded.at(m).at(k);
+        }
+    }
+}
+
+// The windows of one through chain: each mouth joins the windows whose
+// quads its own share, as long as it crosses none of their mouths; a mouth
+// that does, or whose window cannot be zipped, closes with a fan inside the
+// through.
+void zipWindows(const QVector<Leg>& legs, QVector<Chain>& chains, int throughIndex, const QVector<MouthCut>& cuts, QVector<Warning>& warnings)
+{
+    struct Group {
+        QVector<int> members;
+        JunctionWindow window;
+    };
+    Chain& through = chains[throughIndex];
+    const RingTube throughTube {&through.rings, {}};
+    const int resolution = through.rings.first().radii.size();
+    QVector<Group> groups;
+    for (int c = 0; c < cuts.size(); ++c) {
+        const MouthCut& cut = cuts.at(c);
+        Chain& arm = chains[cut.end.chain];
+
+        QSet<Vertex> removed = cut.removed;
+        QVector<int> sharing;
+        bool hasGrown = true;
+        while (hasGrown) {
+            hasGrown = false;
+            for (int g = 0; g < groups.size(); ++g) {
+                if (!sharing.contains(g) && groups.at(g).window.removedQuads.intersects(removed)) {
+                    sharing.append(g);
+                    removed.unite(groups.at(g).window.removedQuads);
+                    hasGrown = true;
+                }
+            }
+        }
+        QVector<int> members;
+        for (int g : std::as_const(sharing)) {
+            members.append(groups.at(g).members);
+        }
+        const bool runsIntoAnother = std::any_of(members.cbegin(), members.cend(), [&](int member) {
+            return mouthsIntersect(cut.polygon, cuts.at(member).polygon, resolution);
+        });
+        if (runsIntoAnother) {
+            warnings.append(Warning {
+                Warning::JunctionOverlap,
+                cut.tripId,
+                cut.station,
+                QStringLiteral("Two passages open into station %1 and run into each other; the tube ends one inside the other.").arg(cut.station)
+            });
+            closeWithFan(arm, cut.end.isStart, throughTube);
+            continue;
+        }
+
+        members.append(c);
+        std::sort(members.begin(), members.end());
+        const std::optional<JunctionWindow> window = zippedWindow(through, chains, cuts, members);
+        if (!window) {
+            warnings.append(armWarning(legs, arm, cut.end.isStart, Warning::JunctionUnzipped,
+                                       QStringLiteral("The passage from station %1 could not be joined to the passage it opens into; the tube ends it inside that passage.")));
+            closeWithFan(arm, cut.end.isStart, throughTube);
+            continue;
+        }
+        std::sort(sharing.begin(), sharing.end(), std::greater<int>());
+        for (int g : std::as_const(sharing)) {
+            groups.removeAt(g);
+        }
+        groups.append(Group {members, *window});
+    }
+
+    for (const Group& group : std::as_const(groups)) {
+        applyWelds(chains, through, group.window);
+        through.windows.append(group.window);
     }
 }
 
@@ -2169,6 +2666,7 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
         stitch = growAndTrim(legs, chains, junctions, spacings, leftOut, warnings);
     }
 
+    QVector<QVector<MouthCut>> cutsByThrough(chains.size());
     for (int j = 0; j < junctions.size(); ++j) {
         const Junction& junction = junctions.at(j);
         Chain& through = chains[junction.through];
@@ -2180,7 +2678,6 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
             }
             continue;
         }
-        const ThroughSpan span(through.rings, junction.position, std::numeric_limits<double>::max());
         std::sort(arms.begin(), arms.end(), [](const TrimmedArm& a, const TrimmedArm& b) { return a.end.chain < b.end.chain; });
 
         for (const TrimmedArm& trimmed : std::as_const(arms)) {
@@ -2194,8 +2691,8 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
             if (!hasMeshedMouthEnd(arm, end.isStart)) {
                 dropArm(legs, arm, end.isStart,
                         QStringLiteral("The passage from station %1 lies inside the passages it joins; the tube leaves it out."), warnings);
-                for (Chain& chain : chains) {
-                    chain.windows.removeIf([&](const JunctionWindow& window) { return window.armChain == end.chain; });
+                for (QVector<MouthCut>& cuts : cutsByThrough) {
+                    cuts.removeIf([&](const MouthCut& cut) { return cut.end.chain == end.chain; });
                 }
                 continue;
             }
@@ -2205,30 +2702,25 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
                     parameter->rx() -= stitch.removedFromStart.at(junction.through);
                 }
             }
-            const QUuid tripId = junctionTrip(legs, arm, end.isStart);
-            WindowCut cut = cutWindow(through, span, arm, end, parameters);
-            if (cut.window && overlapsWindows(through.windows, *cut.window)) {
-                warnings.append(Warning {
-                    Warning::JunctionOverlap,
-                    tripId,
-                    junction.station,
-                    QStringLiteral("Two passages open into station %1 through the same wall; the tube ends one inside the other.").arg(junction.station)
-                });
-                cut.window.reset();
-            } else if (cut.isMouthReversed) {
+            const MouthCutResult result = cutMouth(through, end, junctionTrip(legs, arm, end.isStart), junction.station, parameters);
+            if (result.cut) {
+                cutsByThrough[junction.through].append(*result.cut);
+                continue;
+            }
+            if (result.isMouthReversed) {
                 warnings.append(armWarning(legs, arm, end.isStart, Warning::JunctionUnzipped,
                                            QStringLiteral("The mouth of the passage from station %1 runs backward around the passage it joins; the tube ends it inside that passage.")));
-            } else if (!cut.window) {
+            } else {
                 warnings.append(armWarning(legs, arm, end.isStart, Warning::JunctionUnzipped,
                                            QStringLiteral("The passage from station %1 could not be joined to the passage it opens into; the tube ends it inside that passage.")));
             }
-            if (cut.window) {
-                cut.window->tripId = tripId;
-                applyWelds(arm, through, *cut.window);
-                through.windows.append(*cut.window);
-            } else {
-                closeWithFan(arm, end.isStart, throughTube);
-            }
+            closeWithFan(arm, end.isStart, throughTube);
+        }
+    }
+
+    for (int t = 0; t < chains.size(); ++t) {
+        if (!cutsByThrough.at(t).isEmpty()) {
+            zipWindows(legs, chains, t, cutsByThrough.at(t), warnings);
         }
     }
 }

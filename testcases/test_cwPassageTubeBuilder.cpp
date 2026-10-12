@@ -1922,7 +1922,8 @@ TEST_CASE("cwPassageTubeBuilder welds the mouth vertices of a thin arm", "[Passa
                                                             {armFrom(QStringLiteral("d"), QVector3D(10, -10, 0), lrud(0.07, 0.07, 0.07, 0.07))}));
     REQUIRE(debug.chains.size() == 2);
     REQUIRE(debug.chains.at(0).windows.size() == 1);
-    const Builder::JunctionWindow& window = debug.chains.at(0).windows.first();
+    REQUIRE(debug.chains.at(0).windows.first().mouths.size() == 1);
+    const Builder::WindowMouth& window = debug.chains.at(0).windows.first().mouths.first();
     const QVector<QVector3D> mouth = mouthPositions(debug.chains.at(1).endMouth);
     REQUIRE(window.mouthCorners.size() == mouth.size());
 

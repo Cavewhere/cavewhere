@@ -166,31 +166,41 @@ public:
     };
 
     // One corner of a zip triangle: a through ring vertex (ring, column), or
-    // the arm's mouth point numbered column when ring is kMouthRing.
+    // point number column of the window's mouth number mouth when ring is
+    // kMouthRing.
     struct ZipCorner {
         static constexpr int kMouthRing = -1;
 
         int ring = kMouthRing;
         int column = 0;
+        int mouth = 0;
 
         bool operator==(const ZipCorner&) const = default;
     };
 
-    // Where an arm joins the through chain that holds this window. The through
-    // quads in removedQuads, each named by its first ring and first column, are
-    // left out; boundary is the hole's edge as (ring, column) through vertices,
-    // counter-clockwise in (ring, column) space; zip closes the band between
-    // boundary and the arm's mouth with triangles that belong to tripId.
-    // mouthCorners holds one corner per mouth point: the point itself, an
-    // earlier mouth point it was welded to, or the boundary vertex it was
-    // welded to. The arm's strip to its mouth and the zip band both use them.
-    struct JunctionWindow {
-        QSet<QPair<int, int>> removedQuads;
-        QVector<QPair<int, int>> boundary;
-        QVector<std::array<ZipCorner, 3>> zip;
-        QVector<ZipCorner> mouthCorners;
+    // An arm's mouth in a window. mouthCorners holds one corner per mouth
+    // point: the point itself, an earlier point of the same mouth it was
+    // welded to, or the boundary vertex it was welded to. The arm's strip to
+    // its mouth, which belongs to tripId, and the zip band both use them.
+    struct WindowMouth {
         int armChain = -1;
         bool isArmStart = false;
+        QVector<ZipCorner> mouthCorners;
+        QUuid tripId;
+    };
+
+    // Where arms join the through chain that holds this window. The through
+    // quads in removedQuads, each named by its first ring and first column,
+    // are left out; boundaries are the hole's edge loops as (ring, column)
+    // through vertices, with the hole on their left in (ring, column) space;
+    // zip closes the band between the boundaries and the mouths with
+    // triangles that belong to tripId. Arms whose holes share through quads
+    // share one window.
+    struct JunctionWindow {
+        QSet<QPair<int, int>> removedQuads;
+        QVector<QVector<QPair<int, int>>> boundaries;
+        QVector<std::array<ZipCorner, 3>> zip;
+        QVector<WindowMouth> mouths;
         QUuid tripId;
     };
 

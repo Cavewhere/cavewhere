@@ -273,9 +273,11 @@ double windowRingSpacing(const OnlyWindow& found)
 {
     int first = std::numeric_limits<int>::max();
     int last = std::numeric_limits<int>::lowest();
-    for (const QPair<int, int>& vertex : found.window->boundary) {
-        first = std::min(first, vertex.first);
-        last = std::max(last, vertex.first);
+    for (const QVector<QPair<int, int>>& boundary : found.window->boundaries) {
+        for (const QPair<int, int>& vertex : boundary) {
+            first = std::min(first, vertex.first);
+            last = std::max(last, vertex.first);
+        }
     }
     REQUIRE(last > first);
     const QVector<Builder::Ring>& rings = found.through->rings;
@@ -288,8 +290,10 @@ double windowRingSpacing(const OnlyWindow& found)
 
 const QVector<Builder::MouthPoint>& windowMouth(const Builder::Debug& debug, const OnlyWindow& found)
 {
-    const Builder::Chain& arm = debug.chains.at(found.window->armChain);
-    return found.window->isArmStart ? arm.startMouth : arm.endMouth;
+    REQUIRE(found.window->mouths.size() == 1);
+    const Builder::WindowMouth& windowMouth = found.window->mouths.first();
+    const Builder::Chain& arm = debug.chains.at(windowMouth.armChain);
+    return windowMouth.isArmStart ? arm.startMouth : arm.endMouth;
 }
 
 const Builder::Chain& requireArm(const Builder::Debug& debug, int chainIndex)
@@ -348,6 +352,38 @@ TEST_CASE("cwPassageTubeJunction merges a symmetric T without interior faces", "
         CHECK(radius == Catch::Approx(1.0).margin(kRadiusTolerance));
     }
     checkMeshClean(debug);
+}
+
+// The window of an arm that shares no through quads has one boundary loop
+// and one mouth, and its zip band starts and runs as it did before windows
+// could hold several mouths: each triangle as "ring,column" corners, ring -1
+// for a mouth point.
+TEST_CASE("cwPassageTubeJunction zips the symmetric T's single mouth as before", "[PassageTube][cwPassageTubeJunction]")
+{
+    const QString kExpectedZip = QStringLiteral(
+        "19,0 19,1 -1,0;-1,0 19,1 -1,1;19,1 18,1 -1,1;-1,1 18,1 -1,2;-1,2 18,1 -1,3;18,1 18,2 -1,3;18,2 17,2 -1,3;"
+        "17,2 16,2 -1,3;-1,3 16,2 -1,4;-1,4 16,2 -1,5;16,2 15,2 -1,5;15,2 14,2 -1,5;14,2 14,1 -1,5;-1,5 14,1 -1,6;"
+        "-1,6 14,1 -1,7;14,1 13,1 -1,7;13,1 13,0 -1,7;-1,7 13,0 -1,8;-1,8 13,0 -1,9;13,0 13,15 -1,9;13,15 14,15 -1,9;"
+        "-1,9 14,15 -1,10;-1,10 14,15 -1,11;14,15 14,14 -1,11;14,14 15,14 -1,11;15,14 16,14 -1,11;-1,11 16,14 -1,12;"
+        "-1,12 16,14 -1,13;16,14 17,14 -1,13;17,14 18,14 -1,13;18,14 18,15 -1,13;-1,13 18,15 -1,14;-1,14 18,15 -1,15;"
+        "18,15 19,15 -1,15;19,15 19,0 -1,15;-1,15 19,0 -1,0");
+    const Trip trip {{throughAlongX(roundSection(1)), armTo(QStringLiteral("d"), QVector3D(10, -10, 0), roundSection(0.5))}};
+    const Builder::Debug debug = buildDebug(makeTripsInput({trip}));
+    REQUIRE(debug.chains.at(0).windows.size() == 1);
+    const Builder::JunctionWindow& window = debug.chains.at(0).windows.first();
+    CHECK(window.mouths.size() == 1);
+    CHECK(window.boundaries.size() == 1);
+
+    QStringList triangles;
+    for (const std::array<Builder::ZipCorner, 3>& triangle : window.zip) {
+        QStringList corners;
+        for (const Builder::ZipCorner& corner : triangle) {
+            CHECK(corner.mouth == 0);
+            corners.append(QStringLiteral("%1,%2").arg(corner.ring).arg(corner.column));
+        }
+        triangles.append(corners.join(QLatin1Char(' ')));
+    }
+    CHECK(triangles.join(QLatin1Char(';')).toStdString() == kExpectedZip.toStdString());
 }
 
 TEST_CASE("cwPassageTubeJunction fills a trench to the far wall", "[PassageTube][cwPassageTubeJunction]")
@@ -485,7 +521,11 @@ TEST_CASE("cwPassageTubeJunction keeps a loop's junction closed", "[PassageTube]
     CHECK(isClosedSurface(debug.mesh));
 }
 
-TEST_CASE("cwPassageTubeJunction falls back to a fan cap when two mouths overlap", "[PassageTube][cwPassageTubeJunction]")
+// Two arms 30 degrees apart on the same side run into each other above the
+// through, so their mouths cross on its surface: the second keeps the fan
+// cap, hidden inside the through without crossing its wall. Its tube still
+// runs through the first arm's mouth and zip band, as the passages do.
+TEST_CASE("cwPassageTubeJunction keeps the fallback for arms that run into each other", "[PassageTube][cwPassageTubeJunction]")
 {
     constexpr double kSpreadDegrees = 30.0;
     const float spread = static_cast<float>(qDegreesToRadians(kSpreadDegrees));
@@ -497,8 +537,29 @@ TEST_CASE("cwPassageTubeJunction falls back to a fan cap when two mouths overlap
     REQUIRE(debug.chains.size() == 3);
 
     CHECK(isClosedSurface(debug.mesh));
-    CHECK(warningCount(debug, Warning::JunctionOverlap) == 1);
-    CHECK(debug.chains.at(0).windows.size() == 1);
+    REQUIRE(warningCount(debug, Warning::JunctionOverlap) == 1);
+    const auto overlap = std::find_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const Warning& warning) {
+        return warning.type == Warning::JunctionOverlap;
+    });
+    CHECK(overlap->message.contains(QStringLiteral("run into each other")));
+    REQUIRE(debug.chains.at(0).windows.size() == 1);
+    CHECK(debug.chains.at(0).windows.first().mouths.size() == 1);
+    const auto isFanCapped = [](const Builder::Chain& chain) { return chain.endCap == Builder::EndCap::Fan; };
+    REQUIRE(std::count_if(debug.chains.cbegin() + 1, debug.chains.cend(), isFanCapped) == 1);
+
+    const int capped = static_cast<int>(std::find_if(debug.chains.cbegin() + 1, debug.chains.cend(), isFanCapped) - debug.chains.cbegin());
+    const auto isThroughWall = [&](int triangle) {
+        return debug.triangleChain.at(triangle) == 0 && !debug.triangleInZipBand.at(triangle);
+    };
+    const Check::Report report = Check::check(debug.mesh, debug);
+    INFO(Check::toText(report).toStdString());
+    for (const Check::Issue& issue : report.issues) {
+        if (issue.type != Check::SelfIntersection) {
+            continue;
+        }
+        const bool isCappedArm = debug.triangleChain.at(issue.triangle) == capped || debug.triangleChain.at(issue.otherTriangle) == capped;
+        CHECK_FALSE((isCappedArm && (isThroughWall(issue.triangle) || isThroughWall(issue.otherTriangle))));
+    }
 }
 
 TEST_CASE("cwPassageTubeJunction drops an arm that lies inside the through", "[PassageTube][cwPassageTubeJunction]")
@@ -522,7 +583,7 @@ TEST_CASE("cwPassageTubeJunction samples the mouth to the through's grid", "[Pas
     const QVector<Builder::MouthPoint>& mouth = windowMouth(debug, found);
     const int resolution = Builder::Options().ringResolution;
     CHECK(mouth.size() > resolution);
-    CHECK(found.window->mouthCorners.size() == mouth.size());
+    CHECK(found.window->mouths.first().mouthCorners.size() == mouth.size());
     for (int i = 1; i < mouth.size(); ++i) {
         CHECK(mouth.at(i - 1).column < mouth.at(i).column);
     }

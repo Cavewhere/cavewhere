@@ -2380,36 +2380,44 @@ ChainVertices addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const C
     return placed;
 }
 
-// Each window's zip band and its arm's strip to the mouth, sharing the
-// through's ring vertices and the arm's mouth vertices.
+// Each window's zip band and its arms' strips to their mouths, sharing the
+// through's ring vertices and the arms' mouth vertices.
 void addZipBands(MeshWriter& writer, const QVector<Chain>& chains, const QVector<ChainVertices>& placed)
 {
     using ZipCorner = cwPassageTubeBuilder::ZipCorner;
+    using WindowMouth = cwPassageTubeBuilder::WindowMouth;
     for (int c = 0; c < chains.size(); ++c) {
         for (const cwPassageTubeBuilder::JunctionWindow& window : chains.at(c).windows) {
-            const ChainVertices& arm = placed.at(window.armChain);
-            const qint64 mouthFirst = window.isArmStart ? arm.startMouthFirst : arm.endMouthFirst;
+            const auto mouthFirstOf = [&](const WindowMouth& mouth) {
+                const ChainVertices& arm = placed.at(mouth.armChain);
+                return mouth.isArmStart ? arm.startMouthFirst : arm.endMouthFirst;
+            };
             const auto indexOf = [&](const ZipCorner& corner) {
-                const qint64 first = corner.ring == ZipCorner::kMouthRing ? mouthFirst : placed.at(c).ringFirst.at(corner.ring);
+                const qint64 first = corner.ring == ZipCorner::kMouthRing ? mouthFirstOf(window.mouths.at(corner.mouth))
+                                                                          : placed.at(c).ringFirst.at(corner.ring);
                 return first < 0 ? first : first + corner.column;
             };
 
-            writer.setSource(window.armChain);
-            const qint64 endRingFirst = window.isArmStart ? arm.ringFirst.first() : arm.ringFirst.last();
-            if (mouthFirst >= 0 && endRingFirst >= 0) {
+            for (const WindowMouth& windowMouth : window.mouths) {
+                const ChainVertices& arm = placed.at(windowMouth.armChain);
+                const qint64 endRingFirst = windowMouth.isArmStart ? arm.ringFirst.first() : arm.ringFirst.last();
+                if (mouthFirstOf(windowMouth) < 0 || endRingFirst < 0) {
+                    continue;
+                }
                 QVector<quint32> mouth;
-                mouth.reserve(window.mouthCorners.size());
-                for (const ZipCorner& corner : window.mouthCorners) {
+                mouth.reserve(windowMouth.mouthCorners.size());
+                for (const ZipCorner& corner : windowMouth.mouthCorners) {
                     const qint64 index = indexOf(corner);
                     if (index >= 0) {
                         mouth.append(static_cast<quint32>(index));
                     }
                 }
-                if (mouth.size() == window.mouthCorners.size()) {
-                    const Chain& armChain = chains.at(window.armChain);
-                    const int resolution = (window.isArmStart ? armChain.rings.first() : armChain.rings.last()).vertices.size();
-                    writer.addMouthStrip(window.tripId, static_cast<quint32>(endRingFirst), resolution, mouth,
-                                         window.isArmStart ? armChain.startMouth : armChain.endMouth, !window.isArmStart);
+                if (mouth.size() == windowMouth.mouthCorners.size()) {
+                    const Chain& armChain = chains.at(windowMouth.armChain);
+                    const int resolution = (windowMouth.isArmStart ? armChain.rings.first() : armChain.rings.last()).vertices.size();
+                    writer.setSource(windowMouth.armChain);
+                    writer.addMouthStrip(windowMouth.tripId, static_cast<quint32>(endRingFirst), resolution, mouth,
+                                         windowMouth.isArmStart ? armChain.startMouth : armChain.endMouth, !windowMouth.isArmStart);
                 }
             }
 
