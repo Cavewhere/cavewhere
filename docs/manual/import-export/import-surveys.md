@@ -96,7 +96,7 @@ cave, and a **Compass import** job runs in the sidebar's
 A `.dat` the parser cannot finish loses that whole cave, reported as a
 *warning*, not a failure, so an import can finish with nothing imported and
 nothing louder than a warning list. Milder problems CaveWhere fixes and warns
-about: it trims a cave name over 80 characters to 80, and a survey team to 100.
+about: it trims a cave name over 80 characters to 80.
 Most messages name the file or the line, few name both.
 
 ## Import a Survex file as a new trip
