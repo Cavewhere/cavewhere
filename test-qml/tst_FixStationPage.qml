@@ -1,4 +1,5 @@
 import QtQuick
+import QtCore as QtCore
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -43,6 +44,31 @@ MainWindowTest {
         return false
     }
 
+    //! The page's header cell titled \a title, found among the visual
+    //! children by its sortMode, null when there is none.
+    function headerCell(title) {
+        const search = (item) => {
+            if (item.sortMode !== undefined && item.text === title) {
+                return item
+            }
+            for (let i = 0; i < item.children.length; ++i) {
+                const found = search(item.children[i])
+                if (found !== null) {
+                    return found
+                }
+            }
+            return null
+        }
+        return search(RootData.pageView.currentPageItem)
+    }
+
+    // Opened on the page's own category so cleanup() can put back the widths
+    // a test dragged: one QSettings serves the whole run.
+    QtCore.Settings {
+        id: fixColumnSettingsId
+        category: "FixStationPage"
+    }
+
     TestCase {
         name: "FixStationPage"
         when: windowShown
@@ -79,6 +105,34 @@ MainWindowTest {
             rootId.width = defaultWindowWidth
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.newProject()
+
+            // Puts back the widths a test dragged, on the page's own category.
+            for (const key of ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]) {
+                fixColumnSettingsId.setValue(key, 0)
+            }
+            fixColumnSettingsId.sync()
+        }
+
+        readonly property string coordinateTitle: "Coordinate (East, North / Lat, Long)"
+
+        //! The resize grip on the right edge of header \a title.
+        function resizeGripOf(title) {
+            const cell = rootId.headerCell(title)
+            verify(cell !== null, "the page has a " + title + " header")
+            const grip = rootId.findChildWithPrefix(cell, "columnResizeGrip")
+            verify(grip !== null, "the " + title + " header has a resize grip")
+            verify(grip.visible, "the " + title + " header's resize grip shows")
+            return grip
+        }
+
+        //! Drags header \a title's right edge \a dx pixels sideways. The drag
+        //! is laid out on the page because the grip follows the edge it moves,
+        //! and mouseDrag maps each step through its item's current position.
+        function dragColumnEdge(title, dx) {
+            const grip = resizeGripOf(title)
+            const page = RootData.pageView.currentPageItem
+            const start = grip.mapToItem(page, grip.width / 2, grip.height / 2)
+            mouseDrag(page, start.x, start.y, dx, 0)
         }
 
         function gotoFixStations() {
@@ -1571,6 +1625,91 @@ MainWindowTest {
                    + ") should sit inside the page (" + page.width + ")")
         }
 
+        // Dragging a header's right edge narrows that column, the fix rows'
+        // cells follow it, and the width comes back when the page reopens.
+        function test_aDraggedColumnEdgeResizesAndPersists() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            cave.fixStations.addFixStation()
+            const coordinateCell = findCoordinateCell(0)
+            waitForRendering(page)
+
+            const header = rootId.headerCell(coordinateTitle)
+            verify(header !== null, "the page has a Coordinate header")
+            const startWidth = header.width
+            const startMinimum = page.wideMinimumWidth
+            const drag = 80
+
+            dragColumnEdge(coordinateTitle, -drag)
+            tryVerify(() => Math.abs(header.width - (startWidth - drag)) <= 2, 5000,
+                      "the Coordinate header narrows by the drag, from " + startWidth
+                      + " to about " + (startWidth - drag) + ", got " + header.width)
+            const draggedWidth = header.width
+            tryCompare(coordinateCell.parent, "width", draggedWidth, 5000,
+                       "the fix row's coordinate cell follows its column")
+            verify(Math.abs(page.wideMinimumWidth - (startMinimum - drag)) <= 2,
+                   "the table needs less room once a column narrows")
+            verify(!page.isNarrow, "the page keeps the wide layout")
+
+            compare(Number(fixColumnSettingsId.value("coordinateColumnWidth", 0)), draggedWidth,
+                    "the dragged width is stored under the page's settings")
+
+            // A project switch evicts the cached page, so the next one is
+            // built fresh and reads its widths back from the settings.
+            RootData.newProject()
+            const reopenedCave = gotoFixStations()
+            const reopenedPage = RootData.pageView.currentPageItem
+            verify(reopenedPage !== page, "the reopened page is a new page item")
+            reopenedCave.fixStations.addFixStation()
+            let reopenedHeader = null
+            tryVerify(() => {
+                reopenedHeader = rootId.headerCell(coordinateTitle)
+                return reopenedHeader !== null
+            }, 5000, "the reopened page has a Coordinate header")
+            tryCompare(reopenedHeader, "width", draggedWidth, 5000,
+                       "the dragged width survives reopening the page")
+            tryCompare(findCoordinateCell(0).parent, "width", draggedWidth, 5000,
+                       "and the reopened row's cell has it too")
+        }
+
+        // A drag far past the left edge stops at the minimum column width.
+        function test_aColumnNarrowsNoFurtherThanItsMinimum() {
+            gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            waitForRendering(page)
+            verify(Theme.tableColumnMinimumWidth > 0, "Theme names a minimum column width")
+
+            dragColumnEdge("Input CS", -1000)
+            tryCompare(rootId.headerCell("Input CS"), "width", Theme.tableColumnMinimumWidth, 5000,
+                       "the Input CS column stops at the minimum width")
+        }
+
+        // Widening a column stops where the table still fits the page, so the
+        // page keeps the wide layout through the drag.
+        function test_aColumnWidensOnlyAsFarAsThePageHolds() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            cave.fixStations.addFixStation()
+            findCoordinateCell(0)
+            waitForRendering(page)
+
+            const header = rootId.headerCell("Input CS")
+            verify(header !== null, "the page has an Input CS header")
+            const startWidth = header.width
+            const room = Math.floor(page.width - page.wideMinimumWidth)
+            verify(room > 0, "the page has room for the column to widen")
+
+            dragColumnEdge("Input CS", 5000)
+            tryVerify(() => Math.abs(header.width - (startWidth + room)) <= 2, 5000,
+                      "the Input CS column widens from " + startWidth + " to the page's spare room, about "
+                      + (startWidth + room) + ", got " + header.width)
+            verify(!page.isNarrow, "the page keeps the wide layout")
+            verify(findChild(page, "narrowFixRow.0") === null, "the row keeps its wide delegate")
+            verify(page.wideMinimumWidth <= page.width,
+                   "the widened table (" + page.wideMinimumWidth + ") still fits the page ("
+                   + page.width + ")")
+        }
+
         function test_fixStationsLinkCount() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
@@ -1744,24 +1883,6 @@ MainWindowTest {
             return shownItems(view).map(item => item === null ? "" : item.objectName)
         }
 
-        //! The page's header cell titled \a title, found among the visual
-        //! children by its sortMode, null when there is none.
-        function headerCell(title) {
-            const search = (item) => {
-                if (item.sortMode !== undefined && item.text === title) {
-                    return item
-                }
-                for (let i = 0; i < item.children.length; ++i) {
-                    const found = search(item.children[i])
-                    if (found !== null) {
-                        return found
-                    }
-                }
-                return null
-            }
-            return search(RootData.pageView.currentPageItem)
-        }
-
         //! The page's filter field, checked visible.
         function filterField() {
             const field = findChild(RootData.pageView.currentPageItem, "fixStationFilter")
@@ -1797,7 +1918,7 @@ MainWindowTest {
             makeCaves()
             const view = openProjectFixStations(initialRowCount)
             verifyRowsMatchModel(view, initialRowCount, "opened")
-            const station = headerCell("Station")
+            const station = rootId.headerCell("Station")
             verify(station !== null, "the page has a Station header")
             verify(station.visible, "the header shows in the wide layout")
             waitForRendering(view)

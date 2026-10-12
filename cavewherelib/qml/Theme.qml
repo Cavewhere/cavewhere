@@ -272,6 +272,18 @@ QtObject {
     //The icon ahead of a native node row's name.
     readonly property int treeKindIconSize: Math.round(14 * fontScale)
 
+    // Resizable table columns: the narrowest a dragged column gets, and the
+    // strip at a header cell's right edge that drags it.
+    readonly property int tableColumnMinimumWidth: Math.round(60 * fontScale)
+    readonly property int columnResizeGripWidth: Math.round(8 * fontScale)
+
+    // Fix Stations page default column widths. The station column adds tree
+    // indentation on top; the coordinate column adds the pick-from-view button.
+    readonly property int fixStationColumnWidth: Math.round(130 * fontScale)
+    readonly property int fixInputCSColumnWidth: Math.round(400 * fontScale)
+    //Fits a UTM triple with its elevation unit, e.g. "610016.792, 5615117.075, 2545.34m".
+    readonly property int fixCoordinateColumnWidth: Math.round(300 * fontScale)
+
     // Kind glyphs: a Cave, a Folder where caves go, and a Section (a Folder
     // inside a cave). KindIcon picks one from where the node sits.
     readonly property url kindIconCave: "qrc:/icons/svg/caveKind.svg"

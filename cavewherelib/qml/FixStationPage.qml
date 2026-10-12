@@ -9,6 +9,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick as QQ
 import QtQml
+import QtCore as QtCore
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtQml.Models
@@ -39,6 +40,14 @@ StandardPage {
     // How many tree levels the station column makes room for before the
     // indentation starts to eat into the name.
     readonly property int stationIndentLevels: 3
+
+    // The narrowest the station column gets: the deepest indentation it makes
+    // room for still leaves a minimum-width name.
+    readonly property int stationColumnMinimumWidth: stationIndentLevels * Theme.treeIndent
+                                                     + Theme.tableColumnMinimumWidth
+
+    // The QSettings keys of the dragged column widths, in column order.
+    readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
 
     // Cavern refuses a fix that names no system once the project has a frame,
     // so only then does a bare attached row with no system chosen warn.
@@ -313,6 +322,29 @@ StandardPage {
         }
     }
 
+    //! Sets header \a column to \a requestedWidth and stores it. The width
+    //! stays above the column's minimum, and grows only as far as the table
+    //! still fits the page, so the page keeps the wide layout through a drag.
+    function resizeColumn(column: int, requestedWidth: int): void {
+        const columns = [stationColumn, csColumn, coordinateColumn]
+        const keys = fixStationPage.columnWidthKeys
+        const minimum = column === 0 ? fixStationPage.stationColumnMinimumWidth
+                                     : Theme.tableColumnMinimumWidth
+        const room = Math.max(0, Math.floor(fixStationPage.width - fixStationPage.wideMinimumWidth))
+        const maximum = Math.max(minimum, columns[column].columnWidth + room)
+        const width = Math.min(maximum, Math.max(minimum, requestedWidth))
+        columnWidthsId[keys[column]] = width
+        columnSettingsId.setValue(keys[column], width)
+    }
+
+    //! Picks up the stored column widths, including ones dragged on this
+    //! page's other host while this one sat cached.
+    function readColumnWidths(): void {
+        for (const key of fixStationPage.columnWidthKeys) {
+            columnWidthsId[key] = Number(columnSettingsId.value(key, 0))
+        }
+    }
+
     onCurrentFixRowChanged: {
         treeViewId.currentIndex = fixStationPage.currentFixRow
         if (fixStationPage.currentFixRow < 0) {
@@ -321,6 +353,14 @@ StandardPage {
         // The rows may not be laid out yet when the page opens on a link.
         Qt.callLater(() => fixStationPage.revealFixRow(treeViewId.currentIndex))
     }
+
+    onVisibleChanged: {
+        if (visible) {
+            fixStationPage.readColumnWidths()
+        }
+    }
+
+    QQ.Component.onCompleted: fixStationPage.readColumnWidths()
 
     // currentFixRow mirrors the view, so a link naming the row the page last
     // showed still counts as a change once the view has moved on.
@@ -834,6 +874,23 @@ StandardPage {
         visible: false
     }
 
+    // The widths the user dragged the columns to, shared by every host of this
+    // page. Read each time the page shows and written straight through on each
+    // drag, so a stored width is on disk before the next read. A stored 0 leaves
+    // that column at its default width.
+    QtCore.Settings {
+        id: columnSettingsId
+        category: "FixStationPage"
+    }
+
+    QtObject {
+        id: columnWidthsId
+
+        property int stationColumnWidth: 0
+        property int inputCSColumnWidth: 0
+        property int coordinateColumnWidth: 0
+    }
+
     TableStaticColumnModel {
         id: columnModelId
         columns: [
@@ -841,7 +898,9 @@ StandardPage {
                 id: stationColumn
                 // A name's width plus the indentation of the deepest tree
                 // level the column makes room for.
-                columnWidth: 130 + fixStationPage.stationIndentLevels * Theme.treeIndent
+                columnWidth: columnWidthsId.stationColumnWidth > 0
+                             ? columnWidthsId.stationColumnWidth
+                             : Theme.fixStationColumnWidth + fixStationPage.stationIndentLevels * Theme.treeIndent
                 text: "Station"
                 sortRole: FixStationModel.StationNameRole
             },
@@ -850,16 +909,19 @@ StandardPage {
                 // Wide enough for UTM mode's four controls — mode combo (sized
                 // to its widest entry, "Custom...") + zone + hemisphere + datum
                 // — so none of them is clipped by the cell.
-                columnWidth: 400
+                columnWidth: columnWidthsId.inputCSColumnWidth > 0
+                             ? columnWidthsId.inputCSColumnWidth
+                             : Theme.fixInputCSColumnWidth
                 text: "Input CS"
                 sortRole: FixStationModel.InputCSRole
             },
             TableStaticColumn {
                 id: coordinateColumn
-                // Wide enough for a UTM triple with its elevation unit, e.g.
-                // "610016.792, 5615117.075, 2545.34m", plus the footprint of
-                // the pick-from-view crosshair that shares the column with it.
-                columnWidth: 300 + pickButtonMetricsId.implicitWidth + Theme.tightSpacing
+                // Wide enough for a UTM triple plus the footprint of the
+                // pick-from-view crosshair that shares the column with it.
+                columnWidth: columnWidthsId.coordinateColumnWidth > 0
+                             ? columnWidthsId.coordinateColumnWidth
+                             : Theme.fixCoordinateColumnWidth + pickButtonMetricsId.implicitWidth + Theme.tightSpacing
                 // Both orders are named because the order is per row, not per
                 // column: a geographic CS writes latitude first, a projected one
                 // easting first. The headers this column replaced ("Easting /
@@ -935,7 +997,12 @@ StandardPage {
                 model: columnModelId
 
                 delegate: TableStaticHeaderColumn {
+                    required property int index
+
                     model: treeFilterId
+                    resizable: true
+
+                    onResizeRequested: (newWidth) => fixStationPage.resizeColumn(index, newWidth)
                 }
             }
         }

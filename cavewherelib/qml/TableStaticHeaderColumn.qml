@@ -18,6 +18,10 @@ QQ.Rectangle {
     required property int sortRole; //: -1
     required property var model
 
+    //! Shows a grip on the right edge whose drag asks for a new width
+    //! through resizeRequested(); the page owns the width and stores it.
+    property bool resizable: false
+
     property SortFilterProxyModel _sortModel: model as SortFilterProxyModel
 
     // Derived from the model rather than stored here: the header delegates
@@ -35,6 +39,8 @@ QQ.Rectangle {
 
     // Qt6: add cellPadding (and font etc) as public API in headerview
     readonly property real cellPadding: 2
+
+    signal resizeRequested(int newWidth)
 
     implicitWidth: columnWidth
     implicitHeight: textId.implicitHeight + (cellPadding * 2)
@@ -74,7 +80,7 @@ QQ.Rectangle {
     QQ.MouseArea {
         anchors.fill: parent
         anchors.leftMargin: 5
-        anchors.rightMargin: 5
+        anchors.rightMargin: delegate.resizable ? resizeGripId.width : 5
         onClicked: {
             if(delegate.sortRole >= 0) {
                 //Assume that this is a sort proxy mode
@@ -91,6 +97,41 @@ QQ.Rectangle {
                 }
             } else {
                 console.warn("Delegate has no sortRole")
+            }
+        }
+    }
+
+    QQ.Item {
+        id: resizeGripId
+        objectName: "columnResizeGrip." + delegate.text
+
+        visible: delegate.resizable
+        width: Theme.columnResizeGripWidth
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+
+        QQ.HoverHandler {
+            cursorShape: Qt.SplitHCursor
+        }
+
+        QQ.DragHandler {
+            property int startWidth: 0
+
+            target: null
+            yAxis.enabled: false
+
+            onActiveChanged: {
+                if (active) {
+                    startWidth = delegate.columnWidth
+                }
+            }
+            // Measured from the press, so the drag threshold moves the edge too.
+            onCentroidChanged: {
+                if (active) {
+                    delegate.resizeRequested(Math.round(startWidth + centroid.scenePosition.x
+                                                        - centroid.scenePressPosition.x))
+                }
             }
         }
     }
