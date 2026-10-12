@@ -72,6 +72,7 @@ StandardPage {
     // The node rows the user closed, by node id. Every other node row stays
     // open, the ones that arrive later included.
     property list<string> collapsedNodeIds: []
+    readonly property bool hasCollapsedNodes: fixStationPage.collapsedNodeIds.length > 0
 
     // Set when the tree's rows were inserted, removed or reset and the view
     // has yet to lay them out; the view's next layout re-announces the fix
@@ -271,6 +272,14 @@ StandardPage {
         fixStationPage.collapsedNodeIds = ids
         treeViewId.collapseRecursively()
         fixStationPage.applyExpansion()
+    }
+
+    function toggleExpansion(): void {
+        if (fixStationPage.hasCollapsedNodes) {
+            fixStationPage.expandAll()
+        } else {
+            fixStationPage.collapseAll()
+        }
     }
 
     onCurrentFixRowChanged: {
@@ -829,31 +838,33 @@ StandardPage {
         anchors.margins: Theme.pageMargin
         spacing: Theme.sectionSpacing
 
-        LayoutItemProxy {
-            target: addFixBar
-            Layout.fillWidth: true
-        }
-
         RowLayout {
             spacing: Theme.flowSpacing
             Layout.fillWidth: true
 
-            QC.Button {
-                objectName: "expandAllButton"
-                text: "Expand all"
-                flat: true
-                onClicked: fixStationPage.expandAll()
-            }
-
-            QC.Button {
-                objectName: "collapseAllButton"
-                text: "Collapse all"
-                flat: true
-                onClicked: fixStationPage.collapseAll()
-            }
-
-            QQ.Item {
+            LayoutItemProxy {
+                target: addFixBar
                 Layout.fillWidth: true
+            }
+
+            QC.ToolButton {
+                id: expandToggleButtonId
+                objectName: "expandToggleButton"
+
+                visible: (fixStationPage.cave?.childNodeCount ?? 0) > 0
+                text: fixStationPage.hasCollapsedNodes ? qsTr("Expand all") : qsTr("Collapse all")
+                display: QC.AbstractButton.IconOnly
+                icon.source: fixStationPage.hasCollapsedNodes
+                             ? "qrc:/twbs-icons/icons/arrows-expand.svg"
+                             : "qrc:/twbs-icons/icons/arrows-collapse.svg"
+                icon.color: Theme.text
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+                QC.ToolTip.text: expandToggleButtonId.text
+                QC.ToolTip.delay: Theme.toolTipDelay
+                QC.ToolTip.visible: hovered
+
+                onClicked: fixStationPage.toggleExpansion()
             }
         }
 
@@ -958,7 +969,6 @@ StandardPage {
             required property string nodeKindLabel
             required property SurveyNode node
             required property int ownFixCount
-            required property int subtreeFixCount
             required property int subtreeBareFixCount
             required property int subtreeUnsetFixCount
             required property int attachmentBareFixCount
@@ -1025,17 +1035,27 @@ StandardPage {
                         text: nodeRowId.nodeKindLabel
                     }
 
+                    // The page's own row names the page already open, so only
+                    // the rows below it link to their node's Fix Stations page.
                     QC.Label {
+                        visible: nodeRowId.isPageNode
                         text: nodeRowId.displayName
                         textFormat: QC.Label.PlainText
                         font.bold: true
                     }
 
+                    LinkText {
+                        objectName: "nodeNameLink." + nodeRowId.nodeName
+                        visible: !nodeRowId.isPageNode
+                        text: nodeRowId.displayName
+                        textFormat: QC.Label.PlainText
+                        font.bold: true
+                        onClicked: RootData.pageSelectionModel.currentPageAddress =
+                                   linkGeneratorId.fixStationsLink(nodeRowId.node)
+                    }
+
                     Chip {
-                        text: (nodeRowId.ownFixCount === 1 ? "1 fix" : nodeRowId.ownFixCount + " fixes")
-                              + (nodeRowId.subtreeFixCount !== nodeRowId.ownFixCount
-                                 ? " \u00B7 " + nodeRowId.subtreeFixCount + " with children"
-                                 : "")
+                        text: nodeRowId.ownFixCount === 1 ? "1 fix" : nodeRowId.ownFixCount + " fixes"
                     }
 
                     QC.Label {
@@ -1060,17 +1080,6 @@ StandardPage {
                             color: Theme.warningSurface
                             border.color: Theme.warningBorder
                         }
-                    }
-
-                    QQ.Item {
-                        Layout.fillWidth: true
-                    }
-
-                    LinkText {
-                        visible: !nodeRowId.isPageNode
-                        text: "Open page \u2192"
-                        onClicked: RootData.pageSelectionModel.currentPageAddress =
-                                   linkGeneratorId.fixStationsLink(nodeRowId.node)
                     }
                 }
 

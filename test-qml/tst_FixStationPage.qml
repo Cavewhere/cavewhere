@@ -6,6 +6,43 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
+    //! The first item under \a item whose objectName starts with \a prefix.
+    function findChildWithPrefix(item, prefix) {
+        if (item === null) {
+            return null
+        }
+        const children = item.children
+        for (let i = 0; i < children.length; ++i) {
+            const child = children[i]
+            if (String(child.objectName).startsWith(prefix)) {
+                return child
+            }
+            const found = rootId.findChildWithPrefix(child, prefix)
+            if (found !== null) {
+                return found
+            }
+        }
+        return null
+    }
+
+    //! Whether some item under \a item shows text containing \a text.
+    function showsText(item, text) {
+        if (item === null) {
+            return false
+        }
+        const children = item.children
+        for (let i = 0; i < children.length; ++i) {
+            const child = children[i]
+            if (child.visible && typeof child.text === "string" && child.text.indexOf(text) >= 0) {
+                return true
+            }
+            if (rootId.showsText(child, text)) {
+                return true
+            }
+        }
+        return false
+    }
+
     TestCase {
         name: "FixStationPage"
         when: windowShown
@@ -1694,6 +1731,82 @@ MainWindowTest {
             return shownRow(view, "fixRow.dup")?.stationError ?? null
         }
 
+        //! The page's expand/collapse toggle, checked visible.
+        function expandToggle() {
+            const button = findChild(RootData.pageView.currentPageItem, "expandToggleButton")
+            verify(button !== null, "the page has one expand/collapse toggle")
+            verify(button.visible, "the toggle shows while the page's node has child nodes")
+            return button
+        }
+
+        // A node's name is the link to its Fix Stations page; the page's own
+        // row names the page already open, so it stays plain text.
+        function test_aNodeNameOpensItsFixStationsPage() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+
+            const rootRow = shownRow(view, "nodeRow.")
+            verify(rootRow !== null, "the project's own row is shown")
+            const rootLink = rootId.findChildWithPrefix(rootRow, "nodeNameLink.")
+            verify(rootLink === null || !rootLink.visible,
+                   "the page's own row shows no link to itself")
+            verify(rootId.showsText(rootRow, "Project"), "the page's own row still names its node")
+
+            const rowA = shownRow(view, "nodeRow.A")
+            verify(rowA !== null, "A's row is shown")
+            verify(!rootId.showsText(rowA, "Open page"), "the row carries no separate Open page link")
+            const link = findChild(rowA, "nodeNameLink.A")
+            verify(link !== null, "A's name is a link")
+            verify(link.visible, "A's name link is shown")
+            compare(link.text, "A")
+
+            mouseClick(link)
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage"
+                            && RootData.pageView.currentPageItem.cave === caves.a,
+                      5000, "the link opens A's Fix Stations page")
+            verify(RootData.pageSelectionModel.currentPageAddress.endsWith("Node=A/Fix Stations"),
+                   "the address names A's Fix Stations page, got "
+                   + RootData.pageSelectionModel.currentPageAddress)
+        }
+
+        // A node row counts only the fixes the node itself lists.
+        function test_aNodeRowCountsOnlyItsOwnFixes() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const rowA = shownRow(view, "nodeRow.A")
+            verify(rowA !== null, "A's row is shown")
+            tryVerify(() => rootId.showsText(rowA, "3 fixes"), 5000, "A counts its own three fixes")
+            verify(!rootId.showsText(rowA, "with children"), "A's row carries no subtree count")
+        }
+
+        // One button collapses every node below the page's own row and expands
+        // them again; it follows a single node's chevron too.
+        function test_oneButtonTogglesExpandAndCollapseAll() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const button = expandToggle()
+            compare(button.text, "Collapse all", "with every node open the button collapses")
+            const collapseIcon = String(button.icon.source)
+            verify(collapseIcon.indexOf("arrows-collapse") >= 0, "the button shows the collapse icon")
+
+            mouseClick(button)
+            tryCompare(view, "rows", 3, 5000, "collapse all leaves the project, A and B")
+            tryCompare(button, "text", "Expand all", 5000, "with nodes closed the button expands")
+            verify(String(button.icon.source).indexOf("arrows-expand") >= 0,
+                   "the icon swaps to the expand icon")
+
+            mouseClick(button)
+            tryCompare(view, "rows", initialRowCount, 5000, "expand all opens every node")
+            tryCompare(button, "text", "Collapse all")
+            compare(String(button.icon.source), collapseIcon)
+
+            mouseClick(shownChevron(view, "B"))
+            tryCompare(view, "rows", initialRowCount - 4, 5000, "collapsing B hides its fixes")
+            tryCompare(button, "text", "Expand all", 5000,
+                       "one closed node turns the button to expand all")
+        }
+
         // Closing and reopening a cave hands its rows back to the delegates
         // the view already built, so a toggle costs no new delegates.
         function test_aCollapseAndExpandReusesTheRowDelegates() {
@@ -2085,43 +2198,6 @@ MainWindowTest {
         // entrances (E1 reference, E2), deep/lower (L1 under *cs UTM16N) and
         // deep/empty (no fix), each one *begin block and so one derived node.
 
-        //! The first item under \a item whose objectName starts with \a prefix.
-        function findChildWithPrefix(item, prefix) {
-            if (item === null) {
-                return null
-            }
-            const children = item.children
-            for (let i = 0; i < children.length; ++i) {
-                const child = children[i]
-                if (String(child.objectName).startsWith(prefix)) {
-                    return child
-                }
-                const found = findChildWithPrefix(child, prefix)
-                if (found !== null) {
-                    return found
-                }
-            }
-            return null
-        }
-
-        //! Whether some item under \a item shows text containing \a text.
-        function showsText(item, text) {
-            if (item === null) {
-                return false
-            }
-            const children = item.children
-            for (let i = 0; i < children.length; ++i) {
-                const child = children[i]
-                if (child.visible && typeof child.text === "string" && child.text.indexOf(text) >= 0) {
-                    return true
-                }
-                if (showsText(child, text)) {
-                    return true
-                }
-            }
-            return false
-        }
-
         //! Attaches the subtree fixture under the region's root and waits for
         //! the scan to list all of its fixes.
         function attachSubtreeFixture() {
@@ -2161,8 +2237,25 @@ MainWindowTest {
                 verify(waitForChild("fixRow." + station) !== null, station + " has a row")
             }
             const emptyRow = waitForChild("nodeRow.empty")
-            tryVerify(() => showsText(emptyRow, "No fixed stations"), 5000,
+            tryVerify(() => rootId.showsText(emptyRow, "No fixed stations"), 5000,
                       "the node with no fix says so")
+        }
+
+        // A derived node's name links to that node's Fix Stations page.
+        function test_aDerivedNodeNameOpensItsFixStationsPage() {
+            saveProjectAs("fix-station-tree-name-link")
+            const root = attachSubtreeFixture()
+            openFixStationsOf(root)
+
+            mouseClick(waitForChild("nodeNameLink.entrances"))
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage"
+                            && RootData.pageView.currentPageItem.cave !== null
+                            && RootData.pageView.currentPageItem.cave.name === "entrances",
+                      5000, "the link opens entrances' Fix Stations page")
+            verify(RootData.pageSelectionModel.currentPageAddress.endsWith("Node=entrances/Fix Stations"),
+                   "the address names entrances' Fix Stations page, got "
+                   + RootData.pageSelectionModel.currentPageAddress)
         }
 
         function test_collapseHidesLeaves() {
@@ -2203,7 +2296,7 @@ MainWindowTest {
 
             const e2Row = waitForChild("fixRow.entrances.E2")
             tryVerify(() => {
-                const badge = findChildWithPrefix(e2Row, "noCoordinateSystemBadge")
+                const badge = rootId.findChildWithPrefix(e2Row, "noCoordinateSystemBadge")
                 return badge !== null && badge.text.indexOf("UTM48N") >= 0
             }, 5000, "the descendant's bare fix reads in the owner's choice")
 
