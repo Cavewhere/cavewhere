@@ -1,0 +1,8 @@
+; Two fixes under their own *cs, listed out of name order.
+*begin north
+*cs UTM16N
+*fix n10 500100 3000100 50
+*fix n9 500110 3000100 50
+*data normal from to tape compass clino
+n10 n9 10.0 90 0
+*end north

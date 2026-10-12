@@ -16,6 +16,7 @@
 #include "cwExternalCenterlineManager.h"
 #include "cwFixStationModel.h"
 #include "cwFixStationTreeModel.h"
+#include "cwFixStationTreeFilterModel.h"
 #include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
 #include "cwProject.h"
@@ -30,6 +31,7 @@
 #include <QAbstractItemModel>
 #include <QPointer>
 #include <QSignalSpy>
+#include <QSortFilterProxyModel>
 #include <QStringList>
 #include <QUuid>
 
@@ -95,6 +97,21 @@ const QString kWallsFixture = QStringLiteral("walls_two_caves/TWO.WPJ");
 const QString kEastBook = QStringLiteral("EAST");
 const QString kWestBook = QStringLiteral("WEST");
 constexpr int kWallsFixCount = 2;
+
+// fix_tree_sort_filter/sorted.svx fixes st2, st1, st10 on the source root, in
+// that order and with no *cs, and includes north.svx, whose *begin north
+// fixes n10 then n9 under *cs UTM16N.
+const QString kSortFilterFixture = QStringLiteral("fix_tree_sort_filter/sorted.svx");
+const QString kSortFilterNorthName = QStringLiteral("north");
+const QString kSt1 = QStringLiteral("st1");
+const QString kSt2 = QStringLiteral("st2");
+const QString kSt3 = QStringLiteral("st3");
+const QString kSt10 = QStringLiteral("st10");
+const QString kNorthN9 = QStringLiteral("north.n9");
+const QString kNorthN10 = QStringLiteral("north.n10");
+constexpr int kSortFilterFixCount = 5;
+// How childLabels() writes a node row, so it reads apart from a station.
+const QString kNodeLabel = QStringLiteral("[%1]");
 
 const QString kNativeFolderName = QStringLiteral("North");
 const QString kNativeCaveName = QStringLiteral("Pit");
@@ -243,6 +260,53 @@ void addNativeFix(cwSurveyNode* node, const QString& station, const QString& sys
     REQUIRE(fixes->setData(index, northing, cwFixStationModel::NorthingRole));
     REQUIRE(fixes->setData(index, elevation, cwFixStationModel::ElevationRole));
 }
+
+//! The rows directly under \a parent in row order: a fix row by its station
+//! name, a node row by kNodeLabel around its name.
+QStringList childLabels(const QAbstractItemModel& model, const QModelIndex& parent)
+{
+    const int stationRole = roleId(model, QByteArrayLiteral("stationName"));
+    QStringList labels;
+    for (int row = 0; row < model.rowCount(parent); ++row) {
+        const QModelIndex child = model.index(row, 0, parent);
+        if (rowKind(child) == cwFixStationTreeModel::FixRow) {
+            labels.append(child.data(stationRole).toString());
+        } else {
+            labels.append(kNodeLabel.arg(child.data(cwFixStationTreeModel::NodeNameRole).toString()));
+        }
+    }
+    return labels;
+}
+
+//! Orders \a proxy's rows by \a role, through QSortFilterProxyModel's own sort
+//! (cwSortFilterProxyModel's sort(Qt::SortOrder) hides it).
+void sortBy(cwFixStationTreeFilterModel& proxy, int role, Qt::SortOrder order)
+{
+    proxy.setSortRole(role);
+    QSortFilterProxyModel& base = proxy;
+    base.sort(0, order);
+}
+
+//! A project with sorted.svx attached under the region's root, its tree model
+//! on the source root and the filter model over the tree.
+struct SortFilterFixture
+{
+    std::unique_ptr<SavedProjectFixture> project;
+    cwCave* root = nullptr;
+    cwFixStationTreeModel treeModel;
+    cwFixStationTreeFilterModel proxy;
+
+    explicit SortFilterFixture(const QString& projectFileBase) :
+        project(makeProject(projectFileBase))
+    {
+        root = attachAndWaitForFixes(project.get(), kSortFilterFixture, kSortFilterFixCount);
+        treeModel.setRootNode(root);
+        proxy.setSourceModel(&treeModel);
+    }
+
+    QModelIndex rootRow() const { return proxy.index(0, 0); }
+    QModelIndex northRow() const { return nodeRow(proxy, kSortFilterNorthName); }
+};
 
 } // namespace
 
@@ -511,4 +575,113 @@ TEST_CASE("A native fix on the owner leaves no system in force at its file's inc
     CHECK(linePlot->hasSolveError());
     CHECK(linePlot->solveErrorSummary().contains(kInputProjectionError));
     CHECK(bareFixWarnings(root).size() == 1);
+}
+
+TEST_CASE("The fix station filter model orders sibling fixes by name, numbers by value",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-sort-name"));
+    INFO("tree:\n" << describeTree(fixture.root));
+    REQUIRE(childLabels(fixture.treeModel, fixture.treeModel.index(0, 0))
+            == QStringList({kSt2, kSt1, kSt10, kNodeLabel.arg(kSortFilterNorthName)}));
+
+    sortBy(fixture.proxy, cwFixStationModel::StationNameRole, Qt::AscendingOrder);
+
+    REQUIRE(fixture.proxy.rowCount() == 1);
+    CHECK(childLabels(fixture.proxy, fixture.rootRow())
+          == QStringList({kSt1, kSt2, kSt10, kNodeLabel.arg(kSortFilterNorthName)}));
+    REQUIRE(fixture.northRow().isValid());
+    CHECK(childLabels(fixture.proxy, fixture.northRow()) == QStringList({kNorthN9, kNorthN10}));
+}
+
+TEST_CASE("A descending sort keeps node rows after their sibling fixes",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-sort-descending"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    sortBy(fixture.proxy, cwFixStationModel::StationNameRole, Qt::DescendingOrder);
+
+    REQUIRE(fixture.proxy.rowCount() == 1);
+    CHECK(childLabels(fixture.proxy, fixture.rootRow())
+          == QStringList({kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
+}
+
+TEST_CASE("A coordinate sort orders numbered rows first, then attached rows by their text",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-sort-coordinate"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    sortBy(fixture.proxy, cwFixStationModel::EastingRole, Qt::AscendingOrder);
+    CHECK(childLabels(fixture.proxy, fixture.rootRow())
+          == QStringList({kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
+
+    addNativeFix(fixture.root, kSt3, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    drainPipelines(fixture.project.get());
+    CHECK(childLabels(fixture.proxy, fixture.rootRow())
+          == QStringList({kSt3, kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
+}
+
+TEST_CASE("A fix added while sorted takes its place by name",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-sort-live"));
+    INFO("tree:\n" << describeTree(fixture.root));
+    sortBy(fixture.proxy, cwFixStationModel::StationNameRole, Qt::AscendingOrder);
+
+    addNativeFix(fixture.root, kSt3, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    drainPipelines(fixture.project.get());
+
+    CHECK(childLabels(fixture.proxy, fixture.rootRow())
+          == QStringList({kSt1, kSt2, kSt3, kSt10, kNodeLabel.arg(kSortFilterNorthName)}));
+}
+
+TEST_CASE("The filter keeps a matching fix and the node rows above it",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-ancestors"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    fixture.proxy.setFilterText(QStringLiteral("n9"));
+
+    REQUIRE(fixture.proxy.rowCount() == 1);
+    CHECK(childLabels(fixture.proxy, fixture.rootRow())
+          == QStringList({kNodeLabel.arg(kSortFilterNorthName)}));
+    const QModelIndex north = fixture.northRow();
+    REQUIRE(north.isValid());
+    CHECK(childLabels(fixture.proxy, north) == QStringList({kNorthN9}));
+}
+
+TEST_CASE("The filter matches station names as a case-insensitive substring",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-case"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    fixture.proxy.setFilterText(QStringLiteral("ST1"));
+
+    REQUIRE(fixture.proxy.rowCount() == 1);
+    CHECK(childLabels(fixture.proxy, fixture.rootRow()) == QStringList({kSt1, kSt10}));
+    CHECK_FALSE(fixture.northRow().isValid());
+}
+
+TEST_CASE("A filter nothing matches keeps the page's own row, and clearing it restores every row",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-none"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    fixture.proxy.setFilterText(QStringLiteral("zzz"));
+    REQUIRE(fixture.proxy.rowCount() == 1);
+    CHECK(fixture.proxy.rowCount(fixture.rootRow()) == 0);
+
+    fixture.proxy.setFilterText(QString());
+    REQUIRE(fixture.proxy.rowCount() == 1);
+    CHECK(childLabels(fixture.proxy, fixture.rootRow())
+          == QStringList({kSt2, kSt1, kSt10, kNodeLabel.arg(kSortFilterNorthName)}));
+    REQUIRE(fixture.northRow().isValid());
+    CHECK(childLabels(fixture.proxy, fixture.northRow()) == QStringList({kNorthN10, kNorthN9}));
 }

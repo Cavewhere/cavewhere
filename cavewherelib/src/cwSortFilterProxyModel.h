@@ -42,11 +42,14 @@
 #define SORTFILTERPROXYMODEL_H
 
 //Our includes
+#include "cwGlobals.h"
+
+//Qt includes
 #include <QtCore/qsortfilterproxymodel.h>
 #include <QtQml/qjsvalue.h>
 #include <QQmlEngine>
 
-class cwSortFilterProxyModel : public QSortFilterProxyModel
+class CAVEWHERE_LIB_EXPORT cwSortFilterProxyModel : public QSortFilterProxyModel
 {
     Q_OBJECT
     QML_NAMED_ELEMENT(SortFilterProxyModel)

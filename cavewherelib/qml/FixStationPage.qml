@@ -83,6 +83,7 @@ StandardPage {
 
     function addFix() {
         if (fixStationPage.fixStationsModel) {
+            fixStationPage.clearFilter()
             fixStationPage.fixStationsModel.addFixStation()
         }
     }
@@ -184,9 +185,33 @@ StandardPage {
         }
     }
 
+    function applyFilter(text: string): void {
+        treeFilterId.filterText = text
+        Qt.callLater(fixStationPage.applyExpansion)
+    }
+
+    function clearFilter(): void {
+        filterFieldId.text = ""
+    }
+
+    // Page row \a fixRow's index in the view's model, clearing the filter
+    // when it hides that row.
+    function viewIndexOfFixRow(fixRow: int): var {
+        const sourceIndex = treeModelId.indexOfFixRow(fixRow)
+        if (!sourceIndex.valid) {
+            return sourceIndex
+        }
+        const index = treeFilterId.mapFromSource(sourceIndex)
+        if (index.valid) {
+            return index
+        }
+        fixStationPage.clearFilter()
+        return treeFilterId.mapFromSource(sourceIndex)
+    }
+
     // Opens the nodes above page row \a fixRow and scrolls it into view.
     function revealFixRow(fixRow: int): void {
-        const index = treeModelId.indexOfFixRow(fixRow)
+        const index = fixStationPage.viewIndexOfFixRow(fixRow)
         if (!index.valid) {
             return
         }
@@ -211,31 +236,37 @@ StandardPage {
         return node !== null && fixStationPage.collapsedNodeIds.indexOf(String(node.id)) >= 0
     }
 
-    // Opens every node row the user has not closed. The page's own node is
-    // the tree's root and always open. Walks the model rather than the view's
-    // rows, which the view only recounts at its next layout.
+    // Opens every node row the user has not closed and closes the ones they
+    // have, which a filter may have opened. While filtering, every node row
+    // is open so each match shows. The page's own node is the tree's root
+    // and always open. Walks the model rather than the view's rows, which
+    // the view only recounts at its next layout.
     function applyExpansion(): void {
+        const isFiltering = treeFilterId.filterText.length > 0
         const open = (index, isRoot) => {
             const row = treeViewId.rowAtIndex(index)
             if (row < 0) {
                 return
             }
-            const node = treeModelId.data(index, FixStationTreeModel.NodeObjectRole)
-            if (!isRoot && fixStationPage.isCollapsedNode(node)) {
+            const node = treeFilterId.data(index, FixStationTreeModel.NodeObjectRole)
+            if (!isRoot && !isFiltering && fixStationPage.isCollapsedNode(node)) {
+                if (treeViewId.isExpanded(row)) {
+                    treeViewId.collapse(row)
+                }
                 return
             }
             if (!treeViewId.isExpanded(row)) {
                 treeViewId.expand(row)
             }
-            for (let i = 0; i < treeModelId.rowCount(index); ++i) {
-                const child = treeModelId.index(i, 0, index)
-                if (treeModelId.data(child, FixStationTreeModel.RowKindRole) === FixStationTreeModel.NodeRow) {
+            for (let i = 0; i < treeFilterId.rowCount(index); ++i) {
+                const child = treeFilterId.index(i, 0, index)
+                if (treeFilterId.data(child, FixStationTreeModel.RowKindRole) === FixStationTreeModel.NodeRow) {
                     open(child, false)
                 }
             }
         }
-        if (treeModelId.rowCount() > 0) {
-            open(treeModelId.index(0, 0), true)
+        if (treeFilterId.rowCount() > 0) {
+            open(treeFilterId.index(0, 0), true)
         }
     }
 
@@ -299,13 +330,18 @@ StandardPage {
     }
 
     // New node rows open as they arrive, so the whole subtree starts open.
+    // A sort's layout change leaves the page rows alone, so only rows coming
+    // and going count as a shift.
     QQ.Connections {
-        target: treeModelId
+        target: treeFilterId
         function onRowsInserted() {
             fixStationPage.rowsShifted = true
             Qt.callLater(fixStationPage.applyExpansion)
         }
-        function onRowsRemoved() { fixStationPage.rowsShifted = true }
+        function onRowsRemoved() {
+            fixStationPage.rowsShifted = true
+            Qt.callLater(fixStationPage.applyExpansion)
+        }
         function onModelReset() {
             fixStationPage.rowsShifted = true
             Qt.callLater(fixStationPage.applyExpansion)
@@ -769,6 +805,11 @@ StandardPage {
         rootNode: fixStationPage.cave
     }
 
+    FixStationTreeFilterModel {
+        id: treeFilterId
+        source: treeModelId
+    }
+
     RemoveAskBox {
         id: removeChallengeId
         onRemove: fixStationPage.removeFix(indexToRemove)
@@ -802,6 +843,7 @@ StandardPage {
                 // level the column makes room for.
                 columnWidth: 130 + fixStationPage.stationIndentLevels * Theme.treeIndent
                 text: "Station"
+                sortRole: FixStationModel.StationNameRole
             },
             TableStaticColumn {
                 id: csColumn
@@ -810,6 +852,7 @@ StandardPage {
                 // — so none of them is clipped by the cell.
                 columnWidth: 400
                 text: "Input CS"
+                sortRole: FixStationModel.InputCSRole
             },
             TableStaticColumn {
                 id: coordinateColumn
@@ -822,6 +865,7 @@ StandardPage {
                 // easting first. The headers this column replaced ("Easting /
                 // Long", "Northing / Lat") were the only place that was said.
                 text: "Coordinate (East, North / Lat, Long)"
+                sortRole: FixStationModel.EastingRole
             }
         ]
     }
@@ -847,11 +891,26 @@ StandardPage {
                 Layout.fillWidth: true
             }
 
+            QC.TextField {
+                id: filterFieldId
+                objectName: "fixStationFilter"
+
+                placeholderText: qsTr("Filter stations")
+                inputMethodHints: Qt.ImhNoPredictiveText
+                font.pixelSize: Theme.fontSizeBody
+                Layout.preferredWidth: Theme.treeFilterWidth
+                Layout.alignment: Qt.AlignVCenter
+
+                onTextChanged: fixStationPage.applyFilter(filterFieldId.text)
+            }
+
             QC.ToolButton {
                 id: expandToggleButtonId
                 objectName: "expandToggleButton"
 
+                // Every node row is open while filtering.
                 visible: (fixStationPage.cave?.childNodeCount ?? 0) > 0
+                         && treeFilterId.filterText.length === 0
                 text: fixStationPage.hasCollapsedNodes ? qsTr("Expand all") : qsTr("Collapse all")
                 display: QC.AbstractButton.IconOnly
                 icon.source: fixStationPage.hasCollapsedNodes
@@ -876,7 +935,7 @@ StandardPage {
                 model: columnModelId
 
                 delegate: TableStaticHeaderColumn {
-                    model: treeModelId
+                    model: treeFilterId
                 }
             }
         }
@@ -890,7 +949,7 @@ StandardPage {
             //! How many fix rows the tree holds, every node's included.
             readonly property int count: treeModelId.fixRowCount
 
-            model: treeModelId
+            model: treeFilterId
             clip: true
             boundsBehavior: QQ.Flickable.StopAtBounds
             Layout.fillWidth: true
@@ -1090,9 +1149,9 @@ StandardPage {
                     value: nodeRowId.fixCoordinateSystem
                     Layout.leftMargin: Theme.treeCaretWidth
 
-                    onCommitted: (newCS) => treeModelId.setData(nodeRowId.treeView.index(nodeRowId.row, 0),
-                                                                newCS,
-                                                                FixStationTreeModel.FixCoordinateSystemRole)
+                    onCommitted: (newCS) => treeFilterId.setData(nodeRowId.treeView.index(nodeRowId.row, 0),
+                                                                 newCS,
+                                                                 FixStationTreeModel.FixCoordinateSystemRole)
                 }
 
                 TripSystemControls {

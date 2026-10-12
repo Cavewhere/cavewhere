@@ -1739,6 +1739,146 @@ MainWindowTest {
             return button
         }
 
+        //! The shown rows' objectNames in row order.
+        function shownNames(view) {
+            return shownItems(view).map(item => item === null ? "" : item.objectName)
+        }
+
+        //! The page's header cell titled \a title, found among the visual
+        //! children by its sortMode, null when there is none.
+        function headerCell(title) {
+            const search = (item) => {
+                if (item.sortMode !== undefined && item.text === title) {
+                    return item
+                }
+                for (let i = 0; i < item.children.length; ++i) {
+                    const found = search(item.children[i])
+                    if (found !== null) {
+                        return found
+                    }
+                }
+                return null
+            }
+            return search(RootData.pageView.currentPageItem)
+        }
+
+        //! The page's filter field, checked visible.
+        function filterField() {
+            const field = findChild(RootData.pageView.currentPageItem, "fixStationFilter")
+            verify(field !== null, "the page has a filter field on its Add Fix line")
+            verify(field.visible, "the filter field shows")
+            return field
+        }
+
+        //! Types \a text into \a field one key at a time.
+        function typeInto(field, text) {
+            mouseClick(field)
+            tryVerify(() => field.activeFocus, 5000, "the filter field takes focus")
+            for (let i = 0; i < text.length; ++i) {
+                keyClick(text[i])
+            }
+        }
+
+        //! Empties \a field the way a user does, one backspace per character.
+        function clearField(field) {
+            mouseClick(field)
+            tryVerify(() => field.activeFocus, 5000, "the filter field takes focus")
+            keyClick(Qt.Key_End)
+            const length = field.text.length
+            for (let i = 0; i < length; ++i) {
+                keyClick(Qt.Key_Backspace)
+            }
+        }
+
+        // A header click orders the fixes under each node by that column, and
+        // the node rows keep their place after their parent's fixes; a second
+        // click turns the order around.
+        function test_aHeaderClickSortsSiblingFixes() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            verifyRowsMatchModel(view, initialRowCount, "opened")
+            const station = headerCell("Station")
+            verify(station !== null, "the page has a Station header")
+            verify(station.visible, "the header shows in the wide layout")
+            waitForRendering(view)
+
+            mouseClick(station)
+            tryCompare({ get names() { return shownNames(view).join(",") } }, "names",
+                       ["nodeRow.", "nodeRow.A", "fixRow.dup", "fixRow.dup", "fixRow.x",
+                        "nodeRow.Sub", "fixRow.s0", "fixRow.s1",
+                        "nodeRow.B", "fixRow.b0", "fixRow.b1", "fixRow.b2", "fixRow.b3"].join(","),
+                       5000, "ascending by station, Sub after A's own fixes")
+            verifyRowsMatchModel(view, initialRowCount, "after sorting ascending")
+
+            mouseClick(station)
+            tryCompare({ get names() { return shownNames(view).join(",") } }, "names",
+                       ["nodeRow.", "nodeRow.A", "fixRow.x", "fixRow.dup", "fixRow.dup",
+                        "nodeRow.Sub", "fixRow.s1", "fixRow.s0",
+                        "nodeRow.B", "fixRow.b3", "fixRow.b2", "fixRow.b1", "fixRow.b0"].join(","),
+                       5000, "descending by station, Sub still after A's own fixes")
+            verifyRowsMatchModel(view, initialRowCount, "after sorting descending")
+        }
+
+        // Typing in the filter field keeps the matching fixes and the node
+        // rows above them; clearing it brings every row back, and a node the
+        // user closed before filtering is closed again.
+        function test_typingAFilterKeepsMatchesAndTheirAncestors() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            mouseClick(shownChevron(view, "B"))
+            tryCompare(view, "rows", initialRowCount - 4, 5000, "collapsing B hides its fixes")
+            const field = filterField()
+
+            typeInto(field, "s1")
+            tryCompare({ get names() { return shownNames(view).join(",") } }, "names",
+                       ["nodeRow.", "nodeRow.A", "nodeRow.Sub", "fixRow.s1"].join(","),
+                       5000, "only s1 and the node rows above it")
+            verifyRowsMatchModel(view, 4, "while filtering on s1")
+
+            clearField(field)
+            tryCompare(field, "text", "")
+            verifyRowsMatchModel(view, initialRowCount - 4, "after clearing, with B closed again")
+            verify(shownRow(view, "fixRow.b0") === null, "B stays closed")
+        }
+
+        // Add Fix clears the filter, so the new row it adds is on screen.
+        function test_addFixClearsTheFilter() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const field = filterField()
+            typeInto(field, "s1")
+            tryCompare(view, "rows", 4, 5000, "the filter keeps s1 and its node rows")
+
+            const addButton = findChild(findChild(RootData.pageView.currentPageItem, "addFixBar"),
+                                        "addButton")
+            verify(addButton !== null, "the page has an Add Fix button")
+            mouseClick(addButton)
+            tryCompare(field, "text", "", 5000, "adding a fix clears the filter")
+            verifyRowsMatchModel(view, initialRowCount + 1, "every row plus the new one")
+
+            // New Project keeps the root node's own fixes, so the next test
+            // would open on this one.
+            const root = RootData.pageView.currentPageItem.cave
+            while (root.fixStations.count > 0) {
+                root.fixStations.removeAt(0)
+            }
+        }
+
+        // A link to a fix the filter hides clears the filter and shows the fix.
+        function test_aLinkToAFilteredRowClearsTheFilter() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const field = filterField()
+            typeInto(field, "s1")
+            tryCompare(view, "rows", 4, 5000, "the filter keeps s1 and its node rows")
+
+            // Page rows: A's dup, x, dup are 0..2, Sub's s0, s1 are 3, 4, B's b0..b3 are 5..8.
+            const b2PageRow = 7
+            RootData.pageView.currentPageItem.currentFixRow = b2PageRow
+            tryCompare(field, "text", "", 5000, "a link to a hidden row clears the filter")
+            tryVerify(() => shownRow(view, "fixRow.b2") !== null, 5000, "b2 is shown")
+        }
+
         // A node's name is the link to its Fix Stations page; the page's own
         // row names the page already open, so it stays plain text.
         function test_aNodeNameOpensItsFixStationsPage() {
