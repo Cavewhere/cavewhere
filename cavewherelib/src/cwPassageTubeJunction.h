@@ -45,8 +45,8 @@ public:
     /**
      * A chain's rings read as a solid. A point lies between the two rings
      * whose planes bound it along the chain, and inside when it falls within
-     * their polygons of radii, interpolated linearly between bins and between
-     * the two rings as the mesh lofts them. With a nonzero extendTangent,
+     * their polygons, the chord between two bins as the mesh draws it, blended
+     * between the two rings as the mesh lofts them. With a nonzero extendTangent,
      * points past the last ring along it belong to the last ring, so the tube
      * carries on.
      */

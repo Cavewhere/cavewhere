@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwPassageTubeBuilder.h"
+#include "cwPassageTubeGeometry.h"
 #include "cwPassageTubeJunction.h"
 #include "cwUnits.h"
 
@@ -24,7 +25,8 @@
 
 namespace {
 
-constexpr double kTwoPi = 2.0 * std::numbers::pi;
+using namespace cwPassageTubeGeometry;
+
 constexpr int kMinFilledBins = 4;
 constexpr int kTwistDistributionSamples = 4;
 constexpr double kMinSampleWeight = 0.05;
@@ -32,21 +34,19 @@ constexpr double kSteepWeight = 0.5;
 constexpr double kAlongLegDegrees = 45.0;
 constexpr double kShaftRatio = 3.0;
 constexpr double kMinSampleSpacingMeters = 0.01;
-constexpr double kMinRingSpacingMeters = 0.05;
 constexpr double kCornerInsetMeters = 0.5;
 constexpr double kCornerInsetLegFraction = 0.45;
 constexpr double kCornerInsetSafety = 1.1;
 constexpr double kConcavityClampFactor = 0.95;
 constexpr double kClampWarningMeters = 0.1;
 constexpr double kInsideBinEpsilon = 1e-4;
-// A dead end's fan sits this far from its station toward the ring's
-// centroid: a station against a wall leaves thin triangles to that wall
-// when the fan sits on it, and a narrow far corner leaves them when the
-// fan sits on the centroid.
+// A dead end whose ring is not a simple polygon closes with a fan this far
+// from its station toward the ring's centroid: a station against a wall
+// leaves thin triangles to that wall when the fan sits on it, and a narrow
+// far corner leaves them when the fan sits on the centroid.
 constexpr float kFanCenterBlend = 0.5f;
 constexpr int kMinLoopRings = 3;
 constexpr int kMinLoopStations = 3;
-constexpr float kMinAxisLengthSquared = 0.25f;
 constexpr double kAxisEpsilon = 1e-9;
 constexpr float kMinProjectedLength = 1e-6f;
 constexpr float kMinHorizontalLength = 0.01f;
@@ -497,10 +497,14 @@ struct Miter {
     QVector3D outgoing;
 };
 
+// The corner of a plumb chain start, which no leg ends at.
+constexpr int kChainStartCorner = -1;
+
 // The inside of a sharp bend as one of the rings on its legs sees it: bins
 // pointing along inside reach at most maxInnerRadius, so the ring stays in
 // front of the corner's bisector plane and of its neighbors' planes.
-// cornerLeg indexes Chain::legs: the leg that ends at the corner.
+// cornerLeg indexes Chain::legs: the leg that ends at the corner, or
+// kChainStartCorner.
 struct BendLimit {
     enum Role {
         // A ring along one of the corner's legs.
@@ -520,7 +524,9 @@ struct BendLimit {
 
 // One place along a chain where a ring is fitted. chainLeg indexes
 // Chain::legs: the leg the sample lies on or ends. bends holds a limit for
-// each sharp bend at either end of the legs the sample lies on.
+// each sharp bend at either end of the legs the sample lies on. A plumb
+// sample is a gentle dead end, whose ring stands in the vertical plane
+// through its station.
 struct ChainSample {
     QVector3D position;
     QVector3D tangent;
@@ -529,6 +535,7 @@ struct ChainSample {
     int chainLeg = 0;
     bool isStation = false;
     QVector<BendLimit> bends;
+    bool isPlumb = false;
 
     // The limit of the sharp bend at this sample's station, if it has one.
     const BendLimit* stationBend() const
@@ -738,7 +745,46 @@ struct SharpBend {
     }
 };
 
-QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Options& options)
+// The direction reflected across the horizontal plane.
+QVector3D reflectedVertically(const QVector3D& direction)
+{
+    return QVector3D(direction.x(), direction.y(), -direction.z());
+}
+
+QVector3D horizontalOf(const QVector3D& direction)
+{
+    return QVector3D(direction.x(), direction.y(), 0.0f).normalized();
+}
+
+// A plumb end ring stands in the bisector plane of its leg and that leg
+// reflected across the horizontal plane, so it is the corner of a bend
+// turning by twice the leg's inclination. The ring before it, square to the
+// leg, folds through it when the reading on the bend's inside reaches
+// farther than that ring's distance from the end; only then does the end
+// need the bend's inset and inner-wall limits.
+std::optional<SharpBend> plumbEndBend(const Miter& miter, const LrudRecord& record, double firstSampleDistance, const Options& options)
+{
+    const QVector3D turn = miter.outgoing - miter.incoming;
+    if (turn.lengthSquared() < kDegenerateLengthSquared) {
+        return std::nullopt;
+    }
+    const QVector3D inside = turn.normalized();
+    const double halfTurn = std::asin(std::min(1.0, static_cast<double>(std::abs(miter.incoming.z()))));
+    const std::optional<double> insideReading = inside.z() > 0.0f ? record.lrud.up : record.lrud.down;
+    const double reading = insideReading.value_or(largestReading({record}, options.defaultRadiusMeters));
+    if (kCornerInsetSafety * reading * std::sin(halfTurn) <= firstSampleDistance) {
+        return std::nullopt;
+    }
+    return SharpBend {miter, inside, halfTurn, reading};
+}
+
+// Which ends of an open chain get a plumb ring; a loop has none.
+struct PlumbEnds {
+    bool isStartPlumb = false;
+    bool isEndPlumb = false;
+};
+
+QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const PlumbEnds& plumbEnds, const Options& options)
 {
     const bool loop = isLoop(walked);
     const double spacing = std::max(options.sampleSpacingMeters, kMinSampleSpacingMeters);
@@ -746,14 +792,29 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
     const int legCount = walked.size();
     const int lastLeg = legCount - 1;
 
+    QVector<double> lengths;
+    lengths.reserve(legCount);
+    for (const WalkedLeg& leg : walked) {
+        lengths.append(leg.start.distanceToPoint(leg.end));
+    }
+    const auto intervalsOf = [&](int legIndex) {
+        return std::max(1, static_cast<int>(std::lround(lengths.at(legIndex) / spacing)));
+    };
+    const auto firstSampleDistance = [&](int legIndex) {
+        return lengths.at(legIndex) / intervalsOf(legIndex);
+    };
+
     const auto sharpBendAfter = [&](int legIndex) -> std::optional<SharpBend> {
+        const WalkedLeg& leg = walked.at(legIndex);
+        const QVector3D incoming = leg.direction();
         const bool hasNext = loop || legIndex < lastLeg;
         if (!hasNext) {
+            if (plumbEnds.isEndPlumb) {
+                return plumbEndBend({incoming, reflectedVertically(incoming)}, leg.endRing, firstSampleDistance(legIndex), options);
+            }
             return std::nullopt;
         }
-        const WalkedLeg& leg = walked.at(legIndex);
         const WalkedLeg& next = walked.at((legIndex + 1) % legCount);
-        const QVector3D incoming = leg.direction();
         const QVector3D outgoing = next.direction();
         const float cosine = QVector3D::dotProduct(incoming, outgoing);
         if (cosine >= minBendCosine) {
@@ -769,28 +830,39 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
     };
 
     QVector<std::optional<SharpBend>> bendAfter;
-    QVector<double> lengths;
     bendAfter.reserve(legCount);
-    lengths.reserve(legCount);
     for (int legIndex = 0; legIndex < legCount; ++legIndex) {
         bendAfter.append(sharpBendAfter(legIndex));
-        lengths.append(walked.at(legIndex).start.distanceToPoint(walked.at(legIndex).end));
+    }
+    std::optional<SharpBend> startBend;
+    if (plumbEnds.isStartPlumb) {
+        const QVector3D outgoing = walked.first().direction();
+        startBend = plumbEndBend({reflectedVertically(outgoing), outgoing}, walked.first().startRing, firstSampleDistance(0), options);
     }
 
-    // A sharp corner, named by the index of the leg ending there. The last
-    // leg of an open chain has no bend after it, so the first leg's start
-    // corner exists only on a loop.
+    // A sharp corner, named by the index of the leg ending there, or
+    // kChainStartCorner for a plumb start. On a loop the first leg starts at
+    // the last leg's corner.
+    const auto bendAt = [&](int corner) -> const SharpBend& {
+        return corner == kChainStartCorner ? *startBend : *bendAfter.at(corner);
+    };
     const auto endCorner = [&](int legIndex) -> std::optional<int> {
         if (bendAfter.at(legIndex)) {
             return legIndex;
         }
         return std::nullopt;
     };
-    const auto startCorner = [&](int legIndex) {
-        return endCorner(legIndex > 0 ? legIndex - 1 : lastLeg);
+    const auto startCorner = [&](int legIndex) -> std::optional<int> {
+        if (legIndex > 0 || loop) {
+            return endCorner(legIndex > 0 ? legIndex - 1 : lastLeg);
+        }
+        if (startBend) {
+            return kChainStartCorner;
+        }
+        return std::nullopt;
     };
-    const auto legLimit = [&](int cornerLeg, double distance, BendLimit::Role role) {
-        return bendAfter.at(cornerLeg)->legLimit(distance, cornerLeg, role);
+    const auto legLimit = [&](int corner, double distance, BendLimit::Role role) {
+        return bendAt(corner).legLimit(distance, corner, role);
     };
 
     // A station ends legIn and starts legOut; either is -1 at a dead end.
@@ -798,10 +870,14 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
     // a corner station's ring of both inset rings.
     const auto stationBends = [&](int legIn, int legOut) {
         QVector<BendLimit> bends;
-        if (legIn >= 0 && bendAfter.at(legIn)) {
-            const double inset = std::min(bendAfter.at(legIn)->inset(lengths.at(legIn)),
-                                          bendAfter.at(legIn)->inset(lengths.at(legOut)));
-            bends.append(bendAfter.at(legIn)->stationLimit(inset, legIn));
+        if (const std::optional<int> corner = legIn >= 0 ? endCorner(legIn) : startCorner(legOut)) {
+            double inset = std::numeric_limits<double>::max();
+            for (int leg : {legIn, legOut}) {
+                if (leg >= 0) {
+                    inset = std::min(inset, bendAt(*corner).inset(lengths.at(leg)));
+                }
+            }
+            bends.append(bendAt(*corner).stationLimit(inset, *corner));
         }
         if (legIn >= 0) {
             if (const std::optional<int> corner = startCorner(legIn)) {
@@ -824,25 +900,30 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
         const double length = lengths.at(legIndex);
 
         if (legIndex == 0) {
-            const QVector3D tangent = loop ? bisector(walked.last().direction(), direction) : direction;
+            QVector3D tangent = direction;
+            if (loop) {
+                tangent = bisector(walked.last().direction(), direction);
+            } else if (plumbEnds.isStartPlumb) {
+                tangent = horizontalOf(direction);
+            }
             appendSample(samples, ChainSample {leg.start, tangent, 0.0, {leg.startRing}, legIndex, true,
-                                               stationBends(loop ? lastLeg : -1, legIndex)});
+                                               stationBends(loop ? lastLeg : -1, legIndex), plumbEnds.isStartPlumb});
         }
 
-        const std::optional<int> startBend = startCorner(legIndex);
-        const std::optional<int> endBend = endCorner(legIndex);
-        const double startInset = startBend ? bendAfter.at(*startBend)->inset(length) : 0.0;
-        const double endInset = endBend ? bendAfter.at(*endBend)->inset(length) : 0.0;
+        const std::optional<int> startCornerIndex = startCorner(legIndex);
+        const std::optional<int> endCornerIndex = endCorner(legIndex);
+        const double startInset = startCornerIndex ? bendAt(*startCornerIndex).inset(length) : 0.0;
+        const double endInset = endCornerIndex ? bendAt(*endCornerIndex).inset(length) : 0.0;
         const double startInsetFraction = startInset / length;
         const double endInsetFraction = 1.0 - endInset / length;
 
         const auto appendAlongLeg = [&](double t, BendLimit::Role startRole, BendLimit::Role endRole) {
             QVector<BendLimit> bends;
-            if (startBend) {
-                bends.append(legLimit(*startBend, t * length, startRole));
+            if (startCornerIndex) {
+                bends.append(legLimit(*startCornerIndex, t * length, startRole));
             }
-            if (endBend) {
-                bends.append(legLimit(*endBend, (1.0 - t) * length, endRole));
+            if (endCornerIndex) {
+                bends.append(legLimit(*endCornerIndex, (1.0 - t) * length, endRole));
             }
             appendSample(samples, ChainSample {
                 leg.start + (leg.end - leg.start) * static_cast<float>(t),
@@ -855,25 +936,26 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
             });
         };
 
-        if (startBend) {
+        if (startCornerIndex) {
             appendAlongLeg(startInsetFraction, BendLimit::Inset, BendLimit::Leg);
         }
-        const int intervals = std::max(1, static_cast<int>(std::lround(length / spacing)));
+        const int intervals = intervalsOf(legIndex);
         for (int i = 1; i < intervals; ++i) {
             const double t = static_cast<double>(i) / intervals;
-            const bool isPastStartInset = !startBend || t > startInsetFraction;
-            const bool isBeforeEndInset = !endBend || t < endInsetFraction;
+            const bool isPastStartInset = !startCornerIndex || t > startInsetFraction;
+            const bool isBeforeEndInset = !endCornerIndex || t < endInsetFraction;
             if (isPastStartInset && isBeforeEndInset) {
                 appendAlongLeg(t, BendLimit::Leg, BendLimit::Leg);
             }
         }
-        if (endBend) {
+        if (endCornerIndex) {
             appendAlongLeg(endInsetFraction, BendLimit::Leg, BendLimit::Inset);
         }
 
         distance += length;
         const bool isLast = legIndex == lastLeg;
-        QVector3D endTangent = direction;
+        const bool isPlumb = isLast && plumbEnds.isEndPlumb;
+        QVector3D endTangent = isPlumb ? horizontalOf(direction) : direction;
         QVector<LrudRecord> endRecords {leg.endRing};
         if (isLast) {
             if (loop) {
@@ -886,7 +968,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const Option
         }
         const int legOut = isLast ? (loop ? 0 : -1) : legIndex + 1;
         appendSample(samples, ChainSample {leg.end, endTangent, distance, endRecords, legIndex, true,
-                                           stationBends(legIndex, legOut)});
+                                           stationBends(legIndex, legOut), isPlumb});
     }
     return samples;
 }
@@ -1033,23 +1115,25 @@ QVector<Frame> chainFrames(const QVector<ChainSample>& samples, const Options& o
         frames[i] = makeFrame(tangent, rotateAbout(tangent, horizontalUp, appliedAngle).normalized(), weight);
         previousAngle = angle;
     }
+
+    for (int i = 0; i < count; ++i) {
+        if (samples.at(i).isPlumb) {
+            frames[i] = makeFrame(samples.at(i).tangent, kWorldUp, 0.0);
+        }
+    }
     return frames;
 }
 
-// Distance from the center to the ellipse with semi-axes a and b along the
-// direction (cosTheta, sinTheta).
-double ellipsePolarRadius(double a, double b, double cosTheta, double sinTheta)
-{
-    return a * b / std::hypot(b * cosTheta, a * sinTheta);
-}
-
-// The record's walls as seen across the ring: each side wall foreshortened to
-// its component along frame.right, swapped when the record faces the other
-// way. A record facing along the ring's tangent keeps only up and down.
+// The record's walls as seen across the ring: each wall foreshortened to its
+// component along frame.right or frame.up, the side walls swapped when the
+// record faces the other way. A record facing along the ring's tangent keeps
+// only up and down.
 //
-// On a corner station's ring each wall first slides along the leg whose
-// cross-section holds it onto the bisector plane, so a wall read square to
-// one leg lands where that leg's wall meets the ring.
+// On a corner station's ring each wall instead slides along the leg whose
+// cross-section holds it onto the bisector plane and reaches as far from
+// the station as it lands, so a wall read square to one leg lands where that
+// leg's wall meets the ring. On a sloped corner the slide also carries a
+// vertical wall sideways, off the ring's up axis.
 cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std::optional<Miter>& miter)
 {
     const auto acrossRing = [&](const std::optional<double>& reading, const QVector3D& direction, const QVector3D& axis) -> std::optional<double> {
@@ -1062,16 +1146,16 @@ cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std
                                           <= std::abs(QVector3D::dotProduct(direction, miter->outgoing));
             const QVector3D& leg = isAcrossIncoming ? miter->incoming : miter->outgoing;
             wall -= leg * (QVector3D::dotProduct(wall, frame.tangent) / QVector3D::dotProduct(leg, frame.tangent));
+            return std::max(cwPassageTubeBuilder::kMinRadiusMeters, static_cast<double>(wall.length()));
         }
         return std::max(cwPassageTubeBuilder::kMinRadiusMeters,
                         static_cast<double>(std::abs(QVector3D::dotProduct(wall, axis))));
     };
 
-    cwStationLrud across {std::nullopt, std::nullopt, record.lrud.up, record.lrud.down};
-    if (miter) {
-        across.up = acrossRing(record.lrud.up, kWorldUp, frame.up);
-        across.down = acrossRing(record.lrud.down, -kWorldUp, frame.up);
-    }
+    cwStationLrud across {std::nullopt,
+                          std::nullopt,
+                          acrossRing(record.lrud.up, kWorldUp, frame.up),
+                          acrossRing(record.lrud.down, -kWorldUp, frame.up)};
     const QVector3D right = rightOfFacing(record.facing);
     const float component = QVector3D::dotProduct(right, frame.right);
     if (std::abs(component) < kMinProjectedLength) {
@@ -1087,68 +1171,137 @@ cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std
 
 struct RingFit {
     QVector<double> radii;
+    QVector<double> binAngles;
     QVector<bool> measured;
     int filledBins = 0;
 };
 
-// Samples the LRUD quadrant ellipse into the ring's bins and fills the empty
-// bins between measured ones. Bins are left at zero when fewer than
-// kMinFilledBins are measured.
-RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolution)
+// Bin k's eccentric anomaly around the ring, 2πk/N.
+double binParameter(int bin, int resolution)
 {
-    RingFit fit {QVector<double>(resolution, 0.0), QVector<bool>(resolution, false), 0};
-    const bool hasLrudWeight = 1.0 - frame.inclinationWeight >= kMinSampleWeight;
-    if (hasLrudWeight) {
-        const BendLimit* stationBend = sample.stationBend();
-        const std::optional<Miter> miter = stationBend ? std::optional<Miter>(stationBend->miter) : std::nullopt;
-        QVector<cwStationLrud> across;
-        across.reserve(sample.records.size());
-        for (const LrudRecord& record : sample.records) {
-            across.append(lrudAcross(record, frame, miter));
-        }
-        for (int bin = 0; bin < resolution; ++bin) {
-            const double theta = kTwoPi * bin / resolution;
-            const double cosTheta = std::cos(theta);
-            const double sinTheta = std::sin(theta);
-            const bool usesHorizontal = std::abs(cosTheta) > kAxisEpsilon;
-            const bool usesVertical = std::abs(sinTheta) > kAxisEpsilon;
-            for (const cwStationLrud& lrud : std::as_const(across)) {
-                const std::optional<double> a = cosTheta >= 0.0 ? lrud.right : lrud.left;
-                const std::optional<double> b = sinTheta >= 0.0 ? lrud.up : lrud.down;
-                if ((usesHorizontal && !a) || (usesVertical && !b)) {
-                    continue;
-                }
-                double radius = usesHorizontal ? *a : *b;
-                if (usesHorizontal && usesVertical) {
-                    radius = ellipsePolarRadius(*a, *b, cosTheta, sinTheta);
-                }
-                fit.radii[bin] = fit.measured.at(bin) ? std::max(fit.radii.at(bin), radius) : radius;
-                fit.measured[bin] = true;
-            }
+    return kTwoPi * bin / resolution;
+}
+
+RingFit emptyFit(int resolution)
+{
+    QVector<double> roundAngles;
+    roundAngles.reserve(resolution);
+    for (int bin = 0; bin < resolution; ++bin) {
+        roundAngles.append(binParameter(bin, resolution));
+    }
+
+    return RingFit {QVector<double>(resolution, 0.0), roundAngles, QVector<bool>(resolution, false), 0};
+}
+
+// A pit's left and right read across it whichever way it is entered, so a
+// steep ring is round at their mean, or at the one that was read.
+RingFit fitSteepRing(const QVector<LrudRecord>& records, int resolution)
+{
+    std::optional<double> radius;
+    for (const LrudRecord& record : records) {
+        const std::optional<double>& left = record.lrud.left;
+        const std::optional<double>& right = record.lrud.right;
+        if (left || right) {
+            const double recordRadius = left && right ? (*left + *right) / 2.0 : left.value_or(right.value_or(0.0));
+            radius = std::max(radius.value_or(recordRadius), recordRadius);
         }
     }
 
+    RingFit fit = emptyFit(resolution);
+    if (radius) {
+        fit.radii.fill(*radius);
+        fit.measured.fill(true);
+        fit.filledBins = resolution;
+    }
+    return fit;
+}
+
+// The widest reading of each wall over the records.
+cwStationLrud widestReadings(const QVector<cwStationLrud>& readings)
+{
+    const auto widen = [](std::optional<double>& widest, const std::optional<double>& reading) {
+        if (reading) {
+            widest = std::max(widest.value_or(*reading), *reading);
+        }
+    };
+    cwStationLrud widest;
+    for (const cwStationLrud& lrud : readings) {
+        widen(widest.left, lrud.left);
+        widen(widest.right, lrud.right);
+        widen(widest.up, lrud.up);
+        widen(widest.down, lrud.down);
+    }
+    return widest;
+}
+
+// A missing wall takes the mean of the walls beside it around the ring: a
+// side wall of up and down, a ceiling or floor of left and right.
+cwStationLrud filledReadings(const cwStationLrud& lrud)
+{
+    const auto meanOf = [](const std::optional<double>& a, const std::optional<double>& b) -> std::optional<double> {
+        if (a && b) {
+            return (*a + *b) / 2.0;
+        }
+        return a ? a : b;
+    };
+    return {
+        lrud.left ? lrud.left : meanOf(lrud.up, lrud.down),
+        lrud.right ? lrud.right : meanOf(lrud.up, lrud.down),
+        lrud.up ? lrud.up : meanOf(lrud.left, lrud.right),
+        lrud.down ? lrud.down : meanOf(lrud.left, lrud.right)
+    };
+}
+
+// The quadrant's horizontal and vertical readings at eccentric anomaly t.
+std::pair<std::optional<double>, std::optional<double>> quadrantReadings(const cwStationLrud& lrud, double t)
+{
+    return {std::cos(t) >= 0.0 ? lrud.right : lrud.left, std::sin(t) >= 0.0 ? lrud.up : lrud.down};
+}
+
+// Fits the ring to the LRUD quadrant ellipse. Bin k sits at eccentric anomaly
+// t_k = 2πk/N, the vertex (a cos t_k, b sin t_k) for the quadrant's
+// horizontal and vertical readings a and b, so the bins spread along a thin
+// ellipse's walls instead of bunching at its sides. A bin is measured when
+// the readings its quadrant needs were read; a missing reading is filled from
+// the walls beside it. Bins are left at zero when fewer than kMinFilledBins
+// are measured.
+RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolution)
+{
+    if (1.0 - frame.inclinationWeight < kMinSampleWeight) {
+        return fitSteepRing(sample.records, resolution);
+    }
+
+    const BendLimit* stationBend = sample.stationBend();
+    const std::optional<Miter> miter = stationBend ? std::optional<Miter>(stationBend->miter) : std::nullopt;
+    QVector<cwStationLrud> across;
+    across.reserve(sample.records.size());
+    for (const LrudRecord& record : sample.records) {
+        across.append(lrudAcross(record, frame, miter));
+    }
+    const cwStationLrud read = widestReadings(across);
+
+    RingFit fit = emptyFit(resolution);
+    for (int bin = 0; bin < resolution; ++bin) {
+        const double t = binParameter(bin, resolution);
+        const bool usesHorizontal = std::abs(std::cos(t)) > kAxisEpsilon;
+        const bool usesVertical = std::abs(std::sin(t)) > kAxisEpsilon;
+        const auto [a, b] = quadrantReadings(read, t);
+        fit.measured[bin] = (!usesHorizontal || a) && (!usesVertical || b);
+    }
     fit.filledBins = static_cast<int>(std::count(fit.measured.cbegin(), fit.measured.cend(), true));
     if (fit.filledBins < kMinFilledBins) {
         return fit;
     }
 
+    const cwStationLrud filled = filledReadings(read);
     for (int bin = 0; bin < resolution; ++bin) {
-        if (fit.measured.at(bin)) {
-            continue;
-        }
-        const auto wrapped = [resolution](int index) { return (index + resolution) % resolution; };
-        int before = 1;
-        while (!fit.measured.at(wrapped(bin - before))) {
-            ++before;
-        }
-        int after = 1;
-        while (!fit.measured.at(wrapped(bin + after))) {
-            ++after;
-        }
-        const double radiusBefore = fit.radii.at(wrapped(bin - before));
-        const double radiusAfter = fit.radii.at(wrapped(bin + after));
-        fit.radii[bin] = radiusBefore + (radiusAfter - radiusBefore) * before / (before + after);
+        const double t = binParameter(bin, resolution);
+        const auto [a, b] = quadrantReadings(filled, t);
+        const double x = a.value_or(cwPassageTubeBuilder::kMinRadiusMeters) * std::cos(t);
+        const double y = b.value_or(cwPassageTubeBuilder::kMinRadiusMeters) * std::sin(t);
+        const double angle = std::atan2(y, x);
+        fit.radii[bin] = std::hypot(x, y);
+        fit.binAngles[bin] = angle < 0.0 ? angle + kTwoPi : angle;
     }
     return fit;
 }
@@ -1156,35 +1309,24 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
 // A ring without data takes the nearest fitted ring. In a pit that ring's
 // ceiling and floor would land on horizontal axes through the rolled frame,
 // so the pit is round at the fitted ring's horizontal half-width instead.
-QVector<double> borrowedRadii(const RingFit& fitted, const Frame& frame)
+RingFit borrowedFit(const RingFit& fitted, const Frame& frame)
 {
     if (frame.inclinationWeight <= kSteepWeight) {
-        return fitted.radii;
+        return fitted;
     }
     const int resolution = fitted.radii.size();
     const int rightBin = 0;
     const int leftBin = resolution / 2;
-    const double halfWidth = (fitted.radii.at(rightBin) + fitted.radii.at(leftBin)) / 2.0;
-    return QVector<double>(resolution, halfWidth);
+    RingFit round = emptyFit(resolution);
+    round.radii.fill((fitted.radii.at(rightBin) + fitted.radii.at(leftBin)) / 2.0);
+    return round;
 }
 
 // Level dead ends sit flush with the end station; pits extend by up or down.
-double capOffset(const cwStationLrud& lrud, const QVector3D& outward, const Frame& endFrame)
+double capOffset(const cwStationLrud& lrud, const QVector3D& outward, const Options& options)
 {
     const std::optional<double> offset = outward.z() >= 0.0f ? lrud.up : lrud.down;
-    return endFrame.inclinationWeight * offset.value_or(0.0);
-}
-
-QString chainStartStation(const QVector<Leg>& legs, const ChainLeg& chainLeg)
-{
-    const Leg& leg = legs.at(chainLeg.legIndex);
-    return chainLeg.reversed ? leg.to : leg.from;
-}
-
-QString chainEndStation(const QVector<Leg>& legs, const ChainLeg& chainLeg)
-{
-    const Leg& leg = legs.at(chainLeg.legIndex);
-    return chainLeg.reversed ? leg.from : leg.to;
+    return inclinationWeight(outward, options) * offset.value_or(0.0);
 }
 
 // A warning about the chain, reported at its first station. message takes
@@ -1197,12 +1339,6 @@ Warning chainWarning(const QVector<Leg>& legs, const Chain& chain, Warning::Type
 }
 
 using EndCap = cwPassageTubeBuilder::EndCap;
-
-QVector3D binDirection(const Frame& frame, int bin, int resolution)
-{
-    const double theta = kTwoPi * bin / resolution;
-    return frame.right * static_cast<float>(std::cos(theta)) + frame.up * static_cast<float>(std::sin(theta));
-}
 
 double halfTurnCosine(const Ring& ring, const BendLimit& bend)
 {
@@ -1225,7 +1361,7 @@ void stretchAcrossMiter(Ring& ring, const BendLimit& bend)
     const double cosine = halfTurnCosine(ring, bend);
     const int resolution = ring.radii.size();
     for (int bin = 0; bin < resolution; ++bin) {
-        const double inside = QVector3D::dotProduct(binDirection(ring.frame, bin, resolution), bend.inside);
+        const double inside = QVector3D::dotProduct(binDirection(ring, bin), bend.inside);
         ring.radii[bin] /= squareOverMiterRadius(cosine, inside);
     }
 }
@@ -1251,7 +1387,7 @@ BendChange reshapeInside(Ring& ring, const BendLimit& bend, RadiusAt radiusAt)
     BendChange change;
     const int resolution = ring.radii.size();
     for (int bin = 0; bin < resolution; ++bin) {
-        const double inside = QVector3D::dotProduct(binDirection(ring.frame, bin, resolution), bend.inside);
+        const double inside = QVector3D::dotProduct(binDirection(ring, bin), bend.inside);
         if (inside <= kInsideBinEpsilon) {
             continue;
         }
@@ -1321,8 +1457,9 @@ void fitSharpBends(const QVector<Leg>& legs, const QVector<ChainSample>& samples
 
     for (auto it = corners.cbegin(); it != corners.cend(); ++it) {
         if (it.value().change.largestMeasuredChange > kClampWarningMeters) {
-            const ChainLeg& cornerLeg = chain.legs.at(it.key());
-            const QString station = chainEndStation(legs, cornerLeg);
+            const bool isChainStart = it.key() == kChainStartCorner;
+            const ChainLeg& cornerLeg = chain.legs.at(isChainStart ? 0 : it.key());
+            const QString& station = isChainStart ? chainStartStation(legs, cornerLeg) : chainEndStation(legs, cornerLeg);
             warnings.append(Warning {
                 Warning::BendClamped,
                 legs.at(cornerLeg.legIndex).tripId,
@@ -1340,7 +1477,13 @@ void buildRings(const QVector<Leg>& legs,
                 QVector<Warning>& warnings)
 {
     const QVector<WalkedLeg> walked = walkedLegs(legs, chain, directions);
-    const QVector<ChainSample> samples = chainSamples(walked, options);
+    const bool loop = isLoop(walked);
+    const auto isPlumb = [&](EndCap cap, const QVector3D& direction) {
+        return !loop && cap == EndCap::Fan && inclinationWeight(direction, options) < kSteepWeight;
+    };
+    const PlumbEnds plumbEnds {isPlumb(chain.startCap, walked.first().direction()),
+                               isPlumb(chain.endCap, walked.last().direction())};
+    const QVector<ChainSample> samples = chainSamples(walked, plumbEnds, options);
     const QVector<Frame> frames = chainFrames(samples, options);
     const int resolution = std::max(options.ringResolution, 1);
 
@@ -1370,12 +1513,16 @@ void buildRings(const QVector<Leg>& legs,
     chain.rings.clear();
     chain.rings.reserve(samples.size());
     for (int i = 0; i < samples.size(); ++i) {
-        Ring ring {samples.at(i).position, fits.at(i).radii, frames.at(i), fits.at(i).measured, samples.at(i).chainLeg};
+        Ring ring {samples.at(i).position, fits.at(i).radii, fits.at(i).binAngles, frames.at(i), fits.at(i).measured, samples.at(i).chainLeg};
         if (fits.at(i).filledBins < kMinFilledBins) {
             ring.measured = QVector<bool>(resolution, false);
-            ring.radii = fittedSamples.isEmpty()
-                             ? QVector<double>(resolution, options.defaultRadiusMeters)
-                             : borrowedRadii(fits.at(nearestFitted(i)), frames.at(i));
+            if (fittedSamples.isEmpty()) {
+                ring.radii = QVector<double>(resolution, options.defaultRadiusMeters);
+            } else {
+                const RingFit borrowed = borrowedFit(fits.at(nearestFitted(i)), frames.at(i));
+                ring.radii = borrowed.radii;
+                ring.binAngles = borrowed.binAngles;
+            }
             if (const BendLimit* bend = samples.at(i).stationBend()) {
                 stretchAcrossMiter(ring, *bend);
             }
@@ -1385,12 +1532,12 @@ void buildRings(const QVector<Leg>& legs,
 
     fitSharpBends(legs, samples, chain, warnings);
 
-    if (isLoop(walked)) {
+    if (loop) {
         chain.startCapOffsetMeters = 0.0;
         chain.endCapOffsetMeters = 0.0;
     } else {
-        chain.startCapOffsetMeters = capOffset(walked.first().startLrud, -walked.first().direction(), frames.first());
-        chain.endCapOffsetMeters = capOffset(walked.last().endLrud, walked.last().direction(), frames.last());
+        chain.startCapOffsetMeters = capOffset(walked.first().startLrud, -walked.first().direction(), options);
+        chain.endCapOffsetMeters = capOffset(walked.last().endLrud, walked.last().direction(), options);
     }
 }
 
@@ -1440,21 +1587,6 @@ void classifyChainEnds(const QVector<Leg>& legs, QVector<Chain>& chains)
     }
 }
 
-bool isFinite(const QVector3D& v)
-{
-    return std::isfinite(v.x()) && std::isfinite(v.y()) && std::isfinite(v.z());
-}
-
-// A ring whose frame could not be built tears the chain.
-bool hasValidFrame(const Ring& ring)
-{
-    return isFinite(ring.center)
-           && isFinite(ring.frame.tangent)
-           && isFinite(ring.frame.up)
-           && isFinite(ring.frame.right)
-           && ring.frame.right.lengthSquared() > kMinAxisLengthSquared;
-}
-
 // Places the ring's vertices. A vertex that would land behind the previous
 // ring's plane, folding the tube inside out on the inside of a bend, slides
 // along its own ray onto that plane.
@@ -1463,7 +1595,7 @@ void placeRingVertices(Ring& ring, const Ring* previous)
     const int resolution = ring.radii.size();
     ring.vertices.resize(resolution);
     for (int bin = 0; bin < resolution; ++bin) {
-        const QVector3D direction = binDirection(ring.frame, bin, resolution);
+        const QVector3D direction = binDirection(ring, bin);
         double radius = ring.radii.at(bin);
         if (previous != nullptr) {
             const QVector3D& planeNormal = previous->frame.tangent;
@@ -1500,6 +1632,151 @@ void placeChainVertices(Chain& chain)
             ring.vertices.clear();
         }
     }
+}
+
+double cross2d(const QPointF& origin, const QPointF& a, const QPointF& b)
+{
+    return (a.x() - origin.x()) * (b.y() - origin.y()) - (a.y() - origin.y()) * (b.x() - origin.x());
+}
+
+// The longest edge squared over twice the area, as the mesh check measures
+// slivers; infinite for a triangle wound clockwise or without area.
+double aspectRatio(const QPointF& a, const QPointF& b, const QPointF& c)
+{
+    const double doubleArea = cross2d(a, b, c);
+    if (doubleArea <= 0.0) {
+        return std::numeric_limits<double>::infinity();
+    }
+    const auto lengthSquared = [](const QPointF& v) { return QPointF::dotProduct(v, v); };
+    return std::max({lengthSquared(b - a), lengthSquared(c - b), lengthSquared(a - c)}) / doubleArea;
+}
+
+bool containsPoint(const QVector<QPointF>& polygon, const QPointF& point)
+{
+    bool inside = false;
+    for (int i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++) {
+        const QPointF& a = polygon.at(i);
+        const QPointF& b = polygon.at(j);
+        if ((a.y() > point.y()) != (b.y() > point.y())
+            && point.x() < a.x() + (point.y() - a.y()) * (b.x() - a.x()) / (b.y() - a.y())) {
+            inside = !inside;
+        }
+    }
+    return inside;
+}
+
+// Whether the chord between polygon vertices i and j runs inside the
+// polygon without crossing any of its edges.
+bool isInteriorChord(const QVector<QPointF>& polygon, int i, int j)
+{
+    const int count = polygon.size();
+    const QPointF& a = polygon.at(i);
+    const QPointF& b = polygon.at(j);
+    for (int k = 0; k < count; ++k) {
+        const int next = (k + 1) % count;
+        if (k == i || k == j || next == i || next == j) {
+            continue;
+        }
+        const QPointF& c = polygon.at(k);
+        const QPointF& d = polygon.at(next);
+        const bool crosses = (cross2d(c, d, a) > 0.0) != (cross2d(c, d, b) > 0.0)
+                             && (cross2d(a, b, c) > 0.0) != (cross2d(a, b, d) > 0.0);
+        if (crosses) {
+            return false;
+        }
+    }
+    return containsPoint(polygon, (a + b) / 2.0);
+}
+
+using CapTriangle = std::array<int, 3>;
+
+// Triangulates a simple polygon, counter-clockwise, so its worst triangle is
+// as little of a sliver as it can be (dynamic programming over the chords),
+// or returns nothing when the polygon has no such triangulation. A fan from
+// one center leaves slivers toward the tips of a flat or thin section, where
+// the bins lie close together.
+QVector<CapTriangle> capTriangles(const QVector<QPointF>& polygon)
+{
+    struct Cost {
+        double worst = std::numeric_limits<double>::infinity();
+        double total = std::numeric_limits<double>::infinity();
+
+        bool operator<(const Cost& other) const
+        {
+            return worst < other.worst || (worst == other.worst && total < other.total);
+        }
+    };
+
+    const int count = polygon.size();
+    if (count < 3) {
+        return {};
+    }
+    const auto index = [count](int i, int j) { return i * count + j; };
+    QVector<bool> isChord(count * count, false);
+    for (int i = 0; i < count; ++i) {
+        for (int j = i + 1; j < count; ++j) {
+            const bool isEdge = j == i + 1 || (i == 0 && j == count - 1);
+            isChord[index(i, j)] = isEdge || isInteriorChord(polygon, i, j);
+        }
+    }
+
+    QVector<Cost> cost(count * count);
+    QVector<int> apex(count * count, -1);
+    for (int i = 0; i + 1 < count; ++i) {
+        cost[index(i, i + 1)] = Cost {0.0, 0.0};
+    }
+    for (int span = 2; span < count; ++span) {
+        for (int i = 0; i + span < count; ++i) {
+            const int j = i + span;
+            if (!isChord.at(index(i, j))) {
+                continue;
+            }
+            for (int k = i + 1; k < j; ++k) {
+                if (!isChord.at(index(i, k)) || !isChord.at(index(k, j))) {
+                    continue;
+                }
+                const double aspect = aspectRatio(polygon.at(i), polygon.at(k), polygon.at(j));
+                const Cost& left = cost.at(index(i, k));
+                const Cost& right = cost.at(index(k, j));
+                const Cost candidate {std::max({aspect, left.worst, right.worst}), aspect + left.total + right.total};
+                if (candidate < cost.at(index(i, j))) {
+                    cost[index(i, j)] = candidate;
+                    apex[index(i, j)] = k;
+                }
+            }
+        }
+    }
+    if (!std::isfinite(cost.at(index(0, count - 1)).worst)) {
+        return {};
+    }
+
+    QVector<CapTriangle> triangles;
+    triangles.reserve(count - 2);
+    QVector<std::pair<int, int>> pending {{0, count - 1}};
+    while (!pending.isEmpty()) {
+        const auto [i, j] = pending.takeLast();
+        const int k = apex.at(index(i, j));
+        if (k < 0) {
+            continue;
+        }
+        triangles.append({i, k, j});
+        pending.append({i, k});
+        pending.append({k, j});
+    }
+    return triangles;
+}
+
+// The ring's vertices in its plane, counter-clockwise from frame.right
+// toward frame.up.
+QVector<QPointF> planarPolygon(const Ring& ring)
+{
+    QVector<QPointF> polygon;
+    polygon.reserve(ring.vertices.size());
+    for (const QVector3D& vertex : ring.vertices) {
+        const QVector3D offset = vertex - ring.center;
+        polygon.append(QPointF(QVector3D::dotProduct(offset, ring.frame.right), QVector3D::dotProduct(offset, ring.frame.up)));
+    }
+    return polygon;
 }
 
 // Collects triangles per trip so each trip's indices end up contiguous.
@@ -1575,6 +1852,29 @@ public:
                 addTriangle(tripId, center, next, current);
             } else {
                 addTriangle(tripId, center, current, next);
+            }
+        }
+    }
+
+    // Closes a planar ring with triangles across it, or with a fan around
+    // fanCenter when the ring is not a simple polygon. polygon is the ring
+    // in its plane, counter-clockwise from frame.right toward frame.up;
+    // facingForward is true when the cap faces along the ring's tangent.
+    void addFlatCap(const QUuid& tripId, quint32 ring, const QVector<QPointF>& polygon, bool facingForward, const QVector3D& fanCenter)
+    {
+        const QVector<CapTriangle> triangles = capTriangles(polygon);
+        if (triangles.isEmpty()) {
+            addFan(tripId, addCapCenter(fanCenter), ring, polygon.size(), facingForward);
+            return;
+        }
+        for (const CapTriangle& triangle : triangles) {
+            const quint32 a = ring + triangle.at(0);
+            const quint32 b = ring + triangle.at(1);
+            const quint32 c = ring + triangle.at(2);
+            if (facingForward) {
+                addTriangle(tripId, a, c, b);
+            } else {
+                addTriangle(tripId, a, b, c);
             }
         }
     }
@@ -1672,9 +1972,10 @@ ChainVertices addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const C
             if (before == after) {
                 return;
             }
-            const quint32 center = writer.addCapCenter(chain.rings.at(run.at(position)).center);
-            writer.addFan(before, center, firstVertex.at(position), resolution, true);
-            writer.addFan(after, center, firstVertex.at(position), resolution, false);
+            const Ring& ring = chain.rings.at(run.at(position));
+            const QVector<QPointF> polygon = planarPolygon(ring);
+            writer.addFlatCap(before, firstVertex.at(position), polygon, true, ring.center);
+            writer.addFlatCap(after, firstVertex.at(position), polygon, false, ring.center);
         };
         for (int s = 1; s + 1 < run.size(); ++s) {
             addTripBoundary(s, tripOfRing(run.at(s)), tripOfRing(run.at(s + 1)));
@@ -1685,32 +1986,45 @@ ChainVertices addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const C
         }
 
         // A mouth adds one strip past the end ring; a zipped mouth is closed
-        // by its zip band, anything else by a fan.
-        const auto addCap = [&](int position, EndCap cap, double pitOffset, bool atEnd, const QVector<QVector3D>& mouth) {
+        // by its zip band, one left unzipped by a fan. A dead end closes flat
+        // across its end ring; a steep one runs one strip on to its floor or
+        // ceiling first.
+        const auto addCap = [&](int position, EndCap cap, double pitOffset, bool atEnd, const QVector<QVector3D>& mouth) -> qint64 {
             const Ring& ring = chain.rings.at(run.at(position));
             const QUuid tripId = tripOfRing(run.at(atEnd ? position : position + 1));
             quint32 capRing = firstVertex.at(position);
-            QVector3D capCenter = ring.center + (centroid(ring.vertices) - ring.center) * kFanCenterBlend;
-            qint64 mouthFirst = -1;
-            if (mouth.size() == resolution) {
-                mouthFirst = writer.addRing(mouth);
+            const auto addStrip = [&](const QVector<QVector3D>& end) {
+                const quint32 endFirst = writer.addRing(end);
                 if (atEnd) {
-                    writer.addSides(tripId, capRing, mouthFirst, resolution);
+                    writer.addSides(tripId, capRing, endFirst, resolution);
                 } else {
-                    writer.addSides(tripId, mouthFirst, capRing, resolution);
+                    writer.addSides(tripId, endFirst, capRing, resolution);
                 }
-                capRing = mouthFirst;
-                capCenter = centroid(mouth);
-                pitOffset = 0.0;
+                capRing = endFirst;
+            };
+
+            if (mouth.size() == resolution) {
+                addStrip(mouth);
+                if (cap != EndCap::Mouth) {
+                    writer.addFan(tripId, writer.addCapCenter(centroid(mouth)), capRing, resolution, atEnd);
+                }
+                return capRing;
             }
-            if (cap == EndCap::Mouth && mouthFirst >= 0) {
-                return mouthFirst;
-            }
+
+            QVector3D fanCenter = ring.center + (centroid(ring.vertices) - ring.center) * kFanCenterBlend;
             const double offset = ring.frame.inclinationWeight > kSteepWeight ? pitOffset : 0.0;
-            const QVector3D outward = atEnd ? ring.frame.tangent : -ring.frame.tangent;
-            const quint32 center = writer.addCapCenter(capCenter + outward * static_cast<float>(offset));
-            writer.addFan(tripId, center, capRing, resolution, atEnd);
-            return mouthFirst;
+            if (offset > 0.0) {
+                const QVector3D outward = atEnd ? ring.frame.tangent : -ring.frame.tangent;
+                QVector<QVector3D> pitEnd;
+                pitEnd.reserve(resolution);
+                for (const QVector3D& vertex : ring.vertices) {
+                    pitEnd.append(vertex + outward * static_cast<float>(offset));
+                }
+                addStrip(pitEnd);
+                fanCenter = centroid(pitEnd);
+            }
+            writer.addFlatCap(tripId, capRing, planarPolygon(ring), atEnd, fanCenter);
+            return -1;
         };
         const bool isChainStart = run.first() == 0;
         const bool isChainEnd = run.last() == lastRing;

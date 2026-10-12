@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwPassageTubeJunction.h"
+#include "cwPassageTubeGeometry.h"
 
 //Qt includes
 #include <QHash>
@@ -17,11 +18,12 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <numbers>
 #include <numeric>
 #include <optional>
 
 namespace {
+
+using namespace cwPassageTubeGeometry;
 
 using Builder = cwPassageTubeBuilder;
 using Ring = Builder::Ring;
@@ -35,7 +37,6 @@ using ZipCorner = Builder::ZipCorner;
 using Warning = cwPassageTubeMesh::Warning;
 using RingTube = cwPassageTubeJunction::RingTube;
 
-constexpr double kTwoPi = 2.0 * std::numbers::pi;
 constexpr double kMinJunctionDegrees = 10.0;
 const double kMinJunctionSine = std::sin(qDegreesToRadians(kMinJunctionDegrees));
 constexpr double kJunctionReachMargin = 0.5;
@@ -51,7 +52,6 @@ constexpr int kGrowBisections = 12;
 // through's axis, the search for the through wall reaches.
 constexpr double kWallSearchFactor = 3.0;
 constexpr double kJunctionTolerance = 0.02;
-constexpr double kMinRingSpacingMeters = 0.05;
 constexpr double kParallelRingDegrees = 1.0;
 const float kParallelRingCosine = static_cast<float>(std::cos(qDegreesToRadians(kParallelRingDegrees)));
 // How far, in quads, the window reaches past the mouth, so its edge stays
@@ -62,39 +62,20 @@ constexpr double kWindowMarginQuads = 0.25;
 constexpr double kFoldedZipPenalty = 1e6;
 constexpr double kSliverZipPenalty = 1e3;
 constexpr double kMaxZipAspectRatio = 20.0;
-constexpr float kMinAxisLengthSquared = 0.25f;
 constexpr float kDegenerateLengthSquared = 1e-12f;
 constexpr double kParallelEpsilon = 1e-12;
 // A point this close to a through wall counts as on it, so a column that
 // starts on the wall can grow past it.
 constexpr double kOnWallMeters = 1e-5;
+constexpr double kMaxCarryDegrees = 45.0;
+const double kMinCarryCosine = std::cos(qDegreesToRadians(kMaxCarryDegrees));
 
 using StationKey = QPair<QUuid, QString>;
 using Vertex = QPair<int, int>;
 
-QVector3D binDirection(const Builder::Frame& frame, int bin, int resolution)
-{
-    const double theta = kTwoPi * bin / resolution;
-    return frame.right * static_cast<float>(std::cos(theta)) + frame.up * static_cast<float>(std::sin(theta));
-}
-
 QVector3D unpulledVertex(const Ring& ring, int bin)
 {
-    return ring.center + binDirection(ring.frame, bin, ring.radii.size()) * static_cast<float>(ring.radii.at(bin));
-}
-
-bool isFinite(const QVector3D& v)
-{
-    return std::isfinite(v.x()) && std::isfinite(v.y()) && std::isfinite(v.z());
-}
-
-bool hasValidFrame(const Ring& ring)
-{
-    return isFinite(ring.center)
-           && isFinite(ring.frame.tangent)
-           && isFinite(ring.frame.up)
-           && isFinite(ring.frame.right)
-           && ring.frame.right.lengthSquared() > kMinAxisLengthSquared;
+    return ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
 }
 
 double largestRadius(const Ring& ring)
@@ -210,33 +191,61 @@ Slab slabOf(const QVector<Ring>& rings, const QVector3D& point, int first, int l
     return best;
 }
 
-// The ring's radius toward theta, interpolated linearly between bins.
+// The bins either side of a polar angle: low is the last bin at or before
+// it, high the next one around the ring, and fraction how far the angle lies
+// between their angles.
+struct BinSpan {
+    int low = 0;
+    int high = 0;
+    double fraction = 0.0;
+};
+
+BinSpan binSpan(const Ring& ring, double theta)
+{
+    const QVector<double>& angles = ring.binAngles;
+    const int resolution = angles.size();
+    const double angle = wrappedAngle(theta);
+    const int low = static_cast<int>(std::upper_bound(angles.cbegin(), angles.cend(), angle) - angles.cbegin()) - 1;
+    const int high = (low + 1) % resolution;
+    const double highAngle = high == 0 ? kTwoPi : angles.at(high);
+    const double gap = highAngle - angles.at(low);
+    return BinSpan {low, high, gap > 0.0 ? (angle - angles.at(low)) / gap : 0.0};
+}
+
+QPointF localVertex(const Ring& ring, int bin)
+{
+    const double radius = ring.radii.at(bin);
+    return QPointF(radius * std::cos(ring.binAngles.at(bin)), radius * std::sin(ring.binAngles.at(bin)));
+}
+
+// The ring's radius toward theta: where the ray meets the chord between the
+// bins either side, as the mesh draws the wall there.
 double polarRadius(const Ring& ring, double theta)
 {
-    const int resolution = ring.radii.size();
-    const double position = wrappedAngle(theta) / kTwoPi * resolution;
-    const int low = static_cast<int>(std::floor(position)) % resolution;
-    const int high = (low + 1) % resolution;
-    const double fraction = position - std::floor(position);
-    return ring.radii.at(low) * (1.0 - fraction) + ring.radii.at(high) * fraction;
+    const BinSpan span = binSpan(ring, theta);
+    const QPointF low = localVertex(ring, span.low);
+    const QPointF high = localVertex(ring, span.high);
+    const QPointF chord = high - low;
+    const QPointF direction(std::cos(theta), std::sin(theta));
+    const double denominator = direction.x() * chord.y() - direction.y() * chord.x();
+    const double numerator = low.x() * high.y() - low.y() * high.x();
+    if (std::abs(denominator) < kParallelEpsilon || numerator / denominator <= 0.0) {
+        return ring.radii.at(span.low) * (1.0 - span.fraction) + ring.radii.at(span.high) * span.fraction;
+    }
+    return numerator / denominator;
+}
+
+// The polar angle theta as a fractional bin index around the ring.
+double binPosition(const Ring& ring, double theta)
+{
+    const BinSpan span = binSpan(ring, theta);
+    return span.low + span.fraction;
 }
 
 QPointF localOf(const Ring& ring, const QVector3D& point)
 {
     const QVector3D offset = point - ring.center;
     return QPointF(QVector3D::dotProduct(offset, ring.frame.right), QVector3D::dotProduct(offset, ring.frame.up));
-}
-
-const QString& chainStartStation(const QVector<Leg>& legs, const ChainLeg& chainLeg)
-{
-    const Leg& leg = legs.at(chainLeg.legIndex);
-    return chainLeg.reversed ? leg.to : leg.from;
-}
-
-const QString& chainEndStation(const QVector<Leg>& legs, const ChainLeg& chainLeg)
-{
-    const Leg& leg = legs.at(chainLeg.legIndex);
-    return chainLeg.reversed ? leg.from : leg.to;
 }
 
 QVector3D stationPosition(const QVector<Leg>& legs, const ChainLeg& chainLeg, bool atEnd)
@@ -402,8 +411,10 @@ Ring lerpRing(const Ring& a, const Ring& b, double fraction)
     Ring ring;
     ring.center = a.center + (b.center - a.center) * f;
     ring.radii.reserve(a.radii.size());
+    ring.binAngles.reserve(a.radii.size());
     for (int bin = 0; bin < a.radii.size(); ++bin) {
         ring.radii.append(a.radii.at(bin) + (b.radii.at(bin) - a.radii.at(bin)) * fraction);
+        ring.binAngles.append(a.binAngles.at(bin) + (b.binAngles.at(bin) - a.binAngles.at(bin)) * fraction);
     }
     ring.measured = QVector<bool>(a.radii.size(), false);
     ring.chainLeg = b.chainLeg;
@@ -501,10 +512,8 @@ RingExtent ringExtent(const Ring& ring, const QVector3D& normal)
     extent.highAcross = std::numeric_limits<double>::lowest();
     extent.lowWidth = std::numeric_limits<double>::max();
     extent.highWidth = std::numeric_limits<double>::lowest();
-    const int resolution = ring.radii.size();
-    for (int bin = 0; bin < resolution; ++bin) {
-        const double theta = kTwoPi * bin / resolution;
-        const QPointF vertex(ring.radii.at(bin) * std::cos(theta), ring.radii.at(bin) * std::sin(theta));
+    for (int bin = 0; bin < ring.radii.size(); ++bin) {
+        const QPointF vertex = localVertex(ring, bin);
         const double a = QPointF::dotProduct(vertex, extent.across);
         const double w = QPointF::dotProduct(vertex, extent.width);
         extent.lowAcross = std::min(extent.lowAcross, a);
@@ -525,6 +534,22 @@ struct Fill {
     // One per through ring; all invalid for an arm nearly parallel to the
     // through.
     QVector<RingExtent> extents;
+    // The unit across direction, null for an arm nearly parallel to the
+    // through.
+    QVector3D across;
+
+    // A column carries the fill when it points within kMaxCarryDegrees of
+    // the across direction in its ring's plane. A column running nearly
+    // along a floor or ceiling would otherwise skim through the slab of a
+    // fill below or above it all the way to the far wall.
+    bool isCarriedBy(const Ring& ring, const QVector3D& direction) const
+    {
+        if (across.isNull()) {
+            return true;
+        }
+        const QVector3D inPlane = across - ring.frame.tangent * QVector3D::dotProduct(across, ring.frame.tangent);
+        return std::abs(QVector3D::dotProduct(direction, inPlane)) >= kMinCarryCosine * inPlane.length();
+    }
 
     // Inside the through ring's polygon, or past its extent along the across
     // direction within its width: the part of an arm that reaches above a
@@ -603,7 +628,7 @@ struct JunctionSolids {
             for (const Ring& ring : throughRings) {
                 extents.append(ringExtent(ring, across));
             }
-            result.append(Fill {RingTube {&arm.rings, arm.tangent}, &through, extents});
+            result.append(Fill {RingTube {&arm.rings, arm.tangent}, &through, extents, across});
         }
         return result;
     }
@@ -736,13 +761,6 @@ JunctionSolids junctionSolids(const QVector<Chain>& chains, const Junction& junc
     return solids;
 }
 
-bool insideAnyFill(const QVector<Fill>& fills, const QVector3D& point, double tolerance)
-{
-    return std::any_of(fills.cbegin(), fills.cend(), [&](const Fill& fill) {
-        return fill.inside(point, tolerance);
-    });
-}
-
 // How far ring's wall can reach along direction and stay between its
 // neighbors' planes, so a grown column never folds behind the ring before it
 // or past the ring after it.
@@ -774,9 +792,6 @@ void growThrough(Chain& through, const JunctionSolids& solids)
     const RingTube throughTube {&solids.throughRings, {}};
     const QVector<Fill> fills = solids.fills(throughTube);
     const ThroughSpan span(through.rings, solids.position, solids.reach);
-    const auto inFill = [&](const QVector3D& point) {
-        return solids.isNear(point) && insideAnyFill(fills, point, 0.0);
-    };
 
     for (int i = span.first; i <= span.last; ++i) {
         Ring& ring = through.rings[i];
@@ -789,7 +804,12 @@ void growThrough(Chain& through, const JunctionSolids& solids)
                                       largestRadius(ring) + solids.armRadius + kJunctionReachMargin);
         const int resolution = ring.radii.size();
         for (int bin = 0; bin < resolution; ++bin) {
-            const QVector3D direction = binDirection(ring.frame, bin, resolution);
+            const QVector3D direction = binDirection(ring, bin);
+            const auto inFill = [&](const QVector3D& point) {
+                return solids.isNear(point) && std::any_of(fills.cbegin(), fills.cend(), [&](const Fill& fill) {
+                    return fill.isCarriedBy(ring, direction) && fill.inside(point, 0.0);
+                });
+            };
             const double own = ring.radii.at(bin);
             const auto pointAt = [&](double radius) { return ring.center + direction * static_cast<float>(radius); };
             if (!solids.mayCrossFill(pointAt(own), pointAt(limit))) {
@@ -875,12 +895,12 @@ Trim trimArm(const QVector<Ring>& rings, const QVector3D& tangent, const Junctio
         }
         QVector3D inside = axisPoint;
         QVector3D outside = axisPoint + radial * static_cast<float>(kWallSearchFactor);
-        if (!grownTube.inside(inside) || grownTube.inside(outside)) {
+        if (!grownTube.inside(inside) || grownTube.inside(outside, kJunctionTolerance)) {
             return point;
         }
         for (int step = 0; step < kGrowBisections; ++step) {
             const QVector3D middle = (inside + outside) / 2.0f;
-            (grownTube.inside(middle) ? inside : outside) = middle;
+            (grownTube.inside(middle, kJunctionTolerance) ? inside : outside) = middle;
         }
         return (inside + outside) / 2.0f;
     };
@@ -1017,10 +1037,12 @@ std::optional<QPointF> surfaceParameter(const QVector<Ring>& rings, const Throug
     const Ring& b = rings.at(slab.segment + 1);
     const QPointF localA = localOf(a, point);
     const QPointF localB = localOf(b, point);
-    const double thetaA = std::atan2(localA.y(), localA.x());
-    const double thetaB = unwrapped(std::atan2(localB.y(), localB.x()), thetaA);
-    const double theta = wrappedAngle(thetaA + (thetaB - thetaA) * slab.fraction);
-    return QPointF(slab.segment + slab.fraction, theta / kTwoPi * a.radii.size());
+    const int resolution = a.radii.size();
+    const double columnA = binPosition(a, std::atan2(localA.y(), localA.x()));
+    const double columnB = binPosition(b, std::atan2(localB.y(), localB.x()));
+    const double nearColumnB = columnB + resolution * std::round((columnA - columnB) / resolution);
+    const double column = std::fmod(columnA + (nearColumnB - columnA) * slab.fraction + resolution, resolution);
+    return QPointF(slab.segment + slab.fraction, column);
 }
 
 // The mouth in (ring, column) space, unwrapped across the column seam so it
@@ -1301,7 +1323,7 @@ QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
     // The through's outward direction at a boundary vertex.
     const auto outwardAt = [&](int j) {
         const Vertex& vertex = boundaryVertex(j);
-        return binDirection(rings.at(vertex.first).frame, vertex.second, resolution);
+        return binDirection(rings.at(vertex.first), vertex.second);
     };
 
     // State (i, j) has bridged mouth vertex i to boundary vertex j. The band
@@ -1406,6 +1428,27 @@ bool hasMeshedMouthEnd(const Chain& arm, bool isStart)
     const Ring& end = isStart ? arm.rings.at(0) : arm.rings.at(count - 1);
     const Ring& next = isStart ? arm.rings.at(1) : arm.rings.at(count - 2);
     return hasValidFrame(end) && hasValidFrame(next);
+}
+
+// An arm whose mouth cannot be zipped closes with a fan over the strip to its
+// mouth. A mouth point that lies behind the arm's end ring, where a column
+// that missed the through found a far part of it, would turn that strip
+// inside out, so such an arm closes on its end ring instead.
+void closeWithFan(Chain& arm, bool isStart)
+{
+    capAt(arm, isStart) = EndCap::Fan;
+    QVector<QVector3D>& mouth = isStart ? arm.startMouth : arm.endMouth;
+    if (mouth.isEmpty() || arm.rings.isEmpty()) {
+        return;
+    }
+    const Ring& end = junctionRing(arm, isStart);
+    const QVector3D tangent = arrivingTangent(arm, isStart);
+    const bool isAhead = std::all_of(mouth.cbegin(), mouth.cend(), [&](const QVector3D& point) {
+        return QVector3D::dotProduct(point - end.center, tangent) > 0.0f;
+    });
+    if (!isAhead) {
+        mouth.clear();
+    }
 }
 
 // Cuts the window for one arm's mouth into the through and zips them, or
@@ -1547,7 +1590,7 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
         QVector<ArmEnd> arms = trimmedArms.at(j);
         if (through.rings.size() < 2) {
             for (const ArmEnd& end : std::as_const(arms)) {
-                capAt(chains[end.chain], end.isStart) = EndCap::Fan;
+                closeWithFan(chains[end.chain], end.isStart);
             }
             continue;
         }
@@ -1584,7 +1627,7 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
                 window->tripId = tripId;
                 through.windows.append(*window);
             } else {
-                capAt(arm, end.isStart) = EndCap::Fan;
+                closeWithFan(arm, end.isStart);
             }
         }
     }

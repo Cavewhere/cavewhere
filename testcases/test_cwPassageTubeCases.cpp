@@ -27,7 +27,6 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
-#include <numbers>
 #include <string>
 #include <vector>
 
@@ -135,14 +134,12 @@ void checkCaseBuildsClosed(const std::string& name)
 }
 
 // Random seeds whose junction-free survey builds a clean mesh. The others
-// fail the full check for reasons the bend rules leave alone: random
-// bearings run passages through each other (SelfIntersection), each
-// station's four readings are drawn independently, so a ring can be a thin
-// ellipse whose tip folds (Crease) or a station's wall lies off a ring
-// tilted by the slope or the facing (WallMissed), and a hairpin on a small
-// passage leaves long, thin strips between its inset rings and the corner
-// (SliverTriangle).
-const QVector<int> kCleanRandomSeeds {19, 28, 49};
+// fail the full check on what uniform random bearings and independent
+// readings make: hairpins whose inset rings and clamped inner walls cross
+// or fold (SelfIntersection, Crease, SliverTriangle), passages run through
+// each other (SelfIntersection), and walls off a ring that a hairpin's
+// corner or a station's facing tilts (WallMissed).
+const QVector<int> kCleanRandomSeeds {2, 8, 13, 15, 19, 28, 31, 36, 49};
 
 bool isCleanRandomSeed(int seed)
 {
@@ -157,9 +154,8 @@ int pulledVertexCount(const cwPassageTubeBuilder::Debug& debug)
     int count = 0;
     for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
         for (const cwPassageTubeBuilder::Ring& ring : chain.rings) {
-            const int resolution = ring.radii.size();
             for (int bin = 0; bin < ring.vertices.size(); ++bin) {
-                const double theta = 2.0 * std::numbers::pi * bin / resolution;
+                const double theta = ring.binAngles.at(bin);
                 const QVector3D direction = ring.frame.right * static_cast<float>(std::cos(theta))
                                             + ring.frame.up * static_cast<float>(std::sin(theta));
                 const QVector3D unpulled = ring.center + direction * static_cast<float>(ring.radii.at(bin));
@@ -209,27 +205,10 @@ QVector3D position(const Cases::Trip& trip, const QString& name)
     return {};
 }
 
-// Junction-free cases the builder gets wrong today, none of them owned by
-// a plan task yet: a sloped through passage's ring tilts with the slope
-// while its up and down walls stay vertical, so WallMissed fires on them.
-bool hasKnownBuilderDefect(const Cases::Case& entry)
-{
-    const QStringList& tags = entry.tags;
-    return tags.contains(QStringLiteral("through-profile:30")) || tags.contains(QStringLiteral("through-profile:-30"));
-}
-
 // Gallery cases at a limit the junction merge states: an arm joining at 20°
 // gives a long mouth whose zip band bridges the through's rings with thin
 // triangles (SliverTriangle).
 const QStringList kJunctionLimitCases {QStringLiteral("5. ")};
-
-// Gallery cases whose junction merges clean but whose tube has a defect
-// elsewhere, none of them owned by a plan task yet: the 7 m by 0.8 m arm of
-// 7 is a thin ellipse whose sixteen bins leave a spike along its ceiling
-// (Crease), and the dead ends of the pit and shaft in 8 and 9 and of the
-// sloped arm in 14 do not reach their side or ceiling walls (WallMissed).
-const QStringList kBuilderDefectCases {QStringLiteral("7. "), QStringLiteral("8. "), QStringLiteral("9. "),
-                                       QStringLiteral("14. ")};
 
 // Junctions the merge leaves unclean. In 11 the station stands on the wall
 // the arm enters through, so the through's bins jump from 0.05 m to 3 m
@@ -253,9 +232,7 @@ bool hasNamePrefix(const Cases::Case& entry, const QStringList& prefixes)
 
 bool isUncleanCatalogCase(const Cases::Case& entry)
 {
-    return hasNamePrefix(entry, kJunctionLimitCases)
-           || hasNamePrefix(entry, kBuilderDefectCases)
-           || hasNamePrefix(entry, kOpenJunctionCases);
+    return hasNamePrefix(entry, kJunctionLimitCases) || hasNamePrefix(entry, kOpenJunctionCases);
 }
 
 // The smallest angle in plan between an arm and either half of the through
@@ -340,14 +317,6 @@ bool isOpenSweepCase(const Cases::Case& entry)
            || kOpenSweepCases.contains(entry.name);
 }
 
-// An arm that slopes or drops: its dead end has the sloped-through defect
-// of hasKnownBuilderDefect, and a pit's far ring misses its side walls
-// (WallMissed).
-bool hasTiltedArm(const Cases::Case& entry)
-{
-    return !entry.tags.contains(QStringLiteral("profile:0"));
-}
-
 // Two arms whose mouths share through quads, the merge's other stated
 // limit: the second falls back to a fan cap inside the first
 // (SelfIntersection).
@@ -358,8 +327,8 @@ bool overlapsMouths(const cwPassageTubeBuilder::Debug& debug)
     });
 }
 
-// Every check, apart from the walls a tilted arm's dead end misses and the
-// cases whose mouths overlap, which the [!mayfail] sweep tests cover.
+// Every check, apart from the cases whose mouths overlap, which the
+// [!mayfail] sweep tests cover.
 void checkSweepCaseBuildsClean(const std::string& name)
 {
     INFO(name);
@@ -370,12 +339,7 @@ void checkSweepCaseBuildsClean(const std::string& name)
     if (overlapsMouths(debug)) {
         return;
     }
-    cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
-    if (hasTiltedArm(entry)) {
-        report.issues.removeIf([](const cwPassageTubeMeshCheck::Issue& issue) {
-            return issue.type == cwPassageTubeMeshCheck::WallMissed;
-        });
-    }
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
     INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
     CHECK(report.issues.isEmpty());
 }
@@ -410,15 +374,6 @@ TEST_CASE("cwPassageTubeCases catalog cases at a stated junction limit build cle
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
         return hasNamePrefix(entry, kJunctionLimitCases);
-    })));
-    checkCaseBuildsClean(name);
-}
-
-// See kBuilderDefectCases.
-TEST_CASE("cwPassageTubeCases catalog cases with builder defects away from the junction build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
-{
-    const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return hasNamePrefix(entry, kBuilderDefectCases);
     })));
     checkCaseBuildsClean(name);
 }
@@ -498,7 +453,7 @@ TEST_CASE("cwPassageTubeCases full sweep builds closed meshes", "[cwPassageTubeC
 TEST_CASE("cwPassageTubeCases catalog cases without a junction build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !hasJunction(entry) && !hasKnownBuilderDefect(entry);
+        return !hasJunction(entry);
     })));
     checkCaseBuildsClean(name);
 }
@@ -521,15 +476,6 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction build closed tube
         return !hasJunction(entry);
     })));
     checkCaseBuildsClosed(name);
-}
-
-// See hasKnownBuilderDefect for what each case reports.
-TEST_CASE("cwPassageTubeCases sloped catalog cases without a junction build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
-{
-    const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !hasJunction(entry) && hasKnownBuilderDefect(entry);
-    })));
-    checkCaseBuildsClean(name);
 }
 
 // Random surveys carry every defect of the junction-free seeds (see

@@ -57,7 +57,7 @@ int binAt(int degrees)
 
 QVector3D binDirection(const Builder::Ring& ring, int bin)
 {
-    const double theta = 2.0 * std::numbers::pi * bin / ring.radii.size();
+    const double theta = ring.binAngles.at(bin);
     return ring.frame.right * static_cast<float>(std::cos(theta)) + ring.frame.up * static_cast<float>(std::sin(theta));
 }
 
@@ -117,6 +117,23 @@ void checkMeshClean(const Builder::Debug& debug)
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
     INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
     CHECK(report.issues.isEmpty());
+}
+
+// Every ring vertex sits at its bin's radius: the bend rules kept each ring in
+// front of the one before, so the fold-back pull never moved a vertex.
+void checkNoVertexPulled(const Builder::Debug& debug)
+{
+    for (const Builder::Chain& chain : debug.chains) {
+        for (const Builder::Ring& ring : chain.rings) {
+            const int resolution = ring.radii.size();
+            REQUIRE(ring.vertices.size() == resolution);
+            for (int bin = 0; bin < resolution; ++bin) {
+                const QVector3D unpulled = ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
+                INFO("ring at (" << ring.center.x() << ", " << ring.center.y() << ", " << ring.center.z() << ") bin " << bin);
+                CHECK(ring.vertices.at(bin).distanceToPoint(unpulled) < 1e-4f);
+            }
+        }
+    }
 }
 
 void checkVectorNear(const QVector3D& actual, const QVector3D& expected)
@@ -379,9 +396,15 @@ TEST_CASE("cwPassageTubeBuilder fits a horizontal LRUD ring to the quadrant elli
         CHECK_FALSE(ring.measured.contains(false));
     }
 
-    // Between the axes the ring follows the ellipse of the two adjacent
-    // dimensions: its polar radius 2·3 / hypot(3·cos45°, 2·sin45°).
-    CHECK(chain.rings.at(0).radii.at(binAt(45)) == Catch::Approx(2.3534).margin(1e-4));
+    // Between the axes a bin is the point of the ellipse of the two adjacent
+    // dimensions at eccentric anomaly 45°: (2·cos45°, 3·sin45°).
+    const Builder::Ring& start = chain.rings.at(0);
+    CHECK(start.radii.at(binAt(45)) == Catch::Approx(std::hypot(2.0, 3.0) / std::numbers::sqrt2));
+    CHECK(start.binAngles.at(binAt(45)) == Catch::Approx(std::atan2(3.0, 2.0)));
+    CHECK(start.binAngles.at(binAt(0)) == 0.0);
+    for (int bin = 1; bin < start.binAngles.size(); ++bin) {
+        CHECK(start.binAngles.at(bin) > start.binAngles.at(bin - 1));
+    }
     CHECK(debug.warnings.isEmpty());
 
     // Level dead ends sit flush with their stations.
@@ -492,10 +515,11 @@ TEST_CASE("cwPassageTubeBuilder keeps frames continuous through a vertical pit",
     checkFramesOrthonormal(chain);
     checkMeshClosedWithSaneRings(debug);
 
+    // The pit is round at its own left and right.
     const Builder::Ring& pit = ringAt(chain, QVector3D(0, 10, -5));
     CHECK(pit.frame.inclinationWeight == Catch::Approx(1.0));
     checkVectorNear(pit.frame.tangent, QVector3D(0, 0, -1));
-    CHECK_FALSE(hasMeasuredBin(pit));
+    CHECK_FALSE(pit.measured.contains(false));
     for (double radius : pit.radii) {
         CHECK(radius == Catch::Approx(1.0));
     }
@@ -756,6 +780,45 @@ TEST_CASE("cwPassageTubeBuilder uses the default radius for a chain without pass
     CHECK(debug.warnings.at(0).station == QStringLiteral("a"));
 }
 
+namespace {
+
+// The unit normals of the triangles lying in the horizontal plane at height z.
+QVector<QVector3D> normalsOfTrianglesAtHeight(const cwPassageTubeMesh& mesh, float z)
+{
+    constexpr float kOnPlaneMeters = 1e-4f;
+    QVector<QVector3D> normals;
+    for (int i = 0; i + 2 < mesh.indices.size(); i += 3) {
+        const QVector3D a = mesh.positions.at(mesh.indices.at(i));
+        const QVector3D b = mesh.positions.at(mesh.indices.at(i + 1));
+        const QVector3D c = mesh.positions.at(mesh.indices.at(i + 2));
+        const bool isAtHeight = std::abs(a.z() - z) < kOnPlaneMeters
+                                && std::abs(b.z() - z) < kOnPlaneMeters
+                                && std::abs(c.z() - z) < kOnPlaneMeters;
+        if (isAtHeight) {
+            normals.append(QVector3D::crossProduct(b - a, c - a).normalized());
+        }
+    }
+    return normals;
+}
+
+// A dead end closed flat: at least N - 2 triangles in the plane at height z,
+// each facing within a degree of straight up or down, and no vertex past it.
+void checkFlatCapAtHeight(const cwPassageTubeMesh& mesh, float z, float outward)
+{
+    const float minCosine = static_cast<float>(std::cos(qDegreesToRadians(1.0)));
+    const QVector<QVector3D> normals = normalsOfTrianglesAtHeight(mesh, z);
+    INFO("cap at z " << z);
+    CHECK(normals.size() >= Builder::Options().ringResolution - 2);
+    for (const QVector3D& normal : normals) {
+        CHECK(QVector3D::dotProduct(normal, QVector3D(0, 0, outward)) > minCosine);
+    }
+    for (const QVector3D& position : mesh.positions) {
+        CHECK(outward * (position.z() - z) < 1e-4f);
+    }
+}
+
+} // namespace
+
 TEST_CASE("cwPassageTubeBuilder places pit dead-end caps by up and down", "[PassageTube][cwPassageTubeBuilder]")
 {
     const BuilderInput input = makeInput({{{
@@ -772,8 +835,43 @@ TEST_CASE("cwPassageTubeBuilder places pit dead-end caps by up and down", "[Pass
     CHECK(chain.startCapOffsetMeters == Catch::Approx(2.0));
     CHECK(chain.endCapOffsetMeters == Catch::Approx(3.0));
 
-    // Pit rings get no LRUD samples and fall back to the default radius.
-    CHECK_FALSE(hasMeasuredBin(chain.rings.at(5)));
+    // Pit rings are round at their stations' left and right.
+    CHECK_FALSE(chain.rings.at(5).measured.contains(false));
+    for (double radius : chain.rings.at(5).radii) {
+        CHECK(radius == Catch::Approx(1.0));
+    }
+
+    // Each end runs on to a flat ceiling or floor at the offset.
+    checkFlatCapAtHeight(debug.mesh, 2.0f, 1.0f);
+    checkFlatCapAtHeight(debug.mesh, -13.0f, -1.0f);
+    checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder fits a pit from its own left and right", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kPitRadius = 1.5;
+    const QStringList sides {QString::number(kPitRadius), QString::number(kPitRadius), QString(), QString()};
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("top"), QVector3D(0, 0, 0), sides},
+        {QStringLiteral("bottom"), QVector3D(0, 0, -12), sides},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    for (const Builder::Ring& ring : debug.chains.at(0).rings) {
+        INFO("ring at z " << ring.center.z());
+        CHECK_FALSE(ring.measured.contains(false));
+        for (double radius : ring.radii) {
+            CHECK(radius == Catch::Approx(kPitRadius).margin(1e-3));
+        }
+    }
+    CHECK(debug.warnings.isEmpty());
+
+    checkFlatCapAtHeight(debug.mesh, 0.0f, 1.0f);
+    const QVector<cwPassageTubeMeshCheck::Issue> missed = cwPassageTubeMeshCheck::wallsOnSurface(debug);
+    INFO(cwPassageTubeMeshCheck::toText({missed, 0, {}}).toStdString());
+    CHECK(missed.isEmpty());
+    checkMeshClean(debug);
 }
 
 TEST_CASE("cwPassageTubeBuilder keeps the pit depth out of the lip ring and rounds the shaft", "[PassageTube][cwPassageTubeBuilder]")
@@ -805,9 +903,9 @@ TEST_CASE("cwPassageTubeBuilder keeps the pit depth out of the lip ring and roun
     CHECK(bottom.radii.at(binAt(90)) == Catch::Approx(1.0 * std::numbers::sqrt2));
     CHECK(bottom.radii.at(binAt(270)) == Catch::Approx(0.5 * std::numbers::sqrt2));
 
-    // The shaft is round at the lip's horizontal half-width.
+    // The shaft is round at its stations' left and right.
     const Builder::Ring& shaft = ringAt(chain, QVector3D(0, 10, -10));
-    CHECK_FALSE(hasMeasuredBin(shaft));
+    CHECK_FALSE(shaft.measured.contains(false));
     for (double radius : shaft.radii) {
         CHECK(radius == Catch::Approx(2.0));
     }
@@ -923,6 +1021,129 @@ TEST_CASE("cwPassageTubeBuilder keeps a tall canyon's ceiling", "[PassageTube][c
     CHECK(debug.warnings.isEmpty());
 }
 
+TEST_CASE("cwPassageTubeBuilder spreads bins by arc length on a thin section", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // At uniform polar angles the bins at 67.5° and 90° of this section land
+    // at (0.77, 1.86) and (0, 7), one vertex for over 5 m of wall. Bins at
+    // uniform eccentric anomaly are no farther apart than the bins of a
+    // circle of the 7 m semi-axis. A bound of 1.2 times the mean spacing is
+    // out of reach while each quadrant keeps N/4 bins with the wall readings
+    // on its axis bins: the 7 m quadrants hold over 80% of the perimeter, so
+    // even equal arcs per quadrant leave the largest gap 1.67 times the mean
+    // (2.5 times at eccentric anomaly).
+    constexpr double kHalfWidth = 0.8;
+    constexpr double kCeiling = 7.0;
+    const QStringList dimensions = lrud(kHalfWidth, kHalfWidth, kCeiling, 1);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions},
+    }}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Ring& ring = debug.chains.at(0).rings.at(1);
+    const int resolution = ring.vertices.size();
+    const double maxGap = 2.0 * kCeiling * std::sin(std::numbers::pi / resolution);
+    for (int bin = 0; bin < resolution; ++bin) {
+        INFO("bin " << bin);
+        CHECK(ring.vertices.at(bin).distanceToPoint(ring.vertices.at((bin + 1) % resolution)) <= maxGap);
+    }
+    CHECK(ring.radii.at(binAt(90)) == Catch::Approx(kCeiling));
+    CHECK(ring.binAngles.at(binAt(90)) == Catch::Approx(std::numbers::pi / 2.0));
+    checkMeshClean(debug);
+}
+
+namespace {
+
+constexpr double kSlopeDegrees = 30.0;
+constexpr double kSlopedLegMeters = 10.0;
+
+// A straight passage climbing at 30° from a through b to c, every station
+// reading the given ceiling and a 1 m floor and walls.
+BuilderInput slopedPassageInput(double up)
+{
+    const double slope = qDegreesToRadians(kSlopeDegrees);
+    const QVector3D leg = QVector3D(static_cast<float>(std::cos(slope)), 0.0f, static_cast<float>(std::sin(slope)))
+                          * static_cast<float>(kSlopedLegMeters);
+    const QStringList dimensions = lrud(1, 1, up, 1);
+    return makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), leg, dimensions},
+        {QStringLiteral("c"), leg * 2.0f, dimensions},
+    }}});
+}
+
+} // namespace
+
+TEST_CASE("cwPassageTubeBuilder foreshortens up and down on a slope", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kUp = 1.5;
+    const Builder::Debug debug = buildDebug(slopedPassageInput(kUp));
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+    REQUIRE(chain.rings.size() > 2);
+
+    const double across = kUp * std::cos(qDegreesToRadians(kSlopeDegrees));
+    for (int i = 1; i + 1 < chain.rings.size(); ++i) {
+        const Builder::Ring& ring = chain.rings.at(i);
+        INFO("ring " << i);
+        CHECK(ring.radii.at(binAt(90)) == Catch::Approx(across).margin(1e-3));
+        checkVectorNear(binDirection(ring, binAt(90)), ring.frame.up);
+    }
+
+    const QVector<cwPassageTubeMeshCheck::Issue> missed = cwPassageTubeMeshCheck::wallsOnSurface(debug);
+    INFO(cwPassageTubeMeshCheck::toText({missed, 0, {}}).toStdString());
+    CHECK(missed.isEmpty());
+    checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder ends a sloped passage with a plumb ring", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const auto bendClampedCount = [](const Builder::Debug& debug) {
+        return std::count_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
+            return warning.type == cwPassageTubeMesh::Warning::BendClamped;
+        });
+    };
+
+    SECTION("The end rings stand in the vertical plane through their stations")
+    {
+        constexpr double kUp = 1.5;
+        const Builder::Debug debug = buildDebug(slopedPassageInput(kUp));
+        REQUIRE(debug.chains.size() == 1);
+        const Builder::Chain& chain = debug.chains.at(0);
+        const QVector<QVector3D> stations {debug.legs.first().fromPosition, debug.legs.last().toPosition};
+        const QVector<const Builder::Ring*> ends {&chain.rings.first(), &chain.rings.last()};
+        for (int end = 0; end < ends.size(); ++end) {
+            const Builder::Ring& ring = *ends.at(end);
+            INFO("end " << end);
+            checkVectorNear(ring.center, stations.at(end));
+            CHECK(std::abs(ring.frame.tangent.z()) < 1e-6f);
+            checkVectorNear(ring.frame.up, QVector3D(0, 0, 1));
+            checkVectorNear(ring.vertices.at(binAt(90)), stations.at(end) + QVector3D(0, 0, static_cast<float>(kUp)));
+        }
+        // A 1.5 m ceiling folds nowhere near the ring 1 m in, so no inset.
+        CHECK(chain.rings.at(1).center.distanceToPoint(chain.rings.first().center) == Catch::Approx(1.0).margin(1e-3));
+        CHECK(bendClampedCount(debug) == 0);
+        checkMeshClean(debug);
+    }
+
+    SECTION("A tall section insets the ring beside a plumb end")
+    {
+        // The start climbs, so its ring folds toward the ceiling: the ring
+        // square to the leg sits 1.1 · 7 · tan 30° along it.
+        constexpr double kUp = 7.0;
+        const double inset = 1.1 * kUp * std::tan(qDegreesToRadians(kSlopeDegrees));
+        const Builder::Debug debug = buildDebug(slopedPassageInput(kUp));
+        REQUIRE(debug.chains.size() == 1);
+        const Builder::Chain& chain = debug.chains.at(0);
+        CHECK(std::abs(chain.rings.first().frame.tangent.z()) < 1e-6f);
+        CHECK(chain.rings.at(1).center.distanceToPoint(chain.rings.first().center) == Catch::Approx(inset).margin(1e-3));
+        CHECK(bendClampedCount(debug) == 0);
+        checkMeshClean(debug);
+        checkNoVertexPulled(debug);
+    }
+}
+
 TEST_CASE("cwPassageTubeBuilder keeps a shaft depth repeated on both stations of a leg out of its rings", "[PassageTube][cwPassageTubeBuilder]")
 {
     // As at Phake Cave's a4 and a6: both ends of x→y carry the 23 m depth of
@@ -976,10 +1197,10 @@ TEST_CASE("cwPassageTubeBuilder skins a straight leg into a closed tube", "[Pass
     CHECK(debug.chains.at(0).endCap == Builder::EndCap::Fan);
 
     const cwPassageTubeMesh& mesh = debug.mesh;
-    // Two rings of vertices plus one fan center per end.
-    CHECK(mesh.positions.size() == 2 * resolution + 2);
-    // Two side triangles per bin plus one fan triangle per bin at each end.
-    CHECK(mesh.indices.size() == 3 * (2 * resolution + 2 * resolution));
+    // Two rings of vertices, each closed flat across itself.
+    CHECK(mesh.positions.size() == 2 * resolution);
+    // Two side triangles per bin plus N - 2 cap triangles at each end.
+    CHECK(mesh.indices.size() == 3 * (2 * resolution + 2 * (resolution - 2)));
     checkMeshClean(debug);
 
     REQUIRE(mesh.tripIndexRanges.size() == 1);
@@ -1167,23 +1388,6 @@ TEST_CASE("cwPassageTubeBuilder keeps a loop closing at a sharp bend without fol
     REQUIRE(debug.chains.size() == 1);
     REQUIRE(debug.chains.at(0).startCap == Builder::EndCap::None);
     checkMeshClosedWithSaneRings(debug);
-}
-
-// Every ring vertex sits at its bin's radius: the bend rules kept each ring in
-// front of the one before, so the fold-back pull never moved a vertex.
-void checkNoVertexPulled(const Builder::Debug& debug)
-{
-    for (const Builder::Chain& chain : debug.chains) {
-        for (const Builder::Ring& ring : chain.rings) {
-            const int resolution = ring.radii.size();
-            REQUIRE(ring.vertices.size() == resolution);
-            for (int bin = 0; bin < resolution; ++bin) {
-                const QVector3D unpulled = ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
-                INFO("ring at (" << ring.center.x() << ", " << ring.center.y() << ", " << ring.center.z() << ") bin " << bin);
-                CHECK(ring.vertices.at(bin).distanceToPoint(unpulled) < 1e-4f);
-            }
-        }
-    }
 }
 
 TEST_CASE("cwPassageTubeBuilder keeps the inner wall of a sharp bend clean", "[PassageTube][cwPassageTubeBuilder]")

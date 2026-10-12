@@ -122,17 +122,21 @@ public:
         double inclinationWeight = 0.0;
     };
 
-    // A cross-section ring around center. Bin k lies at angle 2πk/N from
-    // frame.right toward frame.up, N = Options::ringResolution; measured[k]
-    // is true when survey data filled the bin, false when it was interpolated
-    // or borrowed from another ring. chainLeg is the index into Chain::legs of
-    // the leg the ring lies on or ends. vertices are the ring's mesh vertices,
-    // one per bin, pulled onto the previous ring's plane where they would fold
-    // behind it. isGrown is true when a junction grew the ring to take an
-    // arm's section across to the far wall.
+    // A cross-section ring around center with N = Options::ringResolution
+    // bins. Bin k lies at polar angle binAngles[k] from frame.right toward
+    // frame.up, radii[k] from the center; the angles rise with k from
+    // binAngles[0] = 0 and keep each bin in the quadrant of 2πk/N, so a round
+    // ring's bins sit at 2πk/N. measured[k] is true when survey data filled
+    // the bin, false when it was interpolated or borrowed from another ring.
+    // chainLeg is the index into Chain::legs of the leg the ring lies on or
+    // ends. vertices are the ring's mesh vertices, one per bin, pulled onto
+    // the previous ring's plane where they would fold behind it. isGrown is
+    // true when a junction grew the ring to take an arm's section across to
+    // the far wall.
     struct Ring {
         QVector3D center;
         QVector<double> radii;
+        QVector<double> binAngles;
         Frame frame;
         QVector<bool> measured;
         int chainLeg = 0;
@@ -179,7 +183,8 @@ public:
         QVector<Ring> rings;
         // How far a pit dead-end cap sits past the end station: the station's
         // up when the chain ends climbing, its down when it ends descending,
-        // scaled by the end's inclination weight so level ends sit flush.
+        // scaled by the end leg's inclination weight so level ends sit flush.
+        // Only a steep end extends; a gentle end closes on its plumb ring.
         double startCapOffsetMeters = 0.0;
         double endCapOffsetMeters = 0.0;
         // Where an arm meets its through tube: one point per column on the

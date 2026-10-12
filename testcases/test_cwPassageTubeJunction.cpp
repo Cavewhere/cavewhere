@@ -86,7 +86,7 @@ double signedVolume(const cwPassageTubeMesh& mesh)
 
 double binAngle(const Builder::Ring& ring, int bin)
 {
-    return 2.0 * kPi * bin / ring.radii.size();
+    return ring.binAngles.at(bin);
 }
 
 QVector3D binDirection(const Builder::Ring& ring, int bin)
@@ -194,7 +194,9 @@ double sectionArea(const Builder::Ring& ring)
     const int resolution = ring.radii.size();
     double area = 0.0;
     for (int bin = 0; bin < resolution; ++bin) {
-        area += ring.radii.at(bin) * ring.radii.at((bin + 1) % resolution) * std::sin(2.0 * kPi / resolution) / 2.0;
+        const int next = (bin + 1) % resolution;
+        const double angle = binAngle(ring, next) - binAngle(ring, bin) + (next == 0 ? 2.0 * kPi : 0.0);
+        area += ring.radii.at(bin) * ring.radii.at(next) * std::sin(angle) / 2.0;
     }
     return area;
 }
