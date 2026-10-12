@@ -328,6 +328,16 @@ void checkFarthestVertexNear(const Builder::Ring& ring, const QVector3D& expecte
     CHECK(farthest.distanceToPoint(expected) < tolerance);
 }
 
+QVector<QVector3D> mouthPositions(const QVector<cwPassageTubeBuilder::MouthPoint>& mouth)
+{
+    QVector<QVector3D> positions;
+    positions.reserve(mouth.size());
+    for (const cwPassageTubeBuilder::MouthPoint& point : mouth) {
+        positions.append(point.position);
+    }
+    return positions;
+}
+
 } // namespace
 
 TEST_CASE("cwPassageTubeBuilder chains a straight line as one chain", "[PassageTube][cwPassageTubeBuilder]")
@@ -754,16 +764,15 @@ TEST_CASE("cwPassageTubeBuilder takes the component of a wall across the ring", 
     const QVector3D bPosition = b.position.value();
     checkFarthestVertexNear(ringAt(*through, bPosition), bPosition + QVector3D(-kComponent, 0, 0), kToleranceMeters);
 
-    // The arm arrives along +x into that wall and stops where it meets it.
-    constexpr double kMouthToleranceMeters = 0.05;
-    const cwPassageTubeJunction::RingTube throughTube {&through->rings, QVector3D()};
+    // The arm arrives along +x into that wall and stops where it meets it,
+    // on the through's triangles: between the grown rings at b they lie off
+    // the ring tube's blend.
+    constexpr double kOnMeshMeters = 1e-4;
     REQUIRE_FALSE(arm->endMouth.isEmpty());
-    for (const QVector3D& point : arm->endMouth) {
+    for (const QVector3D& point : mouthPositions(arm->endMouth)) {
         INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
         CHECK(point.x() < bPosition.x());
-        const std::optional<double> distance = throughTube.wallDistance(point);
-        REQUIRE(distance.has_value());
-        CHECK(std::abs(*distance) < kMouthToleranceMeters);
+        CHECK(distanceToSides(*through, point) < kOnMeshMeters);
     }
 }
 
@@ -1501,7 +1510,7 @@ TEST_CASE("cwPassageTubeBuilder closes a junction arm with a mouth on the throug
 
     // b's 2 m walls make the through a 2 m cylinder about the x axis, which
     // the arm's default-radius section meets north of b.
-    for (const QVector3D& point : arm.endMouth) {
+    for (const QVector3D& point : mouthPositions(arm.endMouth)) {
         CHECK(point.y() > 0.0f);
         CHECK(std::hypot(point.y(), point.z()) == Catch::Approx(2.0).margin(0.05));
     }
@@ -1842,8 +1851,8 @@ TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passa
     const int armIndex = chainWithLeg(QStringLiteral("a13"), QStringLiteral("a10"));
     REQUIRE(armIndex != through);
     const Builder::Chain& arm = debug.chains.at(armIndex);
-    const QVector<QVector3D>& mouth = arm.endMouth.isEmpty() ? arm.startMouth : arm.endMouth;
-    REQUIRE(mouth.size() == Builder::Options().ringResolution);
+    const QVector<QVector3D> mouth = mouthPositions(arm.endMouth.isEmpty() ? arm.startMouth : arm.endMouth);
+    REQUIRE(mouth.size() >= Builder::Options().ringResolution);
 
     // The ring tube blends between rings while the mesh lofts straight
     // quads, which differ across a10's grown rings, so the mouth is held to
@@ -1897,7 +1906,7 @@ TEST_CASE("cwPassageTubeBuilder puts every mouth vertex on the through mesh", "[
     CHECK(debug.chains.at(0).windows.size() == 1);
     CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
 
-    for (const QVector3D& point : arm.endMouth) {
+    for (const QVector3D& point : mouthPositions(arm.endMouth)) {
         INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
         CHECK(distanceToSides(debug.chains.at(0), point) < kOnMeshMeters);
     }
@@ -1914,7 +1923,7 @@ TEST_CASE("cwPassageTubeBuilder welds the mouth vertices of a thin arm", "[Passa
     REQUIRE(debug.chains.size() == 2);
     REQUIRE(debug.chains.at(0).windows.size() == 1);
     const Builder::JunctionWindow& window = debug.chains.at(0).windows.first();
-    const QVector<QVector3D>& mouth = debug.chains.at(1).endMouth;
+    const QVector<QVector3D> mouth = mouthPositions(debug.chains.at(1).endMouth);
     REQUIRE(window.mouthCorners.size() == mouth.size());
 
     int welded = 0;
@@ -1985,7 +1994,7 @@ TEST_CASE("cwPassageTubeBuilder hides the fallback cone inside the through", "[P
     });
     REQUIRE(capped != debug.chains.cend());
     REQUIRE(capped->endFanCenter.has_value());
-    REQUIRE(capped->endMouth.size() == Builder::Options().ringResolution);
+    REQUIRE(capped->endMouth.size() >= Builder::Options().ringResolution);
 
     const cwPassageTubeMesh& mesh = debug.mesh;
     const auto center = std::find(mesh.positions.cbegin(), mesh.positions.cend(), *capped->endFanCenter);
@@ -2008,11 +2017,11 @@ TEST_CASE("cwPassageTubeBuilder hides the fallback cone inside the through", "[P
         REQUIRE(distance.has_value());
         CHECK(*distance < 0.0);
     }
-    CHECK(fanTriangles.size() == Builder::Options().ringResolution);
+    CHECK(fanTriangles.size() == capped->endMouth.size());
 
     // The fan meets the through wall only along its mouth, where its edges
     // lie in the wall's faces.
-    const QVector<QVector3D>& mouth = capped->endMouth;
+    const QVector<QVector3D> mouth = mouthPositions(capped->endMouth);
     const auto distanceToMouth = [&](const QVector3D& point) {
         double nearest = std::numeric_limits<double>::max();
         for (int k = 0; k < mouth.size(); ++k) {

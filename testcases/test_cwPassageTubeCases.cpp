@@ -52,6 +52,16 @@ constexpr int kRightReading = 1;
 constexpr int kUpReading = 2;
 constexpr int kDownReading = 3;
 
+QVector<QVector3D> mouthPositions(const QVector<cwPassageTubeBuilder::MouthPoint>& mouth)
+{
+    QVector<QVector3D> positions;
+    positions.reserve(mouth.size());
+    for (const cwPassageTubeBuilder::MouthPoint& point : mouth) {
+        positions.append(point.position);
+    }
+    return positions;
+}
+
 const QVector<Cases::Case>& catalog()
 {
     static const QVector<Cases::Case> cases = Cases::catalog();
@@ -217,7 +227,7 @@ const QString kPhakeCave = QStringLiteral("Phake Cave");
 
 // The issues Phake Cave keeps, by the station nearest each one. a10 reads 0
 // on one side, so its ring and mouth bunch vertices a few centimeters apart,
-// and the zip band beside them folds and crosses the arm's strip.
+// and the arm's strip beside them folds against the zip band.
 struct AcceptedIssue {
     QString station;
     cwPassageTubeMeshCheck::Type type;
@@ -225,7 +235,6 @@ struct AcceptedIssue {
 
 const QVector<AcceptedIssue> kPhakeCaveIssues {
     {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SelfIntersection},
 };
 
 QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
@@ -310,33 +319,26 @@ bool hasLargeTiltedArm(const Cases::Case& entry)
 
 // Sweep cases outside those families whose junction the merge leaves
 // unclean, by family:
-// - an arm 30° from the through past J opens where the through widens, and
-//   its zip band folds back on itself (Crease, SelfIntersection);
-// - a level arm 2.5 times the through's size, 45° or 60° off it, becomes
-//   the through and turns sharply into one half of the small passage, and
-//   the other half's zip band folds over the through (Crease,
-//   SliverTriangle, DegenerateTriangle, SelfIntersection);
-// - an arm 30° from the through and sloping 30° meets it in a wedge that
-//   folds by about 155° (Crease);
+// - three small arms, one or more meeting the through obliquely or sloping,
+//   where an arm's strip folds against its zip band at the mouth by 150° to
+//   160° (Crease, SelfIntersection);
 // - a sloped arm meets a through bent 40° at J, and the zip band bridges a
 //   bin jump with thin or folded triangles (Crease, SliverTriangle,
 //   SelfIntersection).
 const QStringList kOpenSweepCases {
     QStringLiteral("plan 90, profile 0, ratio 0.3, 3 arms, bend 0, section x2 past J"),
-
-    QStringLiteral("plan 45, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
-    QStringLiteral("plan 45, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
-    QStringLiteral("plan 60, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
-    QStringLiteral("plan 60, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
-
-    QStringLiteral("plan 30, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
     QStringLiteral("plan 90, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
+    QStringLiteral("plan 90, profile 30, ratio 0.3, 3 arms, bend 40, section x2 past J"),
+    QStringLiteral("plan 90, profile -30, ratio 0.3, 3 arms, bend 40, section x2 past J"),
+    QStringLiteral("plan 60, profile -30, ratio 0.3, 3 arms, bend 40, section x2 past J"),
+    QStringLiteral("plan 45, profile 0, ratio 0.3, 3 arms, bend 0, same section"),
+    QStringLiteral("plan 45, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
+    QStringLiteral("plan 30, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
 
     QStringLiteral("plan 30, profile 30, ratio 1, 1 arm, bend 40, same section"),
     QStringLiteral("plan 30, profile 30, ratio 1, 1 arm, bend 40, section x2 past J"),
     QStringLiteral("plan 30, profile -30, ratio 1, 1 arm, bend 40, same section"),
     QStringLiteral("plan 90, profile -30, ratio 1, 1 arm, bend 40, same section"),
-    QStringLiteral("plan 60, profile -30, ratio 0.3, 3 arms, bend 40, section x2 past J"),
 };
 
 // Sweep cases kept out of the clean checks by their parameters or name.
@@ -398,14 +400,14 @@ std::pair<unsigned int, int> randomSurvey(int seed)
 // Random seeds whose junctions the merge leaves unclean. Their passages
 // build clean without the junctions (see the junction-free tests), and
 // passages that run into each other are warnings. Every one reports a
-// Crease of 150° to 180° where an arm's last strip meets its zip band at the
+// Crease of 150° to 180° where an arm's strip meets its zip band at the
 // mouth: the arm is about as tall or wide as the through, its station reads
 // a few centimeters to the wall the arm leaves through, or it leaves a shaft
 // station or the inside of a bend. About half also report SelfIntersection
 // and SliverTriangle where the zip band crosses its arm or a second arm's
-// mouth, and seed 40 a WallMissed.
-const QVector<int> kJunctionLimitRandomSeeds {1, 2, 4, 5, 6, 8, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-                                             27, 28, 29, 30, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 46, 47, 48, 50};
+// mouth.
+const QVector<int> kJunctionLimitRandomSeeds {2, 4, 5, 6, 10, 11, 15, 16, 17, 20, 21, 23, 24, 25, 27, 28, 29, 30, 32, 34,
+                                             35, 36, 37, 39, 40, 41, 42, 44, 47, 48, 50};
 
 bool isJunctionLimitRandomSeed(int seed)
 {
@@ -437,8 +439,8 @@ TEST_CASE("cwPassageTubeCases zips a mouth that runs along the through's ceiling
     REQUIRE(debug.chains.at(0).windows.size() == 1);
     const cwPassageTubeBuilder::JunctionWindow& window = debug.chains.at(0).windows.first();
     const cwPassageTubeBuilder::Chain& arm = debug.chains.at(window.armChain);
-    const QVector<QVector3D>& mouth = window.isArmStart ? arm.startMouth : arm.endMouth;
-    REQUIRE(mouth.size() == cwPassageTubeBuilder::Options().ringResolution);
+    const QVector<QVector3D> mouth = mouthPositions(window.isArmStart ? arm.startMouth : arm.endMouth);
+    REQUIRE(mouth.size() >= cwPassageTubeBuilder::Options().ringResolution);
 
     const auto isOnMouth = [&](const QVector3D& point) {
         for (int k = 0; k < mouth.size(); ++k) {

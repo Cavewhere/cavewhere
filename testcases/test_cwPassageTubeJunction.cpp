@@ -159,14 +159,18 @@ int warningCount(const Builder::Debug& debug, Warning::Type type)
     }));
 }
 
-const QVector<QVector3D>& mouthOf(const Builder::Chain& arm)
+QVector<QVector3D> mouthOf(const Builder::Chain& arm)
 {
-    return arm.endMouth.isEmpty() ? arm.startMouth : arm.endMouth;
+    QVector<QVector3D> positions;
+    for (const Builder::MouthPoint& point : arm.endMouth.isEmpty() ? arm.startMouth : arm.endMouth) {
+        positions.append(point.position);
+    }
+    return positions;
 }
 
 void checkMouthOnSurface(const Builder::Debug& debug, int throughChain, int armChain)
 {
-    const QVector<QVector3D>& mouth = mouthOf(debug.chains.at(armChain));
+    const QVector<QVector3D> mouth = mouthOf(debug.chains.at(armChain));
     REQUIRE_FALSE(mouth.isEmpty());
     for (const QVector3D& point : mouth) {
         INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
@@ -232,6 +236,60 @@ QList<Station> throughAlongX(const QStringList& dimensions)
 QList<Station> armTo(const QString& name, const QVector3D& far, const QStringList& dimensions)
 {
     return {station(name, far, dimensions), station(QStringLiteral("b"), QVector3D(10, 0, 0), dimensions)};
+}
+
+// Random seed 1's one junction: an arm as big as the through meets it
+// obliquely, so its mouth spans many more through rings than it has columns.
+Builder::Debug buildRandomSeedOne()
+{
+    const Survey survey = cwPassageTubeCases::toSurvey(cwPassageTubeCases::random(1, 1));
+    return buildDebug(survey);
+}
+
+// The only window of the build, and the chain that holds it.
+struct OnlyWindow {
+    const Builder::Chain* through = nullptr;
+    const Builder::JunctionWindow* window = nullptr;
+};
+
+OnlyWindow onlyWindow(const Builder::Debug& debug)
+{
+    OnlyWindow found;
+    int count = 0;
+    for (const Builder::Chain& chain : debug.chains) {
+        for (const Builder::JunctionWindow& window : chain.windows) {
+            found = OnlyWindow {&chain, &window};
+            ++count;
+        }
+    }
+    REQUIRE(count == 1);
+    return found;
+}
+
+// The through's ring spacing over the rings the window's boundary spans: the
+// widest gap between two of them, which densifying holds to the junction's
+// spacing.
+double windowRingSpacing(const OnlyWindow& found)
+{
+    int first = std::numeric_limits<int>::max();
+    int last = std::numeric_limits<int>::lowest();
+    for (const QPair<int, int>& vertex : found.window->boundary) {
+        first = std::min(first, vertex.first);
+        last = std::max(last, vertex.first);
+    }
+    REQUIRE(last > first);
+    const QVector<Builder::Ring>& rings = found.through->rings;
+    double widest = 0.0;
+    for (int i = first; i < last; ++i) {
+        widest = std::max(widest, static_cast<double>(rings.at(i).center.distanceToPoint(rings.at(i + 1).center)));
+    }
+    return widest;
+}
+
+const QVector<Builder::MouthPoint>& windowMouth(const Builder::Debug& debug, const OnlyWindow& found)
+{
+    const Builder::Chain& arm = debug.chains.at(found.window->armChain);
+    return found.window->isArmStart ? arm.startMouth : arm.endMouth;
 }
 
 const Builder::Chain& requireArm(const Builder::Debug& debug, int chainIndex)
@@ -349,7 +407,7 @@ TEST_CASE("cwPassageTubeJunction lands a pit on the passage floor", "[PassageTub
     const Builder::Debug debug = buildDebug(makeTripsInput({trip}));
     const Builder::Chain& pit = requireArm(debug, 1);
 
-    for (const QVector3D& point : pit.endMouth) {
+    for (const QVector3D& point : mouthOf(pit)) {
         INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
         CHECK(std::abs(point.z() - kCeiling) < kMouthToleranceMeters);
     }
@@ -455,4 +513,61 @@ TEST_CASE("cwPassageTubeJunction drops an arm that lies inside the through", "[P
     CHECK(debug.chains.at(0).windows.isEmpty());
     REQUIRE(debug.mesh.tripIndexRanges.size() == 1);
     checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeJunction samples the mouth to the through's grid", "[PassageTube][cwPassageTubeJunction]")
+{
+    const Builder::Debug debug = buildRandomSeedOne();
+    const OnlyWindow found = onlyWindow(debug);
+    const QVector<Builder::MouthPoint>& mouth = windowMouth(debug, found);
+    const int resolution = Builder::Options().ringResolution;
+    CHECK(mouth.size() > resolution);
+    CHECK(found.window->mouthCorners.size() == mouth.size());
+    for (int i = 1; i < mouth.size(); ++i) {
+        CHECK(mouth.at(i - 1).column < mouth.at(i).column);
+    }
+    for (int column = 0; column < resolution; ++column) {
+        CHECK(std::any_of(mouth.cbegin(), mouth.cend(), [column](const Builder::MouthPoint& point) {
+            return point.column == column;
+        }));
+    }
+}
+
+// Where the arm's columns graze the through's ceiling, each enters on one
+// side of the graze or the other, so neighboring columns enter meters apart
+// and a column between them lands on either side; splitting the gap there
+// would zigzag the mouth, so it stays long.
+TEST_CASE("cwPassageTubeJunction keeps every mouth step within twice the through's spacing", "[PassageTube][cwPassageTubeJunction][!mayfail]")
+{
+    constexpr double kMaxMouthStepSpacings = 2.0;
+    const Builder::Debug debug = buildRandomSeedOne();
+    const OnlyWindow found = onlyWindow(debug);
+    const QVector<Builder::MouthPoint>& mouth = windowMouth(debug, found);
+    const double spacing = windowRingSpacing(found);
+    for (int i = 0; i < mouth.size(); ++i) {
+        const Builder::MouthPoint& point = mouth.at(i);
+        const Builder::MouthPoint& next = mouth.at((i + 1) % mouth.size());
+        INFO("mouth points at column " << point.column << " and " << next.column << ", spacing " << spacing);
+        CHECK(point.position.distanceToPoint(next.position) <= kMaxMouthStepSpacings * spacing);
+    }
+}
+
+TEST_CASE("cwPassageTubeJunction meshes the mouth strip as a closed fan", "[PassageTube][cwPassageTubeJunction]")
+{
+    const Builder::Debug debug = buildRandomSeedOne();
+    const OnlyWindow found = onlyWindow(debug);
+    REQUIRE(windowMouth(debug, found).size() > Builder::Options().ringResolution);
+    CHECK(isClosedSurface(debug.mesh));
+}
+
+TEST_CASE("cwPassageTubeJunction zips a sparse mouth", "[PassageTube][cwPassageTubeJunction]")
+{
+    const Builder::Debug debug = buildRandomSeedOne();
+    const Check::Report report = Check::check(debug.mesh, debug);
+    INFO(Check::toText(report).toStdString());
+    for (const Check::Issue& issue : report.issues) {
+        CHECK(issue.type != Check::Crease);
+        CHECK(issue.type != Check::SliverTriangle);
+        CHECK(issue.type != Check::SelfIntersection);
+    }
 }

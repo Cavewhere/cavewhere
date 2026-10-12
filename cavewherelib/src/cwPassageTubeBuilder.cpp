@@ -1558,6 +1558,7 @@ Warning chainWarning(const QVector<Leg>& legs, const Chain& chain, Warning::Type
 }
 
 using EndCap = cwPassageTubeBuilder::EndCap;
+using MouthPoint = cwPassageTubeBuilder::MouthPoint;
 
 double halfTurnCosine(const Ring& ring, const BendLimit& bend)
 {
@@ -2056,15 +2057,68 @@ public:
         }
     }
 
-    // Side quads between two rings given vertex by vertex, as addSides. Where
-    // a ring repeats a vertex, the triangle with two equal corners is left
-    // out.
-    void addSides(const QUuid& tripId, const QVector<quint32>& a, const QVector<quint32>& b)
+    // The strip from an arm's end ring, resolution vertices from endFirst, to
+    // its mouth: per column, end ring vertex k fans to the mouth points up to
+    // a bridge point and vertex k + 1 to the rest, the bridge chosen for the
+    // shortest spokes, as a quad takes its shorter diagonal. mouth holds each
+    // point's vertex; a triangle with two equal corners, where mouth points
+    // are welded, is left out. atEnd winds the strip like side quads from the
+    // end ring on to the mouth, for an arm arriving at its end.
+    void addMouthStrip(const QUuid& tripId,
+                       quint32 endFirst,
+                       int resolution,
+                       const QVector<quint32>& mouth,
+                       const QVector<MouthPoint>& points,
+                       bool atEnd)
     {
-        const int resolution = a.size();
+        const int count = mouth.size();
+        QVector<int> columnFirst(resolution + 1, count);
+        for (int i = count - 1; i >= 0; --i) {
+            const int column = std::clamp(static_cast<int>(std::floor(points.at(i).column)), 0, resolution - 1);
+            columnFirst[column] = i;
+        }
+        const QVector<QVector3D>& positions = m_mesh.positions;
+        const auto addWound = [&](quint32 a, quint32 b, quint32 c) {
+            if (atEnd) {
+                addDistinctTriangle(tripId, a, b, c);
+            } else {
+                addDistinctTriangle(tripId, a, c, b);
+            }
+        };
+        const auto mouthAt = [&](int i) { return mouth.at(i % count); };
+        const auto spoke = [&](quint32 apex, int i) { return positions.at(apex).distanceToPoint(positions.at(mouthAt(i))); };
         for (int k = 0; k < resolution; ++k) {
-            const int next = (k + 1) % resolution;
-            addQuad(tripId, a.at(k), a.at(next), b.at(k), b.at(next));
+            const quint32 low = endFirst + k;
+            const quint32 high = endFirst + (k + 1) % resolution;
+            const int first = columnFirst.at(k);
+            const int last = columnFirst.at(k + 1);
+
+            // Spokes from low to points first..bridge and from high to
+            // bridge..last; the shortest total picks the bridge.
+            double lowSpokes = 0.0;
+            double highSpokes = 0.0;
+            for (int i = first; i <= last; ++i) {
+                highSpokes += spoke(high, i);
+            }
+            int bridge = first;
+            double shortest = std::numeric_limits<double>::max();
+            for (int i = first; i <= last; ++i) {
+                lowSpokes += spoke(low, i);
+                const double total = lowSpokes + highSpokes;
+                if (total < shortest) {
+                    shortest = total;
+                    bridge = i;
+                }
+                highSpokes -= spoke(high, i);
+            }
+
+            for (int i = first; i < bridge; ++i) {
+                addWound(low, mouthAt(i), mouthAt(i + 1));
+            }
+            addWound(low, mouthAt(bridge), high);
+            for (int i = bridge; i < last; ++i) {
+                addWound(high, mouthAt(i), mouthAt(i + 1));
+            }
         }
     }
 
@@ -2168,6 +2222,13 @@ struct ChainVertices {
     qint64 endMouthFirst = -1;
 };
 
+QVector<quint32> consecutiveIndices(quint32 first, int count)
+{
+    QVector<quint32> indices(count);
+    std::iota(indices.begin(), indices.end(), first);
+    return indices;
+}
+
 QVector3D centroid(const QVector<QVector3D>& points)
 {
     QVector3D sum;
@@ -2254,7 +2315,7 @@ ChainVertices addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const C
         // the through, and one left unzipped is closed by a fan. A dead end
         // closes flat across its end ring; a steep one runs one strip on to
         // its floor or ceiling first.
-        const auto addCap = [&](int position, EndCap cap, double pitOffset, bool atEnd, const QVector<QVector3D>& mouth,
+        const auto addCap = [&](int position, EndCap cap, double pitOffset, bool atEnd, const QVector<MouthPoint>& mouth,
                                 const std::optional<QVector3D>& mouthFanCenter) -> qint64 {
             const Ring& ring = chain.rings.at(run.at(position));
             const QUuid tripId = tripOfRing(run.at(atEnd ? position : position + 1));
@@ -2269,12 +2330,18 @@ ChainVertices addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const C
                 capRing = endFirst;
             };
 
-            if (mouth.size() == resolution) {
-                if (cap == EndCap::Mouth) {
-                    return writer.addRing(mouth);
+            if (!mouth.isEmpty()) {
+                QVector<QVector3D> positions;
+                positions.reserve(mouth.size());
+                for (const MouthPoint& point : mouth) {
+                    positions.append(point.position);
                 }
-                addStrip(mouth);
-                writer.addFan(tripId, writer.addCapCenter(mouthFanCenter.value_or(centroid(mouth))), capRing, resolution, atEnd);
+                const quint32 mouthFirst = writer.addRing(positions);
+                if (cap == EndCap::Mouth) {
+                    return mouthFirst;
+                }
+                writer.addMouthStrip(tripId, capRing, resolution, consecutiveIndices(mouthFirst, mouth.size()), mouth, atEnd);
+                writer.addFan(tripId, writer.addCapCenter(mouthFanCenter.value_or(centroid(positions))), mouthFirst, mouth.size(), atEnd);
                 return -1;
             }
 
@@ -2297,11 +2364,11 @@ ChainVertices addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const C
         const bool isChainEnd = run.last() == lastRing;
         const qint64 startMouth = addCap(0, isChainStart ? chain.startCap : EndCap::Fan,
                                          isChainStart ? chain.startCapOffsetMeters : 0.0, false,
-                                         isChainStart ? chain.startMouth : QVector<QVector3D>(),
+                                         isChainStart ? chain.startMouth : QVector<MouthPoint>(),
                                          chain.startFanCenter);
         const qint64 endMouth = addCap(run.size() - 1, isChainEnd ? chain.endCap : EndCap::Fan,
                                        isChainEnd ? chain.endCapOffsetMeters : 0.0, true,
-                                       isChainEnd ? chain.endMouth : QVector<QVector3D>(),
+                                       isChainEnd ? chain.endMouth : QVector<MouthPoint>(),
                                        chain.endFanCenter);
         if (isChainStart) {
             placed.startMouthFirst = startMouth;
@@ -2330,21 +2397,19 @@ void addZipBands(MeshWriter& writer, const QVector<Chain>& chains, const QVector
             writer.setSource(window.armChain);
             const qint64 endRingFirst = window.isArmStart ? arm.ringFirst.first() : arm.ringFirst.last();
             if (mouthFirst >= 0 && endRingFirst >= 0) {
-                const int resolution = window.mouthCorners.size();
-                QVector<quint32> endRing;
                 QVector<quint32> mouth;
-                for (int k = 0; k < resolution; ++k) {
-                    const qint64 index = indexOf(window.mouthCorners.at(k));
+                mouth.reserve(window.mouthCorners.size());
+                for (const ZipCorner& corner : window.mouthCorners) {
+                    const qint64 index = indexOf(corner);
                     if (index >= 0) {
-                        endRing.append(static_cast<quint32>(endRingFirst + k));
                         mouth.append(static_cast<quint32>(index));
                     }
                 }
-                const bool isPlaced = mouth.size() == resolution;
-                if (isPlaced && window.isArmStart) {
-                    writer.addSides(window.tripId, mouth, endRing);
-                } else if (isPlaced) {
-                    writer.addSides(window.tripId, endRing, mouth);
+                if (mouth.size() == window.mouthCorners.size()) {
+                    const Chain& armChain = chains.at(window.armChain);
+                    const int resolution = (window.isArmStart ? armChain.rings.first() : armChain.rings.last()).vertices.size();
+                    writer.addMouthStrip(window.tripId, static_cast<quint32>(endRingFirst), resolution, mouth,
+                                         window.isArmStart ? armChain.startMouth : armChain.endMouth, !window.isArmStart);
                 }
             }
 

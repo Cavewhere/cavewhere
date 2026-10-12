@@ -157,8 +157,16 @@ public:
         None
     };
 
+    // A point of an arm's mouth on the through surface. column is the arm bin
+    // whose wall the point continues plus the fraction of the way toward the
+    // next bin's, 0 <= fraction < 1.
+    struct MouthPoint {
+        QVector3D position;
+        double column = 0.0;
+    };
+
     // One corner of a zip triangle: a through ring vertex (ring, column), or
-    // the arm's mouth vertex at column when ring is kMouthRing.
+    // the arm's mouth point numbered column when ring is kMouthRing.
     struct ZipCorner {
         static constexpr int kMouthRing = -1;
 
@@ -173,8 +181,8 @@ public:
     // left out; boundary is the hole's edge as (ring, column) through vertices,
     // counter-clockwise in (ring, column) space; zip closes the band between
     // boundary and the arm's mouth with triangles that belong to tripId.
-    // mouthCorners holds one corner per arm column: the mouth vertex itself, an
-    // earlier mouth vertex it was welded to, or the boundary vertex it was
+    // mouthCorners holds one corner per mouth point: the point itself, an
+    // earlier mouth point it was welded to, or the boundary vertex it was
     // welded to. The arm's strip to its mouth and the zip band both use them.
     struct JunctionWindow {
         QSet<QPair<int, int>> removedQuads;
@@ -196,11 +204,11 @@ public:
         // Only a steep end extends; a gentle end closes on its plumb ring.
         double startCapOffsetMeters = 0.0;
         double endCapOffsetMeters = 0.0;
-        // Where an arm meets its through tube: one point per column on the
-        // through surface, past the arm's first or last ring. Empty when the
-        // end is not a mouth.
-        QVector<QVector3D> startMouth;
-        QVector<QVector3D> endMouth;
+        // Where an arm meets its through tube: points on the through surface
+        // past the arm's first or last ring, in column order, with at least
+        // one at each whole column. Empty when the end is not a mouth.
+        QVector<MouthPoint> startMouth;
+        QVector<MouthPoint> endMouth;
         // The center of the fan that closes a mouth the stitch pass could not
         // zip, inside the through tube; the mouth's centroid when unset.
         std::optional<QVector3D> startFanCenter;
