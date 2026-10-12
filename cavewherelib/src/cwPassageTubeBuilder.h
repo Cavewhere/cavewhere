@@ -16,6 +16,7 @@
 
 //Qt includes
 #include <QHash>
+#include <QPair>
 #include <QSet>
 #include <QString>
 #include <QUuid>
@@ -23,6 +24,7 @@
 #include <QVector3D>
 
 //Std includes
+#include <array>
 #include <optional>
 
 /**
@@ -56,6 +58,11 @@ struct cwStationLrud {
  * cross-section frame keeps world up in the section plane for gentle passage
  * and rolls toward a rotation-minimizing frame as the passage steepens into a
  * pit, so rings stay continuous through vertical shots.
+ *
+ * At a junction, cwPassageTubeJunction trims each arm where it meets the
+ * through tube, grows the through rings to take the arm's section across to
+ * the far wall, and zips the arm's mouth into a window cut in the through
+ * surface, so the junction is one closed surface.
  */
 class CAVEWHERE_LIB_EXPORT cwPassageTubeBuilder
 {
@@ -121,7 +128,8 @@ public:
     // or borrowed from another ring. chainLeg is the index into Chain::legs of
     // the leg the ring lies on or ends. vertices are the ring's mesh vertices,
     // one per bin, pulled onto the previous ring's plane where they would fold
-    // behind it.
+    // behind it. isGrown is true when a junction grew the ring to take an
+    // arm's section across to the far wall.
     struct Ring {
         QVector3D center;
         QVector<double> radii;
@@ -129,14 +137,40 @@ public:
         QVector<bool> measured;
         int chainLeg = 0;
         QVector<QVector3D> vertices;
+        bool isGrown = false;
     };
 
-    // How a chain end is closed: a fan at a dead end, a dome on an arm ending
-    // at a junction that another chain passes through, nothing on a loop.
+    // How a chain end is closed: a fan at a dead end, a mouth on an arm ending
+    // at a junction that another chain passes through, nothing on a loop. An
+    // arm whose mouth could not be zipped into the through tube closes with a
+    // fan over its mouth instead.
     enum class EndCap {
         Fan,
-        Dome,
+        Mouth,
         None
+    };
+
+    // One corner of a zip triangle: a through ring vertex (ring, column), or
+    // the arm's mouth vertex at column when ring is kMouthRing.
+    struct ZipCorner {
+        static constexpr int kMouthRing = -1;
+
+        int ring = kMouthRing;
+        int column = 0;
+    };
+
+    // Where an arm joins the through chain that holds this window. The through
+    // quads in removedQuads, each named by its first ring and first column, are
+    // left out; boundary is the hole's edge as (ring, column) through vertices,
+    // counter-clockwise in (ring, column) space; zip closes the band between
+    // boundary and the arm's mouth with triangles that belong to tripId.
+    struct JunctionWindow {
+        QSet<QPair<int, int>> removedQuads;
+        QVector<QPair<int, int>> boundary;
+        QVector<std::array<ZipCorner, 3>> zip;
+        int armChain = -1;
+        bool isArmStart = false;
+        QUuid tripId;
     };
 
     struct Chain {
@@ -148,10 +182,13 @@ public:
         // scaled by the end's inclination weight so level ends sit flush.
         double startCapOffsetMeters = 0.0;
         double endCapOffsetMeters = 0.0;
-        // How far a dome reaches past its junction: to the through passage's
-        // far wall along the arm.
-        double startDomeHeightMeters = 0.0;
-        double endDomeHeightMeters = 0.0;
+        // Where an arm meets its through tube: one point per column on the
+        // through surface, past the arm's first or last ring. Empty when the
+        // end is not a mouth.
+        QVector<QVector3D> startMouth;
+        QVector<QVector3D> endMouth;
+        // The holes the arms joining this chain cut into it.
+        QVector<JunctionWindow> windows;
         EndCap startCap = EndCap::Fan;
         EndCap endCap = EndCap::Fan;
     };
@@ -164,7 +201,7 @@ public:
         QVector<cwPassageTubeMesh::Warning> warnings;
         cwPassageTubeMesh mesh;
         // Mesh vertices where a sharp fold is by design: the centers of fan
-        // caps, trip boundaries and dome apexes.
+        // caps and trip boundaries.
         QSet<quint32> intendedCreaseVertices;
     };
 

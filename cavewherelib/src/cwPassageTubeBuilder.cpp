@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwPassageTubeBuilder.h"
+#include "cwPassageTubeJunction.h"
 #include "cwUnits.h"
 
 //Qt includes
@@ -38,7 +39,11 @@ constexpr double kCornerInsetSafety = 1.1;
 constexpr double kConcavityClampFactor = 0.95;
 constexpr double kClampWarningMeters = 0.1;
 constexpr double kInsideBinEpsilon = 1e-4;
-constexpr int kDomeRings = 3;
+// A dead end's fan sits this far from its station toward the ring's
+// centroid: a station against a wall leaves thin triangles to that wall
+// when the fan sits on it, and a narrow far corner leaves them when the
+// fan sits on the centroid.
+constexpr float kFanCenterBlend = 0.5f;
 constexpr int kMinLoopRings = 3;
 constexpr int kMinLoopStations = 3;
 constexpr float kMinAxisLengthSquared = 0.25f;
@@ -589,46 +594,6 @@ cwStationLrud ringLrud(const cwStationLrud& lrud, const QVector<QVector3D>& legD
         ring.down.reset();
     }
     return ring;
-}
-
-// Every passage LRUD record of each station, from every leg that touches it,
-// keyed by cave and canonical station name.
-using StationRecords = QHash<StationKey, QVector<LrudRecord>>;
-
-StationKey canonicalStation(const QUuid& caveId, const QString& station)
-{
-    return {caveId, cwStation::canonicalKey(station)};
-}
-
-StationRecords stationRecords(const QVector<Leg>& legs)
-{
-    StationRecords records;
-    for (const Leg& leg : legs) {
-        records[canonicalStation(leg.caveId, leg.from)].append({leg.fromPassageLrud, leg.fromFacing});
-        records[canonicalStation(leg.caveId, leg.to)].append({leg.toPassageLrud, leg.toFacing});
-    }
-    return records;
-}
-
-// How far the station's walls reach along outward: the largest projection of
-// any wall offset of its records, or nullopt when it has no readings.
-std::optional<double> farWallDistance(const QVector<LrudRecord>& records, const QVector3D& outward)
-{
-    std::optional<double> farthest;
-    const auto reach = [&](const std::optional<double>& reading, const QVector3D& direction) {
-        if (reading) {
-            const double distance = *reading * QVector3D::dotProduct(direction, outward);
-            farthest = std::max(farthest.value_or(distance), distance);
-        }
-    };
-    for (const LrudRecord& record : records) {
-        const QVector3D right = rightOfFacing(record.facing);
-        reach(record.lrud.left, -right);
-        reach(record.lrud.right, right);
-        reach(record.lrud.up, kWorldUp);
-        reach(record.lrud.down, -kWorldUp);
-    }
-    return farthest;
 }
 
 // A chain leg as walked: start and end in travel order. The ring records
@@ -1231,14 +1196,6 @@ Warning chainWarning(const QVector<Leg>& legs, const Chain& chain, Warning::Type
     return Warning {type, legs.at(firstLeg.legIndex).tripId, station, message.arg(station)};
 }
 
-double meanRadius(const Ring& ring)
-{
-    if (ring.radii.isEmpty()) {
-        return 0.0;
-    }
-    return std::accumulate(ring.radii.cbegin(), ring.radii.cend(), 0.0) / ring.radii.size();
-}
-
 using EndCap = cwPassageTubeBuilder::EndCap;
 
 QVector3D binDirection(const Frame& frame, int bin, int resolution)
@@ -1376,20 +1333,8 @@ void fitSharpBends(const QVector<Leg>& legs, const QVector<ChainSample>& samples
     }
 }
 
-// A dome reaches the junction's far wall along the arm, or as far as the arm's
-// own end ring when the junction has no readings.
-double domeHeight(const StationRecords& records, const StationKey& junction, const QVector3D& outward, const Ring& armEnd)
-{
-    const std::optional<double> farWall = farWallDistance(records.value(junction), outward);
-    if (farWall) {
-        return std::max(cwPassageTubeBuilder::kMinRadiusMeters, *farWall);
-    }
-    return meanRadius(armEnd);
-}
-
 void buildRings(const QVector<Leg>& legs,
                 const StationLegDirections& directions,
-                const StationRecords& records,
                 Chain& chain,
                 const Options& options,
                 QVector<Warning>& warnings)
@@ -1447,24 +1392,15 @@ void buildRings(const QVector<Leg>& legs,
         chain.startCapOffsetMeters = capOffset(walked.first().startLrud, -walked.first().direction(), frames.first());
         chain.endCapOffsetMeters = capOffset(walked.last().endLrud, walked.last().direction(), frames.last());
     }
+}
 
-    const auto domeHeightAt = [&](EndCap cap, const ChainLeg& chainLeg, const QString& junction,
-                                  const QVector3D& outward, const Ring& armEnd) {
-        if (cap == EndCap::Dome) {
-            return domeHeight(records, canonicalStation(legs.at(chainLeg.legIndex).caveId, junction), outward, armEnd);
-        }
-        return 0.0;
-    };
-    const ChainLeg& firstLeg = chain.legs.first();
-    const ChainLeg& lastLeg = chain.legs.last();
-    chain.startDomeHeightMeters = domeHeightAt(chain.startCap, firstLeg, chainStartStation(legs, firstLeg),
-                                               -walked.first().direction(), chain.rings.first());
-    chain.endDomeHeightMeters = domeHeightAt(chain.endCap, lastLeg, chainEndStation(legs, lastLeg),
-                                             walked.last().direction(), chain.rings.last());
+StationKey canonicalStation(const QUuid& caveId, const QString& station)
+{
+    return {caveId, cwStation::canonicalKey(station)};
 }
 
 // A chain end at a junction that another chain passes through is an arm and
-// gets a dome; every other open end gets a fan, and loops get no caps.
+// gets a mouth; every other open end gets a fan, and loops get no caps.
 void classifyChainEnds(const QVector<Leg>& legs, QVector<Chain>& chains)
 {
     const auto key = [&](const ChainLeg& chainLeg, const QString& station) {
@@ -1486,7 +1422,7 @@ void classifyChainEnds(const QVector<Leg>& legs, QVector<Chain>& chains)
 
     const auto endCap = [&](const StationKey& station) {
         const bool isArm = degree.value(station) > 2 && passedThrough.contains(station);
-        return isArm ? EndCap::Dome : EndCap::Fan;
+        return isArm ? EndCap::Mouth : EndCap::Fan;
     };
 
     for (Chain& chain : chains) {
@@ -1601,12 +1537,16 @@ public:
     }
 
     // Side quads between two rings of resolution vertices, ring b further
-    // along the tangent than ring a. Each quad splits along its shorter
-    // diagonal, wound counter-clockwise seen from outside.
-    void addSides(const QUuid& tripId, quint32 a, quint32 b, int resolution)
+    // along the tangent than ring a, apart from the quads starting at
+    // skippedColumns. Each quad splits along its shorter diagonal, wound
+    // counter-clockwise seen from outside.
+    void addSides(const QUuid& tripId, quint32 a, quint32 b, int resolution, const QSet<int>& skippedColumns = {})
     {
         const QVector<QVector3D>& positions = m_mesh.positions;
         for (int k = 0; k < resolution; ++k) {
+            if (skippedColumns.contains(k)) {
+                continue;
+            }
             const quint32 next = static_cast<quint32>((k + 1) % resolution);
             const quint32 a0 = a + k;
             const quint32 a1 = a + next;
@@ -1656,41 +1596,37 @@ private:
     QHash<QUuid, QVector<quint32>> m_trianglesByTrip;
 };
 
-// A Loch-style dome past the ring: kDomeRings rings shrinking on a quarter
-// ellipse out to an apex height past the ring.
-void addDome(MeshWriter& writer, const QUuid& tripId, const Ring& ring, quint32 ringFirst, bool atEnd, double height)
-{
-    const int resolution = ring.vertices.size();
-    const QVector3D outward = atEnd ? ring.frame.tangent : -ring.frame.tangent;
+// Where a chain's rings and mouths landed in the mesh, so the zip bands can
+// share their vertices; -1 where nothing was emitted.
+struct ChainVertices {
+    QVector<qint64> ringFirst;
+    qint64 startMouthFirst = -1;
+    qint64 endMouthFirst = -1;
+};
 
-    quint32 previous = ringFirst;
-    for (int i = 1; i <= kDomeRings; ++i) {
-        const double angle = (std::numbers::pi / 2.0) * i / (kDomeRings + 1);
-        const QVector3D center = ring.center + outward * static_cast<float>(height * std::sin(angle));
-        const float scale = static_cast<float>(std::cos(angle));
-        QVector<QVector3D> vertices;
-        vertices.reserve(resolution);
-        for (const QVector3D& vertex : ring.vertices) {
-            vertices.append(center + (vertex - ring.center) * scale);
-        }
-        const quint32 current = writer.addRing(vertices);
-        if (atEnd) {
-            writer.addSides(tripId, previous, current, resolution);
-        } else {
-            writer.addSides(tripId, current, previous, resolution);
-        }
-        previous = current;
+QVector3D centroid(const QVector<QVector3D>& points)
+{
+    QVector3D sum;
+    for (const QVector3D& point : points) {
+        sum += point;
     }
-    const quint32 apex = writer.addCapCenter(ring.center + outward * static_cast<float>(height));
-    writer.addFan(tripId, apex, previous, resolution, atEnd);
+    return sum / static_cast<float>(points.size());
 }
 
-void addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const Chain& chain, QVector<Warning>& warnings)
+ChainVertices addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const Chain& chain, QVector<Warning>& warnings)
 {
+    ChainVertices placed {QVector<qint64>(chain.rings.size(), -1)};
     const auto tripOfRing = [&](int ringIndex) {
         const ChainLeg& chainLeg = chain.legs.at(chain.rings.at(ringIndex).chainLeg);
         return legs.at(chainLeg.legIndex).tripId;
     };
+
+    QHash<int, QSet<int>> removedColumnsByRing;
+    for (const cwPassageTubeBuilder::JunctionWindow& window : chain.windows) {
+        for (const QPair<int, int>& quad : window.removedQuads) {
+            removedColumnsByRing[quad.first].insert(quad.second);
+        }
+    }
 
     // Runs of consecutive rings with valid frames; a torn chain has several.
     QVector<QVector<int>> runs(1);
@@ -1721,11 +1657,13 @@ void addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const Chain& cha
         for (int i = 0; i < run.size(); ++i) {
             const bool closesLoop = isClosedLoop && i == run.size() - 1;
             firstVertex.append(closesLoop ? firstVertex.first() : writer.addRing(chain.rings.at(run.at(i)).vertices));
+            placed.ringFirst[run.at(i)] = firstVertex.last();
         }
 
         // Segment s joins ring s - 1 to ring s and belongs to ring s's leg.
         for (int s = 1; s < run.size(); ++s) {
-            writer.addSides(tripOfRing(run.at(s)), firstVertex.at(s - 1), firstVertex.at(s), resolution);
+            writer.addSides(tripOfRing(run.at(s)), firstVertex.at(s - 1), firstVertex.at(s), resolution,
+                            removedColumnsByRing.value(run.at(s - 1)));
         }
 
         // Where the trip changes, each trip closes its own side of the
@@ -1746,23 +1684,74 @@ void addChainMesh(MeshWriter& writer, const QVector<Leg>& legs, const Chain& cha
             continue;
         }
 
-        const auto addCap = [&](int position, EndCap cap, double pitOffset, bool atEnd) {
+        // A mouth adds one strip past the end ring; a zipped mouth is closed
+        // by its zip band, anything else by a fan.
+        const auto addCap = [&](int position, EndCap cap, double pitOffset, bool atEnd, const QVector<QVector3D>& mouth) {
             const Ring& ring = chain.rings.at(run.at(position));
             const QUuid tripId = tripOfRing(run.at(atEnd ? position : position + 1));
-            if (cap == EndCap::Dome) {
-                addDome(writer, tripId, ring, firstVertex.at(position), atEnd,
-                        atEnd ? chain.endDomeHeightMeters : chain.startDomeHeightMeters);
-                return;
+            quint32 capRing = firstVertex.at(position);
+            QVector3D capCenter = ring.center + (centroid(ring.vertices) - ring.center) * kFanCenterBlend;
+            qint64 mouthFirst = -1;
+            if (mouth.size() == resolution) {
+                mouthFirst = writer.addRing(mouth);
+                if (atEnd) {
+                    writer.addSides(tripId, capRing, mouthFirst, resolution);
+                } else {
+                    writer.addSides(tripId, mouthFirst, capRing, resolution);
+                }
+                capRing = mouthFirst;
+                capCenter = centroid(mouth);
+                pitOffset = 0.0;
+            }
+            if (cap == EndCap::Mouth && mouthFirst >= 0) {
+                return mouthFirst;
             }
             const double offset = ring.frame.inclinationWeight > kSteepWeight ? pitOffset : 0.0;
             const QVector3D outward = atEnd ? ring.frame.tangent : -ring.frame.tangent;
-            const quint32 center = writer.addCapCenter(ring.center + outward * static_cast<float>(offset));
-            writer.addFan(tripId, center, firstVertex.at(position), resolution, atEnd);
+            const quint32 center = writer.addCapCenter(capCenter + outward * static_cast<float>(offset));
+            writer.addFan(tripId, center, capRing, resolution, atEnd);
+            return mouthFirst;
         };
         const bool isChainStart = run.first() == 0;
         const bool isChainEnd = run.last() == lastRing;
-        addCap(0, isChainStart ? chain.startCap : EndCap::Fan, isChainStart ? chain.startCapOffsetMeters : 0.0, false);
-        addCap(run.size() - 1, isChainEnd ? chain.endCap : EndCap::Fan, isChainEnd ? chain.endCapOffsetMeters : 0.0, true);
+        const qint64 startMouth = addCap(0, isChainStart ? chain.startCap : EndCap::Fan,
+                                         isChainStart ? chain.startCapOffsetMeters : 0.0, false,
+                                         isChainStart ? chain.startMouth : QVector<QVector3D>());
+        const qint64 endMouth = addCap(run.size() - 1, isChainEnd ? chain.endCap : EndCap::Fan,
+                                       isChainEnd ? chain.endCapOffsetMeters : 0.0, true,
+                                       isChainEnd ? chain.endMouth : QVector<QVector3D>());
+        if (isChainStart) {
+            placed.startMouthFirst = startMouth;
+        }
+        if (isChainEnd) {
+            placed.endMouthFirst = endMouth;
+        }
+    }
+    return placed;
+}
+
+// Each window's zip band, sharing the through's ring vertices and the arm's
+// mouth vertices.
+void addZipBands(MeshWriter& writer, const QVector<Chain>& chains, const QVector<ChainVertices>& placed)
+{
+    using ZipCorner = cwPassageTubeBuilder::ZipCorner;
+    for (int c = 0; c < chains.size(); ++c) {
+        for (const cwPassageTubeBuilder::JunctionWindow& window : chains.at(c).windows) {
+            const ChainVertices& arm = placed.at(window.armChain);
+            const qint64 mouthFirst = window.isArmStart ? arm.startMouthFirst : arm.endMouthFirst;
+            const auto indexOf = [&](const ZipCorner& corner) {
+                const qint64 first = corner.ring == ZipCorner::kMouthRing ? mouthFirst : placed.at(c).ringFirst.at(corner.ring);
+                return first < 0 ? first : first + corner.column;
+            };
+            for (const std::array<ZipCorner, 3>& triangle : window.zip) {
+                const qint64 a = indexOf(triangle.at(0));
+                const qint64 b = indexOf(triangle.at(1));
+                const qint64 d = indexOf(triangle.at(2));
+                if (a >= 0 && b >= 0 && d >= 0) {
+                    writer.addTriangle(window.tripId, static_cast<quint32>(a), static_cast<quint32>(b), static_cast<quint32>(d));
+                }
+            }
+        }
     }
 }
 
@@ -1790,13 +1779,19 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildDebug(const cwCavingRegio
     classifyChainEnds(debug.legs, debug.chains);
 
     const StationLegDirections directions = stationLegDirections(debug.legs);
-    const StationRecords records = stationRecords(debug.legs);
-    MeshWriter writer(debug.mesh, debug.intendedCreaseVertices);
     for (Chain& chain : debug.chains) {
-        buildRings(debug.legs, directions, records, chain, options, debug.warnings);
-        placeChainVertices(chain);
-        addChainMesh(writer, debug.legs, chain, debug.warnings);
+        buildRings(debug.legs, directions, chain, options, debug.warnings);
     }
+    cwPassageTubeJunction::stitchJunctions(debug.legs, debug.chains, options, debug.warnings);
+
+    MeshWriter writer(debug.mesh, debug.intendedCreaseVertices);
+    QVector<ChainVertices> placed;
+    placed.reserve(debug.chains.size());
+    for (Chain& chain : debug.chains) {
+        placeChainVertices(chain);
+        placed.append(addChainMesh(writer, debug.legs, chain, debug.warnings));
+    }
+    addZipBands(writer, debug.chains, placed);
     writer.finish();
     debug.mesh.warnings = debug.warnings;
     return debug;

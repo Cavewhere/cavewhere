@@ -13,6 +13,7 @@
 //Our includes
 #include "cwPassageTubeBuilder.h"
 #include "cwPassageTubeCases.h"
+#include "cwPassageTubeJunction.h"
 #include "cwPassageTubeMeshCheck.h"
 
 //Qt includes
@@ -177,13 +178,6 @@ QStringList shaftWarningStations(const Builder::Debug& debug)
     }
     stations.sort();
     return stations;
-}
-
-bool hasPosition(const cwPassageTubeMesh& mesh, const QVector3D& position)
-{
-    return std::any_of(mesh.positions.cbegin(), mesh.positions.cend(), [&](const QVector3D& p) {
-        return p.distanceToPoint(position) < 1e-4f;
-    });
 }
 
 void checkFarthestVertexNear(const Builder::Ring& ring, const QVector3D& expected, float tolerance)
@@ -605,9 +599,17 @@ TEST_CASE("cwPassageTubeBuilder takes the component of a wall across the ring", 
     const QVector3D bPosition = b.position.value();
     checkFarthestVertexNear(ringAt(*through, bPosition), bPosition + QVector3D(-kComponent, 0, 0), kToleranceMeters);
 
-    const Builder::Ring& armEnd = arm->rings.last();
-    checkVectorNear(armEnd.center, bPosition);
-    checkFarthestVertexNear(armEnd, bPosition + QVector3D(0, kComponent, 0), kToleranceMeters);
+    // The arm arrives along +x into that wall and stops where it meets it.
+    constexpr double kMouthToleranceMeters = 0.05;
+    const cwPassageTubeJunction::RingTube throughTube {&through->rings, QVector3D()};
+    REQUIRE_FALSE(arm->endMouth.isEmpty());
+    for (const QVector3D& point : arm->endMouth) {
+        INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
+        CHECK(point.x() < bPosition.x());
+        const std::optional<double> distance = throughTube.wallDistance(point);
+        REQUIRE(distance.has_value());
+        CHECK(std::abs(*distance) < kMouthToleranceMeters);
+    }
 }
 
 TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a vertical shot", "[PassageTube][cwPassageTubeBuilder]")
@@ -1049,41 +1051,43 @@ BuilderInput junctionInput(const QStringList& junctionLrud)
     return makeInput({{{a, b, c}, {d, armB}}});
 }
 
-// The arm walks d → b, south into the through tube, and ends at b.
+// The arm walks d → b, south into the through tube, and ends at b in a
+// mouth zipped into the through tube.
 const Builder::Chain& junctionArm(const Builder::Debug& debug)
 {
     REQUIRE(debug.chains.size() == 2);
     const Builder::Chain& arm = debug.chains.at(1);
     REQUIRE(chainStations(debug, arm) == QStringList({QStringLiteral("d"), QStringLiteral("b")}));
     CHECK(arm.startCap == Builder::EndCap::Fan);
-    REQUIRE(arm.endCap == Builder::EndCap::Dome);
-    checkVectorNear(arm.rings.last().center, QVector3D(10, 0, 0));
+    CHECK(arm.endCap == Builder::EndCap::Mouth);
+    CHECK(arm.endMouth.size() == Builder::Options().ringResolution);
+    CHECK(debug.chains.at(0).windows.size() == 1);
     return arm;
 }
 
 } // namespace
 
-TEST_CASE("cwPassageTubeBuilder domes a junction arm to the through passage's far wall", "[PassageTube][cwPassageTubeBuilder][!mayfail]")
+TEST_CASE("cwPassageTubeBuilder closes a junction arm with a mouth on the through passage", "[PassageTube][cwPassageTubeBuilder]")
 {
     const Builder::Debug debug = buildDebug(junctionInput(lrud(2, 2, 2, 2)));
     const Builder::Chain& arm = junctionArm(debug);
 
-    // b faces +x, so its 2 m right wall lies to the south, along the arm.
-    CHECK(arm.endDomeHeightMeters == Catch::Approx(2.0));
-    CHECK(hasPosition(debug.mesh, QVector3D(10, -2, 0)));
-    // The dome overlaps the through tube until the T07d stitch pass merges them.
+    // b's 2 m walls make the through a 2 m cylinder about the x axis, which
+    // the arm's default-radius section meets north of b.
+    for (const QVector3D& point : arm.endMouth) {
+        CHECK(point.y() > 0.0f);
+        CHECK(std::hypot(point.y(), point.z()) == Catch::Approx(2.0).margin(0.05));
+    }
+    for (const Builder::Ring& ring : arm.rings) {
+        CHECK(ring.center.y() > 2.0f);
+    }
     checkMeshClean(debug);
 }
 
-TEST_CASE("cwPassageTubeBuilder takes the dome height from a junction without readings", "[PassageTube][cwPassageTubeBuilder][!mayfail]")
+TEST_CASE("cwPassageTubeBuilder merges an arm into a junction without readings", "[PassageTube][cwPassageTubeBuilder]")
 {
     const Builder::Debug debug = buildDebug(junctionInput({QString(), QString(), QString(), QString()}));
-    const Builder::Chain& arm = junctionArm(debug);
-
-    const double defaultRadius = Builder::Options().defaultRadiusMeters;
-    CHECK(arm.endDomeHeightMeters == Catch::Approx(defaultRadius));
-    CHECK(hasPosition(debug.mesh, QVector3D(10, -static_cast<float>(defaultRadius), 0)));
-    // The dome overlaps the through tube until the T07d stitch pass merges them.
+    junctionArm(debug);
     checkMeshClean(debug);
 }
 
@@ -1356,7 +1360,6 @@ TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single san
         }
     }
 
-    // Phake Cave has junctions; until T07d only its topology is clean.
     checkMeshClosed(debug.mesh);
 
     QElapsedTimer timer;
@@ -1365,66 +1368,51 @@ TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single san
     CHECK(timer.elapsed() < kMaxCheckMilliseconds);
 }
 
-TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passages", "[PassageTube][cwPassageTubeBuilder][!mayfail]")
+TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passages", "[PassageTube][cwPassageTubeBuilder]")
 {
-    constexpr float kToleranceMeters = 1e-3f;
-    constexpr double kMinDomeHeightMeters = 1.5;
-    constexpr double kMaxDomeHeightMeters = 2.5;
+    constexpr double kJunctionTolerance = 0.02;
+    constexpr double kMouthToleranceMeters = 0.05;
 
     const BuilderInput input = makeInput(cwPassageTubeCases::phakeCave());
     const Builder::Debug debug = buildDebug(input);
 
-    // The chain holding the leg between armStation and junction, which must
-    // end at junction in a dome; outward is the arm's direction there.
-    struct Arm {
-        const Builder::Chain* chain = nullptr;
-        QVector3D junction;
-        QVector3D outward;
-        double domeHeight = 0.0;
-    };
-    const auto findArm = [&](const QString& armStation, const QString& junction) {
-        Arm arm;
-        for (const Builder::Chain& chain : debug.chains) {
-            for (int i = 0; i < chain.legs.size(); ++i) {
-                const Builder::ChainLeg& chainLeg = chain.legs.at(i);
+    // The chain holding the leg between from and to.
+    const auto chainWithLeg = [&](const QString& from, const QString& to) {
+        for (int c = 0; c < debug.chains.size(); ++c) {
+            for (const Builder::ChainLeg& chainLeg : debug.chains.at(c).legs) {
                 const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
-                const bool joins = (leg.from == armStation && leg.to == junction)
-                                   || (leg.from == junction && leg.to == armStation);
-                if (!joins) {
-                    continue;
+                if ((leg.from == from && leg.to == to) || (leg.from == to && leg.to == from)) {
+                    return c;
                 }
-                const bool endsAtJunction = i == chain.legs.size() - 1 && chainEnd(debug, chainLeg) == junction;
-                const bool startsAtJunction = i == 0 && chainStart(debug, chainLeg) == junction;
-                REQUIRE((endsAtJunction || startsAtJunction));
-                CHECK((endsAtJunction ? chain.endCap : chain.startCap) == Builder::EndCap::Dome);
-                const bool fromIsJunction = leg.from == junction;
-                arm.chain = &chain;
-                arm.junction = fromIsJunction ? leg.fromPosition : leg.toPosition;
-                arm.outward = (arm.junction - (fromIsJunction ? leg.toPosition : leg.fromPosition)).normalized();
-                arm.domeHeight = endsAtJunction ? chain.endDomeHeightMeters : chain.startDomeHeightMeters;
             }
         }
-        REQUIRE(arm.chain != nullptr);
-        return arm;
+        FAIL("no leg " << from.toStdString() << " to " << to.toStdString());
+        return -1;
     };
 
-    const auto checkNoRingPastJunction = [&](const Arm& arm) {
-        for (const Builder::Ring& ring : arm.chain->rings) {
-            INFO("ring at (" << ring.center.x() << ", " << ring.center.y() << ", " << ring.center.z() << ")");
-            CHECK(QVector3D::dotProduct(ring.center - arm.junction, arm.outward) <= kToleranceMeters);
-        }
-    };
+    const int through = chainWithLeg(QStringLiteral("a9"), QStringLiteral("a10"));
+    CHECK(chainWithLeg(QStringLiteral("a10"), QStringLiteral("a11")) == through);
+    const int armIndex = chainWithLeg(QStringLiteral("a13"), QStringLiteral("a10"));
+    REQUIRE(armIndex != through);
+    const Builder::Chain& arm = debug.chains.at(armIndex);
+    const QVector<QVector3D>& mouth = arm.endMouth.isEmpty() ? arm.startMouth : arm.endMouth;
+    REQUIRE(mouth.size() == Builder::Options().ringResolution);
 
-    const Arm a6Arm = findArm(QStringLiteral("a4"), QStringLiteral("a6"));
-    checkNoRingPastJunction(a6Arm);
+    const cwPassageTubeJunction::RingTube throughTube {&debug.chains.at(through).rings, QVector3D()};
+    QVector<QVector3D> armVertices = mouth;
+    for (const Builder::Ring& ring : arm.rings) {
+        armVertices.append(ring.vertices);
+    }
+    for (const QVector3D& vertex : std::as_const(armVertices)) {
+        INFO("arm vertex (" << vertex.x() << ", " << vertex.y() << ", " << vertex.z() << ")");
+        CHECK_FALSE(throughTube.inside(vertex, -kJunctionTolerance));
+    }
+    for (const QVector3D& point : mouth) {
+        INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
+        const std::optional<double> distance = throughTube.wallDistance(point);
+        REQUIRE(distance.has_value());
+        CHECK(std::abs(*distance) < kMouthToleranceMeters);
+    }
 
-    // a10's 2 m right wall, chunk 3 facing about SSW, projected on the arm.
-    const Arm a10Arm = findArm(QStringLiteral("a13"), QStringLiteral("a10"));
-    checkNoRingPastJunction(a10Arm);
-    CHECK(a10Arm.domeHeight >= kMinDomeHeightMeters);
-    CHECK(a10Arm.domeHeight <= kMaxDomeHeightMeters);
-    CHECK(hasPosition(debug.mesh, a10Arm.junction + a10Arm.outward * static_cast<float>(a10Arm.domeHeight)));
-
-    // The domes overlap their through tubes until the T07d stitch pass merges them.
-    checkMeshClean(debug);
+    checkMeshClosed(debug.mesh);
 }

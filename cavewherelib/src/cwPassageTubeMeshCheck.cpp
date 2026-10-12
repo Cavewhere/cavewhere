@@ -32,7 +32,10 @@ using Debug = cwPassageTubeBuilder::Debug;
 constexpr double kPlaneEpsilon = 1e-7;
 constexpr double kTouchTolerance = 1e-6;
 constexpr double kOrientEpsilon = 1e-12;
-constexpr double kParallelEpsilon = 1e-9;
+// Triangles whose normals differ by less than about this angle in radians
+// share a plane: the float positions of neighboring quads on a cone leave
+// their planes a hair apart, where the line the planes cross along is noise.
+constexpr double kParallelEpsilon = 1e-5;
 constexpr double kRayEpsilon = 1e-9;
 constexpr double kStationTolerance = 1e-4;
 constexpr double kFoldBackTolerance = 1e-4;
@@ -871,8 +874,11 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const 
                 issues.append(*folded);
             }
 
+            // A ring grown at a junction follows the arm's outline, which may
+            // drop sharply at the arm's walls.
             const bool isBetweenStations = !isStationRing(debug, chain, previous) && !isStationRing(debug, chain, ring);
-            if (isBetweenStations && previous.radii.size() == ring.radii.size()) {
+            const bool isGrown = previous.isGrown || ring.isGrown;
+            if (isBetweenStations && !isGrown && previous.radii.size() == ring.radii.size()) {
                 for (int bin = 0; bin < ring.radii.size(); ++bin) {
                     const double smaller = std::min(ring.radii.at(bin), previous.radii.at(bin));
                     const double larger = std::max(ring.radii.at(bin), previous.radii.at(bin));
@@ -935,10 +941,32 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
 
     // The builder reshapes the inside of a bend too sharp for its walls and
     // warns at the corner station; its walls there are no longer the tube's.
-    QSet<QString> bendClamped;
+    // Where an arm joins a through passage, the walls of the junction station
+    // open into the other passage, and an arm left inside the through passage
+    // has its walls inside it.
+    QSet<QString> reshaped;
     for (const cwPassageTubeMesh::Warning& warning : debug.warnings) {
         if (warning.type == cwPassageTubeMesh::Warning::BendClamped) {
-            bendClamped.insert(cwStation::canonicalKey(warning.station));
+            reshaped.insert(cwStation::canonicalKey(warning.station));
+        }
+    }
+    const auto stationOf = [&](const cwPassageTubeBuilder::ChainLeg& chainLeg, bool atEnd) {
+        const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+        return cwStation::canonicalKey(atEnd != chainLeg.reversed ? leg.to : leg.from);
+    };
+    for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
+        if (chain.rings.isEmpty()) {
+            for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
+                reshaped.insert(stationOf(chainLeg, false));
+                reshaped.insert(stationOf(chainLeg, true));
+            }
+            continue;
+        }
+        if (!chain.startMouth.isEmpty()) {
+            reshaped.insert(stationOf(chain.legs.first(), false));
+        }
+        if (!chain.endMouth.isEmpty()) {
+            reshaped.insert(stationOf(chain.legs.last(), true));
         }
     }
 
@@ -955,7 +983,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                                   const cwStationLrud& passage,
                                   const QVector3D& facing) {
         const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
-        if (visited.contains(occurrence) || bendClamped.contains(cwStation::canonicalKey(station))) {
+        if (visited.contains(occurrence) || reshaped.contains(cwStation::canonicalKey(station))) {
             return;
         }
         visited.insert(occurrence);

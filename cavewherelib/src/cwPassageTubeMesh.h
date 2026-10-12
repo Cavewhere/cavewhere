@@ -37,7 +37,9 @@ struct cwPassageTubeMesh {
             ScrapOpening,
             SourceChange,
             ShaftReading,
-            BendClamped
+            BendClamped,
+            ArmInsideThrough,
+            JunctionOverlap
         };
 
         Type type = NoPassageData;

@@ -40,6 +40,10 @@ class cwTrip;
  * The setVisible() target for a trip's Type="Passage" keyword item: shows or
  * hides that trip's index range in the tube. The manager re-points it after
  * every build, because the range moves each time the mesh is rebuilt.
+ *
+ * A junction's zip band belongs to the arm's trip and the hole it closes is
+ * cut in the through passage's trip, so hiding the through's trip leaves the
+ * arm's mouth open, and hiding the arm's trip opens a window in the through.
  */
 class CAVEWHERE_LIB_EXPORT cwPassageTubeTripVisibility : public cwVisibilityProxy
 {

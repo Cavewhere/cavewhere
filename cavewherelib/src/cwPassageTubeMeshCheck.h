@@ -124,12 +124,15 @@ public:
                                   const QSet<quint32>& intendedCreaseVertices,
                                   const Options& options = Options());
 
-    // RadiusJump, FrameTwist and FoldBack over the builder's rings.
+    // RadiusJump, FrameTwist and FoldBack over the builder's rings. Rings a
+    // junction grew follow the arm's outline and may jump.
     static QVector<Issue> ringIssues(const cwPassageTubeBuilder::Debug& debug,
                                      const Options& options = Options());
 
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
-    // apart from the stations where the builder warns BendClamped.
+    // apart from the stations where the builder warns BendClamped, the
+    // junction stations where an arm has a mouth, and the stations of an arm
+    // left inside its through passage.
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 

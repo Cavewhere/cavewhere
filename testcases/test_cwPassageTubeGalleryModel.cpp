@@ -79,7 +79,7 @@ TEST_CASE("cwPassageTubeGalleryModel builds the selected case", "[PassageTube][c
 
     CHECK(model.currentName() == nameAt(model, row));
     CHECK_FALSE(model.mesh().isEmpty());
-    CHECK_FALSE(model.reportText().isEmpty());
+    CHECK(model.reportText().isEmpty() == model.report().issues.isEmpty());
     CHECK(model.issueTexts().size() == model.report().issues.size());
     CHECK(model.issuePositions().size() == model.report().issues.size());
     CHECK(model.data(model.index(row), Model::IssueCountRole).toInt() == model.report().issues.size());
