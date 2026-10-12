@@ -94,6 +94,12 @@ public:
     //! The fix row at page row \a fixRow, invalid when there is none.
     Q_INVOKABLE QModelIndex indexOfFixRow(int fixRow) const;
 
+    //! Announces every role of every fix row. A TreeView that reuses its
+    //! delegates applies a dataChanged that arrives between a row insert or
+    //! removal and its next layout to the delegate the row left, so the view
+    //! calls this once it has laid the new rows out.
+    Q_INVOKABLE void announceFixRows();
+
     QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex& child) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;

@@ -1552,6 +1552,214 @@ MainWindowTest {
         }
     }
 
+    // The tree's rows on the project's page, checked against the model as the
+    // tree opens, closes and changes shape.
+    TestCase {
+        name: "FixStationPageTreeRows"
+        when: windowShown
+
+        function init() {
+            rootId.closeAnyOpenEditor()
+            RootData.futureManagerModel.waitForFinished()
+            RootData.newProject()
+            RootData.pageSelectionModel.currentPageAddress = "View"
+        }
+
+        function cleanup() {
+            RootData.pageSelectionModel.currentPageAddress = "View"
+            RootData.newProject()
+        }
+
+        //! Opens the project's Fix Stations page and waits for \a rowCount
+        //! rows, returning the tree view.
+        function openProjectFixStations(rowCount) {
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Fix Stations"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "the project has a Fix Stations page")
+            const view = findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+            verify(view !== null)
+            tryCompare(view, "rows", rowCount, 5000, "the tree opens with every row")
+            return view
+        }
+
+        //! Cave A lists dup, x, dup (the second dup is the one the solve
+        //! ignores) and holds folder Sub with s0, s1; cave B lists b0..b3.
+        function makeCaves() {
+            const a = RootData.region.addNode(null, SurveyNodeKind.Cave, "A")
+            const sub = RootData.region.addNode(a, SurveyNodeKind.Folder, "Sub")
+            const b = RootData.region.addNode(null, SurveyNodeKind.Cave, "B")
+            compare(a.fixStations.addFixStation("dup"), 0)
+            compare(a.fixStations.addFixStation("x"), 1)
+            compare(a.fixStations.addFixStation("dup2"), 2)
+            // addFixStation refuses a name the node already lists.
+            a.fixStations.setData(a.fixStations.index(2), "dup", FixStationModel.StationNameRole)
+            sub.fixStations.addFixStation("s0")
+            sub.fixStations.addFixStation("s1")
+            for (let i = 0; i < 4; ++i) {
+                b.fixStations.addFixStation("b" + i)
+            }
+            return { a: a, sub: sub, b: b }
+        }
+
+        // Project root + A{dup, x, dup} + Sub{s0, s1} + B{b0..b3}.
+        readonly property int initialRowCount: 13
+
+        //! The delegate on every row the tree shows, in row order.
+        function shownItems(view) {
+            const items = []
+            for (let row = 0; row < view.rows; ++row) {
+                items.push(view.itemAtCell(Qt.point(0, row)))
+            }
+            return items
+        }
+
+        //! The first shown row whose cell differs from the model, as text;
+        //! empty when every row matches.
+        function firstMismatch(view) {
+            const model = view.model
+            for (let row = 0; row < view.rows; ++row) {
+                const item = view.itemAtCell(Qt.point(0, row))
+                if (item === null) {
+                    const overflow = view.contentHeight > view.height
+                            ? ", the rows overflow the " + view.height + "px view" : ""
+                    return "row " + row + " has no delegate" + overflow
+                }
+                const index = view.modelIndex(Qt.point(0, row))
+                if (model.data(index, FixStationTreeModel.RowKindRole) !== FixStationTreeModel.FixRow) {
+                    const nodeName = model.data(index, FixStationTreeModel.NodeNameRole)
+                    if (item.nodeName !== nodeName) {
+                        return "row " + row + " shows node " + item.nodeName + ", model says " + nodeName
+                    }
+                    if (item.row !== row) {
+                        return "node " + nodeName + " on row " + row + " says row " + item.row
+                    }
+                    continue
+                }
+                const fixRow = model.data(index, FixStationTreeModel.FixRowRole)
+                const stationName = model.data(index, FixStationModel.StationNameRole)
+                const stationError = model.data(index, FixStationDiagnosticsModel.StationErrorRole)
+                if (item.fixRow !== fixRow) {
+                    return "row " + row + " (" + stationName + ") shows page row " + item.fixRow
+                            + ", model says " + fixRow
+                }
+                if (item.stationName !== stationName) {
+                    return "row " + row + " shows " + item.stationName + ", model says " + stationName
+                }
+                if (item.stationError !== stationError) {
+                    return "row " + row + " (" + stationName + ") shows error "
+                            + JSON.stringify(item.stationError) + ", model says " + JSON.stringify(stationError)
+                }
+                const cell = findChild(item, "stationCell." + fixRow)
+                if (cell === null || cell.text !== stationName) {
+                    return "row " + row + " has no stationCell." + fixRow + " reading " + stationName
+                }
+            }
+            return ""
+        }
+
+        //! Waits for \a rowCount shown rows that all match the model; a
+        //! failure names the first row that differs.
+        function verifyRowsMatchModel(view, rowCount, when) {
+            const shown = {
+                get mismatch() {
+                    if (view.rows !== rowCount) {
+                        return "the tree shows " + view.rows + " rows, expected " + rowCount
+                    }
+                    return firstMismatch(view)
+                }
+            }
+            tryCompare(shown, "mismatch", "", 5000, when)
+        }
+
+        //! How many shown delegates are absent from \a before.
+        function newDelegateCount(view, before) {
+            return shownItems(view).filter(item => before.indexOf(item) < 0).length
+        }
+
+        //! The first shown row delegate named \a objectName, else null.
+        function shownRow(view, objectName) {
+            return shownItems(view).find(item => item !== null && item.objectName === objectName) ?? null
+        }
+
+        //! The live chevron on node \a nodeName's shown row.
+        function shownChevron(view, nodeName) {
+            const row = shownRow(view, "nodeRow." + nodeName)
+            return row === null ? null : findChild(row, "nodeChevron." + nodeName)
+        }
+
+        //! The stationError the first shown "dup" row carries, null when no
+        //! row shows dup.
+        function firstDupError(view) {
+            return shownRow(view, "fixRow.dup")?.stationError ?? null
+        }
+
+        // Closing and reopening a cave hands its rows back to the delegates
+        // the view already built, so a toggle costs no new delegates.
+        function test_aCollapseAndExpandReusesTheRowDelegates() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            verifyRowsMatchModel(view, initialRowCount, "opened")
+            const before = shownItems(view)
+
+            mouseClick(shownChevron(view, "A"))
+            tryCompare(view, "rows", initialRowCount - 6, 5000, "collapsing A hides its rows")
+            mouseClick(shownChevron(view, "A"))
+            verifyRowsMatchModel(view, initialRowCount, "after collapsing and expanding A")
+
+            compare(newDelegateCount(view, before), 0,
+                    "every row A shows again sits on a delegate the view already built")
+        }
+
+        // The rows the tree shows match the model after every change in its
+        // shape, on delegates the view keeps: a removed or added fix shifts
+        // the page rows below it, and a pooled delegate carries the shift
+        // too.
+        function test_everyShownRowMatchesTheModelAfterTheTreeChanges() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            verifyRowsMatchModel(view, initialRowCount, "opened")
+            verify(firstDupError(view) === "", "the first dup is the one that counts")
+            verify(shownItems(view).some(item => item !== null && item.objectName === "fixRow.dup"
+                                         && item.stationError !== ""),
+                   "the second dup is flagged")
+
+            mouseClick(shownChevron(view, "A"))
+            tryCompare(view, "rows", initialRowCount - 6, 5000, "collapsing A hides its rows")
+            mouseClick(shownChevron(view, "A"))
+            verifyRowsMatchModel(view, initialRowCount, "after collapsing and expanding A")
+
+            // Removing the first dup moves every row below it up one page row,
+            // and the second dup stops being a duplicate.
+            let before = shownItems(view)
+            caves.a.fixStations.removeAt(0)
+            let rowCount = initialRowCount - 1
+            verifyRowsMatchModel(view, rowCount, "after removing the first dup")
+            compare(firstDupError(view), "", "the surviving dup carries no error")
+            compare(newDelegateCount(view, before), 0,
+                    "removing a row keeps every other row's delegate")
+
+            before = shownItems(view)
+            caves.a.fixStations.addFixStation("a9")
+            rowCount += 1
+            verifyRowsMatchModel(view, rowCount, "after adding a9")
+            verify(newDelegateCount(view, before) <= 1,
+                   "adding a row builds at most its own delegate, built "
+                   + newDelegateCount(view, before))
+
+            // A node inserted ahead of Sub shifts Sub's page rows down.
+            before = shownItems(view)
+            const early = RootData.region.addNode(caves.a, SurveyNodeKind.Folder, "Early")
+            RootData.region.moveNode(early, caves.a, 0)
+            early.fixStations.addFixStation("e0")
+            rowCount += 2
+            verifyRowsMatchModel(view, rowCount, "after inserting Early with e0")
+            verify(newDelegateCount(view, before) <= 2,
+                   "inserting a node and its fix builds at most their two delegates, built "
+                   + newDelegateCount(view, before))
+        }
+    }
+
     ExternalCenterlineTestCase {
         name: "FixStationPageAttachedFixes"
         when: windowShown
@@ -1570,11 +1778,54 @@ MainWindowTest {
             RootData.project.newProject()
         }
 
-        //! Waits for \a objectName under the current page and returns it.
+        //! Whether \a item sits somewhere under \a ancestor.
+        function isInside(item, ancestor) {
+            for (let up = item; up !== null; up = up.parent) {
+                if (up === ancestor) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        //! \a objectName on a row the tree shows, else elsewhere on the page.
+        //! A delegate the view pools keeps the names it last carried, so a
+        //! match under the view's content that no shown row holds is a pooled
+        //! row's and counts as absent.
+        function liveChild(objectName) {
+            const page = RootData.pageView.currentPageItem
+            if (page === null) {
+                return null
+            }
+            const view = findChild(page, "fixStationTreeView")
+            if (view !== null) {
+                for (let row = 0; row < view.rows; ++row) {
+                    const rowItem = view.itemAtCell(Qt.point(0, row))
+                    if (rowItem === null) {
+                        continue
+                    }
+                    if (rowItem.objectName === objectName) {
+                        return rowItem
+                    }
+                    const found = findChild(rowItem, objectName)
+                    if (found !== null) {
+                        return found
+                    }
+                }
+            }
+            const found = findChild(page, objectName)
+            if (found !== null && view !== null && isInside(found, view.contentItem)) {
+                return null
+            }
+            return found
+        }
+
+        //! Waits for \a objectName on the current page's shown rows and
+        //! returns it.
         function waitForChild(objectName) {
             let item = null
             tryVerify(() => {
-                item = findChild(RootData.pageView.currentPageItem, objectName)
+                item = liveChild(objectName)
                 return item !== null && item.visible
             }, 5000, objectName + " should be on screen")
             return item
@@ -1619,9 +1870,9 @@ MainWindowTest {
             const attachedCoordinate = waitForChild("coordinateCell.1")
             compare(attachedCoordinate.text, "0 0 0")
             verify(waitForChild("readOnlyLock.1") !== null, "the row carries the lock")
-            compare(findChild(page, "readOnlyLock.0"), null, "the node's own row does not")
-            compare(findChild(page, "inputCSComboBox.1"), null, "nor a system to pick")
-            compare(findChild(page, "pickFromViewButton.1"), null, "nor a pick button")
+            compare(liveChild("readOnlyLock.0"), null, "the node's own row does not")
+            compare(liveChild("inputCSComboBox.1"), null, "nor a system to pick")
+            compare(liveChild("pickFromViewButton.1"), null, "nor a pick button")
             verify(waitForChild("pickFromViewButton.0") !== null)
 
             // Focus opens an editor the way a double-click does (QTest's
@@ -1644,8 +1895,8 @@ MainWindowTest {
 
             // The right-click menu is the remove path; the attached row has none.
             mouseClick(attachedStation, 2, 2, Qt.RightButton)
-            compare(findChild(page, "fixRowMenu.1"), null, "the attached row offers no Remove")
-            verify(findChild(page, "fixRowMenu.0") !== null, "the node's own row does")
+            compare(liveChild("fixRowMenu.1"), null, "the attached row offers no Remove")
+            verify(liveChild("fixRowMenu.0") !== null, "the node's own row does")
 
             // The node's row still edits with the attached row beside it.
             const ownCoordinate = waitForChild("coordinateCell.0")
@@ -1677,9 +1928,9 @@ MainWindowTest {
             rootId.width = Theme.breakpointPanelCollapse / 2
             tryCompare(waitForChild("readOnlySource.0"), "text", "from survex_blocks.svx")
             verify(waitForChild("readOnlyLock.0") !== null, "the narrow row carries the lock too")
-            compare(findChild(page, "inputCSComboBox.0"), null)
+            compare(liveChild("inputCSComboBox.0"), null)
             compare(waitForChild("inputCSText.0").text, "none")
-            compare(findChild(page, "pickFromViewButton.0"), null)
+            compare(liveChild("pickFromViewButton.0"), null)
             rootId.width = wideWidth
         }
 
@@ -1728,7 +1979,7 @@ MainWindowTest {
 
             // houping names its *cs; sanqiao's entrance names none.
             compare(waitForChild("stationCell.0").text, "houping.h1")
-            compare(findChild(RootData.pageView.currentPageItem, "coordinateWarning.0").message, "")
+            compare(liveChild("coordinateWarning.0").message, "")
             compare(waitForChild("stationCell.1").text, "sanqiao.e1")
             compare(waitForChild("coordinateWarning.1").message,
                     "Read in UTM48N, the system the file's *cs out names: "
@@ -1760,7 +2011,7 @@ MainWindowTest {
             compare(waitForChild("coordinateCell.0").text, "10 20 30")
 
             compare(waitForChild("stationCell.1").text, "ref.B")
-            compare(findChild(page, "referenceChip.1"), null, "the plain fix carries none")
+            compare(liveChild("referenceChip.1"), null, "the plain fix carries none")
         }
 
         // In a georeferenced project, a file fix with no coordinate system
@@ -1821,7 +2072,7 @@ MainWindowTest {
             tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 10000,
                       "the choice gives the project a frame")
             tryVerify(() => {
-                const badge = findChild(RootData.pageView.currentPageItem, "noCoordinateSystemBadge.0")
+                const badge = liveChild("noCoordinateSystemBadge.0")
                 return badge !== null && badge.visible && badge.text.indexOf("UTM48N") >= 0
             }, 10000, "the badge names the chosen system")
             tryVerify(() => RootData.region.localProjection.anchorDescription.indexOf("bare.A") >= 0,
@@ -1923,7 +2174,7 @@ MainWindowTest {
             const chevron = waitForChild("nodeChevron.entrances")
             mouseClick(chevron)
             tryVerify(() => {
-                const row = findChild(RootData.pageView.currentPageItem, "fixRow.entrances.E1")
+                const row = liveChild("fixRow.entrances.E1")
                 return row === null || !row.visible
             }, 5000, "collapsing entrances hides its fixes")
 

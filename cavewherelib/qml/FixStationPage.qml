@@ -73,6 +73,11 @@ StandardPage {
     // open, the ones that arrive later included.
     property list<string> collapsedNodeIds: []
 
+    // Set when the tree's rows were inserted, removed or reset and the view
+    // has yet to lay them out; the view's next layout re-announces the fix
+    // rows.
+    property bool rowsShifted: false
+
     PageView.defaultSelectionProperties: ({ "currentFixRow": -1 })
 
     function addFix() {
@@ -189,6 +194,18 @@ StandardPage {
         treeViewId.positionViewAtIndex(index, QQ.TableView.Contain)
     }
 
+    // Closes the shared editor when it is open on a field inside \a row, a
+    // row delegate the view puts back in its pool to show another row later.
+    function closeEditorIn(row: QQ.Item): void {
+        const field = (WindowOverlay.overlay as AppOverlay)?.shadowEditor?.coreClickInput ?? null
+        for (let item = field; item !== null; item = item.parent) {
+            if (item === row) {
+                field.closeEditor()
+                return
+            }
+        }
+    }
+
     function isCollapsedNode(node: SurveyNode): bool {
         return node !== null && fixStationPage.collapsedNodeIds.indexOf(String(node.id)) >= 0
     }
@@ -231,12 +248,11 @@ StandardPage {
             treeViewId.expand(row)
         }
         fixStationPage.collapsedNodeIds = collapsed
-        fixStationPage.applyExpansion()
     }
 
     function expandAll(): void {
         fixStationPage.collapsedNodeIds = []
-        fixStationPage.applyExpansion()
+        treeViewId.expandRecursively()
     }
 
     // Closes every node row under the page's own node.
@@ -276,8 +292,27 @@ StandardPage {
     // New node rows open as they arrive, so the whole subtree starts open.
     QQ.Connections {
         target: treeModelId
-        function onRowsInserted() { Qt.callLater(fixStationPage.applyExpansion) }
-        function onModelReset() { Qt.callLater(fixStationPage.applyExpansion) }
+        function onRowsInserted() {
+            fixStationPage.rowsShifted = true
+            Qt.callLater(fixStationPage.applyExpansion)
+        }
+        function onRowsRemoved() { fixStationPage.rowsShifted = true }
+        function onModelReset() {
+            fixStationPage.rowsShifted = true
+            Qt.callLater(fixStationPage.applyExpansion)
+        }
+    }
+
+    // A reused row delegate misses the page-row and diagnostics updates sent
+    // while its row was moving, so they are sent again once the rows settle.
+    QQ.Connections {
+        target: treeViewId
+        function onLayoutChanged() {
+            if (fixStationPage.rowsShifted) {
+                fixStationPage.rowsShifted = false
+                treeModelId.announceFixRows()
+            }
+        }
     }
 
     component FixField : DoubleClickTextInput {
@@ -845,9 +880,6 @@ StandardPage {
             readonly property int count: treeModelId.fixRowCount
 
             model: treeModelId
-            // A pooled row keeps the names its cells last carried, which would
-            // answer for a row that is gone.
-            reuseItems: false
             clip: true
             boundsBehavior: QQ.Flickable.StopAtBounds
             Layout.fillWidth: true
@@ -1142,6 +1174,8 @@ StandardPage {
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
             implicitWidth: rowLayoutId.implicitWidth
 
+            QQ.TableView.onPooled: fixStationPage.closeEditorIn(wideDelegateId)
+
             TableRowBackground {
                 isSelected: treeViewId.currentIndex === wideDelegateId.fixRow
                 rowIndex: wideDelegateId.fixRow
@@ -1330,6 +1364,8 @@ StandardPage {
                                                           : narrowDelegateId.readInWarning
 
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
+
+            QQ.TableView.onPooled: fixStationPage.closeEditorIn(narrowDelegateId)
 
             TableRowBackground {
                 isSelected: treeViewId.currentIndex === narrowDelegateId.fixRow

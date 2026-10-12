@@ -502,6 +502,17 @@ void cwFixStationTreeModel::fixRowsMoved()
     }
 }
 
+void cwFixStationTreeModel::announceFixRows()
+{
+    rebuildFixRows();
+    for (auto it = m_firstFixRow.constBegin(); it != m_firstFixRow.constEnd(); ++it) {
+        const int count = it.key()->fixStationCount();
+        if (count > 0) {
+            emit dataChanged(fixIndex(it.key(), 0), fixIndex(it.key(), count - 1), {});
+        }
+    }
+}
+
 bool cwFixStationTreeModel::isLeaving(const cwSurveyNode* holder, int row) const
 {
     return m_leavingNodes.contains(holder)
