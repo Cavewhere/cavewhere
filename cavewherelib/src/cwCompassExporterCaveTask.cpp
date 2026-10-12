@@ -146,31 +146,27 @@ void cwCompassExportCaveTask::writeDeclination(QTextStream &stream, cwTripCalibr
 }
 
 /**
-  Writes data to the stream, with a fieldLength.  FieldName is only used for error reporteding.
-  If data is longer then fieldLength, then data is truncated and an error is reported.
+  Writes data to the stream, padded to the width of fieldLength. FieldName is only used for
+  error reporting.
+
+  A negative fieldLength left-justifies data and pads it on the right; longer data is written
+  whole. A positive fieldLength right-justifies data; longer data is truncated to fieldLength
+  and a warning that names the original and truncated text is reported.
   */
 void cwCompassExportCaveTask::writeData(QTextStream& stream,
                                         QString fieldName,
                                         int fieldLength,
                                         QString data) {
-    QString paddedString;
-    if(fieldLength < 0) {
-        paddedString = QString("%1").arg(data, fieldLength);
-    } else {
-        //This is evil, need to resize from the left, not from the right
-        if(data.size() > fieldLength) {
-            data.resize(fieldLength);
-        }
-        paddedString = QString("%1").arg(data, fieldLength);
-    }
-
-    if(data.size() > fieldLength) {
+    if(fieldLength >= 0 && data.size() > fieldLength) {
+        //Keeps the leftmost fieldLength characters
+        const QString original = data;
+        data.resize(fieldLength);
         Errors.append(QString("Warning: Truncating %1 field from \"%2\" to \"%3\"").arg(fieldName,
-                                                                                        data,
-                                                                                        paddedString));
+                                                                                        original,
+                                                                                        data));
     }
 
-    stream << paddedString;
+    stream << QString("%1").arg(data, fieldLength);
 }
 
 /**
