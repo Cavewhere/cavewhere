@@ -161,6 +161,8 @@ public:
 
         int ring = kMouthRing;
         int column = 0;
+
+        bool operator==(const ZipCorner&) const = default;
     };
 
     // Where an arm joins the through chain that holds this window. The through
@@ -168,10 +170,14 @@ public:
     // left out; boundary is the hole's edge as (ring, column) through vertices,
     // counter-clockwise in (ring, column) space; zip closes the band between
     // boundary and the arm's mouth with triangles that belong to tripId.
+    // mouthCorners holds one corner per arm column: the mouth vertex itself, an
+    // earlier mouth vertex it was welded to, or the boundary vertex it was
+    // welded to. The arm's strip to its mouth and the zip band both use them.
     struct JunctionWindow {
         QSet<QPair<int, int>> removedQuads;
         QVector<QPair<int, int>> boundary;
         QVector<std::array<ZipCorner, 3>> zip;
+        QVector<ZipCorner> mouthCorners;
         int armChain = -1;
         bool isArmStart = false;
         QUuid tripId;
@@ -192,6 +198,10 @@ public:
         // end is not a mouth.
         QVector<QVector3D> startMouth;
         QVector<QVector3D> endMouth;
+        // The center of the fan that closes a mouth the stitch pass could not
+        // zip, inside the through tube; the mouth's centroid when unset.
+        std::optional<QVector3D> startFanCenter;
+        std::optional<QVector3D> endFanCenter;
         // The holes the arms joining this chain cut into it.
         QVector<JunctionWindow> windows;
         EndCap startCap = EndCap::Fan;

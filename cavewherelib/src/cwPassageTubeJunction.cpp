@@ -62,12 +62,27 @@ constexpr double kWindowMarginQuads = 0.25;
 constexpr double kFoldedZipPenalty = 1e6;
 constexpr double kSliverZipPenalty = 1e3;
 constexpr double kMaxZipAspectRatio = 20.0;
+// A sliver past the mesh check's aspect-ratio limit costs more again, so a
+// band that must take slivers takes the least thin ones.
+constexpr double kThinSliverZipPenalty = 1e5;
+constexpr double kMaxThinZipAspectRatio = 50.0;
 constexpr float kDegenerateLengthSquared = 1e-12f;
 constexpr double kParallelEpsilon = 1e-12;
 // A point this close to a through wall counts as on it, so a column that
 // starts on the wall can grow past it.
 constexpr double kOnWallMeters = 1e-5;
 constexpr double kMaxCarryDegrees = 45.0;
+// A mouth vertex this close to a window boundary vertex, or to the mouth
+// vertex before it, and within kWeldQuads of it on the through's grid, is
+// welded to it.
+constexpr double kWeldMeters = 0.03;
+constexpr double kWeldQuads = 1.0;
+// How far into the through a fan closing an unzipped mouth reaches, as a
+// fraction of the arm's largest radius.
+constexpr double kFanDepthFactor = 0.5;
+// Lets a segment that ends on, or passes through, a vertex or edge of the
+// through's triangles hit them despite rounding.
+constexpr double kBarycentricEpsilon = 1e-6;
 const double kMinCarryCosine = std::cos(qDegreesToRadians(kMaxCarryDegrees));
 
 using StationKey = QPair<QUuid, QString>;
@@ -233,13 +248,6 @@ double polarRadius(const Ring& ring, double theta)
         return ring.radii.at(span.low) * (1.0 - span.fraction) + ring.radii.at(span.high) * span.fraction;
     }
     return numerator / denominator;
-}
-
-// The polar angle theta as a fractional bin index around the ring.
-double binPosition(const Ring& ring, double theta)
-{
-    const BinSpan span = binSpan(ring, theta);
-    return span.low + span.fraction;
 }
 
 QPointF localOf(const Ring& ring, const QVector3D& point)
@@ -612,6 +620,8 @@ struct JunctionSolids {
     QVector3D throughTangent;
     QVector3D position;
     double reach = 0.0;
+    // How far along the through throughRings reach from the junction.
+    double unionReach = 0.0;
     double armRadius = 0.0;
     // Every point of the union lies within bound of the junction.
     double bound = 0.0;
@@ -715,16 +725,24 @@ double junctionSpacing(const Options& options, const Ring& throughRing, const QV
     return std::max(spacing, kMinRingSpacingMeters);
 }
 
-// The through rings the union reads. It reaches past the growth: a grazing
-// arm's far wall meets the through well beyond the arm's own radius.
-ThroughSpan unionSpan(const QVector<Ring>& rings, const QVector3D& junction, double reach)
+// How far along the through the union reads. It reaches past the growth: a
+// grazing arm's far wall clears the through's wall only where the arm's axis
+// lies the two radii off the through's axis.
+double unionReach(const Ring& throughRing, const QVector<ArmGeometry>& arms, double reach)
 {
-    return ThroughSpan(rings, junction, kUnionReachFactor * reach);
+    const double throughRadius = largestRadius(throughRing);
+    double result = kUnionReachFactor * reach;
+    for (const ArmGeometry& arm : arms) {
+        const double sine = QVector3D::crossProduct(throughRing.frame.tangent, arm.tangent).length();
+        const double farWall = (throughRadius + largestRadius(arm.rings.last())) / std::max(sine, kMinJunctionSine);
+        result = std::max(result, farWall + kJunctionReachMargin);
+    }
+    return result;
 }
 
-QVector<Ring> unionThroughRings(const QVector<Ring>& rings, const QVector3D& junction, double reach)
+QVector<Ring> unionThroughRings(const QVector<Ring>& rings, const QVector3D& junction, double unionReach)
 {
-    const ThroughSpan span = unionSpan(rings, junction, reach);
+    const ThroughSpan span(rings, junction, unionReach);
     return rings.mid(span.first, span.last - span.first + 1);
 }
 
@@ -734,11 +752,13 @@ JunctionSolids junctionSolids(const QVector<Chain>& chains, const Junction& junc
     const Chain& through = chains.at(junction.through);
     solids.arms = armGeometries(chains, junction);
     solids.position = junction.position;
-    solids.throughTangent = through.rings.at(junctionRingIndex(through.rings, junction.position)).frame.tangent;
+    const Ring& throughRing = through.rings.at(junctionRingIndex(through.rings, junction.position));
+    solids.throughTangent = throughRing.frame.tangent;
     solids.reach = junctionReach(solids.throughTangent, solids.arms);
+    solids.unionReach = unionReach(throughRing, solids.arms, solids.reach);
 
-    solids.throughRings = unionThroughRings(through.rings, junction.position, solids.reach);
-    solids.throughFirst = unionSpan(through.rings, junction.position, solids.reach).first;
+    solids.throughRings = unionThroughRings(through.rings, junction.position, solids.unionReach);
+    solids.throughFirst = ThroughSpan(through.rings, junction.position, solids.unionReach).first;
 
     double throughRadius = 0.0;
     for (const Ring& ring : std::as_const(solids.throughRings)) {
@@ -854,102 +874,337 @@ void growThrough(Chain& through, const JunctionSolids& solids)
     }
 }
 
-// The arm cut where it enters the grown through tube: its mouth, one point
-// per column, and how many of its rings, counted from the far end, stay
-// entirely outside.
+// A through side triangle split from its quad as the mesh writer splits it,
+// with each corner's place on the through's (ring, column) grid and the
+// outward normal, unnormalized.
+struct SurfaceTriangle {
+    std::array<QVector3D, 3> points;
+    std::array<QPointF, 3> parameters;
+    QVector3D normal;
+    QVector3D low;
+    QVector3D high;
+
+    bool overlapsBox(const QVector3D& boxLow, const QVector3D& boxHigh) const
+    {
+        return low.x() <= boxHigh.x() && high.x() >= boxLow.x()
+               && low.y() <= boxHigh.y() && high.y() >= boxLow.y()
+               && low.z() <= boxHigh.z() && high.z() >= boxLow.z();
+    }
+
+    // The point and its (ring, column) at barycentric weights u and v on the
+    // second and third corners.
+    QVector3D pointAt(double u, double v) const
+    {
+        return points[0] + (points[1] - points[0]) * static_cast<float>(u) + (points[2] - points[0]) * static_cast<float>(v);
+    }
+
+    QPointF parameterAt(double u, double v) const
+    {
+        return parameters[0] + (parameters[1] - parameters[0]) * u + (parameters[2] - parameters[0]) * v;
+    }
+};
+
+// A point on the through surface and its (ring, column) on the through's
+// grid.
+struct SurfacePoint {
+    QVector3D position;
+    QPointF parameter;
+};
+
+// Where a segment crosses the through surface: the point, its (ring, column)
+// on the through's grid, and how far along the segment it lies, 0 to 1.
+struct SurfaceHit {
+    QVector3D position;
+    QPointF parameter;
+    double along = 0.0;
+};
+
+// The side triangles between consecutive rings first to last of the
+// through, with its vertices placed as the mesh places them. Each quad
+// splits along its shorter diagonal, as cwPassageTubeBuilder's mesh writer
+// splits it.
+QVector<SurfaceTriangle> surfaceTriangles(Chain through, int first, int last)
+{
+    placeChainVertices(through);
+    const QVector<Ring>& rings = through.rings;
+    QVector<SurfaceTriangle> triangles;
+    const auto add = [&](const QVector3D& a, const QVector3D& b, const QVector3D& c,
+                         const QPointF& pa, const QPointF& pb, const QPointF& pc) {
+        const QVector3D low(std::min({a.x(), b.x(), c.x()}), std::min({a.y(), b.y(), c.y()}), std::min({a.z(), b.z(), c.z()}));
+        const QVector3D high(std::max({a.x(), b.x(), c.x()}), std::max({a.y(), b.y(), c.y()}), std::max({a.z(), b.z(), c.z()}));
+        triangles.append(SurfaceTriangle {{a, b, c}, {pa, pb, pc}, QVector3D::crossProduct(b - a, c - a), low, high});
+    };
+    for (int i = first; i < last; ++i) {
+        const Ring& ring = rings.at(i);
+        const Ring& next = rings.at(i + 1);
+        if (!hasValidFrame(ring) || !hasValidFrame(next)) {
+            continue;
+        }
+        const int resolution = ring.radii.size();
+        const double ringParameter = i;
+        for (int k = 0; k < resolution; ++k) {
+            const int nextColumn = (k + 1) % resolution;
+            const QVector3D& a0 = ring.vertices.at(k);
+            const QVector3D& a1 = ring.vertices.at(nextColumn);
+            const QVector3D& b0 = next.vertices.at(k);
+            const QVector3D& b1 = next.vertices.at(nextColumn);
+            const QPointF pa0(ringParameter, k);
+            const QPointF pa1(ringParameter, k + 1);
+            const QPointF pb0(ringParameter + 1, k);
+            const QPointF pb1(ringParameter + 1, k + 1);
+            if ((b1 - a0).lengthSquared() <= (b0 - a1).lengthSquared()) {
+                add(a0, b0, b1, pa0, pb0, pb1);
+                add(a0, b1, a1, pa0, pb1, pa1);
+            } else {
+                add(a0, b0, a1, pa0, pb0, pa1);
+                add(b0, b1, a1, pb0, pb1, pa1);
+            }
+        }
+    }
+    return triangles;
+}
+
+// Möller–Trumbore, as cwPassageTubeMeshCheck's rayCrosses: where the segment
+// from start to end crosses the triangle. The hit is placed by its
+// barycentric coordinates, so it lies on the triangle.
+std::optional<SurfaceHit> segmentCrossing(const SurfaceTriangle& triangle, const QVector3D& start, const QVector3D& end)
+{
+    const QVector3D direction = end - start;
+    const QVector3D edge1 = triangle.points[1] - triangle.points[0];
+    const QVector3D edge2 = triangle.points[2] - triangle.points[0];
+    const QVector3D p = QVector3D::crossProduct(direction, edge2);
+    const double determinant = QVector3D::dotProduct(edge1, p);
+    if (std::abs(determinant) < kParallelEpsilon) {
+        return std::nullopt;
+    }
+    const double inverse = 1.0 / determinant;
+    const QVector3D s = start - triangle.points[0];
+    const double u = QVector3D::dotProduct(s, p) * inverse;
+    if (u < -kBarycentricEpsilon || u > 1.0 + kBarycentricEpsilon) {
+        return std::nullopt;
+    }
+    const QVector3D q = QVector3D::crossProduct(s, edge1);
+    const double v = QVector3D::dotProduct(direction, q) * inverse;
+    if (v < -kBarycentricEpsilon || u + v > 1.0 + kBarycentricEpsilon) {
+        return std::nullopt;
+    }
+    const double along = QVector3D::dotProduct(edge2, q) * inverse;
+    if (along < -kBarycentricEpsilon || along > 1.0 + kBarycentricEpsilon) {
+        return std::nullopt;
+    }
+    return SurfaceHit {triangle.pointAt(u, v), triangle.parameterAt(u, v), along};
+}
+
+enum class Crossing {
+    Entering,
+    Any
+};
+
+// The crossing of the through surface nearest start along the segment to
+// end; an entering crossing meets a triangle from outside.
+std::optional<SurfaceHit> nearestCrossing(const QVector<SurfaceTriangle>& triangles,
+                                          const QVector3D& start,
+                                          const QVector3D& end,
+                                          Crossing crossing)
+{
+    const QVector3D low(std::min(start.x(), end.x()), std::min(start.y(), end.y()), std::min(start.z(), end.z()));
+    const QVector3D high(std::max(start.x(), end.x()), std::max(start.y(), end.y()), std::max(start.z(), end.z()));
+    const QVector3D direction = end - start;
+    std::optional<SurfaceHit> nearest;
+    for (const SurfaceTriangle& triangle : triangles) {
+        if (!triangle.overlapsBox(low, high)) {
+            continue;
+        }
+        if (crossing == Crossing::Entering && QVector3D::dotProduct(triangle.normal, direction) >= 0.0f) {
+            continue;
+        }
+        const std::optional<SurfaceHit> hit = segmentCrossing(triangle, start, end);
+        if (hit && (!nearest || hit->along < nearest->along)) {
+            nearest = hit;
+        }
+    }
+    return nearest;
+}
+
+// The point of the triangle closest to point, by its barycentric weights on
+// the triangle's second and third corners (Ericson, Real-Time Collision
+// Detection 5.1.5).
+QPointF closestWeights(const SurfaceTriangle& triangle, const QVector3D& point)
+{
+    const QVector3D& a = triangle.points[0];
+    const QVector3D& b = triangle.points[1];
+    const QVector3D& c = triangle.points[2];
+    const QVector3D ab = b - a;
+    const QVector3D ac = c - a;
+    const QVector3D ap = point - a;
+    const double d1 = QVector3D::dotProduct(ab, ap);
+    const double d2 = QVector3D::dotProduct(ac, ap);
+    if (d1 <= 0.0 && d2 <= 0.0) {
+        return QPointF(0.0, 0.0);
+    }
+    const QVector3D bp = point - b;
+    const double d3 = QVector3D::dotProduct(ab, bp);
+    const double d4 = QVector3D::dotProduct(ac, bp);
+    if (d3 >= 0.0 && d4 <= d3) {
+        return QPointF(1.0, 0.0);
+    }
+    const double vc = d1 * d4 - d3 * d2;
+    if (vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0) {
+        return QPointF(d1 / (d1 - d3), 0.0);
+    }
+    const QVector3D cp = point - c;
+    const double d5 = QVector3D::dotProduct(ab, cp);
+    const double d6 = QVector3D::dotProduct(ac, cp);
+    if (d6 >= 0.0 && d5 <= d6) {
+        return QPointF(0.0, 1.0);
+    }
+    const double vb = d5 * d2 - d1 * d6;
+    if (vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0) {
+        return QPointF(0.0, d2 / (d2 - d6));
+    }
+    const double va = d3 * d6 - d5 * d4;
+    if (va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0) {
+        const double w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        return QPointF(1.0 - w, w);
+    }
+    const double denominator = 1.0 / (va + vb + vc);
+    return QPointF(vb * denominator, vc * denominator);
+}
+
+// The point of the through surface nearest point, when one lies within
+// reach of it.
+std::optional<SurfacePoint> nearestOnSurface(const QVector<SurfaceTriangle>& triangles, const QVector3D& point, double reach)
+{
+    const QVector3D margin(reach, reach, reach);
+    const QVector3D low = point - margin;
+    const QVector3D high = point + margin;
+    std::optional<SurfacePoint> nearest;
+    double nearestDistance = reach;
+    for (const SurfaceTriangle& triangle : triangles) {
+        if (!triangle.overlapsBox(low, high)) {
+            continue;
+        }
+        const QPointF weights = closestWeights(triangle, point);
+        const QVector3D onTriangle = triangle.pointAt(weights.x(), weights.y());
+        const double distance = onTriangle.distanceToPoint(point);
+        if (distance <= nearestDistance) {
+            nearestDistance = distance;
+            nearest = SurfacePoint {onTriangle, triangle.parameterAt(weights.x(), weights.y())};
+        }
+    }
+    return nearest;
+}
+
+// The arm cut where it enters the grown through: its mouth, one point per
+// column on the through's triangles with its (ring, column) on the through's
+// grid, unset for a point off the through, and how many of its rings,
+// counted from the far end, stay entirely outside.
 struct Trim {
     QVector<QVector3D> mouth;
+    QVector<std::optional<QPointF>> parameters;
     int keptRings = 0;
 };
 
 // An arm that is also the through chain starts on the through, so it is cut
 // where it comes back into the through rather than where it starts there.
-Trim trimArm(const QVector<Ring>& rings, const QVector3D& tangent, const JunctionSolids& solids, bool startsOnThrough)
+Trim trimArm(const QVector<Ring>& rings,
+             const QVector3D& tangent,
+             const JunctionSolids& solids,
+             const QVector<SurfaceTriangle>& throughTriangles,
+             bool startsOnThrough)
 {
     const RingTube grownTube {&solids.grownThroughRings, {}};
     const auto inGrownThrough = [&](const QVector3D& point) {
         return solids.isNear(point) && grownTube.inside(point, kJunctionTolerance);
     };
-    const auto crossing = [&](QVector3D outside, QVector3D inside) {
-        for (int step = 0; step < kGrowBisections; ++step) {
-            const QVector3D middle = (outside + inside) / 2.0f;
-            (inGrownThrough(middle) ? inside : outside) = middle;
+    // A column of the through itself runs on its own surface until it
+    // leaves the through.
+    const auto isOutsideThrough = [&](const QVector3D& point) {
+        return !inGrownThrough(point) && !nearestOnSurface(throughTriangles, point, kJunctionTolerance);
+    };
+    // Where the segment first enters the through, or first comes within
+    // kJunctionTolerance of its surface, as a column running along a wall
+    // the growth took to the arm's own wall does, snapped onto the surface.
+    const auto entry = [&](const QVector3D& start, const QVector3D& end) -> std::optional<SurfaceHit> {
+        std::optional<SurfaceHit> hit = nearestCrossing(throughTriangles, start, end, Crossing::Entering);
+        if (hit && !solids.isNear(hit->position)) {
+            hit.reset();
         }
-        return (outside + inside) / 2.0f;
+        const int steps = std::max(1, static_cast<int>(std::ceil(start.distanceToPoint(end) / kGrowStep)));
+        for (int step = 1; step <= steps; ++step) {
+            const double along = static_cast<double>(step) / steps;
+            if (hit && hit->along <= along) {
+                break;
+            }
+            const QVector3D sample = start + (end - start) * static_cast<float>(along);
+            if (!solids.isNear(sample)) {
+                continue;
+            }
+            const std::optional<SurfacePoint> grazing = nearestOnSurface(throughTriangles, sample, kJunctionTolerance);
+            if (grazing) {
+                return SurfaceHit {grazing->position, grazing->parameter, along};
+            }
+        }
+        return hit;
     };
 
-    // Moves a point along its ring's radial direction onto the wall: the
-    // crossing of the wall between the ring's axis and well past the point.
-    const auto ontoThroughWall = [&](const QVector3D& point) {
+    // Where the ray from the through's axis out through the point, along its
+    // ring's radial direction, crosses the wall.
+    const auto ontoThroughWall = [&](const QVector3D& point) -> std::optional<SurfaceHit> {
         const int index = grownTube.nearestRing(point);
-        const std::optional<double> distance = grownTube.wallDistance(point);
-        if (index < 0 || !distance || std::abs(*distance) <= kJunctionTolerance) {
-            return point;
+        if (index < 0) {
+            return std::nullopt;
         }
         const Ring& ring = solids.grownThroughRings.at(index);
-        const QVector3D offset = point - ring.center;
-        const QVector3D axisPoint = ring.center + ring.frame.tangent * QVector3D::dotProduct(offset, ring.frame.tangent);
+        const QVector3D axisPoint = ring.center + ring.frame.tangent * QVector3D::dotProduct(point - ring.center, ring.frame.tangent);
         const QVector3D radial = point - axisPoint;
         if (radial.length() < kMinRingSpacingMeters) {
-            return point;
+            return std::nullopt;
         }
-        QVector3D inside = axisPoint;
-        QVector3D outside = axisPoint + radial * static_cast<float>(kWallSearchFactor);
-        if (!grownTube.inside(inside) || grownTube.inside(outside, kJunctionTolerance)) {
-            return point;
-        }
-        for (int step = 0; step < kGrowBisections; ++step) {
-            const QVector3D middle = (inside + outside) / 2.0f;
-            (grownTube.inside(middle, kJunctionTolerance) ? inside : outside) = middle;
-        }
-        return (inside + outside) / 2.0f;
+        return nearestCrossing(throughTriangles, axisPoint, axisPoint + radial * static_cast<float>(kWallSearchFactor), Crossing::Any);
     };
 
     const int count = rings.size();
     const int resolution = rings.last().radii.size();
-    const int extensionSteps = static_cast<int>(std::ceil(solids.reach / kGrowStep));
     Trim trim;
     trim.mouth.resize(resolution);
+    trim.parameters.resize(resolution);
     trim.keptRings = count;
 
     for (int bin = 0; bin < resolution; ++bin) {
         QVector<QVector3D> polyline;
-        polyline.reserve(count + extensionSteps);
+        polyline.reserve(count + 1);
         for (const Ring& ring : rings) {
             polyline.append(unpulledVertex(ring, bin));
         }
-        for (int step = 1; step <= extensionSteps; ++step) {
-            polyline.append(polyline.at(count - 1) + tangent * static_cast<float>(step * kGrowStep));
-        }
+        polyline.append(polyline.last() + tangent * static_cast<float>(solids.reach));
 
         // Rings up to lastOutside keep this column outside the through. A
         // column that misses the through ends on its wall, level with its
         // own last vertex.
         int lastOutside = count - 2;
-        trim.mouth[bin] = ontoThroughWall(polyline.at(count - 1));
+        const std::optional<SurfaceHit> onWall = ontoThroughWall(polyline.at(count - 1));
+        trim.mouth[bin] = onWall ? onWall->position : polyline.at(count - 1);
+        trim.parameters[bin] = onWall ? std::optional<QPointF>(onWall->parameter) : std::nullopt;
         const auto findEntry = [&]() {
-            bool hasLeftThrough = !inGrownThrough(polyline.first());
+            bool hasLeftThrough = startsOnThrough ? isOutsideThrough(polyline.first()) : !inGrownThrough(polyline.first());
             if (!hasLeftThrough && !startsOnThrough) {
                 lastOutside = -1;
                 trim.mouth[bin] = polyline.first();
+                trim.parameters[bin].reset();
                 return;
             }
             for (int index = 1; index < polyline.size(); ++index) {
-                const QVector3D from = polyline.at(index - 1);
-                const QVector3D to = polyline.at(index);
-                const int steps = std::max(1, static_cast<int>(std::ceil(from.distanceToPoint(to) / kGrowStep)));
-                QVector3D previous = from;
-                for (int step = 1; step <= steps; ++step) {
-                    const QVector3D sample = from + (to - from) * (static_cast<float>(step) / steps);
-                    const bool isInside = inGrownThrough(sample);
-                    if (isInside && hasLeftThrough) {
-                        trim.mouth[bin] = ontoThroughWall(crossing(previous, sample));
+                if (hasLeftThrough) {
+                    const std::optional<SurfaceHit> hit = entry(polyline.at(index - 1), polyline.at(index));
+                    if (hit) {
+                        trim.mouth[bin] = hit->position;
+                        trim.parameters[bin] = hit->parameter;
                         lastOutside = std::min(index - 1, count - 1);
                         return;
                     }
-                    hasLeftThrough = hasLeftThrough || !isInside;
-                    previous = sample;
                 }
+                hasLeftThrough = hasLeftThrough || isOutsideThrough(polyline.at(index));
             }
         };
         findEntry();
@@ -993,68 +1248,43 @@ QUuid junctionTrip(const QVector<Leg>& legs, const Chain& arm, bool isStart)
     return legs.at(chainLeg.legIndex).tripId;
 }
 
-// Cuts the arm back to the rings outside the union and gives it the mouth.
-// Returns false when no ring stays outside: the arm lies inside the through
-// and is left out, or, when it is the through itself, keeps a fan.
-bool applyTrim(const QVector<Leg>& legs, Chain& arm, const ArmGeometry& geometry, const JunctionSolids& solids, QVector<Warning>& warnings)
+// Leaves out an arm none of whose rings stays outside the through: it lies
+// inside the through and is dropped, or, when it is the through itself,
+// keeps a fan.
+void leaveOutArm(const QVector<Leg>& legs, Chain& arm, bool isStart, int firstRing, QVector<Warning>& warnings)
 {
-    const bool isStart = geometry.end.isStart;
-    const QVector<Ring> rings = ringsTowardJunction(arm, isStart).mid(geometry.firstRing);
-    if (rings.size() < 2) {
-        return false;
+    if (firstRing > 0) {
+        capAt(arm, isStart) = EndCap::Fan;
+    } else {
+        dropArm(legs, arm, isStart,
+                QStringLiteral("The passage from station %1 lies inside the passage it joins; the tube leaves it out."), warnings);
     }
-    const Trim trim = trimArm(rings, arrivingTangent(arm, isStart), solids, geometry.firstRing > 0);
-    if (trim.keptRings <= 0) {
-        if (geometry.firstRing > 0) {
-            capAt(arm, isStart) = EndCap::Fan;
-        } else {
-            dropArm(legs, arm, isStart,
-                    QStringLiteral("The passage from station %1 lies inside the passage it joins; the tube leaves it out."), warnings);
-        }
-        return false;
-    }
-    const int kept = geometry.firstRing + trim.keptRings;
+}
+
+// Cuts the arm back to the rings the trim keeps and gives it the mouth.
+// Returns how many rings it removed from the chain's start.
+int cutArm(Chain& arm, bool isStart, int firstRing, const Trim& trim)
+{
+    const int kept = firstRing + trim.keptRings;
     const int dropped = arm.rings.size() - kept;
     if (isStart) {
         arm.rings.remove(0, dropped);
         arm.startMouth = trim.mouth;
-    } else {
-        arm.rings.remove(kept, dropped);
-        arm.endMouth = trim.mouth;
+        return dropped;
     }
-    return true;
-}
-
-// A point on the through surface as (ring, column): ring fractional between
-// neighbors, column fractional from its angle around the rings.
-std::optional<QPointF> surfaceParameter(const QVector<Ring>& rings, const ThroughSpan& span, const QVector3D& point)
-{
-    const Slab slab = slabOf(rings, point, span.first, span.last, QVector3D());
-    if (slab.segment < 0) {
-        return std::nullopt;
-    }
-    const Ring& a = rings.at(slab.segment);
-    const Ring& b = rings.at(slab.segment + 1);
-    const QPointF localA = localOf(a, point);
-    const QPointF localB = localOf(b, point);
-    const int resolution = a.radii.size();
-    const double columnA = binPosition(a, std::atan2(localA.y(), localA.x()));
-    const double columnB = binPosition(b, std::atan2(localB.y(), localB.x()));
-    const double nearColumnB = columnB + resolution * std::round((columnA - columnB) / resolution);
-    const double column = std::fmod(columnA + (nearColumnB - columnA) * slab.fraction + resolution, resolution);
-    return QPointF(slab.segment + slab.fraction, column);
+    arm.rings.remove(kept, dropped);
+    arm.endMouth = trim.mouth;
+    return 0;
 }
 
 // The mouth in (ring, column) space, unwrapped across the column seam so it
 // reads as one closed polygon; nullopt when a point lies off the through or
 // the mouth wraps all the way around it.
-std::optional<QVector<QPointF>> mouthPolygon(const QVector<Ring>& rings, const ThroughSpan& span, const QVector<QVector3D>& mouth)
+std::optional<QVector<QPointF>> mouthPolygon(const QVector<std::optional<QPointF>>& parameters, int resolution)
 {
-    const int resolution = rings.at(span.junctionRing).radii.size();
     QVector<QPointF> polygon;
-    polygon.reserve(mouth.size());
-    for (const QVector3D& point : mouth) {
-        const std::optional<QPointF> parameter = surfaceParameter(rings, span, point);
+    polygon.reserve(parameters.size());
+    for (const std::optional<QPointF>& parameter : parameters) {
         if (!parameter) {
             return std::nullopt;
         }
@@ -1265,32 +1495,45 @@ double zipTriangleCost(const QPointF& a, const QPointF& b, const QPointF& c,
     }
     const double area = normal.length() / 2.0;
     const double longest = std::max({pa.distanceToPoint(pb), pb.distanceToPoint(pc), pc.distanceToPoint(pa)});
-    if (area <= 0.0 || longest * longest / (2.0 * area) > kMaxZipAspectRatio) {
+    const double aspectRatio = area <= 0.0 ? std::numeric_limits<double>::max() : longest * longest / (2.0 * area);
+    if (aspectRatio > kMaxZipAspectRatio) {
         cost += kSliverZipPenalty;
+    }
+    if (aspectRatio > kMaxThinZipAspectRatio) {
+        cost += kThinSliverZipPenalty;
     }
     return cost;
 }
 
-// Triangulates the band between the window boundary and the mouth, both
+// A vertex of the mouth loop: its corner, which is a window boundary vertex
+// where the mouth was welded to it, its place on the through's grid and its
+// position.
+struct LoopVertex {
+    ZipCorner corner;
+    QPointF parameter;
+    QVector3D position;
+};
+
+// Triangulates the band between the window boundary and the mouth loop, both
 // counter-clockwise in (ring, column) space, starting from the boundary
 // vertex in the direction of the first mouth vertex from the mouth's
 // centroid. Of all the ways to step around the two loops, it takes the one
 // with the least total cost (Fuchs, Kedem and Uselton 1977): the shortest
-// bridging edges, with unfolded, well-shaped triangles.
+// bridging edges, with unfolded, well-shaped triangles. A triangle with two
+// equal corners, where the mouth is welded to the boundary, costs nothing
+// and is left out.
 QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
                                           const QVector<Vertex>& boundary,
-                                          const QVector<QVector3D>& mouth,
-                                          const QVector<QPointF>& mouthPolygon,
-                                          const QVector<int>& mouthOrder,
+                                          const QVector<LoopVertex>& mouth,
                                           int resolution)
 {
     QPointF center;
-    for (const QPointF& point : mouthPolygon) {
-        center += point;
+    for (const LoopVertex& vertex : mouth) {
+        center += vertex.parameter;
     }
-    center /= mouthPolygon.size();
+    center /= mouth.size();
 
-    const int mouthCount = mouthOrder.size();
+    const int mouthCount = mouth.size();
     const int boundaryCount = boundary.size();
     const auto boundaryParameter = [&](const Vertex& vertex) {
         const double column = vertex.second + resolution * std::round((center.y() - vertex.second) / resolution);
@@ -1301,7 +1544,7 @@ QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
         return std::atan2(toward.y(), toward.x());
     };
 
-    const double startAngle = angleAbout(mouthPolygon.at(mouthOrder.first()));
+    const double startAngle = angleAbout(mouth.first().parameter);
     int offset = 0;
     double offsetGap = std::numeric_limits<double>::max();
     for (int j = 0; j < boundaryCount; ++j) {
@@ -1312,8 +1555,7 @@ QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
         }
     }
 
-    const auto mouthAt = [&](int i) { return mouthPolygon.at(mouthOrder.at(i % mouthCount)); };
-    const auto mouth3d = [&](int i) { return mouth.at(mouthOrder.at(i % mouthCount)); };
+    const auto mouthVertex = [&](int i) -> const LoopVertex& { return mouth.at(i % mouthCount); };
     const auto boundaryVertex = [&](int j) { return boundary.at((j + offset) % boundaryCount); };
     const auto boundaryAt = [&](int j) { return boundaryParameter(boundaryVertex(j)); };
     const auto boundary3d = [&](int j) {
@@ -1325,6 +1567,11 @@ QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
         const Vertex& vertex = boundaryVertex(j);
         return binDirection(rings.at(vertex.first), vertex.second);
     };
+    const auto boundaryCorner = [&](int j) {
+        const Vertex& vertex = boundaryVertex(j);
+        return ZipCorner {vertex.first, vertex.second};
+    };
+    const auto mouthCorner = [&](int i) { return mouthVertex(i).corner; };
 
     // State (i, j) has bridged mouth vertex i to boundary vertex j. The band
     // either opens with a boundary step and closes with a mouth step, or the
@@ -1353,20 +1600,24 @@ QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
                     continue;
                 }
                 if (j < boundaryCount && isAllowed(i, j + 1)) {
-                    const double step = here + zipTriangleCost(boundaryAt(j), boundaryAt(j + 1), mouthAt(i),
-                                                               boundary3d(j), boundary3d(j + 1), mouth3d(i),
-                                                               outwardAt(j) + outwardAt(j + 1),
-                                                               mouth3d(i).distanceToPoint(boundary3d(j + 1)));
+                    const bool isWelded = mouthCorner(i) == boundaryCorner(j) || mouthCorner(i) == boundaryCorner(j + 1);
+                    const double step = here + (isWelded ? 0.0
+                                                          : zipTriangleCost(boundaryAt(j), boundaryAt(j + 1), mouthVertex(i).parameter,
+                                                                            boundary3d(j), boundary3d(j + 1), mouthVertex(i).position,
+                                                                            outwardAt(j) + outwardAt(j + 1),
+                                                                            mouthVertex(i).position.distanceToPoint(boundary3d(j + 1))));
                     if (step < path.cost.at(stateIndex(i, j + 1))) {
                         path.cost[stateIndex(i, j + 1)] = step;
                         path.cameByBoundaryStep[stateIndex(i, j + 1)] = true;
                     }
                 }
                 if (i < mouthCount && isAllowed(i + 1, j)) {
-                    const double step = here + zipTriangleCost(mouthAt(i), boundaryAt(j), mouthAt(i + 1),
-                                                               mouth3d(i), boundary3d(j), mouth3d(i + 1),
-                                                               outwardAt(j),
-                                                               mouth3d(i + 1).distanceToPoint(boundary3d(j)));
+                    const bool isWelded = mouthCorner(i) == boundaryCorner(j) || mouthCorner(i + 1) == boundaryCorner(j);
+                    const double step = here + (isWelded ? 0.0
+                                                          : zipTriangleCost(mouthVertex(i).parameter, boundaryAt(j), mouthVertex(i + 1).parameter,
+                                                                            mouthVertex(i).position, boundary3d(j), mouthVertex(i + 1).position,
+                                                                            outwardAt(j),
+                                                                            mouthVertex(i + 1).position.distanceToPoint(boundary3d(j))));
                     if (step < path.cost.at(stateIndex(i + 1, j))) {
                         path.cost[stateIndex(i + 1, j)] = step;
                         path.cameByBoundaryStep[stateIndex(i + 1, j)] = false;
@@ -1383,25 +1634,22 @@ QVector<std::array<ZipCorner, 3>> zipBand(const QVector<Ring>& rings,
                                                   ? opensWithBoundary.cameByBoundaryStep
                                                   : opensWithMouth.cameByBoundaryStep;
 
-    const auto boundaryCorner = [&](int j) {
-        const Vertex& vertex = boundaryVertex(j);
-        return ZipCorner {vertex.first, vertex.second};
-    };
-    const auto mouthCorner = [&](int i) {
-        return ZipCorner {ZipCorner::kMouthRing, mouthOrder.at(i % mouthCount)};
-    };
-
     QVector<std::array<ZipCorner, 3>> triangles;
     triangles.reserve(mouthCount + boundaryCount);
+    const auto addTriangle = [&](const ZipCorner& a, const ZipCorner& b, const ZipCorner& c) {
+        if (a != b && b != c && c != a) {
+            triangles.append({a, b, c});
+        }
+    };
     int i = mouthCount;
     int j = boundaryCount;
     while (i > 0 || j > 0) {
         if (cameByBoundaryStep.at(stateIndex(i, j))) {
             --j;
-            triangles.append({boundaryCorner(j), boundaryCorner(j + 1), mouthCorner(i)});
+            addTriangle(boundaryCorner(j), boundaryCorner(j + 1), mouthCorner(i));
         } else {
             --i;
-            triangles.append({mouthCorner(i), boundaryCorner(j), mouthCorner(i + 1)});
+            addTriangle(mouthCorner(i), boundaryCorner(j), mouthCorner(i + 1));
         }
     }
     std::reverse(triangles.begin(), triangles.end());
@@ -1431,10 +1679,11 @@ bool hasMeshedMouthEnd(const Chain& arm, bool isStart)
 }
 
 // An arm whose mouth cannot be zipped closes with a fan over the strip to its
-// mouth. A mouth point that lies behind the arm's end ring, where a column
-// that missed the through found a far part of it, would turn that strip
-// inside out, so such an arm closes on its end ring instead.
-void closeWithFan(Chain& arm, bool isStart)
+// mouth, its center pulled into the through along the arm so the fan stays
+// hidden inside it. A mouth point that lies behind the arm's end ring, where
+// a column that missed the through found a far part of it, would turn that
+// strip inside out, so such an arm closes on its end ring instead.
+void closeWithFan(Chain& arm, bool isStart, const RingTube& through)
 {
     capAt(arm, isStart) = EndCap::Fan;
     QVector<QVector3D>& mouth = isStart ? arm.startMouth : arm.endMouth;
@@ -1448,17 +1697,129 @@ void closeWithFan(Chain& arm, bool isStart)
     });
     if (!isAhead) {
         mouth.clear();
+        return;
     }
+
+    QVector3D centroid;
+    for (const QVector3D& point : std::as_const(mouth)) {
+        centroid += point;
+    }
+    centroid /= static_cast<float>(mouth.size());
+    QVector3D inside = centroid;
+    QVector3D outside = centroid + tangent * static_cast<float>(largestRadius(end) * kFanDepthFactor);
+    if (through.inside(outside)) {
+        inside = outside;
+    } else if (through.inside(centroid)) {
+        for (int step = 0; step < kGrowBisections; ++step) {
+            const QVector3D middle = (inside + outside) / 2.0f;
+            (through.inside(middle) ? inside : outside) = middle;
+        }
+    }
+    (isStart ? arm.startFanCenter : arm.endFanCenter) = inside;
 }
 
-// Cuts the window for one arm's mouth into the through and zips them, or
-// returns nullopt when the mouth cannot be zipped.
-std::optional<JunctionWindow> cutWindow(const Chain& through, const ThroughSpan& span, const Chain& arm, const ArmEnd& end)
+// Each mouth vertex's corner after welding: a window boundary vertex within
+// kWeldMeters of it and kWeldQuads of it on the through's grid, or else the
+// mouth vertex before it when that close, or itself. A mouth vertex welded
+// to a boundary vertex takes the mouth vertices welded to it along. Without
+// welds when they would leave the mouth loop pinched or with fewer than
+// three vertices.
+QVector<ZipCorner> weldedMouthCorners(const QVector<Ring>& rings,
+                                      const QVector<Vertex>& boundary,
+                                      const QVector<QVector3D>& mouth,
+                                      const QVector<QPointF>& polygon,
+                                      int resolution)
+{
+    const int count = mouth.size();
+    QVector<ZipCorner> corners(count);
+    for (int k = 0; k < count; ++k) {
+        corners[k] = ZipCorner {ZipCorner::kMouthRing, k};
+    }
+    const QVector<ZipCorner> unwelded = corners;
+
+    const auto columnNear = [resolution](const QPointF& parameter, double reference) {
+        return QPointF(parameter.x(), parameter.y() + resolution * std::round((reference - parameter.y()) / resolution));
+    };
+    const auto positionOf = [&](const ZipCorner& corner) {
+        return corner.ring == ZipCorner::kMouthRing ? mouth.at(corner.column) : unpulledVertex(rings.at(corner.ring), corner.column);
+    };
+    const auto parameterOf = [&](const ZipCorner& corner, double reference) {
+        return corner.ring == ZipCorner::kMouthRing ? columnNear(polygon.at(corner.column), reference)
+                                                    : columnNear(QPointF(corner.ring, corner.column), reference);
+    };
+    const auto isWeldable = [&](int k, const ZipCorner& corner) {
+        const QPointF parameter = parameterOf(corner, polygon.at(k).y());
+        return positionOf(corner).distanceToPoint(mouth.at(k)) <= kWeldMeters
+               && std::abs(parameter.x() - polygon.at(k).x()) <= kWeldQuads
+               && std::abs(parameter.y() - polygon.at(k).y()) <= kWeldQuads;
+    };
+
+    for (int k = 0; k < count; ++k) {
+        double nearest = std::numeric_limits<double>::max();
+        for (const Vertex& vertex : boundary) {
+            const ZipCorner corner {vertex.first, vertex.second};
+            const double distance = positionOf(corner).distanceToPoint(mouth.at(k));
+            if (distance < nearest && isWeldable(k, corner)) {
+                nearest = distance;
+                corners[k] = corner;
+            }
+        }
+    }
+
+    const auto collapse = [&](int k, int previous) {
+        const ZipCorner here = corners.at(k);
+        const ZipCorner before = corners.at(previous);
+        if (here == before || !isWeldable(k, before)) {
+            return;
+        }
+        if (here.ring == ZipCorner::kMouthRing) {
+            corners[k] = before;
+        } else if (before.ring == ZipCorner::kMouthRing) {
+            std::replace(corners.begin(), corners.end(), before, here);
+        }
+    };
+    for (int k = 1; k < count; ++k) {
+        collapse(k, k - 1);
+    }
+    collapse(0, count - 1);
+
+    // The loop with consecutive repeats removed visits each corner once.
+    QVector<ZipCorner> loop;
+    for (int k = 0; k < count; ++k) {
+        if (corners.at(k) != corners.at((k + count - 1) % count)) {
+            loop.append(corners.at(k));
+        }
+    }
+    QSet<QPair<int, int>> visited;
+    for (const ZipCorner& corner : std::as_const(loop)) {
+        visited.insert({corner.ring, corner.column});
+    }
+    if (loop.size() < 3 || visited.size() != loop.size()) {
+        return unwelded;
+    }
+    return corners;
+}
+
+// A window cut for one arm's mouth, or why the mouth cannot be zipped: off
+// the through, or its columns run the wrong way around it.
+struct WindowCut {
+    std::optional<JunctionWindow> window;
+    bool isMouthReversed = false;
+};
+
+// Cuts the window for one arm's mouth into the through and zips them.
+// parameters place each mouth point on the through's grid.
+WindowCut cutWindow(const Chain& through,
+                    const ThroughSpan& span,
+                    const Chain& arm,
+                    const ArmEnd& end,
+                    const QVector<std::optional<QPointF>>& parameters)
 {
     const QVector<QVector3D>& mouth = end.isStart ? arm.startMouth : arm.endMouth;
-    const std::optional<QVector<QPointF>> polygon = mouthPolygon(through.rings, span, mouth);
+    const int resolution = through.rings.at(span.junctionRing).radii.size();
+    const std::optional<QVector<QPointF>> polygon = mouthPolygon(parameters, resolution);
     if (!polygon) {
-        return std::nullopt;
+        return {};
     }
 
     // The arm's strip runs its mouth in column order; the zip band must run
@@ -1466,29 +1827,136 @@ std::optional<JunctionWindow> cutWindow(const Chain& through, const ThroughSpan&
     // arm arriving at its end and clockwise around one leaving at its start.
     const bool isColumnOrderCounterClockwise = signedArea(*polygon) > 0.0;
     if (isColumnOrderCounterClockwise == end.isStart) {
-        return std::nullopt;
+        return WindowCut {std::nullopt, true};
     }
 
-    const int resolution = through.rings.at(span.junctionRing).radii.size();
     const QSet<Vertex> removed = removedQuads(through.rings, span, *polygon);
     const std::optional<QVector<Vertex>> boundary = windowBoundary(removed, resolution);
     if (!boundary) {
-        return std::nullopt;
+        return {};
     }
 
-    QVector<int> mouthOrder;
-    mouthOrder.reserve(mouth.size());
+    const QVector<ZipCorner> corners = weldedMouthCorners(through.rings, *boundary, mouth, *polygon, resolution);
+    QVector<LoopVertex> loop;
+    loop.reserve(mouth.size());
     for (int k = 0; k < mouth.size(); ++k) {
-        mouthOrder.append(end.isStart ? (mouth.size() - k) % mouth.size() : k);
+        const int column = end.isStart ? (mouth.size() - k) % mouth.size() : k;
+        const ZipCorner& corner = corners.at(column);
+        if (!loop.isEmpty() && (loop.last().corner == corner || loop.first().corner == corner)) {
+            continue;
+        }
+        if (corner.ring == ZipCorner::kMouthRing) {
+            loop.append(LoopVertex {corner, polygon->at(corner.column), mouth.at(corner.column)});
+        } else {
+            const double nearColumn = corner.column + resolution * std::round((polygon->at(column).y() - corner.column) / resolution);
+            loop.append(LoopVertex {corner, QPointF(corner.ring, nearColumn), unpulledVertex(through.rings.at(corner.ring), corner.column)});
+        }
     }
 
     JunctionWindow window;
     window.removedQuads = removed;
     window.boundary = *boundary;
-    window.zip = zipBand(through.rings, *boundary, mouth, *polygon, mouthOrder, resolution);
+    window.zip = zipBand(through.rings, *boundary, loop, resolution);
+    window.mouthCorners = corners;
     window.armChain = end.chain;
     window.isArmStart = end.isStart;
-    return window;
+    return WindowCut {window, false};
+}
+
+using ArmKey = QPair<int, bool>;
+
+ArmKey armKey(const ArmEnd& end)
+{
+    return {end.chain, end.isStart};
+}
+
+// An arm cut back to its mouth, with each mouth point's place on the
+// through's grid.
+struct TrimmedArm {
+    ArmEnd end;
+    QVector<std::optional<QPointF>> parameters;
+};
+
+// The arms each junction's growth and trims left with a mouth, and how many
+// rings each chain lost from its start, which shifts the ring parameters of
+// mouths on it.
+struct Stitch {
+    QVector<QVector<TrimmedArm>> trimmedArms;
+    QVector<int> removedFromStart;
+};
+
+// Grows each junction's through to take its arms' sections, then trims the
+// arms against it. The arms in leftOut are left out of the growth and the
+// trims; an arm with no ring outside the through is left out and added to
+// leftOut.
+Stitch growAndTrim(const QVector<Leg>& legs,
+                   QVector<Chain>& chains,
+                   const QVector<Junction>& junctions,
+                   QSet<ArmKey>& leftOut,
+                   QVector<Warning>& warnings)
+{
+    QVector<JunctionSolids> solids;
+    solids.reserve(junctions.size());
+    for (const Junction& junction : junctions) {
+        Junction kept = junction;
+        kept.arms.removeIf([&](const ArmEnd& end) { return leftOut.contains(armKey(end)); });
+        solids.append(junctionSolids(chains, kept));
+    }
+
+    for (int j = 0; j < junctions.size(); ++j) {
+        growThrough(chains[junctions.at(j).through], solids.at(j));
+    }
+    for (int j = 0; j < junctions.size(); ++j) {
+        solids[j].grownThroughRings = unionThroughRings(chains.at(junctions.at(j).through).rings,
+                                                        junctions.at(j).position, solids.at(j).unionReach);
+    }
+
+    // Before any trim shortens a through that is also an arm.
+    QVector<QVector<SurfaceTriangle>> throughTriangles;
+    throughTriangles.reserve(junctions.size());
+    for (int j = 0; j < junctions.size(); ++j) {
+        const int first = solids.at(j).throughFirst;
+        throughTriangles.append(surfaceTriangles(chains.at(junctions.at(j).through), first, first + solids.at(j).grownThroughRings.size() - 1));
+    }
+
+    Stitch stitch {QVector<QVector<TrimmedArm>>(junctions.size()), QVector<int>(chains.size(), 0)};
+    for (int j = 0; j < junctions.size(); ++j) {
+        const JunctionSolids& junctionSolids = solids.at(j);
+        for (const ArmEnd& end : junctions.at(j).arms) {
+            Chain& arm = chains[end.chain];
+            const int firstRing = armFirstRing(arm, end, junctions.at(j));
+            if (leftOut.contains(armKey(end))) {
+                leaveOutArm(legs, arm, end.isStart, firstRing, warnings);
+                continue;
+            }
+            const QVector<Ring> rings = ringsTowardJunction(arm, end.isStart).mid(firstRing);
+            if (rings.size() < 2) {
+                continue;
+            }
+            const Trim trim = trimArm(rings, arrivingTangent(arm, end.isStart), junctionSolids, throughTriangles.at(j), firstRing > 0);
+            if (trim.keptRings <= 0) {
+                leaveOutArm(legs, arm, end.isStart, firstRing, warnings);
+                leftOut.insert(armKey(end));
+                continue;
+            }
+            stitch.removedFromStart[end.chain] += cutArm(arm, end.isStart, firstRing, trim);
+            stitch.trimmedArms[j].append(TrimmedArm {end, trim.parameters});
+        }
+    }
+    return stitch;
+}
+
+// Moves each mouth point welded to a through vertex onto it, and each one
+// welded to an earlier mouth point onto that.
+void applyWelds(Chain& arm, const Chain& through, const JunctionWindow& window)
+{
+    QVector<QVector3D>& mouth = window.isArmStart ? arm.startMouth : arm.endMouth;
+    const QVector<QVector3D> unwelded = mouth;
+    for (int k = 0; k < mouth.size(); ++k) {
+        const ZipCorner& corner = window.mouthCorners.at(k);
+        mouth[k] = corner.ring == ZipCorner::kMouthRing ? unwelded.at(corner.column)
+                                                         : unpulledVertex(through.rings.at(corner.ring), corner.column);
+    }
 }
 
 } // namespace
@@ -1561,43 +2029,34 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
         densify(through, junction.position, reach, spacing);
     }
 
-    QVector<JunctionSolids> solids;
-    solids.reserve(junctions.size());
-    for (const Junction& junction : std::as_const(junctions)) {
-        solids.append(junctionSolids(chains, junction));
-    }
-
-    for (int j = 0; j < junctions.size(); ++j) {
-        growThrough(chains[junctions.at(j).through], solids.at(j));
-    }
-    for (int j = 0; j < junctions.size(); ++j) {
-        solids[j].grownThroughRings = unionThroughRings(chains.at(junctions.at(j).through).rings,
-                                                        junctions.at(j).position, solids.at(j).reach);
-    }
-
-    QVector<QVector<ArmEnd>> trimmedArms(junctions.size());
-    for (int j = 0; j < junctions.size(); ++j) {
-        for (const ArmGeometry& arm : solids.at(j).arms) {
-            if (applyTrim(legs, chains[arm.end.chain], arm, solids.at(j), warnings)) {
-                trimmedArms[j].append(arm.end);
-            }
-        }
+    // An arm left out after the growth leaves the through grown where it
+    // poked out, so the through grows again without it.
+    const QVector<Chain> densified = chains;
+    const qsizetype warningCount = warnings.size();
+    QSet<ArmKey> leftOut;
+    Stitch stitch = growAndTrim(legs, chains, junctions, leftOut, warnings);
+    if (!leftOut.isEmpty()) {
+        chains = densified;
+        warnings.resize(warningCount);
+        stitch = growAndTrim(legs, chains, junctions, leftOut, warnings);
     }
 
     for (int j = 0; j < junctions.size(); ++j) {
         const Junction& junction = junctions.at(j);
         Chain& through = chains[junction.through];
-        QVector<ArmEnd> arms = trimmedArms.at(j);
+        const RingTube throughTube {&through.rings, {}};
+        QVector<TrimmedArm> arms = stitch.trimmedArms.at(j);
         if (through.rings.size() < 2) {
-            for (const ArmEnd& end : std::as_const(arms)) {
-                closeWithFan(chains[end.chain], end.isStart);
+            for (const TrimmedArm& trimmed : std::as_const(arms)) {
+                closeWithFan(chains[trimmed.end.chain], trimmed.end.isStart, throughTube);
             }
             continue;
         }
         const ThroughSpan span(through.rings, junction.position, std::numeric_limits<double>::max());
-        std::sort(arms.begin(), arms.end(), [](const ArmEnd& a, const ArmEnd& b) { return a.chain < b.chain; });
+        std::sort(arms.begin(), arms.end(), [](const TrimmedArm& a, const TrimmedArm& b) { return a.end.chain < b.end.chain; });
 
-        for (const ArmEnd& end : std::as_const(arms)) {
+        for (const TrimmedArm& trimmed : std::as_const(arms)) {
+            const ArmEnd& end = trimmed.end;
             Chain& arm = chains[end.chain];
             // An arm joining two passages can be left inside the second, or
             // with too little between its two mouths to mesh.
@@ -1612,22 +2071,35 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
                 }
                 continue;
             }
+            QVector<std::optional<QPointF>> parameters = trimmed.parameters;
+            for (std::optional<QPointF>& parameter : parameters) {
+                if (parameter) {
+                    parameter->rx() -= stitch.removedFromStart.at(junction.through);
+                }
+            }
             const QUuid tripId = junctionTrip(legs, arm, end.isStart);
-            std::optional<JunctionWindow> window = cutWindow(through, span, arm, end);
-            if (window && overlapsWindows(through.windows, *window)) {
+            WindowCut cut = cutWindow(through, span, arm, end, parameters);
+            if (cut.window && overlapsWindows(through.windows, *cut.window)) {
                 warnings.append(Warning {
                     Warning::JunctionOverlap,
                     tripId,
                     junction.station,
-                    QStringLiteral("Two passages open into station %1 through the same wall; the tube caps one inside the other.").arg(junction.station)
+                    QStringLiteral("Two passages open into station %1 through the same wall; the tube ends one inside the other.").arg(junction.station)
                 });
-                window.reset();
+                cut.window.reset();
+            } else if (cut.isMouthReversed) {
+                warnings.append(armWarning(legs, arm, end.isStart, Warning::JunctionUnzipped,
+                                           QStringLiteral("The mouth of the passage from station %1 runs backward around the passage it joins; the tube ends it inside that passage.")));
+            } else if (!cut.window) {
+                warnings.append(armWarning(legs, arm, end.isStart, Warning::JunctionUnzipped,
+                                           QStringLiteral("The passage from station %1 could not be joined to the passage it opens into; the tube ends it inside that passage.")));
             }
-            if (window) {
-                window->tripId = tripId;
-                through.windows.append(*window);
+            if (cut.window) {
+                cut.window->tripId = tripId;
+                applyWelds(arm, through, *cut.window);
+                through.windows.append(*cut.window);
             } else {
-                closeWithFan(arm, end.isStart);
+                closeWithFan(arm, end.isStart, throughTube);
             }
         }
     }

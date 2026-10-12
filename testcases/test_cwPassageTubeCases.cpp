@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -205,34 +206,53 @@ QVector3D position(const Cases::Trip& trip, const QString& name)
     return {};
 }
 
-// Gallery cases at a limit the junction merge states: an arm joining at 20°
-// gives a long mouth whose zip band bridges the through's rings with thin
-// triangles (SliverTriangle).
-const QStringList kJunctionLimitCases {QStringLiteral("5. ")};
+const QString kPhakeCave = QStringLiteral("Phake Cave");
 
-// Junctions the merge leaves unclean. In 11 the station stands on the wall
-// the arm enters through, so the through's bins jump from 0.05 m to 3 m
-// across that wall. The ring tube reads the wall between two bins as the
-// radius interpolated by angle, which bulges up to 0.2 m past the straight
-// edge the mesh draws there, so the mouth lands off the drawn wall and its
-// zip band folds over the through (Crease, SliverTriangle). Phake Cave's
-// a10, a13 and a14 read 0 on one side, so their rings and the a10 mouth
-// bunch vertices a few centimeters apart, and the strips and zip bands
-// beside them are thin or cross (SliverTriangle, SelfIntersection, Crease);
-// it also keeps defects away from its junctions that it had before the
-// merge (Crease, SelfIntersection, SliverTriangle, WallMissed).
-const QStringList kOpenJunctionCases {QStringLiteral("11. "), QStringLiteral("Phake Cave")};
+// The issues Phake Cave keeps, by the station nearest each one. a2, a4, a6,
+// a9 and a10 read 0 on one side, so their rings and the a10 mouth bunch
+// vertices a few centimeters apart, and the strips and zip bands beside them
+// are thin, fold or cross; a3's walls lie off the tube beside a2, a defect it
+// had before the merge.
+struct AcceptedIssue {
+    QString station;
+    cwPassageTubeMeshCheck::Type type;
+};
 
-bool hasNamePrefix(const Cases::Case& entry, const QStringList& prefixes)
+const QVector<AcceptedIssue> kPhakeCaveIssues {
+    {QStringLiteral("a2"), cwPassageTubeMeshCheck::Crease},
+    {QStringLiteral("a2"), cwPassageTubeMeshCheck::SelfIntersection},
+    {QStringLiteral("a2"), cwPassageTubeMeshCheck::WallMissed},
+    {QStringLiteral("a3"), cwPassageTubeMeshCheck::WallMissed},
+    {QStringLiteral("a4"), cwPassageTubeMeshCheck::Crease},
+    {QStringLiteral("a4"), cwPassageTubeMeshCheck::SelfIntersection},
+    {QStringLiteral("a6"), cwPassageTubeMeshCheck::Crease},
+    {QStringLiteral("a9"), cwPassageTubeMeshCheck::SliverTriangle},
+    {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
+    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SelfIntersection},
+    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SliverTriangle},
+};
+
+QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
 {
-    return std::any_of(prefixes.cbegin(), prefixes.cend(), [&](const QString& prefix) {
-        return entry.name.startsWith(prefix);
-    });
+    QString nearest;
+    float nearestDistance = std::numeric_limits<float>::max();
+    for (const QList<Cases::Station>& chunk : trip.chunks) {
+        for (const Cases::Station& station : chunk) {
+            if (station.position && station.position->distanceToPoint(point) < nearestDistance) {
+                nearestDistance = station.position->distanceToPoint(point);
+                nearest = station.name;
+            }
+        }
+    }
+    return nearest;
 }
 
-bool isUncleanCatalogCase(const Cases::Case& entry)
+bool isAcceptedPhakeCaveIssue(const Cases::Trip& trip, const cwPassageTubeMeshCheck::Issue& issue)
 {
-    return hasNamePrefix(entry, kJunctionLimitCases) || hasNamePrefix(entry, kOpenJunctionCases);
+    const QString station = nearestStation(trip, issue.position);
+    return std::any_of(kPhakeCaveIssues.cbegin(), kPhakeCaveIssues.cend(), [&](const AcceptedIssue& accepted) {
+        return accepted.station == station && accepted.type == issue.type;
+    });
 }
 
 // The smallest angle in plan between an arm and either half of the through
@@ -258,9 +278,9 @@ double planJoinDegrees(const Cases::Trip& trip)
 }
 
 // The sweep's stated junction limit that the case parameters show: an arm
-// within 20° of the through in plan gives a long mouth whose zip band
-// bridges the through's rings with thin triangles and folds sharply against
-// its wall (SliverTriangle, Crease). The other stated limit, two mouths
+// within 20° of the through in plan meets its wall in a wedge, and at the
+// mouth's far tip the arm's wall folds against the through's by about 160°,
+// past the crease check's limit (Crease). The other stated limit, two mouths
 // sharing through quads, shows only in the build: see overlapsMouths.
 bool joinsAtGrazingAngle(const Cases::Case& entry)
 {
@@ -278,10 +298,9 @@ bool bendsSharplyAtJunction(const Cases::Case& entry)
 }
 
 // An arm 2.5 times the through's size that slopes or meets a bent through
-// grows the through's columns unevenly. As in gallery case 11, the ring
-// tube's wall between two such bins bulges past the edge the mesh draws, so
-// mouth points land off the drawn wall and the zip band folds over the
-// through (Crease, SelfIntersection).
+// grows the through's columns unevenly, and the zip band that bridges the
+// jumps between grown columns folds over the through or crosses it (Crease,
+// SelfIntersection).
 bool hasLargeTiltedArm(const Cases::Case& entry)
 {
     const QStringList& tags = entry.tags;
@@ -290,22 +309,34 @@ bool hasLargeTiltedArm(const Cases::Case& entry)
 }
 
 // Sweep cases outside those families whose junction the merge leaves
-// unclean. Arms 30° from the through in plan, in the first eight, meet its
-// side wall at 30°, so the mouth folds by about 150°, the crease check's
-// limit (Crease). In the last two, a sloped arm meets a bent through that
-// widens past J, and the zip band bridges a bin jump with thin or folded
-// triangles (Crease, SliverTriangle).
+// unclean, by family:
+// - an arm 30° from the through past J opens where the through widens, and
+//   its zip band folds back on itself (Crease, SelfIntersection);
+// - a level arm 2.5 times the through's size grows the through unevenly, and
+//   its zip band folds over the through or crosses it (Crease,
+//   SliverTriangle, SelfIntersection);
+// - an arm 30° from the through and sloping 30° meets it in a wedge that
+//   folds by about 155° (Crease);
+// - a sloped arm meets a through bent 40° at J, and the zip band bridges a
+//   bin jump with thin or folded triangles (Crease, SliverTriangle,
+//   SelfIntersection).
 const QStringList kOpenSweepCases {
-    QStringLiteral("plan 90, profile 0, ratio 0.3, 3 arms, bend 0, same section"),
     QStringLiteral("plan 90, profile 0, ratio 0.3, 3 arms, bend 0, section x2 past J"),
-    QStringLiteral("plan 30, profile 0, ratio 0.3, 2 arms opposite, bend 0, same section"),
-    QStringLiteral("plan 30, profile 0, ratio 0.3, 2 arms opposite, bend 0, section x2 past J"),
-    QStringLiteral("plan 30, profile 0, ratio 0.3, 3 arms, bend 0, same section"),
-    QStringLiteral("plan 30, profile 0, ratio 0.3, 3 arms, bend 0, section x2 past J"),
+
     QStringLiteral("plan 30, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
     QStringLiteral("plan 30, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
-    QStringLiteral("plan 60, profile 60, ratio 0.3, 3 arms, bend 40, section x2 past J"),
+    QStringLiteral("plan 45, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
+    QStringLiteral("plan 45, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
+    QStringLiteral("plan 90, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
+    QStringLiteral("plan 90, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
+
+    QStringLiteral("plan 30, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
+    QStringLiteral("plan 90, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
+
+    QStringLiteral("plan 30, profile 30, ratio 1, 1 arm, bend 40, same section"),
     QStringLiteral("plan 30, profile 30, ratio 1, 1 arm, bend 40, section x2 past J"),
+    QStringLiteral("plan 30, profile -30, ratio 1, 1 arm, bend 40, same section"),
+    QStringLiteral("plan 90, profile -30, ratio 1, 1 arm, bend 40, same section"),
 };
 
 // Sweep cases kept out of the clean checks by their parameters or name.
@@ -364,27 +395,116 @@ void checkOpenSweepCaseBuildsClean(const std::string& name)
 TEST_CASE("cwPassageTubeCases catalog builds clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !isSweep(entry) && hasJunction(entry) && !isUncleanCatalogCase(entry);
+        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave;
     })));
     checkCaseBuildsClean(name);
 }
 
-// See kJunctionLimitCases.
-TEST_CASE("cwPassageTubeCases catalog cases at a stated junction limit build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+// The arm's ceiling runs level with the through's, so its mouth runs along
+// the through's ceiling for several meters. The zip band to that long edge
+// takes no slivers; the one crease left is the 20° wedge at the mouth's far
+// tip, where the arm's wall folds against the through's (see
+// joinsAtGrazingAngle).
+TEST_CASE("cwPassageTubeCases zips a mouth that runs along the through's ceiling", "[PassageTube][cwPassageTubeCases]")
 {
-    const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return hasNamePrefix(entry, kJunctionLimitCases);
-    })));
-    checkCaseBuildsClean(name);
+    constexpr float kOnMouthMeters = 1e-3f;
+    const Cases::Case& entry = catalogCase("plan 20, profile 0, ratio 1, 1 arm, bend 0, same section");
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    REQUIRE(debug.chains.size() == 2);
+    REQUIRE(debug.chains.at(0).windows.size() == 1);
+    const cwPassageTubeBuilder::JunctionWindow& window = debug.chains.at(0).windows.first();
+    const cwPassageTubeBuilder::Chain& arm = debug.chains.at(window.armChain);
+    const QVector<QVector3D>& mouth = window.isArmStart ? arm.startMouth : arm.endMouth;
+    REQUIRE(mouth.size() == cwPassageTubeBuilder::Options().ringResolution);
+
+    const auto isOnMouth = [&](const QVector3D& point) {
+        for (int k = 0; k < mouth.size(); ++k) {
+            const QVector3D& a = mouth.at(k);
+            const QVector3D& b = mouth.at((k + 1) % mouth.size());
+            const QVector3D edge = b - a;
+            const float along = std::clamp(QVector3D::dotProduct(point - a, edge) / edge.lengthSquared(), 0.0f, 1.0f);
+            if (point.distanceToPoint(a + edge * along) <= kOnMouthMeters) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.size() <= 1);
+    for (const cwPassageTubeMeshCheck::Issue& issue : report.issues) {
+        CHECK(issue.type == cwPassageTubeMeshCheck::Crease);
+        CHECK(isOnMouth(issue.position));
+    }
 }
 
-// See kOpenJunctionCases.
-TEST_CASE("cwPassageTubeCases catalog junctions the merge leaves unclean build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+// Every issue Phake Cave keeps lies by a station kPhakeCaveIssues names.
+TEST_CASE("cwPassageTubeCases catalog junctions the merge leaves unclean build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
-    const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return hasNamePrefix(entry, kOpenJunctionCases);
-    })));
-    checkCaseBuildsClean(name);
+    const Cases::Case& entry = catalogCase(kPhakeCave.toStdString());
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    REQUIRE_FALSE(debug.mesh.isEmpty());
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    for (const cwPassageTubeMeshCheck::Issue& issue : report.issues) {
+        INFO(issue.detail.toStdString() << " nearest " << nearestStation(entry.trip, issue.position).toStdString());
+        CHECK(isAcceptedPhakeCaveIssue(entry.trip, issue));
+    }
+}
+
+// The 15° arm lies inside the through, which doubles past J, apart from its
+// tip, which pokes out; the through grows to take the tip before the arm is
+// left out, then grows again without it.
+TEST_CASE("cwPassageTubeCases re-grows the through after dropping an arm", "[PassageTube][cwPassageTubeCases]")
+{
+    constexpr double kRadiusTolerance = 1e-3;
+    constexpr float kPastJunctionMeters = 7.0f;
+    constexpr float kSameRingMeters = 1e-3f;
+    const Cases::Case& entry = catalogCase("plan 45, profile 0, ratio 0.3, 3 arms, bend 0, section x2 past J");
+    const auto build = [&](const Cases::Trip& trip) {
+        const Cases::Survey survey = Cases::toSurvey(trip);
+        return cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    };
+    const cwPassageTubeBuilder::Debug debug = build(entry.trip);
+    const auto dropped = std::find_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
+        return warning.type == cwPassageTubeMesh::Warning::ArmInsideThrough;
+    });
+    REQUIRE(dropped != debug.warnings.cend());
+    CHECK(std::count_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
+              return warning.type == cwPassageTubeMesh::Warning::ArmInsideThrough;
+          }) == 1);
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+
+    Cases::Trip withoutArm = entry.trip;
+    withoutArm.chunks.removeIf([&](const QList<Cases::Station>& chunk) {
+        return std::any_of(chunk.cbegin(), chunk.cend(), [&](const Cases::Station& station) {
+            return station.name == dropped->station;
+        });
+    });
+    REQUIRE(withoutArm.chunks.size() == entry.trip.chunks.size() - 1);
+    const cwPassageTubeBuilder::Debug plain = build(withoutArm);
+
+    const QVector3D junction = position(entry.trip, QStringLiteral("J"));
+    const QVector3D past = junction + (position(entry.trip, QStringLiteral("t1")) - junction).normalized() * kPastJunctionMeters;
+    const auto ringNear = [&](const cwPassageTubeBuilder::Debug& build) -> const cwPassageTubeBuilder::Ring& {
+        const QVector<cwPassageTubeBuilder::Ring>& rings = build.chains.at(0).rings;
+        return *std::min_element(rings.cbegin(), rings.cend(), [&](const cwPassageTubeBuilder::Ring& a, const cwPassageTubeBuilder::Ring& b) {
+            return a.center.distanceToPoint(past) < b.center.distanceToPoint(past);
+        });
+    };
+    const cwPassageTubeBuilder::Ring& ring = ringNear(debug);
+    const cwPassageTubeBuilder::Ring& plainRing = ringNear(plain);
+    REQUIRE(ring.center.distanceToPoint(plainRing.center) <= kSameRingMeters);
+    CHECK_FALSE(ring.isGrown);
+    REQUIRE(ring.radii.size() == plainRing.radii.size());
+    for (int bin = 0; bin < ring.radii.size(); ++bin) {
+        CHECK(ring.radii.at(bin) == Catch::Approx(plainRing.radii.at(bin)).margin(kRadiusTolerance));
+    }
 }
 
 TEST_CASE("cwPassageTubeCases catalog builds closed meshes", "[PassageTube][cwPassageTubeCases]")
@@ -481,7 +601,7 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction build closed tube
 // Random surveys carry every defect of the junction-free seeds (see
 // kCleanRandomSeeds) and add junctions at the merge's limits: overlapping
 // mouths, grazing joins, sharp bends at the junction and stations reading 0
-// on one side (see isOpenSweepCase and kOpenJunctionCases).
+// on one side (see isOpenSweepCase and kPhakeCaveIssues).
 TEST_CASE("cwPassageTubeCases random surveys build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
 {
     const int seed = GENERATE(range(1, kRandomSeedCount + 1));

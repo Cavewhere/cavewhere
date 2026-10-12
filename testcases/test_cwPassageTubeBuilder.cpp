@@ -18,12 +18,14 @@
 
 //Qt includes
 #include <QElapsedTimer>
+#include <QSet>
 #include <QStringList>
 #include <QtMath>
 
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace {
@@ -195,6 +197,87 @@ QStringList shaftWarningStations(const Builder::Debug& debug)
     }
     stations.sort();
     return stations;
+}
+
+// The point of the triangle abc closest to p (Ericson, Real-Time Collision
+// Detection 5.1.5).
+QVector3D closestPointOnTriangle(const QVector3D& p, const QVector3D& a, const QVector3D& b, const QVector3D& c)
+{
+    const QVector3D ab = b - a;
+    const QVector3D ac = c - a;
+    const QVector3D ap = p - a;
+    const float d1 = QVector3D::dotProduct(ab, ap);
+    const float d2 = QVector3D::dotProduct(ac, ap);
+    if (d1 <= 0.0f && d2 <= 0.0f) {
+        return a;
+    }
+    const QVector3D bp = p - b;
+    const float d3 = QVector3D::dotProduct(ab, bp);
+    const float d4 = QVector3D::dotProduct(ac, bp);
+    if (d3 >= 0.0f && d4 <= d3) {
+        return b;
+    }
+    const float vc = d1 * d4 - d3 * d2;
+    if (vc <= 0.0f && d1 >= 0.0f && d3 <= 0.0f) {
+        return a + ab * (d1 / (d1 - d3));
+    }
+    const QVector3D cp = p - c;
+    const float d5 = QVector3D::dotProduct(ab, cp);
+    const float d6 = QVector3D::dotProduct(ac, cp);
+    if (d6 >= 0.0f && d5 <= d6) {
+        return c;
+    }
+    const float vb = d5 * d2 - d1 * d6;
+    if (vb <= 0.0f && d2 >= 0.0f && d6 <= 0.0f) {
+        return a + ac * (d2 / (d2 - d6));
+    }
+    const float va = d3 * d6 - d5 * d4;
+    if (va <= 0.0f && (d4 - d3) >= 0.0f && (d5 - d6) >= 0.0f) {
+        return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
+    }
+    const float denominator = 1.0f / (va + vb + vc);
+    return a + ab * (vb * denominator) + ac * (vc * denominator);
+}
+
+// The distance from point to the chain's side wall: the triangles between
+// its consecutive rings, each quad split along its shorter diagonal as the
+// mesh splits it, before any junction window is cut out of them.
+double distanceToSides(const Builder::Chain& chain, const QVector3D& point)
+{
+    double nearest = std::numeric_limits<double>::max();
+    const auto measure = [&](const QVector3D& a, const QVector3D& b, const QVector3D& c) {
+        nearest = std::min(nearest, static_cast<double>(closestPointOnTriangle(point, a, b, c).distanceToPoint(point)));
+    };
+    for (int i = 0; i + 1 < chain.rings.size(); ++i) {
+        const QVector<QVector3D>& ring = chain.rings.at(i).vertices;
+        const QVector<QVector3D>& next = chain.rings.at(i + 1).vertices;
+        if (ring.isEmpty() || next.size() != ring.size()) {
+            continue;
+        }
+        const int resolution = ring.size();
+        for (int k = 0; k < resolution; ++k) {
+            const int column = (k + 1) % resolution;
+            const QVector3D& a0 = ring.at(k);
+            const QVector3D& a1 = ring.at(column);
+            const QVector3D& b0 = next.at(k);
+            const QVector3D& b1 = next.at(column);
+            if ((b1 - a0).lengthSquared() <= (b0 - a1).lengthSquared()) {
+                measure(a0, b0, b1);
+                measure(a0, b1, a1);
+            } else {
+                measure(a0, b0, a1);
+                measure(b0, b1, a1);
+            }
+        }
+    }
+    return nearest;
+}
+
+int warningCount(const Builder::Debug& debug, cwPassageTubeMesh::Warning::Type type)
+{
+    return static_cast<int>(std::count_if(debug.warnings.cbegin(), debug.warnings.cend(), [type](const cwPassageTubeMesh::Warning& warning) {
+        return warning.type == type;
+    }));
 }
 
 void checkFarthestVertexNear(const Builder::Ring& ring, const QVector3D& expected, float tolerance)
@@ -1575,7 +1658,7 @@ TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single san
 TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passages", "[PassageTube][cwPassageTubeBuilder]")
 {
     constexpr double kJunctionTolerance = 0.02;
-    constexpr double kMouthToleranceMeters = 0.05;
+    constexpr double kOnMeshMeters = 1e-4;
 
     const BuilderInput input = makeInput(cwPassageTubeCases::phakeCave());
     const Builder::Debug debug = buildDebug(input);
@@ -1602,21 +1685,189 @@ TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passa
     const QVector<QVector3D>& mouth = arm.endMouth.isEmpty() ? arm.startMouth : arm.endMouth;
     REQUIRE(mouth.size() == Builder::Options().ringResolution);
 
+    // The ring tube blends between rings while the mesh lofts straight
+    // quads, which differ across a10's grown rings, so the mouth is held to
+    // the through's triangles.
     const cwPassageTubeJunction::RingTube throughTube {&debug.chains.at(through).rings, QVector3D()};
-    QVector<QVector3D> armVertices = mouth;
     for (const Builder::Ring& ring : arm.rings) {
-        armVertices.append(ring.vertices);
-    }
-    for (const QVector3D& vertex : std::as_const(armVertices)) {
-        INFO("arm vertex (" << vertex.x() << ", " << vertex.y() << ", " << vertex.z() << ")");
-        CHECK_FALSE(throughTube.inside(vertex, -kJunctionTolerance));
+        for (const QVector3D& vertex : ring.vertices) {
+            INFO("arm vertex (" << vertex.x() << ", " << vertex.y() << ", " << vertex.z() << ")");
+            CHECK_FALSE(throughTube.inside(vertex, -kJunctionTolerance));
+        }
     }
     for (const QVector3D& point : mouth) {
         INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
-        const std::optional<double> distance = throughTube.wallDistance(point);
-        REQUIRE(distance.has_value());
-        CHECK(std::abs(*distance) < kMouthToleranceMeters);
+        CHECK(distanceToSides(debug.chains.at(through), point) < kOnMeshMeters);
     }
 
     checkMeshClosed(debug.mesh);
+}
+
+namespace {
+
+// A straight through passage a → b → c along +x, 20 m long, with arms ending
+// at b.
+BuilderInput throughWithArms(const QStringList& throughDimensions, const QList<QList<StationInput>>& arms)
+{
+    const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), throughDimensions};
+    const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0), throughDimensions};
+    const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), throughDimensions};
+    SurveyInput survey;
+    survey.chunks.append({a, b, c});
+    survey.chunks.append(arms);
+    return makeInput(survey);
+}
+
+QList<StationInput> armFrom(const QString& name, const QVector3D& far, const QStringList& dimensions)
+{
+    return {StationInput {name, far, dimensions}, StationInput {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions}};
+}
+
+} // namespace
+
+TEST_CASE("cwPassageTubeBuilder puts every mouth vertex on the through mesh", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kOnMeshMeters = 1e-4;
+    const Builder::Debug debug = buildDebug(throughWithArms(lrud(1, 1, 1, 1),
+                                                            {armFrom(QStringLiteral("d"), QVector3D(10, -10, 0), lrud(0.5, 0.5, 0.5, 0.5))}));
+    REQUIRE(debug.chains.size() == 2);
+    const Builder::Chain& arm = debug.chains.at(1);
+    REQUIRE(arm.endCap == Builder::EndCap::Mouth);
+    REQUIRE(arm.endMouth.size() == Builder::Options().ringResolution);
+    CHECK(debug.chains.at(0).windows.size() == 1);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+
+    for (const QVector3D& point : arm.endMouth) {
+        INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
+        CHECK(distanceToSides(debug.chains.at(0), point) < kOnMeshMeters);
+    }
+    checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder welds the mouth vertices of a thin arm", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // A 7 cm arm's columns meet the through under 3 cm apart, so each pair
+    // welds into one mouth vertex.
+    constexpr double kWeldMeters = 0.03;
+    const Builder::Debug debug = buildDebug(throughWithArms(lrud(1, 1, 1, 1),
+                                                            {armFrom(QStringLiteral("d"), QVector3D(10, -10, 0), lrud(0.07, 0.07, 0.07, 0.07))}));
+    REQUIRE(debug.chains.size() == 2);
+    REQUIRE(debug.chains.at(0).windows.size() == 1);
+    const Builder::JunctionWindow& window = debug.chains.at(0).windows.first();
+    const QVector<QVector3D>& mouth = debug.chains.at(1).endMouth;
+    REQUIRE(window.mouthCorners.size() == mouth.size());
+
+    int welded = 0;
+    for (int k = 0; k < window.mouthCorners.size(); ++k) {
+        const Builder::ZipCorner& corner = window.mouthCorners.at(k);
+        if (corner.ring == Builder::ZipCorner::kMouthRing && corner.column != k) {
+            ++welded;
+            INFO("column " << k << " welded to " << corner.column);
+            CHECK(corner.column < k);
+            CHECK(mouth.at(k).distanceToPoint(mouth.at(corner.column)) < 1e-6f);
+            CHECK(window.mouthCorners.at(corner.column) == corner);
+        }
+    }
+    CHECK(welded > 0);
+    for (int k = 1; k < mouth.size(); ++k) {
+        if (window.mouthCorners.at(k) != window.mouthCorners.at(k - 1)) {
+            CHECK(mouth.at(k).distanceToPoint(mouth.at(k - 1)) > kWeldMeters);
+        }
+    }
+    checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder re-grows the through after dropping an arm", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // The arm's 2.6 m ceiling pokes out of the 2 m through, which grows to
+    // take it, but its sides lie inside, so the arm is left out and the
+    // through keeps its own section.
+    constexpr double kRadiusTolerance = 1e-3;
+    const QStringList throughDimensions = lrud(2, 2, 2, 2);
+    const Builder::Debug debug = buildDebug(throughWithArms(throughDimensions,
+                                                            {armFrom(QStringLiteral("d"), QVector3D(10, -1, 0), lrud(0.3, 0.3, 2.6, 0.3))}));
+    const Builder::Debug withoutArm = buildDebug(throughWithArms(throughDimensions, {}));
+    REQUIRE(debug.chains.size() == 2);
+    REQUIRE(withoutArm.chains.size() == 1);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::ArmInsideThrough) == 1);
+    CHECK(debug.chains.at(1).rings.isEmpty());
+
+    const Builder::Ring& plain = withoutArm.chains.at(0).rings.first();
+    for (const Builder::Ring& ring : debug.chains.at(0).rings) {
+        INFO("ring at x " << ring.center.x());
+        CHECK_FALSE(ring.isGrown);
+        REQUIRE(ring.radii.size() == plain.radii.size());
+        for (int bin = 0; bin < ring.radii.size(); ++bin) {
+            CHECK(ring.radii.at(bin) == Catch::Approx(plain.radii.at(bin)).margin(kRadiusTolerance));
+        }
+    }
+    checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder hides the fallback cone inside the through", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // Two arms 30 degrees apart open through the same wall; the second is
+    // capped with a fan whose center sits inside the through.
+    constexpr double kSpreadDegrees = 30.0;
+    constexpr double kOnMouthMeters = 1e-3;
+    const float spread = static_cast<float>(qDegreesToRadians(kSpreadDegrees));
+    const QVector3D second(10.0f + 10.0f * std::sin(spread), -10.0f * std::cos(spread), 0.0f);
+    const QStringList armDimensions = lrud(0.8, 0.8, 0.8, 0.8);
+    const Builder::Debug debug = buildDebug(throughWithArms(lrud(1, 1, 1, 1),
+                                                            {armFrom(QStringLiteral("d"), QVector3D(10, -10, 0), armDimensions),
+                                                             armFrom(QStringLiteral("e"), second, armDimensions)}));
+    REQUIRE(debug.chains.size() == 3);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionOverlap) == 1);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+
+    const auto capped = std::find_if(debug.chains.cbegin() + 1, debug.chains.cend(), [](const Builder::Chain& chain) {
+        return chain.endCap == Builder::EndCap::Fan;
+    });
+    REQUIRE(capped != debug.chains.cend());
+    REQUIRE(capped->endFanCenter.has_value());
+    REQUIRE(capped->endMouth.size() == Builder::Options().ringResolution);
+
+    const cwPassageTubeMesh& mesh = debug.mesh;
+    const auto center = std::find(mesh.positions.cbegin(), mesh.positions.cend(), *capped->endFanCenter);
+    REQUIRE(center != mesh.positions.cend());
+    const quint32 centerIndex = static_cast<quint32>(center - mesh.positions.cbegin());
+
+    const cwPassageTubeJunction::RingTube throughTube {&debug.chains.at(0).rings, QVector3D()};
+    QSet<int> fanTriangles;
+    for (int triangle = 0; triangle * 3 < mesh.indices.size(); ++triangle) {
+        const quint32 a = mesh.indices.at(triangle * 3);
+        const quint32 b = mesh.indices.at(triangle * 3 + 1);
+        const quint32 c = mesh.indices.at(triangle * 3 + 2);
+        if (a != centerIndex && b != centerIndex && c != centerIndex) {
+            continue;
+        }
+        fanTriangles.insert(triangle);
+        const QVector3D centroid = (mesh.positions.at(a) + mesh.positions.at(b) + mesh.positions.at(c)) / 3.0f;
+        INFO("fan triangle centroid (" << centroid.x() << ", " << centroid.y() << ", " << centroid.z() << ")");
+        const std::optional<double> distance = throughTube.wallDistance(centroid);
+        REQUIRE(distance.has_value());
+        CHECK(*distance < 0.0);
+    }
+    CHECK(fanTriangles.size() == Builder::Options().ringResolution);
+
+    // The fan meets the through wall only along its mouth, where its edges
+    // lie in the wall's faces.
+    const QVector<QVector3D>& mouth = capped->endMouth;
+    const auto distanceToMouth = [&](const QVector3D& point) {
+        double nearest = std::numeric_limits<double>::max();
+        for (int k = 0; k < mouth.size(); ++k) {
+            const QVector3D& a = mouth.at(k);
+            const QVector3D& b = mouth.at((k + 1) % mouth.size());
+            const float t = std::clamp(QVector3D::dotProduct(point - a, b - a) / (b - a).lengthSquared(), 0.0f, 1.0f);
+            nearest = std::min(nearest, static_cast<double>(point.distanceToPoint(a + (b - a) * t)));
+        }
+        return nearest;
+    };
+    const QVector<cwPassageTubeMeshCheck::Issue> crossings = cwPassageTubeMeshCheck::selfIntersections(mesh, cwPassageTubeMeshCheck::wholeMesh(mesh));
+    for (const cwPassageTubeMeshCheck::Issue& issue : crossings) {
+        if (fanTriangles.contains(issue.triangle) || fanTriangles.contains(issue.otherTriangle)) {
+            INFO(cwPassageTubeMeshCheck::toText({{issue}, 0, {}}).toStdString());
+            CHECK(distanceToMouth(issue.position) < kOnMouthMeters);
+        }
+    }
 }
