@@ -242,7 +242,8 @@ public:
     cwSurveyNetwork memberNetwork(const cwSurveyNode* node) const;
 
     //! The member sets moved without a solve (a harvest named a derived
-    //! trip's stations), so every cached member view is dropped.
+    //! trip's stations), so every cached member view is dropped and
+    //! memberViewsChanged() is emitted.
     void invalidateMemberViews();
 
     //! True while a solve is under way, so stationPositions() describes the
@@ -304,6 +305,12 @@ signals:
     //! network() changed. Relayed down the tree as each node's
     //! cwSurveyNode::scopedNetworkChanged.
     void networkChanged();
+
+    //! memberPositions() and memberNetwork() changed while the solve stayed
+    //! put. Relayed down the tree as both cwSurveyNode::scopedPositionsChanged
+    //! and cwSurveyNode::scopedNetworkChanged, since a derived node's scoped
+    //! views are its member views.
+    void memberViewsChanged();
 
 public slots:
 

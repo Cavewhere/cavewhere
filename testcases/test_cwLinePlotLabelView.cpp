@@ -32,6 +32,55 @@
 #include <QUuid>
 #include <memory>
 
+namespace {
+// cwLinePlotLabelView::updateGroup creates labels from a QQmlComponent, so the
+// view must live inside a QML context.
+struct LabelViewHost
+{
+    QQmlEngine engine;
+    std::unique_ptr<QObject> root;
+    cwLinePlotLabelView* labelView = nullptr;
+};
+
+std::unique_ptr<LabelViewHost> makeLabelViewHost()
+{
+    auto host = std::make_unique<LabelViewHost>();
+    QQmlComponent component(&host->engine);
+    component.setData(QByteArrayLiteral(
+                          "import QtQuick\n"
+                          "import cavewherelib\n"
+                          "Item {\n"
+                          "  width: 200; height: 200\n"
+                          "  LinePlotLabelView { objectName: \"labelView\" }\n"
+                          "}\n"),
+                      QUrl());
+    host->root.reset(component.create());
+    REQUIRE(host->root != nullptr);
+    host->labelView = host->root->findChild<cwLinePlotLabelView*>(QStringLiteral("labelView"));
+    REQUIRE(host->labelView != nullptr);
+    return host;
+}
+
+cwLabel3dGroup* groupForKeywordItem(cwKeywordItem* item)
+{
+    return qobject_cast<cwLabel3dGroup*>(item->object());
+}
+
+QStringList sortedLabelTexts(cwKeywordItemModel& keywordModel)
+{
+    QStringList texts;
+    for (int i = 0; i < keywordModel.rowCount(); ++i) {
+        const cwLabel3dGroup* group = groupForKeywordItem(keywordModel.item(i));
+        REQUIRE(group != nullptr);
+        for (const cwLabel3dItem& label : group->labels()) {
+            texts.append(label.text());
+        }
+    }
+    texts.sort();
+    return texts;
+}
+}
+
 // Regression: issue #434 — removing an empty cave used to crash with a
 // use-after-free when a positional list of per-cave groups fell out of sync
 // with the region. The view is now keyed per trip (a QHash, no positional
@@ -40,24 +89,8 @@
 TEST_CASE("Removing an empty cave before a cave with data does not crash cwLinePlotLabelView",
           "[cwLinePlotLabelView]")
 {
-    // cwLinePlotLabelView::updateGroup creates labels from a QQmlComponent,
-    // which requires the item to live inside a QML context.
-    QQmlEngine engine;
-    const char* rootQml =
-        "import QtQuick\n"
-        "import cavewherelib\n"
-        "Item {\n"
-        "  width: 200; height: 200\n"
-        "  LinePlotLabelView { objectName: \"labelView\" }\n"
-        "}\n";
-
-    QQmlComponent component(&engine);
-    component.setData(QByteArray(rootQml), QUrl());
-    std::unique_ptr<QObject> root(component.create());
-    REQUIRE(root != nullptr);
-
-    auto labelView = root->findChild<cwLinePlotLabelView*>("labelView");
-    REQUIRE(labelView != nullptr);
+    auto host = makeLabelViewHost();
+    cwLinePlotLabelView* labelView = host->labelView;
 
     // The empty cave must be at a lower index than the cave with data:
     // after removal, indexOf(dataCave) drops from 1 to 0, which in the
@@ -150,10 +183,6 @@ TwoTripFixture makeTwoTripFixture() {
 
     return f;
 }
-
-cwLabel3dGroup* groupForKeywordItem(cwKeywordItem* item) {
-    return qobject_cast<cwLabel3dGroup*>(item->object());
-}
 }
 
 // 3b: the label view registers one keyword item per trip, carrying the trip's
@@ -169,22 +198,8 @@ TEST_CASE("cwLinePlotLabelView registers per-trip station label keyword visibili
     // removes its items from the model, which must still be alive.
     cwKeywordItemModel keywordModel;
 
-    QQmlEngine engine;
-    const char* rootQml =
-        "import QtQuick\n"
-        "import cavewherelib\n"
-        "Item {\n"
-        "  width: 200; height: 200\n"
-        "  LinePlotLabelView { objectName: \"labelView\" }\n"
-        "}\n";
-
-    QQmlComponent component(&engine);
-    component.setData(QByteArray(rootQml), QUrl());
-    std::unique_ptr<QObject> root(component.create());
-    REQUIRE(root != nullptr);
-
-    auto labelView = root->findChild<cwLinePlotLabelView*>("labelView");
-    REQUIRE(labelView != nullptr);
+    auto host = makeLabelViewHost();
+    cwLinePlotLabelView* labelView = host->labelView;
 
     labelView->setKeywordItemModel(&keywordModel);
     labelView->setRegion(f.region.get());
@@ -269,26 +284,10 @@ TEST_CASE("cwLinePlotLabelView shows station labels for an externally attached t
 
     REQUIRE_FALSE(manager.hasSolveError());
 
-    // The label view builds label data from a QQmlComponent, so it must live in
-    // a QML context (as in the fixtures above).
     cwKeywordItemModel keywordModel;
 
-    QQmlEngine engine;
-    const char* rootQml =
-        "import QtQuick\n"
-        "import cavewherelib\n"
-        "Item {\n"
-        "  width: 200; height: 200\n"
-        "  LinePlotLabelView { objectName: \"labelView\" }\n"
-        "}\n";
-
-    QQmlComponent component(&engine);
-    component.setData(QByteArray(rootQml), QUrl());
-    std::unique_ptr<QObject> root(component.create());
-    REQUIRE(root != nullptr);
-
-    auto labelView = root->findChild<cwLinePlotLabelView*>("labelView");
-    REQUIRE(labelView != nullptr);
+    auto host = makeLabelViewHost();
+    cwLinePlotLabelView* labelView = host->labelView;
 
     labelView->setKeywordItemModel(&keywordModel);
     labelView->setRegion(&region);
@@ -329,22 +328,8 @@ TEST_CASE("cwLinePlotLabelView labels the trips of a depth-2 node",
 
     cwKeywordItemModel keywordModel;
 
-    QQmlEngine engine;
-    const char* rootQml =
-        "import QtQuick\n"
-        "import cavewherelib\n"
-        "Item {\n"
-        "  width: 200; height: 200\n"
-        "  LinePlotLabelView { objectName: \"labelView\" }\n"
-        "}\n";
-
-    QQmlComponent component(&engine);
-    component.setData(QByteArray(rootQml), QUrl());
-    std::unique_ptr<QObject> root(component.create());
-    REQUIRE(root != nullptr);
-
-    auto labelView = root->findChild<cwLinePlotLabelView*>("labelView");
-    REQUIRE(labelView != nullptr);
+    auto host = makeLabelViewHost();
+    cwLinePlotLabelView* labelView = host->labelView;
 
     labelView->setKeywordItemModel(&keywordModel);
     labelView->setRegion(&region);
@@ -359,16 +344,72 @@ TEST_CASE("cwLinePlotLabelView labels the trips of a depth-2 node",
     REQUIRE_FALSE(plotManager.hasSolveError());
 
     REQUIRE(keywordModel.rowCount() == 1);
-    QStringList labelTexts;
-    for (const cwLabel3dItem& label : groupForKeywordItem(keywordModel.item(0))->labels()) {
-        labelTexts.append(label.text());
-    }
-    labelTexts.sort();
-    CHECK(labelTexts == QStringList({QStringLiteral("a1"), QStringLiteral("a2")}));
+    CHECK(sortedLabelTexts(keywordModel) == QStringList({QStringLiteral("a1"), QStringLiteral("a2")}));
 
     addNativeTripWithShot(section, QStringLiteral("Second"),
                           QStringLiteral("a2"), QStringLiteral("a3"));
     plotManager.waitToFinish();
     REQUIRE_FALSE(plotManager.hasSolveError());
     CHECK(keywordModel.rowCount() == 2);
+}
+
+// FX.6: a derived trip's labels come from the station list the external-file
+// scan fills in, which lands apart from the solve. Renaming a Compass survey
+// leaves every station position as it was, so the re-solve moves nothing; the
+// view must still hear that the scan replaced the trip's stations.
+TEST_CASE("cwLinePlotLabelView labels a Compass .dat's stations after the scan replaces the trip",
+          "[cwLinePlotLabelView][Attach][Compass]")
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QString datPath = QDir(sourceDir.path()).filePath(QStringLiteral("rename.dat"));
+    const QByteArray original = fileContents(fixturePath(QStringLiteral("compass_simple.dat")));
+    overwriteFile(datPath, original);
+
+    auto fixture = makeSavedProject(QStringLiteral("labels-compass-rename"),
+                                    QStringLiteral("NativeCave"),
+                                    QStringLiteral("NativeTrip"));
+    cwCavingRegion* region = fixture->project->cavingRegion();
+
+    cwKeywordItemModel keywordModel;
+
+    auto host = makeLabelViewHost();
+    cwLinePlotLabelView* labelView = host->labelView;
+
+    // Connected before the attach, as in the app, where the 3D view exists
+    // before any source is attached.
+    labelView->setKeywordItemModel(&keywordModel);
+    labelView->setRegion(region);
+
+    cwSurveyNode* sourceRoot = attachSourceThroughManager(fixture.get(), region->rootNode(), datPath);
+    drainPipelines(fixture.get());
+    REQUIRE(sourceRoot->tripCount() == 1);
+
+    QByteArray renamed = original;
+    renamed.replace("SURVEY NAME: A", "SURVEY NAME: B");
+    REQUIRE(renamed != original);
+    overwriteFile(datPath, renamed);
+
+    auto future = managerOf(fixture.get())->reloadFromSource(sourceRoot);
+    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
+    INFO("reload: " << future.result().errorMessage().toStdString());
+    REQUIRE_FALSE(future.result().hasError());
+    drainPipelines(fixture.get());
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+
+    REQUIRE(sourceRoot->tripCount() == 1);
+    const cwTrip* trip = sourceRoot->trip(0);
+    CHECK(trip->name() == QStringLiteral("B"));
+
+    QStringList solved;
+    for (const auto& station : trip->solvedStations()) {
+        solved.append(station.first);
+    }
+    solved.sort();
+    const QStringList expected({QStringLiteral("A1"), QStringLiteral("A2"), QStringLiteral("A3")});
+    REQUIRE(solved == expected);
+
+    // The native trip has no shots, so the .dat trip is the only labeled one.
+    CHECK(keywordModel.rowCount() == 1);
+    CHECK(sortedLabelTexts(keywordModel) == expected);
 }

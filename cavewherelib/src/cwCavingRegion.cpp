@@ -125,6 +125,10 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
             m_root, &cwSurveyNode::scopedPositionsChanged);
     connect(this, &cwCavingRegion::networkChanged,
             m_root, &cwSurveyNode::scopedNetworkChanged);
+    connect(this, &cwCavingRegion::memberViewsChanged,
+            m_root, &cwSurveyNode::scopedPositionsChanged);
+    connect(this, &cwCavingRegion::memberViewsChanged,
+            m_root, &cwSurveyNode::scopedNetworkChanged);
 
     connect(m_geoReference, &cwGeoReference::localCoordinateSystemChanged,
             this, &cwCavingRegion::defaultFixDatumChanged);
@@ -691,4 +695,5 @@ void cwCavingRegion::invalidateMemberViews()
 {
     m_memberPositions.clear();
     m_memberNetworks.clear();
+    emit memberViewsChanged();
 }
