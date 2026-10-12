@@ -35,6 +35,9 @@ constexpr double kAlongLegDegrees = 45.0;
 constexpr double kShaftRatio = 3.0;
 constexpr double kMinSampleSpacingMeters = 0.01;
 constexpr double kMaxChainTurnDegrees = 100.0;
+// A wall stretched across a corner's bisector plane reaches at most this many
+// times its reading square to the legs.
+constexpr double kMaxMiterStretch = 3.0;
 constexpr double kCornerInsetMeters = 0.5;
 constexpr double kCornerInsetLegFraction = 0.45;
 constexpr double kCornerInsetSafety = 1.1;
@@ -381,10 +384,11 @@ ChainLeg reversedLeg(const ChainLeg& chainLeg)
 }
 
 // Chains run like Loch's: from each dead end the walk continues along the
-// straightest unused leg. At a junction it continues along the unused leg
-// turning less than kMaxChainTurnDegrees whose section there is closest to
-// the arriving leg's, ties by straightness, or along the straightest unused
-// leg when none turns that little. A passage wider and taller at a junction
+// straightest unused leg turning less than kMaxChainTurnDegrees. At a
+// junction it continues along the unused leg turning that little whose
+// section there is closest to the arriving leg's, ties by straightness. A
+// sharper turn, a hairpin, ends the chain: both legs close with fans that
+// overlap inside each other. A passage wider and taller at a junction
 // than every leg there but the one it continues along by that rule is the
 // big passage: those two legs are the junction's through, and a walk
 // arriving on any other leg ends there.
@@ -454,23 +458,24 @@ QVector<Chain> buildChains(const QVector<Leg>& legs, double defaultRadius)
             return std::abs(sectionAt(legIndex, node).area() - arrivingArea);
         };
 
-        int straightest = -1;
-        int closest = -1;
+        const bool isJunction = degree(node) > 2;
+        int next = -1;
         for (int legIndex : legsByNode.at(node)) {
-            if (legIndex == arriving.legIndex || !isCandidate(legIndex)) {
+            if (legIndex == arriving.legIndex || !isCandidate(legIndex) || straightness(legIndex) <= minTurnCosine) {
                 continue;
             }
-            if (straightest < 0 || straightness(legIndex) > straightness(straightest)) {
-                straightest = legIndex;
-            }
-            const bool isCloser = closest < 0 || areaGap(legIndex) < areaGap(closest)
-                                  || (areaGap(legIndex) == areaGap(closest) && straightness(legIndex) > straightness(closest));
-            if (degree(node) > 2 && straightness(legIndex) > minTurnCosine && isCloser) {
-                closest = legIndex;
+            const bool isStraighter = next < 0 || straightness(legIndex) > straightness(next);
+            const bool isBetter = isJunction
+                                      ? next < 0 || areaGap(legIndex) < areaGap(next) || (areaGap(legIndex) == areaGap(next) && isStraighter)
+                                      : isStraighter;
+            if (isBetter) {
+                next = legIndex;
             }
         }
-        return closest >= 0 ? closest : straightest;
+        return next;
     };
+
+    const auto anyLeg = [](int) { return true; };
 
     // The through pair of each junction its big passage claims, as leg
     // indices; -1 at other stations.
@@ -484,8 +489,8 @@ QVector<Chain> buildChains(const QVector<Leg>& legs, double defaultRadius)
             return sectionAt(a, node).area() < sectionAt(b, node).area();
         });
         const ChainLeg arriving = reversedLeg(leaving(biggest, node));
-        const int partner = continuation(node, arriving, [](int) { return true; });
-        const bool isBigPassage = std::all_of(nodeLegs.cbegin(), nodeLegs.cend(), [&](int legIndex) {
+        const int partner = continuation(node, arriving, anyLeg);
+        const bool isBigPassage = partner >= 0 && std::all_of(nodeLegs.cbegin(), nodeLegs.cend(), [&](int legIndex) {
             return legIndex == biggest || legIndex == partner || sectionAt(biggest, node).isWiderAndTallerThan(sectionAt(legIndex, node));
         });
         if (isBigPassage) {
@@ -551,16 +556,21 @@ QVector<Chain> buildChains(const QVector<Leg>& legs, double defaultRadius)
         return chain;
     };
 
-    // Dead ends first, then odd junctions, then even junctions, so through
-    // chains run end to end before arms claim the junctions.
+    const auto isHairpin = [&](int node) {
+        const QVector<int>& nodeLegs = legsByNode.at(node);
+        return continuation(node, reversedLeg(leaving(nodeLegs.first(), node)), anyLeg) < 0;
+    };
+
+    // Dead ends and hairpins first, then odd junctions, then even junctions,
+    // so through chains run end to end before arms claim the junctions.
     QVector<int> seeds;
     for (int node = 0; node < legsByNode.size(); ++node) {
-        if (degree(node) != 2) {
+        if (degree(node) != 2 || isHairpin(node)) {
             seeds.append(node);
         }
     }
     const auto seedRank = [&](int node) {
-        if (degree(node) == 1) {
+        if (degree(node) <= 2) {
             return 0;
         }
         return degree(node) % 2 == 1 ? 1 : 2;
@@ -577,7 +587,7 @@ QVector<Chain> buildChains(const QVector<Leg>& legs, double defaultRadius)
         }
     }
 
-    // What remains are loops made only of degree-2 stations.
+    // What remains are loops made only of degree-2 stations without a hairpin.
     for (int legIndex = 0; legIndex < legs.size(); ++legIndex) {
         if (!legUsed.at(legIndex)) {
             chains.append(walkChain(fromNode.at(legIndex), legIndex));
@@ -833,11 +843,16 @@ struct SharpBend {
     double halfTurn = 0.0;
     double largestReading = 0.0;
 
+    // How far the rings would sit from the corner on legs of any length.
+    double wantedInset() const
+    {
+        return kCornerInsetSafety * largestReading * std::tan(halfTurn);
+    }
+
     // How far the rings sit from the corner on a leg of the given length.
     double inset(double legLength) const
     {
-        const double wanted = std::max(kCornerInsetSafety * largestReading * std::tan(halfTurn), kCornerInsetMeters);
-        return std::min(wanted, kCornerInsetLegFraction * legLength);
+        return std::min(std::max(wantedInset(), kCornerInsetMeters), kCornerInsetLegFraction * legLength);
     }
 
     BendLimit limit(double clearRadius, int cornerLeg, BendLimit::Role role) const
@@ -933,19 +948,24 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const PlumbE
             }
             return std::nullopt;
         }
-        const WalkedLeg& next = walked.at((legIndex + 1) % legCount);
+        const int nextIndex = (legIndex + 1) % legCount;
+        const WalkedLeg& next = walked.at(nextIndex);
         const QVector3D outgoing = next.direction();
         const float cosine = QVector3D::dotProduct(incoming, outgoing);
-        if (cosine >= minBendCosine) {
-            return std::nullopt;
-        }
         const double turn = std::acos(std::clamp(static_cast<double>(cosine), -1.0, 1.0));
-        return SharpBend {
+        const SharpBend bend {
             {incoming, outgoing},
             (outgoing - incoming).normalized(),
             turn / 2.0,
             largestReading({leg.endRing, next.startRing}, options.defaultRadiusMeters)
         };
+        // A gentler bend is sharp too when its walls reach past the rings
+        // beside the corner.
+        const double nearestRing = std::min(firstSampleDistance(legIndex), firstSampleDistance(nextIndex));
+        if (cosine >= minBendCosine && bend.wantedInset() <= nearestRing) {
+            return std::nullopt;
+        }
+        return bend;
     };
 
     QVector<std::optional<SharpBend>> bendAfter;
@@ -1344,7 +1364,8 @@ cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std
                                           <= std::abs(QVector3D::dotProduct(direction, miter->outgoing));
             const QVector3D& leg = isAcrossIncoming ? miter->incoming : miter->outgoing;
             wall -= leg * (QVector3D::dotProduct(wall, frame.tangent) / QVector3D::dotProduct(leg, frame.tangent));
-            return std::max(cwPassageTubeBuilder::kMinRadiusMeters, static_cast<double>(wall.length()));
+            const double stretched = std::min(static_cast<double>(wall.length()), kMaxMiterStretch * *reading);
+            return std::max(cwPassageTubeBuilder::kMinRadiusMeters, stretched);
         }
         return std::max(cwPassageTubeBuilder::kMinRadiusMeters,
                         static_cast<double>(std::abs(QVector3D::dotProduct(wall, axis))));
@@ -1545,11 +1566,11 @@ double halfTurnCosine(const Ring& ring, const BendLimit& bend)
 
 // The radius of a section square to the legs over its radius stretched
 // across the bisector plane, for a bin whose component along the bend's
-// inside is inside.
+// inside is inside, at least 1 / kMaxMiterStretch.
 double squareOverMiterRadius(double halfTurnCosine, double inside)
 {
     const double halfTurnSineSquared = 1.0 - halfTurnCosine * halfTurnCosine;
-    return std::sqrt(1.0 - inside * inside * halfTurnSineSquared);
+    return std::max(std::sqrt(1.0 - inside * inside * halfTurnSineSquared), 1.0 / kMaxMiterStretch);
 }
 
 // A corner station's ring without readings of its own takes a section

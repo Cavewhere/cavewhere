@@ -409,12 +409,13 @@ TEST_CASE("cwPassageTubeBuilder walks a loop once and closes it", "[PassageTube]
 {
     const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0)};
     const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0)};
-    const StationInput c {QStringLiteral("c"), QVector3D(5, 8, 0)};
-    const BuilderInput input = makeInput({{{a, b, c, a}}});
+    const StationInput c {QStringLiteral("c"), QVector3D(11, 8, 0)};
+    const StationInput d {QStringLiteral("d"), QVector3D(1, 9, 0)};
+    const BuilderInput input = makeInput({{{a, b, c, d, a}}});
 
     const Builder::Debug debug = buildDebug(input);
 
-    REQUIRE(debug.legs.size() == 3);
+    REQUIRE(debug.legs.size() == 4);
     REQUIRE(debug.chains.size() == 1);
     checkChainsCoverLegs(debug);
 
@@ -605,24 +606,30 @@ double cornerInset(double radius, double turnDegrees)
 }
 
 const QVector3D kBendCorner(10, 0, 0);
-const QVector3D kBend120Outgoing(-0.5f, std::sqrt(3.0f) / 2.0f, 0.0f);
+// The sharpest bend a chain runs through, short of a hairpin.
+constexpr double kSharpestBendDegrees = 95.0;
+const QVector3D kSharpestBendOutgoing(static_cast<float>(std::cos(qDegreesToRadians(kSharpestBendDegrees))),
+                                      static_cast<float>(std::sin(qDegreesToRadians(kSharpestBendDegrees))),
+                                      0.0f);
 
-BuilderInput bend120Input()
+BuilderInput sharpestBendInput()
 {
     const QStringList dimensions = lrud(1, 1, 1, 1);
     return makeInput({{{
         {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
         {QStringLiteral("b"), kBendCorner, dimensions},
-        {QStringLiteral("c"), kBendCorner + kBend120Outgoing * 10.0f, dimensions},
+        {QStringLiteral("c"), kBendCorner + kSharpestBendOutgoing * 10.0f, dimensions},
     }}});
 }
 
-BuilderInput triangleLoopInput(const QStringList& dimensions = {QString(), QString(), QString(), QString()})
+// A loop whose corners turn less than a hairpin, so one chain runs round it.
+BuilderInput loopInput(const QStringList& dimensions = {QString(), QString(), QString(), QString()})
 {
     return makeInput({{{
         {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
         {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions},
-        {QStringLiteral("c"), QVector3D(5, 8, 0), dimensions},
+        {QStringLiteral("c"), QVector3D(11, 8, 0), dimensions},
+        {QStringLiteral("d"), QVector3D(1, 9, 0), dimensions},
         {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
     }}});
 }
@@ -1354,15 +1361,15 @@ TEST_CASE("cwPassageTubeBuilder keeps a 90 degree bend narrower than its corner 
     checkMeshClean(buildDebug(rightAngleBendInput(kNarrowRadiusMeters)));
 }
 
-TEST_CASE("cwPassageTubeBuilder rounds a 120 degree bend with inset rings", "[PassageTube][cwPassageTubeBuilder]")
+TEST_CASE("cwPassageTubeBuilder rounds a 95 degree bend with inset rings", "[PassageTube][cwPassageTubeBuilder]")
 {
     const QVector3D& corner = kBendCorner;
-    const QVector3D& outgoing = kBend120Outgoing;
-    const Builder::Debug debug = buildDebug(bend120Input());
+    const QVector3D& outgoing = kSharpestBendOutgoing;
+    const Builder::Debug debug = buildDebug(sharpestBendInput());
     REQUIRE(debug.chains.size() == 1);
     const Builder::Chain& chain = debug.chains.at(0);
 
-    const float inset = static_cast<float>(cornerInset(1.0, 120.0));
+    const float inset = static_cast<float>(cornerInset(1.0, kSharpestBendDegrees));
     const Builder::Ring& before = ringAt(chain, corner - QVector3D(inset, 0, 0));
     checkVectorNear(before.frame.tangent, QVector3D(1, 0, 0));
     const Builder::Ring& after = ringAt(chain, corner + outgoing * inset);
@@ -1406,6 +1413,42 @@ TEST_CASE("cwPassageTubeBuilder rounds a sharp bend with elbow rings", "[Passage
     CHECK(middle.radii.at(innerBin) == Catch::Approx(kConcavityClampFactor * arcRadius).margin(1e-3));
     checkMeshClean(debug);
     checkNoVertexPulled(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder breaks a chain at a hairpin", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kHairpinDegrees = 170.0;
+    constexpr float kLegMeters = 10.0f;
+    const QVector3D back(static_cast<float>(std::cos(qDegreesToRadians(kHairpinDegrees))),
+                         static_cast<float>(std::sin(qDegreesToRadians(kHairpinDegrees))),
+                         0.0f);
+    const QStringList dimensions = lrud(0.5, 0.5, 0.5, 0.5);
+    const QVector3D hairpin(kLegMeters, 0, 0);
+    const QVector3D turned = hairpin + back * kLegMeters;
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), hairpin, dimensions},
+        {QStringLiteral("c"), turned, dimensions},
+        {QStringLiteral("d"), turned + QVector3D(-kLegMeters, 0, 0), dimensions},
+    }}});
+    const Builder::Debug debug = buildDebug(input);
+
+    REQUIRE(debug.chains.size() == 2);
+    checkChainsCoverLegs(debug);
+    for (const Builder::Chain& chain : debug.chains) {
+        const QStringList stations = chainStations(debug, chain);
+        INFO(stations.join(QStringLiteral(" ")).toStdString());
+        CHECK((stations.first() == QStringLiteral("b") || stations.last() == QStringLiteral("b")));
+        CHECK(chain.startCap == Builder::EndCap::Fan);
+        CHECK(chain.endCap == Builder::EndCap::Fan);
+    }
+
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(std::none_of(report.issues.cbegin(), report.issues.cend(), [](const cwPassageTubeMeshCheck::Issue& issue) {
+        return issue.type == cwPassageTubeMeshCheck::Crease;
+    }));
+    checkMeshClosed(debug.mesh);
 }
 
 TEST_CASE("cwPassageTubeBuilder leaves a gentle bend without inset rings", "[PassageTube][cwPassageTubeBuilder]")
@@ -1538,7 +1581,7 @@ TEST_CASE("cwPassageTubeBuilder merges rings closer than the minimum spacing", "
 
 TEST_CASE("cwPassageTubeBuilder closes a loop without caps", "[PassageTube][cwPassageTubeBuilder]")
 {
-    const Builder::Debug debug = buildDebug(triangleLoopInput());
+    const Builder::Debug debug = buildDebug(loopInput());
     REQUIRE(debug.chains.size() == 1);
     CHECK(debug.chains.at(0).startCap == Builder::EndCap::None);
     CHECK(debug.chains.at(0).endCap == Builder::EndCap::None);
@@ -1547,7 +1590,7 @@ TEST_CASE("cwPassageTubeBuilder closes a loop without caps", "[PassageTube][cwPa
 
 TEST_CASE("cwPassageTubeBuilder keeps a loop closing at a sharp bend without folds", "[PassageTube][cwPassageTubeBuilder]")
 {
-    const Builder::Debug debug = buildDebug(triangleLoopInput(lrud(3, 3, 3, 3)));
+    const Builder::Debug debug = buildDebug(loopInput(lrud(3, 3, 3, 3)));
     REQUIRE(debug.chains.size() == 1);
     REQUIRE(debug.chains.at(0).startCap == Builder::EndCap::None);
     checkMeshClosedWithSaneRings(debug);
@@ -1591,9 +1634,9 @@ TEST_CASE("cwPassageTubeBuilder keeps the inner wall of a sharp bend clean", "[P
         {QStringLiteral("vertical pit"), verticalPitInput()},
         {QStringLiteral("pit on a new bearing"), pitOnNewBearingInput()},
         {QStringLiteral("90 degree bend, radius 3"), rightAngleBendInput(3.0)},
-        {QStringLiteral("120 degree bend"), bend120Input()},
-        {QStringLiteral("loop without caps"), triangleLoopInput()},
-        {QStringLiteral("loop closing at a sharp bend"), triangleLoopInput(lrud(3, 3, 3, 3))},
+        {QStringLiteral("95 degree bend"), sharpestBendInput()},
+        {QStringLiteral("loop without caps"), loopInput()},
+        {QStringLiteral("loop closing at a sharp bend"), loopInput(lrud(3, 3, 3, 3))},
     };
     for (const auto& [name, input] : bends) {
         INFO(name.toStdString());

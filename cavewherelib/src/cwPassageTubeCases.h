@@ -138,8 +138,24 @@ public:
     // The gallery cases, Phake Cave, the sweep, and loops tagged arms:0.
     static QVector<Case> catalog();
 
-    // A seeded cave tree with junctionCount three-way junctions.
+    // A seeded cave tree with junctionCount three-way junctions, surveyed as
+    // a caver would: each passage turns at most kRandomMaxTurnDegrees in plan
+    // per leg, a branch leaves its junction at least kRandomMinBranchDegrees
+    // from the legs already there, its readings change at most
+    // kRandomMaxLrudStep-fold per leg and its legs reach well past its walls,
+    // a leg kRandomShaftDegrees or steeper is a shaft whose lower station
+    // reads its depth as up and upper station as down, and every station
+    // keeps kRandomClearanceMeters from the other passages' legs.
+    static constexpr double kRandomMaxTurnDegrees = 60.0;
+    static constexpr double kRandomMinBranchDegrees = 30.0;
+    static constexpr double kRandomMaxLrudStep = 2.0;
+    static constexpr double kRandomShaftDegrees = 45.0;
+    static constexpr double kRandomClearanceMeters = 1.0;
     static Trip random(unsigned int seed, int junctionCount);
+
+    // A seeded cave tree with junctionCount three-way junctions, uniform
+    // random bearings and independent readings at every station.
+    static Trip randomWild(unsigned int seed, int junctionCount);
 };
 
 #endif // CWPASSAGETUBECASES_H

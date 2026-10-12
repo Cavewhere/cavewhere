@@ -11,6 +11,7 @@ QC.ApplicationWindow {
     property string initialCase: ""
     property int randomSeed: -1
     property int randomJunctions: 3
+    property bool randomWild: false
     property string grabDirectory: ""
     property bool grabAll: false
     property bool failingOnly: false
@@ -142,7 +143,7 @@ QC.ApplicationWindow {
 
     function start() {
         if (randomSeed >= 0) {
-            galleryModelId.addRandom(randomSeed, randomJunctions)
+            galleryModelId.addRandom(randomSeed, randomJunctions, randomWild)
             selectRow(galleryModelId.count - 1)
         } else if (initialCase !== "") {
             const row = galleryModelId.indexOf(initialCase)

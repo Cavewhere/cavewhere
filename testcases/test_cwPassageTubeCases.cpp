@@ -44,6 +44,13 @@ constexpr float kMinPlanLengthSquared = 1e-6f;
 constexpr int kRandomSeedCount = 50;
 constexpr int kMaxRandomJunctions = 6;
 constexpr float kPulledToleranceMeters = 1e-4f;
+// Readings print with six significant digits.
+constexpr double kLrudStepTolerance = 1e-4;
+// A station's readings in Cases::Station::lrud order.
+constexpr int kLeftReading = 0;
+constexpr int kRightReading = 1;
+constexpr int kUpReading = 2;
+constexpr int kDownReading = 3;
 
 const QVector<Cases::Case>& catalog()
 {
@@ -134,19 +141,6 @@ void checkCaseBuildsClosed(const std::string& name)
     checkBuildsClosed(entry.trip, entry.sampleSpacing);
 }
 
-// Random seeds whose junction-free survey builds a clean mesh. The others
-// fail the full check on what uniform random bearings and independent
-// readings make: hairpins whose inset rings and clamped inner walls cross
-// or fold (SelfIntersection, Crease, SliverTriangle), passages run through
-// each other (SelfIntersection), and walls off a ring that a hairpin's
-// corner or a station's facing tilts (WallMissed).
-const QVector<int> kCleanRandomSeeds {2, 8, 13, 15, 19, 28, 31, 36, 49};
-
-bool isCleanRandomSeed(int seed)
-{
-    return kCleanRandomSeeds.contains(seed);
-}
-
 // Vertices the builder slid onto the previous ring's plane: the bend rules
 // keep every ring in front of the one before, so the fold-back pull in the
 // builder never moves one.
@@ -167,6 +161,19 @@ int pulledVertexCount(const cwPassageTubeBuilder::Debug& debug)
         }
     }
     return count;
+}
+
+double angleBetweenDegrees(const QVector3D& a, const QVector3D& b)
+{
+    const double cosine = QVector3D::dotProduct(a.normalized(), b.normalized());
+    return qRadiansToDegrees(std::acos(std::clamp(cosine, -1.0, 1.0)));
+}
+
+double distanceToLeg(const QVector3D& point, const QVector3D& start, const QVector3D& end)
+{
+    const QVector3D along = end - start;
+    const float t = std::clamp(QVector3D::dotProduct(point - start, along) / along.lengthSquared(), 0.0f, 1.0f);
+    return point.distanceToPoint(start + t * along);
 }
 
 // Station names of degree above two: survey junctions.
@@ -392,6 +399,28 @@ void checkOpenSweepCaseBuildsClean(const std::string& name)
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
     INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
     CHECK(report.issues.isEmpty());
+}
+
+std::pair<unsigned int, int> randomSurvey(int seed)
+{
+    return {static_cast<unsigned int>(seed), 1 + (seed - 1) % kMaxRandomJunctions};
+}
+
+// Random seeds whose junctions the merge leaves unclean, which T07l takes
+// up with the random clean tests. Their passages build clean without the
+// junctions (see the junction-free tests). Every one reports a Crease of
+// 150° to 180° where an arm's last strip meets its zip band at the mouth:
+// the arm is about as tall or wide as the through, its station reads a few
+// centimeters to the wall the arm leaves through, or it leaves a shaft
+// station or the inside of a bend. Most also report SliverTriangle and
+// SelfIntersection in the zip band, or where two arms' mouths share
+// through quads.
+const QVector<int> kJunctionLimitRandomSeeds {1, 2, 4, 5, 6, 8, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+                                             27, 28, 29, 30, 32, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 46, 47, 48, 50};
+
+bool isJunctionLimitRandomSeed(int seed)
+{
+    return kJunctionLimitRandomSeeds.contains(seed);
 }
 
 } // namespace
@@ -679,48 +708,136 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction build closed tube
     checkCaseBuildsClosed(name);
 }
 
-// Random surveys carry every defect of the junction-free seeds (see
-// kCleanRandomSeeds) and add junctions at the merge's limits: overlapping
-// mouths, grazing joins, sharp bends at the junction and stations reading 0
-// on one side (see isOpenSweepCase and kPhakeCaveIssues).
-TEST_CASE("cwPassageTubeCases random surveys build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+TEST_CASE("cwPassageTubeCases random surveys build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
-    const int seed = GENERATE(range(1, kRandomSeedCount + 1));
-    const int junctions = 1 + (seed - 1) % kMaxRandomJunctions;
+    const auto [seed, junctions] = randomSurvey(GENERATE(filter([](int candidate) { return !isJunctionLimitRandomSeed(candidate); },
+                                                                range(1, kRandomSeedCount + 1))));
     INFO("seed " << seed << ", " << junctions << " junctions");
-    checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), junctions));
+    checkBuildsClean(Cases::random(seed, junctions));
+}
+
+TEST_CASE("cwPassageTubeCases random surveys with junctions at the merge's limits build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+{
+    const auto [seed, junctions] = randomSurvey(GENERATE(from_range(kJunctionLimitRandomSeeds)));
+    INFO("seed " << seed << ", " << junctions << " junctions");
+    checkBuildsClean(Cases::random(seed, junctions));
 }
 
 TEST_CASE("cwPassageTubeCases random surveys build closed tubes", "[PassageTube][cwPassageTubeCases]")
 {
-    const int seed = GENERATE(range(1, kRandomSeedCount + 1));
-    const int junctions = 1 + (seed - 1) % kMaxRandomJunctions;
+    const auto [seed, junctions] = randomSurvey(GENERATE(range(1, kRandomSeedCount + 1)));
     INFO("seed " << seed << ", " << junctions << " junctions");
-    checkBuildsClosed(Cases::random(static_cast<unsigned int>(seed), junctions));
+    checkBuildsClosed(Cases::random(seed, junctions));
 }
 
 TEST_CASE("cwPassageTubeCases random surveys without a junction build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
-    const int seed = GENERATE(from_range(kCleanRandomSeeds));
+    const int seed = GENERATE(range(1, kRandomSeedCount + 1));
     INFO("seed " << seed);
     checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), 0));
 }
 
-// See kCleanRandomSeeds for what the other seeds report.
-TEST_CASE("cwPassageTubeCases random surveys without a junction and with known builder defects build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
-{
-    const int seed = GENERATE(filter([](int candidate) { return !isCleanRandomSeed(candidate); },
-                                     range(1, kRandomSeedCount + 1)));
-    INFO("seed " << seed);
-    checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), 0));
-}
-
-// Sharp random bends no longer fold the inner wall into zero-area triangles.
-TEST_CASE("cwPassageTubeCases random surveys without a junction build no degenerate triangles", "[PassageTube][cwPassageTubeCases]")
+TEST_CASE("cwPassageTubeCases random surveys without a junction build closed tubes", "[PassageTube][cwPassageTubeCases]")
 {
     const int seed = GENERATE(range(1, kRandomSeedCount + 1));
     INFO("seed " << seed);
-    const Cases::Survey survey = Cases::toSurvey(Cases::random(static_cast<unsigned int>(seed), 0));
+    checkBuildsClosed(Cases::random(static_cast<unsigned int>(seed), 0));
+}
+
+TEST_CASE("cwPassageTubeCases random surveys are cave-like", "[PassageTube][cwPassageTubeCases]")
+{
+    const auto [seed, junctions] = randomSurvey(GENERATE(range(1, kRandomSeedCount + 1)));
+    INFO("seed " << seed << ", " << junctions << " junctions");
+    const Cases::Trip trip = Cases::random(seed, junctions);
+
+    for (int c = 0; c < trip.chunks.size(); ++c) {
+        const QList<Cases::Station>& chunk = trip.chunks.at(c);
+        for (int i = 2; i < chunk.size(); ++i) {
+            const QVector3D before = *chunk.at(i - 1).position - *chunk.at(i - 2).position;
+            const QVector3D after = *chunk.at(i).position - *chunk.at(i - 1).position;
+            const double turn = std::abs(std::remainder(qRadiansToDegrees(std::atan2(after.x(), after.y()) - std::atan2(before.x(), before.y())), 360.0));
+            INFO("chunk " << c << ", station " << chunk.at(i - 1).name.toStdString());
+            CHECK(turn <= Cases::kRandomMaxTurnDegrees + kAngleToleranceDegrees);
+        }
+        for (int i = 1; i < chunk.size(); ++i) {
+            for (int reading : {kLeftReading, kRightReading}) {
+                const double ratio = chunk.at(i).lrud.at(reading).toDouble() / chunk.at(i - 1).lrud.at(reading).toDouble();
+                CHECK(ratio <= Cases::kRandomMaxLrudStep + kLrudStepTolerance);
+                CHECK(ratio >= 1.0 / Cases::kRandomMaxLrudStep - kLrudStepTolerance);
+            }
+        }
+
+        for (int i = 1; i < chunk.size(); ++i) {
+            const QVector3D leg = *chunk.at(i).position - *chunk.at(i - 1).position;
+            const double inclination = qRadiansToDegrees(std::atan2(std::abs(leg.z()), std::hypot(leg.x(), leg.y())));
+            if (inclination < Cases::kRandomShaftDegrees + kAngleToleranceDegrees) {
+                continue;
+            }
+            const bool isDescending = leg.z() < 0.0f;
+            const Cases::Station& upper = isDescending ? chunk.at(i - 1) : chunk.at(i);
+            const Cases::Station& lower = isDescending ? chunk.at(i) : chunk.at(i - 1);
+            const double depth = std::abs(leg.z());
+            INFO("chunk " << c << ", shaft " << upper.name.toStdString() << " to " << lower.name.toStdString() << ", " << depth << " m deep");
+            CHECK(upper.lrud.at(kDownReading).toDouble() >= depth * (1.0 - kLrudStepTolerance));
+            CHECK(lower.lrud.at(kUpReading).toDouble() >= depth * (1.0 - kLrudStepTolerance));
+        }
+    }
+
+    for (int c = 1; c < trip.chunks.size(); ++c) {
+        const QList<Cases::Station>& branch = trip.chunks.at(c);
+        const Cases::Station& junction = branch.first();
+        const QVector3D firstLeg = *branch.at(1).position - *junction.position;
+        for (int earlier = 0; earlier < c; ++earlier) {
+            const QList<Cases::Station>& passage = trip.chunks.at(earlier);
+            for (int i = 0; i < passage.size(); ++i) {
+                if (passage.at(i).name != junction.name) {
+                    continue;
+                }
+                for (int neighbor : {i - 1, i + 1}) {
+                    if (neighbor < 0 || neighbor >= passage.size()) {
+                        continue;
+                    }
+                    INFO("branch " << c << " at " << junction.name.toStdString() << " against " << passage.at(neighbor).name.toStdString());
+                    CHECK(angleBetweenDegrees(firstLeg, *passage.at(neighbor).position - *junction.position)
+                          >= Cases::kRandomMinBranchDegrees - kAngleToleranceDegrees);
+                }
+            }
+        }
+    }
+
+    for (int c = 0; c < trip.chunks.size(); ++c) {
+        for (const Cases::Station& station : trip.chunks.at(c)) {
+            for (int other = 0; other < trip.chunks.size(); ++other) {
+                const QList<Cases::Station>& legs = trip.chunks.at(other);
+                for (int i = 1; i < legs.size(); ++i) {
+                    if (other == c || legs.at(i - 1).name == station.name || legs.at(i).name == station.name) {
+                        continue;
+                    }
+                    INFO("station " << station.name.toStdString() << " against " << legs.at(i - 1).name.toStdString()
+                                    << " to " << legs.at(i).name.toStdString());
+                    CHECK(distanceToLeg(*station.position, *legs.at(i - 1).position, *legs.at(i).position)
+                          >= Cases::kRandomClearanceMeters - kPulledToleranceMeters);
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("cwPassageTubeCases wild random surveys build closed tubes", "[PassageTube][cwPassageTubeCases]")
+{
+    const auto [seed, junctions] = randomSurvey(GENERATE(range(1, kRandomSeedCount + 1)));
+    INFO("seed " << seed << ", " << junctions << " junctions");
+    checkBuildsClosed(Cases::randomWild(seed, junctions));
+    checkBuildsClosed(Cases::randomWild(seed, 0));
+}
+
+// Sharp random bends no longer fold the inner wall into zero-area triangles.
+TEST_CASE("cwPassageTubeCases wild random surveys build no degenerate triangles", "[PassageTube][cwPassageTubeCases]")
+{
+    const auto [seed, junctions] = randomSurvey(GENERATE(range(1, kRandomSeedCount + 1)));
+    const int junctionCount = GENERATE_COPY(0, junctions);
+    INFO("seed " << seed << ", " << junctionCount << " junctions");
+    const Cases::Survey survey = Cases::toSurvey(Cases::randomWild(seed, junctionCount));
     const cwPassageTubeMesh mesh = cwPassageTubeBuilder::build(survey.region, survey.positionsByCave, {}, cwPassageTubeBuilder::Options());
     const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::degenerateTriangles(mesh, cwPassageTubeMeshCheck::wholeMesh(mesh));
     const auto degenerate = std::count_if(issues.cbegin(), issues.cend(), [](const cwPassageTubeMeshCheck::Issue& issue) {
@@ -730,11 +847,14 @@ TEST_CASE("cwPassageTubeCases random surveys without a junction build no degener
     CHECK(degenerate == 0);
 }
 
-TEST_CASE("cwPassageTubeCases random surveys without a junction build closed tubes", "[PassageTube][cwPassageTubeCases]")
+// Uniform bearings and independent readings make hairpin cones, passages run
+// through each other and walls off a ring that a station's facing tilts.
+TEST_CASE("cwPassageTubeCases wild random surveys build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
 {
-    const int seed = GENERATE(range(1, kRandomSeedCount + 1));
-    INFO("seed " << seed);
-    checkBuildsClosed(Cases::random(static_cast<unsigned int>(seed), 0));
+    const auto [seed, junctions] = randomSurvey(GENERATE(range(1, kRandomSeedCount + 1)));
+    const int junctionCount = GENERATE_COPY(0, junctions);
+    INFO("seed " << seed << ", " << junctionCount << " junctions");
+    checkBuildsClean(Cases::randomWild(seed, junctionCount));
 }
 
 TEST_CASE("cwPassageTubeCases a case survey round-trips its parameters", "[PassageTube][cwPassageTubeCases]")
@@ -776,6 +896,9 @@ TEST_CASE("cwPassageTubeCases a case survey round-trips its parameters", "[Passa
         const Cases::Trip trip = Cases::random(seed, junctions);
         CHECK(trip == Cases::random(seed, junctions));
         CHECK(junctionCount(trip) == junctions);
+        const Cases::Trip wild = Cases::randomWild(seed, junctions);
+        CHECK(wild == Cases::randomWild(seed, junctions));
+        CHECK(junctionCount(wild) == junctions);
     }
 
     SECTION("catalog names are unique and the sweep covers every parameter")

@@ -94,7 +94,8 @@ public:
     cwRenderPassageTube* tube() const;
     cwRenderLinePlot* linePlot() const;
 
-    Q_INVOKABLE void addRandom(int seed, int junctionCount);
+    // Adds a cwPassageTubeCases::random survey, or a randomWild one when wild.
+    Q_INVOKABLE void addRandom(int seed, int junctionCount, bool wild = false);
 
     // The row named name, else the first whose name starts with it ignoring
     // case, else -1.

@@ -64,6 +64,16 @@ constexpr int kLrudReadingCount = 4;
 // offers an interior station to branch from.
 constexpr int kRandomExtraMainLegs = 3;
 
+// Cave-like random surveys: a leg turns at most this much in 3D from the one
+// before.
+constexpr double kRandomMaxBendDegrees = 90.0;
+// A caver sets stations farther apart than the passage is wide: a leg is at
+// least this many times the largest reading at its stations.
+constexpr double kRandomLegPerReading = 2.5;
+// A passage is at most this many times wider than tall or taller than wide.
+constexpr double kRandomMaxSectionAspect = 3.0;
+constexpr int kRandomPlacementAttempts = 200;
+
 // The "Down" clino: the shot drops straight down whatever its azimuth.
 constexpr double kClinoDown = -90.0;
 
@@ -197,6 +207,40 @@ cwPassageTubeCases::Case loopCase()
     loop.tags = {QStringLiteral("loop"), QStringLiteral("arms:0")};
     loop.trip.chunks = {stations};
     return loop;
+}
+
+double distanceToSegment(const QVector3D& point, const QVector3D& start, const QVector3D& end)
+{
+    const QVector3D along = end - start;
+    const float lengthSquared = along.lengthSquared();
+    const float t = lengthSquared > 0.0f ? std::clamp(QVector3D::dotProduct(point - start, along) / lengthSquared, 0.0f, 1.0f) : 0.0f;
+    return point.distanceToPoint(start + t * along);
+}
+
+// The shortest distance between the segments ab and cd.
+double distanceBetweenSegments(const QVector3D& a, const QVector3D& b, const QVector3D& c, const QVector3D& d)
+{
+    const QVector3D u = b - a;
+    const QVector3D v = d - c;
+    const QVector3D w = a - c;
+    const double uu = QVector3D::dotProduct(u, u);
+    const double uv = QVector3D::dotProduct(u, v);
+    const double vv = QVector3D::dotProduct(v, v);
+    const double uw = QVector3D::dotProduct(u, w);
+    const double vw = QVector3D::dotProduct(v, w);
+    const double denominator = uu * vv - uv * uv;
+    double s = denominator > 0.0 ? std::clamp((uv * vw - vv * uw) / denominator, 0.0, 1.0) : 0.0;
+    double t = vv > 0.0 ? std::clamp((uv * s + vw) / vv, 0.0, 1.0) : 0.0;
+    s = uu > 0.0 ? std::clamp((uv * t - uw) / uu, 0.0, 1.0) : 0.0;
+    const QVector3D closestOnAb = a + static_cast<float>(s) * u;
+    const QVector3D closestOnCd = c + static_cast<float>(t) * v;
+    return closestOnAb.distanceToPoint(closestOnCd);
+}
+
+double angleBetweenDegrees(const QVector3D& a, const QVector3D& b)
+{
+    const double cosine = QVector3D::dotProduct(a.normalized(), b.normalized());
+    return qRadiansToDegrees(std::acos(std::clamp(cosine, -1.0, 1.0)));
 }
 
 } // namespace
@@ -489,7 +533,7 @@ QVector<cwPassageTubeCases::Case> cwPassageTubeCases::catalog()
     return cases;
 }
 
-cwPassageTubeCases::Trip cwPassageTubeCases::random(unsigned int seed, int junctionCount)
+cwPassageTubeCases::Trip cwPassageTubeCases::randomWild(unsigned int seed, int junctionCount)
 {
     std::mt19937 generator(seed);
     std::uniform_real_distribution<double> unit(0.0, 1.0);
@@ -559,6 +603,217 @@ cwPassageTubeCases::Trip cwPassageTubeCases::random(unsigned int seed, int junct
         }
         std::uniform_int_distribution<int> pick(0, static_cast<int>(interior.size()) - 1);
         trip.chunks.append(addPassage(interior.at(pick(generator)), branchLegs(generator)));
+    }
+    return trip;
+}
+
+cwPassageTubeCases::Trip cwPassageTubeCases::random(unsigned int seed, int junctionCount)
+{
+    std::mt19937 generator(seed);
+    std::uniform_real_distribution<double> unit(0.0, 1.0);
+    const auto between = [&](double low, double high) {
+        return low + (high - low) * unit(generator);
+    };
+
+    // Readings as left, right, up and down in log meters.
+    using LogLrud = std::array<double, kLrudReadingCount>;
+    const double logMinLrud = std::log(kRandomMinLrudMeters);
+    const double logMaxLrud = std::log(kRandomMaxLrudMeters);
+    const double logMaxStep = std::log(kRandomMaxLrudStep);
+    enum Reading {
+        Left,
+        Right,
+        Up,
+        Down
+    };
+
+    struct Placed {
+        QVector3D position;
+        LogLrud walk;
+        // The legs at this station, as the station index at their other end.
+        QVector<int> neighbors;
+    };
+    QVector<Placed> placed;
+    const auto name = [](int index) {
+        return QStringLiteral("s%1").arg(index);
+    };
+    const auto toStrings = [](const LogLrud& walk) {
+        QStringList dimensions;
+        for (double logMeters : walk) {
+            dimensions.append(QString::number(std::exp(logMeters)));
+        }
+        return dimensions;
+    };
+
+    const auto largestMeters = [](const LogLrud& walk) {
+        return std::exp(*std::max_element(walk.cbegin(), walk.cend()));
+    };
+
+    // Whether a leg from the station at fromIndex to end, with walls reaching
+    // reach, keeps its stations kRandomClearanceMeters from the other legs
+    // and its walls that far from theirs.
+    const auto isClear = [&](int fromIndex, const QVector3D& end, double reach) {
+        const QVector3D& start = placed.at(fromIndex).position;
+        for (int i = 0; i < placed.size(); ++i) {
+            const Placed& station = placed.at(i);
+            if (i != fromIndex && distanceToSegment(station.position, start, end) < kRandomClearanceMeters) {
+                return false;
+            }
+            for (int neighbor : station.neighbors) {
+                const Placed& other = placed.at(neighbor);
+                if (distanceToSegment(end, station.position, other.position) < kRandomClearanceMeters) {
+                    return false;
+                }
+                const bool sharesStation = i == fromIndex || neighbor == fromIndex;
+                const double otherReach = std::max(largestMeters(station.walk), largestMeters(other.walk));
+                if (!sharesStation
+                    && distanceBetweenSegments(start, end, station.position, other.position) < kRandomClearanceMeters + reach + otherReach) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+
+    const auto drawInclination = [&](bool isEnd) {
+        if (!isEnd && unit(generator) < kRandomSteepFraction) {
+            const double sign = unit(generator) < 0.5 ? -1.0 : 1.0;
+            return sign * between(kRandomGentleDegrees, kVerticalDegrees);
+        }
+        return between(-kRandomGentleDegrees, kRandomGentleDegrees);
+    };
+
+    // A leg from the station at fromIndex: along a bearing drifting from the
+    // passage's previous one, or for a branch's first leg clear of the legs
+    // already at its junction. A passage starts and ends on a gentle leg, as
+    // a survey reaches the floor of a pit before it stops. Empty when every
+    // attempt runs into the cave.
+    struct Draw {
+        QVector3D end;
+        double bearing = 0.0;
+        double inclination = 0.0;
+    };
+    const auto drawLeg = [&](int fromIndex, const std::optional<Draw>& previous, const LogLrud& walk, bool isEnd) -> std::optional<Draw> {
+        const Placed& from = placed.at(fromIndex);
+        const double reach = std::max(largestMeters(from.walk), largestMeters(walk));
+        const double minLength = std::max(kRandomMinLegMeters, kRandomLegPerReading * reach);
+        const double maxLength = std::max(minLength, kRandomMaxLegMeters);
+        for (int attempt = 0; attempt < kRandomPlacementAttempts; ++attempt) {
+            Draw draw;
+            draw.bearing = previous ? previous->bearing + between(-kRandomMaxTurnDegrees, kRandomMaxTurnDegrees)
+                                    : between(0.0, kFullTurnDegrees);
+            draw.inclination = drawInclination(isEnd);
+            const QVector3D heading = direction(draw.bearing, draw.inclination);
+            draw.end = from.position + static_cast<float>(between(minLength, maxLength)) * heading;
+
+            const bool turnsGently = !previous
+                                     || angleBetweenDegrees(direction(previous->bearing, previous->inclination), heading) <= kRandomMaxBendDegrees;
+            const bool leavesJunctionClear = previous || std::all_of(from.neighbors.cbegin(), from.neighbors.cend(), [&](int neighbor) {
+                return angleBetweenDegrees(placed.at(neighbor).position - from.position, heading) >= kRandomMinBranchDegrees;
+            });
+            if (turnsGently && leavesJunctionClear && isClear(fromIndex, draw.end, reach)) {
+                return draw;
+            }
+        }
+        return std::nullopt;
+    };
+
+    const auto isPassageShaped = [](const LogLrud& walk) {
+        const double width = std::exp(walk.at(Left)) + std::exp(walk.at(Right));
+        const double height = std::exp(walk.at(Up)) + std::exp(walk.at(Down));
+        return std::max(width, height) <= kRandomMaxSectionAspect * std::min(width, height);
+    };
+    // A step of the walk that keeps the section passage-shaped, or the walk
+    // unchanged when every attempt flattens it.
+    const auto nextWalk = [&](const LogLrud& walk) {
+        for (int attempt = 0; attempt < kRandomPlacementAttempts; ++attempt) {
+            LogLrud next;
+            for (int i = 0; i < kLrudReadingCount; ++i) {
+                next[i] = std::clamp(walk.at(i) + between(-logMaxStep, logMaxStep), logMinLrud, logMaxLrud);
+            }
+            if (isPassageShaped(next)) {
+                return next;
+            }
+        }
+        return walk;
+    };
+
+    const auto addStation = [&](const QVector3D& position, const LogLrud& walk) {
+        placed.append(Placed {position, walk, {}});
+        return static_cast<int>(placed.size()) - 1;
+    };
+
+    // A passage of up to legCount legs from the placed station at fromIndex,
+    // or empty when its first leg finds no room. A shaft's top station reads
+    // down to the bottom's floor and its bottom station up to the top's
+    // ceiling; a station between two shafts keeps the deeper reading.
+    const auto addPassage = [&](int fromIndex, int legCount) {
+        QList<Station> chunk;
+        std::optional<Draw> previous;
+        int current = fromIndex;
+        LogLrud currentLrud = placed.at(fromIndex).walk;
+        for (int i = 0; i < legCount; ++i) {
+            const LogLrud walk = nextWalk(placed.at(current).walk);
+            const bool isMainPassageStart = i == 0 && fromIndex == 0;
+            const std::optional<Draw> draw = drawLeg(current, previous, walk, isMainPassageStart || i == legCount - 1);
+            if (!draw) {
+                break;
+            }
+            if (chunk.isEmpty()) {
+                chunk.append(Station {name(current), placed.at(current).position, toStrings(currentLrud)});
+            }
+            const int next = addStation(draw->end, walk);
+            placed[current].neighbors.append(next);
+            placed[next].neighbors.append(current);
+
+            LogLrud nextLrud = placed.at(next).walk;
+            if (std::abs(draw->inclination) >= kRandomShaftDegrees) {
+                const double depth = std::abs(draw->end.z() - placed.at(current).position.z());
+                const bool isDescending = draw->inclination < 0.0;
+                const Reading towardNext = isDescending ? Down : Up;
+                const Reading towardCurrent = isDescending ? Up : Down;
+                currentLrud[towardNext] = std::max(currentLrud.at(towardNext), std::log(depth + std::exp(nextLrud.at(towardNext))));
+                nextLrud[towardCurrent] = std::log(depth + std::exp(currentLrud.at(towardCurrent)));
+                chunk.last().lrud = toStrings(currentLrud);
+            }
+            chunk.append(Station {name(next), draw->end, toStrings(nextLrud)});
+            previous = draw;
+            current = next;
+            currentLrud = nextLrud;
+        }
+        return chunk;
+    };
+
+    Trip trip;
+    LogLrud firstWalk;
+    do {
+        for (double& reading : firstWalk) {
+            reading = between(logMinLrud, logMaxLrud);
+        }
+    } while (!isPassageShaped(firstWalk));
+    addStation(QVector3D(0.0f, 0.0f, 0.0f), firstWalk);
+    trip.chunks.append(addPassage(0, junctionCount + kRandomExtraMainLegs));
+
+    std::uniform_int_distribution<int> branchLegs(kRandomMinBranchLegs, kRandomMaxBranchLegs);
+    for (int j = 0; j < junctionCount; ++j) {
+        QVector<int> interior;
+        for (int i = 0; i < placed.size(); ++i) {
+            if (placed.at(i).neighbors.size() == 2) {
+                interior.append(i);
+            }
+        }
+        if (interior.isEmpty()) {
+            break;
+        }
+        std::uniform_int_distribution<int> pick(0, static_cast<int>(interior.size()) - 1);
+        const int legCount = branchLegs(generator);
+        for (int attempt = 0; attempt < kRandomPlacementAttempts; ++attempt) {
+            const QList<Station> branch = addPassage(interior.at(pick(generator)), legCount);
+            if (!branch.isEmpty()) {
+                trip.chunks.append(branch);
+                break;
+            }
+        }
     }
     return trip;
 }

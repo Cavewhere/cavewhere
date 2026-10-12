@@ -412,12 +412,14 @@ TEST_CASE("cwPassageTubeJunction merges arms at a four-way junction", "[PassageT
 
 TEST_CASE("cwPassageTubeJunction keeps a loop's junction closed", "[PassageTube][cwPassageTubeJunction]")
 {
-    // The entrance passage runs on around the loop and ends where it joined it.
+    // The entrance passage runs on around the loop, turning less than a
+    // hairpin at each corner, and ends where it joined it.
     const QStringList dimensions = roundSection(0.5);
     const Trip trip {{{station(QStringLiteral("e"), QVector3D(-10, 0, 0), dimensions),
                        station(QStringLiteral("a"), QVector3D(0, 0, 0), dimensions),
-                       station(QStringLiteral("b"), QVector3D(10, 5, 0), dimensions),
-                       station(QStringLiteral("c"), QVector3D(10, -5, 0), dimensions),
+                       station(QStringLiteral("b"), QVector3D(6, 6, 0), dimensions),
+                       station(QStringLiteral("c"), QVector3D(12, 0, 0), dimensions),
+                       station(QStringLiteral("d"), QVector3D(6, -6, 0), dimensions),
                        station(QStringLiteral("a"), QVector3D(0, 0, 0), dimensions)}}};
     const Builder::Debug debug = buildDebug(makeTripsInput({trip}));
     REQUIRE(debug.chains.size() == 1);

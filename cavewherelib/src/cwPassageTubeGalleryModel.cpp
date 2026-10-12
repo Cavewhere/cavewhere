@@ -177,14 +177,21 @@ cwRenderLinePlot* cwPassageTubeGalleryModel::linePlot() const
     return m_linePlot;
 }
 
-void cwPassageTubeGalleryModel::addRandom(int seed, int junctionCount)
+void cwPassageTubeGalleryModel::addRandom(int seed, int junctionCount, bool wild)
 {
     Cases::Case entry;
-    entry.name = QStringLiteral("random seed %1, %2 junctions").arg(seed).arg(junctionCount);
+    entry.name = QStringLiteral("%1 seed %2, %3 junctions")
+                     .arg(wild ? QStringLiteral("wild random") : QStringLiteral("random"))
+                     .arg(seed)
+                     .arg(junctionCount);
     entry.tags = {QStringLiteral("random"),
                   QStringLiteral("seed:%1").arg(seed),
                   QStringLiteral("junctions:%1").arg(junctionCount)};
-    entry.trip = Cases::random(static_cast<unsigned int>(seed), junctionCount);
+    if (wild) {
+        entry.tags.append(QStringLiteral("wild"));
+    }
+    const auto seedValue = static_cast<unsigned int>(seed);
+    entry.trip = wild ? Cases::randomWild(seedValue, junctionCount) : Cases::random(seedValue, junctionCount);
     m_randomCases.append(entry);
 
     const int row = static_cast<int>(m_rows.size());

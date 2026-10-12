@@ -57,6 +57,8 @@ int main(int argc, char* argv[])
     const QCommandLineOption junctionsOption(QStringLiteral("junctions"),
                                              QStringLiteral("Junctions in the random survey (default 3)."),
                                              QStringLiteral("k"));
+    const QCommandLineOption wildOption(QStringLiteral("wild"),
+                                        QStringLiteral("With --seed, draw the survey with uniform random bearings and independent readings."));
     const QCommandLineOption grabOption(QStringLiteral("grab"),
                                         QStringLiteral("Write the four preset screenshots of the opened case to dir, then exit."),
                                         QStringLiteral("dir"));
@@ -67,7 +69,7 @@ int main(int argc, char* argv[])
                                            QStringLiteral("With --grab-all, only the cases with mesh issues."));
     const QCommandLineOption sweepOption(QStringLiteral("sweep"),
                                          QStringLiteral("Include the parametric sweep cases in the list."));
-    parser.addOptions({caseOption, seedOption, junctionsOption, grabOption, grabAllOption, failingOption, sweepOption});
+    parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption});
     parser.process(app);
 
     cwMetaTypeSystem::registerTypes();
@@ -87,6 +89,7 @@ int main(int argc, char* argv[])
         {QStringLiteral("initialCase"), parser.value(caseOption)},
         {QStringLiteral("randomSeed"), parser.isSet(seedOption) ? parser.value(seedOption).toInt() : kNoSeed},
         {QStringLiteral("randomJunctions"), parser.isSet(junctionsOption) ? parser.value(junctionsOption).toInt() : kDefaultJunctions},
+        {QStringLiteral("randomWild"), parser.isSet(wildOption)},
         {QStringLiteral("grabDirectory"), grabDirectory},
         {QStringLiteral("grabAll"), grabAll},
         {QStringLiteral("failingOnly"), parser.isSet(failingOption)},
