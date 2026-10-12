@@ -34,12 +34,13 @@ message GeoReference {
         NO_ANCHOR = 0;
         FIX_STATION = 1;
         LAZ_LAYER = 2;
+        ATTACHMENT = 3;
     }
 
     optional State state = 1;
     optional string localCoordinateSystem = 2; // PROJ string
     optional AnchorKind anchorKind = 3;
-    optional string anchorId = 4;              // cwFixStation / cwLazLayer UUID
+    optional string anchorId = 4;              // cwFixStation / cwLazLayer / attachment owner UUID
     // The vertical datum the project's elevations are in, as declared by
     // whatever supplied them. Recorded, never applied — see the plan's §5.
     optional string verticalDatum = 5;

@@ -1801,6 +1801,33 @@ MainWindowTest {
                       "the badge names the chosen system")
         }
 
+        // In a project with no frame, the system chosen for a file's bare fix
+        // gives the project its frame, and the Data page names the fix it is
+        // centered on.
+        function test_aChosenBareFixSystemGivesTheProjectAFrame() {
+            saveProjectAs("fix-station-bare-fix-frame")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_bare_fix/bare_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+            compare(RootData.region.geoReference.hasCoordinateSystem, false)
+
+            const page = openFixStationsOf(cave)
+            tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
+            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null)
+
+            page.setBareFixCoordinateSystem(0, "UTM48N")
+            tryVerify(() => cave.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
+                      "the choice lands on the attachment")
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 10000,
+                      "the choice gives the project a frame")
+            tryVerify(() => {
+                const badge = findChild(RootData.pageView.currentPageItem, "noCoordinateSystemBadge.0")
+                return badge !== null && badge.visible && badge.text.indexOf("UTM48N") >= 0
+            }, 10000, "the badge names the chosen system")
+            tryVerify(() => RootData.region.localProjection.anchorDescription.indexOf("bare.A") >= 0,
+                      5000, "the Data page names the fix the frame is centered on")
+        }
+
         // The page as a tree over the node and its subtree: a row per node, the
         // node's fixes under it, attached fixes under the node whose file holds
         // them. survex_subtree_fixes/ridge.svx fixes R0 itself and includes

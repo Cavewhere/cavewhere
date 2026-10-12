@@ -35,7 +35,9 @@ class cwLazLayer;
 /**
  * Drives the project's local projection (LDP) through its lifecycle in
  * response to the region's georeferenced inputs — the fix stations that carry
- * a readable coordinate and the LAZ layers that declare a CRS.
+ * a readable coordinate, the LAZ layers that declare a CRS, and, while the
+ * project has no frame of its own, the attached files' bare fixes that a
+ * system was chosen for.
  *
  * The states and their invariants live on cwGeoReference; the policy for
  * moving between them lives here, because deciding them needs the region's
@@ -87,7 +89,8 @@ public:
     double anchorThresholdMeters() const { return kAnchorThresholdMeters; }
 
     //! What the frame is centered on, for a reader: "A42 — Roppel Cave" when the
-    //! anchor is a fix station, the layer's name when it is a GIS layer, and ""
+    //! anchor is a fix station or an attached file's bare fix (named by the
+    //! attachment's owner), the layer's name when it is a GIS layer, and ""
     //! when no anchor is answerable for the frame (Ungeoreferenced or Frozen).
     //!
     //! Resolved on every read rather than stored: the anchor is an id, and only
@@ -261,6 +264,25 @@ private:
     //! the part of the list that no disk is being waited on for.
     QList<Input> gatherFixInputs() const;
     QList<Input> gatherLayerInputs() const;
+
+    //! Each attached file's bare fix that a system was chosen for, read in that
+    //! system, in the tree's pre-order. The choice is what places the fix, so a
+    //! fix whose file names its own system is left to that file.
+    QList<Input> gatherAttachedFixInputs() const;
+
+    //! Whether the attached inputs take part in the frame: only while the
+    //! project has none, or follows one of them. A frame that already follows
+    //! a native fix or a layer, or that is frozen, keeps its origin whatever
+    //! an attached file says.
+    bool attachedFixesTakePart() const;
+
+    //! gatherInputs() with the attached inputs added after the fixes when
+    //! attachedFixesTakePart().
+    QList<Input> gatherFrameInputs() const;
+
+    //! "A — Owner" for the first bare fix of the attachment \a ownerId, or empty
+    //! when the region no longer lists one.
+    QString attachmentDescription(const QUuid& ownerId) const;
 
     //! Run the state machine against the current inputs, then settle the epoch
     //! if the last thing it was waiting on has landed.

@@ -692,14 +692,18 @@ TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachme
     CHECK(fix.readInWarning() == expected);
     CHECK(readInWarningInTable(cave, kBareFixStation) == expected);
 
-    SECTION("without the project's frame the fix reads as written")
+    SECTION("a project that loses its frame takes one again from the chosen system")
     {
         region->geoReference()->clear();
+        REQUIRE(tryWait(kAttachWaitMs, [region]() {
+            return region->geoReference()->hasCoordinateSystem();
+        }));
         drainPipelines(fixture.get());
         INFO("driver:\n" << linePlot->driverSource().toStdString());
+        CHECK(region->geoReference()->anchor().kind == cwGeoReference::Anchor::Attachment);
+        CHECK(region->geoReference()->anchor().id == cave->id());
         CHECK_FALSE(linePlot->hasSolveError());
-        CHECK(subtreeAttachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
-        CHECK(readInWarningInTable(cave, kBareFixStation).isEmpty());
+        CHECK(subtreeAttachedFixFor(cave, kBareFixStation).readInSystem == kUtm13N);
         CHECK(bareFixWarnings(cave).isEmpty());
     }
 }

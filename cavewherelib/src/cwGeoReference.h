@@ -79,14 +79,18 @@ public:
      * question the lifecycle asks is "was the thing just edited the anchor?",
      * and a coordinate can't answer that about itself.
      *
-     * Both kinds carry a persisted UUID (cwFixStation::id, cwLazLayer::id), so
-     * the identity survives save/load and outlives any rename.
+     * Every kind carries a persisted UUID (cwFixStation::id, cwLazLayer::id,
+     * the attachment owner's cwSurveyNode::id or cwTrip::id), so the identity
+     * survives save/load and outlives any rename.
      */
     struct Anchor {
         enum Kind {
             None,
             FixStation,
-            LazLayer
+            LazLayer,
+            //! An attachment's bare fix read in its chosen system; the id is
+            //! the attachment owner's (node or trip).
+            Attachment
         };
 
         Kind kind = None;

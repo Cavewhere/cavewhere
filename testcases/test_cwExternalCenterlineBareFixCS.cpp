@@ -25,6 +25,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
+#include "cwLocalProjectionManager.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwStationPositionLookup.h"
@@ -51,6 +52,10 @@ namespace {
 
 const QString kBareFixFixture = QStringLiteral("survex_bare_fix/bare_fix.svx");
 const QString kBareFixFileName = QStringLiteral("bare_fix.svx");
+// bare_fix.svx with standard errors after the fix's coordinate.
+const QString kStdErrorsFixture =
+    QStringLiteral("survex_bare_fix_std_errors/bare_fix_std_errors.svx");
+const QString kStdErrorsFileName = QStringLiteral("bare_fix_std_errors.svx");
 // WGS 84 / UTM zone 48N: the project's frame, and the system the user picks
 // for the file's bare fix, by its Survex name.
 const QString kUtm48NFrame = QStringLiteral("EPSG:32648");
@@ -61,6 +66,13 @@ constexpr double kFixEasting = 500000.0;
 constexpr double kFixNorthing = 3000000.0;
 constexpr double kFixElevation = 100.0;
 constexpr double kPlacementMarginMeters = 1.0;
+// The fixture's leg A-B: 10 m at azimuth 90, so B sits that far east of A.
+const QString kEastStation = QStringLiteral("bare.B");
+constexpr double kEastLegMeters = 10.0;
+// A native fix far from the file's, past the anchor's re-derive threshold.
+const QString kFarFixStation = QStringLiteral("far1");
+constexpr double kFarFixEasting = 600000.0;
+const QString kOutputSystemPrefix = QStringLiteral("*cs out");
 // cavern's error 438, the one a bare *fix under a *cs out raises.
 const QString kInputProjectionError = QStringLiteral("input projection isn't");
 
@@ -110,7 +122,7 @@ QString inputSystemLineAtInclude(const QString& driver,
         } else if (trimmed.startsWith(QStringLiteral("*end")) && inForceByBlock.size() > 1) {
             inForceByBlock.removeLast();
         } else if (trimmed.startsWith(QStringLiteral("*cs "))
-                   && !trimmed.startsWith(QStringLiteral("*cs out"))) {
+                   && !trimmed.startsWith(kOutputSystemPrefix)) {
             inForceByBlock.last() = trimmed;
         }
     }
@@ -199,6 +211,57 @@ cwCave* setUpMainWithNativeFix(SavedProjectFixture* fixture, bool autoDeclinatio
     return main;
 }
 
+void drainRoot(cwRootData* rootData)
+{
+    rootData->linePlotManager()->waitToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    QCoreApplication::processEvents();
+}
+
+//! Saves \a fixture's project as \a fileName in \a destinationDir, closes it,
+//! and loads the saved file into a fresh cwRootData.
+std::unique_ptr<cwRootData> saveAndReopen(std::unique_ptr<SavedProjectFixture>& fixture,
+                                          const QTemporaryDir& destinationDir,
+                                          const QString& fileName)
+{
+    REQUIRE(destinationDir.isValid());
+    REQUIRE(fixture->project->saveAs(QDir(destinationDir.path()).filePath(fileName)));
+    fixture->project->waitSaveToFinish();
+    drainPipelines(fixture.get());
+    const QString savedPath = fixture->project->filename();
+    fixture.reset();
+
+    auto freshRoot = std::make_unique<cwRootData>();
+    freshRoot->project()->loadFile(savedPath);
+    freshRoot->project()->waitLoadToFinish();
+    drainRoot(freshRoot.get());
+    return freshRoot;
+}
+
+cwSurveyNode* nodeWithId(cwRootData* rootData, const QUuid& id)
+{
+    const QList<cwSurveyNode*> nodes = rootData->region()->rootNode()->allNodes();
+    const auto found = std::find_if(nodes.cbegin(), nodes.cend(), [&id](const cwSurveyNode* node) {
+        return node->id() == id;
+    });
+    return found == nodes.cend() ? nullptr : *found;
+}
+
+//! Waits for the project to gain a frame, then for the solve that frame
+//! triggers (its driver sets an output system).
+bool waitForSeededFrame(SavedProjectFixture* fixture)
+{
+    cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    const bool seeded = tryWait(kAttachWaitMs, [geoReference]() {
+        return geoReference->hasCoordinateSystem();
+    });
+    const bool solvedInFrame = seeded && tryWait(kAttachWaitMs, [fixture]() {
+        return linePlotOf(fixture)->driverSource().contains(kOutputSystemPrefix);
+    });
+    drainPipelines(fixture);
+    return solvedInFrame;
+}
+
 } // namespace
 
 TEST_CASE("A bare file fix in a georeferenced project with no system chosen fails the solve and warns",
@@ -273,28 +336,10 @@ TEST_CASE("The system chosen for an attachment's bare fixes survives save and re
     drainPipelines(fixture.get());
 
     QTemporaryDir destinationDir;
-    REQUIRE(destinationDir.isValid());
-    const QString destination =
-        QDir(destinationDir.path()).filePath(QStringLiteral("bare-fix-reopened.cwproj"));
-    REQUIRE(fixture->project->saveAs(destination));
-    fixture->project->waitSaveToFinish();
-    drainPipelines(fixture.get());
-    const QString savedPath = fixture->project->filename();
-    fixture.reset();
+    auto freshRoot = saveAndReopen(fixture, destinationDir,
+                                   QStringLiteral("bare-fix-reopened.cwproj"));
 
-    auto freshRoot = std::make_unique<cwRootData>();
-    freshRoot->project()->loadFile(savedPath);
-    freshRoot->project()->waitLoadToFinish();
-    freshRoot->linePlotManager()->waitToFinish();
-    freshRoot->futureManagerModel()->waitForFinished();
-    QCoreApplication::processEvents();
-
-    cwSurveyNode* reopened = nullptr;
-    for (cwSurveyNode* candidate : freshRoot->region()->rootNode()->allNodes()) {
-        if (candidate->id() == rootId) {
-            reopened = candidate;
-        }
-    }
+    cwSurveyNode* reopened = nodeWithId(freshRoot.get(), rootId);
     REQUIRE(reopened != nullptr);
     REQUIRE_FALSE(reopened->externalCenterline().isEmpty());
     const QString reopenedSystem = reopened->externalCenterline().fixCoordinateSystem();
@@ -483,4 +528,187 @@ TEST_CASE("A native child cave still fixes in its own system after its parent's 
         subPositions.position(kSubFixStation) - mainPositions.position(kMainFixStation);
     CHECK(offset.x() == Catch::Approx(kSubFixEasting - kMainFixEasting).margin(kPlacementMarginMeters));
     CHECK(offset.y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+}
+
+TEST_CASE("Choosing a system for a bare file fix gives a project with no frame one, centered on the fix",
+          "[AttachInclude][BareFixCS][BareFixFrame]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-seeds-frame"), false);
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    cwGeoReference* geoReference = region->geoReference();
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+    REQUIRE_FALSE(geoReference->hasCoordinateSystem());
+
+    chooseFixSystem(root, kUtm48N);
+    REQUIRE(waitForSeededFrame(fixture.get()));
+
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == root->id());
+    const QString description = region->localProjection()->anchorDescription();
+    INFO("anchor description: " << description.toStdString());
+    CHECK(description.contains(kFixedStation));
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    CHECK(inputSystemLineAtInclude(linePlot->driverSource()) == QStringLiteral("*cs %1").arg(kUtm48N));
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    // The frame is derived at the fix, so the plot sits at the local origin.
+    const cwStationPositionLookup& lookup = root->scopedPositions();
+    REQUIRE(lookup.hasPosition(kFixedStation));
+    REQUIRE(lookup.hasPosition(kEastStation));
+    const QVector3D fixed = lookup.position(kFixedStation);
+    CHECK(fixed.x() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(fixed.y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(fixed.z() == Catch::Approx(kFixElevation).margin(kPlacementMarginMeters));
+    const QVector3D east = lookup.position(kEastStation);
+    CHECK(east.x() == Catch::Approx(kEastLegMeters).margin(kPlacementMarginMeters));
+    CHECK(east.y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+
+    CHECK(subtreeAttachedFixFor(root, kFixedStation).readInSystem == kUtm48N);
+    CHECK(bareFixWarnings(root).isEmpty());
+}
+
+TEST_CASE("A bare file fix with standard errors gives a project with no frame one at its position",
+          "[AttachInclude][BareFixCS][BareFixFrame]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-std-errors-seeds-frame"), false);
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kStdErrorsFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kStdErrorsFileName));
+    REQUIRE_FALSE(fixture->project->cavingRegion()->geoReference()->hasCoordinateSystem());
+
+    chooseFixSystem(root, kUtm48N);
+    REQUIRE(waitForSeededFrame(fixture.get()));
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    const cwStationPositionLookup& lookup = root->scopedPositions();
+    REQUIRE(lookup.hasPosition(kFixedStation));
+    const QVector3D fixed = lookup.position(kFixedStation);
+    CHECK(fixed.x() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(fixed.y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(fixed.z() == Catch::Approx(kFixElevation).margin(kPlacementMarginMeters));
+}
+
+TEST_CASE("Unsetting the system that gave the project its frame clears the frame",
+          "[AttachInclude][BareFixCS][BareFixFrame]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-unset-frame"), false);
+    cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+
+    chooseFixSystem(root, kUtm48N);
+    REQUIRE(waitForSeededFrame(fixture.get()));
+
+    chooseFixSystem(root, QString());
+    REQUIRE(tryWait(kAttachWaitMs, [geoReference]() {
+        return !geoReference->hasCoordinateSystem();
+    }));
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    CHECK(tryWait(kAttachWaitMs, [linePlot]() {
+        return !linePlot->driverSource().contains(kOutputSystemPrefix);
+    }));
+    drainPipelines(fixture.get());
+
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    CHECK(geoReference->state() == cwGeoReference::Ungeoreferenced);
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    const cwStationPositionLookup& lookup = root->scopedPositions();
+    REQUIRE(lookup.hasPosition(kFixedStation));
+    CHECK(lookup.position(kFixedStation).x()
+          == Catch::Approx(kFixEasting).margin(kPlacementMarginMeters));
+    CHECK(bareFixWarnings(root).isEmpty());
+}
+
+TEST_CASE("A frame a bare file fix's system gave the project survives save and reload",
+          "[AttachInclude][BareFixCS][BareFixFrame]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-frame-round-trip"), false);
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+    const QUuid rootId = root->id();
+
+    chooseFixSystem(root, kUtm48N);
+    REQUIRE(waitForSeededFrame(fixture.get()));
+    const QString savedFrame =
+        fixture->project->cavingRegion()->geoReference()->localCoordinateSystem();
+    REQUIRE_FALSE(savedFrame.isEmpty());
+
+    QTemporaryDir destinationDir;
+    auto freshRoot = saveAndReopen(fixture, destinationDir,
+                                   QStringLiteral("bare-fix-frame-reopened.cwproj"));
+
+    cwSurveyNode* reopened = nodeWithId(freshRoot.get(), rootId);
+    REQUIRE(reopened != nullptr);
+    // The reload's scan lists the file's fix again; the frame holds through it.
+    CHECK(tryWait(kAttachWaitMs, [reopened]() {
+        const auto holders = nodeAndDescendants(reopened);
+        return std::any_of(holders.cbegin(), holders.cend(), [](const cwSurveyNode* holder) {
+            return attachedFixStations(holder).contains(kFixedStation);
+        });
+    }));
+    drainRoot(freshRoot.get());
+
+    const cwGeoReference* reopenedGeoReference = freshRoot->region()->geoReference();
+    CHECK(reopenedGeoReference->localCoordinateSystem() == savedFrame);
+    CHECK(reopenedGeoReference->state() == cwGeoReference::Anchored);
+    CHECK(reopenedGeoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(reopenedGeoReference->anchor().id == rootId);
+}
+
+TEST_CASE("Choosing a system for a trip attachment's bare fix gives a project with no frame one",
+          "[AttachInclude][BareFixCS][BareFixFrame]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-trip-seeds-frame"), false);
+    cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    cwCave* cave = fixture->cave;
+    cwTrip* trip = fixture->trip;
+    attachThroughManager(fixture.get(), trip, fixturePath(kBareFixFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+    REQUIRE_FALSE(geoReference->hasCoordinateSystem());
+
+    chooseFixSystem(trip, kUtm48N);
+    REQUIRE(waitForSeededFrame(fixture.get()));
+
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == trip->id());
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    const QString station = trip->scopePrefix() + kFixedStation;
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    REQUIRE(lookup.hasPosition(station));
+    CHECK(lookup.position(station).x() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(lookup.position(station).y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(attachedFixFor(cave, station).readInSystem == kUtm48N);
+}
+
+TEST_CASE("A native fix added after a bare file fix's system gave the project its frame leaves the frame alone",
+          "[AttachInclude][BareFixCS][BareFixFrame]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-frame-then-native"), false);
+    cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+
+    chooseFixSystem(root, kUtm48N);
+    REQUIRE(waitForSeededFrame(fixture.get()));
+    const QString seededFrame = geoReference->localCoordinateSystem();
+
+    addNativeTripWithShot(fixture->cave, QStringLiteral("Far survey"), kFarFixStation,
+                          QStringLiteral("far2"));
+    addNativeFix(fixture->cave, kFarFixStation, kFarFixEasting);
+    drainPipelines(fixture.get());
+
+    CHECK(geoReference->localCoordinateSystem() == seededFrame);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == root->id());
 }

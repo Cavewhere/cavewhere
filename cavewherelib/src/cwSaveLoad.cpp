@@ -222,6 +222,8 @@ static_assert(static_cast<int>(cwGeoReference::Anchor::FixStation)
               == CavewhereProto::GeoReference_AnchorKind_FIX_STATION);
 static_assert(static_cast<int>(cwGeoReference::Anchor::LazLayer)
               == CavewhereProto::GeoReference_AnchorKind_LAZ_LAYER);
+static_assert(static_cast<int>(cwGeoReference::Anchor::Attachment)
+              == CavewhereProto::GeoReference_AnchorKind_ATTACHMENT);
 
 QDir projectRootDirForFile(const QString& projectFileName)
 {
