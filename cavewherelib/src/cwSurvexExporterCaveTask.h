@@ -25,6 +25,9 @@ class cwStationHandle;
 #include <QTextStream>
 #include <QUuid>
 
+// Std includes
+#include <optional>
+
 class cwSurvexExporterCaveTask : public cwCaveExporterTask
 {
     Q_OBJECT
@@ -175,6 +178,10 @@ private:
         //! The nearest enclosing located block's grid convergence, for a node
         //! with no location of its own.
         double gridConvergence = 0.0;
+        //! The nearest enclosing located block's location when that block
+        //! wrote no `*declination auto` for its whole scope, so a nested block
+        //! still has one to declare.
+        std::optional<cwSurvexExporterUtils::DeclinationContext> undeclaredLocation;
     };
 
     cwSurvexExporterTripTask* TripExporter;
@@ -187,6 +194,17 @@ private:
                         const QString& globalCS,
                         const Inherited& inherited,
                         const cwSurvexExporterUtils::CsScope& enclosingScope);
+
+    //! True when the *include of \a ownerId's file meets a fix that names no
+    //! system: the file fixes stations of its own (Options::externalFixedStations)
+    //! and no system is chosen for them.
+    bool readsInheritedSystem(const QUuid& ownerId, const cwExternalCenterline& centerline) const;
+
+    //! True when \a node's block holds an *include that readsInheritedSystem:
+    //! the node's own, an attached trip's, or one anywhere in its subtree. Such
+    //! a block ends every input *cs it writes before that *include, so cavern
+    //! refuses the file's bare fixes when nothing is chosen for them.
+    bool scopeReachesInheritingInclude(const cwCaveData& node, const DriverTree& tree) const;
 
     struct WrittenFixes {
         //! The node's fixes that validation kept, in the order written.

@@ -46,6 +46,12 @@ constexpr double kSideCaveEasting = 478000.0;
 constexpr double kSideCaveNorthing = 4430000.0;
 constexpr double kSideCaveElevation = 1655.0;
 
+// A point inside UTM zone 48N, the system Main's fix is entered in.
+const QString kMainCS = QStringLiteral("EPSG:32648");
+constexpr double kMainEasting = 500100.0;
+constexpr double kMainNorthing = 3000000.0;
+constexpr double kMainElevation = 100.0;
+
 cwStationHandle nativeHandle(const cwSurveyNode* node, const QString& tail)
 {
     return cwStationHandle(cwStationHandle::NativeCave, node->id(), tail);
@@ -357,4 +363,70 @@ TEST_CASE("A fix with no station of its node's own opens no block", "[Exporter][
     CHECK(driver.contains(QStringLiteral("*begin fisher_ridge")));
     CHECK_FALSE(driver.contains(QStringLiteral("fix_only")));
     CHECK_FALSE(driver.contains(QStringLiteral("*equate")));
+}
+
+TEST_CASE("A node's own fixes end their system before an attachment that reads none",
+          "[Exporter][NodeTree][NativeCSScope]")
+{
+    QTemporaryDir tempRoot;
+    REQUIRE(tempRoot.isValid());
+
+    // Main: a fix entered in UTM zone 48N, a native trip on auto declination,
+    // and a trip attached to a file whose one fix names no system, with no
+    // system chosen for it.
+    cwCavingRegion region;
+    cwCave* main = addEmptyCave(region, QStringLiteral("Main"));
+    cwFixStation fix;
+    fix.setStationName(QStringLiteral("m1"));
+    fix.setInputCS(kMainCS);
+    fix.setCoordinate(kMainEasting, kMainNorthing, kMainElevation);
+    main->fixStations()->appendFixStation(fix);
+    addNativeTripWithShot(main, QStringLiteral("Main survey"), QStringLiteral("m1"),
+                          QStringLiteral("m2"));
+    cwTrip* attached = addAttachedTrip(main, QStringLiteral("Attached"),
+                                       QStringLiteral("bare_fix.svx"));
+    REQUIRE(attached->externalCenterline().fixCoordinateSystem().isEmpty());
+
+    cwSurvexExporterRegion::Options options;
+    const QString attachedDir = tempSubdir(tempRoot, QStringLiteral("attached"));
+    const QString attachedInclude =
+        seedAttachment(attachedDir, fixturePath(QStringLiteral("survex_bare_fix/bare_fix.svx")));
+    options.tripAttachmentDirs.insert(attached->id(), attachedDir);
+    // What the harvest reports for the file: it fixes bare.A itself.
+    options.externalFixedStations.insert(attached->id(), {QStringLiteral("bare.A")});
+
+    const QString driverPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.svx"));
+    const QString driver = exportedText(region, options, driverPath);
+    INFO("driver:\n" << driver.toStdString());
+
+    // The fix's *cs ends in an anonymous block, and the native trip's auto
+    // declination, which needs a system in force, opens its own. The
+    // attachment's *include then sits under *cs out alone.
+    const QStringList expected = {
+        QStringLiteral("*begin  ;All the caves"),
+        QStringLiteral("*cs out EPSG:32648"),
+        QStringLiteral("*begin main ;Main"),
+        QStringLiteral("*begin"),
+        QStringLiteral("*cs EPSG:32648"),
+        QStringLiteral("*fix m1 500100.000000000 3000000.000000000 100.000000000"),
+        QStringLiteral("*end"),
+        QStringLiteral("*begin"),
+        QStringLiteral("*cs EPSG:32648"),
+        QStringLiteral("*begin ; Main survey"),
+        QStringLiteral("*end"),
+        QStringLiteral("*end"),
+        QStringLiteral("*begin attached ; Attached"),
+        QStringLiteral("*include \"%1\"").arg(attachedInclude),
+        QStringLiteral("*end attached"),
+        QStringLiteral("*end main ; End of Main"),
+        QStringLiteral("*end"),
+    };
+    CHECK(skeleton(driver) == expected);
+
+    // So cavern refuses the bare fix, as it would with no native fix at all.
+    const QString threeDPath = QDir(tempRoot.path()).absoluteFilePath(QStringLiteral("driver.3d"));
+    const auto ran = cwCavernRunner::run(driverPath, threeDPath);
+    INFO("cavern: " << ran.errorMessage().toStdString());
+    CHECK(ran.hasError());
+    CHECK(ran.errorMessage().contains(QStringLiteral("input projection isn't")));
 }

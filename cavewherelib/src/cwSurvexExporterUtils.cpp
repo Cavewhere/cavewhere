@@ -102,8 +102,6 @@ std::optional<DeclinationContext> makeDeclinationContext(const QList<cwFixStatio
     return std::nullopt;
 }
 
-namespace {
-
 void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx, CsScope& scope)
 {
     // The fixes above may have left a different system in scope: this context
@@ -113,26 +111,6 @@ void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx, Cs
     stream << "*declination auto ";
     writeCoordTriplet(stream, ctx.easting, ctx.northing, ctx.elevation);
     stream << Qt::endl;
-}
-
-} // namespace
-
-bool writeBlockDeclinationAuto(QTextStream& stream,
-                               const QList<cwFixStation>& fixes,
-                               bool anyTripUsesAuto,
-                               CsScope& scope)
-{
-    if (!anyTripUsesAuto) {
-        return false;
-    }
-
-    const auto ctx = makeDeclinationContext(fixes);
-    if (!ctx) {
-        return false;
-    }
-
-    writeDeclinationAuto(stream, *ctx, scope);
-    return true;
 }
 
 bool writeStandaloneTripHeader(QTextStream& stream,

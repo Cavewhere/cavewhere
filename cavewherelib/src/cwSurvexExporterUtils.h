@@ -134,20 +134,15 @@ double gridConvergenceForBlock(const std::optional<DeclinationContext>& ctx,
                                const QString& outputCS);
 
 /**
- * Emit the cave block's `*declination auto X Y Z`, preceded by a `*cs` when
- * \a scope doesn't already name the system the coordinate is in. Returns
- * whether one is now in scope for the trips inside the block.
+ * Emit `*declination auto X Y Z` at \a ctx's location, preceded by a `*cs`
+ * when \a scope doesn't already name the system the coordinate is in.
  *
- * Written once per cave, not once per trip. Cavern converts the location to
- * WGS84 at parse time and stores it on the settings stack, so every enclosed
- * *begin block inherits it, and re-evaluates IGRF from that block's own *date.
- * \a anyTripUsesAuto keeps caves that never ask for auto byte-identical to what
- * they exported before.
+ * Cavern converts the location to WGS84 at parse time and stores it on the
+ * settings stack, so every enclosed *begin block inherits it, and re-evaluates
+ * IGRF from that block's own *date. The location, like the *cs written for
+ * it, ends at the *end of the block it is written in.
  */
-bool writeBlockDeclinationAuto(QTextStream& stream,
-                               const QList<cwFixStation>& fixes,
-                               bool anyTripUsesAuto,
-                               CsScope& scope);
+void writeDeclinationAuto(QTextStream& stream, const DeclinationContext& ctx, CsScope& scope);
 
 /**
  * The `*cs out` + `*declination auto` preamble for a trip exported on its own,

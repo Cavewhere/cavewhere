@@ -1,0 +1,11 @@
+; A block whose one fix names its own coordinate system, so it solves with
+; no system chosen for the attachment. The file names its own *cs out so it
+; also solves on its own, as the station harvest runs it; under a driver that
+; already set one, cavern ignores this one.
+*cs out UTM48N
+*begin scoped
+*cs UTM48N
+*fix S1 500200 3000000 100
+*data normal from to tape compass clino
+S1 S2 10 0 0
+*end scoped

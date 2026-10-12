@@ -1505,7 +1505,7 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         CHECK(renamedWarnings.first().contains(QStringLiteral("fixes %1 without").arg(scopedD1())));
     }
 
-    SECTION("under a cave whose fix names a system, the trip inherits it and writes none")
+    SECTION("under a cave whose fix names a system, the trip reads its bare fix in none")
     {
         cwTrip* attached = addEmptyTrip(beside, QStringLiteral("Attached"));
         attached->calibrations()->setAutoDeclination(false);
@@ -1517,7 +1517,10 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         const QString driver = manager.driverSource();
         INFO("driver:\n" << driver.toStdString());
         INFO("solve error: " << manager.solveErrorMessage().toStdString());
-        REQUIRE_FALSE(manager.hasSolveError());
+        // The cave's fix ends its system before the trip's block, so nothing
+        // chosen means cavern refuses the bare fix, as the warning says.
+        CHECK(manager.hasSolveError());
+        CHECK(manager.solveErrorSummary().contains(QStringLiteral("input projection isn't")));
 
         const qsizetype tripBegin =
             driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));

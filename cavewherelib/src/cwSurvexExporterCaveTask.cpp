@@ -358,9 +358,26 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     // so this block starts with whatever system its parent left in force.
     cwSurvexExporterUtils::CsScope csScope(enclosingScope);
 
+    // A system this block leaves in force would read the bare fixes of an
+    // *include below it whose file has none chosen. Such a block writes its
+    // fixes, and each auto declination's *cs, in anonymous blocks that end
+    // them; cavern then refuses those fixes as it would with no native fix.
+    const bool shielded = scopeReachesInheritingInclude(node, tree);
+
     Inherited here = inherited;
+    cwSurvexExporterUtils::CsScope fixesScope(csScope);
+    QString fixesText;
+    QTextStream fixesStream(&fixesText);
     const WrittenFixes written =
-        writeFixStations(stream, node, tree, globalCS, inherited.anchored, csScope);
+        writeFixStations(fixesStream, node, tree, globalCS, inherited.anchored, fixesScope);
+    fixesStream.flush();
+    const bool fixesLeaveSystem = shielded && fixesScope.system() != csScope.system();
+    if (fixesLeaveSystem) {
+        stream << "*begin" << Qt::endl << fixesText << "*end" << Qt::endl;
+    } else {
+        stream << fixesText;
+    }
+    cwSurvexExporterUtils::CsScope& nodeScope = fixesLeaveSystem ? csScope : fixesScope;
     here.anchored = written.anchored || inherited.anchored;
 
     // A node with a location of its own declares `*declination auto` for its
@@ -368,16 +385,19 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     // inherits both from the nearest located ancestor. The location comes from
     // the fixes just written: a dropped fix's *cs would land after the fallback
     // *fix, which cavern rejects ("fixed before CS command first used").
+    // A shielded node leaves the location undeclared, and each auto trip, or
+    // the first unshielded block below, declares it in a scope of its own.
     const auto ownLocation = cwSurvexExporterUtils::makeDeclinationContext(written.kept);
     if (ownLocation.has_value()) {
-        if (cwSurvexExporterUtils::writeBlockDeclinationAuto(stream, written.kept,
-                                                             subtreeUsesAutoDeclination(node),
-                                                             csScope)) {
-            here.autoDeclinationInScope = true;
-        }
+        here.undeclaredLocation = ownLocation;
         // One convergence for the whole block: it is a property of the grid at
         // the node's location, and every trip inside is solved on the same grid.
         here.gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(ownLocation, globalCS);
+    }
+    if (!shielded && here.undeclaredLocation.has_value() && subtreeUsesAutoDeclination(node)) {
+        cwSurvexExporterUtils::writeDeclinationAuto(stream, *here.undeclaredLocation, nodeScope);
+        here.autoDeclinationInScope = true;
+        here.undeclaredLocation.reset();
     }
 
     const QHash<QUuid, QString>& tripLabels = labels.tripLabels(node.id);
@@ -413,7 +433,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
             } else if (here.autoDeclinationInScope) {
                 cwSurvexExporterUtils::writeDeclinationReset(stream);
             }
-            cwSurvexExporterUtils::CsScope includeScope(csScope);
+            cwSurvexExporterUtils::CsScope includeScope(nodeScope);
             const QString tripOriginStation =
                 here.anchored ? QString()
                               : originStation(tripData.externalCenterline, tripData.externalStations,
@@ -435,13 +455,24 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
             continue;
         }
 
-        TripExporter->writeTrip(stream, tripData, here.autoDeclinationInScope, here.gridConvergence);
+        const bool declaresOwnAuto = !here.autoDeclinationInScope
+                                     && here.undeclaredLocation.has_value()
+                                     && tripData.calibrations.autoDeclination();
+        if (declaresOwnAuto) {
+            stream << "*begin" << Qt::endl;
+            cwSurvexExporterUtils::CsScope tripScope(nodeScope);
+            cwSurvexExporterUtils::writeDeclinationAuto(stream, *here.undeclaredLocation, tripScope);
+            TripExporter->writeTrip(stream, tripData, true, here.gridConvergence);
+            stream << "*end" << Qt::endl;
+        } else {
+            TripExporter->writeTrip(stream, tripData, here.autoDeclinationInScope, here.gridConvergence);
+        }
         TotalProgress += cwSurvexExporter::stationCount(tripData);
         stream << Qt::endl;
     }
 
     for (const cwCaveData& child : node.nodes) {
-        if (!writeNodeBlock(stream, child, tree, globalCS, here, csScope)) {
+        if (!writeNodeBlock(stream, child, tree, globalCS, here, nodeScope)) {
             return false;
         }
     }
@@ -660,6 +691,35 @@ cwSurvexExporterCaveTask::writeFixStations(QTextStream &stream, const cwCaveData
         anchoredAbove || !writtenFixes.isEmpty() ? QString() : nativeOrFileStation;
     cwSurvexExporterUtils::writeFixStations(stream, directFixes, fallbackStation, globalCS, scope);
     return { writtenFixes, !writtenFixes.isEmpty() || !fallbackStation.isEmpty(), makFixes };
+}
+
+bool cwSurvexExporterCaveTask::readsInheritedSystem(const QUuid& ownerId,
+                                                    const cwExternalCenterline& centerline) const
+{
+    return centerline.fixCoordinateSystem().isEmpty()
+           && !ExportOptions.externalFixedStations.value(ownerId).isEmpty();
+}
+
+bool cwSurvexExporterCaveTask::scopeReachesInheritingInclude(const cwCaveData& node,
+                                                             const DriverTree& tree) const
+{
+    if (!tree.emits(node.id)) {
+        return false;
+    }
+    if (!node.externalCenterline.isEmpty()) {
+        return readsInheritedSystem(node.id, node.externalCenterline);
+    }
+    const bool tripReaches = std::any_of(node.trips.cbegin(), node.trips.cend(),
+                                         [this, &tree](const cwTripData& trip) {
+                                             return !trip.externalCenterline.isEmpty()
+                                                    && !tree.excludedExternalOwners().contains(trip.id)
+                                                    && readsInheritedSystem(trip.id, trip.externalCenterline);
+                                         });
+    return tripReaches
+           || std::any_of(node.nodes.cbegin(), node.nodes.cend(),
+                          [this, &tree](const cwCaveData& child) {
+                              return scopeReachesInheritingInclude(child, tree);
+                          });
 }
 
 QString cwSurvexExporterCaveTask::originStation(const cwExternalCenterline& centerline,
