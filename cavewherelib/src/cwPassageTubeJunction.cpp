@@ -54,6 +54,10 @@ constexpr double kWallSearchFactor = 3.0;
 constexpr double kJunctionTolerance = 0.02;
 constexpr double kParallelRingDegrees = 1.0;
 const float kParallelRingCosine = static_cast<float>(std::cos(qDegreesToRadians(kParallelRingDegrees)));
+// Elbow rings turning at most this much from one to the next take rings
+// between them.
+constexpr double kDensifiableRingDegrees = kElbowStepDegrees + 1.0;
+const float kDensifiableRingCosine = static_cast<float>(std::cos(qDegreesToRadians(kDensifiableRingDegrees)));
 // How far, in quads, the window reaches past the mouth, so its edge stays
 // clear of the mouth and the zip band keeps a width.
 constexpr double kWindowMarginQuads = 0.25;
@@ -411,8 +415,22 @@ struct ThroughSpan {
     }
 };
 
-// A ring square to the chord from a to b, fraction of the way along it, with
-// radii and up blended between the two.
+// The unit vector fraction of the way from unit a to unit b along the arc
+// between them.
+QVector3D slerp(const QVector3D& a, const QVector3D& b, double fraction)
+{
+    const double angle = std::acos(std::clamp(static_cast<double>(QVector3D::dotProduct(a, b)), -1.0, 1.0));
+    const double sine = std::sin(angle);
+    if (sine < kParallelEpsilon) {
+        return (a + (b - a) * static_cast<float>(fraction)).normalized();
+    }
+    const float weightA = static_cast<float>(std::sin((1.0 - fraction) * angle) / sine);
+    const float weightB = static_cast<float>(std::sin(fraction * angle) / sine);
+    return (a * weightA + b * weightB).normalized();
+}
+
+// A ring fraction of the way along the chord from a to b, facing between
+// their tangents, with radii and up blended between the two.
 Ring lerpRing(const Ring& a, const Ring& b, double fraction)
 {
     const float f = static_cast<float>(fraction);
@@ -426,8 +444,9 @@ Ring lerpRing(const Ring& a, const Ring& b, double fraction)
     }
     ring.measured = QVector<bool>(a.radii.size(), false);
     ring.chainLeg = b.chainLeg;
+    ring.isElbow = a.isElbow || b.isElbow;
 
-    const QVector3D tangent = (b.center - a.center).normalized();
+    const QVector3D tangent = slerp(a.frame.tangent, b.frame.tangent, fraction);
     QVector3D up = a.frame.up * (1.0f - f) + b.frame.up * f;
     up -= tangent * QVector3D::dotProduct(up, tangent);
     if (up.lengthSquared() < kDegenerateLengthSquared) {
@@ -451,17 +470,19 @@ bool isInFrontOf(const Ring& ring, const Ring& previous)
     return true;
 }
 
-// Whether two rings face the same way, as they do along a straight leg; at a
-// bend's corner rings inserted between them would crease its inner wall.
-bool isParallel(const Ring& a, const Ring& b)
+// Whether rings can be inserted between two rings: they face the same way,
+// as along a straight leg, or turn by an elbow's step. Between a mitered
+// corner ring and its inset rings they would crease its inner wall.
+bool isDensifiable(const Ring& a, const Ring& b)
 {
-    return QVector3D::dotProduct(a.frame.tangent, b.frame.tangent) >= kParallelRingCosine;
+    const float limit = (a.isElbow || b.isElbow) ? kDensifiableRingCosine : kParallelRingCosine;
+    return QVector3D::dotProduct(a.frame.tangent, b.frame.tangent) >= limit;
 }
 
 // Inserts rings between the through rings around the junction so no two
-// within reach lie farther apart than spacing. A ring that would fold
-// against its neighbors, as one near a sharp bend's corner would, is left
-// out.
+// within reach lie farther apart than spacing, on the chord between them and
+// facing between their tangents. A ring that would fold against its
+// neighbors, as one near an elbow's inner wall can, is left out.
 void densify(Chain& through, const QVector3D& junction, double reach, double spacing)
 {
     const ThroughSpan span(through.rings, junction, reach);
@@ -478,7 +499,7 @@ void densify(Chain& through, const QVector3D& junction, double reach, double spa
         const double start = span.along.at(i);
         const double end = span.along.at(i + 1);
         const bool overlapsReach = end >= center - reach && start <= center + reach;
-        if (!overlapsReach || !hasValidFrame(ring) || !hasValidFrame(next) || !isParallel(ring, next)) {
+        if (!overlapsReach || !hasValidFrame(ring) || !hasValidFrame(next) || !isDensifiable(ring, next)) {
             continue;
         }
         const double gap = end - start;

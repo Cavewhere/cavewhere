@@ -565,10 +565,12 @@ bool isNear(const QVector3D& a, const QVector3D& b)
     return a.distanceToPoint(b) < kStationTolerance;
 }
 
+// A station's ring, or a ring of the elbow that carries a sharp corner
+// station's readings.
 bool isStationRing(const Debug& debug, const cwPassageTubeBuilder::Chain& chain, const cwPassageTubeBuilder::Ring& ring)
 {
     const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chain.legs.at(ring.chainLeg).legIndex);
-    return isNear(ring.center, leg.fromPosition) || isNear(ring.center, leg.toPosition);
+    return ring.isElbow || isNear(ring.center, leg.fromPosition) || isNear(ring.center, leg.toPosition);
 }
 
 std::optional<Issue> foldBack(const cwPassageTubeBuilder::Ring& previous,

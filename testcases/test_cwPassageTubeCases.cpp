@@ -287,14 +287,18 @@ bool joinsAtGrazingAngle(const Cases::Case& entry)
     return planJoinDegrees(entry.trip) <= kGrazingJoinDegrees + kAngleToleranceDegrees;
 }
 
-// A through turning 90° at J keeps its corner rings 1.65 m either side of
-// J, where the inner-bend rule puts them, and the merge adds no rings across
-// the corner, where they would crease its inner wall. The mouth is cut from
-// quads longer than the arm, and its zip band folds or thins (Crease,
-// SelfIntersection, SliverTriangle).
+// A through turning 90° at J rounds the corner with elbow rings, which a
+// single level arm no larger than the through opens into cleanly. A sloped
+// arm, two arms or an arm larger than the through meet the elbow's tight
+// inner wall or straddle the turn, and the zip band folds or crosses it
+// (Crease, SelfIntersection, SliverTriangle).
 bool bendsSharplyAtJunction(const Cases::Case& entry)
 {
-    return entry.tags.contains(QStringLiteral("bend:90"));
+    const QStringList& tags = entry.tags;
+    const bool isSmallLevelArm = tags.contains(QStringLiteral("profile:0"))
+                                 && tags.contains(QStringLiteral("layout:single"))
+                                 && !tags.contains(QStringLiteral("ratio:2.5"));
+    return tags.contains(QStringLiteral("bend:90")) && !isSmallLevelArm;
 }
 
 // An arm 2.5 times the through's size that slopes or meets a bent through
@@ -312,9 +316,10 @@ bool hasLargeTiltedArm(const Cases::Case& entry)
 // unclean, by family:
 // - an arm 30° from the through past J opens where the through widens, and
 //   its zip band folds back on itself (Crease, SelfIntersection);
-// - a level arm 2.5 times the through's size grows the through unevenly, and
-//   its zip band folds over the through or crosses it (Crease,
-//   SliverTriangle, SelfIntersection);
+// - a level arm 2.5 times the through's size, 45° or 60° off it, becomes
+//   the through and turns sharply into one half of the small passage, and
+//   the other half's zip band folds over the through (Crease,
+//   SliverTriangle, DegenerateTriangle, SelfIntersection);
 // - an arm 30° from the through and sloping 30° meets it in a wedge that
 //   folds by about 155° (Crease);
 // - a sloped arm meets a through bent 40° at J, and the zip band bridges a
@@ -323,12 +328,10 @@ bool hasLargeTiltedArm(const Cases::Case& entry)
 const QStringList kOpenSweepCases {
     QStringLiteral("plan 90, profile 0, ratio 0.3, 3 arms, bend 0, section x2 past J"),
 
-    QStringLiteral("plan 30, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
-    QStringLiteral("plan 30, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
     QStringLiteral("plan 45, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
     QStringLiteral("plan 45, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
-    QStringLiteral("plan 90, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
-    QStringLiteral("plan 90, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
+    QStringLiteral("plan 60, profile 0, ratio 2.5, 1 arm, bend 0, same section"),
+    QStringLiteral("plan 60, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"),
 
     QStringLiteral("plan 30, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
     QStringLiteral("plan 90, profile 30, ratio 0.3, 3 arms, bend 0, section x2 past J"),
@@ -337,6 +340,7 @@ const QStringList kOpenSweepCases {
     QStringLiteral("plan 30, profile 30, ratio 1, 1 arm, bend 40, section x2 past J"),
     QStringLiteral("plan 30, profile -30, ratio 1, 1 arm, bend 40, same section"),
     QStringLiteral("plan 90, profile -30, ratio 1, 1 arm, bend 40, same section"),
+    QStringLiteral("plan 60, profile -30, ratio 0.3, 3 arms, bend 40, section x2 past J"),
 };
 
 // Sweep cases kept out of the clean checks by their parameters or name.
@@ -505,6 +509,83 @@ TEST_CASE("cwPassageTubeCases re-grows the through after dropping an arm", "[Pas
     for (int bin = 0; bin < ring.radii.size(); ++bin) {
         CHECK(ring.radii.at(bin) == Catch::Approx(plainRing.radii.at(bin)).margin(kRadiusTolerance));
     }
+}
+
+TEST_CASE("cwPassageTubeCases merges an arm where the through turns 90 degrees", "[PassageTube][cwPassageTubeCases]")
+{
+    constexpr float kAlongLegCosine = 0.9999f;
+    const Cases::Case& entry = catalogCase("plan 90, profile 0, ratio 1, 1 arm, bend 90, same section");
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+
+    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const cwPassageTubeBuilder::Chain& chain) {
+        return !chain.windows.isEmpty();
+    });
+    REQUIRE(through != debug.chains.cend());
+    REQUIRE(through->windows.size() == 1);
+
+    // The rings turning from t0 → J to J → t1: the elbow and any rings
+    // inserted between its rings.
+    const QVector3D junction = position(entry.trip, QStringLiteral("J"));
+    const QVector3D incoming = (junction - position(entry.trip, QStringLiteral("t0"))).normalized();
+    const QVector3D outgoing = (position(entry.trip, QStringLiteral("t1")) - junction).normalized();
+    const auto isElbowRing = [&](int ring) {
+        const QVector3D& tangent = through->rings.at(ring).frame.tangent;
+        return QVector3D::dotProduct(tangent, incoming) < kAlongLegCosine && QVector3D::dotProduct(tangent, outgoing) < kAlongLegCosine;
+    };
+    QSet<int> windowElbowRings;
+    for (const QPair<int, int>& quad : through->windows.first().removedQuads) {
+        for (int ring : {quad.first, quad.first + 1}) {
+            if (isElbowRing(ring)) {
+                windowElbowRings.insert(ring);
+            }
+        }
+    }
+    CHECK(windowElbowRings.size() >= 2);
+}
+
+// The arm is 2.5 times the through passage's size at J, so the through runs
+// along it and on into one half of the small passage; the other half joins
+// it with a mouth.
+TEST_CASE("cwPassageTubeCases chains the big passage as the through", "[PassageTube][cwPassageTubeCases]")
+{
+    const Cases::Case& entry = catalogCase("3. Big arm into a small passage");
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    REQUIRE(debug.chains.size() == 2);
+
+    const auto stations = [&](const cwPassageTubeBuilder::Chain& chain) {
+        QSet<QString> names;
+        for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
+            names.insert(debug.legs.at(chainLeg.legIndex).from);
+            names.insert(debug.legs.at(chainLeg.legIndex).to);
+        }
+        return names;
+    };
+    const auto throughIt = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const cwPassageTubeBuilder::Chain& chain) {
+        return chain.legs.size() == 2;
+    });
+    REQUIRE(throughIt != debug.chains.cend());
+    const cwPassageTubeBuilder::Chain& through = *throughIt;
+    const cwPassageTubeBuilder::Chain& small = debug.chains.at(throughIt == debug.chains.cbegin() ? 1 : 0);
+    const QSet<QString> throughStations = stations(through);
+    CHECK(throughStations.contains(QStringLiteral("a00")));
+    CHECK(throughStations.contains(QStringLiteral("J")));
+
+    REQUIRE(small.legs.size() == 1);
+    const bool isToJunction = debug.legs.at(small.legs.first().legIndex).to == QStringLiteral("J");
+    const bool endsAtJunction = isToJunction != small.legs.first().reversed;
+    CHECK((endsAtJunction ? small.endCap : small.startCap) == cwPassageTubeBuilder::EndCap::Mouth);
+    REQUIRE(through.windows.size() == 1);
+    CHECK(&debug.chains.at(through.windows.first().armChain) == &small);
+
+    checkCaseBuildsClosed(entry.name.toStdString());
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
 }
 
 TEST_CASE("cwPassageTubeCases catalog builds closed meshes", "[PassageTube][cwPassageTubeCases]")

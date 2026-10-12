@@ -132,7 +132,9 @@ public:
     // ends. vertices are the ring's mesh vertices, one per bin, pulled onto
     // the previous ring's plane where they would fold behind it. isGrown is
     // true when a junction grew the ring to take an arm's section across to
-    // the far wall.
+    // the far wall. isElbow is true for the rings that round a sharp corner,
+    // which carry its station's readings off the station, and for rings
+    // inserted beside them.
     struct Ring {
         QVector3D center;
         QVector<double> radii;
@@ -142,6 +144,7 @@ public:
         int chainLeg = 0;
         QVector<QVector3D> vertices;
         bool isGrown = false;
+        bool isElbow = false;
     };
 
     // How a chain end is closed: a fan at a dead end, a mouth on an arm ending

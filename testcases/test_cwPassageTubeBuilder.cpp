@@ -72,6 +72,45 @@ const Builder::Ring& ringAt(const Builder::Chain& chain, const QVector3D& center
     return *it;
 }
 
+// The ring nearest a station: its own ring, or the middle ring of the elbow
+// that rounds a sharp corner there, which carries the station's readings.
+const Builder::Ring& stationRing(const Builder::Chain& chain, const QVector3D& station)
+{
+    REQUIRE_FALSE(chain.rings.isEmpty());
+    return *std::min_element(chain.rings.cbegin(), chain.rings.cend(), [&](const Builder::Ring& a, const Builder::Ring& b) {
+        return a.center.distanceToPoint(station) < b.center.distanceToPoint(station);
+    });
+}
+
+// The indices of the rings that turn from incoming to outgoing: those of the
+// elbow rounding a corner between legs along them, and any rings inserted
+// between its rings.
+QVector<int> elbowRings(const Builder::Chain& chain, const QVector3D& incoming, const QVector3D& outgoing)
+{
+    constexpr float kAlongLegCosine = 0.9999f;
+    QVector<int> elbow;
+    for (int i = 0; i < chain.rings.size(); ++i) {
+        const QVector3D& tangent = chain.rings.at(i).frame.tangent;
+        if (QVector3D::dotProduct(tangent, incoming) < kAlongLegCosine && QVector3D::dotProduct(tangent, outgoing) < kAlongLegCosine) {
+            elbow.append(i);
+        }
+    }
+    return elbow;
+}
+
+// Whether every wall vertex of ring, before any pull, lies in front of the
+// plane of the ring before it, so the tube between them never folds.
+bool isInFrontOf(const Builder::Ring& ring, const Builder::Ring& previous)
+{
+    for (int bin = 0; bin < ring.radii.size(); ++bin) {
+        const QVector3D vertex = ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
+        if (QVector3D::dotProduct(vertex - previous.center, previous.frame.tangent) <= 0.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool hasMeasuredBin(const Builder::Ring& ring)
 {
     return std::find(ring.measured.cbegin(), ring.measured.cend(), true) != ring.measured.cend();
@@ -681,8 +720,10 @@ TEST_CASE("cwPassageTubeBuilder keeps a ring's world shape whichever way the chu
 TEST_CASE("cwPassageTubeBuilder takes the component of a wall across the ring", "[PassageTube][cwPassageTubeBuilder]")
 {
     // b faces the chord a→c, (1, 1, 0)/√2, so its 5 m left wall lies toward
-    // (−1, 1, 0)/√2 and each ring through b sees 5·cos45° of it. The chunk
-    // b→d comes first so the chain rule runs the through chain d–b–c.
+    // (−1, 1, 0)/√2 and each ring through b sees 5·cos45° of it. b reads
+    // taller on the chunk b→d than on a→b→c, so a→b→c, though wider, is no
+    // big passage there; the chunk b→d comes first, and the walk from d
+    // runs on along b→c, as big as a→b at b and straighter.
     constexpr float kComponent = 5.0f * std::numbers::sqrt2_v<float> / 2.0f;
     constexpr float kToleranceMeters = 0.2f;
     const QStringList ends = lrud(1, 1, 1, 1);
@@ -690,8 +731,8 @@ TEST_CASE("cwPassageTubeBuilder takes the component of a wall across the ring", 
     const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0), lrud(5, 0, 1, 1)};
     const StationInput c {QStringLiteral("c"), QVector3D(10, 10, 0), ends};
     const StationInput d {QStringLiteral("d"), QVector3D(10, -10, 0)};
-    const StationInput bWithoutLrud {QStringLiteral("b"), QVector3D(10, 0, 0)};
-    const BuilderInput input = makeInput({{{bWithoutLrud, d}, {a, b, c}}});
+    const StationInput bTall {QStringLiteral("b"), QVector3D(10, 0, 0), lrud(1, 1, 3, 3)};
+    const BuilderInput input = makeInput({{{bTall, d}, {a, b, c}}});
 
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 2);
@@ -746,7 +787,8 @@ TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a ver
     checkVectorNear(drop->toFacing, QVector3D(-1, 0, 0));
 
     REQUIRE(debug.chains.size() == 1);
-    checkFarthestVertexNear(ringAt(debug.chains.at(0), bPosition), bPosition + QVector3D(0, -3, 0), kToleranceMeters);
+    const Builder::Ring& ring = stationRing(debug.chains.at(0), bPosition);
+    checkFarthestVertexNear(ring, ring.center + QVector3D(0, -3, 0), kToleranceMeters);
 }
 
 TEST_CASE("cwPassageTubeBuilder borrows the neighbor ring for all-zero LRUD", "[PassageTube][cwPassageTubeBuilder]")
@@ -973,16 +1015,17 @@ TEST_CASE("cwPassageTubeBuilder keeps the pit depth out of the lip ring and roun
     const Builder::Chain& chain = debug.chains.at(0);
 
     // The approach floor continues to the lip in place of the dropped reading.
-    // The lip and the bottom turn 90°, so their rings lie at 45° and each
-    // vertical reading slides along the level leg onto them, √2 longer.
-    const Builder::Ring& lip = ringAt(chain, QVector3D(0, 10, 0));
+    // The lip and the bottom turn 90°, so their elbows' middle rings lie at
+    // 45° and each vertical reading slides along the level leg onto them, √2
+    // longer.
+    const Builder::Ring& lip = stationRing(chain, QVector3D(0, 10, 0));
     CHECK(lip.radii.at(binAt(90)) == Catch::Approx(1.0 * std::numbers::sqrt2));
     CHECK(lip.radii.at(binAt(270)) == Catch::Approx(0.5 * std::numbers::sqrt2));
     // The corner inset is 1.1 × the 2 m walls × tan 45°.
     const Builder::Ring& approach = ringAt(chain, QVector3D(0, 7.8f, 0));
     CHECK(approach.radii.at(binAt(270)) == Catch::Approx(0.5));
 
-    const Builder::Ring& bottom = ringAt(chain, QVector3D(0, 10, -20));
+    const Builder::Ring& bottom = stationRing(chain, QVector3D(0, 10, -20));
     CHECK(bottom.radii.at(binAt(90)) == Catch::Approx(1.0 * std::numbers::sqrt2));
     CHECK(bottom.radii.at(binAt(270)) == Catch::Approx(0.5 * std::numbers::sqrt2));
 
@@ -1328,6 +1371,43 @@ TEST_CASE("cwPassageTubeBuilder rounds a 120 degree bend with inset rings", "[Pa
     checkMeshClosedWithSaneRings(debug);
 }
 
+TEST_CASE("cwPassageTubeBuilder rounds a sharp bend with elbow rings", "[PassageTube][cwPassageTubeBuilder]")
+{
+    // b has no readings, so its corner insets by the default radius and the
+    // 1 m section borrowed from a and c reaches past the elbow's arc; the
+    // middle ring, stretched across the bisector plane, is capped on the
+    // inside at 0.95 of the arc's radius inset / tan 45°.
+    constexpr double kConcavityClampFactor = 0.95;
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), kBendCorner},
+        {QStringLiteral("c"), kBendCorner + QVector3D(0, 10, 0), dimensions},
+    }}});
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+
+    const QVector3D incoming(1, 0, 0);
+    const QVector3D outgoing(0, 1, 0);
+    const QVector<int> elbow = elbowRings(chain, incoming, outgoing);
+    REQUIRE(elbow.size() == 3);
+    for (int i = 1; i < chain.rings.size(); ++i) {
+        INFO("ring " << i);
+        CHECK(isInFrontOf(chain.rings.at(i), chain.rings.at(i - 1)));
+    }
+
+    const Builder::Ring& middle = chain.rings.at(elbow.at(1));
+    checkVectorNear(middle.frame.tangent, (incoming + outgoing).normalized());
+    const double arcRadius = cornerInset(Builder::Options().defaultRadiusMeters, 90.0);
+    const QVector3D inside = (outgoing - incoming).normalized();
+    const int innerBin = binAt(180);
+    REQUIRE(QVector3D::dotProduct(binDirection(middle, innerBin), inside) == Catch::Approx(1.0).margin(1e-4));
+    CHECK(middle.radii.at(innerBin) == Catch::Approx(kConcavityClampFactor * arcRadius).margin(1e-3));
+    checkMeshClean(debug);
+    checkNoVertexPulled(debug);
+}
+
 TEST_CASE("cwPassageTubeBuilder leaves a gentle bend without inset rings", "[PassageTube][cwPassageTubeBuilder]")
 {
     const BuilderInput input = makeInput({{{
@@ -1473,6 +1553,38 @@ TEST_CASE("cwPassageTubeBuilder keeps a loop closing at a sharp bend without fol
     checkMeshClosedWithSaneRings(debug);
 }
 
+TEST_CASE("cwPassageTubeBuilder rounds every corner of a square loop with elbow rings", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr float kCornerReachMeters = 2.0f;
+    constexpr int kRingsPerRightAngle = 3;
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const QVector<QVector3D> corners {QVector3D(0, 0, 0), QVector3D(10, 0, 0), QVector3D(10, 10, 0), QVector3D(0, 10, 0)};
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("a"), corners.at(0), dimensions},
+        {QStringLiteral("b"), corners.at(1), dimensions},
+        {QStringLiteral("c"), corners.at(2), dimensions},
+        {QStringLiteral("d"), corners.at(3), dimensions},
+        {QStringLiteral("a"), corners.at(0), dimensions},
+    }}});
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+    REQUIRE(chain.startCap == Builder::EndCap::None);
+
+    for (const QVector3D& corner : corners) {
+        INFO("corner " << corner.x() << ", " << corner.y());
+        const auto elbowRingCount = std::count_if(chain.rings.cbegin(), chain.rings.cend(), [&](const Builder::Ring& ring) {
+            return ring.isElbow && ring.center.distanceToPoint(corner) < kCornerReachMeters;
+        });
+        CHECK(elbowRingCount >= kRingsPerRightAngle);
+    }
+    for (int i = 1; i < chain.rings.size(); ++i) {
+        INFO("ring " << i);
+        CHECK(isInFrontOf(chain.rings.at(i), chain.rings.at(i - 1)));
+    }
+    checkMeshClean(debug);
+}
+
 TEST_CASE("cwPassageTubeBuilder keeps the inner wall of a sharp bend clean", "[PassageTube][cwPassageTubeBuilder]")
 {
     const QList<std::pair<QString, BuilderInput>> bends = {
@@ -1506,14 +1618,13 @@ TEST_CASE("cwPassageTubeBuilder widens the corner inset with the ring radius", "
     REQUIRE(debug.chains.size() == 1);
     const Builder::Chain& chain = debug.chains.at(0);
 
-    const auto cornerIt = std::find_if(chain.rings.cbegin(), chain.rings.cend(), [](const Builder::Ring& ring) {
-        return ring.center.distanceToPoint(kBendCorner) < 1e-4f;
-    });
-    REQUIRE(cornerIt != chain.rings.cend());
-    REQUIRE(cornerIt != chain.rings.cbegin());
-    REQUIRE(cornerIt + 1 != chain.rings.cend());
-    CHECK((cornerIt - 1)->center.distanceToPoint(kBendCorner) == Catch::Approx(expectedInset).margin(0.05));
-    CHECK((cornerIt + 1)->center.distanceToPoint(kBendCorner) == Catch::Approx(expectedInset).margin(0.05));
+    // The last ring square to each leg before the elbow.
+    const QVector<int> elbow = elbowRings(chain, QVector3D(1, 0, 0), QVector3D(0, 1, 0));
+    REQUIRE_FALSE(elbow.isEmpty());
+    REQUIRE(elbow.first() > 0);
+    REQUIRE(elbow.last() + 1 < chain.rings.size());
+    CHECK(chain.rings.at(elbow.first() - 1).center.distanceToPoint(kBendCorner) == Catch::Approx(expectedInset).margin(0.05));
+    CHECK(chain.rings.at(elbow.last() + 1).center.distanceToPoint(kBendCorner) == Catch::Approx(expectedInset).margin(0.05));
     checkMeshClean(debug);
 }
 
@@ -1546,13 +1657,19 @@ TEST_CASE("cwPassageTubeBuilder clamps the inner wall of a bend on a short leg",
     };
 
     const Builder::Ring& before = ringAt(chain, kBendCorner - incoming * static_cast<float>(kInset));
-    const Builder::Ring& corner = ringAt(chain, kBendCorner);
     const Builder::Ring& after = ringAt(chain, kBendCorner + outgoing * static_cast<float>(kInset));
     checkInnerSide(before, incoming);
-    checkInnerSide(corner, incoming);
-    checkInnerSide(corner, outgoing);
     checkInnerSide(after, outgoing);
-    for (const Builder::Ring* ring : {&before, &after}) {
+    QVector<const Builder::Ring*> capped {&before, &after};
+    // The elbow's arc has radius inset / tan 45°, so its rings are capped
+    // the same.
+    const QVector<int> elbow = elbowRings(chain, incoming, outgoing);
+    CHECK(elbow.size() == 3);
+    for (int index : elbow) {
+        capped.append(&chain.rings.at(index));
+    }
+    for (const Builder::Ring* ring : std::as_const(capped)) {
+        INFO("ring at (" << ring->center.x() << ", " << ring->center.y() << ")");
         for (int bin = 0; bin < ring->radii.size(); ++bin) {
             if (QVector3D::dotProduct(binDirection(*ring, bin), inside) > 1e-4f) {
                 CHECK(ring->radii.at(bin) <= kMaxInnerRadius);

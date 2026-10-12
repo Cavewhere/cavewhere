@@ -29,6 +29,8 @@ constexpr double kTwoPi = 2.0 * std::numbers::pi;
 constexpr double kMinRingSpacingMeters = 0.05;
 constexpr float kMinAxisLengthSquared = 0.25f;
 constexpr int kMinLoopRings = 3;
+// The most a sharp bend's elbow turns from one ring to the next.
+constexpr double kElbowStepDegrees = 30.0;
 
 inline QVector3D binDirection(const cwPassageTubeBuilder::Ring& ring, int bin)
 {
