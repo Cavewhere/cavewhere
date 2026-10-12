@@ -44,8 +44,8 @@ QVariant cwAttachedFixModel::data(const QModelIndex& index, int role) const
         return fix.coordinateSystem;
     case cwFixStationModel::CoordinateTextRole:
         return fix.coordinate;
-    // The scan keeps the coordinate as the file writes it and reads no
-    // components out of it, so those roles say "no value".
+    // The scan keeps the coordinate as text (a Compass .mak fix in meters)
+    // and reads no components out of it, so those roles say "no value".
     case cwFixStationModel::EastingRole:
     case cwFixStationModel::NorthingRole:
     case cwFixStationModel::ElevationRole:

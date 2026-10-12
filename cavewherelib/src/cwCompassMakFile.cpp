@@ -7,7 +7,11 @@
 
 #include "cwCompassMakFile.h"
 
+//Qt includes
+#include <QLocale>
+
 //Std includes
+#include <cmath>
 #include <cstdlib>
 
 namespace {
@@ -24,6 +28,9 @@ constexpr double kMetersPerFoot = 0.3048;
 constexpr int kFirstUtmZone = 1;
 constexpr int kMaxUtmZone = 60;
 constexpr int kCoordinateCount = 3;
+// A fix row's meters are rounded to a micrometer, so a converted foot value
+// reads 478000.0092 and not 478000.00920000003.
+constexpr double kMeterTextScale = 1e6;
 // A base location's fields: easting, northing, elevation, zone, convergence.
 constexpr int kBaseLocationFieldCount = 5;
 constexpr int kBaseZoneField = 3;
@@ -377,6 +384,21 @@ QString withForwardSlashes(QString path)
 } // namespace
 
 namespace cwCompassMakFile {
+
+QString Fix::meterText() const
+{
+    if (meters.has_value()) {
+        QStringList values;
+        values.reserve(kCoordinateCount);
+        for (const double value : *meters) {
+            // Adding 0.0 turns a rounded -0 into 0, so the text never reads "-0".
+            const double rounded = std::round(value * kMeterTextScale) / kMeterTextScale + 0.0;
+            values.append(QLocale::c().toString(rounded, 'f', QLocale::FloatingPointShortest));
+        }
+        return values.join(QLatin1Char(' '));
+    }
+    return coordinate;
+}
 
 int DatReference::fixZone() const
 {

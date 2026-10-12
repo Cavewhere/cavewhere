@@ -1230,8 +1230,8 @@ StandardPage {
                     // three zeros, and rendering those would hide the very text
                     // that is wrong with it behind a coordinate at the origin.
                     // So it shows what was written, which is all such a row has.
-                    // So does a read-only row: the scan keeps the file's text,
-                    // not the numbers.
+                    // So does a read-only row: the scan keeps its coordinate
+                    // as text (a Compass .mak fix in meters), not components.
                     value: wideDelegateId.coordinateError !== "" || wideDelegateId.readOnly
                            ? wideDelegateId.coordinateText
                            : CoordinateText.format(wideDelegateId.easting,

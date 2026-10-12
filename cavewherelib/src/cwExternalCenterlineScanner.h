@@ -295,6 +295,7 @@ struct SeededTripMetadata {
  */
 struct ScannedFix {
     QString station;
+    //! The file's numbers; a Compass .mak fix in meters, as cavern reads it.
     QString coordinate;
     //! Empty when no input coordinate system is in force.
     QString coordinateSystem;

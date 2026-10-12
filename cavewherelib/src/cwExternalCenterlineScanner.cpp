@@ -1175,7 +1175,7 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                                                  cwSurveyNodeKind::Kind::CompassFile,
                                                  titleCased(referenceStem(target)), datSurvey);
                 for (const cwCompassMakFile::Fix& fix : reference.fixes) {
-                    recordFix(state, fileRow, datSurvey, fix.station, fix.coordinate, system,
+                    recordFix(state, fileRow, datSurvey, fix.station, fix.meterText(), system,
                               canonical, 0);
                 }
                 const IncludeResolveResult resolution =

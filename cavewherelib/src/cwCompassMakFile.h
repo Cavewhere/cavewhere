@@ -43,6 +43,11 @@ struct Fix {
     //! Empty when the bracket does not hold a unit and three numbers.
     std::optional<std::array<double, 3>> meters;
 
+    //! The coordinate as a fix row shows it and the scan records it: meters
+    //! as "<E> <N> <Z>" ("478000.0092 4429999.98936 1655.00304"), or the
+    //! bracket's text as written when it holds no unit and three numbers.
+    QString meterText() const;
+
     bool operator==(const Fix& other) const = default;
 };
 

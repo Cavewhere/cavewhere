@@ -1627,8 +1627,8 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
                               "$16;\n"
                               "#cave.dat,B1[M,580661.57,4113846.34,219];\n"));
         CHECK(scannedFixes(makPath)
-              == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("m,0,0,0"), QString()},
-                                   {QStringLiteral("cave.B1"), QStringLiteral("M,580661.57,4113846.34,219"),
+              == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("0 0 0"), QString()},
+                                   {QStringLiteral("cave.B1"), QStringLiteral("580661.57 4113846.34 219"),
                                     QStringLiteral("North American 1983, UTM zone 16N")}});
     }
 
@@ -1640,7 +1640,7 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
                               "&North American 1983;\n"
                               "#cave.dat,A1[m,580661.57,4113846.34,219];\n"));
         CHECK(scannedFixes(makPath)
-              == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("m,580661.57,4113846.34,219"),
+              == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("580661.57 4113846.34 219"),
                                     QStringLiteral("North American 1983, UTM zone 16N")}});
     }
 
@@ -1651,8 +1651,8 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
             QByteArrayLiteral("#sub/Upper.Cave.DAT,A1[m,0,0,0];\n"
                               "#.DAT,B1[m,0,0,0];\n"));
         CHECK(scannedFixes(makPath)
-              == QList<ScannedFix>{{QStringLiteral("upper.cave.A1"), QStringLiteral("m,0,0,0"), QString()},
-                                   {QStringLiteral("dat.B1"), QStringLiteral("m,0,0,0"), QString()}});
+              == QList<ScannedFix>{{QStringLiteral("upper.cave.A1"), QStringLiteral("0 0 0"), QString()},
+                                   {QStringLiteral("dat.B1"), QStringLiteral("0 0 0"), QString()}});
     }
 
     SECTION("a lone .dat fixes nothing")
@@ -1676,7 +1676,7 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
         REQUIRE_FALSE(scan.hasError());
         CHECK(withoutLocation(scan.value().fixes)
               == QList<ScannedFix>{{QStringLiteral("compass_zone_no_datum.A1"),
-                                    QStringLiteral("f,1568241.5,14534120.7,5429.8"), nad27Zone13}});
+                                    QStringLiteral("478000.0092 4429999.98936 1655.00304"), nad27Zone13}});
         CHECK(scan.value().defaultedDatums
               == QList<DefaultedDatum>{{fixtureName + QStringLiteral(".mak"), QStringLiteral("13N")}});
     }
@@ -1693,7 +1693,7 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
         const auto scan = cwExternalCenterlineScanner::scan(makPath);
         REQUIRE_FALSE(scan.hasError());
         CHECK(withoutLocation(scan.value().fixes)
-              == QList<ScannedFix>{{QStringLiteral("a.B1"), QStringLiteral("m,0,0,0"),
+              == QList<ScannedFix>{{QStringLiteral("a.B1"), QStringLiteral("0 0 0"),
                                     QStringLiteral("North American 1927, UTM zone 16N")}});
         CHECK(scan.value().defaultedDatums
               == QList<DefaultedDatum>{{QStringLiteral("base.mak"), QStringLiteral("16N")}});
@@ -1707,7 +1707,7 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
         const auto laterScan = cwExternalCenterlineScanner::scan(datumLater);
         REQUIRE_FALSE(laterScan.hasError());
         CHECK(withoutLocation(laterScan.value().fixes)
-              == QList<ScannedFix>{{QStringLiteral("a.A1"), QStringLiteral("m,1,2,3"), QString()}});
+              == QList<ScannedFix>{{QStringLiteral("a.A1"), QStringLiteral("1 2 3"), QString()}});
         CHECK(laterScan.value().defaultedDatums.isEmpty());
 
         const QString noZone = writeUtf8File(tempPath(tempDir, QStringLiteral("nozone.mak")),
@@ -1739,8 +1739,8 @@ TEST_CASE("scanCompass reads a .mak '#' line that spans lines", "[Scanner][Attac
     REQUIRE_FALSE(scan.hasError());
     const QString system = QStringLiteral("North American 1983, UTM zone 16N");
     CHECK(withoutLocation(scan.value().fixes)
-          == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("M,580661.57,4113846.34,219"), system},
-                               {QStringLiteral("cave.A3"), QStringLiteral("F,1904992.0,13497526.0,718.5"), system}});
+          == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("580661.57 4113846.34 219"), system},
+                               {QStringLiteral("cave.A3"), QStringLiteral("580641.5616 4114045.9248 218.9988"), system}});
     CHECK(scan.value().dependencies.size() == 2);
     CHECK(scan.value().warnings.isEmpty());
 }

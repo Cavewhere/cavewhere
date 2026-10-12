@@ -77,6 +77,18 @@ const QString kBravoDat = QStringLiteral("BRAVO.DAT");
 const QString kCharlieDat = QStringLiteral("CHARLIE.DAT");
 constexpr int kCompassFixCount = 2;
 
+// compass_fix_units/UNITS.MAK fixes F1 in feet, [f,1234.5,678.9,10.0], and
+// M1 in meters, [m,500.25,600.5,20.0]; it names no datum or zone.
+const QString kMakUnitsFixture = QStringLiteral("compass_fix_units/UNITS.MAK");
+const QString kFeetDat = QStringLiteral("FEET.DAT");
+const QString kMetersDat = QStringLiteral("METERS.DAT");
+const QString kFeetFix = QStringLiteral("feet.F1");
+const QString kMetersFix = QStringLiteral("meters.M1");
+// The values cavern solves with: feet times 0.3048, meters as written.
+const QString kFeetFixMeters = QStringLiteral("376.2756 206.92872 3.048");
+const QString kMetersFixMeters = QStringLiteral("500.25 600.5 20");
+constexpr int kMakUnitsFixCount = 2;
+
 // walls_two_caves/TWO.WPJ: the EAST book's E1.SRV fixes E1, the WEST book's
 // W1.SRV fixes W1.
 const QString kWallsFixture = QStringLiteral("walls_two_caves/TWO.WPJ");
@@ -282,6 +294,36 @@ TEST_CASE("A Compass project's fixes live on the .dat file each .mak line fixes"
     REQUIRE(model.rowCount() == 1);
     CHECK(model.index(0, 0).data(cwFixStationTreeModel::SubtreeFixCountRole).toInt()
           == kCompassFixCount);
+}
+
+TEST_CASE("A Compass .mak fix row shows its coordinate in meters, numbers only",
+          "[FixStationTreeModel][MakFixUnits]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-mak-units"));
+    cwCave* root = attachAndWaitForFixes(fixture.get(), kMakUnitsFixture, kMakUnitsFixCount);
+    INFO("tree:\n" << describeTree(root));
+
+    const cwSurveyNode* feetNode = derivedNode(root, kFeetDat);
+    const cwSurveyNode* metersNode = derivedNode(root, kMetersDat);
+    REQUIRE(attachedFixStations(feetNode) == QStringList({kFeetFix}));
+    REQUIRE(attachedFixStations(metersNode) == QStringList({kMetersFix}));
+
+    const QString feetText = attachedFixFor(feetNode, kFeetFix).coordinate;
+    const QString metersText = attachedFixFor(metersNode, kMetersFix).coordinate;
+    CHECK(feetText.toStdString() == kFeetFixMeters.toStdString());
+    CHECK(metersText.toStdString() == kMetersFixMeters.toStdString());
+
+    cwFixStationTreeModel model;
+    model.setRootNode(root);
+    const int coordinateRole = roleId(model, QByteArrayLiteral("coordinateText"));
+    const QModelIndex feetRow = fixRow(model, nodeRow(model, feetNode->name()), kFeetFix);
+    const QModelIndex metersRow = fixRow(model, nodeRow(model, metersNode->name()), kMetersFix);
+    REQUIRE(feetRow.isValid());
+    REQUIRE(metersRow.isValid());
+    CHECK(feetRow.data(coordinateRole).toString().toStdString()
+          == kFeetFixMeters.toStdString());
+    CHECK(metersRow.data(coordinateRole).toString().toStdString()
+          == kMetersFixMeters.toStdString());
 }
 
 TEST_CASE("A Walls project's fixes live on the book whose survey file holds them",
