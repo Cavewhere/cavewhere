@@ -451,6 +451,44 @@ void checkOpenSweepCaseBuildsClean(const std::string& name)
     CHECK(report.issues.isEmpty());
 }
 
+int warningCount(const cwPassageTubeBuilder::Debug& debug, cwPassageTubeMesh::Warning::Type type)
+{
+    return static_cast<int>(std::count_if(debug.warnings.cbegin(), debug.warnings.cend(), [type](const cwPassageTubeMesh::Warning& warning) {
+        return warning.type == type;
+    }));
+}
+
+cwPassageTubeBuilder::Debug buildDebug(const Cases::Survey& survey, double sampleSpacing)
+{
+    return cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(sampleSpacing));
+}
+
+void checkJoinsEveryArm(const std::string& name)
+{
+    INFO(name);
+    const Cases::Case& entry = catalogCase(name);
+    const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(entry), entry.sampleSpacing);
+    if (warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0) {
+        return;
+    }
+    QStringList messages;
+    for (const cwPassageTubeMesh::Warning& warning : debug.warnings) {
+        messages.append(warning.message);
+    }
+    INFO(messages.join(QLatin1Char('\n')).toStdString());
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+}
+
+const std::string kThreeBigArmsCase = "18. Three big arms into a small passage";
+
+bool isGalleryOrSweepJunction(const Cases::Case& entry)
+{
+    return (entry.tags.contains(QStringLiteral("gallery")) || isSweep(entry)) && hasJunction(entry);
+}
+
 std::pair<unsigned int, int> randomSurvey(int seed)
 {
     return {static_cast<unsigned int>(seed), 1 + (seed - 1) % kMaxRandomJunctions};
@@ -499,7 +537,7 @@ void checkCenterlineInside(const std::string& name)
 TEST_CASE("cwPassageTubeCases catalog builds clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave;
+        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave && entry.name.toStdString() != kThreeBigArmsCase;
     })));
     checkCaseBuildsClean(name);
 }
@@ -715,6 +753,46 @@ TEST_CASE("cwPassageTubeCases chains the big passage as the through", "[PassageT
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
     INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
     CHECK(report.issues.isEmpty());
+}
+
+// No leg at gallery 18's junction is wider and taller than every other, so
+// the small passage stays the through, the big arms open into each other
+// around it, and the stitch ends one inside another. Gallery 19's big arm
+// already claims the through and its back leg zips into it.
+TEST_CASE("cwPassageTubeCases reports big arms that run into each other", "[PassageTube][cwPassageTubeCases]")
+{
+    const Cases::Case& threeBigArms = catalogCase(kThreeBigArmsCase);
+    const cwPassageTubeBuilder::Debug threeBigArmsDebug = buildDebug(Cases::toSurvey(threeBigArms), threeBigArms.sampleSpacing);
+    CHECK(warningCount(threeBigArmsDebug, cwPassageTubeMesh::Warning::JunctionOverlap) > 0);
+    checkCaseBuildsClosed(kThreeBigArmsCase);
+
+    const Cases::Case& doublingBack = catalogCase("19. Through doubling back beside a big arm");
+    const cwPassageTubeBuilder::Debug doublingBackDebug = buildDebug(Cases::toSurvey(doublingBack), doublingBack.sampleSpacing);
+    CHECK(warningCount(doublingBackDebug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+    checkCaseBuildsClosed(doublingBack.name.toStdString());
+}
+
+// Every gallery junction and a subsample of the sweep's that leave an arm
+// unzipped join it into the through with a clean mesh.
+TEST_CASE("cwPassageTubeCases joins every arm", "[PassageTube][cwPassageTubeCases][!mayfail]")
+{
+    std::vector<std::string> names = caseNames([](const Cases::Case& entry) {
+        return isGalleryOrSweepJunction(entry) && !isSweep(entry);
+    });
+    const std::vector<std::string> sweep = caseNames([](const Cases::Case& entry) {
+        return isGalleryOrSweepJunction(entry) && isSweep(entry);
+    }, kSmokeStride);
+    names.insert(names.end(), sweep.cbegin(), sweep.cend());
+    const std::string name = GENERATE_COPY(from_range(names));
+    checkJoinsEveryArm(name);
+}
+
+TEST_CASE("cwPassageTubeCases full sweep joins every arm", "[cwPassageTubeCases][Sweep][.][!mayfail]")
+{
+    const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
+        return isGalleryOrSweepJunction(entry) && isSweep(entry);
+    })));
+    checkJoinsEveryArm(name);
 }
 
 // Two arms as big as the through leave it on opposite sides: each mouth
@@ -1101,6 +1179,6 @@ TEST_CASE("cwPassageTubeCases a case survey round-trips its parameters", "[Passa
             INFO(tag);
             CHECK(tags.contains(QString::fromLatin1(tag)));
         }
-        CHECK(Cases::galleryCases().size() == 19);
+        CHECK(Cases::galleryCases().size() == 21);
     }
 }

@@ -35,6 +35,7 @@ constexpr double kVerticalDegrees = 90.0;
 constexpr std::array<double, 5> kSweepPlanDegrees = {90.0, 60.0, 45.0, 30.0, 20.0};
 constexpr std::array<double, 7> kSweepProfileDegrees = {0.0, 30.0, 60.0, 90.0, -30.0, -60.0, -90.0};
 constexpr std::array<double, 3> kSweepSizeRatios = {0.3, 1.0, 2.5};
+constexpr double kBigArmRatio = kSweepSizeRatios.back();
 constexpr std::array<double, 3> kSweepBendDegrees = {0.0, 40.0, 90.0};
 constexpr std::array<double, 3> kJunctionFreeProfileDegrees = {0.0, 30.0, -30.0};
 constexpr double kSameSideSpreadDegrees = 45.0;
@@ -546,6 +547,15 @@ QVector<cwPassageTubeCases::JunctionCase> cwPassageTubeCases::galleryCases()
     change.throughAtJunction = {1, 1, 1.5, 0.5};
     change.throughPastJunction = {3, 3, 2, 1};
     cases.append(change);
+
+    const Section bigArm {2, 2, 4, 1};
+    cases.append(galleryCase(QStringLiteral("18. Three big arms into a small passage"), {0.8, 0.8, 1, 0.5},
+                             {arm(45, bigArm), arm(135, bigArm), arm(270, bigArm)}));
+
+    JunctionCase doublingBack = galleryCase(QStringLiteral("19. Through doubling back beside a big arm"), kSweepThroughSection,
+                                            {arm(30, kSweepThroughSection.scaled(kBigArmRatio))});
+    doublingBack.throughBendDegrees = kVerticalDegrees;
+    cases.append(doublingBack);
 
     // The arm leaves the room through its side wall, turns back and runs
     // along it, outside, past the room's end, its wall reaching into the room.
