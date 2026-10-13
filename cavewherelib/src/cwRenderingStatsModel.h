@@ -79,13 +79,13 @@ public:
     int totalItems() const { return m_culling.itemsTotal; }
     int culledItems() const { return m_culling.itemsCulled; }
 
-    int streamedItems() const { return m_streaming.streamedItems; }
-    int loadsInFlight() const { return m_streaming.loadsInFlight; }
-    int itemsBelowDesired() const { return m_streaming.itemsBelowDesired; }
-    qint64 readyCpuBytes() const { return m_streaming.readyCpuBytes; }
-    QString readyCpuText() const { return formattedBytes(m_streaming.readyCpuBytes); }
-    int demotionsInFlight() const { return m_streaming.demotionsInFlight; }
-    qint64 streamingRevision() const { return qint64(m_lastStreamingRevision); }
+    int streamedItems() const { return m_streamingFrame.counts.streamedItems; }
+    int loadsInFlight() const { return m_streamingFrame.counts.loadsInFlight; }
+    int itemsBelowDesired() const { return m_streamingFrame.counts.itemsBelowDesired; }
+    qint64 readyCpuBytes() const { return m_streamingFrame.counts.readyCpuBytes; }
+    QString readyCpuText() const { return formattedBytes(m_streamingFrame.counts.readyCpuBytes); }
+    int demotionsInFlight() const { return m_streamingFrame.counts.demotionsInFlight; }
+    qint64 streamingRevision() const { return qint64(m_streamingFrame.revision); }
 
     int residentNodes() const { return m_pointCloud.residentNodes; }
     int selectedNodes() const { return m_pointCloud.selectedNodes; }
@@ -127,8 +127,7 @@ private:
     qint64 m_totalCpuBytes = 0;
     quint64 m_lastLedgerRevision = 0;
     cwRenderFrameStats::Culling m_culling;
-    cwRenderFrameStats::Streaming m_streaming;
-    quint64 m_lastStreamingRevision = 0;
+    cwRenderFrameStats::StreamingFrame m_streamingFrame;
     cwRenderFrameStats::PointCloud m_pointCloud;
     quint64 m_lastFrameStatsRevision = 0;
 };

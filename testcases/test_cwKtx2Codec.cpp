@@ -14,12 +14,15 @@
 #include <QSemaphore>
 #include <QString>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QThreadPool>
 
 #include <ktx.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <thread>
 
 #include "cwConcurrent.h"
 #include "cwDiskCacher.h"
@@ -470,6 +473,68 @@ TEST_CASE("cwKtx2Codec ensures one readable encode per cache key", "[Ktx2Codec]"
         CHECK_FALSE(ensured.errorMessage().isEmpty());
         CHECK_FALSE(QFileInfo::exists(cacher.filePath(nullImageKey)));
     }
+}
+
+namespace {
+    //Long enough for the second caller to reach the claim before the first encode goes on
+    constexpr int kSecondCallerHeadStartMs = 250;
+    constexpr int kSourceWaitTimeoutMs = 30000;
+}
+
+TEST_CASE("cwKtx2Codec runs one source per cache file across concurrent ensures", "[Ktx2Codec]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const cwDiskCacher::Key key = streamedKey(QStringLiteral("concurrent-checksum"));
+
+    std::atomic<int> sourceCalls {0};
+    QSemaphore firstSourceEntered;
+    QSemaphore firstSourceReleased;
+
+    //Each thread owns a cacher on the same directory, as separate jobs do
+    const auto ensureOnThread = [&](const std::function<QImage()>& source,
+                                    std::atomic<bool>& succeeded,
+                                    std::atomic<bool>& finished) {
+        return std::thread([&, source]() {
+            cwDiskCacher cacher{QDir(tempDir.path())};
+            succeeded = !cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError();
+            finished = true;
+        });
+    };
+
+    std::atomic<bool> firstSucceeded {false};
+    std::atomic<bool> firstFinished {false};
+    std::thread first = ensureOnThread([&]() {
+        sourceCalls++;
+        firstSourceEntered.release();
+        //Bounded, so a broken claim fails the checks below rather than hanging
+        firstSourceReleased.tryAcquire(1, kSourceWaitTimeoutMs);
+        return gradientImage(kGradientWidth, kGradientHeight);
+    }, firstSucceeded, firstFinished);
+
+    const bool firstEntered = firstSourceEntered.tryAcquire(1, kSourceWaitTimeoutMs);
+
+    std::atomic<bool> secondSucceeded {false};
+    std::atomic<bool> secondFinished {false};
+    std::thread second = ensureOnThread([&]() {
+        sourceCalls++;
+        return gradientImage(kGradientWidth, kGradientHeight);
+    }, secondSucceeded, secondFinished);
+
+    //The second caller blocks inside the claim, so the only proof of overlap is
+    //that it is still running while the first source holds the claim.
+    QThread::msleep(kSecondCallerHeadStartMs);
+    const bool secondWaitedOnFirst = !secondFinished;
+
+    firstSourceReleased.release();
+    first.join();
+    second.join();
+
+    CHECK(firstEntered);
+    CHECK(secondWaitedOnFirst);
+    CHECK(sourceCalls == 1);
+    CHECK(firstSucceeded);
+    CHECK(secondSucceeded);
 }
 
 namespace {

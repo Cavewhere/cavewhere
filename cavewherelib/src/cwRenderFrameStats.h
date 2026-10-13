@@ -49,6 +49,15 @@ public:
         bool operator==(const Streaming& other) const = default;
     };
 
+    //! Streaming counts paired with the streaming publish that wrote them
+    struct StreamingFrame {
+        Streaming counts;
+        //! Bumped only by publishStreaming(), so a reader can tell a fresh streaming frame from a stale one
+        quint64 revision = 0;
+
+        bool operator==(const StreamingFrame& other) const = default;
+    };
+
     struct PointCloud {
         //! Octree nodes holding a GPU buffer
         int residentNodes = 0;
@@ -76,18 +85,16 @@ public:
     Streaming streaming() const;
     PointCloud pointCloud() const;
     quint64 revision() const;
-    //! Bumped only by publishStreaming(), so a reader can tell a fresh streaming frame from a stale one
-    quint64 streamingRevision() const;
+    StreamingFrame streamingFrame() const;
 
 private:
     cwRenderFrameStats() = default;
 
     mutable QMutex m_mutex;
     Culling m_culling;
-    Streaming m_streaming;
+    StreamingFrame m_streamingFrame;
     PointCloud m_pointCloud;
     quint64 m_revision = 0;
-    quint64 m_streamingRevision = 0;
 };
 
 #endif // CWRENDERFRAMESTATS_H

@@ -140,6 +140,12 @@ namespace cw::ktx2 {
      * called only when the encode is needed, so callers keep an expensive
      * decode lazy.
      *
+     * Calls for the same cache file run one at a time across the process: a
+     * second caller waits for the running encode, then reads its entry rather
+     * than encoding again. source() runs inside the claim, so it must stay out
+     * of ensureEncodedEntry: a re-entrant call on the same cache file would wait
+     * on its own claim forever.
+     *
      * An error Result means the cache has no usable entry at key and the caller
      * should stay on its uncompressed image; the reason is also warned about.
      *

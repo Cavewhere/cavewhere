@@ -153,9 +153,9 @@ void setLiveCamera(cwCamera* camera, float distance)
     camera->setViewMatrix(lookingAt(kItemBCenter, distance));
 }
 
-cwRenderFrameStats::Streaming streamingCounts()
+cwRenderFrameStats::StreamingFrame streamingFrame()
 {
-    return cwRenderFrameStats::instance()->streaming();
+    return cwRenderFrameStats::instance()->streamingFrame();
 }
 
 } // namespace
@@ -229,7 +229,7 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     // the SRB it replaces only ever sampled the shared loading texture.
     REQUIRE(waitFor([&]() {
         viewer->update();
-        const auto counts = streamingCounts();
+        const auto counts = streamingFrame().counts;
         return counts.streamedItems == 2 && counts.loadsInFlight == 0;
     }));
     REQUIRE(framesFrom(kSettleFrames));
@@ -260,13 +260,24 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
 
     // Now the live camera moves in on B. Its refinement loads off-thread and lands
     // in some live frame's streamResources, which always follows an evicting tile.
+    // At the far distance B already reads as settled, so only frames published
+    // after the move count, and B must first be seen wanting more detail.
+    const quint64 revisionBeforeMove = streamingFrame().revision;
     setLiveCamera(viewer->camera(), kLiveNearDistance);
 
+    bool sawBelowDesired = false;
     const bool refined = waitFor([&]() {
         keepTilesFlowing();
         viewer->update();
-        const auto counts = streamingCounts();
-        return counts.loadsInFlight == 0 && counts.itemsBelowDesired == 0;
+        const auto frame = streamingFrame();
+        if (frame.revision <= revisionBeforeMove) {
+            return false;
+        }
+        if (frame.counts.itemsBelowDesired > 0) {
+            sawBelowDesired = true;
+            return false;
+        }
+        return sawBelowDesired && frame.counts.loadsInFlight == 0;
     });
 
     // The live frames that draw B after its swap are where a stale SRB binds a

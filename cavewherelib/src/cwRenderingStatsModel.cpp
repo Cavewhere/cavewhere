@@ -160,13 +160,11 @@ void cwRenderingStatsModel::refresh()
             emit cullingChanged();
         }
 
-        //streamingRevision moves on every streaming publish, even one with
+        //The frame's revision moves on every streaming publish, even one with
         //unchanged counts
-        const cwRenderFrameStats::Streaming streaming = frameStats->streaming();
-        const quint64 streamingRevision = frameStats->streamingRevision();
-        if(m_streaming != streaming || m_lastStreamingRevision != streamingRevision) {
-            m_streaming = streaming;
-            m_lastStreamingRevision = streamingRevision;
+        const cwRenderFrameStats::StreamingFrame streamingFrame = frameStats->streamingFrame();
+        if(m_streamingFrame != streamingFrame) {
+            m_streamingFrame = streamingFrame;
             emit streamingChanged();
         }
 

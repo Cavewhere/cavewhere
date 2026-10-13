@@ -82,3 +82,22 @@ TEST_CASE("cwRenderFrameStats: publishing one half keeps the other",
 
     CHECK(stats->streaming() == kStreaming);
 }
+
+TEST_CASE("cwRenderFrameStats: a streaming frame pairs its counts with its publish",
+          "[RenderCullingStats]") {
+    auto* stats = cwRenderFrameStats::instance();
+
+    stats->publishStreaming(kStreaming);
+    const cwRenderFrameStats::StreamingFrame first = stats->streamingFrame();
+    CHECK(first.counts == kStreaming);
+
+    //Culling leaves the streaming revision where it was
+    stats->publishCulling(kCulling);
+    CHECK(stats->streamingFrame() == first);
+
+    //Unchanged counts republished still read as a new streaming frame
+    stats->publishStreaming(kStreaming);
+    const cwRenderFrameStats::StreamingFrame second = stats->streamingFrame();
+    CHECK(second.counts == kStreaming);
+    CHECK(second.revision == first.revision + 1);
+}

@@ -6,8 +6,12 @@
 // Qt includes
 #include <QDebug>
 #include <QDir>
+#include <QMutex>
 #include <QSemaphore>
+#include <QSet>
 #include <QThread>
+#include <QThreadPool>
+#include <QWaitCondition>
 
 // libktx includes
 #include <ktx.h>
@@ -151,6 +155,65 @@ namespace {
 
         return compressError;
     }
+
+    /**
+     * One claim per cache entry while its encode runs; a second claimant waits,
+     * then reads the finished entry instead of queuing a duplicate encode.
+     */
+    class EncodeClaim
+    {
+    public:
+        explicit EncodeClaim(const QString& entryPath) :
+            m_entryPath(entryPath)
+        {
+            QMutexLocker locker(&mutex());
+            if(inFlight().contains(m_entryPath)) {
+                //Waiting frees this worker's pool slot, as compressOnLane does.
+                QThreadPool* pool = cwTask::threadPool();
+                if(pool != nullptr) {
+                    pool->releaseThread();
+                }
+                while(inFlight().contains(m_entryPath)) {
+                    finished().wait(&mutex());
+                }
+                if(pool != nullptr) {
+                    pool->reserveThread();
+                }
+            }
+            inFlight().insert(m_entryPath);
+        }
+
+        ~EncodeClaim()
+        {
+            QMutexLocker locker(&mutex());
+            inFlight().remove(m_entryPath);
+            finished().wakeAll();
+        }
+
+        EncodeClaim(const EncodeClaim&) = delete;
+        EncodeClaim& operator=(const EncodeClaim&) = delete;
+
+    private:
+        static QMutex& mutex()
+        {
+            static QMutex instance;
+            return instance;
+        }
+
+        static QWaitCondition& finished()
+        {
+            static QWaitCondition instance;
+            return instance;
+        }
+
+        static QSet<QString>& inFlight()
+        {
+            static QSet<QString> instance;
+            return instance;
+        }
+
+        const QString m_entryPath;
+    };
 }
 
 namespace cw::ktx2 {
@@ -362,6 +425,10 @@ Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
                                      const std::function<QImage()>& source,
                                      const cwProgressNodePtr& progressParent)
 {
+    //Claimed before the lookup, so a request that waited on another's encode
+    //finds that encode's entry here.
+    const EncodeClaim claim(cacher.filePath(key));
+
     //entry() rather than hasEntry(): an edited source lands on the same cache
     //file path with a new checksum, and only a read tells a current encode from
     //a stale one
