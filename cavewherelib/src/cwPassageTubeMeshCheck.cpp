@@ -1198,8 +1198,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
 }
 
 QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::centerlineInside(const cwPassageTubeMesh& mesh,
-                                                                                const cwPassageTubeBuilder::Debug& debug,
-                                                                                const Options& options)
+                                                                                const cwPassageTubeBuilder::Debug& debug)
 {
     const QVector<Triangle> triangles = trianglesOf(mesh, allTripsVisible(mesh));
     if (triangles.isEmpty()) {
@@ -1208,7 +1207,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::centerlineInside(
     const TriangleGrid grid(triangles);
     WindingRay ray(triangles, grid, boundsOf(triangles));
     const auto isInside = [&](const Vec& point) {
-        return isNearSurface(triangles, grid, point, options.wallToleranceMeters) || isInsideByVote(ray, point, kEveryTriangle);
+        return isNearSurface(triangles, grid, point, kCenterlineTolerance) || isInsideByVote(ray, point, kEveryTriangle);
     };
 
     QVector<Issue> issues;
@@ -1343,7 +1342,7 @@ cwPassageTubeMeshCheck::Report cwPassageTubeMeshCheck::check(const cwPassageTube
     if (!debug.chains.isEmpty()) {
         report.issues.append(ringIssues(debug, options));
         report.issues.append(wallsOnSurface(debug, options));
-        report.issues.append(centerlineInside(mesh, debug, options));
+        report.issues.append(centerlineInside(mesh, debug));
         report.issues.append(capsExposed(mesh, debug));
     }
     return report;

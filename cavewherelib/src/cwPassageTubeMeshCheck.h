@@ -44,6 +44,9 @@ public:
     static constexpr double kMaxRadiusRatio = 3.0;
     static constexpr double kWallTolerance = 0.15;
     static constexpr double kCenterlineSampleMeters = 0.25;
+    // A centerline point this close to the surface lies on it, which counts
+    // as inside: a zero reading puts the wall on the centerline.
+    static constexpr double kCenterlineTolerance = 0.01;
     static constexpr int kCapSamples = 32;
     // A cap point this close to another chain's surface lies on it: a hidden
     // cone's base on its through passage's wall.
@@ -165,11 +168,10 @@ public:
     // Both stations of every leg of a chain with rings, and points every
     // kCenterlineSampleMeters along it, lie inside the triangles drawn while
     // every trip is visible by a winding number vote of three skewed rays, or
-    // within wallToleranceMeters of one of them. The legs of an arm left
+    // within kCenterlineTolerance of one of them. The legs of an arm left
     // inside its through passage have no rings.
     static QVector<Issue> centerlineInside(const cwPassageTubeMesh& mesh,
-                                           const cwPassageTubeBuilder::Debug& debug,
-                                           const Options& options = Options());
+                                           const cwPassageTubeBuilder::Debug& debug);
 
     // Each disc in debug.caps drawn while every trip is visible, at a
     // station with two or more legs, that shows: one of kCapSamples points

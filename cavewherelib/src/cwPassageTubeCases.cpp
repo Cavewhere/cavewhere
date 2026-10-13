@@ -268,6 +268,34 @@ cwPassageTubeCases::Case unreadSharpBendCase()
                      {QStringLiteral("u3"), u3}});
 }
 
+// A 10 m level lead-in north, a 12 m shaft straight down, then a 6 m leg
+// dipping 8° that turns 120° in plan from the lead-in. The foot reads 0
+// down, so its floor lies on the station, the outside of the bend. The
+// lead-in rolls the frames down the shaft, so the elbow's rings twist about
+// the outgoing leg.
+cwPassageTubeCases::Case shaftFootCase()
+{
+    constexpr float kLeadInMeters = 10.0f;
+    constexpr float kShaftMeters = 12.0f;
+    constexpr float kLegMeters = 6.0f;
+    constexpr double kLegBearingDegrees = 120.0;
+    constexpr double kLegDipDegrees = -8.0;
+    const Section leadIn {2.0, 2.0, 2.0, 1.0};
+    const Section top {2.0, 2.0, 2.0, 0.0};
+    const Section foot {2.0, 2.0, 20.0, 0.0};
+    const Section end {1.0, 1.0, 2.0, 1.0};
+
+    const QVector3D f0(0.0f, 0.0f, 0.0f);
+    const QVector3D f1 = f0 + kLeadInMeters * direction(0.0, 0.0);
+    const QVector3D f2 = f1 + kShaftMeters * direction(0.0, -kVerticalDegrees);
+    const QVector3D f3 = f2 + kLegMeters * direction(kLegBearingDegrees, kLegDipDegrees);
+    return bendCase(QStringLiteral("25. Zero floor reading at the foot of a shaft"),
+                    {{QStringLiteral("f0"), f0, lrudStrings(leadIn)},
+                     {QStringLiteral("f1"), f1, lrudStrings(top)},
+                     {QStringLiteral("f2"), f2, lrudStrings(foot)},
+                     {QStringLiteral("f3"), f3, lrudStrings(end)}});
+}
+
 double distanceToSegment(const QVector3D& point, const QVector3D& start, const QVector3D& end)
 {
     const QVector3D along = end - start;
@@ -647,6 +675,7 @@ QVector<cwPassageTubeCases::Case> cwPassageTubeCases::catalog()
     cases.append(twoTripHairpinCase());
     cases.append(zeroOutsideCornerCase());
     cases.append(unreadSharpBendCase());
+    cases.append(shaftFootCase());
     cases.append({QStringLiteral("Phake Cave"), {QStringLiteral("phake")}, phakeCave()});
     cases.append(loopCase());
     for (const JunctionCase& junctionCase : sweepCases()) {

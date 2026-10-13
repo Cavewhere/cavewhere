@@ -459,7 +459,20 @@ TEST_CASE("cwPassageTubeMeshCheck reports centerline points outside the tube", "
         const QVector<Check::Issue> issues = Check::centerlineInside(mesh, debug);
         REQUIRE(issues.size() == 1);
         CHECK(issues.at(0).type == Check::CenterlineOutside);
-        CHECK(issues.at(0).position.x() > 7.0f - static_cast<float>(Check::kWallTolerance));
+        CHECK(issues.at(0).position.x() > 7.0f - static_cast<float>(Check::kCenterlineTolerance));
+    }
+
+    SECTION("A station 5 cm outside the tube is reported, 5 mm outside lies on the wall") {
+        constexpr float kOutsideMeters = 0.05f;
+        constexpr float kOnWallMeters = 0.005f;
+        const cwPassageTubeMesh outside = boxMesh(QVector3D(-1, -1, -1), QVector3D(10.0f - kOutsideMeters, 1, 1));
+        const QVector<Check::Issue> issues = Check::centerlineInside(outside, debug);
+        REQUIRE(issues.size() == 1);
+        CHECK(issues.at(0).type == Check::CenterlineOutside);
+        CHECK(issues.at(0).position == QVector3D(10, 0, 0));
+
+        const cwPassageTubeMesh onWall = boxMesh(QVector3D(-1, -1, -1), QVector3D(10.0f - kOnWallMeters, 1, 1));
+        CHECK(Check::centerlineInside(onWall, debug).isEmpty());
     }
 
     SECTION("Two overlapping tubes still hold the leg") {

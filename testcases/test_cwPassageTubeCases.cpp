@@ -243,6 +243,9 @@ struct AcceptedIssue {
 
 const QVector<AcceptedIssue> kPhakeCaveIssues {
     {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
+    // T07s: a9 reads 0 down at the foot of the shaft from a6, so the skin
+    // from its elbow's middle ring to the next cuts inside the a9 → a10 leg.
+    {QStringLiteral("a9"), cwPassageTubeMeshCheck::CenterlineOutside},
 };
 
 QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
@@ -472,10 +475,24 @@ bool isJunctionLimitRandomSeed(int seed)
 
 // 24's corner has no readings, so it insets by the default radius, short of
 // the 1.2 m floor it borrows: capping the bend's inside leaves the floor's
-// lowest bin a spike that creases by 155° (Crease).
+// lowest bin a spike that creases by 155° (Crease). 25's foot reads 0 down,
+// and the skin from its elbow's middle ring to the next cuts inside the leg
+// leaving it (CenterlineOutside).
 const QStringList kOpenJunctionFreeCases {
     QStringLiteral("24. Sharp bend in an unread passage next to a zero reading"),
+    QStringLiteral("25. Zero floor reading at the foot of a shaft"),
 };
+
+void checkCenterlineInside(const std::string& name)
+{
+    INFO(name);
+    const Cases::Case& entry = catalogCase(name);
+    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
+    const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::centerlineInside(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText({issues, 0, {}}).toStdString());
+    CHECK(issues.isEmpty());
+}
 
 } // namespace
 
@@ -493,34 +510,25 @@ TEST_CASE("cwPassageTubeCases keeps the centerline inside a junction arm", "[Pas
 {
     const std::string name = GENERATE(std::string("21. Small arm along the wall of a big room"),
                                       std::string("22. Default-radius arm bending inside a big through's reach"));
-    INFO(name);
-    const Cases::Case& entry = catalogCase(name);
-    const Cases::Survey survey = Cases::toSurvey(entry.trip);
-    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
-    const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::centerlineInside(debug.mesh, debug);
-    INFO(cwPassageTubeMeshCheck::toText({issues, 0, {}}).toStdString());
-    CHECK(issues.isEmpty());
+    checkCenterlineInside(name);
 }
 
 // The middle elbow ring sits off its corner station toward the bend's
 // inside, farther than the station's reading on the outside: 23 reads 0
-// there, and 24 borrows the 0 of its first station. The check's wall
-// tolerance would hide a station a few centimeters outside, so only the
-// end stations, flush with their caps, may sit on the surface.
+// there, and 24 borrows the 0 of its first station.
 TEST_CASE("cwPassageTubeCases keeps a corner station inside its elbow ring", "[PassageTube][cwPassageTubeCases]")
 {
-    constexpr double kOnCapMeters = 0.01;
     const std::string name = GENERATE(std::string("23. Sharp bend at a station reading zero on the outside wall"),
                                       std::string("24. Sharp bend in an unread passage next to a zero reading"));
-    INFO(name);
-    const Cases::Case& entry = catalogCase(name);
-    const Cases::Survey survey = Cases::toSurvey(entry.trip);
-    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
-    cwPassageTubeMeshCheck::Options options;
-    options.wallToleranceMeters = kOnCapMeters;
-    const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::centerlineInside(debug.mesh, debug, options);
-    INFO(cwPassageTubeMeshCheck::toText({issues, 0, {}}).toStdString());
-    CHECK(issues.isEmpty());
+    checkCenterlineInside(name);
+}
+
+// The foot of the shaft reads 0 down, the bend's outside, so its floor lies
+// on the station, and the skin from the elbow's middle ring to the next is a
+// chord across the bend that cuts inside the leg leaving the station.
+TEST_CASE("cwPassageTubeCases keeps the centerline inside between elbow rings", "[PassageTube][cwPassageTubeCases][!mayfail]")
+{
+    checkCenterlineInside("25. Zero floor reading at the foot of a shaft");
 }
 
 // The arm's ceiling runs level with the through's, so its mouth runs along
