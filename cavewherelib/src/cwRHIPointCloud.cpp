@@ -29,14 +29,23 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <utility>
 
 namespace {
 
-    // {nodeMin.x, nodeMin.y, nodeMin.z, nodeSize / kQuantMax} then
-    // {floorSpacing, 0, 0, 0}, as two float4s
-    constexpr int kNodeConstantsFloats = 8;
-    constexpr quint32 kNodeConstantsBytes = kNodeConstantsFloats * sizeof(float);
+    // One node's per-instance constants, as PointCloud.vert reads them: the
+    // dequantization (nodeOriginScale), the floor (nodeFloor), and the two ids
+    // the debug views color by (nodeIds).
+    struct NodeConstants {
+        std::array<float, 4> originScale;
+        float floorSpacing = 0.0f;
+        quint32 arrivalFrame = 0;
+        quint32 nodeIndex = 0;
+        quint32 reserved = 0;
+    };
+    constexpr quint32 kNodeConstantsBytes = sizeof(NodeConstants);
+    static_assert(kNodeConstantsBytes == 32, "Two float4s per node slot");
 
     // Slots in the shared per-instance constants buffer, at 32 bytes each (1 MB
     // in all). A view selects at most cw::octree::kMaxDesiredNodes nodes per
@@ -64,8 +73,52 @@ namespace {
     constexpr int kRootLevel = 0;
     constexpr qint64 kBytesPerMegabyte = 1024 * 1024;
 
-    //Byte offset of nodeFloor inside a node's constants slot
-    constexpr quint32 kNodeFloorOffset = 4 * sizeof(float);
+    constexpr quint32 kNodeFloorOffset = offsetof(NodeConstants, floorSpacing);
+    constexpr quint32 kNodeIdsOffset = offsetof(NodeConstants, arrivalFrame);
+    static_assert(offsetof(NodeConstants, nodeIndex) == kNodeIdsOffset + sizeof(quint32),
+                  "nodeIds reads the arrival frame and the node index as one uvec2");
+
+    // The node box overlay. A box is a unit cube scaled to the node's cube: 12
+    // edges, two ends each, every end carrying how far along its edge it sits
+    // so a loading node's box can be dashed.
+    constexpr int kCubeEdgeCount = 12;
+    constexpr int kNodeBoxVertexCount = 2 * kCubeEdgeCount;
+    constexpr int kNodeBoxCornerBinding = 0;
+    constexpr int kNodeBoxInstanceBinding = 1;
+
+    struct NodeBoxCorner {
+        float x;
+        float y;
+        float z;
+        float alongEdge;
+    };
+
+    constexpr std::array<NodeBoxCorner, kNodeBoxVertexCount> kNodeBoxCorners = {{
+        // the four edges along x
+        {0, 0, 0, 0}, {1, 0, 0, 1}, {0, 1, 0, 0}, {1, 1, 0, 1},
+        {0, 0, 1, 0}, {1, 0, 1, 1}, {0, 1, 1, 0}, {1, 1, 1, 1},
+        // along y
+        {0, 0, 0, 0}, {0, 1, 0, 1}, {1, 0, 0, 0}, {1, 1, 0, 1},
+        {0, 0, 1, 0}, {0, 1, 1, 1}, {1, 0, 1, 0}, {1, 1, 1, 1},
+        // along z
+        {0, 0, 0, 0}, {0, 0, 1, 1}, {1, 0, 0, 0}, {1, 0, 1, 1},
+        {0, 1, 0, 0}, {0, 1, 1, 1}, {1, 1, 0, 0}, {1, 1, 1, 1}
+    }};
+
+    // One box: the node cube's min corner and side, then its color, with the
+    // alpha slot saying whether NodeBox.frag dashes it.
+    struct NodeBoxInstance {
+        std::array<float, 4> originSize;
+        std::array<float, 4> color;
+    };
+
+    constexpr float kSolidBox = 0.0f;
+    constexpr float kDashedBox = 1.0f;
+
+    constexpr int kNodeBoxGrowthFactor = 2;
+
+    constexpr quint8 kVertexStageMask = 0x1;
+    constexpr quint8 kUnusedBinding = 0xFF;
 
     using cw::profile::elapsedUs;
 }
@@ -98,6 +151,9 @@ cwRHIPointCloud::~cwRHIPointCloud()
     delete m_nodeConstants;
     delete m_perCloudUBO;
     delete m_srb;
+    delete m_nodeBoxCube;
+    delete m_nodeBoxInstances;
+    delete m_nodeBoxSrb;
     // Resources orphaned by a pool growth are owned by the cwAppearanceSlotted
     // base and freed in its destructor (disjoint from m_perCloudUBO/m_srb above).
     // m_pipelines releases its held pipeline references on destruction.
@@ -137,8 +193,23 @@ void cwRHIPointCloud::initializeResources(const ResourceUpdateData& data)
     m_inputLayout.setAttributes({
         { kPointsBinding, 0, QRhiVertexInputAttribute::UShort4, 0 },        // qpos
         { kNodeConstantsBinding, 1, QRhiVertexInputAttribute::Float4, 0 },  // nodeOriginScale
-        { kNodeConstantsBinding, 2, QRhiVertexInputAttribute::Float4,
-          kNodeFloorOffset }                                                // nodeFloor
+        { kNodeConstantsBinding, 2, QRhiVertexInputAttribute::Float,
+          kNodeFloorOffset },                                               // nodeFloor
+        { kNodeConstantsBinding, 3, QRhiVertexInputAttribute::UInt2,
+          kNodeIdsOffset }                                                  // nodeIds
+    });
+
+    m_nodeBoxInputLayout.setBindings({
+        { quint32(sizeof(NodeBoxCorner)), QRhiVertexInputBinding::PerVertex },
+        { quint32(sizeof(NodeBoxInstance)), QRhiVertexInputBinding::PerInstance,
+          kInstanceStepRate }
+    });
+    m_nodeBoxInputLayout.setAttributes({
+        { kNodeBoxCornerBinding, 0, QRhiVertexInputAttribute::Float4, 0 },  // corner
+        { kNodeBoxInstanceBinding, 1, QRhiVertexInputAttribute::Float4,
+          quint32(offsetof(NodeBoxInstance, originSize)) },                 // boxOriginSize
+        { kNodeBoxInstanceBinding, 2, QRhiVertexInputAttribute::Float4,
+          quint32(offsetof(NodeBoxInstance, color)) }                       // boxColor
     });
 }
 
@@ -355,14 +426,20 @@ cwRHIPointCloud::appearanceUniform(float spacingCoverage) const
     const float rootSpacing =
         m_source.manifest ? float(m_source.manifest->spacing(kRootLevel)) : 0.0f;
     const cwPointCloudShading& shading = m_renderState.value().shading;
-    return PerCloudUniform{spacingCoverage,
-                           m_sseThresholdPx,
-                           rootSpacing,
-                           shading.maxPointSizePx,
-                           qint32(shading.thinningMode),
-                           qint32(shading.sizeMode),
-                           qint32(shading.floorMode),
-                           shading.fixedPointSizePx};
+    PerCloudUniform uniform;
+    uniform.spacingCoverage = spacingCoverage;
+    uniform.sseThresholdPx = m_sseThresholdPx;
+    uniform.rootSpacing = rootSpacing;
+    uniform.maxPointSizePx = shading.maxPointSizePx;
+    uniform.thinningMode = qint32(shading.thinningMode);
+    uniform.sizeMode = qint32(shading.sizeMode);
+    uniform.floorMode = qint32(shading.floorMode);
+    uniform.fixedPointSizePx = shading.fixedPointSizePx;
+    uniform.debugView = qint32(shading.debugView);
+    // Truncated alongside the arrival frames in the node constants, so the
+    // unsigned difference the shader takes stays right across the wrap.
+    uniform.currentFrame = quint32(currentFrame());
+    return uniform;
 }
 
 void cwRHIPointCloud::refreshSseThreshold(const cwRenderBudgets& budgets)
@@ -532,6 +609,12 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     // time for this frame's draws.
     refreshSseThreshold(data.renderData.budgets);
 
+    // The residency age view counts from the current frame, so it is the one
+    // view whose uniform moves every frame.
+    if (m_renderState.value().shading.debugView == cw::pointcloud::DebugView::ResidencyAge) {
+        m_liveAppearanceStale = true;
+    }
+
     // updateResources() runs only on the frames the render object changed, so
     // this is where a refine threshold the view or the inflation governor moved
     // on its own reaches the shader — one write per change, none on the frames
@@ -543,6 +626,8 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     // And where the floors the last live gather queued reach their nodes'
     // constants slots: one write per node per change.
     flushNodeFloors(data.resourceUpdateBatch);
+
+    writeNodeBoxes(rhi, data.resourceUpdateBatch);
 
     publishPickSet();
     if (m_profileEnabled) {
@@ -618,12 +703,13 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     // own points alone, so its own sample spacing is the gap to close.
     const float ownSpacing =
         float(m_source.manifest->spacing(m_source.manifest->nodes.at(index).level));
-    const std::array<float, kNodeConstantsFloats> constants {
-        minimum.x(), minimum.y(), minimum.z(), quantizationStep,
-        ownSpacing, 0.0f, 0.0f, 0.0f
-    };
+    NodeConstants constants;
+    constants.originScale = {minimum.x(), minimum.y(), minimum.z(), quantizationStep};
+    constants.floorSpacing = ownSpacing;
+    constants.arrivalFrame = quint32(currentFrame());
+    constants.nodeIndex = quint32(index);
     batch->updateDynamicBuffer(m_nodeConstants, quint32(slot) * kNodeConstantsBytes,
-                               kNodeConstantsBytes, constants.data());
+                               kNodeConstantsBytes, &constants);
 
     NodeRecord& node = m_nodes[index];
     node.floorSpacing = ownSpacing;
@@ -1019,6 +1105,7 @@ void cwRHIPointCloud::releaseStreamedResources()
     m_requested.clear();
     m_readyQueue.clear();
     m_pendingFloors.clear();
+    m_nodeBoxCount = 0;
 
     // releaseNode swap-removes out of the back, so taking the back each time
     // walks the list once and leaves it empty.
@@ -1103,6 +1190,10 @@ void cwRHIPointCloud::gatherCulled(const GatherContext& context)
 
 bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch>& batches)
 {
+    if (context.renderPass == RenderPass::Overlay) {
+        return gatherNodeBoxes(context, batches);
+    }
+
     if (context.renderPass != RenderPass::PointCloud) {
         return false;
     }
@@ -1194,6 +1285,12 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
         case NodeState::Resident: {
             const cwPointOctreeNode& drawn = m_source.manifest->nodes.at(selected.node);
             drawnNodes.append(selected.node);
+
+            // Still in the cut, so the floors above are what they would be
+            // without minLevel: only the drawing is left out.
+            if (drawn.level < renderData.budgets.minLevel) {
+                break;
+            }
 
             Drawable drawable;
             drawable.type = Drawable::Type::NonIndexed;
@@ -1415,6 +1512,189 @@ bool cwRHIPointCloud::ensureShaderResources(QRhi* rhi, cwRhiItemRenderer* render
     return true;
 }
 
+void cwRHIPointCloud::purgePipelinesFor(QRhiRenderPassDescriptor* descriptor)
+{
+    cwRHIObject::purgePipelinesFor(descriptor);
+    m_nodeBoxPipelines.purgeFor(descriptor);
+    m_nodeBoxPipelineRecord = nullptr;
+}
+
+void cwRHIPointCloud::writeNodeBoxes(QRhi* rhi, QRhiResourceUpdateBatch* batch)
+{
+    m_nodeBoxCount = 0;
+    if (!m_renderState.value().shading.showNodeBoxes || !m_source.manifest) {
+        return;
+    }
+
+    if (!m_nodeBoxCube) {
+        m_nodeBoxCube = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer,
+                                       quint32(sizeof(kNodeBoxCorners)));
+        m_nodeBoxCube->create();
+        batch->uploadStaticBuffer(m_nodeBoxCube, kNodeBoxCorners.data());
+    }
+
+    const cwPointOctreeManifest& manifest = *m_source.manifest;
+    const auto box = [&manifest](int index, cw::pointcloud::Rgb color, float pattern) {
+        const QBox3D bounds = manifest.nodeBounds(index);
+        const QVector3D minimum = bounds.minimum();
+        return NodeBoxInstance{
+            {minimum.x(), minimum.y(), minimum.z(), bounds.maximum().x() - minimum.x()},
+            {color.red, color.green, color.blue, pattern}};
+    };
+
+    // The last cut, which streamResources still names: every node of it by its
+    // level, dashed until it lands, and then every resident node it left out,
+    // which is what eviction takes from.
+    QVector<NodeBoxInstance> boxes;
+    boxes.reserve(m_selected.nodes.size() + m_residentIndices.size());
+    const quint64 frame = currentFrame();
+    for (const cw::octree::SelectedNode& selected : std::as_const(m_selected.nodes)) {
+        if (selected.node < 0 || selected.node >= m_nodes.size()) {
+            continue;
+        }
+        const NodeState state = m_nodes.at(selected.node).state;
+        if (state == NodeState::Failed) {
+            continue;
+        }
+        const cw::pointcloud::Rgb color =
+            cw::pointcloud::levelColor(manifest.nodes.at(selected.node).level);
+        boxes.append(box(selected.node, color,
+                         state == NodeState::Resident ? kSolidBox : kDashedBox));
+    }
+    for (const int index : std::as_const(m_residentIndices)) {
+        if (m_nodes.at(index).lastDesiredFrame != frame) {
+            boxes.append(box(index, cw::pointcloud::kEvictableNodeBoxColor, kSolidBox));
+        }
+    }
+
+    if (boxes.isEmpty()) {
+        return;
+    }
+
+    if (boxes.size() > m_nodeBoxCapacity) {
+        // Deleting defers the native release past the frames still reading it
+        delete m_nodeBoxInstances;
+        m_nodeBoxCapacity = std::max(int(boxes.size()), kNodeBoxGrowthFactor * m_nodeBoxCapacity);
+        m_nodeBoxInstances = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer,
+                                            quint32(m_nodeBoxCapacity * sizeof(NodeBoxInstance)));
+        m_nodeBoxInstances->create();
+    }
+
+    batch->updateDynamicBuffer(m_nodeBoxInstances, 0,
+                               quint32(boxes.size() * sizeof(NodeBoxInstance)),
+                               boxes.constData());
+    m_nodeBoxCount = int(boxes.size());
+}
+
+bool cwRHIPointCloud::gatherNodeBoxes(const GatherContext& context,
+                                      QVector<PipelineBatch>& batches)
+{
+    // The boxes describe the live view's cut, so an export draws none
+    if (!context.liveFrame || m_nodeBoxCount == 0 || !m_nodeBoxInstances) {
+        return false;
+    }
+
+    if (!ensureNodeBoxPipeline(*context.renderData)) {
+        return false;
+    }
+
+    Drawable drawable;
+    drawable.type = Drawable::Type::NonIndexed;
+    drawable.vertexBindings = {
+        QRhiCommandBuffer::VertexInput(m_nodeBoxCube, 0),
+        QRhiCommandBuffer::VertexInput(m_nodeBoxInstances, 0)
+    };
+    drawable.vertexCount = kNodeBoxVertexCount;
+    drawable.instanceCount = quint32(m_nodeBoxCount);
+    drawable.bindings = m_nodeBoxSrb;
+    drawable.globalCameraBinding = 0;
+
+    cwRHIObject::PipelineState state;
+    state.pipeline = m_nodeBoxPipelineRecord->pipeline;
+    state.sortKey = cwRHIObject::makeSortKey(context.objectOrder, state.pipeline);
+    acquirePipelineBatch(batches, state).drawables.append(drawable);
+    return true;
+}
+
+bool cwRHIPointCloud::ensureNodeBoxPipeline(const RenderData& data)
+{
+    QRhi* rhi = data.cb ? data.cb->rhi() : nullptr;
+    if (!m_resourcesInitialized || !data.renderer || !rhi || !data.renderPassDescriptor) {
+        return false;
+    }
+
+    cwRhiPipelineKey key;
+    key.renderPass = data.renderPassDescriptor;
+    key.sampleCount = data.sampleCount;
+    key.vertexShader = QStringLiteral(":/shaders/NodeBox.vert.qsb");
+    key.fragmentShader = QStringLiteral(":/shaders/NodeBox.frag.qsb");
+    key.cullMode = static_cast<quint8>(cwRenderMaterialState::CullMode::None);
+    key.frontFace = static_cast<quint8>(cwRenderMaterialState::FrontFace::CCW);
+    key.blendMode = static_cast<quint8>(cwRenderMaterialState::BlendMode::None);
+    key.globalBinding = 0;
+    key.globalStages = kVertexStageMask;
+    key.textureBinding = kUnusedBinding;
+    key.topology = static_cast<quint8>(QRhiGraphicsPipeline::Lines);
+
+    const quint32 globalStride = data.renderer->globalUniformBufferStride();
+    auto createFn = [this, key, globalStride](QRhi* localRhi) -> cwRhiPipelineRecord* {
+        if (!localRhi) {
+            return nullptr;
+        }
+
+        auto* record = new cwRhiPipelineRecord;
+        record->pipeline = localRhi->newGraphicsPipeline();
+        record->pipeline->setShaderStages({
+            { QRhiShaderStage::Vertex, loadShader(key.vertexShader) },
+            { QRhiShaderStage::Fragment, loadShader(key.fragmentShader) }
+        });
+
+        // An overlay: every box shows, whatever the scene puts in front of it
+        record->pipeline->setDepthTest(false);
+        record->pipeline->setDepthWrite(false);
+        record->pipeline->setSampleCount(key.sampleCount);
+        record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
+        record->pipeline->setVertexInputLayout(m_nodeBoxInputLayout);
+        record->pipeline->setTopology(QRhiGraphicsPipeline::Lines);
+
+        record->layout = localRhi->newShaderResourceBindings();
+        record->layout->setBindings({
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+                0, QRhiShaderResourceBinding::VertexStage, nullptr, globalStride)
+        });
+        record->layout->create();
+
+        record->pipeline->setShaderResourceBindings(record->layout);
+        record->pipeline->setRenderPassDescriptor(key.renderPass);
+        record->pipeline->create();
+        return record;
+    };
+
+    m_nodeBoxPipelineRecord = m_nodeBoxPipelines.acquire(m_frame, key, [&]() {
+        return m_frame->acquirePipeline(key, rhi, createFn);
+    });
+    if (!m_nodeBoxPipelineRecord || !m_nodeBoxPipelineRecord->pipeline) {
+        return false;
+    }
+
+    if (m_nodeBoxSrb && m_nodeBoxPipelineRecord->layout
+        && !m_nodeBoxPipelineRecord->layout->isLayoutCompatible(m_nodeBoxSrb)) {
+        delete m_nodeBoxSrb;
+        m_nodeBoxSrb = nullptr;
+    }
+
+    if (!m_nodeBoxSrb) {
+        m_nodeBoxSrb = rhi->newShaderResourceBindings();
+        m_nodeBoxSrb->setBindings({
+            QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+                0, QRhiShaderResourceBinding::VertexStage, data.renderer->globalUniformBuffer(),
+                globalStride)
+        });
+        m_nodeBoxSrb->create();
+    }
+    return true;
+}
+
 cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderPassDescriptor* renderPassDescriptor,
                                                    int sampleCount) const
 {
@@ -1430,9 +1710,9 @@ cwRhiPipelineKey cwRHIPointCloud::buildPipelineKey(QRhiRenderPassDescriptor* ren
     key.depthWrite = 1;
     key.globalBinding = 0;
     key.perDrawBinding = 1;
-    key.textureBinding = 0xFF;
-    key.globalStages = 0x1;
-    key.perDrawStages = 0x1;
+    key.textureBinding = kUnusedBinding;
+    key.globalStages = kVertexStageMask;
+    key.perDrawStages = kVertexStageMask;
     key.textureStages = 0;
     key.hasPerDraw = 1;
     key.topology = static_cast<quint8>(QRhiGraphicsPipeline::Points);

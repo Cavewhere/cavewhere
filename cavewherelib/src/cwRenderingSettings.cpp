@@ -28,6 +28,9 @@ QString sizeModeKey() { return QStringLiteral("rendering/pointCloud/sizeMode"); 
 QString floorModeKey() { return QStringLiteral("rendering/pointCloud/floorMode"); }
 QString fixedPointSizePxKey() { return QStringLiteral("rendering/pointCloud/fixedPointSizePx"); }
 QString maxPointSizePxKey() { return QStringLiteral("rendering/pointCloud/maxPointSizePx"); }
+QString minLevelKey() { return QStringLiteral("rendering/pointCloud/minLevel"); }
+QString debugViewKey() { return QStringLiteral("rendering/pointCloud/debugView"); }
+QString showNodeBoxesKey() { return QStringLiteral("rendering/pointCloud/showNodeBoxes"); }
 
 // 4x MSAA is the historical default and a good quality/cost balance. Snapped to
 // the device's supported set if 4 happens to be unavailable.
@@ -72,6 +75,18 @@ double clampScreenSpaceErrorPx(double pixels)
 int clampMaxLevel(int level)
 {
     return std::clamp(level, cw::budgets::kUnlimitedLevel, cw::octree::kMaxLevel);
+}
+
+int clampMinLevel(int level)
+{
+    return std::clamp(level, cw::budgets::kRootLevel, cw::octree::kMaxLevel);
+}
+
+// An inverted pair caps the cut below the draw floor, so gather() skips every
+// node and the cloud vanishes.
+bool isInvertedLevelPair(int minLevel, int maxLevel)
+{
+    return maxLevel != cw::budgets::kUnlimitedLevel && minLevel > maxLevel;
 }
 
 template <typename Mode>
@@ -134,6 +149,10 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
     const cwPointCloudShading defaultShading;
     m_freezeCut = settings.value(freezeCutKey(), cw::budgets::kDefaultFreezeCut).toBool();
     m_maxLevel = clampMaxLevel(settings.value(maxLevelKey(), cw::budgets::kDefaultMaxLevel).toInt());
+    m_minLevel = clampMinLevel(settings.value(minLevelKey(), cw::budgets::kDefaultMinLevel).toInt());
+    if (isInvertedLevelPair(m_minLevel, m_maxLevel)) {
+        m_minLevel = m_maxLevel;
+    }
     m_inflationGovernor = settings.value(inflationGovernorKey(),
                                          cw::budgets::kDefaultInflationGovernor).toBool();
     m_evictionHold = settings.value(evictionHoldKey(), cw::budgets::kDefaultEvictionHold).toBool();
@@ -150,6 +169,11 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
                 settings.value(fixedPointSizePxKey(), defaultShading.fixedPointSizePx).toDouble());
     m_shading.maxPointSizePx = clampPointSizePx(
                 settings.value(maxPointSizePxKey(), defaultShading.maxPointSizePx).toDouble());
+    m_shading.debugView = clampMode<cw::pointcloud::DebugView>(
+                settings.value(debugViewKey(), int(defaultShading.debugView)).toInt(),
+                cw::pointcloud::kDebugViewCount);
+    m_shading.showNodeBoxes = settings.value(showNodeBoxesKey(),
+                                             defaultShading.showNodeBoxes).toBool();
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -177,6 +201,7 @@ void cwRenderingSettings::resetPointCloudKnobsToDefaults()
     const cwPointCloudShading defaultShading;
     setFreezeCut(cw::budgets::kDefaultFreezeCut);
     setMaxLevel(cw::budgets::kDefaultMaxLevel);
+    setMinLevel(cw::budgets::kDefaultMinLevel);
     setInflationGovernor(cw::budgets::kDefaultInflationGovernor);
     setEvictionHold(cw::budgets::kDefaultEvictionHold);
     setThinningMode(int(defaultShading.thinningMode));
@@ -184,6 +209,8 @@ void cwRenderingSettings::resetPointCloudKnobsToDefaults()
     setFloorMode(int(defaultShading.floorMode));
     setFixedPointSizePx(defaultShading.fixedPointSizePx);
     setMaxPointSizePx(defaultShading.maxPointSizePx);
+    setDebugView(int(defaultShading.debugView));
+    setShowNodeBoxes(defaultShading.showNodeBoxes);
     setGpuMemoryBudgetMb(cw::budgets::kDefaultGpuBudgetMb);
     setCpuCacheBudgetMb(cw::budgets::kDefaultCpuBudgetMb);
     setUploadBudgetMbPerFrame(cw::budgets::kDefaultUploadBudgetMbPerFrame);
@@ -202,6 +229,7 @@ bool cwRenderingSettings::isAtDefaults() const
             && m_pointBudgetMillions == cw::budgets::kDefaultPointBudgetMillions
             && m_freezeCut == cw::budgets::kDefaultFreezeCut
             && m_maxLevel == cw::budgets::kDefaultMaxLevel
+            && m_minLevel == cw::budgets::kDefaultMinLevel
             && m_inflationGovernor == cw::budgets::kDefaultInflationGovernor
             && m_evictionHold == cw::budgets::kDefaultEvictionHold
             && m_shading == cwPointCloudShading();
@@ -222,6 +250,7 @@ cwRenderBudgets cwRenderingSettings::budgets() const
     budgets.pointBudget = qint64(m_pointBudgetMillions) * cw::budgets::kPointsPerMillion;
     budgets.freezeCut = m_freezeCut;
     budgets.maxLevel = m_maxLevel;
+    budgets.minLevel = m_minLevel;
     budgets.inflationGovernor = m_inflationGovernor;
     budgets.evictionHold = m_evictionHold;
     return budgets;
@@ -240,6 +269,20 @@ void cwRenderingSettings::setMaxLevel(int level)
     if (setPersisted(m_maxLevel, clampMaxLevel(level), maxLevelKey())) {
         emit maxLevelChanged();
         emit isAtDefaultsChanged();
+    }
+    if (isInvertedLevelPair(m_minLevel, m_maxLevel)) {
+        setMinLevel(m_maxLevel);
+    }
+}
+
+void cwRenderingSettings::setMinLevel(int level)
+{
+    if (setPersisted(m_minLevel, clampMinLevel(level), minLevelKey())) {
+        emit minLevelChanged();
+        emit isAtDefaultsChanged();
+    }
+    if (isInvertedLevelPair(m_minLevel, m_maxLevel)) {
+        setMaxLevel(m_minLevel);
     }
 }
 
@@ -303,6 +346,25 @@ void cwRenderingSettings::setMaxPointSizePx(double pixels)
 {
     if (setPersisted(m_shading.maxPointSizePx, clampPointSizePx(pixels), maxPointSizePxKey())) {
         emit maxPointSizePxChanged();
+        emit pointCloudShadingChanged();
+        emit isAtDefaultsChanged();
+    }
+}
+
+void cwRenderingSettings::setDebugView(int view)
+{
+    const auto clamped = clampMode<cw::pointcloud::DebugView>(view, cw::pointcloud::kDebugViewCount);
+    if (setPersisted(m_shading.debugView, clamped, debugViewKey())) {
+        emit debugViewChanged();
+        emit pointCloudShadingChanged();
+        emit isAtDefaultsChanged();
+    }
+}
+
+void cwRenderingSettings::setShowNodeBoxes(bool show)
+{
+    if (setPersisted(m_shading.showNodeBoxes, show, showNodeBoxesKey())) {
+        emit showNodeBoxesChanged();
         emit pointCloudShadingChanged();
         emit isAtDefaultsChanged();
     }

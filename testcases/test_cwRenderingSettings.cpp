@@ -350,11 +350,13 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
     REQUIRE(settings);
     settings->resetToDefaults();
 
+    using cw::pointcloud::DebugView;
     using cw::pointcloud::FloorMode;
     using cw::pointcloud::SizeMode;
     using cw::pointcloud::ThinningMode;
 
     constexpr int kCappedLevel = 3;
+    constexpr int kIsolatedLevel = 2;
     constexpr double kFixedPointSizePx = 5.0;
     constexpr double kMaxPointSizePx = 12.0;
 
@@ -375,6 +377,9 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); },
          QStringLiteral("rendering/pointCloud/maxLevel"), kCappedLevel,
          &cwRenderingSettings::maxLevelChanged},
+        {"minLevel", [&] { settings->setMinLevel(kIsolatedLevel); },
+         QStringLiteral("rendering/pointCloud/minLevel"), kIsolatedLevel,
+         &cwRenderingSettings::minLevelChanged},
         {"inflationGovernor", [&] { settings->setInflationGovernor(false); },
          QStringLiteral("rendering/pointCloud/inflationGovernor"), false,
          &cwRenderingSettings::inflationGovernorChanged},
@@ -396,6 +401,12 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); },
          QStringLiteral("rendering/pointCloud/maxPointSizePx"), kMaxPointSizePx,
          &cwRenderingSettings::maxPointSizePxChanged},
+        {"debugView", [&] { settings->setDebugView(int(DebugView::ResidencyAge)); },
+         QStringLiteral("rendering/pointCloud/debugView"), int(DebugView::ResidencyAge),
+         &cwRenderingSettings::debugViewChanged},
+        {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); },
+         QStringLiteral("rendering/pointCloud/showNodeBoxes"), true,
+         &cwRenderingSettings::showNodeBoxesChanged},
     };
 
     SECTION("the knobs start at the renderer's own rules") {
@@ -404,10 +415,14 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         CHECK(budgets.freezeCut == defaults.freezeCut);
         CHECK(budgets.maxLevel == defaults.maxLevel);
         CHECK(budgets.maxLevel == cwRenderingSettings::unlimitedLevel());
+        CHECK(budgets.minLevel == defaults.minLevel);
+        CHECK(budgets.minLevel == cwRenderingSettings::rootLevel());
         CHECK(budgets.inflationGovernor == defaults.inflationGovernor);
         CHECK(budgets.evictionHold == defaults.evictionHold);
         CHECK(settings->pointCloudShading() == cwPointCloudShading());
         CHECK(settings->maxPointSizePx() == Catch::Approx(cw::pointcloud::kMaxPointSizePx));
+        CHECK(settings->debugView() == int(DebugView::Off));
+        CHECK_FALSE(settings->showNodeBoxes());
         CHECK(settings->isAtDefaults());
     }
 
@@ -438,12 +453,14 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
     SECTION("the streaming knobs reach cwRenderBudgets") {
         settings->setFreezeCut(true);
         settings->setMaxLevel(kCappedLevel);
+        settings->setMinLevel(kIsolatedLevel);
         settings->setInflationGovernor(false);
         settings->setEvictionHold(true);
 
         const cwRenderBudgets budgets = settings->budgets();
         CHECK(budgets.freezeCut);
         CHECK(budgets.maxLevel == kCappedLevel);
+        CHECK(budgets.minLevel == kIsolatedLevel);
         CHECK_FALSE(budgets.inflationGovernor);
         CHECK(budgets.evictionHold);
     }
@@ -456,7 +473,9 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         settings->setFloorMode(int(FloorMode::Off));
         settings->setFixedPointSizePx(kFixedPointSizePx);
         settings->setMaxPointSizePx(kMaxPointSizePx);
-        CHECK(shadingSpy.count() == 5);
+        settings->setDebugView(int(DebugView::DecimationPreview));
+        settings->setShowNodeBoxes(true);
+        CHECK(shadingSpy.count() == 7);
 
         const cwPointCloudShading& shading = settings->pointCloudShading();
         CHECK(shading.thinningMode == ThinningMode::Off);
@@ -464,6 +483,28 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         CHECK(shading.floorMode == FloorMode::Off);
         CHECK(shading.fixedPointSizePx == Catch::Approx(kFixedPointSizePx));
         CHECK(shading.maxPointSizePx == Catch::Approx(kMaxPointSizePx));
+        CHECK(shading.debugView == DebugView::DecimationPreview);
+        CHECK(shading.showNodeBoxes);
+    }
+
+    SECTION("minLevel and maxLevel stay ordered, the edited knob wins") {
+        settings->setMaxLevel(kIsolatedLevel);
+        settings->setMinLevel(kCappedLevel);
+        CHECK(settings->minLevel() == kCappedLevel);
+        CHECK(settings->maxLevel() == kCappedLevel);
+
+        settings->setMaxLevel(kIsolatedLevel);
+        CHECK(settings->maxLevel() == kIsolatedLevel);
+        CHECK(settings->minLevel() == kIsolatedLevel);
+
+        settings->setMaxLevel(cwRenderingSettings::unlimitedLevel());
+        settings->setMinLevel(kCappedLevel);
+        CHECK(settings->maxLevel() == cwRenderingSettings::unlimitedLevel());
+        CHECK(settings->minLevel() == kCappedLevel);
+
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.minLevel == kCappedLevel);
+        CHECK(budgets.maxLevel == cwRenderingSettings::unlimitedLevel());
     }
 
     SECTION("out-of-range values clamp") {
@@ -471,6 +512,16 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         CHECK(settings->maxLevel() == cwRenderingSettings::unlimitedLevel());
         settings->setMaxLevel(1000);
         CHECK(settings->maxLevel() == cwRenderingSettings::maximumLevel());
+
+        settings->setMinLevel(-1);
+        CHECK(settings->minLevel() == cwRenderingSettings::rootLevel());
+        settings->setMinLevel(1000);
+        CHECK(settings->minLevel() == cwRenderingSettings::maximumLevel());
+
+        settings->setDebugView(-1);
+        CHECK(settings->debugView() == int(DebugView::Off));
+        settings->setDebugView(100);
+        CHECK(settings->debugView() == cwRenderingSettings::debugViewCount() - 1);
 
         settings->setThinningMode(-1);
         CHECK(settings->thinningMode() == 0);

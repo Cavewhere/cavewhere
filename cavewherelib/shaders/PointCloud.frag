@@ -7,9 +7,12 @@
 
 #version 440 core
 
+// Flat white unless a debug view colors the point (PointCloud.vert)
+layout(location = 0) in vec4 vColor;
+
 layout(location = 0) out vec4 fragColor;
 
 void main(void)
 {
-    fragColor = vec4(1.0, 1.0, 1.0, 1.0);
+    fragColor = vColor;
 }

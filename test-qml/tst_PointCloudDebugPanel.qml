@@ -24,6 +24,9 @@ MainWindowTest {
             "inflationGovernorCheckBox",
             "evictionHoldCheckBox",
             "maxLevelSpinBox",
+            "minLevelSpinBox",
+            "debugViewComboBox",
+            "showNodeBoxesCheckBox",
             "gpuMemoryBudgetSpinBox",
             "cpuCacheBudgetSpinBox",
             "uploadBudgetSpinBox",
@@ -70,11 +73,17 @@ MainWindowTest {
             rootId.renderingSettings.freezeCut = true
             rootId.renderingSettings.maxLevel = 3
             rootId.renderingSettings.maxPointSizePx = 12
+            rootId.renderingSettings.debugView = 4
+            rootId.renderingSettings.showNodeBoxes = true
+            rootId.renderingSettings.minLevel = 2
 
             tryCompare(row("thinningModeComboBox"), "currentIndex", 2)
             tryCompare(row("freezeCutCheckBox"), "checked", true)
             tryCompare(row("maxLevelSpinBox"), "value", 3)
             tryCompare(row("maxPointSizeSpinBox"), "value", 12)
+            tryCompare(row("debugViewComboBox"), "currentIndex", 4)
+            tryCompare(row("showNodeBoxesCheckBox"), "checked", true)
+            tryCompare(row("minLevelSpinBox"), "value", 2)
         }
 
         function test_rowsWriteTheSettings() {
@@ -82,6 +91,19 @@ MainWindowTest {
             sizeMode.currentIndex = 1
             sizeMode.activated(1)
             compare(rootId.renderingSettings.sizeMode, 1)
+
+            const debugView = row("debugViewComboBox")
+            debugView.currentIndex = 8
+            debugView.activated(8)
+            compare(rootId.renderingSettings.debugView, 8)
+
+            mouseClick(row("showNodeBoxesCheckBox"))
+            tryCompare(rootId.renderingSettings, "showNodeBoxes", true)
+
+            const minLevel = row("minLevelSpinBox")
+            minLevel.value = 3
+            minLevel.valueModified()
+            compare(rootId.renderingSettings.minLevel, 3)
 
             const evictionHold = row("evictionHoldCheckBox")
             mouseClick(evictionHold)
@@ -105,6 +127,9 @@ MainWindowTest {
             rootId.renderingSettings.inflationGovernor = false
             rootId.renderingSettings.thinningMode = 1
             rootId.renderingSettings.floorMode = 1
+            rootId.renderingSettings.debugView = 2
+            rootId.renderingSettings.showNodeBoxes = true
+            rootId.renderingSettings.minLevel = 1
             rootId.renderingSettings.screenSpaceErrorPx = 4
             rootId.lazLayersSceneNode.spacingCoverage = 3
             rootId.renderingSettings.showRenderStatsHud = true
@@ -116,6 +141,9 @@ MainWindowTest {
             compare(rootId.renderingSettings.inflationGovernor, true)
             compare(rootId.renderingSettings.thinningMode, 0)
             compare(rootId.renderingSettings.floorMode, 0)
+            compare(rootId.renderingSettings.debugView, 0)
+            compare(rootId.renderingSettings.showNodeBoxes, false)
+            compare(rootId.renderingSettings.minLevel, 0)
             compare(rootId.renderingSettings.screenSpaceErrorPx, 1.5)
             compare(rootId.lazLayersSceneNode.spacingCoverage,
                     rootId.lazLayersSceneNode.defaultSpacingCoverage)
@@ -127,6 +155,8 @@ MainWindowTest {
             tryCompare(row("inflationGovernorCheckBox"), "checked", true)
             tryCompare(row("thinningModeComboBox"), "currentIndex", 0)
             tryCompare(row("floorModeComboBox"), "currentIndex", 0)
+            tryCompare(row("debugViewComboBox"), "currentIndex", 0)
+            tryCompare(row("showNodeBoxesCheckBox"), "checked", false)
         }
 
         function test_closeButtonClosesThePanel() {
@@ -170,6 +200,18 @@ MainWindowTest {
             tryCompare(rootId.renderingSettings, "freezeCut", true)
             keyClick(Qt.Key_F)
             tryCompare(rootId.renderingSettings, "freezeCut", false)
+        }
+
+        function test_vCyclesTheDebugView() {
+            const view = renderer()
+            view.forceActiveFocus()
+            tryVerify(() => view.activeFocus)
+
+            for (let step = 1; step <= rootId.renderingSettings.debugViewCount; step++) {
+                keyClick(Qt.Key_V)
+                tryCompare(rootId.renderingSettings, "debugView",
+                           step % rootId.renderingSettings.debugViewCount)
+            }
         }
 
         function test_theHudOpensThePanel() {

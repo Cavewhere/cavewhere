@@ -17,10 +17,15 @@ layout(location = 0) in uvec4 qpos;
 layout(location = 1) in vec4 nodeOriginScale;
 
 // Per instance, one per node: the finest sample spacing, in meters, drawn
-// anywhere inside this node's subtree, with yzw reserved. The cut is additive,
-// so a node draws its own points over whatever its refined descendants draw,
-// and this is the gap its sprites really have to close.
-layout(location = 2) in vec4 nodeFloor;
+// anywhere inside this node's subtree. The cut is additive, so a node draws its
+// own points over whatever its refined descendants draw, and this is the gap
+// its sprites really have to close.
+layout(location = 2) in float nodeFloor;
+
+// Per instance, one per node, for the debug views alone: the frame the node
+// became resident and its index in the manifest. Every node draws as instance
+// 0 of its own draw, so gl_InstanceIndex cannot tell two nodes apart.
+layout(location = 3) in uvec2 nodeIds;
 
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
@@ -45,7 +50,10 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // (cw::pointcloud in cwPointCloudShading.h): thinningMode reshapes the weight,
 // sizeMode picks what a sprite measures (fixedPointSizePx for FixedPixels),
 // and floorMode drops the per-node floor. Their defaults are the rules as
-// described here. The C++ PerCloudUniform matches the block field for field.
+// described here. The third row picks what the point is colored by
+// (debugView, cw::pointcloud::DebugView) and carries the frame the residency
+// age view counts from. The C++ PerCloudUniform matches the block field for
+// field.
 layout(std140, binding = 1) uniform PerCloudBlock {
     float spacingCoverage;
     float sseThresholdPx;
@@ -55,13 +63,60 @@ layout(std140, binding = 1) uniform PerCloudBlock {
     int sizeMode;
     int floorMode;
     float fixedPointSizePx;
+    int debugView;
+    uint currentFrame;
 };
+
+layout(location = 0) out vec4 vColor;
 
 const int kThinningDiscrete = 1;
 const int kThinningOff = 2;
 const int kSizeFixedPixels = 1;
 const int kSizeOwnSpacing = 2;
 const int kFloorOff = 1;
+
+const int kViewOff = 0;
+const int kViewLevel = 1;
+const int kViewNode = 2;
+const int kViewRank = 3;
+const int kViewWeight = 4;
+const int kViewSpriteSize = 5;
+const int kViewFloorRatio = 6;
+const int kViewResidencyAge = 7;
+const int kViewDecimationPreview = 8;
+
+// cw::pointcloud::kLevelPalette, value for value
+const int kLevelPaletteSize = 8;
+const vec3 kLevelPalette[8] = vec3[8](
+    vec3(0x6f, 0x8f, 0xf0) / 255.0,
+    vec3(0x43, 0xbd, 0xe0) / 255.0,
+    vec3(0x4e, 0xc9, 0x8a) / 255.0,
+    vec3(0xbc, 0xd2, 0x3c) / 255.0,
+    vec3(0xf2, 0xb7, 0x3a) / 255.0,
+    vec3(0xf3, 0x80, 0x4f) / 255.0,
+    vec3(0xb0, 0x7c, 0xf0) / 255.0,
+    vec3(0xe0, 0x70, 0xc0) / 255.0);
+
+const vec3 kWhite = vec3(1.0);
+const vec4 kFlatColor = vec4(kWhite, 1.0);
+// Every ramp stays off black, the clear color a lit-pixel count reads past
+const float kRampFloor = 0.2;
+const vec3 kZeroWeightColor = vec3(1.0, 0.15, 0.15);
+const vec3 kFullWeightColor = vec3(0.15, 1.0, 0.15);
+const vec3 kSmallSpriteColor = vec3(0.2, 0.3, 0.9);
+const vec3 kLargeSpriteColor = vec3(1.0, 0.9, 0.2);
+const vec3 kOversizedFloorColor = vec3(1.0, 0.2, 1.0);
+// Octaves between a node's own spacing and its floor the ramp spans
+const float kFloorRatioOctaves = 4.0;
+const float kMinimumFloorSpacing = 1e-6;
+const vec3 kSettledColor = vec3(0.4);
+const float kResidencyFadeFrames = 60.0;
+const vec3 kDecimatedColor = vec3(0.25);
+const float kDecimatedSizePx = 1.0;
+const uint kByteMask = 0xFFu;
+const uint kGreenShift = 8u;
+const uint kBlueShift = 16u;
+const float kByteMax = 255.0;
 
 // The continuous level of detail rule, value for value cw::clod
 // (cwPointCloudClod.h) — change one and change the other, which is what the
@@ -99,15 +154,20 @@ const uint kKeptBits = 24u;
 const uint kDropBits = 32u - kKeptBits;
 const float kKeptScale = 1.0 / float(1u << kKeptBits);
 
-float subCellHash01(uvec3 quantized)
+uint mixBits(uint hash)
 {
-    uint hash = (quantized.x & kSubCellMask)
-              | ((quantized.y & kSubCellMask) << kSubCellBits)
-              | ((quantized.z & kSubCellMask) << (2u * kSubCellBits));
     hash *= kMixA;
     hash ^= hash >> kShiftA;
     hash *= kMixB;
     hash ^= hash >> kShiftB;
+    return hash;
+}
+
+float subCellHash01(uvec3 quantized)
+{
+    uint hash = mixBits((quantized.x & kSubCellMask)
+                        | ((quantized.y & kSubCellMask) << kSubCellBits)
+                        | ((quantized.z & kSubCellMask) << (2u * kSubCellBits)));
     return float(hash >> kDropBits) * kKeptScale;
 }
 
@@ -121,6 +181,42 @@ float pointRank(uvec3 quantized)
     float steps = float(kOctantOrder[parentOctant] * kOctantCount
                         + kOctantOrder[grandparentOctant]);
     return (steps + subCellHash01(quantized)) / kRankSteps;
+}
+
+// What a drawn point is colored by under debugView. The level is the node's
+// depth below the root, which the spacing ratio gives exactly: every level
+// halves the spacing.
+vec3 debugColor(float nodeSpacing, float rank, float weight, float sizePx)
+{
+    if (debugView == kViewLevel) {
+        int level = int(round(log2(rootSpacing / nodeSpacing)));
+        return kLevelPalette[level % kLevelPaletteSize];
+    }
+    if (debugView == kViewNode) {
+        uint hash = mixBits(nodeIds.y);
+        vec3 bytes = vec3(hash & kByteMask, (hash >> kGreenShift) & kByteMask,
+                          (hash >> kBlueShift) & kByteMask) / kByteMax;
+        return mix(vec3(kRampFloor), kWhite, bytes);
+    }
+    if (debugView == kViewRank) {
+        return vec3(mix(kRampFloor, 1.0, rank));
+    }
+    if (debugView == kViewWeight) {
+        return mix(kZeroWeightColor, kFullWeightColor, weight);
+    }
+    if (debugView == kViewSpriteSize) {
+        float largest = max(log2(maxPointSizePx), 1.0);
+        return mix(kSmallSpriteColor, kLargeSpriteColor, clamp(log2(sizePx) / largest, 0.0, 1.0));
+    }
+    if (debugView == kViewFloorRatio) {
+        float octaves = log2(nodeSpacing / max(nodeFloor, kMinimumFloorSpacing));
+        return mix(kWhite, kOversizedFloorColor, clamp(octaves / kFloorRatioOctaves, 0.0, 1.0));
+    }
+    if (debugView == kViewResidencyAge) {
+        float age = float(currentFrame - nodeIds.x);
+        return mix(kWhite, kSettledColor, clamp(age / kResidencyFadeFrames, 0.0, 1.0));
+    }
+    return kWhite;
 }
 
 // Keeps the sizing finite for points that straddle or sit behind the eye,
@@ -166,9 +262,17 @@ void main(void)
         weight = 1.0;
     }
 
-    if (pointRank(qpos.xyz) >= weight) {
+    float rank = pointRank(qpos.xyz);
+    if (rank >= weight) {
+        if (debugView == kViewDecimationPreview) {
+            // Left where it is, so what the thinning took shows in place
+            vColor = vec4(kDecimatedColor, 1.0);
+            gl_PointSize = kDecimatedSizePx;
+            return;
+        }
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         gl_PointSize = 1.0;
+        vColor = kFlatColor;
         return;
     }
 
@@ -186,12 +290,12 @@ void main(void)
     //
     // The threshold term describes the spacing a cut that keeps up has on
     // screen. Where the point budget or a node still streaming holds this part
-    // of the cloud coarser than that, nodeFloor.x is the wider gap that is
+    // of the cloud coarser than that, nodeFloor is the wider gap that is
     // really there, so coverage of it becomes a world-space floor. It is the
     // finest spacing drawn under this node rather than this node's own, so a
     // refined region's ancestors keep the size of the region they sit in
     // instead of blowing up to their own coarse spacing.
-    float floorSpacing = sizeMode == kSizeOwnSpacing ? nodeSpacing : nodeFloor.x;
+    float floorSpacing = sizeMode == kSizeOwnSpacing ? nodeSpacing : nodeFloor;
     float floorPx = floorMode == kFloorOff ? 0.0
                                            : spacingCoverage * floorSpacing * pixelsPerMeter;
     float sizePx = sizeMode == kSizeFixedPixels
@@ -203,4 +307,7 @@ void main(void)
     // across zoom levels. EDL response gets noisier on lone 1px sprites but
     // that's preferable to the inconsistent intensity.
     gl_PointSize = clamp(sizePx, 1.0, maxPointSizePx);
+
+    vColor = debugView == kViewOff ? kFlatColor
+                            : vec4(debugColor(nodeSpacing, rank, weight, gl_PointSize), 1.0);
 }

@@ -11,6 +11,9 @@
 //Qt includes
 #include <QtGlobal>
 
+//Std includes
+#include <array>
+
 /**
  * The shader-side point cloud knobs: which thinning and sizing rule
  * PointCloud.vert applies. cwRenderingSettings persists them, the scene node
@@ -49,9 +52,66 @@ namespace cw::pointcloud {
         Off = 1
     };
 
+    //! What PointCloud.vert colors each point by. Every view but Off answers
+    //! one question about the octree or the decimation
+    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 8).
+    enum class DebugView : int {
+        //! Flat white, the renderer as it ships
+        Off = 0,
+        //! kLevelPalette by the node's level
+        Level = 1,
+        //! A hash of the node's index, so node boundaries show
+        Node = 2,
+        //! A gray ramp over the point's rank, the dither order
+        Rank = 3,
+        //! Red at weight 0 to green at weight 1
+        Weight = 4,
+        //! A ramp over the sprite side the sizing rule chose
+        SpriteSize = 5,
+        //! A ramp over the node's own spacing against its floor
+        FloorRatio = 6,
+        //! White the frame a node arrives, fading to gray
+        ResidencyAge = 7,
+        //! Kept points as Off draws them, thinned ones dim at one pixel
+        DecimationPreview = 8
+    };
+
     constexpr int kThinningModeCount = int(ThinningMode::Off) + 1;
     constexpr int kSizeModeCount = int(SizeMode::OwnSpacing) + 1;
     constexpr int kFloorModeCount = int(FloorMode::Off) + 1;
+    constexpr int kDebugViewCount = int(DebugView::DecimationPreview) + 1;
+
+    constexpr bool kDefaultShowNodeBoxes = false;
+
+    //! One color per octree level, cycling past the last. The first six are the
+    //! level colors of plans/POINT_CLOUD_CLOD_FIGURES.html. PointCloud.vert
+    //! spells the same table out for the level view, and the node boxes read it
+    //! here, so a box and the points inside it agree.
+    struct Rgb {
+        float red;
+        float green;
+        float blue;
+    };
+    constexpr std::array<Rgb, 8> kLevelPalette = {{
+        {0x6f / 255.0f, 0x8f / 255.0f, 0xf0 / 255.0f},
+        {0x43 / 255.0f, 0xbd / 255.0f, 0xe0 / 255.0f},
+        {0x4e / 255.0f, 0xc9 / 255.0f, 0x8a / 255.0f},
+        {0xbc / 255.0f, 0xd2 / 255.0f, 0x3c / 255.0f},
+        {0xf2 / 255.0f, 0xb7 / 255.0f, 0x3a / 255.0f},
+        {0xf3 / 255.0f, 0x80 / 255.0f, 0x4f / 255.0f},
+        {0xb0 / 255.0f, 0x7c / 255.0f, 0xf0 / 255.0f},
+        {0xe0 / 255.0f, 0x70 / 255.0f, 0xc0 / 255.0f}
+    }};
+
+    //! A node box's color while its node is resident outside the cut, which is
+    //! what eviction takes from
+    constexpr Rgb kEvictableNodeBoxColor {1.0f, 0.15f, 0.15f};
+
+    constexpr Rgb levelColor(int level)
+    {
+        const int count = int(kLevelPalette.size());
+        return kLevelPalette[std::size_t(((level % count) + count) % count)];
+    }
 
     constexpr double kMinPointSizePx = 1.0;
     constexpr double kMaxPointSizePx = 64.0;
@@ -67,11 +127,18 @@ namespace cw::pointcloud {
                   "PointCloud.vert spells this out");
     static_assert(int(FloorMode::Node) == 0 && int(FloorMode::Off) == 1,
                   "PointCloud.vert spells this out");
+    static_assert(int(DebugView::Off) == 0 && int(DebugView::Level) == 1
+                      && int(DebugView::Node) == 2 && int(DebugView::Rank) == 3
+                      && int(DebugView::Weight) == 4 && int(DebugView::SpriteSize) == 5
+                      && int(DebugView::FloorRatio) == 6 && int(DebugView::ResidencyAge) == 7
+                      && int(DebugView::DecimationPreview) == 8,
+                  "PointCloud.vert spells this out");
 }
 
 /**
  * One cloud's shader-side knobs, as the GUI thread hands them to the render
- * thread.
+ * thread. showNodeBoxes is the one that never reaches the per-cloud uniform: it
+ * switches the cloud's node box overlay on.
  */
 struct cwPointCloudShading {
     cw::pointcloud::ThinningMode thinningMode = cw::pointcloud::ThinningMode::Continuous;
@@ -79,6 +146,8 @@ struct cwPointCloudShading {
     cw::pointcloud::FloorMode floorMode = cw::pointcloud::FloorMode::Node;
     float fixedPointSizePx = float(cw::pointcloud::kDefaultFixedPointSizePx);
     float maxPointSizePx = float(cw::pointcloud::kDefaultMaxPointSizePx);
+    cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;
+    bool showNodeBoxes = cw::pointcloud::kDefaultShowNodeBoxes;
 
     bool operator==(const cwPointCloudShading& other) const = default;
 };

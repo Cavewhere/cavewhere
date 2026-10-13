@@ -31,6 +31,8 @@ class QQuickRhiItem;
 // maxLevel, inflationGovernor and evictionHold ride cwRenderBudgets to the
 // planner, forest and eviction; the thinning, sizing and floor modes and the
 // two pixel sizes ride pointCloudShading() to every cloud's per-cloud uniform.
+// The section 8 debug knobs travel the same two ways: minLevel with the
+// budgets, debugView and showNodeBoxes with the shading.
 // Every default is the renderer's own rule.
 class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
 {
@@ -49,6 +51,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(qint64 gpuBudgetBytes READ gpuBudgetBytes NOTIFY gpuMemoryBudgetMbChanged)
     Q_PROPERTY(bool freezeCut READ freezeCut WRITE setFreezeCut NOTIFY freezeCutChanged)
     Q_PROPERTY(int maxLevel READ maxLevel WRITE setMaxLevel NOTIFY maxLevelChanged)
+    Q_PROPERTY(int minLevel READ minLevel WRITE setMinLevel NOTIFY minLevelChanged)
     Q_PROPERTY(bool inflationGovernor READ inflationGovernor WRITE setInflationGovernor NOTIFY inflationGovernorChanged)
     Q_PROPERTY(bool evictionHold READ evictionHold WRITE setEvictionHold NOTIFY evictionHoldChanged)
     Q_PROPERTY(int thinningMode READ thinningMode WRITE setThinningMode NOTIFY thinningModeChanged)
@@ -56,6 +59,8 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int floorMode READ floorMode WRITE setFloorMode NOTIFY floorModeChanged)
     Q_PROPERTY(double fixedPointSizePx READ fixedPointSizePx WRITE setFixedPointSizePx NOTIFY fixedPointSizePxChanged)
     Q_PROPERTY(double maxPointSizePx READ maxPointSizePx WRITE setMaxPointSizePx NOTIFY maxPointSizePxChanged)
+    Q_PROPERTY(int debugView READ debugView WRITE setDebugView NOTIFY debugViewChanged)
+    Q_PROPERTY(bool showNodeBoxes READ showNodeBoxes WRITE setShowNodeBoxes NOTIFY showNodeBoxesChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
     // The shared budget limits, exposed so the settings UI spin boxes range over
@@ -72,9 +77,11 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int maximumPointBudgetMillions READ maximumPointBudgetMillions CONSTANT)
     Q_PROPERTY(int unlimitedLevel READ unlimitedLevel CONSTANT)
     Q_PROPERTY(int maximumLevel READ maximumLevel CONSTANT)
+    Q_PROPERTY(int rootLevel READ rootLevel CONSTANT)
     Q_PROPERTY(int thinningModeCount READ thinningModeCount CONSTANT)
     Q_PROPERTY(int sizeModeCount READ sizeModeCount CONSTANT)
     Q_PROPERTY(int floorModeCount READ floorModeCount CONSTANT)
+    Q_PROPERTY(int debugViewCount READ debugViewCount CONSTANT)
     Q_PROPERTY(double minimumPointSizePx READ minimumPointSizePx CONSTANT)
     Q_PROPERTY(double maximumPointSizePx READ maximumPointSizePx CONSTANT)
 
@@ -112,6 +119,10 @@ public:
     int maxLevel() const { return m_maxLevel; }
     void setMaxLevel(int level);
 
+    //! The shallowest level the point clouds draw; the cut itself is unchanged
+    int minLevel() const { return m_minLevel; }
+    void setMinLevel(int level);
+
     bool inflationGovernor() const { return m_inflationGovernor; }
     void setInflationGovernor(bool governed);
 
@@ -136,6 +147,13 @@ public:
     double maxPointSizePx() const { return m_shading.maxPointSizePx; }
     void setMaxPointSizePx(double pixels);
 
+    //! A cw::pointcloud::DebugView
+    int debugView() const { return int(m_shading.debugView); }
+    void setDebugView(int view);
+
+    bool showNodeBoxes() const { return m_shading.showNodeBoxes; }
+    void setShowNodeBoxes(bool show);
+
     //! The budget knobs in bytes, the form the render thread consumes
     cwRenderBudgets budgets() const;
 
@@ -154,9 +172,11 @@ public:
     static int maximumPointBudgetMillions() { return cw::budgets::kMaxPointBudgetMillions; }
     static int unlimitedLevel() { return cw::budgets::kUnlimitedLevel; }
     static int maximumLevel();
+    static int rootLevel() { return cw::budgets::kRootLevel; }
     static int thinningModeCount() { return cw::pointcloud::kThinningModeCount; }
     static int sizeModeCount() { return cw::pointcloud::kSizeModeCount; }
     static int floorModeCount() { return cw::pointcloud::kFloorModeCount; }
+    static int debugViewCount() { return cw::pointcloud::kDebugViewCount; }
     static double minimumPointSizePx() { return cw::pointcloud::kMinPointSizePx; }
     static double maximumPointSizePx() { return cw::pointcloud::kMaxPointSizePx; }
 
@@ -183,6 +203,7 @@ signals:
     void pointBudgetMillionsChanged();
     void freezeCutChanged();
     void maxLevelChanged();
+    void minLevelChanged();
     void inflationGovernorChanged();
     void evictionHoldChanged();
     void thinningModeChanged();
@@ -190,6 +211,8 @@ signals:
     void floorModeChanged();
     void fixedPointSizePxChanged();
     void maxPointSizePxChanged();
+    void debugViewChanged();
+    void showNodeBoxesChanged();
 
     //! Any one of the pointCloudShading() knobs moved
     void pointCloudShadingChanged();
@@ -218,6 +241,7 @@ private:
     // Overwritten from QSettings in the constructor, like the budgets.
     bool m_freezeCut = cw::budgets::kDefaultFreezeCut;
     int m_maxLevel = cw::budgets::kDefaultMaxLevel;
+    int m_minLevel = cw::budgets::kDefaultMinLevel;
     bool m_inflationGovernor = cw::budgets::kDefaultInflationGovernor;
     bool m_evictionHold = cw::budgets::kDefaultEvictionHold;
     cwPointCloudShading m_shading;

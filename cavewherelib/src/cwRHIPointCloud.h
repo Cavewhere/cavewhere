@@ -69,6 +69,7 @@ public:
     // nodes no one will see. An offscreen job's culled tiles leave it alone.
     void gatherCulled(const GatherContext& context) override;
     bool usesPointCloudPass() const override;
+    void purgePipelinesFor(QRhiRenderPassDescriptor* descriptor) override;
 
     // The octree's root cube, inflated by the sprite radius. The manifest's
     // root cube is in the project's local frame CRS and PointCloud.vert
@@ -326,12 +327,13 @@ private:
 
     // Mirrors the PerCloudBlock declaration in PointCloud.vert, which at the
     // default knobs sizes every sprite as
-    // max(spacingCoverage * nodeFloor.x * pixelsPerMeter(w),
+    // max(spacingCoverage * nodeFloor * pixelsPerMeter(w),
     //     spacingCoverage * sseThresholdPx)
     // pixels, clamped to maxPointSizePx, the floor coming per instance, and
     // thins each node against the spacing the cut is aiming for, never wider
     // than rootSpacing — the coarsest level the file has. The second std140 row
-    // carries the cwPointCloudShading modes that switch those rules.
+    // carries the cwPointCloudShading modes that switch those rules, the third
+    // the debug view and the frame the residency age view counts from.
     struct PerCloudUniform {
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
@@ -341,9 +343,12 @@ private:
         qint32 sizeMode = 0;
         qint32 floorMode = 0;
         float fixedPointSizePx = 0.0f;
+        qint32 debugView = 0;
+        quint32 currentFrame = 0;
+        float padding[2] = {0.0f, 0.0f};
     };
-    static_assert(sizeof(PerCloudUniform) == 8 * sizeof(float),
-                  "PerCloudBlock in PointCloud.vert is two std140 rows of 16 "
+    static_assert(sizeof(PerCloudUniform) == 12 * sizeof(float),
+                  "PerCloudBlock in PointCloud.vert is three std140 rows of 16 "
                   "bytes; the C++ struct has to match it field for field.");
 
     // The block the shader reads for @a spacingCoverage, carrying this frame's
@@ -356,6 +361,15 @@ private:
     // Takes each drawn node's floor from the finest level drawn under it and
     // queues the ones that moved for the next resource pass.
     void refreshNodeFloors(const QVector<int>& drawnNodes);
+
+    // The node box overlay (cwPointCloudShading::showNodeBoxes): a wire cube
+    // per node of the last cut and per resident node outside it, drawn in the
+    // Overlay pass so the boxes skip EDL. Loading nodes have no constants slot
+    // yet, so the boxes read their own instance buffer, rebuilt each frame the
+    // overlay is on from the cut and the node table.
+    void writeNodeBoxes(QRhi* rhi, QRhiResourceUpdateBatch* batch);
+    bool gatherNodeBoxes(const GatherContext& context, QVector<PipelineBatch>& batches);
+    bool ensureNodeBoxPipeline(const RenderData& data);
 
     bool m_resourcesInitialized = false;
 
@@ -418,9 +432,9 @@ private:
     // over, so they wait here rather than being asked for again.
     QVector<NodeStreamer::Result> m_readyQueue;
 
-    // {nodeMin.xyz, nodeSize / kQuantMax} and {floorSpacing, 0, 0, 0} per
-    // resident node, one 32 byte slot each, bound per instance at the drawing
-    // node's slot offset.
+    // {nodeMin.xyz, nodeSize / kQuantMax} and {floorSpacing, arrival frame,
+    // node index, 0} per resident node, one 32 byte slot each, bound per
+    // instance at the drawing node's slot offset.
     QRhiBuffer* m_nodeConstants = nullptr;
     QVector<int> m_freeSlots;
 
@@ -463,6 +477,18 @@ private:
     QElapsedTimer m_frameIntervalTimer;
 
     cwTracked<cwRenderPointCloud::RenderState> m_renderState;
+
+    // The node box overlay: the unit cube's 24 edge ends, built once, and one
+    // instance per box, grown as the box count needs. m_nodeBoxCount is what
+    // the last writeNodeBoxes() put in it, 0 while the overlay is off.
+    QRhiBuffer* m_nodeBoxCube = nullptr;
+    QRhiBuffer* m_nodeBoxInstances = nullptr;
+    int m_nodeBoxCapacity = 0;
+    int m_nodeBoxCount = 0;
+    QRhiVertexInputLayout m_nodeBoxInputLayout;
+    QRhiShaderResourceBindings* m_nodeBoxSrb = nullptr;
+    cwRhiPipelineSet m_nodeBoxPipelines;
+    cwRhiPipelineRecord* m_nodeBoxPipelineRecord = nullptr;
 };
 
 #endif // CWRHIPOINTCLOUD_H

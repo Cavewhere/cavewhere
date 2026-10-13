@@ -570,6 +570,18 @@ namespace {
 
         void clearAppearanceOverride() { m_appearanceOverride.reset(); }
 
+        //! Colors the following frames by @a view, every other shading knob kept
+        void setDebugView(cw::pointcloud::DebugView view)
+        {
+            updateShading([view](cwPointCloudShading& shading) { shading.debugView = view; });
+        }
+
+        //! Draws the node box overlay over the following frames, or stops
+        void setShowNodeBoxes(bool show)
+        {
+            updateShading([show](cwPointCloudShading& shading) { shading.showNodeBoxes = show; });
+        }
+
         //! Moves what renderFrame() looks at, so two cameras can hold
         //! different parts of the cloud
         void setViewOffset(const QVector3D& offset) { m_viewOffset = offset; }
@@ -841,6 +853,15 @@ namespace {
         }
 
     private:
+        template <typename Edit>
+        void updateShading(Edit edit)
+        {
+            cwPointCloudShading shading = m_render.shading();
+            edit(shading);
+            m_render.setShading(shading);
+            synchronize();
+        }
+
         //! Everything both constructors do once the cache and the target are in
         //! place: publish the octree, build the back end and register it.
         void start()
@@ -4816,6 +4837,278 @@ TEST_CASE("Eviction hold keeps every resident node over the GPU budget",
     fixture.renderFrame();
 
     CHECK(Access::residentCount(fixture.backend()) < resident);
+}
+
+namespace {
+    //! @a rgba with its alpha dropped, which the cloud pass leaves at whatever
+    //! the blend wrote
+    QRgb opaque(QRgb rgba)
+    {
+        return qRgb(qRed(rgba), qGreen(rgba), qBlue(rgba));
+    }
+
+    //! The distinct colors of the last frame's lit pixels
+    QSet<QRgb> litColors(const PointCloudFixture& fixture)
+    {
+        const QImage image = fixture.frameImage();
+        QSet<QRgb> colors;
+        for (const QPoint& pixel : fixture.litPixels()) {
+            colors.insert(opaque(image.pixel(pixel)));
+        }
+        return colors;
+    }
+
+    QRgb paletteRgb(cw::pointcloud::Rgb color)
+    {
+        constexpr float kByteMax = 255.0f;
+        return qRgb(qRound(color.red * kByteMax), qRound(color.green * kByteMax),
+                    qRound(color.blue * kByteMax));
+    }
+
+    //! What DebugView::Off draws every point in
+    const QRgb kFlatWhite = paletteRgb({1.0f, 1.0f, 1.0f});
+
+    //! Every sprite one pixel, so no point hides another level's behind it
+    cwPointCloudShading onePixelShading()
+    {
+        cwPointCloudShading shading;
+        shading.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
+        shading.fixedPointSizePx = float(cw::pointcloud::kMinPointSizePx);
+        return shading;
+    }
+
+    //! Where @a world lands in the readback of renderFrame()'s ortho camera at
+    //! @a orthoHeight, in pixels from the readback's first row
+    QPointF readbackPixel(QRhi* rhi, const PointCloudFixture& fixture, float orthoHeight,
+                          const QVector3D& world)
+    {
+        const QVector4D clip = orthoProjection(orthoHeight) * viewAt(fixture.center())
+                               * QVector4D(world, 1.0f);
+        const double ndcX = clip.x() / clip.w();
+        const double ndcY = clip.y() / clip.w();
+        const QSize size = fixture.colorSize();
+        // A y-up framebuffer reads back bottom row first
+        const double row = rhi->isYUpInFramebuffer() ? (ndcY + 1.0) * 0.5 : (1.0 - ndcY) * 0.5;
+        return QPointF((ndcX + 1.0) * 0.5 * size.width(), row * size.height());
+    }
+
+    //! The eight corners of @a box
+    std::array<QVector3D, 8> boxCorners(const QBox3D& box)
+    {
+        std::array<QVector3D, 8> corners;
+        for (int corner = 0; corner < int(corners.size()); corner++) {
+            corners[corner] = QVector3D((corner & 1) ? box.maximum().x() : box.minimum().x(),
+                                        (corner & 2) ? box.maximum().y() : box.minimum().y(),
+                                        (corner & 4) ? box.maximum().z() : box.minimum().z());
+        }
+        return corners;
+    }
+}
+
+TEST_CASE("The level view shows one color per drawn level", "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("level-view"));
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.render().setShading(onePixelShading());
+    fixture.synchronize();
+    fixture.renderUntilQuiet();
+    fixture.setDebugView(cw::pointcloud::DebugView::Level);
+    fixture.renderFrame();
+
+    QSet<int> levels;
+    for (int level : Access::drawnLevels(fixture.backend())) {
+        levels.insert(level);
+    }
+    REQUIRE(levels.size() > 1);
+    REQUIRE(levels.size() <= qsizetype(cw::pointcloud::kLevelPalette.size()));
+
+    SECTION("every drawn level, in its palette color") {
+        QSet<QRgb> expected;
+        for (int level : std::as_const(levels)) {
+            expected.insert(paletteRgb(cw::pointcloud::levelColor(level)));
+        }
+        CHECK(litColors(fixture) == expected);
+    }
+
+    SECTION("minLevel and maxLevel at one level draw that level alone") {
+        const int finest = finestDrawnLevel(fixture);
+        cwRenderBudgets budgets = fixture.budgets();
+        budgets.minLevel = finest;
+        budgets.maxLevel = finest;
+        fixture.setBudgets(budgets);
+        fixture.renderUntilQuiet();
+
+        CHECK(litColors(fixture)
+              == QSet<QRgb>{paletteRgb(cw::pointcloud::levelColor(finest))});
+    }
+}
+
+TEST_CASE("The decimation preview lights what continuous and thinning off light together",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = kThinningScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kThinningHalfWeightHeight);
+    fixture.render().setShading(onePixelShading());
+    fixture.synchronize();
+    fixture.renderUntilQuiet();
+
+    //One synchronize per frame, as the scene does: a second one before the
+    //frame would hand the back end a state already marked synchronized
+    const auto litUnder = [&](cw::pointcloud::ThinningMode mode,
+                              cw::pointcloud::DebugView view) {
+        cwPointCloudShading shading = onePixelShading();
+        shading.thinningMode = mode;
+        shading.debugView = view;
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+        fixture.renderFrame();
+        const QVector<QPoint> lit = fixture.litPixels();
+        return QSet<QPoint>(lit.begin(), lit.end());
+    };
+
+    const QSet<QPoint> continuous = litUnder(cw::pointcloud::ThinningMode::Continuous,
+                                             cw::pointcloud::DebugView::Off);
+    const QSet<QPoint> off = litUnder(cw::pointcloud::ThinningMode::Off,
+                                      cw::pointcloud::DebugView::Off);
+    const QSet<QPoint> preview = litUnder(cw::pointcloud::ThinningMode::Continuous,
+                                          cw::pointcloud::DebugView::DecimationPreview);
+
+    INFO("continuous " << continuous.size() << ", off " << off.size()
+         << ", preview " << preview.size());
+    REQUIRE(off.size() > continuous.size());
+    CHECK(preview == (continuous | off));
+
+    //What the thinning took draws dim, and what it kept draws as it always does
+    const QImage image = fixture.frameImage();
+    int dim = 0;
+    for (const QPoint& pixel : preview) {
+        if (opaque(image.pixel(pixel)) != kFlatWhite) {
+            dim++;
+        }
+    }
+    CHECK(dim > 0);
+    CHECK(dim <= preview.size() - continuous.size());
+}
+
+TEST_CASE("Every debug view but the preview recolors the pixels flat white lights",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = kThinningScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kThinningHalfWeightHeight);
+    fixture.renderUntilQuiet();
+
+    const auto litUnder = [&](cw::pointcloud::DebugView view) {
+        fixture.setDebugView(view);
+        fixture.renderFrame();
+        const QVector<QPoint> lit = fixture.litPixels();
+        return QSet<QPoint>(lit.begin(), lit.end());
+    };
+
+    const QSet<QPoint> flat = litUnder(cw::pointcloud::DebugView::Off);
+    REQUIRE_FALSE(flat.isEmpty());
+    CHECK(litColors(fixture) == QSet<QRgb>{kFlatWhite});
+
+    for (int view = int(cw::pointcloud::DebugView::Level);
+         view < int(cw::pointcloud::DebugView::DecimationPreview); view++) {
+        INFO("debug view " << view);
+        CHECK(litUnder(cw::pointcloud::DebugView(view)) == flat);
+    }
+}
+
+TEST_CASE("Node boxes outline every resident node and nothing past the octree",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("node-boxes"));
+    fixture.setReadbackEnabled(true);
+
+    //Children streamed in close, then the far camera's cut of the root alone,
+    //which leaves them resident outside the cut
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const QSet<int> resident = fixture.residentNodes();
+    REQUIRE(resident.size() > 2);
+    REQUIRE(finestSelectedLevel(fixture) == kRootLevel);
+
+    //No level that deep, so the box pass is all the frame draws
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.minLevel = cw::octree::kMaxLevel;
+    fixture.setBudgets(budgets);
+    fixture.renderFrame();
+    REQUIRE(fixture.litPixels().isEmpty());
+
+    //The boxes are built from the cut the frame before gathered
+    fixture.setShowNodeBoxes(true);
+    fixture.renderFrame();
+    fixture.renderFrame();
+
+    const QVector<QPoint> lit = fixture.litPixels();
+    REQUIRE_FALSE(lit.isEmpty());
+
+    //A line's end pixel follows the rasterizer's rule, so a corner is lit
+    //somewhere within this of where it projects
+    constexpr double kCornerTolerancePx = 2.0;
+    const auto litNear = [&](const QPointF& point) {
+        return std::any_of(lit.begin(), lit.end(), [&](const QPoint& pixel) {
+            return std::abs(pixel.x() + 0.5 - point.x()) <= kCornerTolerancePx
+                   && std::abs(pixel.y() + 0.5 - point.y()) <= kCornerTolerancePx;
+        });
+    };
+
+    for (int node : resident) {
+        for (const QVector3D& corner : boxCorners(fixture.manifest().nodeBounds(node))) {
+            const QPointF pixel = readbackPixel(rhi.get(), fixture, kFarOrthoHeight, corner);
+            INFO("node " << node << " corner at " << pixel.x() << ", " << pixel.y());
+            CHECK(litNear(pixel));
+        }
+    }
+
+    double left = std::numeric_limits<double>::max();
+    double right = std::numeric_limits<double>::lowest();
+    double top = std::numeric_limits<double>::max();
+    double bottom = std::numeric_limits<double>::lowest();
+    for (const QVector3D& corner : boxCorners(fixture.manifest().nodeBounds(kRootIndex))) {
+        const QPointF pixel = readbackPixel(rhi.get(), fixture, kFarOrthoHeight, corner);
+        left = std::min(left, pixel.x());
+        right = std::max(right, pixel.x());
+        top = std::min(top, pixel.y());
+        bottom = std::max(bottom, pixel.y());
+    }
+
+    int outside = 0;
+    for (const QPoint& pixel : lit) {
+        const double x = pixel.x() + 0.5;
+        const double y = pixel.y() + 0.5;
+        if (x < left - kCornerTolerancePx || x > right + kCornerTolerancePx
+            || y < top - kCornerTolerancePx || y > bottom + kCornerTolerancePx) {
+            outside++;
+        }
+    }
+    CHECK(outside == 0);
+
+    //The root is the cut, in its level's color; the rest wait to be evicted
+    const QSet<QRgb> colors = litColors(fixture);
+    CHECK(colors.contains(paletteRgb(cw::pointcloud::levelColor(kRootLevel))));
+    CHECK(colors.contains(paletteRgb(cw::pointcloud::kEvictableNodeBoxColor)));
 }
 
 TEST_CASE("Zooming out until quiet leaves the holes bounded",

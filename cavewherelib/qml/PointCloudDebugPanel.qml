@@ -25,6 +25,9 @@ QC.Popup {
     readonly property list<string> thinningModeNames: [qsTr("Continuous"), qsTr("Discrete"), qsTr("Off")]
     readonly property list<string> sizeModeNames: [qsTr("Coverage"), qsTr("Fixed pixels"), qsTr("Own spacing")]
     readonly property list<string> floorModeNames: [qsTr("Node"), qsTr("Off")]
+    readonly property list<string> debugViewNames: [qsTr("Off"), qsTr("Level"), qsTr("Node"), qsTr("Rank"),
+        qsTr("Weight"), qsTr("Sprite size"), qsTr("Floor ratio"), qsTr("Residency age"),
+        qsTr("Decimation preview")]
 
     // QC.SpinBox counts in integers, so fractional knobs are held scaled.
     readonly property int screenSpaceErrorScale: 10
@@ -34,7 +37,7 @@ QC.Popup {
     readonly property int labelColumnWidth: Math.round(150 * Theme.fontScale)
 
     // Left open while the camera orbits, with key focus left on the 3D view so
-    // its T and F shortcuts keep working: only Escape or Close shuts it.
+    // its T, V and F shortcuts keep working: only Escape or Close shuts it.
     modal: false
     focus: false
     padding: Theme.statsPadding
@@ -106,6 +109,38 @@ QC.Popup {
                 }
                 onKnobEdited: (editedValue) => panelId.renderingSettings.maxLevel = editedValue
             }
+        }
+
+        RowLayout {
+            KnobLabel { text: qsTr("Min level") }
+
+            KnobSpinBox {
+                objectName: "minLevelSpinBox"
+                from: panelId.renderingSettings.rootLevel
+                to: panelId.renderingSettings.maximumLevel
+                knobValue: panelId.renderingSettings.minLevel
+                onKnobEdited: (editedValue) => panelId.renderingSettings.minLevel = editedValue
+            }
+        }
+
+        SectionLabel { text: qsTr("Debug views") }
+
+        RowLayout {
+            KnobLabel { text: qsTr("Color by (V)") }
+
+            KnobComboBox {
+                objectName: "debugViewComboBox"
+                model: panelId.debugViewNames
+                knobValue: panelId.renderingSettings.debugView
+                onActivated: (index) => panelId.renderingSettings.debugView = index
+            }
+        }
+
+        KnobCheckBox {
+            objectName: "showNodeBoxesCheckBox"
+            text: qsTr("Node boxes")
+            knobValue: panelId.renderingSettings.showNodeBoxes
+            onToggled: panelId.renderingSettings.showNodeBoxes = checked
         }
 
         SectionLabel { text: qsTr("Budgets") }

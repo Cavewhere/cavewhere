@@ -90,12 +90,15 @@ Item {
 
     // One-key A/B switches for the point cloud knobs (PointCloudDebugPanel),
     // so a comparison happens while the camera holds still. P is the coverage
-    // gesture; V is reserved for the debug view.
+    // gesture.
     function handlePointCloudDebugKey(key) {
         const settings = RootData.settings.renderingSettings
         switch (key) {
         case Qt.Key_T:
             settings.thinningMode = (settings.thinningMode + 1) % settings.thinningModeCount
+            return true
+        case Qt.Key_V:
+            settings.debugView = (settings.debugView + 1) % settings.debugViewCount
             return true
         case Qt.Key_F:
             settings.freezeCut = !settings.freezeCut

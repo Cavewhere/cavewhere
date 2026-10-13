@@ -46,6 +46,8 @@ namespace cw::budgets {
     constexpr bool kDefaultFreezeCut = false;
     constexpr int kUnlimitedLevel = -1;
     constexpr int kDefaultMaxLevel = kUnlimitedLevel;
+    constexpr int kRootLevel = 0;
+    constexpr int kDefaultMinLevel = kRootLevel;
     constexpr bool kDefaultInflationGovernor = true;
     constexpr bool kDefaultEvictionHold = false;
 
@@ -74,6 +76,11 @@ struct cwRenderBudgets {
 
     //! The deepest level the cut refines to, kUnlimitedLevel for no cap
     int maxLevel = cw::budgets::kDefaultMaxLevel;
+
+    //! The shallowest level that draws. The cut, and the floors taken from it,
+    //! are what they would be without it, so together with maxLevel one level
+    //! can be drawn alone
+    int minLevel = cw::budgets::kDefaultMinLevel;
 
     //! The forest steps its screen-space-error inflation under budget pressure;
     //! off holds it at 1
