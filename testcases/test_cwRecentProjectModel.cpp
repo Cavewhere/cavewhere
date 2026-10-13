@@ -787,3 +787,60 @@ TEST_CASE("cwRecentProjectModel sorts unstamped entries last in both directions"
     proxy.sort(Qt::DescendingOrder);
     CHECK(proxyPaths() == QStringList({newerPath, olderPath, unstampedPath}));
 }
+
+TEST_CASE("cwRecentProjectModel count tracks adds, replace, and clear", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    cwRecentProjectModel model;
+    QSignalSpy countSpy(&model, &cwRecentProjectModel::countChanged);
+    REQUIRE(model.count() == 0);
+    CHECK(model.property("count").toInt() == 0);
+
+    QTemporaryDir repoTmpDir;
+    REQUIRE(repoTmpDir.isValid());
+    const QDir repoDir(repoTmpDir.path());
+
+    SECTION("Adding entries emits countChanged once per entry") {
+        REQUIRE_FALSE(model.addRepository(repoDir).hasError());
+        CHECK(model.count() == 1);
+        CHECK(countSpy.count() == 1);
+
+        QTemporaryDir fileTmpDir;
+        REQUIRE(fileTmpDir.isValid());
+        const QString projectPath = createEmptyProjectFile(fileTmpDir, QStringLiteral("Other.cw"));
+        REQUIRE_FALSE(model.addRepositoryFromProjectFile(QUrl::fromLocalFile(projectPath)).hasError());
+        CHECK(model.count() == 2);
+        CHECK(model.property("count").toInt() == 2);
+        CHECK(countSpy.count() == 2);
+
+        SECTION("Re-adding an existing entry leaves count unchanged") {
+            countSpy.clear();
+            REQUIRE_FALSE(model.addRepositoryFromProjectFile(QUrl::fromLocalFile(projectPath)).hasError());
+            CHECK(model.count() == 2);
+            CHECK(countSpy.count() == 0);
+        }
+
+        SECTION("clear() resets count to zero") {
+            countSpy.clear();
+            model.clear();
+            CHECK(model.count() == 0);
+            CHECK(model.property("count").toInt() == 0);
+            CHECK(countSpy.count() == 1);
+        }
+    }
+
+    SECTION("Replacing a directory entry with its project file keeps count") {
+        REQUIRE_FALSE(model.addRepository(repoDir).hasError());
+        REQUIRE(model.count() == 1);
+        countSpy.clear();
+
+        const QString projectPath = createEmptyProjectFile(repoTmpDir, QStringLiteral("NewCave.cwproj"));
+        REQUIRE_FALSE(model.addRepositoryFromProjectFile(QUrl::fromLocalFile(projectPath)).hasError());
+        CHECK(model.count() == 1);
+        CHECK(model.property("count").toInt() == 1);
+        // The replace path removes the directory row, then inserts the file row
+        CHECK(countSpy.count() == 2);
+        CHECK(model.data(model.index(0, 0), cwRecentProjectModel::PathRole).toString() == projectPath);
+    }
+}

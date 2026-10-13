@@ -23,13 +23,6 @@ StandardPage {
         Component.onCompleted: sort(Qt.DescendingOrder)
     }
 
-    // Unfiltered view of the recent list, so the empty state can tell "nothing
-    // matches the filter" apart from "no projects yet".
-    SortFilterProxyModel {
-        id: allRecentProjectsId
-        source: RootData.recentProjectModel
-    }
-
     TableStaticColumnModel {
         id: columnModelId
         columns: [
@@ -251,7 +244,7 @@ StandardPage {
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
             visible: listViewId.count === 0
-            text: allRecentProjectsId.count > 0
+            text: RootData.recentProjectModel.count > 0
                   ? qsTr("No projects match the filter.")
                   : qsTr("No caving areas created or opened yet.")
         }

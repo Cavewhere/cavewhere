@@ -61,6 +61,10 @@ cwRecentProjectModel::cwRecentProjectModel(QObject* parent)
         settings.setValue(DefaultDirKey, QUrl::fromLocalFile(QDir(m_defaultRepositoryDir.value().toLocalFile()).absolutePath()));
     });
 
+    connect(this, &cwRecentProjectModel::rowsInserted, this, &cwRecentProjectModel::countChanged);
+    connect(this, &cwRecentProjectModel::rowsRemoved, this, &cwRecentProjectModel::countChanged);
+    connect(this, &cwRecentProjectModel::modelReset, this, &cwRecentProjectModel::countChanged);
+
     loadSettings();
 }
 

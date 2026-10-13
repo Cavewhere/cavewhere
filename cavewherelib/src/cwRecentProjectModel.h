@@ -24,6 +24,7 @@ class CAVEWHERE_LIB_EXPORT cwRecentProjectModel : public QAbstractListModel
     QML_NAMED_ELEMENT(RecentProjectModel);
 
     Q_PROPERTY(QUrl defaultRepositoryDir READ defaultRepositoryDir WRITE setDefaultRepositoryDir NOTIFY defaultRepositoryDirChanged BINDABLE bindableDefaultRepositoryDir)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     enum RepositoryRoles {
@@ -47,6 +48,8 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+    int count() const { return m_repositories.count(); }
+
     QUrl defaultRepositoryDir() const { return m_defaultRepositoryDir.value(); }
     void setDefaultRepositoryDir(const QUrl& defaultRepositoryDir) { m_defaultRepositoryDir = defaultRepositoryDir; }
     QBindable<QUrl> bindableDefaultRepositoryDir() { return &m_defaultRepositoryDir; }
@@ -62,6 +65,7 @@ public:
 
 signals:
     void defaultRepositoryDirChanged();
+    void countChanged();
 
 private:
     struct RepositoryEntry {
