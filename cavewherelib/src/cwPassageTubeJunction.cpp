@@ -101,6 +101,11 @@ constexpr double kFanDepthFactor = 0.5;
 // through's triangles hit them despite rounding.
 constexpr double kBarycentricEpsilon = 1e-6;
 const double kMinCarryCosine = std::cos(qDegreesToRadians(kMaxCarryDegrees));
+// An arm's rings whose tangents stay within this angle of its kept end ring's
+// run straight into the junction, and a column entering the through along
+// them still cuts the arm.
+constexpr double kStraightArmDegrees = 10.0;
+const float kStraightArmCosine = static_cast<float>(std::cos(qDegreesToRadians(kStraightArmDegrees)));
 
 using StationKey = QPair<QUuid, QString>;
 using Vertex = QPair<int, int>;
@@ -1148,16 +1153,25 @@ struct ColumnEntry {
     int lastOutside = -1;
 };
 
+// The arm keeps its rings up to the last one, walking from its far end,
+// whose center lies outside the through (axisKept), so the strip to the
+// mouth spans no bend. Each whole column is searched for its entry from the
+// ring before that one, or from the start of the straight run into it: an
+// entry there lowers the kept rings, and a wall that grazes the through past
+// a bend farther up the arm is left alone. A column already inside the
+// through at the kept end ring takes the wall point radially outward from
+// the through's axis through its vertex.
+//
 // An arm that is also the through chain starts on the through, so it is cut
 // where it comes back into the through rather than where it starts there.
-// Each whole column is cut first; then the columns between two whole columns
-// are cut from the kept end ring on, halving the gap between neighboring
-// mouth points until none is farther apart than kMouthStepFactor times the
-// through's ring spacing at the junction. A gap whose middle point lies on
-// the straight edge across it already follows the through and stays whole;
-// one whose middle point lies farther from either end than the ends lie
-// from each other, where the column grazes the through and enters it on one
-// side or the other, stays whole too, as splitting it would zigzag.
+// Columns between two whole columns are cut from the kept end ring on,
+// halving the gap between neighboring mouth points until none is farther
+// apart than kMouthStepFactor times the through's ring spacing at the
+// junction. A gap whose middle point lies on the straight edge across it
+// already follows the through and stays whole; one whose middle point lies
+// farther from either end than the ends lie from each other, where the column
+// grazes the through and enters it on one side or the other, stays whole too,
+// as splitting it would zigzag.
 Trim trimArm(const QVector<Ring>& rings,
              const QVector3D& tangent,
              const JunctionSolids& solids,
@@ -1271,19 +1285,65 @@ Trim trimArm(const QVector<Ring>& rings,
         return polyline;
     };
 
+    // A column inside the through at its first ring starts its mouth on the
+    // wall straight out from its vertex there; unset when no wall lies there.
+    const auto entryFrom = [&](const QVector<QVector3D>& polyline, int firstRing) -> std::optional<ColumnEntry> {
+        ColumnEntry column = findEntry(withExtension(polyline));
+        if (column.lastOutside >= 0) {
+            column.lastOutside += firstRing;
+            return column;
+        }
+        const std::optional<SurfaceHit> onWall = ontoThroughWall(polyline.first());
+        if (!onWall) {
+            return std::nullopt;
+        }
+        return ColumnEntry {onWall->position, onWall->parameter, firstRing};
+    };
+
     const int count = rings.size();
+    int axisKept = count;
+    while (axisKept > 0 && inGrownThrough(rings.at(axisKept - 1).center)) {
+        --axisKept;
+    }
+    if (axisKept == 0) {
+        return {};
+    }
+
     const int resolution = rings.last().radii.size();
-    QVector<ColumnEntry> wholeColumns;
-    wholeColumns.reserve(resolution);
+    const auto columnPolyline = [&](int bin, int firstRing) {
+        QVector<QVector3D> polyline;
+        polyline.reserve(count - firstRing + 1);
+        for (int i = firstRing; i < count; ++i) {
+            polyline.append(unpulledVertex(rings.at(i), bin));
+        }
+        return polyline;
+    };
+    const QVector3D& axisTangent = rings.at(axisKept - 1).frame.tangent;
+    int straightFrom = axisKept - 1;
+    while (straightFrom > 0 && QVector3D::dotProduct(rings.at(straightFrom - 1).frame.tangent, axisTangent) >= kStraightArmCosine) {
+        --straightFrom;
+    }
+    const int searchStart = std::max(0, std::min(straightFrom, axisKept - 2));
+    QVector<ColumnEntry> wholeColumns(resolution);
+    QVector<int> insideColumns;
     int keptRings = count;
     for (int bin = 0; bin < resolution; ++bin) {
-        QVector<QVector3D> polyline;
-        polyline.reserve(count + 1);
-        for (const Ring& ring : rings) {
-            polyline.append(unpulledVertex(ring, bin));
+        ColumnEntry column = findEntry(withExtension(columnPolyline(bin, searchStart)));
+        if (column.lastOutside < 0) {
+            insideColumns.append(bin);
+            continue;
         }
-        wholeColumns.append(findEntry(withExtension(polyline)));
-        keptRings = std::min(keptRings, wholeColumns.last().lastOutside + 1);
+        column.lastOutside += searchStart;
+        keptRings = std::min(keptRings, column.lastOutside + 1);
+        wholeColumns[bin] = column;
+    }
+    if (!insideColumns.isEmpty()) {
+        keptRings = std::min(keptRings, axisKept);
+        const int endRing = keptRings - 1;
+        for (int bin : std::as_const(insideColumns)) {
+            const QVector3D vertex = unpulledVertex(rings.at(endRing), bin);
+            wholeColumns[bin] = entryFrom(columnPolyline(bin, endRing), endRing).value_or(ColumnEntry {vertex, std::nullopt, endRing});
+        }
     }
 
     // A kept ring right at the mouth would leave a strip of slivers.
@@ -1298,16 +1358,12 @@ Trim trimArm(const QVector<Ring>& rings,
     while (keptRings > 1 && isAtMouth(keptRings - 1)) {
         --keptRings;
     }
-
     Trim trim;
     trim.keptRings = keptRings;
-    if (keptRings <= 0) {
-        return trim;
-    }
 
     // The column fraction of the way from bin to the next, from the kept end
-    // ring on; unset when its start lies inside the through or its mouth
-    // lies off it.
+    // ring on; unset when its mouth lies off the through or at the kept end
+    // ring, where its strip would fold flat.
     const auto betweenColumns = [&](int bin, double fraction) -> std::optional<ColumnEntry> {
         const int next = (bin + 1) % resolution;
         const float f = static_cast<float>(fraction);
@@ -1317,8 +1373,8 @@ Trim trimArm(const QVector<Ring>& rings,
             const QVector3D low = unpulledVertex(rings.at(i), bin);
             polyline.append(low + (unpulledVertex(rings.at(i), next) - low) * f);
         }
-        const ColumnEntry column = findEntry(withExtension(polyline));
-        if (column.lastOutside < 0 || !column.parameter) {
+        const std::optional<ColumnEntry> column = entryFrom(polyline, keptRings - 1);
+        if (!column || !column->parameter || column->position.distanceToPoint(polyline.first()) < kMinRingSpacingMeters) {
             return std::nullopt;
         }
         return column;

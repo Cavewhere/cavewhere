@@ -494,15 +494,14 @@ std::vector<std::pair<unsigned int, int>> cornerOutsideRandomSurveys()
 TEST_CASE("cwPassageTubeCases catalog builds clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave
-               && !entry.name.startsWith(QStringLiteral("21. ")) && !entry.name.startsWith(QStringLiteral("22. "));
+        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave;
     })));
     checkCaseBuildsClean(name);
 }
 
 // An arm cut back to the first of its columns that touches a big through
 // leaves its bends, and the stations at them, outside the tube.
-TEST_CASE("cwPassageTubeCases keeps the centerline inside a junction arm", "[PassageTube][cwPassageTubeCases][!mayfail]")
+TEST_CASE("cwPassageTubeCases keeps the centerline inside a junction arm", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(std::string("21. Small arm along the wall of a big room"),
                                       std::string("22. Default-radius arm bending inside a big through's reach"));

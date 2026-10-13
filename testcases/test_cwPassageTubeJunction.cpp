@@ -304,6 +304,45 @@ const Builder::Chain& requireArm(const Builder::Debug& debug, int chainIndex)
     return arm;
 }
 
+const cwPassageTubeCases::Case& galleryCase(const QString& prefix)
+{
+    static const QVector<cwPassageTubeCases::Case> catalog = cwPassageTubeCases::catalog();
+    const auto found = std::find_if(catalog.cbegin(), catalog.cend(), [&](const cwPassageTubeCases::Case& entry) {
+        return entry.name.startsWith(prefix);
+    });
+    REQUIRE(found != catalog.cend());
+    return *found;
+}
+
+Builder::Debug buildCase(const cwPassageTubeCases::Case& entry)
+{
+    Builder::Options options;
+    options.sampleSpacingMeters = entry.sampleSpacing;
+    return buildDebug(cwPassageTubeCases::toSurvey(entry.trip), options);
+}
+
+int armWithMouth(const Builder::Debug& debug)
+{
+    const auto found = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const Builder::Chain& chain) {
+        return !chain.startMouth.isEmpty() || !chain.endMouth.isEmpty();
+    });
+    REQUIRE(found != debug.chains.cend());
+    return static_cast<int>(std::distance(debug.chains.cbegin(), found));
+}
+
+QVector3D casePosition(const cwPassageTubeCases::Case& entry, const QString& name)
+{
+    for (const QList<Station>& chunk : entry.trip.chunks) {
+        for (const Station& station : chunk) {
+            if (station.name == name && station.position) {
+                return *station.position;
+            }
+        }
+    }
+    FAIL("no station " << name.toStdString());
+    return {};
+}
+
 } // namespace
 
 TEST_CASE("cwPassageTubeJunction reads rings as a solid", "[PassageTube][cwPassageTubeJunction]")
@@ -630,5 +669,93 @@ TEST_CASE("cwPassageTubeJunction zips a sparse mouth", "[PassageTube][cwPassageT
         CHECK(issue.type != Check::Crease);
         CHECK(issue.type != Check::SliverTriangle);
         CHECK(issue.type != Check::SelfIntersection);
+    }
+}
+
+TEST_CASE("cwPassageTubeJunction cuts an arm along a room's wall where its axis enters the room", "[PassageTube][cwPassageTubeJunction]")
+{
+    constexpr double kMaxMouthSpacings = 1.5;
+    // Gallery 21's arm reads at most this far from its stations.
+    constexpr double kArmLargestReading = 3.5;
+    const cwPassageTubeCases::Case& entry = galleryCase(QStringLiteral("21."));
+    const Builder::Debug debug = buildCase(entry);
+    const Builder::Chain& arm = debug.chains.at(armWithMouth(debug));
+    for (const QString& bend : {QStringLiteral("a01"), QStringLiteral("a00")}) {
+        const QVector3D corner = casePosition(entry, bend);
+        INFO("bend at " << bend.toStdString());
+        CHECK(std::any_of(arm.rings.cbegin(), arm.rings.cend(), [&](const Builder::Ring& ring) {
+            return ring.isElbow && ring.center.distanceToPoint(corner) <= entry.sampleSpacing;
+        }));
+    }
+
+    const OnlyWindow found = onlyWindow(debug);
+    const int throughIndex = static_cast<int>(found.through - debug.chains.constData());
+    const double spacing = windowRingSpacing(found);
+    const QVector3D junction = casePosition(entry, QStringLiteral("J"));
+    const double wallReach = junction.distanceToPoint(casePosition(entry, QStringLiteral("a00"))) + kArmLargestReading;
+    for (const QVector3D& point : mouthOf(arm)) {
+        INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << "), spacing " << spacing);
+        CHECK(distanceToTubeSurface(debug, throughIndex, point) <= kMaxMouthSpacings * spacing);
+        CHECK(point.distanceToPoint(junction) <= wallReach);
+    }
+    CHECK(Check::centerlineInside(debug.mesh, debug).isEmpty());
+}
+
+TEST_CASE("cwPassageTubeJunction keeps the elbow of an arm bending beside the through", "[PassageTube][cwPassageTubeJunction]")
+{
+    const cwPassageTubeCases::Case& entry = galleryCase(QStringLiteral("22."));
+    const Builder::Debug debug = buildCase(entry);
+    const Builder::Chain& arm = debug.chains.at(armWithMouth(debug));
+    const auto elbowRings = std::count_if(arm.rings.cbegin(), arm.rings.cend(), [](const Builder::Ring& ring) { return ring.isElbow; });
+    INFO("elbow rings " << elbowRings << " of " << arm.rings.size());
+    CHECK(elbowRings >= 2);
+
+    const QVector<Check::Issue> issues = Check::centerlineInside(debug.mesh, debug);
+    INFO(Check::toText({issues, 0, {}}).toStdString());
+    CHECK(issues.isEmpty());
+}
+
+// These arms enter their through along a straight run, where the cut at the
+// axis keeps the rings the first column's entry kept, so their mouths stay
+// where they were before the axis cut.
+TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into the through", "[PassageTube][cwPassageTubeJunction]")
+{
+    constexpr float kMouthShiftTolerance = 1e-3f;
+    struct ExpectedMouth {
+        QString casePrefix;
+        int armChain = -1;
+        int keptRings = 0;
+        int mouthSize = 0;
+        QVector3D centroid;
+    };
+    const QVector<ExpectedMouth> expected {
+        {QStringLiteral("1. "), 1, 9, 16, QVector3D(0.6399f, 0.0f, 0.1574f)},
+        {QStringLiteral("5. "), 1, 6, 25, QVector3D(0.7489f, -1.6127f, 0.1090f)},
+        {QStringLiteral("11. "), 1, 10, 16, QVector3D(0.0387f, 0.0f, 0.1572f)},
+        {QStringLiteral("Phake Cave"), 1, 3, 23, QVector3D(22.8123f, 21.6853f, -3.2233f)},
+        {QStringLiteral("Phake Cave"), 2, 15, 19, QVector3D(31.0714f, 8.3039f, -4.4094f)},
+        {QStringLiteral("Phake Cave"), 3, 22, 22, QVector3D(26.8181f, 1.8491f, -30.8821f)},
+    };
+    // Rows of one case sit together, so each case is built once.
+    QString builtPrefix;
+    Builder::Debug debug;
+    for (const ExpectedMouth& mouth : expected) {
+        INFO(mouth.casePrefix.toStdString() << " chain " << mouth.armChain);
+        if (mouth.casePrefix != builtPrefix) {
+            debug = buildCase(galleryCase(mouth.casePrefix));
+            builtPrefix = mouth.casePrefix;
+        }
+        REQUIRE(debug.chains.size() > mouth.armChain);
+        const Builder::Chain& arm = debug.chains.at(mouth.armChain);
+        const QVector<QVector3D> points = mouthOf(arm);
+        CHECK(arm.rings.size() == mouth.keptRings);
+        REQUIRE(points.size() == mouth.mouthSize);
+        QVector3D centroid;
+        for (const QVector3D& point : points) {
+            centroid += point;
+        }
+        centroid /= static_cast<float>(points.size());
+        INFO("centroid (" << centroid.x() << ", " << centroid.y() << ", " << centroid.z() << ")");
+        CHECK((centroid - mouth.centroid).length() <= kMouthShiftTolerance);
     }
 }
