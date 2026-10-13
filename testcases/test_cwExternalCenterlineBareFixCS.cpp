@@ -26,6 +26,7 @@
 #include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
 #include "cwLocalProjectionManager.h"
+#include "cwNodeWarningModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwStationPositionLookup.h"
@@ -453,6 +454,42 @@ TEST_CASE("A native fix on the parent node leaves no system in force at a child 
     CHECK(linePlot->hasSolveError());
     CHECK(linePlot->solveErrorSummary().contains(kInputProjectionError));
     CHECK(bareFixWarnings(root).size() == 1);
+}
+
+TEST_CASE("A bare file fix under a cave shows on the region root's warnings and badge",
+          "[AttachInclude][BareFixCS]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-roll-up"), true);
+    cwCave* main = setUpMainWithNativeFix(fixture.get(), true);
+    cwSurveyNode* root = attachSourceThroughManager(fixture.get(), main, fixturePath(kBareFixFixture));
+    REQUIRE(root->parentNode() == main);
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+    REQUIRE(bareFixWarnings(root).size() == 1);
+
+    cwSurveyNode* regionRoot = fixture->project->cavingRegion()->rootNode();
+    cwNodeWarningModel regionModel;
+    regionModel.setNode(regionRoot);
+
+    const auto rollUpRowFor = [&regionModel](const cwSurveyNode* owner) {
+        for (int row = 0; row < regionModel.count(); ++row) {
+            const QModelIndex index = regionModel.index(row);
+            if (regionModel.data(index, cwNodeWarningModel::NodeRole).value<cwSurveyNode*>() == owner
+                && regionModel.data(index, cwNodeWarningModel::MessageRole).toString()
+                       .contains(QStringLiteral("no coordinate system"))) {
+                return row;
+            }
+        }
+        return -1;
+    };
+
+    CHECK(tryWait(kAttachWaitMs, [&]() { return rollUpRowFor(root) >= 0; }));
+    const int row = rollUpRowFor(root);
+    REQUIRE(row >= 0);
+    CHECK(regionModel.data(regionModel.index(row), cwNodeWarningModel::DetailRole).toString()
+              .contains(root->name()));
+
+    // The region root carries no warning of its own, so its count is the subtree's.
+    CHECK(regionRoot->errorModel()->warningCount() >= 1);
 }
 
 TEST_CASE("A native fix on the node leaves no system in force at its trip attachment's include",

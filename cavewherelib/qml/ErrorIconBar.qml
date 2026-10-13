@@ -6,9 +6,9 @@ import QtQuick.Layouts
 import QtQml.Models as QM
 import cavewherelib
 
-// The badge counts roll up the models beneath this one (a node's trips, a
-// trip's shots); the popover lists only this model's own messages and counts
-// the rest, since those belong to the pages that show them in place.
+// The badge counts roll up the models beneath this one (a node's child nodes
+// and trips, a trip's shots); the popover lists only this model's own messages
+// and counts the rest, since those belong to the pages that show them in place.
 QQ.Item {
     id: itemId
     objectName: "errorIconBar"

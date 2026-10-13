@@ -541,6 +541,81 @@ MainWindowTest {
             compare(tableView.currentIndex, -1, "the page opens with no row selected")
         }
 
+        // ── A descendant's warning reaches every ancestor's page ────────────
+
+        // The Data page's row for `node`, found by the object it shows, since
+        // the tree may sort the rows.
+        function treeRowFor(dataPage, node) {
+            let found = null
+            tryVerify(() => {
+                          for (let row = 0; ; ++row) {
+                              const item = findChild(dataPage, "caveDelegate" + row)
+                              if (item === null) {
+                                  return false
+                              }
+                              if (item.treeView.surveyTree.objectAtRow(row) === node) {
+                                  found = item
+                                  return true
+                              }
+                          }
+                      }, 5000, "the Data page shows a row for " + node.name)
+            return found
+        }
+
+        function test_descendantBareFixRollsUpToEveryAncestor() {
+            saveProjectAs("node-warnings-roll-up")
+            addFixedBesideCave()
+
+            const top = RootData.region.addNode(null, SurveyNodeKind.Folder, "Top")
+            const mid = RootData.region.addNode(top, SurveyNodeKind.Folder, "Mid")
+            verify(top !== null, "the Top folder is added")
+            verify(mid !== null, "the Mid folder is added under Top")
+            attachAndWaitForRow(() => RootData.attachSource(
+                                    mid, TestHelper.testcasesDatasetPath(
+                                        "external-centerlines/survex_blocks.svx")))
+            compare(mid.childNodeCount, 1, "the attach adds a source root under Mid")
+            const sourceRoot = mid.childNode(0)
+            tryVerify(() => sourceRoot.errorModel.warningCount > 0,
+                      20000, "the bare fix warns on its source root")
+
+            // The Data page is the region root's page.
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "dataMainPage",
+                      5000, "the Data page opens")
+            const dataPage = RootData.pageView.currentPageItem
+            waitForRendering(dataPage)
+
+            const topBar = findChild(treeRowFor(dataPage, top), "errorIconBar")
+            verify(topBar !== null, "the Top row carries its error badges")
+            tryVerify(() => findChild(topBar, "warningBadge").visible, 5000,
+                      "the Top row's badge counts the warning two levels below it")
+
+            let dataBanner = null
+            tryVerify(() => {
+                          dataBanner = bannerOn(dataPage)
+                          return dataBanner !== null && dataBanner.visible
+                          && entryContaining(dataBanner, "no coordinate system") !== null
+                      }, 20000, "the Data page's banner rolls up the bare fix below it")
+
+            const rollUp = entryContaining(dataBanner, "no coordinate system")
+            mouseClick(messageLabel(rollUp))
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                      && RootData.pageView.currentPageItem.objectName === "cavePage"
+                      && RootData.pageView.currentPageItem.currentNode === sourceRoot,
+                      5000, "the roll-up opens the page of the node that owns the warning")
+            const ownerBanner = bannerOn(RootData.pageView.currentPageItem)
+            tryVerify(() => entryContaining(ownerBanner, "without a coordinate system") !== null,
+                      5000, "the owner's page lists the warning in full")
+
+            const topPage = gotoCavePage(top)
+            compare(topPage.currentNode, top)
+            const topBanner = bannerOn(topPage)
+            tryVerify(() => topBanner.visible
+                      && entryContaining(topBanner, "no coordinate system") !== null,
+                      20000, "Top's banner rolls up the bare fix below it")
+        }
+
         // ── A bare *fix in an attached file of a georeferenced project ──────
 
         function test_attachedFixWithoutCSEntryOpensFixStations() {

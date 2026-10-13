@@ -12,11 +12,12 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// A survey node's warnings on its page, one line per warning (see
-// NodeWarningModel for which ones). Tapping a line opens where the warning is
-// fixed: a fix-station row (or the Fix Stations page with no row, for row -1),
-// a trip's page, or this node's own source line, which lives on the hosting
-// page and so is raised as sourceLineRequested().
+// A survey node's warnings on its page, one line per warning, then one line per
+// kind of problem in the nodes below it (see NodeWarningModel for which ones).
+// Tapping a line opens where the warning is fixed: a fix-station row (or the Fix
+// Stations page with no row, for row -1), a trip's page, the page of the node
+// below that owns a rolled-up problem, or this node's own source line, which
+// lives on the hosting page and so is raised as sourceLineRequested().
 //
 // The host owns visibility and width: it shows the banner while count > 0 and
 // gives it the width to wrap in. The banner only starts hidden, so it never
@@ -31,7 +32,7 @@ QQ.Rectangle {
 
     signal sourceLineRequested()
 
-    function openTarget(target: int, trip: Trip, fixStationRow: int) {
+    function openTarget(target: int, trip: Trip, fixStationRow: int, owner: SurveyNode) {
         switch (target) {
         case NodeWarningModel.FixStationRow: {
             RootData.pageSelectionModel.currentPageAddress =
@@ -44,6 +45,9 @@ QQ.Rectangle {
         }
         case NodeWarningModel.TripPage:
             RootData.pageSelectionModel.currentPageAddress = linkGeneratorId.tripLink(trip)
+            break
+        case NodeWarningModel.NodePage:
+            RootData.pageSelectionModel.currentPageAddress = linkGeneratorId.nodeLink(owner)
             break
         case NodeWarningModel.SourceLine:
             bannerId.sourceLineRequested()
@@ -82,6 +86,7 @@ QQ.Rectangle {
                 model: NodeWarningModel {
                     id: warningModelId
                     node: bannerId.node
+                    attachedCenterlines: RootData.externalCenterlineManager.attachedCenterlinesModel
                 }
 
                 delegate: ColumnLayout {
@@ -93,6 +98,7 @@ QQ.Rectangle {
                     required property int target
                     required property Trip trip
                     required property int fixStationRow
+                    required property SurveyNode node
 
                     readonly property bool opensTarget: entryId.target !== NodeWarningModel.NoTarget
 
@@ -130,7 +136,8 @@ QQ.Rectangle {
 
                     QQ.TapHandler {
                         enabled: entryId.opensTarget
-                        onTapped: bannerId.openTarget(entryId.target, entryId.trip, entryId.fixStationRow)
+                        onTapped: bannerId.openTarget(entryId.target, entryId.trip,
+                                                      entryId.fixStationRow, entryId.node)
                     }
                 }
             }

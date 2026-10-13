@@ -23,6 +23,10 @@ StandardPage {
 
     readonly property bool isNarrow: width < Theme.breakpointPanelCollapse
 
+    // Drives the banner proxies; never read the banner's own visible, which
+    // the hosting proxy controls (see NodePage.hasWarnings).
+    readonly property bool hasWarnings: warningsBannerId.count > 0
+
     //Must match cwLinkGenerator::nodeLink, which builds the same address.
     function cavePageName(cave) {
         return "Node=" + cave.name;
@@ -463,6 +467,14 @@ StandardPage {
         Layout.fillWidth: true
     }
 
+    // The region root owns no warning, so this lists only the problems of the
+    // nodes below it, each opening the page that owns it.
+    NodeWarningsBanner {
+        id: warningsBannerId
+
+        node: RootData.region.rootNode
+    }
+
     // A window-context Shortcut instead of Keys.onEscapePressed: Esc has to
     // reach the move wherever the focus sits. Live only while this page shows
     // an armed move, so it stays out of the way of every other Escape.
@@ -569,6 +581,11 @@ StandardPage {
                     visible: RegionSurveyTree.moveActive
                     Layout.fillWidth: true
                 }
+                LayoutItemProxy {
+                    target: warningsBannerId
+                    visible: pageId.hasWarnings
+                    Layout.fillWidth: true
+                }
                 LayoutItemProxy { target: caveTreeId }
             }
         }
@@ -596,6 +613,11 @@ StandardPage {
             LayoutItemProxy {
                 target: moveBannerId
                 visible: RegionSurveyTree.moveActive
+                Layout.fillWidth: true
+            }
+            LayoutItemProxy {
+                target: warningsBannerId
+                visible: pageId.hasWarnings
                 Layout.fillWidth: true
             }
             LayoutItemProxy { target: caveTreeId }

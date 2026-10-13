@@ -662,6 +662,9 @@ void cwSurveyNode::connectNode(cwSurveyNode* node)
             node, &cwSurveyNode::scopedPositionsChanged, Qt::UniqueConnection);
     connect(this, &cwSurveyNode::scopedNetworkChanged,
             node, &cwSurveyNode::scopedNetworkChanged, Qt::UniqueConnection);
+
+    //A node's badge counts its whole subtree, the way it counts its trips.
+    node->errorModel()->setParentModel(m_errorModel);
 }
 
 void cwSurveyNode::disconnectNode(cwSurveyNode* node)
@@ -682,6 +685,7 @@ void cwSurveyNode::disconnectNode(cwSurveyNode* node)
                node, &cwSurveyNode::scopedPositionsChanged);
     disconnect(this, &cwSurveyNode::scopedNetworkChanged,
                node, &cwSurveyNode::scopedNetworkChanged);
+    node->errorModel()->setParentModel(nullptr);
 }
 
 void cwSurveyNode::setParentNode(cwSurveyNode* node)

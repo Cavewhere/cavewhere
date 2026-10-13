@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwNodeWarningModel.h"
+#include "cwAttachedCenterlinesModel.h"
 #include "cwAttachedFixModel.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
@@ -15,7 +16,37 @@
 #include "cwSurveyNode.h"
 #include "cwTrip.h"
 
+//Qt includes
+#include <QHash>
+#include <QSet>
+
+//Std includes
+#include <algorithm>
+#include <array>
+
 namespace {
+
+//! Roll-up kinds that are not a warning type: a survey file that failed to read,
+//! and any shown warning with no type of its own.
+constexpr int kFileErrorKind = -1;
+constexpr int kOtherWarningKind = -2;
+
+//! The order the roll-up rows list in: a file that failed to read first, then
+//! what keeps the survey from its place on the map, then the rest.
+constexpr std::array kRollUpKindOrder = {
+    kFileErrorKind,
+    static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS),
+    static_cast<int>(cwErrorTypeId::AttachedFileUnfixed),
+    static_cast<int>(cwErrorTypeId::AttachedFileDefaultDatum),
+    static_cast<int>(cwErrorTypeId::UnconnectedStations),
+    static_cast<int>(cwErrorTypeId::FixStationOutlier),
+    static_cast<int>(cwErrorTypeId::FixStationDomain),
+    static_cast<int>(cwErrorTypeId::FixStationReference),
+    kOtherWarningKind
+};
+
+//! A roll-up row's detail names this many nodes, then counts the rest.
+constexpr int kMaxNamedNodes = 5;
 
 bool isShownWarning(const cwError& error)
 {
@@ -55,6 +86,80 @@ int firstBareFixPageRow(const cwSurveyNode* node, int& rowsAhead)
     return -1;
 }
 
+int rollUpKind(const cwError& error)
+{
+    const int typeId = error.errorTypeId();
+    const bool isTyped = std::find(kRollUpKindOrder.cbegin(), kRollUpKindOrder.cend(), typeId)
+                         != kRollUpKindOrder.cend();
+    return isTyped ? typeId : kOtherWarningKind;
+}
+
+QString countedPhrase(int nodeCount, const QString& singular, const QString& plural)
+{
+    if (nodeCount == 1) {
+        return QStringLiteral("1 node below %1").arg(singular);
+    }
+    return QStringLiteral("%1 nodes below %2").arg(QString::number(nodeCount), plural);
+}
+
+QString rollUpMessage(int kind, int nodeCount)
+{
+    switch (kind) {
+    case kFileErrorKind:
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has a survey file that failed to read."),
+                             QStringLiteral("have survey files that failed to read."));
+    case static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has fixes with no coordinate system."),
+                             QStringLiteral("have fixes with no coordinate system."));
+    case static_cast<int>(cwErrorTypeId::AttachedFileUnfixed):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has a survey file with no fixed station."),
+                             QStringLiteral("have survey files with no fixed station."));
+    case static_cast<int>(cwErrorTypeId::AttachedFileDefaultDatum):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("reads a Compass file in the default datum."),
+                             QStringLiteral("read Compass files in the default datum."));
+    case static_cast<int>(cwErrorTypeId::UnconnectedStations):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has stations that are not tied to the cave."),
+                             QStringLiteral("have stations that are not tied to the cave."));
+    case static_cast<int>(cwErrorTypeId::FixStationOutlier):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has a fix far from the survey."),
+                             QStringLiteral("have fixes far from the survey."));
+    case static_cast<int>(cwErrorTypeId::FixStationDomain):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has a fix outside its coordinate system's area."),
+                             QStringLiteral("have fixes outside their coordinate system's area."));
+    case static_cast<int>(cwErrorTypeId::FixStationReference):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has a fix on a station the survey lacks."),
+                             QStringLiteral("have fixes on stations the survey lacks."));
+    default:
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has other warnings."),
+                             QStringLiteral("have other warnings."));
+    }
+}
+
+QString rollUpDetail(const QList<cwSurveyNode*>& nodes)
+{
+    QStringList names;
+    const int namedCount = std::min(static_cast<int>(nodes.size()), kMaxNamedNodes);
+    names.reserve(namedCount);
+    for (int i = 0; i < namedCount; ++i) {
+        names.append(nodes.at(i)->name());
+    }
+    const QString named = names.join(QStringLiteral(", "));
+    const int unnamedCount = static_cast<int>(nodes.size()) - namedCount;
+    if (unnamedCount > 0) {
+        return QStringLiteral("%1, and %2 more").arg(named, QString::number(unnamedCount));
+    }
+    return named;
+}
+
 } // namespace
 
 cwNodeWarningModel::cwNodeWarningModel(QObject* parent)
@@ -72,7 +177,28 @@ void cwNodeWarningModel::setNode(cwSurveyNode* node)
     connectNode();
     connectTrips();
     emit nodeChanged();
-    rebuild();
+    rebuildWithRollUps();
+}
+
+void cwNodeWarningModel::setAttachedCenterlines(cwAttachedCenterlinesModel* attachedCenterlines)
+{
+    if (m_attachedCenterlines == attachedCenterlines) {
+        return;
+    }
+    disconnectAll(m_attachedCenterlinesConnections);
+    m_attachedCenterlines = attachedCenterlines;
+    if (m_attachedCenterlines != nullptr) {
+        const auto schedule = [this]() { scheduleRebuild(); };
+        m_attachedCenterlinesConnections = {
+            connect(m_attachedCenterlines, &cwAttachedCenterlinesModel::modelReset, this, schedule),
+            connect(m_attachedCenterlines, &cwAttachedCenterlinesModel::rowsInserted, this, schedule),
+            connect(m_attachedCenterlines, &cwAttachedCenterlinesModel::rowsRemoved, this, schedule),
+            connect(m_attachedCenterlines, &cwAttachedCenterlinesModel::dataChanged, this, schedule),
+            connect(m_attachedCenterlines, &QObject::destroyed, this, schedule)
+        };
+    }
+    emit attachedCenterlinesChanged();
+    rebuildWithRollUps();
 }
 
 int cwNodeWarningModel::rowCount(const QModelIndex& parent) const
@@ -98,6 +224,8 @@ QVariant cwNodeWarningModel::data(const QModelIndex& index, int role) const
         return QVariant::fromValue(entry.trip.data());
     case FixStationRowRole:
         return entry.fixStationRow;
+    case NodeRole:
+        return QVariant::fromValue(entry.node.data());
     default:
         return QVariant();
     }
@@ -110,7 +238,8 @@ QHash<int, QByteArray> cwNodeWarningModel::roleNames() const
         { DetailRole, "detail" },
         { TargetRole, "target" },
         { TripRole, "trip" },
-        { FixStationRowRole, "fixStationRow" }
+        { FixStationRowRole, "fixStationRow" },
+        { NodeRole, "node" }
     };
 }
 
@@ -147,12 +276,19 @@ void cwNodeWarningModel::connectNode()
         connect(m_node->attachedFixes(), &cwAttachedFixModel::dataChanged,
                 this, &cwNodeWarningModel::rebuild),
 
+        // The error model counts the whole subtree's warnings, so this fires on
+        // any warning below the node; the structure and names can move without one.
+        connect(m_node->errorModel(), &cwErrorModel::warningCountChanged,
+                this, &cwNodeWarningModel::scheduleRebuild),
+        connect(m_node, &cwSurveyNode::subtreeChanged, this, &cwNodeWarningModel::scheduleRebuild),
+        connect(m_node, &cwSurveyNode::scopeLabelsChanged, this, &cwNodeWarningModel::scheduleRebuild),
+
         // m_node already reads null here, so setNode(nullptr) would return early.
         connect(m_node, &QObject::destroyed, this, [this]() {
             disconnectAll(m_nodeConnections);
             disconnectAll(m_tripConnections);
             emit nodeChanged();
-            rebuild();
+            rebuildWithRollUps();
         })
     };
 }
@@ -186,6 +322,31 @@ void cwNodeWarningModel::disconnectAll(QList<QMetaObject::Connection>& connectio
     connections.clear();
 }
 
+void cwNodeWarningModel::scheduleRebuild()
+{
+    if (m_rebuildScheduled) {
+        return;
+    }
+    m_rebuildScheduled = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        if (m_rebuildScheduled) {
+            rebuildWithRollUps();
+        }
+    }, Qt::QueuedConnection);
+}
+
+void cwNodeWarningModel::rebuildWithRollUps()
+{
+    m_rebuildScheduled = false;
+    if (m_node != nullptr) {
+        m_rollUpEntries = descendantEntries();
+    } else {
+        disconnectAll(m_descendantTripConnections);
+        m_rollUpEntries.clear();
+    }
+    rebuild();
+}
+
 void cwNodeWarningModel::rebuild()
 {
     QList<Entry> entries;
@@ -206,6 +367,8 @@ void cwNodeWarningModel::rebuild()
                 }
             }
         }
+
+        entries.append(m_rollUpEntries);
     }
 
     if (entries == m_entries) {
@@ -268,4 +431,74 @@ cwNodeWarningModel::Entry cwNodeWarningModel::nodeEntry(const cwError& error) co
         }
     }
     return entry;
+}
+
+QList<cwNodeWarningModel::Entry> cwNodeWarningModel::descendantEntries()
+{
+    disconnectAll(m_descendantTripConnections);
+
+    const int unconnectedStations = static_cast<int>(cwErrorTypeId::UnconnectedStations);
+    QHash<int, QList<cwSurveyNode*>> ownersByKind;
+    const QList<cwSurveyNode*> descendants = m_node->allNodes();
+    for (cwSurveyNode* descendant : descendants) {
+        QSet<int> kinds;
+        if (hasFileError(descendant)) {
+            kinds.insert(kFileErrorKind);
+        }
+
+        const QList<cwError> errors = descendant->errorModel()->errors()->toList();
+        for (const cwError& error : errors) {
+            if (isShownWarning(error)) {
+                kinds.insert(rollUpKind(error));
+            }
+        }
+
+        for (const cwTrip* trip : descendant->trips()) {
+            m_descendantTripConnections.append(
+                connect(trip, &cwTrip::externalStationsErrorChanged,
+                        this, &cwNodeWarningModel::scheduleRebuild));
+            const QList<cwError> tripErrors = trip->errorModel()->errors()->toList();
+            for (const cwError& error : tripErrors) {
+                if (isShownWarning(error) && error.errorTypeId() == unconnectedStations) {
+                    kinds.insert(unconnectedStations);
+                }
+            }
+        }
+
+        for (int kind : std::as_const(kinds)) {
+            ownersByKind[kind].append(descendant);
+        }
+    }
+
+    QList<Entry> entries;
+    for (int kind : kRollUpKindOrder) {
+        const QList<cwSurveyNode*> owners = ownersByKind.value(kind);
+        if (owners.isEmpty()) {
+            continue;
+        }
+        Entry entry{rollUpMessage(kind, static_cast<int>(owners.size())),
+                    rollUpDetail(owners),
+                    Target::NodePage};
+        entry.node = owners.first();
+        entries.append(entry);
+    }
+    return entries;
+}
+
+bool cwNodeWarningModel::hasFileError(const cwSurveyNode* node) const
+{
+    const auto attachedError = [this](const QUuid& ownerId) {
+        return m_attachedCenterlines != nullptr
+               && !m_attachedCenterlines->errorFor(ownerId).isEmpty();
+    };
+
+    if (attachedError(node->id())) {
+        return true;
+    }
+    for (const cwTrip* trip : node->trips()) {
+        if (attachedError(trip->id()) || !trip->externalStationsError().isEmpty()) {
+            return true;
+        }
+    }
+    return false;
 }

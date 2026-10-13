@@ -6,6 +6,7 @@
 **************************************************************************/
 
 //Our includes
+#include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwError.h"
@@ -16,12 +17,14 @@
 #include "cwFixStationModel.h"
 #include "cwNodeWarningModel.h"
 #include "cwTrip.h"
+#include "TestHelper.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
 #include <QSignalSpy>
+#include <QUndoStack>
 
 namespace {
 
@@ -55,6 +58,43 @@ QString messageAt(const cwNodeWarningModel& model, int row)
 {
     return roleAt(model, row, cwNodeWarningModel::MessageRole).toString();
 }
+
+QString detailAt(const cwNodeWarningModel& model, int row)
+{
+    return roleAt(model, row, cwNodeWarningModel::DetailRole).toString();
+}
+
+cwSurveyNode* nodeAt(const cwNodeWarningModel& model, int row)
+{
+    return roleAt(model, row, cwNodeWarningModel::NodeRole).value<cwSurveyNode*>();
+}
+
+constexpr QLatin1StringView kRollUpBareFix("no coordinate system");
+
+void warnBareFix(cwSurveyNode* node)
+{
+    node->errorModel()->errors()->setTypedWarning(
+        cwErrorTypeId::AttachedFileFixWithoutCS,
+        QStringLiteral("%1.svx fixes p1 without a coordinate system.").arg(node->name()));
+}
+
+// Region root > Cave "Top" > Folder "Mid" > Folder "Deep".
+struct NestedRegion
+{
+    cwCavingRegion region;
+    QUndoStack undoStack;
+    cwSurveyNode* top = nullptr;
+    cwSurveyNode* mid = nullptr;
+    cwSurveyNode* deep = nullptr;
+
+    NestedRegion()
+    {
+        region.setUndoStack(&undoStack);
+        top = region.addNode(nullptr, cwSurveyNode::Kind::Cave, QStringLiteral("Top"));
+        mid = region.addNode(top, cwSurveyNode::Kind::Folder, QStringLiteral("Mid"));
+        deep = region.addNode(mid, cwSurveyNode::Kind::Folder, QStringLiteral("Deep"));
+    }
+};
 
 } // namespace
 
@@ -242,4 +282,142 @@ TEST_CASE("A node warning model empties when its node is destroyed",
     CHECK(model.node() == nullptr);
     CHECK(model.count() == 0);
     CHECK(nodeSpy.count() == 2);
+}
+
+TEST_CASE("A descendant's warning rolls up to every ancestor's list and opens the node that owns it",
+          "[cwNodeWarningModel]")
+{
+    NestedRegion nested;
+    REQUIRE(nested.deep != nullptr);
+    warnBareFix(nested.deep);
+
+    cwNodeWarningModel rootModel;
+    rootModel.setNode(nested.region.rootNode());
+    cwNodeWarningModel topModel;
+    topModel.setNode(nested.top);
+    cwNodeWarningModel deepModel;
+    deepModel.setNode(nested.deep);
+
+    // The owner lists its own warning in full and nothing rolled up.
+    REQUIRE(deepModel.count() == 1);
+    CHECK(targetAt(deepModel, 0) == Target::FixStationRow);
+    CHECK_FALSE(messageAt(deepModel, 0).contains(kRollUpBareFix));
+
+    // Each ancestor row's badge counts the warning below it.
+    CHECK(nested.mid->errorModel()->warningCount() == 1);
+    CHECK(nested.top->errorModel()->warningCount() == 1);
+    CHECK(nested.region.rootNode()->errorModel()->warningCount() == 1);
+
+    for (const cwNodeWarningModel* model : {&rootModel, &topModel}) {
+        INFO("model on " << model->node()->name().toStdString());
+        CHECK(waitUntil([model]() { return model->count() == 1; }));
+        REQUIRE(model->count() == 1);
+        CHECK(targetAt(*model, 0) == Target::NodePage);
+        CHECK(nodeAt(*model, 0) == nested.deep);
+        INFO("message: " << messageAt(*model, 0).toStdString());
+        CHECK(messageAt(*model, 0).contains(kRollUpBareFix));
+        CHECK(detailAt(*model, 0).contains(QStringLiteral("Deep")));
+    }
+}
+
+TEST_CASE("A roll-up counts every node below with the warning and opens the first",
+          "[cwNodeWarningModel]")
+{
+    NestedRegion nested;
+    cwSurveyNode* later = nested.region.addNode(nested.mid, cwSurveyNode::Kind::Folder,
+                                                QStringLiteral("Later"));
+    REQUIRE(later != nullptr);
+    warnBareFix(later);
+    warnBareFix(nested.deep);
+
+    cwNodeWarningModel rootModel;
+    rootModel.setNode(nested.region.rootNode());
+    CHECK(nested.region.rootNode()->errorModel()->warningCount() == 2);
+
+    CHECK(waitUntil([&rootModel]() { return rootModel.count() == 1; }));
+    REQUIRE(rootModel.count() == 1);
+    const QString message = messageAt(rootModel, 0);
+    INFO("message: " << message.toStdString());
+    CHECK(message.contains(kRollUpBareFix));
+    CHECK(message.contains(QStringLiteral("2 ")));
+    CHECK(detailAt(rootModel, 0).contains(QStringLiteral("Deep")));
+    CHECK(detailAt(rootModel, 0).contains(QStringLiteral("Later")));
+    // Deep comes first in the tree, though Later warned first.
+    CHECK(nodeAt(rootModel, 0) == nested.deep);
+}
+
+TEST_CASE("A roll-up leaves when the descendant's warning is suppressed or its node removed",
+          "[cwNodeWarningModel]")
+{
+    NestedRegion nested;
+    warnBareFix(nested.deep);
+
+    cwNodeWarningModel rootModel;
+    rootModel.setNode(nested.region.rootNode());
+    REQUIRE(waitUntil([&rootModel]() { return rootModel.count() == 1; }));
+
+    SECTION("suppressing the warning drops the roll-up, unsuppressing brings it back")
+    {
+        cwErrorListModel* errors = nested.deep->errorModel()->errors();
+        const auto suppressed = static_cast<int>(cwErrorListModel::ErrorRoles::SuppressedRole);
+        errors->setData(errors->index(0), true, suppressed);
+        CHECK(waitUntil([&rootModel]() { return rootModel.count() == 0; }));
+
+        errors->setData(errors->index(0), false, suppressed);
+        CHECK(waitUntil([&rootModel]() { return rootModel.count() == 1; }));
+        CHECK(nodeAt(rootModel, 0) == nested.deep);
+    }
+
+    SECTION("removing the branch drops the roll-up and the badge, undo restores both")
+    {
+        cwErrorModel* topErrors = nested.top->errorModel();
+        REQUIRE(topErrors->warningCount() == 1);
+
+        nested.top->removeNode(nested.top->indexOfNode(nested.mid));
+        CHECK(waitUntil([&rootModel]() { return rootModel.count() == 0; }));
+        CHECK(topErrors->warningCount() == 0);
+
+        nested.undoStack.undo();
+        CHECK(waitUntil([&rootModel]() { return rootModel.count() == 1; }));
+        CHECK(nodeAt(rootModel, 0) == nested.deep);
+        CHECK(topErrors->warningCount() == 1);
+    }
+}
+
+TEST_CASE("A descendant's file error rolls up and opens the node that holds the file",
+          "[cwNodeWarningModel]")
+{
+    NestedRegion nested;
+    cwAttachedCenterlinesModel attachedCenterlines;
+
+    cwNodeWarningModel rootModel;
+    rootModel.setAttachedCenterlines(&attachedCenterlines);
+    rootModel.setNode(nested.region.rootNode());
+    REQUIRE(rootModel.count() == 0);
+
+    cwAttachedCenterlinesModel::Row row;
+    row.ownerName = QStringLiteral("Deep");
+
+    SECTION("a node's own file")
+    {
+        row.ownerId = nested.deep->id();
+    }
+
+    SECTION("a file attached to one of the node's trips")
+    {
+        nested.deep->addTrip();
+        row.ownerId = nested.deep->trip(0)->id();
+    }
+
+    row.error = QStringLiteral("deep.svx:3: error: Unknown command \"*bogus\"");
+    attachedCenterlines.setRows({row});
+
+    CHECK(waitUntil([&rootModel]() { return rootModel.count() == 1; }));
+    REQUIRE(rootModel.count() == 1);
+    CHECK(targetAt(rootModel, 0) == Target::NodePage);
+    CHECK(nodeAt(rootModel, 0) == nested.deep);
+    CHECK(detailAt(rootModel, 0).contains(QStringLiteral("Deep")));
+
+    attachedCenterlines.setRows({});
+    CHECK(waitUntil([&rootModel]() { return rootModel.count() == 0; }));
 }
