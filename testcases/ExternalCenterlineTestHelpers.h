@@ -61,6 +61,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QTextStream>
 #include <QVariant>
 
 // Std
@@ -173,6 +174,64 @@ inline QString writeFileWithMtime(const QString& path, const QByteArray& content
     REQUIRE(f.open(QFile::ReadWrite));
     REQUIRE(f.setFileTime(mtime, QFileDevice::FileModificationTime));
     return path;
+}
+
+// The shot readings and file names writeSurvexTree() generates.
+namespace generatedSurvexTree {
+
+inline constexpr double kTapeBase = 5.0;
+inline constexpr int kTapeSpread = 7;
+inline constexpr int kSideTapeSpread = 5;
+inline constexpr int kBearingStep = 37;
+inline constexpr int kSideBearingStep = 53;
+inline constexpr int kFileBearingStep = 11;
+inline constexpr int kDegreesPerTurn = 360;
+inline constexpr int kClinoSpread = 9;
+inline constexpr int kClinoCenter = 4;
+
+inline const QString kFilePrefix = QStringLiteral("f");
+
+} // namespace generatedSurvexTree
+
+//! Writes a tree of \a files Survex files under \a dir and returns the entry
+//! file. File k opens `*begin fk`, holds \a shots legs split between its own
+//! block and a nested `side` block, and includes and equates its \a children
+//! files c*k+1 .. c*k+c.
+inline QString writeSurvexTree(const QString& dir, int files, int shots, int children)
+{
+    using namespace generatedSurvexTree;
+    const int half = shots / 2;
+    for (int k = 0; k < files; ++k) {
+        QString text;
+        QTextStream out(&text);
+        out << "*begin " << kFilePrefix << k << "\n";
+        out << "*data normal from to tape compass clino\n";
+        for (int i = 0; i < half; ++i) {
+            out << i << " " << (i + 1) << " " << (kTapeBase + (i % kTapeSpread)) << " "
+                << ((i * kBearingStep + k * kFileBearingStep) % kDegreesPerTurn) << " "
+                << ((i % kClinoSpread) - kClinoCenter) << "\n";
+        }
+        out << "*begin side\n*data normal from to tape compass clino\n";
+        for (int i = 0; i < shots - half; ++i) {
+            out << i << " " << (i + 1) << " " << (kTapeBase + (i % kSideTapeSpread)) << " "
+                << ((i * kSideBearingStep + k * kFileBearingStep) % kDegreesPerTurn) << " "
+                << ((i % kClinoSpread) - kClinoCenter) << "\n";
+        }
+        out << "*end side\n";
+        out << "*equate " << half / 2 << " side.0\n";
+        for (int child = children * k + 1; child <= children * k + children && child < files;
+             ++child) {
+            out << "*include \"" << kFilePrefix << child << ".svx\"\n";
+            out << "*equate " << half << " " << kFilePrefix << child << ".0\n";
+        }
+        out << "*end " << kFilePrefix << k << "\n";
+        out.flush();
+        overwriteFile(QDir(dir).filePath(QStringLiteral("%1%2.svx").arg(kFilePrefix).arg(k)),
+                      text.toUtf8());
+    }
+    const QString entry = QDir(dir).filePath(QStringLiteral("tree.svx"));
+    overwriteFile(entry, QStringLiteral("*include \"%1%2.svx\"\n").arg(kFilePrefix).arg(0).toUtf8());
+    return entry;
 }
 
 inline QByteArray fileContents(const QString& path)

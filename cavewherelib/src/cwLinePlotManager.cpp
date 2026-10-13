@@ -525,6 +525,7 @@ void cwLinePlotManager::waitToFinish()
     // continuations before returning, which is what lets the apply's
     // chained runSurvex land in between.
     m_externalCenterlineManager->waitToFinish();
+    AsyncFuture::waitForFinished(currentRun());
     AsyncFuture::waitForFinished(m_restarter.future());
 }
 
@@ -597,11 +598,12 @@ void cwLinePlotManager::runSurvex() {
   \brief Runs the line plot task now, unconditionally.
   */
 QFuture<void> cwLinePlotManager::doRun() {
-    // Enter Working and drop the pending-dirty marker in one step: a solve now
-    // covers the current data, so the pipeline is Working (not Dirty) until it
-    // completes. Reporting Working — not the synchronously-cleared Dirty — is
-    // what keeps a caller waiting on the returned future from mistaking the
-    // pipeline for "finished" while the solve is still in flight.
+    // Enter Working and drop the pending-dirty marker, so the pipeline reports
+    // Working (not Dirty) while the solve waits for a pending scan and while
+    // it runs. That keeps a caller waiting on the returned future from
+    // mistaking the pipeline for "finished". The solve snapshots the region
+    // later, in startSolveAfterScan(), and clears the marker again there, so
+    // an edit that lands before the snapshot rides the same solve.
     const cwUpdatable::State previousState = updateState();
     m_needsUpdate = false;
     const QFuture<void> solve = beginRun();
@@ -648,50 +650,100 @@ QFuture<void> cwLinePlotManager::doRun() {
         }
 
         Region->setStationPositionsStale(true);
-        m_restarter.restart([this]() {
-            if (Region.isNull()) {
-                finishSolving();
-                return QFuture<cwLinePlotTask::LinePlotResultData>();
-            }
-
-            const auto externalInputs = m_externalCenterlineManager->solveInputs();
-            publishAttachedFixWarnings(externalInputs);
-            auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
-            auto future = cwLinePlotTask::run(std::move(input));
-
-            // Receive the worker's result by parameter rather than capturing
-            // the future and calling future.result() — the parameter form
-            // lets AsyncFuture deliver the value directly, no captured-future
-            // ping-pong. publishResults updates CavernOutputPage state
-            // (log/stats/error + per-chunk markers) on every path; updateLinePlot
-            // only runs on the success path so an error doesn't wipe the last
-            // good line plot. Station positions and cave length/depth therefore
-            // keep their last good values while a solve error stands — the
-            // long-standing contract for native trips, which external owners
-            // share.
-            AsyncFuture::observe(future)
-                .context(this, [this](cwLinePlotTask::LinePlotResultData result) {
-                    publishResults(result);
-                    if (result.hasSolveError()) {
-                        const auto& error = result.solveError();
-                        qWarning() << "Line plot solve failed at step"
-                                   << solveErrorStepName(error.step)
-                                   << "exit code" << error.exitCode << ":" << error.message;
-                    } else {
-                        m_externalCenterlineManager->markSolved(QDateTime::currentDateTime());
-                        updateLinePlot(std::move(result));
-                    }
-                    finishSolving();
-                });
-
-            return future;
-        });
+        scheduleSolve();
     } else {
         // No region: nothing to solve.
         finishSolving();
     }
 
     return solve;
+}
+
+void cwLinePlotManager::scheduleSolve()
+{
+    if (m_solveScheduled) {
+        return;
+    }
+    m_solveScheduled = true;
+
+    // Queued so the scan an attach, a load, or setRegion starts later in the
+    // same call chain is already pending when startSolveAfterScan() looks.
+    QMetaObject::invokeMethod(this, &cwLinePlotManager::startSolveAfterScan, Qt::QueuedConnection);
+}
+
+void cwLinePlotManager::startSolveAfterScan()
+{
+    // A scan fills the attachment dirs, declination flags, and fixed
+    // stations solveInputs() hands the driver, so a solve started now would
+    // publish a plot the scan's own solve request immediately replaces.
+    // A canceled scan reports false too, so the wait always ends.
+    if (m_externalCenterlineManager->isScanning()) {
+        connect(m_externalCenterlineManager, &cwExternalCenterlineManager::scanningChanged,
+                this, &cwLinePlotManager::startSolveAfterScan, Qt::SingleShotConnection);
+        return;
+    }
+    m_solveScheduled = false;
+
+    // doRun()'s empty-region path ended the run this start belonged to, so
+    // no solve is owed.
+    if (!isRunning()) {
+        return;
+    }
+
+    if (Region.isNull()) {
+        finishSolving();
+        return;
+    }
+
+    m_restarter.restart([this]() {
+        if (Region.isNull()) {
+            finishSolving();
+            return QFuture<cwLinePlotTask::LinePlotResultData>();
+        }
+
+        // The snapshot below covers every edit and solve request made so
+        // far, including those since doRun() entered Working.
+        if (m_needsUpdate) {
+            m_needsUpdate = false;
+            emit updateStateChanged();
+        }
+
+        const auto externalInputs = m_externalCenterlineManager->solveInputs();
+        publishAttachedFixWarnings(externalInputs);
+        auto input = cwLinePlotTask::buildInput(Region.data(), externalInputs);
+        auto future = cwLinePlotTask::run(std::move(input));
+
+        // Receive the worker's result by parameter rather than capturing
+        // the future and calling future.result() — the parameter form
+        // lets AsyncFuture deliver the value directly, no captured-future
+        // ping-pong. publishResults updates CavernOutputPage state
+        // (log/stats/error + per-chunk markers) on every path; updateLinePlot
+        // only runs on the success path so an error doesn't wipe the last
+        // good line plot. Station positions and cave length/depth therefore
+        // keep their last good values while a solve error stands — the
+        // long-standing contract for native trips, which external owners
+        // share.
+        AsyncFuture::observe(future)
+            .context(this, [this](cwLinePlotTask::LinePlotResultData result) {
+                publishResults(result);
+                if (result.hasSolveError()) {
+                    const auto& error = result.solveError();
+                    qWarning() << "Line plot solve failed at step"
+                               << solveErrorStepName(error.step)
+                               << "exit code" << error.exitCode << ":" << error.message;
+                } else {
+                    m_externalCenterlineManager->markSolved(QDateTime::currentDateTime());
+                    updateLinePlot(std::move(result));
+                }
+                // An edit during this solve scheduled the next one, which
+                // ends the run instead.
+                if (!m_solveScheduled) {
+                    finishSolving();
+                }
+            });
+
+        return future;
+    });
 }
 
 void cwLinePlotManager::finishSolving() {

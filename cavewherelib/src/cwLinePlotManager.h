@@ -201,6 +201,14 @@ private:
 
     bool m_needsUpdate = false;
 
+    // True from scheduleSolve() until startSolveAfterScan() hands the solve
+    // to m_restarter, so a burst of edits queues one start.
+    bool m_solveScheduled = false;
+
+    //! Starts the solve once the external scan in flight, if any, has applied.
+    void scheduleSolve();
+    void startSolveAfterScan();
+
     // Ends the run (Working -> Clean, or -> Dirty if re-edited mid-solve) and
     // emits updateStateChanged so the coordinator re-evaluates its staleness
     // aggregate. Finishing the run's future is what releases anyone waiting on

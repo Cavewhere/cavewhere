@@ -314,6 +314,16 @@ cwExternalCenterlineManager::cwExternalCenterlineManager(QObject* parent) :
         if (m_futureManagerToken.isValid()) {
             m_futureManagerToken.addJob({ QFuture<void>(m_scanRestarter.future()), QStringLiteral("External centerline scan") });
         }
+
+        // The outer future tracks the apply, so it settles after the apply
+        // has emitted its signals. A newer run in its place keeps the scan
+        // going.
+        const auto settle = [this]() {
+            if (m_scanRestarter.future().isFinished()) {
+                setScanning(false);
+            }
+        };
+        AsyncFuture::observe(m_scanRestarter.future()).context(this, settle, settle);
     });
 }
 
@@ -487,8 +497,18 @@ void cwExternalCenterlineManager::waitToFinish()
     AsyncFuture::waitForFinished(m_scanRestarter.future());
 }
 
+void cwExternalCenterlineManager::setScanning(bool scanning)
+{
+    if (m_scanning == scanning) {
+        return;
+    }
+    m_scanning = scanning;
+    emit scanningChanged();
+}
+
 void cwExternalCenterlineManager::recomputeWatchSet()
 {
+    setScanning(true);
     m_scanRestarter.restart([this]() {
         // Stage 1 (main thread, no I/O): snapshot the per-owner value
         // inputs.
@@ -514,12 +534,11 @@ void cwExternalCenterlineManager::recomputeWatchSet()
         // Stage 3 (main thread): install the result wholesale. A result
         // superseded by a newer restart never lands (the restarter
         // cancels this future), and a result outliving this object is
-        // dropped by the context auto-disconnect.
-        AsyncFuture::observe(future).context(this, [this](ExternalScanResult result) {
+        // dropped by the context auto-disconnect. Canceling the returned
+        // apply future cancels the worker too.
+        return AsyncFuture::observe(future).context(this, [this](ExternalScanResult result) {
             applyScanResult(std::move(result));
-        });
-
-        return future;
+        }).future();
     });
 }
 

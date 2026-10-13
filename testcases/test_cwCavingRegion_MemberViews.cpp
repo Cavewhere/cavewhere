@@ -23,7 +23,6 @@
 #include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
-#include <QTextStream>
 #include <QTimer>
 
 // Std
@@ -54,58 +53,6 @@ constexpr int kBinaryTreeChildren = 2;
 // about fourfold and one built by scanning the whole root about sixteenfold.
 constexpr int kWideTreeChildren = 8;
 constexpr double kMaxStallGrowth = 8.0;
-
-constexpr double kTapeBase = 5.0;
-constexpr int kTapeSpread = 7;
-constexpr int kSideTapeSpread = 5;
-constexpr int kBearingStep = 37;
-constexpr int kSideBearingStep = 53;
-constexpr int kFileBearingStep = 11;
-constexpr int kDegreesPerTurn = 360;
-constexpr int kClinoSpread = 9;
-constexpr int kClinoCenter = 4;
-
-const QString kFilePrefix = QStringLiteral("f");
-
-//! Writes a tree of \a files Survex files under \a dir and returns the entry
-//! file. File k opens `*begin fk`, holds \a shots legs split between its own
-//! block and a nested `side` block, and includes and equates its \a children
-//! files c*k+1 .. c*k+c.
-QString writeSurvexTree(const QString& dir, int files, int shots, int children)
-{
-    const int half = shots / 2;
-    for (int k = 0; k < files; ++k) {
-        QString text;
-        QTextStream out(&text);
-        out << "*begin " << kFilePrefix << k << "\n";
-        out << "*data normal from to tape compass clino\n";
-        for (int i = 0; i < half; ++i) {
-            out << i << " " << (i + 1) << " " << (kTapeBase + (i % kTapeSpread)) << " "
-                << ((i * kBearingStep + k * kFileBearingStep) % kDegreesPerTurn) << " "
-                << ((i % kClinoSpread) - kClinoCenter) << "\n";
-        }
-        out << "*begin side\n*data normal from to tape compass clino\n";
-        for (int i = 0; i < shots - half; ++i) {
-            out << i << " " << (i + 1) << " " << (kTapeBase + (i % kSideTapeSpread)) << " "
-                << ((i * kSideBearingStep + k * kFileBearingStep) % kDegreesPerTurn) << " "
-                << ((i % kClinoSpread) - kClinoCenter) << "\n";
-        }
-        out << "*end side\n";
-        out << "*equate " << half / 2 << " side.0\n";
-        for (int child = children * k + 1; child <= children * k + children && child < files;
-             ++child) {
-            out << "*include \"" << kFilePrefix << child << ".svx\"\n";
-            out << "*equate " << half << " " << kFilePrefix << child << ".0\n";
-        }
-        out << "*end " << kFilePrefix << k << "\n";
-        out.flush();
-        overwriteFile(QDir(dir).filePath(QStringLiteral("%1%2.svx").arg(kFilePrefix).arg(k)),
-                      text.toUtf8());
-    }
-    const QString entry = QDir(dir).filePath(QStringLiteral("tree.svx"));
-    overwriteFile(entry, QStringLiteral("*include \"%1%2.svx\"\n").arg(kFilePrefix).arg(0).toUtf8());
-    return entry;
-}
 
 //! The derived nodes under \a root: every node below it that is no source root.
 QList<const cwSurveyNode*> derivedNodes(const cwSurveyNode* root)

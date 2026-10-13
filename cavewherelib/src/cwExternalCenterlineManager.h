@@ -71,6 +71,7 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineManager : public QObject
 
     Q_PROPERTY(cwAttachedCenterlinesModel* attachedCenterlinesModel READ attachedCenterlinesModel CONSTANT FINAL)
     Q_PROPERTY(cwExternalSourceStatusModel* sourceStatusModel READ sourceStatusModel CONSTANT FINAL)
+    Q_PROPERTY(bool scanning READ isScanning NOTIFY scanningChanged FINAL)
 
 public:
     explicit cwExternalCenterlineManager(QObject* parent = nullptr);
@@ -325,6 +326,11 @@ public:
     // teardown calls this before draining its solve pipeline.
     void cancelScan();
 
+    // True from the moment a recompute starts a scan until that scan has
+    // applied and emitted its signals, or was canceled. A solve started
+    // while this is true reads inputs the scan is about to replace.
+    bool isScanning() const { return m_scanning; }
+
     // Test helper: drains the scan pipeline (snapshot → worker → apply).
     // A solve the apply requested is the consumer's to drain.
     void waitToFinish();
@@ -340,6 +346,8 @@ signals:
     // declination flags changed. The consumer runs its solve here — the
     // ordering guarantees buildInput never reads half-applied flags.
     void solveNeeded();
+
+    void scanningChanged();
 
     // Emitted whenever the set of owners whose in-project copy is missing
     // changes, including the paths it names. QML re-reads
@@ -438,7 +446,8 @@ private:
 
     QPointer<cwCavingRegion> m_region;
 
-    AsyncFuture::Restarter<ExternalScanResult> m_scanRestarter;
+    // Each run's future is the apply's, so it settles once the scan applied.
+    AsyncFuture::Restarter<void> m_scanRestarter;
     cwFutureManagerToken m_futureManagerToken;
 
     cwAttachedCenterlinesModel* m_attachedCenterlinesModel;
@@ -482,6 +491,9 @@ private:
     // paths that used to do recompute-then-solve synchronously. The
     // apply consumes it after the member swap and emits solveNeeded().
     bool m_solveOnScanApply = false;
+
+    bool m_scanning = false;
+    void setScanning(bool scanning);
 
     // Rows from the most recent scan apply; the rename rebuild reuses
     // their dep/warning counts so it never touches the disk.
