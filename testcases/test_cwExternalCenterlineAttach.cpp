@@ -203,11 +203,11 @@ TEST_CASE("attach seeds date, team, and file-owned declination onto a fresh trip
     CHECK(members.at(1).name() == QStringLiteral("Bob"));
 
     // *calibrate declination 7.2 - the file owns it, stored via
-    // setImportedDeclination (manual value, auto off).
-    CHECK(fixture->trip->calibrations()->declinationManual() == Catch::Approx(7.2));
+    // setImportedDeclination (manual value, auto off) as cavern applies it, -7.2.
+    CHECK(fixture->trip->calibrations()->declinationManual() == Catch::Approx(-7.2));
     CHECK_FALSE(fixture->trip->calibrations()->autoDeclination());
     REQUIRE(report.metadata.declination.has_value());
-    CHECK(report.metadata.declination.value() == Catch::Approx(7.2));
+    CHECK(report.metadata.declination.value() == Catch::Approx(-7.2));
 }
 
 TEST_CASE("re-attach never clobbers user-edited trip metadata",

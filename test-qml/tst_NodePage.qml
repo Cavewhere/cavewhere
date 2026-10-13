@@ -483,6 +483,68 @@ MainWindowTest {
             verify(findChild(rootPage, "fixStationsLink").visible, "the root keeps its fix-station row")
         }
 
+        // What each drawn trip row's Decl cell shows, keyed by the trip's name:
+        // "<angle> <caption>", or "—" for the em dash. Waits for `tripCount`.
+        function declinationByTrip(page, view, tripCount) {
+            let cells = {}
+            tryVerify(() => {
+                          cells = {}
+                          let found = 0
+                          for (let row = 0; row < view.rows; row++) {
+                              const nameCell = findChild(page, "tripDelegate" + row)
+                              const declCell = findChild(page, "tripDecl" + row)
+                              if (nameCell === null || declCell === null) {
+                                  continue
+                              }
+                              const name = findChild(nameCell, "tripLink").text.replace("📎 ", "")
+                              const emDash = findChild(declCell, "declinationEmDash")
+                              cells[name] = emDash.visible
+                                      ? emDash.text
+                                      : findChild(declCell, "value").text + " "
+                                        + findChild(declCell, "declinationMode").text
+                              found++
+                          }
+                          return found === tripCount
+                      }, 5000, tripCount + " trip rows should draw their Decl cell")
+            return cells
+        }
+
+        // survex_declination/declination.svx sets the declination one way per
+        // block. Each derived trip row shows what cavern applies to it; the
+        // node row, with no date, shows none.
+        function test_attachedTripRowsShowTheFileDeclination() {
+            const sourceRoot = makeSavedCaveAttach(
+                                 "node-page-declination",
+                                 "external-centerlines/survex_declination/declination.svx")
+            const page = gotoNodePage("Source/Data/Node=AttachedCave", sourceRoot)
+            const view = tree(page, "caveDelegate0")
+            //parent, its trip child, and the root's five trips
+            tryVerify(() => {
+                          for (let row = 0; row < view.rows; row++) {
+                              view.expand(row)
+                          }
+                          return view.rows === 7
+                      }, 5000, "every node of the subtree is open; rows: " + view.rows)
+            waitForRendering(page)
+
+            const cells = declinationByTrip(page, view, 6)
+            compare(cells["fileset"], "-2.5° file", "*calibrate declination 2.5 applies -2.5")
+            compare(cells["modern"], "3.25° file", "*declination 3.25 degrees applies +3.25")
+            compare(cells["child"], "-1° file", "child inherits parent's *calibrate declination 1")
+            verify(cells["autoset"] !== undefined && cells["autoset"].endsWith("° file auto"),
+                   "*declination auto reads as IGRF from the file: " + cells["autoset"])
+            compare(cells["silent"], "0° none", "a block that sets nothing applies 0")
+            const emDashTrips = Object.keys(cells).filter(name => cells[name] === "—")
+            compare(emDashTrips, ["mixed"],
+                    "only the block that changes declination mid-block has no one value")
+
+            for (let row = 0; row < view.rows; row++) {
+                const nodeDecl = findChild(page, "caveDecl" + row)
+                verify(nodeDecl === null || findChild(nodeDecl, "declinationMode") === null,
+                       "a node row draws no declination")
+            }
+        }
+
         // A sourced node takes native trips and sections and further files,
         // never a trip copied from a file of its own.
         function test_addVerbsOnASourcedNode() {

@@ -9,6 +9,7 @@
 #define CWEXTERNALCENTERLINESCANNER_H
 
 //Our includes
+#include "cwFileDeclination.h"
 #include "cwGlobals.h"
 #include "cwSurveyNodeKind.h"
 #include <Monad/Result.h>
@@ -187,6 +188,9 @@ public:
     int stationCount = 0;
     QDate date;
     QStringList stations;
+    //! The declination cavern applies to the unit's shots, Unknown when they
+    //! take more than one; meaningful on unit rows only.
+    cwFileDeclination declination;
 
     bool operator==(const cwScanRow& other) const = default;
 };
@@ -242,8 +246,9 @@ enum class Format {
  *   date        - Survex *date (yyyy.mm.dd / yyyy-mm-dd),
  *                 Compass "SURVEY DATE: M D YYYY",
  *                 Walls #DATE YYYY-MM-DD
- *   declination - Survex *calibrate declination <deg> or
- *                 *declination <deg> <units> / *declination auto,
+ *   declination - Survex *calibrate declination <deg> (which cavern
+ *                 applies as -<deg>) or *declination <deg> <units> /
+ *                 *declination auto,
  *                 Compass "DECLINATION: <deg>" header field,
  *                 Walls #UNITS DECL=<deg>
  *   team        - one entry per person: Survex *team lines,
@@ -258,7 +263,7 @@ enum class Format {
  */
 struct SeededTripMetadata {
     std::optional<QDate> date = std::nullopt;
-    std::optional<double> declination = std::nullopt;  // degrees, positive east
+    std::optional<double> declination = std::nullopt;  // degrees east, as cavern applies it
     bool declinationIsAuto = false;
     QStringList team;
 
@@ -541,6 +546,14 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryF
  * path returns Monad::Result error.
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanWalls(const QString& entryFile);
+
+/**
+ * The declination the driver leaves an attached trip's file to apply: the one
+ * value every unit of \a scan carries, or Unknown when they differ or there is
+ * no unit. A unit that sets nothing is Inherited when the file owns no
+ * declination, since the driver then injects the trip's own calibration.
+ */
+CAVEWHERE_LIB_EXPORT cwFileDeclination attachmentDeclination(const ScanResult& scan);
 
 /**
  * The file a Compass .mak's '#' line names, resolved against the .mak's

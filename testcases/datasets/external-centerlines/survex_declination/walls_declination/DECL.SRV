@@ -1,0 +1,6 @@
+; Walls declination fixture: a dated .srv with no .REF, so cavern applies
+; the #UNITS DECL as written.
+#DATE 2020-06-01
+#UNITS D=Meters A=Degrees V=Degrees DECL=3.5
+W1	W2	10.0	0	0
+W2	W3	10.0	90	0

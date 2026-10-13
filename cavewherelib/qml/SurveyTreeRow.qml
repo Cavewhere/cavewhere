@@ -57,7 +57,7 @@ QQ.Item {
     required property UnitValue depthValue
     required property date dateValue
     required property real declination
-    required property bool autoDeclination
+    required property int declinationOrigin
     required property bool muted
     required property bool hasSurveyContent
 
@@ -604,9 +604,9 @@ QQ.Item {
     }
 
     //Only a trip carries a declination, and it reads the way the cave page's
-    //trip table reads it: the angle, then whether it was picked automatically.
-    //An externally backed trip takes its declination from its file, where each
-    //block may set its own, so the row has no one angle to show.
+    //trip table reads it: the angle, then where it comes from. An externally
+    //backed trip shows the angle cavern applies to it from its file, and an em
+    //dash only when the scan cannot tell which one that is.
     QQ.Component {
         id: declinationCellComponent
 
@@ -618,28 +618,45 @@ QQ.Item {
             RowLayout {
                 id: declRowId
 
+                readonly property bool known: rowId.declinationOrigin !== SurveyTreeModel.DeclinationUnknown
+
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Theme.tightSpacing
 
                 QC.Label {
                     objectName: rowId.cellName("value")
-                    visible: !rowId.externallyBacked
+                    visible: declRowId.known
                     text: Utils.fixed(rowId.declination, 2) + "°"
                     color: rowId.textColor
                 }
 
                 QC.Label {
                     objectName: rowId.cellName("declinationMode")
-                    visible: !rowId.externallyBacked
-                    text: rowId.autoDeclination ? qsTr("auto") : qsTr("manual")
+                    visible: declRowId.known
+                    text: {
+                        switch (rowId.declinationOrigin) {
+                        case SurveyTreeModel.DeclinationAuto:
+                            return qsTr("auto")
+                        case SurveyTreeModel.DeclinationManual:
+                            return qsTr("manual")
+                        case SurveyTreeModel.DeclinationFile:
+                            return qsTr("file")
+                        case SurveyTreeModel.DeclinationFileAuto:
+                            return qsTr("file auto")
+                        case SurveyTreeModel.DeclinationNone:
+                            return qsTr("none")
+                        default:
+                            return ""
+                        }
+                    }
                     color: Theme.textSubtle
                     font.pixelSize: Theme.fontSizeCaption
                 }
 
                 QC.Label {
                     objectName: rowId.cellName("declinationEmDash")
-                    visible: rowId.externallyBacked
+                    visible: !declRowId.known
                     text: "—"
                     color: Theme.textSubtle
                 }

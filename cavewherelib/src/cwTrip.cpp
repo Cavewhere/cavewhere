@@ -20,6 +20,8 @@
 #include "cwNameUtils.h"
 #include "cwCavernNaming.h"
 #include "cwScopeLabels.h"
+#include "cwDeclination.h"
+#include "cwSurvexCS.h"
 
 //Qt includes
 #include <QDebug>
@@ -139,6 +141,13 @@ cwTrip::cwTrip(QObject *parent) :
     connect(this, &cwTrip::solvedStationsChanged, this, &cwTrip::knownStationsChanged);
     connect(this, &cwTrip::externalStationsChanged, this, &cwTrip::knownStationsChanged);
 
+    //An auto's IGRF value is read on the trip's date.
+    connect(this, &cwTrip::dateChanged, this, [this]() {
+        if (refreshFileDeclinationDegrees()) {
+            emit fileDeclinationChanged();
+        }
+    });
+
 //    qDebug() << "Creating:" << this;
 }
 
@@ -255,6 +264,59 @@ void cwTrip::setCavernLabel(const QString& label)
     }
     m_cavernLabel = label;
     emit scopeChanged();
+}
+
+void cwTrip::setFileDeclination(const cwFileDeclination& declination)
+{
+    if (m_fileDeclination == declination) {
+        return;
+    }
+    m_fileDeclination = declination;
+    refreshFileDeclinationDegrees();
+    emit fileDeclinationChanged();
+}
+
+bool cwTrip::refreshFileDeclinationDegrees()
+{
+    const auto resolve = [this]() -> std::optional<double> {
+        using Kind = cwFileDeclination::Kind;
+        switch (m_fileDeclination.kind) {
+        case Kind::Value:
+            return m_fileDeclination.degrees;
+        case Kind::None:
+            return 0.0;
+        case Kind::Auto: {
+            //A *cs argument as a Survex file writes it, or the PROJ string a
+            //Compass base location's datum and zone name.
+            const QString& system = m_fileDeclination.autoCoordinateSystem;
+            const std::optional<cwSurvexCS::Parsed> parsed = cwSurvexCS::fromSurvexCS(system);
+            const QString projCS = parsed.has_value() ? parsed->projCS : system;
+            if (projCS.isEmpty() || !date().isValid()) {
+                return std::nullopt;
+            }
+            cwGeoPoint location = m_fileDeclination.autoLocation;
+            if (parsed.has_value() && parsed->latitudeFirst) {
+                std::swap(location.x, location.y);
+            }
+            const Monad::Result<double> igrf = cwDeclination::compute(location, projCS, date());
+            if (igrf.hasError()) {
+                return std::nullopt;
+            }
+            return igrf.value();
+        }
+        case Kind::Unknown:
+        case Kind::Inherited:
+            break;
+        }
+        return std::nullopt;
+    };
+
+    const std::optional<double> degrees = resolve();
+    if (m_fileDeclinationDegrees == degrees) {
+        return false;
+    }
+    m_fileDeclinationDegrees = degrees;
+    return true;
 }
 
 void cwTrip::setAttachedFixes(const QList<cwAttachedFix>& fixes)

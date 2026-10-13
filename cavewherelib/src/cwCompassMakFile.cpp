@@ -453,6 +453,7 @@ Project parse(const QString& text)
             reference.datum = datum;
             reference.zone = zone;
             reference.namesSystem = namesSystem;
+            reference.namesDatum = hasDatumLine;
             reference.baseLocation = base;
             while (!reader.atEnd() && reader.peek() != QLatin1Char(';')) {
                 reader.advance();

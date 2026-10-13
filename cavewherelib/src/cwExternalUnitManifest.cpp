@@ -218,7 +218,9 @@ SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase)
             sorted.append((preserveCase ? station : key).sliced(rowPath.size()));
         }
         sorted.sort();
-        view.unitStations.insert(cwExternalCenterlineAttach::unitSourcePath(row), sorted);
+        const QString unitSourcePath = cwExternalCenterlineAttach::unitSourcePath(row);
+        view.unitStations.insert(unitSourcePath, sorted);
+        view.unitDeclinations.insert(unitSourcePath, row.declination);
     }
     return view;
 }

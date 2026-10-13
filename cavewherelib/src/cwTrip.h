@@ -15,6 +15,7 @@
 #include "cwStationHandle.h"
 #include "cwGlobals.h"
 #include "cwExternalCenterline.h"
+#include "cwFileDeclination.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
 #include "cwTripData.h"
@@ -151,6 +152,18 @@ public:
     //! than a node. Empty for every other trip. Derived like externalStations().
     QString cavernLabel() const { return m_cavernLabel; }
     void setCavernLabel(const QString& label);
+
+    //! The declination an externally backed trip's file leaves cavern to
+    //! apply to its shots, from the scan: its unit's for a derived trip, the
+    //! one every unit agrees on for a trip-level attachment. Unknown for every
+    //! other trip. Derived like externalStations().
+    cwFileDeclination fileDeclination() const { return m_fileDeclination; }
+    void setFileDeclination(const cwFileDeclination& declination);
+
+    //! fileDeclination() in degrees east on this trip's date: the value, 0
+    //! for a file that sets none, IGRF for an auto. Empty when it is Unknown
+    //! or Inherited, or IGRF has no answer for the auto's point and date.
+    std::optional<double> fileDeclinationDegrees() const { return m_fileDeclinationDegrees; }
 
     //! The fixes this derived trip's leaf Survex block carries, as the attach
     //! scan read them, for the Fix Stations page to list read-only under the
@@ -435,6 +448,9 @@ signals:
 
     void solvedLengthChanged();
 
+    //! fileDeclination() or fileDeclinationDegrees() changed.
+    void fileDeclinationChanged();
+
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
 
@@ -471,6 +487,8 @@ protected:
     QStringList m_externalStations;
     QString m_externalStationsError;
     QString m_cavernLabel;
+    cwFileDeclination m_fileDeclination;
+    std::optional<double> m_fileDeclinationDegrees;
     double m_solvedLength = 0.0;
     cwAttachedFixModel* const m_attachedFixes;
 
@@ -482,6 +500,10 @@ private:
     //A trip moving between nodes is renamed while no node lists it, as part of
     //the node's own move command, so the rename and the move undo as one.
     friend class cwSurveyNode;
+
+    //Re-reads fileDeclinationDegrees() from fileDeclination() on date(),
+    //returning whether it changed.
+    bool refreshFileDeclinationDegrees();
 
     // void Copy(const cwTrip& object);
 

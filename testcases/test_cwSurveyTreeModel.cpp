@@ -423,10 +423,11 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         //and resolves to nothing without a fix station, which is the "manual"
         //the cave page shows.
         dataChanged.clear();
-        CHECK(model.data(topo3Index, cwSurveyTreeModel::AutoDeclinationRole).toBool() == false);
+        CHECK(model.data(topo3Index, cwSurveyTreeModel::DeclinationOriginRole).toInt()
+              == cwSurveyTreeModel::DeclinationManual);
 
         topo3->calibrations()->setAutoDeclination(false);
-        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Decl, cwSurveyTreeModel::AutoDeclinationRole));
+        CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Decl, cwSurveyTreeModel::DeclinationOriginRole));
 
         dataChanged.clear();
         topo3->calibrations()->setDeclinationManual(kDeclination);
@@ -434,11 +435,12 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
               == Catch::Approx(kDeclination));
         CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Decl, cwSurveyTreeModel::DeclinationRole));
 
-        //A node row states zero and manual, so a delegate's typed cell always
-        //has a value to show
+        //A node row states zero with an unknown origin, so a delegate's typed
+        //cell always has a value to show
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::DeclinationRole).toDouble()
               == Catch::Approx(0.0));
-        CHECK(model.data(alphaIndex, cwSurveyTreeModel::AutoDeclinationRole).toBool() == false);
+        CHECK(model.data(alphaIndex, cwSurveyTreeModel::DeclinationOriginRole).toInt()
+              == cwSurveyTreeModel::DeclinationUnknown);
     }
 
     SECTION("a trip row names its stations while a node row counts them") {

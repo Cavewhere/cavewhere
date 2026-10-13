@@ -71,10 +71,14 @@ namespace {
     }
 
     //! The declination of \a index's row. A node row holds trips declinated
-    //! many ways, so it carries none.
+    //! many ways, and a trip whose file the scan reads none from shows an em
+    //! dash; both name their origin unknown and carry none.
     std::optional<double> rowDeclination(const QModelIndex& index)
     {
-        if(isNodeRow(index)) { return std::nullopt; }
+        if(index.data(cwSurveyTreeModel::DeclinationOriginRole).toInt()
+           == cwSurveyTreeModel::DeclinationUnknown) {
+            return std::nullopt;
+        }
         return index.data(cwSurveyTreeModel::DeclinationRole).toDouble();
     }
 

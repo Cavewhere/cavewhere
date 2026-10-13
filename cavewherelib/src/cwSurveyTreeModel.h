@@ -85,12 +85,23 @@ public:
         DepthValueRole,
         DateRole,
         DeclinationRole,
-        AutoDeclinationRole,
+        DeclinationOriginRole, //!< Where a trip row's DeclinationRole comes from, a DeclinationOrigin
         MutedRole,
         NameRole,
         HasSurveyContentRole //!< False for a sourced node with no trip under it, which draws gray
     };
     Q_ENUM(RoleItem)
+
+    //! Where the declination a trip row shows comes from.
+    enum DeclinationOrigin {
+        DeclinationAuto,     //!< The trip's calibration, picked by IGRF
+        DeclinationManual,   //!< The trip's calibration, typed in
+        DeclinationFile,     //!< The attached file sets a value
+        DeclinationFileAuto, //!< The attached file asks cavern for IGRF
+        DeclinationNone,     //!< The attached file sets nothing, so cavern applies 0
+        DeclinationUnknown   //!< The scan cannot tell
+    };
+    Q_ENUM(DeclinationOrigin)
 
     explicit cwSurveyTreeModel(QObject* parent = nullptr);
     ~cwSurveyTreeModel();

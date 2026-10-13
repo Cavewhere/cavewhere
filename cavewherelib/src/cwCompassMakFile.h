@@ -75,6 +75,11 @@ struct DatReference {
     //! True once a '&' or '$' line came before this one, after which the
     //! system around the .mak no longer stands for this one's.
     bool namesSystem = false;
+    //! True once a '&' line came before this one. Only a named datum lets
+    //! cavern read the base location, so only then does it take the
+    //! declination from IGRF there instead of from each DAT section's header;
+    //! Compass's defaulted datum is CaveWhere's alone.
+    bool namesDatum = false;
     //! The last base location before this line.
     std::optional<BaseLocation> baseLocation;
     //! Stations listed without a bracket, in order.

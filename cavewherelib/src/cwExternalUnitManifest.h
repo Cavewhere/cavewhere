@@ -54,11 +54,15 @@ CAVEWHERE_LIB_EXPORT Monad::Result<QList<cwScanRow>> read(const QString& path);
  * reads a Compass or Walls file; otherwise names are canonical, as cavern
  * reads a Survex file under its default *case lower. Either way they are the
  * spelling an *equate operand needs to name the station.
+ *
+ * unitDeclinations holds each unit's cwScanRow::declination under the same
+ * key as unitStations, for the derived trip's row to show.
  */
 struct SolveView {
     QHash<QString, QString> cavernLabels;
     QHash<QString, QString> tripCavernLabels;
     QHash<QString, QStringList> unitStations;
+    QHash<QString, cwFileDeclination> unitDeclinations;
 
     bool operator==(const SolveView& other) const = default;
 };

@@ -102,6 +102,8 @@ TEST_CASE("units.json round-trips a scanned Compass project", "[Manifest]")
         for (QString& station : expected.stations) {
             station = station.toLower();
         }
+        // units.json leaves the declination to the scan the solve reads.
+        expected.declination = cwFileDeclination();
         CHECK(read.value().at(i) == expected);
     }
     // The station ALPHA's two surveys share reads back in both units.

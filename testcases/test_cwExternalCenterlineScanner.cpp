@@ -501,7 +501,9 @@ TEST_CASE("seededMetadata populates date, team, and declination from a Survex en
     REQUIRE(scan.seededMetadata.date.has_value());
     CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
     REQUIRE(scan.seededMetadata.declination.has_value());
-    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    // *calibrate declination 7.2 corrects bearings by -7.2: the seed stores
+    // the declination as cavern applies it.
+    CHECK(scan.seededMetadata.declination.value() == -7.2);
     // One entry per *team line
     CHECK(scan.seededMetadata.team
           == QStringList({QStringLiteral("Alice"), QStringLiteral("Bob")}));
@@ -791,7 +793,7 @@ TEST_CASE("seededMetadata parses CRLF-terminated files",
     REQUIRE(scan.seededMetadata.date.has_value());
     CHECK(scan.seededMetadata.date.value() == QDate(2025, 6, 1));
     REQUIRE(scan.seededMetadata.declination.has_value());
-    CHECK(scan.seededMetadata.declination.value() == 7.2);
+    CHECK(scan.seededMetadata.declination.value() == -7.2);
     CHECK(scan.seededMetadata.team == QStringList({QStringLiteral("Alice")}));
 }
 
@@ -2398,4 +2400,125 @@ TEST_CASE("A Survex file included from two scopes is scanned in each of them",
     CHECK(dependenciesUnder(scan, kBlockRowsDir)
           == QStringList({QStringLiteral("shared_scopes.svx"), QStringLiteral("shared.svx")}));
     CHECK(scan.warnings.isEmpty());
+}
+
+namespace {
+
+const QString kDeclinationDir = QStringLiteral("survex_declination");
+
+//! A unit's declination in a form a comparison prints readably: the kind, then
+//! the degrees for a Value and the location and system for an Auto.
+QString describe(const cwFileDeclination& declination)
+{
+    using DeclinationKind = cwFileDeclination::Kind;
+    switch (declination.kind) {
+    case DeclinationKind::Unknown:
+        return QStringLiteral("Unknown");
+    case DeclinationKind::Inherited:
+        return QStringLiteral("Inherited");
+    case DeclinationKind::None:
+        return QStringLiteral("None");
+    case DeclinationKind::Value:
+        return QStringLiteral("Value %1").arg(declination.degrees);
+    case DeclinationKind::Auto:
+        return QStringLiteral("Auto %1 %2 %3 %4")
+            .arg(declination.autoLocation.x, 0, 'f', 0)
+            .arg(declination.autoLocation.y, 0, 'f', 0)
+            .arg(declination.autoLocation.z, 0, 'f', 0)
+            .arg(declination.autoCoordinateSystem);
+    }
+    return QString();
+}
+
+std::string unitDeclination(const ScanResult& scan, const QString& sourcePath)
+{
+    const cwScanRow row = rowAt(scan, sourcePath);
+    REQUIRE(row.isUnit);
+    return describe(row.declination).toStdString();
+}
+
+//! The sourcePaths of the units whose declination the scan cannot tell, joined with ", ".
+std::string unknownUnits(const ScanResult& scan)
+{
+    QStringList sourcePaths;
+    for (const cwScanRow& row : scan.rows) {
+        if (row.isUnit && row.declination.kind == cwFileDeclination::Kind::Unknown) {
+            sourcePaths.append(row.sourcePath);
+        }
+    }
+    return sourcePaths.join(QStringLiteral(", ")).toStdString();
+}
+
+} // namespace
+
+TEST_CASE("Each Survex unit carries the declination cavern applies to its shots",
+          "[Scanner][Survex][Declination]")
+{
+    const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/declination.svx"));
+
+    // *calibrate declination X corrects bearings by -X; *declination D by +D.
+    CHECK(unitDeclination(scan, QStringLiteral("fileset")) == "Value -2.5");
+    CHECK(unitDeclination(scan, QStringLiteral("modern")) == "Value 3.25");
+    // *declination auto reads its point in the *cs in force, as written.
+    CHECK(unitDeclination(scan, QStringLiteral("autoset"))
+          == "Auto 600000 4100000 200 EPSG:32616");
+    // A block that sets nothing gets cavern's default of 0.
+    CHECK(unitDeclination(scan, QStringLiteral("silent")) == "None");
+    // A nested block inherits its parent's directive.
+    CHECK(unitDeclination(scan, QStringLiteral("parent/child")) == "Value -1");
+    // Only the unit whose shots take two declinations has no one value.
+    CHECK(unknownUnits(scan) == "mixed");
+}
+
+TEST_CASE("A Compass base location with a named datum makes each section IGRF auto",
+          "[Scanner][Compass][Declination]")
+{
+    const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/compass_declination/PROJ.MAK"));
+
+    // Cavern ignores the DECLINATION headers once '@' and '&' are both in force.
+    const std::string expected = "Auto 600000 4100000 200 EPSG:32616";
+    CHECK(unitDeclination(scan, QStringLiteral("A.DAT/A1")) == expected);
+    CHECK(unitDeclination(scan, QStringLiteral("A.DAT/A2")) == expected);
+}
+
+TEST_CASE("A Compass base location without a datum leaves each section its header's declination",
+          "[Scanner][Compass][Declination]")
+{
+    const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/compass_declination/NODATUM.MAK"));
+
+    CHECK(unitDeclination(scan, QStringLiteral("A.DAT/A1")) == "Value 4");
+    CHECK(unitDeclination(scan, QStringLiteral("A.DAT/A2")) == "Value 5.5");
+}
+
+TEST_CASE("A Compass .dat on its own carries each section's header declination",
+          "[Scanner][Compass][Declination]")
+{
+    const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/compass_declination/A.DAT"));
+
+    CHECK(unitDeclination(scan, QStringLiteral("A1")) == "Value 4");
+    CHECK(unitDeclination(scan, QStringLiteral("A2")) == "Value 5.5");
+}
+
+TEST_CASE("A Walls unit carries its #UNITS DECL",
+          "[Scanner][Walls][Declination]")
+{
+    const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/walls_declination/DECL.SRV"));
+
+    CHECK(unitDeclination(scan, QStringLiteral("DECL")) == "Value 3.5");
+}
+
+TEST_CASE("A Walls #UNITS RESTORE brings back the declination SAVE kept",
+          "[Scanner][Walls][Declination]")
+{
+    const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/walls_declination/SAVE.SRV"));
+
+    CHECK(unitDeclination(scan, QStringLiteral("SAVE")) == "Value 3.5");
+}
+
+TEST_CASE("A Survex passage line leaves the unit's declination to its shots",
+          "[Scanner][Survex][Declination]")
+{
+    const ScanResult scan = scanFixture(kDeclinationDir + QStringLiteral("/passage.svx"));
+
+    CHECK(unitDeclination(scan, QStringLiteral("lrud")) == "Value -2");
 }

@@ -441,6 +441,9 @@ private:
         // trips' unit station sets, from the rows of the scan above (the
         // rows units.json holds, in the file's own spelling).
         QHash<QUuid, cwExternalUnitManifest::SolveView> sourceViews;
+        // Per trip owner, the declination its file leaves cavern to apply
+        // (cwExternalCenterlineScanner::attachmentDeclination).
+        QHash<QUuid, cwFileDeclination> tripDeclinations;
         QVector<cwAttachedCenterlinesModel::Row> rows;
     };
 

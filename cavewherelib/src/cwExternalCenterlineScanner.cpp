@@ -26,6 +26,7 @@
 //Std includes
 #include <array>
 #include <cstdlib>
+#include <utility>
 
 namespace {
 
@@ -386,6 +387,202 @@ const QRegularExpression& survexDateRegex()
     return regex;
 }
 
+// "*calibrate declination <zero error> [<units>]"
+const QRegularExpression& survexCalibrateDeclinationRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*calibrate\s+declination\s+(\S+)(?:\s+(\S+))?)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "*declination <value> [<units>]" or "*declination auto <x> <y> <z>", the
+// modern replacement for *calibrate declination.
+const QRegularExpression& survexDeclinationRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*declination\s+(\S+)(?:\s+(\S+))?)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+const QRegularExpression& survexDeclinationAutoRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*declination\s+auto\s+(\S+)\s+(\S+)\s+(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "*calibrate default" and its older spelling "*default calibrate", which put
+// every calibration back to cavern's defaults.
+const QRegularExpression& survexCalibrateDefaultRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^\*(?:calibrate\s+default|default\s+calibrate)\b)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "DECLINATION: 7.20  FORMAT: ...", a Compass survey header's field.
+// Captures any token so a non-numeric value reads as unparseable rather
+// than as no declination.
+const QRegularExpression& compassDeclinationRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(^DECLINATION:\s*(\S+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "decl=3.5" among a Walls #UNITS line's or a .wpj entry's options.
+const QRegularExpression& wallsDeclinationOptionRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(\bdecl\s*=\s*([^\s;]+))RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "reset" among a Walls #UNITS line's options, which puts every unit back to
+// its default, a declination of 0 among them.
+const QRegularExpression& wallsResetOptionRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(\breset\b)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+// "save" or "restore" among a Walls #UNITS line's options, which push and pop
+// the units in force, the declination among them.
+const QRegularExpression& wallsSaveRestoreOptionRegex()
+{
+    static const QRegularExpression regex(
+        QStringLiteral(R"RX(\b(save|restore)\b)RX"),
+        QRegularExpression::CaseInsensitiveOption);
+    return regex;
+}
+
+constexpr int kAutoPointComponents = 3;
+// The sign cavern applies each Survex declination command's value with:
+// *calibrate declination X corrects bearings by -X, *declination D by +D.
+constexpr double kCalibrateDeclinationSign = -1.0;
+constexpr double kDeclinationCommandSign = 1.0;
+
+// True when \a units names degrees, which an angle is read in when it names none.
+bool namesDegrees(const QString& units)
+{
+    return units.isEmpty() || units.startsWith(QLatin1String("deg"), Qt::CaseInsensitive);
+}
+
+/**
+ * The declination a Survex command line puts in force, or nothing when the
+ * line sets none the scan can read. *declination auto asks for IGRF at a point
+ * read in \a coordinateSystem, the *cs in force; cavern refuses it without
+ * one, so the scan cannot tell what applies. A value in units other than
+ * degrees is left Unknown too.
+ */
+std::optional<cwFileDeclination> survexDeclination(const QString& line,
+                                                   const QString& coordinateSystem)
+{
+    using Kind = cwFileDeclination::Kind;
+    if (survexCalibrateDefaultRegex().match(line).hasMatch()) {
+        return cwFileDeclination{Kind::None};
+    }
+
+    if (const auto match = survexDeclinationAutoRegex().match(line); match.hasMatch()) {
+        std::array<double, kAutoPointComponents> point {};
+        for (int i = 0; i < kAutoPointComponents; ++i) {
+            bool ok = false;
+            point[i] = match.captured(i + 1).toDouble(&ok);
+            if (!ok) {
+                return std::nullopt;
+            }
+        }
+        if (coordinateSystem.isEmpty()) {
+            return cwFileDeclination{};
+        }
+        return cwFileDeclination{Kind::Auto, 0.0, cwGeoPoint(point[0], point[1], point[2]),
+                                 coordinateSystem};
+    }
+
+    const auto valueDeclination = [](const QRegularExpressionMatch& match, double sign)
+        -> std::optional<cwFileDeclination> {
+        bool ok = false;
+        const double value = match.captured(1).toDouble(&ok);
+        if (!ok) {
+            return std::nullopt;
+        }
+        const QString units = match.captured(2);
+        bool unitsIsNumber = false;
+        units.toDouble(&unitsIsNumber);
+        if (!unitsIsNumber && !namesDegrees(units)) {
+            return cwFileDeclination{};
+        }
+        return cwFileDeclination{Kind::Value, sign * value};
+    };
+
+    if (const auto match = survexCalibrateDeclinationRegex().match(line); match.hasMatch()) {
+        return valueDeclination(match, kCalibrateDeclinationSign);
+    }
+    if (const auto match = survexDeclinationRegex().match(line); match.hasMatch()) {
+        return valueDeclination(match, kDeclinationCommandSign);
+    }
+    return std::nullopt;
+}
+
+/**
+ * Applies a Walls option string's "reset" and "decl=" to \a declination, in
+ * that order. cavern applies DECL= as written; a value the scan cannot read
+ * as degrees (the "7:30" degree-minute form) leaves it Unknown.
+ */
+void applyWallsDeclinationOptions(const QString& text, cwFileDeclination& declination)
+{
+    if (wallsResetOptionRegex().match(text).hasMatch()) {
+        declination = {cwFileDeclination::Kind::None};
+    }
+    const auto match = wallsDeclinationOptionRegex().match(text);
+    if (!match.hasMatch()) {
+        return;
+    }
+    bool ok = false;
+    const double degrees = match.captured(1).toDouble(&ok);
+    declination = ok ? cwFileDeclination{cwFileDeclination::Kind::Value, degrees}
+                     : cwFileDeclination();
+}
+
+/**
+ * Applies a Walls #UNITS line's options to \a declination in the order they
+ * are written: SAVE pushes the declination in force onto \a saved, RESTORE
+ * pops it back, and the text between them goes through
+ * applyWallsDeclinationOptions(). A RESTORE with nothing saved leaves the
+ * declination Unknown.
+ */
+void applyWallsUnitsDeclination(const QString& line,
+                                cwFileDeclination& declination,
+                                QList<cwFileDeclination>& saved)
+{
+    qsizetype segmentStart = 0;
+    auto matches = wallsSaveRestoreOptionRegex().globalMatch(line);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        applyWallsDeclinationOptions(
+            line.mid(segmentStart, match.capturedStart() - segmentStart), declination);
+        segmentStart = match.capturedEnd();
+        const bool isSave =
+            match.captured(1).compare(QLatin1String("save"), Qt::CaseInsensitive) == 0;
+        if (isSave) {
+            saved.append(declination);
+        } else if (saved.isEmpty()) {
+            declination = cwFileDeclination();
+        } else {
+            declination = saved.takeLast();
+        }
+    }
+    applyWallsDeclinationOptions(line.mid(segmentStart), declination);
+}
+
 /**
  * Strips a trailing Survex comment ("; ...") and any leading /
  * trailing whitespace. Used as a pre-step before regex matching so
@@ -468,6 +665,8 @@ struct TreeRow {
     QList<int> children;
     // the row's own unit, as cavern-relative names
     QSet<QString> stations;
+    // set once a station stamped row.declination
+    bool declinationStamped = false;
 };
 
 // One *begin currently on the block stack.
@@ -512,6 +711,9 @@ struct ScanState {
     // per open scope, the input *cs in force, empty for none; index 0 is
     // the file root. Cavern scopes *cs to its *begin block like *data.
     QStringList coordinateSystems = QStringList{QString()};
+    // per open scope, the declination in force, scoped like *cs; index 0 is
+    // the file root, where cavern applies none
+    QList<cwFileDeclination> declinations = {cwFileDeclination{cwFileDeclination::Kind::None}};
     // every station the closure fixes, in walk order
     QList<cwExternalCenterlineScanner::ScannedFix> fixes;
     // per fix, the scan row whose file holds it; the fix's nodePath and
@@ -539,6 +741,11 @@ struct ScanState {
     WallsPrefixLevels pendingWallsPrefix;
     // the system that same entry's .REF georeference names, empty for none
     QString pendingWallsCoordinateSystem;
+    // the declination that same entry's inherited options put in force
+    cwFileDeclination pendingWallsDeclination = {cwFileDeclination::Kind::None};
+    // the IGRF auto a .mak's base location puts in force for the .dat about
+    // to be read, over each section's header
+    std::optional<cwFileDeclination> pendingCompassDeclination;
     // the scan's tree, root first; empty when the walk builds none
     QList<TreeRow> tree;
     // the row the next file read fills - a .mak's Compass file row for its
@@ -633,6 +840,19 @@ void stampRowDate(ScanState& state, int row, const QDate& date)
     }
 }
 
+// The first stamp gives the row its unit's declination; a later, different
+// one leaves it Unknown, since the unit's shots then take more than one.
+void stampRowDeclination(ScanState& state, int row, const cwFileDeclination& declination)
+{
+    TreeRow& treeRow = state.tree[row];
+    if (!treeRow.declinationStamped) {
+        treeRow.row.declination = declination;
+        treeRow.declinationStamped = true;
+    } else if (treeRow.row.declination != declination) {
+        treeRow.row.declination = cwFileDeclination();
+    }
+}
+
 // inProgress is exactly the recursion stack, so a depth of one means
 // the file being read is the entry file itself.
 bool scanningEntryFile(const ScanState& state)
@@ -689,15 +909,24 @@ int takePendingRow(ScanState& state)
  */
 void recordStation(ScanState& state, const QString& station)
 {
+    // A passage line carries no bearing, so the declination in force there
+    // corrects nothing.
+    const bool readsBearing = !state.passageStyles.constLast();
     OpenBlock* open = innermostNamedBlock(state);
     if (open == nullptr) {
         if (!station.contains(QLatin1Char('.'))) {
             state.rootStations.insert(station);
             recordUnitStation(state, kRootRow, station);
+            if (readsBearing) {
+                stampRowDeclination(state, kRootRow, state.declinations.constLast());
+            }
         }
         return;
     }
     recordUnitStation(state, open->row, station);
+    if (readsBearing) {
+        stampRowDeclination(state, open->row, state.declinations.constLast());
+    }
     open->stations.insert(station);
     state.blocks[open->blockIndex].stationCount =
         static_cast<int>(open->stations.size());
@@ -731,6 +960,7 @@ void pushSurvexBlock(ScanState& state, const QString& name)
     // scope starts from the enclosing scope's style.
     state.passageStyles.append(state.passageStyles.constLast());
     state.coordinateSystems.append(state.coordinateSystems.constLast());
+    state.declinations.append(state.declinations.constLast());
 
     OpenBlock open;
     if (!name.isEmpty()) {
@@ -764,6 +994,9 @@ void popSurvexBlock(ScanState& state)
     }
     if (state.coordinateSystems.size() > 1) {
         state.coordinateSystems.removeLast();
+    }
+    if (state.declinations.size() > 1) {
+        state.declinations.removeLast();
     }
 }
 
@@ -1019,6 +1252,13 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
             continue;
         }
 
+        if (const auto declination =
+                survexDeclination(line, state.coordinateSystems.constLast());
+            declination.has_value()) {
+            state.declinations.last() = declination.value();
+            continue;
+        }
+
         if (const auto dateMatch = survexDateRegex().match(line);
             dateMatch.hasMatch()) {
             // An unparseable date stamps nothing and says nothing -
@@ -1116,16 +1356,20 @@ QString titleCased(const QString& text)
  * the driver wraps the file in.
  *
  * For the scan's tree, each survey with shots becomes a unit under
- * \a fileRow (kNoRow builds none), named by its "SURVEY NAME:" and dated
- * by its own "SURVEY DATE:".
+ * \a fileRow (kNoRow builds none), named by its "SURVEY NAME:", dated
+ * by its own "SURVEY DATE:", and carrying its "DECLINATION:" header's value,
+ * which cavern applies as written. \a autoDeclination, the IGRF auto in force
+ * around the file, takes the place of every header, as it does in cavern.
  */
-void collectCompassStations(const QString& text, ScanState& state, int fileRow = kNoRow)
+void collectCompassStations(const QString& text, ScanState& state, int fileRow = kNoRow,
+                            const std::optional<cwFileDeclination>& autoDeclination = std::nullopt)
 {
     const QStringList sections = text.split(QLatin1Char('\f'));
     for (qsizetype sectionIndex = 0; sectionIndex < sections.size(); ++sectionIndex) {
         bool inShots = false;
         QString surveyName;
         QDate surveyDate;
+        cwFileDeclination headerDeclination;
         QStringList sectionStations;
 
         const QStringList lines = sections.at(sectionIndex).split(QLatin1Char('\n'));
@@ -1144,6 +1388,13 @@ void collectCompassStations(const QString& text, ScanState& state, int fileRow =
                 } else if (const auto nameMatch = compassSurveyNameRegex().match(line);
                            nameMatch.hasMatch()) {
                     surveyName = nameMatch.captured(1);
+                } else if (const auto declinationMatch = compassDeclinationRegex().match(line);
+                           declinationMatch.hasMatch()) {
+                    bool ok = false;
+                    const double degrees = declinationMatch.captured(1).toDouble(&ok);
+                    if (ok) {
+                        headerDeclination = {cwFileDeclination::Kind::Value, degrees};
+                    }
                 } else if (line.startsWith(QLatin1String("FROM"), Qt::CaseInsensitive)) {
                     inShots = true;
                 }
@@ -1169,11 +1420,31 @@ void collectCompassStations(const QString& text, ScanState& state, int fileRow =
             const int unitRow = childRow(state, fileRow, segment,
                                          state.tree.at(fileRow).row.kind, segment, QString());
             stampRowDate(state, unitRow, surveyDate);
+            stampRowDeclination(state, unitRow, autoDeclination.value_or(headerDeclination));
             for (const QString& station : std::as_const(sectionStations)) {
                 recordUnitStation(state, unitRow, station);
             }
         }
     }
+}
+
+/**
+ * The IGRF auto a .mak puts in force for the DAT its '#' line names: cavern
+ * reads the base location ('@') only in a datum a '&' line named, and only
+ * one it knows, and then applies IGRF there in place of the DAT's headers.
+ */
+std::optional<cwFileDeclination> makAutoDeclination(const cwCompassMakFile::DatReference& reference)
+{
+    if (!reference.namesDatum || !reference.baseLocation.has_value()) {
+        return std::nullopt;
+    }
+    const QString system = reference.baseLocationCoordinateSystem();
+    if (system.isEmpty()) {
+        return std::nullopt;
+    }
+    const cwCompassMakFile::BaseLocation& base = reference.baseLocation.value();
+    return cwFileDeclination{cwFileDeclination::Kind::Auto, 0.0,
+                             cwGeoPoint(base.easting, base.northing, base.elevation), system};
 }
 
 void scanCompassFile(const QString& filePath, ScanState& state)
@@ -1260,8 +1531,10 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                 // anything else - but go through scanByFormat anyway so
                 // a .mak that nests another .mak still walks correctly.
                 state.pendingRow = fileRow;
+                state.pendingCompassDeclination = makAutoDeclination(reference);
                 scanByFormat(resolution.resolved, state);
                 state.pendingRow = kNoRow;
+                state.pendingCompassDeclination.reset();
                 if (!state.error.isEmpty()) {
                     break;
                 }
@@ -1272,8 +1545,15 @@ void scanCompassFile(const QString& filePath, ScanState& state)
             }
         } else {
             // A .dat holds the surveys themselves; a .mak only points
-            // at them, so it contributes no stations of its own.
-            collectCompassStations(decoded.text, state, takePendingRow(state));
+            // at them, so it contributes no stations of its own. A Survex
+            // *declination auto around the file outranks its headers too.
+            std::optional<cwFileDeclination> autoDeclination =
+                std::exchange(state.pendingCompassDeclination, std::nullopt);
+            if (!autoDeclination.has_value()
+                && state.declinations.constLast().kind == cwFileDeclination::Kind::Auto) {
+                autoDeclination = state.declinations.constLast();
+            }
+            collectCompassStations(decoded.text, state, takePendingRow(state), autoDeclination);
         }
     }
 
@@ -1375,13 +1655,26 @@ WallsStationName wallsStationName(const WallsPrefixLevels& prefix, const QString
  * is neither a #directive nor a ';' comment. A ':'-qualified token
  * ("XY:P1", "A:B:C:name") names its own path, so it counts there
  * instead of under the prefix in force.
+ *
+ * The declination starts from \a declination, the entry's inherited
+ * options', and follows #UNITS DECL=, RESET, SAVE and RESTORE as cavern
+ * applies them. Under a .REF
+ * georeference (\a coordinateSystem) cavern switches between IGRF and the
+ * written value at each #DATE and DECL=, which the scan does not model, so
+ * the unit's declination is Unknown there.
  */
 void collectWallsStations(const QString& canonical,
                           WallsPrefixLevels prefix,
                           const QString& coordinateSystem,
+                          cwFileDeclination declination,
                           ScanState& state,
                           int unitRow)
 {
+    const bool modelsDeclination = coordinateSystem.isEmpty();
+    if (!modelsDeclination) {
+        declination = cwFileDeclination();
+    }
+    QList<cwFileDeclination> savedDeclinations;
     bool sawStation = false;
     const QStringList lines = readDecodedLines(canonical);
     for (qsizetype lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
@@ -1418,6 +1711,9 @@ void collectWallsStations(const QString& canonical,
             // changed prefix here.
             if (wallsUnitsDirectiveRegex().match(line).hasMatch()) {
                 applyWallsPrefixOptions(line, prefix);
+                if (modelsDeclination) {
+                    applyWallsUnitsDeclination(line, declination, savedDeclinations);
+                }
             }
             continue;
         }
@@ -1428,6 +1724,7 @@ void collectWallsStations(const QString& canonical,
             recordWallsStation(state, name.path, name.station);
             recordUnitStation(state, unitRow,
                               joined(name.path, QLatin1Char('.'), name.station));
+            stampRowDeclination(state, unitRow, declination);
             sawStation = true;
         }
     }
@@ -1435,6 +1732,17 @@ void collectWallsStations(const QString& canonical,
     if (sawStation && scanningEntryFile(state)) {
         state.entryHasOwnShots = true;
     }
+}
+
+// The declination a .wpj entry inherits from its books and sets itself,
+// read the same way, from cavern's 0.
+cwFileDeclination wallsDeclinationFromOptions(const QList<dewalls::Segment>& options)
+{
+    cwFileDeclination declination{cwFileDeclination::Kind::None};
+    for (const dewalls::Segment& option : options) {
+        applyWallsDeclinationOptions(option.value(), declination);
+    }
+    return declination;
 }
 
 // The prefix levels a .wpj entry inherits from its books and sets
@@ -1525,6 +1833,7 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
         // not from the .srv, so hand them to the scan about to read
         // that file.
         state.pendingWallsPrefix = wallsPrefixFromOptions(child->allOptions());
+        state.pendingWallsDeclination = wallsDeclinationFromOptions(child->allOptions());
         const dewalls::GeoReferencePtr reference = child->reference();
         state.pendingWallsCoordinateSystem = reference.isNull()
             ? QString()
@@ -1587,6 +1896,9 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         state.dependencies.append(canonical);
         const WallsPrefixLevels prefix = state.pendingWallsPrefix;
         const QString coordinateSystem = state.pendingWallsCoordinateSystem;
+        const cwFileDeclination declination =
+            std::exchange(state.pendingWallsDeclination,
+                          cwFileDeclination{cwFileDeclination::Kind::None});
         state.pendingWallsPrefix = WallsPrefixLevels();
         state.pendingWallsCoordinateSystem.clear();
         // A .srv no project entry handed over is a unit of its own under the
@@ -1598,7 +1910,7 @@ void scanWallsFile(const QString& filePath, ScanState& state)
             unitRow = childRow(state, containerRow(state), stem,
                                cwSurveyNodeKind::Kind::WallsBook, stem, QString());
         }
-        collectWallsStations(canonical, prefix, coordinateSystem, state, unitRow);
+        collectWallsStations(canonical, prefix, coordinateSystem, declination, state, unitRow);
     }
 
     state.inProgress.remove(canonical);
@@ -1694,17 +2006,11 @@ void parseSurvexMetadata(const QStringList& lines,
     static const QRegularExpression teamRegex(
         QStringLiteral(R"RX(^\*team\s+(?:"([^"]+)"|(\S+)))RX"),
         QRegularExpression::CaseInsensitiveOption);
-    static const QRegularExpression calibrateDeclinationRegex(
-        QStringLiteral(R"RX(^\*calibrate\s+declination\s+(\S+))RX"),
-        QRegularExpression::CaseInsensitiveOption);
-    // "*declination <value> <units>" or "*declination auto <x> <y> <z>"
-    // - the modern replacement for *calibrate declination.
-    static const QRegularExpression declinationCommandRegex(
-        QStringLiteral(R"RX(^\*declination\s+(\S+)(?:\s+(\S+))?)RX"),
-        QRegularExpression::CaseInsensitiveOption);
 
+    // Seeded as cavern applies it.
     const auto seedDeclination = [&](const QString& token,
-                                     const char* directiveName) {
+                                     const char* directiveName,
+                                     double sign) {
         bool ok = false;
         const double value = token.toDouble(&ok);
         if (!ok) {
@@ -1712,7 +2018,7 @@ void parseSurvexMetadata(const QStringList& lines,
                 QStringLiteral("could not parse %1: %2")
                     .arg(QLatin1String(directiveName), token));
         } else if (!metadata.declination.has_value()) {
-            metadata.declination = value;
+            metadata.declination = sign * value;
         }
     };
 
@@ -1745,12 +2051,12 @@ void parseSurvexMetadata(const QStringList& lines,
             continue;
         }
 
-        if (const auto match = calibrateDeclinationRegex.match(line); match.hasMatch()) {
-            seedDeclination(match.captured(1), "*calibrate declination");
+        if (const auto match = survexCalibrateDeclinationRegex().match(line); match.hasMatch()) {
+            seedDeclination(match.captured(1), "*calibrate declination", kCalibrateDeclinationSign);
             continue;
         }
 
-        if (const auto match = declinationCommandRegex.match(line); match.hasMatch()) {
+        if (const auto match = survexDeclinationRegex().match(line); match.hasMatch()) {
             const QString token = match.captured(1);
             if (token.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0) {
                 metadata.declinationIsAuto = true;
@@ -1763,7 +2069,7 @@ void parseSurvexMetadata(const QStringList& lines,
                     QStringLiteral("*declination units '%1' not supported, assuming degrees")
                         .arg(units));
             }
-            seedDeclination(token, "*declination");
+            seedDeclination(token, "*declination", kDeclinationCommandSign);
             continue;
         }
     }
@@ -1773,15 +2079,9 @@ void parseCompassMetadata(const QStringList& lines,
                           SeededTripMetadata& metadata,
                           QStringList& warnings)
 {
-    // "DECLINATION: 7.20  FORMAT: ...  CORRECTIONS: ..." - the
-    // DECLINATION field is the magnetic declination cavern applies;
+    // The DECLINATION field is the magnetic declination cavern applies;
     // CORRECTIONS are instrument corrections (compass clino tape),
-    // deliberately NOT read here. Captures any token so a
-    // non-numeric value warns instead of silently reading as
-    // "no declination".
-    static const QRegularExpression declinationRegex(
-        QStringLiteral(R"RX(^DECLINATION:\s*(\S+))RX"),
-        QRegularExpression::CaseInsensitiveOption);
+    // deliberately NOT read here.
     static const QRegularExpression teamRegex(
         QStringLiteral(R"RX(^SURVEY\s+TEAM:\s*(.*)$)RX"),
         QRegularExpression::CaseInsensitiveOption);
@@ -1830,7 +2130,7 @@ void parseCompassMetadata(const QStringList& lines,
             continue;
         }
 
-        if (const auto match = declinationRegex.match(line); match.hasMatch()) {
+        if (const auto match = compassDeclinationRegex().match(line); match.hasMatch()) {
             const QString token = match.captured(1);
             bool ok = false;
             const double value = token.toDouble(&ok);
@@ -2086,6 +2386,27 @@ Monad::Result<ScanResult> scanCompass(const QString& entryFile)
 Monad::Result<ScanResult> scanWalls(const QString& entryFile)
 {
     return scanWithEntry(entryFile, &scanWallsFile, "scanWalls");
+}
+
+cwFileDeclination attachmentDeclination(const ScanResult& scan)
+{
+    std::optional<cwFileDeclination> common;
+    for (const cwScanRow& row : scan.rows) {
+        if (!row.isUnit) {
+            continue;
+        }
+        cwFileDeclination unit = row.declination;
+        if (unit.kind == cwFileDeclination::Kind::None
+            && !scan.seededMetadata.fileOwnsDeclination()) {
+            unit = {cwFileDeclination::Kind::Inherited};
+        }
+        if (!common.has_value()) {
+            common = unit;
+        } else if (common.value() != unit) {
+            return cwFileDeclination();
+        }
+    }
+    return common.value_or(cwFileDeclination());
 }
 
 QString resolveCompassReference(const QString& makPath, const QString& reference)

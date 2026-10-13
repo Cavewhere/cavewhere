@@ -772,6 +772,10 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                         result.sourceViews.insert(
                             owner.ownerId,
                             cwExternalUnitManifest::solveView(scan.value().rows, preserveCase));
+                    } else {
+                        result.tripDeclinations.insert(
+                            owner.ownerId,
+                            cwExternalCenterlineScanner::attachmentDeclination(scan.value()));
                     }
                     for (const QString& dep : scan.value().dependencies) {
                         if (!escaping.contains(dep)) {
@@ -937,9 +941,11 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
                 trip->setCavernLabel(tripLabel);
                 trip->setExternalStations(unitStations);
                 trip->setExternalStationsError(QString());
+                trip->setFileDeclination(sourceView.unitDeclinations.value(trip->sourcePath()));
                 continue;
             }
             trip->setExternalStations(result.ownerStations.value(trip->id()));
+            trip->setFileDeclination(result.tripDeclinations.value(trip->id()));
             // A containment failure skipped the harvest, so the two are
             // never both present; naming it first keeps that explicit.
             const QString containmentError = result.containmentErrors.value(trip->id());

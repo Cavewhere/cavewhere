@@ -5,7 +5,7 @@ import cw.TestLib
 
 // The page of a source root, the node an attached survey file builds its
 // subtree under (SURVEY_TREE_PLAN C7.4b): the source card, and the paperclip
-// and em-dash the derived trip rows below it carry.
+// and file declination the derived trip rows below it carry.
 MainWindowTest {
     id: rootId
 
@@ -50,7 +50,8 @@ MainWindowTest {
 
         // survex_blocks.svx as a source root named AttachedCave: the block
         // doghill and, below it, big-passage with east and the empty sump.
-        // doghill, big-passage, and east each hold the unit of their own shots.
+        // doghill and big-passage each hold a trip for their own shots; east,
+        // a leaf block, is one trip.
         function attachedCave(projectBaseName) {
             return makeSavedCaveAttach(
                         projectBaseName,
@@ -77,6 +78,22 @@ MainWindowTest {
                       }, 5000, "every node of the subtree is open; rows: " + view.rows)
             waitForRendering(rootId)
             return view
+        }
+
+        // The Decl cell of every drawn trip row: the angle, then its caption.
+        // Waits for `count` of them.
+        function declinationTexts(cavePage, count) {
+            const modes = cellsNamed(cavePage, "declinationMode", count)
+            const texts = []
+            for (let i = 0; i < modes.length; i++) {
+                const row = modes[i].parent
+                const value = collectByName(row, "value", [])[0]
+                const emDash = collectByName(row, "declinationEmDash", [])[0]
+                texts.push(emDash.visible
+                           ? emDash.text
+                           : value.text + " " + (modes[i].visible ? modes[i].text : ""))
+            }
+            return texts
         }
 
         // The cells named `objectName` once `count` of them are drawn.
@@ -115,14 +132,14 @@ MainWindowTest {
                    "a native cave shows no source card")
         }
 
-        function test_derivedTripRowsShowPaperclipAndEmDash() {
+        function test_derivedTripRowsShowPaperclipAndFileDeclination() {
             const cave = attachedCave("cavepage-external-rows")
             compare(cave.tripCount, 0, "the root's shots all sit inside doghill")
             compare(cave.childNodeCount, 1, "doghill is the root's one block")
 
             const cavePage = gotoCavePage(cave)
-            //doghill, big-passage, east, sump, and the three trips
-            expandedTree(cavePage, 7)
+            //doghill, big-passage, sump, and the three trips
+            expandedTree(cavePage, 6)
 
             const nameLinks = cellsNamed(cavePage, "tripLink", 3)
             for (let i = 0; i < nameLinks.length; i++) {
@@ -131,29 +148,25 @@ MainWindowTest {
                        + nameLinks[i].text)
             }
 
-            const emDashes = cellsNamed(cavePage, "declinationEmDash", 3)
-            for (let j = 0; j < emDashes.length; j++) {
-                verify(emDashes[j].visible,
-                       "the file owns the declination, so the row shows an em dash")
-            }
+            //survex_blocks.svx sets no declination, so cavern applies 0.
+            compare(declinationTexts(cavePage, 3), ["0° none", "0° none", "0° none"],
+                    "each derived row shows the 0 cavern applies")
         }
 
         // A file whose shots sit outside every *begin gives the root a unit of
         // its own, which windows the whole file beside the side block's trip
         // (§7.2 step 6), and that row is externally backed like any other: same
-        // paperclip, same em-dash declination.
+        // paperclip, same file declination.
         function test_wholeNodeWindowRowIsMarkedLikeAnyDerivedRow() {
             const cave = makeSavedCaveAttach(
                            "cavepage-whole-cave-row",
                            "external-centerlines/survex_root_and_block.svx")
-            compare(cave.tripCount, 1, "the root holds the unit of its own shots")
-            compare(cave.childNodeCount, 1, "the side block is the root's one node")
-            verify(cave.trip(0).windowsWholeNode, "the root's own unit windows the whole file")
-            verify(!cave.childNode(0).trip(0).windowsWholeNode, "the side block's trip windows only side")
+            compare(cave.tripCount, 2, "the root holds its own unit and the leaf block side")
+            compare(cave.childNodeCount, 0, "a leaf block is a trip, not a node")
+            compare([cave.trip(0).windowsWholeNode, cave.trip(1).windowsWholeNode].filter(w => w).length,
+                    1, "only the root's own unit windows the whole file")
 
             const cavePage = gotoCavePage(cave)
-            //side, its trip, and the root's own trip
-            expandedTree(cavePage, 3)
 
             const nameLinks = cellsNamed(cavePage, "tripLink", 2)
             for (let i = 0; i < nameLinks.length; i++) {
@@ -162,15 +175,15 @@ MainWindowTest {
                        + nameLinks[i].text)
             }
 
-            const emDashes = cellsNamed(cavePage, "declinationEmDash", 2)
-            for (let j = 0; j < emDashes.length; j++) {
-                verify(emDashes[j].visible,
-                       "the file owns the declination, so the row shows an em dash")
-            }
+            //survex_root_and_block.svx sets no declination either.
+            compare(declinationTexts(cavePage, 2), ["0° none", "0° none"],
+                    "each window row shows the 0 cavern applies")
         }
 
         // externallyBacked covers a trip-level attachment too, so its row on a
-        // native cave's page is marked the same way.
+        // native cave's page is marked the same way. survex_simple.svx sets no
+        // declination, so the driver injects the trip's own calibration and the
+        // row reads like a native trip's.
         function test_phase2AttachedTripRowShowsPaperclipToo() {
             const fixture = attachFixtureTrip("cavepage-external-p2")
             verify(fixture.trip.externallyBacked, "the attached trip is externally backed")
@@ -183,9 +196,12 @@ MainWindowTest {
             verify(nameLinks[0].text.indexOf("📎 ") === 0,
                    "an Attached trip row is marked too: " + nameLinks[0].text)
 
-            const emDashes = collectByName(cavePage, "declinationEmDash", [])
-            compare(emDashes.length, 1, "the row has a declination cell")
-            verify(emDashes[0].visible, "the file owns its declination")
+            const calibration = fixture.trip.calibration
+            const caption = calibration.autoDeclination && calibration.autoDeclinationAvailable
+                    ? "auto" : "manual"
+            compare(declinationTexts(cavePage, 1),
+                    [Number(calibration.declination.toFixed(2)).toString() + "° " + caption],
+                    "a silent file's trip row shows the calibration the driver injects")
         }
 
         // Each derived trip's row shows the date its block wrote, not the day
@@ -195,7 +211,7 @@ MainWindowTest {
             const dayOfAttach = Qt.formatDate(new Date(), "yyyy-MM-dd")
             const cave = attachedCave("cavepage-external-dates")
             const cavePage = gotoCavePage(cave)
-            const view = expandedTree(cavePage, 7)
+            const view = expandedTree(cavePage, 6)
 
             //A trip row's Date cell names itself by its view row, and draws
             //the date as its "value"; node rows sit between the trip rows.

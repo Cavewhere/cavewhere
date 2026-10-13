@@ -11,6 +11,7 @@
 #include "cwFixStation.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
+#include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
 
 //Catch includes
@@ -165,8 +166,14 @@ TEST_CASE("An attached file's reference fix reads back through the reference rol
         fixture.get(), fixturePath(QStringLiteral("survex_reference_fix/reference_fix.svx")));
     drainPipelines(fixture.get());
 
-    // The file's fixes sit inside *begin ref, so the derived node "ref" lists them.
-    const cwSurveyNode* holder = childNodeNamed(root, QStringLiteral("ref"));
+    // The file's fixes sit inside *begin ref, a leaf block with shots, so the
+    // derived trip "ref" lists them.
+    const cwTrip* holder = nullptr;
+    for (const cwTrip* trip : root->trips()) {
+        if (trip->name() == QStringLiteral("ref")) {
+            holder = trip;
+        }
+    }
     REQUIRE(holder != nullptr);
     const cwAttachedFixModel* model = holder->attachedFixes();
     REQUIRE(model->rowCount() == 2);
@@ -189,7 +196,7 @@ TEST_CASE("An attached file's reference fix reads back through the reference rol
     CHECK(model->data(plain, cwFixStationModel::StationNameRole).toString() == QStringLiteral("ref.B"));
     CHECK(model->data(plain, cwAttachedFixModel::ReferenceRole) == QVariant(false));
 
-    // The page binds the concatenated table, which carries the role by name.
-    CHECK(holder->fixStationTable()->roleNames().value(cwAttachedFixModel::ReferenceRole)
+    // The page binds the node's concatenated table, which carries the role by name.
+    CHECK(root->fixStationTable()->roleNames().value(cwAttachedFixModel::ReferenceRole)
           == QByteArrayLiteral("reference"));
 }
