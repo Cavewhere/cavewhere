@@ -10,6 +10,7 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwLinePlotGeometry.h"
 #include "cwPassageTubeCases.h"
 #include "cwPassageTubeMesh.h"
 #include "cwPassageTubeMeshCheck.h"
@@ -17,6 +18,8 @@
 //Qt includes
 #include <QAbstractListModel>
 #include <QBox3D>
+#include <QMatrix4x4>
+#include <QPointF>
 #include <QPointer>
 #include <QQmlEngine>
 #include <QStringList>
@@ -35,7 +38,8 @@ class cwScene;
  * seeded random caves. Selecting a row builds it with
  * cwPassageTubeBuilder::buildDebug and checks it with
  * cwPassageTubeMeshCheck on the GUI thread; the mesh and centerline go to a
- * tube and a line plot the model adds to its scene.
+ * tube and a line plot the model adds to its scene. A second line plot draws
+ * the builder's rings and their frames.
  *
  * Issue counts for the list are built on first read and cached.
  */
@@ -50,6 +54,9 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(cwScene* scene READ scene WRITE setScene NOTIFY sceneChanged)
     Q_PROPERTY(cwRenderPassageTube* tube READ tube NOTIFY sceneChanged)
     Q_PROPERTY(cwRenderLinePlot* linePlot READ linePlot NOTIFY sceneChanged)
+    Q_PROPERTY(cwRenderLinePlot* ringPlot READ ringPlot NOTIFY sceneChanged)
+    Q_PROPERTY(bool ringsVisible READ ringsVisible WRITE setRingsVisible NOTIFY ringsVisibleChanged)
+    Q_PROPERTY(bool framesVisible READ framesVisible WRITE setFramesVisible NOTIFY framesVisibleChanged)
 
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged)
     Q_PROPERTY(QString parameters READ parameters NOTIFY currentChanged)
@@ -73,6 +80,22 @@ public:
     };
     Q_ENUM(Role)
 
+    // How far a ring's frame cross reaches from its center along right and up;
+    // an elbow ring's reaches kElbowFrameScale times as far.
+    static constexpr double kFrameAxisMeters = 0.5;
+    static constexpr double kElbowFrameScale = 2.0;
+
+    // The rings of every chain as a line list. Each ring's loop runs through
+    // its vertices back to the first; a grown ring draws every other edge.
+    // rights and ups hold one segment per ring, in loop order, from its center
+    // along frame.right and frame.up.
+    struct RingGeometry {
+        QVector<QVector3D> points;
+        QVector<cwLinePlotGeometry::VertexRange> loops;
+        cwLinePlotGeometry::VertexRange rights;
+        cwLinePlotGeometry::VertexRange ups;
+    };
+
     explicit cwPassageTubeGalleryModel(QObject* parent = nullptr);
     ~cwPassageTubeGalleryModel() override;
 
@@ -94,6 +117,13 @@ public:
 
     cwRenderPassageTube* tube() const;
     cwRenderLinePlot* linePlot() const;
+    cwRenderLinePlot* ringPlot() const;
+
+    bool ringsVisible() const;
+    void setRingsVisible(bool ringsVisible);
+
+    bool framesVisible() const;
+    void setFramesVisible(bool framesVisible);
 
     // Adds a cwPassageTubeCases::random survey, or a randomWild one when wild.
     Q_INVOKABLE void addRandom(int seed, int junctionCount, bool wild = false);
@@ -128,6 +158,16 @@ public:
 
     cwPassageTubeMesh mesh() const;
     cwPassageTubeMeshCheck::Report report() const;
+    RingGeometry ringGeometry() const;
+
+    // Rings are numbered across chains in chain order. ringAt is the ring
+    // whose center lies nearest point on screen, within maxPixels, else -1.
+    Q_INVOKABLE int ringAt(QPointF point, const QMatrix4x4& modelToViewport, double maxPixels) const;
+    Q_INVOKABLE int nearestRing(const QVector3D& position) const;
+
+    // The ring's chain, index, leg, distance to its station, frame up,
+    // inclination weight, radius range and kind; empty for an unknown ring.
+    Q_INVOKABLE QString ringLine(int ring) const;
 
 signals:
     void countChanged();
@@ -135,6 +175,8 @@ signals:
     void currentIndexChanged();
     void sceneChanged();
     void currentChanged();
+    void ringsVisibleChanged();
+    void framesVisibleChanged();
 
 private:
     struct Row {
@@ -157,6 +199,7 @@ private:
     void selectCurrent();
     void locateJunction(const cwPassageTubeCases::Trip& trip);
     void pushToScene();
+    void applyRingVisibility();
     void deleteRenderObjects();
 
     QVector<Row> m_rows;
@@ -167,8 +210,12 @@ private:
     QPointer<cwScene> m_scene;
     QPointer<cwRenderPassageTube> m_tube;
     QPointer<cwRenderLinePlot> m_linePlot;
+    QPointer<cwRenderLinePlot> m_ringPlot;
+    bool m_ringsVisible = false;
+    bool m_framesVisible = false;
 
     Build m_current;
+    RingGeometry m_ringGeometry;
     QBox3D m_bounds;
     QVector3D m_junction;
     QVector3D m_armFarEnd;

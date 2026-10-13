@@ -16,6 +16,7 @@ QC.ApplicationWindow {
     property bool grabAll: false
     property bool failingOnly: false
     property bool includeSweep: false
+    property bool showRings: false
     property string defaultGrabDirectory: ""
 
     readonly property list<string> presetNames: ["plan", "profile", "along-arm", "three-quarter"]
@@ -27,6 +28,7 @@ QC.ApplicationWindow {
     readonly property int panelSpacing: 6
     readonly property int reportHeight: 220
     readonly property int markerSize: 10
+    readonly property real ringHoverPixels: 12.0
     readonly property int badgeMinWidth: 28
     readonly property int badgePadding: 6
     readonly property int rowPadding: 6
@@ -50,6 +52,10 @@ QC.ApplicationWindow {
     property string activeGrabDirectory: ""
     property bool quitAfterGrab: false
     property bool grabFailed: false
+
+    // The ring whose line the report shows: the one last hovered, or the one
+    // nearest the issue marker last tapped.
+    property int inspectedRing: -1
 
     width: initialWidth
     height: initialHeight
@@ -91,6 +97,10 @@ QC.ApplicationWindow {
             useOrtho(false)
             turnTableId.setViewState(turnTableId.framingViewState(box, armAzimuth + threeQuarterAzimuthOffset, threeQuarterPitch))
         }
+    }
+
+    function inspectNearestRing(position: QQ.vector3d) {
+        inspectedRing = galleryModelId.nearestRing(position)
     }
 
     function selectRow(row: int) {
@@ -194,6 +204,10 @@ QC.ApplicationWindow {
         id: galleryModelId
         includeSweep: rootId.includeSweep
         scene: sceneId
+        ringsVisible: ringsId.checked
+        framesVisible: framesId.checked
+
+        onCurrentChanged: rootId.inspectedRing = -1
     }
 
     PassageTubeGalleryFilterModel {
@@ -214,10 +228,16 @@ QC.ApplicationWindow {
             return issueMarkerId.transformUpdater.mapModelToViewport(issueMarkerId.modelData)
         }
 
+        signal tapped()
+
         x: viewPoint.x - width / 2
         y: viewPoint.y - height / 2
         radius: width / 2
         border.color: Theme.textInverse
+
+        QQ.TapHandler {
+            onTapped: issueMarkerId.tapped()
+        }
     }
 
     Scene {
@@ -422,6 +442,16 @@ QC.ApplicationWindow {
                     checked: true
                 }
                 QC.CheckBox {
+                    id: ringsId
+                    text: qsTr("Rings")
+                    checked: rootId.showRings
+                }
+                QC.CheckBox {
+                    id: framesId
+                    text: qsTr("Frames")
+                    checked: rootId.showRings
+                }
+                QC.CheckBox {
                     id: centerlineId
                     text: qsTr("Centerline")
                     checked: true
@@ -452,14 +482,29 @@ QC.ApplicationWindow {
                     scene: sceneId
                 }
 
+                QQ.HoverHandler {
+                    id: ringHoverId
+                    enabled: ringsId.checked || framesId.checked
+
+                    onPointChanged: {
+                        const ring = galleryModelId.ringAt(ringHoverId.point.position, transformUpdaterId.matrix, rootId.ringHoverPixels)
+                        if (ring >= 0) {
+                            rootId.inspectedRing = ring
+                        }
+                    }
+                }
+
                 QQ.Repeater {
                     model: issuesId.checked ? galleryModelId.warningPositions : []
 
                     delegate: IssueMarker {
+                        id: warningMarkerId
                         transformUpdater: transformUpdaterId
                         width: rootId.markerSize
                         height: rootId.markerSize
                         color: Theme.warning
+
+                        onTapped: rootId.inspectNearestRing(warningMarkerId.modelData)
                     }
                 }
 
@@ -467,10 +512,13 @@ QC.ApplicationWindow {
                     model: issuesId.checked ? galleryModelId.issuePositions : []
 
                     delegate: IssueMarker {
+                        id: errorMarkerId
                         transformUpdater: transformUpdaterId
                         width: rootId.markerSize
                         height: rootId.markerSize
                         color: Theme.errorText
+
+                        onTapped: rootId.inspectNearestRing(errorMarkerId.modelData)
                     }
                 }
             }
@@ -483,7 +531,8 @@ QC.ApplicationWindow {
 
                 QC.Label {
                     width: reportScrollId.availableWidth
-                    text: galleryModelId.reportText + "\n\n" + galleryModelId.issueTexts.join("\n")
+                    text: (rootId.inspectedRing >= 0 ? galleryModelId.ringLine(rootId.inspectedRing) + "\n\n" : "")
+                          + galleryModelId.reportText + "\n\n" + galleryModelId.issueTexts.join("\n")
                           + "\n\n" + galleryModelId.parameters
                     font.family: Theme.fontFamilyMono
                     font.pixelSize: Theme.fontSizeCaption

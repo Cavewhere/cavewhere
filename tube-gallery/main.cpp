@@ -69,7 +69,9 @@ int main(int argc, char* argv[])
                                            QStringLiteral("With --grab-all, only the cases with mesh issues."));
     const QCommandLineOption sweepOption(QStringLiteral("sweep"),
                                          QStringLiteral("Include the parametric sweep cases in the list."));
-    parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption});
+    const QCommandLineOption ringsOption(QStringLiteral("rings"),
+                                         QStringLiteral("Draw the builder's rings and their frames, also in grabs."));
+    parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption, ringsOption});
     parser.process(app);
 
     cwMetaTypeSystem::registerTypes();
@@ -94,6 +96,7 @@ int main(int argc, char* argv[])
         {QStringLiteral("grabAll"), grabAll},
         {QStringLiteral("failingOnly"), parser.isSet(failingOption)},
         {QStringLiteral("includeSweep"), parser.isSet(sweepOption)},
+        {QStringLiteral("showRings"), parser.isSet(ringsOption)},
         {QStringLiteral("defaultGrabDirectory"), QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("tube-shots"))},
     });
 
