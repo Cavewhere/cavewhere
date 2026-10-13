@@ -62,9 +62,11 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTextStream>
+#include <QTimer>
 #include <QVariant>
 
 // Std
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -585,6 +587,51 @@ inline std::optional<cwError> unconnectedStationsEntry(const cwErrorModel* model
         }
     }
     return std::nullopt;
+}
+
+namespace mainThreadStall {
+inline constexpr int kFrameIntervalMs = 16;
+inline constexpr int kLeadInTicks = 3;
+inline constexpr int kTrailingTicks = 3;
+inline constexpr int kStallWaitMs = 600000;
+} // namespace mainThreadStall
+
+//! The longest gap between two ticks of a 16 ms timer on the main thread while
+//! one queued call runs \a work: how long \a work holds the event loop.
+inline qint64 longestMainThreadStall(const std::function<void()>& work)
+{
+    using namespace mainThreadStall;
+    QTimer frame;
+    frame.setTimerType(Qt::PreciseTimer);
+    frame.setInterval(kFrameIntervalMs);
+
+    QElapsedTimer clock;
+    qint64 lastTick = 0;
+    qint64 longest = 0;
+    int ticks = 0;
+    int ticksAfterWork = -1;
+    QObject::connect(&frame, &QTimer::timeout, [&]() {
+        const qint64 now = clock.elapsed();
+        longest = std::max(longest, now - lastTick);
+        lastTick = now;
+        ++ticks;
+        if (ticksAfterWork >= 0) {
+            ++ticksAfterWork;
+        }
+        if (ticks == kLeadInTicks) {
+            longest = 0;
+            QTimer::singleShot(0, [&]() {
+                work();
+                ticksAfterWork = 0;
+            });
+        }
+    });
+
+    clock.start();
+    frame.start();
+    REQUIRE(tryWait(kStallWaitMs, [&]() { return ticksAfterWork >= kTrailingTicks; }));
+    frame.stop();
+    return longest;
 }
 
 #endif // EXTERNALCENTERLINETESTHELPERS_H

@@ -20,10 +20,8 @@
 
 // Qt
 #include <QDir>
-#include <QElapsedTimer>
 #include <QSignalSpy>
 #include <QTemporaryDir>
-#include <QTimer>
 
 // Std
 #include <algorithm>
@@ -41,10 +39,6 @@ constexpr int kSmallTreeFiles = 12;
 constexpr int kLargeTreeFiles = 48;
 constexpr int kNativeTreeFiles = 6;
 constexpr int kStallRepeats = 3;
-constexpr int kFrameIntervalMs = 16;
-constexpr int kLeadInTicks = 3;
-constexpr int kTrailingTicks = 3;
-constexpr int kStallWaitMs = 600000;
 constexpr int kBinaryTreeChildren = 2;
 
 // Each derived node's view holds its whole subtree, so a fan-out costs
@@ -157,44 +151,6 @@ cwSurveyNode* attachAndCheck(SavedProjectFixture* fixture, const QString& source
 std::unique_ptr<SavedProjectFixture> makeProject(const QString& name)
 {
     return makeSavedProject(name, QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
-}
-
-//! The longest gap between two ticks of a kFrameIntervalMs timer on the main
-//! thread while one queued call runs \a work: how long \a work holds the event
-//! loop.
-qint64 longestMainThreadStall(const std::function<void()>& work)
-{
-    QTimer frame;
-    frame.setTimerType(Qt::PreciseTimer);
-    frame.setInterval(kFrameIntervalMs);
-
-    QElapsedTimer clock;
-    qint64 lastTick = 0;
-    qint64 longest = 0;
-    int ticks = 0;
-    int ticksAfterWork = -1;
-    QObject::connect(&frame, &QTimer::timeout, [&]() {
-        const qint64 now = clock.elapsed();
-        longest = std::max(longest, now - lastTick);
-        lastTick = now;
-        ++ticks;
-        if (ticksAfterWork >= 0) {
-            ++ticksAfterWork;
-        }
-        if (ticks == kLeadInTicks) {
-            longest = 0;
-            QTimer::singleShot(0, [&]() {
-                work();
-                ticksAfterWork = 0;
-            });
-        }
-    });
-
-    clock.start();
-    frame.start();
-    REQUIRE(tryWait(kStallWaitMs, [&]() { return ticksAfterWork >= kTrailingTicks; }));
-    frame.stop();
-    return longest;
 }
 
 //! The shortest of kStallRepeats stalls of one member-view fan-out on \a

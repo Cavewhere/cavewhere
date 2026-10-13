@@ -21,6 +21,7 @@
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
 #include "cwSurveyNetwork.h"
+#include "ExternalCenterlineTestHelpers.h"
 
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
@@ -31,6 +32,7 @@
 
 //Std includes
 #include <algorithm>
+#include <limits>
 
 namespace {
 
@@ -1134,4 +1136,220 @@ TEST_CASE("a fix on a station an attached file fixes itself is flagged",
     // A file that stops fixing the station frees it for the node's fix.
     cave->setFileFixedStations({});
     CHECK(cave->errorModel()->warningCount() == 0);
+}
+
+namespace {
+
+constexpr int kAttachedTreeFiles = 6;
+constexpr int kAttachedTreeShots = 20;
+constexpr int kBinaryTreeChildren = 2;
+
+// Few legs per file, so the fan-out's cost is the nodes it visits rather than
+// the stations each member view holds.
+constexpr int kRelayTreeShots = 8;
+constexpr int kRelaySmallTreeFiles = 32;
+constexpr int kRelayLargeTreeFiles = 128;
+constexpr int kRelayStallRepeats = 3;
+
+// Four times the files is about four times the nodes, so one validator pass
+// per fan-out grows about fourfold; one pass per relayed node grows about
+// sixteenfold.
+constexpr double kMaxRelayStallGrowth = 6.0;
+
+bool hasReferenceWarning(const cwSurveyNode* node)
+{
+    const QList<cwError> errors = node->errorModel()->errors()->toList();
+    return std::any_of(errors.cbegin(), errors.cend(), [](const cwError& error) {
+        return error.errorTypeId() == static_cast<int>(cwErrorTypeId::FixStationReference);
+    });
+}
+
+//! A derived node below \a root whose own sourced trip names stations, and the
+//! first of them as the node names it.
+struct DerivedMember
+{
+    cwSurveyNode* node = nullptr;
+    QString station;
+};
+
+DerivedMember firstDerivedMember(cwSurveyNode* root)
+{
+    DerivedMember member;
+    root->walk([&member, root](const cwSurveyNode* node) {
+        if (member.node != nullptr || node == root || node->isSourceRoot()) {
+            return;
+        }
+        for (const cwTrip* trip : node->trips()) {
+            if (!trip->sourcePath().isEmpty() && !trip->externalStations().isEmpty()) {
+                member.node = const_cast<cwSurveyNode*>(node);
+                member.station = cwStation::canonicalKey(trip->externalStations().first());
+                return;
+            }
+        }
+    });
+    return member;
+}
+
+//! \a network without \a station and every shot that touches it.
+cwSurveyNetwork withoutStation(const cwSurveyNetwork& network, const QString& station)
+{
+    cwSurveyNetwork result;
+    for (const QString& from : network.stations()) {
+        if (from == station) {
+            continue;
+        }
+        for (const QString& to : network.neighbors(from)) {
+            if (to != station) {
+                result.addShot(from, to);
+            }
+        }
+        if (network.hasPosition(from)) {
+            result.setPosition(from, network.position(from));
+        }
+    }
+    return result;
+}
+
+//! Attaches a generated tree of \a files Survex files under the region's root
+//! and waits for the scan and the solve. Returns the source root.
+cwSurveyNode* attachGeneratedTree(SavedProjectFixture* fixture,
+                                  const QTemporaryDir& sourceDir,
+                                  int files,
+                                  int shots)
+{
+    const QString entry = writeSurvexTree(sourceDir.path(), files, shots, kBinaryTreeChildren);
+    cwSurveyNode* root = attachSourceThroughManager(
+        fixture, fixture->project->cavingRegion()->rootNode(), entry);
+    drainPipelines(fixture);
+    REQUIRE_FALSE(fixture->rootData->linePlotManager()->hasSolveError());
+    REQUIRE(root->scopedNetwork().stationCount() > 0);
+    return root;
+}
+
+struct RelayStall
+{
+    qint64 stallMs = 0;
+    qsizetype nodes = 0;
+};
+
+//! The shortest of kRelayStallRepeats main-thread stalls of one queued
+//! invalidateMemberViews() on a generated tree of \a files fix-less files.
+RelayStall measureRelayStall(int files)
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    auto fixture = makeSavedProject(QStringLiteral("validator-relay-%1").arg(files),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    attachGeneratedTree(fixture.get(), sourceDir, files, kRelayTreeShots);
+
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    const QList<cwSurveyNode*> nodes = region->rootNode()->allNodes();
+    for (const cwSurveyNode* node : nodes) {
+        REQUIRE(node->fixStations()->count() == 0);
+    }
+
+    RelayStall result;
+    result.nodes = nodes.size();
+    result.stallMs = std::numeric_limits<qint64>::max();
+    for (int repeat = 0; repeat < kRelayStallRepeats; ++repeat) {
+        const qint64 stall = longestMainThreadStall([region]() { region->invalidateMemberViews(); });
+        result.stallMs = std::min(result.stallMs, stall);
+    }
+    return result;
+}
+
+} // namespace
+
+TEST_CASE("revalidate checks a derived node's fix against its member network",
+          "[cwFixStationValidator][reference]")
+{
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    auto fixture = makeSavedProject(QStringLiteral("validator-derived-fix"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* root = attachGeneratedTree(fixture.get(), sourceDir,
+                                             kAttachedTreeFiles, kAttachedTreeShots);
+    cwCavingRegion* region = fixture->project->cavingRegion();
+
+    const DerivedMember member = firstDerivedMember(root);
+    REQUIRE(member.node != nullptr);
+    REQUIRE(member.node->scopedNetwork().hasStation(member.station));
+
+    const QString absent = QStringLiteral("Absent");
+    REQUIRE_FALSE(member.node->scopedNetwork().hasStation(absent));
+    member.node->fixStations()->appendFixStation(
+        makeFix(absent, QStringLiteral("EPSG:32613"), 478000.0, 4430000.0, 1655.0));
+    drainPipelines(fixture.get());
+
+    CHECK(hasReferenceWarning(member.node));
+    CHECK(warningText(qobject_cast<cwCave*>(member.node)).contains(
+        QStringLiteral("Fix station \"Absent\" names a survey station that doesn't exist")));
+    for (const cwSurveyNode* node : region->rootNode()->allNodes()) {
+        if (node != member.node) {
+            INFO("node " << node->name().toStdString());
+            CHECK_FALSE(hasReferenceWarning(node));
+        }
+    }
+
+    member.node->fixStations()->setData(member.node->fixStations()->index(0),
+                                        member.station,
+                                        cwFixStationModel::StationNameRole);
+    drainPipelines(fixture.get());
+    CHECK_FALSE(hasReferenceWarning(member.node));
+
+    // The region's key for the fixed station: the source root's prefix, then
+    // the node's path below it, then the station.
+    const QString regionKey = cwStation::canonicalKey(root->scopePrefix())
+                              + cwStation::canonicalKey(member.node->cavernPath())
+                              + member.station;
+    REQUIRE(region->network().hasStation(regionKey));
+    const cwSurveyNetwork dropped = withoutStation(region->network(), regionKey);
+
+    // Records, as each reference warning lands on the node, whether the region
+    // already held the network without the station.
+    QList<bool> warningsAfterRegionChange;
+    cwErrorListModel* errors = member.node->errorModel()->errors();
+    QObject::connect(errors, &QAbstractItemModel::rowsInserted, errors,
+                     [&](const QModelIndex&, int first, int last) {
+        for (int row = first; row <= last; ++row) {
+            if (errors->at(row).errorTypeId() == static_cast<int>(cwErrorTypeId::FixStationReference)) {
+                warningsAfterRegionChange.append(!region->network().hasStation(regionKey));
+            }
+        }
+    });
+
+    SECTION("a solve that drops the fixed station") {
+        region->setNetwork(dropped);
+        REQUIRE(member.node->scopedNetwork().stationCount() > 0);
+        REQUIRE_FALSE(member.node->scopedNetwork().hasStation(member.station));
+
+        CHECK(hasReferenceWarning(member.node));
+        CHECK(warningsAfterRegionChange == QList<bool>{true});
+    }
+
+    SECTION("a member-view invalidation after the solve changed unheard") {
+        region->blockSignals(true);
+        region->setNetwork(dropped);
+        region->blockSignals(false);
+        REQUIRE_FALSE(member.node->scopedNetwork().hasStation(member.station));
+        CHECK_FALSE(hasReferenceWarning(member.node));
+
+        region->invalidateMemberViews();
+        CHECK(hasReferenceWarning(member.node));
+        CHECK(warningsAfterRegionChange == QList<bool>{true});
+    }
+}
+
+TEST_CASE("one member-view fan-out revalidates in time linear in the nodes",
+          "[cwFixStationValidator][reference]")
+{
+    const RelayStall small = measureRelayStall(kRelaySmallTreeFiles);
+    const RelayStall large = measureRelayStall(kRelayLargeTreeFiles);
+
+    INFO("small: " << small.nodes << " nodes, " << small.stallMs << " ms stall");
+    INFO("large: " << large.nodes << " nodes, " << large.stallMs << " ms stall");
+    REQUIRE(small.stallMs > 0);
+    const double growth = double(large.stallMs) / double(small.stallMs);
+    INFO("growth " << growth);
+    CHECK(growth <= kMaxRelayStallGrowth);
 }

@@ -95,6 +95,13 @@ cwFixStationValidator::cwFixStationValidator(cwCavingRegion* region) :
             this, [this] { syncNodeConnections(); revalidate(); });
     connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
             this, &cwFixStationValidator::revalidate);
+    // The network decides which fix references are broken. These two signals
+    // are the only sources of cwSurveyNode::scopedNetworkChanged, which the
+    // region relays to every node, so listening here runs one pass per change.
+    connect(m_region, &cwCavingRegion::networkChanged,
+            this, &cwFixStationValidator::revalidate);
+    connect(m_region, &cwCavingRegion::memberViewsChanged,
+            this, &cwFixStationValidator::revalidate);
 
     syncNodeConnections();
     revalidate();
@@ -357,7 +364,9 @@ QHash<cwSurveyNode*, cwFixStationValidator::NodeWarning> cwFixStationValidator::
 
     const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
     for (cwSurveyNode* node : nodes) {
-        if (node == nullptr || node->fixStations() == nullptr) {
+        // Skipping a fix-less node spares building its member network.
+        if (node == nullptr || node->fixStations() == nullptr
+            || node->fixStations()->count() == 0) {
             continue;
         }
         const cwSurveyNetwork network = node->scopedNetwork();
@@ -484,11 +493,8 @@ void cwFixStationValidator::syncNodeConnections()
         // message carries no name and is unaffected).
         connect(node, &cwSurveyNode::nameChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
-        // The survey network decides which fix references are broken, so a
-        // recompute (a station appearing/disappearing) must re-attribute.
-        connect(node, &cwSurveyNode::scopedNetworkChanged,
-                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
-        // So do the stations the node's attached files fix themselves.
+        // The stations the node's attached files fix themselves decide
+        // collisions, so a change to them must re-attribute.
         connect(node, &cwSurveyNode::attachedFixesChanged,
                 this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
         m_connectedNodes.insert(node);
