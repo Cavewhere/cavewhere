@@ -39,16 +39,29 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // really drawn is per instance instead (nodeFloor). rootSpacing is the sample
 // spacing of this cloud's root, the coarsest level it has: the thinning below
 // never aims for a gap wider than that, because past it there is no coarser
-// level left to carry the surface. One float pads to std140's 16 bytes; the
-// C++ PerCloudUniform matches it field for field, padding included.
+// level left to carry the surface. maxPointSizePx caps every sprite.
+//
+// The second row holds the knobs that switch the rules below
+// (cw::pointcloud in cwPointCloudShading.h): thinningMode reshapes the weight,
+// sizeMode picks what a sprite measures (fixedPointSizePx for FixedPixels),
+// and floorMode drops the per-node floor. Their defaults are the rules as
+// described here. The C++ PerCloudUniform matches the block field for field.
 layout(std140, binding = 1) uniform PerCloudBlock {
     float spacingCoverage;
     float sseThresholdPx;
     float rootSpacing;
-    float padding0;
+    float maxPointSizePx;
+    int thinningMode;
+    int sizeMode;
+    int floorMode;
+    float fixedPointSizePx;
 };
 
-const float maxPointSizePx = 64.0;
+const int kThinningDiscrete = 1;
+const int kThinningOff = 2;
+const int kSizeFixedPixels = 1;
+const int kSizeOwnSpacing = 2;
+const int kFloorOff = 1;
 
 // The continuous level of detail rule, value for value cw::clod
 // (cwPointCloudClod.h) — change one and change the other, which is what the
@@ -145,6 +158,13 @@ void main(void)
     float targetSpacing = min(sseThresholdPx / pixelsPerMeter, rootSpacing);
     float nodeSpacing = nodeOriginScale.w * kQuantMax / kSampleGridResolution;
     float weight = clamp(log2(kOctave * nodeSpacing / targetSpacing), 0.0, 1.0);
+    if (thinningMode == kThinningDiscrete) {
+        // Compared directly rather than through log2, so the step lands on the
+        // same side as cw::clod's at the octave boundary on every backend.
+        weight = nodeSpacing >= targetSpacing ? 1.0 : 0.0;
+    } else if (thinningMode == kThinningOff) {
+        weight = 1.0;
+    }
 
     if (pointRank(qpos.xyz) >= weight) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -171,8 +191,12 @@ void main(void)
     // finest spacing drawn under this node rather than this node's own, so a
     // refined region's ancestors keep the size of the region they sit in
     // instead of blowing up to their own coarse spacing.
-    float sizePx = max(spacingCoverage * nodeFloor.x * pixelsPerMeter,
-                       spacingCoverage * sseThresholdPx);
+    float floorSpacing = sizeMode == kSizeOwnSpacing ? nodeSpacing : nodeFloor.x;
+    float floorPx = floorMode == kFloorOff ? 0.0
+                                           : spacingCoverage * floorSpacing * pixelsPerMeter;
+    float sizePx = sizeMode == kSizeFixedPixels
+                       ? fixedPointSizePx
+                       : max(floorPx, spacingCoverage * sseThresholdPx);
     // 1px floor: zoomed-out clouds were getting darker than zoomed-in ones
     // because a large min clamp made far points overdraw and stack EDL
     // darkening. Letting size shrink to a single pixel keeps overdraw flat

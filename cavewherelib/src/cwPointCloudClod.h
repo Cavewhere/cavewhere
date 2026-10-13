@@ -18,6 +18,7 @@
 #include <QtGlobal>
 
 //Our includes
+#include "cwPointCloudShading.h"
 #include "cwPointOctree.h"
 
 /**
@@ -134,6 +135,31 @@ namespace cw::clod {
     }
 
     /**
+     * weight() as @a mode reshapes it: the ramp itself for Continuous, a step
+     * that keeps 1 and drops everything under it to 0 for Discrete — so a level
+     * draws whole until its ramp starts, then not at all — and 1 everywhere
+     * for Off. Discrete never draws a point Continuous drops, and Off draws
+     * every point either one does.
+     */
+    inline double weight(double nodeSpacing, double targetSpacing,
+                         cw::pointcloud::ThinningMode mode)
+    {
+        switch (mode) {
+        case cw::pointcloud::ThinningMode::Discrete:
+            // The weight reaches 1 exactly when nodeSpacing >= targetSpacing.
+            // Both twins compare that in float, without log2, so a node at the
+            // octave boundary draws whole or not at all on the same side as
+            // the GPU instead of the whole node flipping on a rounding error.
+            return float(nodeSpacing) >= float(targetSpacing) ? 1.0 : 0.0;
+        case cw::pointcloud::ThinningMode::Off:
+            return 1.0;
+        case cw::pointcloud::ThinningMode::Continuous:
+            break;
+        }
+        return weight(nodeSpacing, targetSpacing);
+    }
+
+    /**
      * The spacing the cut is aiming for at a vertex where a meter covers
      * @a pixelsPerMeter pixels, given the cloud's refine threshold
      * @a sseThresholdPx and the sample spacing @a rootSpacing of its root. The
@@ -154,6 +180,13 @@ namespace cw::clod {
                       double targetSpacing)
     {
         return double(rank(point)) < weight(nodeSpacing, targetSpacing);
+    }
+
+    //! drawn() under thinning @a mode
+    inline bool drawn(const cw::octree::QuantizedPoint& point, double nodeSpacing,
+                      double targetSpacing, cw::pointcloud::ThinningMode mode)
+    {
+        return double(rank(point)) < weight(nodeSpacing, targetSpacing, mode);
     }
 
     //! The sample spacing of a node whose quantization step — the w of its

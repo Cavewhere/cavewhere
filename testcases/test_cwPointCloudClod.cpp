@@ -185,3 +185,50 @@ TEST_CASE("The target spacing stops widening at the root's own spacing",
     CHECK(farTarget == Catch::Approx(kRootSpacing));
     CHECK(weight(kRootSpacing, farTarget) == Catch::Approx(1.0));
 }
+
+TEST_CASE("Discrete thinning keeps a level whole until its ramp starts, and off keeps it always",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::ThinningMode;
+
+    //Continuous is the ramp itself
+    for (double target : {0.5, 1.0, std::sqrt(2.0), 2.0, 4.0}) {
+        CHECK(weight(kNodeSpacing, target * kNodeSpacing, ThinningMode::Continuous)
+              == weight(kNodeSpacing, target * kNodeSpacing));
+    }
+
+    //Discrete steps to zero the moment the ramp leaves one
+    CHECK(weight(kNodeSpacing, 0.5 * kNodeSpacing, ThinningMode::Discrete) == 1.0);
+    CHECK(weight(kNodeSpacing, kNodeSpacing, ThinningMode::Discrete) == 1.0);
+    CHECK(weight(kNodeSpacing, std::sqrt(2.0) * kNodeSpacing, ThinningMode::Discrete) == 0.0);
+    CHECK(weight(kNodeSpacing, 4.0 * kNodeSpacing, ThinningMode::Discrete) == 0.0);
+
+    //Off draws everything, however far past the octave the target is
+    CHECK(weight(kNodeSpacing, std::sqrt(2.0) * kNodeSpacing, ThinningMode::Off) == 1.0);
+    CHECK(weight(kNodeSpacing, 4.0 * kNodeSpacing, ThinningMode::Off) == 1.0);
+}
+
+TEST_CASE("Off draws every point continuous does, which draws every point discrete does",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::ThinningMode;
+
+    constexpr int kGridSide = 16;
+    const QVector<cw::octree::QuantizedPoint> points = gridPoints(kGridSide);
+
+    for (double target : {0.75, 1.0, 1.25, std::sqrt(2.0), 1.75, 2.0, 3.0}) {
+        for (const cw::octree::QuantizedPoint& point : points) {
+            const bool discrete =
+                drawn(point, kNodeSpacing, target * kNodeSpacing, ThinningMode::Discrete);
+            const bool continuous =
+                drawn(point, kNodeSpacing, target * kNodeSpacing, ThinningMode::Continuous);
+            const bool off = drawn(point, kNodeSpacing, target * kNodeSpacing, ThinningMode::Off);
+
+            REQUIRE(continuous == drawn(point, kNodeSpacing, target * kNodeSpacing));
+            if (discrete) {
+                REQUIRE(continuous);
+            }
+            REQUIRE(off);
+        }
+    }
+}

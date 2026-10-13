@@ -9,6 +9,7 @@
 #define CWRENDERPOINTCLOUD_H
 
 // Our includes
+#include "cwPointCloudShading.h"
 #include "cwPointOctreePickSet.h"
 #include "cwPointOctreeSource.h"
 #include "cwRenderObject.h"
@@ -113,6 +114,8 @@ public:
     float meanSpacingXY() const;
     float spacingCoverage() const;
     void setSpacingCoverage(float spacingCoverage);
+    const cwPointCloudShading& shading() const;
+    void setShading(const cwPointCloudShading& shading);
 
 protected:
     cwRHIObject* createRHIObject() override;
@@ -129,8 +132,12 @@ private:
         // plain capture both render with it.
         float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 
+        // The thinning and sizing rules the shader applies, from
+        // cwRenderingSettings by way of the scene node.
+        cwPointCloudShading shading;
+
         bool operator!=(const RenderState& other) const {
-            return spacingCoverage != other.spacingCoverage;
+            return spacingCoverage != other.spacingCoverage || shading != other.shading;
         }
     };
 
@@ -152,6 +159,11 @@ inline const cwPointOctreeSource& cwRenderPointCloud::octree() const
 inline float cwRenderPointCloud::spacingCoverage() const
 {
     return m_renderState.value().spacingCoverage;
+}
+
+inline const cwPointCloudShading& cwRenderPointCloud::shading() const
+{
+    return m_renderState.value().shading;
 }
 
 #endif // CWRENDERPOINTCLOUD_H

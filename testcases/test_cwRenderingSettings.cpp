@@ -9,6 +9,11 @@
 
 //Qt includes
 #include <QSettings>
+#include <QSignalSpy>
+#include <QVector>
+
+//Std includes
+#include <functional>
 
 TEST_CASE("cwRenderingSettings is a singleton defaulting to 4x MSAA", "[cwRenderingSettings]")
 {
@@ -332,6 +337,163 @@ TEST_CASE("cwRenderingSettings budget knobs round-trip, clamp, persist, and emit
         CHECK(settings->screenSpaceErrorPx() == Catch::Approx(1.5));
         CHECK(settings->pointBudgetMillions() == 16);
         CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
+TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip isAtDefaults",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::FloorMode;
+    using cw::pointcloud::SizeMode;
+    using cw::pointcloud::ThinningMode;
+
+    constexpr int kCappedLevel = 3;
+    constexpr double kFixedPointSizePx = 5.0;
+    constexpr double kMaxPointSizePx = 12.0;
+
+    // One knob each: how to move it off its default, what QSettings holds
+    // afterward, and the notify signal that has to fire once.
+    struct Knob {
+        const char* name;
+        std::function<void()> change;
+        QString key;
+        QVariant persisted;
+        void (cwRenderingSettings::*notify)();
+    };
+
+    const QVector<Knob> knobs = {
+        {"freezeCut", [&] { settings->setFreezeCut(true); },
+         QStringLiteral("rendering/pointCloud/freezeCut"), true,
+         &cwRenderingSettings::freezeCutChanged},
+        {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); },
+         QStringLiteral("rendering/pointCloud/maxLevel"), kCappedLevel,
+         &cwRenderingSettings::maxLevelChanged},
+        {"inflationGovernor", [&] { settings->setInflationGovernor(false); },
+         QStringLiteral("rendering/pointCloud/inflationGovernor"), false,
+         &cwRenderingSettings::inflationGovernorChanged},
+        {"evictionHold", [&] { settings->setEvictionHold(true); },
+         QStringLiteral("rendering/pointCloud/evictionHold"), true,
+         &cwRenderingSettings::evictionHoldChanged},
+        {"thinningMode", [&] { settings->setThinningMode(int(ThinningMode::Discrete)); },
+         QStringLiteral("rendering/pointCloud/thinningMode"), int(ThinningMode::Discrete),
+         &cwRenderingSettings::thinningModeChanged},
+        {"sizeMode", [&] { settings->setSizeMode(int(SizeMode::FixedPixels)); },
+         QStringLiteral("rendering/pointCloud/sizeMode"), int(SizeMode::FixedPixels),
+         &cwRenderingSettings::sizeModeChanged},
+        {"floorMode", [&] { settings->setFloorMode(int(FloorMode::Off)); },
+         QStringLiteral("rendering/pointCloud/floorMode"), int(FloorMode::Off),
+         &cwRenderingSettings::floorModeChanged},
+        {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); },
+         QStringLiteral("rendering/pointCloud/fixedPointSizePx"), kFixedPointSizePx,
+         &cwRenderingSettings::fixedPointSizePxChanged},
+        {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); },
+         QStringLiteral("rendering/pointCloud/maxPointSizePx"), kMaxPointSizePx,
+         &cwRenderingSettings::maxPointSizePxChanged},
+    };
+
+    SECTION("the knobs start at the renderer's own rules") {
+        const cwRenderBudgets defaults;
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.freezeCut == defaults.freezeCut);
+        CHECK(budgets.maxLevel == defaults.maxLevel);
+        CHECK(budgets.maxLevel == cwRenderingSettings::unlimitedLevel());
+        CHECK(budgets.inflationGovernor == defaults.inflationGovernor);
+        CHECK(budgets.evictionHold == defaults.evictionHold);
+        CHECK(settings->pointCloudShading() == cwPointCloudShading());
+        CHECK(settings->maxPointSizePx() == Catch::Approx(cw::pointcloud::kMaxPointSizePx));
+        CHECK(settings->isAtDefaults());
+    }
+
+    for (const Knob& knob : knobs) {
+        DYNAMIC_SECTION("moving " << knob.name << " persists it, fires once, and leaves the defaults") {
+            QSignalSpy notifySpy(settings, knob.notify);
+            QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+            knob.change();
+
+            CHECK(notifySpy.count() == 1);
+            CHECK(defaultsSpy.count() == 1);
+            CHECK_FALSE(settings->isAtDefaults());
+
+            QSettings diskSettings;
+            CHECK(diskSettings.value(knob.key) == knob.persisted);
+
+            //Setting the same value again is a no-op
+            knob.change();
+            CHECK(notifySpy.count() == 1);
+
+            settings->resetPointCloudKnobsToDefaults();
+            CHECK(notifySpy.count() == 2);
+            CHECK(settings->isAtDefaults());
+        }
+    }
+
+    SECTION("the streaming knobs reach cwRenderBudgets") {
+        settings->setFreezeCut(true);
+        settings->setMaxLevel(kCappedLevel);
+        settings->setInflationGovernor(false);
+        settings->setEvictionHold(true);
+
+        const cwRenderBudgets budgets = settings->budgets();
+        CHECK(budgets.freezeCut);
+        CHECK(budgets.maxLevel == kCappedLevel);
+        CHECK_FALSE(budgets.inflationGovernor);
+        CHECK(budgets.evictionHold);
+    }
+
+    SECTION("the shader knobs reach pointCloudShading and announce it") {
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+
+        settings->setThinningMode(int(ThinningMode::Off));
+        settings->setSizeMode(int(SizeMode::OwnSpacing));
+        settings->setFloorMode(int(FloorMode::Off));
+        settings->setFixedPointSizePx(kFixedPointSizePx);
+        settings->setMaxPointSizePx(kMaxPointSizePx);
+        CHECK(shadingSpy.count() == 5);
+
+        const cwPointCloudShading& shading = settings->pointCloudShading();
+        CHECK(shading.thinningMode == ThinningMode::Off);
+        CHECK(shading.sizeMode == SizeMode::OwnSpacing);
+        CHECK(shading.floorMode == FloorMode::Off);
+        CHECK(shading.fixedPointSizePx == Catch::Approx(kFixedPointSizePx));
+        CHECK(shading.maxPointSizePx == Catch::Approx(kMaxPointSizePx));
+    }
+
+    SECTION("out-of-range values clamp") {
+        settings->setMaxLevel(-10);
+        CHECK(settings->maxLevel() == cwRenderingSettings::unlimitedLevel());
+        settings->setMaxLevel(1000);
+        CHECK(settings->maxLevel() == cwRenderingSettings::maximumLevel());
+
+        settings->setThinningMode(-1);
+        CHECK(settings->thinningMode() == 0);
+        settings->setThinningMode(100);
+        CHECK(settings->thinningMode() == cwRenderingSettings::thinningModeCount() - 1);
+        settings->setSizeMode(100);
+        CHECK(settings->sizeMode() == cwRenderingSettings::sizeModeCount() - 1);
+        settings->setFloorMode(100);
+        CHECK(settings->floorMode() == cwRenderingSettings::floorModeCount() - 1);
+
+        settings->setFixedPointSizePx(0.0);
+        CHECK(settings->fixedPointSizePx() == Catch::Approx(cwRenderingSettings::minimumPointSizePx()));
+        settings->setMaxPointSizePx(1000.0);
+        CHECK(settings->maxPointSizePx() == Catch::Approx(cwRenderingSettings::maximumPointSizePx()));
+    }
+
+    SECTION("resetting the point cloud knobs leaves MSAA and the HUD alone") {
+        settings->setShowRenderStatsHud(true);
+        settings->setThinningMode(int(ThinningMode::Off));
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->thinningMode() == int(ThinningMode::Continuous));
+        CHECK(settings->showRenderStatsHud());
     }
 
     settings->resetToDefaults();

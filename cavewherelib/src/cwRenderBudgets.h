@@ -41,6 +41,14 @@ namespace cw::budgets {
     constexpr double kMinScreenSpaceErrorPx = 0.5;
     constexpr double kMaxScreenSpaceErrorPx = 8.0;
 
+    // The streaming switches. Each default is the renderer's own behavior, so
+    // they exist to isolate one rule for an A/B rather than to tune it.
+    constexpr bool kDefaultFreezeCut = false;
+    constexpr int kUnlimitedLevel = -1;
+    constexpr int kDefaultMaxLevel = kUnlimitedLevel;
+    constexpr bool kDefaultInflationGovernor = true;
+    constexpr bool kDefaultEvictionHold = false;
+
     constexpr qint64 kDefaultGpuBudgetBytes = kDefaultGpuBudgetMb * kBytesPerMegabyte;
     constexpr qint64 kDefaultCpuBudgetBytes = kDefaultCpuBudgetMb * kBytesPerMegabyte;
     constexpr qint64 kDefaultUploadBudgetBytesPerFrame = kDefaultUploadBudgetMbPerFrame * kBytesPerMegabyte;
@@ -60,6 +68,19 @@ struct cwRenderBudgets {
 
     //! Points per frame across every cloud in the view
     qint64 pointBudget = cw::budgets::kDefaultPointBudgetPoints;
+
+    //! The live cut stays where it is while the camera moves
+    bool freezeCut = cw::budgets::kDefaultFreezeCut;
+
+    //! The deepest level the cut refines to, kUnlimitedLevel for no cap
+    int maxLevel = cw::budgets::kDefaultMaxLevel;
+
+    //! The forest steps its screen-space-error inflation under budget pressure;
+    //! off holds it at 1
+    bool inflationGovernor = cw::budgets::kDefaultInflationGovernor;
+
+    //! Resident nodes stay resident, over the GPU budget if it comes to that
+    bool evictionHold = cw::budgets::kDefaultEvictionHold;
 };
 
 #endif // CWRENDERBUDGETS_H

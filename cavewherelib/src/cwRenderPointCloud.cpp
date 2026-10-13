@@ -40,7 +40,7 @@ void cwRenderPointCloud::setOctree(const cwPointOctreeSource& source)
 
 void cwRenderPointCloud::clear()
 {
-    // The render knob (spacingCoverage) lives in m_renderState and is
+    // The render knobs (spacingCoverage, shading) live in m_renderState and are
     // intentionally left untouched — clearing only drops the octree.
     m_source.setValue(cwPointOctreeSource());
 
@@ -82,6 +82,17 @@ void cwRenderPointCloud::setSpacingCoverage(float spacingCoverage)
         return;
     }
     state.spacingCoverage = spacingCoverage;
+    m_renderState.setValue(state);
+    update();
+}
+
+void cwRenderPointCloud::setShading(const cwPointCloudShading& shading)
+{
+    RenderState state = m_renderState.value();
+    if (state.shading == shading) {
+        return;
+    }
+    state.shading = shading;
     m_renderState.setValue(state);
     update();
 }

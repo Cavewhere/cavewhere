@@ -1165,9 +1165,6 @@ namespace {
     //! mask is eroded by that much plus a pixel of rasterization slack
     constexpr int kReferenceErosionSlackPx = 1;
 
-    //! PointCloud.vert's ceiling on gl_PointSize (:45)
-    constexpr double kMaxSpritePx = 64.0;
-
     //! 2 % a step, which puts several scales between neighboring level
     //! transitions without the sweep costing more frames than it is worth
     constexpr double kSweepStepFraction = 1.02;
@@ -1452,7 +1449,7 @@ namespace {
         const double coverage = double(uniform.spacingCoverage);
         const double sizePx = std::max(coverage * floorSpacing * pixelsPerMeter,
                                        coverage * double(uniform.sseThresholdPx));
-        return std::clamp(sizePx, kMinSpritePx, kMaxSpritePx);
+        return std::clamp(sizePx, kMinSpritePx, double(uniform.maxPointSizePx));
     }
 
     //! The widest floor the last frame drew, which is the node with the least
@@ -2230,11 +2227,22 @@ namespace {
         return cache;
     }
 
+    //! Switches @a fixture's cloud to thinning @a mode, every other shading knob kept
+    void setThinningMode(PointCloudFixture& fixture, cw::pointcloud::ThinningMode mode)
+    {
+        cwPointCloudShading shading = fixture.render().shading();
+        shading.thinningMode = mode;
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+    }
+
     //! Every point of @a fixture's drawn nodes that cw::clod keeps at @a height
     //! and the view holds, which is what the frame's lit pixels have to come
     //! to. The points come out of the payloads the nodes were uploaded from,
     //! so the prediction reads the same quantized coordinates the shader does.
-    int predictedDrawnCount(const PointCloudFixture& fixture, float height)
+    int predictedDrawnCount(const PointCloudFixture& fixture, float height,
+                            cw::pointcloud::ThinningMode mode =
+                                cw::pointcloud::ThinningMode::Continuous)
     {
         const cwPointOctreeManifest& manifest = fixture.manifest();
         const double pixelsPerMeter = double(kTargetDimension) / double(height);
@@ -2259,7 +2267,7 @@ namespace {
                     qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
                     0};
 
-                if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing)) {
+                if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing, mode)) {
                     continue;
                 }
 
@@ -4499,6 +4507,315 @@ TEST_CASE("The GPU thins the points the CPU predicts", "[PointCloudStreaming]")
         CHECK(std::abs(double(lit) - double(predicted))
               <= kThinnedCountTolerance * double(predicted));
     }
+
+    SECTION("discrete thinning drops the refined level whole at half its weight") {
+        setThinningMode(fixture, cw::pointcloud::ThinningMode::Discrete);
+        const qsizetype lit = litCountAt(kThinningHalfWeightHeight);
+        const int predicted = predictedDrawnCount(fixture, kThinningHalfWeightHeight,
+                                                  cw::pointcloud::ThinningMode::Discrete);
+        const int continuous = predictedDrawnCount(fixture, kThinningHalfWeightHeight);
+
+        INFO("predicted " << predicted << " points at H = " << kThinningHalfWeightHeight
+             << " m, lit " << lit << " pixels, " << continuous << " under the ramp");
+        CHECK(predicted < continuous);
+        CHECK(std::abs(double(lit) - double(predicted))
+              <= kThinnedCountTolerance * double(predicted));
+    }
+
+    SECTION("thinning off draws every resident point the view holds") {
+        setThinningMode(fixture, cw::pointcloud::ThinningMode::Off);
+        const qsizetype lit = litCountAt(kThinningHalfWeightHeight);
+        const int predicted = predictedDrawnCount(fixture, kThinningHalfWeightHeight,
+                                                  cw::pointcloud::ThinningMode::Off);
+        const int continuous = predictedDrawnCount(fixture, kThinningHalfWeightHeight);
+
+        INFO("predicted " << predicted << " points at H = " << kThinningHalfWeightHeight
+             << " m, lit " << lit << " pixels, " << continuous << " under the ramp");
+        CHECK(predicted > continuous);
+        CHECK(std::abs(double(lit) - double(predicted))
+              <= kThinnedCountTolerance * double(predicted));
+    }
+}
+
+TEST_CASE("Thinning off lights at least what continuous does, which lights at least what discrete does",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kTargetDimension);
+    fixture.render().setSpacingCoverage(kBareSpacingCoverage);
+    fixture.synchronize();
+    fixture.setReadbackEnabled(true);
+
+    const auto litUnder = [&](cw::pointcloud::ThinningMode mode) {
+        setThinningMode(fixture, mode);
+        fixture.renderFrame();
+        return fixture.litPixels().size();
+    };
+
+    //The modes reshape the weight alone, so the cut each height settles to is
+    //the one all three draw from
+    bool modesDiffer = false;
+    for (float height : zoomOutHeights(kPlaneSweepLowHeight, kPlaneSweepHighHeight,
+                                       kSweepStepFraction)) {
+        fixture.setOrthoHeight(height);
+        litUnder(cw::pointcloud::ThinningMode::Continuous);
+        fixture.renderUntilQuiet();
+
+        const qsizetype discrete = litUnder(cw::pointcloud::ThinningMode::Discrete);
+        const qsizetype off = litUnder(cw::pointcloud::ThinningMode::Off);
+        const qsizetype continuous = litUnder(cw::pointcloud::ThinningMode::Continuous);
+
+        INFO("H = " << height << " m: off " << off << ", continuous " << continuous
+             << ", discrete " << discrete);
+        CHECK(off >= continuous);
+        CHECK(continuous >= discrete);
+        modesDiffer = modesDiffer || off > discrete;
+    }
+
+    //Somewhere along the sweep a level is mid-ramp, or the comparison above
+    //could not have told the modes apart
+    CHECK(modesDiffer);
+}
+
+TEST_CASE("Fixed pixel sprites take the size asked for and every sprite stops at the ceiling",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("size-modes"));
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.synchronize();
+    fixture.renderUntilQuiet();
+
+    //The top edge of the lit region sits half a sprite above the highest drawn
+    //point, so two shadings of the same cut differ there by half their sides
+    const auto spriteSideUnder = [&](const cwPointCloudShading& shading) {
+        cwPointCloudShading reference = shading;
+        reference.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
+        reference.fixedPointSizePx = float(kMinSpritePx);
+        fixture.render().setShading(reference);
+        fixture.synchronize();
+        fixture.renderFrame();
+        const int referenceTop = topmostLitRow(fixture.litPixels());
+        REQUIRE(referenceTop >= 0);
+
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+        fixture.renderFrame();
+        const int top = topmostLitRow(fixture.litPixels());
+        REQUIRE(top >= 0);
+        return kMinSpritePx + 2.0 * (referenceTop - top);
+    };
+
+    //Odd sizes, so a sprite reaches whole pixels either side of its center
+    constexpr float kFixedSidePx = 9.0f;
+    constexpr float kCeilingPx = 5.0f;
+    constexpr float kOversizedCoverage = 8.0f;
+
+    SECTION("fixed pixels ignores the coverage and the spacing") {
+        cwPointCloudShading shading;
+        shading.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
+        shading.fixedPointSizePx = kFixedSidePx;
+        fixture.render().setSpacingCoverage(kOversizedCoverage);
+
+        const double side = spriteSideUnder(shading);
+        INFO("fixed sprite side " << side);
+        CHECK(std::abs(side - double(kFixedSidePx)) <= kSpriteTolerancePx);
+    }
+
+    SECTION("maxPointSizePx caps a sprite the coverage asks to be wider") {
+        fixture.render().setSpacingCoverage(kOversizedCoverage);
+        REQUIRE(spriteSidePx(kOversizedCoverage, refineThresholdPx(fixture)) > kCeilingPx);
+
+        cwPointCloudShading shading;
+        shading.maxPointSizePx = kCeilingPx;
+        const double side = spriteSideUnder(shading);
+        INFO("capped sprite side " << side);
+        CHECK(std::abs(side - double(kCeilingPx)) <= kSpriteTolerancePx);
+    }
+}
+
+TEST_CASE("Own spacing sizes ancestors past the floor and floor off sizes under it",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("floor-modes"));
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.render().setSpacingCoverage(kWheelCoverage);
+    fixture.synchronize();
+
+    const auto litUnder = [&](const cwPointCloudShading& shading) {
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+        fixture.renderFrame();
+        return fixture.litPixels().size();
+    };
+
+    SECTION("the root alone, held there by maxLevel, sizes from the threshold once its floor is off") {
+        cwRenderBudgets budgets = fixture.budgets();
+        budgets.maxLevel = kRootLevel;
+        fixture.setBudgets(budgets);
+        fixture.renderUntilQuiet();
+        REQUIRE(fixture.drawableCount() == 1);
+
+        cwPointCloudShading floorOff;
+        floorOff.floorMode = cw::pointcloud::FloorMode::Off;
+
+        const qsizetype covered = litUnder(cwPointCloudShading());
+        const qsizetype threshold = litUnder(floorOff);
+        INFO("floored " << covered << " lit, threshold alone " << threshold);
+        CHECK(threshold < covered);
+    }
+
+    SECTION("a refined cut's ancestors grow when each node sizes from its own spacing") {
+        fixture.renderUntilQuiet();
+        REQUIRE(selectedLevelCount(fixture) > 1);
+
+        cwPointCloudShading ownSpacing;
+        ownSpacing.sizeMode = cw::pointcloud::SizeMode::OwnSpacing;
+
+        const qsizetype covered = litUnder(cwPointCloudShading());
+        const qsizetype own = litUnder(ownSpacing);
+        INFO("floored " << covered << " lit, own spacing " << own);
+        CHECK(own > covered);
+    }
+}
+
+TEST_CASE("maxLevel stops the cut at the level it names", "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("max-level"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const int uncapped = finestSelectedLevel(fixture);
+    REQUIRE(uncapped > 1);
+
+    const int capped = uncapped - 1;
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.maxLevel = capped;
+    fixture.setBudgets(budgets);
+    fixture.renderUntilQuiet();
+
+    CHECK(finestSelectedLevel(fixture) == capped);
+    CHECK(finestDrawnLevel(fixture) == capped);
+
+    //An export job cuts its own camera under the same cap
+    const cwRHIObject::RenderData job = fixture.jobRenderData(kCloseOrthoHeight);
+    cw::octree::SelectionInput input;
+    input.manifest = &fixture.manifest();
+    input.viewProjection = job.viewProjectionMatrix;
+    input.absP11 = std::abs(double(job.projectionMatrix(1, 1)));
+    input.viewportHeightPx = job.viewportSize.height();
+    input.screenSpaceErrorPx = job.budgets.screenSpaceErrorPx;
+    input.maxLevel = job.budgets.maxLevel;
+    for (const cw::octree::SelectedNode& node : cw::octree::selectNodes(input)) {
+        CHECK(fixture.manifest().nodes.at(node.node).level <= capped);
+    }
+}
+
+TEST_CASE("A frozen cut holds while the camera moves and follows it again once thawed",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("freeze-cut"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const QVector<int> closeCut = Access::selectedLevels(fixture.backend());
+    const int residentBefore = Access::residentCount(fixture.backend());
+    REQUIRE(finestSelectedLevel(fixture) > kRootLevel);
+
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.freezeCut = true;
+    fixture.setBudgets(budgets);
+
+    //The far camera wants the root alone; the frozen cut keeps every node it held
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    constexpr int kFrozenFrames = 5;
+    for (int i = 0; i < kFrozenFrames; i++) {
+        fixture.renderFrame();
+    }
+
+    CHECK(Access::selectedLevels(fixture.backend()) == closeCut);
+    CHECK(Access::residentCount(fixture.backend()) == residentBefore);
+
+    budgets.freezeCut = false;
+    fixture.setBudgets(budgets);
+    fixture.renderFrame();
+
+    CHECK(finestSelectedLevel(fixture) == kRootLevel);
+}
+
+TEST_CASE("The inflation governor off holds the threshold under a binding point budget",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("governor-off"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const qint64 uncappedPoints = Access::selectedPoints(fixture.backend());
+    const qint64 rootPoints = fixture.manifest().nodes.at(kRootIndex).pointCount;
+    REQUIRE(uncappedPoints > 3 * rootPoints);
+
+    constexpr qint64 kBudgetShare = 3;
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.pointBudget = uncappedPoints / kBudgetShare;
+    budgets.inflationGovernor = false;
+    fixture.setBudgets(budgets);
+
+    constexpr int kFrames = 3 * cw::octree::kSseRelaxProbeFrames;
+    for (int i = 0; i < kFrames; i++) {
+        fixture.renderFrame();
+        REQUIRE(Access::selectedPoints(fixture.backend()) <= budgets.pointBudget);
+        REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+    }
+
+    //The cap alone holds the cut, so it stays cut off part way
+    CHECK(Access::pointCapped(fixture.backend()));
+}
+
+TEST_CASE("Eviction hold keeps every resident node over the GPU budget",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("eviction-hold"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const int resident = Access::residentCount(fixture.backend());
+    REQUIRE(resident > 2);
+
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = totalGpuBytes() - 1;
+    budgets.evictionHold = true;
+    fixture.setBudgets(budgets);
+    fixture.setOrthoHeight(kFarOrthoHeight);
+
+    const qint64 before = fixture.gpuBytes();
+    constexpr int kFrames = 3;
+    for (int i = 0; i < kFrames; i++) {
+        fixture.renderFrame();
+    }
+
+    CHECK(Access::residentCount(fixture.backend()) == resident);
+    CHECK(fixture.gpuBytes() == before);
+
+    //Let go, and the budget takes back what the far camera no longer wants
+    budgets.evictionHold = false;
+    fixture.setBudgets(budgets);
+    fixture.renderFrame();
+
+    CHECK(Access::residentCount(fixture.backend()) < resident);
 }
 
 TEST_CASE("Zooming out until quiet leaves the holes bounded",

@@ -184,11 +184,12 @@ private:
     // and marks it resident. False when no constants slot could be freed for
     // it, which leaves the node Absent to be asked for again.
     bool uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int index,
-                    const cwPointOctreeNodePayload& payload);
+                    const cwPointOctreeNodePayload& payload, bool evictionHold);
 
     // A free constants slot, evicting the coldest resident node outside the cut
-    // to make one when the stack is empty. -1 when nothing could be freed.
-    int takeConstantSlot();
+    // to make one when the stack is empty unless @a evictionHold. -1 when
+    // nothing could be freed.
+    int takeConstantSlot(bool evictionHold);
 
     // Records every node the previous cut held that this frame's cut dropped,
     // keyed by the frame it was last wanted in, which is what evictColdestNode
@@ -323,24 +324,27 @@ private:
     // this cloud's inflation, marking the live slot behind when it moved.
     void refreshSseThreshold(const cwRenderBudgets& budgets);
 
-    // Mirrors the PerCloudBlock declaration in PointCloud.vert, which sizes
-    // every sprite as
+    // Mirrors the PerCloudBlock declaration in PointCloud.vert, which at the
+    // default knobs sizes every sprite as
     // max(spacingCoverage * nodeFloor.x * pixelsPerMeter(w),
     //     spacingCoverage * sseThresholdPx)
-    // pixels, the floor coming per instance, and thins each node against the
-    // spacing the cut is aiming for, never wider than rootSpacing — the
-    // coarsest level the file has. The three live floats carry one explicit pad
-    // float so the struct is std140's 16 bytes, which is what the block rounds
-    // up to.
+    // pixels, clamped to maxPointSizePx, the floor coming per instance, and
+    // thins each node against the spacing the cut is aiming for, never wider
+    // than rootSpacing — the coarsest level the file has. The second std140 row
+    // carries the cwPointCloudShading modes that switch those rules.
     struct PerCloudUniform {
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
         float rootSpacing = 0.0f;
-        float padding0 = 0.0f;
+        float maxPointSizePx = 0.0f;
+        qint32 thinningMode = 0;
+        qint32 sizeMode = 0;
+        qint32 floorMode = 0;
+        float fixedPointSizePx = 0.0f;
     };
-    static_assert(sizeof(PerCloudUniform) == 4 * sizeof(float),
-                  "PerCloudBlock in PointCloud.vert rounds to std140's 16 "
-                  "bytes; the C++ struct has to match it, padding included.");
+    static_assert(sizeof(PerCloudUniform) == 8 * sizeof(float),
+                  "PerCloudBlock in PointCloud.vert is two std140 rows of 16 "
+                  "bytes; the C++ struct has to match it field for field.");
 
     // The block the shader reads for @a spacingCoverage, carrying this frame's
     // refine threshold along with it.

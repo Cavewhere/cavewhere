@@ -15,6 +15,9 @@
 #include <algorithm>
 #include <cmath>
 
+//The budget's maxLevel goes straight into the selection's
+static_assert(cw::budgets::kUnlimitedLevel == cw::octree::kUnlimitedLevel);
+
 void cwPointCloudForest::setTree(const cwRHIObject* cloud,
                                  const cwPointOctreeManifest* manifest)
 {
@@ -93,6 +96,20 @@ bool cwPointCloudForest::anyNodeSelected() const
 
 void cwPointCloudForest::advance(const cwRenderBudgets& budgets)
 {
+    //A frozen cut is the one being looked at, so the governor holds with it
+    if (budgets.freezeCut) {
+        return;
+    }
+
+    if (!budgets.inflationGovernor) {
+        m_sseInflation = 1.0;
+        m_desiredBytesRelaxed = -1;
+        m_pointCappedRelaxed = false;
+        m_relaxedSteps = 1;
+        m_relaxProbeFrame = 0;
+        return;
+    }
+
     const auto* ledger = cwRenderMemoryLedger::instance();
     const qint64 total = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu);
 
@@ -190,6 +207,11 @@ void cwPointCloudForest::select(const cwRHIObject::RenderData& renderData,
                                 const cwFrustum& frustum,
                                 const std::function<bool(const cwRHIObject*)>& draws)
 {
+    //Only a cut that exists can be frozen, so the first frame of a tree still cuts
+    if (renderData.budgets.freezeCut && anyNodeSelected()) {
+        return;
+    }
+
     m_lastFrustum = frustum;
 
     cw::octree::ForestInput input;
@@ -200,6 +222,7 @@ void cwPointCloudForest::select(const cwRHIObject::RenderData& renderData,
     input.screenSpaceErrorPx = renderData.budgets.screenSpaceErrorPx;
     input.sseInflation = m_sseInflation;
     input.maxPoints = renderData.budgets.pointBudget;
+    input.maxLevel = renderData.budgets.maxLevel;
 
     //The trees of the cut, in registration order, and where each one's slice
     //goes back to

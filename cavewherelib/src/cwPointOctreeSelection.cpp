@@ -117,6 +117,9 @@ ForestSelection selectForest(const ForestInput& input)
             return;
         }
         const cwPointOctreeManifest* manifest = manifestOf(tree);
+        if(input.maxLevel >= 0 && manifest->nodes.at(node.node).level >= input.maxLevel) {
+            return;
+        }
         for(int child : manifest->nodes.at(node.node).children) {
             if(child >= 0 && child < manifest->nodes.size()) {
                 heap.push({{child, projectedSpacing(tree, child)}, tree});
@@ -173,6 +176,7 @@ Selection selectCut(const SelectionInput& input)
     forest.sseInflation = input.sseInflation;
     forest.maxNodes = input.maxNodes;
     forest.maxPoints = input.maxPoints;
+    forest.maxLevel = input.maxLevel;
 
     return selectForest(forest).trees.at(0);
 }

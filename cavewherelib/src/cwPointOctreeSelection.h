@@ -24,6 +24,9 @@ namespace cw::octree {
     //Caps the selection walk, and with it the draw count per view per frame
     constexpr int kMaxDesiredNodes = 4096;
 
+    //A maxLevel that leaves the cut free to refine as deep as the tree goes
+    constexpr int kUnlimitedLevel = -1;
+
     //Anti-churn: how fast the screen space error grows and shrinks under pressure
     constexpr double kSseInflationStep = 1.25;
     constexpr double kMaxSseInflation = 16.0;
@@ -77,6 +80,9 @@ namespace cw::octree {
         //would push it past this, which bounds frame time in the unit frame
         //time follows.
         qint64 maxPoints = std::numeric_limits<qint64>::max();
+
+        //The deepest level the cut refines to, kUnlimitedLevel for no cap
+        int maxLevel = kUnlimitedLevel;
     };
 
     //One node of the cut, with the on-screen spacing of its points that put it there
@@ -140,6 +146,7 @@ namespace cw::octree {
         double sseInflation = 1.0;
         int maxNodes = kMaxDesiredNodes;
         qint64 maxPoints = std::numeric_limits<qint64>::max();
+        int maxLevel = kUnlimitedLevel;
     };
 
     //! One forest cut: a Selection per input tree, in input order, plus the totals

@@ -266,6 +266,7 @@ cw::octree::SelectionInput cwRHIPointCloud::selectionInput(const RenderData& ren
     input.viewportHeightPx = renderData.viewportSize.height();
     input.screenSpaceErrorPx = renderData.budgets.screenSpaceErrorPx;
     input.sseInflation = forest().sseInflation();
+    input.maxLevel = renderData.budgets.maxLevel;
     return input;
 }
 
@@ -353,7 +354,15 @@ cwRHIPointCloud::appearanceUniform(float spacingCoverage) const
     // thin away, so it is the widest gap cw::clod ever thins toward.
     const float rootSpacing =
         m_source.manifest ? float(m_source.manifest->spacing(kRootLevel)) : 0.0f;
-    return PerCloudUniform{spacingCoverage, m_sseThresholdPx, rootSpacing, 0.0f};
+    const cwPointCloudShading& shading = m_renderState.value().shading;
+    return PerCloudUniform{spacingCoverage,
+                           m_sseThresholdPx,
+                           rootSpacing,
+                           shading.maxPointSizePx,
+                           qint32(shading.thinningMode),
+                           qint32(shading.sizeMode),
+                           qint32(shading.floorMode),
+                           shading.fixedPointSizePx};
 }
 
 void cwRHIPointCloud::refreshSseThreshold(const cwRenderBudgets& budgets)
@@ -480,6 +489,14 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
             continue;
         }
 
+        if (data.renderData.budgets.evictionHold && m_freeSlots.isEmpty()) {
+            // Held with the slot pool full: the node stays Requested and its
+            // payload waits here, so it is decoded once rather than dropped and
+            // asked for again every frame.
+            deferred.append(result);
+            continue;
+        }
+
         if (!cw::residency::takeFromBudget(remainingUploadBytes, result.payload.bytes.size(),
                                            uploadedThisFrame)) {
             // The streamer already handed this over, so it waits here for the
@@ -488,7 +505,8 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
             continue;
         }
 
-        if (uploadNode(rhi, data.resourceUpdateBatch, index, result.payload)) {
+        if (uploadNode(rhi, data.resourceUpdateBatch, index, result.payload,
+                       data.renderData.budgets.evictionHold)) {
             uploadedThisFrame = true;
         }
     }
@@ -573,10 +591,10 @@ void cwRHIPointCloud::publishPointCloudStats()
 }
 
 bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int index,
-                                 const cwPointOctreeNodePayload& payload)
+                                 const cwPointOctreeNodePayload& payload, bool evictionHold)
 {
     const QByteArray& bytes = payload.bytes;
-    const int slot = takeConstantSlot();
+    const int slot = takeConstantSlot(evictionHold);
     if (slot < 0) {
         // Nothing could be freed for it; it goes back to being asked for.
         m_nodes[index].state = NodeState::Absent;
@@ -708,9 +726,9 @@ bool cwRHIPointCloud::evictColdestNode()
     return false;
 }
 
-int cwRHIPointCloud::takeConstantSlot()
+int cwRHIPointCloud::takeConstantSlot(bool evictionHold)
 {
-    if (m_freeSlots.isEmpty()) {
+    if (m_freeSlots.isEmpty() && !evictionHold) {
         QElapsedTimer evictTimer;
         if (m_profileEnabled) {
             evictTimer.start();
@@ -812,7 +830,7 @@ void cwRHIPointCloud::enforceGpuBudget(const cwRenderBudgets& budgets)
     const qint64 overshoot = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu)
                              - budgets.gpuBudgetBytes;
 
-    if (overshoot > 0) {
+    if (overshoot > 0 && !budgets.evictionHold) {
         const quint64 frame = currentFrame();
         const QVector<cw::octree::NodeResidency> stats = residencyStats();
         for (const int index : cw::octree::planNodeEvictions(stats, overshoot)) {

@@ -42,6 +42,9 @@ class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
     QML_UNCREATABLE("Access via RegionSceneManager.lazLayersSceneNode")
 
     Q_PROPERTY(float spacingCoverage READ spacingCoverage WRITE setSpacingCoverage NOTIFY spacingCoverageChanged)
+    Q_PROPERTY(float defaultSpacingCoverage READ defaultSpacingCoverage CONSTANT)
+    Q_PROPERTY(float minimumSpacingCoverage READ minimumSpacingCoverage CONSTANT)
+    Q_PROPERTY(float maximumSpacingCoverage READ maximumSpacingCoverage CONSTANT)
 
 public:
     explicit cwLazLayersSceneNode(QObject* parent = nullptr);
@@ -59,6 +62,9 @@ public:
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
 
     float spacingCoverage() const { return m_spacingCoverage; }
+    static float defaultSpacingCoverage();
+    static float minimumSpacingCoverage();
+    static float maximumSpacingCoverage();
 
     /// Subset of the bound model's layers whose render object is currently
     /// visible (keyword-filter pipeline gates this). Returns layers in the
@@ -79,6 +85,11 @@ private slots:
     void onEnabledChanged();
 
 private:
+    // The thinning and sizing knobs every owned cloud draws with, read off
+    // cwRenderingSettings and fanned out whenever one of them moves.
+    cwPointCloudShading shading() const;
+    void applyShading();
+
     void connectModel();
     void disconnectModel();
     void rebuild();

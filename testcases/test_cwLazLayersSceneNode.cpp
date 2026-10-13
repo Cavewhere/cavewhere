@@ -22,6 +22,7 @@
 #include "cwLazLayersSceneNode.h"
 #include "cwPointOctreeManifest.h"
 #include "cwRenderPointCloud.h"
+#include "cwRenderingSettings.h"
 #include "cwScene.h"
 
 #include "LazFixtureHelper.h"
@@ -499,4 +500,51 @@ TEST_CASE("scene node fans the spacing coverage out to clouds it already has and
     node.setSpacingCoverage(-1.0f);
     CHECK(node.spacingCoverage() == kMinCoverage);
     CHECK(secondCloud->spacingCoverage() == kMinCoverage);
+}
+
+TEST_CASE("scene node fans the rendering settings' shading out to clouds it already has and to later ones",
+          "[cwLazLayersSceneNode]")
+{
+    cwRenderingSettings::initialize();
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* first = addLazViaRescan(model, gisLayersDir, QStringLiteral("shading-first"));
+    REQUIRE(first != nullptr);
+
+    cwRenderPointCloud* firstCloud = node.pointCloudForLayer(first);
+    REQUIRE(firstCloud != nullptr);
+    CHECK(firstCloud->shading() == cwPointCloudShading());
+
+    constexpr double kFixedPointSizePx = 7.0;
+    settings->setThinningMode(int(cw::pointcloud::ThinningMode::Off));
+    settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels));
+    settings->setFixedPointSizePx(kFixedPointSizePx);
+    CHECK(firstCloud->shading() == settings->pointCloudShading());
+    CHECK(firstCloud->shading().thinningMode == cw::pointcloud::ThinningMode::Off);
+
+    cwLazLayer* second = addLazViaRescan(model, gisLayersDir, QStringLiteral("shading-second"));
+    REQUIRE(second != nullptr);
+
+    cwRenderPointCloud* secondCloud = node.pointCloudForLayer(second);
+    REQUIRE(secondCloud != nullptr);
+    CHECK(secondCloud->shading() == settings->pointCloudShading());
+
+    settings->resetToDefaults();
+    CHECK(firstCloud->shading() == cwPointCloudShading());
+    CHECK(secondCloud->shading() == cwPointCloudShading());
 }

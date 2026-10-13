@@ -88,10 +88,28 @@ Item {
     // Keys handlers fire only when this item has active focus.
     focus: true
 
+    // One-key A/B switches for the point cloud knobs (PointCloudDebugPanel),
+    // so a comparison happens while the camera holds still. P is the coverage
+    // gesture; V is reserved for the debug view.
+    function handlePointCloudDebugKey(key) {
+        const settings = RootData.settings.renderingSettings
+        switch (key) {
+        case Qt.Key_T:
+            settings.thinningMode = (settings.thinningMode + 1) % settings.thinningModeCount
+            return true
+        case Qt.Key_F:
+            settings.freezeCut = !settings.freezeCut
+            return true
+        }
+        return false
+    }
+
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_P && !event.isAutoRepeat) {
             turnTableInteractionId.pKeyHeld = true
             event.accepted = true
+        } else if (event.modifiers === Qt.NoModifier && !event.isAutoRepeat) {
+            event.accepted = rootId.handlePointCloudDebugKey(event.key)
         }
     }
 
@@ -334,6 +352,7 @@ Item {
     // Built only while the setting is on, so a hidden HUD costs nothing — not
     // even the model's polling timer.
     Loader {
+        id: renderStatsHudLoaderId
         objectName: "renderStatsHudLoader"
         active: RootData.settings.renderingSettings.showRenderStatsHud
         anchors.top: parent.top
@@ -341,7 +360,18 @@ Item {
         anchors.margins: Theme.pageMargin
         z: rootId.zOverlay
 
-        sourceComponent: RenderStatsHud { }
+        sourceComponent: RenderStatsHud {
+            onDebugPanelRequested: pointCloudDebugPanelId.open()
+        }
+    }
+
+    // Opened from the HUD, and right-aligned under it inside the view.
+    PointCloudDebugPanel {
+        id: pointCloudDebugPanelId
+        parent: rootId
+        x: rootId.width - width - Theme.pageMargin
+        y: renderStatsHudLoaderId.y + renderStatsHudLoaderId.height + Theme.linkBarButtonSpacing
+        lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
     }
 
     // The tools are armed from the main sidebar's tool rail (see MainSideBar),

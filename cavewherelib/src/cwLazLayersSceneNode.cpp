@@ -14,6 +14,7 @@
 #include "cwLazLayerModel.h"
 #include "cwRenderObject.h"
 #include "cwRenderPointCloud.h"
+#include "cwRenderingSettings.h"
 #include "cwScene.h"
 
 #include <QDebug>
@@ -51,6 +52,42 @@ constexpr float kMaxGapFudge = 10.0f;
 cwLazLayersSceneNode::cwLazLayersSceneNode(QObject* parent) :
     QObject(parent)
 {
+    // Without the singleton (tests, tools) every cloud keeps the default rules.
+    if (auto* settings = cwRenderingSettings::instance()) {
+        connect(settings, &cwRenderingSettings::pointCloudShadingChanged,
+                this, &cwLazLayersSceneNode::applyShading);
+    }
+}
+
+cwPointCloudShading cwLazLayersSceneNode::shading() const
+{
+    const auto* settings = cwRenderingSettings::instance();
+    return settings ? settings->pointCloudShading() : cwPointCloudShading();
+}
+
+void cwLazLayersSceneNode::applyShading()
+{
+    const cwPointCloudShading current = shading();
+    for (const auto& renderObject : std::as_const(m_pointClouds)) {
+        if (renderObject) {
+            renderObject->setShading(current);
+        }
+    }
+}
+
+float cwLazLayersSceneNode::defaultSpacingCoverage()
+{
+    return cw::pointcloud::kDefaultSpacingCoverage;
+}
+
+float cwLazLayersSceneNode::minimumSpacingCoverage()
+{
+    return kMinSpacingCoverage;
+}
+
+float cwLazLayersSceneNode::maximumSpacingCoverage()
+{
+    return kMaxSpacingCoverage;
 }
 
 cwLazLayersSceneNode::~cwLazLayersSceneNode()
@@ -263,6 +300,7 @@ void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
 
     auto* renderObject = new cwRenderPointCloud();
     renderObject->setSpacingCoverage(m_spacingCoverage);
+    renderObject->setShading(shading());
     renderObject->setScene(m_scene);
     m_pointClouds.insert(layer->id(), renderObject);
 

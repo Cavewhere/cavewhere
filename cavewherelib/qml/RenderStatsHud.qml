@@ -33,6 +33,9 @@ QQ.Rectangle {
     color: Qt.alpha(Theme.floatingWidgetColor, hudRootId.backgroundOpacity)
     radius: Theme.floatingWidgetRadius
 
+    // The point cloud knobs panel is a desktop debugging aid, opened from here.
+    signal debugPanelRequested()
+
     RenderingStatsModel {
         id: statsModelId
         running: hudRootId.visible
@@ -191,6 +194,15 @@ QQ.Rectangle {
                 font.pixelSize: Theme.fontSizeCaption
                 visible: statsModelId.sseInflation > 1
             }
+        }
+
+        QC.Button {
+            objectName: "renderStatsHudDebugPanelButton"
+            text: qsTr("Point cloud knobs…")
+            font.pixelSize: Theme.fontSizeCaption
+            visible: RootData.desktopBuild
+            Layout.alignment: Qt.AlignRight
+            onClicked: hudRootId.debugPanelRequested()
         }
     }
 }
