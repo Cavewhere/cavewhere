@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as QC
 import QtCore as QtCore
 import QtTest
 import cavewherelib
@@ -6,6 +7,40 @@ import cw.TestLib
 
 MainWindowTest {
     id: rootId
+
+    //! The tooltip \a host declares as its own child, null when it has none.
+    function toolTipOf(host) {
+        const data = host.data
+        for (let i = 0; i < data.length; ++i) {
+            if (data[i] instanceof QC.ToolTip) {
+                return data[i]
+            }
+        }
+        return null
+    }
+
+    //! Switches to the light scheme, hovers \a host through \a testCase, and
+    //! checks that its tooltip shows text holding \a text in the Theme's
+    //! tooltip colors. The caller puts the scheme back.
+    function verifyLightToolTip(testCase, host, text) {
+        RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Light
+        testCase.tryVerify(() => !Theme.dark, 5000, "the scheme is light")
+
+        const tip = rootId.toolTipOf(host)
+        testCase.verify(tip !== null, host.objectName + " declares a tooltip")
+        testCase.waitForRendering(rootId)
+        testCase.mouseMove(host, host.width / 2, host.height / 2)
+        testCase.tryVerify(() => tip.visible, 5000, "hovering " + host.objectName + " shows its tooltip")
+
+        testCase.verify(tip.contentItem.text.indexOf(text) >= 0,
+                        "the tooltip reads \"" + tip.contentItem.text + "\"")
+        testCase.verify(Qt.colorEqual(tip.background.color, Theme.toolTipSurface),
+                        "tooltip surface " + tip.background.color + ", Theme " + Theme.toolTipSurface)
+        testCase.verify(Qt.colorEqual(tip.contentItem.color, Theme.toolTipText),
+                        "tooltip text " + tip.contentItem.color + ", Theme " + Theme.toolTipText)
+        testCase.mouseMove(rootId, 0, 0)
+        testCase.tryVerify(() => !tip.visible, 5000, "leaving " + host.objectName + " hides its tooltip")
+    }
 
     //! The first item under \a item whose objectName starts with \a prefix.
     function findChildWithPrefix(item, prefix) {
@@ -103,6 +138,7 @@ MainWindowTest {
             // functions alphabetically, so a width left behind would silently
             // put every later test in the other layout.
             rootId.width = defaultWindowWidth
+            RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.System
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.newProject()
 
@@ -1359,6 +1395,22 @@ MainWindowTest {
         }
 
 
+        // The warning's tooltip is a dark panel in both schemes, so its text
+        // takes the tooltip color, not the page's.
+        function test_inlineWarningToolTipFollowsTheLightTheme() {
+            const cave = gotoFixStations()
+            cave.fixStations.addFixStation()
+            tryCompare(cave.fixStations, "count", 1)
+
+            const fixPage = RootData.pageView.currentPageItem
+            let warning = null
+            tryVerify(() => {
+                warning = findChild(fixPage, "stationWarning.0")
+                return warning !== null && warning.visible
+            }, 5000, "an empty station name shows the row's warning")
+            rootId.verifyLightToolTip(this, warning, warning.message)
+        }
+
         //! A row carrying a coordinate with no system to read it under. The
         //! ordinary shape of one — an svx `*fix` with no `*cs`, or any project
         //! saved before fixes carried their own system — and reachable from here
@@ -2148,6 +2200,7 @@ MainWindowTest {
         }
 
         function cleanup() {
+            RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.System
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.project.newProject()
         }
@@ -2309,6 +2362,41 @@ MainWindowTest {
             compare(waitForChild("inputCSText.0").text, "none")
             compare(liveChild("pickFromViewButton.0"), null)
             rootId.width = wideWidth
+        }
+
+        // The lock's tooltip names the file in the tooltip colors in the
+        // light scheme.
+        function test_readOnlyLockToolTipFollowsTheLightTheme() {
+            const cave = makeSavedCaveAttach("fix-station-lock-tooltip",
+                                             "external-centerlines/survex_blocks.svx")
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+            openFixStationsOf(cave)
+            rootId.verifyLightToolTip(this, waitForChild("readOnlyLock.0"), "survex_blocks.svx")
+        }
+
+        // The bare-fix badge's tooltip names the file in the tooltip colors
+        // in the light scheme.
+        function test_bareFixBadgeToolTipFollowsTheLightTheme() {
+            saveProjectAs("fix-station-bare-fix-tooltip")
+
+            // A native fix gives the project its frame, so the badge shows.
+            RootData.region.addCave()
+            const anchorCave = RootData.region.cave(RootData.region.caveCount - 1)
+            anchorCave.name = "AnchorCave"
+            const anchors = anchorCave.fixStations
+            compare(anchors.addFixStation("A1"), 0)
+            anchors.setData(anchors.index(0), "EPSG:32648", FixStationModel.InputCSRole)
+            anchors.setData(anchors.index(0), 500000.0, FixStationModel.EastingRole)
+            anchors.setData(anchors.index(0), 3000000.0, FixStationModel.NorthingRole)
+            anchors.setData(anchors.index(0), 100.0, FixStationModel.ElevationRole)
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 5000,
+                      "the anchoring fix gives the project a frame")
+
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_bare_fix/bare_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+            openFixStationsOf(cave)
+            rootId.verifyLightToolTip(this, waitForChild("noCoordinateSystemBadge.0"), "bare_fix.svx")
         }
 
         // A .mak naming a UTM zone and no datum reads in Compass's default

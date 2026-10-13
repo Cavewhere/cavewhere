@@ -542,16 +542,7 @@ StandardPage {
         QC.ToolTip {
             visible: warningHover.hovered && inlineWarning.message !== ""
             text: inlineWarning.message
-            delay: 300
-
-            // Every message this carries quotes something the user supplied — a
-            // station name, the unit token the parser refused — and the default
-            // content item reads its text as AutoText, so a name like A<b>B
-            // becomes a tag. Same reason the coordinate cell declares PlainText.
-            contentItem: QC.Label {
-                text: inlineWarning.message
-                textFormat: QC.Label.PlainText
-            }
+            delay: Theme.toolTipDelay
         }
     }
 
@@ -577,13 +568,8 @@ StandardPage {
 
         QC.ToolTip {
             visible: lockHover.hovered
+            text: "Fixed by " + readOnlyLock.sourceFile + ". Edit that file to change this fix."
             delay: Theme.toolTipDelay
-
-            // The file name is the user's; see InlineWarning.
-            contentItem: QC.Label {
-                text: "Fixed by " + readOnlyLock.sourceFile + ". Edit that file to change this fix."
-                textFormat: QC.Label.PlainText
-            }
         }
     }
 
@@ -654,16 +640,11 @@ StandardPage {
 
         QC.ToolTip {
             visible: bareFixHover.hovered
+            text: bareFixBadge.unset
+                  ? "Cavern rejects this fix until a coordinate system is chosen for "
+                    + bareFixBadge.sourceFile + "."
+                  : bareFixBadge.readInWarning
             delay: Theme.toolTipDelay
-
-            // The file name is the user's; see InlineWarning.
-            contentItem: QC.Label {
-                text: bareFixBadge.unset
-                      ? "Cavern rejects this fix until a coordinate system is chosen for "
-                        + bareFixBadge.sourceFile + "."
-                      : bareFixBadge.readInWarning
-                textFormat: QC.Label.PlainText
-            }
         }
     }
 
