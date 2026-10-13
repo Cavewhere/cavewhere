@@ -40,6 +40,8 @@ class CAVEWHERE_LIB_EXPORT cwRenderingStatsModel : public QAbstractListModel
     Q_PROPERTY(qint64 readyCpuBytes READ readyCpuBytes NOTIFY streamingChanged)
     Q_PROPERTY(QString readyCpuText READ readyCpuText NOTIFY streamingChanged)
     Q_PROPERTY(int demotionsInFlight READ demotionsInFlight NOTIFY streamingChanged)
+    //! Counts the frames that published streaming counts, so a reader can tell a fresh frame from a stale one
+    Q_PROPERTY(qint64 streamingRevision READ streamingRevision NOTIFY streamingChanged)
     Q_PROPERTY(int residentNodes READ residentNodes NOTIFY pointCloudChanged)
     Q_PROPERTY(int selectedNodes READ selectedNodes NOTIFY pointCloudChanged)
     Q_PROPERTY(int nodeLoadsInFlight READ nodeLoadsInFlight NOTIFY pointCloudChanged)
@@ -83,6 +85,7 @@ public:
     qint64 readyCpuBytes() const { return m_streaming.readyCpuBytes; }
     QString readyCpuText() const { return formattedBytes(m_streaming.readyCpuBytes); }
     int demotionsInFlight() const { return m_streaming.demotionsInFlight; }
+    qint64 streamingRevision() const { return qint64(m_lastStreamingRevision); }
 
     int residentNodes() const { return m_pointCloud.residentNodes; }
     int selectedNodes() const { return m_pointCloud.selectedNodes; }
@@ -125,6 +128,7 @@ private:
     quint64 m_lastLedgerRevision = 0;
     cwRenderFrameStats::Culling m_culling;
     cwRenderFrameStats::Streaming m_streaming;
+    quint64 m_lastStreamingRevision = 0;
     cwRenderFrameStats::PointCloud m_pointCloud;
     quint64 m_lastFrameStatsRevision = 0;
 };

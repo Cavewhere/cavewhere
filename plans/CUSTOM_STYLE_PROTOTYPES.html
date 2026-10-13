@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CaveWhere Style Prototypes</title>
+<style>
+  /* CaveWhere's bundled fonts, loaded straight from the repo so the prototype
+     uses the same faces the app ships. */
+  @font-face { font-family: "Fira Sans"; font-weight: 400; src: url("../cavewherelib/fonts/FiraSans-Regular.ttf"); }
+  @font-face { font-family: "Fira Sans"; font-weight: 400; font-style: italic; src: url("../cavewherelib/fonts/FiraSans-Italic.ttf"); }
+  @font-face { font-family: "Fira Sans"; font-weight: 700; src: url("../cavewherelib/fonts/FiraSans-Bold.ttf"); }
+  @font-face { font-family: "Yanone Kaffeesatz"; font-weight: 300; src: url("../cavewherelib/fonts/YanoneKaffeesatz-Light.ttf"); }
+  @font-face { font-family: "Yanone Kaffeesatz"; font-weight: 400; src: url("../cavewherelib/fonts/YanoneKaffeesatz-Regular.ttf"); }
+  @font-face { font-family: "Yanone Kaffeesatz"; font-weight: 700; src: url("../cavewherelib/fonts/YanoneKaffeesatz-Bold.ttf"); }
+  @font-face { font-family: "Courier Prime"; font-weight: 400; src: url("../cavewherelib/fonts/CourierPrime-Regular.ttf"); }
+
+  :root {
+    --ui-font: -apple-system, "Segoe UI", system-ui, sans-serif;
+    --heading-font: "Yanone Kaffeesatz", var(--ui-font);
+    --mono-font: "Courier Prime", ui-monospace, Menlo, monospace;
+
+    /* Reference palette, sampled from the 2020 prototype PDF. */
+    --ice: #D1F5FA; --mist: #B5BDCF; --mint: #70EBC9; --cyan: #2EE8E3;
+    --teal: #03A899; --blue: #4096CF; --navy: #0A3659; --spring: #38BDD9;
+
+    --doc-bg: #f7f8f9; --doc-fg: #1c2024; --doc-muted: #5b6570; --doc-rule: #d9dee3;
+    --doc-card: #ffffff; --doc-accent: #0a6f8c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --doc-bg: #16181b; --doc-fg: #e8eaed; --doc-muted: #9aa3ad; --doc-rule: #30353b;
+            --doc-card: #1e2125; --doc-accent: #5fd0e8; }
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--doc-bg); color: var(--doc-fg);
+         font: 15px/1.5 var(--ui-font); }
+  .doc { max-width: 1240px; margin: 0 auto; padding: 28px 20px 80px; }
+  .doc h1 { font: 700 40px/1.1 var(--heading-font); margin: 0 0 6px; letter-spacing: .01em; }
+  .doc h2 { font: 700 28px/1.15 var(--heading-font); margin: 44px 0 8px; }
+  .doc h3 { font-size: 15px; margin: 0 0 4px; }
+  .doc p { margin: 6px 0 12px; max-width: 78ch; }
+  .muted { color: var(--doc-muted); }
+  .doc code { font-family: var(--mono-font); font-size: .95em; }
+
+  .kept { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin: 14px 0; }
+  .kept > div { background: var(--doc-card); border: 1px solid var(--doc-rule); border-radius: 8px; padding: 12px 14px; }
+  .kept q { color: #c62828; font-style: italic; }
+  @media (prefers-color-scheme: dark) { .kept q { color: #ff8a80; } }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 4px; }
+  .swatch { width: 104px; font-size: 12px; }
+  .swatch i { display: block; height: 56px; border-radius: 6px; border: 1px solid rgba(128,128,128,.35); }
+  .swatch b { display: block; margin-top: 4px; }
+  .swatch span { font-family: var(--mono-font); color: var(--doc-muted); }
+
+  .bar { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+         padding: 10px 14px; margin: 18px -14px 14px; background: color-mix(in srgb, var(--doc-bg) 92%, transparent);
+         backdrop-filter: blur(8px); border-bottom: 1px solid var(--doc-rule); }
+  .seg { display: inline-flex; border: 1px solid var(--doc-rule); border-radius: 8px; overflow: hidden; background: var(--doc-card); }
+  .seg button { font: inherit; color: inherit; background: none; border: 0; padding: 7px 14px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--doc-rule); }
+  .seg button[aria-pressed="true"] { background: var(--doc-accent); color: var(--doc-bg); font-weight: 700; }
+  .bar .what { flex: 1 1 320px; font-size: 14px; }
+
+  .six { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 1000px) { .six { grid-template-columns: repeat(2, 1fr); } }
+  .six .theme { border-radius: 8px; padding: 0; cursor: pointer; overflow: hidden; outline: 1px solid var(--doc-rule); }
+  .six .theme.sel { outline: 3px solid var(--doc-accent); }
+  .six .cap { padding: 6px 12px; font-size: 12px; background: var(--chrome); color: var(--chrome-text); display: flex; justify-content: space-between; }
+  .six .mini { background: var(--panel); margin: 12px; padding: 12px; border-radius: var(--radius-lg); display: grid; gap: 10px; box-shadow: var(--shadow); }
+  .six .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  /* ───────────────────────── Theme tokens ───────────────────────── */
+  .theme { --g1: #70EBC9; --g2: #2EE8E3; --g3: #38BDD9;
+           --danger: #cf222e; --warn-bg: #fff3df; --warn-border: #e0a64b; --warn-text: #7a4b00;
+           --btn-ring: none; --btn-shadow: none; --input-focus-ring: 0 0 0 2px var(--focus);
+           --primary-border: transparent; --tab-on-line: transparent; --tog-off-opacity: 1;
+           --radius-lg: calc(var(--radius) + 2px);
+           background: var(--canvas); color: var(--text);
+           font: var(--cw-size, 16px)/1.3 var(--cw-font, "Yanone Kaffeesatz"), var(--ui-font); }
+
+  /* A · Karst — the 2020 prototype, carried over as literally as possible. */
+  .theme[data-dir="a"][data-mode="dark"] {
+    --canvas:#565656; --panel:#313131; --card:#3A3A3A; --chrome:#232323; --chrome-text:#fff;
+    --text:#fff; --text-2:#C9C9C9; --border:#595959; --ctl-border:#fff;
+    --accent:#38BDD9; --accent-text:#38BDD9; --on-accent:#10262c;
+    --btn-bg:transparent; --btn-border:#fff; --btn-text:#fff;
+    --btn-hover-bg:transparent; --btn-hover-border:#fff; --btn-ring: inset 0 0 0 1px #fff;
+    --btn-press-bg:#fff; --btn-press-text:#232323; --btn-press-border:#fff;
+    --primary-bg:#fff; --primary-text:#232323; --primary-hover-bg:#CDCECE;
+    --tog-on-bg:transparent; --tog-on-text:#fff; --tog-on-border:#fff; --tog-off-opacity:.45;
+    --field-bg:#fff; --field-text:#232323; --field-border:#fff;
+    --input-bg:transparent; --input-text:#fff; --input-border:#fff; --input-ph:#A8A8A8;
+    --input-focus-bg:#fff; --input-focus-text:#232323; --input-focus-ring:none;
+    --arrow-bg:#313131; --arrow-fg:#fff; --arrow-hover-bg:#CDCECE; --arrow-hover-fg:#313131;
+    --check-bg:#fff; --check-mark:#232323;
+    --pop-bg:#fff; --pop-text:#232323; --pop-border:transparent; --pop-sel-bg:#3A3A3A; --pop-sel-text:#fff;
+    --tip-bg:#fff; --tip-text:#232323;
+    --row-alt:#3A3A3A; --track:#565656; --lead:#fff; --focus:#38BDD9; --scroll:#9E9E9E;
+    --tab-strip:#313131; --tab-on-bg:#565656; --tab-on-text:#fff; --tab-text:#9A9A9A;
+    --linkbar:#CDCECE; --chip-bg:#313131; --chip-text:#fff;
+    --radius:2px; --shadow: 3px 3px 0 rgba(0,0,0,.4);
+    --warn-bg:#3a3524; --warn-border:#8a8250; --warn-text:#f0d9a0; --danger:#f47067;
+  }
+  .theme[data-dir="a"][data-mode="light"] {
+    --canvas:#C9CBCD; --panel:#F2F2F2; --card:#FFFFFF; --chrome:#DADCDE; --chrome-text:#1E1E1E;
+    --text:#1E1E1E; --text-2:#555; --border:#B5B5B5; --ctl-border:#2B2B2B;
+    --accent:#38BDD9; --accent-text:#086A86; --on-accent:#10262c;
+    --btn-bg:transparent; --btn-border:#2B2B2B; --btn-text:#1E1E1E;
+    --btn-hover-bg:transparent; --btn-hover-border:#2B2B2B; --btn-ring: inset 0 0 0 1px #2B2B2B;
+    --btn-press-bg:#2B2B2B; --btn-press-text:#fff; --btn-press-border:#2B2B2B;
+    --primary-bg:#2B2B2B; --primary-text:#fff; --primary-hover-bg:#4A4A4A;
+    --tog-on-bg:transparent; --tog-on-text:#1E1E1E; --tog-on-border:#2B2B2B; --tog-off-opacity:.45;
+    --field-bg:#fff; --field-text:#1E1E1E; --field-border:#2B2B2B;
+    --input-bg:#fff; --input-text:#1E1E1E; --input-border:#2B2B2B; --input-ph:#8A8A8A;
+    --input-focus-bg:#fff; --input-focus-text:#1E1E1E; --input-focus-ring: inset 0 0 0 1px #2B2B2B;
+    --arrow-bg:#2B2B2B; --arrow-fg:#fff; --arrow-hover-bg:#8A8A8A; --arrow-hover-fg:#fff;
+    --check-bg:#2B2B2B; --check-mark:#fff;
+    --pop-bg:#fff; --pop-text:#1E1E1E; --pop-border:#B5B5B5; --pop-sel-bg:#2B2B2B; --pop-sel-text:#fff;
+    --tip-bg:#2B2B2B; --tip-text:#fff;
+    --row-alt:#E7E7E7; --track:#C4C4C4; --lead:#0A3659; --focus:#0A7391; --scroll:#8C8C8C;
+    --tab-strip:#DADCDE; --tab-on-bg:#F2F2F2; --tab-on-text:#1E1E1E; --tab-text:#6A6A6A;
+    --linkbar:#fff; --chip-bg:#2B2B2B; --chip-text:#fff;
+    --radius:2px; --shadow: 3px 3px 0 rgba(0,0,0,.18);
+  }
+
+  /* B · Deep Pool — the reference palette becomes the surfaces, not only the accent. */
+  .theme[data-dir="b"][data-mode="dark"] {
+    --canvas:#06182A; --panel:#0C2740; --card:#123453; --chrome:#051221; --chrome-text:#EAF6FA;
+    --text:#EAF6FA; --text-2:#B5BDCF; --border:#264B6B; --ctl-border:#7F9AB3;
+    --accent:#2EE8E3; --accent-text:#58D6EC; --on-accent:#0A3659;
+    --btn-bg:#1A4468; --btn-border:#1A4468; --btn-text:#EAF6FA;
+    --btn-hover-bg:#235682; --btn-hover-border:#235682;
+    --btn-press-bg:#0F3352; --btn-press-text:#EAF6FA; --btn-press-border:#0F3352;
+    --primary-bg: linear-gradient(90deg,#70EBC9,#2EE8E3); --primary-text:#0A3659; --primary-hover-bg: linear-gradient(90deg,#93F1D8,#6AF0EC);
+    --tog-on-bg:rgba(46,232,227,.16); --tog-on-text:#2EE8E3; --tog-on-border:#2EE8E3;
+    --field-bg:#081D31; --field-text:#EAF6FA; --field-border:#264B6B;
+    --input-bg:#081D31; --input-text:#EAF6FA; --input-border:#264B6B; --input-ph:#7F93A8;
+    --input-focus-bg:#081D31; --input-focus-text:#EAF6FA;
+    --arrow-bg:transparent; --arrow-fg:#B5BDCF; --arrow-hover-bg:rgba(255,255,255,.08); --arrow-hover-fg:#fff;
+    --check-bg:#2EE8E3; --check-mark:#0A3659;
+    --pop-bg:#123453; --pop-text:#EAF6FA; --pop-border:#264B6B; --pop-sel-bg:rgba(46,232,227,.2); --pop-sel-text:#fff;
+    --tip-bg:#EAF6FA; --tip-text:#0A2438;
+    --row-alt:#0F2E4A; --track:#1D4161; --lead:#fff; --focus:#2EE8E3; --scroll:#3F6485;
+    --tab-strip:transparent; --tab-on-bg:transparent; --tab-on-text:#2EE8E3; --tab-text:#B5BDCF; --tab-on-line:#2EE8E3;
+    --linkbar:#081D31; --chip-bg:#1A4468; --chip-text:#EAF6FA;
+    --radius:6px; --shadow: 0 8px 22px rgba(0,0,0,.5);
+    --warn-bg:#3a3524; --warn-border:#8a8250; --warn-text:#f0d9a0; --danger:#f47067;
+  }
+  .theme[data-dir="b"][data-mode="light"] {
+    --canvas:#E3EFF4; --panel:#FFFFFF; --card:#EFF9FB; --chrome:#0A3659; --chrome-text:#EAF6FA;
+    --text:#0A2438; --text-2:#4A6076; --border:#C3D6DF; --ctl-border:#6B8394;
+    --accent:#03A899; --accent-text:#12689A; --on-accent:#0A3659;
+    --btn-bg:#E1EEF3; --btn-border:#E1EEF3; --btn-text:#0A2438;
+    --btn-hover-bg:#D0E4EC; --btn-hover-border:#D0E4EC;
+    --btn-press-bg:#BBD6E2; --btn-press-text:#0A2438; --btn-press-border:#BBD6E2;
+    --primary-bg: linear-gradient(90deg,#70EBC9,#2EE8E3); --primary-text:#0A3659; --primary-hover-bg: linear-gradient(90deg,#5CE0BC,#1FD8D3);
+    --tog-on-bg:#0A3659; --tog-on-text:#fff; --tog-on-border:#0A3659;
+    --field-bg:#fff; --field-text:#0A2438; --field-border:#C3D6DF;
+    --input-bg:#fff; --input-text:#0A2438; --input-border:#C3D6DF; --input-ph:#8195A6;
+    --input-focus-bg:#fff; --input-focus-text:#0A2438;
+    --arrow-bg:transparent; --arrow-fg:#4A6076; --arrow-hover-bg:rgba(10,54,89,.08); --arrow-hover-fg:#0A2438;
+    --check-bg:#0A3659; --check-mark:#70EBC9;
+    --pop-bg:#fff; --pop-text:#0A2438; --pop-border:#C3D6DF; --pop-sel-bg:#D1F5FA; --pop-sel-text:#0A2438;
+    --tip-bg:#0A3659; --tip-text:#fff;
+    --row-alt:#F2F8FA; --track:#D3E3EA; --lead:#0A3659; --focus:#03A899; --scroll:#A9BECA;
+    --tab-strip:transparent; --tab-on-bg:transparent; --tab-on-text:#0A3659; --tab-text:#4A6076; --tab-on-line:#03A899;
+    --linkbar:#12406A; --chip-bg:#2A5C8A; --chip-text:#EAF6FA;
+    --radius:6px; --shadow: 0 6px 18px rgba(10,54,89,.18);
+  }
+
+  /* C · Limestone — warm paper neutrals; the smallest step from today's Fusion look. */
+  .theme[data-dir="c"][data-mode="light"] {
+    --canvas:#E7E3DB; --panel:#F6F3EE; --card:#FFFFFF; --chrome:#DDD8CE; --chrome-text:#26231F;
+    --text:#26231F; --text-2:#5C574F; --border:#CFC8BB; --ctl-border:#8C8579;
+    --accent:#027A70; --accent-text:#0A6C80; --on-accent:#fff;
+    --btn-bg:#FFFFFF; --btn-border:#CFC8BB; --btn-text:#26231F; --btn-shadow: 0 1px 0 rgba(60,50,30,.12);
+    --btn-hover-bg:#F1EDE5; --btn-hover-border:#B9B1A2;
+    --btn-press-bg:#E3DDD1; --btn-press-text:#26231F; --btn-press-border:#B9B1A2;
+    --primary-bg:#027A70; --primary-text:#fff; --primary-hover-bg:#036A62;
+    --tog-on-bg:#DCEFEC; --tog-on-text:#02564F; --tog-on-border:#027A70;
+    --field-bg:#fff; --field-text:#26231F; --field-border:#CFC8BB;
+    --input-bg:#fff; --input-text:#26231F; --input-border:#CFC8BB; --input-ph:#8F887C;
+    --input-focus-bg:#fff; --input-focus-text:#26231F;
+    --arrow-bg:transparent; --arrow-fg:#5C574F; --arrow-hover-bg:rgba(60,50,30,.08); --arrow-hover-fg:#26231F;
+    --check-bg:#027A70; --check-mark:#fff;
+    --pop-bg:#fff; --pop-text:#26231F; --pop-border:#CFC8BB; --pop-sel-bg:#DCEFEC; --pop-sel-text:#26231F;
+    --tip-bg:#33302B; --tip-text:#F6F3EE;
+    --row-alt:#EFEBE4; --track:#DAD4C8; --lead:#0A3659; --focus:#027A70; --scroll:#B4AC9E;
+    --tab-strip:#DDD8CE; --tab-on-bg:#F6F3EE; --tab-on-text:#26231F; --tab-text:#5C574F;
+    --linkbar:#fff; --chip-bg:#E7E3DB; --chip-text:#26231F;
+    --radius:4px; --shadow: 0 2px 8px rgba(60,50,30,.2);
+  }
+  .theme[data-dir="c"][data-mode="dark"] {
+    --canvas:#1C1A18; --panel:#292725; --card:#34312E; --chrome:#151412; --chrome-text:#EDEAE4;
+    --text:#EDEAE4; --text-2:#B9B3A9; --border:#4B4641; --ctl-border:#8E877D;
+    --accent:#2DBFB0; --accent-text:#5CCDE3; --on-accent:#0C2422;
+    --btn-bg:#3C3936; --btn-border:#56504A; --btn-text:#EDEAE4; --btn-shadow: 0 1px 0 rgba(0,0,0,.3);
+    --btn-hover-bg:#47433F; --btn-hover-border:#6A635B;
+    --btn-press-bg:#2F2C2A; --btn-press-text:#EDEAE4; --btn-press-border:#56504A;
+    --primary-bg:#2DBFB0; --primary-text:#0C2422; --primary-hover-bg:#4FD0C2;
+    --tog-on-bg:#1F4A46; --tog-on-text:#8FE6DC; --tog-on-border:#2DBFB0;
+    --field-bg:#1F1D1B; --field-text:#EDEAE4; --field-border:#4B4641;
+    --input-bg:#1F1D1B; --input-text:#EDEAE4; --input-border:#4B4641; --input-ph:#8E877D;
+    --input-focus-bg:#1F1D1B; --input-focus-text:#EDEAE4;
+    --arrow-bg:transparent; --arrow-fg:#B9B3A9; --arrow-hover-bg:rgba(255,255,255,.08); --arrow-hover-fg:#fff;
+    --check-bg:#2DBFB0; --check-mark:#0C2422;
+    --pop-bg:#34312E; --pop-text:#EDEAE4; --pop-border:#4B4641; --pop-sel-bg:#1F4A46; --pop-sel-text:#fff;
+    --tip-bg:#EDEAE4; --tip-text:#26231F;
+    --row-alt:#2F2D2A; --track:#45413C; --lead:#fff; --focus:#2DBFB0; --scroll:#6A635B;
+    --tab-strip:#151412; --tab-on-bg:#292725; --tab-on-text:#EDEAE4; --tab-text:#B9B3A9;
+    --linkbar:#1F1D1B; --chip-bg:#3C3936; --chip-text:#EDEAE4;
+    --radius:4px; --shadow: 0 4px 14px rgba(0,0,0,.5);
+    --warn-bg:#3a3524; --warn-border:#8a8250; --warn-text:#f0d9a0; --danger:#f47067;
+  }
+
+  /* D · Karst Soft — Karst's neutral charcoal and monochrome ink, with Deep Pool's
+     6 px corners and Limestone's hairline borders and soft shadows. */
+  .theme[data-dir="d"][data-mode="dark"] {
+    --canvas:#565656; --panel:#313131; --card:#3A3A3A; --chrome:#232323; --chrome-text:#fff;
+    --text:#fff; --text-2:#C9C9C9; --border:#4C4C4C; --ctl-border:#939393;
+    --accent:#38BDD9; --accent-text:#38BDD9; --on-accent:#10262c;
+    --btn-bg:#454545; --btn-border:#606060; --btn-text:#fff; --btn-shadow: 0 1px 0 rgba(0,0,0,.3);
+    --btn-hover-bg:#505050; --btn-hover-border:#767676;
+    --btn-press-bg:#2A2A2A; --btn-press-text:#fff; --btn-press-border:#606060;
+    --primary-bg:#fff; --primary-text:#232323; --primary-hover-bg:#DADADA;
+    --tog-on-bg:#626262; --tog-on-text:#fff; --tog-on-border:#A6A6A6; --tog-off-opacity:.7;
+    --field-bg:#262626; --field-text:#fff; --field-border:#606060;
+    --input-bg:#262626; --input-text:#fff; --input-border:#606060; --input-ph:#9A9A9A;
+    --input-focus-bg:#262626; --input-focus-text:#fff;
+    --arrow-bg:transparent; --arrow-fg:#C9C9C9; --arrow-hover-bg:rgba(255,255,255,.08); --arrow-hover-fg:#fff;
+    --check-bg:#fff; --check-mark:#232323;
+    --pop-bg:#3A3A3A; --pop-text:#fff; --pop-border:#606060; --pop-sel-bg:#565656; --pop-sel-text:#fff;
+    --tip-bg:#fff; --tip-text:#232323;
+    --row-alt:#3A3A3A; --track:#565656; --lead:#fff; --focus:#38BDD9; --scroll:#9E9E9E;
+    --tab-strip:#232323; --tab-on-bg:#313131; --tab-on-text:#fff; --tab-text:#A8A8A8;
+    --linkbar:#262626; --chip-bg:#454545; --chip-text:#fff;
+    --radius:6px; --shadow: 0 4px 14px rgba(0,0,0,.42);
+    --warn-bg:#3a3524; --warn-border:#8a8250; --warn-text:#f0d9a0; --danger:#f47067;
+  }
+  .theme[data-dir="d"][data-mode="light"] {
+    --canvas:#C9CBCD; --panel:#F2F2F2; --card:#FFFFFF; --chrome:#DADCDE; --chrome-text:#1E1E1E;
+    --text:#1E1E1E; --text-2:#555; --border:#D2D2D2; --ctl-border:#858585;
+    --accent:#1493B3; --accent-text:#086A86; --on-accent:#fff;
+    --btn-bg:#FFFFFF; --btn-border:#C2C2C2; --btn-text:#1E1E1E; --btn-shadow: 0 1px 0 rgba(0,0,0,.08);
+    --btn-hover-bg:#F0F0F0; --btn-hover-border:#A8A8A8;
+    --btn-press-bg:#DEDEDE; --btn-press-text:#1E1E1E; --btn-press-border:#A8A8A8;
+    --primary-bg:#2B2B2B; --primary-text:#fff; --primary-hover-bg:#4A4A4A;
+    --tog-on-bg:#D6D6D6; --tog-on-text:#1E1E1E; --tog-on-border:#858585; --tog-off-opacity:.7;
+    --field-bg:#fff; --field-text:#1E1E1E; --field-border:#C2C2C2;
+    --input-bg:#fff; --input-text:#1E1E1E; --input-border:#C2C2C2; --input-ph:#8A8A8A;
+    --input-focus-bg:#fff; --input-focus-text:#1E1E1E;
+    --arrow-bg:transparent; --arrow-fg:#555; --arrow-hover-bg:rgba(0,0,0,.07); --arrow-hover-fg:#1E1E1E;
+    --check-bg:#2B2B2B; --check-mark:#fff;
+    --pop-bg:#fff; --pop-text:#1E1E1E; --pop-border:#C2C2C2; --pop-sel-bg:#E4E4E4; --pop-sel-text:#1E1E1E;
+    --tip-bg:#2B2B2B; --tip-text:#fff;
+    --row-alt:#E7E7E7; --track:#C4C4C4; --lead:#0A3659; --focus:#0A7391; --scroll:#8C8C8C;
+    --tab-strip:#DADCDE; --tab-on-bg:#F2F2F2; --tab-on-text:#1E1E1E; --tab-text:#6A6A6A;
+    --linkbar:#fff; --chip-bg:#E4E4E4; --chip-text:#1E1E1E;
+    --radius:6px; --shadow: 0 2px 8px rgba(0,0,0,.16);
+  }
+
+  /* Mint and cyan wash out on a light track, so light mode runs the same sweep
+     one step deeper in the palette and leads with Navy. */
+  .theme[data-mode="light"] { --g1: #03A899; --g2: #2EC4D6; --g3: #4096CF; }
+
+  /* ───────────────────────── Controls ───────────────────────── */
+  .theme button, .theme input, .theme textarea { font: inherit; }
+  .theme :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 14px;
+         border-radius: var(--radius); border: 1px solid var(--btn-border); background: var(--btn-bg); color: var(--btn-text);
+         box-shadow: var(--btn-shadow); cursor: pointer; white-space: nowrap; }
+  .btn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+  .btn:hover, .btn.is-hover { background: var(--btn-hover-bg); border-color: var(--btn-hover-border); box-shadow: var(--btn-ring); }
+  .btn:active, .btn.is-pressed { background: var(--btn-press-bg); color: var(--btn-press-text); border-color: var(--btn-press-border); box-shadow: none; }
+  .btn:disabled { opacity: .4; cursor: default; pointer-events: none; }
+  .btn.primary { background: var(--primary-bg); color: var(--primary-text); border-color: var(--primary-border); font-weight: 700; }
+  .btn.primary:hover, .btn.primary.is-hover { background: var(--primary-hover-bg); box-shadow: none; }
+  .btn.toggle { opacity: var(--tog-off-opacity); }
+  .btn.toggle[aria-pressed="true"] { opacity: 1; background: var(--tog-on-bg); color: var(--tog-on-text); border-color: var(--tog-on-border); }
+  .btn.tool { width: 30px; padding: 0; }
+
+  .check, .radio { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  .check input, .radio input { appearance: none; -webkit-appearance: none; margin: 0; width: 16px; height: 16px; flex: none;
+         border: 1.5px solid var(--ctl-border); background: transparent; display: grid; place-content: center; cursor: pointer; }
+  .check input { border-radius: min(var(--radius), 4px); }
+  .radio input { border-radius: 50%; }
+  .check input::before { content: ""; width: 10px; height: 10px; transform: scale(0);
+         clip-path: polygon(14% 52%, 0 66%, 40% 100%, 100% 20%, 86% 8%, 38% 70%); background: var(--check-mark); }
+  .check input:checked { background: var(--check-bg); border-color: var(--check-bg); }
+  .check input:checked::before { transform: scale(1); }
+  .radio input::before { content: ""; width: 6px; height: 6px; border-radius: 50%; transform: scale(0); background: var(--check-mark); }
+  .radio input:checked { background: var(--check-bg); border-color: var(--check-bg); }
+  .radio input:checked::before { transform: scale(1); }
+  .check input:hover, .radio input:hover { box-shadow: inset 0 0 0 1px var(--ctl-border); }
+  .check.off, .radio.off { opacity: .4; pointer-events: none; }
+
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .switch input { appearance: none; -webkit-appearance: none; margin: 0; position: relative; width: 34px; height: 18px; border-radius: 9px;
+         background: var(--track); cursor: pointer; transition: background .15s; flex: none; }
+  .switch input::before { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+         background: var(--panel); border: 1px solid var(--ctl-border); transition: left .15s; box-sizing: border-box; }
+  .switch input:checked { background: var(--accent); }
+  .switch input:checked::before { left: 18px; border-color: transparent; }
+  /* The 2020 prototype drew the switch as a hollow bead on a wire. */
+  .theme[data-dir="a"] .switch input { height: 14px; background: linear-gradient(var(--ctl-border), var(--ctl-border)) center / 100% 2px no-repeat; border-radius: 0; }
+  .theme[data-dir="a"] .switch input::before { top: 0; left: 0; background: var(--panel); border: 1.5px solid var(--ctl-border); }
+  .theme[data-dir="a"] .switch input:checked::before { left: 20px; background: var(--accent); border-color: var(--ctl-border); }
+
+  .combo, .spin { display: inline-flex; align-items: stretch; height: 28px; border-radius: var(--radius);
+         background: var(--field-bg); color: var(--field-text); border: 1px solid var(--field-border); overflow: hidden; cursor: pointer; }
+  .combo > span, .spin > span { padding: 0 10px; display: flex; align-items: center; min-width: 64px; flex: 1; }
+  .combo > i { width: 28px; display: grid; place-content: center; background: var(--arrow-bg); color: var(--arrow-fg); }
+  .combo > i::before { content: ""; width: 9px; height: 9px; border: solid currentColor; border-width: 0 2px 2px 0; transform: translateY(-2px) rotate(45deg); }
+  .combo:hover > i, .combo.is-hover > i { background: var(--arrow-hover-bg); color: var(--arrow-hover-fg); }
+  .spin > span { min-width: 44px; }
+  .spin > i { width: 18px; display: grid; grid-template-rows: 1fr 1fr; background: var(--arrow-bg); color: var(--arrow-fg); }
+  .spin > i b { display: grid; place-content: center; }
+  .spin > i b::before { content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 1.5px 0 0 1.5px; transform: translateY(1px) rotate(45deg); }
+  .spin > i b + b::before { transform: translateY(-2px) rotate(225deg); }
+  .spin > i b:hover { background: var(--arrow-hover-bg); color: var(--arrow-hover-fg); }
+
+  .field { height: 28px; padding: 0 10px; border-radius: var(--radius); background: var(--input-bg); color: var(--input-text);
+         border: 1px solid var(--input-border); min-width: 0; width: 160px; }
+  textarea.field { height: 78px; padding: 7px 10px; resize: none; width: 100%; }
+  .field::placeholder { color: var(--input-ph); }
+  .field:hover, .field.is-hover { box-shadow: inset 0 0 0 1px var(--input-border); }
+  .field:focus, .field.is-focus { outline: none; background: var(--input-focus-bg); color: var(--input-focus-text);
+         border-color: var(--focus); box-shadow: var(--input-focus-ring); }
+  .theme[data-dir="a"] .field:focus, .theme[data-dir="a"] .field.is-focus { border-color: var(--input-border); }
+  .field.err { border-color: var(--danger); }
+  .errtext { color: var(--danger); font-size: .86em; }
+
+  .slider { position: relative; width: 150px; height: 18px; }
+  .slider::before { content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 2px; background: var(--track); border-radius: 1px; }
+  .slider b { position: absolute; left: 0; top: 8px; height: 2px; width: 60%; background: var(--accent); }
+  .slider i { position: absolute; left: calc(60% - 8px); top: 1px; width: 16px; height: 16px; border-radius: 50%;
+         background: var(--panel); border: 2px solid var(--accent); }
+  .theme[data-dir="a"] .slider i { border: 1.5px solid var(--ctl-border); }
+  .theme[data-dir="a"] .slider b { background: var(--ctl-border); }
+  .theme[data-dir="a"] .slider::before { background: var(--border); }
+
+  .progress { height: 5px; background: var(--track); border-radius: calc(var(--radius) / 2); overflow: hidden; }
+  .progress b { display: block; height: 100%; width: 70%;
+         background: linear-gradient(90deg, var(--g1) 0%, var(--g2) 62%, var(--g3) 86%, var(--lead) 100%); }
+  .progress.run b { animation: fill 4.5s ease-in-out infinite; }
+  .progress.ind b { width: 35%; animation: slide 1.6s ease-in-out infinite; }
+  @keyframes fill { 0% { width: 4%; } 85%, 100% { width: 100%; } }
+  @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(290%); } }
+
+  /* Busy ring: mint-to-cyan sweep with a bright leading edge, as in the prototype. */
+  .busy { position: relative; width: 44px; height: 44px; flex: none; }
+  .busy .ring { position: absolute; inset: 0; border-radius: 50%;
+         background: conic-gradient(from 0deg, transparent 0 8%, var(--g1) 30%, var(--g2) 70%, var(--g3) 90%, var(--lead) 100%);
+         -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+                 mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+         animation: spin 1.1s linear infinite; }
+  .busy.plate { width: 60px; height: 60px; padding: 8px; background: var(--panel); border-radius: 50%; box-shadow: var(--shadow); }
+  .busy.plate .ring { inset: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* Droplet lifecycle: fall, ripple, spin, then expand and fade. */
+  .drip { position: relative; width: 60px; height: 84px; }
+  .drip .drop { position: absolute; left: 28px; top: 0; width: 4px; height: 4px; border-radius: 50%; background: var(--lead); opacity: 0; }
+  .drip .rip { position: absolute; left: 8px; top: 32px; width: 44px; height: 44px; border-radius: 50%; border: 1.5px solid var(--g2); opacity: 0; }
+  .drip .busy { position: absolute; left: 8px; top: 32px; opacity: 0; }
+  .drip.play .drop { animation: fall .45s cubic-bezier(.5,0,1,.6) forwards; }
+  .drip.play .rip { animation: ripple .7s ease-out .4s forwards; }
+  .drip.play .rip.two { animation-delay: .55s; }
+  .drip.play .busy { animation: ringlife 4.2s linear .6s forwards; }
+  @keyframes fall { 0% { opacity: 1; transform: translateY(0) scaleY(1); } 80% { opacity: 1; transform: translateY(48px) scaleY(2.6); } 100% { opacity: 0; transform: translateY(52px) scaleY(1); } }
+  @keyframes ripple { 0% { opacity: .9; transform: scale(.1); } 100% { opacity: 0; transform: scale(1); } }
+  @keyframes ringlife { 0% { opacity: 0; transform: scale(.6); } 8% { opacity: 1; transform: scale(1); } 86% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.45); } }
+
+  .tabs { display: flex; background: var(--tab-strip); border-bottom: 1px solid var(--border); }
+  .tab { border: 0; background: none; color: var(--tab-text); padding: 6px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
+         border-radius: var(--radius) var(--radius) 0 0; }
+  .tab.on { background: var(--tab-on-bg); color: var(--tab-on-text); font-weight: 700; border-bottom-color: var(--tab-on-line); }
+  .tab:hover { color: var(--tab-on-text); }
+
+  .pop { background: var(--pop-bg); color: var(--pop-text); border: 1px solid var(--pop-border); border-radius: var(--radius);
+         box-shadow: var(--shadow); padding: 3px 0; display: inline-block; min-width: 100px; }
+  .pop div { padding: 3px 12px 3px 26px; position: relative; display: flex; justify-content: space-between; gap: 22px; cursor: default; }
+  .pop.list div { padding-left: 10px; }
+  .pop div.sel, .pop div:hover { background: var(--pop-sel-bg); color: var(--pop-sel-text); }
+  .pop div.ck::before { content: ""; position: absolute; left: 9px; top: 7px; width: 9px; height: 5px; border: solid currentColor; border-width: 0 0 2px 2px; transform: rotate(-45deg); }
+  .pop div.sub::after { content: "▸"; }
+  .pop hr { border: 0; border-top: 1px solid color-mix(in srgb, var(--pop-text) 22%, transparent); margin: 3px 0; }
+  .pop kbd { font: inherit; opacity: .7; }
+
+  .tip { display: inline-block; background: var(--tip-bg); color: var(--tip-text); padding: 5px 9px; border-radius: var(--radius);
+         box-shadow: var(--shadow); font-size: .86em; max-width: 230px; }
+
+  .group { background: var(--card); border-radius: var(--radius-lg); padding: 9px 11px; }
+  .group > h5 { margin: 0 0 5px; font-size: .93em; font-weight: 700; display: flex; align-items: center; gap: 7px; }
+  .theme[data-dir="b"] .group, .theme[data-dir="c"] .group, .theme[data-dir="d"] .group { border: 1px solid var(--border); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; font-size: .93em; padding-left: 12px; }
+  .edit { color: var(--accent-text); cursor: text; border-radius: 2px; }
+  .edit:hover { background: color-mix(in srgb, var(--accent-text) 16%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-text) 16%, transparent); }
+  .link { color: var(--accent-text); text-decoration: none; cursor: pointer; }
+  .link:hover { text-decoration: underline; }
+
+  .tbl { width: 100%; border-collapse: collapse; font-size: .93em; }
+  .tbl th { text-align: left; background: var(--chrome); color: var(--chrome-text); padding: 4px 9px; font-weight: 700; }
+  .tbl td { padding: 4px 9px; }
+  .tbl tr:nth-child(odd) td { background: var(--row-alt); }
+
+  .scroll { width: 6px; height: 90px; border-radius: 3px; background: color-mix(in srgb, var(--scroll) 25%, transparent); position: relative; }
+  .scroll::before { content: ""; position: absolute; left: 0; right: 0; top: 6px; height: 40px; border-radius: 3px; background: var(--scroll); }
+
+  .banner { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); border-radius: var(--radius); padding: 7px 10px; font-size: .93em; }
+  .floating { background: var(--panel); border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 10px 16px; }
+
+  /* ───────────────────────── Gallery layout ───────────────────────── */
+  .stage { border-radius: 10px; overflow: hidden; outline: 1px solid var(--doc-rule); }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; grid-auto-flow: dense; padding: 14px; }
+  .cell { background: var(--panel); border-radius: var(--radius-lg); padding: 12px 14px; box-shadow: var(--shadow); min-width: 0; }
+  .cell.wide { grid-column: 1 / -1; }
+  .cell > h4 { margin: 0 0 9px; font-weight: 700; font-size: .8em; line-height: 1; letter-spacing: .06em; text-transform: uppercase; color: var(--text-2); }
+  .r { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 9px; }
+  .r:last-child { margin-bottom: 0; }
+  .c { display: grid; gap: 7px; }
+  .states { display: grid; grid-template-columns: repeat(4, auto); gap: 6px 14px; align-items: center; justify-content: start; }
+  .states small { color: var(--text-2); font-size: .8em; }
+  .lbl { color: var(--text-2); font-size: .86em; }
+
+  /* ───────────────────────── In-context mock ───────────────────────── */
+  .app { display: grid; grid-template-rows: auto auto 1fr; height: 580px; min-width: 1000px; }
+  .appwrap { overflow-x: auto; }
+  .menubar { background: var(--chrome); color: var(--chrome-text); padding: 4px 10px; display: flex; gap: 16px; font-size: .93em; }
+  .linkrow { background: color-mix(in srgb, var(--chrome) 55%, var(--canvas)); padding: 5px 8px; display: flex; gap: 8px; align-items: center; color: var(--chrome-text); }
+  .linkbar { flex: 1; background: var(--linkbar); border-radius: var(--radius-lg); padding: 3px 5px; display: flex; gap: 4px; align-items: center; font-size: .86em; min-height: 22px; }
+  .chip { background: var(--chip-bg); color: var(--chip-text); border-radius: var(--radius); padding: 1px 7px; }
+  .linkbar s { text-decoration: none; color: var(--chip-bg); }
+  .body { display: grid; grid-template-columns: 64px 400px minmax(0, 1fr) 200px; min-height: 0; }
+  .side { background: var(--panel); padding: 8px 6px; display: grid; gap: 6px; align-content: start; border-right: 1px solid var(--border); }
+  .side button { background: none; border: 1px solid transparent; color: var(--text); border-radius: var(--radius-lg); padding: 5px 0 3px; font-size: .8em;
+         display: grid; justify-items: center; gap: 1px; cursor: pointer; opacity: .5; }
+  .side button.on { opacity: 1; border-color: var(--tog-on-border); background: var(--tog-on-bg); color: var(--tog-on-text); }
+  .side svg { width: 30px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+  .page { background: var(--panel); padding: 10px 12px; overflow: hidden; display: grid; gap: 9px; align-content: start; }
+  .page h3 { margin: 0; font: 400 26px/1.1 var(--heading-font); display: flex; align-items: baseline; gap: 8px; }
+  .page h3 .date { margin-left: auto; font-size: 16px; }
+  .sect { border-top: 1px solid var(--text-2); padding-top: 5px; font-weight: 700; display: flex; justify-content: space-between; }
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 7px; }
+  .page > * { min-width: 0; }
+  .page .tbl th, .page .tbl td { padding: 4px 6px; }
+  .view { position: relative; display: grid; place-items: center; gap: 14px; align-content: center;
+          background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--canvas) 86%, #fff), var(--canvas) 70%); }
+  .view .paper { width: 62%; aspect-ratio: 1.45; background: #f3efe4; border-radius: 2px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+  .view .paper::before { content: ""; position: absolute; inset: 0;
+          background: repeating-linear-gradient(0deg, transparent 0 15px, rgba(30,120,160,.22) 15px 16px), repeating-linear-gradient(90deg, transparent 0 15px, rgba(30,120,160,.22) 15px 16px); }
+  .view .paper svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .view .floating { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); width: 300px; text-align: center; display: grid; gap: 7px; }
+  .view .busy.plate { position: absolute; top: 16px; right: 16px; }
+  .tools { background: var(--panel); border-left: 1px solid var(--border); display: grid; align-content: start; }
+  .tools .in { padding: 10px; display: grid; gap: 10px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .busy .ring, .progress.run b, .progress.ind b { animation: none; }
+  }
+
+  .decide { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .decide > div { background: var(--doc-card); border: 1px solid var(--doc-rule); border-radius: 8px; padding: 12px 14px; }
+  .decide b.rec { color: var(--doc-accent); }
+  table.cmp { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--doc-card); }
+  table.cmp th, table.cmp td { border: 1px solid var(--doc-rule); padding: 7px 10px; text-align: left; vertical-align: top; }
+</style>
+</head>
+<body>
+<div class="doc">
+
+<h1>CaveWhere style prototypes</h1>
+<p class="muted">Four directions for a custom Qt Quick Controls style, each in light and dark. Every control on this page is live: hover, press, tab to it, type in it. Text is set in the fonts CaveWhere bundles today, switchable among the three families the Appearance settings offer. Companion document: <a href="CUSTOM_STYLE_PLAN.html" style="color:var(--doc-accent)">CUSTOM_STYLE_PLAN.html</a> covers how the chosen direction becomes a real style.</p>
+
+<h2>What carries over from the 2020 prototype</h2>
+<p>Richard Louie Reyes's prototype is dark-only and predates today's UI. These are the parts your red-ink feedback approved, and every direction below keeps them.</p>
+<div class="kept">
+  <div><h3>Karst-spring palette</h3><q>I really like these</q><br><span class="muted">Seven colors sampled from spring photos, plus one accent that marks editable text.</span></div>
+  <div><h3>Gradient loading bar</h3><q>Very Nice!</q><br><span class="muted">Mint to cyan with a bright leading edge, boxed when it floats over an image.</span></div>
+  <div><h3>Droplet busy indicator</h3><q>Awesome, really like this</q><br><span class="muted">A drop falls, ripples into a ring, the ring spins, then expands and fades.</span></div>
+  <div><h3>Quiet text boxes</h3><q>Looks great! I like both of these</q><br><span class="muted">Body text in the plain text color, with placeholder text that clears on focus.</span></div>
+</div>
+<div class="swatches">
+  <div class="swatch"><i style="background:#D1F5FA"></i><b>Ice</b><span>#D1F5FA</span></div>
+  <div class="swatch"><i style="background:#B5BDCF"></i><b>Mist</b><span>#B5BDCF</span></div>
+  <div class="swatch"><i style="background:#70EBC9"></i><b>Mint</b><span>#70EBC9</span></div>
+  <div class="swatch"><i style="background:#2EE8E3"></i><b>Cyan</b><span>#2EE8E3</span></div>
+  <div class="swatch"><i style="background:#03A899"></i><b>Teal</b><span>#03A899</span></div>
+  <div class="swatch"><i style="background:#4096CF"></i><b>Blue</b><span>#4096CF</span></div>
+  <div class="swatch"><i style="background:#0A3659"></i><b>Navy</b><span>#0A3659</span></div>
+  <div class="swatch"><i style="background:#38BDD9"></i><b>Spring (accent)</b><span>#38BDD9</span></div>
+</div>
+<p class="muted">Names are mine; hex values are sampled from page 3 of the PDF. The prototype's surfaces are neutral grays: #232323 chrome, #313131 panels, #3A3A3A cards, #565656 canvas.</p>
+
+<h2>All eight at a glance</h2>
+<p class="muted">Click a tile to load it into the full gallery below.</p>
+<div class="six" id="six"></div>
+
+<div class="bar">
+  <div class="seg" id="dirSeg">
+    <button data-dir="a">A · Karst</button>
+    <button data-dir="b">B · Deep Pool</button>
+    <button data-dir="c">C · Limestone</button>
+    <button data-dir="d">D · Karst Soft</button>
+  </div>
+  <div class="seg" id="modeSeg">
+    <button data-mode="light">Light</button>
+    <button data-mode="dark">Dark</button>
+  </div>
+  <div class="seg" id="fontSeg">
+    <button data-font="cw">CaveWhere font</button>
+    <button data-font="fira">Fira Sans</button>
+    <button data-font="sys">System</button>
+  </div>
+  <div class="what" id="what"></div>
+</div>
+
+<h2 style="margin-top:8px">In context</h2>
+<p class="muted">A trip page with notes, drawn with each direction's controls. Layout and icons are placeholders; the style changes control visuals only.</p>
+<div class="stage appwrap"><div class="theme" id="appStage"></div></div>
+
+<h2>Control gallery</h2>
+<p class="muted">This is the content the in-app style gallery page will show. State rows pin hover and pressed so they can be compared without a pointer.</p>
+<div class="stage"><div class="theme" id="galStage"></div></div>
+
+<h2>How the directions differ</h2>
+<table class="cmp">
+  <tr><th></th><th>A · Karst</th><th>B · Deep Pool</th><th>C · Limestone</th><th>D · Karst Soft</th></tr>
+  <tr><th>Idea</th><td>The 2020 prototype carried over literally, with a light mode derived by inverting the ink.</td><td>The spring palette becomes the surfaces: navy depths in dark, ice washes in light.</td><td>Warm paper neutrals, since cave maps are paper-first. The smallest step from today's Fusion look.</td><td>Your blend: A's colors, B's rounding, C's borders and shadows.</td></tr>
+  <tr><th>Buttons</th><td>Outlined, transparent. Hover thickens the outline; press inverts to solid.</td><td>Filled, borderless. One gradient primary button per view.</td><td>Filled with a hairline border. Teal primary button.</td><td>Filled one step lighter than the panel, with a hairline border. Solid white primary button in dark mode, solid ink in light.</td></tr>
+  <tr><th>Input fields</th><td>Dark mode: combo and spin boxes are white blocks; text fields are outlined and turn white on focus.</td><td>Inset wells darker than the panel; cyan focus ring.</td><td>White or near-black wells with a hairline border; teal focus ring.</td><td>Wells one step darker than the panel in dark mode, white in light, with a hairline border; spring focus ring.</td></tr>
+  <tr><th>Corners</th><td>2 px</td><td>6 px</td><td>4 px</td><td>6 px</td></tr>
+  <tr><th>Shadows</th><td>Hard offset, as drawn in the prototype</td><td>Soft, deep</td><td>Soft, shallow</td><td>Soft, shallow</td></tr>
+  <tr><th>Where color appears</th><td>Editable values, progress, busy ring. Everything else is monochrome.</td><td>Everywhere: surfaces, selection, toggles, primary actions.</td><td>Editable values, selection, primary action, progress.</td><td>Editable values, progress, busy ring, switch, slider, focus ring.</td></tr>
+  <tr><th>Risk</th><td>White fields in dark mode are bright next to scanned notes. Monochrome selection relies on inversion.</td><td>Tinted surfaces sit beside the 3D view and scanned notes, so they can color-cast how those read.</td><td>Least distinctive of the first three.</td><td>Neutral gray selection and toggles carry less signal than a colored state; check the pressed toggle reads clearly.</td></tr>
+</table>
+
+<h2>Decisions to settle before building the style</h2>
+<div class="decide">
+  <div><h3>1. Direction</h3><b class="rec">Chosen so far:</b> D, built from your feedback. It keeps A's colors and adds B's 6 px corners with C's hairline borders and soft shadows. Three details in D are my calls and are open to change: dark input wells in dark mode where A used white blocks, a dark menu where A used a white one, and a spring-colored switch and slider.</div>
+  <div><h3>2. Accent text in light mode</h3>Spring #38BDD9 on white has a contrast ratio near 2.2, too faint for text. Each light theme here uses a deeper spring for editable values and keeps #38BDD9 for fills. Confirm the deeper shade reads as the same color to you.</div>
+  <div><h3>3. Progress colors in light mode</h3>Mint, cyan, and a white leading edge wash out on a light track. In light mode these prototypes run the sweep one step deeper, Teal through Blue, and lead with Navy.</div>
+  <div><h3>4. Editable-value convention</h3>The prototype colors every click-to-edit value with the accent. Today the app does the same through its link color. Confirm that links and editable values keep sharing one color.</div>
+  <div><h3>5. Sidebar and chrome</h3>Today's sidebar is a dark gradient in both modes. A, C, and D follow the mode; B keeps navy chrome in light mode. Choose whether chrome follows the mode or stays dark.</div>
+  <div><h3>6. Busy indicator lifecycle</h3>The droplet open and the expanding close add about half a second each. Choose whether short tasks skip them and show the spinning ring alone.</div>
+</div>
+
+</div>
+
+<!-- ───────────── Templates ───────────── -->
+<template id="miniT">
+  <div class="cap"><span class="name"></span><span class="mode"></span></div>
+  <div class="mini">
+    <div class="row"><button class="btn">Export</button><button class="btn primary">Save</button>
+      <label class="check"><input type="checkbox" checked>Auto</label></div>
+    <div class="row"><span class="combo"><span>JPG</span><i></i></span><input class="field" style="width:104px" placeholder="Filter…">
+      <span>Length <span class="edit">1777.39</span> m</span></div>
+    <div class="progress run"><b></b></div>
+  </div>
+</template>
+
+<template id="appT">
+  <div class="app">
+    <div class="menubar"><span>File</span><span>Edit</span><span>View</span><span>Help</span></div>
+    <div class="linkrow"><span>◀</span><span>▶</span>
+      <div class="linkbar"><span class="chip">Data</span><s>›</s><span class="chip">Cave: Wahoo</span><s>›</s><span class="chip">Trip: Overland</span></div></div>
+    <div class="body">
+      <div class="side">
+        <button><svg viewBox="0 0 30 26"><path d="M3 6l8-3 8 3 8-3v17l-8 3-8-3-8 3zM11 3v17M19 6v17"/></svg>View</button>
+        <button class="on"><svg viewBox="0 0 30 26"><path d="M4 18l14-12h8L12 18zM4 18v3h8l14-12V6M12 18v3"/></svg>Data</button>
+      </div>
+      <div class="page">
+        <h3>Trip: <span class="edit">Overland</span><span class="date edit">2012-07-20</span></h3>
+        <div class="sect">Calibration</div>
+        <div class="two">
+          <div class="group"><h5>Declination</h5><div class="kv"><span>Declination</span><span class="edit">-6.7</span></div></div>
+          <div class="group"><h5>Distance</h5><div class="kv"><span>Calibration</span><span class="edit">0</span><span>Units</span><span class="edit">ft</span></div></div>
+          <div class="group"><h5><label class="check"><input type="checkbox" checked>Front Sights</label></h5>
+            <div class="kv"><span>Compass</span><span class="edit">0</span><span>Clino</span><span class="edit">0</span></div></div>
+          <div class="group"><h5><label class="check"><input type="checkbox">Back Sights</label></h5>
+            <div class="kv" style="opacity:.4"><span>Compass</span><span>0</span><span>Clino</span><span>0</span></div></div>
+        </div>
+        <div class="sect">Data <span>+</span></div>
+        <table class="tbl">
+          <tr><th>Station</th><th>Distance</th><th>Azimuth</th><th>Vertical</th><th>L</th><th>R</th><th>U</th><th>D</th></tr>
+          <tr><td class="edit">house</td><td></td><td></td><td></td><td class="edit">0</td><td class="edit">0</td><td class="edit">0</td><td class="edit">0</td></tr>
+          <tr><td class="edit">ov1</td><td class="edit">60</td><td class="edit">60</td><td class="edit">-3.5</td><td class="edit">2</td><td class="edit">1</td><td class="edit">4</td><td class="edit">0</td></tr>
+          <tr><td class="edit">ov2</td><td class="edit">41.2</td><td class="edit">177</td><td class="edit">+2</td><td class="edit">3</td><td class="edit">5</td><td class="edit">1</td><td class="edit">1</td></tr>
+          <tr><td class="edit">ov3</td><td class="edit">28.1</td><td class="edit">165</td><td class="edit">+4</td><td class="edit">0</td><td class="edit">2</td><td class="edit">2</td><td class="edit">0</td></tr>
+        </table>
+        <div class="r"><button class="btn"><svg viewBox="0 0 14 14"><path d="M7 2v10M2 7h10"/></svg>Add Trip</button><button class="btn">Export</button><span class="lbl">Total length: 129.3 ft</span></div>
+      </div>
+      <div class="view">
+        <div class="paper"><svg viewBox="0 0 300 207" preserveAspectRatio="none"><path d="M70 170c20-30 10-50 40-62s30-40 62-48 40 6 58-18" fill="none" stroke="#2a2a2a" stroke-width="7" stroke-linecap="round" opacity=".18"/><path d="M70 170c20-30 10-50 40-62s30-40 62-48 40 6 58-18" fill="none" stroke="#b03a2e" stroke-width="1.5"/><g fill="#2e7d32"><circle cx="70" cy="170" r="3.5"/><circle cx="110" cy="108" r="3.5"/><circle cx="172" cy="60" r="3.5"/><circle cx="230" cy="42" r="3.5"/></g></svg></div>
+        <div class="busy plate"><div class="ring"></div></div>
+        <div class="floating"><span>Loading</span><div class="progress run"><b></b></div></div>
+      </div>
+      <div class="tools">
+        <div class="tabs"><button class="tab on">View</button><button class="tab">Export</button></div>
+        <div class="in">
+          <div class="c"><span class="lbl">File type</span><div class="r"><span class="combo"><span>JPG</span><i></i></span><button class="btn primary">Export</button></div></div>
+          <div class="c"><span class="lbl">Resolution</span><div class="r"><span class="spin"><span>300</span><i><b></b><b></b></i></span><span>DPI</span></div></div>
+          <div class="c"><span class="lbl">Projection</span>
+            <label class="radio"><input type="radio" name="pj" checked>Orthogonal</label>
+            <label class="radio"><input type="radio" name="pj">Perspective</label></div>
+          <label class="switch"><input type="checkbox" checked>Station labels</label>
+          <div class="r"><button class="btn toggle" aria-pressed="true">Plan</button><button class="btn toggle" aria-pressed="false">Profile</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="galT">
+  <div class="gallery">
+    <div class="cell"><h4>Button</h4>
+      <div class="r"><button class="btn">Export</button><button class="btn primary">Save</button>
+        <button class="btn"><svg viewBox="0 0 14 14"><path d="M7 11V3M3.5 6.5L7 3l3.5 3.5M2 12.5h10"/></svg>Draw Up</button></div>
+      <div class="states">
+        <small>Neutral</small><small>Hover</small><small>Pressed</small><small>Disabled</small>
+        <button class="btn" tabindex="-1">Export</button><button class="btn is-hover" tabindex="-1">Export</button><button class="btn is-pressed" tabindex="-1">Export</button><button class="btn" disabled>Export</button>
+      </div></div>
+
+    <div class="cell"><h4>Toggle and tool buttons</h4>
+      <div class="r"><button class="btn toggle" aria-pressed="true">Plan</button><button class="btn toggle" aria-pressed="false">Profile</button></div>
+      <div class="r"><button class="btn tool toggle" aria-pressed="true" title="Select"><svg viewBox="0 0 14 14"><path d="M3 2l8 5-3.5 1L6 12z"/></svg></button>
+        <button class="btn tool toggle" aria-pressed="false" title="Add station"><svg viewBox="0 0 14 14"><path d="M7 2l5 9H2z"/></svg></button>
+        <button class="btn tool toggle" aria-pressed="false" title="Add lead"><svg viewBox="0 0 14 14"><circle cx="7" cy="7" r="5"/><path d="M7 4.5v3M7 9.6v.2"/></svg></button>
+        <span class="lbl">Click to toggle</span></div></div>
+
+    <div class="cell"><h4>CheckBox · RadioButton · Switch</h4>
+      <div class="r"><label class="check"><input type="checkbox" checked>Checked</label><label class="check"><input type="checkbox">Unchecked</label><label class="check off"><input type="checkbox">Disabled</label></div>
+      <div class="r"><label class="radio"><input type="radio" name="g1" checked>Plan</label><label class="radio"><input type="radio" name="g1">Profile</label><label class="radio off"><input type="radio">Disabled</label></div>
+      <div class="r"><label class="switch"><input type="checkbox" checked>On</label><label class="switch"><input type="checkbox">Off</label></div></div>
+
+    <div class="cell"><h4>ComboBox · SpinBox</h4>
+      <div class="r" style="align-items:flex-start">
+        <div class="c"><span class="combo"><span>Running Profile</span><i></i></span>
+          <span class="combo is-hover"><span>JPG</span><i></i></span></div>
+        <div class="pop list"><div>JPG</div><div class="sel">PDF</div><div>PNG</div><div>SVG</div><div>TIF</div></div>
+        <div class="c"><span class="spin"><span>300</span><i><b></b><b></b></i></span><span class="spin"><span>1.00</span><i><b></b><b></b></i></span></div>
+      </div></div>
+
+    <div class="cell"><h4>TextField · TextArea</h4>
+      <div class="r"><input class="field" placeholder="Filter…"><input class="field" value="Typed text"></div>
+      <div class="r"><input class="field is-focus" value="Focused" tabindex="-1"><div class="c" style="gap:2px"><input class="field err" value="91° N"><span class="errtext">Latitude is at most 90°</span></div></div>
+      <textarea class="field" placeholder="Type notes here…">Aven, breakdown crawl, large stream. Strong air. Needs bolts and a handline.</textarea></div>
+
+    <div class="cell"><h4>Slider · ProgressBar · BusyIndicator</h4>
+      <div class="r"><div class="slider"><b></b><i></i></div><span class="lbl">60%</span></div>
+      <div class="c" style="margin-bottom:10px"><div class="progress run"><b></b></div><div class="progress ind"><b></b></div></div>
+      <div class="r"><div class="busy"><div class="ring"></div></div><div class="busy plate"><div class="ring"></div></div>
+        <div class="drip"><i class="drop"></i><i class="rip"></i><i class="rip two"></i><div class="busy"><div class="ring"></div></div></div>
+        <button class="btn replay">Play droplet</button></div></div>
+
+    <div class="cell"><h4>Menu · ToolTip</h4>
+      <div class="r" style="align-items:flex-start">
+        <div class="pop"><div>Compute Scraps</div><div>Reload <kbd>Ctrl+R</kbd></div><hr><div class="ck">Scraps Visible</div><div class="ck">Leads Visible</div><div>Station Labels</div><hr><div class="sel sub">Event Recording</div></div>
+        <div class="c"><span class="tip">The view's azimuth is the compass direction the view faces: 0° for north, 90° for east.</span>
+          <span class="tip"><b>Click</b> the north arrow's first point</span></div>
+      </div></div>
+
+    <div class="cell"><h4>TabBar · GroupBox · ScrollBar</h4>
+      <div class="tabs" style="margin-bottom:9px"><button class="tab on">View</button><button class="tab">Export</button><button class="tab">Layers</button></div>
+      <div class="r" style="align-items:stretch">
+        <div class="group" style="flex:1"><h5>Declination</h5><div class="kv"><span>Declination</span><span class="edit">-6.7</span><span>Units</span><span class="edit">ft</span></div></div>
+        <div class="group" style="flex:1"><h5><label class="check"><input type="checkbox" checked>Front Sights</label></h5><div class="kv"><span>Compass</span><span class="edit">0</span></div></div>
+        <div class="scroll"></div>
+      </div></div>
+
+    <div class="cell wide"><h4>Tables, links, editable values</h4>
+      <table class="tbl">
+        <tr><th>Trip</th><th>Date</th><th>Survey</th><th>Length</th><th>Completed</th></tr>
+        <tr><td><a class="link">Overland</a></td><td class="edit">2012-07-20</td><td>OV 1-4</td><td><span class="edit">0</span> ft</td><td><label class="check"><input type="checkbox"></label></td></tr>
+        <tr><td><a class="link">asurvey1</a></td><td class="edit">2012-05-26</td><td>A 1-14</td><td><span class="edit">194.53</span> ft</td><td><label class="check"><input type="checkbox" checked></label></td></tr>
+        <tr><td><a class="link">Trip1-Team1</a></td><td class="edit">2012-05-26</td><td>B 1-18</td><td><span class="edit">493.5</span> ft</td><td><label class="check"><input type="checkbox" checked></label></td></tr>
+        <tr><td><a class="link">Trip2-Team2</a></td><td class="edit">2012-05-27</td><td>B 18-45</td><td><span class="edit">638.3</span> ft</td><td><label class="check"><input type="checkbox"></label></td></tr>
+      </table></div>
+
+    <div class="cell"><h4>Dialog · Banner</h4>
+      <div class="banner" style="margin-bottom:10px">Missing backsight clino from “house” to “ov1”.</div>
+      <div class="group"><h5>Remove this note?</h5><div style="font-size:.93em;margin-bottom:9px;color:var(--text-2)">The scanned page and its scraps leave the trip.</div>
+        <div class="r" style="justify-content:flex-end"><button class="btn">Cancel</button><button class="btn primary">Remove</button></div></div></div>
+  </div>
+</template>
+
+<script>
+(function () {
+  const dirs = {
+    a: { name: "A · Karst", text: "The 2020 prototype, carried over literally: neutral charcoal, outlined buttons that invert on press, 2 px corners. Color is reserved for editable values, progress, and the busy ring." },
+    b: { name: "B · Deep Pool", text: "The spring palette becomes the surfaces: navy depths in dark mode, ice washes in light. Filled buttons, a mint-to-cyan primary action, 6 px corners." },
+    c: { name: "C · Limestone", text: "Warm paper neutrals with a teal accent. Filled, hairline-bordered buttons at today's density, 4 px corners. The smallest step from Fusion." },
+    d: { name: "D · Karst Soft", text: "The blend you asked for: Karst's neutral charcoal and monochrome ink, Deep Pool's 6 px corners, Limestone's hairline borders and soft shadows." }
+  };
+  // The three families the Appearance settings offer, at their default sizes.
+  const fonts = {
+    cw:   { family: '"Yanone Kaffeesatz"', size: "16px" },
+    fira: { family: '"Fira Sans"', size: "14px" },
+    sys:  { family: '-apple-system, "Segoe UI", system-ui', size: "14px" }
+  };
+  let state = { font: "cw", dir: "d", mode: matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" };
+  try { Object.assign(state, JSON.parse(localStorage.getItem("cwStyleProto2") || "{}")); } catch (e) {}
+  if (!dirs[state.dir]) state.dir = "d";
+  if (!fonts[state.font]) state.font = "cw";
+  if (state.mode !== "light" && state.mode !== "dark") state.mode = "dark";
+
+  const $ = (id) => document.getElementById(id);
+  const clone = (id) => $(id).content.cloneNode(true);
+
+  $("appStage").appendChild(clone("appT"));
+  $("galStage").appendChild(clone("galT"));
+
+  const six = $("six");
+  for (const mode of ["dark", "light"]) {
+    for (const dir of Object.keys(dirs)) {
+      const tile = document.createElement("div");
+      tile.className = "theme";
+      tile.dataset.dir = dir; tile.dataset.mode = mode;
+      tile.appendChild(clone("miniT"));
+      tile.querySelector(".name").textContent = dirs[dir].name;
+      tile.querySelector(".mode").textContent = mode;
+      tile.addEventListener("click", (e) => {
+        if (e.target.closest("button, input, label")) return;
+        state.dir = dir; state.mode = mode; apply();
+      });
+      six.appendChild(tile);
+    }
+  }
+
+  function apply() {
+    for (const stage of [$("appStage"), $("galStage")]) { stage.dataset.dir = state.dir; stage.dataset.mode = state.mode; }
+    document.querySelectorAll(".theme").forEach((t) => {
+      t.style.setProperty("--cw-font", fonts[state.font].family);
+      t.style.setProperty("--cw-size", fonts[state.font].size);
+    });
+    document.querySelectorAll("#fontSeg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.font === state.font));
+    document.querySelectorAll("#dirSeg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.dir === state.dir));
+    document.querySelectorAll("#modeSeg button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.mode === state.mode));
+    six.querySelectorAll(".theme").forEach((t) => t.classList.toggle("sel", t.dataset.dir === state.dir && t.dataset.mode === state.mode));
+    $("what").innerHTML = "<b>" + dirs[state.dir].name + ", " + state.mode + ".</b> " + dirs[state.dir].text;
+    try { localStorage.setItem("cwStyleProto2", JSON.stringify(state)); } catch (e) {}
+  }
+  $("dirSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { state.dir = b.dataset.dir; apply(); } });
+  $("fontSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { state.font = b.dataset.font; apply(); } });
+  $("modeSeg").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { state.mode = b.dataset.mode; apply(); } });
+
+  document.addEventListener("click", (e) => {
+    const toggle = e.target.closest(".btn.toggle");
+    if (toggle) toggle.setAttribute("aria-pressed", toggle.getAttribute("aria-pressed") !== "true");
+    const tab = e.target.closest(".tab");
+    if (tab) { tab.parentNode.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t === tab)); }
+    const side = e.target.closest(".side button");
+    if (side) { side.parentNode.querySelectorAll("button").forEach((t) => t.classList.toggle("on", t === side)); }
+    const replay = e.target.closest(".replay");
+    if (replay) { const d = replay.parentNode.querySelector(".drip"); d.classList.remove("play"); void d.offsetWidth; d.classList.add("play"); }
+  });
+
+  const params = new URLSearchParams(location.search);
+  if (dirs[params.get("dir")]) state.dir = params.get("dir");
+  if (fonts[params.get("font")]) state.font = params.get("font");
+  if (params.get("mode") === "light" || params.get("mode") === "dark") state.mode = params.get("mode");
+  apply();
+  document.querySelectorAll(".drip").forEach((d) => d.classList.add("play"));
+})();
+</script>
+</body>
+</html>

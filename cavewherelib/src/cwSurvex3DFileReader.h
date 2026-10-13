@@ -14,7 +14,20 @@
 #include "CaveWhereLibExport.h"
 
 //Qt includes
+#include <QHash>
+#include <QPair>
 #include <QString>
+
+// Survex's closure error for the traverse a leg sits in, in standard deviations:
+// total (e), horizontal (h) and vertical (v).
+struct cwLegError {
+    float e = 0.0f;
+    float h = 0.0f;
+    float v = 0.0f;
+};
+
+// Unordered pair of canonical station names -> the error of the traverse the leg sits in
+using cwLegErrorsByShot = QHash<QPair<QString, QString>, cwLegError>;
 
 /**
  * Reads cavern's .3d output into a position lookup and a survey network.
@@ -30,7 +43,17 @@ public:
         cwSurveyNetwork network;
         cwStationPositionLookup lookup;
         cwSplayTipsByStation splayTips;
+
+        // The img_ERROR_INFO closure error of every leg that sits in a loop,
+        // keyed by legKey() of its two full station names. Legs outside any
+        // loop (dead ends, articulation legs, hanging traverses), splays, and
+        // traverses cavern reports with zero error are absent.
+        cwLegErrorsByShot legErrors;
     };
+
+    // The sorted pair of canonical station names, so a leg reads the same
+    // key in either direction.
+    static QPair<QString, QString> legKey(const QString& from, const QString& to);
 
     // Parses a .3d file once, returning the survey network (station names,
     // shot connectivity, positions), a standalone position lookup, and the

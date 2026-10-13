@@ -12,6 +12,7 @@
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurvex3DFileReader.h"
 
 #include <QHash>
 #include <QVector>
@@ -49,6 +50,13 @@
  * to the first trip holding the station at all (tips from an external .svx
  * include have no stored splays to match).
  *
+ * segmentErrors runs parallel to points: segmentErrors[i] belongs to the
+ * segment at points[2i], points[2i+1]. It holds the leg's survex closure error
+ * e (in σ) when the cave's legErrorsByCave map has the leg, and kNoErrorValue
+ * for every other centerline segment and every splay segment.
+ * legErrorsByCave is keyed by cwCave::id(), with canonical station names
+ * (cave prefix stripped) in each cwSurvex3DFileReader::legKey().
+ *
  * Pure compute — no file I/O, no Qt object machinery. Caller invokes from
  * any thread; only reads the const region snapshot.
  */
@@ -56,6 +64,10 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotGeometry
 {
 public:
     cwLinePlotGeometry() = delete;
+
+    // A segment with no closure error. The render object and the shader read
+    // any value below zero as "no loop".
+    static constexpr float kNoErrorValue = -1.0f;
 
     class CaveLengthAndDepth {
     public:
@@ -84,11 +96,13 @@ public:
         QVector<VertexRange> tripSplayVertexRanges; // running trip id -> splay tail of that span
         QVector<QUuid> tripUuids;               // running trip id -> stable cwTripData::id
         QVector<CaveLengthAndDepth> cavesLengthAndDepths;
+        QVector<float> segmentErrors;           // 1 per segment, parallel to points / 2
     };
 
     static Monad::Result<Result> generate(
         const cwCavingRegionData& region,
-        const QHash<QUuid, cwSplayTipsByStation>& splayTipsByCave = {});
+        const QHash<QUuid, cwSplayTipsByStation>& splayTipsByCave = {},
+        const QHash<QUuid, cwLegErrorsByShot>& legErrorsByCave = {});
 };
 
 #endif // CWLINEPLOTGEOMETRY_H

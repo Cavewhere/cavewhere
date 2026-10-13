@@ -13,8 +13,6 @@ IconButton {
     iconSource: "qrc:/twbs-icons/icons/question-circle.svg"
     hoverIconSource: "qrc:/twbs-icons/icons/question-circle-fill.svg"
     sourceSize: Qt.size(15, 15);
-    height: 15
-    width: 15
 
     onClicked:  {
         if(showItemOnClick !== null) {

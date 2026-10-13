@@ -9,6 +9,7 @@ Window {
     height: 600
     visible: !RootData.license.hasReadLicenseAgreement
     color: Theme.surfaceMuted
+    palette: ThemePalette {}
     title: "License Agreement"
 
     modality: Qt.WindowModal
@@ -36,7 +37,7 @@ Window {
         RowLayout {
             Layout.alignment: Qt.AlignRight
 
-            Button {
+            QC.Button {
                 text: "Close CaveWhere"
                 onClicked: {
                     RootData.license.hasReadLicenseAgreement = false
@@ -44,7 +45,7 @@ Window {
                 }
             }
 
-            Button {
+            QC.Button {
                 text: "Accept"
                 onClicked: {
                     RootData.license.hasReadLicenseAgreement = true

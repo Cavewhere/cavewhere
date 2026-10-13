@@ -15,9 +15,9 @@ import cavewherelib
 // right-clicking to open the copy menu never moves the cursor, clears the
 // selection, or starts a drag-selection — all of which a raw TextInput gets wrong.
 // Its decoration is stripped (background: null, no padding) so it still reads as
-// plain text; the app runs the Fusion style, so the background is removable. Font
-// and alignment default to the app UI style and are overridable by the caller
-// (e.g. mono/right for the measurement readout).
+// plain text; CaveWhereStyle's delegates carry no ids, so background: null removes
+// the field frame. Font and alignment default to the app UI style and are
+// overridable by the caller (e.g. mono/right for the measurement readout).
 QC.TextField {
     id: root
 

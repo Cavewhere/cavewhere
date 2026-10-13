@@ -13,9 +13,9 @@ QQ.Rectangle {
         } else {
             //Alternating color background
             if(rowIndex % 2 == 1) {
-                return Theme.surfaceMuted
+                return Theme.rowAlternate
             } else {
-                return Theme.surface
+                return Theme.background
             }
         }
     }

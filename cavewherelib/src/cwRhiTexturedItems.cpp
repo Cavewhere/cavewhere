@@ -172,6 +172,16 @@ void cwRhiTexturedItems::synchronize(const SynchronizeData& data)
     }
 
     renderItems->m_pendingChanges.clear();
+
+    if (renderItems->m_sharedUniformBlock.isChanged()) {
+        m_sharedUniformBlock = renderItems->m_sharedUniformBlock.value();
+        renderItems->m_sharedUniformBlock.resetChanged();
+        for (Item* item : std::as_const(m_items)) {
+            if (item->material.wantsPerDrawUniform()) {
+                item->uniformNeedsUpdate = true;
+            }
+        }
+    }
 }
 
 void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
@@ -205,10 +215,9 @@ void cwRhiTexturedItems::updateResources(const ResourceUpdateData& data)
         }
 
         if (item->pipelineNeedsUpdate) {
-            // Live-only pre-build so createShaderResourceBindings has a
-            // pipelineRecord; gather() is the authoritative build (the offscreen
-            // path never comes through here). Key on this item's pass entry —
-            // see ResourceUpdateData::perPassRenderData.
+            // Live-only pre-build; gather() is the authoritative build (the
+            // offscreen path never comes through here). Key on this item's pass
+            // entry — see ResourceUpdateData::perPassRenderData.
             Q_ASSERT(data.perPassRenderData);
             const auto pass = toRenderPass(item->material.renderPass);
             const RenderData& routed = (*data.perPassRenderData)[static_cast<size_t>(pass)];
@@ -569,6 +578,11 @@ bool cwRhiTexturedItems::streamResources(ResourceUpdateData& data, qint64& remai
     // hasWork() covers the loads still queued or in flight — the frame renderer
     // has no other window onto this object's streamer.
     return levelsRemain || m_streamer.hasWork();
+}
+
+bool cwRhiTexturedItems::hasStreamingWork() const
+{
+    return m_streamer.hasWork();
 }
 
 void cwRhiTexturedItems::publishStreamingStats() const
@@ -992,9 +1006,9 @@ void cwRhiTexturedItems::Item::purgePipelinesFor(QRhiRenderPassDescriptor* descr
 void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdateData& data,
                                                              const SharedItemData& sharedData)
 {
-    // The bindings are rebuilt even while pipelineRecord is null (purged by
-    // evictPipelinesFor). Skipping would leave the old srb bound to a texture
-    // that a streamed mip swap just deleted.
+    // Rebuilt whether or not a pipeline record exists: the bindings are
+    // pass-independent, and a purge nulls the record while the texture or
+    // uniform buffer these bindings reference can still be replaced.
     QRhi* rhi = data.renderData.cb->rhi();
     auto* renderer = data.renderData.renderer;
 
@@ -1042,15 +1056,15 @@ void cwRhiTexturedItems::Item::createShaderResourceBindings(const ResourceUpdate
 
 QByteArray cwRhiTexturedItems::Item::buildPerDrawUniformPayload() const
 {
-    QByteArray payload;
+    // modelMatrix, then the shared color-by block, then the item's own block.
+    // Shaders that declare only the matrix ignore the rest.
+    const QByteArray sharedBlock = owner ? owner->m_sharedUniformBlock : QByteArray();
     const int matrixBytes = sizeof(float) * 16;
-    payload.resize(matrixBytes + uniformBlock.size());
-
-    std::memcpy(payload.data(), modelMatrix.constData(), matrixBytes);
-    if (!uniformBlock.isEmpty()) {
-        std::memcpy(payload.data() + matrixBytes, uniformBlock.constData(), uniformBlock.size());
-    }
-
+    QByteArray payload;
+    payload.reserve(matrixBytes + sharedBlock.size() + uniformBlock.size());
+    payload.append(reinterpret_cast<const char*>(modelMatrix.constData()), matrixBytes);
+    payload.append(sharedBlock);
+    payload.append(uniformBlock);
     return payload;
 }
 

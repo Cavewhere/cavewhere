@@ -70,6 +70,7 @@ class CAVEWHERE_LIB_EXPORT cwProject :  public QObject{
 
     //Older save and load
     Q_PROPERTY(QString filename READ filename NOTIFY filenameChanged)
+    Q_PROPERTY(QString dataRootPath READ dataRootPath NOTIFY dataRootChanged)
     Q_PROPERTY(FileType fileType READ fileType NOTIFY fileTypeChanged)
     Q_PROPERTY(bool canSaveDirectly READ canSaveDirectly NOTIFY canSaveDirectlyChanged)
     Q_PROPERTY(bool saveWillCauseDataLoss READ saveWillCauseDataLoss NOTIFY canSaveDirectlyChanged)
@@ -145,6 +146,7 @@ public:
     // Q_INVOKABLE void setDataRoot(const QString& dataRoot);
 
     QDir dataRootDir() const;
+    QString dataRootPath() const;
     Q_INVOKABLE QString absolutePath(const QString& relativePath) const;
     Q_INVOKABLE QString absolutePath(const cwNote* note) const;
     Q_INVOKABLE QString absolutePath(const cwNoteLiDAR* noteLiDAR) const;

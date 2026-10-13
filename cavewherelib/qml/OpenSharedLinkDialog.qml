@@ -57,7 +57,7 @@ QC.Dialog {
             objectName: "openSharedLinkError"
             Layout.fillWidth: true
             visible: text.length > 0
-            color: Theme.danger
+            color: Theme.errorText
             wrapMode: QC.Label.WordWrap
         }
     }

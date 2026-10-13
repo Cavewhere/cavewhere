@@ -106,6 +106,9 @@ QList<QFuture<Monad::Result<QVector<cwRenderTexturedItems::Item> > > > cwTriangu
                 //Add the render item
                 auto& item = renderItems.emplaceBack(std::move(geometry));
                 item.localBounds = localBounds;
+                // The mesh draws with the scrap shaders, which read a per-draw block.
+                item.material = cwRenderTexturedItems::scrapMaterial();
+                item.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
 
                 const cwProgressScope textureScope(textures,
                                                    QStringLiteral("Texture %1").arg(geometryIndex + 1));

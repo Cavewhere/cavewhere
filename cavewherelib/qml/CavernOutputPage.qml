@@ -29,7 +29,7 @@ StandardPage {
                 objectName: "statusLabel"
                 Layout.fillWidth: true
                 font.pixelSize: Theme.fontSizeMedium
-                color: root.hasError ? Theme.danger : Theme.text
+                color: root.hasError ? Theme.errorText : Theme.text
                 wrapMode: QC.Label.WordWrap
                 text: root.hasError
                       ? qsTr("Cavern reported an error during the last solve.")

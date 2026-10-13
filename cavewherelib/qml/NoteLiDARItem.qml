@@ -59,7 +59,7 @@ RegionViewer {
 
     scene: GltfScene {
         id: sceneId
-        gltf.dataRootPath: RootData.project ? RootData.project.absolutePath("") : ""
+        gltf.dataRootPath: RootData.project ? RootData.project.dataRootPath : ""
         gltf.gltfFilePath: note ? RootData.project.absolutePath(note) : ""
         gltf.futureManagerToken: RootData.futureManagerModel.token
         gltf.modelMatrix: {

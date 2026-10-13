@@ -75,6 +75,15 @@ Item {
     //by and drops them below the cluster instead of covering the last splay
     readonly property real shotBoxShift: stationSplaysExpanded ? -columnTemplate.shotRowY : 0
 
+    //True on the shot row whose cells hold the keyboard
+    readonly property bool shotSelected: itemId.rowType === SurveyEditorRowIndex.ShotRow
+                                         && itemId.model.focusedRow === itemId.index
+                                         && itemId.model.isShotCell(itemId.model.focusedRole)
+
+    //The selected shot's arrow reaches over the station rows on either side of
+    //it, and the view stacks its rows in no fixed order
+    z: itemId.shotSelected ? 2 : 1
+
     Loader {
         id: titleLoaderId
         active: itemId.rowType === SurveyEditorRowIndex.TitleRow
@@ -519,6 +528,47 @@ Item {
                 dataValidator: clinoValidator
             }
 
+            //Points from the selected shot's from station down to its to
+            //station, centered in the station column the way the names are and
+            //on the seam between the two name cells. Large text leaves less
+            //room between the names, so the arrow shrinks to keep clear of both
+            Loader {
+                active: itemId.shotSelected
+
+                sourceComponent: QC.Control {
+                    id: shotArrowId
+                    objectName: "shotArrow"
+
+                    //The room between the two names' text, measured in the
+                    //font the names inherit, which this control inherits too
+                    readonly property real nameGap: itemId.columnTemplate.dataRowHeight
+                                                    - 2 * itemId.columnTemplate.columnOffset
+                                                    - nameMetricsId.height
+                    readonly property real arrowSize: Math.max(0, Math.min(Theme.shotArrowSize,
+                                                                           shotArrowId.nameGap - 2 * Theme.shotArrowClearance))
+
+                    x: itemId.columnTemplate.stationX
+                       + (itemId.columnTemplate.stationWidth - shotArrowId.width) / 2
+                    y: shotDistanceDataBox.y + (shotDistanceDataBox.height - shotArrowId.height) / 2
+                    width: shotArrowId.arrowSize
+                    height: shotArrowId.arrowSize
+                    padding: 0
+
+                    //A tap on the arrow lands on the station cell under it
+                    enabled: false
+
+                    contentItem: Icon {
+                        source: "qrc:/twbs-icons/icons/arrow-down.svg"
+                        sourceSize: Qt.size(shotArrowId.arrowSize, shotArrowId.arrowSize)
+                        colorizationColor: Theme.accent
+                    }
+
+                    FontMetrics {
+                        id: nameMetricsId
+                        font: shotArrowId.font
+                    }
+                }
+            }
         }
     }
 }

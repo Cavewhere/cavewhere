@@ -201,6 +201,50 @@ TEST_CASE("cwSurveyEditorModel setDataAt appends from virtual trailing rows",
     CHECK(chunk->station(chunk->stationCount() - 1).name() == "S2");
 }
 
+TEST_CASE("cwSurveyEditorModel setDataAt appends below a nameless trailing station",
+          "[cwSurveyEditorModel][row-role-api][virtual]")
+{
+    cwTrip trip;
+    trip.addNewChunk();
+    auto* chunk = trip.chunk(0);
+    REQUIRE(chunk != nullptr);
+
+    cwSurveyEditorModel model;
+    model.setTrip(&trip);
+    model.setFocusedChunk(chunk);
+
+    const auto cellAt = [&](int indexInChunk, cwSurveyEditorRowIndex::RowType rowType, cwSurveyEditorCellIndex::CellRole role) {
+        return model.cellIndex(model.toModelRow(model.rowIndex(chunk, indexInChunk, rowType)), role);
+    };
+
+    REQUIRE(model.setDataAt(cellAt(0, cwSurveyEditorRowIndex::StationRow, cwSurveyEditorCellIndex::StationNameCell), "1"));
+    REQUIRE(model.setDataAt(cellAt(1, cwSurveyEditorRowIndex::StationRow, cwSurveyEditorCellIndex::StationNameCell), "2"));
+    REQUIRE(model.setDataAt(cellAt(0, cwSurveyEditorRowIndex::ShotRow, cwSurveyEditorCellIndex::ShotDistanceCell), "10"));
+    REQUIRE(model.setDataAt(cellAt(1, cwSurveyEditorRowIndex::StationRow, cwSurveyEditorCellIndex::StationNameCell), ""));
+    REQUIRE(chunk->stationCount() == 2);
+    REQUIRE(chunk->shotCount() == 1);
+
+    const int virtualStationRow = model.toModelRow(model.rowIndex(chunk, chunk->stationCount(), cwSurveyEditorRowIndex::StationRow));
+    REQUIRE(virtualStationRow >= 0);
+
+    cwSignalSpy rowsInsertedSpy(&model, &QAbstractItemModel::rowsInserted);
+    const int rowsBefore = model.rowCount();
+
+    REQUIRE(model.setDataAt(model.cellIndex(virtualStationRow, cwSurveyEditorCellIndex::StationNameCell), "3"));
+
+    CHECK(chunk->stationCount() == 3);
+    CHECK(chunk->shotCount() == 2);
+    CHECK(chunk->station(2).name() == "3");
+    CHECK(chunk->shot(0).distance().value() == "10");
+
+    //The chunk grew one shot and one station, and a fresh blank pair sits below
+    const int titleRows = 1;
+    const int blankPairRows = 2;
+    CHECK(rowsInsertedSpy.count() == 1);
+    CHECK(model.rowCount() == rowsBefore + blankPairRows);
+    CHECK(model.rowCount() == titleRows + chunk->stationCount() + chunk->shotCount() + blankPairRows);
+}
+
 TEST_CASE("cwSurveyEditorModel exposes row metadata roles for real and virtual rows",
           "[cwSurveyEditorModel][row-role-api][row-metadata]")
 {

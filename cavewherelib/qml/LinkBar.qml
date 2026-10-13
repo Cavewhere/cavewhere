@@ -16,10 +16,19 @@ QQ.Item {
     required property string dataPageAddress
     required property string mapPageAddress
 
+    property bool editingAddress: false
+
     // The status chip was tapped. The task sheet it opens is the host's, for the
     // same reason the sidebar's task flyout is: it has to composite above the
     // page view, and a child of the top bar cannot.
     signal tasksRequested()
+
+    function startEditingAddress() {
+        textFieldId.text = RootData.pageSelectionModel.currentPageAddress
+        editingAddress = true
+        textFieldId.selectAll()
+        textFieldId.forceActiveFocus()
+    }
 
     RowLayout {
         id: rowLayoutId
@@ -27,7 +36,7 @@ QQ.Item {
         anchors.right: parent.right
         anchors.rightMargin: linkBarId.layoutSize >= Theme.LayoutSize.Wide ? 5 : 0
 
-        spacing: 0
+        spacing: Theme.linkBarButtonSpacing
 
         LinkBarModel {
             id: linkBarModel
@@ -123,14 +132,32 @@ QQ.Item {
             }
         }
 
-        QQ.Rectangle {
-            id: linkbarBackgroundRect
+        QQ.Item {
+            id: breadcrumbAreaId
+            objectName: "linkBarBreadcrumb"
 
             Layout.fillWidth: true
+            Layout.topMargin: Theme.linkBarVerticalMargin
+            Layout.bottomMargin: Theme.linkBarVerticalMargin
             implicitHeight: sizeItemId.height + 10
-            border.width: 1
-            border.color: Theme.sidebar.divider
-            color: Theme.surfaceMuted
+
+            // Built lazily on the first right-click, in-scene like SelectableValue's
+            // menu so it behaves the same on every platform.
+            QC.ContextMenu.menu: QC.Menu {
+                objectName: "linkBarMenu"
+                popupType: QC.Popup.Item
+
+                QC.MenuItem {
+                    objectName: "linkBarEditItem"
+                    text: qsTr("Edit")
+                    onTriggered: linkBarId.startEditingAddress()
+                }
+                QC.MenuItem {
+                    objectName: "linkBarCopyItem"
+                    text: qsTr("Copy")
+                    onTriggered: RootData.copyText(RootData.pageSelectionModel.currentPageAddress)
+                }
+            }
 
             LinkBarItem {
                 id: sizeItemId
@@ -152,7 +179,6 @@ QQ.Item {
                 spacing: 0
                 visible: !textFieldId.visible
 
-
                 delegate: LinkBarItem {
                     required property string nameRole
                     required property string fullPathRole
@@ -161,44 +187,31 @@ QQ.Item {
                     text: nameRole
                     onClicked: RootData.pageSelectionModel.currentPageAddress = fullPathRole
                 }
-
-                QQ.Rectangle {
-                    anchors.fill: parent
-                    color: Theme.surface
-                }
             }
 
             QC.TextField {
                 id: textFieldId
+                objectName: "linkBarAddressField"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.margins: 3
                 anchors.verticalCenter: parent.verticalCenter
-                // implicitHeight: linkbarBackgroundRect.height
-                visible: textEnableButtonId.checked
+                visible: linkBarId.editingAddress
                 focus: false
-                text: RootData.pageSelectionModel.currentPageAddress
-                onEditingFinished: RootData.pageSelectionModel.currentPageAddress = text
-            }
 
-            QC.Button {
-                id: textEnableButtonId
-                anchors.right: parent.right
-                anchors.rightMargin: 5
-                anchors.verticalCenter: parent.verticalCenter
-                visible: true //RootData.desktopBuild
-
-                text: "..."
-                onClicked: {
-                    textFieldId.forceActiveFocus()
-                    checked = !checked;
+                // Hiding the field takes its focus, which emits editingFinished;
+                // the editingAddress check keeps an Escape from applying the text.
+                onEditingFinished: {
+                    if (linkBarId.editingAddress) {
+                        RootData.pageSelectionModel.currentPageAddress = text
+                        linkBarId.editingAddress = false
+                    }
+                }
+                QQ.Keys.onEscapePressed: {
+                    text = RootData.pageSelectionModel.currentPageAddress
+                    linkBarId.editingAddress = false
                 }
             }
-        }
-
-        QQ.Item {
-            implicitWidth: 5
-            implicitHeight: 1
         }
 
         // Only at Narrow: at Medium and above the sidebar footer says all this,
@@ -231,7 +244,7 @@ QQ.Item {
             needsInstallation: RootData.remote.gitHubIntegration.needsInstallation
 
             // Right-aligned popup positioning anchored below this button
-            readonly property int _popupRightEdge: QC.Overlay.overlay.width - 5
+            readonly property int _popupRightEdge: syncButtonId.QQ.Window.width - 5
             readonly property int _popupY: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
 
             onSyncRequested: {
@@ -267,6 +280,7 @@ QQ.Item {
 
             ReconnectPopup {
                 id: reconnectPopupId
+                objectName: "reconnectPopup"
                 parent: QC.Overlay.overlay
                 gitHub: RootData.remote.gitHubIntegration
                 x: syncButtonId._popupRightEdge - width
@@ -308,6 +322,7 @@ QQ.Item {
         }
 
         DiscordChatButton {
+            objectName: "discordButton"
             visible: linkBarId.layoutSize >= Theme.LayoutSize.Wide
             implicitWidth: sizeItemId.height
             implicitHeight: implicitWidth

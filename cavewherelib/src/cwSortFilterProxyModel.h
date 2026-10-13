@@ -106,6 +106,7 @@ protected:
     int roleKey(const QByteArray &role) const;
     QHash<int, QByteArray> roleNames() const;
     bool filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const;
+    bool lessThan(const QModelIndex &sourceLeft, const QModelIndex &sourceRight) const override;
 };
 
 #endif // SORTFILTERPROXYMODEL_H

@@ -12,7 +12,7 @@ QQ.Rectangle {
     height: visible ? contentLayout.implicitHeight + 12 : 0
     width: visible ? contentLayout.implicitWidth + 16 : 0
     color: Theme.warning
-    radius: 5
+    radius: Theme.controlRadius
     opacity: 0.9
 
     QQ.Connections {

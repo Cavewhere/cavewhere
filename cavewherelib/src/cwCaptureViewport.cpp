@@ -23,6 +23,7 @@
 #include "cw3dRegionViewer.h"
 #include "cwCaptureCenterline.h"
 #include "cwCaptureLeads.h"
+#include "cwCaptureLabelItem.h"
 #include "cwCaptureLabelPlacer.h"
 #include "cwCaptureLeadLines.h"
 #include "cwGraphicsImageItem.h"
@@ -33,9 +34,6 @@
 #include "cwGlobals.h"
 #include "cwScaleBarItem.h"
 #include "cwCavingRegion.h"
-#include "cwCave.h"
-#include "cwSurveyNetwork.h"
-#include "cwStationPositionLookup.h"
 #include "cwConcurrent.h"
 #include "cwLabelPlacementControl.h"
 
@@ -80,8 +78,8 @@ struct LabelPlacementInput {
     cwCaptureLabelPlacer::PlacementViewport viewport;
     qreal   cellSizeLocal    = 0.0;
     QVector<TileAlphaInput>       tiles;
-    QVector<QRectF>               obstacleRects; // station dots + lead markers, before finalize()
-    QVector<QPair<QLineF, qreal>> softSegments;  // centerline legs, after finalize()
+    QVector<QRectF>               obstacleRects; // visible station dots + lead markers, before finalize()
+    QVector<QPair<QLineF, qreal>> softSegments;  // visible centerline legs, after finalize()
     cwCaptureCenterline* centerline = nullptr;
     cwCaptureLeads*      leads      = nullptr;
 };
@@ -107,6 +105,9 @@ constexpr qreal StationDotObstacleMarginPaperPx = 1.0;
 // device-pixel-ratio 1 — no Retina supersampling. MSAA (cwRenderingSettings::
 // sampleCount) supplies the anti-aliasing the supersample used to provide.
 constexpr float kExportDevicePixelRatio = 1.0f;
+
+// A preview tile pixel is one local unit.
+constexpr double kPreviewImageScale = 1.0;
 }
 
 cwCaptureViewport::cwCaptureViewport(QObject *parent) :
@@ -131,6 +132,10 @@ cwCaptureViewport::cwCaptureViewport(QObject *parent) :
     connect(this, &cwCaptureViewport::positionOnPaperChanged, this, &cwCaptureViewport::updateItemsPosition);
     connect(this, &cwCaptureViewport::rotationChanged, this, &cwCaptureViewport::updateTransformForItems);
     connect(this, &cwCaptureViewport::boundingBoxChanged, this, &cwCaptureViewport::updateScaleBarGeometry);
+    connect(this, &cwCaptureViewport::finishedCapture,
+            this, &cwCaptureViewport::relabelPreviewIfPending);
+    connect(this, &cwCaptureViewport::captureCanceled,
+            this, &cwCaptureViewport::relabelPreviewIfPending);
 
     m_scaleBar->setZValue(ScaleBarZValue);
     m_scaleBar->setVisible(false);
@@ -201,12 +206,18 @@ void cwCaptureViewport::capture()
             // were never captured.
             cancelCapture();
             m_captureAgainWhenDone = true;
+            if(m_runIsRelabel && !previewCapture()) {
+                // The export takes over the label pointers; the surviving
+                // preview tiles need their labels placed again afterward.
+                m_relabelPreviewWhenDone = true;
+            }
         }
         return;
     }
     CapturingImages = true;
     m_cancelRequested = false;
     m_runIsPreview = previewCapture();
+    m_runIsRelabel = false;
 
     // Every bail-out below must still end the run with a terminal signal:
     // cwCaptureManager waits on exactly one of finishedCapture() /
@@ -258,7 +269,7 @@ void cwCaptureViewport::capture()
         PreviewItem = new QGraphicsItemGroup();
         previewItemChanged();
 
-        imageScale = 1.0;
+        imageScale = kPreviewImageScale;
     } else {
         if(Item != NULL) {
             delete Item;
@@ -298,9 +309,11 @@ void cwCaptureViewport::capture()
                                                     originalProj);
 
     // Hide the gradient/grid/line-plot so the rendered tiles are transparent-backed,
-    // but keep point clouds visible so they appear in the export (EDL-lit, as in the
-    // live view). Per-tile visibility override (not a global toggle), so the live 3D
-    // view stays interactive and undisturbed throughout the export.
+    // and hide the 3D station-label/lead billboards because the export redraws them
+    // as 2D overlays. Keep point clouds visible so they appear in the export
+    // (EDL-lit, as in the live view). Per-tile visibility override (not a global
+    // toggle), so the live 3D view stays interactive and undisturbed throughout the
+    // export.
     const QSet<cwRenderObjectId> hiddenObjectIds =
         m_sceneManager.isNull() ? QSet<cwRenderObjectId>{}
                                 : m_sceneManager->captureHiddenObjectIds();
@@ -699,47 +712,6 @@ void cwCaptureViewport::deleteSceneItems()
     m_scaleBar = nullptr;
 }
 
-cwSurveyNetwork cwCaptureViewport::buildCenterlineNetwork() const
-{
-    cwSurveyNetwork network;
-
-    if(m_sceneManager.isNull()) {
-        return network;
-    }
-
-    cwCavingRegion* region = m_sceneManager->cavingRegion();
-    if(region == nullptr) {
-        return network;
-    }
-
-    const QList<cwCave*> caves = region->caves();
-    for(cwCave* cave : caves) {
-        if(cave == nullptr) {
-            continue;
-        }
-
-        const cwSurveyNetwork caveNetwork = cave->network();
-        const cwStationPositionLookup stationLookup = cave->stationPositionLookup();
-        const QStringList stations = caveNetwork.stations();
-        for(const QString& station : stations) {
-            if(stationLookup.hasPosition(station)) {
-                network.setPosition(station, stationLookup.position(station));
-            }
-        }
-
-        for(const QString& station : stations) {
-            const QStringList neighbors = caveNetwork.neighbors(station);
-            for(const QString& neighbor : neighbors) {
-                network.addShot(station, neighbor);
-            }
-        }
-    }
-
-    qDebug() << "Build network station empty:" << network.isEmpty();
-
-    return network;
-}
-
 cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const
 {
     if(parent == nullptr) {
@@ -751,7 +723,12 @@ cwCaptureCenterline* cwCaptureViewport::createCenterlineItem(QGraphicsItemGroup*
     centerline->setCamera(CaptureCamera);
     centerline->setViewport(viewport());
     centerline->setImageScale(imageScale);
-    centerline->setNetwork(buildCenterlineNetwork());
+    if(!m_sceneManager.isNull()) {
+        centerline->setNetworks(cwCaptureCenterline::caveNetworks(m_sceneManager->cavingRegion()));
+    }
+    centerline->setDotsVisible(m_centerlineDotsVisible);
+    centerline->setLegsVisible(m_centerlineLegsVisible);
+    centerline->setLabelsVisible(m_centerlineLabelsVisible);
 
     return centerline;
 }
@@ -771,8 +748,6 @@ cwCaptureLeads* cwCaptureViewport::createLeadsItem(QGraphicsItemGroup* parent, d
     if(!m_sceneManager.isNull()) {
         leads->setRegion(m_sceneManager->cavingRegion());
     }
-
-    leads->setVisible(m_leadsVisible);
 
     return leads;
 }
@@ -871,7 +846,7 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         CenterlineItem->setPaperPxToLocal(paperPxToLocal);
         CenterlineItem->setVisible(false);
     }
-    LeadsItem = createLeadsItem(parent, imageScale);
+    LeadsItem = m_leadsVisible ? createLeadsItem(parent, imageScale) : nullptr;
     if(LeadsItem != nullptr) {
         LeadsItem->setExportDpi(exportDpi);
         LeadsItem->setPaperPxToLocal(paperPxToLocal);
@@ -883,7 +858,7 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
     // Gather static dot/marker obstacles (seeded before finalize) from the
     // items' geometry — cheap GUI-thread reads, so the worker needs no GUI
     // access to build them.
-    if(CenterlineItem != nullptr) {
+    if(CenterlineItem != nullptr && CenterlineItem->dotsVisible()) {
         const qreal dotHalf = CenterlineItem->stationDotRadius()
                               + StationDotObstacleMarginPaperPx * paperPxToLocal;
         const QVector<QPointF> stationPositions = CenterlineItem->stationPositions();
@@ -905,7 +880,7 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
 
     // Gather centerline legs as soft obstacles (registered after finalize) so
     // leaders prefer routes that don't visually cut across them.
-    if(CenterlineItem != nullptr) {
+    if(CenterlineItem != nullptr && CenterlineItem->legsVisible()) {
         const qreal centerlineThickness =
             cwCaptureCenterline::LinePenWidthPaperPx * paperPxToLocal;
         const QVector<QLineF> legs = CenterlineItem->lines();
@@ -1017,7 +992,12 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
 
         if(m_labelPlacementFuture.isCanceled()) {
             // Canceled: leave the partially placed items hidden; the run's
-            // output is discarded by the manager.
+            // output is discarded by the manager. A canceled relabel leaves
+            // the surviving preview without labels, so place them again;
+            // each cancel re-arms at most one relabel.
+            if(m_runIsRelabel) {
+                m_relabelPreviewWhenDone = true;
+            }
             emit captureCanceled();
             return;
         }
@@ -1025,12 +1005,11 @@ void cwCaptureViewport::placeLabelsAfterTiles(QGraphicsItemGroup* parent, double
         if(CenterlineItem != nullptr) {
             CenterlineItem->setVisible(true);
         }
+        // Leads exist only if they were shown when this run's placement started.
+        LeadLinesItem = nullptr;
         if(LeadsItem != nullptr) {
-            LeadsItem->setVisible(m_leadsVisible);
-        }
-        LeadLinesItem = createLeadLinesItem(parent, imageScale, LeadsItem);
-        if(LeadLinesItem != nullptr) {
-            LeadLinesItem->setVisible(m_leadsVisible);
+            LeadsItem->setVisible(true);
+            LeadLinesItem = createLeadLinesItem(parent, imageScale, LeadsItem);
         }
         emit finishedCapture();
     }, Qt::SingleShotConnection);
@@ -1071,8 +1050,6 @@ cwCaptureLeadLines* cwCaptureViewport::createLeadLinesItem(QGraphicsItemGroup* p
 
     const QSizeF localSize = QSizeF(viewport().size()) * imageScale;
     lines->setBoundingRect(QRectF(QPointF(0.0, 0.0), localSize));
-    lines->setVisible(m_leadsVisible);
-
     return lines;
 }
 
@@ -1300,23 +1277,79 @@ void cwCaptureViewport::setScaleBarVisible(bool visible)
 
 void cwCaptureViewport::setLeadsVisible(bool visible)
 {
-    if(m_leadsVisible == visible) {
+    setLabelOption(m_leadsVisible, visible, &cwCaptureViewport::leadsVisibleChanged);
+}
+
+void cwCaptureViewport::setCenterlineDotsVisible(bool visible)
+{
+    setLabelOption(m_centerlineDotsVisible, visible, &cwCaptureViewport::centerlineDotsVisibleChanged);
+}
+
+void cwCaptureViewport::setCenterlineLegsVisible(bool visible)
+{
+    setLabelOption(m_centerlineLegsVisible, visible, &cwCaptureViewport::centerlineLegsVisibleChanged);
+}
+
+void cwCaptureViewport::setCenterlineLabelsVisible(bool visible)
+{
+    setLabelOption(m_centerlineLabelsVisible, visible, &cwCaptureViewport::centerlineLabelsVisibleChanged);
+}
+
+void cwCaptureViewport::setLabelOption(bool& option, bool visible, void (cwCaptureViewport::*changed)())
+{
+    if(option == visible) {
+        return;
+    }
+    option = visible;
+    emit (this->*changed)();
+    relabelPreview();
+}
+
+void cwCaptureViewport::deletePreviewLabelItems()
+{
+    // The label-item pointers may point into the export group (Item) after an
+    // export, so find the preview's own label items by type.
+    const QList<QGraphicsItem*> children = PreviewItem->childItems();
+    for(QGraphicsItem* child : children) {
+        if(dynamic_cast<cwCaptureLabelItem*>(child) != nullptr      // centerline + leads
+           || dynamic_cast<cwCaptureLeadLines*>(child) != nullptr) {
+            delete child;
+        }
+    }
+    CenterlineItem = nullptr;
+    LeadsItem = nullptr;
+    LeadLinesItem = nullptr;
+}
+
+void cwCaptureViewport::relabelPreview()
+{
+    if(PreviewItem == nullptr) {
+        // Nothing captured yet; the first preview reads the current options.
+        return;
+    }
+    if(CapturingImages) {
+        // A run owns the label items until it ends (its worker mutates them).
+        m_relabelPreviewWhenDone = true;
         return;
     }
 
-    m_leadsVisible = visible;
+    deletePreviewLabelItems();
+    CapturingImages = true;
+    m_cancelRequested = false;
+    m_runIsPreview = true;
+    m_runIsRelabel = true;
+    placeLabelsAfterTiles(PreviewItem, kPreviewImageScale);
+}
 
-    // While a capture is in flight the label items are deliberately hidden
-    // (the worker is mutating their data — see placeLabelsAfterTiles); the
-    // continuation applies the current m_leadsVisible when it reveals them.
-    if(LeadsItem != nullptr && !CapturingImages) {
-        LeadsItem->setVisible(visible);
+void cwCaptureViewport::relabelPreviewIfPending()
+{
+    if(m_relabelPreviewWhenDone) {
+        m_relabelPreviewWhenDone = false;
+        // Queued: let the emitting run (and the manager's handler for it)
+        // unwind before a new placement starts.
+        QMetaObject::invokeMethod(this, &cwCaptureViewport::relabelPreview,
+                                  Qt::QueuedConnection);
     }
-    if(LeadLinesItem != nullptr && !CapturingImages) {
-        LeadLinesItem->setVisible(visible);
-    }
-
-    emit leadsVisibleChanged();
 }
 
 cwUnits::UnitSystem cwCaptureViewport::effectiveScaleBarUnitSystem() const

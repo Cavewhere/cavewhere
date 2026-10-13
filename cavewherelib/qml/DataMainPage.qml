@@ -96,7 +96,7 @@ StandardPage {
     // The unit system is a project-wide choice a user rarely changes but can
     // wreck a project by flipping. It shows read-only until the user clicks
     // Edit, which is the extra click the design asks for.
-    QQ.Rectangle {
+    SectionGroupBox {
         id: regionInfoBox
         objectName: "regionInfoBox"
 
@@ -109,8 +109,7 @@ StandardPage {
         readonly property int originPrecision: 6
 
         Layout.fillWidth: true
-        implicitHeight: infoColumnId.implicitHeight + Theme.statsPadding * 2
-        color: Theme.borderSubtle
+        title: qsTr("Project")
 
         function formatOrigin(latitude, longitude) {
             return Utils.formatLatLon(latitude, longitude, regionInfoBox.originPrecision)
@@ -120,14 +119,7 @@ StandardPage {
             id: infoColumnId
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Theme.statsPadding
             spacing: Theme.tightSpacing
-
-            QC.Label {
-                text: qsTr("Project")
-                font.bold: true
-            }
 
             ColumnLayout {
                 Layout.fillWidth: true
@@ -184,8 +176,9 @@ StandardPage {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.flowSpacing
 
-                // A custom label replaces the one the style positions and
-                // measures, so it has to do both jobs itself. It sits at the
+                // A custom label replaces the style's title so the edit toggle
+                // shares its line inside the card. The style still sets its y
+                // to the card's top padding; the label sets its own x to the
                 // frame's left padding to line up with the rows, and it declares
                 // an implicit size: the style reserves the title's room only when
                 // the label reports an implicit width, and reserves the height it

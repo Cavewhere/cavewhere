@@ -8,7 +8,15 @@
 
 #include <QtGlobal>
 
+#include <cstring>
+
 namespace {
+
+// Binding 1 is the scrap texture, so the per-draw block sits at 2.
+constexpr int kScrapPerDrawBinding = 2;
+// std140 vec4 item: x = color-by value, yzw reserved.
+constexpr int kItemBlockFloats = 4;
+constexpr qsizetype kColorValueBytes = sizeof(float);
 
 Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
                                                 const QVector<cwGeometry::AttributeDesc>& layout)
@@ -249,8 +257,24 @@ void cwRenderTexturedItems::updateItem(uint32_t id, const Item& item)
         updateTexture(id, item.texture.image());
     }
     setMaterial(id, item.material);
-    setUniformBlock(id, item.uniformBlock);
+    setUniformBlock(id, withColorValueOf(id, item.uniformBlock));
     setModelMatrix(id, item.modelMatrix);
+}
+
+QByteArray cwRenderTexturedItems::withColorValueOf(uint32_t id, const QByteArray& uniformBlock) const
+{
+    // The color-by value belongs to the item's visibility proxy, which pushes
+    // it only when it changes; a re-triangulated item must keep it.
+    const auto entry = m_frontState.constFind(id);
+    if (entry == m_frontState.cend()
+        || entry->uniformBlock.size() < kColorValueBytes
+        || uniformBlock.size() < kColorValueBytes) {
+        return uniformBlock;
+    }
+
+    QByteArray block = uniformBlock;
+    std::memcpy(block.data(), entry->uniformBlock.constData(), kColorValueBytes);
+    return block;
 }
 
 void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geometry)
@@ -422,6 +446,40 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
     if (auto* intersector = geometryItersecter()) {
         intersector->setModelMatrix({renderObjectId(), id}, modelMatrix);
     }
+}
+
+void cwRenderTexturedItems::setSharedUniformBlock(const QByteArray& block)
+{
+    m_sharedUniformBlock.setValue(block);
+    update();
+}
+
+cwRenderMaterialState cwRenderTexturedItems::scrapMaterial()
+{
+    cwRenderMaterialState material;
+    material.perDrawUniformBinding = kScrapPerDrawBinding;
+    material.perDrawUniformStages = cwRenderMaterialState::ShaderStage::Fragment;
+    return material;
+}
+
+QByteArray cwRenderTexturedItems::emptyItemBlock()
+{
+    return QByteArray(sizeof(float) * kItemBlockFloats, '\0');
+}
+
+void cwRenderTexturedItems::setItemColorValue(uint32_t id, float value)
+{
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
+        return;
+    }
+
+    QByteArray block = entry->uniformBlock;
+    if (block.size() < kColorValueBytes) {
+        block = emptyItemBlock();
+    }
+    std::memcpy(block.data(), &value, kColorValueBytes);
+    setUniformBlock(id, block);
 }
 
 void cwRenderTexturedItems::removeItem(uint32_t id)

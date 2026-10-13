@@ -24,7 +24,6 @@ class cwCamera;
 class cwCaptureCenterline;
 class cwCaptureLeads;
 class cwCaptureLeadLines;
-class cwSurveyNetwork;
 #include "cwFutureManagerToken.h"
 #include "cwScaleBarItem.h"
 #include "cwScale.h"
@@ -51,6 +50,9 @@ class CAVEWHERE_LIB_EXPORT cwCaptureViewport : public cwCaptureItem
     Q_PROPERTY(double cameraPitch READ cameraPitch WRITE setCameraPitch NOTIFY cameraPitchChanged)
     Q_PROPERTY(bool scaleBarVisible READ scaleBarVisible WRITE setScaleBarVisible NOTIFY scaleBarVisibleChanged)
     Q_PROPERTY(bool leadsVisible READ leadsVisible WRITE setLeadsVisible NOTIFY leadsVisibleChanged)
+    Q_PROPERTY(bool centerlineDotsVisible READ centerlineDotsVisible WRITE setCenterlineDotsVisible NOTIFY centerlineDotsVisibleChanged)
+    Q_PROPERTY(bool centerlineLegsVisible READ centerlineLegsVisible WRITE setCenterlineLegsVisible NOTIFY centerlineLegsVisibleChanged)
+    Q_PROPERTY(bool centerlineLabelsVisible READ centerlineLabelsVisible WRITE setCenterlineLabelsVisible NOTIFY centerlineLabelsVisibleChanged)
     Q_PROPERTY(cwUnits::ScaleBarUnitMode scaleBarUnitMode READ scaleBarUnitMode WRITE setScaleBarUnitMode NOTIFY scaleBarUnitModeChanged)
 
 public:
@@ -113,6 +115,15 @@ public:
     bool leadsVisible() const;
     void setLeadsVisible(bool visible);
 
+    bool centerlineDotsVisible() const;
+    void setCenterlineDotsVisible(bool visible);
+
+    bool centerlineLegsVisible() const;
+    void setCenterlineLegsVisible(bool visible);
+
+    bool centerlineLabelsVisible() const;
+    void setCenterlineLabelsVisible(bool visible);
+
     cwUnits::ScaleBarUnitMode scaleBarUnitMode() const;
     void setScaleBarUnitMode(cwUnits::ScaleBarUnitMode mode);
 
@@ -134,6 +145,9 @@ signals:
     void positionAfterScaleChanged();
     void scaleBarVisibleChanged();
     void leadsVisibleChanged();
+    void centerlineDotsVisibleChanged();
+    void centerlineLegsVisibleChanged();
+    void centerlineLabelsVisibleChanged();
     void scaleBarUnitModeChanged();
 
     void sceneManagerChanged();
@@ -179,7 +193,6 @@ private:
     //! Re-hook the export scale bar to the current project's unitSystemChanged
     //! (so FollowProject refreshes live, #470/R3) and refresh it now.
     void updateScaleBarForRegion();
-    cwSurveyNetwork buildCenterlineNetwork() const;
     cwCaptureCenterline* createCenterlineItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeads* createLeadsItem(QGraphicsItemGroup* parent, double imageScale) const;
     cwCaptureLeadLines* createLeadLinesItem(QGraphicsItemGroup* parent, double imageScale, cwCaptureLeads* leadsPeer) const;
@@ -188,6 +201,15 @@ private:
     // builds the leader lines and emits finishedCapture() (or captureCanceled()
     // if it was aborted). Returns immediately; does not block the GUI.
     void placeLabelsAfterTiles(QGraphicsItemGroup* parent, double imageScale);
+
+    // Re-runs label placement on the existing preview tiles, so a centerline
+    // option change keeps the layer's size and position on the paper. Defers
+    // to the end of an in-flight run.
+    void relabelPreview();
+    void relabelPreviewIfPending();
+    void deletePreviewLabelItems();
+
+    void setLabelOption(bool& option, bool visible, void (cwCaptureViewport::*changed)());
 
     // In-flight worker-thread label placement (see placeLabelsAfterTiles).
     // Held so it can be canceled on cancelCapture()/destruction. Canceling a
@@ -232,6 +254,16 @@ private:
     cwCaptureLeads* LeadsItem;
     cwCaptureLeadLines* LeadLinesItem;
     bool m_leadsVisible = false;
+    bool m_centerlineDotsVisible = true;
+    bool m_centerlineLegsVisible = true;
+    bool m_centerlineLabelsVisible = true;
+    // Set when a centerline option changes while a run is in flight; the
+    // preview's labels are re-placed once that run ends (see relabelPreview).
+    bool m_relabelPreviewWhenDone = false;
+    // Whether the in-flight run only re-places the preview's labels. When such
+    // a run is canceled or superseded, its label items stay hidden, so the
+    // preview is relabeled again once the next run ends.
+    bool m_runIsRelabel = false;
 };
 
 /**
@@ -301,6 +333,18 @@ inline bool cwCaptureViewport::scaleBarVisible() const {
 
 inline bool cwCaptureViewport::leadsVisible() const {
     return m_leadsVisible;
+}
+
+inline bool cwCaptureViewport::centerlineDotsVisible() const {
+    return m_centerlineDotsVisible;
+}
+
+inline bool cwCaptureViewport::centerlineLegsVisible() const {
+    return m_centerlineLegsVisible;
+}
+
+inline bool cwCaptureViewport::centerlineLabelsVisible() const {
+    return m_centerlineLabelsVisible;
 }
 
 inline cwUnits::ScaleBarUnitMode cwCaptureViewport::scaleBarUnitMode() const {

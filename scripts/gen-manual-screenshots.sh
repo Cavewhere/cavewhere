@@ -74,13 +74,10 @@ else
     echo "==> Generating manual screenshots into $image_dir"
 fi
 # CW_MANUAL_IMAGE_DIR redirects WindowGrabber's output at the manual's images/.
-# QT_QUICK_CONTROLS_STYLE=Fusion matches the real desktop app (the Windows/Linux
-# look, with the sidebar File button) rather than the macOS native style.
 # No --platform flag: use the native (GPU-backed) QPA so the 3D view renders.
 # $tests is deliberately unquoted: empty means "run everything", and the test
 # names it holds never contain spaces.
 CW_MANUAL_IMAGE_DIR="$image_dir" \
-QT_QUICK_CONTROLS_STYLE="Fusion" \
     "$test_bin" -input "$repo_root/test-qml/tst_ManualScreenshots.qml" \
     $tests \
     2>&1 | tee /tmp/cavewhere-manual-screenshots.log

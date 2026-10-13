@@ -8,6 +8,7 @@
 
 #include "cwRegionSceneManager.h"
 #include "cwScene.h"
+#include "cwRenderBillboards.h"
 #include "cwRenderGridPlane.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderRadialGradient.h"
@@ -37,6 +38,10 @@ cwRegionSceneManager::cwRegionSceneManager(QObject *parent) :
 
     m_lazLayers = new cwLazLayersSceneNode(this);
     m_lazLayers->setScene(scene());
+
+    m_colorBy = new cwColorBy(this);
+    m_colorBy->setTargets(m_linePlot, m_items);
+    m_colorBy->setScene(scene());
 
     //Keep the grid plane sitting at the lowest cave depth (issue #534). The
     //plane's default elevation already covers the no-geometry state, so only the
@@ -72,8 +77,16 @@ void cwRegionSceneManager::updateGridPlaneElevation()
   */
 void cwRegionSceneManager::setCavingRegion(cwCavingRegion* region) {
     if(Region != region) {
+        if(Region) {
+            disconnect(Region, &cwCavingRegion::unitSystemChanged, this, nullptr);
+        }
         Region = region;
         m_lazLayers->setLazLayerModel(region ? region->lazLayers() : nullptr);
+        if(Region) {
+            const auto syncUnitSystem = [this]() { m_colorBy->setUnitSystem(Region->unitSystem()); };
+            connect(Region, &cwCavingRegion::unitSystemChanged, this, syncUnitSystem);
+            syncUnitSystem();
+        }
         emit cavingRegionChanged();
     }
 }
@@ -90,6 +103,9 @@ QSet<cwRenderObjectId> cwRegionSceneManager::captureHiddenObjectIds() const
     return {
         m_background->renderObjectId(),
         m_linePlot->renderObjectId(),
-        m_plane->renderObjectId()
+        m_plane->renderObjectId(),
+        // 3D station labels and lead markers. The export draws its own as 2D
+        // vector overlays (cwCaptureCenterline, cwCaptureLeads).
+        scene()->billboardLayer()->renderObjectId()
     };
 }

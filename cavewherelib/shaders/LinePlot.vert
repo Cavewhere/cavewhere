@@ -19,8 +19,12 @@ layout(location = 2) in uint iType;
 // 0 = hidden, non-zero = visible. A hidden segment collapses outside the
 // clip volume and the whole quad is discarded.
 layout(location = 3) in uint iVisibility;
+// Per-segment color-by value (keyword slot or loop closure error), read for
+// every value source except WorldZ.
+layout(location = 4) in float iValue;
 
 layout(location = 0) flat out uint vType;
+layout(location = 1) out float vValue;
 
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
@@ -29,6 +33,17 @@ layout(std140, binding = 0) uniform GlobalBlock {
     float devicePixelRatio;
     vec2 viewportSize; // pass render target size in device pixels
 };
+
+// Mirrors cwColorByUniform; keep in sync with LinePlot.frag. Only params.w
+// (valueSource) is read here.
+const int kRampStops = 32;
+layout(std140, binding = 1) uniform ColorByBlock {
+    vec4 ramp[kRampStops];
+    vec4 range;   // rangeMin, rangeMax, pivot, halfExtent
+    vec4 params;  // mode, strength, slotCount, valueSource
+};
+
+const float kValueSourceWorldZ = 0.0;
 
 const float kCenterlineHalfWidthPx = 1.0; // logical px -> 2 px wide line
 const float kSplayHalfWidthPx = 0.5;      // logical px -> 1 px wide line
@@ -48,6 +63,7 @@ void main(void)
     if (iVisibility == 0u) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside [-w,w] clip volume -> discarded
         vType = 0u;
+        vValue = 0.0;
         return;
     }
 
@@ -58,6 +74,7 @@ void main(void)
     if (clipFrom.w < kMinClipW && clipTo.w < kMinClipW) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         vType = 0u;
+        vValue = 0.0;
         return;
     }
     // One endpoint behind the eye: truncate the segment at the eye plane so
@@ -98,6 +115,9 @@ void main(void)
     clip.xy += offsetPx * (2.0 / viewportSize) * clip.w;
     clip.z -= isSplay ? kSplayDepthBias : kCenterlineDepthBias;
 
+    // The world elevation of this corner so depth coloring grades along a
+    // shot, or the segment's own value.
+    vValue = params.w == kValueSourceWorldZ ? mix(iFrom.z, iTo.z, endSelect) : iValue;
     gl_Position = clip;
     vType = iType;
 }

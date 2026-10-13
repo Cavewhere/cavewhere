@@ -586,7 +586,9 @@ TEST_CASE("Each LiDAR note reaches the render items as it finishes", "[cwNoteLiD
     REQUIRE(renderItems != nullptr);
     const auto renderObjectId = renderItems->renderObjectId();
 
-    constexpr int kBatchTimeoutMs = 120000;
+    // Each note's cold texture encode runs one at a time on the encode lane, and
+    // under CPU load a single encode alone can outlast two minutes.
+    constexpr int kBatchTimeoutMs = 600000;
     constexpr int kPollWaitMs = 2;
     bool sawPartialDelivery = false;
     bool sawVisibleMidBatch = false;
@@ -1046,22 +1048,27 @@ namespace {
         QObject m_context;
     };
 
-    //Pumps the event loop until the pipeline is done and its row has gone. The
-    //detail line is polled on a timer, so a run has to be watched, never waited
-    //out in a nested loop.
-    void pumpUntilLiDARSettles(cwRootData* rootData, cwNoteLiDARManager* manager)
+    //Pumps the event loop until the pipeline is done and its row has gone, and
+    //says whether it got there. The detail line is polled on a timer, so a run
+    //has to be watched, never waited out in a nested loop.
+    [[nodiscard]] bool pumpUntilLiDARSettles(cwRootData* rootData, cwNoteLiDARManager* manager)
     {
-        constexpr int kRunTimeoutMs = 120000;
+        //A cold run's texture encode alone can outlast two minutes under CPU load
+        constexpr int kRunTimeoutMs = 600000;
         constexpr int kPollWaitMs = 2;
+
+        const auto settled = [rootData, manager]() {
+            return manager->updateState() == cwUpdatable::State::Clean
+                   && rootData->futureManagerModel()->rowCount() == 0;
+        };
 
         QElapsedTimer timer;
         timer.start();
-        while(timer.elapsed() < kRunTimeoutMs
-              && (manager->updateState() != cwUpdatable::State::Clean
-                  || rootData->futureManagerModel()->rowCount() > 0)) {
+        while(timer.elapsed() < kRunTimeoutMs && !settled()) {
             QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents,
                                             kPollWaitMs);
         }
+        return settled();
     }
 
     //A loaded project with one freshly copied scan on its only LiDAR note: what
@@ -1109,7 +1116,7 @@ namespace {
         cwNoteLiDARManager* manager() const { return m_rootData->noteLiDARManager(); }
         cwFutureManagerModel* futureManagerModel() const { return m_rootData->futureManagerModel(); }
 
-        void pumpUntilSettled() const { pumpUntilLiDARSettles(m_rootData.get(), manager()); }
+        [[nodiscard]] bool pumpUntilSettled() const { return pumpUntilLiDARSettles(m_rootData.get(), manager()); }
 
     private:
         //The project's temp folder outlives the data that reads from it
@@ -1143,7 +1150,7 @@ TEST_CASE("A LiDAR run's progress moves in steps finer than one per note",
         project.note()->addStation(station);
     }
 
-    project.pumpUntilSettled();
+    REQUIRE(project.pumpUntilSettled());
 
     REQUIRE_FALSE(recorder.runs().isEmpty());
 
@@ -1191,11 +1198,11 @@ TEST_CASE("A LiDAR rerun off a warm texture cache still reaches full",
     station.setPositionOnNote(QVector3D(0.19147f, -0.720703f, -2.15723f));
     project.note()->addStation(station);
 
-    project.pumpUntilSettled();
+    REQUIRE(project.pumpUntilSettled());
 
     LiDARRunRecorder recorder(project.futureManagerModel());
     project.manager()->updateLiDARForCave(project.cave());
-    project.pumpUntilSettled();
+    REQUIRE(project.pumpUntilSettled());
 
     REQUIRE_FALSE(recorder.runs().isEmpty());
 

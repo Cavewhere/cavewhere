@@ -5,6 +5,7 @@
 
 //Qt
 #include <QAbstractListModel>
+#include <QDateTime>
 #include <QFileInfo>
 #include <QPropertyBinding>
 #include <QQmlEngine>
@@ -23,11 +24,13 @@ class CAVEWHERE_LIB_EXPORT cwRecentProjectModel : public QAbstractListModel
     QML_NAMED_ELEMENT(RecentProjectModel);
 
     Q_PROPERTY(QUrl defaultRepositoryDir READ defaultRepositoryDir WRITE setDefaultRepositoryDir NOTIFY defaultRepositoryDirChanged BINDABLE bindableDefaultRepositoryDir)
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
     enum RepositoryRoles {
         PathRole = Qt::UserRole + 1,
-        NameRole
+        NameRole,
+        LastOpenedRole
     };
     Q_ENUM(RepositoryRoles)
 
@@ -45,6 +48,8 @@ public:
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+    int count() const { return m_repositories.count(); }
+
     QUrl defaultRepositoryDir() const { return m_defaultRepositoryDir.value(); }
     void setDefaultRepositoryDir(const QUrl& defaultRepositoryDir) { m_defaultRepositoryDir = defaultRepositoryDir; }
     QBindable<QUrl> bindableDefaultRepositoryDir() { return &m_defaultRepositoryDir; }
@@ -53,16 +58,19 @@ public:
     Q_INVOKABLE Monad::ResultBase addRepositoryDirectory(const QDir& dir);
     Q_INVOKABLE Monad::ResultString repositoryProjectFile(int index) const;
     Q_INVOKABLE Monad::ResultBase addRepositoryFromProjectFile(const QUrl& projectFileUrl);
+    Q_INVOKABLE Monad::ResultBase recordProjectOpened(const QUrl& projectFileUrl);
 
     Q_INVOKABLE void clear();
     void setProject(cwProject* project);
 
 signals:
     void defaultRepositoryDirChanged();
+    void countChanged();
 
 private:
     struct RepositoryEntry {
         QString projectPath;
+        QDateTime lastOpened; // UTC; invalid when the entry predates stamping
     };
 
     void loadSettings();
@@ -74,5 +82,6 @@ private:
     QPropertyNotifier m_defaultRepositoryDirNotifier;
 
     static constexpr char SettingsKey[] = "repositories";
+    static constexpr char LastOpenedKey[] = "repositoryLastOpened";
     static constexpr char DefaultDirKey[] = "defaultRepositoryDir";
 };

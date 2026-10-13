@@ -29,6 +29,7 @@ void cwRenderFrameStats::publishStreaming(const Streaming& streaming)
     QMutexLocker locker(&m_mutex);
     m_streaming = streaming;
     ++m_revision;
+    ++m_streamingRevision;
 }
 
 void cwRenderFrameStats::publishPointCloud(const PointCloud& pointCloud)
@@ -60,4 +61,10 @@ quint64 cwRenderFrameStats::revision() const
 {
     QMutexLocker locker(&m_mutex);
     return m_revision;
+}
+
+quint64 cwRenderFrameStats::streamingRevision() const
+{
+    QMutexLocker locker(&m_mutex);
+    return m_streamingRevision;
 }

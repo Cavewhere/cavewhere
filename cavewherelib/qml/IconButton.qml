@@ -26,13 +26,17 @@ AbstractIconButton {
     QQ.Accessible.name: container.toolTip !== "" ? container.toolTip : container.text
     QQ.Accessible.onPressAction: container.clicked()
 
-    implicitHeight: iconNormal.sourceSize.height + (label.text === "" ? 0 : label.height)
-    implicitWidth:  Math.max(iconNormal.sourceSize.width, label.width) + 4
+    implicitHeight: 2 * Theme.compactButtonPadding
+                    + iconNormal.sourceSize.height
+                    + (label.text === "" ? 0 : label.anchors.topMargin + label.height)
+    implicitWidth: 2 * Theme.compactButtonPadding
+                   + Math.max(iconNormal.sourceSize.width, label.width)
 
     Icon {
         id: iconNormal
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
+        anchors.topMargin: Theme.compactButtonPadding
         colorizeEnabled: container.adjustColor
         visible: true
     }
@@ -40,7 +44,7 @@ AbstractIconButton {
     Icon {
         id: iconHover
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
+        anchors.top: iconNormal.top
         sourceSize: iconNormal.sourceSize
         colorizeEnabled: container.adjustColor
         visible: false
@@ -50,7 +54,7 @@ AbstractIconButton {
         id: label
         anchors.top: iconNormal.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 2
+        anchors.topMargin: Theme.tightSpacing
     }
 
     QQ.MouseArea {

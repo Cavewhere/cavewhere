@@ -115,11 +115,11 @@ declination then falls back to the stored manual value and warns:
 
 ## Record the team
 
-The **Team** section lists who came. The **+** beside the heading adds a blank
-row; double-click the name cell to fill it in. The **−** and the green
+The **Team** section lists who came. The **+ Add Team Member** button under the
+heading adds a blank row; double-click the name cell to fill it in. The **−** and the green
 **+ Role** button appear only on the selected row.
 
-![The Team section of a trip: a Team heading with a + button, Name and Role columns, and one selected row holding a name, a role chip, and a green + Role button.](../images/survey-team.png)
+![The Team section of a trip: a Team heading with an Add Team Member button, Name and Role columns, and one selected row holding a name, a role chip, and a green + Role button.](../images/survey-team.png)
 *The Team section, with its one row selected.*
 
 **The names do more than document.** Every non-empty name becomes a **Caver**

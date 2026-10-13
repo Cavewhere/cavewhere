@@ -73,13 +73,15 @@ cwFixStation makeFix(const QString& name, const QString& cs, double e, double n,
 
 //! The region exported the way the export menu does it, read back as text.
 //! Concurrent test processes each need their own output file.
-QString writeRegionToString(const cwCavingRegionData& region)
+QString writeRegionToString(const cwCavingRegionData& region,
+                            cwSurvexExporterRegion::OutputCSPolicy policy =
+                                cwSurvexExporterRegion::OutputCSPolicy::Shareable)
 {
     const QString path = QDir::temp().filePath(
         QStringLiteral("cwSurvexExporterFix-%1.svx").arg(QCoreApplication::applicationPid()));
 
     cwSurvexExporterRegion::Options options;
-    options.outputCSPolicy = cwSurvexExporterRegion::OutputCSPolicy::Shareable;
+    options.outputCSPolicy = policy;
     const auto result = cwSurvexExporterRegion::exportRegion(region, path, options);
     INFO(result.errorMessage().toStdString());
     REQUIRE_FALSE(result.hasError());
@@ -357,4 +359,36 @@ TEST_CASE("Survex export writes a geographic fix to the last digit the user type
     const QString output = writeRegionToString(region);
     INFO(output.toStdString());
     CHECK(output.contains(QStringLiteral("*fix a1 -121.830584300 51.114081600 2198.010000000")));
+}
+
+TEST_CASE("Line-plot export with no frame writes no *cs for a fix that has one",
+          "[cwSurvexExporterFix][issue660]") {
+    // A project whose only fix is a typo has no frame (#660), so there is no
+    // *cs out, and cavern refuses any *cs without one: before the *fix it
+    // reports "The input projection is set but the output projection isn't",
+    // after it "fixed before CS command first used". *declination auto would
+    // write the fix's *cs after the fallback *fix, so it has to sit out too.
+    cwCavingRegionData region;
+    REQUIRE(region.geoReference.localCoordinateSystem.isEmpty());
+
+    cwCaveData cave = makeCave(QStringLiteral("Typo"),
+                               {QStringLiteral("a1"), QStringLiteral("a2")});
+    cave.trips.first().calibrations.setAutoDeclination(true);
+
+    SECTION("a fix on a surveyed station") {
+        cave.fixStations.append(makeFix("a1", QStringLiteral("EPSG:32613"),
+                                        1478000.0, 4430000.0, 1655.0));
+    }
+    SECTION("a fix whose station name the survey doesn't have") {
+        cave.fixStations.append(makeFix("zz9", QStringLiteral("EPSG:32613"),
+                                        1478000.0, 4430000.0, 1655.0));
+    }
+    region.caves.append(cave);
+
+    const QString output = writeRegionToString(
+        region, cwSurvexExporterRegion::OutputCSPolicy::WorkingFrame);
+    INFO(output.toStdString());
+    CHECK_FALSE(output.contains(QStringLiteral("*cs")));
+    CHECK_FALSE(output.contains(QStringLiteral("*declination auto")));
+    CHECK(output.contains(QStringLiteral("*fix a1 0 0 0")));
 }

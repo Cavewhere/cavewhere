@@ -61,6 +61,10 @@ cwRecentProjectModel::cwRecentProjectModel(QObject* parent)
         settings.setValue(DefaultDirKey, QUrl::fromLocalFile(QDir(m_defaultRepositoryDir.value().toLocalFile()).absolutePath()));
     });
 
+    connect(this, &cwRecentProjectModel::rowsInserted, this, &cwRecentProjectModel::countChanged);
+    connect(this, &cwRecentProjectModel::rowsRemoved, this, &cwRecentProjectModel::countChanged);
+    connect(this, &cwRecentProjectModel::modelReset, this, &cwRecentProjectModel::countChanged);
+
     loadSettings();
 }
 
@@ -85,6 +89,8 @@ QVariant cwRecentProjectModel::data(const QModelIndex& index, int role) const
         return info.absoluteFilePath();
     case NameRole:
         return info.isDir() ? info.fileName() : info.fileName();
+    case LastOpenedRole:
+        return entry.lastOpened.toLocalTime();
     default:
         return {};
     }
@@ -94,7 +100,8 @@ QHash<int, QByteArray> cwRecentProjectModel::roleNames() const
 {
     return QHash<int, QByteArray>{
         { PathRole, "pathRole" },
-        { NameRole, "nameRole" }
+        { NameRole, "nameRole" },
+        { LastOpenedRole, "lastOpenedRole" }
     };
 }
 
@@ -107,7 +114,7 @@ Monad::ResultBase cwRecentProjectModel::addRepository(const cwResultDir& dir)
 
                    cwSaveLoad::initializeGitRepository(dir.value());
 
-                   m_repositories.append({dir.value().absolutePath()});
+                   m_repositories.append({dir.value().absolutePath(), QDateTime::currentDateTimeUtc()});
                    endInsertRows();
                    saveRepositories();
 
@@ -187,10 +194,12 @@ Monad::ResultBase cwRecentProjectModel::addRepositoryFromProjectFile(const QUrl&
 
     // Remove any existing directory entry for the same repository (e.g. added via addRepository())
     int replacementIndex = -1;
+    QDateTime replacedLastOpened;
     for (int i = 0; i < m_repositories.count(); ++i) {
         const QFileInfo repoInfo(m_repositories.at(i).projectPath);
         if (repoInfo.isDir() && repoInfo.absoluteFilePath() == parentDirPath) {
             replacementIndex = i;
+            replacedLastOpened = m_repositories.at(i).lastOpened;
             beginRemoveRows(QModelIndex(), i, i);
             m_repositories.removeAt(i);
             endRemoveRows();
@@ -209,9 +218,32 @@ Monad::ResultBase cwRecentProjectModel::addRepositoryFromProjectFile(const QUrl&
 
     const int newIndex = replacementIndex >= 0 ? replacementIndex : m_repositories.count();
     beginInsertRows(QModelIndex(), newIndex, newIndex);
-    m_repositories.insert(newIndex, {storedPath});
+    const QDateTime lastOpened = replacedLastOpened.isValid() ? replacedLastOpened : QDateTime::currentDateTimeUtc();
+    m_repositories.insert(newIndex, {storedPath, lastOpened});
     endInsertRows();
     saveRepositories();
+
+    return Monad::ResultBase();
+}
+
+Monad::ResultBase cwRecentProjectModel::recordProjectOpened(const QUrl& projectFileUrl)
+{
+    const auto addResult = addRepositoryFromProjectFile(projectFileUrl);
+    if (addResult.hasError()) {
+        return addResult;
+    }
+
+    const QString storedPath = QFileInfo(projectFileUrl.toLocalFile()).absoluteFilePath();
+    for (int i = 0; i < m_repositories.count(); ++i) {
+        RepositoryEntry& entry = m_repositories[i];
+        if (QFileInfo(entry.projectPath).absoluteFilePath() == storedPath) {
+            entry.lastOpened = QDateTime::currentDateTimeUtc();
+            const QModelIndex changedIndex = index(i, 0);
+            emit dataChanged(changedIndex, changedIndex, {LastOpenedRole});
+            saveRepositories();
+            break;
+        }
+    }
 
     return Monad::ResultBase();
 }
@@ -236,6 +268,10 @@ void cwRecentProjectModel::loadSettings()
 
     //Load repositories list
     const QStringList list = settings.value(SettingsKey).toStringList();
+    const QVariantMap lastOpenedMap = settings.value(LastOpenedKey).toMap();
+    const auto lastOpenedFor = [&lastOpenedMap](const QString& path) {
+        return lastOpenedMap.value(path).toDateTime().toUTC();
+    };
     bool pruned = false;
     for (const QString& path : list) {
         const QFileInfo info(path);
@@ -247,7 +283,7 @@ void cwRecentProjectModel::loadSettings()
         if (info.isDir()) {
             const QDir dir(info.absoluteFilePath());
             if (QQuickGit::GitRepository::isRepository(dir)) {
-                m_repositories.append({dir.absolutePath()});
+                m_repositories.append({dir.absolutePath(), lastOpenedFor(dir.absolutePath())});
             } else {
                 pruned = true;
             }
@@ -257,7 +293,7 @@ void cwRecentProjectModel::loadSettings()
         const QString suffix = info.suffix();
         if (suffix.compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0
             || suffix.compare(QStringLiteral("cw"), Qt::CaseInsensitive) == 0) {
-            m_repositories.append({info.absoluteFilePath()});
+            m_repositories.append({info.absoluteFilePath(), lastOpenedFor(info.absoluteFilePath())});
         } else {
             pruned = true;
         }
@@ -292,8 +328,14 @@ void cwRecentProjectModel::saveRepositories() const
 {
     QSettings settings;
     QStringList list;
+    QVariantMap lastOpenedMap;
     for (const RepositoryEntry& entry : m_repositories) {
-        list.append(QFileInfo(entry.projectPath).absoluteFilePath());
+        const QString path = QFileInfo(entry.projectPath).absoluteFilePath();
+        list.append(path);
+        if (entry.lastOpened.isValid()) {
+            lastOpenedMap.insert(path, entry.lastOpened);
+        }
     }
     settings.setValue(SettingsKey, list);
+    settings.setValue(LastOpenedKey, lastOpenedMap);
 }

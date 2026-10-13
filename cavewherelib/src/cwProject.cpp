@@ -215,6 +215,8 @@ void cwProject::connectSaveLoad(cwSaveLoad* saveLoad)
         }
         emit filenameChanged(saveLoad->fileName());
         emit fileTypeChanged();
+        //The data root lives under the project file's directory, so it moves too.
+        emit dataRootChanged();
     });
     connect(saveLoad, &cwSaveLoad::dataRootChanged, this, [this, saveLoad]() {
         if (m_saveLoad != saveLoad) {
@@ -1800,6 +1802,11 @@ QString cwProject::dataRoot() const
 QDir cwProject::dataRootDir() const
 {
     return m_saveLoad->dataRootDir();
+}
+
+QString cwProject::dataRootPath() const
+{
+    return dataRootDir().path();
 }
 
 /**

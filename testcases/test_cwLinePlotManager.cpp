@@ -18,6 +18,7 @@ using Catch::Matchers::WithinAbs;
 
 //Cavewhere includes
 #include "cwLinePlotManager.h"
+#include "cwLinePlotTask.h"
 #include "cwUpdateCoordinator.h"
 #include "cwJobSettings.h"
 #include "cwCavingRegion.h"
@@ -1739,6 +1740,59 @@ TEST_CASE("cwLinePlotManager surfaces cavern output to QML",
         // an error-class letter (L = length, B = bearing, G = gradient).
         CHECK_FALSE(plotManager->loopClosureStats().isEmpty());
     }
+}
+
+TEST_CASE("The line plot result carries each segment's loop closure error", "[LinePlot]")
+{
+    // A misclosed triangle a1->a2->a3->a1 plus a dead end a3->a4. The three
+    // loop legs share one survex error; the dead end has none.
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    trip->calibrations()->setBackSights(false);
+    cave->addTrip(trip);
+
+    const auto makeShot = [](const QString& distance, const QString& compass) {
+        cwShot shot;
+        shot.setDistance(cwDistanceReading(distance));
+        shot.setCompass(cwCompassReading(compass));
+        shot.setClino(cwClinoReading(QStringLiteral("0.0")));
+        return shot;
+    };
+
+    cwSurveyChunk* loopChunk = new cwSurveyChunk();
+    trip->addChunk(loopChunk);
+    loopChunk->appendShot(cwStation(QStringLiteral("a1")), cwStation(QStringLiteral("a2")),
+                          makeShot(QStringLiteral("10.0"), QStringLiteral("0.0")));
+    loopChunk->appendShot(cwStation(QStringLiteral("a2")), cwStation(QStringLiteral("a3")),
+                          makeShot(QStringLiteral("10.0"), QStringLiteral("90.0")));
+    loopChunk->appendShot(cwStation(QStringLiteral("a3")), cwStation(QStringLiteral("a1")),
+                          makeShot(QStringLiteral("15.0"), QStringLiteral("225.0")));
+
+    cwSurveyChunk* deadEndChunk = new cwSurveyChunk();
+    trip->addChunk(deadEndChunk);
+    deadEndChunk->appendShot(cwStation(QStringLiteral("a3")), cwStation(QStringLiteral("a4")),
+                             makeShot(QStringLiteral("5.0"), QStringLiteral("90.0")));
+
+    auto future = cwLinePlotTask::run(cwLinePlotTask::buildInput(&region));
+    future.waitForFinished();
+    REQUIRE(future.resultCount() == 1);
+
+    const cwLinePlotTask::LinePlotResultData result = future.result();
+    REQUIRE_FALSE(result.hasSolveError());
+
+    const QVector<float> errors = result.segmentErrors();
+    REQUIRE(errors.size() == result.stationPositions().size() / 2);
+    REQUIRE(errors.size() == 4);
+
+    CHECK(errors.at(0) > 0.0f);
+    CHECK(errors.at(1) == errors.at(0));
+    CHECK(errors.at(2) == errors.at(0));
+    CHECK(errors.at(3) == cwLinePlotGeometry::kNoErrorValue);
 }
 
 // Regression: adding a fix station leaves a blank row until the user types a

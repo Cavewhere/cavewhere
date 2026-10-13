@@ -76,7 +76,8 @@ QHash<QString, int> splayOwnerByStation(const cwCaveData& cave,
 
 Monad::Result<cwLinePlotGeometry::Result>
 cwLinePlotGeometry::generate(const cwCavingRegionData& region,
-                             const QHash<QUuid, cwSplayTipsByStation>& splayTipsByCave)
+                             const QHash<QUuid, cwSplayTipsByStation>& splayTipsByCave,
+                             const QHash<QUuid, cwLegErrorsByShot>& legErrorsByCave)
 {
     Result result;
 
@@ -88,6 +89,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
         const QHash<QString, QVector3D> stationPositions = caveStationPositions(cave);
 
         const cwSplayTipsByStation caveSplayTips = splayTipsByCave.value(cave.id);
+        const cwLegErrorsByShot caveLegErrors = legErrorsByCave.value(cave.id);
         const QHash<QString, int> splayOwners =
             splayOwnerByStation(cave, caveSplayTips, result.tripUuids.size());
         QSet<QString> splaysEmitted;
@@ -126,9 +128,11 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
                 // bootstrap from the first station that has a solved position.
                 int startIndex = 0;
                 QVector3D previousPoint;
+                QString previousName;
                 bool havePrevious = false;
                 while (startIndex < chunk.stations.size()) {
-                    if (resolve(chunk.stations.at(startIndex).name(), &previousPoint)) {
+                    previousName = chunk.stations.at(startIndex).name();
+                    if (resolve(previousName, &previousPoint)) {
                         havePrevious = true;
                         break;
                     }
@@ -148,7 +152,8 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
                     const cwShot& shot = chunk.shots.at(stationIndex - 1);
 
                     QVector3D currentPoint;
-                    if (!resolve(chunk.stations.at(stationIndex).name(), &currentPoint)) {
+                    const QString currentName = chunk.stations.at(stationIndex).name();
+                    if (!resolve(currentName, &currentPoint)) {
                         // Unresolved station — skip the shot; the next resolved
                         // station bridges back to previousPoint, exactly as the
                         // shared-vertex path did.
@@ -167,7 +172,14 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
                     result.points.append(previousPoint);
                     result.points.append(currentPoint);
 
+                    const auto errorIt = caveLegErrors.constFind(
+                        cwSurvex3DFileReader::legKey(previousName, currentName));
+                    result.segmentErrors.append(errorIt != caveLegErrors.constEnd()
+                                                    ? errorIt->e
+                                                    : kNoErrorValue);
+
                     previousPoint = currentPoint;
+                    previousName = currentName;
                 }
             }
 
@@ -194,6 +206,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
                         for (const QVector3D& tip : tips) {
                             result.points.append(stationPoint);
                             result.points.append(tip);
+                            result.segmentErrors.append(kNoErrorValue);
                         }
                     }
                 }
@@ -216,6 +229,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
     result.tripVertexRanges.squeeze();
     result.tripSplayVertexRanges.squeeze();
     result.tripUuids.squeeze();
+    result.segmentErrors.squeeze();
 
     return Monad::Result<Result>(std::move(result));
 }

@@ -55,6 +55,16 @@ QVector3D toVector3D(const img_point& p) {
 
 } // namespace
 
+QPair<QString, QString> cwSurvex3DFileReader::legKey(const QString& from, const QString& to)
+{
+    const QString first = cwStation::canonicalKey(from);
+    const QString second = cwStation::canonicalKey(to);
+    if (second < first) {
+        return {second, first};
+    }
+    return {first, second};
+}
+
 cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLookup(const QString& threeDFilePath)
 {
     NetworkAndLookup out;
@@ -111,6 +121,10 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
 
     bool hasPrev = false;
     img_point prev{};
+    // Named legs since the last MOVE: cavern writes a traverse's
+    // img_ERROR_INFO right after its LINEs, and the record covers the last
+    // n_legs of them (aven's rule, survex/src/model.cc).
+    QList<QPair<QString, QString>> legsSinceMove;
     while ((code = img_read_item(pimg, &pt)) != img_STOP) {
         if (code == img_BAD) {
             qWarning() << "cwSurvex3DFileReader: Error reading .3d file (pass 2):" << threeDFilePath;
@@ -119,6 +133,19 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
         if (code == img_MOVE) {
             prev = pt;
             hasPrev = true;
+            legsSinceMove.clear();
+        } else if (code == img_ERROR_INFO) {
+            // Cavern misses some articulating traverses and writes them with
+            // all-zero error; aven treats those as outside any loop, and so
+            // do we.
+            const bool hasError = pimg->E != 0.0 || pimg->H != 0.0 || pimg->V != 0.0;
+            if (hasError) {
+                const cwLegError error{float(pimg->E), float(pimg->H), float(pimg->V)};
+                const qsizetype legCount = qMin<qsizetype>(pimg->n_legs, legsSinceMove.size());
+                for (qsizetype i = legsSinceMove.size() - legCount; i < legsSinceMove.size(); ++i) {
+                    out.legErrors.insert(legsSinceMove.at(i), error);
+                }
+            }
         } else if (code == img_LINE) {
             if (hasPrev) {
                 const auto fromIt = coordToName.constFind(toKey(prev));
@@ -130,6 +157,7 @@ cwSurvex3DFileReader::NetworkAndLookup cwSurvex3DFileReader::readNetworkAndLooku
                     // Both ends are real stations, so this is a leg of the
                     // network even when it carries *flags splay.
                     out.network.addShot(*fromIt, *toIt);
+                    legsSinceMove.append(legKey(*fromIt, *toIt));
                 } else if ((pimg->flags & img_FLAG_SPLAY) && (fromIsNamed || toIsNamed)) {
                     // Exactly one end named: that end is the station the splay
                     // hangs off, and the anonymous end is where it lands.

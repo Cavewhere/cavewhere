@@ -130,8 +130,13 @@ void spinEventLoopSlice();
  * Both halves matter: the frame is derived from the headers, and the point
  * decodes wait on the frame, so a model whose probes have all landed can still
  * have every row mid-decode.
+ *
+ * The default budget is generous on purpose: it only bounds how long a real
+ * failure takes to report. A decode into a frame it hasn't seen builds a new
+ * PROJ operation from proj.db, which takes a fraction of a second alone but
+ * close to ten seconds late in a full ASAN run on a loaded machine.
  */
-bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs = 10000);
+bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs = 60000);
 
 /**
  * Records the name of every job announced by @a manager while it lives.

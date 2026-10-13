@@ -293,7 +293,7 @@ QC.Dialog {
                 Layout.fillWidth: true
                 Layout.maximumWidth: _scrollView.width
                 wrapMode: QC.Label.WordWrap
-                color: (rootId._directoryConflict || rootId._parentNotFound) ? Theme.danger : Theme.warning
+                color: (rootId._directoryConflict || rootId._parentNotFound) ? Theme.errorText : Theme.warning
                 text: rootId._directoryConflict
                       ? "A folder \"%1\" already exists in this location. Choose a different name or location.".arg(rootId._sanitizedName)
                       : rootId._parentNotFound

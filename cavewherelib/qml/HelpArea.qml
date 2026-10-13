@@ -28,7 +28,7 @@ QQ.Rectangle {
 
     color: Theme.surfaceRaised
     implicitHeight: layout.implicitHeight
-    radius: 5
+    radius: Theme.controlRadius
     clip: true
 
     visible: false
@@ -77,6 +77,7 @@ QQ.Rectangle {
 
                 textFormat: QC.Label.RichText
                 wrapMode: QC.Label.WordWrap
+                font.family: Theme.fontFamilyBody
                 font.pixelSize: Theme.fontSizeBody
 
                 text: "No documentation"

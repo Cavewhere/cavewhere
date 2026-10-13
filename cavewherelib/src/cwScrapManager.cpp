@@ -1077,10 +1077,11 @@ void cwScrapManager::attachScrap(cwScrap* scrap)
     if(scrap == nullptr || m_renderScraps.isNull()) {
         return;
     }
-    cwRenderMaterialState state;
+    cwRenderMaterialState state = cwRenderTexturedItems::scrapMaterial();
     state.cullMode = cwRenderMaterialState::CullMode::None;
     m_scrapToRenderId.insert(scrap,
-                             m_renderScraps->addItem({.material = state}));
+                             m_renderScraps->addItem({.material = state,
+                                                      .uniformBlock = cwRenderTexturedItems::emptyItemBlock()}));
     addKeywordItemForScrap(scrap);
 }
 

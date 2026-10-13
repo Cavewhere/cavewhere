@@ -6,6 +6,7 @@
 #include "cwGeometry.h"
 #include "cwItemTexture.h"
 #include "cwStreamedTexture.h"
+#include "cwTracked.h"
 #include "CaveWhereLibExport.h"
 #include <QHash>
 #include <QByteArray>
@@ -45,6 +46,7 @@ public:
     // partner of addItem. Keeps add/update field-complete by construction: a
     // field added to Item is wired into both here and addItem, side by side,
     // instead of being easy to forget in a caller's hand-rolled setter loop.
+    // The item keeps its color-by value (see setItemColorValue).
     void updateItem(uint32_t id, const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
@@ -62,6 +64,20 @@ public:
     void setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix);
     void removeItem(uint32_t id);
 
+    // The color-by block shared by every scrap draw (pushed by cwColorBy).
+    void setSharedUniformBlock(const QByteArray& block);
+    QByteArray sharedUniformBlock() const { return m_sharedUniformBlock.value(); }
+
+    // Material for items drawn with the default scrap shaders: their per-draw
+    // block (model matrix, shared color-by block, item tail) at binding 2 in
+    // the fragment stage.
+    static cwRenderMaterialState scrapMaterial();
+
+    // The per-item tail of the scrap per-draw block: vec4 item (x = color-by value).
+    // Items always carry it so the GPU buffer is never shorter than the GLSL block.
+    static QByteArray emptyItemBlock();
+    void setItemColorValue(uint32_t id, float value);
+
     //For testing
     Item item(uint32_t id) const;
     bool hasItem(uint32_t id) const;
@@ -72,6 +88,8 @@ protected:
     void updateVisibility() override;
 
 private:
+    QByteArray withColorValueOf(uint32_t id, const QByteArray& uniformBlock) const;
+
     // What travels to the render thread. Item additionally carries
     // visible/storeGeometry/storeTexture, which are authoring state only —
     // visibility publishes through the scene visibility store, never on a
@@ -126,6 +144,8 @@ private:
     };
 
     QHash<uint32_t, PendingItemState> m_pendingChanges;
+
+    cwTracked<QByteArray> m_sharedUniformBlock;
 
     // Simple ID generator for items
     uint32_t m_nextId = 1;

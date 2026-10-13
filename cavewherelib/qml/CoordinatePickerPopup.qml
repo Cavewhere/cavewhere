@@ -128,13 +128,6 @@ QC.Popup {
                               parent.height - root.height))
        : 0
 
-    background: QQ.Rectangle {
-        color: Theme.surfaceRaised
-        border.color: Theme.border
-        border.width: 1
-        radius: Theme.floatingWidgetRadius
-    }
-
     contentItem: ColumnLayout {
         spacing: 8
 

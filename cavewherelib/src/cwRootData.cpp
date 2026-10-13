@@ -56,6 +56,19 @@
 #include "GitRepository.h"
 #include "LfsBatchClient.h"
 
+namespace {
+void recordRecentProject(cwRecentProjectModel* model, const QString& localPath)
+{
+    if (localPath.isEmpty()) {
+        return;
+    }
+    const auto recordResult = model->recordProjectOpened(QUrl::fromLocalFile(localPath));
+    if (recordResult.hasError()) {
+        qWarning() << "Failed to record recent project:" << recordResult.errorMessage();
+    }
+}
+}
+
 cwRootData::cwRootData(QObject *parent) :
     QObject(parent),
     m_account(new QQuickGit::Account(this)),
@@ -77,19 +90,11 @@ cwRootData::cwRootData(QObject *parent) :
     Project->setGitAccount(m_account);
     Project->setFutureManagerToken(FutureManagerModel);
     m_recentProjectModel->setProject(Project);
-    // Auto-add to recent list on save (covers save-as path changes).
-    // Not needed on loaded — all loadProject() callers already add to recents
-    // explicitly with the user-facing path (which may differ from the internal
-    // .cwproj path after legacy conversion).
+    // Saving stamps the recent entry too (covers save-as path changes).
+    // Loading is stamped in loadProject() with the user-facing path, which may
+    // differ from the internal .cwproj path after legacy conversion.
     connect(Project, &cwProject::fileSaved, this, [this]() {
-        const QString currentProjectPath = QFileInfo(Project->filename()).absoluteFilePath();
-        if (currentProjectPath.isEmpty()) {
-            return;
-        }
-        const auto addResult = m_recentProjectModel->addRepositoryFromProjectFile(QUrl::fromLocalFile(currentProjectPath));
-        if (addResult.hasError()) {
-            qWarning() << "Failed to add recent project:" << addResult.errorMessage();
-        }
+        recordRecentProject(m_recentProjectModel, QFileInfo(Project->filename()).absoluteFilePath());
     });
     remote();
     Project->setAuthProvider(remote()->authProvider());
@@ -170,6 +175,8 @@ cwRootData::cwRootData(QObject *parent) :
 
     RegionSceneManager = new cwRegionSceneManager(this);
     RegionSceneManager->lazLayersSceneNode()->setKeywordItemModel(m_keywordItemModel);
+    RegionSceneManager->colorBy()->setKeywordItemModel(m_keywordItemModel);
+    RegionSceneManager->colorBy()->setVisibleKeywordModel(m_keywordFilterPipelineModel->acceptedModel());
     RegionSceneManager->setCavingRegion(Region);
 
     // The picking BVH builds asynchronously and publishes progress as
@@ -340,6 +347,7 @@ void cwRootData::loadProject(const QString& filename)
 {
     prepareForProjectSwitch();
     Project->loadFile(filename);
+    recordRecentProject(m_recentProjectModel, cwGlobals::convertFromURL(filename));
 }
 
 /**

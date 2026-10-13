@@ -134,11 +134,7 @@ cwFixStationValidator::classifyCandidates(const QList<FixCandidate>& candidates)
 cwFixStationValidator::Classification
 cwFixStationValidator::currentClassification() const
 {
-    // Without a project frame there is no origin to measure a distance from,
-    // and fixes entered in different input CSs would be compared as raw
-    // coordinates — degrees against meters. Skip classification entirely until
-    // the project is georeferenced.
-    if (m_region == nullptr || !m_region->geoReference()->hasCoordinateSystem()) {
+    if (m_region == nullptr) {
         return {};
     }
     return classifyCandidates(gatherCandidates());
@@ -152,6 +148,12 @@ cwFixStationValidator::gatherCandidates() const
         return candidates;
     }
 
+    // Without a project frame there is no origin to measure a distance from,
+    // and fixes entered in different input CSs would be compared as raw
+    // coordinates — degrees against meters — so Part B waits for the project to
+    // be georeferenced. Part A needs no frame, and is the very reason a project
+    // whose only fix is a typo has none: that fix may not anchor one.
+    const bool hasFrame = m_region->geoReference()->hasCoordinateSystem();
     const QString frameCS = m_region->geoReference()->localCoordinateSystem();
 
     for (cwCave* cave : m_region->caves()) {
@@ -181,8 +183,16 @@ cwFixStationValidator::gatherCandidates() const
             // frame was derived from — the one Part B always measures at zero.
             const bool domainValid = cwFixStationDiagnostics::isDomainValid(fix);
 
-            // currentClassification() guarantees frameCS is non-empty. The
-            // memoizing form matters here: frameCS is the derived local
+            if (!hasFrame) {
+                // classifyCandidates() files a domain-bad fix before it reads
+                // the position, so the unprojected point is never measured.
+                if (!domainValid) {
+                    candidates.append(FixCandidate{cave, fix.id(), cwGeoPoint(), domainValid});
+                }
+                continue;
+            }
+
+            // The memoizing form matters here: frameCS is the derived local
             // projection, which no fix's inputCS ever equals, so every fix in
             // every cave needs a real transform — and revalidate() runs on each
             // fix-station edit and each solve.

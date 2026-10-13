@@ -22,6 +22,11 @@ MainWindowTest {
         font.family: Theme.fontFamily
     }
 
+    BodyText {
+        id: bodyProbe
+        text: "Aa"
+    }
+
     TestCase {
         name: "AppearanceSettingsItem"
         when: windowShown
@@ -40,6 +45,31 @@ MainWindowTest {
 
         function cleanup() {
             resetToDefaults()
+            RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.System
+        }
+
+        // ── Color scheme ─────────────────────────────────────────────────────
+
+        function findSchemeButton(name) {
+            return ObjectFinder.findObjectByChain(rootId, "rootId->appearanceSettings->GroupBox->" + name)
+        }
+
+        function test_darkSchemeMakesThemeDark() {
+            let btn = findSchemeButton("darkSchemeRadioButton")
+            verify(btn !== null, "darkSchemeRadioButton not found")
+            mouseClick(btn)
+            compare(RootData.settings.appearanceSettings.colorScheme, AppearanceSettings.Dark)
+            tryVerify(() => Theme.dark)
+        }
+
+        function test_lightSchemeMakesThemeLight() {
+            RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Dark
+            tryVerify(() => Theme.dark)
+            let btn = findSchemeButton("lightSchemeRadioButton")
+            verify(btn !== null, "lightSchemeRadioButton not found")
+            mouseClick(btn)
+            compare(RootData.settings.appearanceSettings.colorScheme, AppearanceSettings.Light)
+            tryVerify(() => !Theme.dark)
         }
 
         // ── Font family ──────────────────────────────────────────────────────
@@ -221,6 +251,25 @@ MainWindowTest {
             tryVerify(function() { return btn.enabled })
             mouseClick(btn)
             tryVerify(function() { return !btn.enabled })
+        }
+
+        // ── Body copy size (#705) ────────────────────────────────────────────
+
+        function test_bodyCopyIs14ForEveryFontAtItsDefaultSize() {
+            let entries = RootData.settings.fontSettings.fontEntries
+            for (let i = 0; i < entries.length; ++i) {
+                RootData.settings.fontSettings.fontFamily = entries[i].family
+                RootData.settings.fontSettings.fontBaseSize = entries[i].defaultSize
+                compare(bodyProbe.font.pixelSize, 14, "body copy size for " + entries[i].label)
+                compare(bodyProbe.font.family, Theme.fontFamilyBody)
+            }
+        }
+
+        function test_bodyCopyFollowsUserSizeOffset() {
+            RootData.settings.fontSettings.fontFamily = defaultFontFamily
+            let defaultSize = RootData.settings.fontSettings.defaultFontBaseSize
+            RootData.settings.fontSettings.fontBaseSize = defaultSize + 4
+            compare(bodyProbe.font.pixelSize, Math.round(14 * (defaultSize + 4) / defaultSize))
         }
     }
 }

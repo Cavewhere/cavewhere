@@ -76,6 +76,8 @@ public:
     Streaming streaming() const;
     PointCloud pointCloud() const;
     quint64 revision() const;
+    //! Bumped only by publishStreaming(), so a reader can tell a fresh streaming frame from a stale one
+    quint64 streamingRevision() const;
 
 private:
     cwRenderFrameStats() = default;
@@ -85,6 +87,7 @@ private:
     Streaming m_streaming;
     PointCloud m_pointCloud;
     quint64 m_revision = 0;
+    quint64 m_streamingRevision = 0;
 };
 
 #endif // CWRENDERFRAMESTATS_H

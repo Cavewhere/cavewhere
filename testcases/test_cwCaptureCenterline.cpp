@@ -3,9 +3,12 @@
 
 //Our includes
 #include "cwCamera.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
 #include "cwCaptureCenterline.h"
 #include "cwCaptureLabelPlacer.h"
 #include "cwProjection.h"
+#include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
 
 //Qt includes
@@ -17,6 +20,9 @@
 #include <QRectF>
 #include <QSet>
 #include <QVector3D>
+
+//Std includes
+#include <algorithm>
 
 namespace {
 
@@ -67,27 +73,59 @@ QSet<QString> names(const QVector<cwCaptureLabelPlacer::LabelRequest>& requests)
     return result;
 }
 
+QFont makeFixtureFont()
+{
+    QFont font;
+    font.setPointSizeF(FixtureFontPointSize);
+    return font;
+}
+
+// A centerline over makeNetwork(), seen through an ortho camera that maps the
+// network's world (x, y) onto TestViewport 1:1.
+struct CenterlineFixture
+{
+    CenterlineFixture()
+    {
+        camera.setViewport(TestViewport);
+        cwProjection projection;
+        projection.setOrtho(0.0, TestViewport.width(), 0.0, TestViewport.height(),
+                            -1.0, 1.0);
+        camera.setProjection(projection);
+
+        centerline.setCamera(&camera);
+        centerline.setViewport(TestViewport);
+        centerline.setExportDpi(TestExportDpi);
+        centerline.setLabelFont(font);
+        centerline.setNetworks({makeNetwork()});
+    }
+
+    cwCamera camera;
+    QFont font = makeFixtureFont();
+    cwCaptureCenterline centerline;
+};
+
+QVector<cwCaptureLabelPlacer::Placement> placeEvery(
+    const QVector<cwCaptureLabelPlacer::LabelRequest>& requests)
+{
+    QVector<cwCaptureLabelPlacer::Placement> placements;
+    placements.reserve(requests.size());
+    for(int i = 0; i < requests.size(); i++) {
+        cwCaptureLabelPlacer::Placement placement;
+        placement.placed = true;
+        placement.labelRect = QRectF(10.0 * (i + 1), 5.0, 8.0, 4.0);
+        placements.append(placement);
+    }
+    return placements;
+}
+
 } // namespace
 
 TEST_CASE("cwCaptureCenterline buildLabelRequests culls off-viewport stations before measuring",
           "[cwCaptureCenterline]")
 {
-    cwCamera camera;
-    camera.setViewport(TestViewport);
-    cwProjection projection;
-    projection.setOrtho(0.0, TestViewport.width(), 0.0, TestViewport.height(),
-                        -1.0, 1.0);
-    camera.setProjection(projection);
-
-    QFont fixtureFont;
-    fixtureFont.setPointSizeF(FixtureFontPointSize);
-
-    cwCaptureCenterline centerline;
-    centerline.setCamera(&camera);
-    centerline.setViewport(TestViewport);
-    centerline.setExportDpi(TestExportDpi);
-    centerline.setLabelFont(fixtureFont);
-    centerline.setNetwork(makeNetwork());
+    CenterlineFixture fixture;
+    cwCaptureCenterline& centerline = fixture.centerline;
+    const QFont& fixtureFont = fixture.font;
 
     const QRectF viewportBounds = centerline.boundingRect();
     REQUIRE(viewportBounds == QRectF(0.0, 0.0, 100.0, 100.0));
@@ -146,14 +184,8 @@ TEST_CASE("cwCaptureCenterline buildLabelRequests culls off-viewport stations be
     // applyPlacements maps results through the culled request list back to
     // the right stations: each placed rect lands on its request's station and
     // the culled station stays unlabeled.
-    QVector<cwCaptureLabelPlacer::Placement> placements;
-    placements.reserve(culledRequests.size());
-    for(int i = 0; i < culledRequests.size(); i++) {
-        cwCaptureLabelPlacer::Placement placement;
-        placement.placed = true;
-        placement.labelRect = QRectF(10.0 * (i + 1), 5.0, 8.0, 4.0);
-        placements.append(placement);
-    }
+    const QVector<cwCaptureLabelPlacer::Placement> placements =
+        placeEvery(culledRequests);
     centerline.applyPlacements(placements);
 
     const auto placedLabels = centerline.placedLabels();
@@ -167,4 +199,140 @@ TEST_CASE("cwCaptureCenterline buildLabelRequests culls off-viewport stations be
         CHECK(placedByName.value(culledRequests.at(i).text)
               == placements.at(i).labelRect);
     }
+}
+
+TEST_CASE("cwCaptureCenterline defaults every part to visible",
+          "[cwCaptureCenterline]")
+{
+    const cwCaptureCenterline centerline;
+    CHECK(centerline.dotsVisible());
+    CHECK(centerline.legsVisible());
+    CHECK(centerline.labelsVisible());
+}
+
+TEST_CASE("cwCaptureCenterline builds no label requests while labels are hidden",
+          "[cwCaptureCenterline]")
+{
+    CenterlineFixture fixture;
+    cwCaptureCenterline& centerline = fixture.centerline;
+
+    REQUIRE(centerline.labelsVisible());
+    const auto visibleRequests = centerline.buildLabelRequests();
+    REQUIRE_FALSE(visibleRequests.isEmpty());
+    centerline.applyPlacements(placeEvery(visibleRequests));
+    REQUIRE(centerline.placedLabels().size() == visibleRequests.size());
+
+    centerline.setLabelsVisible(false);
+    CHECK_FALSE(centerline.labelsVisible());
+    CHECK(centerline.buildLabelRequests().isEmpty());
+
+    // The request index from the visible build is cleared, so the empty slice
+    // matches it, and the earlier placements are dropped.
+    centerline.applyPlacements({});
+    CHECK(centerline.placedLabels().isEmpty());
+
+    centerline.setLabelsVisible(true);
+    CHECK(names(centerline.buildLabelRequests()) == names(visibleRequests));
+}
+
+TEST_CASE("cwCaptureCenterline keeps its geometry while parts are hidden",
+          "[cwCaptureCenterline]")
+{
+    CenterlineFixture fixture;
+    cwCaptureCenterline& centerline = fixture.centerline;
+
+    const QVector<QPointF> positions = centerline.stationPositions();
+    const QVector<QLineF> lines = centerline.lines();
+    REQUIRE_FALSE(positions.isEmpty());
+    REQUIRE_FALSE(lines.isEmpty());
+
+    centerline.setDotsVisible(false);
+    centerline.setLegsVisible(false);
+    CHECK_FALSE(centerline.dotsVisible());
+    CHECK_FALSE(centerline.legsVisible());
+
+    // The viewport, not the item, decides what is a placement obstacle.
+    CHECK(centerline.stationPositions() == positions);
+    CHECK(centerline.lines() == lines);
+}
+
+TEST_CASE("cwCaptureCenterline keeps caves that share station names apart",
+          "[cwCaptureCenterline]")
+{
+    // Two caves, both starting at "a1", laid side by side in the viewport.
+    // Cave 1 spans x 10..30 and cave 2 spans x 70..90, so any leg crossing
+    // the 30..70 gap joins the two caves.
+    constexpr qreal CaveGapLeft = 30.0;
+    constexpr qreal CaveGapRight = 70.0;
+    constexpr float StationY = 50.0f;
+    constexpr float Cave1A1X = 10.0f;
+    constexpr float Cave2A1X = 90.0f;
+    constexpr qreal PositionTolerance = 1e-3;
+
+    auto addCave = [](cwCavingRegion& region,
+                      const QList<QPair<QString, float>>& stations) {
+        cwSurveyNetwork network;
+        cwStationPositionLookup lookup;
+        for(int i = 0; i < stations.size(); i++) {
+            lookup.setPosition(stations.at(i).first,
+                               QVector3D(stations.at(i).second, StationY, 0.0f));
+            if(i > 0) {
+                network.addShot(stations.at(i - 1).first, stations.at(i).first);
+            }
+        }
+        auto* cave = new cwCave();
+        cave->setSurveyNetwork(network);
+        cave->setStationPositionLookup(lookup);
+        region.addCave(cave);
+    };
+
+    cwCavingRegion region;
+    addCave(region, {{"a1", Cave1A1X}, {"a2", 20.0f}, {"a3", 30.0f}});
+    addCave(region, {{"a1", Cave2A1X}, {"b2", 80.0f}, {"b3", 70.0f}});
+
+    cwCamera camera;
+    camera.setViewport(TestViewport);
+    cwProjection projection;
+    projection.setOrtho(0.0, TestViewport.width(), 0.0, TestViewport.height(),
+                        -1.0, 1.0);
+    camera.setProjection(projection);
+
+    cwCaptureCenterline centerline;
+    centerline.setCamera(&camera);
+    centerline.setViewport(TestViewport);
+    centerline.setExportDpi(TestExportDpi);
+    centerline.setLabelFont(makeFixtureFont());
+    centerline.setNetworks(cwCaptureCenterline::caveNetworks(&region));
+
+    // Every leg stays on its own side of the gap.
+    const QVector<QLineF> lines = centerline.lines();
+    CHECK(lines.size() == 4);
+    for(const QLineF& line : lines) {
+        INFO("Leg from x=" << line.x1() << " to x=" << line.x2());
+        const qreal left = qMin(line.x1(), line.x2());
+        const qreal right = qMax(line.x1(), line.x2());
+        CHECK((right <= CaveGapLeft || left >= CaveGapRight));
+    }
+
+    // Each cave keeps its own "a1" dot and label.
+    const QVector<QPointF> positions = centerline.stationPositions();
+    CHECK(positions.size() == 6);
+    // Every station sits on one row, so x alone identifies it.
+    auto hasStationAtX = [&](qreal x) {
+        return std::any_of(positions.begin(), positions.end(), [&](const QPointF& position) {
+            return qAbs(position.x() - x) < PositionTolerance;
+        });
+    };
+    CHECK(hasStationAtX(Cave1A1X));
+    CHECK(hasStationAtX(Cave2A1X));
+
+    const auto requests = centerline.buildLabelRequests();
+    int a1Labels = 0;
+    for(const auto& request : requests) {
+        if(request.text == QStringLiteral("a1")) {
+            ++a1Labels;
+        }
+    }
+    CHECK(requests.size() == 6);
+    CHECK(a1Labels == 2);
 }

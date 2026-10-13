@@ -19,7 +19,7 @@ QQ.Rectangle {
     signal logoutRequested()
 
     implicitHeight: cardLayout.implicitHeight + 24
-    radius: 6
+    radius: Theme.panelRadius
     color: Theme.surfaceRaised
     border.width: 1
     border.color: Theme.borderSubtle
@@ -111,7 +111,7 @@ QQ.Rectangle {
             property bool succeeded: false
 
             color: testConnection.state === GitTestConnection.Testing ? Theme.textSubtle
-                 : testResultLabel.hasError ? Theme.danger
+                 : testResultLabel.hasError ? Theme.errorText
                  : Theme.success
             text: testConnection.state === GitTestConnection.Testing ? qsTr("Testing connection...")
                 : testResultLabel.hasError ? testConnection.errorMessage

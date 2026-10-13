@@ -37,6 +37,9 @@ cwScene::cwScene(QObject *parent) :
     // calls, and no query runs during teardown.
     GeometryItersecter->setVisibilityStore(m_visibility);
 
+    connect(m_visibility, &cwSceneVisibility::changed, this, &cwScene::visibleBoundsChanged);
+    connect(GeometryItersecter, &cwGeometryItersecter::bvhReady, this, &cwScene::visibleBoundsChanged);
+
     // An EDL tuning change marks the scene dirty and schedules a repaint;
     // cwRhiScene::synchroize() then pulls the new values across to the effect.
     connect(m_edl, &cwEDLSettings::changed, this, &cwScene::update);

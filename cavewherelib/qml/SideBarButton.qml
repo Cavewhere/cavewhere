@@ -26,18 +26,36 @@ QQ.Rectangle {
 
     anchors.left: parent.left;
     anchors.right: parent.right
-    height: columnLayoutId.height + 10
+    height: columnLayoutId.height + 2 * (Theme.toolRailPanelInset + Theme.sidebarButtonPadding)
     color: Theme.transparent
-    clip: true;
 
     //Called when troggle is true
     signal buttonIsTroggled()
 
+    // The current page's button takes the selected-row tint; an idle button
+    // recedes until the pointer reaches it.
+    QQ.Rectangle {
+        id: buttonFaceId
+        objectName: "buttonFace"
+        anchors.fill: parent
+        // Lines the face up with the tool rail card below the buttons.
+        anchors.margins: Theme.toolRailPanelInset
+        radius: Theme.panelRadius
+        border.width: 1
+        color: button.troggled ? Theme.highlight
+                               : hoverHandler.hovered ? Theme.hoverOverlay : Theme.transparent
+        border.color: button.troggled ? Theme.accentMuted
+                                      : hoverHandler.hovered ? Theme.border : Theme.transparent
+    }
+
     GridLayout {
         id: columnLayoutId
         anchors.centerIn: parent
+        opacity: button.troggled || hoverHandler.hovered ? 1.0 : Theme.sidebarIdleOpacity
 
         columns: layout == Qt.Vertical ? 1 : 2
+        rowSpacing: Theme.sidebarButtonContentSpacing
+        columnSpacing: Theme.sidebarButtonContentSpacing
         // rows: columnLayout ? 2 : 1
 
         QQ.Image {
@@ -69,43 +87,10 @@ QQ.Rectangle {
             color: Theme.sidebar.text
             text: "text"
             smooth: true
-            style: QC.Label.Sunken
             font.bold: true
             font.pixelSize: button.compactMode ? Theme.fontSizeSmall : Theme.fontSizeMedium
             Layout.alignment: Qt.AlignHCenter
         }
-    }
-
-    QQ.Rectangle {
-        id: hoverBackground
-        x: -parent.height / 2
-        y: parent.height / 2
-        width: parent.height
-        height: parent.width
-        z: -2
-        gradient: QQ.Gradient {
-            QQ.GradientStop {
-                id: gradientstop1
-                position: 0
-                color: Theme.sidebar.hoverStart
-            }
-
-            QQ.GradientStop {
-                id: gradientstop2
-                position: 0.47
-                color: Theme.sidebar.hoverMid
-            }
-
-            QQ.GradientStop {
-                id: gradientstop3
-                position: 1
-                color: Theme.transparent
-            }
-        }
-        transformOrigin: QQ.Item.Top
-        rotation: -90
-        visible: false
-        opacity: 1
     }
 
     QQ.TapHandler {
@@ -115,124 +100,5 @@ QQ.Rectangle {
 
     QQ.HoverHandler {
         id: hoverHandler
-        onHoveredChanged: {
-            if(hovered) {
-                button.state = "hoverState"
-            } else {
-                button.state = ""
-            }
-        }
-    }
-
-    QQ.Rectangle {
-        id: borderRectangle
-        width: parent.width + 4
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        color: Theme.transparent
-        anchors.horizontalCenter: parent.horizontalCenter
-        border.color: Theme.transparent
-        border.width: 0
-        z: -1
-        opacity: 1
-    }
-
-    states: [
-        QQ.State {
-            name: "toggledState"
-
-        QQ.PropertyChanges {
-            gradientstop1 {
-                position: 0
-                color: Theme.sidebar.toggledStart
-            }
-        }
-
-        QQ.PropertyChanges {
-            gradientstop2 {
-                position: 1
-                color: Theme.sidebar.toggledMid
-            }
-        }
-
-        QQ.PropertyChanges {
-            gradientstop3 {
-                position: 1
-                color: Theme.sidebar.toggledEnd
-            }
-        }
-
-            QQ.PropertyChanges {
-                hoverBackground {
-                    z: -1
-                    visible: true
-                }
-            }
-
-        QQ.PropertyChanges {
-            textLabel {
-                color: Theme.sidebar.textActive
-                styleColor: Theme.sidebar.textStroke
-                style: QC.Label.Raised
-            }
-        }
-
-        QQ.PropertyChanges {
-            borderRectangle {
-                border.color: Theme.sidebar.borderActive
-            }
-        }
-
-            QQ.PropertyChanges {
-                hoverHandler {
-                    onHoveredChanged: {}
-                }
-            }
-        },
-        QQ.State {
-            name: "hoverState"
-
-            QQ.PropertyChanges {
-                hoverBackground {
-                    visible: true
-                }
-            }
-
-        QQ.PropertyChanges {
-            gradientstop1 {
-                position: 0
-                color: Theme.sidebar.hoverStart
-            }
-        }
-
-        QQ.PropertyChanges {
-            gradientstop2 {
-                position: 0.47
-                color: Theme.sidebar.hoverMidHover
-            }
-        }
-
-            QQ.PropertyChanges {
-                gradientstop3 {
-                    position: 1
-                    color: Theme.transparent
-                }
-            }
-
-        QQ.PropertyChanges {
-            borderRectangle {
-                border.color: Theme.sidebar.borderHover
-            }
-        }
-
-        }
-    ]
-
-    onTroggledChanged: {
-        if(troggled) {
-            button.state = "toggledState";
-        } else {
-            button.state = "";
-        }
     }
 }

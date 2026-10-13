@@ -214,9 +214,9 @@ MainWindowTest {
                    "GIS Sources is a link to another page, not a projection fact")
         }
 
-        // A custom label replaces the one the style positions and measures, so
-        // both jobs are done by hand and both can go wrong: the title starts at
-        // the control's edge instead of the frame's, and the group reserves too
+        // A custom label replaces the style's title, so its x and its implicit
+        // size are set by hand and both can go wrong: the title starts at the
+        // control's edge instead of the frame's, and the group reserves too
         // little room for it and prints it over the first row.
         function test_theGroupTitleLinesUpWithItsRows() {
             const group = label("coordinateSystemGroup")

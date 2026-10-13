@@ -17,6 +17,9 @@ cwTeam::cwTeam(QObject *parent) :
     QAbstractListModel(parent),
     m_keywordModel(new cwKeywordModel(this))
 {
+    connect(this, &cwTeam::rowsInserted, this, &cwTeam::countChanged);
+    connect(this, &cwTeam::rowsRemoved, this, &cwTeam::countChanged);
+    connect(this, &cwTeam::modelReset, this, &cwTeam::countChanged);
 }
 
 // /**

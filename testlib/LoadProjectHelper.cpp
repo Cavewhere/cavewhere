@@ -638,6 +638,24 @@ void TestHelper::addStationSplay(cwSurveyChunk* chunk,
     chunk->setStationSplays(stationIndex, splays);
 }
 
+void TestHelper::addRepeatShot(cwSurveyChunk* chunk,
+                               int shotIndex,
+                               double distanceOffset) const
+{
+    if (chunk == nullptr || chunk->parentTrip() == nullptr
+        || shotIndex < 0 || shotIndex >= chunk->shotCount()) {
+        return;
+    }
+
+    cwShot repeat = chunk->shot(shotIndex);
+    const double distance = repeat.distance().value().toDouble() + distanceOffset;
+    repeat.setDistance(cwDistanceReading(distance));
+
+    auto* repeatChunk = new cwSurveyChunk(chunk->parentTrip());
+    repeatChunk->appendShot(chunk->station(shotIndex), chunk->station(shotIndex + 1), repeat);
+    chunk->parentTrip()->addChunk(repeatChunk);
+}
+
 QVariantList TestHelper::a4SplayReadings() const
 {
     QVariantList readings;

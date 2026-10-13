@@ -406,6 +406,11 @@ qt_add_qml_module(cavewherelib
 
 )
 
+# The custom Qt Quick Controls style. Desktop only; phones keep their platform style.
+if(NOT MOBILE_BUILD)
+    add_subdirectory(style)
+endif()
+
 target_sources(cavewherelib PRIVATE ${cavewherelib_CPP_FILES} ${cavewherelib_H_FILES})
 qt_import_qml_plugins(cavewherelib)
 

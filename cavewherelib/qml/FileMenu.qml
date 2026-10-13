@@ -201,6 +201,20 @@ QC.Menu {
         }
 
         QC.MenuItem {
+            text: "Style Gallery..."
+            onTriggered: {
+                RootData.pageSelectionModel.gotoPageByName(null, "Style Gallery");
+            }
+        }
+
+        QC.MenuItem {
+            text: "Colors..."
+            onTriggered: {
+                RootData.pageSelectionModel.gotoPageByName(null, "Colors");
+            }
+        }
+
+        QC.MenuItem {
             text: RootData.linePlotManager.hasSolveError
                   ? qsTr("Cavern Output… (solve error)")
                   : qsTr("Cavern Output…")

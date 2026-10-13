@@ -66,11 +66,10 @@ int main(int argc, char **argv) \
     QApplication app(argc, argv);
 
     // Match the application's style stack (main.cpp) so tests exercise the same
-    // style as production. Fusion is a pure-QML style with no native theme calls,
-    // so it also sidesteps the Windows native-style offscreen crash that previously
-    // required forcing the Basic style here.
+    // style as production.
     QApplication::setStyle(QStyleFactory::create("Fusion")); // Qt Widgets
-    QQuickStyle::setStyle("Fusion");                          // Qt Quick Controls
+    QQuickStyle::setStyle("CaveWhereStyle");                  // Qt Quick Controls
+    QQuickStyle::setFallbackStyle("Fusion");
 
     // Manual-screenshot generation (CW_MANUAL_IMAGE_DIR set by
     // scripts/gen-manual-screenshots.sh): pin a light color scheme so the images

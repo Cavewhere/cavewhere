@@ -353,9 +353,11 @@ MainWindowTest {
                 return gallery.currentNoteLiDAR != null
             }, 15000, "select any LiDAR note")
 
+            // The fresh fixture's cache is cold, so the scan's large baseColor
+            // texture is compressed to KTX2 before the glTF is Ready.
             tryVerifyWithDiagnostics(() => {
                 return noteLiDARViewer().scene.gltf.status === RenderGLTF.Ready
-            }, 20000, "wait for any LiDAR viewer ready", () => {
+            }, 60000, "wait for any LiDAR viewer ready", () => {
                 SyncTestHelper.waitForFutureManagerToFinish(testCaseId, RootData)
             })
 

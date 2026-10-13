@@ -700,11 +700,21 @@ bool cwSurveyEditorModel::setDataAt(const cwSurveyEditorCellIndex& cell, const Q
         const int firstFormerlyVirtualRow = firstVirtualRow(chunk);
         const int lastFormerlyVirtualRow = firstFormerlyVirtualRow + 1;
 
-        disconnectChunkSignals(chunk);
+        const int stationCountBefore = chunk->stationCount();
 
-        chunk->appendNewShot();
-        chunk->setData(*chunkRole, indexInChunk, data);
+        //appendNewShot only leaves from a named station, and the blank pair
+        //also sits below a nameless one whose shot holds a reading
+        disconnectChunkSignals(chunk);
+        chunk->insertStation(stationCountBefore - 1, cwSurveyChunk::Below);
+        const bool appended = chunk->stationCount() > stationCountBefore;
+        if(appended) {
+            chunk->setData(*chunkRole, indexInChunk, data);
+        }
         connectChunkSignals(chunk);
+
+        if(!appended) {
+            return false;
+        }
 
         const auto changedModelIndex = toModelIndex({chunk, indexInChunk, rowIndex.rowType()});
         if(changedModelIndex.isValid()) {
@@ -1277,6 +1287,15 @@ int cwSurveyEditorModel::focusedRow() const
 int cwSurveyEditorModel::focusedRole() const
 {
     return static_cast<int>(m_focusedCellRole);
+}
+
+cwSurveyEditorRowIndex cwSurveyEditorModel::focusedRowIndex() const
+{
+    const int row = focusedRow();
+    if(m_trip.isNull() || row < 0 || row >= rowCount()) {
+        return {};
+    }
+    return toRowIndex(row);
 }
 
 void cwSurveyEditorModel::setFocusedCell(const cwSurveyEditorCellIndex& cell)

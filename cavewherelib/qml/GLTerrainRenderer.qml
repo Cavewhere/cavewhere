@@ -80,6 +80,8 @@ Item {
     // LinePlotLabelView fill this item and carry tap-away handlers, so anything
     // clickable left below them never sees a press.
     readonly property int zOverlay: 3
+    // Gap between the view's edges and the floating chrome
+    readonly property int chromeMargin: 20
 
     clip: true
 
@@ -252,7 +254,7 @@ Item {
         id: fixStationOutlierBox
         objectName: "fixStationOutlierBox"
         anchors.top: parent.top
-        anchors.topMargin: 20
+        anchors.topMargin: rootId.chromeMargin
         anchors.bottom: undefined
         // The banner carries a link, so it needs the chrome layer, not just a
         // spot above the scene: LeadView's tap-away handler fills this item at
@@ -275,10 +277,12 @@ Item {
     }
 
     Row {
+        id: bottomRightChromeId
+
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 20
+        anchors.bottomMargin: rootId.chromeMargin
         anchors.right: parent.right
-        anchors.rightMargin: 20
+        anchors.rightMargin: rootId.chromeMargin
         z: rootId.zOverlay
         spacing: 10
 
@@ -299,6 +303,32 @@ Item {
             compassRotation: turnTableInteractionId.cameraRotation
             // Don't set sampleCount; cwRenderingSettings drives it.
         }
+    }
+
+    // Color-by sits above the scale bar and compass: a chip when off, the
+    // colorbar when on. At zOverlay so its tap never reaches LeadView's or
+    // LinePlotLabelView's tap-away handlers or the turntable camera.
+    ColorByLegend {
+        id: colorByLegendId
+        anchors.right: parent.right
+        anchors.bottom: bottomRightChromeId.top
+        anchors.rightMargin: rootId.chromeMargin
+        anchors.bottomMargin: Theme.flowSpacing
+        z: rootId.zOverlay
+        popupOpen: colorByPopupId.opened
+        onClicked: colorByPopupId.opened ? colorByPopupId.close() : colorByPopupId.open()
+    }
+
+    ColorByPopup {
+        id: colorByPopupId
+        // Parented to the legend so a press on the Edit/Done pill counts as
+        // inside the parent: the popup stays open through that press and the
+        // pill's tap then toggles it. A press elsewhere in the view closes it.
+        parent: colorByLegendId
+        closePolicy: QC.Popup.CloseOnEscape | QC.Popup.CloseOnPressOutsideParent
+        // Right-aligned with the legend, above it, kept inside the view
+        x: Math.max(-colorByLegendId.x, colorByLegendId.width - width)
+        y: Math.max(-colorByLegendId.y, -height - Theme.linkBarButtonSpacing)
     }
 
     // Built only while the setting is on, so a hidden HUD costs nothing — not
@@ -337,8 +367,8 @@ Item {
         interaction: measurementInteractionId
         visible: interactionManagerId.activeInteraction === measurementInteractionId
                  && measurementInteractionId.hasMeasurement
-        x: Math.max(0, parent.width - width - 20)
-        y: 20
+        x: Math.max(0, parent.width - width - rootId.chromeMargin)
+        y: rootId.chromeMargin
     }
 }
 
