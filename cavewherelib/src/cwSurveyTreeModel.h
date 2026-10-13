@@ -274,7 +274,9 @@ private:
     //! watcher names them.
     QString tripUsedStations(cwTrip* trip) const;
 
-    //! \a trip's surveyed length, zero until its watcher adds it up.
+    //! \a trip's length in its calibration's distance unit: the shots its
+    //! watcher adds up, or the solved legs of an externally backed trip, which
+    //! has no shots. Zero until the watcher or the solve measures it.
     double tripLength(cwTrip* trip) const;
 };
 

@@ -578,6 +578,15 @@ inline int vertexCountOf(const cwLinePlotGeometry::Result& geometry, const cwTri
     return geometry.tripVertexRanges.at(tripIndex).count;
 }
 
+//! The length, in meters, of the legs \a trip draws in \a geometry.
+inline double tripLengthOf(const cwLinePlotGeometry::Result& geometry, const cwTrip* trip)
+{
+    REQUIRE(geometry.tripLengths.size() == geometry.tripUuids.size());
+    const qsizetype tripIndex = geometry.tripUuids.indexOf(trip->id());
+    REQUIRE(tripIndex >= 0);
+    return geometry.tripLengths.at(tripIndex);
+}
+
 //! The survey label an externally-attached trip's *begin block carries, which is
 //! also the scope its solved stations are keyed under in the cave lookup.
 inline QString tripScopeLabel(const cwTrip* trip)

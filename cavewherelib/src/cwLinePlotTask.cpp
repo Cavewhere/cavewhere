@@ -219,6 +219,7 @@ struct cwLinePlotTask::LinePlotWorker {
         result.setTripVertexRanges(geometry.tripVertexRanges);
         result.setTripSplayVertexRanges(geometry.tripSplayVertexRanges);
         result.setTripUuids(geometry.tripUuids);
+        result.setTripLengths(geometry.tripLengths);
 
         updateDepthLength(geometry.nodeLengthAndDepths, result);
 

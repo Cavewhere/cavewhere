@@ -234,8 +234,8 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
         return node != nullptr ? QString() : tripUsedStations(trip);
     case LengthRole:
         //A node carries a solved cwLength object the cell reads unit and all; a
-        //trip has only the number its length task adds up, in the unit the
-        //trip's own calibration is surveyed in.
+        //trip has only a number, in the unit the trip's own calibration is
+        //surveyed in.
         return node != nullptr
                 ? QVariant::fromValue(node->length())
                 : QVariant::fromValue(tripLength(trip));
@@ -668,9 +668,13 @@ void cwSurveyTreeModel::connectTrip(cwTrip* trip)
     auto stats = new cwTripStatsWatcher(trip, this);
     m_tripStats.insert(trip, stats);
 
-    connect(stats, &cwTripStatsWatcher::lengthChanged, this, [this, trip]() {
+    const auto emitLengthChanged = [this, trip]() {
         emitRowDataChanged(indexOfTrip(trip), Length, Length, {LengthRole});
-    });
+    };
+    connect(stats, &cwTripStatsWatcher::lengthChanged, this, emitLengthChanged);
+    connect(trip, &cwTrip::solvedLengthChanged, this, emitLengthChanged);
+    connect(trip, &cwTrip::externallyBackedChanged, this, emitLengthChanged);
+    connect(calibration, &cwTripCalibration::distanceUnitChanged, this, emitLengthChanged);
     connect(stats, &cwTripStatsWatcher::usedStationsChanged, this, [this, trip]() {
         emitRowDataChanged(indexOfTrip(trip), Stations, Stations,
                            {StationCountRole, UsedStationsRole});
@@ -913,6 +917,10 @@ QString cwSurveyTreeModel::tripUsedStations(cwTrip* trip) const
 
 double cwSurveyTreeModel::tripLength(cwTrip* trip) const
 {
+    if (trip->externallyBacked()) {
+        return cwUnits::convert(trip->solvedLength(), cwUnits::Meters,
+                                trip->calibrations()->distanceUnit());
+    }
     const cwTripStatsWatcher* stats = m_tripStats.value(trip);
     return stats != nullptr ? stats->length() : 0.0;
 }

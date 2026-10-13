@@ -379,6 +379,7 @@ void cwLinePlotManager::setKeywordItemModel(cwKeywordItemModel* keywordItemModel
 }
 
 void cwLinePlotManager::reconcileTripKeywordItems(
+    const QHash<QUuid, cwTrip*>& liveByUuid,
     const QVector<QUuid>& tripUuids,
     const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges,
     const QVector<cwLinePlotGeometry::VertexRange>& tripSplayVertexRanges)
@@ -393,12 +394,6 @@ void cwLinePlotManager::reconcileTripKeywordItems(
     // trip), so the running id indexes all three tables identically.
     Q_ASSERT(tripVertexRanges.size() == tripUuids.size());
     Q_ASSERT(tripSplayVertexRanges.size() == tripUuids.size());
-
-    // Resolve UUIDs to live trips by identity (never by list position).
-    QHash<QUuid, cwTrip*> liveByUuid;
-    for (cwTrip* trip : Region->rootNode()->allTrips()) {
-        liveByUuid.insert(trip->id(), trip);
-    }
 
     // Re-binds an item's proxy to its current vertex span (they shift each
     // solve) and re-hides a keyword-hidden span. setGeometry just reset every
@@ -1078,11 +1073,27 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
                                 results.tripSplayVertexRanges());
     }
 
+    // Resolve UUIDs to live trips by identity (never by list position).
+    QHash<QUuid, cwTrip*> liveByUuid;
+    for (cwTrip* trip : Region->rootNode()->allTrips()) {
+        liveByUuid.insert(trip->id(), trip);
+    }
+
+    const QVector<QUuid> tripUuids = results.tripUuids();
+    const QVector<double> tripLengths = results.tripLengths();
+    Q_ASSERT(tripLengths.size() == tripUuids.size());
+    for (int i = 0; i < tripUuids.size(); ++i) {
+        if (cwTrip* trip = liveByUuid.value(tripUuids.at(i), nullptr)) {
+            trip->setSolvedLength(tripLengths.at(i));
+        }
+    }
+
     // Re-attach per-trip keyword items (centerline + splays) to the new
     // geometry and re-seed each item's visibility by its (shifted) vertex
     // span. setGeometry reset the render object to all-visible, so reconcile
     // pushes the spans that keyword filtering hides.
-    reconcileTripKeywordItems(results.tripUuids(),
+    reconcileTripKeywordItems(liveByUuid,
+                              tripUuids,
                               results.tripVertexRanges(),
                               results.tripSplayVertexRanges());
 

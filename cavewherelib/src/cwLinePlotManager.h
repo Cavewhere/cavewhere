@@ -236,13 +236,14 @@ private:
     void updateLinePlot(cwLinePlotTask::LinePlotResultData results);
 
     // Re-attaches the per-trip keyword items to the freshly-solved geometry:
-    // resolves each running id's UUID to a live cwTrip*, creates/removes keyword
+    // looks up each running id's UUID in liveByUuid, creates/removes keyword
     // items to match, re-binds each trip's visibility proxy to its new vertex
     // span, and re-seeds the render object's hidden trips. Identity (UUID)
     // keyed, so it is immune to list-order drift; trips deleted mid-solve simply
     // fail to resolve and are skipped. tripVertexRanges and
     // tripSplayVertexRanges are parallel to tripUuids (all running-id indexed).
-    void reconcileTripKeywordItems(const QVector<QUuid>& tripUuids,
+    void reconcileTripKeywordItems(const QHash<QUuid, cwTrip*>& liveByUuid,
+                                   const QVector<QUuid>& tripUuids,
                                    const QVector<cwLinePlotGeometry::VertexRange>& tripVertexRanges,
                                    const QVector<cwLinePlotGeometry::VertexRange>& tripSplayVertexRanges);
     void removeTripKeywordItems(cwTrip* trip);

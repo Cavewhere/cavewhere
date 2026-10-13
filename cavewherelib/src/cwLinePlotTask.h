@@ -153,6 +153,7 @@ public:
         void setTripVertexRanges(QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges);
         void setTripSplayVertexRanges(QVector<cwLinePlotGeometry::VertexRange> ranges);
         void setTripUuids(QVector<QUuid> tripUuids);
+        void setTripLengths(QVector<double> tripLengths);
 
         QVector<QVector3D> stationPositions() const;
 
@@ -160,11 +161,13 @@ public:
         // its tail) and the running-id -> stable cwTrip::id mapping (all
         // running-id indexed). Only value-type data crosses the worker
         // boundary; the manager resolves each UUID to a live cwTrip* and binds
-        // its visibility proxy to the matching vertex range. See
-        // cwLinePlotGeometry for how the ranges are assigned.
+        // its visibility proxy to the matching vertex range. tripLengths is
+        // the length in meters of the legs each trip draws. See
+        // cwLinePlotGeometry for how the ranges and lengths are assigned.
         QVector<cwLinePlotGeometry::VertexRange> tripVertexRanges() const;
         QVector<cwLinePlotGeometry::VertexRange> tripSplayVertexRanges() const;
         QVector<QUuid> tripUuids() const;
+        QVector<double> tripLengths() const;
 
     public:
         void setRegionNetwork(cwSurveyNetwork network);
@@ -185,6 +188,7 @@ public:
         QVector<cwLinePlotGeometry::VertexRange> TripVertexRanges;
         QVector<cwLinePlotGeometry::VertexRange> TripSplayVertexRanges;
         QVector<QUuid> TripUuids;
+        QVector<double> TripLengths;
         cwSurveyNetwork RegionNetwork;
         bool RegionNetworkChanged = false;
         cwStationPositionLookup RegionStationPositions;
@@ -408,6 +412,14 @@ cwLinePlotTask::LinePlotResultData::tripSplayVertexRanges() const {
 
 inline QVector<QUuid> cwLinePlotTask::LinePlotResultData::tripUuids() const {
     return TripUuids;
+}
+
+inline void cwLinePlotTask::LinePlotResultData::setTripLengths(QVector<double> tripLengths) {
+    TripLengths = std::move(tripLengths);
+}
+
+inline QVector<double> cwLinePlotTask::LinePlotResultData::tripLengths() const {
+    return TripLengths;
 }
 
 inline QList<QUuid> cwLinePlotTask::StationTripScrapLookup::trips(QString stationName) const

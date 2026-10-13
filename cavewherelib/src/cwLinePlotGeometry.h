@@ -57,9 +57,10 @@
  * its tail, so hiding a trip covers its splays and a splay-only toggle can
  * address just the tail. tripUuids[i] maps that running id back to a stable
  * cwTripData::id so callers can re-attach it to a live trip without relying on
- * list position. A running id is assigned to every trip in the walk's order,
- * even trips that emit no geometry (count 0), so all three tables are the
- * total trip count.
+ * list position, and tripLengths[i] is the length in meters of the legs that
+ * trip draws (its counted chunk shots for a native trip). A running id is
+ * assigned to every trip in the walk's order, even trips that emit no geometry
+ * (count 0, length 0), so all four tables are the total trip count.
  *
  * `splayTipsByNode` is keyed by node id, and each node's tips by the
  * node-local canonical station name, landing only in the node that owns the
@@ -75,7 +76,9 @@
  * whose two ends its unit holds (a leg two units both hold draws in both), the
  * root's whole-node window (cwTrip::windowsWholeNode) draws the legs no unit
  * drew, and a native trip draws its chunks under its label in the root's
- * block. Every node of the subtree folds its trips' legs, each leg once.
+ * block. Every node of the subtree folds its trips' legs, each leg once, while
+ * each trip's length counts every leg it draws, so a leg two units share counts
+ * in both trips and once in their node.
  *
  * Pure compute — no file I/O, no Qt object machinery. Caller invokes from
  * any thread; only reads the const region snapshot.
@@ -111,6 +114,7 @@ public:
         QVector<VertexRange> tripVertexRanges;  // running trip id -> full span in points
         QVector<VertexRange> tripSplayVertexRanges; // running trip id -> splay tail of that span
         QVector<QUuid> tripUuids;               // running trip id -> stable cwTripData::id
+        QVector<double> tripLengths;            // running trip id -> length of the legs it draws, meters
         QHash<QUuid, LengthAndDepth> nodeLengthAndDepths; // every node, keyed by cwCaveData::id
     };
 

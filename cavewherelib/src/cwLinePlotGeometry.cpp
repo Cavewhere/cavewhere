@@ -338,9 +338,9 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
         const cwTripData& trip = node.trips.at(tripIndex);
 
         // Every trip gets a running id (== index into tripUuids /
-        // tripVertexRanges / tripSplayVertexRanges) in walk order, even ones
-        // that emit no geometry, so all three tables stay a dense
-        // total-trip-count list.
+        // tripVertexRanges / tripSplayVertexRanges / tripLengths) in walk
+        // order, even ones that emit no geometry, so all four tables stay a
+        // dense total-trip-count list.
         const int runningTripId = result.tripUuids.size();
         result.tripUuids.append(trip.id);
         const int vertexStart = result.points.size();
@@ -361,9 +361,11 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
         if (!scopePrefix.isEmpty()) {
             const QStringList ownedStations =
                 scopeOwnedStations(network, scopePrefix, tripScopePrefixes);
-            nodeExtent.absorb(emitNetworkScopeGeometry(
+            const ScopeExtent scopeExtent = emitNetworkScopeGeometry(
                 network, nodePrefix, ownedStations,
-                stationPositions, result.points, emittedNodeLegs));
+                stationPositions, result.points, emittedNodeLegs);
+            result.tripLengths.append(scopeExtent.length);
+            nodeExtent.absorb(scopeExtent);
 
             const int splayStart = result.points.size();
             if (!nodeSplayTips.isEmpty()) {
@@ -385,7 +387,9 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
             continue;
         }
 
-        nodeExtent.absorb(emitChunkGeometry(trip, resolve, result.points));
+        const ScopeExtent chunkExtent = emitChunkGeometry(trip, resolve, result.points);
+        result.tripLengths.append(chunkExtent.length);
+        nodeExtent.absorb(chunkExtent);
 
         // Walk the trip's stations in survey order so the tips land
         // deterministically.
@@ -702,6 +706,11 @@ ScopeExtent emitSourcedNode(const cwCaveData& node,
         result.tripVertexRanges.append(
             cwLinePlotGeometry::VertexRange{vertexStart, int(result.points.size()) - vertexStart});
         subtreeLegs.append(tripGeometry.legs);
+
+        ScopeExtent tripExtent;
+        QSet<QString> tripFolded;
+        foldLegs(tripGeometry.legs, tripFolded, tripExtent);
+        result.tripLengths.append(tripExtent.length);
     }
 
     for (const cwCaveData& child : node.nodes) {
@@ -780,6 +789,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
     result.tripVertexRanges.squeeze();
     result.tripSplayVertexRanges.squeeze();
     result.tripUuids.squeeze();
+    result.tripLengths.squeeze();
 
     return Monad::Result<Result>(std::move(result));
 }

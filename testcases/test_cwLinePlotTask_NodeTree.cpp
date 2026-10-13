@@ -20,6 +20,7 @@
 #include "cwEquateModel.h"
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
+#include "cwExternalCenterline.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
 #include "cwGeoReference.h"
@@ -30,6 +31,7 @@
 #include "cwRootData.h"
 #include "cwStationHandle.h"
 #include "cwSurveyChunk.h"
+#include "cwSurveyNetwork.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 
@@ -384,6 +386,83 @@ TEST_CASE("A Folder's length is the sum of its caves", "[cwLinePlotGeometry][Nod
     CHECK(folderExtent.length() == Catch::Approx(upperExtent.length() + lowerExtent.length()));
     // The Folder spans from Upper's floor down to Lower's.
     CHECK(folderExtent.depth() == Catch::Approx(double(kUpperFloor - kLowerFloor)));
+}
+
+TEST_CASE("A Folder's length sums a native Cave and an attached Cave, and each attached trip is as long as its legs",
+          "[cwLinePlotGeometry][NodeTree]")
+{
+    cwCavingRegion region;
+    cwCave* folder = addChildNode(region.rootNode(), QStringLiteral("folder"),
+                                  cwSurveyNode::Kind::Folder);
+    cwCave* upper = addChildNode(folder, QStringLiteral("upper"), cwSurveyNode::Kind::Cave);
+    cwTrip* upperTrip = addNativeTripWithShot(upper, QStringLiteral("Upper trip"),
+                                              QStringLiteral("a1"), QStringLiteral("a2"));
+
+    // A source root with one derived node and two derived trips, the shape an
+    // attached Compass file lands in.
+    cwCave* sourced = addChildNode(folder, QStringLiteral("project"), cwSurveyNode::Kind::Cave);
+    sourced->setExternalCenterline(cwExternalCenterline(QStringLiteral("PROJECT.MAK")));
+    sourced->setSourceId(QUuid::createUuid());
+    cwCave* alpha = new cwCave();
+    alpha->setName(QStringLiteral("Alpha"));
+    alpha->setSourceId(sourced->sourceId());
+    alpha->setSourcePath(QStringLiteral("ALPHA.DAT"));
+    alpha->setCavernLabel(QStringLiteral("alpha"));
+    sourced->addNode(alpha);
+    const auto addDerivedTrip = [alpha](const QString& name, const QStringList& stations) {
+        cwTrip* trip = new cwTrip();
+        trip->setName(name);
+        trip->setSourcePath(QStringLiteral("ALPHA.DAT/") + name);
+        trip->setExternalStations(stations);
+        alpha->addTrip(trip);
+        return trip;
+    };
+    cwTrip* first = addDerivedTrip(QStringLiteral("ALPHA1"),
+                                   {QStringLiteral("p1"), QStringLiteral("p2"), QStringLiteral("p3")});
+    cwTrip* second = addDerivedTrip(QStringLiteral("ALPHA2"),
+                                    {QStringLiteral("p3"), QStringLiteral("p4")});
+
+    cwStationPositionLookup upperLookup;
+    upperLookup.setPosition(QStringLiteral("a1"), QVector3D(0.0f, 0.0f, 0.0f));
+    upperLookup.setPosition(QStringLiteral("a2"), QVector3D(0.0f, float(kShotLength), 0.0f));
+    SurveyTreeTestHelper::setScopedPositions(upper, upperLookup);
+
+    // ALPHA1: 6 m north then 8 m east; ALPHA2: 5 m south.
+    constexpr double kFirstLegLength = 6.0;
+    constexpr double kSecondLegLength = 8.0;
+    constexpr double kThirdLegLength = 5.0;
+    cwStationPositionLookup sourcedLookup;
+    sourcedLookup.setPosition(QStringLiteral("alpha.p1"), QVector3D(0.0f, 0.0f, 0.0f));
+    sourcedLookup.setPosition(QStringLiteral("alpha.p2"), QVector3D(0.0f, float(kFirstLegLength), 0.0f));
+    sourcedLookup.setPosition(QStringLiteral("alpha.p3"),
+                              QVector3D(float(kSecondLegLength), float(kFirstLegLength), 0.0f));
+    sourcedLookup.setPosition(QStringLiteral("alpha.p4"),
+                              QVector3D(float(kSecondLegLength), float(kFirstLegLength - kThirdLegLength), 0.0f));
+    SurveyTreeTestHelper::setScopedPositions(sourced, sourcedLookup);
+
+    cwSurveyNetwork network;
+    network.addShot(QStringLiteral("folder.project.alpha.P1"), QStringLiteral("folder.project.alpha.P2"));
+    network.addShot(QStringLiteral("folder.project.alpha.P2"), QStringLiteral("folder.project.alpha.P3"));
+    network.addShot(QStringLiteral("folder.project.alpha.P3"), QStringLiteral("folder.project.alpha.P4"));
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(), network);
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    // The geometry draws every trip, so the lengths below have legs to measure.
+    REQUIRE(vertexCountOf(geometry, upperTrip) == 2);
+    REQUIRE(vertexCountOf(geometry, first) == 4);
+    REQUIRE(vertexCountOf(geometry, second) == 2);
+
+    const double attachedLength = kFirstLegLength + kSecondLegLength + kThirdLegLength;
+    CHECK(geometry.nodeLengthAndDepths.value(alpha->id()).length() == Catch::Approx(attachedLength));
+    CHECK(geometry.nodeLengthAndDepths.value(sourced->id()).length() == Catch::Approx(attachedLength));
+    CHECK(geometry.nodeLengthAndDepths.value(folder->id()).length()
+          == Catch::Approx(kShotLength + attachedLength));
+
+    CHECK(tripLengthOf(geometry, upperTrip) == Catch::Approx(kShotLength));
+    CHECK(tripLengthOf(geometry, first) == Catch::Approx(kFirstLegLength + kSecondLegLength));
+    CHECK(tripLengthOf(geometry, second) == Catch::Approx(kThirdLegLength));
 }
 
 TEST_CASE("The depth-2 fixture loads and solves with every trip drawn",

@@ -344,6 +344,15 @@ bool cwTrip::isScoped() const
            || isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, parentNode());
 }
 
+void cwTrip::setSolvedLength(double meters)
+{
+    if (m_solvedLength == meters) {
+        return;
+    }
+    m_solvedLength = meters;
+    emit solvedLengthChanged();
+}
+
 bool cwTrip::externallyBacked() const
 {
     if (!m_externalCenterline.isEmpty()) {

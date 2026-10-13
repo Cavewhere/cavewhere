@@ -1804,5 +1804,30 @@ MainWindowTest {
             tryCellText(page, "tripStations" + viewRowOf(tree, left), "value", "3",
                         "an attached trip counts its own stations")
         }
+
+        // --- MP.6: attached trips report their solved length ---
+
+        // An attached trip owns no shots, so its row reads the length of the
+        // legs the solve drew for it.
+        function test_attachedTripRowsShowTheirSolvedLength() {
+            const page = gotoDataMainPage()
+            const root = attachStationCountsFile()
+            const system = childNamed(root, "system")
+            const lower = childNamed(system, "lower")
+            const upper = tripNamed(system, "upper")
+            const left = tripNamed(lower, "left")
+            verify(upper !== null, "system holds the trip upper")
+            verify(left !== null, "lower holds the leaf trip left")
+
+            const tree = surveyTree(page)
+            tree.surveyTree.expandAll()
+            tryVerify(() => viewRowOf(tree, left) >= 0, 10000, "every row is shown")
+
+            // upper is three 5 m legs; left is two 4 m legs.
+            tryCellText(page, "tripLength" + viewRowOf(tree, upper), "value", "15",
+                        "an attached trip reads the length of its solved legs")
+            tryCellText(page, "tripLength" + viewRowOf(tree, left), "value", "8",
+                        "a leaf attached trip reads the length of its solved legs")
+        }
     }
 }

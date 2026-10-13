@@ -77,6 +77,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(bool isScoped READ isScoped NOTIFY scopeChanged)
     Q_PROPERTY(bool externallyBacked READ externallyBacked NOTIFY externallyBackedChanged)
     Q_PROPERTY(bool windowsWholeNode READ windowsWholeNode NOTIFY externallyBackedChanged)
+    Q_PROPERTY(double solvedLength READ solvedLength NOTIFY solvedLengthChanged)
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
     Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
@@ -208,6 +209,13 @@ public:
     //! that holds it, so the worker-thread geometry pass and the UI decide
     //! alike.
     static bool windowsWholeNode(const cwTripData& trip, const cwCaveData& node);
+
+    //! The length in meters of the legs this trip draws in the last solve, the
+    //! per-trip counterpart of cwSurveyNode::length(). It is what an externally
+    //! backed trip, which has no shots to add up, reports as its length.
+    //! Recomputed every solve and never saved; 0 before the first solve.
+    double solvedLength() const;
+    void setSolvedLength(double meters);
 
     QDateTime date() const;
     void setDate(QDateTime date);
@@ -425,6 +433,8 @@ signals:
     //! that will not solve stays unlisted until one does.
     void knownStationsChanged();
 
+    void solvedLengthChanged();
+
 public slots:
     void setChucks(QList<cwSurveyChunk*> chunks);
 
@@ -461,6 +471,7 @@ protected:
     QStringList m_externalStations;
     QString m_externalStationsError;
     QString m_cavernLabel;
+    double m_solvedLength = 0.0;
     cwAttachedFixModel* const m_attachedFixes;
 
     //Units
@@ -519,6 +530,11 @@ inline QString cwTrip::name() const {
 inline QUuid cwTrip::id() const
 {
     return Id;
+}
+
+inline double cwTrip::solvedLength() const
+{
+    return m_solvedLength;
 }
 
 /**

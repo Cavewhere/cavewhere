@@ -12,6 +12,7 @@
 //Cavewhere includes
 #include "cwLinePlotGeometry.h"
 #include "SurveyTreeTestHelper.h"
+#include "ExternalCenterlineTestHelpers.h"
 #include "cwCavingRegion.h"
 #include "cwCave.h"
 #include "cwExternalCenterline.h"
@@ -163,6 +164,11 @@ TEST_CASE("cwLinePlotGeometry de-shares vertices per shot", "[cwLinePlotGeometry
             }
         }
     }
+
+    SECTION("each native trip is as long as its chunks") {
+        CHECK(tripLengthOf(geometry, trip1) == Catch::Approx(10.0));
+        CHECK(tripLengthOf(geometry, trip2) == Catch::Approx(10.0));
+    }
 }
 
 TEST_CASE("cwLinePlotGeometry duplicates a station shared by consecutive shots", "[cwLinePlotGeometry]")
@@ -290,6 +296,10 @@ TEST_CASE("cwLinePlotGeometry draws each unit trip by two-endpoint membership",
     CHECK(geometry.nodeLengthAndDepths.value(alpha->id()).length() == Catch::Approx(expectedLength));
     CHECK(geometry.nodeLengthAndDepths.value(root->id()).length() == Catch::Approx(expectedLength));
     CHECK(geometry.nodeLengthAndDepths.value(root->id()).depth() == Catch::Approx(5.0));
+
+    // Each unit trip is as long as the legs it draws.
+    CHECK(tripLengthOf(geometry, first) == Catch::Approx(20.0));
+    CHECK(tripLengthOf(geometry, second) == Catch::Approx(QVector3D(a4Position - a3Position).length()));
 }
 
 TEST_CASE("cwLinePlotGeometry draws a leg two units both hold in each of them",
@@ -328,6 +338,10 @@ TEST_CASE("cwLinePlotGeometry draws a leg two units both hold in each of them",
     CHECK(geometry.tripVertexRanges.at(geometry.tripUuids.indexOf(first->id())).count == 2);
     CHECK(geometry.tripVertexRanges.at(geometry.tripUuids.indexOf(second->id())).count == 4);
     CHECK(geometry.nodeLengthAndDepths.value(root->id()).length() == Catch::Approx(20.0));
+
+    // The shared leg counts in each trip that draws it, while the node counts it once.
+    CHECK(tripLengthOf(geometry, first) == Catch::Approx(10.0));
+    CHECK(tripLengthOf(geometry, second) == Catch::Approx(20.0));
 }
 
 TEST_CASE("cwLinePlotGeometry hands the whole-node window every leg no unit drew",
@@ -394,6 +408,10 @@ TEST_CASE("cwLinePlotGeometry hands the whole-node window every leg no unit drew
     const cwLinePlotGeometry::LengthAndDepth measured = geometry.nodeLengthAndDepths.value(region.cave(0)->id());
     CHECK(measured.length() == Catch::Approx(26.0));
     CHECK(measured.depth() == Catch::Approx(0.0));
+
+    // The window is as long as the root's leg and the tie; the block as its own leg.
+    CHECK(tripLengthOf(geometry, window) == Catch::Approx(14.0));
+    CHECK(tripLengthOf(geometry, blockTrip) == Catch::Approx(12.0));
 }
 
 TEST_CASE("cwLinePlotGeometry draws a native trip inside a sourced subtree from its chunks",
@@ -435,4 +453,5 @@ TEST_CASE("cwLinePlotGeometry draws a native trip inside a sourced subtree from 
     CHECK(geometry.tripVertexRanges.at(geometry.tripUuids.indexOf(native->id())).count == 2);
     CHECK(geometry.nodeLengthAndDepths.value(alpha->id()).length() == Catch::Approx(10.0));
     CHECK(geometry.nodeLengthAndDepths.value(root->id()).length() == Catch::Approx(10.0));
+    CHECK(tripLengthOf(geometry, native) == Catch::Approx(10.0));
 }
