@@ -12,6 +12,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QSignalSpy>
 
 //Our includes
 #include "cwRecentProjectModel.h"
@@ -21,8 +23,50 @@
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
 #include "TestHelper.h"
+#include "SignalSpyChecker.h"
 
 namespace {
+constexpr qint64 kStampToleranceSeconds = 5;
+constexpr int kFileSavedTimeoutMs = 10000;
+const QDateTime kOldStamp = QDateTime(QDate(2000, 1, 1), QTime(12, 0), QTimeZone::UTC);
+
+QString createEmptyProjectFile(const QTemporaryDir& dir, const QString& name)
+{
+    const QString path = dir.filePath(name);
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.close();
+    }
+    return QFileInfo(path).absoluteFilePath();
+}
+
+QDateTime lastOpenedAt(const cwRecentProjectModel& model, int row)
+{
+    return model.data(model.index(row, 0), cwRecentProjectModel::LastOpenedRole).toDateTime();
+}
+
+bool isNearNow(const QDateTime& stamp)
+{
+    return stamp.isValid()
+           && std::abs(stamp.secsTo(QDateTime::currentDateTimeUtc())) <= kStampToleranceSeconds;
+}
+
+// Spins until the clock ticks past stamp, so a later stamp is strictly greater
+void waitForClockToPass(const QDateTime& stamp)
+{
+    while (QDateTime::currentDateTimeUtc() <= stamp) {
+    }
+}
+
+void seedSettings(const QStringList& paths, const QVariantMap& lastOpened)
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("repositories"), paths);
+    if (!lastOpened.isEmpty()) {
+        settings.setValue(QStringLiteral("repositoryLastOpened"), lastOpened);
+    }
+}
+
 QString readGitExclude(const QDir& dir)
 {
     QFile file(dir.filePath(QStringLiteral(".git/info/exclude")));
@@ -46,6 +90,8 @@ TEST_CASE("cwRecentProjectModel initial state", "[cwRecentProjectModel]") {
     REQUIRE(roles.contains(cwRecentProjectModel::NameRole));
     REQUIRE(roles.value(cwRecentProjectModel::PathRole) == "pathRole");
     REQUIRE(roles.value(cwRecentProjectModel::NameRole) == "nameRole");
+    REQUIRE(roles.contains(cwRecentProjectModel::LastOpenedRole));
+    REQUIRE(roles.value(cwRecentProjectModel::LastOpenedRole) == "lastOpenedRole");
 }
 
 TEST_CASE("cwRecentProjectModel addRepository and persistence", "[cwRecentProjectModel]") {
@@ -529,4 +575,179 @@ TEST_CASE("cwRecentProjectModel opening sqlite project keeps only original entry
     // Only the original .cw entry remains — no duplicate from the loaded signal.
     REQUIRE(model->rowCount() == 1);
     CHECK(model->data(model->index(0, 0), cwRecentProjectModel::PathRole).toString() == bundledSource);
+}
+
+TEST_CASE("cwRecentProjectModel addRepositoryFromProjectFile stamps a new entry once", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    const QString projectPath = createEmptyProjectFile(tmpDir, QStringLiteral("Stamped.cw"));
+
+    cwRecentProjectModel model;
+    REQUIRE_FALSE(model.addRepositoryFromProjectFile(QUrl::fromLocalFile(projectPath)).hasError());
+    REQUIRE(model.rowCount() == 1);
+
+    const QDateTime firstStamp = lastOpenedAt(model, 0);
+    CHECK(isNearNow(firstStamp));
+
+    waitForClockToPass(firstStamp);
+
+    REQUIRE_FALSE(model.addRepositoryFromProjectFile(QUrl::fromLocalFile(projectPath)).hasError());
+    REQUIRE(model.rowCount() == 1);
+    CHECK(lastOpenedAt(model, 0) == firstStamp);
+}
+
+TEST_CASE("cwRecentProjectModel recordProjectOpened moves the stamp forward and persists", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    const QString otherPath = createEmptyProjectFile(tmpDir, QStringLiteral("Other.cw"));
+    const QString projectPath = createEmptyProjectFile(tmpDir, QStringLiteral("Opened.cw"));
+    seedSettings({otherPath, projectPath}, {{otherPath, kOldStamp}, {projectPath, kOldStamp}});
+
+    cwRecentProjectModel model;
+    REQUIRE(model.rowCount() == 2);
+    CHECK(lastOpenedAt(model, 1).toUTC() == kOldStamp);
+
+    auto spyChecker = SignalSpyChecker::Constant::makeChecker(&model);
+    auto dataChangedSpy = spyChecker.findSpy(&cwRecentProjectModel::dataChanged);
+
+    const auto result = model.recordProjectOpened(QUrl::fromLocalFile(projectPath));
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+
+    spyChecker[dataChangedSpy]++;
+    spyChecker.checkSpies();
+
+    REQUIRE(dataChangedSpy->count() == 1);
+    const QList<QVariant> arguments = dataChangedSpy->at(0);
+    CHECK(arguments.at(0).value<QModelIndex>().row() == 1);
+    CHECK(arguments.at(1).value<QModelIndex>().row() == 1);
+    CHECK(arguments.at(2).value<QList<int>>() == QList<int>{cwRecentProjectModel::LastOpenedRole});
+
+    REQUIRE(model.rowCount() == 2);
+    const QDateTime newStamp = lastOpenedAt(model, 1);
+    CHECK(newStamp > kOldStamp);
+    CHECK(isNearNow(newStamp));
+    CHECK(lastOpenedAt(model, 0).toUTC() == kOldStamp);
+
+    cwRecentProjectModel reloaded;
+    REQUIRE(reloaded.rowCount() == 2);
+    CHECK(lastOpenedAt(reloaded, 1) == newStamp);
+    CHECK(lastOpenedAt(reloaded, 0).toUTC() == kOldStamp);
+}
+
+TEST_CASE("cwRecentProjectModel saving a listed project moves the stamp forward", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    auto rootData = std::make_unique<cwRootData>();
+    rootData->account()->setName(QStringLiteral("Test User"));
+    rootData->account()->setEmail(QStringLiteral("test@example.com"));
+    auto* model = rootData->recentProjectModel();
+    auto* project = rootData->project();
+
+    QTemporaryDir saveRoot;
+    REQUIRE(saveRoot.isValid());
+
+    QSignalSpy fileSavedSpy(project, &cwProject::fileSaved);
+    const auto waitForFileSaved = [&]() {
+        project->waitSaveToFinish();
+        rootData->futureManagerModel()->waitForFinished();
+        if (fileSavedSpy.isEmpty()) {
+            fileSavedSpy.wait(kFileSavedTimeoutMs);
+        }
+        REQUIRE(fileSavedSpy.count() == 1);
+        fileSavedSpy.clear();
+    };
+
+    REQUIRE(project->saveAs(saveRoot.filePath(QStringLiteral("Saved.cw"))));
+    waitForFileSaved();
+    REQUIRE(project->errorModel()->count() == 0);
+
+    REQUIRE(model->rowCount() == 1);
+    const QDateTime firstStamp = lastOpenedAt(*model, 0);
+    CHECK(isNearNow(firstStamp));
+
+    waitForClockToPass(firstStamp);
+
+    REQUIRE(project->save());
+    waitForFileSaved();
+    REQUIRE(project->errorModel()->count() == 0);
+
+    REQUIRE(model->rowCount() == 1);
+    CHECK(lastOpenedAt(*model, 0) > firstStamp);
+}
+
+TEST_CASE("cwRecentProjectModel loading a listed project moves the stamp forward", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    const QString projectPath = copyToTempFolder(testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw"));
+    REQUIRE(QFileInfo::exists(projectPath));
+    seedSettings({projectPath}, {{projectPath, kOldStamp}});
+
+    auto rootData = std::make_unique<cwRootData>();
+    auto* model = rootData->recentProjectModel();
+    auto* project = rootData->project();
+    REQUIRE(model->rowCount() == 1);
+    CHECK(lastOpenedAt(*model, 0).toUTC() == kOldStamp);
+
+    rootData->loadProject(QUrl::fromLocalFile(projectPath).toString());
+    project->waitLoadToFinish();
+    rootData->futureManagerModel()->waitForFinished();
+    project->waitSaveToFinish();
+    REQUIRE(project->errorModel()->count() == 0);
+
+    REQUIRE(model->rowCount() == 1);
+    CHECK(model->data(model->index(0, 0), cwRecentProjectModel::PathRole).toString() == projectPath);
+    const QDateTime loadedStamp = lastOpenedAt(*model, 0);
+    CHECK(loadedStamp > kOldStamp);
+    CHECK(isNearNow(loadedStamp));
+}
+
+TEST_CASE("cwRecentProjectModel loads settings without stamps as invalid", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    const QString firstPath = createEmptyProjectFile(tmpDir, QStringLiteral("First.cw"));
+    const QString secondPath = createEmptyProjectFile(tmpDir, QStringLiteral("Second.cwproj"));
+    seedSettings({firstPath, secondPath}, {});
+
+    cwRecentProjectModel model;
+    REQUIRE(model.rowCount() == 2);
+    CHECK_FALSE(lastOpenedAt(model, 0).isValid());
+    CHECK_FALSE(lastOpenedAt(model, 1).isValid());
+    CHECK(model.data(model.index(0, 0), cwRecentProjectModel::PathRole).toString() == firstPath);
+    CHECK(model.data(model.index(1, 0), cwRecentProjectModel::PathRole).toString() == secondPath);
+}
+
+TEST_CASE("cwRecentProjectModel loadSettings prunes missing paths from the stamp map", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    const QString keepPath = createEmptyProjectFile(tmpDir, QStringLiteral("Keep.cw"));
+    const QString missingPath = QFileInfo(tmpDir.filePath(QStringLiteral("Missing.cw"))).absoluteFilePath();
+    REQUIRE_FALSE(QFileInfo::exists(missingPath));
+    seedSettings({keepPath, missingPath}, {{keepPath, kOldStamp}, {missingPath, kOldStamp}});
+
+    cwRecentProjectModel model;
+    REQUIRE(model.rowCount() == 1);
+    CHECK(lastOpenedAt(model, 0).toUTC() == kOldStamp);
+
+    QSettings reread;
+    CHECK(reread.value(QStringLiteral("repositories")).toStringList() == QStringList{keepPath});
+    const QVariantMap stampMap = reread.value(QStringLiteral("repositoryLastOpened")).toMap();
+    CHECK(stampMap.size() == 1);
+    CHECK(stampMap.contains(keepPath));
+    CHECK_FALSE(stampMap.contains(missingPath));
+    CHECK(stampMap.value(keepPath).toDateTime().toUTC() == kOldStamp);
 }

@@ -10,10 +10,6 @@ Item {
     function handleSelectedFile(path) {
         RootData.lastDirectory = path
         RootData.loadProject(path);
-        const repoResult = RootData.recentProjectModel.addRepositoryFromProjectFile(path);
-        if (repoResult.hasError) {
-            console.warn("Failed to add to recent list:", repoResult.errorMessage);
-        }
     }
 
     function runLoadForTest(path) {

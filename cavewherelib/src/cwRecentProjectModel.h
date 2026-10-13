@@ -5,6 +5,7 @@
 
 //Qt
 #include <QAbstractListModel>
+#include <QDateTime>
 #include <QFileInfo>
 #include <QPropertyBinding>
 #include <QQmlEngine>
@@ -27,7 +28,8 @@ class CAVEWHERE_LIB_EXPORT cwRecentProjectModel : public QAbstractListModel
 public:
     enum RepositoryRoles {
         PathRole = Qt::UserRole + 1,
-        NameRole
+        NameRole,
+        LastOpenedRole
     };
     Q_ENUM(RepositoryRoles)
 
@@ -53,6 +55,7 @@ public:
     Q_INVOKABLE Monad::ResultBase addRepositoryDirectory(const QDir& dir);
     Q_INVOKABLE Monad::ResultString repositoryProjectFile(int index) const;
     Q_INVOKABLE Monad::ResultBase addRepositoryFromProjectFile(const QUrl& projectFileUrl);
+    Q_INVOKABLE Monad::ResultBase recordProjectOpened(const QUrl& projectFileUrl);
 
     Q_INVOKABLE void clear();
     void setProject(cwProject* project);
@@ -63,6 +66,7 @@ signals:
 private:
     struct RepositoryEntry {
         QString projectPath;
+        QDateTime lastOpened; // UTC; invalid when the entry predates stamping
     };
 
     void loadSettings();
@@ -74,5 +78,6 @@ private:
     QPropertyNotifier m_defaultRepositoryDirNotifier;
 
     static constexpr char SettingsKey[] = "repositories";
+    static constexpr char LastOpenedKey[] = "repositoryLastOpened";
     static constexpr char DefaultDirKey[] = "defaultRepositoryDir";
 };
