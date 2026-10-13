@@ -608,8 +608,12 @@ bool isAlongLeg(const QVector3D& direction, const QVector<QVector3D>& legDirecti
     });
 }
 
-// Whether a triangle lies within tolerance of point.
-bool isNearSurface(const QVector<Triangle>& triangles, const TriangleGrid& grid, const Vec& point, double tolerance)
+constexpr auto kEveryTriangle = [](const Triangle&) { return true; };
+
+// Whether a triangle that counts lies within tolerance of point.
+template<typename Counts = decltype(kEveryTriangle)>
+bool isNearSurface(const QVector<Triangle>& triangles, const TriangleGrid& grid, const Vec& point, double tolerance,
+                   Counts counts = kEveryTriangle)
 {
     const Vec reach(tolerance, tolerance, tolerance);
     const Box query {point - reach, point + reach};
@@ -621,7 +625,7 @@ bool isNearSurface(const QVector<Triangle>& triangles, const TriangleGrid& grid,
         const QVector<int> inCell = grid.cells().value(cell);
         found = std::any_of(inCell.cbegin(), inCell.cend(), [&](int t) {
             const Triangle& triangle = triangles.at(t);
-            return triangle.box.overlaps(query) && (closestPoint(point, triangle) - point).length() <= tolerance;
+            return counts(triangle) && triangle.box.overlaps(query) && (closestPoint(point, triangle) - point).length() <= tolerance;
         });
     });
     return found;
@@ -641,7 +645,9 @@ public:
     {
     }
 
-    int winding(const Vec& origin, const Vec& direction)
+    // Counts only the triangles counts accepts.
+    template<typename Counts = decltype(kEveryTriangle)>
+    int winding(const Vec& origin, const Vec& direction, Counts counts = kEveryTriangle)
     {
         ++m_stamp;
         const Vec unit = direction * (1.0 / direction.length());
@@ -662,7 +668,7 @@ public:
                     }
                     m_visited[t] = m_stamp;
                     const Triangle& triangle = m_triangles.at(t);
-                    if (rayCrosses(origin, unit, triangle)) {
+                    if (counts(triangle) && rayCrosses(origin, unit, triangle)) {
                         winding += Vec::dot(triangle.normal(), unit) > 0.0 ? 1 : -1;
                     }
                 }
@@ -694,7 +700,76 @@ private:
     int m_stamp = 0;
 };
 
+Box boundsOf(const QVector<Triangle>& triangles)
+{
+    Box bounds = triangles.first().box;
+    for (const Triangle& triangle : triangles) {
+        bounds = Box {Vec::min(bounds.lo, triangle.box.lo), Vec::max(bounds.hi, triangle.box.hi)};
+    }
+    return bounds;
+}
+
+// The rays of an inside vote: along +x, +y and +z, each tilted as kRayTiltY
+// and kRayTiltZ tilt +x.
+const std::array<Vec, kCenterlineRayCount> kInsideRayDirections {Vec(1.0, kRayTiltY, kRayTiltZ),
+                                                                 Vec(kRayTiltZ, 1.0, kRayTiltY),
+                                                                 Vec(kRayTiltY, kRayTiltZ, 1.0)};
+
+// Whether most of the inside vote's rays find point inside the triangles
+// counts accepts.
+template<typename Counts>
+bool isInsideByVote(WindingRay& ray, const Vec& point, Counts counts)
+{
+    const auto votes = std::count_if(kInsideRayDirections.cbegin(), kInsideRayDirections.cend(), [&](const Vec& direction) {
+        return ray.winding(point, direction, counts) > 0;
+    });
+    return votes >= kCenterlineInsideVotes;
+}
+
+// count points spread over the triangles by area, each placed by a
+// low-discrepancy sequence inside its triangle.
+QVector<Vec> spreadPoints(const QVector<Triangle>& triangles, int count)
+{
+    constexpr double kGoldenStep = std::numbers::phi - 1.0;
+    constexpr double kSilverStep = std::numbers::sqrt2 - 1.0;
+    QVector<double> cumulativeArea;
+    cumulativeArea.reserve(triangles.size());
+    double total = 0.0;
+    for (const Triangle& triangle : triangles) {
+        total += triangle.normal().length() / 2.0;
+        cumulativeArea.append(total);
+    }
+    QVector<Vec> points;
+    if (total <= 0.0) {
+        return points;
+    }
+    points.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        const double target = (i + 0.5) / count * total;
+        const auto found = std::lower_bound(cumulativeArea.cbegin(), cumulativeArea.cend(), target);
+        const Triangle& triangle = triangles.at(std::min(static_cast<int>(found - cumulativeArea.cbegin()), static_cast<int>(triangles.size()) - 1));
+        double u = std::fmod((i + 1) * kGoldenStep, 1.0);
+        double v = std::fmod((i + 1) * kSilverStep, 1.0);
+        if (u + v > 1.0) {
+            u = 1.0 - u;
+            v = 1.0 - v;
+        }
+        const Vec& a = triangle.points[0];
+        points.append(a + (triangle.points[1] - a) * u + (triangle.points[2] - a) * v);
+    }
+    return points;
+}
+
 } // namespace
+
+cwPassageTubeMeshCheck::Range cwPassageTubeMeshCheck::allTripsVisible(const cwPassageTubeMesh& mesh)
+{
+    int count = static_cast<int>(mesh.indices.size());
+    for (const cwPassageTubeMesh::TripBoundary& boundary : mesh.tripBoundaryRanges) {
+        count = std::min(count, boundary.range.first);
+    }
+    return Range {0, count};
+}
 
 cwPassageTubeMeshCheck::Range cwPassageTubeMeshCheck::wholeMesh(const cwPassageTubeMesh& mesh)
 {
@@ -1029,7 +1104,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const 
 QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                                                               const Options& options)
 {
-    const QVector<Triangle> triangles = trianglesOf(debug.mesh, wholeMesh(debug.mesh));
+    const QVector<Triangle> triangles = trianglesOf(debug.mesh, allTripsVisible(debug.mesh));
     const TriangleGrid grid(triangles);
     const auto isOnSurface = [&](const Vec& point) {
         return isNearSurface(triangles, grid, point, options.wallToleranceMeters);
@@ -1126,27 +1201,14 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::centerlineInside(
                                                                                 const cwPassageTubeBuilder::Debug& debug,
                                                                                 const Options& options)
 {
-    const QVector<Triangle> triangles = trianglesOf(mesh, wholeMesh(mesh));
+    const QVector<Triangle> triangles = trianglesOf(mesh, allTripsVisible(mesh));
     if (triangles.isEmpty()) {
         return {};
     }
     const TriangleGrid grid(triangles);
-    Box bounds = triangles.first().box;
-    for (const Triangle& triangle : triangles) {
-        bounds = Box {Vec::min(bounds.lo, triangle.box.lo), Vec::max(bounds.hi, triangle.box.hi)};
-    }
-    WindingRay ray(triangles, grid, bounds);
-    const std::array<Vec, kCenterlineRayCount> directions {Vec(1.0, kRayTiltY, kRayTiltZ),
-                                                           Vec(kRayTiltZ, 1.0, kRayTiltY),
-                                                           Vec(kRayTiltY, kRayTiltZ, 1.0)};
+    WindingRay ray(triangles, grid, boundsOf(triangles));
     const auto isInside = [&](const Vec& point) {
-        if (isNearSurface(triangles, grid, point, options.wallToleranceMeters)) {
-            return true;
-        }
-        const auto votes = std::count_if(directions.cbegin(), directions.cend(), [&](const Vec& direction) {
-            return ray.winding(point, direction) > 0;
-        });
-        return votes >= kCenterlineInsideVotes;
+        return isNearSurface(triangles, grid, point, options.wallToleranceMeters) || isInsideByVote(ray, point, kEveryTriangle);
     };
 
     QVector<Issue> issues;
@@ -1180,24 +1242,95 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::centerlineInside(
     return issues;
 }
 
+QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::capsExposed(const cwPassageTubeMesh& mesh,
+                                                                           const cwPassageTubeBuilder::Debug& debug)
+{
+    const QVector<Triangle> triangles = trianglesOf(mesh, allTripsVisible(mesh));
+    if (triangles.isEmpty()) {
+        return {};
+    }
+
+    QVector<QVector<int>> capTriangles(debug.caps.size());
+    for (int t = 0; t < triangles.size(); ++t) {
+        const int cap = debug.triangleCap.value(triangles.at(t).number, -1);
+        if (cap >= 0) {
+            capTriangles[cap].append(t);
+        }
+    }
+
+    using StationKey = std::pair<QUuid, QString>;
+    QHash<StationKey, int> legCount;
+    for (const cwPassageTubeBuilder::Leg& leg : debug.legs) {
+        ++legCount[{leg.caveId, cwStation::canonicalKey(leg.from)}];
+        ++legCount[{leg.caveId, cwStation::canonicalKey(leg.to)}];
+    }
+
+    const TriangleGrid grid(triangles);
+    WindingRay ray(triangles, grid, boundsOf(triangles));
+    const auto chainOf = [&](const Triangle& triangle) {
+        return debug.triangleChain.value(triangle.number, kNoChain);
+    };
+
+    QHash<QVector<quint32>, int> capByVertices;
+    QVector<Issue> issues;
+    for (int c = 0; c < capTriangles.size(); ++c) {
+        const QVector<int>& inCap = capTriangles.at(c);
+        const cwPassageTubeBuilder::Cap& cap = debug.caps.at(c);
+        if (inCap.isEmpty() || legCount.value({cap.caveId, cwStation::canonicalKey(cap.station)}) < 2) {
+            continue;
+        }
+
+        QVector<Triangle> disc;
+        disc.reserve(inCap.size());
+        QSet<quint32> vertexSet;
+        for (int t : inCap) {
+            disc.append(triangles.at(t));
+            for (quint32 vertex : triangles.at(t).vertices) {
+                vertexSet.insert(vertex);
+            }
+        }
+        QVector<quint32> vertices(vertexSet.cbegin(), vertexSet.cend());
+        std::sort(vertices.begin(), vertices.end());
+        const Vec center = disc.first().centroid();
+
+        const auto coinciding = capByVertices.constFind(vertices);
+        if (coinciding != capByVertices.constEnd()) {
+            issues.append(Issue {CapExposed, center.toQVector3D(),
+                                 QStringLiteral("the cap at station %1 of chain %2 coincides with cap %3")
+                                     .arg(cap.station).arg(cap.chain).arg(coinciding.value()),
+                                 disc.first().number});
+            continue;
+        }
+        capByVertices.insert(vertices, c);
+
+        const auto isOtherChain = [&](const Triangle& triangle) {
+            return chainOf(triangle) != cap.chain;
+        };
+        const QVector<Vec> samples = spreadPoints(disc, kCapSamples);
+        const auto exposed = std::count_if(samples.cbegin(), samples.cend(), [&](const Vec& point) {
+            return !isNearSurface(triangles, grid, point, kCapSurfaceTolerance, isOtherChain)
+                   && !isInsideByVote(ray, point, isOtherChain);
+        });
+        if (exposed > 0) {
+            issues.append(Issue {CapExposed, center.toQVector3D(),
+                                 QStringLiteral("%1 of %2 points of the cap at station %3 of chain %4 lie outside the other passages")
+                                     .arg(exposed).arg(samples.size()).arg(cap.station).arg(cap.chain),
+                                 disc.first().number});
+        }
+    }
+    return issues;
+}
+
 cwPassageTubeMeshCheck::Report cwPassageTubeMeshCheck::check(const cwPassageTubeMesh& mesh,
                                                              const cwPassageTubeBuilder::Debug& debug,
                                                              const Options& options)
 {
-    Report report;
-    const Range whole = wholeMesh(mesh);
-    const QVector<Range> ranges = mesh.tripIndexRanges.isEmpty() ? QVector<Range> {whole} : mesh.tripIndexRanges;
-    for (const Range& range : ranges) {
-        const Report closedReport = closed(mesh, range);
-        report.issues.append(closedReport.issues);
-        report.componentCount += closedReport.componentCount;
-        report.components.append(closedReport.components);
-        report.issues.append(creases(mesh, range, debug.intendedCreaseVertices, options));
-    }
+    const Range visible = allTripsVisible(mesh);
+    Report report = closed(mesh, visible);
+    report.issues.append(creases(mesh, visible, debug.intendedCreaseVertices, options));
+    report.issues.append(degenerateTriangles(mesh, visible, options));
 
-    report.issues.append(degenerateTriangles(mesh, whole, options));
-
-    const QVector<Issue> crossings = selfIntersections(mesh, whole, debug);
+    const QVector<Issue> crossings = selfIntersections(mesh, visible, debug);
     for (const Issue& crossing : crossings) {
         if (crossing.type == PassageOverlap) {
             report.warnings.append(crossing);
@@ -1205,12 +1338,13 @@ cwPassageTubeMeshCheck::Report cwPassageTubeMeshCheck::check(const cwPassageTube
             report.issues.append(crossing);
         }
     }
-    report.issues.append(nestedShells(mesh, whole, crossings));
+    report.issues.append(nestedShells(mesh, visible, crossings));
 
     if (!debug.chains.isEmpty()) {
         report.issues.append(ringIssues(debug, options));
         report.issues.append(wallsOnSurface(debug, options));
         report.issues.append(centerlineInside(mesh, debug, options));
+        report.issues.append(capsExposed(mesh, debug));
     }
     return report;
 }
@@ -1248,6 +1382,8 @@ QString cwPassageTubeMeshCheck::typeName(Type type)
         return QStringLiteral("WallMissed");
     case CenterlineOutside:
         return QStringLiteral("CenterlineOutside");
+    case CapExposed:
+        return QStringLiteral("CapExposed");
     }
     return QString();
 }

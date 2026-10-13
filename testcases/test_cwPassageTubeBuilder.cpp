@@ -135,14 +135,13 @@ void checkFramesOrthonormal(const Builder::Chain& chain)
     }
 }
 
-// Each trip's tube is closed, consistently wound and outward facing.
+// The tube drawn with every trip visible is closed, consistently wound and
+// outward facing.
 void checkMeshClosed(const cwPassageTubeMesh& mesh)
 {
-    for (const cwPassageTubeMesh::VertexRange& range : mesh.tripIndexRanges) {
-        const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::closed(mesh, range);
-        INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
-        CHECK(report.issues.isEmpty());
-    }
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::closed(mesh, cwPassageTubeMeshCheck::allTripsVisible(mesh));
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
 }
 
 // The tube is closed and its rings neither twist, fold back nor jump.
@@ -1479,7 +1478,7 @@ const cwPassageTubeCases::Case& catalogCase(const QString& name)
 
 Builder::Debug buildCase(const cwPassageTubeCases::Case& entry)
 {
-    const BuilderInput input = makeInput(entry.trip);
+    const BuilderInput input = cwPassageTubeCases::toSurvey(entry);
     Builder::Options options;
     options.sampleSpacingMeters = entry.sampleSpacing;
     return Builder::buildDebug(input.region, input.positionsByCave, {}, options);
@@ -1625,9 +1624,10 @@ TEST_CASE("cwPassageTubeBuilder breaks a chain at a hairpin", "[PassageTube][cwP
     for (const Builder::Chain& chain : debug.chains) {
         const QStringList stations = chainStations(debug, chain);
         INFO(stations.join(QStringLiteral(" ")).toStdString());
-        CHECK((stations.first() == QStringLiteral("b") || stations.last() == QStringLiteral("b")));
-        CHECK(chain.startCap == Builder::EndCap::Fan);
-        CHECK(chain.endCap == Builder::EndCap::Fan);
+        const bool startsAtHairpin = stations.first() == QStringLiteral("b");
+        CHECK((startsAtHairpin || stations.last() == QStringLiteral("b")));
+        CHECK(chain.startCap == (startsAtHairpin ? Builder::EndCap::Dome : Builder::EndCap::Fan));
+        CHECK(chain.endCap == (startsAtHairpin ? Builder::EndCap::Fan : Builder::EndCap::Dome));
     }
 
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
@@ -1705,15 +1705,81 @@ TEST_CASE("cwPassageTubeBuilder merges an arm into a junction without readings",
     checkMeshClean(debug);
 }
 
-TEST_CASE("cwPassageTubeBuilder caps each trip of a chain that spans two trips", "[PassageTube][cwPassageTubeBuilder]")
+namespace {
+
+// The mesh drawn while only running trip trip is visible: its triangles and
+// the boundary discs that close it against the hidden trips.
+cwPassageTubeMesh tripAlone(const cwPassageTubeMesh& mesh, int trip)
 {
+    cwPassageTubeMesh alone;
+    alone.positions = mesh.positions;
+    const auto append = [&](const cwPassageTubeMesh::VertexRange& range) {
+        alone.indices.append(mesh.indices.mid(range.first, range.count));
+    };
+    append(mesh.tripIndexRanges.at(trip));
+    for (const cwPassageTubeMesh::TripBoundary& boundary : mesh.tripBoundaryRanges) {
+        if (boundary.trip == trip) {
+            append(boundary.range);
+        }
+    }
+    return alone;
+}
+
+void checkNoCapExposed(const Builder::Debug& debug)
+{
+    const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::capsExposed(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText({issues, 0, {}}).toStdString());
+    CHECK(issues.isEmpty());
+}
+
+void checkCenterlineInside(const Builder::Debug& debug)
+{
+    const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::centerlineInside(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText({issues, 0, {}}).toStdString());
+    CHECK(issues.isEmpty());
+}
+
+// The stations of the caps drawn with every trip visible, sorted.
+QStringList visibleCapStations(const Builder::Debug& debug)
+{
+    const cwPassageTubeMesh::VertexRange visible = cwPassageTubeMeshCheck::allTripsVisible(debug.mesh);
+    QSet<int> caps;
+    for (int triangle = visible.first / 3; triangle < (visible.first + visible.count) / 3; ++triangle) {
+        if (debug.triangleCap.at(triangle) >= 0) {
+            caps.insert(debug.triangleCap.at(triangle));
+        }
+    }
+    QStringList stations;
+    for (int cap : std::as_const(caps)) {
+        stations.append(debug.caps.at(cap).station);
+    }
+    stations.sort();
+    return stations;
+}
+
+// The direction plan degrees counter-clockwise from +x.
+QVector3D planDirection(double degrees)
+{
+    return QVector3D(static_cast<float>(std::cos(qDegreesToRadians(degrees))),
+                     static_cast<float>(std::sin(qDegreesToRadians(degrees))),
+                     0.0f);
+}
+
+} // namespace
+
+// a–b–c along +x, a→b in the first trip and b→c in the second. The second
+// trip reads b as wide as the first, or twice as wide.
+TEST_CASE("cwPassageTubeBuilder continues a passage across a trip boundary without a cap", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const double secondTripScale = GENERATE(1.0, 2.0);
+    INFO("second trip reads b x" << secondTripScale);
     const QStringList dimensions = lrud(1, 1, 1, 1);
     const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions};
     const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions};
+    const StationInput bSecond {QStringLiteral("b"), QVector3D(10, 0, 0),
+                                lrud(secondTripScale, secondTripScale, secondTripScale, secondTripScale)};
     const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), dimensions};
-    const SurveyInput first {{{a, b}}};
-    const SurveyInput second {{{b, c}}};
-    const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {first, second});
+    const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {{{{a, b}}}, {{{bSecond, c}}}});
 
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 1);
@@ -1729,7 +1795,226 @@ TEST_CASE("cwPassageTubeBuilder caps each trip of a chain that spans two trips",
         CHECK(range.count > 0);
         next = range.first + range.count;
     }
+    CHECK(cwPassageTubeMeshCheck::allTripsVisible(mesh).count == next);
+
+    REQUIRE(mesh.tripBoundaryRanges.size() == 2);
+    for (const cwPassageTubeMesh::TripBoundary& boundary : mesh.tripBoundaryRanges) {
+        CHECK(boundary.range.first == next);
+        CHECK(boundary.range.count > 0);
+        CHECK(boundary.trip + boundary.neighborTrip == 1);
+        next = boundary.range.first + boundary.range.count;
+    }
     CHECK(next == mesh.indices.size());
+
+    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("c")}));
+    checkNoCapExposed(debug);
+    checkCenterlineInside(debug);
+    checkMeshClosed(mesh);
+    for (int trip = 0; trip < mesh.tripIndexRanges.size(); ++trip) {
+        INFO("trip " << trip << " alone");
+        const cwPassageTubeMesh alone = tripAlone(mesh, trip);
+        const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::closed(alone, cwPassageTubeMeshCheck::wholeMesh(alone));
+        INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+        CHECK(report.issues.isEmpty());
+    }
+    if (secondTripScale == 1.0) {
+        checkMeshClean(debug);
+    }
+}
+
+// The passage a–b–c of the two-trip test above, with b's 2 m walls, and a
+// third trip's arm from d, north of b, joining at b: the window around b
+// removes side quads on both sides of b's ring.
+TEST_CASE("cwPassageTubeBuilder hides a trip boundary disc inside a junction window", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList junctionDimensions = lrud(2, 2, 2, 2);
+    const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0)};
+    const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0), junctionDimensions};
+    const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0)};
+    const StationInput d {QStringLiteral("d"), QVector3D(10, 10, 0)};
+    const StationInput armB {QStringLiteral("b"), QVector3D(10, 0, 0)};
+    const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {{{{a, b}}}, {{{b, c}}}, {{{d, armB}}}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 2);
+    REQUIRE(debug.chains.at(0).windows.size() == 1);
+    CHECK(debug.chains.at(1).endCap == Builder::EndCap::Mouth);
+    REQUIRE(debug.mesh.tripBoundaryRanges.size() == 2);
+
+    constexpr float kPositionTolerance = 1e-4f;
+    // Each trip's disc at b leaves out the ring vertices whose side quads on
+    // that trip's side the window removed on both neighboring columns.
+    const Builder::Chain& through = debug.chains.at(0);
+    const auto atB = std::min_element(through.rings.cbegin(), through.rings.cend(), [&](const Builder::Ring& x, const Builder::Ring& y) {
+        return x.center.distanceToPoint(*b.position) < y.center.distanceToPoint(*b.position);
+    });
+    const int ringAtB = static_cast<int>(atB - through.rings.cbegin());
+    REQUIRE(ringAtB > 0);
+    const QSet<QPair<int, int>>& removedQuads = through.windows.first().removedQuads;
+    const QUuid firstTripId = input.region.caves.at(0).trips.at(0).id;
+    const int resolution = static_cast<int>(atB->vertices.size());
+    int clippedVertices = 0;
+    for (const cwPassageTubeMesh::TripBoundary& boundary : debug.mesh.tripBoundaryRanges) {
+        const bool isFirstTrip = debug.mesh.tripUuids.at(boundary.trip) == firstTripId;
+        const int quadRing = isFirstTrip ? ringAtB - 1 : ringAtB;
+        INFO("disc of trip " << boundary.trip << " against quads of ring " << quadRing);
+        QVector<QVector3D> discPositions;
+        for (int i = boundary.range.first; i < boundary.range.first + boundary.range.count; ++i) {
+            discPositions.append(debug.mesh.positions.at(debug.mesh.indices.at(i)));
+        }
+        for (int k = 0; k < resolution; ++k) {
+            const int previousColumn = (k + resolution - 1) % resolution;
+            if (removedQuads.contains({quadRing, previousColumn}) && removedQuads.contains({quadRing, k})) {
+                ++clippedVertices;
+                const QVector3D& vertex = atB->vertices.at(k);
+                CHECK(std::none_of(discPositions.cbegin(), discPositions.cend(), [&](const QVector3D& position) {
+                    return position.distanceToPoint(vertex) < kPositionTolerance;
+                }));
+            }
+        }
+    }
+    CHECK(clippedVertices > 0);
+
+    CHECK_FALSE(visibleCapStations(debug).contains(QStringLiteral("b")));
+    checkNoCapExposed(debug);
+    checkMeshClean(debug);
+}
+
+// Trip 1 runs a→b→c east; trip 2 ties in at c and turns 150° in plan back
+// beside b–c with the same readings.
+TEST_CASE("cwPassageTubeBuilder covers a hairpin tie-in", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kHairpinDegrees = 150.0;
+    constexpr float kLegMeters = 10.0f;
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const QVector3D tieIn(2 * kLegMeters, 0, 0);
+    const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions};
+    const StationInput b {QStringLiteral("b"), QVector3D(kLegMeters, 0, 0), dimensions};
+    const StationInput c {QStringLiteral("c"), tieIn, dimensions};
+    const StationInput d {QStringLiteral("d"), tieIn + planDirection(kHairpinDegrees) * kLegMeters, dimensions};
+    const Builder::Debug debug = buildDebug(cwPassageTubeCases::toSurvey(QList<SurveyInput> {{{{a, b, c}}}, {{{c, d}}}}));
+
+    REQUIRE(debug.chains.size() == 2);
+    checkChainsCoverLegs(debug);
+    for (const Builder::Chain& chain : debug.chains) {
+        const QStringList stations = chainStations(debug, chain);
+        INFO(stations.join(QStringLiteral(" ")).toStdString());
+        const bool endsAtTieIn = stations.last() == QStringLiteral("c");
+        REQUIRE((endsAtTieIn || stations.first() == QStringLiteral("c")));
+        CHECK((endsAtTieIn ? chain.endCap : chain.startCap) == Builder::EndCap::Dome);
+
+        // The ring that closes the dome lies past c along the leg reaching c.
+        const Builder::Ring& endRing = endsAtTieIn ? chain.rings.last() : chain.rings.first();
+        const QVector3D towardTieIn = endsAtTieIn ? endRing.frame.tangent : -endRing.frame.tangent;
+        CHECK(QVector3D::dotProduct(endRing.center - tieIn, towardTieIn) > 0.5f);
+    }
+
+    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("d")}));
+    checkNoCapExposed(debug);
+    checkCenterlineInside(debug);
+    checkMeshClean(debug);
+}
+
+// A Y at J whose three 12 m arms end at K0, K1 and K2. A straight passage
+// crosses each K between two dead ends, so the walks from those dead ends
+// pass every K before J's own seed. The arms come first in the survey, so J
+// seeds before the Ks.
+TEST_CASE("cwPassageTubeBuilder chains through a junction no walk reaches first", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr float kArmMeters = 12.0f;
+    constexpr float kCrossingMeters = 6.0f;
+    constexpr double kArmDegrees[] = {90.0, 210.0, 330.0};
+    constexpr double kRightAngleDegrees = 90.0;
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const StationInput junction {QStringLiteral("J"), QVector3D(0, 0, 0), dimensions};
+
+    QList<QList<StationInput>> arms;
+    QList<QList<StationInput>> crossings;
+    for (int i = 0; i < 3; ++i) {
+        const QVector3D far = planDirection(kArmDegrees[i]) * kArmMeters;
+        const QVector3D across = planDirection(kArmDegrees[i] + kRightAngleDegrees) * kCrossingMeters;
+        const StationInput k {QStringLiteral("K%1").arg(i), far, dimensions};
+        arms.append({junction, k});
+        crossings.append({{QStringLiteral("L%1").arg(i), far - across, dimensions}, k, {QStringLiteral("R%1").arg(i), far + across, dimensions}});
+    }
+    const Builder::Debug debug = buildDebug(makeInput({arms + crossings}));
+
+    checkChainsCoverLegs(debug);
+    int passing = 0;
+    int endingAtJunction = 0;
+    for (const Builder::Chain& chain : debug.chains) {
+        const QStringList stations = chainStations(debug, chain);
+        INFO(stations.join(QStringLiteral(" ")).toStdString());
+        if (stations.mid(1, stations.size() - 2).contains(QStringLiteral("J"))) {
+            ++passing;
+        }
+        if (stations.first() == QStringLiteral("J")) {
+            ++endingAtJunction;
+            CHECK(chain.startCap == Builder::EndCap::Mouth);
+            CHECK_FALSE(chain.startMouth.isEmpty());
+        }
+        if (stations.last() == QStringLiteral("J")) {
+            ++endingAtJunction;
+            CHECK(chain.endCap == Builder::EndCap::Mouth);
+            CHECK_FALSE(chain.endMouth.isEmpty());
+        }
+    }
+    CHECK(passing == 1);
+    CHECK(endingAtJunction == 1);
+    CHECK_FALSE(visibleCapStations(debug).contains(QStringLiteral("J")));
+    checkNoCapExposed(debug);
+    checkCenterlineInside(debug);
+}
+
+// Trip 1 runs a→b→c and trip 2 b→c→d along +x, reading b and c 5 % wider.
+TEST_CASE("cwPassageTubeBuilder treats a re-shot tie-in as one leg", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kResurveyScale = 1.05;
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const QStringList resurveyed = lrud(kResurveyScale, kResurveyScale, kResurveyScale, kResurveyScale);
+    const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions};
+    const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions};
+    const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), dimensions};
+    const StationInput bAgain {QStringLiteral("b"), QVector3D(10, 0, 0), resurveyed};
+    const StationInput cAgain {QStringLiteral("c"), QVector3D(20, 0, 0), resurveyed};
+    const StationInput d {QStringLiteral("d"), QVector3D(30, 0, 0), dimensions};
+    const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {{{{a, b, c}}}, {{{bAgain, cAgain, d}}}});
+    const Builder::Debug debug = buildDebug(input);
+
+    CHECK(debug.legs.size() == 3);
+    REQUIRE(debug.chains.size() == 1);
+    CHECK(debug.chains.at(0).legs.size() == 3);
+    checkChainsCoverLegs(debug);
+    CHECK(debug.chains.at(0).windows.isEmpty());
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionOverlap) == 0);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::RepeatedShot) == 1);
+
+    const auto resurveyedLeg = std::find_if(debug.legs.cbegin(), debug.legs.cend(), [](const Builder::Leg& leg) {
+        return leg.from == QStringLiteral("b") && leg.to == QStringLiteral("c");
+    });
+    REQUIRE(resurveyedLeg != debug.legs.cend());
+    CHECK(resurveyedLeg->tripId == input.region.caves.at(0).trips.at(0).id);
+    CHECK(*resurveyedLeg->fromLrud.left == Catch::Approx((1.0 + kResurveyScale) / 2.0));
+
+    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("d")}));
+    checkNoCapExposed(debug);
+    checkMeshClean(debug);
+}
+
+TEST_CASE("cwPassageTubeBuilder keeps a cap at a true dead end", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const Builder::Debug debug = buildDebug(makeInput({{{
+        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
+        {QStringLiteral("b"), QVector3D(10, 0, 0), dimensions},
+        {QStringLiteral("c"), QVector3D(20, 0, 0), dimensions},
+    }}}));
+    REQUIRE(debug.chains.size() == 1);
+    CHECK(debug.chains.at(0).startCap == Builder::EndCap::Fan);
+    CHECK(debug.chains.at(0).endCap == Builder::EndCap::Fan);
+    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("c")}));
+    checkNoCapExposed(debug);
     checkMeshClean(debug);
 }
 

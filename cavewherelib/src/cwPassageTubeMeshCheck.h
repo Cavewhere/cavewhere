@@ -26,10 +26,10 @@
  *
  * Pure functions over value snapshots: callable from any thread.
  *
- * A range is a span of mesh.indices, three per triangle. Topology checks run
- * per trip range, since each trip closes its own tube; intersection checks
- * run over the whole mesh. Triangle numbers in an Issue count from the start
- * of mesh.indices.
+ * A range is a span of mesh.indices, three per triangle. check() looks at
+ * what a viewer sees with every trip visible: the trip ranges, without the
+ * trip boundary discs that draw only while a neighbor trip is hidden.
+ * Triangle numbers in an Issue count from the start of mesh.indices.
  */
 class CAVEWHERE_LIB_EXPORT cwPassageTubeMeshCheck
 {
@@ -44,6 +44,10 @@ public:
     static constexpr double kMaxRadiusRatio = 3.0;
     static constexpr double kWallTolerance = 0.15;
     static constexpr double kCenterlineSampleMeters = 0.25;
+    static constexpr int kCapSamples = 32;
+    // A cap point this close to another chain's surface lies on it: a hidden
+    // cone's base on its through passage's wall.
+    static constexpr double kCapSurfaceTolerance = 0.01;
 
     enum Type {
         OpenEdge,
@@ -60,7 +64,8 @@ public:
         FrameTwist,
         FoldBack,
         WallMissed,
-        CenterlineOutside
+        CenterlineOutside,
+        CapExposed
     };
 
     struct Issue {
@@ -108,6 +113,10 @@ public:
 
     static Range wholeMesh(const cwPassageTubeMesh& mesh);
 
+    // The triangles drawn while every trip is visible: all but the trip
+    // boundary discs.
+    static Range allTripsVisible(const cwPassageTubeMesh& mesh);
+
     // OpenEdge, InconsistentWinding, NonManifoldVertex, and NegativeVolume
     // for each closed, consistently wound component, with component stats.
     static Report closed(const cwPassageTubeMesh& mesh, const Range& range);
@@ -154,16 +163,24 @@ public:
                                          const Options& options = Options());
 
     // Both stations of every leg of a chain with rings, and points every
-    // kCenterlineSampleMeters along it, lie inside the mesh by a winding
-    // number vote of three skewed rays, or within wallToleranceMeters of a
-    // triangle. The legs of an arm left inside its through passage have no
-    // rings.
+    // kCenterlineSampleMeters along it, lie inside the triangles drawn while
+    // every trip is visible by a winding number vote of three skewed rays, or
+    // within wallToleranceMeters of one of them. The legs of an arm left
+    // inside its through passage have no rings.
     static QVector<Issue> centerlineInside(const cwPassageTubeMesh& mesh,
                                            const cwPassageTubeBuilder::Debug& debug,
                                            const Options& options = Options());
 
-    // Runs every check; the ring, wall and centerline checks run when debug
-    // has chains.
+    // Each disc in debug.caps drawn while every trip is visible, at a
+    // station with two or more legs, that shows: one of kCapSamples points
+    // spread over it lies outside the mesh of every other chain, or it
+    // coincides with another cap. A dead end's cap, and an arm's cone hidden
+    // inside its through passage, are what a viewer expects.
+    static QVector<Issue> capsExposed(const cwPassageTubeMesh& mesh,
+                                      const cwPassageTubeBuilder::Debug& debug);
+
+    // Runs every check over allTripsVisible; the ring, wall, centerline and
+    // cap checks run when debug has chains.
     // PassageOverlap goes to Report::warnings, every other kind to issues.
     static Report check(const cwPassageTubeMesh& mesh,
                         const cwPassageTubeBuilder::Debug& debug = cwPassageTubeBuilder::Debug(),

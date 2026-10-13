@@ -121,12 +121,16 @@ public:
         double sampleSpacing = 1.0;
     };
 
-    // One entry of the catalog, ready to build.
+    // One entry of the catalog, ready to build: trip, then laterTrips in
+    // survey order.
     struct Case {
         QString name;
         QStringList tags;
         Trip trip;
         double sampleSpacing = 1.0;
+        QList<Trip> laterTrips;
+
+        QList<Trip> trips() const { return QList<Trip> {trip} + laterTrips; }
     };
 
     static Trip toTrip(const JunctionCase& junctionCase);
@@ -136,6 +140,7 @@ public:
     static Survey toSurvey(const QList<Trip>& trips);
     static Survey toSurvey(const Trip& trip);
     static Survey toSurvey(const JunctionCase& junctionCase);
+    static Survey toSurvey(const Case& entry);
 
     // Phake Cave, trip "2025.2 Release", with its four chunks as the file
     // has them.
@@ -149,8 +154,8 @@ public:
     // are tagged crowded.
     static QVector<JunctionCase> sweepCases();
 
-    // The gallery cases, Phake Cave, the sweep, and the loops and sharp
-    // bends tagged arms:0.
+    // The gallery cases, Phake Cave, the sweep, and the loops, sharp bends
+    // and passages surveyed over several trips tagged arms:0.
     static QVector<Case> catalog();
 
     // A seeded cave tree with junctionCount three-way junctions, surveyed as

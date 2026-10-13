@@ -262,11 +262,18 @@ QString cwPassageTubeGalleryModel::parameters() const
     lines.append(QStringLiteral("tags: %1").arg(entry.tags.join(QStringLiteral(", "))));
     lines.append(QStringLiteral("sample spacing: %1 m").arg(entry.sampleSpacing));
     lines.append(QStringLiteral("junction: %1").arg(vectorText(m_junction)));
-    for (int chunk = 0; chunk < entry.trip.chunks.size(); ++chunk) {
-        lines.append(QStringLiteral("chunk %1 (LRUD):").arg(chunk));
-        for (const Cases::Station& station : entry.trip.chunks.at(chunk)) {
-            const QString position = station.position ? vectorText(*station.position) : QStringLiteral("unpositioned");
-            lines.append(QStringLiteral("  %1 %2  %3").arg(station.name, position, lrudText(station.lrud)));
+    const QList<Cases::Trip> trips = entry.trips();
+    for (int trip = 0; trip < trips.size(); ++trip) {
+        if (trips.size() > 1) {
+            lines.append(QStringLiteral("trip %1:").arg(trip));
+        }
+        const QList<QList<Cases::Station>>& chunks = trips.at(trip).chunks;
+        for (int chunk = 0; chunk < chunks.size(); ++chunk) {
+            lines.append(QStringLiteral("chunk %1 (LRUD):").arg(chunk));
+            for (const Cases::Station& station : chunks.at(chunk)) {
+                const QString position = station.position ? vectorText(*station.position) : QStringLiteral("unpositioned");
+                lines.append(QStringLiteral("  %1 %2  %3").arg(station.name, position, lrudText(station.lrud)));
+            }
         }
     }
     return lines.join(QLatin1Char('\n'));
@@ -351,7 +358,7 @@ cwPassageTubeMeshCheck::Report cwPassageTubeGalleryModel::report() const
 
 cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::Case& entry)
 {
-    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const Cases::Survey survey = Cases::toSurvey(entry);
     cwPassageTubeBuilder::Options options;
     options.sampleSpacingMeters = entry.sampleSpacing;
 

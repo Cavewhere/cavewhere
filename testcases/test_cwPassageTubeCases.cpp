@@ -115,9 +115,8 @@ cwPassageTubeBuilder::Options builderOptions(double sampleSpacing)
     return options;
 }
 
-void checkBuildsClean(const Cases::Trip& trip, double sampleSpacing = cwPassageTubeBuilder::Options().sampleSpacingMeters)
+void checkBuildsClean(const Cases::Survey& survey, double sampleSpacing = cwPassageTubeBuilder::Options().sampleSpacingMeters)
 {
-    const Cases::Survey survey = Cases::toSurvey(trip);
     const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(sampleSpacing));
     REQUIRE_FALSE(debug.mesh.isEmpty());
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
@@ -125,31 +124,39 @@ void checkBuildsClean(const Cases::Trip& trip, double sampleSpacing = cwPassageT
     CHECK(report.issues.isEmpty());
 }
 
-// Each trip's tube is watertight, consistently wound and outward facing.
-void checkBuildsClosed(const Cases::Trip& trip, double sampleSpacing = cwPassageTubeBuilder::Options().sampleSpacingMeters)
+void checkBuildsClean(const Cases::Trip& trip)
 {
-    const Cases::Survey survey = Cases::toSurvey(trip);
+    checkBuildsClean(Cases::toSurvey(trip));
+}
+
+// The tube drawn with every trip visible is watertight, consistently wound
+// and outward facing.
+void checkBuildsClosed(const Cases::Survey& survey, double sampleSpacing = cwPassageTubeBuilder::Options().sampleSpacingMeters)
+{
     const cwPassageTubeMesh mesh = cwPassageTubeBuilder::build(survey.region, survey.positionsByCave, {}, builderOptions(sampleSpacing));
     REQUIRE_FALSE(mesh.isEmpty());
-    for (const cwPassageTubeMesh::VertexRange& range : mesh.tripIndexRanges) {
-        const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::closed(mesh, range);
-        INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
-        CHECK(report.issues.isEmpty());
-    }
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::closed(mesh, cwPassageTubeMeshCheck::allTripsVisible(mesh));
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+}
+
+void checkBuildsClosed(const Cases::Trip& trip)
+{
+    checkBuildsClosed(Cases::toSurvey(trip));
 }
 
 void checkCaseBuildsClean(const std::string& name)
 {
     INFO(name);
     const Cases::Case& entry = catalogCase(name);
-    checkBuildsClean(entry.trip, entry.sampleSpacing);
+    checkBuildsClean(Cases::toSurvey(entry), entry.sampleSpacing);
 }
 
 void checkCaseBuildsClosed(const std::string& name)
 {
     INFO(name);
     const Cases::Case& entry = catalogCase(name);
-    checkBuildsClosed(entry.trip, entry.sampleSpacing);
+    checkBuildsClosed(Cases::toSurvey(entry), entry.sampleSpacing);
 }
 
 // Vertices the builder slid onto the previous ring's plane: the bend rules
@@ -860,7 +867,7 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction never pull a vert
     })));
     INFO(name);
     const Cases::Case& entry = catalogCase(name);
-    const Cases::Survey survey = Cases::toSurvey(entry.trip);
+    const Cases::Survey survey = Cases::toSurvey(entry);
     const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
     CHECK(pulledVertexCount(debug) == 0);
 }

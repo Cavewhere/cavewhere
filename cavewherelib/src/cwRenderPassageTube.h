@@ -40,16 +40,17 @@ class cwRenderPassageTube : public cwRenderObject
 public:
     explicit cwRenderPassageTube(QObject* parent = nullptr);
 
-    // New geometry resets visibility to all-visible; the owner re-applies any
-    // hidden trip ranges afterward.
+    // New geometry resets visibility to every trip visible, its trip boundary
+    // discs hidden; the owner re-applies any hidden trip ranges afterward.
     void setMesh(const cwPassageTubeMesh& mesh);
     void clear();
 
     // Hides or shows the triangles in indices [firstIndex, firstIndex + count),
-    // e.g. one entry of tripIndexRanges(). The per-index mask is published to the
-    // scene visibility store, and cwRHIPassageTube compacts the index buffer from
-    // it. The published buffer is shared with the store, so it is replaced, never
-    // mutated in place.
+    // e.g. one entry of tripIndexRanges(). A trip boundary disc then shows
+    // exactly while its trip is visible and its neighbor trip hidden. The
+    // per-index mask is published to the scene visibility store, and
+    // cwRHIPassageTube compacts the index buffer from it. The published buffer
+    // is shared with the store, so it is replaced, never mutated in place.
     void setRangeVisible(int firstIndex, int count, bool visible);
 
     bool wireframe() const;
@@ -98,6 +99,7 @@ private:
     };
 
     void publishMask();
+    void applyTripBoundaryVisibility(QVector<quint8>& visibility) const;
 
     cwTracked<GeometryState> m_geometry;
     bool m_wireframe = false;
@@ -105,6 +107,7 @@ private:
     QVector4D m_clipPlane;
     bool m_clipEnabled = false;
     QVector<cwPassageTubeMesh::VertexRange> m_tripIndexRanges;
+    QVector<cwPassageTubeMesh::TripBoundary> m_tripBoundaryRanges;
 
     // Authoring copy of the per-index mask; consumers read the published store entry.
     QVector<quint8> m_visibility;

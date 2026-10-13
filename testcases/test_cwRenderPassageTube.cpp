@@ -187,6 +187,48 @@ TEST_CASE("cwRenderPassageTube setRangeVisible hides one trip range",
     }
 }
 
+TEST_CASE("cwRenderPassageTube draws a trip boundary disc only while the neighbor trip is hidden",
+          "[PassageTube][cwRenderPassageTube]")
+{
+    constexpr int kIndicesPerDisc = 3;
+    constexpr int kTripIndices = 2 * kIndicesPerTrip;
+    cwPassageTubeMesh mesh = twoTripMesh();
+    mesh.indices.append({0, 1, 2, 0, 2, 1});
+    mesh.tripBoundaryRanges = {{{kTripIndices, kIndicesPerDisc}, 0, 1},
+                               {{kTripIndices + kIndicesPerDisc, kIndicesPerDisc}, 1, 0}};
+
+    cwScene scene;
+    cwRenderPassageTube tube;
+    tube.setScene(&scene);
+    tube.setMesh(mesh);
+
+    const auto expected = [&](bool firstTrip, bool secondTrip, bool firstDisc, bool secondDisc) {
+        QVector<quint8> visibility;
+        for (const auto& [shown, count] : {std::pair(firstTrip, kIndicesPerTrip), std::pair(secondTrip, kIndicesPerTrip),
+                                           std::pair(firstDisc, kIndicesPerDisc), std::pair(secondDisc, kIndicesPerDisc)}) {
+            visibility.append(QVector<quint8>(count, shown ? cwRenderPassageTube::kVisible : cwRenderPassageTube::kHidden));
+        }
+        return visibility;
+    };
+
+    CHECK(tube.visibility() == expected(true, true, false, false));
+    const cwVisibilitySnapshot allVisible = scene.visibility()->snapshot();
+    REQUIRE(publishedMask(allVisible, tube) != nullptr);
+    CHECK(*publishedMask(allVisible, tube) == expected(true, true, false, false));
+
+    tube.setRangeVisible(kIndicesPerTrip, kIndicesPerTrip, false);
+    CHECK(tube.visibility() == expected(true, false, true, false));
+
+    tube.setRangeVisible(0, kIndicesPerTrip, false);
+    CHECK(tube.visibility() == expected(false, false, false, false));
+
+    tube.setRangeVisible(kIndicesPerTrip, kIndicesPerTrip, true);
+    CHECK(tube.visibility() == expected(false, true, false, true));
+
+    tube.setRangeVisible(0, kIndicesPerTrip, true);
+    CHECK(tube.visibility() == expected(true, true, false, false));
+}
+
 TEST_CASE("cwRenderPassageTube wireframe property notifies on change",
           "[PassageTube][cwRenderPassageTube]")
 {

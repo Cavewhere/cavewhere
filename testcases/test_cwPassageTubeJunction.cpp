@@ -66,12 +66,12 @@ Station station(const QString& name, const QVector3D& position, const QStringLis
     return Station {name, position, dimensions};
 }
 
-// Every trip's tube, and the mesh as a whole, is watertight, consistently
-// wound and outward facing.
+// Every trip's tube, and the mesh drawn with every trip visible, is
+// watertight, consistently wound and outward facing.
 bool isClosedSurface(const cwPassageTubeMesh& mesh)
 {
     QVector<cwPassageTubeMesh::VertexRange> ranges = mesh.tripIndexRanges;
-    ranges.append(Check::wholeMesh(mesh));
+    ranges.append(Check::allTripsVisible(mesh));
     return std::all_of(ranges.cbegin(), ranges.cend(), [&](const cwPassageTubeMesh::VertexRange& range) {
         const Check::Report report = Check::closed(mesh, range);
         UNSCOPED_INFO(Check::toText(report).toStdString());

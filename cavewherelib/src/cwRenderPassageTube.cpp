@@ -29,6 +29,8 @@ void cwRenderPassageTube::setMesh(const cwPassageTubeMesh& mesh)
 
     m_visibility = QVector<quint8>(state.indices.size(), kVisible);
     m_tripIndexRanges = mesh.tripIndexRanges;
+    m_tripBoundaryRanges = mesh.tripBoundaryRanges;
+    applyTripBoundaryVisibility(m_visibility);
     m_geometry.setValue(std::move(state));
 
     publishMask();
@@ -50,14 +52,11 @@ void cwRenderPassageTube::setRangeVisible(int firstIndex, int count, bool visibl
 
     QVector<quint8> visibility = m_visibility;
     const quint8 flag = visible ? kVisible : kHidden;
-    bool changed = false;
     for (int i = firstIndex; i < firstIndex + count; ++i) {
-        if (visibility.at(i) != flag) {
-            visibility[i] = flag;
-            changed = true;
-        }
+        visibility[i] = flag;
     }
-    if (!changed) {
+    applyTripBoundaryVisibility(visibility);
+    if (visibility == m_visibility) {
         return;
     }
 
@@ -119,6 +118,21 @@ void cwRenderPassageTube::publishMask()
         const bool anyHidden = m_visibility.contains(kHidden);
         visibilityStore->setMask(renderObjectId(), kSubId,
                                  anyHidden ? m_visibility : QVector<quint8>());
+    }
+}
+
+void cwRenderPassageTube::applyTripBoundaryVisibility(QVector<quint8>& visibility) const
+{
+    const auto isTripVisible = [&](int trip) {
+        const cwPassageTubeMesh::VertexRange& range = m_tripIndexRanges.at(trip);
+        return range.count > 0 && visibility.at(range.first) == kVisible;
+    };
+    for (const cwPassageTubeMesh::TripBoundary& boundary : std::as_const(m_tripBoundaryRanges)) {
+        const bool shown = isTripVisible(boundary.trip) && !isTripVisible(boundary.neighborTrip);
+        const quint8 flag = shown ? kVisible : kHidden;
+        for (int i = boundary.range.first; i < boundary.range.first + boundary.range.count; ++i) {
+            visibility[i] = flag;
+        }
     }
 }
 

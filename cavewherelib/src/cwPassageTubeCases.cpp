@@ -302,6 +302,37 @@ double angleBetweenDegrees(const QVector3D& a, const QVector3D& b)
     return qRadiansToDegrees(std::acos(std::clamp(cosine, -1.0, 1.0)));
 }
 
+// Trip 1 runs north h0 → h1 → h2. Trip 2 shoots h1 → h2 again with readings
+// 5 % wider, then ties in at h2 with a new chunk that turns 150° in plan and
+// runs back beside the first trip.
+cwPassageTubeCases::Case twoTripHairpinCase()
+{
+    constexpr float kLegMeters = 10.0f;
+    constexpr double kHairpinDegrees = 150.0;
+    constexpr double kResurveyScale = 1.05;
+    const Section section = roundSection(1.0);
+    const Section resurveyed = section.scaled(kResurveyScale);
+
+    const QVector3D h0(0.0f, 0.0f, 0.0f);
+    const QVector3D h1 = h0 + kLegMeters * direction(0.0, 0.0);
+    const QVector3D h2 = h1 + kLegMeters * direction(0.0, 0.0);
+    const QVector3D h3 = h2 + kLegMeters * direction(-kHairpinDegrees, 0.0);
+
+    cwPassageTubeCases::Case twoTrips;
+    twoTrips.name = QStringLiteral("20. Passage surveyed over two trips with a hairpin tie-in and a re-shot leg");
+    twoTrips.tags = {QStringLiteral("trips"), QStringLiteral("hairpin"), QStringLiteral("arms:0")};
+    twoTrips.trip.chunks = {{{QStringLiteral("h0"), h0, lrudStrings(section)},
+                             {QStringLiteral("h1"), h1, lrudStrings(section)},
+                             {QStringLiteral("h2"), h2, lrudStrings(section)}}};
+    cwPassageTubeCases::Trip tieIn;
+    tieIn.chunks = {{{QStringLiteral("h1"), h1, lrudStrings(resurveyed)},
+                     {QStringLiteral("h2"), h2, lrudStrings(resurveyed)}},
+                    {{QStringLiteral("h2"), h2, lrudStrings(resurveyed)},
+                     {QStringLiteral("h3"), h3, lrudStrings(section)}}};
+    twoTrips.laterTrips = {tieIn};
+    return twoTrips;
+}
+
 } // namespace
 
 Section cwPassageTubeCases::Section::scaled(double factor) const
@@ -401,6 +432,11 @@ cwPassageTubeCases::Survey cwPassageTubeCases::toSurvey(const Trip& trip)
 cwPassageTubeCases::Survey cwPassageTubeCases::toSurvey(const JunctionCase& junctionCase)
 {
     return toSurvey(toTrip(junctionCase));
+}
+
+cwPassageTubeCases::Survey cwPassageTubeCases::toSurvey(const Case& entry)
+{
+    return toSurvey(entry.trips());
 }
 
 cwPassageTubeCases::Trip cwPassageTubeCases::phakeCave()
@@ -608,6 +644,7 @@ QVector<cwPassageTubeCases::Case> cwPassageTubeCases::catalog()
     for (const JunctionCase& junctionCase : galleryCases()) {
         cases.append(toCase(junctionCase));
     }
+    cases.append(twoTripHairpinCase());
     cases.append(zeroOutsideCornerCase());
     cases.append(unreadSharpBendCase());
     cases.append({QStringLiteral("Phake Cave"), {QStringLiteral("phake")}, phakeCave()});

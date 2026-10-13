@@ -150,11 +150,14 @@ public:
     // How a chain end is closed: a fan at a dead end, a mouth on an arm ending
     // at a junction that another chain passes through, nothing on a loop. An
     // arm whose mouth could not be zipped into the through tube closes with a
-    // fan over its mouth instead.
+    // fan over its mouth instead. A dome closes each of the two chains a
+    // hairpin breaks: their end rings sit past the station along their legs,
+    // so the two tubes overlap around it and neither shows a disc.
     enum class EndCap {
         Fan,
         Mouth,
-        None
+        None,
+        Dome
     };
 
     // A point of an arm's mouth on the through surface. column is the arm bin
@@ -229,6 +232,14 @@ public:
         EndCap endCap = EndCap::Fan;
     };
 
+    // A disc across a chain's tube: the cap at one of its ends or a trip
+    // boundary, at station.
+    struct Cap {
+        int chain = -1;
+        QUuid caveId;
+        QString station;
+    };
+
     // Diagnostics: the intermediate results of the pipeline, for inspecting
     // how the builder read the survey.
     struct Debug {
@@ -241,9 +252,13 @@ public:
         QSet<quint32> intendedCreaseVertices;
         // One entry per mesh triangle: the chain whose rings, cap or mouth
         // strip emitted it. A zip band's triangles belong to the through
-        // chain and are marked in triangleInZipBand.
+        // chain and are marked in triangleInZipBand. triangleCap indexes caps
+        // for the triangles of a flat cap, a fan or a trip boundary disc, and
+        // is -1 for the rest.
         QVector<int> triangleChain;
         QVector<bool> triangleInZipBand;
+        QVector<int> triangleCap;
+        QVector<Cap> caps;
     };
 
     static cwPassageTubeMesh build(const cwCavingRegionData& region,
