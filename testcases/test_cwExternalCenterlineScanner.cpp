@@ -2170,18 +2170,18 @@ TEST_CASE("A lone Walls .srv is a book root holding the file's unit",
     CHECK(scan.rows.at(1).date == QDate(2023, 5, 10));
 }
 
-TEST_CASE("survex_master's tree is a file root with one block node per included cave",
+TEST_CASE("survex_master's tree is a file root with one block trip per included cave",
           "[Scanner][Survex][SourcedFixtures]")
 {
     const ScanResult scan = scanFixture(QStringLiteral("survex_master/master.svx"));
 
-    // The included files are transparent: each block is a node and, since it
-    // holds shots, a unit too. The master writes no shots of its own.
+    // The included files are transparent: each block holds shots and no
+    // nested block, so it is a unit only. The master writes no shots of its own.
     CHECK(describe(scan.rows) == QStringList({
         QStringLiteral("0 SurvexFile '' 'master' '' node 9"),
-        QStringLiteral("1 SurvexBlock 'alpha' 'alpha' 'alpha' node+unit 2"),
-        QStringLiteral("1 SurvexBlock 'bravo' 'bravo' 'bravo' node+unit 3"),
-        QStringLiteral("1 SurvexBlock 'charlie' 'charlie' 'charlie' node+unit 4"),
+        QStringLiteral("1 SurvexBlock 'alpha' 'alpha' 'alpha' unit 2"),
+        QStringLiteral("1 SurvexBlock 'bravo' 'bravo' 'bravo' unit 3"),
+        QStringLiteral("1 SurvexBlock 'charlie' 'charlie' 'charlie' unit 4"),
     }));
     CHECK(rowAt(scan, QStringLiteral("alpha")).stations
           == QStringList({QStringLiteral("alpha.a1"), QStringLiteral("alpha.a2")}));
@@ -2192,14 +2192,14 @@ TEST_CASE("survex_nested's tree nests blocks across *include boundaries",
 {
     const ScanResult scan = scanFixture(QStringLiteral("survex_nested.svx"));
 
-    // Nested writes no shots of its own, so it is a node only. Entrance's
-    // "Passage.P1" tie is a name Entrance writes, so it counts there and in
-    // Passage alike.
+    // Nested writes no shots of its own, so it is a node only; Passage nests
+    // no block, so it is a unit only. Entrance's "Passage.P1" tie is a name
+    // Entrance writes, so it counts there and in Passage alike.
     CHECK(describe(scan.rows) == QStringList({
         QStringLiteral("0 SurvexFile '' 'survex_nested' '' node 5"),
         QStringLiteral("1 SurvexBlock 'Nested' 'Nested' 'Nested' node 5"),
         QStringLiteral("2 SurvexBlock 'Nested/Entrance' 'Entrance' 'Entrance' node+unit 5"),
-        QStringLiteral("3 SurvexBlock 'Nested/Entrance/Passage' 'Passage' 'Passage' node+unit 3"),
+        QStringLiteral("3 SurvexBlock 'Nested/Entrance/Passage' 'Passage' 'Passage' unit 3"),
     }));
     CHECK(rowAt(scan, QStringLiteral("Nested/Entrance")).stations
           == QStringList({QStringLiteral("Nested.Entrance.E1"), QStringLiteral("Nested.Entrance.E2"),
@@ -2216,10 +2216,10 @@ TEST_CASE("A Survex root's own shots are the root's unit; an empty block is gray
     {
         const ScanResult scan = scanFixture(QStringLiteral("survex_root_and_block.svx"));
         // The root writes r1..r3 and the side.s1 tie, which names a station
-        // of side's and stays out of the root's unit.
+        // of side's and stays out of the root's unit. side is a leaf, a unit.
         CHECK(describe(scan.rows) == QStringList({
             QStringLiteral("0 SurvexFile '' 'survex_root_and_block' '' node+unit 5"),
-            QStringLiteral("1 SurvexBlock 'side' 'side' 'side' node+unit 2"),
+            QStringLiteral("1 SurvexBlock 'side' 'side' 'side' unit 2"),
         }));
         CHECK(scan.rows.at(0).stations
               == QStringList({QStringLiteral("r1"), QStringLiteral("r2"), QStringLiteral("r3")}));
@@ -2272,4 +2272,130 @@ TEST_CASE("scanSurvex matches the reference keyword in any case, as cavern does"
     INFO("coordinate: " << fixes.first().coordinate.toStdString());
     CHECK(fixes.first().coordinate == QStringLiteral("1 2 3"));
     CHECK(fixes.first().reference);
+}
+
+namespace {
+
+const QString kBlockRowsDir = QStringLiteral("survex_block_rows");
+
+ScanResult scanBlockRows(const QString& entry)
+{
+    return scanFixture(kBlockRowsDir + QLatin1Char('/') + entry);
+}
+
+//! Each fix as "<station> node '<nodePath>' trip '<tripPath>'".
+QStringList describeFixHomes(const ScanResult& scan)
+{
+    QStringList homes;
+    for (const ScannedFix& fix : scan.fixes) {
+        homes.append(QStringLiteral("%1 node '%2' trip '%3'")
+                         .arg(fix.station, fix.nodePath, fix.tripPath));
+    }
+    return homes;
+}
+
+} // namespace
+
+TEST_CASE("A leaf Survex block with shots is one unit row, and its fix is the unit's",
+          "[Scanner][Survex][SurvexBlockRows]")
+{
+    const ScanResult scan = scanBlockRows(QStringLiteral("leaf.svx"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'leaf' '' node 3"),
+        QStringLiteral("1 SurvexBlock 'simmons_hall' 'simmons_hall' 'simmons_hall' unit 3"),
+    }));
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("simmons_hall.st1 node '' trip 'simmons_hall'"),
+    }));
+}
+
+TEST_CASE("A Survex block with its own shots and a nested block is a node and a unit",
+          "[Scanner][Survex][SurvexBlockRows]")
+{
+    const ScanResult scan = scanBlockRows(QStringLiteral("mixed.svx"));
+
+    // cave keeps its node to hold inner; inner is a leaf, a unit only.
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'mixed' '' node 4"),
+        QStringLiteral("1 SurvexBlock 'cave' 'cave' 'cave' node+unit 4"),
+        QStringLiteral("2 SurvexBlock 'cave/inner' 'inner' 'inner' unit 2"),
+    }));
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("cave.c1 node 'cave' trip ''"),
+        QStringLiteral("cave.inner.i2 node 'cave' trip 'cave/inner'"),
+    }));
+}
+
+TEST_CASE("One Survex block name under two parent scopes is two unit rows",
+          "[Scanner][Survex][SurvexBlockRows]")
+{
+    const ScanResult scan = scanBlockRows(QStringLiteral("twoscopes.svx"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'twoscopes' '' node 4"),
+        QStringLiteral("1 SurvexBlock 'east' 'east' 'east' node 2"),
+        QStringLiteral("2 SurvexBlock 'east/higharch' 'higharch' 'higharch' unit 2"),
+        QStringLiteral("1 SurvexBlock 'west' 'west' 'west' node 2"),
+        QStringLiteral("2 SurvexBlock 'west/higharch' 'higharch' 'higharch' unit 2"),
+    }));
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("east.higharch.h1 node 'east' trip 'east/higharch'"),
+        QStringLiteral("west.higharch.h1 node 'west' trip 'west/higharch'"),
+    }));
+}
+
+TEST_CASE("A Survex block opened twice in one scope, with a file included twice, is one unit row",
+          "[Scanner][Survex][SurvexBlockRows]")
+{
+    const ScanResult scan = scanBlockRows(QStringLiteral("repeat.svx"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'repeat' '' node 4"),
+        QStringLiteral("1 SurvexBlock 'higharch' 'higharch' 'higharch' unit 4"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("higharch")).stations
+          == QStringList({QStringLiteral("higharch.h1"), QStringLiteral("higharch.h2"),
+                          QStringLiteral("higharch.h3"), QStringLiteral("higharch.h4")}));
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("higharch.h1 node '' trip 'higharch'"),
+    }));
+}
+
+TEST_CASE("A Survex block holding only an *include is a node over the included file's blocks",
+          "[Scanner][Survex][SurvexBlockRows]")
+{
+    const ScanResult scan = scanBlockRows(QStringLiteral("includeonly.svx"));
+
+    // Two real scopes, higharch and higharch.higharch; the inner one is the leaf.
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'includeonly' '' node 2"),
+        QStringLiteral("1 SurvexBlock 'higharch' 'higharch' 'higharch' node 2"),
+        QStringLiteral("2 SurvexBlock 'higharch/higharch' 'higharch' 'higharch' unit 2"),
+    }));
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("higharch.higharch.x1 node 'higharch' trip 'higharch/higharch'"),
+    }));
+}
+
+TEST_CASE("A Survex file included from two scopes is scanned in each of them",
+          "[Scanner][Survex][SurvexBlockRows]")
+{
+    const ScanResult scan = scanBlockRows(QStringLiteral("shared_scopes.svx"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 SurvexFile '' 'shared_scopes' '' node 4"),
+        QStringLiteral("1 SurvexBlock 'one' 'one' 'one' unit 2"),
+        QStringLiteral("1 SurvexBlock 'two' 'two' 'two' unit 2"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("two")).stations
+          == QStringList({QStringLiteral("two.s1"), QStringLiteral("two.s2")}));
+    CHECK(describeFixHomes(scan) == QStringList({
+        QStringLiteral("one.s1 node '' trip 'one'"),
+        QStringLiteral("two.s1 node '' trip 'two'"),
+    }));
+    // The second scope reads the file again and lists it once.
+    CHECK(dependenciesUnder(scan, kBlockRowsDir)
+          == QStringList({QStringLiteral("shared_scopes.svx"), QStringLiteral("shared.svx")}));
+    CHECK(scan.warnings.isEmpty());
 }

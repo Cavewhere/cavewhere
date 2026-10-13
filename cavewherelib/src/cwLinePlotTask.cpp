@@ -65,7 +65,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* nod
     //
     // A source root answers for its whole subtree, and its scopes come from the
     // snapshot's labels: a derived trip's stations sit under its node's cavern
-    // path, a native trip's under its label in the root's block.
+    // path and its own scope, a native trip's under its label in the root's block.
     const bool sourceRoot = labels.sourceRoot(node->id()) == node->id();
     const QList<cwTrip*> trips = sourceRoot ? node->allTrips() : node->trips();
     for(cwTrip* trip : trips) {
@@ -73,7 +73,7 @@ cwLinePlotTask::StationTripScrapLookup::StationTripScrapLookup(cwSurveyNode* nod
         const QUuid tripNodeId = trip->parentNode()->id();
         const QString tripScope = sourceRoot
             ? (trip->isDerived()
-                   ? labels.cavernPath(tripNodeId)
+                   ? labels.cavernPath(tripNodeId) + trip->scopePrefix()
                    : cwCavernNaming::scopePrefix(labels.tripLabels(tripNodeId).value(tripId)))
             : trip->scopePrefix();
 

@@ -154,7 +154,9 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> replace(
  *  - a node row matches the derived node with its sourcePath, or creates one;
  *  - a unit row matches the derived trip with unitSourcePath(row), or creates
  *    one, its date seeded from the row (a dateless row takes its nearest dated
- *    ancestor's);
+ *    ancestor's). A node-and-unit row's trip sits under the row's node; a
+ *    unit-only row's (a leaf Survex block, a Compass survey, a Walls .srv)
+ *    under its parent's node, so a leaf Survex block is one trip;
  *  - a row whose path, or an ancestor's, is in \a exclusions is skipped, and
  *    so is a missing file;
  *  - a derived trip no row matches is removed when it holds no native content
@@ -169,9 +171,10 @@ CAVEWHERE_LIB_EXPORT void reconcileSubtree(cwSurveyNode* root,
 
 /**
  * The source path a derived trip carries for a unit row: the row's own path
- * for a unit-only row, and the row's path plus "/#own" for a node that is also
- * a unit (a Survex block or root with shots of its own), so the trip's path
- * names it apart from its node's - an empty root path included.
+ * for a unit-only row (a leaf Survex block's trip takes the block's path), and
+ * the row's path plus "/#own" for a node that is also a unit (a Survex root,
+ * or a Survex block that nests another and has shots of its own), so the
+ * trip's path names it apart from its node's - an empty root path included.
  */
 CAVEWHERE_LIB_EXPORT QString unitSourcePath(const cwScanRow& row);
 

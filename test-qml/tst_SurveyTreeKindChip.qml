@@ -59,8 +59,9 @@ QQ.Item {
 
             const model = RootData.externalCenterlineManager.attachedCenterlinesModel
             const rowsBefore = model.rowCount()
+            // mixed.svx's block cave nests inner, so cave stays a node row.
             RootData.attachSource(RootData.region.rootNode,
-                                  TestHelper.testcasesDatasetPath("external-centerlines/survex_simple.svx"))
+                                  TestHelper.testcasesDatasetPath("external-centerlines/survex_block_rows/mixed.svx"))
             tryVerify(() => model.rowCount() > rowsBefore, 10000, "the attach must land")
             RootData.futureManagerModel.waitForFinished()
             const cave = RootData.region.cave(0)

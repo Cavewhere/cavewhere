@@ -42,11 +42,13 @@ CAVEWHERE_LIB_EXPORT Monad::Result<QList<cwScanRow>> read(const QString& path);
 
 /**
  * What the solve reads out of \a rows for one source root: each derived
- * node's cavernLabel, keyed by the node's sourcePath, and each unit's station
- * set keyed by the source path its derived trip carries
- * (cwExternalCenterlineAttach::unitSourcePath). A unit's stations are named
- * below the cavern path of the node that holds its trip ("A5" for a Compass
- * survey in ALPHA.DAT, whose names are "alpha.A5"), sorted.
+ * node's cavernLabel, keyed by the node's sourcePath; each derived trip's
+ * own cavernLabel (a leaf Survex block's name), keyed by the trip's
+ * sourcePath; and each unit's station set keyed by the source path its
+ * derived trip carries (cwExternalCenterlineAttach::unitSourcePath). A unit's
+ * stations are named below the cavern path of the node that holds its trip
+ * and the trip's own label ("A5" for a Compass survey in ALPHA.DAT, whose
+ * names are "alpha.A5"; "st1" for "simmons_hall.st1"), sorted.
  *
  * \a preserveCase keeps each name as the rows spell it, which is how cavern
  * reads a Compass or Walls file; otherwise names are canonical, as cavern
@@ -55,6 +57,7 @@ CAVEWHERE_LIB_EXPORT Monad::Result<QList<cwScanRow>> read(const QString& path);
  */
 struct SolveView {
     QHash<QString, QString> cavernLabels;
+    QHash<QString, QString> tripCavernLabels;
     QHash<QString, QStringList> unitStations;
 
     bool operator==(const SolveView& other) const = default;

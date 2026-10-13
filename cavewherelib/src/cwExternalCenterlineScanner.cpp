@@ -478,9 +478,14 @@ struct OpenBlock {
 };
 
 struct ScanState {
-    // canonical paths fully processed; re-includes are silently
-    // deduplicated when the file is here but NOT in inProgress
+    // canonical Compass and Walls paths fully processed; re-includes are
+    // silently deduplicated when the file is here but NOT in inProgress
     QSet<QString> visited;
+    // each Survex file read, with the row of the scope that included it: a
+    // file included from two scopes is read in each, and once per scope
+    QSet<QPair<QString, int>> scannedSurvexScopes;
+    // dependencies, as a set
+    QSet<QString> listedDependencies;
     // canonical paths currently on the recursion stack; a re-entry
     // into one of these is a real cycle and must warn
     QSet<QString> inProgress;
@@ -509,6 +514,9 @@ struct ScanState {
     QStringList coordinateSystems = QStringList{QString()};
     // every station the closure fixes, in walk order
     QList<cwExternalCenterlineScanner::ScannedFix> fixes;
+    // per fix, the scan row whose file holds it; the fix's nodePath and
+    // tripPath are read off it once the tree is final
+    QList<int> fixRows;
     // every .mak that names a UTM zone and no datum
     QList<cwExternalCenterlineScanner::DefaultedDatum> defaultedDatums;
     // the system the first Survex *cs out names, empty until one does
@@ -802,6 +810,7 @@ QString nodeSourcePath(const ScanState& state, int row)
  * dotted path, then \a scopePath (a Compass DAT's survey, a Walls prefix
  * path, empty for Survex, whose blocks are the open blocks), then the
  * station as the file writes it. \a row is the scan row whose file holds it.
+ * A fix the walk already recorded on the same row is recorded once.
  */
 void recordFix(ScanState& state, int row, const QString& scopePath, const QString& station,
                const QString& coordinate, const QString& coordinateSystem,
@@ -812,13 +821,61 @@ void recordFix(ScanState& state, int row, const QString& scopePath, const QStrin
         segments.append(scopePath);
     }
     segments.append(station);
-    state.fixes.append({segments.join(QLatin1Char('.')), coordinate, coordinateSystem,
-                        file, line, reference, nodeSourcePath(state, row)});
+    const cwExternalCenterlineScanner::ScannedFix fix{segments.join(QLatin1Char('.')), coordinate,
+                                                      coordinateSystem, file, line, reference};
+    for (qsizetype i = 0; i < state.fixes.size(); ++i) {
+        if (state.fixRows.at(i) == row && state.fixes.at(i) == fix) {
+            return;
+        }
+    }
+    state.fixes.append(fix);
+    state.fixRows.append(row);
+}
+
+// A row the demotion turned into a trip: a Survex block that is a unit only.
+bool isLeafSurvexBlock(const cwScanRow& row)
+{
+    return row.kind == cwSurveyNodeKind::Kind::SurvexBlock && row.isUnit && !row.isNode;
+}
+
+/**
+ * Turns every Survex block that holds shots and no nested block into a unit
+ * only, so it becomes one trip rather than a node holding a trip of the same
+ * name. A block that nests another, or holds no shots, stays a node.
+ */
+void demoteLeafSurvexBlocks(ScanState& state)
+{
+    for (qsizetype index = kRootRow + 1; index < state.tree.size(); ++index) {
+        const TreeRow& treeRow = state.tree.at(index);
+        const bool nestsRows = std::any_of(treeRow.children.cbegin(), treeRow.children.cend(),
+                                           [&state](int child) {
+            const cwScanRow& row = state.tree.at(child).row;
+            return row.isNode || row.isUnit;
+        });
+        if (treeRow.row.kind == cwSurveyNodeKind::Kind::SurvexBlock
+            && treeRow.row.isNode && treeRow.row.isUnit && !nestsRows) {
+            state.tree[index].row.isNode = false;
+        }
+    }
+}
+
+// Reads each fix's nodePath and tripPath off the row that holds it.
+void homeFixes(ScanState& state)
+{
+    for (qsizetype i = 0; i < state.fixes.size(); ++i) {
+        const int row = state.fixRows.at(i);
+        cwExternalCenterlineScanner::ScannedFix& fix = state.fixes[i];
+        fix.nodePath = nodeSourcePath(state, row);
+        const cwScanRow& holder = state.tree.at(row).row;
+        fix.tripPath = isLeafSurvexBlock(holder) ? holder.sourcePath : QString();
+    }
 }
 
 void recordWarning(ScanState& state, const QString& message)
 {
-    state.warnings.append(message);
+    if (!state.warnings.contains(message)) {
+        state.warnings.append(message);
+    }
 }
 
 /**
@@ -878,9 +935,11 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
                       QStringLiteral("circular include skipped: %1").arg(filePath));
         return;
     }
-    if (state.visited.contains(canonical)) {
-        // Already fully processed via another include path. Silent
-        // dedup - dependencies already lists it.
+    // cavern reads an included file into the scope around the *include, so a
+    // file included from a second scope gives that scope its own stations.
+    // A second include within one scope adds nothing.
+    const QPair<QString, int> scope(canonical, containerRow(state));
+    if (state.scannedSurvexScopes.contains(scope)) {
         return;
     }
 
@@ -894,8 +953,12 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
     const QByteArray bytes = file.readAll();
     file.close();
 
+    state.scannedSurvexScopes.insert(scope);
     state.inProgress.insert(canonical);
-    state.dependencies.append(canonical);
+    if (!state.listedDependencies.contains(canonical)) {
+        state.listedDependencies.insert(canonical);
+        state.dependencies.append(canonical);
+    }
 
     const DecodedFile decoded = decodeBytes(bytes);
     if (decoded.usedLatin1Fallback) {
@@ -1011,7 +1074,6 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
     }
 
     state.inProgress.remove(canonical);
-    state.visited.insert(canonical);
 }
 
 // A '#' reference's leaf name without its extension, as the .mak spells it.
@@ -1989,6 +2051,9 @@ Monad::Result<ScanResult> scanWithEntry(const QString& entryFile,
             QStringLiteral("%1: entry file could not be read: %2")
                 .arg(QLatin1String(contextName), entryFile));
     }
+
+    demoteLeafSurvexBlocks(state);
+    homeFixes(state);
 
     ScanResult result;
     result.dependencies = state.dependencies;

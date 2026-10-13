@@ -122,10 +122,11 @@ Q_DECLARE_METATYPE(cwScanBlock)
 
 /**
  * One row of the tree an attach builds from a survey file: a node (a source
- * root, a Compass file, a Walls book, a Survex block), a unit (the stations one
- * future derived trip owns), or both (a Survex block or root with shots of its
- * own). ScanResult::rows lists them in pre-order; depth is the number of
- * ancestors, so the root is depth 0.
+ * root, a Compass file, a Walls book, a Survex block that nests another), a
+ * unit (the stations one future derived trip owns: a Survex block with shots
+ * and no nested block among them), or both (a Survex root, or a Survex block
+ * that nests another and has shots of its own). ScanResult::rows lists them in
+ * pre-order; depth is the number of ancestors, so the root is depth 0.
  *
  * sourcePath is the row's identity inside the source, the value a derived
  * record's source_path holds: empty for the root, otherwise '/'-joined
@@ -135,10 +136,11 @@ Q_DECLARE_METATYPE(cwScanBlock)
  * takes '#' and its 1-based position among its siblings ("FILE.DAT/#3"), so
  * its identity is positional.
  *
- * cavernLabel is the naming level cavern builds for a node: the lower-cased
+ * cavernLabel is the naming level cavern builds for the row: the lower-cased
  * .dat stem for a Compass file inside a .mak, the block name for a Survex
- * block, empty for the root, a Walls book, and a unit-only row. A row's
- * cavern path is its ancestors' and its own cavernLabels joined with '.'.
+ * block (a unit-only one included), empty for the root, a Walls book, and
+ * every other unit-only row. A row's cavern path is its ancestors' and its own
+ * cavernLabels joined with '.'.
  *
  * stations is the unit's station names relative to cavern's root label,
  * spelled as the file spells them and sorted: the cavern path, then any Walls
@@ -151,7 +153,8 @@ Q_DECLARE_METATYPE(cwScanBlock)
  * shown and never made into a node or trip. hasSurveyContent is true when the
  * row's own unit or a descendant unit holds stations.
  *
- * kind names a node row's node kind. A unit-only row carries its parent's.
+ * kind names a node row's node kind. A unit-only Survex block row keeps
+ * SurvexBlock; every other unit-only row carries its parent's.
  */
 class CAVEWHERE_LIB_EXPORT cwScanRow
 {
@@ -308,10 +311,14 @@ struct ScannedFix {
     //! fix in cavern's output even when no leg uses it.
     bool reference = false;
     //! The cwScanRow::sourcePath of the node row whose file holds the fix: the
-    //! innermost named Survex *begin block around it, the Compass .dat its
-    //! .mak line fixes, the Walls book around its .srv. Empty for the entry
-    //! file's own root.
+    //! innermost Survex *begin block around it that is a node row, the Compass
+    //! .dat its .mak line fixes, the Walls book around its .srv. Empty for the
+    //! entry file's own root.
     QString nodePath;
+    //! The cwScanRow::sourcePath of the unit-only Survex block row that holds
+    //! the fix, whose trip sits under the nodePath row; empty when a node row
+    //! holds it.
+    QString tripPath;
 
     bool hasCoordinateSystem() const { return !coordinateSystem.isEmpty(); }
 
@@ -334,9 +341,8 @@ struct ScanResult {
     /**
      * Every file required to feed the entry file into cavern,
      * stored as canonical absolute paths. The entry file itself is
-     * always the first element when it resolves. De-duplicated via
-     * the same canonical-path visited set that drives cycle
-     * detection.
+     * always the first element when it resolves. Each file is listed
+     * once, however many scopes include it.
      */
     QStringList dependencies;
 
@@ -382,9 +388,14 @@ struct ScanResult {
      *             its book. Other-type entries are skipped. A lone .srv is a
      *             WallsBook root holding the file's unit.
      *   Survex  - the entry file is a SurvexFile root and each named block a
-     *             SurvexBlock node (files are transparent, and a block opened
-     *             twice is one row). Shots outside every named block are the
-     *             root's own unit; a block with shots of its own is a unit too.
+     *             SurvexBlock row (files are transparent, and a block opened
+     *             twice in one scope is one row; the same name in two scopes
+     *             is two). Shots outside every named block are the root's own
+     *             unit. A block with shots and no nested block is a unit only,
+     *             so it becomes one trip; a block that nests another is a
+     *             node, and a unit too when it has shots of its own. A block
+     *             with no shots stays a node. A file included from two scopes
+     *             is read in each.
      */
     QList<cwScanRow> rows;
 

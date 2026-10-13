@@ -11,6 +11,7 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwSurveyNode.h"
+class cwTrip;
 
 //Qt includes
 #include <QAbstractItemModel>
@@ -22,10 +23,14 @@
 /**
  * The Fix Stations page's tree: one row for rootNode, under it a row per
  * descendant node in tree order, and under each node row that node's
- * fixStationTable() rows (its fix rows) ahead of its child node rows.
+ * fixStationTable() rows (its fix rows), then a trip row per derived trip that
+ * holds attached fixes (a leaf Survex block's, cwTrip::attachedFixes()), in
+ * the node's trip order and each over its own fix rows, then its child node
+ * rows.
  *
  * Fix rows forward the underlying table's roles by name, and setData() on one
- * reaches the model that owns the row. Node rows answer the Roles below.
+ * reaches the model that owns the row. Node and trip rows answer the Roles
+ * below; a trip row is read-only and shows the system its node inherits.
  *
  * Every fix row also has a page row (FixRowRole): its place among all the fix
  * rows in depth-first order. rootNode's own rows come first, so a page row
@@ -43,7 +48,8 @@ public:
     //! What a row stands for.
     enum RowKind {
         NodeRow = 0,
-        FixRow = 1
+        FixRow = 1,
+        TripRow = 2
     };
     Q_ENUM(RowKind)
 
@@ -65,21 +71,25 @@ public:
         InheritedFixCoordinateSystemRole,
         InheritedFromNodeIdRole,
         //! The cwSurveyNode a node row stands for, or whose table a fix row
-        //! comes from.
+        //! comes from; a trip row's node for the trip row and its fix rows.
         NodeObjectRole,
         //! The words a node row's kind is drawn as (cwSurveyTreeModel::kindLabel).
         NodeKindLabelRole,
         //! The fixes with no coordinate system the node's own attachment holds
         //! anywhere under it; zero for a node that attaches nothing.
         AttachmentBareFixCountRole,
-        //! The nearest attachment owner above a node row, null for none.
+        //! The nearest attachment owner above a node row, null for none; for a
+        //! trip row, its node when that owns one, else the nearest above.
         InheritedFromNodeRole,
-        //! A fix row's page row; -1 on a node row.
+        //! A fix row's page row; -1 on a node or trip row.
         FixRowRole,
         //! The attached fixes under a node row that the solve reads in no
         //! coordinate system (cwAttachedFix::readInSystem is empty), the ones
         //! warning 603 is about.
-        SubtreeUnsetFixCountRole
+        SubtreeUnsetFixCountRole,
+        //! The cwTrip a trip row stands for, or whose fixes a fix row lists;
+        //! null on every other row.
+        TripObjectRole
     };
     Q_ENUM(Roles)
 
@@ -116,56 +126,87 @@ signals:
 private:
     QPointer<cwSurveyNode> m_rootNode;
 
-    //! The nodes this model holds connections to.
+    //! The nodes and trips this model holds connections to.
     QSet<cwSurveyNode*> m_connected;
+    QSet<cwTrip*> m_connectedTrips;
 
-    //! Each node's first page row, and the page row count, rebuilt on demand
-    //! after the rows move.
-    mutable QHash<const cwSurveyNode*, int> m_firstFixRow;
+    //! Per node, the derived trips that have a row, in the node's trip order,
+    //! and per such trip the fix rows its row holds. Kept here rather than read
+    //! off the trips, so the rows change only between a begin/end pair.
+    QHash<const cwSurveyNode*, QList<cwTrip*>> m_tripRows;
+    QHash<const cwTrip*, int> m_tripFixRows;
+
+    //! Each node's and trip row's first page row, and the page row count,
+    //! rebuilt on demand after the rows move.
+    mutable QHash<const QObject*, int> m_firstFixRow;
     mutable int m_fixRowCount = 0;
     mutable bool m_fixRowsDirty = true;
 
     //! The fix rows on their way out, between a table's rowsAboutToBeRemoved
-    //! and rowsRemoved, or every fix row of the nodes leaving the tree. They
-    //! have no page row, so a view row still drawing one gives up its page
-    //! row before it goes, the way a ListView row's index turns -1.
+    //! and rowsRemoved, or every fix row of the nodes and trip rows leaving the
+    //! tree. They have no page row, so a view row still drawing one gives up
+    //! its page row before it goes, the way a ListView row's index turns -1.
     struct LeavingRows {
-        const cwSurveyNode* node = nullptr;
+        const QObject* holder = nullptr;
         int first = -1;
         int last = -1;
     };
     LeavingRows m_leavingRows;
-    QSet<const cwSurveyNode*> m_leavingNodes;
+    QSet<const QObject*> m_leavingHolders;
 
-    bool isLeaving(const cwSurveyNode* holder, int row) const;
+    bool isLeaving(const QObject* holder, int row) const;
 
-    //! Announces FixRowRole on \a node's fix rows \a first through \a last.
-    void emitFixRowChanged(const cwSurveyNode* node, int first, int last);
+    //! Announces FixRowRole on \a holder's fix rows \a first through \a last.
+    void emitFixRowChanged(const QObject* holder, int first, int last);
 
-    //! The node whose rows hold \a index: its parent node row's node, nullptr
-    //! for the top-level row.
-    static cwSurveyNode* holderOf(const QModelIndex& index);
+    //! The node or trip whose rows hold \a index, nullptr for the top-level row.
+    static QObject* holderOf(const QModelIndex& index);
 
-    //! The node a node row stands for, nullptr for a fix row or an invalid index.
+    //! The node a node row stands for, nullptr for any other row.
     cwSurveyNode* nodeAt(const QModelIndex& index) const;
 
-    //! True when \a index is one of a node's fix rows.
-    static bool isFixRow(const QModelIndex& index);
+    //! The trip a trip row stands for, nullptr for any other row.
+    cwTrip* tripAt(const QModelIndex& index) const;
+
+    //! True when \a index is one of a node's or trip row's fix rows.
+    bool isFixRow(const QModelIndex& index) const;
+
+    //! How many fix rows \a holder, a node or a trip with a row, lists.
+    int fixRowsOf(const QObject* holder) const;
+
+    //! The number of trip rows under \a node.
+    int tripRowCount(const cwSurveyNode* node) const;
 
     //! The row \a node owns here, invalid when it hangs outside rootNode.
     QModelIndex indexOfNode(const cwSurveyNode* node) const;
 
-    //! \a node's fixStationTable() row \a row as this model's index.
-    QModelIndex fixIndex(const cwSurveyNode* node, int row) const;
+    //! The row \a trip owns here, invalid when it has none.
+    QModelIndex indexOfTrip(const cwTrip* trip) const;
+
+    //! \a holder's fix row \a row as this model's index.
+    QModelIndex fixIndex(const QObject* holder, int row) const;
 
     //! True when \a node is rootNode or hangs under it.
     bool isInTree(const cwSurveyNode* node) const;
 
     void connectSubtree(cwSurveyNode* node);
     void connectNode(cwSurveyNode* node);
+    void connectTrip(cwSurveyNode* node, cwTrip* trip);
     void disconnectSubtree(cwSurveyNode* node);
     void disconnectAll();
     void disconnectNode(cwSurveyNode* node);
+    void disconnectTrip(cwTrip* trip);
+
+    //! Gives \a trip a row under \a node, holding \a fixRows fix rows.
+    void insertTripRow(cwSurveyNode* node, cwTrip* trip, int fixRows);
+    //! Takes \a trip's row out from under \a node, when it has one.
+    void removeTripRow(const cwSurveyNode* node, cwTrip* trip);
+    //! \a trip's fixes are about to be replaced: its fix rows go.
+    void tripFixesAboutToReset(cwTrip* trip);
+    //! \a trip's fixes were replaced: its rows follow them.
+    void tripFixesReset(cwSurveyNode* node, cwTrip* trip);
+    //! Forgets the trip rows of the nodes that left the tree.
+    void forgetLeavingNodes();
 
     void rebuildFixRows() const;
 
@@ -176,10 +217,11 @@ private:
     //! \a node's fix counts moved, and so did every node's above it.
     void emitCountsChanged(const cwSurveyNode* node);
 
-    //! The attachment roles of \a node and every node under it moved.
+    //! The attachment roles of \a node and every node and trip row under it moved.
     void emitAttachmentChanged(const cwSurveyNode* node);
 
     void emitNodeRowChanged(const cwSurveyNode* node, const QList<int>& roles);
+    void emitTripRowChanged(const cwTrip* trip, const QList<int>& roles);
 
     static int subtreeFixCount(const cwSurveyNode* node);
     static int subtreeBareFixCount(const cwSurveyNode* node);

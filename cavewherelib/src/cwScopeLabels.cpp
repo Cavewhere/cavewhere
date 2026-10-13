@@ -24,7 +24,8 @@ QList<cwCavernNaming::ScopeEntry> scopeEntries(const QList<Data>& siblings)
 
 //! The labels every native trip of \a root's subtree takes, one pool assigned
 //! pre-order (a node's trips, then each child's subtree), apart from the scopes
-//! the root's included file opens.
+//! the root's included file opens: its derived nodes' and derived trips'
+//! cavernLabels among them.
 QHash<QUuid, QString> sourcedTripLabels(const cwCaveData& root)
 {
     QList<cwCavernNaming::ScopeEntry> entries;
@@ -34,6 +35,8 @@ QHash<QUuid, QString> sourcedTripLabels(const cwCaveData& root)
         for (const cwTripData& trip : node.trips) {
             if (isNativeTrip(trip)) {
                 entries.append({trip.id, trip.name});
+            } else {
+                cavernLabels.append(trip.cavernLabel);
             }
         }
         for (const cwCaveData& child : node.nodes) {

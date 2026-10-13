@@ -188,20 +188,25 @@ SolveView solveView(const QList<cwScanRow>& rows, bool preserveCase)
     for (const cwScanRow& row : rows) {
         cavernPathAtDepth.resize(row.depth + 1);
         const QString parentPath = row.depth == 0 ? QString() : cavernPathAtDepth.at(row.depth - 1);
-        const QString rowPath = row.isNode
-            ? parentPath + cwCavernNaming::scopePrefix(cwStation::canonicalKey(row.cavernLabel))
-            : parentPath;
+        const QString rowPath =
+            parentPath + cwCavernNaming::scopePrefix(cwStation::canonicalKey(row.cavernLabel));
         cavernPathAtDepth[row.depth] = rowPath;
 
-        if (row.isNode && row.depth > 0) {
-            view.cavernLabels.insert(row.sourcePath, row.cavernLabel);
+        if (row.depth > 0) {
+            if (row.isNode) {
+                view.cavernLabels.insert(row.sourcePath, row.cavernLabel);
+            } else if (!row.cavernLabel.isEmpty()) {
+                view.tripCavernLabels.insert(row.sourcePath, row.cavernLabel);
+            }
         }
         if (!row.isUnit) {
             continue;
         }
 
         // A node that is also a unit holds its own trip, so the trip's node
-        // path is the row's; a unit-only row's trip sits in its parent node.
+        // path is the row's. A unit-only row's trip sits in its parent node,
+        // below the trip's own label when the row has one (a leaf Survex
+        // block), so either way a station is named relative to its trip.
         QSet<QString> seen;
         QStringList sorted;
         for (const QString& station : row.stations) {

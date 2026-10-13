@@ -79,6 +79,7 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(bool windowsWholeNode READ windowsWholeNode NOTIFY externallyBackedChanged)
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
+    Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
 
 public:
     explicit cwTrip(QObject *parent = 0);
@@ -118,7 +119,8 @@ public:
     //! the trip's own namespace — canonical and sorted, the same spelling
     //! solvedStations() yields once the region solve does place the survey.
     //! A derived trip holds its unit's station set instead, from its source's
-    //! units.json, with its node's cavern path stripped ("a5" under Alpha).
+    //! units.json, with its node's cavern path and its own cavernLabel()
+    //! stripped ("a5" under Alpha).
     //! Learned at scan time by running cavern over the attachment alone
     //! (cwExternalStationHarvest), so they exist whether or not the region solve
     //! placed it: cavern drops a survey nothing fixes and nothing ties in, which
@@ -143,11 +145,26 @@ public:
     QString externalStationsError() const { return m_externalStationsError; }
     void setExternalStationsError(const QString& error);
 
+    //! The naming level cavern builds for this derived trip, from its source's
+    //! units.json: the block name of a leaf Survex block, which is a trip rather
+    //! than a node. Empty for every other trip. Derived like externalStations().
+    QString cavernLabel() const { return m_cavernLabel; }
+    void setCavernLabel(const QString& label);
+
+    //! The fixes this derived trip's leaf Survex block carries, as the attach
+    //! scan read them, for the Fix Stations page to list read-only under the
+    //! trip. Empty for every other trip. Derived like externalStations().
+    cwAttachedFixModel* attachedFixes() const { return m_attachedFixes; }
+    //! Feeds attachedFixes(), emitting attachedFixesChanged() when the list differs.
+    void setAttachedFixes(const QList<cwAttachedFix>& fixes);
+
     //! The scope prefix this trip's stations carry in its node's namespace:
     //! "<tripLabel>." for an externally-attached trip (see cwCavernNaming) and
     //! for a native trip inside a sourced subtree, which the driver writes as
-    //! its own block in the root's (cwScopeLabels); empty for a flat native trip
-    //! and a derived trip, whose stations sit in its node's view as they are.
+    //! its own block in the root's (cwScopeLabels); "<cavernLabel>." for a
+    //! derived trip with a cavernLabel(), the leaf Survex block it stands for;
+    //! empty for a flat native trip and every other derived trip, whose
+    //! stations sit in its node's view as they are.
     //! The one accessor every scope consumer — equates, the solved-* accessors,
     //! and the geometry enumeration — speaks, so the trip kinds never diverge.
     QString scopePrefix() const;
@@ -162,7 +179,8 @@ public:
                                const QUuid& nodeId);
 
     //! True when this trip's stations carry a scope prefix: an attached trip,
-    //! or a native trip inside a sourced subtree.
+    //! a native trip inside a sourced subtree, or a derived trip with a
+    //! cavernLabel().
     bool isScoped() const;
 
     //! True when an external survey file — this trip's own attachment, or the
@@ -350,8 +368,12 @@ signals:
     void externalStationsChanged();
     void externalStationsErrorChanged();
 
-    //! Fired when this trip's scope may have moved: its own externalCenterline
-    //! or name changed, or — chained from
+    //! attachedFixes()' rows changed. Chained to the parent node's
+    //! cwSurveyNode::attachedFixesChanged, so a node-level listener hears it.
+    void attachedFixesChanged();
+
+    //! Fired when this trip's scope may have moved: its own externalCenterline,
+    //! cavernLabel or name changed, or — chained from
     //! cwCave::tripScopeLabelsChanged — a *sibling* was renamed, added or
     //! removed, which can move this trip's collision suffix. The NOTIFY for both
     //! derived properties, and safe to bind against.
@@ -438,6 +460,8 @@ protected:
     QString m_sourcePath;
     QStringList m_externalStations;
     QString m_externalStationsError;
+    QString m_cavernLabel;
+    cwAttachedFixModel* const m_attachedFixes;
 
     //Units
 

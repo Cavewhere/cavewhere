@@ -108,7 +108,8 @@ namespace {
 
 cwTrip::cwTrip(QObject *parent) :
     QObject(parent),
-    m_parentNode(nullptr)
+    m_parentNode(nullptr),
+    m_attachedFixes(new cwAttachedFixModel(this))
 {
 //    DistanceUnit = cwUnits::Meters;
     Team = new cwTeam(this);
@@ -247,6 +248,24 @@ void cwTrip::setSourcePath(const QString& sourcePath)
     emit externallyBackedChanged();
 }
 
+void cwTrip::setCavernLabel(const QString& label)
+{
+    if (m_cavernLabel == label) {
+        return;
+    }
+    m_cavernLabel = label;
+    emit scopeChanged();
+}
+
+void cwTrip::setAttachedFixes(const QList<cwAttachedFix>& fixes)
+{
+    if (m_attachedFixes->attachedFixes() == fixes) {
+        return;
+    }
+    m_attachedFixes->setAttachedFixes(fixes);
+    emit attachedFixesChanged();
+}
+
 QString cwTrip::ownUnitSourcePath()
 {
     return QStringLiteral("#own");
@@ -272,6 +291,11 @@ void cwTrip::setExternalStationsError(const QString& error)
 
 QString cwTrip::scopePrefix() const
 {
+    //A derived trip's scope is the leaf Survex block it stands for, if any.
+    if (isDerived()) {
+        return cwCavernNaming::scopePrefix(m_cavernLabel);
+    }
+
     //A trip's label is only unique among its sibling set, so the node owns the
     //assignment and this is a lookup in the map it keeps.
     const auto label = [this]() -> QString {
@@ -302,6 +326,9 @@ QString cwTrip::scopePrefix() const
 QString cwTrip::scopePrefix(const cwTripData& data, const cwScopeLabels& labels,
                             const QUuid& nodeId)
 {
+    if (!data.sourcePath.isEmpty()) {
+        return cwCavernNaming::scopePrefix(data.cavernLabel);
+    }
     const bool writtenInSourcedBlock = isNativeTrip(data) && !labels.sourceRoot(nodeId).isNull();
     return computeScopePrefix(!data.externalCenterline.isEmpty() || writtenInSourcedBlock,
                               [&]() { return labels.tripLabels(nodeId).value(data.id); });
@@ -313,6 +340,7 @@ bool cwTrip::isScoped() const
     //the same fields scopePrefix() branches on, and this is read from QML
     //bindings often enough that walking the node's trips for it would be waste.
     return !m_externalCenterline.isEmpty()
+           || (isDerived() && !m_cavernLabel.isEmpty())
            || isWrittenInSourcedBlock(m_sourcePath, m_externalCenterline, parentNode());
 }
 
@@ -670,11 +698,12 @@ QList<QPair<QString, QVector3D>> cwTrip::solvedStations() const {
 
     if(isDerived()) {
         //A derived trip's stations are its unit set, which the node's view
-        //already names locally. Membership is the whole rule, so a station two
-        //units share belongs to both.
+        //names below the trip's own scope. Membership is the whole rule, so a
+        //station two units share belongs to both.
+        const QString prefix = scopePrefix();
         QSet<QString> listed;
         for(const QString& station : m_externalStations) {
-            const QString key = cwStation::canonicalKey(station);
+            const QString key = cwStation::canonicalKey(prefix + station);
             listed.insert(key);
             if(lookup.hasPosition(key)) {
                 solved.append({station, lookup.position(key)});
@@ -776,8 +805,8 @@ cwStationHandle cwTrip::stationHandle(const QString& tail) const
 {
     //Deliberately scopePrefix() and not isScoped(): the two disagree for a trip
     //its cave no longer lists, and solvedStations() above splits on the prefix.
-    //A derived trip has no prefix, but its stations are its unit's, which only
-    //a Trip handle can name (cwSurvexExporterCaveTask::DriverTree::operand).
+    //A derived trip's stations are its unit's, prefix or not, which only a Trip
+    //handle can name (cwSurvexExporterCaveTask::DriverTree::operand).
     if(scopePrefix().isEmpty() && !isDerived()) {
         cwSurveyNode* node = parentNode();
         return cwStationHandle(cwStationHandle::NativeCave,
@@ -814,7 +843,8 @@ cwTripData cwTrip::data() const
         Id,
         m_externalCenterline,
         m_sourcePath,
-        m_externalStations
+        m_externalStations,
+        m_cavernLabel
     };
 }
 

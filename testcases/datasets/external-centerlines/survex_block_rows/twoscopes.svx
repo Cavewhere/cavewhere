@@ -1,0 +1,13 @@
+; The same block name under two parent scopes: two cavern scopes.
+*begin east
+*begin higharch
+*fix h1 0 0 0
+h1 h2 10.0 0 0
+*end higharch
+*end east
+*begin west
+*begin higharch
+*fix h1 100 0 0
+h1 h2 10.0 0 0
+*end higharch
+*end west

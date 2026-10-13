@@ -733,10 +733,11 @@ private:
     // no longer owns.
     void applyHarvest(const ExternalScanResult& result);
 
-    // Lists the files' own fixes (from m_ownerFixes) on the node whose file
-    // holds them: a derived node lists its source root's fixes from its own
-    // file, the owner the rest, a trip's under its live scopePrefix(); and the
-    // stations each file fixes on the owner.
+    // Lists the files' own fixes (from m_ownerFixes) on the node or derived
+    // trip whose file holds them: a derived trip lists its source root's fixes
+    // from its leaf Survex block (ScannedFix::tripPath), a derived node the
+    // ones from its own file, the owner the rest, an attached trip's under its
+    // live scopePrefix(); and the stations each file fixes on the owner.
     void refreshAttachedFixes(cwSurveyNode* node);
 
     // The sourcePaths of the derived nodes under \a owner, the source root

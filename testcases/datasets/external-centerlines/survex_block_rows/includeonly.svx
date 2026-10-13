@@ -1,0 +1,5 @@
+; A block whose only content is an *include of a file that opens a
+; block of the same name, so the scope is higharch.higharch.
+*begin higharch
+*include higharch
+*end higharch

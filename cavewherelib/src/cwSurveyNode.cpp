@@ -601,6 +601,10 @@ void cwSurveyNode::connectTrip(cwTrip* trip)
     connect(trip, &cwTrip::externalStationsChanged,
             this, &cwSurveyNode::tripExternalStationsChanged, Qt::UniqueConnection);
 
+    //A derived trip's attached fixes are this node's to list and validate.
+    connect(trip, &cwTrip::attachedFixesChanged,
+            this, &cwSurveyNode::attachedFixesChanged, Qt::UniqueConnection);
+
     //externallyBacked() reads this node's attachment and its ancestors', so an
     //attach or detach anywhere above moves every trip's answer and only this
     //node can say so.
@@ -622,6 +626,8 @@ void cwSurveyNode::disconnectTrip(cwTrip* trip)
                trip, &cwTrip::solvedStationsChanged);
     disconnect(trip, &cwTrip::externalStationsChanged,
                this, &cwSurveyNode::tripExternalStationsChanged);
+    disconnect(trip, &cwTrip::attachedFixesChanged,
+               this, &cwSurveyNode::attachedFixesChanged);
     disconnect(this, &cwSurveyNode::externallyBackedChanged,
                trip, &cwTrip::externallyBackedChanged);
 }
@@ -1548,8 +1554,9 @@ cwSurveyNode::SourceMembers cwSurveyNode::sourceMembers() const
         const QString nodePath = cwStation::canonicalKey(node->cavernPath());
         for (const cwTrip* trip : node->trips()) {
             if (!trip->sourcePath().isEmpty()) {
+                const QString tripPath = nodePath + cwStation::canonicalKey(trip->scopePrefix());
                 for (const QString& station : trip->externalStations()) {
-                    members.stations.insert(nodePath + cwStation::canonicalKey(station));
+                    members.stations.insert(tripPath + cwStation::canonicalKey(station));
                 }
                 continue;
             }
@@ -1579,6 +1586,8 @@ QHash<QUuid, QString> cwSurveyNode::sourcedTripScopeLabels() const
         for (const cwTrip* trip : node->trips()) {
             if (trip->sourcePath().isEmpty() && trip->externalCenterline().isEmpty()) {
                 entries.append({trip->id(), trip->name()});
+            } else {
+                cavernLabels.append(trip->cavernLabel());
             }
         }
     });

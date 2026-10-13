@@ -12,6 +12,7 @@
 #include "cwCave.h"
 #include "cwCavernRunner.h"
 #include "cwCavingRegion.h"
+#include "cwCavingRegionData.h"
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceModel.h"
@@ -20,6 +21,7 @@
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSaveLoad.h"
+#include "cwScopeLabels.h"
 #include "cwSurveyNoteModel.h"
 #include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
@@ -403,7 +405,7 @@ TEST_CASE("Attaching walls_project nests its books and keeps the gray ones",
     CHECK(tripNamed(dec2001, QStringLiteral("D Survey 1"))->date().date() == QDate(2001, 12, 1));
 }
 
-TEST_CASE("Attaching survex_master builds a file root with one block node per cave",
+TEST_CASE("Attaching survex_master builds a file root with one block trip per cave",
           "[Attach]")
 {
     auto fixture = makeProject(QStringLiteral("subtree-survex-master"));
@@ -413,17 +415,14 @@ TEST_CASE("Attaching survex_master builds a file root with one block node per ca
 
     CHECK(root->name() == QStringLiteral("master"));
     CHECK(root->kind() == cwSurveyNode::Kind::SurvexFile);
-    CHECK(root->tripCount() == 0);
-    CHECK(childNodeNames(root) == QStringList({QStringLiteral("alpha"), QStringLiteral("bravo"),
-                                           QStringLiteral("charlie")}));
-    for (const cwSurveyNode* block : root->childNodes()) {
-        INFO("block " << block->name().toStdString());
-        CHECK(block->kind() == cwSurveyNode::Kind::SurvexBlock);
-        CHECK(block->sourcePath() == block->name());
-        // A block with shots of its own holds its own unit, named apart from
-        // the node.
-        REQUIRE(block->tripCount() == 1);
-        CHECK(block->trip(0)->sourcePath() == block->name() + QStringLiteral("/#own"));
+    CHECK(root->childNodeCount() == 0);
+    // Each block holds shots and no nested block, so it is one trip whose
+    // path is the block's.
+    CHECK(tripNames(root) == QStringList({QStringLiteral("alpha"), QStringLiteral("bravo"),
+                                          QStringLiteral("charlie")}));
+    for (const cwTrip* trip : root->trips()) {
+        INFO("block " << trip->name().toStdString());
+        CHECK(trip->sourcePath() == trip->name());
     }
 }
 
@@ -530,4 +529,176 @@ TEST_CASE("firstErrorLine picks cavern's error out of a noisy log",
     CHECK(cwCavernRunner::firstErrorLine(QStringLiteral("\n  Export failed  \nmore\n"))
           == QStringLiteral("Export failed"));
     CHECK(cwCavernRunner::firstErrorLine(QString()).isEmpty());
+}
+
+namespace {
+
+const QString kBlockRowsDir = QStringLiteral("survex_block_rows/");
+
+//! \a node's subtree, pre-order, one line per row: "node <name> [<sourcePath>]"
+//! or "trip <name> [<sourcePath>]", indented two spaces per level.
+QStringList describeRows(const cwSurveyNode* node, int depth = 0)
+{
+    const QString indent(depth * 2, QLatin1Char(' '));
+    QStringList lines({indent + QStringLiteral("node %1 [%2]").arg(node->name(), node->sourcePath())});
+    for (const cwTrip* trip : node->trips()) {
+        lines.append(indent + QStringLiteral("  trip %1 [%2]").arg(trip->name(), trip->sourcePath()));
+    }
+    for (const cwSurveyNode* child : node->childNodes()) {
+        lines.append(describeRows(child, depth + 1));
+    }
+    return lines;
+}
+
+//! The names \a trip's solved stations go by, sorted.
+QStringList solvedNames(const cwTrip* trip)
+{
+    QStringList names;
+    for (const auto& station : trip->solvedStations()) {
+        names.append(station.first);
+    }
+    names.sort();
+    return names;
+}
+
+cwSurveyNode* attachBlockRows(SavedProjectFixture* fixture, const QString& entry)
+{
+    cwSurveyNode* root = attachSourceThroughManager(fixture, regionRoot(fixture),
+                                                    fixturePath(kBlockRowsDir + entry));
+    drainPipelines(fixture);
+    return root;
+}
+
+//! The derived nodes under \a root that list \a station among their attached fixes.
+QStringList nodesListingFix(const cwSurveyNode* root, const QString& station)
+{
+    QStringList names;
+    for (const cwSurveyNode* node : nodeAndDescendants(root)) {
+        if (attachedFixStations(node).contains(station)) {
+            names.append(node->name());
+        }
+    }
+    return names;
+}
+
+} // namespace
+
+TEST_CASE("A leaf Survex block attaches as one trip, its stations named in the block",
+          "[Attach][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("block-rows-leaf"));
+    cwSurveyNode* root = attachBlockRows(fixture.get(), QStringLiteral("leaf.svx"));
+
+    CHECK(describeRows(root) == QStringList({
+        QStringLiteral("node leaf []"),
+        QStringLiteral("  trip simmons_hall [simmons_hall]"),
+    }));
+    // The fix is the trip's, so no node lists it.
+    CHECK(nodesListingFix(root, QStringLiteral("simmons_hall.st1")).isEmpty());
+
+    const cwTrip* trip = tripNamed(root, QStringLiteral("simmons_hall"));
+    REQUIRE(trip != nullptr);
+    CHECK(solvedNames(trip)
+          == QStringList({QStringLiteral("st1"), QStringLiteral("st2"), QStringLiteral("st3")}));
+}
+
+TEST_CASE("A Survex block with its own shots and a nested block attaches as a node with two trips",
+          "[Attach][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("block-rows-mixed"));
+    cwSurveyNode* root = attachBlockRows(fixture.get(), QStringLiteral("mixed.svx"));
+
+    CHECK(describeRows(root) == QStringList({
+        QStringLiteral("node mixed []"),
+        QStringLiteral("  node cave [cave]"),
+        QStringLiteral("    trip cave [cave/#own]"),
+        QStringLiteral("    trip inner [cave/inner]"),
+    }));
+
+    cwSurveyNode* cave = childNodeNamed(root, QStringLiteral("cave"));
+    REQUIRE(cave != nullptr);
+    // cave's own fix stays on its node; inner's is inner's trip's.
+    CHECK(attachedFixStations(cave) == QStringList({QStringLiteral("cave.c1")}));
+
+    const cwTrip* inner = tripNamed(cave, QStringLiteral("inner"));
+    REQUIRE(inner != nullptr);
+    CHECK(solvedNames(inner) == QStringList({QStringLiteral("i1"), QStringLiteral("i2")}));
+
+    // A native trip named like the block takes another scope label, live and
+    // in the driver's pool alike.
+    auto* caveNode = qobject_cast<cwCave*>(cave);
+    REQUIRE(caveNode != nullptr);
+    cwTrip* native = addEmptyTrip(caveNode, QStringLiteral("inner"));
+    const QString liveLabel = tripScopeLabel(native);
+    CHECK(liveLabel.compare(QStringLiteral("inner"), Qt::CaseInsensitive) != 0);
+    const cwScopeLabels labels(fixture->project->cavingRegion()->data());
+    CHECK(labels.tripLabels(cave->id()).value(native->id()) == liveLabel);
+}
+
+TEST_CASE("One Survex block name under two parent scopes attaches as two trips",
+          "[Attach][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("block-rows-two-scopes"));
+    cwSurveyNode* root = attachBlockRows(fixture.get(), QStringLiteral("twoscopes.svx"));
+
+    CHECK(describeRows(root) == QStringList({
+        QStringLiteral("node twoscopes []"),
+        QStringLiteral("  node east [east]"),
+        QStringLiteral("    trip higharch [east/higharch]"),
+        QStringLiteral("  node west [west]"),
+        QStringLiteral("    trip higharch [west/higharch]"),
+    }));
+}
+
+TEST_CASE("A Survex block opened twice in one scope attaches as one trip holding every shot",
+          "[Attach][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("block-rows-repeat"));
+    cwSurveyNode* root = attachBlockRows(fixture.get(), QStringLiteral("repeat.svx"));
+
+    CHECK(describeRows(root) == QStringList({
+        QStringLiteral("node repeat []"),
+        QStringLiteral("  trip higharch [higharch]"),
+    }));
+    const cwTrip* trip = tripNamed(root, QStringLiteral("higharch"));
+    REQUIRE(trip != nullptr);
+    CHECK(solvedNames(trip) == QStringList({QStringLiteral("h1"), QStringLiteral("h2"),
+                                            QStringLiteral("h3"), QStringLiteral("h4")}));
+}
+
+TEST_CASE("A Survex block holding only an *include attaches as a node over the included block's trip",
+          "[Attach][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("block-rows-include-only"));
+    cwSurveyNode* root = attachBlockRows(fixture.get(), QStringLiteral("includeonly.svx"));
+
+    CHECK(describeRows(root) == QStringList({
+        QStringLiteral("node includeonly []"),
+        QStringLiteral("  node higharch [higharch]"),
+        QStringLiteral("    trip higharch [higharch/higharch]"),
+    }));
+    const cwSurveyNode* outer = childNodeNamed(root, QStringLiteral("higharch"));
+    REQUIRE(outer != nullptr);
+    const cwTrip* trip = tripNamed(outer, QStringLiteral("higharch"));
+    REQUIRE(trip != nullptr);
+    CHECK(solvedNames(trip) == QStringList({QStringLiteral("x1"), QStringLiteral("x2")}));
+}
+
+TEST_CASE("A Survex file included from two scopes attaches a trip in each",
+          "[Attach][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("block-rows-shared"));
+    cwSurveyNode* root = attachBlockRows(fixture.get(), QStringLiteral("shared_scopes.svx"));
+
+    CHECK(describeRows(root) == QStringList({
+        QStringLiteral("node shared_scopes []"),
+        QStringLiteral("  trip one [one]"),
+        QStringLiteral("  trip two [two]"),
+    }));
+    for (const QString& name : {QStringLiteral("one"), QStringLiteral("two")}) {
+        INFO("trip " << name.toStdString());
+        const cwTrip* trip = tripNamed(root, name);
+        REQUIRE(trip != nullptr);
+        CHECK(solvedNames(trip) == QStringList({QStringLiteral("s1"), QStringLiteral("s2")}));
+    }
 }

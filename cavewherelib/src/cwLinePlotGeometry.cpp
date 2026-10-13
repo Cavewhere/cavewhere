@@ -576,9 +576,11 @@ private:
             SourcedTripGeometry& geometry = m_trips[trip.id];
 
             if (!trip.sourcePath.isEmpty()) {
+                const QString tripPath =
+                    cavernPath + cwStation::canonicalKey(cwTrip::scopePrefix(trip, m_labels, node.id));
                 QSet<QString> members;
                 for (const QString& station : trip.externalStations) {
-                    members.insert(cavernPath + cwStation::canonicalKey(station));
+                    members.insert(tripPath + cwStation::canonicalKey(station));
                 }
                 if (cwTrip::windowsWholeNode(trip, node)) {
                     m_windowTripId = trip.id;

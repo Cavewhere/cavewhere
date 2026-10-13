@@ -25,8 +25,9 @@ bool isShownWarning(const cwError& error)
 /**
  * The Fix Stations page's row of the first fix read in no coordinate system under
  * \a node, -1 when there is none. The page lists a node's fixStationTable()
- * rows, then each child node's subtree in order, so a row's place counts every
- * row listed ahead of it; \a rowsAhead carries that count down the walk.
+ * rows, then its derived trips' attached fixes, then each child node's subtree
+ * in order, so a row's place counts every row listed ahead of it; \a rowsAhead
+ * carries that count down the walk.
  */
 int firstBareFixPageRow(const cwSurveyNode* node, int& rowsAhead)
 {
@@ -37,6 +38,14 @@ int firstBareFixPageRow(const cwSurveyNode* node, int& rowsAhead)
                + node->fixStationTable()->mapFromSource(attachedFixes->index(bareRow)).row();
     }
     rowsAhead += node->fixStationCount();
+    for (const cwTrip* trip : node->trips()) {
+        const cwAttachedFixModel* tripFixes = trip->attachedFixes();
+        const int tripBareRow = tripFixes->firstFixWithoutReadInSystem();
+        if (tripBareRow >= 0) {
+            return rowsAhead + tripBareRow;
+        }
+        rowsAhead += tripFixes->count();
+    }
     for (const cwSurveyNode* child : node->childNodes()) {
         const int row = firstBareFixPageRow(child, rowsAhead);
         if (row >= 0) {
@@ -160,6 +169,11 @@ void cwNodeWarningModel::connectTrips()
         m_tripConnections.append(connect(errors, &cwErrorListModel::warningMessagesChanged,
                                          this, &cwNodeWarningModel::rebuild));
         m_tripConnections.append(connect(errors, &cwErrorListModel::dataChanged,
+                                         this, &cwNodeWarningModel::rebuild));
+        // A derived trip's attached fixes sit on the page after the node's.
+        m_tripConnections.append(connect(trip->attachedFixes(), &cwAttachedFixModel::modelReset,
+                                         this, &cwNodeWarningModel::rebuild));
+        m_tripConnections.append(connect(trip->attachedFixes(), &cwAttachedFixModel::dataChanged,
                                          this, &cwNodeWarningModel::rebuild));
     }
 }

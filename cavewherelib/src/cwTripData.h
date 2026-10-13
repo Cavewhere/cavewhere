@@ -37,6 +37,10 @@ struct cwTripData {
     //! cwTrip::data() and never persisted — see cwTrip::setData for why nothing
     //! reads it back.
     QStringList externalStations;
+
+    //! Snapshot of cwTrip::cavernLabel(), for the worker passes' scopePrefix().
+    //! Derived like externalStations, so never persisted.
+    QString cavernLabel;
 };
 
 //! True for a trip whose shots are the user's own: neither derived from a

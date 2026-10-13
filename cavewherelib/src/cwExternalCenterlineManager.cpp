@@ -909,9 +909,9 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
         return;
     }
 
-    // A derived node's cavernLabel and a derived trip's unit set come from its
-    // source root's manifest; the member views read both, so a change drops
-    // them ahead of the solve.
+    // A derived node's cavernLabel and a derived trip's cavernLabel and unit set
+    // come from its source root's manifest; the member views read them all, so
+    // a change drops them ahead of the solve.
     bool memberViewsMoved = false;
     for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
         node->setExternalStations(result.ownerStations.value(node->id()));
@@ -931,7 +931,10 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
         for (cwTrip* trip : node->trips()) {
             if (trip->isDerived()) {
                 const QStringList unitStations = sourceView.unitStations.value(trip->sourcePath());
-                memberViewsMoved = memberViewsMoved || trip->externalStations() != unitStations;
+                const QString tripLabel = sourceView.tripCavernLabels.value(trip->sourcePath());
+                memberViewsMoved = memberViewsMoved || trip->externalStations() != unitStations
+                                   || trip->cavernLabel() != tripLabel;
+                trip->setCavernLabel(tripLabel);
                 trip->setExternalStations(unitStations);
                 trip->setExternalStationsError(QString());
                 continue;
@@ -961,23 +964,26 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
     // Named the way a fix on the owner names the station: a trip's file
     // stations sit under its scopePrefix(), as in fileFixedStations(). A fix
     // listed on a derived node keeps the owner's name for it.
-    const auto addFixes = [&](const QUuid& ownerId, const QString& scope,
-                              const cwExternalCenterline& centerline,
-                              const std::function<bool(const QString&)>& holdsNodePath) {
+    using ScannedFix = cwExternalCenterlineScanner::ScannedFix;
+    const auto ownerFixes = [&](const QUuid& ownerId, const QString& scope,
+                                const cwExternalCenterline& centerline,
+                                const std::function<bool(const ScannedFix&)>& holds) {
+        QList<cwAttachedFix> listed;
         const QString fileName = QFileInfo(centerline.entryFile()).fileName();
         const ReadInSystem readIn = readInSystemFor(ownerId, centerline);
-        for (const cwExternalCenterlineScanner::ScannedFix& fix : m_ownerFixes.value(ownerId)) {
-            if (!holdsNodePath(fix.nodePath)) {
+        for (const ScannedFix& fix : m_ownerFixes.value(ownerId)) {
+            if (!holds(fix)) {
                 continue;
             }
             const bool bare = !fix.hasCoordinateSystem();
-            attachedFixes.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
-                                  fileName, fix.file, fix.line,
-                                  bare ? readIn.system : QString(),
-                                  fix.reference,
-                                  bare && readIn.fileOutput,
-                                  ownerId});
+            listed.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
+                           fileName, fix.file, fix.line,
+                           bare ? readIn.system : QString(),
+                           fix.reference,
+                           bare && readIn.fileOutput,
+                           ownerId});
         }
+        return listed;
     };
     const auto addFileFixedStations = [&](const QUuid& ownerId) {
         const auto fixed = m_ownerFixedStations.constFind(ownerId);
@@ -986,27 +992,49 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
         }
     };
 
-    // A fix lives on the derived node whose file holds it; the owner keeps the
-    // ones its derived nodes do not take (the entry file's own, a hidden node's).
-    if (!node->externalCenterline().isEmpty()) {
-        const QSet<QString> derivedPaths = derivedNodePaths(node);
-        addFixes(node->id(), QString(), node->externalCenterline(),
-                 [&derivedPaths](const QString& nodePath) {
-            return !derivedPaths.contains(nodePath);
-        });
-        addFileFixedStations(node->id());
-    }
-    if (node->isSourced() && !node->isSourceRoot()) {
-        const cwSurveyNode* owner = node->sourceRoot();
-        if (owner != nullptr && !owner->externalCenterline().isEmpty()) {
-            const QString sourcePath = node->sourcePath();
-            addFixes(owner->id(), QString(), owner->externalCenterline(),
-                     [&sourcePath](const QString& nodePath) { return nodePath == sourcePath; });
+    // A fix lives on the derived trip whose leaf Survex block holds it, else on
+    // the derived node whose file holds it; the owner keeps the ones none of
+    // its derived records take (the entry file's own, a hidden node's).
+    const bool ownsAttachment = !node->externalCenterline().isEmpty();
+    const cwSurveyNode* owner = ownsAttachment ? node
+                                               : (node->isSourced() ? node->sourceRoot() : nullptr);
+    const bool ownerAttaches = owner != nullptr && !owner->externalCenterline().isEmpty();
+    // A fix's trip is a direct child of the node its nodePath names, so only
+    // this node's derived trips can take one of the fixes it is offered.
+    QSet<QString> tripPaths;
+    for (const cwTrip* trip : node->trips()) {
+        if (trip->isDerived()) {
+            tripPaths.insert(trip->sourcePath());
         }
     }
-    for (const cwTrip* trip : node->trips()) {
-        addFixes(trip->id(), trip->scopePrefix(), trip->externalCenterline(),
-                 [](const QString&) { return true; });
+    const auto takenByTrip = [&tripPaths](const ScannedFix& fix) {
+        return tripPaths.contains(fix.tripPath);
+    };
+    const auto fixesFromOwner = [&](const std::function<bool(const ScannedFix&)>& holds) {
+        return ownerFixes(owner->id(), QString(), owner->externalCenterline(), holds);
+    };
+    if (ownsAttachment) {
+        const QSet<QString> derivedPaths = derivedNodePaths(node);
+        attachedFixes.append(fixesFromOwner([&](const ScannedFix& fix) {
+            return !derivedPaths.contains(fix.nodePath) && !takenByTrip(fix);
+        }));
+        addFileFixedStations(node->id());
+    } else if (ownerAttaches) {
+        const QString sourcePath = node->sourcePath();
+        attachedFixes.append(fixesFromOwner([&](const ScannedFix& fix) {
+            return fix.nodePath == sourcePath && !takenByTrip(fix);
+        }));
+    }
+    for (cwTrip* trip : node->trips()) {
+        if (trip->isDerived()) {
+            const QString tripPath = trip->sourcePath();
+            trip->setAttachedFixes(ownerAttaches
+                ? fixesFromOwner([&tripPath](const ScannedFix& fix) { return fix.tripPath == tripPath; })
+                : QList<cwAttachedFix>());
+            continue;
+        }
+        attachedFixes.append(ownerFixes(trip->id(), trip->scopePrefix(), trip->externalCenterline(),
+                                        [](const ScannedFix&) { return true; }));
         addFileFixedStations(trip->id());
     }
 

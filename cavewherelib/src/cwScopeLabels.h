@@ -94,8 +94,9 @@ public:
     QString cavernPath(const QUuid& nodeId) const;
 
     //! The scope heads an included file opens itself, lowercased: the first
-    //! segment of each dotted station it holds and each derived node's
-    //! cavernLabel. A native trip written beside the *include never takes one.
+    //! segment of each dotted station it holds and each derived node's and
+    //! derived trip's cavernLabel. A native trip written beside the *include
+    //! never takes one.
     static QSet<QString> includedScopeHeads(const QStringList& rootStations,
                                             const QStringList& cavernLabels);
 

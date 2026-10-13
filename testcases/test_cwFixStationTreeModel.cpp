@@ -19,9 +19,11 @@
 #include "cwFixStationTreeFilterModel.h"
 #include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
+#include "cwNodeWarningModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
 #include "cwSurveyNode.h"
+#include "cwTrip.h"
 #include "ExternalCenterlineTestHelpers.h"
 
 // Async
@@ -40,9 +42,9 @@
 
 namespace {
 
-// ridge.svx fixes R0 itself and includes three files, each one *begin block:
-// entrances (E1 reference, E2, both bare), deep/lower (L1 under *cs UTM16N),
-// and deep/empty (no fix).
+// ridge.svx fixes R0 itself and includes three files, each one leaf *begin
+// block and so one derived trip: entrances (E1 reference, E2, both bare),
+// deep/lower (L1 under *cs UTM16N), and deep/empty (no fix).
 const QString kSubtreeFixture = QStringLiteral("survex_subtree_fixes/ridge.svx");
 const QString kRootName = QStringLiteral("ridge");
 const QString kEntrancesName = QStringLiteral("entrances");
@@ -100,7 +102,7 @@ constexpr int kWallsFixCount = 2;
 
 // fix_tree_sort_filter/sorted.svx fixes st2, st1, st10 on the source root, in
 // that order and with no *cs, and includes north.svx, whose *begin north
-// fixes n10 then n9 under *cs UTM16N.
+// fixes n10 then n9 under *cs UTM16N; north is a leaf, so a trip row.
 const QString kSortFilterFixture = QStringLiteral("fix_tree_sort_filter/sorted.svx");
 const QString kSortFilterNorthName = QStringLiteral("north");
 const QString kSt1 = QStringLiteral("st1");
@@ -137,7 +139,7 @@ cwCave* attachAndWaitForFixes(SavedProjectFixture* fixture, const QString& sourc
     const bool scanned = tryWait(kAttachWaitMs, [fixture, fixCount]() {
         int listed = 0;
         for (const cwSurveyNode* node : fixture->project->cavingRegion()->rootNode()->allNodes()) {
-            listed += node->attachedFixes()->count();
+            listed += static_cast<int>(nodeAndTripAttachedFixes(node).size());
         }
         return listed == fixCount;
     });
@@ -164,6 +166,29 @@ const cwSurveyNode* derivedNode(const cwSurveyNode* root, const QString& sourceP
     INFO("sourcePath " << sourcePath.toStdString());
     FAIL("No derived node has that sourcePath");
     return nullptr;
+}
+
+//! \a node's trip named \a name.
+const cwTrip* tripNamed(const cwSurveyNode* node, const QString& name)
+{
+    for (const cwTrip* trip : node->trips()) {
+        if (trip->name() == name) {
+            return trip;
+        }
+    }
+    INFO("trip " << name.toStdString());
+    FAIL("No trip has that name");
+    return nullptr;
+}
+
+//! The fixes \a trip lists, by station.
+QStringList tripFixStations(const cwTrip* trip)
+{
+    QStringList stations;
+    for (const cwAttachedFix& fix : trip->attachedFixes()->attachedFixes()) {
+        stations.append(fix.station);
+    }
+    return stations;
 }
 
 //! The tree's whole-node layout, for INFO lines.
@@ -205,6 +230,24 @@ QModelIndex nodeRow(const QAbstractItemModel& model, const QString& name,
             return child;
         }
         const QModelIndex found = nodeRow(model, name, child);
+        if (found.isValid()) {
+            return found;
+        }
+    }
+    return QModelIndex();
+}
+
+//! The trip row named \a name anywhere below \a parent, depth-first.
+QModelIndex tripRow(const QAbstractItemModel& model, const QString& name,
+                    const QModelIndex& parent = QModelIndex())
+{
+    for (int row = 0; row < model.rowCount(parent); ++row) {
+        const QModelIndex child = model.index(row, 0, parent);
+        if (rowKind(child) == cwFixStationTreeModel::TripRow
+            && child.data(cwFixStationTreeModel::NodeNameRole).toString() == name) {
+            return child;
+        }
+        const QModelIndex found = tripRow(model, name, child);
         if (found.isValid()) {
             return found;
         }
@@ -262,7 +305,7 @@ void addNativeFix(cwSurveyNode* node, const QString& station, const QString& sys
 }
 
 //! The rows directly under \a parent in row order: a fix row by its station
-//! name, a node row by kNodeLabel around its name.
+//! name, a node or trip row by kNodeLabel around its name.
 QStringList childLabels(const QAbstractItemModel& model, const QModelIndex& parent)
 {
     const int stationRole = roleId(model, QByteArrayLiteral("stationName"));
@@ -305,12 +348,12 @@ struct SortFilterFixture
     }
 
     QModelIndex rootRow() const { return proxy.index(0, 0); }
-    QModelIndex northRow() const { return nodeRow(proxy, kSortFilterNorthName); }
+    QModelIndex northRow() const { return tripRow(proxy, kSortFilterNorthName); }
 };
 
 } // namespace
 
-TEST_CASE("Attached fixes live on the derived node whose file holds them",
+TEST_CASE("Attached fixes live on the derived trip whose leaf block holds them",
           "[FixStationTreeModel]")
 {
     auto fixture = makeProject(QStringLiteral("fix-tree-rehome"));
@@ -318,25 +361,29 @@ TEST_CASE("Attached fixes live on the derived node whose file holds them",
     INFO("tree:\n" << describeTree(root));
 
     REQUIRE(root->name() == kRootName);
-    REQUIRE(childNodeNames(root) == QStringList({kEntrancesName, kLowerName, kEmptyName}));
-    const cwSurveyNode* entrances = childNodeNamed(root, kEntrancesName);
-    const cwSurveyNode* lower = childNodeNamed(root, kLowerName);
-    const cwSurveyNode* empty = childNodeNamed(root, kEmptyName);
+    CHECK(root->childNodeCount() == 0);
+    // The root's own unit, then one trip per included leaf block.
+    REQUIRE(tripNames(root) == QStringList({kRootName, kEntrancesName, kLowerName, kEmptyName}));
+    const cwTrip* entrances = tripNamed(root, kEntrancesName);
+    const cwTrip* lower = tripNamed(root, kLowerName);
+    const cwTrip* empty = tripNamed(root, kEmptyName);
     CHECK(entrances->sourcePath() == kEntrancesName);
     CHECK(lower->sourcePath() == kLowerName);
     CHECK(empty->sourcePath() == kEmptyName);
 
     CHECK(attachedFixStations(root) == QStringList({kRootFix}));
-    CHECK(attachedFixStations(entrances) == QStringList({kEntranceReferenceFix, kEntrancePlainFix}));
-    CHECK(attachedFixStations(lower) == QStringList({kLowerFix}));
-    CHECK(attachedFixStations(empty).isEmpty());
+    CHECK(tripFixStations(entrances) == QStringList({kEntranceReferenceFix, kEntrancePlainFix}));
+    CHECK(tripFixStations(lower) == QStringList({kLowerFix}));
+    CHECK(tripFixStations(empty).isEmpty());
 
-    if (attachedFixStations(entrances).size() == kEntrancesFixCount) {
-        CHECK(attachedFixFor(entrances, kEntranceReferenceFix).reference);
-        CHECK_FALSE(attachedFixFor(entrances, kEntrancePlainFix).reference);
+    const QList<cwAttachedFix>& entranceFixes = entrances->attachedFixes()->attachedFixes();
+    if (entranceFixes.size() == kEntrancesFixCount) {
+        CHECK(entranceFixes.at(0).reference);
+        CHECK_FALSE(entranceFixes.at(1).reference);
     }
-    if (attachedFixStations(lower).size() == 1) {
-        CHECK(attachedFixFor(lower, kLowerFix).coordinateSystem == kLowerSystem);
+    const QList<cwAttachedFix>& lowerFixes = lower->attachedFixes()->attachedFixes();
+    if (lowerFixes.size() == 1) {
+        CHECK(lowerFixes.at(0).coordinateSystem == kLowerSystem);
     }
 }
 
@@ -415,7 +462,7 @@ TEST_CASE("A Walls project's fixes live on the book whose survey file holds them
     CHECK_FALSE(model.indexOfFixRow(kWallsFixCount).isValid());
 }
 
-TEST_CASE("The fix station tree lists each node's fixes ahead of its child nodes",
+TEST_CASE("The fix station tree lists each node's fixes ahead of its trip rows",
           "[FixStationTreeModel]")
 {
     auto fixture = makeProject(QStringLiteral("fix-tree-structure"));
@@ -432,27 +479,24 @@ TEST_CASE("The fix station tree lists each node's fixes ahead of its child nodes
     CHECK(rootRow.data(cwFixStationTreeModel::NodeNameRole).toString() == kRootName);
     CHECK(rootRow.data(cwFixStationTreeModel::NodeIdRole).toUuid() == root->id());
 
-    // Fix rows first, then child node rows in tree order.
-    const QStringList expectedNames({kEntrancesName, kLowerName, kEmptyName});
+    // Fix rows first, then a row per trip that holds fixes, in trip order;
+    // empty fixes nothing, so it has no row.
+    const QStringList expectedNames({kEntrancesName, kLowerName});
     REQUIRE(model.rowCount(rootRow) == 1 + expectedNames.size());
     const QModelIndex firstRow = model.index(0, 0, rootRow);
     CHECK(rowKind(firstRow) == cwFixStationTreeModel::FixRow);
     CHECK(fixRowStations(model, rootRow) == QStringList({kRootFix}));
     for (int i = 0; i < expectedNames.size(); ++i) {
         const QModelIndex child = model.index(1 + i, 0, rootRow);
-        CHECK(rowKind(child) == cwFixStationTreeModel::NodeRow);
+        CHECK(rowKind(child) == cwFixStationTreeModel::TripRow);
         CHECK(child.data(cwFixStationTreeModel::NodeNameRole).toString() == expectedNames.at(i));
     }
+    CHECK_FALSE(tripRow(model, kEmptyName).isValid());
 
-    const QModelIndex entrancesRow = nodeRow(model, kEntrancesName);
+    const QModelIndex entrancesRow = tripRow(model, kEntrancesName);
     REQUIRE(entrancesRow.isValid());
     CHECK(model.rowCount(entrancesRow) == kEntrancesFixCount);
     CHECK(entrancesRow.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == kEntrancesFixCount);
-
-    const QModelIndex emptyRow = nodeRow(model, kEmptyName);
-    REQUIRE(emptyRow.isValid());
-    CHECK(model.rowCount(emptyRow) == 0);
-    CHECK(emptyRow.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == 0);
 
     CHECK(rootRow.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == kFixtureFixCount);
     CHECK(rootRow.data(cwFixStationTreeModel::SubtreeBareFixCountRole).toInt()
@@ -462,8 +506,8 @@ TEST_CASE("The fix station tree lists each node's fixes ahead of its child nodes
 
     CHECK(rootRow.data(cwFixStationTreeModel::IsAttachmentOwnerRole).toBool());
     for (const QString& name : expectedNames) {
-        INFO("node " << name.toStdString());
-        CHECK_FALSE(nodeRow(model, name).data(cwFixStationTreeModel::IsAttachmentOwnerRole).toBool());
+        INFO("trip " << name.toStdString());
+        CHECK_FALSE(tripRow(model, name).data(cwFixStationTreeModel::IsAttachmentOwnerRole).toBool());
     }
 
     CHECK(model.setData(rootRow, kUtm48N, cwFixStationTreeModel::FixCoordinateSystemRole));
@@ -483,8 +527,8 @@ TEST_CASE("The fix station tree lists each node's fixes ahead of its child nodes
     georeference(fixture.get());
     drainPipelines(fixture.get());
     CHECK(tryWait(kAttachWaitMs, [&]() {
-        return referenceRow.data(roleId(model, QByteArrayLiteral("readInSystem"))).toString()
-               == kUtm48N;
+        const QModelIndex row = fixRow(model, tripRow(model, kEntrancesName), kEntranceReferenceFix);
+        return row.data(roleId(model, QByteArrayLiteral("readInSystem"))).toString() == kUtm48N;
     }));
     // Every bare fix now reads in the owner's choice, so none is left unset.
     CHECK(rootRow.data(cwFixStationTreeModel::SubtreeBareFixCountRole).toInt()
@@ -516,6 +560,7 @@ TEST_CASE("The fix station tree follows added fixes and a detached source",
     CHECK(fixRowStations(model, pitRow) == QStringList({kNativeStation}));
 
     REQUIRE(nodeRow(model, kRootName).isValid());
+    REQUIRE(tripRow(model, kEntrancesName).isValid());
     QSignalSpy removed(&model, &QAbstractItemModel::rowsRemoved);
     auto future = managerOf(fixture.get())->deleteSourceRoot(sourceRoot);
     REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
@@ -525,7 +570,7 @@ TEST_CASE("The fix station tree follows added fixes and a detached source",
 
     CHECK(removed.count() >= 1);
     CHECK_FALSE(nodeRow(model, kRootName).isValid());
-    CHECK_FALSE(nodeRow(model, kEntrancesName).isValid());
+    CHECK_FALSE(tripRow(model, kEntrancesName).isValid());
     CHECK(nodeRow(model, kNativeCaveName).isValid());
 }
 
@@ -684,4 +729,188 @@ TEST_CASE("A filter nothing matches keeps the page's own row, and clearing it re
           == QStringList({kSt2, kSt1, kSt10, kNodeLabel.arg(kSortFilterNorthName)}));
     REQUIRE(fixture.northRow().isValid());
     CHECK(childLabels(fixture.proxy, fixture.northRow()) == QStringList({kNorthN10, kNorthN9}));
+}
+
+namespace {
+
+// survex_block_rows/leaf.svx: one leaf block, simmons_hall, whose bare *fix
+// st1 is the derived trip's.
+const QString kLeafFixture = QStringLiteral("survex_block_rows/leaf.svx");
+const QString kLeafTripName = QStringLiteral("simmons_hall");
+const QString kLeafFix = QStringLiteral("simmons_hall.st1");
+
+// survex_block_rows/mixed.svx: block cave fixes c1 among its own shots and
+// nests the leaf block inner, which fixes i2.
+const QString kMixedFixture = QStringLiteral("survex_block_rows/mixed.svx");
+const QString kMixedNodeName = QStringLiteral("cave");
+const QString kMixedTripName = QStringLiteral("inner");
+const QString kMixedNodeFix = QStringLiteral("cave.c1");
+const QString kMixedTripFix = QStringLiteral("cave.inner.i2");
+constexpr int kMixedFixCount = 2;
+
+// survex_block_rows/shared_scopes.svx: shared.svx, which fixes s1, included
+// from block one and from block two.
+const QString kSharedFixture = QStringLiteral("survex_block_rows/shared_scopes.svx");
+constexpr int kSharedFixCount = 2;
+
+// survex_block_rows/order.svx: beta (a node: it nests gamma) fixes b1 in
+// UTM48N, then the leaf alpha fixes a1 with no system.
+const QString kOrderFixture = QStringLiteral("survex_block_rows/order.svx");
+const QString kOrderBareFix = QStringLiteral("alpha.a1");
+const QString kOrderTripName = QStringLiteral("alpha");
+constexpr int kOrderFixCount = 2;
+
+const QString kTripKindLabel = QStringLiteral("Trip");
+
+//! Attaches \a source under the region's root, points \a model at the new
+//! root, and waits until the model lists \a fixCount fix rows.
+cwSurveyNode* attachForTree(SavedProjectFixture* fixture, cwFixStationTreeModel& model,
+                            const QString& source, int fixCount)
+{
+    cwSurveyNode* root = attachSourceUnderRegion(fixture, fixturePath(source));
+    model.setRootNode(root);
+    const bool listed = tryWait(kAttachWaitMs, [&model, fixCount]() {
+        return model.fixRowCount() == fixCount;
+    });
+    drainPipelines(fixture);
+    INFO("fix rows listed: " << model.fixRowCount());
+    CHECK(listed);
+    return root;
+}
+
+} // namespace
+
+TEST_CASE("A derived trip holding fixes is a trip row under its node, over its fix rows",
+          "[FixStationTreeModel][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-trip-row"));
+    georeference(fixture.get());
+    cwFixStationTreeModel model;
+    cwSurveyNode* root = attachForTree(fixture.get(), model, kLeafFixture, 1);
+
+    const cwTrip* trip = nullptr;
+    for (const cwTrip* candidate : root->trips()) {
+        if (candidate->name() == kLeafTripName) {
+            trip = candidate;
+        }
+    }
+    REQUIRE(trip != nullptr);
+
+    REQUIRE(model.rowCount() == 1);
+    const QModelIndex rootRow = model.index(0, 0);
+    CHECK(childLabels(model, rootRow) == QStringList({kNodeLabel.arg(kLeafTripName)}));
+
+    const QModelIndex tripIndex = tripRow(model, kLeafTripName);
+    REQUIRE(tripIndex.isValid());
+    CHECK(tripIndex.parent() == rootRow);
+    CHECK(tripIndex.data(cwFixStationTreeModel::NodeIdRole).toUuid() == trip->id());
+    CHECK(tripIndex.data(cwFixStationTreeModel::NodeKindLabelRole).toString() == kTripKindLabel);
+    CHECK(tripIndex.data(cwFixStationTreeModel::NodeObjectRole).value<cwSurveyNode*>() == root);
+    CHECK(tripIndex.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == 1);
+    CHECK(tripIndex.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == 1);
+    CHECK(tripIndex.data(cwFixStationTreeModel::SubtreeBareFixCountRole).toInt() == 1);
+    CHECK(tripIndex.data(cwFixStationTreeModel::SubtreeUnsetFixCountRole).toInt() == 1);
+    CHECK_FALSE(tripIndex.data(cwFixStationTreeModel::IsAttachmentOwnerRole).toBool());
+    CHECK(tripIndex.data(cwFixStationTreeModel::FixRowRole).toInt() == -1);
+    CHECK_FALSE(model.flags(tripIndex).testFlag(Qt::ItemIsEditable));
+    CHECK_FALSE(model.setData(tripIndex, kUtm48N, cwFixStationTreeModel::FixCoordinateSystemRole));
+
+    CHECK(fixRowStations(model, tripIndex) == QStringList({kLeafFix}));
+    const QModelIndex fixIndex = fixRow(model, tripIndex, kLeafFix);
+    REQUIRE(fixIndex.isValid());
+    CHECK(fixIndex.data(cwFixStationTreeModel::FixRowRole).toInt() == 0);
+    CHECK(model.indexOfFixRow(0) == fixIndex);
+    CHECK(fixIndex.data(cwFixStationTreeModel::NodeObjectRole).value<cwSurveyNode*>() == root);
+
+    CHECK(rootRow.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == 1);
+    CHECK(rootRow.data(cwFixStationTreeModel::AttachmentBareFixCountRole).toInt() == 1);
+
+    // The owner's choice reaches the trip row as the system it inherits.
+    REQUIRE(model.setData(rootRow, kUtm48N, cwFixStationTreeModel::FixCoordinateSystemRole));
+    drainPipelines(fixture.get());
+    CHECK(tripIndex.data(cwFixStationTreeModel::InheritedFixCoordinateSystemRole).toString()
+          == kUtm48N);
+    CHECK(tripIndex.data(cwFixStationTreeModel::InheritedFromNodeIdRole).toUuid() == root->id());
+    CHECK(tryWait(kAttachWaitMs, [&]() {
+        return tripIndex.data(cwFixStationTreeModel::SubtreeUnsetFixCountRole).toInt() == 0;
+    }));
+}
+
+TEST_CASE("A node's trip rows sit after its own fixes, and page rows run through them",
+          "[FixStationTreeModel][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-trip-row-order"));
+    cwFixStationTreeModel model;
+    attachForTree(fixture.get(), model, kMixedFixture, kMixedFixCount);
+
+    const QModelIndex caveRow = nodeRow(model, kMixedNodeName);
+    REQUIRE(caveRow.isValid());
+    // cave's own trip holds no fix, so it has no row.
+    CHECK(childLabels(model, caveRow)
+          == QStringList({kMixedNodeFix, kNodeLabel.arg(kMixedTripName)}));
+    CHECK(caveRow.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == 1);
+    CHECK(caveRow.data(cwFixStationTreeModel::SubtreeFixCountRole).toInt() == kMixedFixCount);
+
+    const QModelIndex innerRow = tripRow(model, kMixedTripName);
+    REQUIRE(innerRow.isValid());
+    CHECK(rowKind(innerRow) == cwFixStationTreeModel::TripRow);
+    CHECK(innerRow.parent() == caveRow);
+    CHECK(fixRowStations(model, innerRow) == QStringList({kMixedTripFix}));
+
+    const QModelIndex innerFix = fixRow(model, innerRow, kMixedTripFix);
+    REQUIRE(innerFix.isValid());
+    CHECK(innerFix.data(cwFixStationTreeModel::FixRowRole).toInt() == 1);
+    CHECK(model.indexOfFixRow(1) == innerFix);
+}
+
+TEST_CASE("A file included from two scopes gives each scope's trip row its own fix",
+          "[FixStationTreeModel][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-shared-scopes"));
+    cwFixStationTreeModel model;
+    attachForTree(fixture.get(), model, kSharedFixture, kSharedFixCount);
+
+    const QModelIndex rootRow = model.index(0, 0);
+    CHECK(childLabels(model, rootRow) == QStringList({kNodeLabel.arg(QStringLiteral("one")),
+                                                      kNodeLabel.arg(QStringLiteral("two"))}));
+    CHECK(fixRowStations(model, tripRow(model, QStringLiteral("one")))
+          == QStringList({QStringLiteral("one.s1")}));
+    CHECK(fixRowStations(model, tripRow(model, QStringLiteral("two")))
+          == QStringList({QStringLiteral("two.s1")}));
+}
+
+TEST_CASE("Warning 603 opens the bare fix a derived trip holds, at its page row",
+          "[FixStationTreeModel][cwNodeWarningModel][SurvexBlockRows]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-trip-warning"));
+    georeference(fixture.get());
+    cwFixStationTreeModel model;
+    cwSurveyNode* root = attachForTree(fixture.get(), model, kOrderFixture, kOrderFixCount);
+
+    // A node's trip rows come ahead of its child nodes, so alpha's bare fix
+    // is the page's first row although beta is written first.
+    const QModelIndex rootRow = model.index(0, 0);
+    CHECK(childLabels(model, rootRow) == QStringList({kNodeLabel.arg(kOrderTripName),
+                                                      kNodeLabel.arg(QStringLiteral("beta"))}));
+
+    REQUIRE(tryWait(kAttachWaitMs, [root]() { return bareFixWarnings(root).size() == 1; }));
+    cwNodeWarningModel warnings;
+    warnings.setNode(root);
+    int warningRow = -1;
+    for (int row = 0; row < warnings.count(); ++row) {
+        const auto target = static_cast<cwNodeWarningModel::Target>(
+            warnings.data(warnings.index(row), cwNodeWarningModel::TargetRole).toInt());
+        if (target == cwNodeWarningModel::Target::FixStationRow) {
+            warningRow = row;
+        }
+    }
+    REQUIRE(warningRow >= 0);
+    const int pageRow =
+        warnings.data(warnings.index(warningRow), cwNodeWarningModel::FixStationRowRole).toInt();
+    CHECK(pageRow == 0);
+
+    const QModelIndex target = model.indexOfFixRow(pageRow);
+    REQUIRE(target.isValid());
+    CHECK(target.data(roleId(model, QByteArrayLiteral("stationName"))).toString() == kOrderBareFix);
+    CHECK(rowKind(target.parent()) == cwFixStationTreeModel::TripRow);
 }

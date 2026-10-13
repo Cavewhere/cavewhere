@@ -1874,7 +1874,7 @@ MainWindowTest {
         function expandToggle() {
             const button = findChild(RootData.pageView.currentPageItem, "expandToggleButton")
             verify(button !== null, "the page has one expand/collapse toggle")
-            verify(button.visible, "the toggle shows while the page's node has child nodes")
+            verify(button.visible, "the toggle shows while the page's node has node or trip rows under it")
             return button
         }
 
@@ -2209,6 +2209,9 @@ MainWindowTest {
         //! fix sits on the derived node whose file holds it.
         function subtreeAttachedFixCount(node) {
             let count = node.attachedFixes.count
+            for (let i = 0; i < node.tripCount; ++i) {
+                count += node.trip(i).attachedFixes.count
+            }
             for (let i = 0; i < node.childNodeCount; ++i) {
                 count += subtreeAttachedFixCount(node.childNode(i))
             }
@@ -2454,10 +2457,11 @@ MainWindowTest {
         }
 
         // The page as a tree over the node and its subtree: a row per node, the
-        // node's fixes under it, attached fixes under the node whose file holds
-        // them. survex_subtree_fixes/ridge.svx fixes R0 itself and includes
-        // entrances (E1 reference, E2), deep/lower (L1 under *cs UTM16N) and
-        // deep/empty (no fix), each one *begin block and so one derived node.
+        // node's fixes under it, attached fixes under the node or derived trip
+        // whose file holds them. survex_subtree_fixes/ridge.svx fixes R0 itself
+        // and includes entrances (E1 reference, E2), deep/lower (L1 under *cs
+        // UTM16N) and deep/empty (no fix), each one leaf *begin block and so
+        // one derived trip.
 
         //! Attaches the subtree fixture under the region's root and waits for
         //! the scan to list all of its fixes.
@@ -2491,31 +2495,38 @@ MainWindowTest {
             const page = openFixStationsOf(root)
             verify(waitForChild("fixStationTreeView") !== null, "the page is a tree")
 
-            for (const nodeName of ["ridge", "entrances", "lower", "empty"]) {
-                verify(waitForChild("nodeRow." + nodeName) !== null, nodeName + " has a row")
+            const rootRow = waitForChild("nodeRow.ridge")
+            for (const tripName of ["entrances", "lower"]) {
+                verify(waitForChild("tripRow." + tripName) !== null, tripName + " has a row")
             }
             for (const station of ["R0", "entrances.E1", "entrances.E2", "lower.L1"]) {
                 verify(waitForChild("fixRow." + station) !== null, station + " has a row")
             }
-            const emptyRow = waitForChild("nodeRow.empty")
-            tryVerify(() => rootId.showsText(emptyRow, "No fixed stations"), 5000,
-                      "the node with no fix says so")
+            compare(liveChild("tripRow.empty"), null, "a trip that fixes nothing has no row")
+            compare(liveChild("nodeRow.entrances"), null, "a leaf block is no node row")
+            tryVerify(() => rootId.showsText(rootRow, "1 fix"), 5000,
+                      "the owner's row counts its own fix")
         }
 
         // A derived node's name links to that node's Fix Stations page.
+        // survex_block_rows/mixed.svx's block cave nests the leaf inner, so
+        // cave is a derived node.
         function test_aDerivedNodeNameOpensItsFixStationsPage() {
             saveProjectAs("fix-station-tree-name-link")
-            const root = attachSubtreeFixture()
+            const root = attachSourceToRegion(TestHelper.testcasesDatasetSourcePath(
+                                                  "external-centerlines/survex_block_rows/mixed.svx"))
+            tryVerify(() => subtreeAttachedFixCount(root) === 2, 20000,
+                      "the scan lists every fix in the file tree")
             openFixStationsOf(root)
 
-            mouseClick(waitForChild("nodeNameLink.entrances"))
+            mouseClick(waitForChild("nodeNameLink.cave"))
             tryVerify(() => RootData.pageView.currentPageItem !== null
                             && RootData.pageView.currentPageItem.objectName === "fixStationPage"
                             && RootData.pageView.currentPageItem.cave !== null
-                            && RootData.pageView.currentPageItem.cave.name === "entrances",
-                      5000, "the link opens entrances' Fix Stations page")
-            verify(RootData.pageSelectionModel.currentPageAddress.endsWith("Node=entrances/Fix Stations"),
-                   "the address names entrances' Fix Stations page, got "
+                            && RootData.pageView.currentPageItem.cave.name === "cave",
+                      5000, "the link opens cave's Fix Stations page")
+            verify(RootData.pageSelectionModel.currentPageAddress.endsWith("Node=cave/Fix Stations"),
+                   "the address names cave's Fix Stations page, got "
                    + RootData.pageSelectionModel.currentPageAddress)
         }
 
@@ -2525,14 +2536,14 @@ MainWindowTest {
             openFixStationsOf(root)
 
             verify(waitForChild("fixRow.entrances.E1") !== null)
-            const chevron = waitForChild("nodeChevron.entrances")
+            const chevron = waitForChild("tripChevron.entrances")
             mouseClick(chevron)
             tryVerify(() => {
                 const row = liveChild("fixRow.entrances.E1")
                 return row === null || !row.visible
             }, 5000, "collapsing entrances hides its fixes")
 
-            mouseClick(waitForChild("nodeChevron.entrances"))
+            mouseClick(waitForChild("tripChevron.entrances"))
             verify(waitForChild("fixRow.entrances.E1") !== null, "expanding shows them again")
         }
 
@@ -2586,6 +2597,55 @@ MainWindowTest {
 
             verify(waitForChild("fixRow.R0") !== null, "the attached root's fix is listed")
             verify(waitForChild("fixRow.p1") !== null, "a native cave's fix is listed")
+        }
+
+        // survex_block_rows/leaf.svx is one leaf block, simmons_hall, so the
+        // block is a trip, and its bare *fix st1 sits under the trip's row.
+        function test_aTripRowHoldsItsBlocksFixesAndInheritsTheOwnersSystem() {
+            saveProjectAs("fix-station-tree-trip-row")
+            addAnchorCave("AnchorCave")
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 5000,
+                      "the anchoring fix gives the project a frame")
+
+            const root = attachSourceToRegion(TestHelper.testcasesDatasetSourcePath(
+                                                  "external-centerlines/survex_block_rows/leaf.svx"))
+            compare(root.name, "leaf")
+            const page = openFixStationsOf(root)
+
+            const tripRow = waitForChild("tripRow.simmons_hall")
+            verify(waitForChild("fixRow.simmons_hall.st1") !== null, "the trip's fix has a row")
+            compare(liveChild("nodeRow.simmons_hall"), null, "the block is no node row")
+            tryVerify(() => rootId.showsText(tripRow, "1 without coordinate system"), 5000,
+                      "the trip row carries the block's badge")
+            compare(findChild(tripRow, "bareFixSystemCombo.simmons_hall"), null,
+                    "the trip row offers no system of its own")
+
+            // The owner's control stays on the owner's node row.
+            const ownerRow = waitForChild("nodeRow.leaf")
+            tryVerify(() => findChild(ownerRow, "bareFixSystemCombo.leaf") !== null, 5000,
+                      "the owner's row offers a system for the file's bare fixes")
+            page.setBareFixCoordinateSystem(0, "UTM48N")
+            tryVerify(() => root.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
+                      "the choice lands on the attachment")
+
+            const inherited = waitForChild("inheritedSystem.simmons_hall")
+            verify(isInside(inherited, liveChild("tripRow.simmons_hall")),
+                   "the inherited system shows on the trip row")
+            tryVerify(() => inherited.text.indexOf("UTM48N") >= 0
+                            && inherited.text.indexOf("leaf") >= 0, 5000,
+                      "the trip row names the system and the node it is set on")
+
+            mouseClick(waitForChild("tripChevron.simmons_hall"))
+            tryVerify(() => {
+                const row = liveChild("fixRow.simmons_hall.st1")
+                return row === null || !row.visible
+            }, 5000, "collapsing the trip hides its fixes")
+            mouseClick(waitForChild("tripChevron.simmons_hall"))
+            verify(waitForChild("fixRow.simmons_hall.st1") !== null, "expanding shows them again")
+
+            const toggle = findChild(page, "expandToggleButton")
+            verify(toggle !== null, "the page has one expand/collapse toggle")
+            tryVerify(() => toggle.visible, 5000, "a page whose rows are trip rows offers Collapse all")
         }
     }
 }

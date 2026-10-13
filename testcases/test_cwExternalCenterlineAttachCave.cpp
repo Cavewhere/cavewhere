@@ -557,20 +557,26 @@ constexpr double kBareFixMarginMeters = 0.1;
 
 //! The read-in note \a node's Fix Stations page shows on its row for
 //! \a station, read through the concatenated table the page binds on the node
-//! that lists the fix: \a node or one under it.
+//! that lists the fix: \a node or one under it, or the attached rows of a
+//! derived trip of one.
 QString readInWarningInTable(const cwSurveyNode* node, const QString& station)
 {
     for (const cwSurveyNode* holder : nodeAndDescendants(node)) {
-        const QAbstractItemModel* table = holder->fixStationTable();
-        const QHash<int, QByteArray> roles = table->roleNames();
-        const int stationRole = roles.key(QByteArrayLiteral("stationName"), -1);
-        const int warningRole = roles.key(QByteArrayLiteral("readInWarning"), -1);
-        REQUIRE(stationRole >= 0);
-        REQUIRE(warningRole >= 0);
-        for (int row = 0; row < table->rowCount(); ++row) {
-            const QModelIndex index = table->index(row, 0);
-            if (table->data(index, stationRole).toString() == station) {
-                return table->data(index, warningRole).toString();
+        QList<const QAbstractItemModel*> tables({holder->fixStationTable()});
+        for (const cwTrip* trip : holder->trips()) {
+            tables.append(trip->attachedFixes());
+        }
+        for (const QAbstractItemModel* table : std::as_const(tables)) {
+            const QHash<int, QByteArray> roles = table->roleNames();
+            const int stationRole = roles.key(QByteArrayLiteral("stationName"), -1);
+            const int warningRole = roles.key(QByteArrayLiteral("readInWarning"), -1);
+            REQUIRE(stationRole >= 0);
+            REQUIRE(warningRole >= 0);
+            for (int row = 0; row < table->rowCount(); ++row) {
+                const QModelIndex index = table->index(row, 0);
+                if (table->data(index, stationRole).toString() == station) {
+                    return table->data(index, warningRole).toString();
+                }
             }
         }
     }

@@ -382,12 +382,23 @@ inline QList<const cwSurveyNode*> nodeAndDescendants(const cwSurveyNode* node)
     return nodes;
 }
 
-//! The attached row that names \a station on \a node or a node under it: a
-//! file's fix is listed on the derived node whose file holds it.
+//! The attached rows \a node lists, then those its trips list.
+inline QList<cwAttachedFix> nodeAndTripAttachedFixes(const cwSurveyNode* node)
+{
+    QList<cwAttachedFix> fixes = node->attachedFixes()->attachedFixes();
+    for (const cwTrip* trip : node->trips()) {
+        fixes.append(trip->attachedFixes()->attachedFixes());
+    }
+    return fixes;
+}
+
+//! The attached row that names \a station on \a node, a node under it, or a
+//! trip of either: a file's fix is listed on the derived trip whose leaf
+//! Survex block holds it, else on the derived node whose file holds it.
 inline cwAttachedFix subtreeAttachedFixFor(const cwSurveyNode* node, const QString& station)
 {
     for (const cwSurveyNode* holder : nodeAndDescendants(node)) {
-        for (const cwAttachedFix& fix : holder->attachedFixes()->attachedFixes()) {
+        for (const cwAttachedFix& fix : nodeAndTripAttachedFixes(holder)) {
             if (fix.station == station) {
                 return fix;
             }

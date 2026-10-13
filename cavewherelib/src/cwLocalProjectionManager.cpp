@@ -34,6 +34,16 @@
 
 namespace {
 
+    //! The attached fixes \a node lists, then those its derived trips list.
+    QList<cwAttachedFix> listedAttachedFixes(const cwSurveyNode* node)
+    {
+        QList<cwAttachedFix> fixes = node->attachedFixes()->attachedFixes();
+        for (const cwTrip* trip : node->trips()) {
+            fixes.append(trip->attachedFixes()->attachedFixes());
+        }
+        return fixes;
+    }
+
     //! How near the origin a point has to sit to count as being on it. The frame
     //! travels as a PROJ string, so an origin written out and read back lands a
     //! fraction of a meter from where it started; a gap past this one is the
@@ -244,7 +254,7 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherAttachedF
     }
 
     for (const cwSurveyNode* node : nodes) {
-        for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
+        for (const cwAttachedFix& fix : listedAttachedFixes(node)) {
             if (!fix.coordinateSystem.isEmpty()) {
                 continue;
             }
@@ -711,7 +721,7 @@ QString cwLocalProjectionManager::attachmentDescription(const QUuid& ownerId) co
             }
         }
         if (station.isEmpty()) {
-            for (const cwAttachedFix& fix : node->attachedFixes()->attachedFixes()) {
+            for (const cwAttachedFix& fix : listedAttachedFixes(node)) {
                 if (fix.ownerId == ownerId && fix.coordinateSystem.isEmpty()) {
                     station = fix.station;
                     break;

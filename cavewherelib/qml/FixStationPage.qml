@@ -83,6 +83,9 @@ StandardPage {
     property list<string> collapsedNodeIds: []
     readonly property bool hasCollapsedNodes: fixStationPage.collapsedNodeIds.length > 0
 
+    // Set while the page's own node has a node or trip row under it to close.
+    property bool hasCollapsibleRows: false
+
     // Set when the tree's rows were inserted, removed or reset and the view
     // has yet to lay them out; the view's next layout re-announces the fix
     // rows.
@@ -241,15 +244,15 @@ StandardPage {
         }
     }
 
-    function isCollapsedNode(node: SurveyNode): bool {
-        return node !== null && fixStationPage.collapsedNodeIds.indexOf(String(node.id)) >= 0
+    function isCollapsedId(id: string): bool {
+        return fixStationPage.collapsedNodeIds.indexOf(id) >= 0
     }
 
-    // Opens every node row the user has not closed and closes the ones they
-    // have, which a filter may have opened. While filtering, every node row
-    // is open so each match shows. The page's own node is the tree's root
-    // and always open. Walks the model rather than the view's rows, which
-    // the view only recounts at its next layout.
+    // Opens every node and trip row the user has not closed and closes the
+    // ones they have, which a filter may have opened. While filtering, every
+    // such row is open so each match shows. The page's own node is the tree's
+    // root and always open. Walks the model rather than the view's rows,
+    // which the view only recounts at its next layout.
     function applyExpansion(): void {
         const isFiltering = treeFilterId.filterText.length > 0
         const open = (index, isRoot) => {
@@ -257,8 +260,8 @@ StandardPage {
             if (row < 0) {
                 return
             }
-            const node = treeFilterId.data(index, FixStationTreeModel.NodeObjectRole)
-            if (!isRoot && !isFiltering && fixStationPage.isCollapsedNode(node)) {
+            const id = String(treeFilterId.data(index, FixStationTreeModel.NodeIdRole))
+            if (!isRoot && !isFiltering && fixStationPage.isCollapsedId(id)) {
                 if (treeViewId.isExpanded(row)) {
                     treeViewId.collapse(row)
                 }
@@ -269,7 +272,8 @@ StandardPage {
             }
             for (let i = 0; i < treeFilterId.rowCount(index); ++i) {
                 const child = treeFilterId.index(i, 0, index)
-                if (treeFilterId.data(child, FixStationTreeModel.RowKindRole) === FixStationTreeModel.NodeRow) {
+                const kind = treeFilterId.data(child, FixStationTreeModel.RowKindRole)
+                if (kind === FixStationTreeModel.NodeRow || kind === FixStationTreeModel.TripRow) {
                     open(child, false)
                 }
             }
@@ -277,10 +281,26 @@ StandardPage {
         if (treeFilterId.rowCount() > 0) {
             open(treeFilterId.index(0, 0), true)
         }
+        fixStationPage.hasCollapsibleRows = fixStationPage.rootHasCollapsibleRows()
     }
 
-    function toggleNode(row: int, node: SurveyNode): void {
-        const id = String(node.id)
+    function rootHasCollapsibleRows(): bool {
+        if (treeModelId.rowCount() === 0) {
+            return false
+        }
+        const root = treeModelId.index(0, 0)
+        for (let i = 0; i < treeModelId.rowCount(root); ++i) {
+            const kind = treeModelId.data(treeModelId.index(i, 0, root), FixStationTreeModel.RowKindRole)
+            if (kind === FixStationTreeModel.NodeRow || kind === FixStationTreeModel.TripRow) {
+                return true
+            }
+        }
+        return false
+    }
+
+    // Opens or closes view row \a row, a node or trip row whose node or trip
+    // id is \a id.
+    function toggleRow(row: int, id: string): void {
         const collapsed = fixStationPage.collapsedNodeIds.filter(collapsedId => collapsedId !== id)
         if (treeViewId.isExpanded(row)) {
             collapsed.push(id)
@@ -296,10 +316,16 @@ StandardPage {
         treeViewId.expandRecursively()
     }
 
-    // Closes every node row under the page's own node.
+    // Closes every node and trip row under the page's own node.
     function collapseAll(): void {
         const ids = []
         const collect = (node) => {
+            for (let i = 0; i < node.tripCount; ++i) {
+                const trip = node.trip(i)
+                if (trip.attachedFixes.count > 0) {
+                    ids.push(String(trip.id))
+                }
+            }
             for (let i = 0; i < node.childNodeCount; ++i) {
                 const child = node.childNode(i)
                 ids.push(String(child.id))
@@ -831,9 +857,83 @@ StandardPage {
         }
     }
 
+    // A node or trip row's caret, which opens and closes the row.
+    component RowChevron : QQ.Item {
+        id: rowChevron
+        property bool expanded: false
+        property bool hasChildren: false
+
+        signal toggled()
+
+        Layout.preferredWidth: Theme.treeCaretWidth
+        Layout.preferredHeight: Theme.treeCaretWidth
+
+        QC.Label {
+            anchors.centerIn: parent
+            visible: rowChevron.hasChildren
+            text: rowChevron.expanded ? "\u25BE" : "\u25B8"
+            color: Theme.textSubtle
+        }
+
+        QQ.TapHandler {
+            enabled: rowChevron.hasChildren
+            onTapped: rowChevron.toggled()
+        }
+    }
+
+    // The fixes under a row that cavern refuses until a system is chosen for
+    // them.
+    component UnsetFixesBadge : QC.Label {
+        id: unsetFixesBadge
+        property int count: 0
+
+        visible: fixStationPage.projectHasFrame && unsetFixesBadge.count > 0
+        text: "\u26A0 " + unsetFixesBadge.count + " without coordinate system"
+        color: Theme.errorText
+        font.pixelSize: Theme.fontSizeSmall
+        leftPadding: Theme.chipPadding
+        rightPadding: Theme.chipPadding
+
+        background: QQ.Rectangle {
+            radius: Theme.chipRadius
+            color: Theme.warningSurface
+            border.color: Theme.warningBorder
+        }
+    }
+
+    // The system a row's bare fixes read in, chosen on fromNode, with a link
+    // to fromNode's Fix Stations page.
+    component InheritedSystemRow : RowLayout {
+        id: inheritedSystemRow
+        property string rowName: ""
+        property string system: ""
+        property SurveyNode fromNode: null
+
+        spacing: Theme.tightSpacing
+        Layout.leftMargin: Theme.treeCaretWidth
+
+        QC.Label {
+            objectName: "inheritedSystem." + inheritedSystemRow.rowName
+            text: "Coordinate system for bare fixes: "
+                  + (inheritedSystemRow.system !== "" ? inheritedSystemRow.system : "unset")
+                  + " (set on " + (inheritedSystemRow.fromNode?.name ?? "") + ")"
+            textFormat: QC.Label.PlainText
+            color: inheritedSystemRow.system !== "" ? Theme.textSubtle : Theme.errorText
+            font.pixelSize: Theme.fontSizeSmall
+        }
+
+        LinkText {
+            text: "\u2191"
+            onClicked: RootData.pageSelectionModel.currentPageAddress =
+                       linkGeneratorId.fixStationsLink(inheritedSystemRow.fromNode)
+        }
+    }
+
     // The rows are a tree over the node and its subtree: a row per node, and
     // under each its fix station table's rows (its own rows, then the
-    // read-only rows its files fix themselves) ahead of its child nodes.
+    // read-only rows its files fix themselves), then a row per derived trip
+    // whose leaf Survex block fixes stations, over those read-only rows, ahead
+    // of its child nodes.
     //
     // A fix row is addressed by its page row, its place among every fix row
     // in depth-first order. The node's own rows come first, so a page row
@@ -970,8 +1070,8 @@ StandardPage {
                 id: expandToggleButtonId
                 objectName: "expandToggleButton"
 
-                // Every node row is open while filtering.
-                visible: (fixStationPage.cave?.childNodeCount ?? 0) > 0
+                // Every node and trip row is open while filtering.
+                visible: fixStationPage.hasCollapsibleRows
                          && treeFilterId.filterText.length === 0
                 text: fixStationPage.hasCollapsedNodes ? qsTr("Expand all") : qsTr("Collapse all")
                 display: QC.AbstractButton.IconOnly
@@ -1056,6 +1156,11 @@ StandardPage {
         }
 
         DelegateChoice {
+            roleValue: FixStationTreeModel.TripRow
+            delegate: tripRowComponent
+        }
+
+        DelegateChoice {
             roleValue: FixStationTreeModel.FixRow
             delegate: wideDelegateComponent
         }
@@ -1068,6 +1173,11 @@ StandardPage {
         DelegateChoice {
             roleValue: FixStationTreeModel.NodeRow
             delegate: nodeRowComponent
+        }
+
+        DelegateChoice {
+            roleValue: FixStationTreeModel.TripRow
+            delegate: tripRowComponent
         }
 
         DelegateChoice {
@@ -1137,23 +1247,13 @@ StandardPage {
                     Layout.fillWidth: true
 
                     // The page's own node is the tree's root and stays open.
-                    QQ.Item {
+                    RowChevron {
                         objectName: "nodeChevron." + nodeRowId.nodeName
                         visible: !nodeRowId.isPageNode
-                        Layout.preferredWidth: Theme.treeCaretWidth
-                        Layout.preferredHeight: Theme.treeCaretWidth
+                        expanded: nodeRowId.expanded
+                        hasChildren: nodeRowId.hasChildren
 
-                        QC.Label {
-                            anchors.centerIn: parent
-                            visible: nodeRowId.hasChildren
-                            text: nodeRowId.expanded ? "\u25BE" : "\u25B8"
-                            color: Theme.textSubtle
-                        }
-
-                        QQ.TapHandler {
-                            enabled: nodeRowId.hasChildren
-                            onTapped: fixStationPage.toggleNode(nodeRowId.row, nodeRowId.node)
-                        }
+                        onToggled: fixStationPage.toggleRow(nodeRowId.row, String(nodeRowId.node.id))
                     }
 
                     Chip {
@@ -1191,21 +1291,8 @@ StandardPage {
                         font.pixelSize: Theme.fontSizeSmall
                     }
 
-                    // Cavern refuses these until a system is chosen for them.
-                    QC.Label {
-                        visible: fixStationPage.projectHasFrame
-                                 && nodeRowId.subtreeUnsetFixCount > 0
-                        text: "\u26A0 " + nodeRowId.subtreeUnsetFixCount + " without coordinate system"
-                        color: Theme.errorText
-                        font.pixelSize: Theme.fontSizeSmall
-                        leftPadding: Theme.chipPadding
-                        rightPadding: Theme.chipPadding
-
-                        background: QQ.Rectangle {
-                            radius: Theme.chipRadius
-                            color: Theme.warningSurface
-                            border.color: Theme.warningBorder
-                        }
+                    UnsetFixesBadge {
+                        count: nodeRowId.subtreeUnsetFixCount
                     }
                 }
 
@@ -1226,26 +1313,96 @@ StandardPage {
                     Layout.leftMargin: Theme.treeCaretWidth
                 }
 
-                RowLayout {
+                InheritedSystemRow {
                     visible: nodeRowId.showsInheritedSystem
-                    spacing: Theme.tightSpacing
-                    Layout.leftMargin: Theme.treeCaretWidth
+                    rowName: nodeRowId.nodeName
+                    system: nodeRowId.bareFixSystem
+                    fromNode: nodeRowId.inheritedFromNode
+                }
+            }
+        }
+    }
+
+    // A derived trip's row, under its node, over the fixes its leaf Survex
+    // block holds: chevron, kind, name, its fix count, and the system its
+    // fixes with no system of their own read in, chosen on the attachment's
+    // owner row.
+    QQ.Component {
+        id: tripRowComponent
+
+        QQ.Item {
+            id: tripRowId
+            objectName: "tripRow." + tripRowId.nodeName
+
+            required property bool expanded
+            required property bool hasChildren
+            required property int depth
+            required property int row
+            required property string nodeName
+            required property string nodeKindLabel
+            required property Trip trip
+            required property int ownFixCount
+            required property int subtreeBareFixCount
+            required property int subtreeUnsetFixCount
+            required property string inheritedFixCoordinateSystem
+            required property SurveyNode inheritedFromNode
+
+            readonly property bool showsInheritedSystem: tripRowId.inheritedFromNode !== null
+                                                         && tripRowId.subtreeBareFixCount > 0
+
+            implicitWidth: tripColumnId.implicitWidth + tripColumnId.anchors.leftMargin + Theme.delegatePadding
+            implicitHeight: tripColumnId.implicitHeight + 2 * Theme.delegatePadding
+
+            QQ.Rectangle {
+                anchors.fill: parent
+                color: Theme.surfaceMuted
+            }
+
+            ColumnLayout {
+                id: tripColumnId
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Theme.delegatePadding + tripRowId.depth * Theme.treeIndent
+                anchors.rightMargin: Theme.delegatePadding
+                spacing: Theme.tightSpacing
+
+                RowLayout {
+                    spacing: Theme.flowSpacing
+                    Layout.fillWidth: true
+
+                    RowChevron {
+                        objectName: "tripChevron." + tripRowId.nodeName
+                        expanded: tripRowId.expanded
+                        hasChildren: tripRowId.hasChildren
+
+                        onToggled: fixStationPage.toggleRow(tripRowId.row, String(tripRowId.trip.id))
+                    }
+
+                    Chip {
+                        text: tripRowId.nodeKindLabel
+                    }
 
                     QC.Label {
-                        objectName: "inheritedSystem." + nodeRowId.nodeName
-                        text: "Coordinate system for bare fixes: "
-                              + (nodeRowId.bareFixSystem !== "" ? nodeRowId.bareFixSystem : "unset")
-                              + " (set on " + (nodeRowId.inheritedFromNode?.name ?? "") + ")"
+                        text: tripRowId.nodeName
                         textFormat: QC.Label.PlainText
-                        color: nodeRowId.bareFixSystem !== "" ? Theme.textSubtle : Theme.errorText
-                        font.pixelSize: Theme.fontSizeSmall
+                        font.bold: true
                     }
 
-                    LinkText {
-                        text: "\u2191"
-                        onClicked: RootData.pageSelectionModel.currentPageAddress =
-                                   linkGeneratorId.fixStationsLink(nodeRowId.inheritedFromNode)
+                    Chip {
+                        text: tripRowId.ownFixCount === 1 ? "1 fix" : tripRowId.ownFixCount + " fixes"
                     }
+
+                    UnsetFixesBadge {
+                        count: tripRowId.subtreeUnsetFixCount
+                    }
+                }
+
+                InheritedSystemRow {
+                    visible: tripRowId.showsInheritedSystem
+                    rowName: tripRowId.nodeName
+                    system: tripRowId.inheritedFixCoordinateSystem
+                    fromNode: tripRowId.inheritedFromNode
                 }
             }
         }

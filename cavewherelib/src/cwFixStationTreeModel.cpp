@@ -10,6 +10,7 @@
 #include "cwAttachedFixModel.h"
 #include "cwExternalCenterline.h"
 #include "cwSurveyTreeModel.h"
+#include "cwTrip.h"
 
 //Qt includes
 #include <QConcatenateTablesProxyModel>
@@ -57,6 +58,40 @@ bool isUnset(const cwAttachedFix& fix)
     return isBare(fix) && fix.readInSystem.isEmpty();
 }
 
+//! How a trip row's kind is drawn.
+const QString kTripKindLabel = QStringLiteral("Trip");
+
+int bareCount(const QList<cwAttachedFix>& fixes)
+{
+    return static_cast<int>(std::count_if(fixes.cbegin(), fixes.cend(), isBare));
+}
+
+int unsetCount(const QList<cwAttachedFix>& fixes)
+{
+    return static_cast<int>(std::count_if(fixes.cbegin(), fixes.cend(), isUnset));
+}
+
+//! \a node's own attached fixes, then its trips'.
+QList<cwAttachedFix> nodeAndTripFixes(const cwSurveyNode* node)
+{
+    QList<cwAttachedFix> fixes = node->attachedFixes()->attachedFixes();
+    for (const cwTrip* trip : node->trips()) {
+        fixes.append(trip->attachedFixes()->attachedFixes());
+    }
+    return fixes;
+}
+
+//! The nearest node at or above \a node with an attachment of its own.
+cwSurveyNode* attachmentOwnerAtOrAbove(const cwSurveyNode* node)
+{
+    for (const cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
+        if (!current->externalCenterline().isEmpty()) {
+            return const_cast<cwSurveyNode*>(current);
+        }
+    }
+    return nullptr;
+}
+
 } // namespace
 
 cwFixStationTreeModel::cwFixStationTreeModel(QObject* parent) :
@@ -92,7 +127,7 @@ QModelIndex cwFixStationTreeModel::indexOfFixRow(int fixRow) const
     rebuildFixRows();
     for (auto it = m_firstFixRow.constBegin(); it != m_firstFixRow.constEnd(); ++it) {
         const int first = it.value();
-        if (fixRow >= first && fixRow < first + it.key()->fixStationCount()) {
+        if (fixRow >= first && fixRow < first + fixRowsOf(it.key())) {
             return fixIndex(it.key(), fixRow - first);
         }
     }
@@ -104,13 +139,26 @@ QModelIndex cwFixStationTreeModel::index(int row, int column, const QModelIndex&
     if (column != 0 || row < 0 || row >= rowCount(parent)) {
         return QModelIndex();
     }
-    return createIndex(row, column, parent.isValid() ? nodeAt(parent) : nullptr);
+    if (!parent.isValid()) {
+        return createIndex(row, column, nullptr);
+    }
+    QObject* holder = nodeAt(parent);
+    if (holder == nullptr) {
+        holder = tripAt(parent);
+    }
+    return createIndex(row, column, holder);
 }
 
 QModelIndex cwFixStationTreeModel::parent(const QModelIndex& child) const
 {
-    const cwSurveyNode* holder = holderOf(child);
-    return holder == nullptr ? QModelIndex() : indexOfNode(holder);
+    const QObject* holder = holderOf(child);
+    if (holder == nullptr) {
+        return QModelIndex();
+    }
+    if (const auto* trip = qobject_cast<const cwTrip*>(holder)) {
+        return indexOfTrip(trip);
+    }
+    return indexOfNode(static_cast<const cwSurveyNode*>(holder));
 }
 
 int cwFixStationTreeModel::rowCount(const QModelIndex& parent) const
@@ -118,8 +166,13 @@ int cwFixStationTreeModel::rowCount(const QModelIndex& parent) const
     if (!parent.isValid()) {
         return m_rootNode.isNull() ? 0 : 1;
     }
-    const cwSurveyNode* node = nodeAt(parent);
-    return node == nullptr ? 0 : node->fixStationCount() + node->childNodeCount();
+    if (const cwSurveyNode* node = nodeAt(parent)) {
+        return node->fixStationCount() + tripRowCount(node) + node->childNodeCount();
+    }
+    if (const cwTrip* trip = tripAt(parent)) {
+        return m_tripFixRows.value(trip);
+    }
+    return 0;
 }
 
 int cwFixStationTreeModel::columnCount(const QModelIndex& parent) const
@@ -135,12 +188,18 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
     }
 
     if (isFixRow(index)) {
-        const cwSurveyNode* holder = holderOf(index);
+        const QObject* holder = holderOf(index);
+        const auto* trip = qobject_cast<const cwTrip*>(holder);
         switch (role) {
         case RowKindRole:
             return FixRow;
         case NodeObjectRole:
-            return QVariant::fromValue(const_cast<cwSurveyNode*>(holder));
+            return QVariant::fromValue(trip != nullptr
+                                           ? trip->parentNode()
+                                           : const_cast<cwSurveyNode*>(
+                                                 static_cast<const cwSurveyNode*>(holder)));
+        case TripObjectRole:
+            return QVariant::fromValue(const_cast<cwTrip*>(trip));
         case FixRowRole:
             if (isLeaving(holder, index.row())) {
                 return -1;
@@ -148,7 +207,58 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
             rebuildFixRows();
             return m_firstFixRow.value(holder) + index.row();
         default:
-            return holder->fixStationTable()->index(index.row(), 0).data(role);
+            if (trip != nullptr) {
+                return trip->attachedFixes()->index(index.row()).data(role);
+            }
+            return static_cast<const cwSurveyNode*>(holder)
+                ->fixStationTable()->index(index.row(), 0).data(role);
+        }
+    }
+
+    if (const cwTrip* trip = tripAt(index)) {
+        const QList<cwAttachedFix>& fixes = trip->attachedFixes()->attachedFixes();
+        const auto owner = [trip]() { return attachmentOwnerAtOrAbove(trip->parentNode()); };
+        switch (role) {
+        case Qt::DisplayRole:
+        case NodeNameRole:
+            return trip->name();
+        case RowKindRole:
+            return TripRow;
+        case NodeIdRole:
+            return trip->id();
+        case NodeKindLabelRole:
+            return kTripKindLabel;
+        case NodeObjectRole:
+            return QVariant::fromValue(trip->parentNode());
+        case TripObjectRole:
+            return QVariant::fromValue(const_cast<cwTrip*>(trip));
+        case OwnFixCountRole:
+        case SubtreeFixCountRole:
+            return static_cast<int>(fixes.size());
+        case SubtreeBareFixCountRole:
+            return bareCount(fixes);
+        case SubtreeUnsetFixCountRole:
+            return unsetCount(fixes);
+        case AttachmentBareFixCountRole:
+            return 0;
+        case IsAttachmentOwnerRole:
+            return false;
+        case FixCoordinateSystemRole:
+            return QString();
+        case InheritedFixCoordinateSystemRole: {
+            const cwSurveyNode* inheritedFrom = owner();
+            return inheritedFrom == nullptr ? QString() : inheritedFrom->externalCenterline().fixCoordinateSystem();
+        }
+        case InheritedFromNodeIdRole: {
+            const cwSurveyNode* inheritedFrom = owner();
+            return inheritedFrom == nullptr ? QUuid() : inheritedFrom->id();
+        }
+        case InheritedFromNodeRole:
+            return QVariant::fromValue(owner());
+        case FixRowRole:
+            return -1;
+        default:
+            return QVariant();
         }
     }
 
@@ -171,6 +281,8 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
         return cwSurveyTreeModel::kindLabel(node);
     case NodeObjectRole:
         return QVariant::fromValue(const_cast<cwSurveyNode*>(node));
+    case TripObjectRole:
+        return QVariant::fromValue(static_cast<cwTrip*>(nullptr));
     case OwnFixCountRole:
         return node->fixStationCount();
     case SubtreeFixCountRole:
@@ -209,7 +321,12 @@ bool cwFixStationTreeModel::setData(const QModelIndex& index, const QVariant& va
     }
 
     if (isFixRow(index)) {
-        QAbstractItemModel* table = holderOf(index)->fixStationTable();
+        const QObject* holder = holderOf(index);
+        if (const auto* trip = qobject_cast<const cwTrip*>(holder)) {
+            cwAttachedFixModel* fixes = trip->attachedFixes();
+            return fixes->setData(fixes->index(index.row()), value, role);
+        }
+        QAbstractItemModel* table = static_cast<const cwSurveyNode*>(holder)->fixStationTable();
         return table->setData(table->index(index.row(), 0), value, role);
     }
 
@@ -229,7 +346,12 @@ Qt::ItemFlags cwFixStationTreeModel::flags(const QModelIndex& index) const
         return Qt::NoItemFlags;
     }
     if (isFixRow(index)) {
-        const QAbstractItemModel* table = holderOf(index)->fixStationTable();
+        const QObject* holder = holderOf(index);
+        if (const auto* trip = qobject_cast<const cwTrip*>(holder)) {
+            const cwAttachedFixModel* fixes = trip->attachedFixes();
+            return fixes->flags(fixes->index(index.row()));
+        }
+        const QAbstractItemModel* table = static_cast<const cwSurveyNode*>(holder)->fixStationTable();
         return table->flags(table->index(index.row(), 0));
     }
     const cwSurveyNode* node = nodeAt(index);
@@ -259,14 +381,15 @@ QHash<int, QByteArray> cwFixStationTreeModel::roleNames() const
         {AttachmentBareFixCountRole,        "attachmentBareFixCount"},
         {InheritedFromNodeRole,             "inheritedFromNode"},
         {FixRowRole,                        "fixRow"},
-        {SubtreeUnsetFixCountRole,          "subtreeUnsetFixCount"}
+        {SubtreeUnsetFixCountRole,          "subtreeUnsetFixCount"},
+        {TripObjectRole,                    "trip"}
     });
     return names;
 }
 
-cwSurveyNode* cwFixStationTreeModel::holderOf(const QModelIndex& index)
+QObject* cwFixStationTreeModel::holderOf(const QModelIndex& index)
 {
-    return static_cast<cwSurveyNode*>(index.internalPointer());
+    return static_cast<QObject*>(index.internalPointer());
 }
 
 cwSurveyNode* cwFixStationTreeModel::nodeAt(const QModelIndex& index) const
@@ -274,18 +397,53 @@ cwSurveyNode* cwFixStationTreeModel::nodeAt(const QModelIndex& index) const
     if (!index.isValid()) {
         return nullptr;
     }
-    const cwSurveyNode* holder = holderOf(index);
+    const QObject* holder = holderOf(index);
     if (holder == nullptr) {
         return m_rootNode;
     }
-    const int childRow = index.row() - holder->fixStationCount();
-    return childRow >= 0 ? holder->childNode(childRow) : nullptr;
+    const auto* node = qobject_cast<const cwSurveyNode*>(holder);
+    if (node == nullptr) {
+        return nullptr;
+    }
+    const int childRow = index.row() - node->fixStationCount() - tripRowCount(node);
+    return childRow >= 0 ? node->childNode(childRow) : nullptr;
 }
 
-bool cwFixStationTreeModel::isFixRow(const QModelIndex& index)
+cwTrip* cwFixStationTreeModel::tripAt(const QModelIndex& index) const
 {
-    const cwSurveyNode* holder = holderOf(index);
-    return index.isValid() && holder != nullptr && index.row() < holder->fixStationCount();
+    const auto* node = qobject_cast<const cwSurveyNode*>(holderOf(index));
+    if (!index.isValid() || node == nullptr) {
+        return nullptr;
+    }
+    const int tripRow = index.row() - node->fixStationCount();
+    const QList<cwTrip*> trips = m_tripRows.value(node);
+    return tripRow >= 0 && tripRow < trips.size() ? trips.at(tripRow) : nullptr;
+}
+
+bool cwFixStationTreeModel::isFixRow(const QModelIndex& index) const
+{
+    const QObject* holder = holderOf(index);
+    if (!index.isValid() || holder == nullptr) {
+        return false;
+    }
+    if (qobject_cast<const cwTrip*>(holder) != nullptr) {
+        return true;
+    }
+    return index.row() < static_cast<const cwSurveyNode*>(holder)->fixStationCount();
+}
+
+int cwFixStationTreeModel::fixRowsOf(const QObject* holder) const
+{
+    if (const auto* trip = qobject_cast<const cwTrip*>(holder)) {
+        return m_tripFixRows.value(trip);
+    }
+    return static_cast<const cwSurveyNode*>(holder)->fixStationCount();
+}
+
+int cwFixStationTreeModel::tripRowCount(const cwSurveyNode* node) const
+{
+    const auto trips = m_tripRows.constFind(node);
+    return trips == m_tripRows.constEnd() ? 0 : static_cast<int>(trips->size());
 }
 
 QModelIndex cwFixStationTreeModel::indexOfNode(const cwSurveyNode* node) const
@@ -304,12 +462,26 @@ QModelIndex cwFixStationTreeModel::indexOfNode(const cwSurveyNode* node) const
     if (childRow < 0) {
         return QModelIndex();
     }
-    return createIndex(holder->fixStationCount() + childRow, 0, holder);
+    return createIndex(holder->fixStationCount() + tripRowCount(holder) + childRow, 0,
+                       static_cast<QObject*>(holder));
 }
 
-QModelIndex cwFixStationTreeModel::fixIndex(const cwSurveyNode* node, int row) const
+QModelIndex cwFixStationTreeModel::indexOfTrip(const cwTrip* trip) const
 {
-    return createIndex(row, 0, const_cast<cwSurveyNode*>(node));
+    for (auto it = m_tripRows.constBegin(); it != m_tripRows.constEnd(); ++it) {
+        const int tripRow = it->indexOf(const_cast<cwTrip*>(trip));
+        if (tripRow >= 0) {
+            const cwSurveyNode* node = it.key();
+            return createIndex(node->fixStationCount() + tripRow, 0,
+                               static_cast<QObject*>(const_cast<cwSurveyNode*>(node)));
+        }
+    }
+    return QModelIndex();
+}
+
+QModelIndex cwFixStationTreeModel::fixIndex(const QObject* holder, int row) const
+{
+    return createIndex(row, 0, const_cast<QObject*>(holder));
 }
 
 bool cwFixStationTreeModel::isInTree(const cwSurveyNode* node) const
@@ -380,14 +552,16 @@ void cwFixStationTreeModel::connectNode(cwSurveyNode* node)
     });
 
     connect(node, &cwSurveyNode::beginInsertNodes, this, [this, node](int begin, int end) {
-        const int first = node->fixStationCount();
+        const int first = node->fixStationCount() + tripRowCount(node);
         beginInsertRows(indexOfNode(node), first + begin, first + end);
     });
     connect(node, &cwSurveyNode::insertedNodes, this, [this, node](int begin, int end) {
-        endInsertRows();
+        // The new rows arrive with their own trip rows, so those are counted
+        // before the insert ends.
         for (int i = begin; i <= end; ++i) {
             connectSubtree(node->childNode(i));
         }
+        endInsertRows();
         fixRowsMoved();
         emitCountsChanged(node);
     });
@@ -395,21 +569,42 @@ void cwFixStationTreeModel::connectNode(cwSurveyNode* node)
         for (int i = begin; i <= end; ++i) {
             cwSurveyNode* child = node->childNode(i);
             child->walk([this](const cwSurveyNode* leaving) {
-                m_leavingNodes.insert(leaving);
+                m_leavingHolders.insert(leaving);
+                for (cwTrip* trip : m_tripRows.value(leaving)) {
+                    m_leavingHolders.insert(trip);
+                }
             });
             disconnectSubtree(child);
         }
-        for (const cwSurveyNode* leaving : std::as_const(m_leavingNodes)) {
-            emitFixRowChanged(leaving, 0, leaving->fixStationCount() - 1);
+        for (const QObject* leaving : std::as_const(m_leavingHolders)) {
+            emitFixRowChanged(leaving, 0, fixRowsOf(leaving) - 1);
         }
-        const int first = node->fixStationCount();
+        const int first = node->fixStationCount() + tripRowCount(node);
         beginRemoveRows(indexOfNode(node), first + begin, first + end);
     });
     connect(node, &cwSurveyNode::removedNodes, this, [this, node]() {
-        m_leavingNodes.clear();
         endRemoveRows();
+        forgetLeavingNodes();
         fixRowsMoved();
         emitCountsChanged(node);
+    });
+
+    connect(node, &cwSurveyNode::insertedTrips, this, [this, node](int begin, int end) {
+        for (int i = begin; i <= end; ++i) {
+            cwTrip* trip = node->trip(i);
+            connectTrip(node, trip);
+            const int fixRows = trip->attachedFixes()->count();
+            if (fixRows > 0) {
+                insertTripRow(node, trip, fixRows);
+            }
+        }
+    });
+    connect(node, &cwSurveyNode::beginRemoveTrips, this, [this, node](int begin, int end) {
+        for (int i = begin; i <= end; ++i) {
+            cwTrip* trip = node->trip(i);
+            removeTripRow(node, trip);
+            disconnectTrip(trip);
+        }
     });
 
     connect(node, &cwSurveyNode::nameChanged, this, [this, node]() {
@@ -442,6 +637,136 @@ void cwFixStationTreeModel::connectNode(cwSurveyNode* node)
             emit fixRowCountChanged();
         }
     });
+
+    QList<cwTrip*>& tripRows = m_tripRows[node];
+    tripRows.clear();
+    for (cwTrip* trip : node->trips()) {
+        connectTrip(node, trip);
+        const int fixRows = trip->attachedFixes()->count();
+        if (fixRows > 0) {
+            tripRows.append(trip);
+            m_tripFixRows.insert(trip, fixRows);
+        }
+    }
+}
+
+void cwFixStationTreeModel::connectTrip(cwSurveyNode* node, cwTrip* trip)
+{
+    if (m_connectedTrips.contains(trip)) {
+        return;
+    }
+    m_connectedTrips.insert(trip);
+
+    const cwAttachedFixModel* fixes = trip->attachedFixes();
+    connect(fixes, &QAbstractItemModel::modelAboutToBeReset, this, [this, trip]() {
+        tripFixesAboutToReset(trip);
+    });
+    connect(fixes, &QAbstractItemModel::modelReset, this, [this, node, trip]() {
+        tripFixesReset(node, trip);
+    });
+    connect(fixes, &QAbstractItemModel::dataChanged, this,
+            [this, trip](const QModelIndex& topLeft, const QModelIndex& bottomRight,
+                         const QList<int>& roles) {
+        if (indexOfTrip(trip).isValid()) {
+            emit dataChanged(fixIndex(trip, topLeft.row()), fixIndex(trip, bottomRight.row()), roles);
+            emitTripRowChanged(trip, kCountRoles);
+        }
+    });
+    connect(trip, &cwTrip::nameChanged, this, [this, trip]() {
+        emitTripRowChanged(trip, {Qt::DisplayRole, NodeNameRole});
+    });
+    connect(trip, &QObject::destroyed, this, [this, trip]() {
+        m_connectedTrips.remove(trip);
+    });
+}
+
+void cwFixStationTreeModel::insertTripRow(cwSurveyNode* node, cwTrip* trip, int fixRows)
+{
+    const QList<cwTrip*> shown = m_tripRows.value(node);
+    int tripRow = 0;
+    for (const cwTrip* sibling : node->trips()) {
+        if (sibling == trip) {
+            break;
+        }
+        if (shown.contains(sibling)) {
+            ++tripRow;
+        }
+    }
+
+    const int row = node->fixStationCount() + tripRow;
+    beginInsertRows(indexOfNode(node), row, row);
+    m_tripRows[node].insert(tripRow, trip);
+    m_tripFixRows.insert(trip, fixRows);
+    endInsertRows();
+    fixRowsMoved();
+}
+
+void cwFixStationTreeModel::removeTripRow(const cwSurveyNode* node, cwTrip* trip)
+{
+    const int tripRow = m_tripRows.value(node).indexOf(trip);
+    if (tripRow < 0) {
+        return;
+    }
+
+    m_leavingHolders.insert(trip);
+    emitFixRowChanged(trip, 0, m_tripFixRows.value(trip) - 1);
+    const int row = node->fixStationCount() + tripRow;
+    beginRemoveRows(indexOfNode(node), row, row);
+    m_tripRows[node].removeAt(tripRow);
+    m_tripFixRows.remove(trip);
+    endRemoveRows();
+    m_leavingHolders.remove(trip);
+    fixRowsMoved();
+}
+
+void cwFixStationTreeModel::tripFixesAboutToReset(cwTrip* trip)
+{
+    const int fixRows = m_tripFixRows.value(trip);
+    const QModelIndex tripIndex = indexOfTrip(trip);
+    if (!tripIndex.isValid() || fixRows == 0) {
+        return;
+    }
+
+    m_leavingRows = {trip, 0, fixRows - 1};
+    emitFixRowChanged(trip, 0, fixRows - 1);
+    beginRemoveRows(tripIndex, 0, fixRows - 1);
+    m_tripFixRows.insert(trip, 0);
+    endRemoveRows();
+    m_leavingRows = LeavingRows();
+}
+
+void cwFixStationTreeModel::tripFixesReset(cwSurveyNode* node, cwTrip* trip)
+{
+    const int fixRows = trip->attachedFixes()->count();
+    const QModelIndex tripIndex = indexOfTrip(trip);
+    if (!tripIndex.isValid()) {
+        if (fixRows > 0) {
+            insertTripRow(node, trip, fixRows);
+        }
+    } else if (fixRows == 0) {
+        removeTripRow(node, trip);
+    } else {
+        beginInsertRows(tripIndex, 0, fixRows - 1);
+        m_tripFixRows.insert(trip, fixRows);
+        endInsertRows();
+        fixRowsMoved();
+    }
+    emitTripRowChanged(trip, kCountRoles);
+}
+
+void cwFixStationTreeModel::forgetLeavingNodes()
+{
+    for (auto it = m_tripRows.begin(); it != m_tripRows.end();) {
+        if (!m_leavingHolders.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        for (const cwTrip* trip : std::as_const(*it)) {
+            m_tripFixRows.remove(trip);
+        }
+        it = m_tripRows.erase(it);
+    }
+    m_leavingHolders.clear();
 }
 
 void cwFixStationTreeModel::disconnectSubtree(cwSurveyNode* node)
@@ -462,12 +787,27 @@ void cwFixStationTreeModel::disconnectAll()
         disconnectNode(node);
     }
     m_connected.clear();
+    m_connectedTrips.clear();
+    m_tripRows.clear();
+    m_tripFixRows.clear();
 }
 
 void cwFixStationTreeModel::disconnectNode(cwSurveyNode* node)
 {
     disconnect(node, nullptr, this, nullptr);
     disconnect(node->fixStationTable(), nullptr, this, nullptr);
+    for (cwTrip* trip : node->trips()) {
+        disconnectTrip(trip);
+    }
+}
+
+void cwFixStationTreeModel::disconnectTrip(cwTrip* trip)
+{
+    if (!m_connectedTrips.remove(trip)) {
+        return;
+    }
+    disconnect(trip, nullptr, this, nullptr);
+    disconnect(trip->attachedFixes(), nullptr, this, nullptr);
 }
 
 void cwFixStationTreeModel::rebuildFixRows() const
@@ -481,6 +821,10 @@ void cwFixStationTreeModel::rebuildFixRows() const
         m_rootNode->walk([this, &next](const cwSurveyNode* node) {
             m_firstFixRow.insert(node, next);
             next += node->fixStationCount();
+            for (const cwTrip* trip : m_tripRows.value(node)) {
+                m_firstFixRow.insert(trip, next);
+                next += m_tripFixRows.value(trip);
+            }
         });
     }
     m_fixRowCount = next;
@@ -494,7 +838,7 @@ void cwFixStationTreeModel::fixRowsMoved()
     rebuildFixRows();
 
     for (auto it = m_firstFixRow.constBegin(); it != m_firstFixRow.constEnd(); ++it) {
-        emitFixRowChanged(it.key(), 0, it.key()->fixStationCount() - 1);
+        emitFixRowChanged(it.key(), 0, fixRowsOf(it.key()) - 1);
     }
 
     if (m_fixRowCount != oldCount) {
@@ -506,23 +850,24 @@ void cwFixStationTreeModel::announceFixRows()
 {
     rebuildFixRows();
     for (auto it = m_firstFixRow.constBegin(); it != m_firstFixRow.constEnd(); ++it) {
-        const int count = it.key()->fixStationCount();
+        const int count = fixRowsOf(it.key());
         if (count > 0) {
             emit dataChanged(fixIndex(it.key(), 0), fixIndex(it.key(), count - 1), {});
         }
     }
 }
 
-bool cwFixStationTreeModel::isLeaving(const cwSurveyNode* holder, int row) const
+bool cwFixStationTreeModel::isLeaving(const QObject* holder, int row) const
 {
-    return m_leavingNodes.contains(holder)
-           || (holder == m_leavingRows.node && row >= m_leavingRows.first && row <= m_leavingRows.last);
+    return m_leavingHolders.contains(holder)
+           || (holder == m_leavingRows.holder && row >= m_leavingRows.first
+               && row <= m_leavingRows.last);
 }
 
-void cwFixStationTreeModel::emitFixRowChanged(const cwSurveyNode* node, int first, int last)
+void cwFixStationTreeModel::emitFixRowChanged(const QObject* holder, int first, int last)
 {
     if (first <= last) {
-        emit dataChanged(fixIndex(node, first), fixIndex(node, last), {FixRowRole});
+        emit dataChanged(fixIndex(holder, first), fixIndex(holder, last), {FixRowRole});
     }
 }
 
@@ -538,6 +883,9 @@ void cwFixStationTreeModel::emitAttachmentChanged(const cwSurveyNode* node)
 {
     node->walk([this](const cwSurveyNode* current) {
         emitNodeRowChanged(current, kAttachmentRoles);
+        for (const cwTrip* trip : m_tripRows.value(current)) {
+            emitTripRowChanged(trip, kAttachmentRoles);
+        }
     });
 }
 
@@ -549,11 +897,22 @@ void cwFixStationTreeModel::emitNodeRowChanged(const cwSurveyNode* node, const Q
     }
 }
 
+void cwFixStationTreeModel::emitTripRowChanged(const cwTrip* trip, const QList<int>& roles)
+{
+    const QModelIndex index = indexOfTrip(trip);
+    if (index.isValid()) {
+        emit dataChanged(index, index, roles);
+    }
+}
+
 int cwFixStationTreeModel::subtreeFixCount(const cwSurveyNode* node)
 {
     int count = 0;
     node->walk([&count](const cwSurveyNode* current) {
         count += current->fixStationCount();
+        for (const cwTrip* trip : current->trips()) {
+            count += trip->attachedFixes()->count();
+        }
     });
     return count;
 }
@@ -562,8 +921,7 @@ int cwFixStationTreeModel::subtreeBareFixCount(const cwSurveyNode* node)
 {
     int count = 0;
     node->walk([&count](const cwSurveyNode* current) {
-        const QList<cwAttachedFix>& fixes = current->attachedFixes()->attachedFixes();
-        count += static_cast<int>(std::count_if(fixes.cbegin(), fixes.cend(), isBare));
+        count += bareCount(nodeAndTripFixes(current));
     });
     return count;
 }
@@ -572,8 +930,7 @@ int cwFixStationTreeModel::subtreeUnsetFixCount(const cwSurveyNode* node)
 {
     int count = 0;
     node->walk([&count](const cwSurveyNode* current) {
-        const QList<cwAttachedFix>& fixes = current->attachedFixes()->attachedFixes();
-        count += static_cast<int>(std::count_if(fixes.cbegin(), fixes.cend(), isUnset));
+        count += unsetCount(nodeAndTripFixes(current));
     });
     return count;
 }
@@ -586,17 +943,14 @@ int cwFixStationTreeModel::attachmentBareFixCount(const cwSurveyNode* owner)
     int count = 0;
     owner->walk([&count, owner](const cwSurveyNode* current) {
         count += current->attachedFixes()->bareFixCount(owner->id());
+        for (const cwTrip* trip : current->trips()) {
+            count += trip->attachedFixes()->bareFixCount(owner->id());
+        }
     });
     return count;
 }
 
 cwSurveyNode* cwFixStationTreeModel::attachmentOwnerAbove(const cwSurveyNode* node)
 {
-    for (cwSurveyNode* current = node->parentNode(); current != nullptr;
-         current = current->parentNode()) {
-        if (!current->externalCenterline().isEmpty()) {
-            return current;
-        }
-    }
-    return nullptr;
+    return node->parentNode() == nullptr ? nullptr : attachmentOwnerAtOrAbove(node->parentNode());
 }

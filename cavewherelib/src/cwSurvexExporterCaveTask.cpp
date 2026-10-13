@@ -138,7 +138,7 @@ void cwSurvexExporterCaveTask::DriverTree::indexSourcedSubtree(const cwCaveData&
 }
 
 // A derived trip's station sits in its unit set, named below its node's cavern
-// path; a native trip's below its label in the root's block.
+// path and its own scope; a native trip's below its label in the root's block.
 QString cwSurvexExporterCaveTask::DriverTree::sourcedTripOperand(const Owner& owner,
                                                                  const QString& tail) const
 {
@@ -159,7 +159,9 @@ QString cwSurvexExporterCaveTask::DriverTree::sourcedTripOperand(const Owner& ow
         if (spelled == owner.trip->externalStations.cend()) {
             return QString();
         }
-        return cwStation::canonicalKey(rootPrefix + m_labels.cavernPath(owner.node->id)) + *spelled;
+        return cwStation::canonicalKey(rootPrefix + m_labels.cavernPath(owner.node->id)
+                                       + cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id))
+               + *spelled;
     }
 
     const QString tripScope = cwTrip::scopePrefix(*owner.trip, m_labels, owner.node->id);
