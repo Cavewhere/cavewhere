@@ -209,6 +209,65 @@ cwPassageTubeCases::Case loopCase()
     return loop;
 }
 
+cwPassageTubeCases::Case bendCase(const QString& name, const QList<Station>& stations)
+{
+    cwPassageTubeCases::Case bend;
+    bend.name = name;
+    bend.tags = {QStringLiteral("bend"), QStringLiteral("arms:0")};
+    bend.trip.chunks = {stations};
+    return bend;
+}
+
+// A 5 m leg north climbing 45°, then a 1.7 m leg climbing 51° that turns
+// 56° from it in 3D, toward the east, sampled every 0.5 m so the corner's
+// walls reach past the rings beside it and an elbow rounds it. The first
+// station and the corner read 0 on their left, the outside of the bend; the
+// last station is unread.
+cwPassageTubeCases::Case zeroOutsideCornerCase()
+{
+    constexpr double kFirstLegMeters = 5.0;
+    constexpr double kSecondLegMeters = 1.7;
+    constexpr double kTurnDegrees = 56.0;
+    constexpr double kFirstClimbDegrees = 45.0;
+    constexpr double kSecondClimbDegrees = 51.0;
+    constexpr double kSampleSpacingMeters = 0.5;
+    const Section corner {0.0, 1.07, 0.91, 0.15};
+    const double firstClimb = qDegreesToRadians(kFirstClimbDegrees);
+    const double secondClimb = qDegreesToRadians(kSecondClimbDegrees);
+    const double planTurnCosine = (std::cos(qDegreesToRadians(kTurnDegrees)) - std::sin(firstClimb) * std::sin(secondClimb))
+                                  / (std::cos(firstClimb) * std::cos(secondClimb));
+    const double planTurnDegrees = qRadiansToDegrees(std::acos(planTurnCosine));
+
+    const QVector3D start(0.0f, 0.0f, 0.0f);
+    const QVector3D bend = start + static_cast<float>(kFirstLegMeters) * direction(0.0, kFirstClimbDegrees);
+    const QVector3D end = bend + static_cast<float>(kSecondLegMeters) * direction(planTurnDegrees, kSecondClimbDegrees);
+    cwPassageTubeCases::Case zeroOutside = bendCase(QStringLiteral("23. Sharp bend at a station reading zero on the outside wall"),
+                                                    {{QStringLiteral("c0"), start, lrudStrings(corner)},
+                                                     {QStringLiteral("c1"), bend, lrudStrings(corner)},
+                                                     {QStringLiteral("c2"), end}});
+    zeroOutside.sampleSpacing = kSampleSpacingMeters;
+    return zeroOutside;
+}
+
+// Three level 4 m legs north, the last turning 72° east, read only at the
+// first station, whose left wall is 0: the bend's outside.
+cwPassageTubeCases::Case unreadSharpBendCase()
+{
+    constexpr float kLegMeters = 4.0f;
+    constexpr double kTurnDegrees = 72.0;
+    const Section first {0.0, 0.6, 0.6, 1.2};
+
+    const QVector3D u0(0.0f, 0.0f, 0.0f);
+    const QVector3D u1 = u0 + kLegMeters * direction(0.0, 0.0);
+    const QVector3D u2 = u1 + kLegMeters * direction(0.0, 0.0);
+    const QVector3D u3 = u2 + kLegMeters * direction(kTurnDegrees, 0.0);
+    return bendCase(QStringLiteral("24. Sharp bend in an unread passage next to a zero reading"),
+                    {{QStringLiteral("u0"), u0, lrudStrings(first)},
+                     {QStringLiteral("u1"), u1},
+                     {QStringLiteral("u2"), u2},
+                     {QStringLiteral("u3"), u3}});
+}
+
 double distanceToSegment(const QVector3D& point, const QVector3D& start, const QVector3D& end)
 {
     const QVector3D along = end - start;
@@ -549,6 +608,8 @@ QVector<cwPassageTubeCases::Case> cwPassageTubeCases::catalog()
     for (const JunctionCase& junctionCase : galleryCases()) {
         cases.append(toCase(junctionCase));
     }
+    cases.append(zeroOutsideCornerCase());
+    cases.append(unreadSharpBendCase());
     cases.append({QStringLiteral("Phake Cave"), {QStringLiteral("phake")}, phakeCave()});
     cases.append(loopCase());
     for (const JunctionCase& junctionCase : sweepCases()) {

@@ -149,7 +149,8 @@ public:
     // are tagged crowded.
     static QVector<JunctionCase> sweepCases();
 
-    // The gallery cases, Phake Cave, the sweep, and loops tagged arms:0.
+    // The gallery cases, Phake Cave, the sweep, and the loops and sharp
+    // bends tagged arms:0.
     static QVector<Case> catalog();
 
     // A seeded cave tree with junctionCount three-way junctions, surveyed as
