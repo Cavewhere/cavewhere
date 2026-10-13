@@ -10,7 +10,6 @@
 #include "cwCavingRegion.h"
 #include "cwSurveyNode.h"
 #include "cwAttachedFixModel.h"
-#include "cwCoordinateText.h"
 #include "cwCoordinateTransform.h"
 #include "cwExternalCenterline.h"
 #include "cwFixStation.h"
@@ -20,12 +19,10 @@
 #include "cwLazLayerModel.h"
 #include "cwLocalProjection.h"
 #include "cwMath.h"
-#include "cwSurvexCS.h"
 #include "cwTrip.h"
 
 //Qt includes
 #include <QHash>
-#include <QRegularExpression>
 
 //Std includes
 #include <algorithm>
@@ -34,25 +31,11 @@
 
 namespace {
 
-    //! The attached fixes \a node lists, then those its derived trips list.
-    QList<cwAttachedFix> listedAttachedFixes(const cwSurveyNode* node)
-    {
-        QList<cwAttachedFix> fixes = node->attachedFixes()->attachedFixes();
-        for (const cwTrip* trip : node->trips()) {
-            fixes.append(trip->attachedFixes()->attachedFixes());
-        }
-        return fixes;
-    }
-
     //! How near the origin a point has to sit to count as being on it. The frame
     //! travels as a PROJ string, so an origin written out and read back lands a
     //! fraction of a meter from where it started; a gap past this one is the
     //! project's data having moved rather than the round trip.
     constexpr double kFrameOriginToleranceMeters = 1.0;
-
-    //! How many numbers lead a Survex *fix's coordinate: x, y and z. Cavern
-    //! takes standard errors after them, which play no part in the position.
-    constexpr qsizetype kFixCoordinateComponents = 3;
 
     //! How far \a from and \a to sit apart horizontally, both being points in
     //! the frame. The frame is judged on horizontal position, so z takes no part.
@@ -255,7 +238,7 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherAttachedF
     }
 
     for (const cwSurveyNode* node : nodes) {
-        for (const cwAttachedFix& fix : listedAttachedFixes(node)) {
+        for (const cwAttachedFix& fix : node->listedAttachedFixes()) {
             if (!fix.coordinateSystem.isEmpty()) {
                 continue;
             }
@@ -264,39 +247,20 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherAttachedF
                 continue;
             }
 
-            // The choice is spelled the way the driver writes it after *cs, so
-            // a Survex name maps through cavern's own reading of it; anything
-            // that isn't one is taken as PROJ text, as the driver passes it on.
-            const std::optional<cwSurvexCS::Parsed> parsed = cwSurvexCS::fromSurvexCS(choice);
-            const QString cs = parsed.has_value() ? parsed->projCS : choice;
-            if (!cwCoordinateTransform::isValidCS(cs)) {
+            const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(choice);
+            if (!placement.has_value()) {
                 continue;
             }
-
-            const QString position =
-                fix.coordinate.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts)
-                    .mid(0, kFixCoordinateComponents)
-                    .join(QLatin1Char(' '));
-            const auto coordinate = cwCoordinateText::parse(position, cwUnits::Metric,
-                                                            cwCoordinateText::EastingNorthing);
-            if (coordinate.hasError()) {
-                continue;
-            }
-            const cwCoordinateText::Coordinate read = coordinate.value();
-            const bool latitudeFirst = parsed.has_value() && parsed->latitudeFirst;
-            const cwGeoPoint point(latitudeFirst ? read.northing : read.easting,
-                                   latitudeFirst ? read.easting : read.northing,
-                                   read.elevation);
 
             // The same domain rule as a fix station and a layer.
-            if (!cwCoordinateTransform::domainCheck(cs, point).isValid()) {
+            if (!cwCoordinateTransform::domainCheck(placement->cs, placement->point).isValid()) {
                 continue;
             }
 
             inputs.append(Input{
                 cwGeoReference::Anchor{cwGeoReference::Anchor::Attachment, fix.ownerId},
-                cs,
-                point
+                placement->cs,
+                placement->point
             });
         }
     }
@@ -722,7 +686,7 @@ QString cwLocalProjectionManager::attachmentDescription(const QUuid& ownerId) co
             }
         }
         if (station.isEmpty()) {
-            for (const cwAttachedFix& fix : listedAttachedFixes(node)) {
+            for (const cwAttachedFix& fix : node->listedAttachedFixes()) {
                 if (fix.ownerId == ownerId && fix.coordinateSystem.isEmpty()) {
                     station = fix.station;
                     break;

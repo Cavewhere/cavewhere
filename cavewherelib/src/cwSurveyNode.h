@@ -199,6 +199,9 @@ public:
     //! Feeds attachedFixes(), emitting attachedFixesChanged() when the list differs.
     void setAttachedFixes(const QList<cwAttachedFix>& fixes);
 
+    //! The attached fixes this node lists, then those its trips list.
+    QList<cwAttachedFix> listedAttachedFixes() const;
+
     //! Per owner (this node or one of its trips), the stations its attached
     //! file fixes itself, named as cavern names them in that file
     //! ("doghill.d1"). Derived like externalStations().
@@ -498,6 +501,10 @@ signals:
     //! attachedFixes()' rows or the stations behind fileFixedStations() changed.
     void attachedFixesChanged();
 
+    //! attachedFixesChanged() fired on this node or a node below it. Relayed one
+    //! hop up per level, like subtreeChanged().
+    void subtreeAttachedFixesChanged();
+
     //! fixStationTable()'s row count changed.
     void fixStationCountChanged();
 
@@ -549,6 +556,14 @@ public slots:
 private:
     cwSurveyNode(bool isRoot, QObject* parent);
 
+    //! The fixes the readout converges at: this node's own, then, when none
+    //! of them places the cave, the first attached fix the driver can place.
+    QList<cwFixStation> convergenceFixes() const;
+
+    //! Queues one recomputeGridConvergence() for however many changes arrive
+    //! before the event loop turns.
+    void scheduleGridConvergence();
+
     QList<cwTrip*> m_trips;
     QList<cwSurveyNode*> m_childNodes;
     QString m_name;
@@ -587,6 +602,7 @@ private:
     bool m_takesCaves = false;
     bool m_isSection = false;
     bool m_readOnly = false;
+    bool m_gridConvergenceScheduled = false;
     QUuid m_sourceId;
     QString m_sourcePath;
 

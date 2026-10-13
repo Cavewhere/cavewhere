@@ -391,14 +391,17 @@ inline QList<const cwSurveyNode*> nodeAndDescendants(const cwSurveyNode* node)
     return nodes;
 }
 
-//! The attached rows \a node lists, then those its trips list.
-inline QList<cwAttachedFix> nodeAndTripAttachedFixes(const cwSurveyNode* node)
+//! True when \a node, a node under it, or a trip of either lists an attached
+//! row naming \a station.
+inline bool subtreeListsAttachedFix(const cwSurveyNode* node, const QString& station)
 {
-    QList<cwAttachedFix> fixes = node->attachedFixes()->attachedFixes();
-    for (const cwTrip* trip : node->trips()) {
-        fixes.append(trip->attachedFixes()->attachedFixes());
-    }
-    return fixes;
+    const QList<const cwSurveyNode*> holders = nodeAndDescendants(node);
+    return std::any_of(holders.cbegin(), holders.cend(), [&station](const cwSurveyNode* holder) {
+        const QList<cwAttachedFix> fixes = holder->listedAttachedFixes();
+        return std::any_of(fixes.cbegin(), fixes.cend(), [&station](const cwAttachedFix& fix) {
+            return fix.station == station;
+        });
+    });
 }
 
 //! The attached row that names \a station on \a node, a node under it, or a
@@ -407,7 +410,7 @@ inline QList<cwAttachedFix> nodeAndTripAttachedFixes(const cwSurveyNode* node)
 inline cwAttachedFix subtreeAttachedFixFor(const cwSurveyNode* node, const QString& station)
 {
     for (const cwSurveyNode* holder : nodeAndDescendants(node)) {
-        for (const cwAttachedFix& fix : nodeAndTripAttachedFixes(holder)) {
+        for (const cwAttachedFix& fix : holder->listedAttachedFixes()) {
             if (fix.station == station) {
                 return fix;
             }

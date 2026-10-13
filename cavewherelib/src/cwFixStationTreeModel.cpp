@@ -71,16 +71,6 @@ int unsetCount(const QList<cwAttachedFix>& fixes)
     return static_cast<int>(std::count_if(fixes.cbegin(), fixes.cend(), isUnset));
 }
 
-//! \a node's own attached fixes, then its trips'.
-QList<cwAttachedFix> nodeAndTripFixes(const cwSurveyNode* node)
-{
-    QList<cwAttachedFix> fixes = node->attachedFixes()->attachedFixes();
-    for (const cwTrip* trip : node->trips()) {
-        fixes.append(trip->attachedFixes()->attachedFixes());
-    }
-    return fixes;
-}
-
 //! The nearest node at or above \a node with an attachment of its own.
 cwSurveyNode* attachmentOwnerAtOrAbove(const cwSurveyNode* node)
 {
@@ -921,7 +911,7 @@ int cwFixStationTreeModel::subtreeBareFixCount(const cwSurveyNode* node)
 {
     int count = 0;
     node->walk([&count](const cwSurveyNode* current) {
-        count += bareCount(nodeAndTripFixes(current));
+        count += bareCount(current->listedAttachedFixes());
     });
     return count;
 }
@@ -930,7 +920,7 @@ int cwFixStationTreeModel::subtreeUnsetFixCount(const cwSurveyNode* node)
 {
     int count = 0;
     node->walk([&count](const cwSurveyNode* current) {
-        count += unsetCount(nodeAndTripFixes(current));
+        count += unsetCount(current->listedAttachedFixes());
     });
     return count;
 }

@@ -8,6 +8,7 @@
 // Catch
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
 // Our
@@ -24,6 +25,7 @@
 #include "cwFixStationModel.h"
 #include "cwGeoPoint.h"
 #include "cwGeoReference.h"
+#include "cwGridConvergence.h"
 #include "cwLinePlotManager.h"
 #include "cwLocalProjectionManager.h"
 #include "cwNodeWarningModel.h"
@@ -47,6 +49,7 @@
 
 // Std
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace {
@@ -252,6 +255,40 @@ bool waitForSeededFrame(SavedProjectFixture* fixture)
     });
     drainPipelines(fixture);
     return solvedInFrame;
+}
+
+//! A tree shaped like a large Survex dataset: north.svx includes houping
+//! beside it and sanqiao above it, and sanqiao/fixedpts/ents.svx fixes e1
+//! with no *cs. north_cs_out.svx swaps in a houping that fixes h1 under its
+//! own *cs UTM48N.
+QString bareFixTreeFixture(const QString& entry)
+{
+    return fixturePath(QStringLiteral("survex_bare_fix_tree/north/%1").arg(entry));
+}
+const QString kTreeBareFixStation = QStringLiteral("sanqiao.e1");
+const QString kTreeOwnCsFixStation = QStringLiteral("houping.h1");
+// WGS 84 / UTM zone 47N, whose meridian sits 6 degrees west of the fix's.
+const QString kUtm47NFrame = QStringLiteral("EPSG:32647");
+// Well under the convergence 6 degrees off the meridian gives at the fix.
+constexpr double kOffMeridianConvergenceDegrees = 1.0;
+// A convergence read at the frame's own anchor: PROJ answers a hair off zero.
+constexpr double kAnchorConvergenceMarginDegrees = 1e-6;
+
+//! The convergence the readout should report for the fixture's fix in the
+//! project's current frame.
+double fixtureConvergenceIn(const QString& frameCS)
+{
+    const auto convergence = cwGridConvergence::computeAt(fixtureFixIn(frameCS), frameCS);
+    REQUIRE_FALSE(convergence.hasError());
+    return convergence.value();
+}
+
+//! Waits for \a node's grid convergence readout to read Valid.
+bool waitForValidConvergence(const cwSurveyNode* node)
+{
+    return tryWait(kAttachWaitMs, [node]() {
+        return node->gridConvergence()->state() == cwGridConvergence::Valid;
+    });
 }
 
 } // namespace
@@ -675,13 +712,7 @@ TEST_CASE("A frame a bare file fix's system gave the project survives save and r
     REQUIRE(reopened != nullptr);
     // The reload's scan lists the file's fix again; the frame holds through it.
     CHECK(tryWait(kAttachWaitMs, [reopened]() {
-        const auto holders = nodeAndDescendants(reopened);
-        return std::any_of(holders.cbegin(), holders.cend(), [](const cwSurveyNode* holder) {
-            const QList<cwAttachedFix> fixes = nodeAndTripAttachedFixes(holder);
-            return std::any_of(fixes.cbegin(), fixes.cend(), [](const cwAttachedFix& fix) {
-                return fix.station == kFixedStation;
-            });
-        });
+        return subtreeListsAttachedFix(reopened, kFixedStation);
     }));
     drainRoot(freshRoot.get());
 
@@ -742,4 +773,107 @@ TEST_CASE("A native fix added after a bare file fix's system gave the project it
     CHECK(geoReference->localCoordinateSystem() == seededFrame);
     CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
     CHECK(geoReference->anchor().id == root->id());
+}
+
+TEST_CASE("The grid convergence readout converges at a bare file fix once its system is chosen",
+          "[AttachInclude][BareFixCS][GridConvergence]")
+{
+    // A frame one zone west of the fix's, so the fix sits off its meridian
+    // and the convergence there is far from zero.
+    auto fixture = makeProject(QStringLiteral("bare-fix-convergence"), false);
+    fixture->project->cavingRegion()->geoReference()->restore(cwGeoReference::Frozen,
+                                                              kUtm47NFrame, {}, QString());
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+    const cwGridConvergence* convergence = root->gridConvergence();
+    REQUIRE(convergence->state() == cwGridConvergence::NoFixStation);
+
+    chooseFixSystem(root, kUtm48N);
+    const bool valid = waitForValidConvergence(root);
+    drainPipelines(fixture.get());
+    INFO("readout: " << convergence->text().toStdString());
+    CHECK(valid);
+    CHECK(convergence->state() == cwGridConvergence::Valid);
+    CHECK(convergence->text().contains(kFixedStation));
+    const QString frame = fixture->project->cavingRegion()->geoReference()->localCoordinateSystem();
+    const double expected = fixtureConvergenceIn(frame);
+    INFO("expected convergence: " << expected);
+    REQUIRE(std::abs(expected) > kOffMeridianConvergenceDegrees);
+    CHECK(convergence->angle() == Catch::Approx(expected));
+
+    // With no system the fix places nothing again.
+    chooseFixSystem(root, QString());
+    CHECK(tryWait(kAttachWaitMs, [convergence]() {
+        return convergence->state() == cwGridConvergence::NoFixStation;
+    }));
+}
+
+TEST_CASE("A bare file fix whose system gave the project its frame converges at that fix",
+          "[AttachInclude][BareFixCS][BareFixFrame][GridConvergence]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-frame-convergence"), false);
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+
+    chooseFixSystem(root, kUtm48N);
+    REQUIRE(waitForSeededFrame(fixture.get()));
+
+    const cwGridConvergence* convergence = root->gridConvergence();
+    const bool valid = waitForValidConvergence(root);
+    INFO("readout: " << convergence->text().toStdString());
+    CHECK(valid);
+    CHECK(convergence->text().contains(kFixedStation));
+    // The frame is centered on the fix, where grid north is true north.
+    CHECK_THAT(convergence->angle(),
+               Catch::Matchers::WithinAbs(0.0, kAnchorConvergenceMarginDegrees));
+}
+
+TEST_CASE("An attachment owner converges at a bare file fix listed below it",
+          "[AttachInclude][BareFixCS][GridConvergence]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-fix-tree-convergence"), true);
+    cwCave* owner = attachSourceUnderRegion(fixture.get(),
+                                            bareFixTreeFixture(QStringLiteral("north.svx")));
+    drainPipelines(fixture.get());
+    REQUIRE(tryWait(kAttachWaitMs, [owner]() {
+        return subtreeListsAttachedFix(owner, kTreeBareFixStation);
+    }));
+    // The fix is listed on a node below the owner, where the system is chosen.
+    CHECK_FALSE(attachedFixStations(owner).contains(kTreeBareFixStation));
+
+    chooseFixSystem(owner, kUtm48N);
+    REQUIRE(tryWait(kAttachWaitMs, [owner]() {
+        return subtreeAttachedFixFor(owner, kTreeBareFixStation).readInSystem == kUtm48N;
+    }));
+    const bool valid = waitForValidConvergence(owner);
+    drainPipelines(fixture.get());
+
+    const cwGridConvergence* convergence = owner->gridConvergence();
+    INFO("readout: " << convergence->text().toStdString());
+    CHECK(valid);
+    CHECK(convergence->text().contains(kTreeBareFixStation));
+
+    // A native cave beside it has no fix of its own and reads none.
+    CHECK(fixture->cave->gridConvergence()->state() == cwGridConvergence::NoFixStation);
+}
+
+TEST_CASE("An attachment owner converges at a file fix that names its own system",
+          "[AttachInclude][BareFixCS][GridConvergence]")
+{
+    auto fixture = makeProject(QStringLiteral("own-cs-tree-convergence"), true);
+    cwCave* owner = attachSourceUnderRegion(fixture.get(),
+                                            bareFixTreeFixture(QStringLiteral("north_cs_out.svx")));
+    drainPipelines(fixture.get());
+    REQUIRE(tryWait(kAttachWaitMs, [owner]() {
+        return subtreeListsAttachedFix(owner, kTreeOwnCsFixStation);
+    }));
+    REQUIRE(subtreeAttachedFixFor(owner, kTreeOwnCsFixStation).coordinateSystem == kUtm48N);
+
+    // No system is chosen: houping's fix places the cave on its own.
+    const bool valid = waitForValidConvergence(owner);
+    drainPipelines(fixture.get());
+    const cwGridConvergence* convergence = owner->gridConvergence();
+    INFO("readout: " << convergence->text().toStdString());
+    CHECK(valid);
+    CHECK(convergence->text().contains(kTreeOwnCsFixStation));
 }

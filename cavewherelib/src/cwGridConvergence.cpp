@@ -163,6 +163,12 @@ QString cwGridConvergence::detailText() const
     return readoutAt(m_angle, m_station, kDetailDecimals) + grid;
 }
 
+bool cwGridConvergence::placesCave(const cwFixStation& fix)
+{
+    return fix.hasPlacedCoordinate()
+           && cwCoordinateTransform::isValidCS(fix.inputCS().trimmed());
+}
+
 void cwGridConvergence::update(const QList<cwFixStation>& fixStations,
                                const QString& frameCS)
 {
@@ -178,15 +184,10 @@ void cwGridConvergence::update(const QList<cwFixStation>& fixStations,
             return { 0.0, NoCoordinateSystem, QString(), QString() };
         }
 
-        // Only a fix that reads as a coordinate under a system of its own says
-        // where the cave is; the rest report zeros, which would converge at the
-        // frame's origin rather than at the cave.
-        const auto located =
-            std::find_if(fixStations.constBegin(), fixStations.constEnd(),
-                         [](const cwFixStation& fix) {
-                             return fix.hasPlacedCoordinate()
-                                    && cwCoordinateTransform::isValidCS(fix.inputCS().trimmed());
-                         });
+        // The rest report zeros, which would converge at the frame's origin
+        // rather than at the cave.
+        const auto located = std::find_if(fixStations.constBegin(), fixStations.constEnd(),
+                                          &cwGridConvergence::placesCave);
         if (located == fixStations.constEnd()) {
             return { 0.0, NoFixStation, QString(), QString() };
         }

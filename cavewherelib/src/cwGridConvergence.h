@@ -99,6 +99,10 @@ public:
     /// reads NoCoordinateSystem — nothing stands in for one.
     void update(const QList<cwFixStation>& fixStations, const QString& frameCS);
 
+    /// True when \a fix reads as a coordinate under a system of its own, so it
+    /// says where the cave is. update() converges at the first such fix.
+    static bool placesCave(const cwFixStation& fix);
+
     /// Pure, stateless math: (location, sourceCS) → convergence degrees.
     static Monad::Result<double> computeAt(const cwGeoPoint& location,
                                            const QString& sourceCS);

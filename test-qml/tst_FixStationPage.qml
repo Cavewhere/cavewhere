@@ -2456,6 +2456,31 @@ MainWindowTest {
                       5000, "the Data page names the fix the frame is centered on")
         }
 
+        // Once a file's bare fix has a system, the owner's page reads its grid
+        // convergence at that fix.
+        function test_aChosenBareFixSystemGivesTheNodePageAConvergence() {
+            saveProjectAs("fix-station-bare-fix-convergence")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_bare_fix/bare_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+
+            const page = openFixStationsOf(cave)
+            tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
+            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null)
+            page.setBareFixCoordinateSystem(0, "UTM48N")
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 10000,
+                      "the choice gives the project a frame")
+
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name)
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "cavePage",
+                      5000, "should land on cavePage")
+            const readout = findChild(RootData.pageView.currentPageItem, "gridConvergenceValue")
+            verify(readout !== null, "the node page shows the grid convergence")
+            tryVerify(() => readout.text.indexOf("bare.A") >= 0, 10000,
+                      "the readout converges at the file's fix: " + readout.text)
+        }
+
         // The page as a tree over the node and its subtree: a row per node, the
         // node's fixes under it, attached fixes under the node or derived trip
         // whose file holds them. survex_subtree_fixes/ridge.svx fixes R0 itself

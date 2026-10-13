@@ -10,6 +10,7 @@
 
 //Our includes
 #include "cwGlobals.h"
+#include "cwGeoPoint.h"
 
 //Qt includes
 #include <QHashFunctions>
@@ -17,6 +18,9 @@
 #include <QString>
 #include <QUuid>
 #include <QtQml/qqmlregistration.h>
+
+//Std includes
+#include <optional>
 
 /**
  * Value type identifying the entry-point centerline file (Survex,
@@ -132,6 +136,23 @@ public:
     //! The note the Fix Stations page shows on the row: where the fix is read
     //! in and which line left it there. Empty when readInSystem is.
     QString readInWarning() const;
+
+    //! The system the driver solves the fix in: its own coordinateSystem, else
+    //! readInSystem. Empty when nothing names one.
+    QString solveSystem() const;
+
+    //! Where the fix sits once read in a system: the PROJ text of that system
+    //! and the point in its own axis order.
+    struct Placement
+    {
+        QString cs;
+        cwGeoPoint point;
+    };
+
+    //! The fix's coordinate read in \a system, spelled the way the driver
+    //! writes it after *cs (a Survex name, or else PROJ text). Empty when the
+    //! system names no valid CRS or the coordinate does not parse.
+    std::optional<Placement> placementIn(const QString& system) const;
 
     bool operator==(const cwAttachedFix& other) const = default;
 };

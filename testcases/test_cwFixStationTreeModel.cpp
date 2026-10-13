@@ -139,7 +139,7 @@ cwCave* attachAndWaitForFixes(SavedProjectFixture* fixture, const QString& sourc
     const bool scanned = tryWait(kAttachWaitMs, [fixture, fixCount]() {
         int listed = 0;
         for (const cwSurveyNode* node : fixture->project->cavingRegion()->rootNode()->allNodes()) {
-            listed += static_cast<int>(nodeAndTripAttachedFixes(node).size());
+            listed += static_cast<int>(node->listedAttachedFixes().size());
         }
         return listed == fixCount;
     });

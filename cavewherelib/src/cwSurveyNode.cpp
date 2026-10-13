@@ -18,6 +18,7 @@
 #include "cwData.h"
 #include "cwFixStationModel.h"
 #include "cwGridConvergence.h"
+#include "cwFixStation.h"
 #include "cwNameUtils.h"
 #include "cwKeywordModel.h"
 #include "cwTripCalibration.h"
@@ -30,6 +31,7 @@
 
 //Std includes
 #include <algorithm>
+#include <optional>
 
 namespace {
     //! Joins a node's path names into the one hierarchy string the keyword
@@ -95,6 +97,16 @@ cwSurveyNode::cwSurveyNode(bool isRoot, QObject* parent) :
                     recomputeGridConvergence();
                 }
             });
+
+    // An attachment owner's readout reads the fixes its derived subtree lists,
+    // and removing a derived node changes no remaining node's rows.
+    connect(this, &cwSurveyNode::attachedFixesChanged,
+            this, &cwSurveyNode::subtreeAttachedFixesChanged);
+    // Coalesced, since a reconcile inserts its rows one at a time.
+    connect(this, &cwSurveyNode::subtreeAttachedFixesChanged,
+            this, &cwSurveyNode::scheduleGridConvergence);
+    connect(this, &cwSurveyNode::subtreeChanged,
+            this, &cwSurveyNode::scheduleGridConvergence);
 
     wireScopeLabelAggregate();
 
@@ -638,6 +650,8 @@ void cwSurveyNode::connectNode(cwSurveyNode* node)
     //once per level. UniqueConnection because undo/redo re-inserts the same node.
     connect(node, &cwSurveyNode::subtreeChanged,
             this, &cwSurveyNode::subtreeChanged, Qt::UniqueConnection);
+    connect(node, &cwSurveyNode::subtreeAttachedFixesChanged,
+            this, &cwSurveyNode::subtreeAttachedFixesChanged, Qt::UniqueConnection);
     connect(node, &cwSurveyNode::scopeLabelsChanged,
             this, &cwSurveyNode::scopeLabelsChanged, Qt::UniqueConnection);
     connect(node, &cwSurveyNode::tripsDeleted,
@@ -671,6 +685,8 @@ void cwSurveyNode::disconnectNode(cwSurveyNode* node)
 {
     disconnect(node, &cwSurveyNode::subtreeChanged,
                this, &cwSurveyNode::subtreeChanged);
+    disconnect(node, &cwSurveyNode::subtreeAttachedFixesChanged,
+               this, &cwSurveyNode::subtreeAttachedFixesChanged);
     disconnect(node, &cwSurveyNode::scopeLabelsChanged,
                this, &cwSurveyNode::scopeLabelsChanged);
     disconnect(node, &cwSurveyNode::tripsDeleted,
@@ -852,8 +868,22 @@ cwUnits::UnitSystem cwSurveyNode::unitSystem() const
     return region ? region->unitSystem() : cwUnits::Metric;
 }
 
+void cwSurveyNode::scheduleGridConvergence()
+{
+    if (m_gridConvergenceScheduled) {
+        return;
+    }
+    m_gridConvergenceScheduled = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        if (m_gridConvergenceScheduled) {
+            recomputeGridConvergence();
+        }
+    }, Qt::QueuedConnection);
+}
+
 void cwSurveyNode::recomputeGridConvergence()
 {
+    m_gridConvergenceScheduled = false;
     // The readout owns the PROJ work and change detection; we just feed it the
     // current fix stations and the grid they are plotted in. That grid is the
     // project's local projection — cavern solves under it — so a node with no
@@ -862,7 +892,56 @@ void cwSurveyNode::recomputeGridConvergence()
     const QString frameCS = region == nullptr
         ? QString()
         : region->geoReference()->localCoordinateSystem();
-    m_gridConvergence->update(m_fixStations->fixStations(), frameCS);
+    m_gridConvergence->update(convergenceFixes(), frameCS);
+}
+
+QList<cwFixStation> cwSurveyNode::convergenceFixes() const
+{
+    QList<cwFixStation> fixes = m_fixStations->fixStations();
+    if (std::any_of(fixes.cbegin(), fixes.cend(), &cwGridConvergence::placesCave)) {
+        return fixes;
+    }
+
+    const auto placedIn = [](const cwSurveyNode* holder) -> std::optional<cwFixStation> {
+        for (const cwAttachedFix& attached : holder->listedAttachedFixes()) {
+            const std::optional<cwAttachedFix::Placement> placement =
+                attached.placementIn(attached.solveSystem());
+            if (placement.has_value()) {
+                cwFixStation fix;
+                fix.setStationName(attached.station);
+                // The system decides the axis order, so it goes in before the numbers.
+                fix.setInputCS(placement->cs);
+                fix.setCoordinate(placement->point.x, placement->point.y, placement->point.z);
+                return fix;
+            }
+        }
+        return std::nullopt;
+    };
+
+    // The attached fixes the driver solves: this node's own rows, then, for a
+    // sourced node, those its derived subtree lists below it, pre-order.
+    const cwSurveyNode* source = sourceRoot();
+    const auto findBelow = [&](const auto& self, const cwSurveyNode* holder) -> std::optional<cwFixStation> {
+        if (const std::optional<cwFixStation> fix = placedIn(holder)) {
+            return fix;
+        }
+        if (source == nullptr) {
+            return std::nullopt;
+        }
+        for (const cwSurveyNode* child : holder->m_childNodes) {
+            if (child->sourceId() == source->sourceId() && !child->isSourceRoot()) {
+                if (const std::optional<cwFixStation> fix = self(self, child)) {
+                    return fix;
+                }
+            }
+        }
+        return std::nullopt;
+    };
+
+    if (const std::optional<cwFixStation> fix = findBelow(findBelow, this)) {
+        fixes.append(*fix);
+    }
+    return fixes;
 }
 
 /**
@@ -1393,6 +1472,15 @@ void cwSurveyNode::setAttachedFixes(const QList<cwAttachedFix>& fixes)
     }
     m_attachedFixes->setAttachedFixes(fixes);
     emit attachedFixesChanged();
+}
+
+QList<cwAttachedFix> cwSurveyNode::listedAttachedFixes() const
+{
+    QList<cwAttachedFix> fixes = m_attachedFixes->attachedFixes();
+    for (const cwTrip* trip : trips()) {
+        fixes.append(trip->attachedFixes()->attachedFixes());
+    }
+    return fixes;
 }
 
 void cwSurveyNode::setFileFixedStations(const QHash<QUuid, QStringList>& stationsByOwner)
