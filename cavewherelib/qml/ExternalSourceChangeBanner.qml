@@ -32,7 +32,7 @@ QQ.Rectangle {
     implicitWidth: bannerRowId.implicitWidth + Theme.sectionSpacing * 2
     color: Theme.info
     radius: Theme.floatingWidgetRadius
-    border.width: 1
+    border.width: Theme.bannerBorderWidth
     border.color: Theme.border
 
     RowLayout {

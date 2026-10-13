@@ -1278,6 +1278,7 @@ void cwProject::newProject() {
     Region->clearCaves();
     Region->equates()->setEquates({});
     Region->lazLayers()->clear();
+    Region->clearSolve();
     if(UndoStack) {
         UndoStack->clear();
     }

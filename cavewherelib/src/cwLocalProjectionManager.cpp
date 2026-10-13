@@ -209,16 +209,17 @@ void cwLocalProjectionManager::setLoading(bool loading)
 QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherInputs() const
 {
     QList<Input> inputs = gatherFixInputs();
+    inputs.append(gatherAttachedFixInputs());
     inputs.append(gatherLayerInputs());
     return inputs;
 }
 
 QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherFrameInputs() const
 {
-    QList<Input> inputs = gatherFixInputs();
     if (attachedFixesTakePart()) {
-        inputs.append(gatherAttachedFixInputs());
+        return gatherInputs();
     }
+    QList<Input> inputs = gatherFixInputs();
     inputs.append(gatherLayerInputs());
     return inputs;
 }

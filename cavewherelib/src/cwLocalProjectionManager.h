@@ -128,7 +128,9 @@ public:
 
     //! The middle of the project — the component-wise median of every input the
     //! frame can place, in the frame's own coordinates — or an empty result when
-    //! there is no frame or nothing it can place.
+    //! there is no frame or nothing it can place. Attached bare fixes whose
+    //! system is chosen count in every frame state, including a frame that
+    //! keeps its origin whatever they say.
     std::optional<cwGeoPoint> dataCenter() const;
 
     //! Whether the frame is already frozen on the middle of the project, so
@@ -226,7 +228,8 @@ private:
     std::optional<AsyncFuture::Deferred<QString>> m_epoch;
 
     //! The georeferenced inputs in a fixed order — each cave's fix stations in
-    //! region order, then the LAZ layers in model order. Nothing records which
+    //! region order, then each attachment's bare fix whose system is chosen,
+    //! then the LAZ layers in model order. Nothing records which
     //! input truly came first, so "first" means first in this order: it only
     //! decides between inputs that appeared together, and it decides the same
     //! way every time, which is what a stored frame needs.
@@ -259,7 +262,7 @@ private:
     //! its own rows, so the id lookup is the model's.
     std::optional<FoundFix> findFixStation(const QUuid& stationId) const;
 
-    //! The two halves of gatherInputs(), in the order it concatenates them.
+    //! The native halves of gatherInputs(), in the order it concatenates them.
     //! The fix half stands on its own while headers are still arriving: it is
     //! the part of the list that no disk is being waited on for.
     QList<Input> gatherFixInputs() const;
@@ -276,7 +279,7 @@ private:
     //! an attached file says.
     bool attachedFixesTakePart() const;
 
-    //! gatherInputs() with the attached inputs added after the fixes when
+    //! gatherInputs(), keeping the attached inputs only when
     //! attachedFixesTakePart().
     QList<Input> gatherFrameInputs() const;
 

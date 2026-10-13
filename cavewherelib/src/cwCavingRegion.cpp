@@ -41,6 +41,7 @@ cwCavingRegion::cwCavingRegion(QObject *parent) :
     //the projection manager walk the tree as they construct, so they follow it.
     m_root = new cwSurveyNode(cwSurveyNode::RootNodeTag{}, this);
     m_fixStationValidator = new cwFixStationValidator(this);
+    m_farFromOriginNotice = new cwFarFromOriginNotice(this);
     m_localProjectionManager = new cwLocalProjectionManager(this);
 
     // Every GIS layer loads into the frame, and the frame is derived from what
@@ -455,8 +456,7 @@ void cwCavingRegion::setData(const cwCavingRegionData &data)
     m_externalSources->setSources(data.externalSources);
 
     clearCaves();
-    setStationPositions(cwStationPositionLookup());
-    setNetwork(cwSurveyNetwork());
+    clearSolve();
 
     QList<cwCave*> newCaves;
     newCaves.reserve(data.caves.size());
@@ -590,6 +590,12 @@ void cwCavingRegion::setStationPositions(const cwStationPositionLookup& position
     m_scopedPositions.clear();
     m_memberPositions.clear();
     emit positionsChanged();
+}
+
+void cwCavingRegion::clearSolve()
+{
+    setStationPositions(cwStationPositionLookup());
+    setNetwork(cwSurveyNetwork());
 }
 
 void cwCavingRegion::setNetwork(const cwSurveyNetwork& network)

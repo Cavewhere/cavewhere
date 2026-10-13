@@ -27,6 +27,7 @@ class cwProject;
 #include "cwCavingRegionData.h"
 #include "cwEquateModel.h"
 #include "cwExternalSourceModel.h"
+#include "cwFarFromOriginNotice.h"
 #include "cwFixStationValidator.h"
 #include "cwGeoReference.h"
 #include "cwLocalProjectionManager.h"
@@ -47,6 +48,7 @@ class CAVEWHERE_LIB_EXPORT cwCavingRegion : public QAbstractListModel, public cw
     Q_PROPERTY(int caveCount READ caveCount NOTIFY caveCountChanged)
     Q_PROPERTY(cwGeoReference* geoReference READ geoReference CONSTANT)
     Q_PROPERTY(cwFixStationValidator* fixStationValidator READ fixStationValidator CONSTANT)
+    Q_PROPERTY(cwFarFromOriginNotice* farFromOriginNotice READ farFromOriginNotice CONSTANT)
     Q_PROPERTY(cwLazLayerModel* lazLayers READ lazLayers CONSTANT)
     Q_PROPERTY(cwLocalProjectionManager* localProjection READ localProjection CONSTANT)
     Q_PROPERTY(cwUnits::UnitSystem unitSystem READ unitSystem WRITE setUnitSystem NOTIFY unitSystemChanged)
@@ -81,6 +83,10 @@ public:
     //! rest of the survey). Owned here because the check is region-scoped, but
     //! the geometry/attribution logic lives in the validator, not the region.
     cwFixStationValidator* fixStationValidator() const { return m_fixStationValidator; }
+
+    //! Whether the solved survey sits far from the origin in a project with no
+    //! frame, for the banner that offers to frame it.
+    cwFarFromOriginNotice* farFromOriginNotice() const { return m_farFromOriginNotice; }
 
     cwLazLayerModel* lazLayers() const { return m_lazLayers; }
 
@@ -224,6 +230,11 @@ public:
     cwSurveyNetwork network() const { return m_network; }
     void setNetwork(const cwSurveyNetwork& network);
 
+    //! Empties stationPositions() and network(). A region with nothing to
+    //! solve publishes no solve, so a load or a new project clears the last
+    //! project's solve here.
+    void clearSolve();
+
     //! stationPositions() restricted to the names under \a prefix, keyed by
     //! the rest of each name. Cached per prefix until the positions change.
     cwStationPositionLookup scopedPositions(const QString& prefix) const;
@@ -327,6 +338,8 @@ private:
     cwLazLayerModel* m_lazLayers = nullptr;
 
     cwFixStationValidator* m_fixStationValidator = nullptr;
+
+    cwFarFromOriginNotice* m_farFromOriginNotice = nullptr;
 
     cwLocalProjectionManager* m_localProjectionManager = nullptr;
 

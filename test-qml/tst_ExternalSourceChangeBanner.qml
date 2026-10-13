@@ -286,7 +286,7 @@ MainWindowTest {
         }
 
         // A source root is one owner for its whole subtree: its row names the
-        // root with its node count, says the notes on its trips are there
+        // root, says the notes on its trips are there
         // (§6.11 case 6), and its Update reloads the root.
         function test_sourceRootRowUpdatesTheRoot() {
             const host = sourceChangeHost()
@@ -301,8 +301,8 @@ MainWindowTest {
             const ownerId = statusRowOwnerId(0)
             compare(ownerId.toString(), sourceRoot.id.toString(), "the root is the owner")
 
-            compare(sourceRoot.childNodeCount, 1, "survex_simple's block Simple is the root's one node")
-            const derivedTrip = sourceRoot.childNode(0).trip(0)
+            compare(sourceRoot.childNodeCount, 0, "survex_simple's leaf block Simple is a trip")
+            const derivedTrip = sourceRoot.trip(0)
             TestHelper.addNoteWithScrap(derivedTrip, "Sketch")
 
             rewriteSource(source, "survex_no_metadata.svx")
@@ -320,7 +320,7 @@ MainWindowTest {
             const rootRow = rows.itemAtIndex(0)
             verify(rootRow !== null, "the root row must be realized")
             compare(findChild(rootRow, "externalSourceChangeRowOwner").text,
-                    "BannerRoot (2 nodes)", "a root row counts the nodes it stands for")
+                    "BannerRoot", "a root with no child nodes names just itself")
             const notes = findChild(rootRow, "externalSourceChangeRowNotes")
             verify(notes.visible, "the row says notes are on the root's trips")
             compare(notes.text, "1 note(s) on its trips")

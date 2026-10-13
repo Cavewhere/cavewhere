@@ -352,6 +352,15 @@ inline cwCave* attachSourceUnderRegion(SavedProjectFixture* fixture, const QStri
     return root;
 }
 
+//! \a Owner is a cwSurveyNode or a cwTrip; both carry an attachment.
+template<typename Owner>
+void chooseFixSystem(Owner* owner, const QString& system)
+{
+    auto centerline = owner->externalCenterline();
+    centerline.setFixCoordinateSystem(system);
+    owner->setExternalCenterline(centerline);
+}
+
 //! The attached row of \a node that names \a station.
 inline cwAttachedFix attachedFixFor(const cwSurveyNode* node, const QString& station)
 {

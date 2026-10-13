@@ -180,15 +180,6 @@ std::unique_ptr<SavedProjectFixture> makeProject(const QString& projectFileBase,
     return fixture;
 }
 
-//! \a Owner is a cwSurveyNode or a cwTrip; both carry an attachment.
-template<typename Owner>
-void chooseFixSystem(Owner* owner, const QString& system)
-{
-    auto centerline = owner->externalCenterline();
-    centerline.setFixCoordinateSystem(system);
-    owner->setExternalCenterline(centerline);
-}
-
 //! A native fix on \a node at \a station, entered in the project's frame.
 void addNativeFix(cwSurveyNode* node, const QString& station, double easting)
 {
@@ -686,7 +677,10 @@ TEST_CASE("A frame a bare file fix's system gave the project survives save and r
     CHECK(tryWait(kAttachWaitMs, [reopened]() {
         const auto holders = nodeAndDescendants(reopened);
         return std::any_of(holders.cbegin(), holders.cend(), [](const cwSurveyNode* holder) {
-            return attachedFixStations(holder).contains(kFixedStation);
+            const QList<cwAttachedFix> fixes = nodeAndTripAttachedFixes(holder);
+            return std::any_of(fixes.cbegin(), fixes.cend(), [](const cwAttachedFix& fix) {
+                return fix.station == kFixedStation;
+            });
         });
     }));
     drainRoot(freshRoot.get());

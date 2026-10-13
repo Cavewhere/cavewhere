@@ -507,6 +507,8 @@ QtObject {
     readonly property int bannerRadius: controlRadius
     // Border of the attention pulse's frame.
     readonly property int attentionBorderWidth: 2
+    // Border of a banner in the window's banner strip.
+    readonly property int bannerBorderWidth: 1
     readonly property color errorBackground: danger
 
     // View (3D scene) radial background gradient + grid lines

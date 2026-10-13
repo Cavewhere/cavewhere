@@ -37,13 +37,22 @@ WindowOverlay {
     // Takes a feature's banner into this window's banner strip. Banners stack
     // in registration order, the first registered on top, and each one spans
     // the strip. Registering the same banner twice changes nothing.
+    //
+    // The move waits for the event loop: a banner registers while the window
+    // hands itself down the banner's old siblings, and moving it out of that
+    // list mid-walk makes the next sibling miss its window.
     function addBanner(banner: QQ.Item) {
-        if (banner === null || banner.parent === bannerAreaId) {
+        if (banner === null) {
             return
         }
 
-        banner.parent = bannerAreaId
-        banner.width = Qt.binding(() => bannerAreaId.width)
+        Qt.callLater(() => {
+            // A banner whose window closed within the same turn is gone by now.
+            if (banner && banner.parent !== bannerAreaId) {
+                banner.parent = bannerAreaId
+                banner.width = Qt.binding(() => bannerAreaId.width)
+            }
+        })
     }
 
     // Floats at the top of the window, over the page rather than inside it,

@@ -168,6 +168,8 @@ QQ.Item {
     // into the overlay's banner strip and floats over the window's content.
     ExternalSourceChangeHost {}
 
+    FarFromOriginBanner {}
+
     QQ.Component {
         id: renderingComponent
         RenderingView {
