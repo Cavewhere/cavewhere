@@ -234,14 +234,8 @@ struct AcceptedIssue {
     cwPassageTubeMeshCheck::Type type;
 };
 
-// a2 reads 0 on the outside of its sharp bend and a9 0 below the shaft's
-// foot, where the passage turns: the middle elbow ring sits off each
-// station toward the bend's inside, by more than the zero reading, so the
-// station lies outside the tube (CenterlineOutside).
 const QVector<AcceptedIssue> kPhakeCaveIssues {
     {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a2"), cwPassageTubeMeshCheck::CenterlineOutside},
-    {QStringLiteral("a9"), cwPassageTubeMeshCheck::CenterlineOutside},
 };
 
 QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
@@ -469,32 +463,10 @@ bool isJunctionLimitRandomSeed(int seed)
     return kJunctionLimitRandomSeeds.contains(seed);
 }
 
-// Random seeds with a sharp bend at a station that reads a few centimeters
-// on the bend's outside: the middle elbow ring sits off the station toward
-// the bend's inside by more than that reading, so the station and the
-// centerline beside it lie outside the tube (CenterlineOutside). Seed 1's
-// corner is also its junction, so the arm's leg into it starts outside too.
-const QVector<int> kCornerOutsideRandomSeeds {1, 33};
-const QVector<int> kCornerOutsideJunctionFreeSeeds {32, 41, 50};
-
-std::vector<std::pair<unsigned int, int>> cornerOutsideRandomSurveys()
-{
-    std::vector<std::pair<unsigned int, int>> surveys;
-    for (int seed : kCornerOutsideRandomSeeds) {
-        surveys.push_back(randomSurvey(seed));
-    }
-    for (int seed : kCornerOutsideJunctionFreeSeeds) {
-        surveys.emplace_back(static_cast<unsigned int>(seed), 0);
-    }
-    return surveys;
-}
-
-// The middle elbow ring sits off its corner station toward the bend's
-// inside, farther than the station's reading on the outside: 23 reads 0
-// there, and 24 borrows the 0 of its first station. The station and the
-// centerline beside it lie outside the tube (CenterlineOutside).
-const QStringList kCornerOutsideCases {
-    QStringLiteral("23. Sharp bend at a station reading zero on the outside wall"),
+// 24's corner has no readings, so it insets by the default radius, short of
+// the 1.2 m floor it borrows: capping the bend's inside leaves the floor's
+// lowest bin a spike that creases by 155° (Crease).
+const QStringList kOpenJunctionFreeCases {
     QStringLiteral("24. Sharp bend in an unread passage next to a zero reading"),
 };
 
@@ -528,7 +500,7 @@ TEST_CASE("cwPassageTubeCases keeps the centerline inside a junction arm", "[Pas
 // there, and 24 borrows the 0 of its first station. The check's wall
 // tolerance would hide a station a few centimeters outside, so only the
 // end stations, flush with their caps, may sit on the surface.
-TEST_CASE("cwPassageTubeCases keeps a corner station inside its elbow ring", "[PassageTube][cwPassageTubeCases][!mayfail]")
+TEST_CASE("cwPassageTubeCases keeps a corner station inside its elbow ring", "[PassageTube][cwPassageTubeCases]")
 {
     constexpr double kOnCapMeters = 0.01;
     const std::string name = GENERATE(std::string("23. Sharp bend at a station reading zero on the outside wall"),
@@ -868,15 +840,15 @@ TEST_CASE("cwPassageTubeCases full sweep builds closed meshes", "[cwPassageTubeC
 TEST_CASE("cwPassageTubeCases catalog cases without a junction build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !hasJunction(entry) && !kCornerOutsideCases.contains(entry.name);
+        return !hasJunction(entry) && !kOpenJunctionFreeCases.contains(entry.name);
     })));
     checkCaseBuildsClean(name);
 }
 
-TEST_CASE("cwPassageTubeCases catalog cases with a corner station outside its elbow build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+TEST_CASE("cwPassageTubeCases open catalog cases without a junction build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return kCornerOutsideCases.contains(entry.name);
+        return kOpenJunctionFreeCases.contains(entry.name);
     })));
     checkCaseBuildsClean(name);
 }
@@ -904,15 +876,8 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction build closed tube
 TEST_CASE("cwPassageTubeCases random surveys build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const auto [seed, junctions] = randomSurvey(GENERATE(filter([](int candidate) {
-        return !isJunctionLimitRandomSeed(candidate) && !kCornerOutsideRandomSeeds.contains(candidate);
+        return !isJunctionLimitRandomSeed(candidate);
     }, range(1, kRandomSeedCount + 1))));
-    INFO("seed " << seed << ", " << junctions << " junctions");
-    checkBuildsClean(Cases::random(seed, junctions));
-}
-
-TEST_CASE("cwPassageTubeCases random surveys with a corner station outside its elbow build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
-{
-    const auto [seed, junctions] = GENERATE(from_range(cornerOutsideRandomSurveys()));
     INFO("seed " << seed << ", " << junctions << " junctions");
     checkBuildsClean(Cases::random(seed, junctions));
 }
@@ -933,8 +898,7 @@ TEST_CASE("cwPassageTubeCases random surveys build closed tubes", "[PassageTube]
 
 TEST_CASE("cwPassageTubeCases random surveys without a junction build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
-    const int seed = GENERATE(filter([](int candidate) { return !kCornerOutsideJunctionFreeSeeds.contains(candidate); },
-                                     range(1, kRandomSeedCount + 1)));
+    const int seed = GENERATE(range(1, kRandomSeedCount + 1));
     INFO("seed " << seed);
     checkBuildsClean(Cases::random(static_cast<unsigned int>(seed), 0));
 }

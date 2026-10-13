@@ -13,12 +13,14 @@
 
 //Qt includes
 #include <QMap>
+#include <QPointF>
 #include <QSet>
 #include <QtMath>
 
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <numbers>
 #include <numeric>
@@ -43,6 +45,9 @@ constexpr double kCornerInsetLegFraction = 0.45;
 constexpr double kCornerInsetSafety = 1.1;
 constexpr double kConcavityClampFactor = 0.95;
 constexpr double kClampWarningMeters = 0.1;
+// A ring without readings borrows from its own trip within this many legs
+// before a nearer ring of another trip.
+constexpr int kSameTripBorrowLegs = 2;
 constexpr double kInsideBinEpsilon = 1e-4;
 // A dead end whose ring is not a simple polygon closes with a fan this far
 // from its station toward the ring's centroid: a station against a wall
@@ -646,7 +651,8 @@ struct BendLimit {
 // each sharp bend at either end of the legs the sample lies on. A plumb
 // sample is a gentle dead end, whose ring stands in the vertical plane
 // through its station. An elbow sample rounds a sharp corner; its middle one
-// carries the corner station's records stationOffsetMeters from the station.
+// carries the corner station's records and stationOffset, the station's
+// position less its own.
 struct ChainSample {
     QVector3D position;
     QVector3D tangent;
@@ -657,7 +663,7 @@ struct ChainSample {
     QVector<BendLimit> bends;
     bool isPlumb = false;
     bool isElbow = false;
-    double stationOffsetMeters = 0.0;
+    QVector3D stationOffset;
 
     // The limit of the sharp bend at this sample's station, if it has one.
     const BendLimit* stationBend() const
@@ -1088,7 +1094,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const PlumbE
             sample.bends.append(far);
             sample.isElbow = true;
             if (isMiddle) {
-                sample.stationOffsetMeters = sample.position.distanceToPoint(station.position);
+                sample.stationOffset = station.position - sample.position;
             }
             elbow.append(sample);
         }
@@ -1388,11 +1394,15 @@ cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std
     return across;
 }
 
+// stationRadii are the radii of the station's section around the station
+// itself, which a ring without readings borrows; they differ from radii on
+// an elbow's middle ring.
 struct RingFit {
     QVector<double> radii;
     QVector<double> binAngles;
     QVector<bool> measured;
     int filledBins = 0;
+    QVector<double> stationRadii;
 };
 
 // Bin k's eccentric anomaly around the ring, 2πk/N.
@@ -1409,7 +1419,8 @@ RingFit emptyFit(int resolution)
         roundAngles.append(binParameter(bin, resolution));
     }
 
-    return RingFit {QVector<double>(resolution, 0.0), roundAngles, QVector<bool>(resolution, false), 0};
+    const QVector<double> zeros(resolution, 0.0);
+    return RingFit {zeros, roundAngles, QVector<bool>(resolution, false), 0, zeros};
 }
 
 // A pit's left and right read across it whichever way it is entered, so a
@@ -1429,6 +1440,7 @@ RingFit fitSteepRing(const QVector<LrudRecord>& records, int resolution)
     RingFit fit = emptyFit(resolution);
     if (radius) {
         fit.radii.fill(*radius);
+        fit.stationRadii = fit.radii;
         fit.measured.fill(true);
         fit.filledBins = resolution;
     }
@@ -1477,13 +1489,103 @@ std::pair<std::optional<double>, std::optional<double>> quadrantReadings(const c
     return {std::cos(t) >= 0.0 ? lrud.right : lrud.left, std::sin(t) >= 0.0 ? lrud.up : lrud.down};
 }
 
+// The walls with those on center's side of the station grown so their
+// quadrant ellipse holds center, a point given as (right, up) from the
+// station, at least kMinRadiusMeters inside it: first each axis past
+// center's reach along it, then both together along center's direction.
+cwStationLrud enclosingCenter(const cwStationLrud& lrud, const QPointF& center)
+{
+    constexpr double kMinRadius = cwPassageTubeBuilder::kMinRadiusMeters;
+    cwStationLrud grown = lrud;
+    std::optional<double>& horizontal = center.x() >= 0.0 ? grown.right : grown.left;
+    std::optional<double>& vertical = center.y() >= 0.0 ? grown.up : grown.down;
+    horizontal = std::max(horizontal.value_or(kMinRadius), std::abs(center.x()) + kMinRadius);
+    vertical = std::max(vertical.value_or(kMinRadius), std::abs(center.y()) + kMinRadius);
+
+    const double distance = std::hypot(center.x(), center.y());
+    if (distance > 0.0) {
+        const double a = *horizontal;
+        const double b = *vertical;
+        const double reach = a * b * distance / std::hypot(b * center.x(), a * center.y());
+        const double scale = (distance + kMinRadius) / reach;
+        if (scale > 1.0) {
+            horizontal = a * scale;
+            vertical = b * scale;
+        }
+    }
+    return grown;
+}
+
+// How far the ray from center along angle runs to the quadrant ellipse of
+// lrud around the origin, with center inside it: the root of the one
+// quadrant's ellipse that the ray meets inside that quadrant.
+double reachFromPoint(const cwStationLrud& lrud, const QPointF& center, double angle)
+{
+    constexpr double kMinRadius = cwPassageTubeBuilder::kMinRadiusMeters;
+    const QPointF direction(std::cos(angle), std::sin(angle));
+    std::optional<double> reach;
+    for (const double horizontalSign : {1.0, -1.0}) {
+        for (const double verticalSign : {1.0, -1.0}) {
+            const double a = (horizontalSign > 0.0 ? lrud.right : lrud.left).value_or(kMinRadius);
+            const double b = (verticalSign > 0.0 ? lrud.up : lrud.down).value_or(kMinRadius);
+            const double quadratic = std::pow(direction.x() / a, 2) + std::pow(direction.y() / b, 2);
+            const double linear = 2.0 * (center.x() * direction.x() / (a * a) + center.y() * direction.y() / (b * b));
+            const double constant = std::pow(center.x() / a, 2) + std::pow(center.y() / b, 2) - 1.0;
+            const double discriminant = linear * linear - 4.0 * quadratic * constant;
+            if (discriminant < 0.0) {
+                continue;
+            }
+            const double root = (-linear + std::sqrt(discriminant)) / (2.0 * quadratic);
+            const QPointF hit = center + direction * root;
+            const bool isInQuadrant = hit.x() * horizontalSign >= -kAxisEpsilon && hit.y() * verticalSign >= -kAxisEpsilon;
+            if (root > 0.0 && isInQuadrant) {
+                reach = std::min(reach.value_or(root), root);
+            }
+        }
+    }
+    return reach.value_or(kMinRadius);
+}
+
+// The section a ring fits to its station's walls, in the ring's (right, up)
+// plane around its center. An elbow's middle ring sits off its station
+// toward the bend's inside, so its section is the walls' quadrant ellipse
+// around its center joined with the same ellipse around the station: the
+// walls on the bend's outside stay where they were read, and the station
+// lies inside by at least its reading there.
+class LrudSection
+{
+public:
+    LrudSection(const cwStationLrud& walls, const Frame& frame, const QVector3D& stationOffset) :
+        m_walls(walls),
+        m_station(QVector3D::dotProduct(stationOffset, frame.right), QVector3D::dotProduct(stationOffset, frame.up)),
+        m_wallsAroundStation(enclosingCenter(walls, -m_station))
+    {
+    }
+
+    double reach(double angle) const
+    {
+        return std::max(reachAroundStation(angle), reachFromPoint(m_wallsAroundStation, -m_station, angle));
+    }
+
+    // The section's reach if the ring were centered on its station.
+    double reachAroundStation(double angle) const
+    {
+        return reachFromPoint(m_walls, QPointF(), angle);
+    }
+
+private:
+    cwStationLrud m_walls;
+    QPointF m_station;
+    cwStationLrud m_wallsAroundStation;
+};
+
 // Fits the ring to the LRUD quadrant ellipse. Bin k sits at eccentric anomaly
 // t_k = 2πk/N, the vertex (a cos t_k, b sin t_k) for the quadrant's
 // horizontal and vertical readings a and b, so the bins spread along a thin
 // ellipse's walls instead of bunching at its sides. A bin is measured when
 // the readings its quadrant needs were read; a missing reading is filled from
 // the walls beside it. Bins are left at zero when fewer than kMinFilledBins
-// are measured.
+// are measured. Each bin reaches to the LrudSection along its angle.
 RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolution)
 {
     if (1.0 - frame.inclinationWeight < kMinSampleWeight) {
@@ -1513,14 +1615,16 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
     }
 
     const cwStationLrud filled = filledReadings(read);
+    const LrudSection section(filled, frame, sample.stationOffset);
     for (int bin = 0; bin < resolution; ++bin) {
         const double t = binParameter(bin, resolution);
         const auto [a, b] = quadrantReadings(filled, t);
         const double x = a.value_or(cwPassageTubeBuilder::kMinRadiusMeters) * std::cos(t);
         const double y = b.value_or(cwPassageTubeBuilder::kMinRadiusMeters) * std::sin(t);
         const double angle = std::atan2(y, x);
-        fit.radii[bin] = std::hypot(x, y);
         fit.binAngles[bin] = angle < 0.0 ? angle + kTwoPi : angle;
+        fit.radii[bin] = section.reach(angle);
+        fit.stationRadii[bin] = section.reachAroundStation(angle);
     }
     return fit;
 }
@@ -1530,14 +1634,17 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
 // so the pit is round at the fitted ring's horizontal half-width instead.
 RingFit borrowedFit(const RingFit& fitted, const Frame& frame)
 {
+    const QVector<double>& radii = fitted.stationRadii;
     if (frame.inclinationWeight <= kSteepWeight) {
-        return fitted;
+        RingFit borrowed = fitted;
+        borrowed.radii = radii;
+        return borrowed;
     }
-    const int resolution = fitted.radii.size();
+    const int resolution = radii.size();
     const int rightBin = 0;
     const int leftBin = resolution / 2;
     RingFit round = emptyFit(resolution);
-    round.radii.fill((fitted.radii.at(rightBin) + fitted.radii.at(leftBin)) / 2.0);
+    round.radii.fill((radii.at(rightBin) + radii.at(leftBin)) / 2.0);
     return round;
 }
 
@@ -1584,6 +1691,31 @@ void stretchAcrossMiter(Ring& ring, const BendLimit& bend)
         const double inside = QVector3D::dotProduct(binDirection(ring, bin), bend.inside);
         ring.radii[bin] /= squareOverMiterRadius(cosine, inside);
     }
+}
+
+// A borrowed section on a ring stationOffset off its station, as
+// LrudSection joins it: the bins toward the station reach as far past it as
+// the section does, so the station lies inside.
+void reachPastStation(Ring& ring, const QVector3D& stationOffset)
+{
+    for (int bin = 0; bin < ring.radii.size(); ++bin) {
+        ring.radii[bin] += std::max(0.0f, QVector3D::dotProduct(stationOffset, binDirection(ring, bin)));
+    }
+}
+
+// How far the ring's measured walls lie past the station's readings. An
+// elbow's middle ring reads the walls on the bend's inside from its center,
+// which sits stationOffset nearer the inside than the station; the walls on
+// the outside stay where they were read.
+double insideWallShift(const Ring& ring, const QVector3D& stationOffset)
+{
+    double shift = 0.0;
+    for (int bin = 0; bin < ring.radii.size(); ++bin) {
+        if (ring.measured.at(bin)) {
+            shift = std::max(shift, static_cast<double>(-QVector3D::dotProduct(stationOffset, binDirection(ring, bin))));
+        }
+    }
+    return shift;
 }
 
 // How fitting a ring to its bend changed it: whether any bin moved, and how
@@ -1670,8 +1802,8 @@ BendChange reshapeInside(Ring& ring, const BendLimit& bend, RadiusAt radiusAt)
 // wall becomes the miter of the capped section, even where that moves a
 // measured wall outward, so the inner wall meets the corner without a ridge.
 // An elbow's rings are square to its arc, so its middle ring is only capped.
-// Warns once per corner whose measured walls moved, as an elbow's middle ring
-// moves them off its station.
+// Warns once per corner whose measured walls moved: by the caps, or on an
+// elbow's middle ring by being read from its center.
 void fitSharpBends(const QVector<Leg>& legs, const QVector<ChainSample>& samples, Chain& chain, QVector<Warning>& warnings)
 {
     struct Corner {
@@ -1699,9 +1831,7 @@ void fitSharpBends(const QVector<Leg>& legs, const QVector<ChainSample>& samples
     for (int i = 0; i < samples.size(); ++i) {
         if (const BendLimit* bend = samples.at(i).stationBend()) {
             Corner& corner = corners[bend->cornerLeg];
-            if (chain.rings.at(i).measured.contains(true)) {
-                corner.change.add(BendChange {false, samples.at(i).stationOffsetMeters});
-            }
+            corner.change.add(BendChange {false, insideWallShift(chain.rings.at(i), samples.at(i).stationOffset)});
             corner.stationRings.append(i);
         }
         capRing(i);
@@ -1767,11 +1897,20 @@ void buildRings(const QVector<Leg>& legs,
                                      QStringLiteral("The passage from station %1 has no LRUD; the tube uses the default radius.")));
     }
 
+    const auto tripOf = [&](int index) {
+        return legs.at(chain.legs.at(samples.at(index).chainLeg).legIndex).tripId;
+    };
     const auto nearestFitted = [&](int index) {
-        const double distance = samples.at(index).distanceAlongChain;
-        return *std::min_element(fittedSamples.cbegin(), fittedSamples.cend(), [&](int a, int b) {
-            return std::abs(samples.at(a).distanceAlongChain - distance)
-                   < std::abs(samples.at(b).distanceAlongChain - distance);
+        const ChainSample& sample = samples.at(index);
+        const auto trip = tripOf(index);
+        QVector<int> sameTrip;
+        std::copy_if(fittedSamples.cbegin(), fittedSamples.cend(), std::back_inserter(sameTrip), [&](int fitted) {
+            return tripOf(fitted) == trip && std::abs(samples.at(fitted).chainLeg - sample.chainLeg) <= kSameTripBorrowLegs;
+        });
+        const QVector<int>& candidates = sameTrip.isEmpty() ? fittedSamples : sameTrip;
+        return *std::min_element(candidates.cbegin(), candidates.cend(), [&](int a, int b) {
+            return std::abs(samples.at(a).distanceAlongChain - sample.distanceAlongChain)
+                   < std::abs(samples.at(b).distanceAlongChain - sample.distanceAlongChain);
         });
     };
 
@@ -1792,6 +1931,7 @@ void buildRings(const QVector<Leg>& legs,
             if (const BendLimit* bend = samples.at(i).stationBend()) {
                 stretchAcrossMiter(ring, *bend);
             }
+            reachPastStation(ring, samples.at(i).stationOffset);
         }
         chain.rings.append(ring);
     }

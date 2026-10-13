@@ -732,8 +732,8 @@ TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into
         {QStringLiteral("1. "), 1, 9, 16, QVector3D(0.6399f, 0.0f, 0.1574f)},
         {QStringLiteral("5. "), 1, 6, 25, QVector3D(0.7489f, -1.6127f, 0.1090f)},
         {QStringLiteral("11. "), 1, 10, 16, QVector3D(0.0387f, 0.0f, 0.1572f)},
-        {QStringLiteral("Phake Cave"), 1, 3, 23, QVector3D(22.8123f, 21.6853f, -3.2233f)},
-        {QStringLiteral("Phake Cave"), 2, 15, 19, QVector3D(31.0714f, 8.3039f, -4.4094f)},
+        {QStringLiteral("Phake Cave"), 1, 2, 22, QVector3D(23.0290f, 22.0490f, -2.9788f)},
+        {QStringLiteral("Phake Cave"), 2, 15, 19, QVector3D(31.7972f, 8.9665f, -3.9049f)},
         {QStringLiteral("Phake Cave"), 3, 22, 22, QVector3D(26.8181f, 1.8491f, -30.8821f)},
     };
     // Rows of one case sit together, so each case is built once.
