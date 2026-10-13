@@ -83,6 +83,7 @@ QQ.Rectangle {
         spacing: Theme.tightSpacing
 
         QC.Label {
+            anchors.verticalCenter: parent.verticalCenter
             text: "🔒"
             font.pixelSize: Theme.fontSizeCaption
             visible: chipId.sourced
@@ -91,11 +92,13 @@ QQ.Rectangle {
         QC.Label {
             id: labelId
 
+            anchors.verticalCenter: parent.verticalCenter
             font.pixelSize: Theme.fontSizeCaption
             color: chipId.sourced ? Theme.chipSourcedText : Theme.chipText
         }
 
         QC.Label {
+            anchors.verticalCenter: parent.verticalCenter
             text: "▾"
             font.pixelSize: Theme.fontSizeCaption
             color: Theme.chipText
