@@ -13,6 +13,11 @@ namespace {
 // selected from gl_VertexIndex, no corner vertex buffer.
 constexpr quint32 kVerticesPerQuad = 4;
 
+// In depth-buffer units, so lines win ties with coplanar surfaces in both
+// ortho and perspective while staying inside the passage tube.
+constexpr int kLineDepthBias = -2;
+constexpr float kLineSlopeScaledDepthBias = -1.0f;
+
 } // namespace
 
 cwRHILinePlot::cwRHILinePlot()
@@ -253,6 +258,9 @@ bool cwRHILinePlot::ensurePipeline(const RenderData& data)
 
         record->pipeline->setDepthTest(true);
         record->pipeline->setDepthWrite(true);
+        record->pipeline->setDepthOp(QRhiGraphicsPipeline::LessOrEqual);
+        record->pipeline->setDepthBias(kLineDepthBias);
+        record->pipeline->setSlopeScaledDepthBias(kLineSlopeScaledDepthBias);
         record->pipeline->setSampleCount(key.sampleCount);
         record->pipeline->setCullMode(QRhiGraphicsPipeline::None);
         record->pipeline->setVertexInputLayout(m_inputLayout);

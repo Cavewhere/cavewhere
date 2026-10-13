@@ -14,7 +14,7 @@
 // standard way to get thicker lines there.
 layout(location = 0) in vec3 iFrom;
 layout(location = 1) in vec3 iTo;
-// 0 = centerline, non-zero = splay. Selects width, color, and depth bias.
+// 0 = centerline, non-zero = splay. Selects width and color.
 layout(location = 2) in uint iType;
 // 0 = hidden, non-zero = visible. A hidden segment collapses outside the
 // clip volume and the whole quad is discarded.
@@ -32,11 +32,6 @@ layout(std140, binding = 0) uniform GlobalBlock {
 
 const float kCenterlineHalfWidthPx = 1.0; // logical px -> 2 px wide line
 const float kSplayHalfWidthPx = 0.5;      // logical px -> 1 px wide line
-// Clip-space z pull toward the eye so lines win depth ties against the
-// surfaces they run along; splays get a hair less so the centerline wins
-// z-fights at shared stations.
-const float kCenterlineDepthBias = 1e-4;
-const float kSplayDepthBias = 0.5e-4;
 // Smallest clip w kept after eye-plane clipping. An endpoint behind the eye
 // (w <= 0) mirrors under the manual perspective divide and flips the sign of
 // the width offset (which scales by w), so segments straddling the eye plane
@@ -96,7 +91,6 @@ void main(void)
     // stay correct.
     vec4 clip = mix(clipFrom, clipTo, endSelect);
     clip.xy += offsetPx * (2.0 / viewportSize) * clip.w;
-    clip.z -= isSplay ? kSplayDepthBias : kCenterlineDepthBias;
 
     gl_Position = clip;
     vType = iType;
