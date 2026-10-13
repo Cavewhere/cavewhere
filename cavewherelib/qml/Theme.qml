@@ -243,6 +243,8 @@ QtObject {
     // Room a fixed-width table sets aside for a vertical scrollbar when it works
     // out whether it still fits the page it is on.
     readonly property int scrollBarAllowance: 16
+    // Fixed "Last opened" column on the Sources page; fits a yyyy-MM-dd HH:mm stamp.
+    readonly property int recentProjectDateColumnWidth: 150
 
     // Utility
     readonly property color transparent: "#00000000"

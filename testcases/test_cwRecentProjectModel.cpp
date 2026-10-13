@@ -17,6 +17,7 @@
 
 //Our includes
 #include "cwRecentProjectModel.h"
+#include "cwSortFilterProxyModel.h"
 #include "cwProject.h"
 #include "cwErrorListModel.h"
 #include "cwFutureManagerModel.h"
@@ -750,4 +751,39 @@ TEST_CASE("cwRecentProjectModel loadSettings prunes missing paths from the stamp
     CHECK(stampMap.contains(keepPath));
     CHECK_FALSE(stampMap.contains(missingPath));
     CHECK(stampMap.value(keepPath).toDateTime().toUTC() == kOldStamp);
+}
+
+TEST_CASE("cwRecentProjectModel sorts unstamped entries last in both directions", "[cwRecentProjectModel]") {
+    QSettings settings;
+    settings.clear();
+
+    QTemporaryDir tmpDir;
+    REQUIRE(tmpDir.isValid());
+    const QString unstampedPath = createEmptyProjectFile(tmpDir, QStringLiteral("Unstamped.cw"));
+    const QString olderPath = createEmptyProjectFile(tmpDir, QStringLiteral("Older.cw"));
+    const QString newerPath = createEmptyProjectFile(tmpDir, QStringLiteral("Newer.cw"));
+    const QDateTime newerStamp = kOldStamp.addDays(1);
+    seedSettings({unstampedPath, olderPath, newerPath},
+                 {{olderPath, kOldStamp}, {newerPath, newerStamp}});
+
+    cwRecentProjectModel model;
+    REQUIRE(model.rowCount() == 3);
+
+    cwSortFilterProxyModel proxy;
+    proxy.setSource(&model);
+    proxy.setSortRole(cwRecentProjectModel::LastOpenedRole);
+
+    const auto proxyPaths = [&proxy]() {
+        QStringList paths;
+        for (int row = 0; row < proxy.rowCount(); ++row) {
+            paths.append(proxy.data(proxy.index(row, 0), cwRecentProjectModel::PathRole).toString());
+        }
+        return paths;
+    };
+
+    proxy.sort(Qt::AscendingOrder);
+    CHECK(proxyPaths() == QStringList({olderPath, newerPath, unstampedPath}));
+
+    proxy.sort(Qt::DescendingOrder);
+    CHECK(proxyPaths() == QStringList({newerPath, olderPath, unstampedPath}));
 }

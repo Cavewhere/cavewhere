@@ -15,6 +15,171 @@ MainWindowTest {
             RootData.recentProjectModel.clear();
         }
 
+        // Copies the Phake Cave dataset to each name in the temp dir and returns the paths.
+        function copyProjects(names) {
+            const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            const source = TestHelper.testcasesDatasetPath("test_cwProject/Phake Cave 3000.cw")
+            return names.map((name) => {
+                const path = tempDir + "/" + name + ".cw"
+                verify(TestHelper.copyFile(source, path), "copy to " + path)
+                return path
+            })
+        }
+
+        // Stamps each path in order, letting the clock tick between stamps so
+        // every entry gets a distinct Last opened time.
+        function recordOpenedInOrder(paths) {
+            for (const path of paths) {
+                const before = Date.now()
+                tryVerify(() => Date.now() > before)
+                const result = RootData.recentProjectModel.recordProjectOpened(TestHelper.toLocalUrl(path))
+                verify(!result.hasError, result.errorMessage)
+            }
+        }
+
+        function gotoSourcePage() {
+            RootData.pageSelectionModel.currentPageAddress = "Source"
+            waitForRendering(mainWindow)
+            let repoListView = ObjectFinder.findObjectByChain(mainWindow, "rootId->repositoryListView")
+            verify(repoListView !== null, "repositoryListView not found")
+            return repoListView
+        }
+
+        function typeIntoField(field, text) {
+            mouseClick(field)
+            for (const character of text) {
+                keyClick(character)
+            }
+        }
+
+        // The page persists between tests and keeps its last sort, so put the
+        // newest-first default back before the next test.
+        function restoreDefaultSort() {
+            let lastOpenedHeader = findChild(mainWindow, "recentHeaderLastOpened")
+            verify(lastOpenedHeader !== null, "recentHeaderLastOpened not found")
+            mouseClick(lastOpenedHeader)
+            mouseClick(lastOpenedHeader)
+            tryCompare(lastOpenedHeader, "sortMode", TableStaticHeaderColumn.Sort.Descending)
+        }
+
+        function clearFilterField(field) {
+            mouseClick(field)
+            keyClick(Qt.Key_A, Qt.ControlModifier)
+            keyClick(Qt.Key_Delete)
+            tryCompare(field, "text", "")
+        }
+
+        function rowPath(listView, row) {
+            const item = listView.itemAtIndex(row)
+            return item === null ? "" : item.pathRole
+        }
+
+        function test_defaultOrder_mostRecentFirst() {
+            const paths = copyProjects(["source-order-a", "source-order-b"])
+            recordOpenedInOrder(paths)
+
+            let repoListView = gotoSourcePage()
+            tryCompare(repoListView, "count", 2)
+            tryVerify(() => rowPath(repoListView, 0) === paths[1], 5000, "most recently opened should be first")
+            tryVerify(() => rowPath(repoListView, 1) === paths[0])
+
+            let lastOpenedLabel = findChild(mainWindow, "repoLastOpened_0")
+            verify(lastOpenedLabel !== null, "repoLastOpened_0 not found")
+            verify(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(lastOpenedLabel.text), "unexpected date text: " + lastOpenedLabel.text)
+        }
+
+        function test_headerClick_sortsByName() {
+            const paths = copyProjects(["source-sort-bravo", "source-sort-alpha"])
+            recordOpenedInOrder(paths)
+
+            let repoListView = gotoSourcePage()
+            tryCompare(repoListView, "count", 2)
+
+            let nameHeader = findChild(mainWindow, "recentHeaderName")
+            verify(nameHeader !== null, "recentHeaderName not found")
+            let lastOpenedHeader = findChild(mainWindow, "recentHeaderLastOpened")
+            verify(lastOpenedHeader !== null, "recentHeaderLastOpened not found")
+            compare(lastOpenedHeader.sortMode, TableStaticHeaderColumn.Sort.Descending)
+
+            mouseClick(nameHeader)
+            tryVerify(() => rowPath(repoListView, 0) === paths[1], 5000, "alpha should sort first")
+            tryVerify(() => rowPath(repoListView, 1) === paths[0])
+            tryCompare(lastOpenedHeader, "sortMode", TableStaticHeaderColumn.Sort.None)
+
+            mouseClick(nameHeader)
+            tryVerify(() => rowPath(repoListView, 0) === paths[0], 5000, "bravo should sort first when reversed")
+            tryVerify(() => rowPath(repoListView, 1) === paths[1])
+
+            restoreDefaultSort()
+        }
+
+        function test_filter_narrowsList() {
+            const paths = copyProjects(["source-filter-alpha", "source-filter-bravo"])
+            recordOpenedInOrder(paths)
+
+            let repoListView = gotoSourcePage()
+            tryCompare(repoListView, "count", 2)
+
+            let filterField = findChild(mainWindow, "recentProjectFilterField")
+            verify(filterField !== null, "recentProjectFilterField not found")
+
+            typeIntoField(filterField, "brav")
+            tryCompare(repoListView, "count", 1)
+            tryVerify(() => rowPath(repoListView, 0) === paths[1], 5000, "bravo should be the only match")
+
+            clearFilterField(filterField)
+            tryCompare(repoListView, "count", 2)
+
+            typeIntoField(filterField, "zzq")
+            tryCompare(repoListView, "count", 0)
+            let emptyLabel = findChild(mainWindow, "recentProjectsEmptyLabel")
+            verify(emptyLabel !== null, "recentProjectsEmptyLabel not found")
+            tryCompare(emptyLabel, "visible", true)
+            tryCompare(emptyLabel, "text", "No projects match the filter.")
+
+            clearFilterField(filterField)
+            tryCompare(repoListView, "count", 2)
+        }
+
+        function test_clickRow_afterSort_opensThatProject() {
+            // Source order is bravo, alpha; sorting by name puts alpha (source row 1) first.
+            const paths = copyProjects(["source-click-bravo", "source-click-alpha"])
+            recordOpenedInOrder(paths)
+
+            let repoListView = gotoSourcePage()
+            tryCompare(repoListView, "count", 2)
+
+            let nameHeader = findChild(mainWindow, "recentHeaderName")
+            verify(nameHeader !== null, "recentHeaderName not found")
+            mouseClick(nameHeader)
+            tryVerify(() => rowPath(repoListView, 0) === paths[1], 5000, "alpha should sort first")
+            waitForRendering(repoListView)
+
+            let linkText = findChild(mainWindow, "repoLinkText_0")
+            verify(linkText !== null, "repoLinkText_0 not found")
+            compare(linkText.text, "source-click-alpha.cw")
+            mouseClick(linkText)
+
+            let askToSaveDialog = findChild(rootId, "mainWindowTestAskToSaveDialog")
+            if (askToSaveDialog !== null
+                    && askToSaveDialog._dialog !== null
+                    && askToSaveDialog._dialog.askToSaveDialog.visible) {
+                askToSaveDialog._dialog.askToSaveDialog.discarded()
+            }
+
+            tryCompare(RootData.project, "filename", paths[1], 20000)
+            tryVerify(() => RootData.region.caveCount > 0, 20000)
+
+            // Let the legacy-to-bundle conversion settle so later tests start clean.
+            tryCompare(RootData.project, "fileType", Project.BundledGitFileType, 5000)
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+            TestHelper.waitForFutureManagerToFinish(RootData.futureManagerModel)
+            RootData.newProject()
+
+            gotoSourcePage()
+            restoreDefaultSort()
+        }
+
         function test_newProjectMenu_navigatesToView() {
             RootData.pageSelectionModel.currentPageAddress = "Source"
             waitForRendering(mainWindow);
