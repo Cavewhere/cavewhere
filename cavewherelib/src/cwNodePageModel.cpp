@@ -12,7 +12,6 @@
 #include "cwNodePageModel.h"
 #include "cwCavingRegion.h"
 #include "cwExternalSourceModel.h"
-#include "cwStationPositionLookup.h"
 #include "cwSurveyNode.h"
 #include "cwSurveyTreeModel.h"
 #include "cwTrip.h"
@@ -197,7 +196,7 @@ void cwNodePageModel::updateSourceUnitCount()
 void cwNodePageModel::updateStationCount()
 {
     const int count = m_node != nullptr && m_node->isSourced()
-            ? static_cast<int>(m_node->scopedPositions().positions().size())
+            ? cwSurveyTreeModel::sourcedStationCount(m_node)
             : 0;
 
     if(m_stationCount == count) {

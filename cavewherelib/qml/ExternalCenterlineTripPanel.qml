@@ -143,7 +143,7 @@ QQ.Item {
                 Layout.fillWidth: true
                 hasError: root.linePlotManager.hasSolveError
                 warningCount: root.linePlotManager.lastSolveWarningCount
-                stationCount: root.linePlotManager.lastSolveStationCount
+                stationCount: stationsListId.count
                 onViewCavernOutputRequested: {
                     RootData.pageSelectionModel.gotoPageByName(null, "Cavern")
                 }

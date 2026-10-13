@@ -13,8 +13,8 @@ import cavewherelib
 // Solve-status strip for the external-centerline trip panel: colored
 // status dot, station count, warning pill, and a "View cavern output"
 // deep link. Dumb data properties so the component tests can drive all
-// three states; the panel binds them from cwLinePlotManager
-// (hasSolveError / lastSolveStationCount / lastSolveWarningCount).
+// three states; the panel binds the error and warnings from
+// cwLinePlotManager and the count from the trip's own known stations.
 RowLayout {
     id: root
     objectName: "solveStatus"

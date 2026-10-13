@@ -69,6 +69,7 @@ void cwSurveyTreeModel::setRegion(cwCavingRegion* region)
     m_connected.clear();
     qDeleteAll(m_tripStats);
     m_tripStats.clear();
+    m_stationCounts.clear();
     endResetModel();
 
     if(m_region) {
@@ -78,8 +79,16 @@ void cwSurveyTreeModel::setRegion(cwCavingRegion* region)
             m_connected.clear();
             qDeleteAll(m_tripStats);
             m_tripStats.clear();
+            m_stationCounts.clear();
             endResetModel();
         });
+
+        //Once per region rather than per node, which relays these to every
+        //node of the tree.
+        connect(m_region, &cwCavingRegion::positionsChanged,
+                this, &cwSurveyTreeModel::invalidateStationCounts);
+        connect(m_region, &cwCavingRegion::memberViewsChanged,
+                this, &cwSurveyTreeModel::invalidateStationCounts);
 
         connectSubtree(m_region->rootNode());
     }
@@ -114,6 +123,22 @@ QString cwSurveyTreeModel::kindLabel(const cwSurveyNode* node)
         return QStringLiteral("Section");
     }
     return kindLabel(node->kind());
+}
+
+int cwSurveyTreeModel::sourcedStationCount(const cwSurveyNode* node)
+{
+    const int solved = static_cast<int>(node->scopedPositions().positions().size());
+    if(solved > 0) {
+        return solved;
+    }
+
+    int known = 0;
+    node->walk([&known](const cwSurveyNode* current) {
+        for(int i = 0; i < current->tripCount(); i++) {
+            known += static_cast<int>(current->trip(i)->knownStations().size());
+        }
+    });
+    return known;
 }
 
 QModelIndex cwSurveyTreeModel::index(int row, int column, const QModelIndex& parent) const
@@ -543,6 +568,7 @@ bool cwSurveyTreeModel::trackObject(QObject* object)
 
     connect(object, &QObject::destroyed, this, [this](QObject* dead) {
         m_connected.remove(dead);
+        m_stationCounts.remove(dead);
         removeTripStats(dead);
     });
 
@@ -594,6 +620,7 @@ void cwSurveyTreeModel::connectNode(cwSurveyNode* node)
         //The Kind chip reads the source as well as the Name cell's badge.
         emitRowDataChanged(indexOfNode(node), Name, Kind, kSourceRoles);
         emitSurveyContentChanged(node);
+        invalidateStationCounts();
     });
     connect(node, &cwSurveyNode::childNodeCountChanged, this, [this, node]() {
         emitAggregateChanged(node);
@@ -649,6 +676,9 @@ void cwSurveyTreeModel::connectTrip(cwTrip* trip)
                            {StationCountRole, UsedStationsRole});
         emitAggregateChanged(trip->parentNode());
     });
+
+    connect(trip, &cwTrip::knownStationsChanged, this, &cwSurveyTreeModel::invalidateStationCounts);
+    connect(trip, &cwTrip::externallyBackedChanged, this, &cwSurveyTreeModel::invalidateStationCounts);
 }
 
 void cwSurveyTreeModel::disconnectSubtree(cwSurveyNode* node)
@@ -685,6 +715,7 @@ void cwSurveyTreeModel::disconnectObject(QObject* object)
 {
     if(object == nullptr) { return; }
     m_connected.remove(object);
+    m_stationCounts.remove(object);
     disconnect(object, nullptr, this, nullptr);
 }
 
@@ -775,8 +806,37 @@ void cwSurveyTreeModel::emitRowDataChanged(const QModelIndex& rowIndex,
 
 void cwSurveyTreeModel::emitAggregateChanged(cwSurveyNode* node)
 {
+    //A sourced node's count before a solve sums the trips under it.
+    m_stationCounts.clear();
     for(cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
         emitRowDataChanged(indexOfNode(current), Trips, Stations, kAggregateRoles);
+    }
+}
+
+void cwSurveyTreeModel::invalidateStationCounts()
+{
+    m_stationCounts.clear();
+
+    if(m_stationCountRefreshPending) { return; }
+    m_stationCountRefreshPending = true;
+    QMetaObject::invokeMethod(this, &cwSurveyTreeModel::refreshStationCounts, Qt::QueuedConnection);
+}
+
+void cwSurveyTreeModel::refreshStationCounts()
+{
+    m_stationCountRefreshPending = false;
+    if(m_region.isNull()) { return; }
+
+    const QList<int> roles = {StationCountRole, UsedStationsRole};
+    const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+    for(cwSurveyNode* node : nodes) {
+        emitRowDataChanged(indexOfNode(node), Stations, Stations, roles);
+        for(int i = 0; i < node->tripCount(); i++) {
+            cwTrip* trip = node->trip(i);
+            if(trip->externallyBacked()) {
+                emitRowDataChanged(indexOfTrip(trip), Stations, Stations, roles);
+            }
+        }
     }
 }
 
@@ -809,21 +869,35 @@ int cwSurveyTreeModel::subtreeTripCount(const cwSurveyNode* node)
 
 int cwSurveyTreeModel::subtreeStationCount(const cwSurveyNode* node) const
 {
-    int count = 0;
-
-    //A walk keeps a repaint free of the list allTrips() would build for every
-    //visible row.
-    node->walk([this, &count](const cwSurveyNode* current) {
-        for(int i = 0; i < current->tripCount(); i++) {
-            count += tripStationCount(current->trip(i));
+    if(node->isSourced()) {
+        auto cached = m_stationCounts.find(node);
+        if(cached == m_stationCounts.end()) {
+            cached = m_stationCounts.insert(node, sourcedStationCount(node));
         }
-    });
+        return cached.value();
+    }
 
+    //A sourced child takes its own rule, so the fold recurses rather than walks.
+    int count = 0;
+    for(int i = 0; i < node->tripCount(); i++) {
+        count += tripStationCount(node->trip(i));
+    }
+    for(int i = 0; i < node->childNodeCount(); i++) {
+        count += subtreeStationCount(node->childNode(i));
+    }
     return count;
 }
 
 int cwSurveyTreeModel::tripStationCount(cwTrip* trip) const
 {
+    if(trip->externallyBacked()) {
+        auto cached = m_stationCounts.find(trip);
+        if(cached == m_stationCounts.end()) {
+            cached = m_stationCounts.insert(trip, static_cast<int>(trip->knownStations().size()));
+        }
+        return cached.value();
+    }
+
     const cwTripStatsWatcher* stats = m_tripStats.value(trip);
     return stats != nullptr ? stats->stationCount() : 0;
 }

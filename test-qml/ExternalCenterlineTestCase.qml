@@ -99,6 +99,15 @@ CWTestCase {
         return null
     }
 
+    function tripNamed(node, name) {
+        for (let i = 0; i < node.tripCount; i++) {
+            if (node.trip(i).name === name) {
+                return node.trip(i)
+            }
+        }
+        return null
+    }
+
     // Saves the fresh project as .cwproj and attaches the
     // survex_simple.svx fixture to a new trip via the cwRootData
     // wrapper. Returns { trip, source }.

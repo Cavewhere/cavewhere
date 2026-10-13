@@ -1,0 +1,21 @@
+*begin system
+s1 s2 10 0 0
+s2 s3 10 90 0
+*equate s3 upper.u1
+*equate s3 lower.left.l1
+*begin upper
+u1 u2 5 0 0
+u2 u3 5 0 0
+u3 u4 5 0 0
+*end upper
+*begin lower
+*equate left.l3 right.r1
+*begin left
+l1 l2 4 180 0
+l2 l3 4 180 0
+*end left
+*begin right
+r1 r2 3 270 0
+*end right
+*end lower
+*end system

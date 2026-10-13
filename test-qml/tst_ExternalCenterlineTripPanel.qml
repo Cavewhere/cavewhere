@@ -313,10 +313,15 @@ MainWindowTest {
             // answer to the missing file rather than the previous one.
             RootData.futureManagerModel.waitForFinished()
             verify(!solveStatus.hasError, "the region still solved")
-            verify(solveStatus.stationCount > 0,
+            verify(RootData.linePlotManager.lastSolveStationCount > 0,
                    "the surviving attachment's stations are counted")
-            verify(statusLabel.text.indexOf("stations") >= 0,
-                   "the status counts stations; got: " + statusLabel.text)
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryCompare(stationsList, "count", 0, 10000,
+                       "the trip whose copy is gone lists no stations")
+            compare(solveStatus.stationCount, 0,
+                    "the status counts this trip's own stations")
+            compare(statusLabel.text, "0 stations")
         }
 
         function test_viewCavernOutputNavigates() {
@@ -757,9 +762,10 @@ MainWindowTest {
         }
 
         // survex_blocks.svx attaches as a SurvexFile root with no shots of its
-        // own; each block with shots is a derived node holding one derived
-        // trip. Binds the panel to east's, the deepest block. Returns the
-        // source root.
+        // own. A block with nested blocks is a derived node holding its own
+        // shots as a derived trip; a leaf block with shots is one derived trip
+        // of the node above it. Binds the panel to east, the deepest block.
+        // Returns the source root.
         function bindDerivedTrip(projectBaseName) {
             const sourceRoot = makeSavedCaveAttach(
                                  projectBaseName,
@@ -768,13 +774,13 @@ MainWindowTest {
             compare(sourceRoot.rowCount(), 0, "the file's root holds no shots of its own")
             const doghill = childNamed(sourceRoot, "doghill")
             const bigPassage = childNamed(doghill, "big-passage")
-            const east = childNamed(bigPassage, "east")
             const sump = childNamed(bigPassage, "sump")
-            verify(east !== null && sump !== null, "each block is a derived node")
-            compare([doghill.rowCount(), bigPassage.rowCount(), east.rowCount(), sump.rowCount()],
-                    [1, 1, 1, 0], "one derived trip per block with shots")
+            verify(bigPassage !== null && sump !== null, "each block with nested blocks is a derived node")
+            compare([doghill.rowCount(), bigPassage.rowCount(), sump.rowCount()],
+                    [1, 2, 0], "big-passage holds its own shots and the leaf block east")
 
-            const trip = east.trip(0)
+            const trip = bigPassage.trip(1)
+            compare(trip.name, "east", "the leaf block east is a derived trip")
             verify(trip.externallyBacked,
                    "a derived trip is backed by its source root's file")
             compare(trip.externalCenterline.entryFile, "",
@@ -877,6 +883,32 @@ MainWindowTest {
                       10000, "the attach's chained solve publishes stations")
             tryVerify(() => stationsList.count > 0, 10000,
                       "the block's stations reach the derived trip's list")
+        }
+
+        // A derived trip's solve status counts the trip's own stations, the
+        // number its tree row shows, rather than every station the region
+        // solved. counts.svx's leaf block left holds l1-l3 of the file's 12.
+        function test_aDerivedTripsSolveStatusCountsItsOwnStations() {
+            saveProjectAs("trip-panel-own-count")
+            const root = attachSourceToRegion(
+                           TestHelper.testcasesDatasetSourcePath(
+                               "external-centerlines/survex_station_counts/counts.svx"))
+            const lower = childNamed(childNamed(root, "system"), "lower")
+            verify(lower !== null, "the file holds the block lower")
+            const left = tripNamed(lower, "left")
+            verify(left !== null, "lower holds the leaf trip left")
+
+            rootId.trip = left
+            waitForRendering(panelId)
+            tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 3,
+                      10000, "the attach's chained solve places the whole file")
+
+            const solveStatus = findChild(panelId, "solveStatus")
+            const statusLabel = findChild(solveStatus, "solveStatusLabel")
+            verify(statusLabel !== null, "solveStatusLabel must exist")
+            tryCompare(solveStatus, "stationCount", 3, 10000,
+                       "the solve status counts left's own stations")
+            compare(statusLabel.text, "3 stations")
         }
 
         // The verb the scope header adds acts on the real trip through the

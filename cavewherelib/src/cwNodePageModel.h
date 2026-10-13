@@ -32,8 +32,9 @@ class cwSurveyNode;
  * or removed at any depth, and any trip's date edit, refresh them.
  *
  * A node of a sourced subtree also gets what its source card shows: how many
- * derived trips (units of the survey file) sit at or below it, how many solved
- * stations its view holds, and, on a source root, the names of the derived
+ * derived trips (units of the survey file) sit at or below it, how many
+ * stations it holds (cwSurveyTreeModel::sourcedStationCount(), the count its
+ * tree row shows), and, on a source root, the names of the derived
  * nodes and trips the user hid from the project.
  */
 class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
@@ -67,8 +68,8 @@ public:
     //! The derived trips at or below a sourced node; 0 for a native node.
     int sourceUnitCount() const { return m_sourceUnitCount; }
 
-    //! The solved stations in a sourced node's scopedPositions(); 0 for a
-    //! native node.
+    //! The solved stations in a sourced node's scopedPositions(), or its
+    //! trips' harvested stations before a solve; 0 for a native node.
     int stationCount() const { return m_stationCount; }
 
     //! On a source root, one name per path its source excludes: the last

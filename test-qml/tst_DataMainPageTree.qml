@@ -1735,16 +1735,74 @@ MainWindowTest {
                    "a source root offers no Move to…")
             menu.close()
 
-            // survex_simple's one block is a derived node holding the block's
-            // own shots as a derived trip.
-            tryVerify(() => cave.childNodeCount > 0 && cave.childNode(0).tripCount > 0, 10000,
-                      "the attached file's block holds a derived trip")
+            // survex_simple's one block is a leaf, so it lists as a derived
+            // trip of the file's root.
+            tryVerify(() => cave.tripCount > 0, 10000,
+                      "the attached file's block is a derived trip")
             tree.surveyTree.expandAll()
-            tryVerify(() => tree.rows > 2, 5000)
-            const tripMenu = openMenuOn(page, tree, 2, "tripDelegate")
+            tryVerify(() => tree.rows > 1, 5000)
+            const tripMenu = openMenuOn(page, tree, 1, "tripDelegate")
             verify(findChild(tripMenu, "surveyItemMoveMenuItem") === null,
                    "a derived trip offers no Move to…")
             tripMenu.close()
+        }
+
+        // --- MP.5: attached rows count the solved stations of their subtree ---
+
+        // Attaches survex_station_counts/counts.svx under the region's root and
+        // waits for its blocks to land. Returns the source root.
+        function attachStationCountsFile() {
+            RootData.account.name = "Counts Test"
+            RootData.account.email = "counts.test@example.com"
+            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            verify(RootData.project.saveAs(tmpPath + "/stationCounts.cwproj"), "saveAs should succeed")
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            const regionRoot = RootData.region.rootNode
+            RootData.attachSource(regionRoot,
+                                  TestHelper.testcasesDatasetSourcePath("external-centerlines/survex_station_counts/counts.svx"))
+            tryVerify(() => {
+                          const root = regionRoot.childNodeCount === 1 ? regionRoot.childNode(0) : null
+                          const system = root !== null ? childNamed(root, "system") : null
+                          return system !== null && childNamed(system, "lower") !== null
+                      }, 10000, "the attach must build the subtree")
+            RootData.futureManagerModel.waitForFinished()
+            return regionRoot.childNode(0)
+        }
+
+        // The trip named \a name under \a node.
+        function tripNamed(node, name) {
+            for (let i = 0; i < node.tripCount; i++) {
+                if (node.trip(i).name === name) {
+                    return node.trip(i)
+                }
+            }
+            return null
+        }
+
+        // The file root, a node in the middle, and a leaf trip each read the
+        // stations solved under them, where they all read 0 or nothing before.
+        function test_attachedRowsCountTheirSolvedStations() {
+            // The page is up before the attach, the way the attach dialog runs
+            // from it, so its rows take in the counts as the solve lands.
+            const page = gotoDataMainPage()
+            const root = attachStationCountsFile()
+            const system = childNamed(root, "system")
+            const lower = childNamed(system, "lower")
+            const left = tripNamed(lower, "left")
+            verify(left !== null, "lower holds the leaf trip left")
+
+            const tree = surveyTree(page)
+            tree.surveyTree.expandAll()
+            tryVerify(() => viewRowOf(tree, left) >= 0, 10000, "every row is shown")
+
+            // s1-s3, u1-u4, l1-l3 and r1-r2; equated names count apart.
+            tryCellText(page, "caveStations" + viewRowOf(tree, root), "value", "12",
+                        "the source root counts every solved station of its file")
+            tryCellText(page, "caveStations" + viewRowOf(tree, lower), "value", "5",
+                        "a middle node counts the solved stations of its blocks")
+            tryCellText(page, "tripStations" + viewRowOf(tree, left), "value", "3",
+                        "an attached trip counts its own stations")
         }
     }
 }

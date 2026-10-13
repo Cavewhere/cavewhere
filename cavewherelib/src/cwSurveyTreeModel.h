@@ -106,6 +106,11 @@ public:
     //! \a node is never null.
     static QString kindLabel(const cwSurveyNode* node);
 
+    //! The stations a sourced \a node holds: the solved stations of its
+    //! scopedPositions(), or, before a solve places any, the known stations of
+    //! every trip under it. The one count the tree row and the node page show.
+    static int sourcedStationCount(const cwSurveyNode* node);
+
     QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const override;
     QModelIndex parent(const QModelIndex& index) const override;
     int rowCount(const QModelIndex& parent = QModelIndex()) const override;
@@ -186,6 +191,11 @@ private:
     //! trip, so a node row folds the counts its subtree's trips already hold.
     QHash<QObject*, cwTripStatsWatcher*> m_tripStats;
 
+    //! The station counts of sourced nodes and externally backed trips,
+    //! filled as rows are read, because each one merges every known station.
+    mutable QHash<const QObject*, int> m_stationCounts;
+    bool m_stationCountRefreshPending = false;
+
     //! The node an index stands for: the region's root for the invalid index,
     //! the node itself for a node row, nullptr for a trip row.
     cwSurveyNode* nodeForIndex(const QModelIndex& index) const;
@@ -234,6 +244,12 @@ private:
     //! because those two fold over a whole subtree.
     void emitAggregateChanged(cwSurveyNode* node);
 
+    //! Forgets every cached station count and announces the Stations cell of
+    //! every node row and externally backed trip row once, on the next turn of
+    //! the event loop, so a solve that pulses every trip refreshes the column once.
+    void invalidateStationCounts();
+    void refreshStationCounts();
+
     //! Whether \a node and every node above it hold survey content may have
     //! moved, so their whole rows are announced for HasSurveyContentRole.
     void emitSurveyContentChanged(cwSurveyNode* node);
@@ -245,11 +261,13 @@ private:
     //! The number of trips over \a node's subtree, its own trips included.
     static int subtreeTripCount(const cwSurveyNode* node);
 
-    //! The number of stations over \a node's subtree, zero for a trip whose
-    //! stations have yet to be counted.
+    //! The number of stations over \a node's subtree: sourcedStationCount() for
+    //! a sourced node, the sum of its trips and child nodes otherwise.
     int subtreeStationCount(const cwSurveyNode* node) const;
 
-    //! The number of stations \a trip names, zero until its watcher counts them.
+    //! The number of stations \a trip names: its known stations when it is
+    //! externally backed, its chunk stations otherwise, zero until its watcher
+    //! counts them.
     int tripStationCount(cwTrip* trip) const;
 
     //! \a trip's stations as one line of abbreviated ranges, empty until its

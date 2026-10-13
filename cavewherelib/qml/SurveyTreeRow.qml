@@ -575,7 +575,8 @@ QQ.Item {
     //day and a node to as many as it holds trips, so only a trip row dates
     //itself; only a node row counts trips. A trip names its own stations and a
     //node counts the stations under it, because a subtree's names run far past
-    //one cell.
+    //one cell. An attached trip counts its stations too, since it has no
+    //chunk names to draw as ranges.
     QQ.Component {
         id: textCellComponent
 
@@ -590,7 +591,7 @@ QQ.Item {
                 case SurveyTreeModel.Trips:
                     return rowId.isNode ? rowId.tripCount : "";
                 case SurveyTreeModel.Stations:
-                    return rowId.isNode ? rowId.stationCount : rowId.usedStations;
+                    return rowId.isNode || rowId.externallyBacked ? rowId.stationCount : rowId.usedStations;
                 case SurveyTreeModel.Date:
                     return isNaN(rowId.dateValue.getTime())
                          ? ""
