@@ -76,11 +76,23 @@ public:
         Section scaled(double factor) const;
     };
 
+    // A leg past the station before it: it turns turnDegrees in plan,
+    // counter-clockwise, from the leg before and climbs at profileDegrees.
+    // at is the section at its far station.
+    struct ArmLeg {
+        double turnDegrees = 0.0;
+        double profileDegrees = 0.0;
+        double lengthMeters = kArmLengthMeters;
+        Section at;
+    };
+
     // An arm leaves J along planDegrees, measured in plan counter-clockwise from
     // the direction back along the through passage toward t0, and climbs
     // at profileDegrees (90 is a pit dropping into J, −90 a shaft below
     // it). at is the far station's section; atJunction is J's own reading
-    // on the arm's chunk when hasJunctionLrud is set.
+    // on the arm's chunk when hasJunctionLrud is set; a station without
+    // readings, hasLrud unset, takes the builder's default radius. legsBeyond
+    // carry the arm on past its far station in a second chunk.
     struct ArmSpec {
         double planDegrees = 90.0;
         double profileDegrees = 0.0;
@@ -88,6 +100,8 @@ public:
         Section at;
         Section atJunction;
         bool hasJunctionLrud = true;
+        bool hasLrud = true;
+        QVector<ArmLeg> legsBeyond;
     };
 
     // The through passage runs t0 → J → t1 heading north into J and climbing

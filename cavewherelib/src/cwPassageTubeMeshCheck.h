@@ -43,6 +43,7 @@ public:
     static constexpr double kMaxCreaseDegrees = 150.0;
     static constexpr double kMaxRadiusRatio = 3.0;
     static constexpr double kWallTolerance = 0.15;
+    static constexpr double kCenterlineSampleMeters = 0.25;
 
     enum Type {
         OpenEdge,
@@ -58,7 +59,8 @@ public:
         RadiusJump,
         FrameTwist,
         FoldBack,
-        WallMissed
+        WallMissed,
+        CenterlineOutside
     };
 
     struct Issue {
@@ -151,7 +153,17 @@ public:
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 
-    // Runs every check; the ring and wall checks run when debug has chains.
+    // Both stations of every leg of a chain with rings, and points every
+    // kCenterlineSampleMeters along it, lie inside the mesh by a winding
+    // number vote of three skewed rays, or within wallToleranceMeters of a
+    // triangle. The legs of an arm left inside its through passage have no
+    // rings.
+    static QVector<Issue> centerlineInside(const cwPassageTubeMesh& mesh,
+                                           const cwPassageTubeBuilder::Debug& debug,
+                                           const Options& options = Options());
+
+    // Runs every check; the ring, wall and centerline checks run when debug
+    // has chains.
     // PassageOverlap goes to Report::warnings, every other kind to issues.
     static Report check(const cwPassageTubeMesh& mesh,
                         const cwPassageTubeBuilder::Debug& debug = cwPassageTubeBuilder::Debug(),

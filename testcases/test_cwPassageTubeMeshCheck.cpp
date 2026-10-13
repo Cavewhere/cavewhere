@@ -432,3 +432,45 @@ TEST_CASE("cwPassageTubeMeshCheck reports LRUD walls off the tube surface", "[Pa
         CHECK(Check::wallsOnSurface(debug).isEmpty());
     }
 }
+
+TEST_CASE("cwPassageTubeMeshCheck reports centerline points outside the tube", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    cwPassageTubeBuilder::Leg leg;
+    leg.from = QStringLiteral("a");
+    leg.to = QStringLiteral("b");
+    leg.fromPosition = QVector3D(0, 0, 0);
+    leg.toPosition = QVector3D(10, 0, 0);
+
+    cwPassageTubeBuilder::Chain chain;
+    chain.legs = {cwPassageTubeBuilder::ChainLeg {0, false}};
+    chain.rings = {cwPassageTubeBuilder::Ring()};
+
+    cwPassageTubeBuilder::Debug debug;
+    debug.legs = {leg};
+    debug.chains = {chain};
+
+    SECTION("A tube around the whole leg") {
+        const cwPassageTubeMesh mesh = boxMesh(QVector3D(-1, -1, -1), QVector3D(11, 1, 1));
+        CHECK(Check::centerlineInside(mesh, debug).isEmpty());
+    }
+
+    SECTION("A tube that stops 3 m short of b") {
+        const cwPassageTubeMesh mesh = boxMesh(QVector3D(-1, -1, -1), QVector3D(7, 1, 1));
+        const QVector<Check::Issue> issues = Check::centerlineInside(mesh, debug);
+        REQUIRE(issues.size() == 1);
+        CHECK(issues.at(0).type == Check::CenterlineOutside);
+        CHECK(issues.at(0).position.x() > 7.0f - static_cast<float>(Check::kWallTolerance));
+    }
+
+    SECTION("Two overlapping tubes still hold the leg") {
+        cwPassageTubeMesh mesh = boxMesh(QVector3D(-1, -1, -1), QVector3D(6, 1, 1));
+        appendBox(mesh, QVector3D(4, -1, -1), QVector3D(11, 1, 1));
+        CHECK(Check::centerlineInside(mesh, debug).isEmpty());
+    }
+
+    SECTION("A leg of an arm left inside its through passage has no rings") {
+        debug.chains[0].rings.clear();
+        const cwPassageTubeMesh mesh = boxMesh(QVector3D(-1, -1, -1), QVector3D(7, 1, 1));
+        CHECK(Check::centerlineInside(mesh, debug).isEmpty());
+    }
+}

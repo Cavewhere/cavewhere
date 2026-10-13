@@ -269,13 +269,23 @@ cwPassageTubeCases::Trip cwPassageTubeCases::toTrip(const JunctionCase& junction
 
     for (int i = 0; i < junctionCase.arms.size(); ++i) {
         const ArmSpec& spec = junctionCase.arms.at(i);
-        const QVector3D far = junction + static_cast<float>(spec.lengthMeters)
-                                             * direction(kHalfTurnDegrees - spec.planDegrees, spec.profileDegrees);
-        const QStringList junctionLrud = spec.hasJunctionLrud ? lrudStrings(spec.atJunction) : emptyLrud();
-        trip.chunks.append({
-            {QStringLiteral("a%1%2").arg(i).arg(0), far, lrudStrings(spec.at)},
-            {junctionName, junction, junctionLrud},
-        });
+        const auto lrudOf = [&](const Section& section) { return spec.hasLrud ? lrudStrings(section) : emptyLrud(); };
+        double azimuth = kHalfTurnDegrees - spec.planDegrees;
+        const QVector3D far = junction + static_cast<float>(spec.lengthMeters) * direction(azimuth, spec.profileDegrees);
+        const QStringList junctionLrud = spec.hasJunctionLrud ? lrudOf(spec.atJunction) : emptyLrud();
+        const Station farStation {QStringLiteral("a%1%2").arg(i).arg(0), far, lrudOf(spec.at)};
+        trip.chunks.append({farStation, {junctionName, junction, junctionLrud}});
+
+        if (spec.legsBeyond.isEmpty()) {
+            continue;
+        }
+        QList<Station> beyond {farStation};
+        for (const ArmLeg& leg : spec.legsBeyond) {
+            azimuth -= leg.turnDegrees;
+            const QVector3D next = *beyond.last().position + static_cast<float>(leg.lengthMeters) * direction(azimuth, leg.profileDegrees);
+            beyond.append({QStringLiteral("a%1%2").arg(i).arg(beyond.size()), next, lrudOf(leg.at)});
+        }
+        trip.chunks.append(beyond);
     }
     return trip;
 }
@@ -413,6 +423,20 @@ QVector<cwPassageTubeCases::JunctionCase> cwPassageTubeCases::galleryCases()
     change.throughAtJunction = {1, 1, 1.5, 0.5};
     change.throughPastJunction = {3, 3, 2, 1};
     cases.append(change);
+
+    // The arm leaves the room through its side wall, turns back and runs
+    // along it, outside, past the room's end, its wall reaching into the room.
+    const Section sideArm {3, 2, 3.5, 2};
+    ArmSpec alongWall = arm(70, sideArm, 20.0);
+    alongWall.legsBeyond = {{45.0, 0.0, 3.0, sideArm}, {80.0, 0.0, 16.0, sideArm}};
+    cases.append(galleryCase(QStringLiteral("21. Small arm along the wall of a big room"), {8, 8, 6, 1.5}, {alongWall}));
+
+    // The arm drops out through the floor and, 4.9 m from J, turns 74 degrees
+    // to climb back beside it, outside, its wall reaching into the room.
+    ArmSpec unread = arm(90, {}, -22.0, 4.9);
+    unread.hasLrud = false;
+    unread.legsBeyond = {{61.7, 21.0, 6.0, {}}};
+    cases.append(galleryCase(QStringLiteral("22. Default-radius arm bending inside a big through's reach"), {6, 6, 6, 1.5}, {unread}));
 
     return cases;
 }

@@ -22,6 +22,7 @@
 #include <numeric>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -48,6 +49,10 @@ constexpr double kAlongLegDegrees = 45.0;
 // A ray along +x tilted by irrational amounts, so it misses edges and vertices.
 constexpr double kRayTiltY = 1e-3 * std::numbers::sqrt2;
 constexpr double kRayTiltZ = 1e-3 * std::numbers::sqrt3;
+// The centerline check's rays run along +x, +y and +z, each tilted as above;
+// a point is inside when most of them say so.
+constexpr int kCenterlineRayCount = 3;
+constexpr int kCenterlineInsideVotes = 2;
 
 struct Vec {
     double x = 0.0;
@@ -293,6 +298,7 @@ public:
     }
 
     const QHash<Cell, QVector<int>>& cells() const { return m_cells; }
+    double cellSize() const { return m_cellSize; }
 
 private:
     // The median edge length, coarsened so no triangle spans too many cells.
@@ -601,6 +607,92 @@ bool isAlongLeg(const QVector3D& direction, const QVector<QVector3D>& legDirecti
         return QVector3D::dotProduct(direction, legDirection) > minCosine;
     });
 }
+
+// Whether a triangle lies within tolerance of point.
+bool isNearSurface(const QVector<Triangle>& triangles, const TriangleGrid& grid, const Vec& point, double tolerance)
+{
+    const Vec reach(tolerance, tolerance, tolerance);
+    const Box query {point - reach, point + reach};
+    bool found = false;
+    grid.forEachCell(query, [&](const Cell& cell) {
+        if (found) {
+            return;
+        }
+        const QVector<int> inCell = grid.cells().value(cell);
+        found = std::any_of(inCell.cbegin(), inCell.cend(), [&](int t) {
+            const Triangle& triangle = triangles.at(t);
+            return triangle.box.overlaps(query) && (closestPoint(point, triangle) - point).length() <= tolerance;
+        });
+    });
+    return found;
+}
+
+// The winding number of the mesh around a point, read along one ray: each
+// triangle the ray leaves through counts one, each it enters through minus
+// one. Passages that run into each other still count a point inside both.
+class WindingRay
+{
+public:
+    WindingRay(const QVector<Triangle>& triangles, const TriangleGrid& grid, const Box& bounds) :
+        m_triangles(triangles),
+        m_grid(grid),
+        m_bounds(bounds),
+        m_visited(triangles.size(), 0)
+    {
+    }
+
+    int winding(const Vec& origin, const Vec& direction)
+    {
+        ++m_stamp;
+        const Vec unit = direction * (1.0 / direction.length());
+        const double length = exitDistance(origin, unit);
+        const double step = m_grid.cellSize();
+        int winding = 0;
+        for (double start = 0.0; start < length; start += step) {
+            const Vec a = origin + unit * start;
+            const Vec b = origin + unit * std::min(start + step, length);
+            m_grid.forEachCell(Box {Vec::min(a, b), Vec::max(a, b)}, [&](const Cell& cell) {
+                const auto found = m_grid.cells().constFind(cell);
+                if (found == m_grid.cells().cend()) {
+                    return;
+                }
+                for (int t : found.value()) {
+                    if (m_visited.at(t) == m_stamp) {
+                        continue;
+                    }
+                    m_visited[t] = m_stamp;
+                    const Triangle& triangle = m_triangles.at(t);
+                    if (rayCrosses(origin, unit, triangle)) {
+                        winding += Vec::dot(triangle.normal(), unit) > 0.0 ? 1 : -1;
+                    }
+                }
+            });
+        }
+        return winding;
+    }
+
+private:
+    // How far the ray runs before it leaves the bounds.
+    double exitDistance(const Vec& origin, const Vec& unit) const
+    {
+        double exit = std::numeric_limits<double>::max();
+        for (int axis = 0; axis < 3; ++axis) {
+            const double component = unit[axis];
+            if (std::abs(component) < kRayEpsilon) {
+                continue;
+            }
+            const double bound = component > 0.0 ? m_bounds.hi[axis] : m_bounds.lo[axis];
+            exit = std::min(exit, (bound - origin[axis]) / component);
+        }
+        return std::max(exit, 0.0);
+    }
+
+    const QVector<Triangle>& m_triangles;
+    const TriangleGrid& m_grid;
+    Box m_bounds;
+    std::vector<int> m_visited;
+    int m_stamp = 0;
+};
 
 } // namespace
 
@@ -939,23 +1031,8 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
 {
     const QVector<Triangle> triangles = trianglesOf(debug.mesh, wholeMesh(debug.mesh));
     const TriangleGrid grid(triangles);
-    const double tolerance = options.wallToleranceMeters;
-
     const auto isOnSurface = [&](const Vec& point) {
-        const Vec reach(tolerance, tolerance, tolerance);
-        const Box query {point - reach, point + reach};
-        bool found = false;
-        grid.forEachCell(query, [&](const Cell& cell) {
-            if (found) {
-                return;
-            }
-            const QVector<int> inCell = grid.cells().value(cell);
-            found = std::any_of(inCell.cbegin(), inCell.cend(), [&](int t) {
-                const Triangle& triangle = triangles.at(t);
-                return triangle.box.overlaps(query) && (closestPoint(point, triangle) - point).length() <= tolerance;
-            });
-        });
-        return found;
+        return isNearSurface(triangles, grid, point, options.wallToleranceMeters);
     };
 
     using StationKey = std::pair<QUuid, QString>;
@@ -1045,6 +1122,64 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
     return issues;
 }
 
+QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::centerlineInside(const cwPassageTubeMesh& mesh,
+                                                                                const cwPassageTubeBuilder::Debug& debug,
+                                                                                const Options& options)
+{
+    const QVector<Triangle> triangles = trianglesOf(mesh, wholeMesh(mesh));
+    if (triangles.isEmpty()) {
+        return {};
+    }
+    const TriangleGrid grid(triangles);
+    Box bounds = triangles.first().box;
+    for (const Triangle& triangle : triangles) {
+        bounds = Box {Vec::min(bounds.lo, triangle.box.lo), Vec::max(bounds.hi, triangle.box.hi)};
+    }
+    WindingRay ray(triangles, grid, bounds);
+    const std::array<Vec, kCenterlineRayCount> directions {Vec(1.0, kRayTiltY, kRayTiltZ),
+                                                           Vec(kRayTiltZ, 1.0, kRayTiltY),
+                                                           Vec(kRayTiltY, kRayTiltZ, 1.0)};
+    const auto isInside = [&](const Vec& point) {
+        if (isNearSurface(triangles, grid, point, options.wallToleranceMeters)) {
+            return true;
+        }
+        const auto votes = std::count_if(directions.cbegin(), directions.cend(), [&](const Vec& direction) {
+            return ray.winding(point, direction) > 0;
+        });
+        return votes >= kCenterlineInsideVotes;
+    };
+
+    QVector<Issue> issues;
+    for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
+        if (chain.rings.isEmpty()) {
+            continue;
+        }
+        for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
+            const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+            const Vec from(leg.fromPosition);
+            const Vec to(leg.toPosition);
+            const int steps = std::max(1, static_cast<int>(std::ceil((to - from).length() / kCenterlineSampleMeters)));
+            int outsideCount = 0;
+            std::optional<Vec> firstOutside;
+            for (int step = 0; step <= steps; ++step) {
+                const Vec point = from + (to - from) * (static_cast<double>(step) / steps);
+                if (!isInside(point)) {
+                    ++outsideCount;
+                    if (!firstOutside) {
+                        firstOutside = point;
+                    }
+                }
+            }
+            if (firstOutside) {
+                issues.append(Issue {CenterlineOutside, firstOutside->toQVector3D(),
+                                     QStringLiteral("%1 of %2 centerline points from %3 to %4 lie outside the tube")
+                                         .arg(outsideCount).arg(steps + 1).arg(leg.from, leg.to)});
+            }
+        }
+    }
+    return issues;
+}
+
 cwPassageTubeMeshCheck::Report cwPassageTubeMeshCheck::check(const cwPassageTubeMesh& mesh,
                                                              const cwPassageTubeBuilder::Debug& debug,
                                                              const Options& options)
@@ -1075,6 +1210,7 @@ cwPassageTubeMeshCheck::Report cwPassageTubeMeshCheck::check(const cwPassageTube
     if (!debug.chains.isEmpty()) {
         report.issues.append(ringIssues(debug, options));
         report.issues.append(wallsOnSurface(debug, options));
+        report.issues.append(centerlineInside(mesh, debug, options));
     }
     return report;
 }
@@ -1110,6 +1246,8 @@ QString cwPassageTubeMeshCheck::typeName(Type type)
         return QStringLiteral("FoldBack");
     case WallMissed:
         return QStringLiteral("WallMissed");
+    case CenterlineOutside:
+        return QStringLiteral("CenterlineOutside");
     }
     return QString();
 }
