@@ -460,8 +460,8 @@ MainWindowTest {
             verify(!findChild(page, "sourceRootCard").visible, "the root's card stays on the root")
             compare(findChild(card, "derivedNodeFileLabel").text, "PROJECT.MAK")
             compare(findChild(card, "derivedNodeUnitLabel").text, "This node is ALPHA.DAT in the project")
-            compare(findChild(card, "derivedNodeCountsLabel").text.indexOf("2 unit(s) · "), 0,
-                    "ALPHA1 and ALPHA2 are Alpha's units")
+            compare(findChild(card, "derivedNodeCountsLabel"), null,
+                    "MP.9: the card carries no unit or station count")
 
             verify(!findChild(page, "fixStationsLink").visible, "a derived node offers no fix stations")
             verify(!findChild(page, "fixStationsBadge").parent.visible,

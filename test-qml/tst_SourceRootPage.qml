@@ -4,9 +4,9 @@ import cavewherelib
 import cw.TestLib
 
 // The page of a source root (SURVEY_TREE_PLAN C7.4b): the source card names
-// the copied file, its format and provenance, the units and stations the file
-// gives the project and the solve status; Reload re-copies the file; the
-// derived items the user hid are listed with Restore….
+// the copied file, its format and provenance, and the solve status; Reload and
+// Replace… live in the header's right-click menus (MP.9); the derived items the
+// user hid are listed with Restore….
 MainWindowTest {
     id: rootId
 
@@ -64,8 +64,8 @@ MainWindowTest {
             tryVerify(() => findChild(card, "sourceModeLabel").text.indexOf("compass_project/PROJECT.MAK") >= 0,
                       5000, "the card says where the copy came from")
 
-            compare(findChild(card, "sourceRootUnitsLabel").text, "4 unit(s) from this file",
-                    "ALPHA1, ALPHA2, BRAVO1 and CHARLIE1 are the file's units")
+            compare(findChild(card, "sourceRootUnitsLabel"), null,
+                    "MP.9: the card carries no unit count")
 
             const solveStatusLabel = findChild(card, "solveStatusLabel")
             tryVerify(() => /^[1-9]\d* stations$/.test(solveStatusLabel.text), 20000,
@@ -73,21 +73,31 @@ MainWindowTest {
                       + solveStatusLabel.text)
 
             verify(!findChild(card, "sourceRootHiddenLabel").visible, "nothing is hidden yet")
-            verify(findChild(card, "replaceButton").visible, "Replace… lives on the root")
+            compare(findChild(card, "replaceButton"), null, "Replace… is no button on the card")
+            const menuArea = openAttachedFileMenu(header)
+            const replaceItem = findChild(menuArea, "replaceAction")
+            verify(replaceItem !== null, "Replace… lives in the root's header menu")
+            verify(replaceItem.enabled, "an idle root offers Replace…")
+            closeMenu(menuArea)
             verify(findChild(page, "fixStationsLink").visible, "the root keeps its fix-station row")
             verify(!findChild(page, "derivedNodeCard").visible, "a root shows no derived-node card")
         }
 
-        function test_reloadButtonReloadsTheRoot() {
+        function test_reloadFromTheHeaderMenuReloadsTheRoot() {
             const sourceRoot = attachCompassProject("source-root-reload")
             attachCompletedSpyId.clear()
             const page = gotoNodePage("Source/Data/Node=PROJECT", sourceRoot)
             const card = sourceCard(page)
 
-            const reloadButton = findChild(card, "sourceRootReloadButton")
-            tryVerify(() => reloadButton.enabled, 5000,
+            compare(findChild(card, "sourceRootReloadButton"), null,
+                    "MP.9: Reload is no button on the card")
+            const menuArea = openAttachedFileMenu(findChild(card, "attachedHeader"))
+            const reloadItem = findChild(menuArea, "reloadFromSourceAction")
+            verify(reloadItem !== null, "Reload lives in the root's header menu")
+            tryVerify(() => reloadItem.enabled, 5000,
                       "the file the root was copied from is on disk, so Reload is offered")
-            mouseClick(reloadButton)
+            closeMenu(menuArea)
+            reloadItem.triggered()
 
             tryVerify(() => attachCompletedSpyId.count === 1, 20000, "Reload runs once")
             const report = attachCompletedSpyId.signalArguments[0][0]
@@ -115,8 +125,6 @@ MainWindowTest {
             const hiddenLabel = findChild(card, "sourceRootHiddenLabel")
             tryVerify(() => hiddenLabel.visible, 5000, "the card lists what is hidden")
             compare(findChild(card, "sourceRootHiddenLabel").text, "2 hidden: ALPHA2, BRAVO.DAT ·")
-            compare(findChild(card, "sourceRootUnitsLabel").text, "2 unit(s) from this file",
-                    "the hidden units leave the count")
 
             waitForRendering(card)
             mouseClick(findChild(card, "sourceRootRestoreLink"))
@@ -131,7 +139,6 @@ MainWindowTest {
             tryVerify(() => childNamed(sourceRoot, "Bravo") !== null, 10000, "the hidden node comes back")
             tryCompare(alpha, "tripCount", 2, 10000, "the hidden trip comes back")
             tryVerify(() => !hiddenLabel.visible, 5000, "nothing is hidden any more")
-            compare(findChild(card, "sourceRootUnitsLabel").text, "4 unit(s) from this file")
         }
     }
 }

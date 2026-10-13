@@ -46,7 +46,6 @@ class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
     Q_PROPERTY(QString kindLabel READ kindLabel NOTIFY kindLabelChanged)
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
     Q_PROPERTY(QDateTime lastSurvey READ lastSurvey NOTIFY lastSurveyChanged)
-    Q_PROPERTY(int sourceUnitCount READ sourceUnitCount NOTIFY sourceUnitCountChanged)
     Q_PROPERTY(int stationCount READ stationCount NOTIFY stationCountChanged)
     Q_PROPERTY(QStringList hiddenNames READ hiddenNames NOTIFY hiddenNamesChanged)
 
@@ -65,9 +64,6 @@ public:
     //! there has a date.
     QDateTime lastSurvey() const { return m_lastSurvey; }
 
-    //! The derived trips at or below a sourced node; 0 for a native node.
-    int sourceUnitCount() const { return m_sourceUnitCount; }
-
     //! The solved stations in a sourced node's scopedPositions(), or its
     //! trips' harvested stations before a solve; 0 for a native node.
     int stationCount() const { return m_stationCount; }
@@ -82,7 +78,6 @@ signals:
     void kindLabelChanged();
     void tripCountChanged();
     void lastSurveyChanged();
-    void sourceUnitCountChanged();
     void stationCountChanged();
     void hiddenNamesChanged();
 
@@ -97,7 +92,6 @@ private:
 
     int m_tripCount = 0;
     QDateTime m_lastSurvey;
-    int m_sourceUnitCount = 0;
     int m_stationCount = 0;
     QStringList m_hiddenNames;
 
@@ -108,7 +102,6 @@ private:
     void setLastSurvey(const QDateTime& date);
     void rewireSource();
     void disconnectSource();
-    void updateSourceUnitCount();
     void updateStationCount();
     void updateHiddenNames();
 };

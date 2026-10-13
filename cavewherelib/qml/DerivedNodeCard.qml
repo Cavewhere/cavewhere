@@ -11,14 +11,13 @@ import QtQuick.Layouts
 import cavewherelib
 
 // The source card on a derived node's page: which file the node comes from,
-// what the node is inside that file, and a link to the source root, whose page
-// holds Reload, Replace…, and Restore….
+// what the node is inside that file, and a link to the source root, whose
+// header menus hold Reload and Replace… and whose page holds Restore….
 QQ.Item {
     id: root
     objectName: "derivedNodeCard"
 
     property SurveyNode node: null
-    property NodePageModel pageModel: null
 
     // Read once per node: a derived node stays under the root that built it.
     readonly property SurveyNode sourceRoot: root.node !== null ? root.node.sourceRoot() : null
@@ -71,17 +70,6 @@ QQ.Item {
             wrapMode: QC.Label.WordWrap
             color: Theme.textSecondary
             text: root.node !== null ? qsTr("This node is %1 in the project").arg(root.node.sourcePath) : ""
-        }
-
-        QC.Label {
-            objectName: "derivedNodeCountsLabel"
-            Layout.fillWidth: true
-            color: Theme.textSecondary
-            text: root.pageModel !== null
-                  ? qsTr("%n unit(s)", "", root.pageModel.sourceUnitCount)
-                    + " · "
-                    + qsTr("%n station(s)", "", root.pageModel.stationCount)
-                  : ""
         }
     }
 

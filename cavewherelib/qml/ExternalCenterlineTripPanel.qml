@@ -17,9 +17,10 @@ import cavewherelib
 //
 // A trip reaches this panel in one of two modes, and the header Loader is
 // where they part: Attached, where the trip owns a survey file of its own
-// (file name, format, Replace… and where the copy came from), and Scope,
-// where the trip windows one block of its cave's file (the cave it belongs
-// to, its station prefix, and Remove trip). Everything that acts on a file
+// (file name, format and where the copy came from, with Reload and Replace…
+// in their right-click menus), and Scope, where the trip windows one block
+// of its cave's file (the cave it belongs to, its station prefix, and
+// Remove trip). Everything that acts on a file
 // of the trip's own — the missing-copy and file-error banners, Replace,
 // the provenance line — belongs to Attached alone.
 QQ.Item {

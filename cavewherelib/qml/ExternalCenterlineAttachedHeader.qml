@@ -11,12 +11,13 @@ import QtQuick.Layouts
 import cavewherelib
 
 // Attached-mode header for an external-centerline owner — a trip or a
-// cave, both of which expose externalCenterline and id: entry
-// filename + format + the Replace… action, and the provenance line
-// ("Copied from: <path>" or "Copied from an unknown location (this
-// machine)"), which names where the copy came from — every action on
-// this panel targets the copy inside the project. The action only
-// raises a signal — the panel owns the manager wiring.
+// node, both of which expose externalCenterline and id: the entry file
+// name and format, and the provenance line ("Copied from: <path>" or
+// "Copied from an unknown location (this machine)"), which names where
+// the copy came from. Each line has a right-click menu that leads with
+// Reload and Replace…, then reveals or opens that line's own file: the
+// copy inside the project, or the source. The verbs only raise signals —
+// the panel owns the manager wiring.
 ColumnLayout {
     id: root
     objectName: "attachedHeader"
@@ -102,66 +103,84 @@ ColumnLayout {
         }
     }
 
-    RowLayout {
+    QQ.Item {
         objectName: "attachedHeaderFileRow"
         Layout.fillWidth: true
-        spacing: Theme.tightSpacing
+        implicitWidth: fileRowLayoutId.implicitWidth
+        implicitHeight: fileRowLayoutId.implicitHeight
 
-        QC.Label {
-            objectName: "attachedFileLabel"
-            Layout.maximumWidth: parent.width
-            elide: QC.Label.ElideMiddle
-            font.bold: true
-            text: root.fileName
+        RowLayout {
+            id: fileRowLayoutId
+            anchors.fill: parent
+            spacing: Theme.tightSpacing
 
-            // The row shows a bare file name and elides it; hovering names
-            // the whole path of the copy inside the project, which is the
-            // file every verb on this header acts on.
-            QC.ToolTip.visible: fileHoverId.hovered && root.entryFilePath.length > 0
-            QC.ToolTip.text: root.entryFilePath
-            QC.ToolTip.delay: Theme.toolTipDelay
+            QC.Label {
+                objectName: "attachedFileLabel"
+                Layout.maximumWidth: parent.width
+                elide: QC.Label.ElideMiddle
+                font.bold: true
+                text: root.fileName
 
-            QQ.HoverHandler {
-                id: fileHoverId
-            }
+                // The row shows a bare file name and elides it; hovering names
+                // the whole path of the copy inside the project, which is the
+                // file every verb on this header acts on.
+                QC.ToolTip.visible: fileHoverId.hovered && root.entryFilePath.length > 0
+                QC.ToolTip.text: root.entryFilePath
+                QC.ToolTip.delay: Theme.toolTipDelay
 
-            // Right-click reaches the file itself — the copy inside the
-            // project, which is the file this panel is showing.
-            ContextMenuArea {
-                objectName: "attachedFileContextMenu"
-                anchors.fill: parent
-
-                onAboutToShow: root.refreshEntryFileExists()
-
-                RevealInFileManagerMenuItem {
-                    objectName: "showInFileManagerAction"
-                    filePath: root.entryFilePath
-                }
-
-                QC.MenuItem {
-                    objectName: "openFileAction"
-                    text: qsTr("Open")
-                    enabled: root.entryFileExists
-                    onTriggered: FileRevealer.openFile(root.entryFilePath)
+                QQ.HoverHandler {
+                    id: fileHoverId
                 }
             }
+
+            QC.Label {
+                objectName: "attachedFormatLabel"
+                visible: root.formatName.length > 0
+                color: Theme.textSecondary
+                text: root.formatName
+            }
+
+            QQ.Item { Layout.fillWidth: true }
         }
 
-        QC.Label {
-            objectName: "attachedFormatLabel"
-            visible: root.formatName.length > 0
-            color: Theme.textSecondary
-            text: root.formatName
-        }
+        // Right-click anywhere on the row reaches the file itself — the copy
+        // inside the project, which is the file this panel is showing.
+        ContextMenuArea {
+            objectName: "attachedFileContextMenu"
+            anchors.fill: parent
 
-        QQ.Item { Layout.fillWidth: true }
+            onAboutToShow: {
+                root.refreshEntryFileExists()
+                root.refreshSourceState()
+            }
 
-        QC.Button {
-            objectName: "replaceButton"
-            text: qsTr("Replace…")
-            visible: root.attached
-            enabled: root.actionsEnabled
-            onClicked: root.replaceRequested()
+            QC.MenuItem {
+                objectName: "reloadFromSourceAction"
+                text: qsTr("Reload")
+                enabled: root.actionsEnabled && root.sourceReloadable
+                onTriggered: root.reloadFromSourceRequested()
+            }
+
+            QC.MenuItem {
+                objectName: "replaceAction"
+                text: qsTr("Replace…")
+                enabled: root.attached && root.actionsEnabled
+                onTriggered: root.replaceRequested()
+            }
+
+            QC.MenuSeparator {}
+
+            RevealInFileManagerMenuItem {
+                objectName: "showInFileManagerAction"
+                filePath: root.entryFilePath
+            }
+
+            QC.MenuItem {
+                objectName: "openFileAction"
+                text: qsTr("Open")
+                enabled: root.entryFileExists
+                onTriggered: FileRevealer.openFile(root.entryFilePath)
+            }
         }
     }
 
@@ -173,7 +192,7 @@ ColumnLayout {
 
         // A quiet hint, one step out of the subtle gray the line normally
         // reads in: the source having moved on is news the user can act on
-        // through this line's own Reload, and never an error.
+        // through Reload in this line's menu, and never an error.
         color: root.showChangedSuffix ? Theme.textSecondary : Theme.textSubtle
         text: root.sourceKnown
               ? (root.showChangedSuffix
@@ -192,9 +211,10 @@ ColumnLayout {
             id: sourceHoverId
         }
 
-        // Right-click reaches the source itself — the only place on this
-        // panel whose verbs act on the original rather than the copy. It
-        // needs a path to act on, so an unknown origin offers no menu.
+        // Right-click reaches the source itself — this menu's reveal and
+        // open act on the original rather than the copy. It needs a path to
+        // act on, so an unknown origin offers no menu; Replace… stays on the
+        // file row's menu there.
         ContextMenuArea {
             objectName: "sourceContextMenu"
             anchors.fill: parent
@@ -208,6 +228,15 @@ ColumnLayout {
                 enabled: root.actionsEnabled && root.sourceReloadable
                 onTriggered: root.reloadFromSourceRequested()
             }
+
+            QC.MenuItem {
+                objectName: "replaceAction"
+                text: qsTr("Replace…")
+                enabled: root.attached && root.actionsEnabled
+                onTriggered: root.replaceRequested()
+            }
+
+            QC.MenuSeparator {}
 
             RevealInFileManagerMenuItem {
                 objectName: "showSourceInFileManagerAction"

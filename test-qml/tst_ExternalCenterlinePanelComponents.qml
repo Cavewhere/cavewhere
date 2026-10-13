@@ -256,30 +256,100 @@ MainWindowTest {
         }
 
         // §16 B2a: the header carries the file action and only raises a
-        // signal — the panel owns the manager wiring. §16 B9b took Reload
-        // off this row: the watcher already covers project-copy edits.
+        // signal — the panel owns the manager wiring. MP.9 moved Replace…
+        // off the file row into the row's right-click menu, so the row
+        // carries no buttons at all.
         function test_attachedHeaderReplaceRaisesSignal() {
             verify(findChild(attachedHeaderId, "reloadButton") === null,
                    "the file row carries no Reload button")
+            verify(findChild(attachedHeaderId, "replaceButton") === null,
+                   "the file row carries no Replace… button")
 
-            const replaceButton = findChild(attachedHeaderId, "replaceButton")
-            verify(replaceButton !== null, "replaceButton must exist")
-            verify(!replaceButton.visible, "an unattached header shows no Replace")
+            let menuArea = openAttachedFileMenu(attachedHeaderId)
+            let replaceItem = findChild(menuArea, "replaceAction")
+            verify(replaceItem !== null, "the file menu holds replaceAction")
+            verify(!replaceItem.enabled, "an unattached header offers nothing to replace")
+            closeMenu(menuArea)
 
             const fixture = attachFixtureTrip("panel-header-actions")
             rootId.trip = fixture.trip
-            tryVerify(() => replaceButton.visible,
-                      5000, "attaching shows the file action")
-            // A just-shown item has no layout until the next frame, so a
-            // click before it lands on the header's old geometry.
-            waitForRendering(attachedHeaderId)
+            tryVerify(() => attachedHeaderId.attached, 5000, "the header reads Attached")
 
-            mouseClick(replaceButton)
+            menuArea = openAttachedFileMenu(attachedHeaderId)
+            replaceItem = findChild(menuArea, "replaceAction")
+            compare(replaceItem.text, "Replace…")
+            verify(replaceItem.enabled, "an attached header offers Replace…")
+            closeMenu(menuArea)
+
+            replaceItem.triggered()
             compare(replaceRequestedSpyId.count, 1, "Replace raises replaceRequested")
 
             attachedHeaderId.actionsEnabled = false
-            tryVerify(() => !replaceButton.enabled,
+            tryVerify(() => !replaceItem.enabled,
                       5000, "a busy owner disables the action")
+        }
+
+        // MP.9: both of the header's right-click menus — the file row's and
+        // the source line's — lead with Reload then Replace…, the order a
+        // source root's tree row offers them in. Each verb keeps its rule:
+        // Replace… needs an idle owner, Reload also needs the source on
+        // this machine.
+        function test_headerMenusHoldReloadAndReplace() {
+            const fixture = attachFixtureTrip("panel-header-menu-verbs")
+            rootId.trip = fixture.trip
+            tryVerify(() => attachedHeaderId.rememberedSourcePath.length > 0,
+                      5000, "the attach remembered where the copy came from")
+
+            const sourceLabel = findChild(attachedHeaderId, "sourceModeLabel")
+            verify(sourceLabel !== null, "sourceModeLabel must exist")
+            const openSourceMenu = () => {
+                const menuArea = findChild(attachedHeaderId, "sourceContextMenu")
+                verify(menuArea !== null, "sourceContextMenu must exist")
+                waitForRendering(attachedHeaderId)
+                mouseClick(sourceLabel, sourceLabel.width / 2,
+                           sourceLabel.height / 2, Qt.RightButton)
+                tryVerify(() => menuArea.menu.opened, 5000,
+                          "right-clicking the source line opens its menu")
+                return menuArea
+            }
+
+            const menuOpeners = [
+                { name: "file", open: () => openAttachedFileMenu(attachedHeaderId) },
+                { name: "source", open: openSourceMenu }
+            ]
+
+            const checkVerbs = (opener, reloadEnabled, replaceEnabled, situation) => {
+                const menuArea = opener.open()
+                const menu = menuArea.menu
+                verify(menu.count >= 2, opener.name + " menu holds at least two items")
+                const first = menu.itemAt(0)
+                const second = menu.itemAt(1)
+                compare(first.objectName, "reloadFromSourceAction",
+                        opener.name + " menu leads with Reload")
+                compare(first.text, "Reload")
+                compare(second.objectName, "replaceAction",
+                        opener.name + " menu follows with Replace…")
+                compare(second.text, "Replace…")
+                tryCompare(first, "enabled", reloadEnabled, 5000,
+                           opener.name + " menu Reload " + situation)
+                compare(second.enabled, replaceEnabled,
+                        opener.name + " menu Replace… " + situation)
+                closeMenu(menuArea)
+            }
+
+            menuOpeners.forEach(opener =>
+                checkVerbs(opener, true, true, "on an idle owner with its source on disk"))
+
+            attachedHeaderId.actionsEnabled = false
+            menuOpeners.forEach(opener =>
+                checkVerbs(opener, false, false, "on a busy owner"))
+            attachedHeaderId.actionsEnabled = true
+
+            // A breadcrumb naming a file that is gone: nothing to copy back
+            // in, while the file can still be swapped for another.
+            attachedHeaderId.rememberedSourcePath = fixture.source + ".gone"
+            menuOpeners.forEach(opener =>
+                checkVerbs(opener, false, true, "with its source gone"))
         }
 
         // §16 B2e: right-clicking the file name reaches the file on disk.

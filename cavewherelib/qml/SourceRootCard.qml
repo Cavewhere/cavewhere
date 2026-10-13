@@ -11,11 +11,10 @@ import QtQuick.Layouts
 import cavewherelib
 
 // The source card on a source root's page: the copied file, its format, where
-// the copy came from, how many units the file gives the project, the solve
-// status with the root's station count, Reload and Replace…, and the derived
-// nodes and trips the user hid, with Restore… to bring them back. Reload and
-// Replace act on the whole subtree, so they live on the root and nowhere below
-// it.
+// the copy came from, the solve status with the root's station count, and the
+// derived nodes and trips the user hid, with Restore… to bring them back.
+// Reload and Replace… sit in the header's right-click menus; they act on the
+// whole subtree, so they live on the root and nowhere below it.
 QQ.Item {
     id: root
     objectName: "sourceRootCard"
@@ -66,10 +65,6 @@ QQ.Item {
         const model = root.externalCenterlineManager.attachedCenterlinesModel
         root.solveError = model.errorFor(root.node.id)
         root.solveWarningCount = model.warningCountFor(root.node.id)
-    }
-
-    function reload() {
-        RootData.reloadSource(root.node)
     }
 
     onNodeChanged: {
@@ -153,32 +148,8 @@ QQ.Item {
             sourceReloadable: root.sourceReloadable
 
             onReplaceRequested: root.openReplaceDialog()
-            onReloadFromSourceRequested: root.reload()
+            onReloadFromSourceRequested: RootData.reloadSource(root.node)
             onSourceEligibilityRefreshRequested: root.refreshReloadable()
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.tightSpacing
-
-            // The stations the file gives the project are the solve
-            // status's count, below.
-            QC.Label {
-                objectName: "sourceRootUnitsLabel"
-                Layout.fillWidth: true
-                wrapMode: QC.Label.WordWrap
-                color: Theme.textSecondary
-                text: root.pageModel !== null
-                      ? qsTr("%n unit(s) from this file", "", root.pageModel.sourceUnitCount)
-                      : ""
-            }
-
-            QC.Button {
-                objectName: "sourceRootReloadButton"
-                text: qsTr("Reload")
-                enabled: root.sourceReloadable && !ownerStateId.ownerBusy
-                onClicked: root.reload()
-            }
         }
 
         RowLayout {
@@ -274,7 +245,7 @@ QQ.Item {
         onAccepted: RootData.restoreHidden(root.node)
     }
 
-    // Built on the first Replace click: the dialog carries a file dialog and a
+    // Built on the first Replace…: the dialog carries a file dialog and a
     // scan preview that most pages never open.
     QQ.Loader {
         id: replaceDialogLoaderId

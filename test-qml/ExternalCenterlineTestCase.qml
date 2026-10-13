@@ -119,4 +119,28 @@ CWTestCase {
         attachSourceToTrip(trip, source)
         return { trip: trip, source: source }
     }
+
+    // Right-clicks the empty strip at the right end of an attached header's
+    // file row and returns the file menu's area once the menu is open. The
+    // whole row carries the menu, so the strip reaches it too.
+    function openAttachedFileMenu(header) {
+        const fileRow = findChild(header, "attachedHeaderFileRow")
+        verify(fileRow !== null, "attachedHeaderFileRow must exist")
+        const menuArea = findChild(header, "attachedFileContextMenu")
+        verify(menuArea !== null, "attachedFileContextMenu must exist")
+
+        // A just-shown header has no layout until the next frame.
+        waitForRendering(header)
+        const stripInset = 2
+        mouseClick(fileRow, fileRow.width - stripInset, fileRow.height / 2,
+                   Qt.RightButton)
+        tryVerify(() => menuArea.menu.opened, 5000,
+                  "right-clicking the file row's empty strip opens the file menu")
+        return menuArea
+    }
+
+    function closeMenu(menuArea) {
+        menuArea.menu.dismiss()
+        tryVerify(() => !menuArea.menu.opened, 5000, "the menu closes")
+    }
 }

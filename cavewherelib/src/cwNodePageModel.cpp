@@ -5,9 +5,6 @@
 **
 **************************************************************************/
 
-//Std includes
-#include <algorithm>
-
 //Our includes
 #include "cwNodePageModel.h"
 #include "cwCavingRegion.h"
@@ -84,7 +81,6 @@ void cwNodePageModel::rewireTrips()
     if(m_node == nullptr) {
         setTripCount(0);
         setLastSurvey(QDateTime());
-        updateSourceUnitCount();
         return;
     }
 
@@ -97,7 +93,6 @@ void cwNodePageModel::rewireTrips()
 
     setTripCount(trips.size());
     updateLastSurvey();
-    updateSourceUnitCount();
 }
 
 void cwNodePageModel::updateLastSurvey()
@@ -171,26 +166,8 @@ void cwNodePageModel::rewireSource()
         }
     }
 
-    updateSourceUnitCount();
     updateStationCount();
     updateHiddenNames();
-}
-
-void cwNodePageModel::updateSourceUnitCount()
-{
-    int count = 0;
-    if(m_node != nullptr && m_node->isSourced()) {
-        const QList<cwTrip*> trips = m_node->allTrips();
-        count = static_cast<int>(std::count_if(trips.cbegin(), trips.cend(), [](const cwTrip* trip) {
-            return !trip->sourcePath().isEmpty();
-        }));
-    }
-
-    if(m_sourceUnitCount == count) {
-        return;
-    }
-    m_sourceUnitCount = count;
-    emit sourceUnitCountChanged();
 }
 
 void cwNodePageModel::updateStationCount()

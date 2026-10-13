@@ -272,11 +272,15 @@ MainWindowTest {
             tryVerify(() => card.visible, 5000)
 
             verify(findChild(card, "replaceCenterlineDialog") === null,
-                   "the card defers the dialog until Replace is clicked")
+                   "the card defers the dialog until Replace… is chosen")
 
-            const replaceButton = findChild(card, "replaceButton")
-            verify(replaceButton !== null, "replaceButton must exist")
-            mouseClick(replaceButton)
+            compare(findChild(card, "replaceButton"), null, "Replace… is no button on the card")
+            const menuArea = openAttachedFileMenu(findChild(card, "attachedHeader"))
+            const replaceItem = findChild(menuArea, "replaceAction")
+            verify(replaceItem !== null, "the card's header menu holds replaceAction")
+            verify(replaceItem.enabled, "an idle root offers Replace…")
+            closeMenu(menuArea)
+            replaceItem.triggered()
 
             const dialog = findChild(card, "replaceCenterlineDialog")
             verify(dialog !== null, "Replace… opens the replace dialog")

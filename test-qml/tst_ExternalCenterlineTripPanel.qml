@@ -104,18 +104,11 @@ MainWindowTest {
             verify(fileLabel !== null, "attachedFileLabel must exist")
             tryCompare(fileLabel, "text", "survex_simple.svx")
 
-            // The action rides the file-name row, so its vertical center
-            // falls inside the file label's band.
-            const replaceButton = findChild(header, "replaceButton")
-            verify(replaceButton !== null, "replaceButton must exist")
-            const centersOnFileRow = () => {
-                const labelTop = panelY(fileLabel)
-                const labelBottom = labelTop + fileLabel.height
-                const center = panelY(replaceButton) + replaceButton.height / 2
-                return center >= labelTop && center <= labelBottom
-            }
-            tryVerify(centersOnFileRow, 5000,
-                      "Replace… sits on the file-name row")
+            // MP.9: the file row carries no buttons; its right-click menu
+            // reaches across the whole row, empty strip included.
+            compare(findChild(header, "replaceButton"), null,
+                    "Replace… is no longer a button on the file row")
+            closeMenu(openAttachedFileMenu(header))
 
             // The Date label leads the metadata block in bold.
             const dateLabel = findChild(metadata, "tripMetadataDateLabel")
@@ -344,24 +337,30 @@ MainWindowTest {
             attachAndBind("trip-panel-actions")
             RootData.futureManagerModel.waitForFinished()
 
-            // §16 B2a parked the actions on the header's file-name row.
+            // MP.9 took Replace… off the file-name row into its menu, so the
+            // row holds the name and format and nothing to click.
             const fileRow = findChild(panelId, "attachedHeaderFileRow")
             verify(fileRow !== null, "attachedHeaderFileRow must exist")
+            const fileLabel = findChild(fileRow, "attachedFileLabel")
+            verify(fileLabel !== null, "attachedFileLabel must exist")
+            const rowLayout = fileLabel.parent
+            verify(rowLayout !== fileRow,
+                   "the name attachedHeaderFileRow sits on the row's wrapper, never on the layout")
 
             const rowNames = []
-            for (let i = 0; i < fileRow.children.length; ++i) {
-                const child = fileRow.children[i]
+            for (let i = 0; i < rowLayout.children.length; ++i) {
+                const child = rowLayout.children[i]
                 if (child.objectName.length > 0) {
                     rowNames.push(child.objectName)
                 }
             }
             compare(rowNames.join(","),
-                    "attachedFileLabel,attachedFormatLabel,replaceButton",
-                    "an attached panel offers Replace… and nothing else")
-            // The two labels, the fill spacer and the button — pins the
-            // row's size so an action added without an objectName fails here too.
-            compare(fileRow.children.length, 4,
-                    "the file row holds the name, format, spacer and Replace…")
+                    "attachedFileLabel,attachedFormatLabel",
+                    "the file row holds the name and format and no action")
+            // The two labels and the fill spacer — pins the row's size so an
+            // action added without an objectName fails here too.
+            compare(rowLayout.children.length, 3,
+                    "the file row holds the name, format and spacer")
 
             // §16 B2e: the panel hands the header an absolute path, so the
             // file-name context menu acts on the copy inside the project.
@@ -371,9 +370,11 @@ MainWindowTest {
                    "the panel resolves the entry file on disk; got: "
                    + header.entryFilePath)
 
-            const replaceButton = findChild(panelId, "replaceButton")
-            verify(replaceButton.visible && replaceButton.enabled,
-                   "Replace is clickable on an idle attached trip")
+            const menuArea = openAttachedFileMenu(header)
+            const replaceItem = findChild(menuArea, "replaceAction")
+            verify(replaceItem !== null, "the file menu holds replaceAction")
+            verify(replaceItem.enabled, "Replace… is offered on an idle attached trip")
+            closeMenu(menuArea)
 
             verify(findChild(panelId, "detachAskBox") === null,
                    "the detach confirm box is gone with the action that opened it")
@@ -383,15 +384,16 @@ MainWindowTest {
             attachAndBind("trip-panel-replace")
             RootData.futureManagerModel.waitForFinished()
 
-            const replaceButton = findChild(panelId, "replaceButton")
-            verify(replaceButton !== null, "replaceButton must exist")
-            verify(replaceButton.visible && replaceButton.enabled,
-                   "Replace is clickable on an idle attached trip")
+            const menuArea = openAttachedFileMenu(findChild(panelId, "attachedHeader"))
+            const replaceItem = findChild(menuArea, "replaceAction")
+            verify(replaceItem !== null, "the file menu holds replaceAction")
+            verify(replaceItem.enabled, "Replace… is offered on an idle attached trip")
+            closeMenu(menuArea)
 
-            // The dialog is built by the click that opens it.
+            // The dialog is built by the verb that opens it.
             verify(findChild(panelId, "replaceCenterlineDialog") === null,
-                   "the panel defers the dialog until Replace is clicked")
-            mouseClick(replaceButton)
+                   "the panel defers the dialog until Replace… is chosen")
+            replaceItem.triggered()
             const dialog = findChild(panelId, "replaceCenterlineDialog")
             verify(dialog !== null, "replaceCenterlineDialog must exist")
 
@@ -414,7 +416,7 @@ MainWindowTest {
             // Replace holds the same per-owner token as attach, so the
             // panel's affordances disable while it drains.
             compare(panelId.ownerBusy, true, "owner is busy right after confirming")
-            verify(!replaceButton.enabled, "Replace disables while the owner is busy")
+            verify(!replaceItem.enabled, "Replace… disables while the owner is busy")
 
             tryVerify(() => attachCompletedSpyId.count === 1, 10000,
                       "replace reports once through the attach bridge")
@@ -825,7 +827,7 @@ MainWindowTest {
         function test_aDerivedTripHidesTheAttachedOnlySurface() {
             bindDerivedTrip("trip-panel-scope-surface")
 
-            compare(findChild(panelId, "replaceButton"), null,
+            compare(findChild(panelId, "attachedFileContextMenu"), null,
                     "there is nothing of the trip's own to replace")
             compare(findChild(panelId, "sourceModeLabel"), null,
                     "the trip's copy has no provenance of its own")
