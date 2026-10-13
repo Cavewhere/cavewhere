@@ -7,6 +7,7 @@
 
 //Our includes
 #include "cwPassageTubeMeshCheck.h"
+#include "cwPassageTubeGeometry.h"
 
 //Qt includes
 #include <QHash>
@@ -1270,12 +1271,27 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::capsExposed(const
         return debug.triangleChain.value(triangle.number, kNoChain);
     };
 
+    // A through that ends past its junction ends the passage there, as a
+    // dead end does.
+    const auto isThroughEnd = [&](const cwPassageTubeBuilder::Cap& cap) {
+        if (cap.chain < 0 || cap.chain >= debug.chains.size()) {
+            return false;
+        }
+        const cwPassageTubeBuilder::Chain& chain = debug.chains.at(cap.chain);
+        const QString station = cwStation::canonicalKey(cap.station);
+        const bool isStartHere = chain.startThroughReachMeters > 0.0
+                                 && cwStation::canonicalKey(cwPassageTubeGeometry::chainStartStation(debug.legs, chain.legs.first())) == station;
+        const bool isEndHere = chain.endThroughReachMeters > 0.0
+                               && cwStation::canonicalKey(cwPassageTubeGeometry::chainEndStation(debug.legs, chain.legs.last())) == station;
+        return isStartHere || isEndHere;
+    };
+
     QHash<QVector<quint32>, int> capByVertices;
     QVector<Issue> issues;
     for (int c = 0; c < capTriangles.size(); ++c) {
         const QVector<int>& inCap = capTriangles.at(c);
         const cwPassageTubeBuilder::Cap& cap = debug.caps.at(c);
-        if (inCap.isEmpty() || legCount.value({cap.caveId, cwStation::canonicalKey(cap.station)}) < 2) {
+        if (inCap.isEmpty() || legCount.value({cap.caveId, cwStation::canonicalKey(cap.station)}) < 2 || isThroughEnd(cap)) {
             continue;
         }
 

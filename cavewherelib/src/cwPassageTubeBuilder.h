@@ -217,6 +217,13 @@ public:
         // Only a steep end extends; a gentle end closes on its plumb ring.
         double startCapOffsetMeters = 0.0;
         double endCapOffsetMeters = 0.0;
+        // How far past its end station a chain carries its end ring when it
+        // ends at a junction as that junction's through: the biggest passage
+        // there, which no other leg continues. Every other leg is an arm
+        // whose mouth lands on the wall it carries past the station. Zero at
+        // other ends.
+        double startThroughReachMeters = 0.0;
+        double endThroughReachMeters = 0.0;
         // Where an arm meets its through tube: points on the through surface
         // past the arm's first or last ring, in column order, with at least
         // one at each whole column. Empty when the end is not a mouth.

@@ -21,6 +21,7 @@
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <variant>
 
 namespace {
 
@@ -310,13 +311,23 @@ struct Junction {
 QVector<Junction> findJunctions(const QVector<Leg>& legs, QVector<Chain>& chains)
 {
     QHash<StationKey, int> throughByStation;
+    const auto addThrough = [&](int c, const ChainLeg& chainLeg, const QString& station) {
+        const StationKey key = stationKey(legs, chainLeg, station);
+        if (!throughByStation.contains(key)) {
+            throughByStation.insert(key, c);
+        }
+    };
     for (int c = 0; c < chains.size(); ++c) {
-        const QVector<ChainLeg>& chainLegs = chains.at(c).legs;
+        const Chain& chain = chains.at(c);
+        const QVector<ChainLeg>& chainLegs = chain.legs;
         for (int i = 1; i < chainLegs.size(); ++i) {
-            const StationKey key = stationKey(legs, chainLegs.at(i), chainStartStation(legs, chainLegs.at(i)));
-            if (!throughByStation.contains(key)) {
-                throughByStation.insert(key, c);
-            }
+            addThrough(c, chainLegs.at(i), chainStartStation(legs, chainLegs.at(i)));
+        }
+        if (chain.startThroughReachMeters > 0.0) {
+            addThrough(c, chainLegs.first(), chainStartStation(legs, chainLegs.first()));
+        }
+        if (chain.endThroughReachMeters > 0.0) {
+            addThrough(c, chainLegs.last(), chainEndStation(legs, chainLegs.last()));
         }
     }
 
@@ -1458,16 +1469,23 @@ int cutArm(Chain& arm, bool isStart, int firstRing, const Trim& trim)
     return 0;
 }
 
+// Why an arm's mouth cannot be placed on its through's grid.
+enum class MouthFailure {
+    OffThrough,
+    WrapsAround,
+    Reversed
+};
+
 // The mouth in (ring, column) space, unwrapped across the column seam so it
-// reads as one closed polygon; nullopt when a point lies off the through or
-// the mouth wraps all the way around it.
-std::optional<QVector<QPointF>> mouthPolygon(const QVector<std::optional<QPointF>>& parameters, int resolution)
+// reads as one closed polygon, or why it is none: a point lies off the
+// through, or the mouth wraps all the way around it.
+std::variant<QVector<QPointF>, MouthFailure> mouthPolygon(const QVector<std::optional<QPointF>>& parameters, int resolution)
 {
     QVector<QPointF> polygon;
     polygon.reserve(parameters.size());
     for (const std::optional<QPointF>& parameter : parameters) {
         if (!parameter) {
-            return std::nullopt;
+            return MouthFailure::OffThrough;
         }
         QPointF unwrappedParameter = *parameter;
         if (!polygon.isEmpty()) {
@@ -1478,7 +1496,7 @@ std::optional<QVector<QPointF>> mouthPolygon(const QVector<std::optional<QPointF
     }
     const double closingGap = std::abs(polygon.last().y() - polygon.first().y());
     if (closingGap > resolution / 2.0) {
-        return std::nullopt;
+        return MouthFailure::WrapsAround;
     }
     return polygon;
 }
@@ -2164,6 +2182,19 @@ QVector<ZipCorner> weldedMouthCorners(const QVector<Ring>& rings,
     return corners;
 }
 
+QString mouthFailureMessage(MouthFailure failure)
+{
+    switch (failure) {
+    case MouthFailure::OffThrough:
+        return QStringLiteral("The passage from station %1 could not be joined to the passage it opens into: its mouth leaves that passage's wall; the tube ends it inside that passage.");
+    case MouthFailure::WrapsAround:
+        return QStringLiteral("The passage from station %1 could not be joined to the passage it opens into: its mouth wraps around that passage; the tube ends it inside that passage.");
+    case MouthFailure::Reversed:
+        return QStringLiteral("The mouth of the passage from station %1 runs backward around the passage it joins; the tube ends it inside that passage.");
+    }
+    return {};
+}
+
 // An arm's mouth placed on its through's grid, with the through quads it
 // covers.
 struct MouthCut {
@@ -2174,35 +2205,31 @@ struct MouthCut {
     QSet<Vertex> removed;
 };
 
-// One arm's mouth cut into the through, or why it cannot be zipped: off the
-// through, or its columns run the wrong way around it.
-struct MouthCutResult {
-    std::optional<MouthCut> cut;
-    bool isMouthReversed = false;
-};
-
-// Places one arm's mouth on the through and finds the quads it covers.
-// parameters place each mouth point on the through's grid.
-MouthCutResult cutMouth(const Chain& through,
-                        const ArmEnd& end,
-                        const QUuid& tripId,
-                        const QString& station,
-                        const QVector<std::optional<QPointF>>& parameters)
+// Places one arm's mouth on the through and finds the quads it covers, or
+// says why it cannot: off the through, wrapped around it, or with its
+// columns running the wrong way around it. parameters place each mouth
+// point on the through's grid.
+std::variant<MouthCut, MouthFailure> cutMouth(const Chain& through,
+                                              const ArmEnd& end,
+                                              const QUuid& tripId,
+                                              const QString& station,
+                                              const QVector<std::optional<QPointF>>& parameters)
 {
     const int resolution = through.rings.first().radii.size();
-    const std::optional<QVector<QPointF>> polygon = mouthPolygon(parameters, resolution);
-    if (!polygon) {
-        return {};
+    const std::variant<QVector<QPointF>, MouthFailure> placed = mouthPolygon(parameters, resolution);
+    if (const MouthFailure* failure = std::get_if<MouthFailure>(&placed)) {
+        return *failure;
     }
+    const QVector<QPointF>& polygon = std::get<QVector<QPointF>>(placed);
 
     // The arm's strip runs its mouth in column order; the zip band must run
     // it the other way, which needs the columns counter-clockwise around an
     // arm arriving at its end and clockwise around one leaving at its start.
-    const bool isColumnOrderCounterClockwise = signedArea(*polygon) > 0.0;
+    const bool isColumnOrderCounterClockwise = signedArea(polygon) > 0.0;
     if (isColumnOrderCounterClockwise == end.isStart) {
-        return MouthCutResult {std::nullopt, true};
+        return MouthFailure::Reversed;
     }
-    return MouthCutResult {MouthCut {end, tripId, station, *polygon, removedQuads(through.rings, *polygon, resolution)}, false};
+    return MouthCut {end, tripId, station, polygon, removedQuads(through.rings, polygon, resolution)};
 }
 
 // Whether two mouths cross or one holds the other in (ring, column) space,
@@ -2758,18 +2785,12 @@ void cwPassageTubeJunction::stitchJunctions(const QVector<Leg>& legs,
                     parameter->rx() -= stitch.removedFromStart.at(junction.through);
                 }
             }
-            const MouthCutResult result = cutMouth(through, end, junctionTrip(legs, arm, end.isStart), junction.station, parameters);
-            if (result.cut) {
-                cutsByThrough[junction.through].append(*result.cut);
+            const std::variant<MouthCut, MouthFailure> result = cutMouth(through, end, junctionTrip(legs, arm, end.isStart), junction.station, parameters);
+            if (const MouthCut* cut = std::get_if<MouthCut>(&result)) {
+                cutsByThrough[junction.through].append(*cut);
                 continue;
             }
-            if (result.isMouthReversed) {
-                warnings.append(armWarning(legs, arm, end.isStart, Warning::JunctionUnzipped,
-                                           QStringLiteral("The mouth of the passage from station %1 runs backward around the passage it joins; the tube ends it inside that passage.")));
-            } else {
-                warnings.append(armWarning(legs, arm, end.isStart, Warning::JunctionUnzipped,
-                                           QStringLiteral("The passage from station %1 could not be joined to the passage it opens into; the tube ends it inside that passage.")));
-            }
+            warnings.append(armWarning(legs, arm, end.isStart, Warning::JunctionUnzipped, mouthFailureMessage(std::get<MouthFailure>(result))));
             closeWithFan(arm, end.isStart, throughTube);
         }
     }

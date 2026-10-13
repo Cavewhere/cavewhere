@@ -416,6 +416,76 @@ TEST_CASE("cwPassageTubeBuilder runs one chain through a 4-way junction and ends
     CHECK(armChains == 2);
 }
 
+// Three legs as big as each other meet a small one at j. The small leg is
+// walked first, and the straightest leg as big as itself is n; but w and e
+// are bigger than s and turn least into each other, so they are the through
+// although n ties them.
+TEST_CASE("cwPassageTubeBuilder chains the straightest pair of big legs when a third ties them", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList big = lrud(2, 2, 2, 2);
+    const QStringList small = lrud(0.5, 0.5, 0.5, 0.5);
+    const StationInput south {QStringLiteral("s"), QVector3D(0, -10, 0), small};
+    const StationInput junctionSmall {QStringLiteral("j"), QVector3D(0, 0, 0), small};
+    const StationInput junctionBig {QStringLiteral("j"), QVector3D(0, 0, 0), big};
+    const StationInput west {QStringLiteral("w"), QVector3D(-10, 0, 0), big};
+    const StationInput east {QStringLiteral("e"), QVector3D(10, 0, 0), big};
+    const StationInput north {QStringLiteral("n"), QVector3D(0, 10, 0), big};
+    const BuilderInput input = makeInput({{{south, junctionSmall}, {west, junctionBig, east}, {junctionBig, north}}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 3);
+    checkChainsCoverLegs(debug);
+    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const Builder::Chain& chain) {
+        return chain.legs.size() == 2;
+    });
+    REQUIRE(through != debug.chains.cend());
+    const QStringList stations = chainStations(debug, *through);
+    CHECK((stations == QStringList({QStringLiteral("w"), QStringLiteral("j"), QStringLiteral("e")})
+           || stations == QStringList({QStringLiteral("e"), QStringLiteral("j"), QStringLiteral("w")})));
+}
+
+// The big leg leaves j between the two small ones, which turn 90 degrees
+// there, so neither continues it. It ends past j as the junction's through,
+// by more than the small legs' largest reading, and both small legs open
+// into its wall.
+TEST_CASE("cwPassageTubeBuilder ends the biggest leg past a junction no other leg continues", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kSmallReading = 1.0;
+    const QStringList small = lrud(kSmallReading, kSmallReading, kSmallReading, kSmallReading);
+    const QStringList big = lrud(3, 3, 3, 3);
+    const QVector3D junction(0, 0, 0);
+    const QVector3D bigFar(-7.0f, -7.0f, 0.0f);
+    const BuilderInput input = makeInput({{
+        {{QStringLiteral("s"), QVector3D(0, -10, 0), small}, {QStringLiteral("j"), junction, small}, {QStringLiteral("w"), QVector3D(-10, 0, 0), small}},
+        {{QStringLiteral("b"), bigFar, big}, {QStringLiteral("j"), junction, big}},
+    }});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 3);
+    checkChainsCoverLegs(debug);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+
+    const auto bigChain = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [&](const Builder::Chain& chain) {
+        return chainStations(debug, chain).contains(QStringLiteral("b"));
+    });
+    REQUIRE(bigChain != debug.chains.cend());
+    REQUIRE(chainStations(debug, *bigChain) == QStringList({QStringLiteral("b"), QStringLiteral("j")}));
+    CHECK(bigChain->endThroughReachMeters > kSmallReading);
+    CHECK(bigChain->startThroughReachMeters == 0.0);
+    CHECK(bigChain->endCap == Builder::EndCap::Fan);
+    const QVector3D arriving = (junction - bigFar).normalized();
+    CHECK(QVector3D::dotProduct(bigChain->rings.last().center - junction, arriving) > 0.0f);
+
+    QSet<int> zipped;
+    for (const Builder::JunctionWindow& window : bigChain->windows) {
+        for (const Builder::WindowMouth& mouth : window.mouths) {
+            zipped.insert(mouth.armChain);
+        }
+    }
+    CHECK(zipped.size() == 2);
+    checkMeshClosed(debug.mesh);
+}
+
 TEST_CASE("cwPassageTubeBuilder walks a loop once and closes it", "[PassageTube][cwPassageTubeBuilder]")
 {
     const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0)};

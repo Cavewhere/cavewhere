@@ -340,10 +340,6 @@ bool hasLargeTiltedArm(const Cases::Case& entry)
 //   or as big as the through, and the zip band folds against an arm's
 //   strip where their mouths come within a few centimeters (Crease,
 //   SliverTriangle, SelfIntersection);
-// - three arms 2.5 times the through's size, whose mouths meet on both
-//   sides of the through so no bridge joins the window's front and back
-//   boundaries: two arms end inside the through (JunctionUnzipped, and the
-//   cone's SelfIntersection);
 // - two arms that share one window at a straight through, oblique or
 //   steep, where the zip band folds against a strip at the neck between
 //   their mouths (Crease, SelfIntersection).
@@ -387,10 +383,6 @@ const QStringList kOpenSweepCases {
     QStringLiteral("plan 90, profile -60, ratio 0.3, 2 arms opposite, bend 40, same section"),
     QStringLiteral("plan 90, profile 30, ratio 0.3, 2 arms same side, bend 40, same section"),
     QStringLiteral("plan 90, profile 30, ratio 0.3, 2 arms same side, bend 40, section x2 past J"),
-
-    QStringLiteral("plan 30, profile 0, ratio 2.5, 3 arms, bend 0, section x2 past J"),
-    QStringLiteral("plan 90, profile 0, ratio 2.5, 3 arms, bend 0, same section"),
-    QStringLiteral("plan 90, profile 0, ratio 2.5, 3 arms, bend 0, section x2 past J"),
 
     QStringLiteral("plan 30, profile -60, ratio 0.3, 2 arms opposite, bend 0, section x2 past J"),
     QStringLiteral("plan 30, profile 0, ratio 1, 2 arms opposite, bend 0, same section"),
@@ -463,30 +455,88 @@ cwPassageTubeBuilder::Debug buildDebug(const Cases::Survey& survey, double sampl
     return cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(sampleSpacing));
 }
 
+QSet<QString> chainStations(const cwPassageTubeBuilder::Debug& debug, const cwPassageTubeBuilder::Chain& chain)
+{
+    QSet<QString> names;
+    for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
+        names.insert(debug.legs.at(chainLeg.legIndex).from);
+        names.insert(debug.legs.at(chainLeg.legIndex).to);
+    }
+    return names;
+}
+
+// The chains whose mouths a window of chain zips.
+QSet<int> zippedArms(const cwPassageTubeBuilder::Chain& chain)
+{
+    QSet<int> arms;
+    for (const cwPassageTubeBuilder::JunctionWindow& window : chain.windows) {
+        for (const cwPassageTubeBuilder::WindowMouth& mouth : window.mouths) {
+            arms.insert(mouth.armChain);
+        }
+    }
+    return arms;
+}
+
+// The single-leg chain from station to J.
+int armChain(const cwPassageTubeBuilder::Debug& debug, const QString& station)
+{
+    for (int c = 0; c < debug.chains.size(); ++c) {
+        const QSet<QString> stations = chainStations(debug, debug.chains.at(c));
+        if (debug.chains.at(c).legs.size() == 1 && stations.contains(station)) {
+            return c;
+        }
+    }
+    return -1;
+}
+
+// Sweep junctions whose arms the stitch still leaves unzipped, by family:
+// - two arms 2.5 times the through's size 20 degrees off it at a through
+//   bent 40 degrees, and three arms as big as the through at a bend of 40,
+//   where an arm's mouth wraps around the through;
+// - arms 2.5 times the through's size sloping down 30 degrees at a bend of
+//   90 or with three arms, and a small arm climbing 30 degrees beside an
+//   opposite one at a bend of 90, where a column's mouth point leaves the
+//   through's wall;
+// - small arms at a through bent 90 degrees, three at plan 20 or two
+//   opposite at plan 90, and two arms 2.5 times the through's size sloping
+//   30 degrees opposite each other at a bend of 90, whose mouths run
+//   backward around the through.
+const QStringList kUnzippedSweepCases {
+    QStringLiteral("plan 20, profile 0, ratio 2.5, 2 arms opposite, bend 40, same section"),
+    QStringLiteral("plan 20, profile 0, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"),
+    QStringLiteral("plan 20, profile 0, ratio 2.5, 2 arms same side, bend 40, same section"),
+    QStringLiteral("plan 20, profile 0, ratio 2.5, 2 arms same side, bend 40, section x2 past J"),
+    QStringLiteral("plan 90, profile 0, ratio 1, 3 arms, bend 40, section x2 past J"),
+
+    QStringLiteral("plan 30, profile -30, ratio 2.5, 2 arms opposite, bend 90, same section"),
+    QStringLiteral("plan 30, profile -30, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"),
+    QStringLiteral("plan 30, profile -30, ratio 2.5, 2 arms same side, bend 90, same section"),
+    QStringLiteral("plan 30, profile -30, ratio 2.5, 2 arms same side, bend 90, section x2 past J"),
+    QStringLiteral("plan 45, profile -30, ratio 2.5, 3 arms, bend 0, section x2 past J"),
+    QStringLiteral("plan 45, profile -30, ratio 2.5, 3 arms, bend 90, section x2 past J"),
+    QStringLiteral("plan 90, profile -30, ratio 2.5, 3 arms, bend 40, same section"),
+    QStringLiteral("plan 90, profile 30, ratio 0.3, 2 arms opposite, bend 90, section x2 past J"),
+
+    QStringLiteral("plan 20, profile 0, ratio 0.3, 3 arms, bend 90, same section"),
+    QStringLiteral("plan 20, profile 0, ratio 0.3, 3 arms, bend 90, section x2 past J"),
+    QStringLiteral("plan 90, profile 0, ratio 0.3, 2 arms opposite, bend 90, same section"),
+    QStringLiteral("plan 90, profile 0, ratio 0.3, 2 arms opposite, bend 90, section x2 past J"),
+    QStringLiteral("plan 90, profile -30, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"),
+    QStringLiteral("plan 90, profile 30, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"),
+};
+
 void checkJoinsEveryArm(const std::string& name)
 {
     INFO(name);
     const Cases::Case& entry = catalogCase(name);
     const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(entry), entry.sampleSpacing);
-    if (warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0) {
-        return;
-    }
-    QStringList messages;
-    for (const cwPassageTubeMesh::Warning& warning : debug.warnings) {
-        messages.append(warning.message);
-    }
-    INFO(messages.join(QLatin1Char('\n')).toStdString());
     CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
-    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
-    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
-    CHECK(report.issues.isEmpty());
 }
 
-const std::string kThreeBigArmsCase = "18. Three big arms into a small passage";
-
-bool isGalleryOrSweepJunction(const Cases::Case& entry)
+bool isJoinedJunctionCase(const Cases::Case& entry)
 {
-    return (entry.tags.contains(QStringLiteral("gallery")) || isSweep(entry)) && hasJunction(entry);
+    const bool isJunctionCase = entry.tags.contains(QStringLiteral("gallery")) || isSweep(entry);
+    return isJunctionCase && hasJunction(entry) && !kUnzippedSweepCases.contains(entry.name);
 }
 
 std::pair<unsigned int, int> randomSurvey(int seed)
@@ -537,7 +587,7 @@ void checkCenterlineInside(const std::string& name)
 TEST_CASE("cwPassageTubeCases catalog builds clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave && entry.name.toStdString() != kThreeBigArmsCase;
+        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave;
     })));
     checkCaseBuildsClean(name);
 }
@@ -755,42 +805,124 @@ TEST_CASE("cwPassageTubeCases chains the big passage as the through", "[PassageT
     CHECK(report.issues.isEmpty());
 }
 
-// No leg at gallery 18's junction is wider and taller than every other, so
-// the small passage stays the through, the big arms open into each other
-// around it, and the stitch ends one inside another. Gallery 19's big arm
-// already claims the through and its back leg zips into it.
-TEST_CASE("cwPassageTubeCases reports big arms that run into each other", "[PassageTube][cwPassageTubeCases]")
+// No two of the three big arms continue each other as straight as the small
+// passage does, and every big arm ties the others, so only the size rule
+// makes two of them the through: the pair 90 degrees apart, since the
+// straighter pairs would leave the small passage beside the third big arm.
+TEST_CASE("cwPassageTubeCases chains two big arms as the through", "[PassageTube][cwPassageTubeCases]")
 {
-    const Cases::Case& threeBigArms = catalogCase(kThreeBigArmsCase);
-    const cwPassageTubeBuilder::Debug threeBigArmsDebug = buildDebug(Cases::toSurvey(threeBigArms), threeBigArms.sampleSpacing);
-    CHECK(warningCount(threeBigArmsDebug, cwPassageTubeMesh::Warning::JunctionOverlap) > 0);
-    checkCaseBuildsClosed(kThreeBigArmsCase);
+    const Cases::Case& entry = catalogCase("18. Three big arms into a small passage");
+    const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(entry), entry.sampleSpacing);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
 
-    const Cases::Case& doublingBack = catalogCase("19. Through doubling back beside a big arm");
-    const cwPassageTubeBuilder::Debug doublingBackDebug = buildDebug(Cases::toSurvey(doublingBack), doublingBack.sampleSpacing);
-    CHECK(warningCount(doublingBackDebug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
-    checkCaseBuildsClosed(doublingBack.name.toStdString());
+    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const cwPassageTubeBuilder::Chain& chain) {
+        return chain.legs.size() == 2;
+    });
+    REQUIRE(through != debug.chains.cend());
+    const QSet<QString> stations = chainStations(debug, *through);
+    CHECK(stations == QSet<QString>({QStringLiteral("a00"), QStringLiteral("J"), QStringLiteral("a10")}));
+    CHECK(zippedArms(*through).size() == 3);
+
+    checkCaseBuildsClosed(entry.name.toStdString());
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
 }
 
-// Every gallery junction and a subsample of the sweep's that leave an arm
-// unzipped join it into the through with a clean mesh.
-TEST_CASE("cwPassageTubeCases joins every arm", "[PassageTube][cwPassageTubeCases][!mayfail]")
+// The big arm leaves J between the two halves of the through passage, which
+// bends 90 degrees there, so no leg continues it within the chain turn
+// limit. It still claims the through, ends past J, and both halves of the
+// small passage open into its wall.
+TEST_CASE("cwPassageTubeCases ends a big dead-end through past the junction", "[PassageTube][cwPassageTubeCases]")
+{
+    constexpr double kBetweenHalvesDegrees = 315.0;
+    constexpr double kBigArmRatio = 2.5;
+    const Cases::Section section {1.2, 1.2, 1.5, 1.0};
+    Cases::JunctionCase junctionCase;
+    junctionCase.name = QStringLiteral("Big arm between the halves of a bent through");
+    junctionCase.throughSection = section;
+    junctionCase.throughAtJunction = section;
+    junctionCase.throughPastJunction = section;
+    junctionCase.throughBendDegrees = kRightAngleDegrees;
+    Cases::ArmSpec arm;
+    arm.planDegrees = kBetweenHalvesDegrees;
+    arm.at = section.scaled(kBigArmRatio);
+    arm.atJunction = arm.at;
+    junctionCase.arms = {arm};
+    const Cases::Survey survey = Cases::toSurvey(junctionCase);
+    const cwPassageTubeBuilder::Debug debug = buildDebug(survey, junctionCase.sampleSpacing);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+
+    const int bigChain = armChain(debug, QStringLiteral("a00"));
+    REQUIRE(bigChain >= 0);
+    const cwPassageTubeBuilder::Chain& big = debug.chains.at(bigChain);
+    const cwPassageTubeBuilder::Leg& bigLeg = debug.legs.at(big.legs.first().legIndex);
+    const bool endsAtJunction = (bigLeg.to == QStringLiteral("J")) != big.legs.first().reversed;
+    const double reach = endsAtJunction ? big.endThroughReachMeters : big.startThroughReachMeters;
+    CHECK(reach > section.up);
+
+    // The end ring at J lies past J along the big passage.
+    const Cases::Trip trip = Cases::toTrip(junctionCase);
+    const QVector3D junction = position(trip, QStringLiteral("J"));
+    const QVector3D arriving = (junction - position(trip, QStringLiteral("a00"))).normalized();
+    const cwPassageTubeBuilder::Ring& endRing = endsAtJunction ? big.rings.last() : big.rings.first();
+    CHECK(QVector3D::dotProduct(endRing.center - junction, arriving) > 0.0f);
+
+    const QSet<int> zipped = zippedArms(big);
+    CHECK(zipped.contains(armChain(debug, QStringLiteral("t0"))));
+    CHECK(zipped.contains(armChain(debug, QStringLiteral("t1"))));
+
+    checkBuildsClosed(survey, junctionCase.sampleSpacing);
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+}
+
+// The big arm continues the through's far half, which turns back toward it,
+// so the near half leaves J 30 degrees from the big arm, grazing its wall,
+// and still opens into it.
+TEST_CASE("cwPassageTubeCases zips the leg beside a big arm", "[PassageTube][cwPassageTubeCases]")
+{
+    const Cases::Case& entry = catalogCase("19. Through doubling back beside a big arm");
+    const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(entry), entry.sampleSpacing);
+    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
+
+    const int backLeg = armChain(debug, QStringLiteral("t0"));
+    REQUIRE(backLeg >= 0);
+    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const cwPassageTubeBuilder::Chain& chain) {
+        return chain.legs.size() == 2;
+    });
+    REQUIRE(through != debug.chains.cend());
+    CHECK(chainStations(debug, *through).contains(QStringLiteral("a00")));
+    CHECK(zippedArms(*through).contains(backLeg));
+
+    checkCaseBuildsClosed(entry.name.toStdString());
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    for (const cwPassageTubeMeshCheck::Issue& issue : report.issues) {
+        CHECK(issue.type == cwPassageTubeMeshCheck::Crease);
+    }
+}
+
+// Every gallery junction and a subsample of the sweep's join their arms into
+// the through, apart from the families in kUnzippedSweepCases.
+TEST_CASE("cwPassageTubeCases joins every arm", "[PassageTube][cwPassageTubeCases]")
 {
     std::vector<std::string> names = caseNames([](const Cases::Case& entry) {
-        return isGalleryOrSweepJunction(entry) && !isSweep(entry);
+        return isJoinedJunctionCase(entry) && !isSweep(entry);
     });
     const std::vector<std::string> sweep = caseNames([](const Cases::Case& entry) {
-        return isGalleryOrSweepJunction(entry) && isSweep(entry);
+        return isJoinedJunctionCase(entry) && isSweep(entry);
     }, kSmokeStride);
     names.insert(names.end(), sweep.cbegin(), sweep.cend());
     const std::string name = GENERATE_COPY(from_range(names));
     checkJoinsEveryArm(name);
 }
 
-TEST_CASE("cwPassageTubeCases full sweep joins every arm", "[cwPassageTubeCases][Sweep][.][!mayfail]")
+TEST_CASE("cwPassageTubeCases full sweep joins every arm", "[cwPassageTubeCases][Sweep][.]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return isGalleryOrSweepJunction(entry) && isSweep(entry);
+        return isJoinedJunctionCase(entry) && isSweep(entry);
     })));
     checkJoinsEveryArm(name);
 }
