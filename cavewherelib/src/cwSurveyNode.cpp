@@ -1582,6 +1582,9 @@ QHash<QUuid, QString> cwSurveyNode::sourcedTripScopeLabels() const
             }
         }
     });
+    if (entries.isEmpty()) {
+        return QHash<QUuid, QString>();
+    }
     return cwCavernNaming::scopeLabels(
         entries, cwScopeLabels::includedScopeHeads(root->externalStations(), cavernLabels));
 }

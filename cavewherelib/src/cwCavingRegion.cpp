@@ -648,8 +648,16 @@ cwStationPositionLookup cwCavingRegion::memberPositions(const cwSurveyNode* node
         const cwSurveyNode::SourceMembers members = node->sourceMembers();
         const QString cavernPath = cwStation::canonicalKey(node->cavernPath());
         const QMap<QString, QVector3D> positions = scopedPositions(rootPrefix).positions();
-        for (auto position = positions.constBegin(); position != positions.constEnd(); ++position) {
-            if (members.contains(position.key())) {
+        for (const QString& station : members.stations) {
+            const auto position = positions.constFind(station);
+            if (position != positions.constEnd()) {
+                lookup.setPosition(memberLocalKey(station, cavernPath), position.value());
+            }
+        }
+        for (const QString& prefix : members.scopePrefixes) {
+            for (auto position = positions.lowerBound(prefix);
+                 position != positions.constEnd() && position.key().startsWith(prefix);
+                 ++position) {
                 lookup.setPosition(memberLocalKey(position.key(), cavernPath), position.value());
             }
         }
@@ -671,11 +679,7 @@ cwSurveyNetwork cwCavingRegion::memberNetwork(const cwSurveyNode* node) const
         const cwSurveyNode::SourceMembers members = node->sourceMembers();
         const QString cavernPath = cwStation::canonicalKey(node->cavernPath());
         const cwSurveyNetwork rootNetwork = scopedNetwork(rootPrefix);
-        const QStringList stations = rootNetwork.stations();
-        for (const QString& station : stations) {
-            if (!members.contains(station)) {
-                continue;
-            }
+        const auto addMember = [&](const QString& station) {
             const QString local = memberLocalKey(station, cavernPath);
             const QStringList neighbors = rootNetwork.neighbors(station);
             for (const QString& neighbor : neighbors) {
@@ -685,6 +689,20 @@ cwSurveyNetwork cwCavingRegion::memberNetwork(const cwSurveyNode* node) const
             }
             if (rootNetwork.hasPosition(station)) {
                 network.setPosition(local, rootNetwork.position(station));
+            }
+        };
+
+        //Member keys are canonical, like the root view's, so looking each one
+        //up visits the same stations a scan of the root view would.
+        for (const QString& station : members.stations) {
+            addMember(station);
+        }
+        if (!members.scopePrefixes.isEmpty()) {
+            const QStringList stations = rootNetwork.stations();
+            for (const QString& station : stations) {
+                if (!members.stations.contains(station) && members.contains(station)) {
+                    addMember(station);
+                }
             }
         }
     }

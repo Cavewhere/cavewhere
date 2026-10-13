@@ -136,6 +136,10 @@ NodeTree buildNodeTree(cwCavingRegion& region, const QTemporaryDir& tempRoot)
                                             cwDistanceReading(QString::number(kDropLength)),
                                             cwClinoReading(QString::number(kStraightDown))));
     cwTrip* domeClimb = addAttachedTrip(tree.section, QStringLiteral("Dome climb"));
+    // The file's *fix is bare, so the attachment chooses the system it reads in.
+    cwExternalCenterline domeClimbCenterline = domeClimb->externalCenterline();
+    domeClimbCenterline.setFixCoordinateSystem(kFrameCS);
+    domeClimb->setExternalCenterline(domeClimbCenterline);
     attachFixture(tempRoot, domeClimb, QStringLiteral("survex_simple.svx"), tree.tripDirs);
     tree.trips.append(domeClimb);
 
