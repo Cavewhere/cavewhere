@@ -86,7 +86,7 @@ MainWindowTest {
             verify(header.attached, "the header reads Attached after the fixture attach")
             verify(stationsList !== null && stationsList.visible, "stations list renders")
             verify(metadata !== null && metadata.visible, "trip metadata renders")
-            compare(findChild(panelId, "solveStatus"), null,
+            compare(findChild(panelId, "solveStatusLabel"), null,
                     "the trip page carries no solve status; the source root card has it")
 
             // Header row, Date/Declination/Team, then the station list at
@@ -790,7 +790,7 @@ MainWindowTest {
                     "a derived trip's page has no Part of: header")
             compare(findChild(panelId, "attachedHeader"), null,
                     "the attached header belongs to a trip with a file of its own")
-            compare(findChild(panelId, "solveStatus"), null,
+            compare(findChild(panelId, "solveStatusLabel"), null,
                     "the trip page carries no solve status")
             verify(stationsList !== null && stationsList.visible, "stations list renders")
 

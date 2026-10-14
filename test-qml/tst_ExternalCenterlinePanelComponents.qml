@@ -604,39 +604,16 @@ MainWindowTest {
             tryVerify(() => !explainer.visible, 5000, "the dialog closes on cancel")
         }
 
-        function test_solveStatusDotColors() {
+        function test_solveStatusLabel() {
+            compare(solveStatusId.warningCount, undefined,
+                    "XC.4: the solve status carries no warning count")
+
             solveStatusId.hasError = false
-            solveStatusId.warningCount = 0
             solveStatusId.stationCount = 42
-
-            const dot = findChild(solveStatusId, "solveStatusDot")
-            verify(dot !== null, "solveStatusDot must exist")
-            verify(Qt.colorEqual(dot.color, Theme.success),
-                   "clean solve renders green; got: " + dot.color)
-
-            const label = findChild(solveStatusId, "solveStatusLabel")
-            verify(label !== null, "solveStatusLabel must exist")
-            verify(label.text.indexOf("42") >= 0,
-                   "station count renders; got: " + label.text)
-
-            const pill = findChild(solveStatusId, "solveWarningPill")
-            verify(pill !== null, "solveWarningPill must exist")
-            verify(!pill.visible, "no warning pill on a clean solve")
-
-            solveStatusId.warningCount = 1
-            verify(Qt.colorEqual(dot.color, Theme.warning),
-                   "a warning renders yellow; got: " + dot.color)
-            verify(pill.visible, "warning pill appears")
-            verify(pill.text.indexOf("1") >= 0,
-                   "pill carries the count; got: " + pill.text)
+            compare(solveStatusId.text, "42 stations")
 
             solveStatusId.hasError = true
-            verify(Qt.colorEqual(dot.color, Theme.danger),
-                   "an error renders red; got: " + dot.color)
-            compare(label.text, "Solve failed")
-
-            compare(findChild(solveStatusId, "viewCavernOutputLink"), null,
-                    "the shared status holds no cavern-output link; the source root card owns it")
+            compare(solveStatusId.text, "Solve failed")
         }
 
         function test_stationsListShowsRowsAndClickEmits() {

@@ -38,7 +38,6 @@ QQ.Item {
 
     // The attached model's answers for this root, re-read on its signals.
     property string solveError: ""
-    property int solveWarningCount: 0
 
     implicitWidth: contentColumnId.implicitWidth
     implicitHeight: contentColumnId.implicitHeight
@@ -60,12 +59,10 @@ QQ.Item {
     function refreshSolveState() {
         if (root.node === null) {
             root.solveError = ""
-            root.solveWarningCount = 0
             return
         }
         const model = root.externalCenterlineManager.attachedCenterlinesModel
         root.solveError = model.errorFor(root.node.id)
-        root.solveWarningCount = model.warningCountFor(root.node.id)
     }
 
     onNodeChanged: {
@@ -182,7 +179,6 @@ QQ.Item {
 
             ExternalCenterlineSolveStatus {
                 hasError: root.solveError.length > 0 || root.linePlotManager.hasSolveError
-                warningCount: root.solveWarningCount
                 stationCount: root.pageModel !== null ? root.pageModel.stationCount : 0
             }
 

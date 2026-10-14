@@ -71,6 +71,10 @@ MainWindowTest {
             tryVerify(() => /^[1-9]\d* stations$/.test(solveStatusLabel.text), 20000,
                       "the solve status counts the root's solved stations; got: "
                       + solveStatusLabel.text)
+            compare(findChild(card, "solveWarningPill"), null,
+                    "XC.4: the card shows no warning count; the row and the warnings banner carry warnings")
+            compare(findChild(card, "solveStatusDot"), null,
+                    "XC.4: the card shows no colored solve dot")
 
             verify(!findChild(card, "sourceRootHiddenLabel").visible, "nothing is hidden yet")
             compare(findChild(card, "replaceButton"), null, "Replace… is no button on the card")
