@@ -2144,6 +2144,23 @@ MainWindowTest {
                        "one closed node turns the button to expand all")
         }
 
+        // The page's toggle is the shared ExpandCollapseButton the survey
+        // tree uses: it carries the collapsed-rows flag and the two requests.
+        function test_theToggleIsTheSharedExpandCollapseButton() {
+            makeCaves()
+            openProjectFixStations(initialRowCount)
+            const button = expandToggle()
+            verify(button instanceof ExpandCollapseButton,
+                   "the page's toggle is the shared ExpandCollapseButton")
+            compare(typeof button.hasCollapsedRows, "boolean",
+                    "the toggle reads its state from the shared hasCollapsedRows")
+            compare(button.hasCollapsedRows, false, "with every node open nothing is collapsed")
+            compare(typeof button.expandAllRequested, "function",
+                    "the toggle asks for expand all through the shared signal")
+            compare(typeof button.collapseAllRequested, "function",
+                    "the toggle asks for collapse all through the shared signal")
+        }
+
         // Closing and reopening a cave hands its rows back to the delegates
         // the view already built, so a toggle costs no new delegates.
         function test_aCollapseAndExpandReusesTheRowDelegates() {

@@ -94,6 +94,11 @@ ColumnLayout {
     //whole row hovered, and a row is one cell per column.
     property int hoveredRow: -1
 
+    //Whether a row with rows of its own is closed, and whether any row has
+    //rows of its own at all. Kept by updateExpansionState().
+    property bool hasCollapsedRows: false
+    property bool hasCollapsibleRows: false
+
     spacing: 0
 
     //The cwSurveyNode or cwTrip a proxy index stands for, null for a row that
@@ -514,17 +519,51 @@ ColumnLayout {
         treeViewId.forceActiveFocus();
     }
 
+    //Calls \a action on each top-level view row, last row first, so the rows
+    //an action adds or removes below a row leave the rows above it in place.
+    //TreeView's own whole-tree expandRecursively() starts at the model's
+    //root and opens nothing under a rootIndex, which a node page sets.
+    function forEachTopLevelRow(action: var) : void {
+        for(let row = treeViewId.rows - 1; row >= 0; row--) {
+            if(treeViewId.depth(row) === 0) {
+                action(row);
+            }
+        }
+        treeViewId.forceLayout();
+    }
+
     //Opens every row of the tree, and every row those rows bring with them.
     //A filter shows its matches by opening the rows that hold them.
     function expandAll() {
-        treeViewId.expandRecursively();
-        treeViewId.forceLayout();
+        surveyTreeId.forEachTopLevelRow((row) => treeViewId.expandRecursively(row));
     }
 
     //Closes every row of the tree.
     function collapseAll() {
-        treeViewId.collapseRecursively();
-        treeViewId.forceLayout();
+        surveyTreeId.forEachTopLevelRow((row) => treeViewId.collapseRecursively(row));
+    }
+
+    //A closed row hides the rows under it, so a shown row with children that
+    //is closed is exactly a tree with rows left to open.
+    function updateExpansionState() : void {
+        let collapsible = false;
+        for(let row = 0; row < treeViewId.rows; row++) {
+            if(filterModelId.hasChildren(surveyTreeId.indexAtRow(row))) {
+                collapsible = true;
+                if(!treeViewId.isExpanded(row)) {
+                    surveyTreeId.hasCollapsibleRows = true;
+                    surveyTreeId.hasCollapsedRows = true;
+                    return;
+                }
+            }
+        }
+        surveyTreeId.hasCollapsibleRows = collapsible;
+        surveyTreeId.hasCollapsedRows = false;
+    }
+
+    //Coalesces a burst of row and expansion changes into one scan.
+    function updateExpansionStateLater() : void {
+        Qt.callLater(surveyTreeId.updateExpansionState);
     }
 
     //The ids of the nodes that are open right now. A filter change rebuilds
@@ -844,6 +883,18 @@ ColumnLayout {
         }
 
         QQ.Item { Layout.fillWidth: true }
+
+        ExpandCollapseButton {
+            objectName: "surveyTreeExpandToggle"
+
+            hasCollapsedRows: surveyTreeId.hasCollapsedRows
+            //Every row that holds a match is open while filtering.
+            visible: surveyTreeId.hasCollapsibleRows && filterModelId.filterText.length === 0
+            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+
+            onExpandAllRequested: surveyTreeId.expandAll()
+            onCollapseAllRequested: surveyTreeId.collapseAll()
+        }
     }
 
     QC.HorizontalHeaderView {
@@ -997,6 +1048,9 @@ ColumnLayout {
         }
 
         onWidthChanged: treeViewId.forceLayout()
+        onRowsChanged: surveyTreeId.updateExpansionStateLater()
+        onExpanded: surveyTreeId.updateExpansionStateLater()
+        onCollapsed: surveyTreeId.updateExpansionStateLater()
 
         //Handled before TableView sees the key, and accepted only for the keys
         //the tree owns, so ↑ ↓ Home End stay TableView's.
@@ -1032,10 +1086,14 @@ ColumnLayout {
                 surveyTreeId.expandPendingSourceRootsLater();
 
                 surveyTreeId.makeFirstRowCurrent();
+                //A row added under a closed row changes no view row, yet can
+                //give that row children.
+                surveyTreeId.updateExpansionStateLater();
             }
 
             function onRowsRemoved(parent, first, last) {
                 surveyTreeId.ensureRootIndex();
+                surveyTreeId.updateExpansionStateLater();
             }
 
             function onModelReset() {
@@ -1047,10 +1105,12 @@ ColumnLayout {
                 surveyTreeId.collectSourceRoots(surveyTreeId.rootProxyIndex());
                 surveyTreeId.expandPendingSourceRootsLater();
                 surveyTreeId.makeFirstRowCurrent();
+                surveyTreeId.updateExpansionStateLater();
             }
 
             function onLayoutChanged() {
                 surveyTreeId.ensureRootIndex();
+                surveyTreeId.updateExpansionStateLater();
             }
         }
     }

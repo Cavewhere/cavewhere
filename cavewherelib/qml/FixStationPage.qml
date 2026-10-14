@@ -340,14 +340,6 @@ StandardPage {
         fixStationPage.applyExpansion()
     }
 
-    function toggleExpansion(): void {
-        if (fixStationPage.hasCollapsedNodes) {
-            fixStationPage.expandAll()
-        } else {
-            fixStationPage.collapseAll()
-        }
-    }
-
     //! Sets header \a column to \a requestedWidth and stores it. The width
     //! stays above the column's minimum, and grows only as far as the table
     //! still fits the page, so the page keeps the wide layout through a drag.
@@ -1047,26 +1039,18 @@ StandardPage {
                 onTextChanged: fixStationPage.applyFilter(filterFieldId.text)
             }
 
-            QC.ToolButton {
+            ExpandCollapseButton {
                 id: expandToggleButtonId
                 objectName: "expandToggleButton"
 
+                hasCollapsedRows: fixStationPage.hasCollapsedNodes
                 // Every node and trip row is open while filtering.
                 visible: fixStationPage.hasCollapsibleRows
                          && treeFilterId.filterText.length === 0
-                text: fixStationPage.hasCollapsedNodes ? qsTr("Expand all") : qsTr("Collapse all")
-                display: QC.AbstractButton.IconOnly
-                icon.source: fixStationPage.hasCollapsedNodes
-                             ? "qrc:/twbs-icons/icons/arrows-expand.svg"
-                             : "qrc:/twbs-icons/icons/arrows-collapse.svg"
-                icon.color: Theme.text
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
-                QC.ToolTip.text: expandToggleButtonId.text
-                QC.ToolTip.delay: Theme.toolTipDelay
-                QC.ToolTip.visible: hovered
-
-                onClicked: fixStationPage.toggleExpansion()
+                onExpandAllRequested: fixStationPage.expandAll()
+                onCollapseAllRequested: fixStationPage.collapseAll()
             }
         }
 

@@ -71,6 +71,13 @@ MainWindowTest {
             return row.treeView
         }
 
+        // The expand/collapse button the node page's tree shares with the Data page.
+        function expandToggle(page) {
+            const button = findChild(findChild(page, "tripTree"), "surveyTreeExpandToggle")
+            verify(button !== null, "the node page's tree holds the expand/collapse button")
+            return button
+        }
+
         // The objectNames of the menu entries a user sees, in order.
         function visibleEntryNames(menu) {
             const names = []
@@ -171,6 +178,61 @@ MainWindowTest {
             const tripPageItem = RootData.pageView.currentPageItem
             compare(tripPageItem.PageView.page, RootData.pageSelectionModel.currentPage,
                     "the trip page item holds the page the model shows")
+        }
+
+        // The node page's tree shares the Data page's expand/collapse button:
+        // one click opens every Section, the next closes them again.
+        function test_oneButtonTogglesTheNodeTreeRows() {
+            const nodes = setupCaveWithSection()
+            const page = gotoNodePage("Source/Data/Node=Side Cave", nodes.cave)
+
+            const view = tree(page, "caveDelegate0")
+            tryCompare(view, "rows", 2, 5000)
+
+            const button = expandToggle(page)
+            tryVerify(() => button.visible, 5000, "the button shows while a Section has trips")
+            tryCompare(button, "text", "Expand all")
+
+            mouseClick(button)
+            tryCompare(view, "rows", 3, 5000, "expand all shows the Section's trip")
+            tryCompare(button, "text", "Collapse all")
+
+            mouseClick(button)
+            tryCompare(view, "rows", 2, 5000, "collapse all closes the Section again")
+            tryCompare(button, "text", "Expand all")
+        }
+
+        // A filter on the node page opens the Section that holds a match, and
+        // clearing it puts the Section back the way it was.
+        function test_filterOpensTheSectionHoldingAMatch() {
+            const nodes = setupCaveWithSection()
+            const page = gotoNodePage("Source/Data/Node=Side Cave", nodes.cave)
+
+            const view = tree(page, "caveDelegate0")
+            tryCompare(view, "rows", 2, 5000)
+
+            const filter = findChild(findChild(page, "tripTree"), "surveyTreeFilter")
+            verify(filter !== null, "the node page's tree has a filter field")
+
+            filter.text = "survey"
+            tryCompare(view, "rows", 3, 5000,
+                       "both trips match, so the Section holding one opens")
+
+            filter.text = ""
+            tryCompare(view, "rows", 2, 5000, "clearing the filter closes the Section again")
+        }
+
+        // A node holding only trips has nothing to open, so the button hides.
+        function test_expandToggleHidesOnATripOnlyNode() {
+            const cave = addNode(null, SurveyNodeKind.Cave, "Side Cave")
+            addTrip(cave, "Entrance survey", new Date(2023, 10, 12))
+            const page = gotoNodePage("Source/Data/Node=Side Cave", cave)
+
+            const view = tree(page, "tripDelegate0")
+            tryCompare(view, "rows", 1, 5000)
+
+            const button = expandToggle(page)
+            tryVerify(() => !button.visible, 5000, "trip rows alone offer no expand/collapse")
         }
 
         function test_childSectionStaysAwayWhileTheNodeHasNone() {

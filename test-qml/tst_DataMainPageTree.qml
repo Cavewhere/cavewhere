@@ -317,18 +317,75 @@ MainWindowTest {
             verify(!tree.isExpanded(3), "a cave that was closed stays closed")
         }
 
-        // The toolbar offers the filter alone: the carets and the keyboard are
-        // how rows are opened and closed.
-        function test_toolbarHasNoExpandOrCollapseAllButtons() {
+        // The shared expand/collapse button, found on the Data page's tree.
+        function surveyTreeToggle(page) {
+            let button = null
+            tryVerify(() => {
+                          button = findChild(page, "surveyTreeExpandToggle")
+                          return button !== null
+                      }, 5000, "the survey tree's toolbar must hold the expand/collapse button")
+            return button
+        }
+
+        // One toolbar button opens every row and closes them again; a single
+        // closed row turns it back to Expand all, and a filter hides it.
+        function test_oneButtonTogglesExpandAndCollapseAllRows() {
             addCave("Alpha Cave", 2)
+            addCave("Beta Cave", 1)
 
             const page = gotoDataMainPage()
-            surveyTree(page)
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 2, 5000)
 
-            verify(findChild(page, "expandAllButton") === null,
-                   "Expand all is gone")
-            verify(findChild(page, "collapseAllButton") === null,
-                   "Collapse all is gone")
+            const button = surveyTreeToggle(page)
+            tryVerify(() => button.visible, 5000, "the button shows while a row has children")
+            tryCompare(button, "text", "Expand all", 5000, "collapsed caves make the button expand")
+            verify(String(button.icon.source).indexOf("arrows-expand") >= 0,
+                   "the button shows the expand icon")
+
+            mouseClick(button)
+            tryCompare(tree, "rows", 5, 5000, "expand all shows both caves and their three trips")
+            tryCompare(button, "text", "Collapse all", 5000, "with every row open the button collapses")
+            verify(String(button.icon.source).indexOf("arrows-collapse") >= 0,
+                   "the icon swaps to the collapse icon")
+
+            mouseClick(button)
+            tryCompare(tree, "rows", 2, 5000, "collapse all leaves the two caves")
+            tryCompare(button, "text", "Expand all")
+
+            tree.expand(0)
+            tryCompare(tree, "rows", 4, 5000)
+            tryCompare(button, "text", "Expand all", 5000,
+                       "one open cave beside a closed one keeps Expand all")
+
+            mouseClick(button)
+            tryCompare(tree, "rows", 5, 5000)
+            tryCompare(button, "text", "Collapse all")
+            tree.collapse(0)
+            tryCompare(tree, "rows", 3, 5000)
+            tryCompare(button, "text", "Expand all", 5000,
+                       "one closed cave turns the button to Expand all")
+
+            const filter = findChild(page, "surveyTreeFilter")
+            filter.text = "beta"
+            tryVerify(() => !button.visible, 5000, "a filter hides the button")
+            filter.text = ""
+            tryVerify(() => button.visible, 5000, "clearing the filter brings the button back")
+        }
+
+        // Rows without children leave nothing to open, so the button hides.
+        function test_expandToggleHidesWhileNoRowHasChildren() {
+            addCave("Alpha Cave", 0)
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+
+            const button = surveyTreeToggle(page)
+            tryVerify(() => !button.visible, 5000, "a lone empty cave offers no expand/collapse")
+
+            RootData.region.cave(0).addTrip()
+            tryVerify(() => button.visible, 5000, "a trip under the cave brings the button")
         }
 
         function focusTree(tree) {
