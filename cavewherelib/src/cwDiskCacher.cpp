@@ -135,7 +135,7 @@ bool cwDiskCacher::hasEntry(const Key& key) const
     return info.exists() && info.isFile();
 }
 
-void cwDiskCacher::insert(const Key& key, const QByteArray& data)
+bool cwDiskCacher::insert(const Key& key, const QByteArray& data)
 {
     // Determine cache file path under global lock
     QString cacheFile = filePath(key);
@@ -155,7 +155,13 @@ void cwDiskCacher::insert(const Key& key, const QByteArray& data)
 
     QFile file(cacheFile);
     if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        file.write(bytes.data(), static_cast<qint64>(bytes.size()));
+        const qint64 size = static_cast<qint64>(bytes.size());
+        const bool complete = file.write(bytes.data(), size) == size && file.flush();
         file.close();
+        if (complete) {
+            return true;
+        }
+        file.remove();
     }
+    return false;
 }

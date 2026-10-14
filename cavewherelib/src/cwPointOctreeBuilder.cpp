@@ -141,14 +141,11 @@ namespace {
         return nodeName(octantPath);
     }
 
-    /**
-     * Inserts data and reports whether the entry landed. cwDiskCacher::insert
-     * is void, so a full or read-only cache shows up as a missing file.
-     */
+    //! Inserts data and reports whether the whole entry landed, so a full or
+    //! read-only cache fails the build rather than leaving a truncated node
     bool writeEntry(cwDiskCacher& cacher, const cwDiskCacher::Key& key, const QByteArray& data)
     {
-        cacher.insert(key, data);
-        return cacher.hasEntry(key);
+        return cacher.insert(key, data);
     }
 
     struct BoundsTracker {

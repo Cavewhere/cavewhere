@@ -26,7 +26,8 @@ public:
 
     bool hasEntry(const Key& key) const;
 
-    void insert(const Key& key, const QByteArray& data);
+    //! Returns true once the whole entry is on disk; a short write removes the file
+    bool insert(const Key& key, const QByteArray& data);
 
     QDir dir() const;
     void setDir(const QDir& directory);

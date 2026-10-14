@@ -44,11 +44,13 @@
 #include <memory>
 #include <optional>
 #include <random>
+#include <sstream>
 #include <vector>
 
 //Our includes
 #include "cwAppearanceOverride.h"
 #include "cwDiskCacher.h"
+#include "cwFrustum.h"
 #include "cwLazClipOperation.h"
 #include "cwLazLoader.h"
 #include "cwPointCloudAppearance.h"
@@ -867,6 +869,9 @@ namespace {
         }
 
         QSize colorSize() const { return m_colorSize; }
+
+        //! The size of the target every frame draws into
+        QSize targetSize() const { return m_live.target->pixelSize(); }
 
         //! The last frame's readback as an image, for dumping a case that
         //! failed. The readback is RGBA8 and the copy owns its bytes.
@@ -1858,9 +1863,9 @@ namespace {
     //! One line of the sweep's CSV. The release build compiles qDebug out, and
     //! Catch2 prints an INFO only for a case that failed, so the curve — the
     //! point of the whole exercise — goes straight to stdout.
-    void writeCsvLine(const QString& line)
+    void writeCsvLine(const QString& line, std::ostream& out = std::cout)
     {
-        std::cout << line.toStdString() << std::endl;
+        out << line.toStdString() << std::endl;
     }
 
     enum class StepPolicy {
@@ -5838,6 +5843,896 @@ TEST_CASE("EDL shades the plane's edges and leaves its flat pass as it was",
     fixture.renderFrame();
     CHECK(fixture.compositeImage().isNull());
     CHECK(fixture.frameImage() == flat);
+}
+
+namespace {
+
+    // ---- Eval paths ----------------------------------------------------
+    //
+    // A pose is a view matrix plus a projection, and a path is an ordered list
+    // of poses, generated from the octree's own bounds so the oracle frames and
+    // the candidate frames of a later run draw from identical matrices.
+
+    //! The full 1080p frame, for the starved variants whose budget binds only
+    //! when the view asks for enough points
+    const QSize kFullHdTargetSize(1920, 1080);
+
+    //! Every path pose's depth range: near enough for the fly-in's last pose,
+    //! far enough for its first one to see past the tile
+    constexpr float kPathNearMeters = 1.0f;
+    constexpr float kPathFarMeters = 10000.0f;
+
+    //! P2: two revolutions of 5 degrees a pose, 400 m above the tile center's
+    //! elevation and pitched 30 degrees down onto it
+    constexpr float kOrbitHeightMeters = 400.0f;
+    constexpr float kOrbitPitchDownDegrees = 30.0f;
+    constexpr int kOrbitRevolutions = 2;
+    constexpr float kOrbitHeadingStepDegrees = 5.0f;
+    constexpr float kDegreesPerRevolution = 360.0f;
+    constexpr int kOrbitPoseCount =
+        int(kOrbitRevolutions * kDegreesPerRevolution / kOrbitHeadingStepDegrees);
+
+    //! P2's zoomed-in sub-path: the orbit's pitch, rotated through a quarter
+    //! turn at the height where the cut's finest level changes
+    constexpr float kBoundarySweepDegrees = 90.0f;
+    constexpr int kBoundaryPoseCount = int(kBoundarySweepDegrees / kOrbitHeadingStepDegrees) + 1;
+    //! Section 13 saw coverage sizing stop closing the BC tile's surface at
+    //! level 6, which makes its boundary the one the tile's sub-path sits on
+    constexpr int kTileBoundaryLevel = 6;
+    //! The boundary height is bisected to this share of itself
+    constexpr double kBoundaryHeightTolerance = 1.0e-3;
+    //! Halvings or doublings the bisection may spend bracketing the boundary
+    constexpr int kMaxBoundaryBracketSteps = 32;
+    constexpr double kBoundaryBracketFactor = 2.0;
+
+    //! P3: a straight descent toward the tile center from the south
+    constexpr float kFlyInStartRangeMeters = 3000.0f;
+    constexpr float kFlyInStartAltitudeMeters = 1500.0f;
+    constexpr float kFlyInEndRangeMeters = 80.0f;
+    constexpr float kFlyInEndAltitudeMeters = 60.0f;
+    constexpr int kFlyInPoseCount = 240;
+    const QVector3D kFlyInApproachDirection(0.0f, -1.0f, 0.0f);
+
+    //! P4: frames a still pose is held for from an empty residency, at most
+    constexpr int kColdStartFrameCount = 600;
+
+    const QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
+
+    //! One camera of a path
+    struct Pose {
+        QMatrix4x4 view;
+        QMatrix4x4 projection;
+        QString label;
+        int index = 0;
+    };
+
+    struct EvalPath {
+        QString name;
+        QVector<Pose> poses;
+    };
+
+    //! How sweepPath() steps through a path
+    struct PathStep {
+        StepPolicy policy = StepPolicy::Frames;
+        //! Frames policy only: frames recorded at every pose
+        int framesPerPose = 1;
+        //! Settle at the first pose before recording, so the path starts from
+        //! the residency a camera that has been there a while would have
+        bool settleBeforeFirstPose = true;
+        //! Frames policy only: move on from a pose at its first frame with
+        //! nothing pending, which is how a cold start stops at quiet
+        bool leavePoseWhenQuiet = false;
+    };
+
+    //! A path together with the stepping it is meant to run with
+    struct PlannedPath {
+        EvalPath path;
+        PathStep step;
+    };
+
+    //! Where every path aims: the center of the data's bounding box, at its
+    //! middle elevation
+    QVector3D pathCenter(const cwPointOctreeManifest& manifest)
+    {
+        return (manifest.bboxMin + manifest.bboxMax) * 0.5f;
+    }
+
+    //! The perspective every path draws through
+    QMatrix4x4 pathProjection(QSize target)
+    {
+        QMatrix4x4 projection;
+        projection.perspective(kEvalVerticalFieldOfViewDegrees, aspectRatio(target),
+                               kPathNearMeters, kPathFarMeters);
+        return projection;
+    }
+
+    Pose lookAtPose(const QVector3D& eye, const QVector3D& target,
+                    const QMatrix4x4& projection, const QString& label, int index)
+    {
+        Pose pose;
+        pose.view.lookAt(eye, target, kWorldUp);
+        pose.projection = projection;
+        pose.label = label;
+        pose.index = index;
+        return pose;
+    }
+
+    //! A camera @a height above @a center, pitched kOrbitPitchDownDegrees down
+    //! onto it from the side @a headingDegrees names
+    Pose orbitPose(const QVector3D& center, float height, float headingDegrees,
+                   const QMatrix4x4& projection, const QString& label, int index)
+    {
+        const double range = height / std::tan(qDegreesToRadians(double(kOrbitPitchDownDegrees)));
+        const double heading = qDegreesToRadians(double(headingDegrees));
+        const QVector3D eye = center + QVector3D(float(range * std::cos(heading)),
+                                                 float(range * std::sin(heading)),
+                                                 height);
+        return lookAtPose(eye, center, projection, label, index);
+    }
+
+    //! @a poseCount orbit poses @a height above the path center, starting at
+    //! heading 0 and turning kOrbitHeadingStepDegrees a pose, each labeled
+    //! @a labelPrefix and its heading
+    EvalPath orbitSweep(const QString& name, const QString& labelPrefix,
+                        const cwPointOctreeManifest& manifest, QSize target,
+                        float height, int poseCount)
+    {
+        EvalPath path;
+        path.name = name;
+        const QVector3D center = pathCenter(manifest);
+        const QMatrix4x4 projection = pathProjection(target);
+        for (int i = 0; i < poseCount; i++) {
+            const float heading = i * kOrbitHeadingStepDegrees;
+            const QString label = QStringLiteral("%1heading-%2")
+                                      .arg(labelPrefix)
+                                      .arg(double(heading), 0, 'f', 0);
+            path.poses.append(orbitPose(center, height, heading, projection, label, i));
+        }
+        return path;
+    }
+
+    //! P2, the oblique orbit
+    EvalPath orbitPath(const cwPointOctreeManifest& manifest, QSize target)
+    {
+        return orbitSweep(QStringLiteral("P2"), QString(), manifest, target,
+                          kOrbitHeightMeters, kOrbitPoseCount);
+    }
+
+    //! The deepest level @a manifest holds
+    int deepestLevel(const cwPointOctreeManifest& manifest)
+    {
+        int deepest = kRootLevel;
+        for (const cwPointOctreeNode& node : manifest.nodes) {
+            deepest = std::max(deepest, node.level);
+        }
+        return deepest;
+    }
+
+    //! The finest level the cut asks for from @a pose, through the very
+    //! selection the forest runs: the corrected camera, the frustum, the
+    //! target's height and the budgets' threshold, point cap and level cap.
+    int finestCutLevel(const cwPointOctreeManifest& manifest, const Pose& pose,
+                       QSize target, const QMatrix4x4& clipSpaceCorrection,
+                       const cwRenderBudgets& budgets)
+    {
+        const QMatrix4x4 projection = clipSpaceCorrection * pose.projection;
+        const QMatrix4x4 viewProjection = projection * pose.view;
+        const cwFrustum frustum = cwFrustum::fromViewProjection(viewProjection);
+
+        cw::octree::SelectionInput input;
+        input.manifest = &manifest;
+        input.frustum = &frustum;
+        input.viewProjection = viewProjection;
+        input.absP11 = std::abs(double(projection(1, 1)));
+        input.viewportHeightPx = target.height();
+        input.screenSpaceErrorPx = budgets.screenSpaceErrorPx;
+        input.maxPoints = budgets.pointBudget;
+        input.maxLevel = budgets.maxLevel;
+
+        int finest = kRootLevel;
+        for (const cw::octree::SelectedNode& selected : cw::octree::selectCut(input).nodes) {
+            finest = std::max(finest, manifest.nodes.at(selected.node).level);
+        }
+        return finest;
+    }
+
+    //! The height above the path center at which the orbit pose looking from
+    //! heading 0 starts asking for @a level: just above it the cut stops at
+    //! @a level - 1, just below it reaches @a level.
+    //!
+    //! The first guess is the closed form from the level spacings: the parent
+    //! level refines once its spacing projects past the threshold, and at the
+    //! orbit's pitch and field of view the bottom of the frame sees the ground
+    //! at a depth of the height itself. Node boxes reach nearer the eye than
+    //! the ground they hold, so the guess is only a bracket, and the height is
+    //! bisected on the cut itself, which makes it a boundary on any tile.
+    float levelBoundaryHeight(const cwPointOctreeManifest& manifest, QSize target,
+                              const QMatrix4x4& clipSpaceCorrection, int level,
+                              const cwRenderBudgets& budgets = {})
+    {
+        REQUIRE(level > kRootLevel);
+        REQUIRE(level <= deepestLevel(manifest));
+
+        const QVector3D center = pathCenter(manifest);
+        const QMatrix4x4 projection = pathProjection(target);
+        const auto reachesLevel = [&](double height) {
+            const Pose pose = orbitPose(center, float(height), 0.0f, projection, QString(), 0);
+            return finestCutLevel(manifest, pose, target, clipSpaceCorrection, budgets) >= level;
+        };
+
+        const double focalPx = std::abs(double((clipSpaceCorrection * projection)(1, 1)))
+                               * target.height() * 0.5;
+        const double guess = manifest.spacing(level - 1) * focalPx / budgets.screenSpaceErrorPx;
+
+        double low = guess;
+        double high = guess;
+        for (int step = 0; step < kMaxBoundaryBracketSteps && !reachesLevel(low); step++) {
+            low /= kBoundaryBracketFactor;
+        }
+        for (int step = 0; step < kMaxBoundaryBracketSteps && reachesLevel(high); step++) {
+            high *= kBoundaryBracketFactor;
+        }
+        REQUIRE(reachesLevel(low));
+        REQUIRE_FALSE(reachesLevel(high));
+
+        while ((high - low) > high * kBoundaryHeightTolerance) {
+            const double middle = 0.5 * (low + high);
+            if (reachesLevel(middle)) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        return float(0.5 * (low + high));
+    }
+
+    //! P2's zoomed-in sub-path: the orbit pitch at the height where the cut
+    //! starts asking for @a level, turned through a quarter revolution in the
+    //! orbit's steps. Rotation near a level boundary is where section 13 saw
+    //! the governor swap tiles.
+    EvalPath levelBoundaryPath(const cwPointOctreeManifest& manifest, QSize target,
+                               const QMatrix4x4& clipSpaceCorrection, int level,
+                               const cwRenderBudgets& budgets = {})
+    {
+        const float height = levelBoundaryHeight(manifest, target, clipSpaceCorrection,
+                                                 level, budgets);
+        return orbitSweep(QStringLiteral("P2z"), QStringLiteral("level-%1-").arg(level),
+                          manifest, target, height, kBoundaryPoseCount);
+    }
+
+    //! P3, the straight descent onto the path center
+    EvalPath flyInPath(const cwPointOctreeManifest& manifest, QSize target)
+    {
+        EvalPath path;
+        path.name = QStringLiteral("P3");
+        const QVector3D ground = pathCenter(manifest);
+        const QMatrix4x4 projection = pathProjection(target);
+        const QVector3D start = ground + kFlyInApproachDirection * kFlyInStartRangeMeters
+                                + kWorldUp * kFlyInStartAltitudeMeters;
+        const QVector3D end = ground + kFlyInApproachDirection * kFlyInEndRangeMeters
+                              + kWorldUp * kFlyInEndAltitudeMeters;
+        for (int i = 0; i < kFlyInPoseCount; i++) {
+            const float along = float(i) / float(kFlyInPoseCount - 1);
+            path.poses.append(lookAtPose(start + (end - start) * along, ground, projection,
+                                         QStringLiteral("descent-%1").arg(i), i));
+        }
+        return path;
+    }
+
+    //! P4: @a pose held for up to @a frameCount frames from whatever residency
+    //! the fixture has, which for a cold start is a fresh one, every frame
+    //! recorded and the hold ending at the first quiet frame. The plan's pose
+    //! is P2's worst by hole fraction, which waits on the hole columns.
+    PlannedPath coldStartPath(const Pose& pose, int frameCount = kColdStartFrameCount)
+    {
+        PlannedPath planned;
+        planned.path.name = QStringLiteral("P4");
+        Pose held = pose;
+        held.index = 0;
+        planned.path.poses.append(held);
+        planned.step.policy = StepPolicy::Frames;
+        planned.step.framesPerPose = frameCount;
+        planned.step.settleBeforeFirstPose = false;
+        planned.step.leavePoseWhenQuiet = true;
+        return planned;
+    }
+
+    // ---- Candidate configurations ---------------------------------------
+
+    //! One row of section 4.3: the budgets a run draws under and the target
+    //! it draws into
+    struct EvalConfig {
+        QString name;
+        cwRenderBudgets budgets;
+        QSize targetSize;
+    };
+
+    enum class Candidate {
+        Default,  //!< the desktop app as shipped
+        Starved,  //!< a phone-class budget
+        Latent,   //!< slow disk: arrival spread over many frames
+        Tight     //!< the governor binding on every pose, as section 13 saw it
+    };
+
+    constexpr int kStarvedGpuBudgetMb = 256;
+    constexpr int kStarvedPointBudgetMillions = 4;
+    constexpr int kStarvedUploadBudgetMbPerFrame = 2;
+    constexpr qint64 kLatentUploadBudgetBytesPerFrame = 256 * 1024;
+    constexpr int kTightGpuBudgetMb = 256;
+    constexpr int kTightPointBudgetMillions = 1;
+
+    EvalConfig candidateConfig(Candidate candidate)
+    {
+        using namespace cw::budgets;
+
+        EvalConfig config;
+        config.targetSize = kHalfHdTargetSize;
+        switch (candidate) {
+        case Candidate::Default:
+            config.name = QStringLiteral("C-default");
+            break;
+        case Candidate::Starved:
+            config.name = QStringLiteral("C-starved");
+            config.budgets.gpuBudgetBytes = kStarvedGpuBudgetMb * kBytesPerMegabyte;
+            config.budgets.pointBudget = kStarvedPointBudgetMillions * kPointsPerMillion;
+            config.budgets.uploadBudgetBytesPerFrame =
+                kStarvedUploadBudgetMbPerFrame * kBytesPerMegabyte;
+            config.targetSize = kFullHdTargetSize;
+            break;
+        case Candidate::Latent:
+            config.name = QStringLiteral("C-latent");
+            config.budgets.uploadBudgetBytesPerFrame = kLatentUploadBudgetBytesPerFrame;
+            break;
+        case Candidate::Tight:
+            config.name = QStringLiteral("C-tight");
+            config.budgets.gpuBudgetBytes = kTightGpuBudgetMb * kBytesPerMegabyte;
+            config.budgets.pointBudget = kTightPointBudgetMillions * kPointsPerMillion;
+            break;
+        }
+        return config;
+    }
+
+    // ---- sweepPath ------------------------------------------------------
+
+    //! One frame of a path, as evalCsv records it
+    struct EvalRecord {
+        int pose = 0;
+        int frame = 0;
+        //! The lit share of the whole target. The footprint the oracle masks
+        //! give a perspective frame arrives with the hole columns.
+        double litFraction = 0.0;
+        //! The lit fraction's change from the frame recorded before, across
+        //! poses too
+        double litStep = 0.0;
+        int residentNodes = 0;
+        qint64 gpuBytes = 0;
+        qint64 selectedPoints = 0;
+        qint64 selectedBytes = 0;
+        double sseInflation = 1.0;
+        bool pointCapped = false;
+        //! The frame renderer still had streaming work, or a governor settling
+        bool pending = false;
+        int finestSelectedLevel = 0;
+        int finestDrawnLevel = 0;
+    };
+
+    //! Frames until the frame renderer reports nothing pending and the lit
+    //! count matches the frame before, or the timeout runs out. The frame the
+    //! wait ends on is the settled one, so a caller records it as it stands.
+    void renderUntilSettled(PointCloudFixture& fixture)
+    {
+        QElapsedTimer timer;
+        timer.start();
+        fixture.renderFrame();
+        qsizetype previousLit = fixture.litPixels().size();
+        for (;;) {
+            QThread::msleep(kFramePauseMs);
+            fixture.renderFrame();
+            const qsizetype lit = fixture.litPixels().size();
+            const bool settled = !fixture.frameRenderer()->hasPendingStreamingWork()
+                                 && lit == previousLit;
+            if (settled || timer.elapsed() >= kWaitTimeoutMs) {
+                return;
+            }
+            previousLit = lit;
+        }
+    }
+
+    //! Walks @a fixture along @a path under @a config, one evalCsv line on
+    //! @a out per recorded frame: Quiet records each pose once it has settled,
+    //! Frames records step.framesPerPose bare frames at each. The hole columns
+    //! are in the header and empty until the oracle masks exist.
+    QVector<EvalRecord> sweepPath(PointCloudFixture& fixture, const EvalPath& path,
+                                  const EvalConfig& config, const PathStep& step,
+                                  std::ostream& out = std::cout)
+    {
+        REQUIRE_FALSE(path.poses.isEmpty());
+        REQUIRE(step.framesPerPose > 0);
+        REQUIRE(fixture.targetSize() == config.targetSize);
+
+        fixture.setReadbackEnabled(true);
+        fixture.setBudgets(config.budgets);
+
+        if (step.settleBeforeFirstPose) {
+            const Pose& first = path.poses.first();
+            fixture.setPose(first.view, first.projection);
+            renderUntilSettled(fixture);
+        }
+
+        writeCsvLine(QStringLiteral("evalCsv,path,config,pose,frame,label,litFraction,litStep,"
+                                    "residentNodes,gpuBytes,selectedPoints,selectedBytes,"
+                                    "sseInflation,pointCapped,pending,finestSelected,"
+                                    "finestDrawn,holeFraction,holeCount,maxHoleSide"),
+                     out);
+
+        const QSize target = fixture.targetSize();
+        const double targetPixels = double(target.width()) * double(target.height());
+
+        QVector<EvalRecord> records;
+        const auto recordFrame = [&](const Pose& pose, int frame) {
+            EvalRecord record;
+            record.pose = pose.index;
+            record.frame = frame;
+            record.litFraction = double(fixture.litPixels().size()) / targetPixels;
+            record.litStep = records.isEmpty()
+                                 ? 0.0
+                                 : std::abs(record.litFraction - records.constLast().litFraction);
+            record.residentNodes = Access::residentCount(fixture.backend());
+            record.gpuBytes = fixture.gpuBytes();
+            record.selectedPoints = Access::selectedPoints(fixture.backend());
+            record.selectedBytes = Access::selectedBytes(fixture.backend());
+            record.sseInflation = Access::sseInflation(fixture.backend());
+            record.pointCapped = Access::pointCapped(fixture.backend());
+            record.pending = fixture.frameRenderer()->hasPendingStreamingWork();
+            record.finestSelectedLevel = finestSelectedLevel(fixture);
+            record.finestDrawnLevel = finestDrawnLevel(fixture);
+
+            //The last three fields are the hole columns
+            writeCsvLine(QStringLiteral("evalCsv,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,"
+                                        "%15,%16,,,")
+                             .arg(path.name, config.name)
+                             .arg(record.pose)
+                             .arg(record.frame)
+                             .arg(pose.label)
+                             .arg(record.litFraction, 0, 'f', 5)
+                             .arg(record.litStep, 0, 'f', 5)
+                             .arg(record.residentNodes)
+                             .arg(record.gpuBytes)
+                             .arg(record.selectedPoints)
+                             .arg(record.selectedBytes)
+                             .arg(record.sseInflation, 0, 'f', 4)
+                             .arg(record.pointCapped ? 1 : 0)
+                             .arg(record.pending ? 1 : 0)
+                             .arg(record.finestSelectedLevel)
+                             .arg(record.finestDrawnLevel),
+                         out);
+            records.append(record);
+            return record;
+        };
+
+        for (const Pose& pose : path.poses) {
+            fixture.setPose(pose.view, pose.projection);
+
+            if (step.policy == StepPolicy::Quiet) {
+                renderUntilSettled(fixture);
+                recordFrame(pose, 0);
+            } else {
+                for (int frame = 0; frame < step.framesPerPose; frame++) {
+                    fixture.renderFrame();
+                    const EvalRecord record = recordFrame(pose, frame);
+                    if (step.leavePoseWhenQuiet && !record.pending) {
+                        break;
+                    }
+                }
+            }
+        }
+        return records;
+    }
+
+    //! The lines of @a output that start with @a prefix
+    QStringList linesWithPrefix(const std::ostringstream& output, const QString& prefix)
+    {
+        QStringList matching;
+        const QStringList all = QString::fromStdString(output.str())
+                                    .split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        for (const QString& line : all) {
+            if (line.startsWith(prefix)) {
+                matching.append(line);
+            }
+        }
+        return matching;
+    }
+
+    //! The eye of @a pose, in world coordinates
+    QVector3D eyeOf(const Pose& pose)
+    {
+        return pose.view.inverted().map(QVector3D());
+    }
+
+    //! The direction @a pose looks along, in world coordinates
+    QVector3D forwardOf(const Pose& pose)
+    {
+        constexpr QVector3D kViewForward(0.0f, 0.0f, -1.0f);
+        return pose.view.inverted().mapVector(kViewForward).normalized();
+    }
+
+    //! Meters a generated eye may sit off where its parameters put it: float
+    //! round-off through a view matrix and its inverse a few kilometers out
+    constexpr float kPoseToleranceMeters = 0.01f;
+    constexpr double kPoseToleranceDegrees = 0.01;
+
+    //! How far above and below the boundary height the cut is checked: well
+    //! clear of the bisection's tolerance, and far inside the factor of two
+    //! that separates neighboring boundaries
+    constexpr double kBoundaryProbeFraction = 0.02;
+
+    //! Poses the sweepPath cases walk: the first few of the zoomed-in sub-path,
+    //! close enough to the plane that the cut streams at every one of them
+    constexpr int kSweptPoseCount = 4;
+    constexpr int kSweptFramesPerPose = 3;
+
+    //! Frames a pose is held for in the governor case, enough for the
+    //! inflation to step more than once
+    constexpr int kGovernorFramesPerPose = 6;
+
+    //! C-tight's point budget scaled to the 410 k point plane. Its root alone
+    //! holds a 128 x 128 sample of the plane, about 16 k points, and the cut
+    //! at the boundary height asks for several times this, so the cap binds
+    //! and the governor has to inflate.
+    constexpr qint64 kSyntheticTightPointBudget = 24000;
+
+    //! Frames a tile pose is recorded for: the plan's two per pose for a
+    //! candidate on P2
+    constexpr int kTileFramesPerPose = 2;
+
+    //! The plane octree's own zoomed-in sub-path, at its deepest boundary
+    EvalPath planeBoundaryPath(QRhi* rhi, QSize target)
+    {
+        const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+        return levelBoundaryPath(manifest, target, rhi->clipSpaceCorrMatrix(),
+                                 deepestLevel(manifest));
+    }
+}
+
+TEST_CASE("The oblique orbit circles twice at its height and pitch",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const QVector3D center = pathCenter(manifest);
+    const EvalPath path = orbitPath(manifest, kHalfHdTargetSize);
+
+    CHECK(path.name == QStringLiteral("P2"));
+    REQUIRE(path.poses.size() == kOrbitPoseCount);
+    CHECK(kOrbitPoseCount == 144);
+
+    for (int i = 0; i < path.poses.size(); i++) {
+        const Pose& pose = path.poses.at(i);
+        const QVector3D eye = eyeOf(pose);
+        const QVector3D forward = forwardOf(pose);
+        const double pitchDegrees = qRadiansToDegrees(std::asin(double(forward.z())));
+        const double headingDegrees =
+            qRadiansToDegrees(std::atan2(double(eye.y() - center.y()),
+                                         double(eye.x() - center.x())));
+        const double expectedHeading =
+            std::remainder(double(i * kOrbitHeadingStepDegrees), double(kDegreesPerRevolution));
+
+        INFO("pose " << i << ": eye height " << eye.z() - center.z() << ", pitch "
+             << pitchDegrees << ", heading " << headingDegrees);
+        CHECK(pose.index == i);
+        CHECK(std::abs(eye.z() - center.z() - kOrbitHeightMeters) <= kPoseToleranceMeters);
+        CHECK(std::abs(pitchDegrees + kOrbitPitchDownDegrees) <= kPoseToleranceDegrees);
+        CHECK(std::abs(std::remainder(headingDegrees - expectedHeading,
+                                      double(kDegreesPerRevolution)))
+              <= kPoseToleranceDegrees);
+    }
+
+    //Two revolutions: the second lap retraces the first
+    const int lap = kOrbitPoseCount / kOrbitRevolutions;
+    CHECK((eyeOf(path.poses.at(lap)) - eyeOf(path.poses.at(0))).length() <= kPoseToleranceMeters);
+}
+
+TEST_CASE("The fly-in descends from its start to its end aimed at one ground point",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const QVector3D ground = pathCenter(manifest);
+    const EvalPath path = flyInPath(manifest, kHalfHdTargetSize);
+
+    CHECK(path.name == QStringLiteral("P3"));
+    REQUIRE(path.poses.size() == kFlyInPoseCount);
+
+    const auto rangeOf = [&](const QVector3D& eye) {
+        return QVector3D(eye.x() - ground.x(), eye.y() - ground.y(), 0.0f).length();
+    };
+
+    const QVector3D first = eyeOf(path.poses.constFirst());
+    const QVector3D last = eyeOf(path.poses.constLast());
+    CHECK(std::abs(rangeOf(first) - kFlyInStartRangeMeters) <= kPoseToleranceMeters);
+    CHECK(std::abs(first.z() - ground.z() - kFlyInStartAltitudeMeters) <= kPoseToleranceMeters);
+    CHECK(std::abs(rangeOf(last) - kFlyInEndRangeMeters) <= kPoseToleranceMeters);
+    CHECK(std::abs(last.z() - ground.z() - kFlyInEndAltitudeMeters) <= kPoseToleranceMeters);
+
+    float previousDistance = std::numeric_limits<float>::max();
+    for (const Pose& pose : path.poses) {
+        //The ground point sits on the view axis, in front of the eye
+        const QVector3D inView = pose.view.map(ground);
+        const float distance = (eyeOf(pose) - ground).length();
+        INFO("pose " << pose.index << ": ground in view at " << inView.x() << ", "
+             << inView.y() << ", " << inView.z());
+        CHECK(std::abs(inView.x()) <= kPoseToleranceMeters);
+        CHECK(std::abs(inView.y()) <= kPoseToleranceMeters);
+        CHECK(inView.z() < 0.0f);
+        CHECK(distance < previousDistance);
+        previousDistance = distance;
+    }
+}
+
+TEST_CASE("A cold start holds one pose and stops at quiet",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const EvalPath orbit = orbitPath(manifest, kHalfHdTargetSize);
+    const Pose& chosen = orbit.poses.at(kSweptPoseCount);
+
+    const PlannedPath planned = coldStartPath(chosen);
+    CHECK(planned.path.name == QStringLiteral("P4"));
+    REQUIRE(planned.path.poses.size() == 1);
+    CHECK(planned.path.poses.first().view == chosen.view);
+    CHECK(planned.path.poses.first().projection == chosen.projection);
+    CHECK(planned.path.poses.first().index == 0);
+    CHECK(planned.step.policy == StepPolicy::Frames);
+    CHECK(planned.step.framesPerPose == kColdStartFrameCount);
+    CHECK_FALSE(planned.step.settleBeforeFirstPose);
+    CHECK(planned.step.leavePoseWhenQuiet);
+
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    const QVector<EvalRecord> records =
+        sweepPath(fixture, planned.path, candidateConfig(Candidate::Default), planned.step);
+
+    //From an empty residency the first frame has the root to load, and the
+    //hold ends on the first frame with nothing left
+    REQUIRE(records.size() > 1);
+    CHECK(records.size() < kColdStartFrameCount);
+    CHECK(records.constFirst().pending);
+    CHECK_FALSE(records.constLast().pending);
+    for (int i = 0; i < records.size(); i++) {
+        CHECK(records.at(i).pose == 0);
+        CHECK(records.at(i).frame == i);
+    }
+}
+
+TEST_CASE("The zoomed-in sub-path sits at a level boundary of the octree",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const int level = deepestLevel(manifest);
+    REQUIRE(level > kRootLevel);
+
+    const float height = levelBoundaryHeight(manifest, kHalfHdTargetSize,
+                                             rhi->clipSpaceCorrMatrix(), level);
+    const EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    REQUIRE(path.poses.size() == kBoundaryPoseCount);
+
+    const QVector3D center = pathCenter(manifest);
+    for (const Pose& pose : path.poses) {
+        CHECK(std::abs(eyeOf(pose).z() - center.z() - height) <= kPoseToleranceMeters);
+        const double pitchDegrees = qRadiansToDegrees(std::asin(double(forwardOf(pose).z())));
+        CHECK(std::abs(pitchDegrees + kOrbitPitchDownDegrees) <= kPoseToleranceDegrees);
+    }
+    //A quarter turn, first pose to last
+    const QVector3D firstOut = eyeOf(path.poses.constFirst()) - center;
+    const QVector3D lastOut = eyeOf(path.poses.constLast()) - center;
+    CHECK(std::abs(QVector3D::dotProduct(QVector3D(firstOut.x(), firstOut.y(), 0.0f),
+                                         QVector3D(lastOut.x(), lastOut.y(), 0.0f)))
+          <= kPoseToleranceMeters * firstOut.length());
+
+    //The renderer's own cut agrees: a little above the height it stops a
+    //level short, a little below it reaches the level
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    const QMatrix4x4 projection = pathProjection(kHalfHdTargetSize);
+    const auto finestAt = [&](double probeHeight) {
+        const Pose pose = orbitPose(center, float(probeHeight), 0.0f, projection, QString(), 0);
+        fixture.setPose(pose.view, pose.projection);
+        fixture.renderFrame();
+        return finestSelectedLevel(fixture);
+    };
+
+    const int above = finestAt(height * (1.0 + kBoundaryProbeFraction));
+    const int below = finestAt(height * (1.0 - kBoundaryProbeFraction));
+    INFO("boundary height " << height << " m for level " << level << ": finest level "
+         << above << " above, " << below << " below");
+    CHECK(above == level - 1);
+    CHECK(below == level);
+}
+
+TEST_CASE("sweepPath writes one evalCsv line per frame under the Frames policy",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    path.poses.resize(kSweptPoseCount);
+
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kSweptFramesPerPose;
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+    const QVector<EvalRecord> records
+        = sweepPath(fixture, path, candidateConfig(Candidate::Default), step, output);
+    const QStringList lines = linesWithPrefix(output, QStringLiteral("evalCsv,"));
+
+    constexpr int kHeaderLines = 1;
+    const int expectedFrames = kSweptPoseCount * kSweptFramesPerPose;
+    REQUIRE(records.size() == expectedFrames);
+    REQUIRE(lines.size() == kHeaderLines + expectedFrames);
+    CHECK(lines.constFirst().startsWith(QStringLiteral("evalCsv,path,config,pose,frame,")));
+
+    constexpr int kPoseField = 3;
+    constexpr int kFrameField = 4;
+    const int headerFields = int(lines.constFirst().split(QLatin1Char(',')).size());
+    for (int i = 0; i < expectedFrames; i++) {
+        const QStringList fields = lines.at(kHeaderLines + i).split(QLatin1Char(','));
+        INFO(lines.at(kHeaderLines + i).toStdString());
+        CHECK(fields.size() == headerFields);
+        CHECK(fields.at(1) == path.name);
+        CHECK(fields.at(2) == QStringLiteral("C-default"));
+        CHECK(fields.at(kPoseField).toInt() == i / kSweptFramesPerPose);
+        CHECK(fields.at(kFrameField).toInt() == i % kSweptFramesPerPose);
+        CHECK(records.at(i).pose == i / kSweptFramesPerPose);
+        CHECK(records.at(i).frame == i % kSweptFramesPerPose);
+    }
+
+    //Something drew, and what the cut held is on the ledger
+    CHECK(records.constLast().litFraction > 0.0);
+    CHECK(records.constLast().residentNodes > 0);
+    CHECK(records.constLast().gpuBytes > 0);
+    CHECK(records.constLast().selectedPoints > 0);
+}
+
+TEST_CASE("sweepPath under the Quiet policy records each pose once nothing is pending",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    path.poses.resize(kSweptPoseCount);
+
+    PathStep step;
+    step.policy = StepPolicy::Quiet;
+    //From cold, so the first pose has its whole cut to stream before it settles
+    step.settleBeforeFirstPose = false;
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    const QVector<EvalRecord> records =
+        sweepPath(fixture, path, candidateConfig(Candidate::Default), step);
+
+    REQUIRE(records.size() == kSweptPoseCount);
+    for (int i = 0; i < records.size(); i++) {
+        INFO("pose " << i);
+        CHECK(records.at(i).pose == i);
+        CHECK(records.at(i).frame == 0);
+        CHECK_FALSE(records.at(i).pending);
+        CHECK(records.at(i).finestDrawnLevel == records.at(i).finestSelectedLevel);
+    }
+
+    //Settled means settled: another frame at the last pose draws the same
+    //pixels and asks for nothing
+    const qsizetype settledLit = fixture.litPixels().size();
+    fixture.renderFrame();
+    CHECK(fixture.litPixels().size() == settledLit);
+    CHECK_FALSE(fixture.frameRenderer()->hasPendingStreamingWork());
+}
+
+TEST_CASE("C-tight's point budget inflates the threshold where C-default leaves it at 1",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    path.poses.resize(kSweptPoseCount);
+
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kGovernorFramesPerPose;
+    step.settleBeforeFirstPose = false;
+
+    const auto widestInflation = [](const QVector<EvalRecord>& records) {
+        double widest = 0.0;
+        for (const EvalRecord& record : records) {
+            widest = std::max(widest, record.sseInflation);
+        }
+        return widest;
+    };
+
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    PointCloudFixture defaultFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    const QVector<EvalRecord> defaultRecords = sweepPath(defaultFixture, path, defaults, step);
+
+    EvalConfig tight = candidateConfig(Candidate::Tight);
+    CHECK(tight.budgets.pointBudget == kTightPointBudgetMillions * cw::budgets::kPointsPerMillion);
+    tight.budgets.pointBudget = kSyntheticTightPointBudget;
+    PointCloudFixture tightFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    const QVector<EvalRecord> tightRecords = sweepPath(tightFixture, path, tight, step);
+
+    const auto capped = std::count_if(tightRecords.cbegin(), tightRecords.cend(),
+                                      [](const EvalRecord& record) { return record.pointCapped; });
+    INFO("C-default widest inflation " << widestInflation(defaultRecords)
+         << ", C-tight widest inflation " << widestInflation(tightRecords)
+         << " with " << capped << " capped frames");
+    CHECK(widestInflation(defaultRecords) == 1.0);
+    for (const EvalRecord& record : defaultRecords) {
+        CHECK_FALSE(record.pointCapped);
+    }
+    CHECK(widestInflation(tightRecords) > 1.0);
+}
+
+TEST_CASE("The candidate table holds section 4.3's budgets",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    using namespace cw::budgets;
+
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalConfig starved = candidateConfig(Candidate::Starved);
+    const EvalConfig latent = candidateConfig(Candidate::Latent);
+    const EvalConfig tight = candidateConfig(Candidate::Tight);
+
+    CHECK(defaults.budgets.gpuBudgetBytes == kDefaultGpuBudgetBytes);
+    CHECK(defaults.budgets.pointBudget == kDefaultPointBudgetPoints);
+    CHECK(defaults.budgets.uploadBudgetBytesPerFrame == kDefaultUploadBudgetBytesPerFrame);
+    CHECK(defaults.targetSize == kHalfHdTargetSize);
+
+    CHECK(starved.budgets.gpuBudgetBytes == kStarvedGpuBudgetMb * kBytesPerMegabyte);
+    CHECK(starved.budgets.pointBudget == kStarvedPointBudgetMillions * kPointsPerMillion);
+    CHECK(starved.budgets.uploadBudgetBytesPerFrame
+          == kStarvedUploadBudgetMbPerFrame * kBytesPerMegabyte);
+    CHECK(starved.targetSize == kFullHdTargetSize);
+
+    CHECK(latent.budgets.gpuBudgetBytes == kDefaultGpuBudgetBytes);
+    CHECK(latent.budgets.pointBudget == kDefaultPointBudgetPoints);
+    CHECK(latent.budgets.uploadBudgetBytesPerFrame == kLatentUploadBudgetBytesPerFrame);
+
+    CHECK(tight.budgets.gpuBudgetBytes == kTightGpuBudgetMb * kBytesPerMegabyte);
+    CHECK(tight.budgets.pointBudget == kTightPointBudgetMillions * kPointsPerMillion);
+    CHECK(tight.budgets.uploadBudgetBytesPerFrame == kDefaultUploadBudgetBytesPerFrame);
+
+    const QStringList names {defaults.name, starved.name, latent.name, tight.name};
+    CHECK(names == QStringList {QStringLiteral("C-default"), QStringLiteral("C-starved"),
+                                QStringLiteral("C-latent"), QStringLiteral("C-tight")});
+}
+
+TEST_CASE("The oblique orbit runs on a tile under the default budgets",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    const EvalConfig config = candidateConfig(Candidate::Default);
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kTileFramesPerPose;
+
+    const int boundaryLevel = std::min(kTileBoundaryLevel, deepestLevel(manifest));
+    const QVector<EvalPath> paths {
+        orbitPath(manifest, config.targetSize),
+        levelBoundaryPath(manifest, config.targetSize, rhi->clipSpaceCorrMatrix(),
+                          boundaryLevel, config.budgets)
+    };
+
+    for (const EvalPath& path : paths) {
+        PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
+        fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
+        fixture.synchronize();
+
+        const QVector<EvalRecord> records = sweepPath(fixture, path, config, step);
+
+        INFO(path.name.toStdString());
+        CHECK(records.size() == path.poses.size() * kTileFramesPerPose);
+        for (const EvalRecord& record : records) {
+            CHECK(record.sseInflation >= 1.0);
+        }
+    }
 }
 
 TEST_CASE("Zooming out until quiet leaves the holes bounded",
