@@ -622,7 +622,8 @@ namespace {
         }
 
         //! One frame in renderLiveFrame's order: updateResources (first frame
-        //! only), streamResources, gatherScene, drawScene. @a options is what an
+        //! only), streamResources, gatherScene, recordPendingStreamingWork,
+        //! drawScene. @a options is what an
         //! offscreen export job would pass — the live frame's defaults otherwise.
         void renderFrame(const cwSceneGatherOptions& options = {})
         {
@@ -669,7 +670,8 @@ namespace {
             }
 
             qint64 remainingUploadBytes = renderData.budgets.uploadBudgetBytesPerFrame;
-            m_backend->streamResources(resourceUpdateData, remainingUploadBytes);
+            bool streamedWorkLeft =
+                m_backend->streamResources(resourceUpdateData, remainingUploadBytes);
 
             if (m_secondBackend) {
                 if (!m_secondInitialized) {
@@ -677,7 +679,9 @@ namespace {
                     m_secondInitialized = true;
                 }
                 m_secondBackend->updateResources(resourceUpdateData);
-                m_secondBackend->streamResources(resourceUpdateData, remainingUploadBytes);
+                streamedWorkLeft =
+                    m_secondBackend->streamResources(resourceUpdateData, remainingUploadBytes)
+                    || streamedWorkLeft;
             }
 
             cwSceneGatherOptions gatherOptions = options;
@@ -694,6 +698,10 @@ namespace {
             std::array<QVector<cwRHIObject::PipelineBatch>,
                        cwRhiFrameRenderer::kPassCount> passBatches;
             frameRenderer()->gatherScene(passBatches, perPassRenderData, gatherOptions);
+
+            if (options.liveFrame) {
+                frameRenderer()->recordPendingStreamingWork(streamedWorkLeft);
+            }
 
             m_drawableCount = 0;
             for (const auto& batches : passBatches) {
@@ -836,8 +844,8 @@ namespace {
         //! True while either cloud still has something in flight
         bool streamingWork() const
         {
-            return Access::hasStreamingWork(*m_backend)
-                   || (m_secondBackend && Access::hasStreamingWork(*m_secondBackend));
+            return m_backend->hasStreamingWork()
+                   || (m_secondBackend && m_secondBackend->hasStreamingWork());
         }
 
         //! The nodes the primary cloud holds right now
@@ -2371,7 +2379,7 @@ TEST_CASE("A closer camera streams the children in under the frame's upload budg
         CHECK(current - previous <= mostPerFrame);
         previous = current;
         QThread::msleep(kFramePauseMs);
-    } while (Access::hasStreamingWork(fixture.backend()) && timer.elapsed() < kWaitTimeoutMs);
+    } while (fixture.backend().hasStreamingWork() && timer.elapsed() < kWaitTimeoutMs);
     fixture.renderFrame();
 
     CHECK(Access::residentCount(fixture.backend()) > 1);
@@ -2414,13 +2422,13 @@ TEST_CASE("Zooming out cancels the nodes the cut dropped", "[PointCloudStreaming
     // and watch that nothing but the root ever lands.
     QElapsedTimer timer;
     timer.start();
-    while (Access::hasStreamingWork(fixture.backend()) && timer.elapsed() < kWaitTimeoutMs) {
+    while (fixture.backend().hasStreamingWork() && timer.elapsed() < kWaitTimeoutMs) {
         QThread::msleep(kFramePauseMs);
         fixture.renderFrame();
         CHECK(Access::residentCount(fixture.backend()) <= 1);
     }
 
-    CHECK_FALSE(Access::hasStreamingWork(fixture.backend()));
+    CHECK_FALSE(fixture.backend().hasStreamingWork());
     CHECK(Access::residentCount(fixture.backend()) <= 1);
 }
 
@@ -2847,6 +2855,171 @@ TEST_CASE("The relaxed cut is probed on probe frames, not every frame",
     CHECK(Access::sseInflation(fixture.backend()) == 1.0);
 }
 
+TEST_CASE("A finer screen-space error leaves the loads its gather asked for as streaming work",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("knob-gather-loads"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = cw::budgets::kMaxScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+    fixture.renderUntilQuiet();
+
+    // Asked through the base, the way cwRhiFrameRenderer asks after gather
+    const cwRHIObject& object = fixture.backend();
+    REQUIRE_FALSE(object.hasStreamingWork());
+    const int coarseResident = Access::residentCount(fixture.backend());
+
+    // The knob moves while the camera rests: the one frame it asks for is
+    // where the finer cut requests its nodes, after streamResources has
+    // already reported nothing pending
+    budgets.screenSpaceErrorPx = cw::budgets::kMinScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+    fixture.renderFrame();
+
+    CHECK(object.hasStreamingWork());
+    CHECK(fixture.frameRenderer()->hasPendingStreamingWork());
+
+    fixture.renderUntilQuiet();
+    CHECK(Access::residentCount(fixture.backend()) > coarseResident);
+}
+
+TEST_CASE("A budget knob keeps the view drawing until the governor settles, and no longer",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("governor-settle"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const cwPointCloudForest& forest = fixture.frameRenderer()->pointCloudForest();
+    const qint64 cutBytes = Access::selectedBytes(fixture.backend());
+    REQUIRE(cutBytes > 0);
+    REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+    REQUIRE_FALSE(forest.isSettling(fixture.budgets()));
+
+    // What cwRhiScene re-arms another frame on
+    const auto needsAnotherFrame = [&fixture]() {
+        return fixture.frameRenderer()->hasPendingStreamingWork();
+    };
+    REQUIRE_FALSE(needsAnotherFrame());
+
+    // Frames the way the live view draws them once the camera rests: the one
+    // the knob asks for, then one more while the last left anything to do.
+    // Counts the frames only the governor asked for.
+    const auto renderUntilSettled = [&]() {
+        int governorOnlyFrames = 0;
+        QElapsedTimer timer;
+        timer.start();
+        fixture.renderFrame();
+        while (needsAnotherFrame() && timer.elapsed() < kWaitTimeoutMs) {
+            if (!fixture.streamingWork()) {
+                governorOnlyFrames++;
+            }
+            QThread::msleep(kFramePauseMs);
+            fixture.renderFrame();
+        }
+        return governorOnlyFrames;
+    };
+
+    // A share the cut cannot hold, and one with room to spare
+    constexpr qint64 kTightShareDivisor = 2;
+    constexpr qint64 kRoomyShareMultiplier = 4;
+    const qint64 outsideBytes = totalGpuBytes() - fixture.gpuBytes();
+    const qint64 tightBudget = outsideBytes + cutBytes / kTightShareDivisor;
+    const qint64 roomyBudget = outsideBytes + kRoomyShareMultiplier * cutBytes;
+
+    // The knob alone, before any frame, already leaves the governor a step to take
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = tightBudget;
+    fixture.setBudgets(budgets);
+    CHECK(forest.isSettling(fixture.budgets()));
+
+    const int inflatingFrames = renderUntilSettled();
+    CHECK_FALSE(needsAnotherFrame());
+
+    // Frames past the one the knob asked for came from the governor alone:
+    // streaming by itself would have left the view short of the probe
+    const double inflated = Access::sseInflation(fixture.backend());
+    CHECK(inflated > 1.0);
+    CHECK(inflatingFrames > 1);
+
+    // Settled means settled: frames past it change nothing
+    const QSet<int> settledNodes = fixture.residentNodes();
+    constexpr int kRestingFrames = 3 * cw::octree::kSseRelaxProbeFrames;
+    for (int i = 0; i < kRestingFrames; i++) {
+        fixture.renderFrame();
+        REQUIRE(Access::sseInflation(fixture.backend()) == inflated);
+        REQUIRE(fixture.residentNodes() == settledNodes);
+        REQUIRE_FALSE(needsAnotherFrame());
+    }
+
+    // Room to spare again. The probe that would step back down measured the
+    // old share, so the knob alone asks for frames until a probe has run.
+    budgets.gpuBudgetBytes = roomyBudget;
+    fixture.setBudgets(budgets);
+    CHECK(forest.isSettling(fixture.budgets()));
+
+    const int relaxingFrames = renderUntilSettled();
+    CHECK_FALSE(needsAnotherFrame());
+    CHECK(relaxingFrames > 0);
+    CHECK(Access::sseInflation(fixture.backend()) == 1.0);
+
+    // A governor switched off goes back to 1 on the next frame and holds there
+    budgets.gpuBudgetBytes = tightBudget;
+    fixture.setBudgets(budgets);
+    renderUntilSettled();
+    REQUIRE(Access::sseInflation(fixture.backend()) > 1.0);
+
+    budgets.inflationGovernor = false;
+    fixture.setBudgets(budgets);
+    CHECK(forest.isSettling(fixture.budgets()));
+    fixture.renderFrame();
+    CHECK(Access::sseInflation(fixture.backend()) == 1.0);
+    CHECK_FALSE(forest.isSettling(fixture.budgets()));
+}
+
+TEST_CASE("Floors the last landing nodes queued ask for the frame that writes them",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("floor-frame"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+
+    // Frames until the last nodes land: nothing waits in the ready queue and
+    // the streamer has nothing left, so whatever the frame still reports is
+    // the floors its gather moved under the nodes it drew for the first time
+    const auto loadsLeft = [&fixture]() {
+        return Access::readyQueueCount(fixture.backend()) > 0
+               || Access::streamerHasWork(fixture.backend());
+    };
+
+    QElapsedTimer timer;
+    timer.start();
+    fixture.renderFrame();
+    while (loadsLeft() && timer.elapsed() < kWaitTimeoutMs) {
+        QThread::msleep(kFramePauseMs);
+        fixture.renderFrame();
+    }
+    REQUIRE_FALSE(loadsLeft());
+    REQUIRE(Access::residentCount(fixture.backend()) > 1);
+
+    CHECK(Access::pendingFloorCount(fixture.backend()) > 0);
+    CHECK(fixture.backend().hasStreamingWork());
+    CHECK(fixture.frameRenderer()->hasPendingStreamingWork());
+
+    // The next frame writes them, and asks for none after it
+    fixture.renderFrame();
+    CHECK(Access::pendingFloorCount(fixture.backend()) == 0);
+    CHECK_FALSE(fixture.backend().hasStreamingWork());
+    CHECK_FALSE(fixture.frameRenderer()->hasPendingStreamingWork());
+}
+
 TEST_CASE("A streamed frame publishes the cut and its residency to the render stats",
           "[PointCloudStreaming]")
 {
@@ -2874,7 +3047,7 @@ TEST_CASE("A streamed frame publishes the cut and its residency to the render st
     QElapsedTimer timer;
     timer.start();
     fixture.renderFrame();
-    while (Access::hasStreamingWork(fixture.backend()) && timer.elapsed() < kWaitTimeoutMs) {
+    while (fixture.backend().hasStreamingWork() && timer.elapsed() < kWaitTimeoutMs) {
         const cwRenderFrameStats::PointCloud streaming = frameStats->pointCloud();
         CHECK(streaming.residentNodes == Access::residentCount(fixture.backend()));
         // Payloads the upload budget held back are still on their way.
@@ -3269,7 +3442,7 @@ TEST_CASE("The CPU ledger holds exactly the resident nodes' pick mirrors",
     fixture.renderUntilQuiet();
 
     REQUIRE(Access::residentCount(fixture.backend()) > 1);
-    REQUIRE_FALSE(Access::hasStreamingWork(fixture.backend()));
+    REQUIRE_FALSE(fixture.backend().hasStreamingWork());
 
     qint64 mirrored = 0;
     qint64 uploaded = 0;
@@ -3399,7 +3572,7 @@ TEST_CASE("Payloads the upload budget holds back stay bounded", "[PointCloudStre
         fixture.renderFrame();
         CHECK(Access::readyQueueBytes(fixture.backend()) <= mostQueued);
         QThread::msleep(kFramePauseMs);
-    } while (Access::hasStreamingWork(fixture.backend()) && timer.elapsed() < kWaitTimeoutMs);
+    } while (fixture.backend().hasStreamingWork() && timer.elapsed() < kWaitTimeoutMs);
 
     CHECK(Access::residentCount(fixture.backend()) > 1);
     CHECK(Access::readyQueueBytes(fixture.backend()) == 0);
@@ -4837,6 +5010,80 @@ TEST_CASE("Eviction hold keeps every resident node over the GPU budget",
     fixture.renderFrame();
 
     CHECK(Access::residentCount(fixture.backend()) < resident);
+}
+
+TEST_CASE("Eviction hold with a full slot pool leaves the waiting payloads to the hold's release",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    // Two windows a passage apart, as in the cold queue test: the far one wants
+    // nodes the near one never drew.
+    const auto stretchOffset = [](const PointCloudFixture& cloud, double along) {
+        return QVector3D(float(along * kTubeLength),
+                         float(kTubeBend * along * along),
+                         0.0f) - cloud.center();
+    };
+
+    int nearCut = 0;
+    {
+        PointCloudFixture probe(rhi.get(), QStringLiteral("hold-slot-probe"));
+        probe.setOrthoHeight(kChurnOrthoHeight);
+        probe.setViewOffset(stretchOffset(probe, kChurnNearAlong));
+        probe.renderUntilQuiet();
+        nearCut = Access::residentCount(probe.backend());
+    }
+    REQUIRE(nearCut > 1);
+
+    // A pool the near window fills exactly, held from the first frame
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("hold-slot-wait"));
+    Access::setMaxResidentNodes(fixture.mutableBackend(), nearCut);
+    fixture.setOrthoHeight(kChurnOrthoHeight);
+
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.evictionHold = true;
+    fixture.setBudgets(budgets);
+
+    fixture.setViewOffset(stretchOffset(fixture, kChurnNearAlong));
+    fixture.renderUntilQuiet();
+    REQUIRE(Access::residentCount(fixture.backend()) == nearCut);
+    REQUIRE(Access::freeSlotCount(fixture.backend()) == 0);
+
+    // The far window's payloads arrive with no slot to land in, and the hold
+    // keeps the near window's nodes from giving one up
+    fixture.setViewOffset(stretchOffset(fixture, kChurnFarAlong));
+    QElapsedTimer timer;
+    timer.start();
+    fixture.renderFrame();
+    while (fixture.frameRenderer()->hasPendingStreamingWork()
+           && timer.elapsed() < kWaitTimeoutMs) {
+        QThread::msleep(kFramePauseMs);
+        fixture.renderFrame();
+    }
+
+    const QVector<int> waiting = Access::readyQueueNodes(fixture.backend());
+    REQUIRE_FALSE(waiting.isEmpty());
+    CHECK(Access::residentCount(fixture.backend()) == nearCut);
+    CHECK_FALSE(fixture.backend().hasStreamingWork());
+    CHECK_FALSE(fixture.frameRenderer()->hasPendingStreamingWork());
+
+    // The camera at rest: the frames a repaint draws anyway change nothing and
+    // ask for none of their own
+    constexpr int kRestingFrames = 3;
+    for (int i = 0; i < kRestingFrames; i++) {
+        QThread::msleep(kFramePauseMs);
+        fixture.renderFrame();
+        REQUIRE(Access::readyQueueNodes(fixture.backend()) == waiting);
+        REQUIRE_FALSE(fixture.frameRenderer()->hasPendingStreamingWork());
+    }
+
+    // Let go, and the frame the release asks for lands a waiting payload in a
+    // slot the near window gives up
+    budgets.evictionHold = false;
+    fixture.setBudgets(budgets);
+    fixture.renderFrame();
+
+    CHECK(Access::nodeState(fixture.backend(), waiting.first()) == NodeState::Resident);
 }
 
 namespace {

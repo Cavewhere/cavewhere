@@ -18,6 +18,7 @@
 #include "cwEDLSettings.h"
 #include "cwOffscreenRenderParameters.h"
 #include "cwOffscreenRenderJob.h"
+#include "cwRenderingSettings.h"
 
 
 //Qt includes
@@ -43,6 +44,16 @@ cwScene::cwScene(QObject *parent) :
     // An EDL tuning change marks the scene dirty and schedules a repaint;
     // cwRhiScene::synchroize() then pulls the new values across to the effect.
     connect(m_edl, &cwEDLSettings::changed, this, &cwScene::update);
+
+    // The budget knobs reach every streamed object at the sync barrier
+    // (cwRhiScene::synchroize), so a change needs a frame to get there. The
+    // frames after it come from the streaming work and the governor's settle,
+    // which cwRhiFrameRenderer re-arms until both are done. The settings
+    // singleton has to exist first: cwRootData initializes it, through
+    // cwSettings::initialize(), before it builds the scene manager.
+    if (auto* settings = cwRenderingSettings::instance()) {
+        connect(settings, &cwRenderingSettings::budgetsChanged, this, &cwScene::update);
+    }
 }
 
 cwScene::~cwScene()

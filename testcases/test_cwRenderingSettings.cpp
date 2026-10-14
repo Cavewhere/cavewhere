@@ -597,3 +597,75 @@ TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[
     settings->setSupportedSampleCounts({1, 2, 4, 8});
     settings->setSampleCount(4);
 }
+
+TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChanged",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr int kCappedLevel = 3;
+    constexpr int kIsolatedLevel = 2;
+    constexpr double kFixedPointSizePx = 5.0;
+    constexpr double kMaxPointSizePx = 12.0;
+
+    // budgetsChanged is what asks the scene for a frame when one of these
+    // moves, so a knob missing from it would wait for the camera to move
+    struct Knob {
+        const char* name;
+        std::function<void()> change;
+        bool rideBudgets;
+    };
+
+    const QVector<Knob> knobs = {
+        {"gpuMemoryBudgetMb", [&] { settings->setGpuMemoryBudgetMb(cw::budgets::kMinGpuBudgetMb); }, true},
+        {"cpuCacheBudgetMb", [&] { settings->setCpuCacheBudgetMb(cw::budgets::kMinCpuBudgetMb); }, true},
+        {"uploadBudgetMbPerFrame",
+         [&] { settings->setUploadBudgetMbPerFrame(cw::budgets::kMinUploadBudgetMbPerFrame); }, true},
+        {"screenSpaceErrorPx",
+         [&] { settings->setScreenSpaceErrorPx(cw::budgets::kMaxScreenSpaceErrorPx); }, true},
+        {"pointBudgetMillions",
+         [&] { settings->setPointBudgetMillions(cw::budgets::kMinPointBudgetMillions); }, true},
+        {"freezeCut", [&] { settings->setFreezeCut(true); }, true},
+        {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); }, true},
+        {"minLevel", [&] { settings->setMinLevel(kIsolatedLevel); }, true},
+        {"inflationGovernor", [&] { settings->setInflationGovernor(false); }, true},
+        {"evictionHold", [&] { settings->setEvictionHold(true); }, true},
+        {"thinningMode",
+         [&] { settings->setThinningMode(int(cw::pointcloud::ThinningMode::Discrete)); }, false},
+        {"sizeMode", [&] { settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels)); }, false},
+        {"floorMode", [&] { settings->setFloorMode(int(cw::pointcloud::FloorMode::Off)); }, false},
+        {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); }, false},
+        {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); }, false},
+        {"debugView",
+         [&] { settings->setDebugView(int(cw::pointcloud::DebugView::ResidencyAge)); }, false},
+        {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); }, false},
+    };
+
+    for (const Knob& knob : knobs) {
+        INFO(knob.name);
+        settings->resetToDefaults();
+
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+
+        knob.change();
+
+        // Each knob rides exactly one of the two ways to the render thread
+        if (knob.rideBudgets) {
+            CHECK(budgetsSpy.count() == 1);
+            CHECK(shadingSpy.count() == 0);
+        } else {
+            CHECK(budgetsSpy.count() == 0);
+            CHECK(shadingSpy.count() == 1);
+        }
+
+        // Setting the value it already holds announces nothing
+        knob.change();
+        CHECK(budgetsSpy.count() + shadingSpy.count() == 1);
+    }
+
+    settings->resetToDefaults();
+}

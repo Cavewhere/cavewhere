@@ -19,6 +19,7 @@
 
 //Std includes
 #include <functional>
+#include <optional>
 
 class cwPointOctreeManifest;
 struct cwRenderBudgets;
@@ -79,6 +80,15 @@ public:
     //! Bytes of the last probed cut, -1 when the probe has not run
     qint64 desiredBytesRelaxed() const { return m_desiredBytesRelaxed; }
 
+    /**
+     * True while the governor has steps left to take under @a budgets: the
+     * next advance() would move the inflation, or the view is inflated and no
+     * probe has yet measured the cut it holds now against what @a budgets
+     * leave the clouds. Asked after select(), so the frame renderer keeps
+     * drawing frames until the cut stops moving.
+     */
+    bool isSettling(const cwRenderBudgets& budgets) const;
+
 private:
     //! One cloud's tree and the slice of the last cut that belongs to it
     struct Tree {
@@ -87,8 +97,23 @@ private:
         cw::octree::Selection selection;
     };
 
+    //! What a probe measured its relaxations from
+    struct Probe {
+        cw::octree::ForestInput input;
+        qint64 availableBytes = 0;
+    };
+
     //! The cut one step finer, so nextSseInflation() has evidence to step down on
     void probeRelaxedCut();
+
+    //! The budget left to the clouds once everything else on the GPU is paid for
+    static qint64 availableBytesFor(const cwRenderBudgets& budgets);
+
+    //! What nextSseInflation() rules on, for the last cut against @a availableBytes
+    cw::octree::InflationInput inflationInput(qint64 availableBytes) const;
+
+    //! The last probe measured the cut of the last select() against @a availableBytes
+    bool probedLastCut(qint64 availableBytes) const;
 
     bool anyNodeSelected() const;
 
@@ -113,6 +138,8 @@ private:
     //frame's own, which is gone by the time the probe runs
     cw::octree::ForestInput m_lastInput;
     cwFrustum m_lastFrustum;
+
+    std::optional<Probe> m_lastProbe;
 };
 
 #endif // CWPOINTCLOUDFOREST_H

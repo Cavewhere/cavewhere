@@ -60,6 +60,12 @@ public:
     void synchronize(const SynchronizeData& data) override;
     void updateResources(const ResourceUpdateData& data) override;
     bool streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes) override;
+
+    // The loads gather() just asked for count too, and so do the floors it
+    // queued, which only the next frame's streamResources() writes. A queue
+    // waiting on the eviction hold for a slot is left for the hold's release.
+    bool hasStreamingWork() const override;
+
     bool residencyReady(const RenderData& jobRenderData) override;
     void releaseStreamedResources() override;
     bool gather(const GatherContext& context, QVector<PipelineBatch>& batches) override;
@@ -431,6 +437,10 @@ private:
     // Loads the budget refused this frame. The streamer already handed them
     // over, so they wait here rather than being asked for again.
     QVector<NodeStreamer::Result> m_readyQueue;
+
+    // The last streamResources() held a ready payload back because the
+    // eviction hold left the slot pool full.
+    bool m_waitingForSlot = false;
 
     // {nodeMin.xyz, nodeSize / kQuantMax} and {floorSpacing, arrival frame,
     // node index, 0} per resident node, one 32 byte slot each, bound per

@@ -23,9 +23,13 @@
 #include "cwPointOctreeManifest.h"
 #include "cwRenderPointCloud.h"
 #include "cwRenderingSettings.h"
+#include "cwRhiScene.h"
 #include "cwScene.h"
 
+#include "CwRhiSceneTestAccess.h"
 #include "LazFixtureHelper.h"
+
+#include <functional>
 
 namespace {
 
@@ -547,4 +551,85 @@ TEST_CASE("scene node fans the rendering settings' shading out to clouds it alre
     settings->resetToDefaults();
     CHECK(firstCloud->shading() == cwPointCloudShading());
     CHECK(secondCloud->shading() == cwPointCloudShading());
+}
+
+TEST_CASE("every point cloud debug panel knob asks the scene for a frame",
+          "[cwLazLayersSceneNode]")
+{
+    cwRenderingSettings::initialize();
+    auto* settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    cwScene scene;
+    cwRhiScene rhiScene;
+    cwKeywordItemModel keywordItems;
+    cwLazLayerModel model;
+
+    cwLazLayersSceneNode node;
+    node.setScene(&scene);
+    node.setKeywordItemModel(&keywordItems);
+    node.setLazLayerModel(&model);
+
+    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
+    cwLazLayer* layer = addLazViaRescan(model, gisLayersDir, QStringLiteral("panel-knobs"));
+    REQUIRE(layer != nullptr);
+    REQUIRE(node.pointCloudForLayer(layer) != nullptr);
+
+    constexpr int kCappedLevel = 3;
+    constexpr int kIsolatedLevel = 2;
+    constexpr double kFixedPointSizePx = 5.0;
+    constexpr double kMaxPointSizePx = 12.0;
+    constexpr float kTunedCoverage = 3.0f;
+
+    // Everything PointCloudDebugPanel.qml edits
+    struct Knob {
+        const char* name;
+        std::function<void()> change;
+    };
+
+    const QVector<Knob> knobs = {
+        {"freezeCut", [&] { settings->setFreezeCut(true); }},
+        {"inflationGovernor", [&] { settings->setInflationGovernor(false); }},
+        {"evictionHold", [&] { settings->setEvictionHold(true); }},
+        {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); }},
+        {"minLevel", [&] { settings->setMinLevel(kIsolatedLevel); }},
+        {"debugView",
+         [&] { settings->setDebugView(int(cw::pointcloud::DebugView::ResidencyAge)); }},
+        {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); }},
+        {"gpuMemoryBudgetMb", [&] { settings->setGpuMemoryBudgetMb(cw::budgets::kMinGpuBudgetMb); }},
+        {"cpuCacheBudgetMb", [&] { settings->setCpuCacheBudgetMb(cw::budgets::kMinCpuBudgetMb); }},
+        {"uploadBudgetMbPerFrame",
+         [&] { settings->setUploadBudgetMbPerFrame(cw::budgets::kMinUploadBudgetMbPerFrame); }},
+        {"pointBudgetMillions",
+         [&] { settings->setPointBudgetMillions(cw::budgets::kMinPointBudgetMillions); }},
+        {"screenSpaceErrorPx",
+         [&] { settings->setScreenSpaceErrorPx(cw::budgets::kMaxScreenSpaceErrorPx); }},
+        {"thinningMode",
+         [&] { settings->setThinningMode(int(cw::pointcloud::ThinningMode::Discrete)); }},
+        {"sizeMode", [&] { settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels)); }},
+        {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); }},
+        {"floorMode", [&] { settings->setFloorMode(int(cw::pointcloud::FloorMode::Off)); }},
+        {"spacingCoverage", [&] { node.setSpacingCoverage(kTunedCoverage); }},
+        {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); }},
+    };
+
+    for (const Knob& knob : knobs) {
+        INFO(knob.name);
+
+        // A render object with an update already queued has its frame asked
+        // for, so each knob starts from a drained scene the way it would
+        // after the frame that drew the last one
+        CwRhiSceneTestAccess::synchroize(rhiScene, &scene);
+
+        QSignalSpy frameSpy(&scene, &cwScene::needsRendering);
+        knob.change();
+        CHECK(frameSpy.count() >= 1);
+    }
+
+    settings->resetToDefaults();
+    node.setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
 }

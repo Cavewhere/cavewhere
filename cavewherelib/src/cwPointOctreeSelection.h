@@ -127,6 +127,8 @@ namespace cw::octree {
     struct CAVEWHERE_LIB_EXPORT ForestTree
     {
         const cwPointOctreeManifest* manifest = nullptr;
+
+        bool operator==(const ForestTree& other) const = default;
     };
 
     /**

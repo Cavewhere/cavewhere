@@ -195,6 +195,25 @@ struct CwRhiPointCloudTestAccess {
         return int(cloud.m_readyQueue.size());
     }
 
+    // The nodes whose payloads wait in the ready queue
+    static QVector<int> readyQueueNodes(const cwRHIPointCloud& cloud) {
+        QVector<int> nodes;
+        for (const auto& result : cloud.m_readyQueue) {
+            nodes.append(int(result.itemId));
+        }
+        return nodes;
+    }
+
+    static bool streamerHasWork(const cwRHIPointCloud& cloud) {
+        return cloud.m_streamer.hasWork();
+    }
+
+    // Nodes whose floor the last gather moved, waiting for the next frame's
+    // streamResources() to write it
+    static int pendingFloorCount(const cwRHIPointCloud& cloud) {
+        return int(cloud.m_pendingFloors.size());
+    }
+
     static bool exportRequested(const cwRHIPointCloud& cloud, int index) {
         if (index < 0 || index >= cloud.m_nodes.size()) {
             return false;
@@ -207,10 +226,6 @@ struct CwRhiPointCloudTestAccess {
     // frame which changed nothing republishes nothing.
     static bool residencyChanged(const cwRHIPointCloud& cloud) {
         return cloud.m_residencyChanged;
-    }
-
-    static bool hasStreamingWork(const cwRHIPointCloud& cloud) {
-        return !cloud.m_readyQueue.isEmpty() || cloud.m_streamer.hasWork();
     }
 
     // The raw GPU-resource identity, so a lifetime test can watch a node's

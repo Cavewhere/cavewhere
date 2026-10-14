@@ -18,6 +18,22 @@
 //The budget's maxLevel goes straight into the selection's
 static_assert(cw::budgets::kUnlimitedLevel == cw::octree::kUnlimitedLevel);
 
+namespace {
+//Every field the cut is selected from. The frustum follows from viewProjection.
+bool selectsSameCut(const cw::octree::ForestInput& a, const cw::octree::ForestInput& b)
+{
+    return a.trees == b.trees
+           && a.viewProjection == b.viewProjection
+           && a.absP11 == b.absP11
+           && a.viewportHeightPx == b.viewportHeightPx
+           && a.screenSpaceErrorPx == b.screenSpaceErrorPx
+           && a.sseInflation == b.sseInflation
+           && a.maxNodes == b.maxNodes
+           && a.maxPoints == b.maxPoints
+           && a.maxLevel == b.maxLevel;
+}
+}
+
 void cwPointCloudForest::setTree(const cwRHIObject* cloud,
                                  const cwPointOctreeManifest* manifest)
 {
@@ -78,6 +94,7 @@ void cwPointCloudForest::forgetLastCut()
     m_lastInput = cw::octree::ForestInput{};
     m_desiredBytesRelaxed = -1;
     m_pointCappedRelaxed = false;
+    m_lastProbe.reset();
 
     for (Tree& tree : m_trees) {
         tree.selection = cw::octree::Selection{};
@@ -110,17 +127,7 @@ void cwPointCloudForest::advance(const cwRenderBudgets& budgets)
         return;
     }
 
-    const auto* ledger = cwRenderMemoryLedger::instance();
-    const qint64 total = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu);
-
-    //What is left for the clouds: everything that is not point cloud geometry
-    //comes off the top by what it holds. The clouds share the rest, which is
-    //why no other cloud's demand comes off it any more.
-    const qint64 cloudGeometryBytes =
-        ledger->bytes(cwRenderMemoryLedger::Category::PointCloudGeometry,
-                      cwRenderMemoryLedger::Residency::Gpu);
-    const qint64 availableBytes =
-        std::max<qint64>(0, budgets.gpuBudgetBytes - (total - cloudGeometryBytes));
+    const qint64 availableBytes = availableBytesFor(budgets);
 
     //No cloud drew, so there is no cut to measure. The governor holds where the
     //last drawn frame left it rather than relaxing on the bytes of a cut nobody
@@ -130,6 +137,56 @@ void cwPointCloudForest::advance(const cwRenderBudgets& budgets)
         return;
     }
 
+    m_sseInflation = cw::octree::nextSseInflation(inflationInput(availableBytes));
+
+    //What the next probe measures its relaxations against
+    m_availableBytes = availableBytes;
+
+    probeRelaxedCut();
+}
+
+bool cwPointCloudForest::isSettling(const cwRenderBudgets& budgets) const
+{
+    //A frozen cut is the one being looked at, so the governor holds with it
+    if (budgets.freezeCut) {
+        return false;
+    }
+
+    //The next advance() puts an ungoverned view back at 1
+    if (!budgets.inflationGovernor) {
+        return m_sseInflation != 1.0;
+    }
+
+    if (!anyNodeSelected()) {
+        return false;
+    }
+
+    const qint64 availableBytes = availableBytesFor(budgets);
+    if (cw::octree::nextSseInflation(inflationInput(availableBytes)) != m_sseInflation) {
+        return true;
+    }
+
+    //An inflated view steps down only on a probe's evidence, so it has settled
+    //once a probe has measured the cut it holds now, under the budget it has now
+    return m_sseInflation > 1.0 && !probedLastCut(availableBytes);
+}
+
+qint64 cwPointCloudForest::availableBytesFor(const cwRenderBudgets& budgets)
+{
+    const auto* ledger = cwRenderMemoryLedger::instance();
+    const qint64 total = ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu);
+
+    //What is left for the clouds: everything that is not point cloud geometry
+    //comes off the top by what it holds. The clouds share the rest, which is
+    //why no other cloud's demand comes off it any more.
+    const qint64 cloudGeometryBytes =
+        ledger->bytes(cwRenderMemoryLedger::Category::PointCloudGeometry,
+                      cwRenderMemoryLedger::Residency::Gpu);
+    return std::max<qint64>(0, budgets.gpuBudgetBytes - (total - cloudGeometryBytes));
+}
+
+cw::octree::InflationInput cwPointCloudForest::inflationInput(qint64 availableBytes) const
+{
     cw::octree::InflationInput inflation;
     inflation.current = m_sseInflation;
     inflation.desiredBytes = m_selected.bytes;
@@ -138,12 +195,14 @@ void cwPointCloudForest::advance(const cwRenderBudgets& budgets)
     inflation.pointCapped = m_selected.pointCapped;
     inflation.pointCappedRelaxed = m_pointCappedRelaxed;
     inflation.relaxedSteps = m_relaxedSteps;
-    m_sseInflation = cw::octree::nextSseInflation(inflation);
+    return inflation;
+}
 
-    //What the next probe measures its relaxations against
-    m_availableBytes = availableBytes;
-
-    probeRelaxedCut();
+bool cwPointCloudForest::probedLastCut(qint64 availableBytes) const
+{
+    return m_lastProbe.has_value()
+           && m_lastProbe->availableBytes == availableBytes
+           && selectsSameCut(m_lastProbe->input, m_lastInput);
 }
 
 void cwPointCloudForest::probeRelaxedCut()
@@ -166,6 +225,11 @@ void cwPointCloudForest::probeRelaxedCut()
     if (m_lastInput.trees.isEmpty()) {
         return;
     }
+
+    //The cut the next select() takes, once nothing else moves: the last one's
+    //camera and knobs at the inflation this probe relaxes from
+    m_lastProbe = Probe{m_lastInput, m_availableBytes};
+    m_lastProbe->input.sseInflation = m_sseInflation;
 
     // The step down is only taken on evidence: the cut one step finer, selected
     // for real rather than estimated, and only on a probe frame because

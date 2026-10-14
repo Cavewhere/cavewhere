@@ -214,6 +214,9 @@ signals:
     void debugViewChanged();
     void showNodeBoxesChanged();
 
+    //! Any one of the budgets() knobs moved
+    void budgetsChanged();
+
     //! Any one of the pointCloudShading() knobs moved
     void pointCloudShadingChanged();
     void supportedSampleCountsChanged();

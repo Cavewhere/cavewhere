@@ -559,6 +559,7 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     }
 
     bool uploadedThisFrame = false;
+    m_waitingForSlot = false;
     QVector<NodeStreamer::Result> deferred;
     for (const NodeStreamer::Result& result : std::as_const(m_readyQueue)) {
         const int index = int(result.itemId);
@@ -571,6 +572,7 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
             // payload waits here, so it is decoded once rather than dropped and
             // asked for again every frame.
             deferred.append(result);
+            m_waitingForSlot = true;
             continue;
         }
 
@@ -641,6 +643,21 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
         m_profile.stream.add(elapsedUs(streamTimer));
         m_profile.streamFrames++;
         maybeFlushProfileBlock();
+    }
+
+    return hasStreamingWork();
+}
+
+bool cwRHIPointCloud::hasStreamingWork() const
+{
+    if (!m_pendingFloors.isEmpty()) {
+        return true;
+    }
+
+    // A queue waiting on the eviction hold for a slot moves only once the hold
+    // is let go, and letting go asks for its own frame through budgetsChanged.
+    if (m_waitingForSlot) {
+        return false;
     }
 
     return !m_readyQueue.isEmpty() || m_streamer.hasWork();
@@ -1104,6 +1121,7 @@ void cwRHIPointCloud::releaseStreamedResources()
     }
     m_requested.clear();
     m_readyQueue.clear();
+    m_waitingForSlot = false;
     m_pendingFloors.clear();
     m_nodeBoxCount = 0;
 

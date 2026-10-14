@@ -218,8 +218,8 @@ public:
     quint64 frameCounter() const { return m_frameCounter; }
 
     // True when the last live frame left streaming work behind — levels waiting
-    // on the next frame's upload budget, or loads still running. cwRhiScene
-    // re-arms another frame while it holds.
+    // on the next frame's upload budget, loads still running, or a point cloud
+    // governor still settling. cwRhiScene re-arms another frame while it holds.
     bool hasPendingStreamingWork() const { return m_hasPendingStreamingWork; }
 
     // The frame's visibility truth: one immutable snapshot of the scene's
@@ -371,6 +371,12 @@ public:
     // / update every render object, gather the scene, and draw it from camera slot 0.
     // Driven by cwRhiScene::render, which sequences the offscreen drain after it.
     void renderLiveFrame(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
+
+    // Settles hasPendingStreamingWork() for the live frame just gathered:
+    // @a streamedWorkLeft is what its streamResources() calls reported, joined
+    // by the loads gatherScene() asked for and a point cloud governor still
+    // settling.
+    void recordPendingStreamingWork(bool streamedWorkLeft);
 
     // Ask every render object to release what it streamed onto the GPU (see
     // cwRHIObject::releaseStreamedResources). Render thread only, outside a frame.

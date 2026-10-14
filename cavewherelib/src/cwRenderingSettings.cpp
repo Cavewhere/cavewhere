@@ -260,6 +260,7 @@ void cwRenderingSettings::setFreezeCut(bool freeze)
 {
     if (setPersisted(m_freezeCut, freeze, freezeCutKey())) {
         emit freezeCutChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }
@@ -268,6 +269,7 @@ void cwRenderingSettings::setMaxLevel(int level)
 {
     if (setPersisted(m_maxLevel, clampMaxLevel(level), maxLevelKey())) {
         emit maxLevelChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
     if (isInvertedLevelPair(m_minLevel, m_maxLevel)) {
@@ -279,6 +281,7 @@ void cwRenderingSettings::setMinLevel(int level)
 {
     if (setPersisted(m_minLevel, clampMinLevel(level), minLevelKey())) {
         emit minLevelChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
     if (isInvertedLevelPair(m_minLevel, m_maxLevel)) {
@@ -290,6 +293,7 @@ void cwRenderingSettings::setInflationGovernor(bool governed)
 {
     if (setPersisted(m_inflationGovernor, governed, inflationGovernorKey())) {
         emit inflationGovernorChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }
@@ -298,6 +302,7 @@ void cwRenderingSettings::setEvictionHold(bool hold)
 {
     if (setPersisted(m_evictionHold, hold, evictionHoldKey())) {
         emit evictionHoldChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }
@@ -374,6 +379,7 @@ void cwRenderingSettings::setGpuMemoryBudgetMb(int megabytes)
 {
     if (setPersisted(m_gpuMemoryBudgetMb, clampGpuMemoryBudgetMb(megabytes), gpuMemoryBudgetMbKey())) {
         emit gpuMemoryBudgetMbChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }
@@ -382,6 +388,7 @@ void cwRenderingSettings::setCpuCacheBudgetMb(int megabytes)
 {
     if (setPersisted(m_cpuCacheBudgetMb, clampCpuCacheBudgetMb(megabytes), cpuCacheBudgetMbKey())) {
         emit cpuCacheBudgetMbChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }
@@ -392,6 +399,7 @@ void cwRenderingSettings::setUploadBudgetMbPerFrame(int megabytes)
                      clampUploadBudgetMbPerFrame(megabytes),
                      uploadBudgetMbPerFrameKey())) {
         emit uploadBudgetMbPerFrameChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }
@@ -400,6 +408,7 @@ void cwRenderingSettings::setScreenSpaceErrorPx(double pixels)
 {
     if (setPersisted(m_screenSpaceErrorPx, clampScreenSpaceErrorPx(pixels), screenSpaceErrorPxKey())) {
         emit screenSpaceErrorPxChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }
@@ -410,6 +419,7 @@ void cwRenderingSettings::setPointBudgetMillions(int millions)
                      clampPointBudgetMillions(millions),
                      pointBudgetMillionsKey())) {
         emit pointBudgetMillionsChanged();
+        emit budgetsChanged();
         emit isAtDefaultsChanged();
     }
 }

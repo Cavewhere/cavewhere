@@ -286,21 +286,17 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     // Streamed uploads ride this frame's batch, sharing one budget across every
     // object so a frame's upload cost is bounded whatever the scene holds.
     qint64 remainingUploadBytes = m_budgets.uploadBudgetBytesPerFrame;
-    m_hasPendingStreamingWork = false;
+    bool streamedWorkLeft = false;
     for(auto object : std::as_const(m_rhiObjects)) {
-        m_hasPendingStreamingWork = object->streamResources(resourceUpdateData, remainingUploadBytes)
-                                    || m_hasPendingStreamingWork;
+        streamedWorkLeft = object->streamResources(resourceUpdateData, remainingUploadBytes)
+                           || streamedWorkLeft;
     }
 
     std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
 
     gatherScene(passBatches, perPassRenderData);
 
-    // Gather is where streamed items ask for the levels this camera wants, so a
-    // load requested there needs a frame of its own to land in.
-    for(auto object : std::as_const(m_rhiObjects)) {
-        m_hasPendingStreamingWork = m_hasPendingStreamingWork || object->hasStreamingWork();
-    }
+    recordPendingStreamingWork(streamedWorkLeft);
 
     const QColor clearColor = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
 
@@ -314,6 +310,21 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
     drawScene(cb, renderer->renderTarget(), edlActive ? &m_edlOffscreen : nullptr,
               passBatches, perPassRenderData, resources, liveFrameContext,
               kLiveCameraOffset, clearColor);
+}
+
+void cwRhiFrameRenderer::recordPendingStreamingWork(bool streamedWorkLeft)
+{
+    // Gather is where streamed items ask for the levels this camera wants, so a
+    // load requested there needs a frame of its own to land in.
+    const bool gatheredWorkLeft =
+        std::any_of(m_rhiObjects.cbegin(), m_rhiObjects.cend(),
+                    [](const cwRHIObject* object) { return object->hasStreamingWork(); });
+
+    // The governor takes one step a frame and steps down only on a probe every
+    // few frames, so a cut it has yet to settle on needs frames of its own.
+    m_hasPendingStreamingWork = streamedWorkLeft
+                                || gatheredWorkLeft
+                                || m_pointCloudForest.isSettling(m_budgets);
 }
 
 void cwRhiFrameRenderer::releaseStreamedResources()
