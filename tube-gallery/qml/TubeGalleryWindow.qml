@@ -1,5 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Controls as QC
+import QtQuick.Dialogs as QD
 import QtQuick.Layouts
 import cavewherelib
 import cw.TubeGallery
@@ -17,6 +18,9 @@ QC.ApplicationWindow {
     property bool failingOnly: false
     property bool includeSweep: false
     property bool showRings: false
+    property list<string> projectFiles: []
+    property real projectSpacing: 1.0
+    property string focusStation: ""
     property string defaultGrabDirectory: ""
 
     readonly property list<string> presetNames: ["plan", "profile", "along-arm", "three-quarter"]
@@ -53,6 +57,11 @@ QC.ApplicationWindow {
     property bool quitAfterGrab: false
     property bool grabFailed: false
 
+    // Projects from the command line still loading, and the first row they
+    // added.
+    property int pendingProjects: 0
+    property int firstProjectRow: -1
+
     // The ring whose line the report shows: the one last hovered, or the one
     // nearest the issue marker last tapped.
     property int inspectedRing: -1
@@ -62,6 +71,19 @@ QC.ApplicationWindow {
     visible: true
     title: qsTr("Passage Tube Gallery")
     color: Theme.background
+
+    menuBar: QC.MenuBar {
+        visible: !rootId.grabAll
+
+        QC.Menu {
+            title: qsTr("File")
+
+            QC.MenuItem {
+                text: qsTr("Open project…")
+                onTriggered: openProjectDialogId.open()
+            }
+        }
+    }
 
     function degrees(radians: real): real {
         return radians * 180.0 / Math.PI
@@ -152,6 +174,24 @@ QC.ApplicationWindow {
     }
 
     function start() {
+        if (projectFiles.length > 0) {
+            pendingProjects = projectFiles.length
+            for (const file of projectFiles) {
+                galleryModelId.openProject(file, projectSpacing)
+            }
+        } else {
+            selectInitialRow()
+        }
+    }
+
+    function projectSettled() {
+        pendingProjects--
+        if (pendingProjects === 0) {
+            selectInitialRow()
+        }
+    }
+
+    function selectInitialRow() {
         if (randomSeed >= 0) {
             galleryModelId.addRandom(randomSeed, randomJunctions, randomWild)
             selectRow(galleryModelId.count - 1)
@@ -166,7 +206,7 @@ QC.ApplicationWindow {
             }
             selectRow(Math.max(row, 0))
         } else {
-            selectRow(0)
+            selectRow(Math.max(firstProjectRow, 0))
         }
 
         if (grabAll) {
@@ -206,8 +246,35 @@ QC.ApplicationWindow {
         scene: sceneId
         ringsVisible: ringsId.checked
         framesVisible: framesId.checked
+        station: stationFieldId.text
 
         onCurrentChanged: rootId.inspectedRing = -1
+        onProjectOpened: (firstRow, rowCount) => {
+            if (rootId.pendingProjects > 0) {
+                if (rootId.firstProjectRow < 0 && rowCount > 0) {
+                    rootId.firstProjectRow = firstRow
+                }
+                rootId.projectSettled()
+            } else if (rowCount > 0) {
+                rootId.selectRow(firstRow)
+            }
+        }
+        onProjectFailed: (message) => {
+            console.warn(message)
+            if (rootId.grabDirectory !== "") {
+                Qt.exit(1)
+            } else if (rootId.pendingProjects > 0) {
+                rootId.projectSettled()
+            }
+        }
+    }
+
+    QD.FileDialog {
+        id: openProjectDialogId
+        title: qsTr("Open project")
+        nameFilters: [qsTr("CaveWhere projects (*.cw *.cwproj)")]
+
+        onAccepted: galleryModelId.openProject(openProjectDialogId.selectedFile.toString(), rootId.projectSpacing)
     }
 
     PassageTubeGalleryFilterModel {
@@ -423,6 +490,13 @@ QC.ApplicationWindow {
                 QC.Button {
                     text: qsTr("3/4")
                     onClicked: rootId.applyPreset("three-quarter")
+                }
+                QC.TextField {
+                    id: stationFieldId
+                    placeholderText: qsTr("Station")
+                    text: rootId.focusStation
+
+                    onEditingFinished: rootId.applyPreset("three-quarter")
                 }
                 QC.CheckBox {
                     id: wireframeId

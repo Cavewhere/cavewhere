@@ -7,22 +7,38 @@
 
 //Our includes
 #include "cwPassageTubeGalleryModel.h"
+#include "cwCave.h"
+#include "cwCavingRegion.h"
+#include "cwError.h"
+#include "cwErrorListModel.h"
+#include "cwGlobals.h"
+#include "cwLinePlotManager.h"
+#include "cwProject.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderPassageTube.h"
+#include "cwSaveLoadPrivate.h"
 #include "cwScene.h"
+#include "cwStation.h"
 
 //Qt includes
+#include <QDir>
+#include <QFileInfo>
 #include <QHash>
 #include <QLineF>
 #include <QMap>
 #include <QSet>
+#include <QTemporaryDir>
 #include <QVector4D>
 #include <QtMath>
+
+//Async includes
+#include <asyncfuture.h>
 
 //Std includes
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <memory>
 #include <optional>
 
 namespace {
@@ -40,11 +56,11 @@ bool isSweep(const Cases::Case& entry)
     return entry.tags.contains(QStringLiteral("sweep"));
 }
 
-QString lrudText(const QStringList& lrud)
+QString lrudText(const cwStation& station)
 {
     QStringList readings;
-    for (const QString& reading : lrud) {
-        readings.append(reading.isEmpty() ? QStringLiteral("-") : reading);
+    for (const cwDistanceReading& reading : {station.left(), station.right(), station.up(), station.down()}) {
+        readings.append(reading.value().isEmpty() ? QStringLiteral("-") : reading.value());
     }
     return readings.join(QLatin1Char(' '));
 }
@@ -55,6 +71,70 @@ QString vectorText(const QVector3D& vector)
         .arg(vector.x(), 0, 'f', 2)
         .arg(vector.y(), 0, 'f', 2)
         .arg(vector.z(), 0, 'f', 2);
+}
+
+QVector3D horizontalDirection(const QVector3D& from, const QVector3D& to)
+{
+    QVector3D horizontal = to - from;
+    horizontal.setZ(0.0f);
+    return horizontal.length() > kMinHorizontalLength ? horizontal.normalized() : kFallbackArmDirection;
+}
+
+// The leg end nearest position, empty when there are no legs.
+QString nearestStation(const Builder::Debug& debug, const QVector3D& position)
+{
+    QString nearest;
+    float nearestDistance = std::numeric_limits<float>::max();
+    const auto consider = [&](const QString& name, const QVector3D& stationPosition) {
+        const float distance = position.distanceToPoint(stationPosition);
+        if (distance < nearestDistance) {
+            nearest = name;
+            nearestDistance = distance;
+        }
+    };
+    for (const Builder::Leg& leg : debug.legs) {
+        consider(leg.from, leg.fromPosition);
+        consider(leg.to, leg.toPosition);
+    }
+    return nearest;
+}
+
+QString issueLine(const Builder::Debug& debug, const cwPassageTubeMeshCheck::Issue& issue, const QString& prefix = QString())
+{
+    const QString station = nearestStation(debug, issue.position);
+    const QString position = vectorText(issue.position);
+    return QStringLiteral("%1%2 at %3: %4")
+        .arg(prefix, cwPassageTubeMeshCheck::typeName(issue.type),
+             station.isEmpty() ? position : station + QLatin1Char(' ') + position, issue.detail);
+}
+
+// The box a station's readings reach around position: left and right in plan,
+// up above and down below.
+QBox3D readingBox(const QVector3D& position, const cwStationLrud& lrud)
+{
+    const float side = static_cast<float>(std::max(lrud.left.value_or(0.0), lrud.right.value_or(0.0)));
+    const float up = static_cast<float>(lrud.up.value_or(0.0));
+    const float down = static_cast<float>(lrud.down.value_or(0.0));
+    return QBox3D(position - QVector3D(side, side, down), position + QVector3D(side, side, up));
+}
+
+// The path of path's copy in directory: a .cwproj brings the directory it
+// sits in along; empty when the copy fails.
+QString copyProject(const QString& path, const QDir& directory)
+{
+    const QFileInfo source(path);
+    if (!source.isFile()) {
+        return QString();
+    }
+    if (source.suffix().compare(QStringLiteral("cwproj"), Qt::CaseInsensitive) == 0) {
+        const QDir copy(directory.filePath(source.dir().dirName()));
+        if (cwSaveLoadPrivate::copyDirectoryRecursively(source.dir(), copy).hasError()) {
+            return QString();
+        }
+        return copy.filePath(source.fileName());
+    }
+    const QString copy = directory.filePath(source.fileName());
+    return QFile::copy(source.absoluteFilePath(), copy) ? copy : QString();
 }
 
 // A chain leg's stations in the order the chain walks them.
@@ -249,8 +329,7 @@ QVector<QVector3D> positionsOf(const QVector<cwPassageTubeMeshCheck::Issue>& iss
 } // namespace
 
 cwPassageTubeGalleryModel::cwPassageTubeGalleryModel(QObject* parent) :
-    QAbstractListModel(parent),
-    m_armDirection(kFallbackArmDirection)
+    QAbstractListModel(parent)
 {
     loadCatalog();
 }
@@ -258,6 +337,19 @@ cwPassageTubeGalleryModel::cwPassageTubeGalleryModel(QObject* parent) :
 cwPassageTubeGalleryModel::~cwPassageTubeGalleryModel()
 {
     deleteRenderObjects();
+
+    //A project's destructor waits for its save queue, so its continuations
+    //find it gone from m_loadingProjects before it dies.
+    const QList<cwProject*> loading = std::exchange(m_loadingProjects, {});
+    qDeleteAll(loading);
+}
+
+cwPassageTubeCases::Survey cwPassageTubeGalleryModel::Row::survey() const
+{
+    if (const auto* entry = std::get_if<Cases::Case>(&source)) {
+        return Cases::toSurvey(*entry);
+    }
+    return std::get<Cases::Survey>(source);
 }
 
 int cwPassageTubeGalleryModel::rowCount(const QModelIndex& parent) const
@@ -278,9 +370,9 @@ QVariant cwPassageTubeGalleryModel::data(const QModelIndex& index, int role) con
     switch (role) {
     case Qt::DisplayRole:
     case NameRole:
-        return row.entry.name;
+        return row.name;
     case TagsRole:
-        return row.entry.tags.join(QStringLiteral(", "));
+        return row.tags.join(QStringLiteral(", "));
     case IssueCountRole:
         ensureIssueCount(row);
         return *row.issueCount;
@@ -413,6 +505,51 @@ void cwPassageTubeGalleryModel::setFramesVisible(bool framesVisible)
     applyRingVisibility();
 }
 
+QString cwPassageTubeGalleryModel::station() const
+{
+    return m_station;
+}
+
+void cwPassageTubeGalleryModel::setStation(const QString& station)
+{
+    if (m_station == station) {
+        return;
+    }
+    m_station = station;
+    emit stationChanged();
+    locateStation();
+    emit currentChanged();
+}
+
+void cwPassageTubeGalleryModel::openProject(const QString& path, double sampleSpacing)
+{
+    const QString localPath = cwGlobals::convertFromURL(path);
+    auto directory = std::make_shared<QTemporaryDir>();
+    const QString copyPath = directory->isValid() ? copyProject(localPath, QDir(directory->path())) : QString();
+    if (copyPath.isEmpty()) {
+        emit projectFailed(QStringLiteral("Could not copy %1 to a temporary directory").arg(localPath));
+        return;
+    }
+
+    const QString label = QFileInfo(localPath).completeBaseName();
+    auto* project = new cwProject(this);
+    m_loadingProjects.append(project);
+
+    //The copy lives until the project that reads it is gone.
+    connect(project, &QObject::destroyed, this, [directory]() { directory->remove(); });
+    connect(project, &cwProject::loaded, this, [this, project, label, sampleSpacing]() {
+        auto* linePlot = new cwLinePlotManager(project);
+        linePlot->setRegion(project->cavingRegion());
+        collectWhenSolved(project, linePlot, label, sampleSpacing);
+    });
+    connect(project->errorModel(), &cwErrorListModel::countChanged, this, [this, project]() {
+        if (cwError::containsFatal(project->errorModel()->toList())) {
+            failProject(project, project->errorModel()->allMessagesAsText());
+        }
+    });
+    project->loadOrConvert(copyPath);
+}
+
 void cwPassageTubeGalleryModel::addRandom(int seed, int junctionCount, bool wild)
 {
     Cases::Case entry;
@@ -428,24 +565,18 @@ void cwPassageTubeGalleryModel::addRandom(int seed, int junctionCount, bool wild
     }
     const auto seedValue = static_cast<unsigned int>(seed);
     entry.trip = wild ? Cases::randomWild(seedValue, junctionCount) : Cases::random(seedValue, junctionCount);
-    m_randomCases.append(entry);
-
-    const int row = static_cast<int>(m_rows.size());
-    beginInsertRows(QModelIndex(), row, row);
-    m_rows.append(Row {entry});
-    endInsertRows();
-    emit countChanged();
+    appendRows({caseRow(entry)});
 }
 
 int cwPassageTubeGalleryModel::indexOf(const QString& name) const
 {
     for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows.at(i).entry.name == name) {
+        if (m_rows.at(i).name == name) {
             return i;
         }
     }
     for (int i = 0; i < m_rows.size(); ++i) {
-        if (m_rows.at(i).entry.name.startsWith(name, Qt::CaseInsensitive)) {
+        if (m_rows.at(i).name.startsWith(name, Qt::CaseInsensitive)) {
             return i;
         }
     }
@@ -474,7 +605,7 @@ QString cwPassageTubeGalleryModel::currentName() const
     if (m_currentIndex < 0) {
         return QString();
     }
-    return m_rows.at(m_currentIndex).entry.name;
+    return m_rows.at(m_currentIndex).name;
 }
 
 QString cwPassageTubeGalleryModel::parameters() const
@@ -483,22 +614,26 @@ QString cwPassageTubeGalleryModel::parameters() const
         return QString();
     }
 
-    const Cases::Case& entry = m_rows.at(m_currentIndex).entry;
+    const Row& row = m_rows.at(m_currentIndex);
     QStringList lines;
-    lines.append(QStringLiteral("tags: %1").arg(entry.tags.join(QStringLiteral(", "))));
-    lines.append(QStringLiteral("sample spacing: %1 m").arg(entry.sampleSpacing));
+    lines.append(QStringLiteral("tags: %1").arg(row.tags.join(QStringLiteral(", "))));
+    lines.append(QStringLiteral("sample spacing: %1 m").arg(row.sampleSpacing));
     lines.append(QStringLiteral("junction: %1").arg(vectorText(m_junction)));
-    const QList<Cases::Trip> trips = entry.trips();
-    for (int trip = 0; trip < trips.size(); ++trip) {
-        if (trips.size() > 1) {
-            lines.append(QStringLiteral("trip %1:").arg(trip));
-        }
-        const QList<QList<Cases::Station>>& chunks = trips.at(trip).chunks;
-        for (int chunk = 0; chunk < chunks.size(); ++chunk) {
-            lines.append(QStringLiteral("chunk %1 (LRUD):").arg(chunk));
-            for (const Cases::Station& station : chunks.at(chunk)) {
-                const QString position = station.position ? vectorText(*station.position) : QStringLiteral("unpositioned");
-                lines.append(QStringLiteral("  %1 %2  %3").arg(station.name, position, lrudText(station.lrud)));
+    const Cases::Survey survey = row.survey();
+    for (const cwCaveData& cave : std::as_const(survey.region.caves)) {
+        const cwStationPositionLookup positions = survey.positionsByCave.value(cave.id);
+        for (int trip = 0; trip < cave.trips.size(); ++trip) {
+            if (cave.trips.size() > 1) {
+                lines.append(QStringLiteral("trip %1:").arg(trip));
+            }
+            const QList<cwSurveyChunkData>& chunks = cave.trips.at(trip).chunks;
+            for (int chunk = 0; chunk < chunks.size(); ++chunk) {
+                lines.append(QStringLiteral("chunk %1 (LRUD):").arg(chunk));
+                for (const cwStation& station : chunks.at(chunk).stations) {
+                    const QString position = positions.hasPosition(station.name()) ? vectorText(positions.position(station.name()))
+                                                                                   : QStringLiteral("unpositioned");
+                    lines.append(QStringLiteral("  %1 %2  %3").arg(station.name(), position, lrudText(station)));
+                }
             }
         }
     }
@@ -510,11 +645,14 @@ QString cwPassageTubeGalleryModel::reportText() const
     if (m_currentIndex < 0) {
         return QString();
     }
-    QStringList lines = elbowLines(m_current.debug);
-    const QString checkText = cwPassageTubeMeshCheck::toText(m_current.report);
-    if (!checkText.isEmpty()) {
-        lines.prepend(checkText);
+    QStringList lines;
+    for (const cwPassageTubeMeshCheck::Issue& issue : std::as_const(m_current.report.issues)) {
+        lines.append(issueLine(m_current.debug, issue));
     }
+    for (const cwPassageTubeMeshCheck::Issue& issue : std::as_const(m_current.report.warnings)) {
+        lines.append(issueLine(m_current.debug, issue, QStringLiteral("warning: ")));
+    }
+    lines.append(elbowLines(m_current.debug));
     return lines.join(QLatin1Char('\n'));
 }
 
@@ -533,8 +671,7 @@ QStringList cwPassageTubeGalleryModel::issueTexts() const
     QStringList texts;
     texts.reserve(m_current.report.issues.size());
     for (const cwPassageTubeMeshCheck::Issue& issue : m_current.report.issues) {
-        texts.append(QStringLiteral("%1 at %2: %3")
-                         .arg(cwPassageTubeMeshCheck::typeName(issue.type), vectorText(issue.position), issue.detail));
+        texts.append(issueLine(m_current.debug, issue));
     }
     return texts;
 }
@@ -554,6 +691,9 @@ double cwPassageTubeGalleryModel::boundsRadius() const
 
 QBox3D cwPassageTubeGalleryModel::framingBox() const
 {
+    if (m_stationFrame) {
+        return m_stationFrame->box;
+    }
     if (m_bounds.isNull()) {
         const float radius = static_cast<float>(kFallbackRadius);
         const QVector3D extent(radius, radius, radius);
@@ -564,17 +704,17 @@ QBox3D cwPassageTubeGalleryModel::framingBox() const
 
 QVector3D cwPassageTubeGalleryModel::junction() const
 {
-    return m_junction;
+    return m_stationFrame ? m_stationFrame->station : m_junction;
 }
 
 QVector3D cwPassageTubeGalleryModel::armFarEnd() const
 {
-    return m_armFarEnd;
+    return m_stationFrame ? m_stationFrame->farEnd : m_armFarEnd;
 }
 
 QVector3D cwPassageTubeGalleryModel::armDirection() const
 {
-    return m_armDirection;
+    return horizontalDirection(armFarEnd(), junction());
 }
 
 cwPassageTubeMesh cwPassageTubeGalleryModel::mesh() const
@@ -657,11 +797,15 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
     return QString();
 }
 
-cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::Case& entry)
+cwPassageTubeGalleryModel::Row cwPassageTubeGalleryModel::caseRow(const Cases::Case& entry)
 {
-    const Cases::Survey survey = Cases::toSurvey(entry);
+    return Row {entry.name, entry.tags, entry.sampleSpacing, entry};
+}
+
+cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::Survey& survey, double sampleSpacing)
+{
     cwPassageTubeBuilder::Options options;
-    options.sampleSpacingMeters = entry.sampleSpacing;
+    options.sampleSpacingMeters = sampleSpacing;
 
     Build result;
     result.debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, options);
@@ -690,13 +834,24 @@ void cwPassageTubeGalleryModel::loadCatalog()
     m_rows.clear();
     for (const Cases::Case& entry : Cases::catalog()) {
         if (m_includeSweep || !isSweep(entry)) {
-            m_rows.append(Row {entry});
+            m_rows.append(caseRow(entry));
         }
     }
-    for (const Cases::Case& entry : std::as_const(m_randomCases)) {
-        m_rows.append(Row {entry});
-    }
+    m_rows.append(m_addedRows);
     endResetModel();
+    emit countChanged();
+}
+
+void cwPassageTubeGalleryModel::appendRows(const QVector<Row>& rows)
+{
+    if (rows.isEmpty()) {
+        return;
+    }
+    m_addedRows.append(rows);
+    const int first = static_cast<int>(m_rows.size());
+    beginInsertRows(QModelIndex(), first, first + static_cast<int>(rows.size()) - 1);
+    m_rows.append(rows);
+    endInsertRows();
     emit countChanged();
 }
 
@@ -711,7 +866,7 @@ void cwPassageTubeGalleryModel::ensureIssueCount(const Row& row) const
     if (row.issueCount) {
         return;
     }
-    cacheIssues(row, build(row.entry).report);
+    cacheIssues(row, build(row.survey(), row.sampleSpacing).report);
 }
 
 void cwPassageTubeGalleryModel::selectCurrent()
@@ -722,10 +877,10 @@ void cwPassageTubeGalleryModel::selectCurrent()
         m_bounds = QBox3D();
         m_junction = QVector3D();
         m_armFarEnd = QVector3D();
-        m_armDirection = kFallbackArmDirection;
     } else {
         const Row& row = m_rows.at(m_currentIndex);
-        m_current = build(row.entry);
+        const Cases::Survey survey = row.survey();
+        m_current = build(survey, row.sampleSpacing);
         m_ringGeometry = ringGeometryOf(m_current.debug);
 
         if (!row.issueCount) {
@@ -742,33 +897,49 @@ void cwPassageTubeGalleryModel::selectCurrent()
             m_bounds.unite(leg.fromPosition);
             m_bounds.unite(leg.toPosition);
         }
-        locateJunction(row.entry.trip);
+        locateJunction(survey);
     }
+    locateStation();
 
     pushToScene();
     emit currentChanged();
 }
 
-void cwPassageTubeGalleryModel::locateJunction(const Cases::Trip& trip)
+void cwPassageTubeGalleryModel::locateJunction(const Cases::Survey& survey)
 {
+    QList<QStringList> chunks;
     QHash<QString, QVector3D> positions;
+    for (const cwCaveData& cave : std::as_const(survey.region.caves)) {
+        const cwStationPositionLookup lookup = survey.positionsByCave.value(cave.id);
+        for (const cwTripData& trip : cave.trips) {
+            for (const cwSurveyChunkData& chunk : trip.chunks) {
+                QStringList names;
+                for (const cwStation& station : chunk.stations) {
+                    const QString key = cwStation::canonicalKey(station.name());
+                    names.append(key);
+                    if (lookup.hasPosition(key)) {
+                        positions.insert(key, lookup.position(key));
+                    }
+                }
+                chunks.append(names);
+            }
+        }
+    }
+
     QHash<QString, QSet<QString>> neighbors;
     QStringList order;
-    for (const QList<Cases::Station>& chunk : trip.chunks) {
+    for (const QStringList& chunk : std::as_const(chunks)) {
         for (int i = 0; i < chunk.size(); ++i) {
-            const Cases::Station& station = chunk.at(i);
-            if (station.position) {
-                positions.insert(station.name, *station.position);
+            const QString& name = chunk.at(i);
+            if (!neighbors.contains(name)) {
+                order.append(name);
             }
-            if (!neighbors.contains(station.name)) {
-                order.append(station.name);
-            }
-            QSet<QString>& adjacent = neighbors[station.name];
+            QSet<QString>& adjacent = neighbors[name];
             if (i > 0) {
-                adjacent.insert(chunk.at(i - 1).name);
+                adjacent.insert(chunk.at(i - 1));
             }
             if (i + 1 < chunk.size()) {
-                adjacent.insert(chunk.at(i + 1).name);
+                adjacent.insert(chunk.at(i + 1));
             }
         }
     }
@@ -785,30 +956,108 @@ void cwPassageTubeGalleryModel::locateJunction(const Cases::Trip& trip)
     // The first chunk other than the first that ends at the junction is its
     // first arm; without one, the first chunk's start stands in for it.
     const auto farEndName = [&]() -> QString {
-        for (int c = 1; c < trip.chunks.size(); ++c) {
-            const QList<Cases::Station>& chunk = trip.chunks.at(c);
+        for (int c = 1; c < chunks.size(); ++c) {
+            const QStringList& chunk = chunks.at(c);
             if (chunk.size() < 2) {
                 continue;
             }
-            if (chunk.constLast().name == junctionName) {
-                return chunk.constFirst().name;
+            if (chunk.constLast() == junctionName) {
+                return chunk.constFirst();
             }
-            if (chunk.constFirst().name == junctionName) {
-                return chunk.constLast().name;
+            if (chunk.constFirst() == junctionName) {
+                return chunk.constLast();
             }
         }
-        return trip.chunks.isEmpty() || trip.chunks.constFirst().isEmpty()
-                   ? QString()
-                   : trip.chunks.constFirst().constFirst().name;
+        return chunks.isEmpty() || chunks.constFirst().isEmpty() ? QString() : chunks.constFirst().constFirst();
     }();
 
     m_junction = positions.value(junctionName, boundsCenter());
     m_armFarEnd = positions.value(farEndName, m_junction);
+}
 
-    QVector3D horizontal = m_junction - m_armFarEnd;
-    horizontal.setZ(0.0f);
-    m_armDirection = horizontal.length() > kMinHorizontalLength ? horizontal.normalized()
-                                                                 : kFallbackArmDirection;
+void cwPassageTubeGalleryModel::locateStation()
+{
+    m_stationFrame.reset();
+    if (m_station.isEmpty()) {
+        return;
+    }
+
+    const QString key = cwStation::canonicalKey(m_station);
+    StationFrame frame;
+    float longest = -1.0f;
+    for (const cwPassageTubeBuilder::Leg& leg : std::as_const(m_current.debug.legs)) {
+        const bool atFrom = cwStation::canonicalKey(leg.from) == key;
+        if (!atFrom && cwStation::canonicalKey(leg.to) != key) {
+            continue;
+        }
+
+        frame.box.unite(readingBox(leg.fromPosition, leg.fromLrud));
+        frame.box.unite(readingBox(leg.toPosition, leg.toLrud));
+
+        const float length = leg.fromPosition.distanceToPoint(leg.toPosition);
+        if (length > longest) {
+            longest = length;
+            frame.station = atFrom ? leg.fromPosition : leg.toPosition;
+            frame.farEnd = atFrom ? leg.toPosition : leg.fromPosition;
+        }
+    }
+    if (longest >= 0.0f) {
+        m_stationFrame = frame;
+    }
+}
+
+//A run can end with the line plot dirty again, so this waits for it to settle
+//clean.
+void cwPassageTubeGalleryModel::collectWhenSolved(cwProject* project, cwLinePlotManager* linePlot, const QString& label, double sampleSpacing)
+{
+    AsyncFuture::observe(linePlot->runIfNeeded()).context(this, [this, project, linePlot, label, sampleSpacing]() {
+        if (!m_loadingProjects.contains(project)) {
+            return;
+        }
+        if (linePlot->updateState() == cwUpdatable::State::Clean) {
+            addProjectRows(project, label, sampleSpacing);
+        } else {
+            collectWhenSolved(project, linePlot, label, sampleSpacing);
+        }
+    });
+}
+
+void cwPassageTubeGalleryModel::addProjectRows(cwProject* project, const QString& label, double sampleSpacing)
+{
+    const cwCavingRegionData region = project->cavingRegion()->data();
+    QHash<QUuid, cwStationPositionLookup> positionsByCave;
+    for (const cwCave* cave : project->cavingRegion()->caves()) {
+        positionsByCave.insert(cave->id(), cave->stationPositionLookup());
+    }
+
+    QVector<Row> rows;
+    for (const cwCaveData& cave : region.caves) {
+        Cases::Survey survey;
+        survey.region = region;
+        survey.region.caves = {cave};
+        survey.positionsByCave.insert(cave.id, positionsByCave.value(cave.id));
+        rows.append(Row {QStringLiteral("%1: %2").arg(label, cave.name), {QStringLiteral("project")}, sampleSpacing, survey});
+    }
+
+    dropProject(project);
+    const int firstRow = static_cast<int>(m_rows.size());
+    appendRows(rows);
+    emit projectOpened(firstRow, static_cast<int>(rows.size()));
+}
+
+void cwPassageTubeGalleryModel::failProject(cwProject* project, const QString& message)
+{
+    if (!m_loadingProjects.contains(project)) {
+        return;
+    }
+    dropProject(project);
+    emit projectFailed(message);
+}
+
+void cwPassageTubeGalleryModel::dropProject(cwProject* project)
+{
+    m_loadingProjects.removeOne(project);
+    project->deleteLater();
 }
 
 void cwPassageTubeGalleryModel::pushToScene()

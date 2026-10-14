@@ -28,20 +28,27 @@
 
 //Std includes
 #include <optional>
+#include <variant>
 
+class cwLinePlotManager;
+class cwProject;
 class cwRenderLinePlot;
 class cwRenderPassageTube;
 class cwScene;
 
 /**
- * The tube gallery's list of surveys: the cwPassageTubeCases catalog plus
- * seeded random caves. Selecting a row builds it with
+ * The tube gallery's list of surveys: the cwPassageTubeCases catalog, seeded
+ * random caves and the caves of opened CaveWhere projects. Selecting a row builds it with
  * cwPassageTubeBuilder::buildDebug and checks it with
  * cwPassageTubeMeshCheck on the GUI thread; the mesh and centerline go to a
  * tube and a line plot the model adds to its scene. A second line plot draws
  * the builder's rings and their frames.
  *
  * Issue counts for the list are built on first read and cached.
+ *
+ * openProject loads a copy of a project in a temporary directory, solves its
+ * line plot and keeps each cave's survey and station positions as a row; the
+ * copy and the project are dropped once the rows are in.
  */
 class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
 {
@@ -57,6 +64,7 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(cwRenderLinePlot* ringPlot READ ringPlot NOTIFY sceneChanged)
     Q_PROPERTY(bool ringsVisible READ ringsVisible WRITE setRingsVisible NOTIFY ringsVisibleChanged)
     Q_PROPERTY(bool framesVisible READ framesVisible WRITE setFramesVisible NOTIFY framesVisibleChanged)
+    Q_PROPERTY(QString station READ station WRITE setStation NOTIFY stationChanged)
 
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged)
     Q_PROPERTY(QString parameters READ parameters NOTIFY currentChanged)
@@ -125,8 +133,18 @@ public:
     bool framesVisible() const;
     void setFramesVisible(bool framesVisible);
 
+    // The station the camera frames, matched ignoring case; empty, or a
+    // station the current row lacks, frames the whole survey.
+    QString station() const;
+    void setStation(const QString& station);
+
     // Adds a cwPassageTubeCases::random survey, or a randomWild one when wild.
     Q_INVOKABLE void addRandom(int seed, int junctionCount, bool wild = false);
+
+    // Loads a copy of the .cw or .cwproj at path and appends a row per cave,
+    // named "<project>: <cave>" and built at sampleSpacing meters. Emits
+    // projectOpened with the new rows, or projectFailed.
+    Q_INVOKABLE void openProject(const QString& path, double sampleSpacing);
 
     // The row named name, else the first whose name starts with it ignoring
     // case, else -1.
@@ -144,15 +162,16 @@ public:
     QVector3D boundsCenter() const;
     double boundsRadius() const;
 
-    // The mesh and centerline bounds, a unit cube when the case is empty.
+    // The legs at station() and their readings, else the mesh and centerline
+    // bounds, a unit cube when the case is empty.
     QBox3D framingBox() const;
 
-    // The first station where three or more passages meet, the bounds center
-    // when there is none.
+    // station(), else the first station where three or more passages meet,
+    // the bounds center when there is none.
     QVector3D junction() const;
 
-    // The far station of the first arm into junction(), and the horizontal unit
-    // direction from it toward the junction.
+    // The far station of station()'s longest leg, else of the first arm into
+    // junction(); and the horizontal unit direction from it toward junction().
     QVector3D armFarEnd() const;
     QVector3D armDirection() const;
 
@@ -177,12 +196,27 @@ signals:
     void currentChanged();
     void ringsVisibleChanged();
     void framesVisibleChanged();
+    void stationChanged();
+    void projectOpened(int firstRow, int rowCount);
+    void projectFailed(const QString& message);
 
 private:
+    // A catalog or random case, or one cave of an opened project.
     struct Row {
-        cwPassageTubeCases::Case entry;
+        QString name;
+        QStringList tags;
+        double sampleSpacing = 0.0;
+        std::variant<cwPassageTubeCases::Case, cwPassageTubeCases::Survey> source;
         mutable std::optional<int> issueCount;
         mutable QString issueSummary;
+
+        cwPassageTubeCases::Survey survey() const;
+    };
+
+    struct StationFrame {
+        QBox3D box;
+        QVector3D station;
+        QVector3D farEnd;
     };
 
     struct Build {
@@ -190,20 +224,28 @@ private:
         cwPassageTubeMeshCheck::Report report;
     };
 
-    static Build build(const cwPassageTubeCases::Case& entry);
+    static Row caseRow(const cwPassageTubeCases::Case& entry);
+    static Build build(const cwPassageTubeCases::Survey& survey, double sampleSpacing);
     static QString summary(const cwPassageTubeMeshCheck::Report& report);
 
     void loadCatalog();
+    void appendRows(const QVector<Row>& rows);
     void cacheIssues(const Row& row, const cwPassageTubeMeshCheck::Report& report) const;
     void ensureIssueCount(const Row& row) const;
     void selectCurrent();
-    void locateJunction(const cwPassageTubeCases::Trip& trip);
+    void locateJunction(const cwPassageTubeCases::Survey& survey);
+    void locateStation();
+    void collectWhenSolved(cwProject* project, cwLinePlotManager* linePlot, const QString& label, double sampleSpacing);
+    void addProjectRows(cwProject* project, const QString& label, double sampleSpacing);
+    void failProject(cwProject* project, const QString& message);
+    void dropProject(cwProject* project);
     void pushToScene();
     void applyRingVisibility();
     void deleteRenderObjects();
 
     QVector<Row> m_rows;
-    QVector<cwPassageTubeCases::Case> m_randomCases;
+    QVector<Row> m_addedRows;
+    QList<cwProject*> m_loadingProjects;
     bool m_includeSweep = false;
     int m_currentIndex = -1;
 
@@ -213,13 +255,14 @@ private:
     QPointer<cwRenderLinePlot> m_ringPlot;
     bool m_ringsVisible = false;
     bool m_framesVisible = false;
+    QString m_station;
 
     Build m_current;
     RingGeometry m_ringGeometry;
     QBox3D m_bounds;
     QVector3D m_junction;
     QVector3D m_armFarEnd;
-    QVector3D m_armDirection;
+    std::optional<StationFrame> m_stationFrame;
 };
 
 #endif // CWPASSAGETUBEGALLERYMODEL_H

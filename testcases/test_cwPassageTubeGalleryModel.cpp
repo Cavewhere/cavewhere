@@ -9,14 +9,24 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Our includes
+#include "cwCave.h"
+#include "cwCavingRegion.h"
 #include "cwPassageTubeCases.h"
 #include "cwPassageTubeGalleryModel.h"
+#include "cwProject.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderPassageTube.h"
 #include "cwScene.h"
+#include "cwSurveyChunk.h"
+#include "cwTrip.h"
 
 //Qt includes
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 
 //Std includes
 #include <algorithm>
@@ -30,6 +40,81 @@ const QString kSymmetricT = QStringLiteral("1. symmetric T");
 const QString kJunctionFreeCase = QStringLiteral("no arms, through profile 0, bend 0, same section");
 const QString kShaftFootCase = QStringLiteral("25. Zero floor reading at the foot of a shaft");
 constexpr float kLengthTolerance = 1e-4f;
+constexpr float kPositionTolerance = 1e-3f;
+constexpr int kProjectLoadTimeoutMs = 30000;
+
+const QString kProjectBaseName = QStringLiteral("Bend");
+const QStringList kCaveNames {QStringLiteral("First Cave"), QStringLiteral("Second Cave")};
+const QString kReading = QStringLiteral("1");
+
+// a1 → a2 runs 10 m north, a2 → a3 turns east for 15 m, all level.
+struct BendShot {
+    const char* from;
+    const char* to;
+    const char* distance;
+    const char* compass;
+};
+const BendShot kBendShots[] {{"a1", "a2", "10", "0"}, {"a2", "a3", "15", "90"}};
+const QVector3D kA1(0.0f, 0.0f, 0.0f);
+const QVector3D kA2(0.0f, 10.0f, 0.0f);
+const QVector3D kA3(15.0f, 10.0f, 0.0f);
+
+cwStation bendStation(const char* name)
+{
+    cwStation station(QString::fromLatin1(name));
+    station.setLeft(cwDistanceReading(kReading));
+    station.setRight(cwDistanceReading(kReading));
+    station.setUp(cwDistanceReading(kReading));
+    station.setDown(cwDistanceReading(kReading));
+    return station;
+}
+
+// Saves a .cwproj with a cave per kCaveNames, each surveying kBendShots, and
+// returns its path.
+QString writeBendProject(const QDir& directory)
+{
+    cwProject project;
+    cwCavingRegion* region = project.cavingRegion();
+    for (const QString& caveName : kCaveNames) {
+        auto* cave = new cwCave();
+        cave->setName(caveName);
+        region->addCave(cave);
+        auto* trip = new cwTrip();
+        trip->setName(QStringLiteral("Trip"));
+        cave->addTrip(trip);
+        auto* chunk = new cwSurveyChunk();
+        trip->addChunk(chunk);
+        for (const BendShot& bend : kBendShots) {
+            cwShot shot;
+            shot.setDistance(cwDistanceReading(QString::fromLatin1(bend.distance)));
+            shot.setCompass(cwCompassReading(QString::fromLatin1(bend.compass)));
+            shot.setClino(cwClinoReading(QStringLiteral("0")));
+            chunk->appendShot(bendStation(bend.from), bendStation(bend.to), shot);
+        }
+    }
+
+    const QString path = directory.filePath(kProjectBaseName + QStringLiteral("/") + kProjectBaseName + QStringLiteral(".cwproj"));
+    REQUIRE(project.saveAs(path));
+    project.waitSaveToFinish();
+    REQUIRE(QFileInfo::exists(path));
+    return path;
+}
+
+// The bend as a catalog trip, positioned as the line plot solves it.
+cwPassageTubeCases::Trip bendTrip()
+{
+    const QStringList readings {kReading, kReading, kReading, kReading};
+    cwPassageTubeCases::Trip trip;
+    trip.chunks = {{{QStringLiteral("a1"), kA1, readings},
+                    {QStringLiteral("a2"), kA2, readings},
+                    {QStringLiteral("a3"), kA3, readings}}};
+    return trip;
+}
+
+bool isNear(const QVector3D& a, const QVector3D& b)
+{
+    return a.distanceToPoint(b) < kPositionTolerance;
+}
 
 QString nameAt(const Model& model, int row)
 {
@@ -227,4 +312,108 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
         CHECK(model.ringLine(nearest).startsWith(QStringLiteral("chain 0 ring 0: ")));
         CHECK(model.ringLine(static_cast<int>(rings.size())).isEmpty());
     }
+}
+
+TEST_CASE("cwPassageTubeGalleryModel opens a CaveWhere project", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    const QString path = writeBendProject(QDir(directory.path()));
+    const QDateTime savedAt = QFileInfo(path).lastModified();
+    const QStringList savedFiles = QDir(QFileInfo(path).absolutePath()).entryList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot);
+
+    Model model;
+    const int rowsBefore = model.rowCount();
+    QSignalSpy openedSpy(&model, &Model::projectOpened);
+    QSignalSpy failedSpy(&model, &Model::projectFailed);
+    model.openProject(path, cwPassageTubeBuilder::Options().sampleSpacingMeters);
+    openedSpy.wait(kProjectLoadTimeoutMs);
+    INFO((failedSpy.isEmpty() ? QString() : failedSpy.constFirst().constFirst().toString()).toStdString());
+    REQUIRE(failedSpy.isEmpty());
+    REQUIRE(openedSpy.count() == 1);
+    CHECK(openedSpy.constFirst().at(0).toInt() == rowsBefore);
+    CHECK(openedSpy.constFirst().at(1).toInt() == kCaveNames.size());
+
+    REQUIRE(model.rowCount() == rowsBefore + kCaveNames.size());
+    for (int i = 0; i < kCaveNames.size(); ++i) {
+        CHECK(nameAt(model, rowsBefore + i) == kProjectBaseName + QStringLiteral(": ") + kCaveNames.at(i));
+        CHECK(model.data(model.index(rowsBefore + i), Model::TagsRole).toString() == QStringLiteral("project"));
+    }
+
+    CHECK(QFileInfo(path).lastModified() == savedAt);
+    CHECK(QDir(QFileInfo(path).absolutePath()).entryList(QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot) == savedFiles);
+
+    model.setCurrentIndex(rowsBefore);
+    REQUIRE_FALSE(model.mesh().isEmpty());
+
+    SECTION("the report matches the equivalent catalog survey")
+    {
+        const cwPassageTubeCases::Survey survey = cwPassageTubeCases::toSurvey(bendTrip());
+        const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, {});
+        const cwPassageTubeMeshCheck::Report expected = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+        const cwPassageTubeMeshCheck::Report report = model.report();
+
+        CHECK(model.mesh().positions.size() == debug.mesh.positions.size());
+        CHECK(model.mesh().indices.size() == debug.mesh.indices.size());
+        REQUIRE(report.issues.size() == expected.issues.size());
+        REQUIRE(report.warnings.size() == expected.warnings.size());
+        for (int i = 0; i < expected.issues.size(); ++i) {
+            CHECK(report.issues.at(i).type == expected.issues.at(i).type);
+            CHECK(isNear(report.issues.at(i).position, expected.issues.at(i).position));
+        }
+        for (int i = 0; i < expected.warnings.size(); ++i) {
+            CHECK(report.warnings.at(i).type == expected.warnings.at(i).type);
+        }
+    }
+
+    SECTION("a station frames its legs and looks down the longest")
+    {
+        const QBox3D wholeSurvey = model.framingBox();
+        model.setStation(QStringLiteral("A2"));
+
+        const QBox3D box = model.framingBox();
+        CHECK(box.contains(kA2));
+        CHECK(box.contains(kA1));
+        CHECK(box.contains(kA3));
+        CHECK(isNear(model.junction(), kA2));
+        CHECK(isNear(model.armFarEnd(), kA3));
+        CHECK(isNear(model.armDirection(), QVector3D(-1.0f, 0.0f, 0.0f)));
+
+        model.setStation(QString());
+        CHECK(model.framingBox() == wholeSurvey);
+    }
+}
+
+TEST_CASE("cwPassageTubeGalleryModel names the station nearest each issue", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    Model model;
+    const int row = model.indexOf(kShaftFootCase);
+    REQUIRE(row >= 0);
+    model.setCurrentIndex(row);
+
+    const cwPassageTubeMeshCheck::Report report = model.report();
+    const QStringList texts = model.issueTexts();
+    REQUIRE_FALSE(texts.isEmpty());
+    REQUIRE(texts.size() == report.issues.size());
+    for (int i = 0; i < texts.size(); ++i) {
+        INFO(texts.at(i).toStdString());
+        const QString prefix = cwPassageTubeMeshCheck::typeName(report.issues.at(i).type) + QStringLiteral(" at ");
+        REQUIRE(texts.at(i).startsWith(prefix));
+        CHECK_FALSE(texts.at(i).mid(prefix.size()).startsWith(QLatin1Char('(')));
+        CHECK(model.reportText().contains(texts.at(i)));
+    }
+}
+
+TEST_CASE("cwPassageTubeGalleryModel reports a project it cannot copy", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+
+    Model model;
+    const int rowsBefore = model.rowCount();
+    QSignalSpy failedSpy(&model, &Model::projectFailed);
+    model.openProject(QDir(directory.path()).filePath(QStringLiteral("missing.cwproj")),
+                      cwPassageTubeBuilder::Options().sampleSpacingMeters);
+    CHECK(failedSpy.count() == 1);
+    CHECK(model.rowCount() == rowsBefore);
 }

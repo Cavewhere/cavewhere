@@ -9,6 +9,7 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
+#include <QFileInfo>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QStyleFactory>
@@ -18,6 +19,7 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwMetaTypeSystem.h"
+#include "cwPassageTubeBuilder.h"
 #include "cwRootData.h"
 #include "cwSettings.h"
 #include "cwTask.h"
@@ -71,7 +73,17 @@ int main(int argc, char* argv[])
                                          QStringLiteral("Include the parametric sweep cases in the list."));
     const QCommandLineOption ringsOption(QStringLiteral("rings"),
                                          QStringLiteral("Draw the builder's rings and their frames, also in grabs."));
-    parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption, ringsOption});
+    const QCommandLineOption projectOption(QStringLiteral("project"),
+                                           QStringLiteral("Add a row per cave of this .cw or .cwproj, read from a temporary copy, and open on the first. Repeatable."),
+                                           QStringLiteral("file"));
+    const QCommandLineOption spacingOption(QStringLiteral("spacing"),
+                                           QStringLiteral("Sample spacing in meters for project rows (default: the builder's)."),
+                                           QStringLiteral("m"));
+    const QCommandLineOption stationOption(QStringLiteral("station"),
+                                           QStringLiteral("Frame the camera on this station; the along-arm view looks down its longest leg."),
+                                           QStringLiteral("name"));
+    parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption, ringsOption,
+                       projectOption, spacingOption, stationOption});
     parser.process(app);
 
     cwMetaTypeSystem::registerTypes();
@@ -86,6 +98,12 @@ int main(int argc, char* argv[])
     cwRootData::initCavewherelib();
 
     const bool grabAll = parser.isSet(grabAllOption);
+    const double projectSpacing = parser.isSet(spacingOption) ? parser.value(spacingOption).toDouble()
+                                                              : cwPassageTubeBuilder::Options().sampleSpacingMeters;
+    QStringList projectFiles;
+    for (const QString& path : parser.values(projectOption)) {
+        projectFiles.append(QFileInfo(path).absoluteFilePath());
+    }
     const QString grabDirectory = grabAll ? parser.value(grabAllOption) : parser.value(grabOption);
     engine->setInitialProperties({
         {QStringLiteral("initialCase"), parser.value(caseOption)},
@@ -97,6 +115,9 @@ int main(int argc, char* argv[])
         {QStringLiteral("failingOnly"), parser.isSet(failingOption)},
         {QStringLiteral("includeSweep"), parser.isSet(sweepOption)},
         {QStringLiteral("showRings"), parser.isSet(ringsOption)},
+        {QStringLiteral("projectFiles"), projectFiles},
+        {QStringLiteral("projectSpacing"), projectSpacing},
+        {QStringLiteral("focusStation"), parser.value(stationOption)},
         {QStringLiteral("defaultGrabDirectory"), QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("tube-shots"))},
     });
 
