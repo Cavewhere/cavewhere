@@ -13,6 +13,10 @@
 #include <QtEndian>
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
+#include <QDateTime>
+#include <QHash>
+#include <QRect>
 #include <QElapsedTimer>
 #include <QMatrix4x4>
 #include <QSet>
@@ -74,6 +78,7 @@
 #include "cwSceneVisibility.h"
 
 #include "CwRhiPointCloudTestAccess.h"
+#include "LazFixtureHelper.h"
 #include "ProfileLogCapture.h"
 
 using Access = CwRhiPointCloudTestAccess;
@@ -348,26 +353,39 @@ namespace {
         return made;
     }
 
-    QMatrix4x4 orthoProjection(float height)
+    //! How many times wider than tall @a size is
+    float aspectRatio(QSize size)
+    {
+        return float(size.width()) / float(size.height());
+    }
+
+    //! An orthographic box @a height meters tall and @a aspect times as wide
+    QMatrix4x4 orthoProjection(float height, float aspect = 1.0f)
     {
         const float half = height * 0.5f;
         QMatrix4x4 projection;
-        projection.ortho(-half, half, -half, half, kOrthoNear, kOrthoFar);
+        projection.ortho(-half * aspect, half * aspect, -half, half, kOrthoNear, kOrthoFar);
         return projection;
     }
 
     //! The perspective projection that puts the same world height on screen at
     //! the camera's distance as orthoProjection(@a height) does, so a test can
     //! swap cameras without retuning what it expects to measure.
-    QMatrix4x4 perspectiveProjection(float height)
+    QMatrix4x4 perspectiveProjection(float height, float aspect = 1.0f)
     {
         const double verticalFieldOfView =
             2.0 * std::atan(double(height) * 0.5 / double(kEyeDistance));
         QMatrix4x4 projection;
-        projection.perspective(float(qRadiansToDegrees(verticalFieldOfView)), 1.0f,
+        projection.perspective(float(qRadiansToDegrees(verticalFieldOfView)), aspect,
                                kOrthoNear, kOrthoFar);
         return projection;
     }
+
+    //! The camera one frame draws from
+    struct CameraPose {
+        QMatrix4x4 view;
+        QMatrix4x4 projection;
+    };
 
     QMatrix4x4 viewAt(const QVector3D& center)
     {
@@ -458,8 +476,15 @@ namespace {
         //! pixels on a side, since the viewport is what the screen-space error
         //! rule measures against.
         PointCloudFixture(QRhi* rhi, const OctreeCache& cache, int targetDimension) :
+            PointCloudFixture(rhi, cache, QSize(targetDimension, targetDimension))
+        {
+        }
+
+        //! The same, into a target @a targetSize pixels, which need not be
+        //! square: the eval poses draw into 960 x 540 and 1920 x 1080.
+        PointCloudFixture(QRhi* rhi, const OctreeCache& cache, QSize targetSize) :
             m_rhi(rhi),
-            m_live(makeRenderTarget(rhi, QSize(targetDimension, targetDimension)))
+            m_live(makeRenderTarget(rhi, targetSize))
         {
             m_cache = cache;
             start();
@@ -467,6 +492,9 @@ namespace {
 
         ~PointCloudFixture()
         {
+            //While the cloud is still registered, so it drops the pipelines it
+            //built against the EDL targets too
+            frameRenderer()->destroyEdlOffscreen(m_edl);
             frameRenderer()->evictPipelinesFor(m_live.renderPassDescriptor.get());
             if (m_secondRender) {
                 frameRenderer()->destroyRenderObject(m_secondRender->renderObjectId());
@@ -554,7 +582,38 @@ namespace {
             m_resourceUpdateAfterSyncOnly = afterSyncOnly;
         }
 
-        void setOrthoHeight(float height) { m_orthoHeight = height; }
+        //! Draws the following frames from the fixed eye above the cloud center
+        //! through an orthographic box @a height meters tall, or the
+        //! perspective setPerspective() asks for at the same world height
+        void setOrthoHeight(float height)
+        {
+            m_orthoHeight = height;
+            m_pose.reset();
+        }
+
+        //! Draws the following frames from @a view through @a projection, the
+        //! raw camera before the backend's clip-space correction, until the next
+        //! setOrthoHeight(). setPerspective() and setViewOffset() shape only the
+        //! fixed eye, never a pose set here.
+        void setPose(const QMatrix4x4& view, const QMatrix4x4& projection)
+        {
+            m_pose = CameraPose{view, projection};
+        }
+
+        //! The camera the next frame draws from
+        CameraPose pose() const
+        {
+            if (m_pose.has_value()) {
+                return *m_pose;
+            }
+            return CameraPose{viewAt(m_cache.center + m_viewOffset), projection(m_orthoHeight)};
+        }
+
+        //! Routes the following frames through the EDL offscreen and composite
+        //! the live frame and the export path draw with. litPixels() and
+        //! frameImage() keep reading the flat color the cloud draws, now out of
+        //! the EDL's cloud target, and compositeImage() reads the shaded frame.
+        void setEdlEnabled(bool enabled) { m_edlEnabled = enabled; }
 
         //! Draws the following frames through perspectiveProjection() instead
         //! of orthoProjection(), at the same world height.
@@ -639,13 +698,27 @@ namespace {
                                                m_live.renderPassDescriptor.get(),
                                                m_live.target->sampleCount()};
 
-            frameRenderer()->setupPassRouting(m_live.target.get(), nullptr);
+            //In renderLiveFrame's order: the offscreen and its effect are in
+            //place before the routing that points the passes at them
+            const cwRhiFrameRenderer::EdlOffscreen* edl = nullptr;
+            if (m_edlEnabled) {
+                const int sampleCount = m_live.target->sampleCount();
+                frameRenderer()->ensureEdlOffscreen(m_edl, m_rhi, size, sampleCount);
+                frameRenderer()->ensureEffectInitialized(m_edl, m_rhi,
+                                                         m_live.renderPassDescriptor.get(),
+                                                         sampleCount);
+                REQUIRE(m_edl.valid());
+                edl = &m_edl;
+            }
+
+            frameRenderer()->setupPassRouting(m_live.target.get(), edl);
 
             constexpr int kLiveCameraSlot = 0;
+            const CameraPose framePose = pose();
             const cwRhiFrameRenderer::ClipSpaceCamera camera =
                 frameRenderer()->stampCamera(batch, m_rhi, renderData, kLiveCameraSlot,
-                                             m_live.target.get(), projection(m_orthoHeight),
-                                             viewAt(m_cache.center + m_viewOffset), 1.0f, size);
+                                             m_live.target.get(), framePose.projection,
+                                             framePose.view, 1.0f, size);
 
             const cwRHIObject::PerPassRenderData perPassRenderData =
                 frameRenderer()->buildPerPassRenderData(renderData);
@@ -714,15 +787,22 @@ namespace {
                 camera.projectionCorrected, size, 1.0f
             };
 
-            frameRenderer()->drawScene(cb, m_live.target.get(), nullptr, passBatches,
+            frameRenderer()->drawScene(cb, m_live.target.get(), edl, passBatches,
                                        perPassRenderData, batch, frameContext, 0,
                                        QColor::fromRgbF(0.0, 0.0, 0.0, 0.0));
 
+            //With EDL the cloud's flat color sits in the EDL cloud target and
+            //the live target holds the composite
             QRhiReadbackResult readback;
+            QRhiReadbackResult compositeReadback;
             if (m_readbackEnabled) {
+                QRhiTexture* flatColor = edl ? m_edl.cloudColor.get() : m_live.color.get();
                 QRhiResourceUpdateBatch* readbackBatch = m_rhi->nextResourceUpdateBatch();
-                readbackBatch->readBackTexture(QRhiReadbackDescription(m_live.color.get()),
-                                               &readback);
+                readbackBatch->readBackTexture(QRhiReadbackDescription(flatColor), &readback);
+                if (edl) {
+                    readbackBatch->readBackTexture(QRhiReadbackDescription(m_live.color.get()),
+                                                   &compositeReadback);
+                }
                 cb->resourceUpdate(readbackBatch);
             }
 
@@ -732,6 +812,8 @@ namespace {
                 //An offscreen frame is complete when endOffscreenFrame returns
                 m_colorPixels = readback.data;
                 m_colorSize = readback.pixelSize;
+                m_compositePixels = compositeReadback.data;
+                m_compositeSize = compositeReadback.pixelSize;
             }
         }
 
@@ -788,15 +870,11 @@ namespace {
 
         //! The last frame's readback as an image, for dumping a case that
         //! failed. The readback is RGBA8 and the copy owns its bytes.
-        QImage frameImage() const
-        {
-            if (m_colorSize.isEmpty()) {
-                return QImage();
-            }
-            return QImage(reinterpret_cast<const uchar*>(m_colorPixels.constData()),
-                          m_colorSize.width(), m_colorSize.height(),
-                          QImage::Format_RGBA8888).copy();
-        }
+        QImage frameImage() const { return rgbaImage(m_colorPixels, m_colorSize); }
+
+        //! The last frame's EDL composite, or a null image when the frame was
+        //! drawn without EDL
+        QImage compositeImage() const { return rgbaImage(m_compositePixels, m_compositeSize); }
 
         //! The pixels of the last frame that are not the clear color, in the
         //! [-1, 1] square of the target, x and y folded to their magnitudes so
@@ -887,7 +965,18 @@ namespace {
 
         QMatrix4x4 projection(float height) const
         {
-            return m_perspective ? perspectiveProjection(height) : orthoProjection(height);
+            const float aspect = aspectRatio(m_live.target->pixelSize());
+            return m_perspective ? perspectiveProjection(height, aspect)
+                                 : orthoProjection(height, aspect);
+        }
+
+        static QImage rgbaImage(const QByteArray& pixels, QSize size)
+        {
+            if (size.isEmpty()) {
+                return QImage();
+            }
+            return QImage(reinterpret_cast<const uchar*>(pixels.constData()),
+                          size.width(), size.height(), QImage::Format_RGBA8888).copy();
         }
 
         QRhi* const m_rhi;
@@ -907,11 +996,16 @@ namespace {
         int m_drawableCount = 0;
         float m_orthoHeight = kFarOrthoHeight;
         bool m_perspective = false;
+        std::optional<CameraPose> m_pose;
+        bool m_edlEnabled = false;
+        cwRhiFrameRenderer::EdlOffscreen m_edl;
         std::optional<cwPointCloudAppearance> m_appearanceOverride;
         QVector3D m_viewOffset;
         bool m_readbackEnabled = false;
         QByteArray m_colorPixels;
         QSize m_colorSize;
+        QByteArray m_compositePixels;
+        QSize m_compositeSize;
         qint64 m_gpuBaseline = 0;
         qint64 m_cpuBaseline = 0;
     };
@@ -1292,6 +1386,8 @@ namespace {
     //! Where a failed case writes its frame, when it is set
     const char* const kFrameDumpEnvironmentVariable = "CAVEWHERE_HOLE_METRIC_DUMP_DIR";
     const char* const kTileLazEnvironmentVariable = "CAVEWHERE_HOLE_METRIC_LAZ";
+    //! Where the tile's octree is built and kept between runs, when it is set
+    const char* const kTileCacheEnvironmentVariable = "CAVEWHERE_HOLE_METRIC_CACHE_DIR";
 
     //! A per-pixel flag over a target-sized grid: which pixels are lit, or which
     //! ones the hole count is entitled to look at.
@@ -1611,22 +1707,11 @@ namespace {
     //! measure. Node payloads are quantized against bounds derived from
     //! rootMin, so sliding rootMin slides the whole cloud onto the origin
     //! without touching a single cached byte.
-    ShiftedOctree buildShiftedOctree(const QString& cacheRoot, const QString& lazPath,
-                                     std::optional<QVector3D> shift)
+    ShiftedOctree shiftedOctree(const QString& cacheRoot, const QString& lazPath,
+                                const cwPointOctreeManifest& built,
+                                std::optional<QVector3D> shift)
     {
-        //An empty frame CS leaves the points in the file's own meters
-        const cwPointOctreeBuilder::Request request {
-            .path = lazPath,
-            .cacheRootPath = cacheRoot
-        };
-
-        QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
-        future.waitForFinished();
-        REQUIRE(future.resultCount() == 1);
-        const cwPointOctreeBuilder::Result result = future.result();
-        REQUIRE_FALSE(result.hasError());
-
-        auto manifest = std::make_shared<cwPointOctreeManifest>(result.value());
+        auto manifest = std::make_shared<cwPointOctreeManifest>(built);
 
         ShiftedOctree shifted;
         shifted.shift = shift.value_or((manifest->bboxMin + manifest->bboxMax) * 0.5f);
@@ -1644,21 +1729,95 @@ namespace {
         return shifted;
     }
 
+    //! The request every tile build makes: an empty frame CS leaves the points
+    //! in the file's own meters.
+    cwPointOctreeBuilder::Request tileBuildRequest(const QString& cacheRoot,
+                                                   const QString& lazPath)
+    {
+        return cwPointOctreeBuilder::Request {
+            .path = lazPath,
+            .cacheRootPath = cacheRoot
+        };
+    }
+
+    ShiftedOctree buildShiftedOctree(const QString& cacheRoot, const QString& lazPath,
+                                     std::optional<QVector3D> shift)
+    {
+        QFuture<cwPointOctreeBuilder::Result> future =
+            cwPointOctreeBuilder::build(tileBuildRequest(cacheRoot, lazPath));
+        future.waitForFinished();
+        REQUIRE(future.resultCount() == 1);
+        const cwPointOctreeBuilder::Result result = future.result();
+        REQUIRE_FALSE(result.hasError());
+
+        return shiftedOctree(cacheRoot, lazPath, result.value(), shift);
+    }
+
+    //! A tile octree and how it came to be.
+    struct LoadedTileOctree {
+        ShiftedOctree shifted;
+        //! Zero when the octree was read back from the cache
+        qint64 buildMilliseconds = 0;
+        bool reused = false;
+    };
+
+    //! The octree of @a lazPath under @a cacheRoot, recentered onto its own
+    //! bounding-box center. A manifest a previous build left there is reused
+    //! when the builder's fingerprint of the LAZ still matches it and every node
+    //! it lists is still on disk; anything else is built. The fingerprint is
+    //! the one the manifest records: the file's size, the first and last 4 MB
+    //! of its bytes, and its CS, so an edited or replaced file rebuilds. The
+    //! manifest also carries cw::octree::kFormatGeneration, the only thing that
+    //! invalidates a cache built with different builder parameters: a change to
+    //! the per-node point target or leaf sizing needs a generation bump, or the
+    //! persistent directory keeps serving the old layout.
+    //!
+    //! The root node is read back and its checksum verified before the cache
+    //! counts; the other nodes are checked for presence only, since reading
+    //! every one costs as much as a tile pass. A node truncated by a crash
+    //! after the manifest landed loads with warnings at draw time, and the cure
+    //! is deleting the cache directory by hand. Two processes sharing one
+    //! directory race the same way.
+    LoadedTileOctree loadOrBuildTileOctree(const QString& cacheRoot, const QString& lazPath)
+    {
+        LoadedTileOctree loaded;
+
+        const std::optional<cwPointOctreeManifest> cached =
+            cwPointOctreeBuilder::cachedManifest(tileBuildRequest(cacheRoot, lazPath));
+        const auto rootReadsBack = [&]() {
+            const cwDiskCacher cacher {QDir(cacheRoot)};
+            return !cacher.entry(cw::octree::nodeKey(lazPath, cached->fingerprint,
+                                                     cached->nodeName(kRootIndex)))
+                        .isEmpty();
+        };
+        if (cached.has_value() && rootReadsBack()) {
+            loaded.shifted = shiftedOctree(cacheRoot, lazPath, *cached, std::nullopt);
+            loaded.reused = true;
+            return loaded;
+        }
+
+        QElapsedTimer timer;
+        timer.start();
+        loaded.shifted = buildShiftedOctree(cacheRoot, lazPath, std::nullopt);
+        loaded.buildMilliseconds = timer.elapsed();
+        return loaded;
+    }
+
     //! The octree of a real LAZ tile, built once per process. The file is a
     //! 1 km USGS lidar tile — USGS_LPC_WY_FEMA_East_2019_D19_w1145n2340.laz,
     //! 5.5 M points, downloaded from the USGS 3DEP lidar catalog — and it is
     //! too big to check in, so the path comes from CAVEWHERE_HOLE_METRIC_LAZ
-    //! and the tile cases skip without it.
+    //! and the tile cases skip without it. CAVEWHERE_HOLE_METRIC_CACHE_DIR
+    //! keeps the octree between runs; without it the octree lives in a
+    //! temporary directory for the process alone.
     struct TileCache {
-        QTemporaryDir directory {
-            QDir::temp().filePath(QStringLiteral("cwHoleMetric-%1-XXXXXX")
-                                      .arg(QCoreApplication::applicationPid()))
-        };
+        std::optional<QTemporaryDir> temporaryDirectory;
         OctreeCache cache;
         //! Where the tile sat in its own Albers meters before the recenter, so
         //! anything clipped out of the file can be shifted onto the same frame
         QVector3D originalCenter;
         qint64 buildMilliseconds = 0;
+        bool reused = false;
         bool built = false;
     };
 
@@ -1676,16 +1835,22 @@ namespace {
             return tile;
         }
 
-        REQUIRE(tile.directory.isValid());
+        QString cacheRoot = QString::fromLocal8Bit(qgetenv(kTileCacheEnvironmentVariable));
+        if (cacheRoot.isEmpty()) {
+            tile.temporaryDirectory.emplace(
+                QDir::temp().filePath(QStringLiteral("cwHoleMetric-%1-XXXXXX")
+                                          .arg(QCoreApplication::applicationPid())));
+            REQUIRE(tile.temporaryDirectory->isValid());
+            cacheRoot = tile.temporaryDirectory->path();
+        } else {
+            REQUIRE(QDir().mkpath(cacheRoot));
+        }
 
-        QElapsedTimer timer;
-        timer.start();
-        const ShiftedOctree shifted = buildShiftedOctree(tile.directory.path(), lazPath,
-                                                         std::nullopt);
-        tile.buildMilliseconds = timer.elapsed();
-
-        tile.cache = shifted.cache;
-        tile.originalCenter = shifted.shift;
+        const LoadedTileOctree loaded = loadOrBuildTileOctree(cacheRoot, lazPath);
+        tile.cache = loaded.shifted.cache;
+        tile.originalCenter = loaded.shifted.shift;
+        tile.buildMilliseconds = loaded.buildMilliseconds;
+        tile.reused = loaded.reused;
         tile.built = true;
         return tile;
     }
@@ -1867,9 +2032,13 @@ namespace {
                  "holes on real data");
         }
         REQUIRE(tile.cache.source.manifest->nodes.size() > 1);
-        writeCsvLine(QStringLiteral("holeBuild,usgsTile,%1,%2")
+        //Fields: buildMs, pointCount, built or cached, nodeCount. A reused
+        //octree reports buildMs 0 and cached.
+        writeCsvLine(QStringLiteral("holeBuild,usgsTile,%1,%2,%3,%4")
                          .arg(tile.buildMilliseconds)
-                         .arg(tile.cache.source.manifest->pointCount));
+                         .arg(tile.cache.source.manifest->pointCount)
+                         .arg(tile.reused ? QStringLiteral("cached") : QStringLiteral("built"))
+                         .arg(tile.cache.source.manifest->nodes.size()));
         return tile.cache;
     }
 
@@ -5356,6 +5525,319 @@ TEST_CASE("Node boxes outline every resident node and nothing past the octree",
     const QSet<QRgb> colors = litColors(fixture);
     CHECK(colors.contains(paletteRgb(cw::pointcloud::levelColor(kRootLevel))));
     CHECK(colors.contains(paletteRgb(cw::pointcloud::kEvictableNodeBoxColor)));
+}
+
+namespace {
+
+    //! Every file under @a root and when it was last written
+    QHash<QString, QDateTime> fileTimesUnder(const QString& root)
+    {
+        QHash<QString, QDateTime> times;
+        QDirIterator it(root, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QFileInfo info = it.nextFileInfo();
+            times.insert(info.absoluteFilePath(), info.lastModified());
+        }
+        return times;
+    }
+
+    //! The eval poses' target, a 1080p frame at half size
+    const QSize kHalfHdTargetSize(960, 540);
+    constexpr float kEvalVerticalFieldOfViewDegrees = 60.0f;
+
+    //! An eye standing over the plane, so the bottom of the frame looks at the
+    //! plane close up and the top looks past its far edge at the horizon
+    const QVector3D kObliqueEye(0.0f, -20.0f, 8.0f);
+    constexpr float kObliquePitchDegrees = 20.0f;
+    constexpr float kObliqueNear = 0.1f;
+    constexpr float kObliqueFar = 1000.0f;
+
+    //! The share of the frame, from the bottom up, that sees the plane well
+    //! inside its near edge
+    constexpr double kNearBandFraction = 0.25;
+    //! What the near band has to light. Close up a sprite covers several
+    //! pixels, so the surface reads closed.
+    constexpr double kMinNearBandLitFraction = 0.9;
+
+    //! How far two measurements of the plane's lit extent may disagree: a
+    //! sprite's rasterized margin on either side
+    constexpr double kLitExtentTolerancePx = 2 * kSpriteRasterFactor * kSpriteMarginPx;
+
+    //! The ortho height that puts the 64 m plane across half the 540 px target
+    constexpr float kHalfFrameOrthoHeight = 128.0f;
+
+    //! The camera kObliqueEye looks through: pitched kObliquePitchDegrees down
+    //! from level toward +y, with z up, at the eval poses' field of view.
+    CameraPose obliquePose(QSize target)
+    {
+        const float pitch = qDegreesToRadians(kObliquePitchDegrees);
+        const QVector3D forward(0.0f, std::cos(pitch), -std::sin(pitch));
+
+        CameraPose pose;
+        pose.view.lookAt(kObliqueEye, kObliqueEye + forward, QVector3D(0.0f, 0.0f, 1.0f));
+        pose.projection.perspective(kEvalVerticalFieldOfViewDegrees,
+                                    aspectRatio(target),
+                                    kObliqueNear, kObliqueFar);
+        return pose;
+    }
+
+    //! The row, counted from the top of the picture, @a pixel sits on. A
+    //! backend whose framebuffer is y up reads back bottom row first.
+    int rowFromTop(QRhi* rhi, const QPoint& pixel, QSize size)
+    {
+        return rhi->isYUpInFramebuffer() ? size.height() - 1 - pixel.y() : pixel.y();
+    }
+
+    //! The topmost and bottommost rows, counted from the top, @a pixels reach
+    std::pair<int, int> rowExtent(QRhi* rhi, const QVector<QPoint>& pixels, QSize size)
+    {
+        int topRow = size.height();
+        int bottomRow = 0;
+        for (const QPoint& pixel : pixels) {
+            const int row = rowFromTop(rhi, pixel, size);
+            topRow = std::min(topRow, row);
+            bottomRow = std::max(bottomRow, row);
+        }
+        return {topRow, bottomRow};
+    }
+
+    //! The radius, in pixels, around a lit pixel EDL looks at: its 1.4 px
+    //! default sample spread rounded up, with a pixel for the rasterizer
+    constexpr int kEdlNeighborhoodPx = 3;
+    //! How much darker EDL leaves the plane's border than its inside. The
+    //! border's outer neighbors are the clear depth, so each of them darkens it
+    //! to the ceiling.
+    constexpr double kMinEdlEdgeContrast = 32.0;
+
+    //! True when every pixel within @a radius of @a pixel is lit in @a lit
+    bool surroundedByLit(const PixelMask& lit, const QPoint& pixel, int radius)
+    {
+        for (int dy = -radius; dy <= radius; dy++) {
+            for (int dx = -radius; dx <= radius; dx++) {
+                if (!lit.at(pixel.x() + dx, pixel.y() + dy)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+}
+
+TEST_CASE("A tile octree built into a cache directory is reused until the LAZ changes",
+          "[PointCloudStreaming][TileCache]")
+{
+    QTemporaryDir lazDirectory;
+    QTemporaryDir cacheDirectory;
+    REQUIRE(lazDirectory.isValid());
+    REQUIRE(cacheDirectory.isValid());
+
+    const QString lazPath = tempLazPath(lazDirectory, QStringLiteral("tile-cache"));
+    REQUIRE(writeSyntheticLazFile(lazPath, passagePoints(kPassagePointCount, kPassageSeed)));
+
+    const LoadedTileOctree first = loadOrBuildTileOctree(cacheDirectory.path(), lazPath);
+    CHECK_FALSE(first.reused);
+    const cwPointOctreeManifest& built = *first.shifted.cache.source.manifest;
+    REQUIRE(built.nodes.size() > 1);
+
+    const QHash<QString, QDateTime> builtFiles = fileTimesUnder(cacheDirectory.path());
+    //One entry per node and the manifest
+    CHECK(builtFiles.size() == built.nodes.size() + 1);
+
+    SECTION("a second load reads the same octree back without writing a byte") {
+        const LoadedTileOctree second = loadOrBuildTileOctree(cacheDirectory.path(), lazPath);
+        CHECK(second.reused);
+        CHECK(second.buildMilliseconds == 0);
+
+        const cwPointOctreeManifest& reused = *second.shifted.cache.source.manifest;
+        CHECK(reused.fingerprint == built.fingerprint);
+        CHECK(reused.nodes.size() == built.nodes.size());
+        CHECK(reused.rootMin == built.rootMin);
+        CHECK(second.shifted.shift == first.shifted.shift);
+        CHECK(fileTimesUnder(cacheDirectory.path()) == builtFiles);
+
+        //The nodes the cache holds load and draw
+        const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+        LoadWarningCounter warnings;
+        PointCloudFixture fixture(rhi.get(), second.shifted.cache, kTargetDimension);
+        fixture.setReadbackEnabled(true);
+        fixture.setOrthoHeight(kFarOrthoHeight);
+        fixture.renderUntilQuiet();
+        CHECK(warnings.count() == 0);
+        CHECK(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
+        CHECK_FALSE(fixture.litPixels().isEmpty());
+    }
+
+    SECTION("a different file at the same path rebuilds under its own fingerprint") {
+        REQUIRE(writeSyntheticLazFile(lazPath,
+                                      passagePoints(kPassagePointCount, kPassageSeed + 1)));
+
+        const LoadedTileOctree rebuilt = loadOrBuildTileOctree(cacheDirectory.path(), lazPath);
+        CHECK_FALSE(rebuilt.reused);
+        CHECK(rebuilt.shifted.cache.source.manifest->fingerprint != built.fingerprint);
+    }
+
+    const cwDiskCacher cacher {QDir(cacheDirectory.path())};
+    const auto nodeFilePath = [&](int index) {
+        return cacher.filePath(cw::octree::nodeKey(lazPath, built.fingerprint,
+                                                   built.nodeName(index)));
+    };
+    const auto checkRebuiltComplete = [&]() {
+        const LoadedTileOctree rebuilt = loadOrBuildTileOctree(cacheDirectory.path(), lazPath);
+        CHECK_FALSE(rebuilt.reused);
+        CHECK(rebuilt.shifted.cache.source.manifest->fingerprint == built.fingerprint);
+        CHECK(fileTimesUnder(cacheDirectory.path()).size() == builtFiles.size());
+        CHECK(loadOrBuildTileOctree(cacheDirectory.path(), lazPath).reused);
+    };
+
+    SECTION("a node missing from disk rebuilds the octree") {
+        const QString leafPath = nodeFilePath(built.nodes.size() - 1);
+        REQUIRE(builtFiles.contains(QFileInfo(leafPath).absoluteFilePath()));
+        REQUIRE(QFile::remove(leafPath));
+
+        checkRebuiltComplete();
+        CHECK(QFileInfo::exists(leafPath));
+    }
+
+    SECTION("a root node truncated after the manifest landed rebuilds the octree") {
+        QFile root(nodeFilePath(kRootIndex));
+        REQUIRE(root.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        root.close();
+
+        checkRebuiltComplete();
+        CHECK(QFileInfo(root).size() > 0);
+    }
+}
+
+TEST_CASE("An oblique perspective pose lights the plane below the horizon and nothing above",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    fixture.setReadbackEnabled(true);
+    const CameraPose pose = obliquePose(kHalfHdTargetSize);
+    fixture.setPose(pose.view, pose.projection);
+    fixture.renderUntilQuiet();
+
+    REQUIRE(fixture.colorSize() == kHalfHdTargetSize);
+    const QVector<QPoint> lit = fixture.litPixels();
+    REQUIRE_FALSE(lit.isEmpty());
+
+    //The horizon of a camera pitched down by p sits tan(p) / tan(fov / 2) of
+    //the half-height above the center of the frame
+    const double horizonNdc = std::tan(qDegreesToRadians(double(kObliquePitchDegrees)))
+                              / std::tan(qDegreesToRadians(kEvalVerticalFieldOfViewDegrees * 0.5));
+    const int height = kHalfHdTargetSize.height();
+    const int horizonRow = int((1.0 - horizonNdc) * 0.5 * height);
+    const int nearBandTop = int(height * (1.0 - kNearBandFraction));
+
+    const int highestLitRow = rowExtent(rhi.get(), lit, kHalfHdTargetSize).first;
+    const auto nearBandLit = std::count_if(lit.cbegin(), lit.cend(), [&](const QPoint& pixel) {
+        return rowFromTop(rhi.get(), pixel, kHalfHdTargetSize) >= nearBandTop;
+    });
+
+    const int nearBandPixels = (height - nearBandTop) * kHalfHdTargetSize.width();
+    const double nearBandLitFraction = double(nearBandLit) / double(nearBandPixels);
+
+    INFO("horizon row " << horizonRow << ", highest lit row " << highestLitRow
+         << ", near band lit " << nearBandLitFraction);
+    CHECK(highestLitRow > horizonRow);
+    CHECK(nearBandLitFraction >= kMinNearBandLitFraction);
+
+    //setOrthoHeight() drops the pose: the fixed eye straight down draws the
+    //plane in the middle of the frame again, as far above the center as below
+    fixture.setOrthoHeight(kHalfFrameOrthoHeight);
+    fixture.renderUntilQuiet();
+    const QVector<QPoint> straightDown = fixture.litPixels();
+    REQUIRE_FALSE(straightDown.isEmpty());
+    const auto [topRow, bottomRow] = rowExtent(rhi.get(), straightDown, kHalfHdTargetSize);
+    INFO("straight down, rows " << topRow << " to " << bottomRow);
+    CHECK(std::abs(topRow - (height - 1 - bottomRow)) <= kLitExtentTolerancePx);
+}
+
+TEST_CASE("A wide target reads back at its own size and keeps the plane square",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kHalfFrameOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    CHECK(fixture.colorSize() == kHalfHdTargetSize);
+    CHECK(fixture.frameImage().size() == kHalfHdTargetSize);
+
+    const QVector<QPoint> lit = fixture.litPixels();
+    REQUIRE_FALSE(lit.isEmpty());
+    QRect bounds(lit.first(), QSize(1, 1));
+    for (const QPoint& pixel : lit) {
+        bounds |= QRect(pixel, QSize(1, 1));
+    }
+
+    //The ortho box takes the target's aspect, so a meter is as many pixels
+    //across as it is up and the square plane stays square
+    const double expectedSidePx =
+        kPlaneSide / double(kHalfFrameOrthoHeight) * kHalfHdTargetSize.height();
+    INFO("lit bounds " << bounds.width() << " x " << bounds.height()
+         << " px, plane " << expectedSidePx << " px");
+    CHECK(std::abs(bounds.width() - bounds.height()) <= kLitExtentTolerancePx);
+    CHECK(std::abs(bounds.height() - expectedSidePx) <= kLitExtentTolerancePx);
+}
+
+TEST_CASE("EDL shades the plane's edges and leaves its flat pass as it was",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kTargetDimension);
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kPlaneSweepHighHeight);
+    fixture.renderUntilQuiet();
+
+    const QImage flat = fixture.frameImage();
+    REQUIRE_FALSE(flat.isNull());
+    CHECK(fixture.compositeImage().isNull());
+
+    fixture.setEdlEnabled(true);
+    fixture.renderFrame();
+
+    //The flat pass now comes out of the EDL cloud target and is the same
+    //picture the frame without EDL drew
+    CHECK(fixture.frameImage() == flat);
+
+    const QImage composite = fixture.compositeImage();
+    REQUIRE(composite.size() == flat.size());
+
+    const PixelMask lit = litMask(fixture);
+    double insideSum = 0.0;
+    int insideCount = 0;
+    double edgeSum = 0.0;
+    int edgeCount = 0;
+    for (const QPoint& pixel : fixture.litPixels()) {
+        const int gray = qGray(composite.pixel(pixel));
+        if (surroundedByLit(lit, pixel, kEdlNeighborhoodPx)) {
+            insideSum += gray;
+            insideCount++;
+        } else {
+            edgeSum += gray;
+            edgeCount++;
+        }
+    }
+    REQUIRE(insideCount > 0);
+    REQUIRE(edgeCount > 0);
+
+    const double insideMean = insideSum / insideCount;
+    const double edgeMean = edgeSum / edgeCount;
+    INFO("inside mean " << insideMean << " over " << insideCount << " px, edge mean "
+         << edgeMean << " over " << edgeCount << " px");
+    CHECK(insideMean - edgeMean >= kMinEdlEdgeContrast);
+
+    //And off again, the composite goes with it
+    fixture.setEdlEnabled(false);
+    fixture.renderFrame();
+    CHECK(fixture.compositeImage().isNull());
+    CHECK(fixture.frameImage() == flat);
 }
 
 TEST_CASE("Zooming out until quiet leaves the holes bounded",
