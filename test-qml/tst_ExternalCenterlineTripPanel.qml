@@ -80,23 +80,21 @@ MainWindowTest {
             compare(String(report.ownerId), String(rootId.trip.id))
 
             const header = findChild(panelId, "attachedHeader")
-            const solveStatus = findChild(panelId, "solveStatus")
             const stationsList = findChild(panelId, "stationsList")
             const metadata = findChild(panelId, "tripMetadata")
             verify(header !== null && header.visible, "attached header renders")
             verify(header.attached, "the header reads Attached after the fixture attach")
-            verify(solveStatus !== null && solveStatus.visible, "solve status renders")
             verify(stationsList !== null && stationsList.visible, "stations list renders")
             verify(metadata !== null && metadata.visible, "trip metadata renders")
+            compare(findChild(panelId, "solveStatus"), null,
+                    "the trip page carries no solve status; the source root card has it")
 
-            // §16 B2a order: header row, solve status, Date/Declination/
-            // Team, then the station list at the bottom.
+            // Header row, Date/Declination/Team, then the station list at
+            // the bottom.
             waitForRendering(panelId)
             const panelY = (item) => item.mapToItem(panelId, 0, 0).y
-            tryVerify(() => panelY(header) < panelY(solveStatus),
-                      5000, "header above solve status")
-            tryVerify(() => panelY(solveStatus) < panelY(metadata),
-                      5000, "solve status above trip metadata")
+            tryVerify(() => panelY(header) < panelY(metadata),
+                      5000, "header above trip metadata")
             tryVerify(() => panelY(metadata) < panelY(stationsList),
                       5000, "trip metadata above the stations list")
 
@@ -270,7 +268,7 @@ MainWindowTest {
         // its own survey and nothing else. Cavern fatals on an *include it
         // cannot open, which would leave every panel in the region reading
         // "Solve failed" instead.
-        function test_aMissingProjectCopyLeavesTheSolveStatusCountingStations() {
+        function test_aMissingProjectCopyCostsOnlyItsOwnSurvey() {
             attachAndBind("trip-panel-missing-copy-solve")
             tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 0,
                       10000, "the attach-chained solve settles first")
@@ -288,10 +286,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
 
             const banner = findChild(panelId, "missingCenterlineCopyBanner")
-            const solveStatus = findChild(panelId, "solveStatus")
-            const statusLabel = findChild(solveStatus, "solveStatusLabel")
             verify(banner !== null, "missingCenterlineCopyBanner must exist")
-            verify(statusLabel !== null, "solveStatusLabel must exist")
 
             const copyPath = TestHelper.externalCenterlineCopyPath(
                 RootData.project, rootId.trip, "survex_simple.svx")
@@ -302,29 +297,16 @@ MainWindowTest {
                       "deleting the in-project copy banners the trip")
 
             // The deletion's own solve is queued through the future manager,
-            // so draining it is what makes the status below the region's
+            // so draining it is what makes the solve below the region's
             // answer to the missing file rather than the previous one.
             RootData.futureManagerModel.waitForFinished()
-            verify(!solveStatus.hasError, "the region still solved")
+            verify(!RootData.linePlotManager.hasSolveError, "the region still solved")
             verify(RootData.linePlotManager.lastSolveStationCount > 0,
                    "the surviving attachment's stations are counted")
             const stationsList = findChild(panelId, "stationsList")
             verify(stationsList !== null, "stationsList must exist")
             tryCompare(stationsList, "count", 0, 10000,
                        "the trip whose copy is gone lists no stations")
-            compare(solveStatus.stationCount, 0,
-                    "the status counts this trip's own stations")
-            compare(statusLabel.text, "0 stations")
-        }
-
-        function test_viewCavernOutputNavigates() {
-            attachAndBind("trip-panel-navigate")
-
-            const link = findChild(panelId, "viewCavernOutputLink")
-            verify(link !== null, "viewCavernOutputLink must exist")
-            mouseClick(link)
-            // init() restores "View" before every test.
-            tryCompare(RootData.pageSelectionModel, "currentPageAddress", "Cavern")
         }
 
         // The commit-3b gate (plans/EXTERNAL_FILE_LIVE_LINK_RETIREMENT.html
@@ -443,8 +425,7 @@ MainWindowTest {
             // Let the relayout the trip binding causes settle before taking
             // the baseline — a snapshot mid-polish would make the exact-y
             // compares below fail for reasons unrelated to forgetting.
-            const componentNames = ["attachedHeader", "solveStatus",
-                                    "stationsList", "tripMetadata"]
+            const componentNames = ["attachedHeader", "stationsList", "tripMetadata"]
             componentNames.forEach(name => {
                 tryVerify(() => {
                     const item = findChild(panelId, name)
@@ -795,21 +776,22 @@ MainWindowTest {
 
         // A derived trip is externally backed by its root's file and owns none
         // of its own, so every manager lookup the panel makes misses: they
-        // render as empty rather than tearing the panel down, and the header
-        // Loader carries the scope header instead of the attached one.
+        // render as empty rather than tearing the panel down. The page has no
+        // header: the breadcrumb names the trip's place, and the trip leaves
+        // only with its file.
         function test_aDerivedTripRendersThePanelWithNoFileOfItsOwn() {
             bindDerivedTrip("trip-panel-scope")
 
             verify(!panelId.isAttached, "a derived trip owns no file to be attached to")
-            verify(panelId.isScope, "a derived trip renders in scope mode")
+            verify(rootId.trip.sourcePath.length > 0, "the trip derives from its root's file")
 
-            const scopeHeader = findChild(panelId, "scopeHeader")
-            const solveStatus = findChild(panelId, "solveStatus")
             const stationsList = findChild(panelId, "stationsList")
-            verify(scopeHeader !== null && scopeHeader.visible, "the scope header renders")
+            compare(findChild(panelId, "scopeHeader"), null,
+                    "a derived trip's page has no Part of: header")
             compare(findChild(panelId, "attachedHeader"), null,
                     "the attached header belongs to a trip with a file of its own")
-            verify(solveStatus !== null && solveStatus.visible, "solve status renders")
+            compare(findChild(panelId, "solveStatus"), null,
+                    "the trip page carries no solve status")
             verify(stationsList !== null && stationsList.visible, "stations list renders")
 
             // Every imperative lookup misses, and each answers with its
@@ -887,10 +869,10 @@ MainWindowTest {
                       "the block's stations reach the derived trip's list")
         }
 
-        // A derived trip's solve status counts the trip's own stations, the
-        // number its tree row shows, rather than every station the region
-        // solved. counts.svx's leaf block left holds l1-l3 of the file's 12.
-        function test_aDerivedTripsSolveStatusCountsItsOwnStations() {
+        // A derived trip lists its own stations, the number its tree row
+        // shows, rather than every station the region solved. counts.svx's
+        // leaf block left holds l1-l3 of the file's 12.
+        function test_aDerivedTripListsOnlyItsOwnStations() {
             saveProjectAs("trip-panel-own-count")
             const root = attachSourceToRegion(
                            TestHelper.testcasesDatasetSourcePath(
@@ -905,51 +887,16 @@ MainWindowTest {
             tryVerify(() => RootData.linePlotManager.lastSolveStationCount > 3,
                       10000, "the attach's chained solve places the whole file")
 
-            const solveStatus = findChild(panelId, "solveStatus")
-            const statusLabel = findChild(solveStatus, "solveStatusLabel")
-            verify(statusLabel !== null, "solveStatusLabel must exist")
-            tryCompare(solveStatus, "stationCount", 3, 10000,
-                       "the solve status counts left's own stations")
-            compare(statusLabel.text, "3 stations")
-        }
-
-        // The verb the scope header adds acts on the real trip through the
-        // panel: its removal.
-        function test_theScopeHeadersVerbsReachTheTrip() {
-            bindDerivedTrip("trip-panel-scope-verbs")
-            const trip = rootId.trip
-            const node = trip.parentNode
-            const rowsBefore = node.rowCount()
-
-            const scopeHeader = findChild(panelId, "scopeHeader")
-
-            const removeButton = findChild(scopeHeader, "removeTripButton")
-            verify(removeButton !== null, "removeTripButton must exist")
-            mouseClick(removeButton)
-
-            const challenge = findChild(scopeHeader, "removeTripChallenge")
-            verify(challenge !== null, "removeTripChallenge must exist")
-            tryVerify(() => challenge.visible, 5000, "the prompt opens")
-
-            const confirm = findChild(challenge, "removeButton")
-            verify(confirm !== null, "the prompt's confirm button must exist")
-            // The header makes room for the prompt, so the panel's column
-            // has to settle before the prompt's buttons stand where the
-            // click is aimed.
-            waitForRendering(panelId)
-
-            // Nothing may touch the trip after this click: removeTrip with
-            // no undo stack destroys it on the spot.
-            mouseClick(confirm)
-            tryVerify(() => node.rowCount() === rowsBefore - 1,
-                      10000, "confirming removes the trip from its node")
-            rootId.trip = null
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null, "stationsList must exist")
+            tryCompare(stationsList, "count", 3, 10000,
+                       "the list holds left's own stations")
         }
 
         // The whole-node window (§7.2 step 6): the source root's own unit,
-        // which owns every station no other unit claims. The panel reads it as
-        // scope mode like any derived trip.
-        function test_aWholeNodeWindowRendersInScopeMode() {
+        // which owns every station no other unit claims. The panel renders it
+        // like any derived trip.
+        function test_aWholeNodeWindowRendersLikeADerivedTrip() {
             const root = makeSavedCaveAttach(
                            "trip-panel-whole-node",
                            "external-centerlines/survex_root_and_block.svx")
@@ -966,11 +913,11 @@ MainWindowTest {
             waitForRendering(panelId)
 
             verify(!panelId.isAttached, "the window owns no file of its own")
-            verify(panelId.isScope, "the window is a derived trip")
-
-            const scopeHeader = findChild(panelId, "scopeHeader")
-            verify(scopeHeader !== null && scopeHeader.visible,
-                   "the scope header renders for the whole-node window")
+            compare(findChild(panelId, "attachedHeader"), null,
+                    "the window has no file row of its own")
+            const stationsList = findChild(panelId, "stationsList")
+            verify(stationsList !== null && stationsList.visible,
+                   "the stations list renders for the whole-node window")
         }
     }
 }

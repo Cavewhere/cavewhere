@@ -420,6 +420,8 @@ MainWindowTest {
             //menu holds the verbs no cell carries: Add, Move to… and Delete….
             compare(menu.count, 3, "a cave row's menu offers Add, Move to… and Delete…")
             compare(menu.menuAt(0).objectName, "addVerbsSubmenu")
+            compare(menu.itemAt(1).objectName, "surveyItemMoveMenuItem", "Move to… follows Add")
+            compare(menu.itemAt(2).objectName, "surveyItemDeleteMenuItem", "Delete… comes last")
             const deleteItem = findChild(menu, "surveyItemDeleteMenuItem")
             verify(deleteItem !== null && deleteItem.visible, "Delete… must be offered")
             compare(deleteItem.text, "Delete…")
@@ -474,6 +476,9 @@ MainWindowTest {
             const submenu = menu.menuAt(2)
             verify(submenu !== null, "the third entry is a submenu")
             compare(submenu.objectName, "declinationSubmenu")
+            compare(menu.itemAt(0).objectName, "surveyItemMoveMenuItem", "Move to… leads")
+            compare(menu.itemAt(1).objectName, "surveyItemDeleteMenuItem",
+                    "Delete… sits between Move to… and Declination")
 
             mouseClick(findChild(menu, "surveyItemDeleteMenuItem"))
 
@@ -1608,10 +1613,10 @@ MainWindowTest {
             tryVerify(() => !bookMenu.visible, 5000)
         }
 
-        // Deleting a source root, a derived node and a derived trip each asks
-        // in its own words: the root and its copied file go, the derived ones
-        // are hidden across Reload.
-        function test_sourcedDeletePromptsSayWhatHappens() {
+        // Sourced data is all or nothing: the source root deletes with its
+        // copied file, while the nodes and trips its file derives offer no
+        // Delete…. A native trip filed under a derived node keeps its own.
+        function test_onlyTheSourceRootAndNativeRowsOfferDelete() {
             const root = attachWallsProjectAndReload()
             const page = gotoDataMainPage()
             const tree = surveyTree(page)
@@ -1619,35 +1624,83 @@ MainWindowTest {
             tree.surveyTree.expandAll()
             tryVerify(() => tree.rows === 9, 5000, "every row of the subtree shows")
 
-            let askBox = deletePromptFor(page, tree, 0, "caveDelegate")
+            const askBox = deletePromptFor(page, tree, 0, "caveDelegate")
             compare(askBox.message,
                     "Delete <b>KAUA</b>? Removes 4 books, 3 derived trips and 1 native trip. "
                     + "The copied KAUA.WPJ is removed from the project.")
             mouseClick(findChild(askBox, "cancelButton"))
             tryVerify(() => !askBox.visible, 5000)
 
+            const rootMenu = openMenuOn(page, tree, 0, "caveDelegate")
+            const rootNames = menuEntryNames(rootMenu)
+            const reloadAt = rootNames.indexOf("surveyItemReloadMenuItem")
+            const replaceAt = rootNames.indexOf("surveyItemReplaceMenuItem")
+            const deleteAt = rootNames.indexOf("surveyItemDeleteMenuItem")
+            verify(reloadAt >= 0 && reloadAt < replaceAt && replaceAt < deleteAt,
+                   "the root's menu runs Reload, Replace…, Delete…; got: " + rootNames)
+            rootMenu.close()
+            tryVerify(() => !rootMenu.visible, 5000)
+
             const surveys = childNamed(root, "Surveys")
-            askBox = deletePromptFor(page, tree, viewRowOf(tree, surveys), "caveDelegate")
-            compare(askBox.message,
-                    "Delete <b>Surveys</b>? Hides this Walls book and its 3 derived trips "
-                    + "from the project. It stays hidden across Reload; Restore… on KAUA.WPJ brings it back. "
-                    + "Its 1 native trip is deleted for good; Restore… brings back only what KAUA.WPJ derives.")
-            mouseClick(findChild(askBox, "cancelButton"))
-            tryVerify(() => !askBox.visible, 5000)
+            const surveysMenu = openMenuOn(page, tree, viewRowOf(tree, surveys), "caveDelegate")
+            compare(findChild(surveysMenu, "surveyItemDeleteMenuItem"), null,
+                    "a derived node offers no Delete…")
+            surveysMenu.close()
+            tryVerify(() => !surveysMenu.visible, 5000)
 
             const dec2001 = childNamed(surveys, "Dec 2001 Surveys")
             const derivedTrip = dec2001.trip(0)
             compare(derivedTrip.name, "D Survey 1")
-            askBox = deletePromptFor(page, tree, viewRowOf(tree, derivedTrip), "tripDelegate")
-            compare(askBox.message,
-                    "Delete trip <b>D Survey 1</b>? Hides it from the project; "
-                    + "it stays hidden across Reload of KAUA.WPJ.")
+            const derivedTripMenu = openMenuOn(page, tree, viewRowOf(tree, derivedTrip), "tripDelegate")
+            compare(findChild(derivedTripMenu, "surveyItemDeleteMenuItem"), null,
+                    "a derived trip offers no Delete…")
+            derivedTripMenu.close()
+            tryVerify(() => !derivedTripMenu.visible, 5000)
 
-            // Removing hides it: the trip leaves the tree, and the source
-            // remembers it so Reload keeps it out.
-            mouseClick(findChild(askBox, "removeButton"))
-            tryCompare(dec2001, "tripCount", 2, 5000)
-            tryVerify(() => tree.rows === 8, 5000, "the hidden trip's row is gone")
+            let nativeTrip = null
+            for (let i = 0; i < surveys.tripCount; i++) {
+                if (surveys.trip(i).name === "Native trip") {
+                    nativeTrip = surveys.trip(i)
+                }
+            }
+            verify(nativeTrip !== null, "Surveys holds the native trip")
+            const nativeMenu = openMenuOn(page, tree, viewRowOf(tree, nativeTrip), "tripDelegate")
+            verify(findChild(nativeMenu, "surveyItemDeleteMenuItem") !== null,
+                   "a native trip under a derived node keeps Delete…")
+            nativeMenu.close()
+            tryVerify(() => !nativeMenu.visible, 5000)
+        }
+
+        // A trip with a file of its own leaves with that file, so its row
+        // keeps Delete….
+        function test_anAttachedTripOffersDelete() {
+            RootData.account.name = "Attached Delete Test"
+            RootData.account.email = "attached.delete@example.com"
+            const tmpPath = RootData.urlToLocal(TestHelper.tempDirectoryUrl())
+            verify(RootData.project.saveAs(tmpPath + "/attachedDelete.cwproj"), "saveAs should succeed")
+            TestHelper.waitForProjectSaveToFinish(RootData.project)
+
+            const cave = addCave("Alpha Cave", 1)
+            const trip = cave.trip(0)
+            const model = RootData.externalCenterlineManager.attachedCenterlinesModel
+            const rowsBefore = model.rowCount()
+            RootData.attachTripCenterline(trip,
+                                          TestHelper.testcasesDatasetPath("external-centerlines/survex_simple.svx"))
+            tryVerify(() => model.rowCount() > rowsBefore, 10000, "the attach must land")
+            RootData.futureManagerModel.waitForFinished()
+            verify(trip.externalCenterline.entryFile.length > 0, "the trip owns its file")
+            compare(trip.sourcePath, "", "an attached trip derives from no other file")
+
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+            tree.expand(0)
+            tryCompare(tree, "rows", 2, 5000)
+            const menu = openMenuOn(page, tree, viewRowOf(tree, trip), "tripDelegate")
+            verify(findChild(menu, "surveyItemDeleteMenuItem") !== null,
+                   "an attached trip keeps Delete…")
+            menu.close()
+            tryVerify(() => !menu.visible, 5000)
         }
 
         // Clicking Delete… on a freshly attached source root asks first.

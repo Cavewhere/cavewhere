@@ -12,17 +12,15 @@ import cavewherelib
 
 // Replaces SurveyEditor on TripPage for an externally-backed trip
 // (master plan §8.5.1 + Phase-2 §9 deltas). Assembles the commit-10
-// sub-components, top to bottom: the header, solve status, trip metadata,
-// and the scoped station list. The whole column scrolls.
+// sub-components, top to bottom: the header, trip metadata, and the scoped
+// station list. The whole column scrolls.
 //
-// A trip reaches this panel in one of two modes, and the header Loader is
-// where they part: Attached, where the trip owns a survey file of its own
-// (file name, format and where the copy came from, with Reload and Replace…
-// in their right-click menus), and Scope, where the trip windows one block
-// of its cave's file (the cave it belongs to, its station prefix, and
-// Remove trip). Everything that acts on a file
-// of the trip's own — the missing-copy and file-error banners, Replace,
-// the provenance line — belongs to Attached alone.
+// A trip reaches this panel in one of two modes: Attached, where the trip
+// owns a survey file of its own, and Derived, where the trip windows one
+// block of its source root's file. Everything that acts on a file of the
+// trip's own — the header with its file name, format and provenance, Reload
+// and Replace…, and the missing-copy and file-error banners — belongs to
+// Attached alone. The solve status lives on the source root's card.
 QQ.Item {
     id: root
     objectName: "externalCenterlineTripPanel"
@@ -45,8 +43,6 @@ QQ.Item {
     // source root's file. Attached wins when a trip somehow carries both.
     readonly property bool isAttached: trip !== null
                                        && trip.externalCenterline.entryFile.length > 0
-    readonly property bool isScope: !isAttached && trip !== null
-                                    && trip.sourcePath.length > 0
 
     signal stationClicked(cwStationHandle stationHandle)
 
@@ -110,7 +106,7 @@ QQ.Item {
             MissingCenterlineCopyBanner {
                 id: missingCopyBannerId
                 Layout.fillWidth: true
-                // A Scope trip has no copy of its own to be missing, and
+                // A derived trip has no copy of its own to be missing, and
                 // the banner already hides itself on an empty path.
                 missingPath: root.isAttached ? root.missingCopyPath : ""
                 onReplaceRequested: root.openReplaceDialog()
@@ -119,7 +115,7 @@ QQ.Item {
             ExternalCenterlineFileErrorBanner {
                 id: fileErrorBannerId
                 Layout.fillWidth: true
-                // Likewise: a Scope trip owns no file to have failed. The
+                // Likewise: a derived trip owns no file to have failed. The
                 // cave's error is reported on the cave's own page.
                 errorMessage: root.isAttached && root.trip !== null
                               ? root.trip.externalStationsError : ""
@@ -134,19 +130,31 @@ QQ.Item {
             }
 
             QQ.Loader {
-                id: headerLoaderId
                 Layout.fillWidth: true
-                sourceComponent: root.isAttached ? attachedHeaderComp : scopeHeaderComp
-            }
+                active: root.isAttached
+                sourceComponent: QQ.Component {
+                    ExternalCenterlineAttachedHeader {
+                        id: attachedHeaderItemId
 
-            ExternalCenterlineSolveStatus {
-                id: solveStatusId
-                Layout.fillWidth: true
-                hasError: root.linePlotManager.hasSolveError
-                warningCount: root.linePlotManager.lastSolveWarningCount
-                stationCount: stationsListId.count
-                onViewCavernOutputRequested: {
-                    RootData.pageSelectionModel.gotoPageByName(null, "Cavern")
+                        owner: root.trip
+                        externalSourceSettings: root.externalSourceSettings
+                        actionsEnabled: !root.ownerBusy
+                        entryFilePath: root.entryFilePath
+                        sourceChangedSinceCopy: root.sourceChangedSinceCopy
+
+                        onReplaceRequested: root.openReplaceDialog()
+
+                        onReloadFromSourceRequested: {
+                            root.externalCenterlineManager.reloadFromSource(root.trip)
+                        }
+
+                        // canReloadFromSource follows the disk and has no change
+                        // signal, so the header asks at the moment its menu opens.
+                        onSourceEligibilityRefreshRequested: {
+                            attachedHeaderItemId.sourceReloadable =
+                                    root.externalCenterlineManager.canReloadFromSource(root.trip)
+                        }
+                    }
                 }
             }
 
@@ -181,39 +189,6 @@ QQ.Item {
                 // built late. Deferred out of the close handler so the popup
                 // is not destroyed from inside its own emission.
                 onClosed: Qt.callLater(() => replaceDialogLoaderId.active = false)
-            }
-        }
-    }
-
-    QQ.Component {
-        id: scopeHeaderComp
-        ExternalCenterlineScopeHeader {
-            trip: root.trip
-        }
-    }
-
-    QQ.Component {
-        id: attachedHeaderComp
-        ExternalCenterlineAttachedHeader {
-            id: attachedHeaderItemId
-
-            owner: root.trip
-            externalSourceSettings: root.externalSourceSettings
-            actionsEnabled: !root.ownerBusy
-            entryFilePath: root.entryFilePath
-            sourceChangedSinceCopy: root.sourceChangedSinceCopy
-
-            onReplaceRequested: root.openReplaceDialog()
-
-            onReloadFromSourceRequested: {
-                root.externalCenterlineManager.reloadFromSource(root.trip)
-            }
-
-            // canReloadFromSource follows the disk and has no change
-            // signal, so the header asks at the moment its menu opens.
-            onSourceEligibilityRefreshRequested: {
-                attachedHeaderItemId.sourceReloadable =
-                        root.externalCenterlineManager.canReloadFromSource(root.trip)
             }
         }
     }

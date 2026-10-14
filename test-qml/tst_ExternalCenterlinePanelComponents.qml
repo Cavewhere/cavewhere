@@ -106,12 +106,6 @@ MainWindowTest {
         when: windowShown
 
         SignalSpy {
-            id: viewOutputSpyId
-            target: solveStatusId
-            signalName: "viewCavernOutputRequested"
-        }
-
-        SignalSpy {
             id: stationClickSpyId
             target: stationsListId
             signalName: "stationClicked"
@@ -139,7 +133,6 @@ MainWindowTest {
             RootData.newProject()
             RootData.futureManagerModel.waitForFinished()
             rootId.trip = null
-            viewOutputSpyId.clear()
             stationClickSpyId.clear()
             dateSpyId.clear()
             replaceRequestedSpyId.clear()
@@ -611,7 +604,7 @@ MainWindowTest {
             tryVerify(() => !explainer.visible, 5000, "the dialog closes on cancel")
         }
 
-        function test_solveStatusDotColorsAndLink() {
+        function test_solveStatusDotColors() {
             solveStatusId.hasError = false
             solveStatusId.warningCount = 0
             solveStatusId.stationCount = 42
@@ -642,14 +635,8 @@ MainWindowTest {
                    "an error renders red; got: " + dot.color)
             compare(label.text, "Solve failed")
 
-            solveStatusId.hasError = false
-            solveStatusId.warningCount = 0
-            solveStatusId.stationCount = 0
-
-            const link = findChild(solveStatusId, "viewCavernOutputLink")
-            verify(link !== null, "viewCavernOutputLink must exist")
-            mouseClick(link)
-            compare(viewOutputSpyId.count, 1, "link raises the deep-link signal")
+            compare(findChild(solveStatusId, "viewCavernOutputLink"), null,
+                    "the shared status holds no cavern-output link; the source root card owns it")
         }
 
         function test_stationsListShowsRowsAndClickEmits() {

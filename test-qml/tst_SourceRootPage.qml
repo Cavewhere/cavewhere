@@ -83,6 +83,22 @@ MainWindowTest {
             verify(!findChild(page, "derivedNodeCard").visible, "a root shows no derived-node card")
         }
 
+        // The cavern output covers the whole project, so its link sits on the
+        // source root's card beside the solve status, and nowhere on a trip.
+        function test_cardLinksToTheCavernOutput() {
+            const sourceRoot = attachCompassProject("source-root-cavern-link")
+            const page = gotoNodePage("Source/Data/Node=PROJECT", sourceRoot)
+            const card = sourceCard(page)
+
+            const link = findChild(card, "viewCavernOutputLink")
+            verify(link !== null, "the source root card carries View cavern output")
+            compare(link.text, "View cavern output")
+            tryVerify(() => link.visible, 5000, "the link shows on the card")
+            waitForRendering(card)
+            mouseClick(link)
+            tryCompare(RootData.pageSelectionModel, "currentPageAddress", "Cavern")
+        }
+
         function test_reloadFromTheHeaderMenuReloadsTheRoot() {
             const sourceRoot = attachCompassProject("source-root-reload")
             attachCompletedSpyId.clear()

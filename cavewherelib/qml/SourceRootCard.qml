@@ -11,8 +11,9 @@ import QtQuick.Layouts
 import cavewherelib
 
 // The source card on a source root's page: the copied file, its format, where
-// the copy came from, the solve status with the root's station count, and the
-// derived nodes and trips the user hid, with Restore… to bring them back.
+// the copy came from, the derived nodes and trips the user hid with Restore…
+// to bring them back, and the solve status with the root's station count and
+// a link to the cavern output.
 // Reload and Replace… sit in the header's right-click menus; they act on the
 // whole subtree, so they live on the root and nowhere below it.
 QQ.Item {
@@ -175,15 +176,22 @@ QQ.Item {
             }
         }
 
-        ExternalCenterlineSolveStatus {
+        RowLayout {
             Layout.fillWidth: true
+            spacing: Theme.tightSpacing
 
-            hasError: root.solveError.length > 0 || root.linePlotManager.hasSolveError
-            warningCount: root.solveWarningCount
-            stationCount: root.pageModel !== null ? root.pageModel.stationCount : 0
+            ExternalCenterlineSolveStatus {
+                hasError: root.solveError.length > 0 || root.linePlotManager.hasSolveError
+                warningCount: root.solveWarningCount
+                stationCount: root.pageModel !== null ? root.pageModel.stationCount : 0
+            }
 
-            onViewCavernOutputRequested: {
-                RootData.pageSelectionModel.gotoPageByName(null, "Cavern")
+            QQ.Item { Layout.fillWidth: true }
+
+            LinkText {
+                objectName: "viewCavernOutputLink"
+                text: qsTr("View cavern output")
+                onClicked: RootData.pageSelectionModel.gotoPageByName(null, "Cavern")
             }
         }
     }

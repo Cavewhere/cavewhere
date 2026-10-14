@@ -329,19 +329,14 @@ ColumnLayout {
     }
 
     //What the prompt says. Deleting a source root takes its subtree and its
-    //copied file along; deleting a node or trip its file derives hides it, so
-    //the prompt says it stays hidden; anything else is the ordinary delete,
-    //which counts the children and trips that go with it.
+    //copied file along; anything else is the ordinary delete, which counts
+    //the children and trips that go with it.
     function removeMessage(object: QQ.QtObject) : string {
         const node = object as SurveyNode;
         const trip = object as Trip;
 
         if(trip !== null) {
-            return trip.sourcePath !== ""
-                    ? qsTr("Delete trip <b>%1</b>? Hides it from the project; it stays hidden across Reload of %2.")
-                          .arg(trip.name)
-                          .arg(surveyTreeId.sourceFileName(trip.parentNode))
-                    : qsTr("Delete <b>%1</b>?").arg(trip.name);
+            return qsTr("Delete <b>%1</b>?").arg(trip.name);
         }
 
         if(node === null) {
@@ -359,27 +354,6 @@ ColumnLayout {
                       .arg(node.name)
                       .arg(parts)
                       .arg(surveyTreeId.sourceFileName(node));
-        }
-
-        //Hiding removes the node outright, so native trips under it are
-        //deleted; Restore rebuilds only what the file derives.
-        if(node.isSourced) {
-            const kindLabel = RegionSurveyTree.data(RegionSurveyTree.indexOf(node),
-                                                    SurveyTreeModel.KindLabelRole);
-            const counts = surveyTreeId.subtreeTripCounts(node);
-            const fileName = surveyTreeId.sourceFileName(node);
-            const hideText = qsTr("Delete <b>%1</b>? Hides this %2 and its %3 from the project. It stays hidden across Reload; Restore… on %4 brings it back.")
-                      .arg(node.name)
-                      .arg(kindLabel)
-                      .arg(surveyTreeId.countText(counts.derived, qsTr("derived trip"), qsTr("derived trips")))
-                      .arg(fileName);
-            if(counts.native === 0) {
-                return hideText;
-            }
-            const nativeText = counts.native === 1
-                    ? qsTr("Its 1 native trip is deleted for good; Restore… brings back only what %1 derives.").arg(fileName)
-                    : qsTr("Its %1 native trips are deleted for good; Restore… brings back only what %2 derives.").arg(counts.native).arg(fileName);
-            return qsTr("%1 %2").arg(hideText).arg(nativeText);
         }
 
         const nodeCount = surveyTreeId.descendantNodeCount(node);
@@ -431,8 +405,7 @@ ColumnLayout {
     }
 
     //Removes whatever the prompt asked about. A source root goes with its
-    //copied file and its source record, and a node or trip its file derives is
-    //hidden so Reload keeps it out. A top-level node is a row of the region,
+    //copied file and its source record. A top-level node is a row of the region,
     //which is the undoable way to remove a cave; anything deeper is a row of
     //its own parent.
     function removePending() {
@@ -447,11 +420,6 @@ ColumnLayout {
 
         if(node !== null && node.isSourceRoot) {
             RootData.deleteSourceRoot(node);
-            return;
-        }
-
-        if((node !== null && node.isSourced) || (trip !== null && trip.sourcePath !== "")) {
-            RootData.hideDerived(object);
             return;
         }
 

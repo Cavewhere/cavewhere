@@ -10,11 +10,10 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Solve-status strip for the external-centerline trip panel: colored
-// status dot, station count, warning pill, and a "View cavern output"
-// deep link. Dumb data properties so the component tests can drive all
-// three states; the panel binds the error and warnings from
-// cwLinePlotManager and the count from the trip's own known stations.
+// Solve-status strip for a source root's card: colored status dot, station
+// count and warning pill. Dumb data properties so the component tests can
+// drive all three states; the card binds the error and warnings from the
+// solve and the count from the root's own stations.
 RowLayout {
     id: root
     objectName: "solveStatus"
@@ -24,8 +23,6 @@ RowLayout {
     property int stationCount: 0
 
     spacing: Theme.tightSpacing
-
-    signal viewCavernOutputRequested()
 
     QQ.Rectangle {
         id: statusDotId
@@ -52,13 +49,5 @@ RowLayout {
         visible: !root.hasError && root.warningCount > 0
         color: Theme.textSecondary
         text: qsTr("%1 warnings").arg(root.warningCount)
-    }
-
-    QQ.Item { Layout.fillWidth: true }
-
-    LinkText {
-        objectName: "viewCavernOutputLink"
-        text: qsTr("View cavern output")
-        onClicked: root.viewCavernOutputRequested()
     }
 }

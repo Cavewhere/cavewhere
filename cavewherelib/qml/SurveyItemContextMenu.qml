@@ -10,7 +10,9 @@ import QtQuick.Controls as QC
 import cavewherelib
 
 // The context menu of a survey-tree row: Add on a node, Move to…, Reload and
-// Replace… on a source root, Delete…, and Declination on a trip.
+// Replace… on a source root, Delete…, and Declination on a trip. A copied
+// file's data goes all or nothing, so Delete… sits on native rows, the source
+// root and an attached trip, which leaves with its own file.
 //
 // A click on the row's name opens it and the name cell renames it, so the menu
 // is left holding the verbs no cell of the row carries — the Add verbs for the
@@ -42,6 +44,18 @@ QC.Menu {
     //has the keyboard from then on.
     property bool asking: false
 
+    //The menu's entries in the order they sit, by objectName. The entries
+    //join and leave as the row changes, so each one takes its place by rank
+    //rather than beside a neighbor that may be absent.
+    readonly property list<string> entryOrder: [
+        "addVerbsSubmenu",
+        "surveyItemMoveMenuItem",
+        "surveyItemReloadMenuItem",
+        "surveyItemReplaceMenuItem",
+        "surveyItemDeleteMenuItem",
+        "declinationSubmenu"
+    ]
+
     //The calibrations Declination acts on: the selected rows' trips when this
     //row is one of them, this row's trip otherwise. Read when the menu opens,
     //since the selection can have moved since the last time it did.
@@ -66,9 +80,50 @@ QC.Menu {
                                             && contextMenuId.row.node !== null
                                             && contextMenuId.row.node.isSourceRoot
 
+    //Whether the row may be deleted on its own: a node or trip a copied file
+    //derives goes only with its whole file, which is the source root's
+    //Delete….
+    readonly property bool canDelete: contextMenuId.isNodeRow
+                                      ? contextMenuId.row.node !== null
+                                        && (!contextMenuId.row.node.isSourced
+                                            || contextMenuId.row.node.isSourceRoot)
+                                      : contextMenuId.row !== null
+                                        && contextMenuId.row.trip !== null
+                                        && contextMenuId.row.trip.sourcePath === ""
+
     //Whether Reload can find the file the root was copied from. That follows
     //the disk and has no change signal, so it is read when the menu opens.
     property bool canReload: false
+
+    //Where an entry named \a name goes: ahead of the first entry that ranks
+    //after it, or at the end.
+    function insertPosition(name: string) : int {
+        const rank = contextMenuId.entryOrder.indexOf(name);
+        for(let i = 0; i < contextMenuId.count; i++) {
+            const submenu = contextMenuId.menuAt(i);
+            const entryName = submenu !== null ? submenu.objectName : contextMenuId.itemAt(i).objectName;
+            if(contextMenuId.entryOrder.indexOf(entryName) > rank) {
+                return i;
+            }
+        }
+        return contextMenuId.count;
+    }
+
+    function insertEntry(item: QC.MenuItem) {
+        contextMenuId.insertItem(contextMenuId.insertPosition(item.objectName), item);
+    }
+
+    function insertSubmenu(menu: QC.Menu) {
+        contextMenuId.insertMenu(contextMenuId.insertPosition(menu.objectName), menu);
+    }
+
+    //Hands the entry back to the Instantiator, which owns its destruction.
+    function takeEntry(item: QC.MenuItem) {
+        const position = contextMenuId.indexOfItem(item);
+        if(position >= 0) {
+            contextMenuId.takeItem(position);
+        }
+    }
 
     //The position of the submenu \a menu among this menu's entries, -1 when
     //it holds none.
@@ -91,8 +146,7 @@ QC.Menu {
         return -1;
     }
 
-    //Gives up the submenu an Instantiator is about to destroy, so the menu does
-    //not destroy it a second time.
+    //Hands the submenu back to the Instantiator, which owns its destruction.
     function takeSubmenu(menu: QC.Menu) {
         const position = contextMenuId.indexOfMenu(menu);
         if(position >= 0) {
@@ -111,6 +165,12 @@ QC.Menu {
                 && RootData.externalCenterlineManager.canReloadFromSource(contextMenuId.row.node)
                 && !RootData.externalCenterlineManager.isOwnerBusy(contextMenuId.row.node.id);
         contextMenuId.popup(x, y);
+        //An entry that joined at the end takes its first click only after the
+        //list lays out again (likely because it lay past the list's old height).
+        const list = contextMenuId.contentItem as QQ.ListView;
+        if(list !== null) {
+            list.forceLayout();
+        }
     }
 
     //The node's Add verbs lead the menu. A Menu's `visible` opens a submenu
@@ -128,7 +188,7 @@ QC.Menu {
             onAttachSurveyFileRequested: (node) => contextMenuId.surveyTree.attachSurveyFile(node)
         }
 
-        onObjectAdded: (index, object) => contextMenuId.insertMenu(0, object as QC.Menu)
+        onObjectAdded: (index, object) => contextMenuId.insertSubmenu(object as QC.Menu)
         onObjectRemoved: (index, object) => contextMenuId.takeSubmenu(object as QC.Menu)
     }
 
@@ -145,18 +205,12 @@ QC.Menu {
             onTriggered: contextMenuId.surveyTree.moveObject(contextMenuId.row.object)
         }
 
-        onObjectAdded: (index, object) => contextMenuId.insertItem(contextMenuId.indexOfItem(deleteMenuItemId),
-                                                                   object as QC.MenuItem)
-        onObjectRemoved: (index, object) => {
-            const position = contextMenuId.indexOfItem(object as QC.MenuItem);
-            if(position >= 0) {
-                contextMenuId.takeItem(position);
-            }
-        }
+        onObjectAdded: (index, object) => contextMenuId.insertEntry(object as QC.MenuItem)
+        onObjectRemoved: (index, object) => contextMenuId.takeEntry(object as QC.MenuItem)
     }
 
-    //Reload and Replace… join a source root's menu ahead of Delete…, the way
-    //Move to… joins a movable row's.
+    //Reload and Replace… join a source root's menu, the way Move to… joins a
+    //movable row's.
     QQ.Instantiator {
         model: contextMenuId.isSourceRootRow ? ["reload", "replace"] : []
 
@@ -180,27 +234,27 @@ QC.Menu {
             }
         }
 
-        onObjectAdded: (index, object) => contextMenuId.insertItem(contextMenuId.indexOfItem(deleteMenuItemId),
-                                                                   object as QC.MenuItem)
-        onObjectRemoved: (index, object) => {
-            const position = contextMenuId.indexOfItem(object as QC.MenuItem);
-            if(position >= 0) {
-                contextMenuId.takeItem(position);
-            }
-        }
+        onObjectAdded: (index, object) => contextMenuId.insertEntry(object as QC.MenuItem)
+        onObjectRemoved: (index, object) => contextMenuId.takeEntry(object as QC.MenuItem)
     }
 
-    QC.MenuItem {
-        id: deleteMenuItemId
-        objectName: "surveyItemDeleteMenuItem"
-        text: qsTr("Delete…")
+    QQ.Instantiator {
+        active: contextMenuId.canDelete
 
-        onTriggered: {
-            contextMenuId.asking = true;
-            contextMenuId.surveyTree.askRemove(contextMenuId.row,
-                                               contextMenuId.clickPos.x,
-                                               contextMenuId.clickPos.y);
+        delegate: QC.MenuItem {
+            objectName: "surveyItemDeleteMenuItem"
+            text: qsTr("Delete…")
+
+            onTriggered: {
+                contextMenuId.asking = true;
+                contextMenuId.surveyTree.askRemove(contextMenuId.row,
+                                                   contextMenuId.clickPos.x,
+                                                   contextMenuId.clickPos.y);
+            }
         }
+
+        onObjectAdded: (index, object) => contextMenuId.insertEntry(object as QC.MenuItem)
+        onObjectRemoved: (index, object) => contextMenuId.takeEntry(object as QC.MenuItem)
     }
 
     //A node has no declination, and a Menu's `visible` opens the menu rather
@@ -213,7 +267,7 @@ QC.Menu {
             tripCalibrations: contextMenuId.tripCalibrations
         }
 
-        onObjectAdded: (index, object) => contextMenuId.addMenu(object as QC.Menu)
+        onObjectAdded: (index, object) => contextMenuId.insertSubmenu(object as QC.Menu)
 
         onObjectRemoved: (index, object) => contextMenuId.takeSubmenu(object as QC.Menu)
     }
