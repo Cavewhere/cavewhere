@@ -122,6 +122,20 @@ public:
         double inclinationWeight = 0.0;
     };
 
+    // The section a ring was fitted to. readings are the quadrant readings in
+    // the ring's (right, up) plane, as lrudAcross, widestReadings and
+    // filledReadings left them; stationRadii are their quadrant ellipse
+    // around station, per bin, at the ring's binAngles, as the fit left them.
+    // station is the ring center except on an elbow's middle ring, which sits
+    // inset from it. A sharp bend later reshapes the bins that point into it
+    // and marks them unmeasured, so stationRadii equal radii on the measured
+    // bins of every ring other than an elbow's middle ring.
+    struct Section {
+        cwStationLrud readings;
+        QVector<double> stationRadii;
+        QVector3D station;
+    };
+
     // A cross-section ring around center with N = Options::ringResolution
     // bins. Bin k lies at polar angle binAngles[k] from frame.right toward
     // frame.up, radii[k] from the center; the angles rise with k from
@@ -134,7 +148,8 @@ public:
     // true when a junction grew the ring to take an arm's section across to
     // the far wall. isElbow is true for the rings that round a sharp corner,
     // which carry its station's readings off the station, and for rings
-    // inserted beside them.
+    // inserted beside them. section is set on the rings fitted from their own
+    // readings; steep, borrowed, blended and grown rings have none.
     struct Ring {
         QVector3D center;
         QVector<double> radii;
@@ -145,6 +160,7 @@ public:
         QVector<QVector3D> vertices;
         bool isGrown = false;
         bool isElbow = false;
+        std::optional<Section> section;
     };
 
     // How a chain end is closed: a fan at a dead end, a mouth on an arm ending

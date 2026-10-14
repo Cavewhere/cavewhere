@@ -73,6 +73,12 @@ int main(int argc, char* argv[])
                                          QStringLiteral("Include the parametric sweep cases in the list."));
     const QCommandLineOption ringsOption(QStringLiteral("rings"),
                                          QStringLiteral("Draw the builder's rings and their frames, also in grabs."));
+    const QCommandLineOption readingsOption(QStringLiteral("readings"),
+                                            QStringLiteral("Draw each station's readings as spokes, also in grabs."));
+    const QCommandLineOption sectionsOption(QStringLiteral("sections"),
+                                            QStringLiteral("Draw the section each ring was fitted to, also in grabs."));
+    const QCommandLineOption overshootOption(QStringLiteral("overshoot"),
+                                             QStringLiteral("Draw where a ring reaches past its section, also in grabs."));
     const QCommandLineOption projectOption(QStringLiteral("project"),
                                            QStringLiteral("Add a row per cave of this .cw or .cwproj, read from a temporary copy, and open on the first. Repeatable."),
                                            QStringLiteral("file"));
@@ -83,7 +89,7 @@ int main(int argc, char* argv[])
                                            QStringLiteral("Frame the camera on this station; the along-arm view looks down its longest leg."),
                                            QStringLiteral("name"));
     parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption, ringsOption,
-                       projectOption, spacingOption, stationOption});
+                       readingsOption, sectionsOption, overshootOption, projectOption, spacingOption, stationOption});
     parser.process(app);
 
     cwMetaTypeSystem::registerTypes();
@@ -115,6 +121,9 @@ int main(int argc, char* argv[])
         {QStringLiteral("failingOnly"), parser.isSet(failingOption)},
         {QStringLiteral("includeSweep"), parser.isSet(sweepOption)},
         {QStringLiteral("showRings"), parser.isSet(ringsOption)},
+        {QStringLiteral("showReadings"), parser.isSet(readingsOption)},
+        {QStringLiteral("showSections"), parser.isSet(sectionsOption)},
+        {QStringLiteral("showOvershoot"), parser.isSet(overshootOption)},
         {QStringLiteral("projectFiles"), projectFiles},
         {QStringLiteral("projectSpacing"), projectSpacing},
         {QStringLiteral("focusStation"), parser.value(stationOption)},

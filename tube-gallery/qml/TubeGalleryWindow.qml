@@ -18,6 +18,9 @@ QC.ApplicationWindow {
     property bool failingOnly: false
     property bool includeSweep: false
     property bool showRings: false
+    property bool showReadings: false
+    property bool showSections: false
+    property bool showOvershoot: false
     property list<string> projectFiles: []
     property real projectSpacing: 1.0
     property string focusStation: ""
@@ -246,6 +249,9 @@ QC.ApplicationWindow {
         scene: sceneId
         ringsVisible: ringsId.checked
         framesVisible: framesId.checked
+        readingsVisible: readingsId.checked
+        sectionsVisible: sectionsId.checked
+        overshootVisible: overshootId.checked
         station: stationFieldId.text
 
         onCurrentChanged: rootId.inspectedRing = -1
@@ -526,6 +532,21 @@ QC.ApplicationWindow {
                     checked: rootId.showRings
                 }
                 QC.CheckBox {
+                    id: readingsId
+                    text: qsTr("Readings")
+                    checked: rootId.showReadings
+                }
+                QC.CheckBox {
+                    id: sectionsId
+                    text: qsTr("Sections")
+                    checked: rootId.showSections
+                }
+                QC.CheckBox {
+                    id: overshootId
+                    text: qsTr("Overshoot")
+                    checked: rootId.showOvershoot
+                }
+                QC.CheckBox {
                     id: centerlineId
                     text: qsTr("Centerline")
                     checked: true
@@ -558,7 +579,7 @@ QC.ApplicationWindow {
 
                 QQ.HoverHandler {
                     id: ringHoverId
-                    enabled: ringsId.checked || framesId.checked
+                    enabled: ringsId.checked || framesId.checked || sectionsId.checked || overshootId.checked
 
                     onPointChanged: {
                         const ring = galleryModelId.ringAt(ringHoverId.point.position, transformUpdaterId.matrix, rootId.ringHoverPixels)

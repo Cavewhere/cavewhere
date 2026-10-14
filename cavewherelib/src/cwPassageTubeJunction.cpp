@@ -919,6 +919,7 @@ void growThrough(Chain& through, const JunctionSolids& solids)
                 ring.radii[bin] = inside;
                 ring.measured[bin] = false;
                 ring.isGrown = true;
+                ring.section.reset();
             }
         }
     }

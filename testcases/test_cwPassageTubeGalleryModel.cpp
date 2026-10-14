@@ -39,6 +39,7 @@ using Model = cwPassageTubeGalleryModel;
 const QString kSymmetricT = QStringLiteral("1. symmetric T");
 const QString kJunctionFreeCase = QStringLiteral("no arms, through profile 0, bend 0, same section");
 const QString kShaftFootCase = QStringLiteral("25. Zero floor reading at the foot of a shaft");
+const QString kSharpBendCase = QStringLiteral("23. Sharp bend at a station reading zero on the outside wall");
 constexpr float kLengthTolerance = 1e-4f;
 constexpr float kPositionTolerance = 1e-3f;
 constexpr int kProjectLoadTimeoutMs = 30000;
@@ -142,6 +143,21 @@ QVector<cwPassageTubeBuilder::Ring> caseRings(const QString& name)
         rings.append(chain.rings);
     }
     return rings;
+}
+
+// The position of station in the named catalog case's survey.
+QVector3D casePosition(const QString& name, const QString& station)
+{
+    const QVector<cwPassageTubeCases::Case> catalog = cwPassageTubeCases::catalog();
+    const auto entry = std::find_if(catalog.cbegin(), catalog.cend(), [&](const cwPassageTubeCases::Case& candidate) {
+        return candidate.name == name;
+    });
+    REQUIRE(entry != catalog.cend());
+    const cwPassageTubeCases::Survey survey = cwPassageTubeCases::toSurvey(*entry);
+    REQUIRE(survey.region.caves.size() == 1);
+    const cwStationPositionLookup positions = survey.positionsByCave.value(survey.region.caves.constFirst().id);
+    REQUIRE(positions.hasPosition(station));
+    return positions.position(station);
 }
 
 } // namespace
@@ -311,6 +327,107 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
         CHECK(nearest == 0);
         CHECK(model.ringLine(nearest).startsWith(QStringLiteral("chain 0 ring 0: ")));
         CHECK(model.ringLine(static_cast<int>(rings.size())).isEmpty());
+    }
+}
+
+// Case 23 reads c0 and c1 and leaves c2 unread; the elbow at c1 reaches
+// past c1's readings on the bend's inside.
+TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    constexpr int kReadStations = 2;
+    constexpr int kSpokesPerStation = 4;
+    cwScene scene;
+    Model model;
+    model.setScene(&scene);
+
+    const int row = model.indexOf(kSharpBendCase);
+    REQUIRE(row >= 0);
+    model.setCurrentIndex(row);
+
+    const Model::RingGeometry geometry = model.ringGeometry();
+    const QVector<cwPassageTubeBuilder::Ring> rings = caseRings(kSharpBendCase);
+    REQUIRE_FALSE(rings.isEmpty());
+    const QVector3D c0 = casePosition(kSharpBendCase, QStringLiteral("c0"));
+    const QVector3D c1 = casePosition(kSharpBendCase, QStringLiteral("c1"));
+    CHECK(model.ringPlot()->points() == geometry.points);
+
+    SECTION("four spokes from each read station")
+    {
+        REQUIRE(geometry.readings.count == 2 * kSpokesPerStation * kReadStations);
+        const QVector<QVector3D> stations {c0, c1};
+        for (int spoke = 0; spoke < geometry.readings.count / 2; ++spoke) {
+            const QVector3D start = geometry.points.at(geometry.readings.start + 2 * spoke);
+            const QVector3D end = geometry.points.at(geometry.readings.start + 2 * spoke + 1);
+            CHECK(std::any_of(stations.cbegin(), stations.cend(), [&](const QVector3D& station) { return isNear(start, station); }));
+            CHECK(start.distanceToPoint(end) > 0.0f);
+        }
+        CHECK(geometry.passageReadings.start == geometry.readings.start + geometry.readings.count);
+    }
+
+    SECTION("a loop per sectioned ring and an inset per sectioned elbow ring")
+    {
+        const qsizetype sectioned = std::count_if(rings.cbegin(), rings.cend(), [](const cwPassageTubeBuilder::Ring& ring) {
+            return ring.section.has_value();
+        });
+        const qsizetype sectionedElbows = std::count_if(rings.cbegin(), rings.cend(), [](const cwPassageTubeBuilder::Ring& ring) {
+            return ring.section.has_value() && ring.isElbow;
+        });
+        REQUIRE(sectioned > 0);
+        REQUIRE(sectionedElbows > 0);
+        REQUIRE(geometry.sectionLoops.size() == sectioned);
+        int loop = 0;
+        for (const cwPassageTubeBuilder::Ring& ring : rings) {
+            if (ring.section) {
+                const cwLinePlotGeometry::VertexRange& range = geometry.sectionLoops.at(loop++);
+                CHECK(range.count == 2 * ring.section->stationRadii.size());
+                CHECK(geometry.points.at(range.start) == geometry.points.at(range.start + range.count - 1));
+            }
+        }
+        CHECK(geometry.sectionInsets.count == 2 * sectionedElbows);
+        CHECK(geometry.overshoots.start == geometry.sectionInsets.start + geometry.sectionInsets.count);
+        CHECK(geometry.overshoots.count > 0);
+    }
+
+    SECTION("the report and the ring line name the corner and its overshoot")
+    {
+        const QString report = model.reportText();
+        INFO(report.toStdString());
+        const QStringList lines = report.split(QLatin1Char('\n')).filter(QStringLiteral("at c1 (chain 0): reaches "));
+        REQUIRE(lines.size() == 1);
+        CHECK(lines.constFirst().contains(QStringLiteral(" m past the readings at ")));
+
+        const int middle = model.nearestRing(c1);
+        const QString line = model.ringLine(middle);
+        INFO(line.toStdString());
+        CHECK(line.contains(QStringLiteral("section L/R/U/D ")));
+        CHECK(line.contains(QStringLiteral(" around c1 ")));
+        CHECK(line.contains(QStringLiteral(" m past the readings at ")));
+    }
+
+    SECTION("each layer shows on its own")
+    {
+        model.setReadingsVisible(true);
+        const QVector<quint8> visibility = model.ringPlot()->visibility();
+        CHECK(visibility.at(geometry.readings.start) == cwRenderLinePlot::kVisible);
+        CHECK(visibility.at(geometry.sectionLoops.constFirst().start) == cwRenderLinePlot::kHidden);
+        CHECK(visibility.at(geometry.overshoots.start) == cwRenderLinePlot::kHidden);
+        CHECK(visibility.at(0) == cwRenderLinePlot::kHidden);
+    }
+
+    SECTION("framing a station takes in its rings' sections")
+    {
+        model.setStation(QStringLiteral("c1"));
+        const QBox3D withoutSections = model.framingBox();
+        model.setSectionsVisible(true);
+        const QBox3D box = model.framingBox();
+        CHECK(box.contains(withoutSections));
+        for (const cwPassageTubeBuilder::Ring& ring : rings) {
+            if (ring.section && isNear(ring.section->station, c1)) {
+                for (const QVector3D& vertex : ring.vertices) {
+                    CHECK(box.contains(vertex));
+                }
+            }
+        }
     }
 }
 

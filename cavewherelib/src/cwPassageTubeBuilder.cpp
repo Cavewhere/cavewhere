@@ -777,6 +777,7 @@ QVector<Chain> buildChains(const QVector<Leg>& legs, double defaultRadius)
 
 using Frame = cwPassageTubeBuilder::Frame;
 using Ring = cwPassageTubeBuilder::Ring;
+using Section = cwPassageTubeBuilder::Section;
 using Options = cwPassageTubeBuilder::Options;
 
 // A station occurrence's LRUD with the facing they were read along.
@@ -1587,14 +1588,17 @@ cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std
 }
 
 // stationRadii are the radii of the station's section around the station
-// itself, which a ring without readings borrows; they differ from radii on
-// an elbow's middle ring.
+// itself, which a ring without readings borrows; as fitted, they differ from
+// radii only on an elbow's middle ring, until fitSharpBends reshapes the bins
+// that point into a bend. section is set only on a fit from the quadrant
+// readings.
 struct RingFit {
     QVector<double> radii;
     QVector<double> binAngles;
     QVector<bool> measured;
     int filledBins = 0;
     QVector<double> stationRadii;
+    std::optional<Section> section;
 };
 
 // Bin k's eccentric anomaly around the ring, 2πk/N.
@@ -1612,7 +1616,7 @@ RingFit emptyFit(int resolution)
     }
 
     const QVector<double> zeros(resolution, 0.0);
-    return RingFit {zeros, roundAngles, QVector<bool>(resolution, false), 0, zeros};
+    return RingFit {zeros, roundAngles, QVector<bool>(resolution, false), 0, zeros, std::nullopt};
 }
 
 // A pit's left and right read across it whichever way it is entered, so a
@@ -1818,6 +1822,7 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
         fit.radii[bin] = section.reach(angle);
         fit.stationRadii[bin] = section.reachAroundStation(angle);
     }
+    fit.section = Section {filled, fit.stationRadii, sample.position + sample.stationOffset};
     return fit;
 }
 
@@ -1954,6 +1959,7 @@ void blendElbowRings(const QVector<ChainSample>& samples, Chain& chain)
         const Ring& low = chain.rings.at(before);
         const Ring& high = chain.rings.at(after);
         Ring& ring = chain.rings[i];
+        ring.section.reset();
         for (int bin = 0; bin < ring.radii.size(); ++bin) {
             ring.radii[bin] = low.radii.at(bin) + (high.radii.at(bin) - low.radii.at(bin)) * fraction;
             ring.binAngles[bin] = low.binAngles.at(bin) + (high.binAngles.at(bin) - low.binAngles.at(bin)) * fraction;
@@ -2124,6 +2130,7 @@ void buildRings(const QVector<Leg>& legs,
     for (int i = 0; i < samples.size(); ++i) {
         Ring ring {samples.at(i).position, fits.at(i).radii, fits.at(i).binAngles, frames.at(i), fits.at(i).measured, samples.at(i).chainLeg};
         ring.isElbow = samples.at(i).isElbow;
+        ring.section = fits.at(i).section;
         if (fits.at(i).filledBins < kMinFilledBins) {
             ring.measured = QVector<bool>(resolution, false);
             if (fittedSamples.isEmpty()) {

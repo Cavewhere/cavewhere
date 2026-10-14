@@ -42,7 +42,8 @@ class cwScene;
  * cwPassageTubeBuilder::buildDebug and checks it with
  * cwPassageTubeMeshCheck on the GUI thread; the mesh and centerline go to a
  * tube and a line plot the model adds to its scene. A second line plot draws
- * the builder's rings and their frames.
+ * the builder's rings and their frames, the survey's readings, the sections
+ * the rings were fitted to, and where a ring reaches past its section.
  *
  * Issue counts for the list are built on first read and cached.
  *
@@ -64,6 +65,9 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(cwRenderLinePlot* ringPlot READ ringPlot NOTIFY sceneChanged)
     Q_PROPERTY(bool ringsVisible READ ringsVisible WRITE setRingsVisible NOTIFY ringsVisibleChanged)
     Q_PROPERTY(bool framesVisible READ framesVisible WRITE setFramesVisible NOTIFY framesVisibleChanged)
+    Q_PROPERTY(bool readingsVisible READ readingsVisible WRITE setReadingsVisible NOTIFY readingsVisibleChanged)
+    Q_PROPERTY(bool sectionsVisible READ sectionsVisible WRITE setSectionsVisible NOTIFY sectionsVisibleChanged)
+    Q_PROPERTY(bool overshootVisible READ overshootVisible WRITE setOvershootVisible NOTIFY overshootVisibleChanged)
     Q_PROPERTY(QString station READ station WRITE setStation NOTIFY stationChanged)
 
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged)
@@ -97,11 +101,30 @@ public:
     // its vertices back to the first; a grown ring draws every other edge.
     // rights and ups hold one segment per ring, in loop order, from its center
     // along frame.right and frame.up.
+    //
+    // readings hold a spoke per read wall of each station occurrence, from
+    // the station as long as the reading: left and right square to its
+    // facing, up and down along world z. passageReadings hold the passage
+    // LRUD's spokes where they differ from the reading.
+    //
+    // sectionLoops hold, per ring with a section, the loop of its
+    // stationRadii around the section's station in the ring's frame;
+    // sectionInsets a segment from the station to the center of each elbow
+    // ring with a section. overshoots hold a whisker from the section loop to
+    // the ring vertex of each bin that reaches more than
+    // cwPassageTubeMeshCheck::kWallTolerance past it.
+    //
+    // The ranges follow one another in the order declared.
     struct RingGeometry {
         QVector<QVector3D> points;
         QVector<cwLinePlotGeometry::VertexRange> loops;
         cwLinePlotGeometry::VertexRange rights;
         cwLinePlotGeometry::VertexRange ups;
+        cwLinePlotGeometry::VertexRange readings;
+        cwLinePlotGeometry::VertexRange passageReadings;
+        QVector<cwLinePlotGeometry::VertexRange> sectionLoops;
+        cwLinePlotGeometry::VertexRange sectionInsets;
+        cwLinePlotGeometry::VertexRange overshoots;
     };
 
     explicit cwPassageTubeGalleryModel(QObject* parent = nullptr);
@@ -133,6 +156,17 @@ public:
     bool framesVisible() const;
     void setFramesVisible(bool framesVisible);
 
+    bool readingsVisible() const;
+    void setReadingsVisible(bool readingsVisible);
+
+    // With a station(), the framing box also takes in the station's rings
+    // and their sections.
+    bool sectionsVisible() const;
+    void setSectionsVisible(bool sectionsVisible);
+
+    bool overshootVisible() const;
+    void setOvershootVisible(bool overshootVisible);
+
     // The station the camera frames, matched ignoring case; empty, or a
     // station the current row lacks, frames the whole survey.
     QString station() const;
@@ -162,8 +196,9 @@ public:
     QVector3D boundsCenter() const;
     double boundsRadius() const;
 
-    // The legs at station() and their readings, else the mesh and centerline
-    // bounds, a unit cube when the case is empty.
+    // The legs at station() and their readings, with the station's rings and
+    // sections while sectionsVisible, else the mesh and centerline bounds, a
+    // unit cube when the case is empty.
     QBox3D framingBox() const;
 
     // station(), else the first station where three or more passages meet,
@@ -185,7 +220,8 @@ public:
     Q_INVOKABLE int nearestRing(const QVector3D& position) const;
 
     // The ring's chain, index, leg, distance to its station, frame up,
-    // inclination weight, radius range and kind; empty for an unknown ring.
+    // inclination weight, radius range, kind, and its section's readings,
+    // station and largest overshoot; empty for an unknown ring.
     Q_INVOKABLE QString ringLine(int ring) const;
 
 signals:
@@ -196,6 +232,9 @@ signals:
     void currentChanged();
     void ringsVisibleChanged();
     void framesVisibleChanged();
+    void readingsVisibleChanged();
+    void sectionsVisibleChanged();
+    void overshootVisibleChanged();
     void stationChanged();
     void projectOpened(int firstRow, int rowCount);
     void projectFailed(const QString& message);
@@ -255,6 +294,9 @@ private:
     QPointer<cwRenderLinePlot> m_ringPlot;
     bool m_ringsVisible = false;
     bool m_framesVisible = false;
+    bool m_readingsVisible = false;
+    bool m_sectionsVisible = false;
+    bool m_overshootVisible = false;
     QString m_station;
 
     Build m_current;

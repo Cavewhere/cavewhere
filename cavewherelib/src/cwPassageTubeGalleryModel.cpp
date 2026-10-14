@@ -13,6 +13,7 @@
 #include "cwErrorListModel.h"
 #include "cwGlobals.h"
 #include "cwLinePlotManager.h"
+#include "cwPassageTubeGeometry.h"
 #include "cwProject.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderPassageTube.h"
@@ -36,6 +37,7 @@
 
 //Std includes
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -50,6 +52,8 @@ const QVector3D kFallbackArmDirection(1.0f, 0.0f, 0.0f);
 constexpr float kMinHorizontalLength = 1e-4f;
 constexpr double kFallbackRadius = 1.0;
 constexpr int kJunctionDegree = 3;
+constexpr float kStationMatchMeters = 1e-3f;
+const QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
 
 bool isSweep(const Cases::Case& entry)
 {
@@ -282,6 +286,131 @@ int nearestRingIndex(const Builder::Debug& debug, double maxDistance, DistanceTo
     return nearest;
 }
 
+// The point of bin's section loop: its station radius from the section's
+// station along the bin's angle in the ring's frame.
+QVector3D sectionPoint(const Builder::Ring& ring, int bin)
+{
+    return ring.section->station + cwPassageTubeGeometry::binDirection(ring, bin) * static_cast<float>(ring.section->stationRadii.at(bin));
+}
+
+QVector3D ringVertex(const Builder::Ring& ring, int bin)
+{
+    if (bin < ring.vertices.size()) {
+        return ring.vertices.at(bin);
+    }
+    return ring.center + cwPassageTubeGeometry::binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
+}
+
+// How far bin's radius reaches past its section's station radius.
+double overshootAt(const Builder::Ring& ring, int bin)
+{
+    return ring.radii.at(bin) - ring.section->stationRadii.at(bin);
+}
+
+struct Overshoot {
+    int bin = 0;
+    double meters = 0.0;
+};
+
+// The bin of the ring with a section that reaches farthest past it.
+std::optional<Overshoot> largestOvershoot(const Builder::Ring& ring)
+{
+    if (!ring.section) {
+        return std::nullopt;
+    }
+    std::optional<Overshoot> largest;
+    for (int bin = 0; bin < ring.radii.size(); ++bin) {
+        const double meters = overshootAt(ring, bin);
+        if (!largest || meters > largest->meters) {
+            largest = Overshoot {bin, meters};
+        }
+    }
+    return largest;
+}
+
+QString overshootText(const Builder::Ring& ring, const Overshoot& overshoot)
+{
+    return QStringLiteral("%1 m past the readings at %2°")
+        .arg(overshoot.meters, 0, 'f', 2)
+        .arg(qRadiansToDegrees(ring.binAngles.at(overshoot.bin)), 0, 'f', 0);
+}
+
+QString lrudValuesText(const cwStationLrud& lrud)
+{
+    QStringList values;
+    for (const std::optional<double>& value : {lrud.left, lrud.right, lrud.up, lrud.down}) {
+        values.append(value ? QString::number(*value, 'f', 2) : QStringLiteral("-"));
+    }
+    return values.join(QLatin1Char('/'));
+}
+
+// One line per ring whose largest overshoot exceeds the wall tolerance.
+QStringList overshootLines(const Builder::Debug& debug)
+{
+    QStringList lines;
+    for (int c = 0; c < debug.chains.size(); ++c) {
+        const QVector<Builder::Ring>& rings = debug.chains.at(c).rings;
+        for (int i = 0; i < rings.size(); ++i) {
+            const Builder::Ring& ring = rings.at(i);
+            const std::optional<Overshoot> overshoot = largestOvershoot(ring);
+            if (overshoot && overshoot->meters > cwPassageTubeMeshCheck::kWallTolerance) {
+                lines.append(QStringLiteral("ring %1 at %2 (chain %3): reaches %4")
+                                 .arg(i)
+                                 .arg(nearestStation(debug, ring.section->station))
+                                 .arg(c)
+                                 .arg(overshootText(ring, *overshoot)));
+            }
+        }
+    }
+    return lines;
+}
+
+// A station occurrence's readings: the walls at one end of a leg.
+struct StationReadings {
+    QVector3D position;
+    cwStationLrud lrud;
+    cwStationLrud passageLrud;
+    QVector3D facing;
+};
+
+// Each station occurrence once: a station read in two chunks is two.
+QVector<StationReadings> stationReadings(const Builder::Debug& debug)
+{
+    QSet<std::pair<std::pair<QUuid, int>, QString>> seen;
+    QVector<StationReadings> readings;
+    const auto add = [&](const Builder::Leg& leg, const QString& name, const StationReadings& entry) {
+        const std::pair<std::pair<QUuid, int>, QString> key {{leg.tripId, leg.chunkIndex}, cwStation::canonicalKey(name)};
+        if (!seen.contains(key)) {
+            seen.insert(key);
+            readings.append(entry);
+        }
+    };
+    for (const Builder::Leg& leg : debug.legs) {
+        add(leg, leg.from, {leg.fromPosition, leg.fromLrud, leg.fromPassageLrud, leg.fromFacing});
+        add(leg, leg.to, {leg.toPosition, leg.toLrud, leg.toPassageLrud, leg.toFacing});
+    }
+    return readings;
+}
+
+// The rings fitted around station, with their sections.
+QBox3D stationSectionsBox(const Builder::Debug& debug, const QVector3D& station)
+{
+    QBox3D box;
+    for (const Builder::Chain& chain : debug.chains) {
+        for (const Builder::Ring& ring : chain.rings) {
+            if (ring.section && ring.section->station.distanceToPoint(station) <= kStationMatchMeters) {
+                for (const QVector3D& vertex : ring.vertices) {
+                    box.unite(vertex);
+                }
+                for (int bin = 0; bin < ring.section->stationRadii.size(); ++bin) {
+                    box.unite(sectionPoint(ring, bin));
+                }
+            }
+        }
+    }
+    return box;
+}
+
 cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& debug)
 {
     using Range = cwLinePlotGeometry::VertexRange;
@@ -313,6 +442,74 @@ cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& deb
     };
     geometry.rights = appendAxes(&Builder::Frame::right);
     geometry.ups = appendAxes(&Builder::Frame::up);
+
+    const auto appended = [&](const auto& append) {
+        const int start = static_cast<int>(points.size());
+        append();
+        return Range {start, static_cast<int>(points.size()) - start};
+    };
+
+    using Wall = std::optional<double> cwStationLrud::*;
+    const QVector<StationReadings> readings = stationReadings(debug);
+    const auto appendSpokes = [&](const auto& spokeLength) {
+        for (const StationReadings& entry : readings) {
+            const QVector3D right = QVector3D(entry.facing.y(), -entry.facing.x(), 0.0f).normalized();
+            const std::array<std::pair<Wall, QVector3D>, 4> walls {{
+                {&cwStationLrud::left, -right},
+                {&cwStationLrud::right, right},
+                {&cwStationLrud::up, kWorldUp},
+                {&cwStationLrud::down, -kWorldUp},
+            }};
+            for (const auto& [wall, direction] : walls) {
+                if (const std::optional<double> length = spokeLength(entry, wall)) {
+                    points << entry.position << entry.position + direction * static_cast<float>(*length);
+                }
+            }
+        }
+    };
+    geometry.readings = appended([&]() {
+        appendSpokes([](const StationReadings& entry, Wall wall) { return entry.lrud.*wall; });
+    });
+    geometry.passageReadings = appended([&]() {
+        appendSpokes([](const StationReadings& entry, Wall wall) {
+            const std::optional<double>& passage = entry.passageLrud.*wall;
+            return passage == entry.lrud.*wall ? std::optional<double>() : passage;
+        });
+    });
+
+    const auto forEachSectionedRing = [&](const auto& visit) {
+        for (const Builder::Chain& chain : debug.chains) {
+            for (const Builder::Ring& ring : chain.rings) {
+                if (ring.section) {
+                    visit(ring);
+                }
+            }
+        }
+    };
+    forEachSectionedRing([&](const Builder::Ring& ring) {
+        geometry.sectionLoops.append(appended([&]() {
+            const int binCount = static_cast<int>(ring.section->stationRadii.size());
+            for (int bin = 0; bin < binCount; ++bin) {
+                points << sectionPoint(ring, bin) << sectionPoint(ring, (bin + 1) % binCount);
+            }
+        }));
+    });
+    geometry.sectionInsets = appended([&]() {
+        forEachSectionedRing([&](const Builder::Ring& ring) {
+            if (ring.isElbow) {
+                points << ring.section->station << ring.center;
+            }
+        });
+    });
+    geometry.overshoots = appended([&]() {
+        forEachSectionedRing([&](const Builder::Ring& ring) {
+            for (int bin = 0; bin < ring.radii.size(); ++bin) {
+                if (overshootAt(ring, bin) > cwPassageTubeMeshCheck::kWallTolerance) {
+                    points << sectionPoint(ring, bin) << ringVertex(ring, bin);
+                }
+            }
+        });
+    });
     return geometry;
 }
 
@@ -505,6 +702,55 @@ void cwPassageTubeGalleryModel::setFramesVisible(bool framesVisible)
     applyRingVisibility();
 }
 
+bool cwPassageTubeGalleryModel::readingsVisible() const
+{
+    return m_readingsVisible;
+}
+
+void cwPassageTubeGalleryModel::setReadingsVisible(bool readingsVisible)
+{
+    if (m_readingsVisible == readingsVisible) {
+        return;
+    }
+    m_readingsVisible = readingsVisible;
+    emit readingsVisibleChanged();
+    applyRingVisibility();
+}
+
+bool cwPassageTubeGalleryModel::sectionsVisible() const
+{
+    return m_sectionsVisible;
+}
+
+void cwPassageTubeGalleryModel::setSectionsVisible(bool sectionsVisible)
+{
+    if (m_sectionsVisible == sectionsVisible) {
+        return;
+    }
+    m_sectionsVisible = sectionsVisible;
+    emit sectionsVisibleChanged();
+    applyRingVisibility();
+    if (!m_station.isEmpty()) {
+        locateStation();
+        emit currentChanged();
+    }
+}
+
+bool cwPassageTubeGalleryModel::overshootVisible() const
+{
+    return m_overshootVisible;
+}
+
+void cwPassageTubeGalleryModel::setOvershootVisible(bool overshootVisible)
+{
+    if (m_overshootVisible == overshootVisible) {
+        return;
+    }
+    m_overshootVisible = overshootVisible;
+    emit overshootVisibleChanged();
+    applyRingVisibility();
+}
+
 QString cwPassageTubeGalleryModel::station() const
 {
     return m_station;
@@ -653,6 +899,7 @@ QString cwPassageTubeGalleryModel::reportText() const
         lines.append(issueLine(m_current.debug, issue, QStringLiteral("warning: ")));
     }
     lines.append(elbowLines(m_current.debug));
+    lines.append(overshootLines(m_current.debug));
     return lines.join(QLatin1Char('\n'));
 }
 
@@ -776,6 +1023,16 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
                                                 ? std::pair<double, double>(0.0, 0.0)
                                                 : std::pair<double, double>(*std::min_element(entry.radii.cbegin(), entry.radii.cend()),
                                                                             *std::max_element(entry.radii.cbegin(), entry.radii.cend()));
+        QString sectionText;
+        if (entry.section) {
+            const QString station = nearestStation(m_current.debug, entry.section->station);
+            sectionText = QStringLiteral(", section L/R/U/D %1 around %2 %3")
+                              .arg(lrudValuesText(entry.section->readings), station, vectorText(entry.section->station));
+            if (const std::optional<Overshoot> overshoot = largestOvershoot(entry)) {
+                sectionText += QStringLiteral(", reaches ") + overshootText(entry, *overshoot);
+            }
+        }
+
         QStringList kinds;
         if (entry.isElbow) {
             kinds.append(QStringLiteral("elbow"));
@@ -784,7 +1041,7 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             kinds.append(QStringLiteral("grown"));
         }
 
-        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, up %6, inclination weight %7, radius %8-%9 m%10")
+        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, up %6, inclination weight %7, radius %8-%9 m%10%11")
             .arg(chainIndex)
             .arg(ring)
             .arg(entry.chainLeg)
@@ -792,7 +1049,7 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             .arg(entry.frame.inclinationWeight, 0, 'f', 2)
             .arg(minRadius, 0, 'f', 2)
             .arg(maxRadius, 0, 'f', 2)
-            .arg(kinds.isEmpty() ? QString() : QStringLiteral(", ") + kinds.join(QStringLiteral(", ")));
+            .arg(kinds.isEmpty() ? QString() : QStringLiteral(", ") + kinds.join(QStringLiteral(", ")), sectionText);
     }
     return QString();
 }
@@ -1002,6 +1259,9 @@ void cwPassageTubeGalleryModel::locateStation()
         }
     }
     if (longest >= 0.0f) {
+        if (m_sectionsVisible) {
+            frame.box.unite(stationSectionsBox(m_current.debug, frame.station));
+        }
         m_stationFrame = frame;
     }
 }
@@ -1075,7 +1335,7 @@ void cwPassageTubeGalleryModel::pushToScene()
         m_linePlot->setGeometry(points);
     }
     if (m_ringPlot) {
-        m_ringPlot->setGeometry(m_ringGeometry.points, {m_ringGeometry.ups});
+        m_ringPlot->setGeometry(m_ringGeometry.points, {m_ringGeometry.ups, m_ringGeometry.passageReadings, m_ringGeometry.overshoots});
         applyRingVisibility();
     }
 }
@@ -1083,11 +1343,17 @@ void cwPassageTubeGalleryModel::pushToScene()
 void cwPassageTubeGalleryModel::applyRingVisibility()
 {
     if (m_ringPlot) {
-        const int frameStart = m_ringGeometry.rights.start;
-        const int frameCount = m_ringGeometry.rights.count + m_ringGeometry.ups.count;
+        const RingGeometry& geometry = m_ringGeometry;
+        const int frameStart = geometry.rights.start;
+        const int readingStart = geometry.readings.start;
+        const int sectionStart = geometry.passageReadings.start + geometry.passageReadings.count;
+        const int overshootStart = geometry.overshoots.start;
         m_ringPlot->setRangeVisible(0, frameStart, m_ringsVisible);
-        m_ringPlot->setRangeVisible(frameStart, frameCount, m_framesVisible);
-        m_ringPlot->setVisible(m_ringsVisible || m_framesVisible);
+        m_ringPlot->setRangeVisible(frameStart, readingStart - frameStart, m_framesVisible);
+        m_ringPlot->setRangeVisible(readingStart, sectionStart - readingStart, m_readingsVisible);
+        m_ringPlot->setRangeVisible(sectionStart, overshootStart - sectionStart, m_sectionsVisible);
+        m_ringPlot->setRangeVisible(overshootStart, geometry.overshoots.count, m_overshootVisible);
+        m_ringPlot->setVisible(m_ringsVisible || m_framesVisible || m_readingsVisible || m_sectionsVisible || m_overshootVisible);
     }
 }
 

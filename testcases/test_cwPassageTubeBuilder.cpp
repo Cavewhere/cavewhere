@@ -1626,6 +1626,56 @@ TEST_CASE("cwPassageTubeBuilder keeps a corner station's outside walls on its el
     checkMeshClean(debug);
 }
 
+// c1's elbow carries its readings off the station: the middle ring's section
+// sits around c1 and the ring reaches past it on the bend's inside. A ring
+// the bend left measured is its own section. The bend caps the bins that
+// point into it after the fit, so only measured bins hold the section.
+TEST_CASE("cwPassageTubeBuilder keeps the section each ring was fitted to", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr float kStationTolerance = 1e-4f;
+    constexpr double kRadiusTolerance = 1e-9;
+    const cwPassageTubeCases::Case& entry = catalogCase(QStringLiteral("23. Sharp bend at a station reading zero on the outside wall"));
+    const Builder::Debug debug = buildCase(entry);
+    REQUIRE(debug.chains.size() == 1);
+    const Builder::Chain& chain = debug.chains.at(0);
+
+    const QVector3D corner = casePosition(entry, QStringLiteral("c1"));
+    const Builder::Ring& middle = stationRing(chain, corner);
+    REQUIRE(middle.isElbow);
+    REQUIRE(middle.section);
+    CHECK(middle.section->station.distanceToPoint(corner) < kStationTolerance);
+    CHECK(middle.section->readings.left);
+    CHECK(middle.section->readings.right);
+    CHECK(middle.section->readings.up);
+    CHECK(middle.section->readings.down);
+
+    const QVector<double>& stationRadii = middle.section->stationRadii;
+    REQUIRE(stationRadii.size() == middle.radii.size());
+    double largestOvershoot = -std::numeric_limits<double>::max();
+    for (int bin = 0; bin < stationRadii.size(); ++bin) {
+        INFO("bin " << bin);
+        if (middle.measured.at(bin)) {
+            CHECK(stationRadii.at(bin) <= middle.radii.at(bin) + kRadiusTolerance);
+        }
+        largestOvershoot = std::max(largestOvershoot, middle.radii.at(bin) - stationRadii.at(bin));
+    }
+    CHECK(largestOvershoot > 0.0);
+
+    for (const Builder::Ring& ring : chain.rings) {
+        if (ring.isElbow && &ring != &middle) {
+            CHECK_FALSE(ring.section);
+        }
+    }
+
+    const auto straight = std::find_if(chain.rings.cbegin(), chain.rings.cend(), [&](const Builder::Ring& ring) {
+        return !ring.isElbow && std::all_of(ring.measured.cbegin(), ring.measured.cend(), [](bool measured) { return measured; });
+    });
+    REQUIRE(straight != chain.rings.cend());
+    REQUIRE(straight->section);
+    CHECK(straight->section->station.distanceToPoint(straight->center) < kStationTolerance);
+    CHECK(straight->section->stationRadii == straight->radii);
+}
+
 // b turns left with its left wall, the bend's inside, unread: the elbow moves
 // no measured wall, though its middle ring sits off b.
 TEST_CASE("cwPassageTubeBuilder warns of no clamp at an elbow that keeps its measured walls", "[PassageTube][cwPassageTubeBuilder]")
