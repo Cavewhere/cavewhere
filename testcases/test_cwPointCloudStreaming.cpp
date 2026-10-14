@@ -12,17 +12,20 @@
 #include <QRay3D>
 #include <QtEndian>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
 #include <QDateTime>
 #include <QHash>
 #include <QRect>
+#include <QSaveFile>
 #include <QElapsedTimer>
 #include <QMatrix4x4>
 #include <QSet>
 #include <QSize>
 #include <QString>
 #include <QStringList>
+#include <QFile>
 #include <QFileInfo>
 #include <QImage>
 #include <QTemporaryDir>
@@ -76,6 +79,7 @@
 #include "cwProjection.h"
 #include "cwScene.h"
 #include "cwScenePick.h"
+#include "cwScreenSpace.h"
 #include "cwSceneUpdate.h"
 #include "cwSceneVisibility.h"
 
@@ -532,6 +536,7 @@ namespace {
 
         cwRenderObjectId secondObjectId() const { return m_secondRender->renderObjectId(); }
 
+        QRhi* rhi() const { return m_rhi; }
         cwRhiItemRenderer& renderer() { return m_renderer; }
         cwRhiFrameRenderer* frameRenderer() const { return m_renderer.frameRenderer(); }
         const cwRHIPointCloud& backend() const { return *m_backend; }
@@ -616,6 +621,7 @@ namespace {
         //! frameImage() keep reading the flat color the cloud draws, now out of
         //! the EDL's cloud target, and compositeImage() reads the shaded frame.
         void setEdlEnabled(bool enabled) { m_edlEnabled = enabled; }
+        bool edlEnabled() const { return m_edlEnabled; }
 
         //! Draws the following frames through perspectiveProjection() instead
         //! of orthoProjection(), at the same world height.
@@ -1217,6 +1223,17 @@ namespace {
         return kMinSpritePx + 2.0 * (floorTop - top);
     }
 
+    //! The quantized point a node's payload holds at byte @a offset
+    cw::octree::QuantizedPoint quantizedPointAt(const QByteArray& bytes, qsizetype offset)
+    {
+        const char* axes = bytes.constData() + offset;
+        constexpr int kAxisBytes = int(sizeof(quint16));
+        return cw::octree::QuantizedPoint{qFromLittleEndian<quint16>(axes),
+                                          qFromLittleEndian<quint16>(axes + kAxisBytes),
+                                          qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
+                                          0};
+    }
+
     //! Every point the cloud has resident, dequantized out of the very mirrors
     //! the pick set was published — the points a pick can reach.
     QVector<QVector3D> residentPoints(const PointCloudFixture& fixture)
@@ -1231,13 +1248,7 @@ namespace {
             const QBox3D bounds = fixture.manifest().nodeBounds(i);
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
                  offset += cw::octree::kBytesPerPoint) {
-                const char* axes = bytes.constData() + offset;
-                constexpr int kAxisBytes = int(sizeof(quint16));
-                const cw::octree::QuantizedPoint quantized{
-                    qFromLittleEndian<quint16>(axes),
-                    qFromLittleEndian<quint16>(axes + kAxisBytes),
-                    qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
-                    0};
+                const cw::octree::QuantizedPoint quantized = quantizedPointAt(bytes, offset);
                 points.append(cw::octree::dequantize(quantized, bounds));
             }
         }
@@ -2462,13 +2473,7 @@ namespace {
 
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
                  offset += cw::octree::kBytesPerPoint) {
-                const char* axes = bytes.constData() + offset;
-                constexpr int kAxisBytes = int(sizeof(quint16));
-                const cw::octree::QuantizedPoint quantized{
-                    qFromLittleEndian<quint16>(axes),
-                    qFromLittleEndian<quint16>(axes + kAxisBytes),
-                    qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
-                    0};
+                const cw::octree::QuantizedPoint quantized = quantizedPointAt(bytes, offset);
 
                 if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing, mode)) {
                     continue;
@@ -6732,6 +6737,1187 @@ TEST_CASE("The oblique orbit runs on a tile under the default budgets",
         for (const EvalRecord& record : records) {
             CHECK(record.sseInflation >= 1.0);
         }
+    }
+}
+
+namespace {
+
+    // ---- Oracles --------------------------------------------------------
+    //
+    // Section 4: three reference renders a candidate frame is compared
+    // against, each one knob away from the next. O1 is the pixels the data can
+    // light at all, O2 the full render at the coverage a person would tune by
+    // hand, O3 the production shader with nothing left to stream. None of them
+    // changes when the streamer does, so each is rendered once per path and
+    // kept on disk.
+
+    enum class Oracle {
+        O1,  //!< the eroded footprint of the densest render the octree gives
+        O2,  //!< every leaf resident at the 0.5 px threshold, coverage swept
+        O3   //!< the production shader at its defaults with nothing streaming
+    };
+
+    QString oracleName(Oracle oracle)
+    {
+        switch (oracle) {
+        case Oracle::O1:
+            return QStringLiteral("O1");
+        case Oracle::O2:
+            return QStringLiteral("O2");
+        case Oracle::O3:
+            return QStringLiteral("O3");
+        }
+        return QString();
+    }
+
+    //! Section 4.1's coverage sweep
+    constexpr std::array<float, 7> kO2Coverages {1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f, 8.0f};
+    //! The most lit pixels O2's pick may draw per footprint pixel
+    constexpr double kMaxO2Overdraw = 4.0;
+
+    //! How far past the whole cloud the oracle budgets reach. The GPU ledger
+    //! carries the node constants and pick mirrors beside the payloads, so the
+    //! cloud's own bytes alone would bind on a cut that holds every leaf. On
+    //! the BC tile the cloud is 609 MB and 76.1 M points, so the budgets come
+    //! to the 1536 MB default and 152 M points.
+    constexpr qint64 kOracleBudgetHeadroom = 2;
+
+    //! PointCloud.vert's kSmallSpriteColor and kLargeSpriteColor, red channel:
+    //! the sprite size view ramps red between them over log2 of the side
+    constexpr double kSmallSpriteRed = 0.2;
+    constexpr double kLargeSpriteRed = 1.0;
+    constexpr double kChannelMax = 255.0;
+
+    //! The budgets under which every node the cut asks for at
+    //! @a screenSpaceErrorPx streams in and stays: GPU, CPU and point budgets
+    //! past the whole of @a manifest, and no per-frame upload limit.
+    cwRenderBudgets oracleBudgets(const cwPointOctreeManifest& manifest,
+                                  double screenSpaceErrorPx)
+    {
+        qint64 points = 0;
+        qint64 bytes = 0;
+        for (const cwPointOctreeNode& node : manifest.nodes) {
+            points += node.pointCount;
+            bytes += node.byteSize;
+        }
+
+        cwRenderBudgets budgets;
+        budgets.gpuBudgetBytes = std::max(budgets.gpuBudgetBytes, bytes * kOracleBudgetHeadroom);
+        budgets.cpuBudgetBytes = std::max(budgets.cpuBudgetBytes, bytes * kOracleBudgetHeadroom);
+        budgets.pointBudget = std::max(budgets.pointBudget, points * kOracleBudgetHeadroom);
+        budgets.uploadBudgetBytesPerFrame = std::numeric_limits<qint64>::max();
+        budgets.screenSpaceErrorPx = screenSpaceErrorPx;
+        return budgets;
+    }
+
+    //! What one oracle render draws with, beside the budgets
+    struct OracleConfig {
+        Oracle oracle = Oracle::O3;
+        double screenSpaceErrorPx = cw::budgets::kDefaultScreenSpaceErrorPx;
+        float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
+        //! Every other knob stays at its default. O1 colors by sprite size,
+        //! which leaves its lit pixels where the flat pass puts them and tells
+        //! the erosion how far each sprite spills.
+        cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;
+    };
+
+    //! O1: the cut refined to the minimum threshold, eroded the way the
+    //! [HoleMetric] reference is, with sprites as wide as the top of O2's
+    //! sweep rather than the [HoleMetric] reference's coverage. A reference
+    //! drawn inside the sweep would be one of O2's own renders, and every
+    //! coverage from it up would score no holes by construction.
+    OracleConfig o1Config()
+    {
+        OracleConfig config;
+        config.oracle = Oracle::O1;
+        config.screenSpaceErrorPx = kReferenceScreenSpaceErrorPx;
+        config.spacingCoverage = kO2Coverages.back();
+        config.debugView = cw::pointcloud::DebugView::SpriteSize;
+        return config;
+    }
+
+    //! O2 at one coverage of the sweep
+    OracleConfig o2Config(float spacingCoverage)
+    {
+        OracleConfig config;
+        config.oracle = Oracle::O2;
+        config.screenSpaceErrorPx = cw::budgets::kMinScreenSpaceErrorPx;
+        config.spacingCoverage = spacingCoverage;
+        return config;
+    }
+
+    //! O3: every default, budgets past the whole cloud
+    OracleConfig o3Config()
+    {
+        OracleConfig config;
+        config.oracle = Oracle::O3;
+        return config;
+    }
+
+    //! Bumped by hand whenever C++ an oracle depends on changes what it draws
+    //! or records: cwRHIPointCloud's cut, governor and node floors, cw::clod,
+    //! the CPU twin, the erosion, the index format. The shaders are hashed
+    //! and the test-side constants are spelled out in describe(), so neither
+    //! needs a bump.
+    const QString kOracleCacheVersion = QStringLiteral("oracleVersion,1");
+
+    //! Every knob an oracle render depends on, as the cache key spells it
+    QString describe(const OracleConfig& config, const cwPointOctreeManifest& manifest)
+    {
+        const cwRenderBudgets budgets = oracleBudgets(manifest, config.screenSpaceErrorPx);
+        const cwPointCloudShading shading;
+        const QString constants =
+            QStringLiteral(",erosionSlack=%1,rasterFactor=%2,minSpritePx=%3,smallRed=%4,"
+                           "largeRed=%5")
+                .arg(kReferenceErosionSlackPx)
+                .arg(kSpriteRasterFactor, 0, 'g', 6)
+                .arg(kMinSpritePx, 0, 'g', 6)
+                .arg(kSmallSpriteRed, 0, 'g', 6)
+                .arg(kLargeSpriteRed, 0, 'g', 6);
+        return QStringLiteral("%1,sse=%2,coverage=%3,view=%4,thinning=%5,size=%6,floor=%7,"
+                              "fixedPx=%8,maxPx=%9,gpu=%10,points=%11,minLevel=%12,maxLevel=%13")
+            .arg(oracleName(config.oracle))
+            .arg(config.screenSpaceErrorPx, 0, 'g', 6)
+            .arg(double(config.spacingCoverage), 0, 'g', 6)
+            .arg(int(config.debugView))
+            .arg(int(shading.thinningMode))
+            .arg(int(shading.sizeMode))
+            .arg(int(shading.floorMode))
+            .arg(double(shading.fixedPointSizePx), 0, 'g', 6)
+            .arg(double(shading.maxPointSizePx), 0, 'g', 6)
+            .arg(budgets.gpuBudgetBytes)
+            .arg(budgets.pointBudget)
+            .arg(budgets.minLevel)
+            .arg(budgets.maxLevel)
+               + constants;
+    }
+
+    //! A hash of the compiled PointCloud.vert and PointCloud.frag the test
+    //! binary draws with. The .qsb files are read out of the resources
+    //! qt_add_shaders embeds at build time rather than out of the source tree:
+    //! they are exactly what the GPU runs, the binary finds them wherever it
+    //! is run from, and an edit that compiles to the same shader (a comment,
+    //! say) leaves the oracles valid.
+    QByteArray shaderHash(const QStringList& shaders)
+    {
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        for (const QString& shader : shaders) {
+            QFile file(shader);
+            REQUIRE(file.open(QIODevice::ReadOnly));
+            hash.addData(file.readAll());
+        }
+        return hash.result().toHex();
+    }
+
+    QByteArray pointCloudShaderHash()
+    {
+        return shaderHash({QStringLiteral(":/shaders/PointCloud.vert.qsb"),
+                           QStringLiteral(":/shaders/PointCloud.frag.qsb")});
+    }
+
+    //! What an EDL composite depends on beside the flat pass: the compiled
+    //! EDL shaders, both variants, and the tuning the frame renderer feeds them
+    QByteArray edlHash(const PointCloudFixture& fixture)
+    {
+        const EdlParametersData& parameters = fixture.frameRenderer()->edlParameters();
+        return shaderHash({QStringLiteral(":/shaders/EDL.vert.qsb"),
+                           QStringLiteral(":/shaders/EDL.frag.qsb"),
+                           QStringLiteral(":/shaders/EDL_MSAA.frag.qsb")})
+               + QStringLiteral(",strength=%1,maxDarken=%2,radiusPx=%3")
+                     .arg(double(parameters.strength), 0, 'g', 9)
+                     .arg(double(parameters.maxDarken), 0, 'g', 9)
+                     .arg(double(parameters.radiusPx), 0, 'g', 9)
+                     .toUtf8();
+    }
+
+    //! A hash of @a path as the oracles see it: its name, the target, and
+    //! every pose's label and matrices
+    QByteArray poseTableHash(const EvalPath& path, QSize target)
+    {
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        hash.addData(path.name.toUtf8());
+        hash.addData(QStringLiteral("%1x%2").arg(target.width()).arg(target.height()).toUtf8());
+        constexpr int kMatrixBytes = int(16 * sizeof(float));
+        for (const Pose& pose : path.poses) {
+            hash.addData(pose.label.toUtf8());
+            hash.addData(QByteArrayView(reinterpret_cast<const char*>(pose.view.constData()),
+                                        kMatrixBytes));
+            hash.addData(QByteArrayView(
+                reinterpret_cast<const char*>(pose.projection.constData()), kMatrixBytes));
+        }
+        return hash.result().toHex();
+    }
+
+    //! Where an oracle render is kept: everything it depends on, hashed
+    QString oracleCacheKey(const PointCloudFixture& fixture, const EvalPath& path,
+                           const OracleConfig& config, const QByteArray& shaderHash)
+    {
+        QCryptographicHash hash(QCryptographicHash::Sha256);
+        hash.addData(kOracleCacheVersion.toUtf8());
+        hash.addData(fixture.manifest().fingerprint.toUtf8());
+        hash.addData(poseTableHash(path, fixture.targetSize()));
+        hash.addData(describe(config, fixture.manifest()).toUtf8());
+        if (fixture.edlEnabled()) {
+            hash.addData(QByteArrayView("edl"));
+            hash.addData(edlHash(fixture));
+        } else {
+            hash.addData(QByteArrayView("flat"));
+        }
+        hash.addData(shaderHash);
+        return QString::fromLatin1(hash.result().toHex());
+    }
+
+    //! Where the oracles are kept between runs: CAVEWHERE_HOLE_METRIC_CACHE_DIR
+    //! when it is set, beside the tile octree, and a directory of this process
+    //! alone otherwise.
+    [[maybe_unused]] QString evalCacheRoot()
+    {
+        const QString configured =
+            QString::fromLocal8Bit(qgetenv(kTileCacheEnvironmentVariable));
+        if (!configured.isEmpty()) {
+            REQUIRE(QDir().mkpath(configured));
+            return configured;
+        }
+
+        static QTemporaryDir temporary {
+            QDir::temp().filePath(QStringLiteral("cwEvalOracles-%1-XXXXXX")
+                                      .arg(QCoreApplication::applicationPid()))
+        };
+        REQUIRE(temporary.isValid());
+        return temporary.path();
+    }
+
+    // ---- The CPU twin over a pose -----------------------------------------
+
+    //! What the drawn nodes' points come to under the cloud's live uniform,
+    //! predicted point by point the way PointCloud.vert sizes and thins them
+    struct DrawPrediction {
+        qint64 points = 0;
+        //! Sprite pixels inside the target, summed over every drawn point
+        double fragments = 0.0;
+        double widestSidePx = 0.0;
+        //! The pixels whose centers the predicted sprites cover, when asked for
+        PixelMask covered;
+    };
+
+    //! The twin over the fixture's current camera: every point of every drawn
+    //! node that cw::clod keeps and the clip volume holds, sized as the vertex
+    //! shader sizes it, its square clipped to the target. With @a rasterize
+    //! the squares are also drawn into covered, top row first like the readback.
+    DrawPrediction predictedDraw(const PointCloudFixture& fixture, bool rasterize = false)
+    {
+        using namespace cw::pointcloud;
+
+        const CwRhiPointCloudTestAccess::PerCloudUniform uniform =
+            Access::liveAppearanceUniform(fixture.backend());
+        const CameraPose pose = fixture.pose();
+        const cwRhiFrameRenderer::ClipSpaceCamera camera =
+            cwRhiFrameRenderer::clipSpaceCorrectedCamera(fixture.rhi(), pose.projection,
+                                                         pose.view);
+        const QSize target = fixture.targetSize();
+        const double width = target.width();
+        const double height = target.height();
+        const double focalPx = std::abs(double(camera.projectionCorrected(1, 1))) * height * 0.5;
+        const bool depthZeroToOne = fixture.rhi()->isClipDepthZeroToOne();
+
+        const auto thinning = ThinningMode(uniform.thinningMode);
+        const auto sizeMode = SizeMode(uniform.sizeMode);
+        const bool floorOn = FloorMode(uniform.floorMode) == FloorMode::Node;
+        const double coverage = uniform.spacingCoverage;
+        const double thresholdPx = uniform.sseThresholdPx;
+
+        const auto overlap = [](double center, double half, double extent) {
+            return std::max(0.0, std::min(center + half, extent) - std::max(center - half, 0.0));
+        };
+
+        //A pixel is covered when its center lies in [center - half, center + half)
+        const auto coveredRange = [](double center, double half, int extent) {
+            constexpr double kPixelCenter = 0.5;
+            const int first = std::max(0, int(std::ceil(center - half - kPixelCenter)));
+            const int end = std::min(extent, int(std::ceil(center + half - kPixelCenter)));
+            return std::pair<int, int>(first, end);
+        };
+
+        DrawPrediction prediction;
+        if (rasterize) {
+            prediction.covered = PixelMask(target);
+        }
+        const cwPointOctreeManifest& manifest = fixture.manifest();
+        for (int node : Access::drawnNodes(fixture.backend())) {
+            const QBox3D bounds = manifest.nodeBounds(node);
+            const float quantizationStep =
+                float(double(bounds.maximum().x() - bounds.minimum().x())
+                      / double(cw::octree::kQuantMax));
+            const double nodeSpacing = cw::clod::nodeSpacingFromQuantizationStep(quantizationStep);
+            const double floorSpacing = sizeMode == SizeMode::OwnSpacing
+                                            ? nodeSpacing
+                                            : double(Access::nodeFloorSpacing(fixture.backend(), node));
+
+            const QByteArray bytes = Access::nodeBytes(fixture.backend(), node);
+            for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
+                 offset += cw::octree::kBytesPerPoint) {
+                const cw::octree::QuantizedPoint quantized = quantizedPointAt(bytes, offset);
+
+                const QVector4D clip = camera.viewProjection
+                                       * QVector4D(cw::octree::dequantize(quantized, bounds), 1.0f);
+                const double w = clip.w();
+                const double nearDepth = depthZeroToOne ? 0.0 : -w;
+                const bool inside = w > 0.0 && std::abs(double(clip.x())) <= w
+                                    && std::abs(double(clip.y())) <= w
+                                    && double(clip.z()) >= nearDepth && double(clip.z()) <= w;
+                if (!inside) {
+                    continue;
+                }
+
+                const double pixelsPerMeter = focalPx / std::max(w, cw::sse::kMinimumClipW);
+                const double targetSpacing = cw::clod::targetSpacing(
+                    thresholdPx, pixelsPerMeter, double(uniform.rootSpacing));
+                if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing, thinning)) {
+                    continue;
+                }
+
+                const double floorPx = floorOn ? coverage * floorSpacing * pixelsPerMeter : 0.0;
+                const double sizePx = sizeMode == SizeMode::FixedPixels
+                                          ? double(uniform.fixedPointSizePx)
+                                          : std::max(floorPx, coverage * thresholdPx);
+                const double side = std::clamp(sizePx, kMinSpritePx,
+                                               double(uniform.maxPointSizePx));
+
+                const double centerX = (clip.x() / w * 0.5 + 0.5) * width;
+                const double centerY = (clip.y() / w * 0.5 + 0.5) * height;
+                prediction.points++;
+                prediction.fragments += overlap(centerX, side * 0.5, width)
+                                        * overlap(centerY, side * 0.5, height);
+                prediction.widestSidePx = std::max(prediction.widestSidePx, side);
+
+                if (rasterize) {
+                    const auto [firstX, endX] = coveredRange(centerX, side * 0.5, target.width());
+                    const auto [firstY, endY] =
+                        coveredRange(height - centerY, side * 0.5, target.height());
+                    for (int y = firstY; y < endY; y++) {
+                        for (int x = firstX; x < endX; x++) {
+                            prediction.covered.setAt(x, y, true);
+                        }
+                    }
+                }
+            }
+        }
+        return prediction;
+    }
+
+    // ---- O1 over an arbitrary pose ----------------------------------------
+
+    //! Where pixel (@a x, @a y) sits in a row-major grid @a width wide
+    size_t pixelIndex(int width, int x, int y)
+    {
+        return size_t(y) * size_t(width) + size_t(x);
+    }
+
+    //! For every pixel, the chessboard distance to the nearest pixel of
+    //! @a mask whose flag is not @a flag, so 0 on those pixels themselves.
+    //! Pixels past the target's edge count as @a edge. Two raster passes, the
+    //! classic chamfer transform with every step costing one, which is exact
+    //! for the chessboard metric.
+    std::vector<int> distanceToOther(const PixelMask& mask, bool flag, bool edge)
+    {
+        const int width = mask.size.width();
+        const int height = mask.size.height();
+        const int unreached = width + height;
+        std::vector<int> distance(size_t(width) * size_t(height), 0);
+        const auto at = [&](int x, int y) -> int {
+            if (x < 0 || y < 0 || x >= width || y >= height) {
+                return edge == flag ? unreached : 0;
+            }
+            return distance.at(pixelIndex(width, x, y));
+        };
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                distance[pixelIndex(width, x, y)] = mask.at(x, y) == flag ? unreached : 0;
+            }
+        }
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int& here = distance[pixelIndex(width, x, y)];
+                if (here > 0) {
+                    here = std::min({here, at(x - 1, y) + 1, at(x - 1, y - 1) + 1,
+                                     at(x, y - 1) + 1, at(x + 1, y - 1) + 1});
+                }
+            }
+        }
+        for (int y = height - 1; y >= 0; y--) {
+            for (int x = width - 1; x >= 0; x--) {
+                int& here = distance[pixelIndex(width, x, y)];
+                if (here > 0) {
+                    here = std::min({here, at(x + 1, y) + 1, at(x + 1, y + 1) + 1,
+                                     at(x, y + 1) + 1, at(x - 1, y + 1) + 1});
+                }
+            }
+        }
+        return distance;
+    }
+
+    //! The sprite side, in pixels, the sprite size view gave a pixel whose red
+    //! channel is @a red
+    //! under a ceiling of @a maxPointSizePx: the vertex shader's ramp undone.
+    double spriteSideFromRed(uchar red, double maxPointSizePx)
+    {
+        const double ramp = (red / kChannelMax - kSmallSpriteRed)
+                            / (kLargeSpriteRed - kSmallSpriteRed);
+        const double octaves = std::max(std::log2(maxPointSizePx), 1.0);
+        return std::exp2(std::clamp(ramp, 0.0, 1.0) * octaves);
+    }
+
+    //! O1's mask out of a reference render drawn in the sprite size view:
+    //! every lit pixel farther from an unlit one than half the sprite drawn
+    //! over it, plus kReferenceErosionSlackPx. That is the [HoleMetric]
+    //! reference's erosion with the radius read per pixel rather than taken
+    //! from the widest sprite in the frame, since in perspective the sprites
+    //! near the eye are many times the far ones. The target's edge is not a
+    //! gap in the data, so nothing erodes from it. @a widestErosionPx is set to
+    //! the largest radius used.
+    PixelMask erodedBySpriteSize(const PixelMask& lit, const QImage& spriteSizeView,
+                                 double maxPointSizePx, int& widestErosionPx)
+    {
+        const std::vector<int> distance = distanceToOther(lit, true, true);
+        const int width = lit.size.width();
+
+        PixelMask mask(lit.size);
+        widestErosionPx = 0;
+        for (int y = 0; y < lit.size.height(); y++) {
+            //RGBA8888, so a pixel's red is its first byte
+            constexpr int kBytesPerPixel = 4;
+            const uchar* row = spriteSizeView.constScanLine(y);
+            for (int x = 0; x < width; x++) {
+                if (!lit.at(x, y)) {
+                    continue;
+                }
+                const double side = spriteSideFromRed(row[x * kBytesPerPixel], maxPointSizePx);
+                const int radius = int(std::ceil(side * 0.5)) + kReferenceErosionSlackPx;
+                widestErosionPx = std::max(widestErosionPx, radius);
+                mask.setAt(x, y, distance.at(pixelIndex(width, x, y)) > radius);
+            }
+        }
+        return mask;
+    }
+
+    // ---- Oracle frames and their cache ----------------------------------------
+
+    //! One pose of an oracle render
+    struct OracleFrame {
+        int pose = 0;
+        //! The flat pass. O1's is drawn in the sprite size view.
+        QImage frame;
+        //! The EDL composite, null when the fixture draws without EDL
+        QImage composite;
+        //! O1: the eroded footprint. O2 and O3: the pixels the frame lights.
+        PixelMask mask;
+        //! The pixels the render lit, before any erosion
+        qsizetype litCount = 0;
+        double sseInflation = 1.0;
+        int residentNodes = 0;
+        qint64 selectedPoints = 0;
+        qint64 predictedPoints = 0;
+        double predictedFragments = 0.0;
+        double widestSidePx = 0.0;
+        //! O1 only: the widest erosion any pixel got
+        int widestErosionPx = 0;
+    };
+
+    //! One oracle configuration over a whole path
+    struct OracleSet {
+        OracleConfig config;
+        QString key;
+        bool fromCache = false;
+        QVector<OracleFrame> frames;
+    };
+
+    //! One coverage of O2's sweep, over the whole path
+    struct CoverageRow {
+        float spacingCoverage = 0.0f;
+        double meanHoleFraction = 0.0;
+        double worstHoleFraction = 0.0;
+        double meanOverdraw = 0.0;
+        double worstOverdraw = 0.0;
+    };
+
+    struct CoverageSweep {
+        QVector<CoverageRow> rows;
+        //! The row O2 draws at
+        int pickIndex = -1;
+        //! False when every coverage overdraws past kMaxO2Overdraw somewhere on
+        //! the path, and the pick fell back to the one that overdraws least
+        bool pickWithinOverdraw = false;
+    };
+
+    //! What oracleFrames() hands back: the oracle's frame at every pose and,
+    //! for O2, the sweep that picked its coverage
+    struct OracleFrames {
+        Oracle oracle = Oracle::O3;
+        float spacingCoverage = 0.0f;
+        //! Every render behind the frames came off disk
+        bool fromCache = false;
+        QVector<OracleFrame> frames;
+        CoverageSweep sweep;
+    };
+
+    const QString kOracleIndexFile = QStringLiteral("index.csv");
+    const QString kOracleIndexMagic = QStringLiteral("oracleCache,1");
+    //! The suffixes of a pose's files: the flat frame, its mask, the EDL composite
+    const QString kFrameFileKind = QStringLiteral("frame");
+    const QString kMaskFileKind = QStringLiteral("mask");
+    const QString kCompositeFileKind = QStringLiteral("edl");
+
+    QString oracleDirectory(const QString& cacheRoot, const OracleConfig& config,
+                            const QString& key)
+    {
+        constexpr int kDirectoryKeyChars = 16;
+        return QDir(cacheRoot).filePath(QStringLiteral("eval-oracles/%1-%2")
+                                            .arg(oracleName(config.oracle),
+                                                 key.left(kDirectoryKeyChars)));
+    }
+
+    QString framePath(const QString& directory, int pose, const QString& kind)
+    {
+        return QDir(directory).filePath(QStringLiteral("pose-%1-%2.png")
+                                            .arg(pose, 3, 10, QLatin1Char('0'))
+                                            .arg(kind));
+    }
+
+    QImage maskImage(const PixelMask& mask)
+    {
+        constexpr uchar kSet = 255;
+        QImage image(mask.size, QImage::Format_Grayscale8);
+        for (int y = 0; y < mask.size.height(); y++) {
+            uchar* row = image.scanLine(y);
+            for (int x = 0; x < mask.size.width(); x++) {
+                row[x] = mask.at(x, y) ? kSet : 0;
+            }
+        }
+        return image;
+    }
+
+    PixelMask maskFromImage(const QImage& image)
+    {
+        const QImage gray = image.convertToFormat(QImage::Format_Grayscale8);
+        PixelMask mask(gray.size());
+        for (int y = 0; y < gray.height(); y++) {
+            const uchar* row = gray.constScanLine(y);
+            for (int x = 0; x < gray.width(); x++) {
+                mask.setAt(x, y, row[x] != 0);
+            }
+        }
+        return mask;
+    }
+
+    //! A PNG under @a path at @a size, or a null image for anything missing,
+    //! unreadable or the wrong size
+    QImage loadFrame(const QString& path, QSize size)
+    {
+        QImage image(path);
+        if (image.isNull() || image.size() != size) {
+            return QImage();
+        }
+        return image.convertToFormat(QImage::Format_RGBA8888);
+    }
+
+    //! The set under @a directory, when every file the index names is there,
+    //! reads back and has the target's size; nothing otherwise, which makes a
+    //! missing or corrupt file a re-render.
+    std::optional<QVector<OracleFrame>> loadOracleSet(const QString& directory,
+                                                      const QString& key, int poseCount,
+                                                      QSize target, bool withComposite)
+    {
+        QFile index(QDir(directory).filePath(kOracleIndexFile));
+        if (!index.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            return std::nullopt;
+        }
+        const QStringList lines =
+            QString::fromUtf8(index.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+
+        constexpr int kHeaderLines = 2;
+        constexpr int kPoseFields = 10;
+        if (lines.size() != kHeaderLines + poseCount || lines.at(0) != kOracleIndexMagic
+            || lines.at(1) != QStringLiteral("key,%1").arg(key)) {
+            return std::nullopt;
+        }
+
+        QVector<OracleFrame> frames;
+        for (int pose = 0; pose < poseCount; pose++) {
+            const QStringList fields = lines.at(kHeaderLines + pose).split(QLatin1Char(','));
+            if (fields.size() != kPoseFields || fields.at(0) != QStringLiteral("pose")
+                || fields.at(1).toInt() != pose) {
+                return std::nullopt;
+            }
+
+            OracleFrame frame;
+            frame.pose = pose;
+            frame.litCount = fields.at(2).toLongLong();
+            frame.sseInflation = fields.at(3).toDouble();
+            frame.residentNodes = fields.at(4).toInt();
+            frame.selectedPoints = fields.at(5).toLongLong();
+            frame.predictedPoints = fields.at(6).toLongLong();
+            frame.predictedFragments = fields.at(7).toDouble();
+            frame.widestSidePx = fields.at(8).toDouble();
+            frame.widestErosionPx = fields.at(9).toInt();
+
+            frame.frame = loadFrame(framePath(directory, pose, kFrameFileKind), target);
+            const QImage mask = loadFrame(framePath(directory, pose, kMaskFileKind),
+                                          target);
+            if (frame.frame.isNull() || mask.isNull()) {
+                return std::nullopt;
+            }
+            frame.mask = maskFromImage(mask);
+
+            if (withComposite) {
+                frame.composite =
+                    loadFrame(framePath(directory, pose, kCompositeFileKind), target);
+                if (frame.composite.isNull()) {
+                    return std::nullopt;
+                }
+            }
+            frames.append(frame);
+        }
+        return frames;
+    }
+
+    //! Writes @a frames under @a directory, the index last so a run cut short
+    //! leaves a set that reads back as missing
+    void saveOracleSet(const QString& directory, const QString& key,
+                       const QVector<OracleFrame>& frames)
+    {
+        REQUIRE(QDir().mkpath(directory));
+        QStringList lines {kOracleIndexMagic, QStringLiteral("key,%1").arg(key)};
+        for (const OracleFrame& frame : frames) {
+            REQUIRE(frame.frame.save(framePath(directory, frame.pose, kFrameFileKind)));
+            REQUIRE(maskImage(frame.mask).save(
+                framePath(directory, frame.pose, kMaskFileKind)));
+            if (!frame.composite.isNull()) {
+                REQUIRE(frame.composite.save(
+                    framePath(directory, frame.pose, kCompositeFileKind)));
+            }
+            lines.append(QStringLiteral("pose,%1,%2,%3,%4,%5,%6,%7,%8,%9")
+                             .arg(frame.pose)
+                             .arg(frame.litCount)
+                             .arg(frame.sseInflation, 0, 'g', 17)
+                             .arg(frame.residentNodes)
+                             .arg(frame.selectedPoints)
+                             .arg(frame.predictedPoints)
+                             .arg(frame.predictedFragments, 0, 'g', 17)
+                             .arg(frame.widestSidePx, 0, 'g', 17)
+                             .arg(frame.widestErosionPx));
+        }
+
+        QSaveFile index(QDir(directory).filePath(kOracleIndexFile));
+        REQUIRE(index.open(QIODevice::WriteOnly | QIODevice::Text));
+        index.write(lines.join(QLatin1Char('\n')).toUtf8());
+        index.write("\n");
+        REQUIRE(index.commit());
+    }
+
+    //! Draws @a fixture's current pose under @a config until nothing is left to
+    //! stream, the same settle sweepPath's Quiet policy records at, and reads
+    //! the frame back as one oracle frame.
+    OracleFrame renderOracleFrame(PointCloudFixture& fixture, const OracleConfig& config,
+                                  int pose)
+    {
+        fixture.renderUntilQuiet();
+        renderUntilSettled(fixture);
+
+        OracleFrame frame;
+        frame.pose = pose;
+        frame.frame = fixture.frameImage();
+        frame.composite = fixture.compositeImage();
+
+        const PixelMask lit = litMask(fixture);
+        frame.litCount = lit.count();
+        frame.sseInflation = Access::sseInflation(fixture.backend());
+        frame.residentNodes = Access::residentCount(fixture.backend());
+        frame.selectedPoints = Access::selectedPoints(fixture.backend());
+
+        //The twin walks every drawn point, and O1 uses none of what it predicts
+        if (config.oracle != Oracle::O1) {
+            const DrawPrediction prediction = predictedDraw(fixture);
+            frame.predictedPoints = prediction.points;
+            frame.predictedFragments = prediction.fragments;
+            frame.widestSidePx = prediction.widestSidePx;
+        }
+
+        if (config.oracle == Oracle::O1) {
+            const double maxPointSizePx =
+                Access::liveAppearanceUniform(fixture.backend()).maxPointSizePx;
+            frame.mask = erodedBySpriteSize(lit, frame.frame, maxPointSizePx,
+                                            frame.widestErosionPx);
+        } else {
+            frame.mask = lit;
+        }
+        return frame;
+    }
+
+    //! @a config over every pose of @a path, off disk when a render with the
+    //! same key is there and drawn and saved otherwise. The fixture's budgets,
+    //! coverage and shading are put back the way they were; its pose and
+    //! residency are wherever the last oracle pose left them.
+    OracleSet oracleSet(PointCloudFixture& fixture, const EvalPath& path,
+                        const OracleConfig& config, const QString& cacheRoot,
+                        const QByteArray& shaderHash)
+    {
+        REQUIRE_FALSE(path.poses.isEmpty());
+
+        OracleSet set;
+        set.config = config;
+        set.key = oracleCacheKey(fixture, path, config, shaderHash);
+        const QString directory = oracleDirectory(cacheRoot, config, set.key);
+
+        const std::optional<QVector<OracleFrame>> cached =
+            loadOracleSet(directory, set.key, int(path.poses.size()), fixture.targetSize(),
+                          fixture.edlEnabled());
+        if (cached.has_value()) {
+            set.fromCache = true;
+            set.frames = *cached;
+            return set;
+        }
+
+        const cwRenderBudgets savedBudgets = fixture.budgets();
+        const float savedCoverage = fixture.render().spacingCoverage();
+        const cwPointCloudShading savedShading = fixture.render().shading();
+
+        fixture.setReadbackEnabled(true);
+        fixture.setBudgets(oracleBudgets(fixture.manifest(), config.screenSpaceErrorPx));
+        fixture.render().setSpacingCoverage(config.spacingCoverage);
+        cwPointCloudShading shading;
+        shading.debugView = config.debugView;
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+
+        //Frames and their files go by position on the path, which is what
+        //loadOracleSet() reads them back by, whatever the poses' own indices
+        for (int position = 0; position < path.poses.size(); position++) {
+            const Pose& pose = path.poses.at(position);
+            fixture.setPose(pose.view, pose.projection);
+            set.frames.append(renderOracleFrame(fixture, config, position));
+        }
+
+        fixture.setBudgets(savedBudgets);
+        fixture.render().setSpacingCoverage(savedCoverage);
+        fixture.render().setShading(savedShading);
+        fixture.synchronize();
+
+        saveOracleSet(directory, set.key, set.frames);
+        return set;
+    }
+
+    //! Section 4.1's sweep: O2 at every coverage of kO2Coverages, each pose's
+    //! hole fraction against @a o1 and its overdraw — the twin's predicted
+    //! sprite pixels over the pixels of O1's mask — summarized over the
+    //! path. The pick is the lowest mean hole fraction among the coverages
+    //! whose worst pose stays under kMaxO2Overdraw, the smaller coverage on a
+    //! tie, and the least overdrawn coverage when none stays under the bound.
+    //! One oracleCsv line per coverage goes to @a out.
+    CoverageSweep coverageSweep(const OracleSet& o1, const QVector<OracleSet>& o2Sets,
+                                const EvalPath& path, std::ostream& out)
+    {
+        writeCsvLine(QStringLiteral("oracleCsv,path,oracle,coverage,meanHoleFraction,"
+                                    "worstHoleFraction,meanOverdraw,worstOverdraw,picked"),
+                     out);
+
+        CoverageSweep sweep;
+        for (const OracleSet& set : o2Sets) {
+            REQUIRE(set.frames.size() == o1.frames.size());
+
+            CoverageRow row;
+            row.spacingCoverage = set.config.spacingCoverage;
+            for (int pose = 0; pose < set.frames.size(); pose++) {
+                const OracleFrame& frame = set.frames.at(pose);
+                const OracleFrame& reference = o1.frames.at(pose);
+                const double holes = holeStats(frame.mask, reference.mask).fraction;
+                const qsizetype footprint = reference.mask.count();
+                const double overdraw =
+                    footprint > 0 ? frame.predictedFragments / double(footprint) : 0.0;
+                row.meanHoleFraction += holes;
+                row.worstHoleFraction = std::max(row.worstHoleFraction, holes);
+                row.meanOverdraw += overdraw;
+                row.worstOverdraw = std::max(row.worstOverdraw, overdraw);
+            }
+            row.meanHoleFraction /= double(set.frames.size());
+            row.meanOverdraw /= double(set.frames.size());
+            sweep.rows.append(row);
+        }
+
+        for (int i = 0; i < sweep.rows.size(); i++) {
+            const CoverageRow& row = sweep.rows.at(i);
+            if (row.worstOverdraw < kMaxO2Overdraw
+                && (sweep.pickIndex < 0
+                    || row.meanHoleFraction < sweep.rows.at(sweep.pickIndex).meanHoleFraction)) {
+                sweep.pickIndex = i;
+            }
+        }
+        sweep.pickWithinOverdraw = sweep.pickIndex >= 0;
+        if (!sweep.pickWithinOverdraw) {
+            const auto least = std::min_element(
+                sweep.rows.cbegin(), sweep.rows.cend(),
+                [](const CoverageRow& a, const CoverageRow& b) {
+                    return a.worstOverdraw < b.worstOverdraw;
+                });
+            sweep.pickIndex = int(std::distance(sweep.rows.cbegin(), least));
+        }
+
+        for (int i = 0; i < sweep.rows.size(); i++) {
+            const CoverageRow& row = sweep.rows.at(i);
+            writeCsvLine(QStringLiteral("oracleCsv,%1,O2,%2,%3,%4,%5,%6,%7")
+                             .arg(path.name)
+                             .arg(double(row.spacingCoverage), 0, 'g', 3)
+                             .arg(row.meanHoleFraction, 0, 'f', 5)
+                             .arg(row.worstHoleFraction, 0, 'f', 5)
+                             .arg(row.meanOverdraw, 0, 'f', 3)
+                             .arg(row.worstOverdraw, 0, 'f', 3)
+                             .arg(i == sweep.pickIndex ? 1 : 0),
+                         out);
+        }
+        return sweep;
+    }
+
+    //! @a oracle's frame at every pose of @a path, drawn by @a fixture into its
+    //! own target, or read back from under @a cacheRoot when the same octree,
+    //! poses, oracle configuration, EDL setting and @a shaderHash drew them
+    //! before. O2 runs its coverage sweep first, against O1, writes the sweep's
+    //! oracleCsv lines to @a out, and hands back the frames at the coverage it
+    //! picked. A render leaves @a fixture at the oracle's last pose with every
+    //! leaf resident, and a cache hit leaves it untouched, so a candidate
+    //! measured after the oracles wants a fixture of its own.
+    OracleFrames oracleFrames(PointCloudFixture& fixture, const EvalPath& path, Oracle oracle,
+                              const QString& cacheRoot, std::ostream& out = std::cout,
+                              const QByteArray& shaderHash = pointCloudShaderHash())
+    {
+        OracleFrames result;
+        result.oracle = oracle;
+
+        const auto take = [&](const OracleSet& set) {
+            result.spacingCoverage = set.config.spacingCoverage;
+            result.fromCache = set.fromCache;
+            result.frames = set.frames;
+        };
+
+        switch (oracle) {
+        case Oracle::O1:
+            take(oracleSet(fixture, path, o1Config(), cacheRoot, shaderHash));
+            break;
+        case Oracle::O3:
+            take(oracleSet(fixture, path, o3Config(), cacheRoot, shaderHash));
+            break;
+        case Oracle::O2: {
+            const OracleSet o1 = oracleSet(fixture, path, o1Config(), cacheRoot, shaderHash);
+            bool allCached = o1.fromCache;
+            QVector<OracleSet> sets;
+            for (float coverage : kO2Coverages) {
+                sets.append(oracleSet(fixture, path, o2Config(coverage), cacheRoot, shaderHash));
+                allCached = allCached && sets.constLast().fromCache;
+            }
+
+            result.sweep = coverageSweep(o1, sets, path, out);
+            take(sets.at(result.sweep.pickIndex));
+            result.fromCache = allCached;
+            break;
+        }
+        }
+        return result;
+    }
+
+    //! A one-pose path through obliquePose(): the plane from 8 m up, near
+    //! surface at the bottom of the frame and its far edge under the horizon
+    EvalPath obliquePlanePath(QSize target)
+    {
+        const CameraPose camera = obliquePose(target);
+        Pose pose;
+        pose.view = camera.view;
+        pose.projection = camera.projection;
+        pose.label = QStringLiteral("oblique");
+        EvalPath path;
+        path.name = QStringLiteral("oblique");
+        path.poses.append(pose);
+        return path;
+    }
+
+    //! The share of the target O1's mask has to hold at the oblique pose for
+    //! the superset check to say anything: the plane fills the frame's lower
+    //! two thirds
+    constexpr double kMinO1MaskShare = 0.3;
+
+    //! Poses of the boundary path O2's sweep case walks
+    constexpr int kO2SweepPoseCount = 2;
+
+    //! How far, in pixels, a pixel the twin and the GPU disagree on may sit
+    //! from one the other side lights. A sprite edge rounds to either side,
+    //! and along the frame's bottom edge the GPU also draws a little of the
+    //! sprites whose centers sit just past the clip volume, which the twin
+    //! culls the way the vertex shader's clip test does.
+    constexpr int kTwinRasterTolerancePx = 2;
+}
+
+TEST_CASE("O1 at a perspective pose holds every pixel O3 lights there up to a sprite's spill",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+
+    const EvalPath path = obliquePlanePath(kHalfHdTargetSize);
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+    const OracleFrames o1 = oracleFrames(fixture, path, Oracle::O1, cacheRoot.path(), output);
+    const OracleFrames o3 = oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output);
+
+    REQUIRE(o1.frames.size() == 1);
+    REQUIRE(o3.frames.size() == 1);
+    const OracleFrame& reference = o1.frames.constFirst();
+    const OracleFrame& production = o3.frames.constFirst();
+    REQUIRE(reference.mask.size == kHalfHdTargetSize);
+    REQUIRE(production.mask.size == kHalfHdTargetSize);
+
+    const double targetPixels = double(kHalfHdTargetSize.width()) * kHalfHdTargetSize.height();
+    const double maskShare = double(reference.mask.count()) / targetPixels;
+
+    //O1 erodes by the sprites it drew, and O3's own sprites spill half a side
+    //past what they stand for, so an O3 pixel may sit that far outside
+    const int tolerancePx = reference.widestErosionPx
+                            + int(std::ceil(production.widestSidePx * 0.5 * kSpriteRasterFactor))
+                            + kReferenceErosionSlackPx;
+    const std::vector<int> toMask = distanceToOther(reference.mask, false, false);
+
+    qsizetype outside = 0;
+    qsizetype beyondTolerance = 0;
+    const int width = kHalfHdTargetSize.width();
+    for (int y = 0; y < kHalfHdTargetSize.height(); y++) {
+        for (int x = 0; x < width; x++) {
+            if (!production.mask.at(x, y) || reference.mask.at(x, y)) {
+                continue;
+            }
+            outside++;
+            if (toMask.at(pixelIndex(width, x, y)) > tolerancePx) {
+                beyondTolerance++;
+            }
+        }
+    }
+
+    INFO("O1 mask share " << maskShare << ", widest erosion " << reference.widestErosionPx
+         << " px; O3 lit " << production.litCount << ", widest sprite "
+         << production.widestSidePx << " px; outside the mask " << outside
+         << ", beyond " << tolerancePx << " px " << beyondTolerance);
+    CHECK(maskShare >= kMinO1MaskShare);
+    CHECK(production.litCount > 0);
+    CHECK(beyondTolerance == 0);
+    //The reference lights more than what survives its erosion
+    CHECK(reference.litCount > reference.mask.count());
+}
+
+TEST_CASE("O2's coverage sweep picks the fewest holes that stay under the overdraw bound",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+
+    EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    path.poses.resize(kO2SweepPoseCount);
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+    const OracleFrames o2 = oracleFrames(fixture, path, Oracle::O2, cacheRoot.path(), output);
+    const QStringList lines = linesWithPrefix(output, QStringLiteral("oracleCsv,"));
+
+    constexpr int kHeaderLines = 1;
+    const int coverageCount = int(kO2Coverages.size());
+    REQUIRE(coverageCount == 7);
+    REQUIRE(o2.sweep.rows.size() == coverageCount);
+    REQUIRE(lines.size() == kHeaderLines + coverageCount);
+    CHECK(lines.constFirst().startsWith(QStringLiteral("oracleCsv,path,oracle,coverage,")));
+
+    REQUIRE(o2.sweep.pickIndex >= 0);
+    CHECK(o2.sweep.pickWithinOverdraw);
+    const CoverageRow& picked = o2.sweep.rows.at(o2.sweep.pickIndex);
+    for (int i = 0; i < coverageCount; i++) {
+        const CoverageRow& row = o2.sweep.rows.at(i);
+        const QStringList fields = lines.at(kHeaderLines + i).split(QLatin1Char(','));
+        INFO(lines.at(kHeaderLines + i).toStdString());
+        CHECK(row.spacingCoverage == kO2Coverages.at(size_t(i)));
+        CHECK(fields.at(1) == path.name);
+        CHECK(fields.at(2) == QStringLiteral("O2"));
+        CHECK(fields.constLast() == (i == o2.sweep.pickIndex ? QStringLiteral("1")
+                                                             : QStringLiteral("0")));
+        if (row.worstOverdraw < kMaxO2Overdraw) {
+            CHECK(picked.meanHoleFraction <= row.meanHoleFraction);
+        }
+        //Wider sprites draw more of the target over again
+        if (i > 0) {
+            CHECK(row.meanOverdraw >= o2.sweep.rows.at(i - 1).meanOverdraw);
+        }
+    }
+
+    CHECK(picked.worstOverdraw < kMaxO2Overdraw);
+    //The hole column moves: the narrowest sprites open holes the pick closes
+    const CoverageRow& narrowest = o2.sweep.rows.constFirst();
+    CHECK(narrowest.meanHoleFraction > 0.0);
+    CHECK(narrowest.meanHoleFraction > picked.meanHoleFraction);
+    CHECK(o2.spacingCoverage == picked.spacingCoverage);
+    CHECK(o2.frames.size() == kO2SweepPoseCount);
+    //The sweep has both sides of the bound to choose between
+    CHECK(o2.sweep.rows.constLast().worstOverdraw >= kMaxO2Overdraw);
+    CHECK(o2.sweep.rows.constLast().meanOverdraw > o2.sweep.rows.constFirst().meanOverdraw);
+}
+
+TEST_CASE("O3 drawn twice at one pose lights the same pixels",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const EvalPath path = obliquePlanePath(kHalfHdTargetSize);
+
+    //Two fixtures, two cache roots: each render starts from an empty residency.
+    //The first also has the twin rasterize what it predicts at the pose the
+    //render left the fixture at.
+    PixelMask twinCovered;
+    const auto render = [&](bool rasterizeTwin) {
+        QTemporaryDir cacheRoot;
+        REQUIRE(cacheRoot.isValid());
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        std::ostringstream output;
+        const OracleFrames o3 = oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output);
+        REQUIRE_FALSE(o3.fromCache);
+        REQUIRE(o3.frames.size() == 1);
+        if (rasterizeTwin) {
+            twinCovered = predictedDraw(fixture, true).covered;
+        }
+        return o3.frames.constFirst();
+    };
+
+    const OracleFrame first = render(true);
+    const OracleFrame second = render(false);
+    INFO("lit " << first.litCount << " then " << second.litCount);
+    CHECK(first.litCount > 0);
+    CHECK(first.mask.flags == second.mask.flags);
+    CHECK(first.predictedPoints == second.predictedPoints);
+
+    //Section 5.1: the twin and the GPU still agree. A pixel one side lights
+    //and the other leaves dark may only sit on a sprite's rasterized edge.
+    REQUIRE(twinCovered.size == first.mask.size);
+    const std::vector<int> toLit = distanceToOther(first.mask, false, false);
+    const std::vector<int> toCovered = distanceToOther(twinCovered, false, false);
+    const int width = kHalfHdTargetSize.width();
+    qsizetype twinOnly = 0;
+    qsizetype gpuOnly = 0;
+    qsizetype beyondEdge = 0;
+    for (int y = 0; y < kHalfHdTargetSize.height(); y++) {
+        for (int x = 0; x < width; x++) {
+            const bool gpu = first.mask.at(x, y);
+            const bool twin = twinCovered.at(x, y);
+            if (gpu == twin) {
+                continue;
+            }
+            const size_t index = pixelIndex(width, x, y);
+            if (twin) {
+                twinOnly++;
+                beyondEdge += toLit.at(index) > kTwinRasterTolerancePx ? 1 : 0;
+            } else {
+                gpuOnly++;
+                beyondEdge += toCovered.at(index) > kTwinRasterTolerancePx ? 1 : 0;
+            }
+        }
+    }
+    INFO("twin covers " << twinCovered.count() << ", GPU lit " << first.litCount
+         << "; twin only " << twinOnly << ", GPU only " << gpuOnly << ", beyond "
+         << kTwinRasterTolerancePx << " px " << beyondEdge);
+    CHECK(twinCovered.count() > 0);
+    CHECK(beyondEdge == 0);
+}
+
+TEST_CASE("Oracle frames come off disk until the shader or the poses change",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+
+    const EvalPath path = obliquePlanePath(kHalfHdTargetSize);
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+
+    const OracleFrames first = oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output);
+    REQUIRE_FALSE(first.fromCache);
+    REQUIRE(first.frames.size() == 1);
+
+    const QHash<QString, QDateTime> written = fileTimesUnder(cacheRoot.path());
+    REQUIRE_FALSE(written.isEmpty());
+    const quint64 framesBefore = fixture.frameCounter();
+
+    const auto checkRenders = [&](const OracleFrames& frames) {
+        CHECK_FALSE(frames.fromCache);
+        CHECK(fixture.frameCounter() > framesBefore);
+        CHECK(fileTimesUnder(cacheRoot.path()).size() > written.size());
+    };
+
+    SECTION("the same inputs read the frames back without a frame drawn or a file written") {
+        const OracleFrames second =
+            oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output);
+        CHECK(second.fromCache);
+        CHECK(fixture.frameCounter() == framesBefore);
+        CHECK(fileTimesUnder(cacheRoot.path()) == written);
+        REQUIRE(second.frames.size() == 1);
+        CHECK(second.frames.constFirst().mask.flags == first.frames.constFirst().mask.flags);
+        CHECK(second.frames.constFirst().frame == first.frames.constFirst().frame);
+        CHECK(second.frames.constFirst().litCount == first.frames.constFirst().litCount);
+    }
+
+    SECTION("a different shader hash renders again") {
+        checkRenders(oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output,
+                                  pointCloudShaderHash() + QByteArray("-edited")));
+    }
+
+    SECTION("a moved pose renders again") {
+        constexpr float kPoseNudgeMeters = 0.5f;
+        EvalPath moved = path;
+        moved.poses.first().view.translate(kPoseNudgeMeters, 0.0f, 0.0f);
+        checkRenders(oracleFrames(fixture, moved, Oracle::O3, cacheRoot.path(), output));
+    }
+
+    SECTION("EDL keeps the composite beside the same flat frame, and reads it back") {
+        fixture.setEdlEnabled(true);
+        const OracleFrames shaded =
+            oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output);
+        CHECK_FALSE(shaded.fromCache);
+        REQUIRE(shaded.frames.size() == 1);
+        const OracleFrame& frame = shaded.frames.constFirst();
+        CHECK(frame.composite.size() == kHalfHdTargetSize);
+        CHECK(frame.mask.flags == first.frames.constFirst().mask.flags);
+        CHECK(first.frames.constFirst().composite.isNull());
+
+        const OracleFrames again =
+            oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output);
+        CHECK(again.fromCache);
+        REQUIRE(again.frames.size() == 1);
+        CHECK(again.frames.constFirst().composite == frame.composite);
+    }
+
+    SECTION("a corrupt frame renders again, and the rewrite reads back") {
+        const QStringList pngs = [&]() {
+            QStringList found;
+            for (auto it = written.cbegin(); it != written.cend(); ++it) {
+                if (it.key().endsWith(QStringLiteral("-frame.png"))) {
+                    found.append(it.key());
+                }
+            }
+            return found;
+        }();
+        REQUIRE(pngs.size() == 1);
+        QFile png(pngs.constFirst());
+        REQUIRE(png.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        png.write("not a png");
+        png.close();
+
+        const OracleFrames rendered =
+            oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output);
+        CHECK_FALSE(rendered.fromCache);
+        CHECK(fixture.frameCounter() > framesBefore);
+        CHECK(oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output).fromCache);
     }
 }
 
