@@ -18,6 +18,7 @@
 #include "cwLinePlotGeometry.h"
 
 // Qt includes
+#include <QColor>
 #include <QVector3D>
 #include <QVector>
 #include <QQmlEngine>
@@ -30,6 +31,11 @@ class cwRenderLinePlot : public cwRenderObject
     friend class cwRHILinePlot;
 
 public:
+    struct TypedRange {
+        cwLinePlotGeometry::VertexRange range;
+        quint32 type = kCenterlineSegment;
+    };
+
     explicit cwRenderLinePlot(QObject *parent = nullptr);
 
     // Points are a non-indexed line list: a drawn segment owns vertices
@@ -40,6 +46,10 @@ public:
     // (cwLinePlotManager::reconcileTripKeywordItems).
     void setGeometry(QVector<QVector3D> pointData,
                      QVector<cwLinePlotGeometry::VertexRange> splayRanges = {});
+
+    // Segments in each range take its type (a segment type below
+    // kSegmentTypeCount); segments outside every range are centerline.
+    void setGeometry(QVector<QVector3D> pointData, QVector<TypedRange> typedRanges);
 
     // Per-vertex visibility, one byte per vertex (255 = visible, 0 = hidden;
     // both vertices of a shot share the value). setRangeVisible flips a
@@ -60,6 +70,10 @@ public:
 
     QVector<QVector3D> points() const;
     QVector<quint8> visibility() const;
+    QVector<quint32> segmentTypes() const;
+
+    // The color the line plot shader draws a segment type in.
+    static QColor segmentColor(quint32 type);
 
     // Endpoints of the line segment whose first vertex is firstIndex — the value
     // cwRayHit::firstIndex carries for a line hit (under the iota index list it is
@@ -85,9 +99,9 @@ private:
 
         QVector<QVector3D> points;
 
-        // One entry per segment (points.size() / 2): kCenterlineSegment or
-        // kSplaySegment. Uploaded as the per-instance type attribute that
-        // selects line width, color, and depth bias in the shader.
+        // One segment type per segment (points.size() / 2). Uploaded as the
+        // per-instance type attribute that selects line width and color in
+        // the shader.
         QVector<quint32> segmentTypes;
 
         // This is needed for cwTracked to work, all ways changes
@@ -113,10 +127,16 @@ public:
     // snapshot reads.
     static constexpr uint64_t kSubId = 0;
 
-    // Per-segment type values for Data::segmentTypes; the shader branches on
-    // zero vs non-zero.
+    // Per-segment type values for Data::segmentTypes, an index into the
+    // shader's palette. Centerline segments draw 2 px wide, the rest 1 px.
     static constexpr quint32 kCenterlineSegment = 0;
     static constexpr quint32 kSplaySegment = 1;
+    static constexpr quint32 kRingSegment = 2;
+    static constexpr quint32 kFrameSegment = 3;
+    static constexpr quint32 kReadingSegment = 4;
+    static constexpr quint32 kSectionSegment = 5;
+    static constexpr quint32 kOvershootSegment = 6;
+    static constexpr quint32 kSegmentTypeCount = 7;
 };
 
 inline float cwRenderLinePlot::maxZValue() const
@@ -137,6 +157,11 @@ inline QVector<QVector3D> cwRenderLinePlot::points() const
 inline QVector<quint8> cwRenderLinePlot::visibility() const
 {
     return m_visibility;
+}
+
+inline QVector<quint32> cwRenderLinePlot::segmentTypes() const
+{
+    return m_data.value().segmentTypes;
 }
 
 #endif // CWRENDERLINEPLOT_H

@@ -36,6 +36,7 @@ QC.ApplicationWindow {
     readonly property int panelSpacing: 6
     readonly property int reportHeight: 220
     readonly property int markerSize: 10
+    readonly property int swatchSize: 12
     readonly property real ringHoverPixels: 12.0
     readonly property int badgeMinWidth: 28
     readonly property int badgePadding: 6
@@ -314,6 +315,17 @@ QC.ApplicationWindow {
         }
     }
 
+    component LayerSwatch: QQ.Rectangle {
+        id: layerSwatchId
+
+        required property string layerName
+
+        implicitWidth: rootId.swatchSize
+        implicitHeight: rootId.swatchSize
+        color: galleryModelId.layerColor(layerSwatchId.layerName)
+        border.color: Theme.textInverse
+    }
+
     Scene {
         id: sceneId
     }
@@ -528,25 +540,40 @@ QC.ApplicationWindow {
                     text: qsTr("Rings")
                     checked: rootId.showRings
                 }
+                LayerSwatch {
+                    layerName: "rings"
+                }
                 QC.CheckBox {
                     id: framesId
                     text: qsTr("Frames")
                     checked: rootId.showRings
+                }
+                LayerSwatch {
+                    layerName: "frames"
                 }
                 QC.CheckBox {
                     id: readingsId
                     text: qsTr("Readings")
                     checked: rootId.showReadings
                 }
+                LayerSwatch {
+                    layerName: "readings"
+                }
                 QC.CheckBox {
                     id: sectionsId
                     text: qsTr("Sections")
                     checked: rootId.showSections
                 }
+                LayerSwatch {
+                    layerName: "sections"
+                }
                 QC.CheckBox {
                     id: overshootId
                     text: qsTr("Overshoot")
                     checked: rootId.showOvershoot
+                }
+                LayerSwatch {
+                    layerName: "overshoot"
                 }
                 QC.CheckBox {
                     id: centerlineId

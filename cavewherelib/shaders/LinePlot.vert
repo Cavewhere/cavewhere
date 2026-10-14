@@ -14,7 +14,8 @@
 // standard way to get thicker lines there.
 layout(location = 0) in vec3 iFrom;
 layout(location = 1) in vec3 iTo;
-// 0 = centerline, non-zero = splay. Selects width and color.
+// cwRenderLinePlot segment type: 0 = centerline, drawn wider. Indexes the
+// fragment shader's palette.
 layout(location = 2) in uint iType;
 // 0 = hidden, non-zero = visible. A hidden segment collapses outside the
 // clip volume and the whole quad is discarded.
@@ -31,7 +32,7 @@ layout(std140, binding = 0) uniform GlobalBlock {
 };
 
 const float kCenterlineHalfWidthPx = 1.0; // logical px -> 2 px wide line
-const float kSplayHalfWidthPx = 0.5;      // logical px -> 1 px wide line
+const float kThinHalfWidthPx = 0.5;       // logical px -> 1 px wide line
 // Smallest clip w kept after eye-plane clipping. An endpoint behind the eye
 // (w <= 0) mirrors under the manual perspective divide and flips the sign of
 // the width offset (which scales by w), so segments straddling the eye plane
@@ -79,8 +80,8 @@ void main(void)
     float endSelect = float(gl_VertexIndex >> 1);
     float side = float(int(gl_VertexIndex & 1) * 2 - 1);
 
-    bool isSplay = iType != 0u;
-    float halfWidthPx = (isSplay ? kSplayHalfWidthPx : kCenterlineHalfWidthPx)
+    bool isCenterline = iType == 0u;
+    float halfWidthPx = (isCenterline ? kCenterlineHalfWidthPx : kThinHalfWidthPx)
         * devicePixelRatio;
 
     // Extrude sideways for width plus along the segment for a square cap, so

@@ -18,6 +18,7 @@
 //Qt includes
 #include <QAbstractListModel>
 #include <QBox3D>
+#include <QColor>
 #include <QMatrix4x4>
 #include <QPointF>
 #include <QPointer>
@@ -209,6 +210,10 @@ public:
     // junction(); and the horizontal unit direction from it toward junction().
     QVector3D armFarEnd() const;
     QVector3D armDirection() const;
+
+    // The color the ring plot draws a layer in: "rings", "frames",
+    // "readings", "sections" or "overshoot"; invalid for any other name.
+    Q_INVOKABLE QColor layerColor(const QString& layer) const;
 
     cwPassageTubeMesh mesh() const;
     cwPassageTubeMeshCheck::Report report() const;

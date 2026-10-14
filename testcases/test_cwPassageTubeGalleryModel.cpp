@@ -431,6 +431,56 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
     }
 }
 
+TEST_CASE("cwPassageTubeGalleryModel colors each ring plot layer on its own", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    using Range = cwLinePlotGeometry::VertexRange;
+    cwScene scene;
+    Model model;
+    model.setScene(&scene);
+
+    const int row = model.indexOf(kSharpBendCase);
+    REQUIRE(row >= 0);
+    model.setCurrentIndex(row);
+
+    const Model::RingGeometry geometry = model.ringGeometry();
+    const QVector<quint32> types = model.ringPlot()->segmentTypes();
+    REQUIRE(types.size() == geometry.points.size() / 2);
+
+    const auto checkType = [&](const Range& range, quint32 type) {
+        for (int vertex = range.start; vertex < range.start + range.count; vertex += 2) {
+            INFO("vertex " << vertex);
+            CHECK(types.at(vertex / 2) == type);
+        }
+    };
+    REQUIRE_FALSE(geometry.loops.isEmpty());
+    for (const Range& loop : geometry.loops) {
+        checkType(loop, cwRenderLinePlot::kRingSegment);
+    }
+    REQUIRE(geometry.rights.count > 0);
+    checkType(geometry.rights, cwRenderLinePlot::kFrameSegment);
+    checkType(geometry.ups, cwRenderLinePlot::kFrameSegment);
+    REQUIRE(geometry.readings.count > 0);
+    checkType(geometry.readings, cwRenderLinePlot::kReadingSegment);
+    checkType(geometry.passageReadings, cwRenderLinePlot::kReadingSegment);
+    REQUIRE_FALSE(geometry.sectionLoops.isEmpty());
+    for (const Range& loop : geometry.sectionLoops) {
+        checkType(loop, cwRenderLinePlot::kSectionSegment);
+    }
+    REQUIRE(geometry.sectionInsets.count > 0);
+    checkType(geometry.sectionInsets, cwRenderLinePlot::kSectionSegment);
+    checkType(geometry.overshoots, cwRenderLinePlot::kOvershootSegment);
+
+    SECTION("each layer's swatch is its segment color")
+    {
+        CHECK(model.layerColor(QStringLiteral("rings")) == cwRenderLinePlot::segmentColor(cwRenderLinePlot::kRingSegment));
+        CHECK(model.layerColor(QStringLiteral("frames")) == cwRenderLinePlot::segmentColor(cwRenderLinePlot::kFrameSegment));
+        CHECK(model.layerColor(QStringLiteral("readings")) == cwRenderLinePlot::segmentColor(cwRenderLinePlot::kReadingSegment));
+        CHECK(model.layerColor(QStringLiteral("sections")) == cwRenderLinePlot::segmentColor(cwRenderLinePlot::kSectionSegment));
+        CHECK(model.layerColor(QStringLiteral("overshoot")) == cwRenderLinePlot::segmentColor(cwRenderLinePlot::kOvershootSegment));
+        CHECK_FALSE(model.layerColor(QStringLiteral("centerline")).isValid());
+    }
+}
+
 TEST_CASE("cwPassageTubeGalleryModel opens a CaveWhere project", "[PassageTube][cwPassageTubeGalleryModel]")
 {
     QTemporaryDir directory;

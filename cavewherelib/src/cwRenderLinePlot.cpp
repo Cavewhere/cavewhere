@@ -6,6 +6,7 @@
 **************************************************************************/
 
 // Std includes
+#include <array>
 #include <limits>
 #include <numeric>
 
@@ -15,6 +16,21 @@
 #include "cwScene.h"
 #include "cwSceneVisibility.h"
 #include "cwGeometry.h"
+
+namespace {
+
+// Matches kTypeColors in LinePlot.frag, indexed by segment type.
+constexpr std::array<std::array<float, 4>, cwRenderLinePlot::kSegmentTypeCount> kSegmentColors {{
+    {1.0f, 0.0f, 0.0f, 1.0f},   // centerline: red
+    {1.0f, 0.6f, 0.6f, 1.0f},   // splay: pink
+    {0.85f, 0.85f, 0.85f, 1.0f}, // ring: light gray
+    {0.2f, 0.45f, 1.0f, 1.0f},  // frame: blue
+    {0.1f, 0.8f, 0.2f, 1.0f},   // reading: green
+    {1.0f, 0.85f, 0.0f, 1.0f},  // section: yellow
+    {1.0f, 0.0f, 1.0f, 1.0f},   // overshoot: magenta
+}};
+
+} // namespace
 
 
 cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
@@ -28,21 +44,33 @@ cwRenderLinePlot::cwRenderLinePlot(QObject *parent) :
 void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData,
                                    QVector<cwLinePlotGeometry::VertexRange> splayRanges)
 {
+    QVector<TypedRange> typedRanges;
+    typedRanges.reserve(splayRanges.size());
+    for (const cwLinePlotGeometry::VertexRange& range : std::as_const(splayRanges)) {
+        typedRanges.append(TypedRange {range, kSplaySegment});
+    }
+    setGeometry(std::move(pointData), std::move(typedRanges));
+}
+
+void cwRenderLinePlot::setGeometry(QVector<QVector3D> pointData, QVector<TypedRange> typedRanges)
+{
     Data data;
 
-    // One type per segment; a splay range always covers whole segments (its
-    // start and count are even — cwLinePlotGeometry appends vertices in
-    // pairs), so vertex span -> segment span is a divide by 2.
+    // One type per segment; a range always covers whole segments (its start
+    // and count are even — vertices come in pairs), so vertex span -> segment
+    // span is a divide by 2.
     const int segmentCount = pointData.size() / 2;
     data.segmentTypes = QVector<quint32>(segmentCount, kCenterlineSegment);
-    for (const cwLinePlotGeometry::VertexRange& range : splayRanges) {
+    for (const TypedRange& typedRange : std::as_const(typedRanges)) {
+        const cwLinePlotGeometry::VertexRange& range = typedRange.range;
+        Q_ASSERT(typedRange.type < kSegmentTypeCount);
         Q_ASSERT(range.start % 2 == 0);
         Q_ASSERT(range.count % 2 == 0);
         Q_ASSERT(range.start + range.count <= pointData.size());
         const int firstSegment = range.start / 2;
         const int endSegment = (range.start + range.count) / 2;
         for (int segment = firstSegment; segment < endSegment; ++segment) {
-            data.segmentTypes[segment] = kSplaySegment;
+            data.segmentTypes[segment] = typedRange.type;
         }
     }
 
@@ -181,6 +209,13 @@ std::optional<std::pair<QVector3D, QVector3D>> cwRenderLinePlot::segmentEndpoint
         return std::nullopt;
     }
     return std::pair<QVector3D, QVector3D>(points.at(firstIndex), points.at(firstIndex + 1));
+}
+
+QColor cwRenderLinePlot::segmentColor(quint32 type)
+{
+    Q_ASSERT(type < kSegmentTypeCount);
+    const std::array<float, 4>& color = kSegmentColors.at(type);
+    return QColor::fromRgbF(color.at(0), color.at(1), color.at(2), color.at(3));
 }
 
 cwRHIObject* cwRenderLinePlot::createRHIObject()

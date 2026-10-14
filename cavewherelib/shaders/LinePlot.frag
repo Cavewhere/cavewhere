@@ -7,14 +7,22 @@
 
 #version 440 core
 
-layout(location = 0) flat in uint vType; // 0 = centerline, non-zero = splay
+layout(location = 0) flat in uint vType; // cwRenderLinePlot segment type
 
 layout(location = 0) out vec4 fragColor;
 
-const vec4 kCenterlineColor = vec4(1.0, 0.0, 0.0, 1.0);
-const vec4 kSplayColor = vec4(1.0, 0.6, 0.6, 1.0);
+// Indexed by segment type; must match cwRenderLinePlot::segmentColor.
+const vec4 kTypeColors[7] = vec4[7](
+    vec4(1.0, 0.0, 0.0, 1.0),    // centerline: red
+    vec4(1.0, 0.6, 0.6, 1.0),    // splay: pink
+    vec4(0.85, 0.85, 0.85, 1.0), // ring: light gray
+    vec4(0.2, 0.45, 1.0, 1.0),   // frame: blue
+    vec4(0.1, 0.8, 0.2, 1.0),    // reading: green
+    vec4(1.0, 0.85, 0.0, 1.0),   // section: yellow
+    vec4(1.0, 0.0, 1.0, 1.0)     // overshoot: magenta
+);
 
 void main(void)
 {
-    fragColor = vType != 0u ? kSplayColor : kCenterlineColor;
+    fragColor = kTypeColors[vType];
 }

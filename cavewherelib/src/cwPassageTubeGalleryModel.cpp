@@ -481,6 +481,23 @@ cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& deb
     return geometry;
 }
 
+QVector<cwRenderLinePlot::TypedRange> typedRanges(const cwPassageTubeGalleryModel::RingGeometry& geometry)
+{
+    QVector<cwRenderLinePlot::TypedRange> ranges;
+    const auto appendAll = [&](const QVector<cwLinePlotGeometry::VertexRange>& sources, quint32 type) {
+        for (const cwLinePlotGeometry::VertexRange& range : sources) {
+            ranges.append({range, type});
+        }
+    };
+    appendAll(geometry.loops, cwRenderLinePlot::kRingSegment);
+    appendAll({geometry.rights, geometry.ups}, cwRenderLinePlot::kFrameSegment);
+    appendAll({geometry.readings, geometry.passageReadings}, cwRenderLinePlot::kReadingSegment);
+    appendAll(geometry.sectionLoops, cwRenderLinePlot::kSectionSegment);
+    appendAll({geometry.sectionInsets}, cwRenderLinePlot::kSectionSegment);
+    appendAll({geometry.overshoots}, cwRenderLinePlot::kOvershootSegment);
+    return ranges;
+}
+
 QVector<QVector3D> positionsOf(const QVector<cwPassageTubeMeshCheck::Issue>& issues)
 {
     QVector<QVector3D> positions;
@@ -941,6 +958,22 @@ cwPassageTubeMeshCheck::Report cwPassageTubeGalleryModel::report() const
     return m_current.report;
 }
 
+QColor cwPassageTubeGalleryModel::layerColor(const QString& layer) const
+{
+    static const QHash<QString, quint32> layerTypes {
+        {QStringLiteral("rings"), cwRenderLinePlot::kRingSegment},
+        {QStringLiteral("frames"), cwRenderLinePlot::kFrameSegment},
+        {QStringLiteral("readings"), cwRenderLinePlot::kReadingSegment},
+        {QStringLiteral("sections"), cwRenderLinePlot::kSectionSegment},
+        {QStringLiteral("overshoot"), cwRenderLinePlot::kOvershootSegment},
+    };
+    const auto type = layerTypes.constFind(layer);
+    if (type == layerTypes.cend()) {
+        return QColor();
+    }
+    return cwRenderLinePlot::segmentColor(*type);
+}
+
 cwPassageTubeGalleryModel::RingGeometry cwPassageTubeGalleryModel::ringGeometry() const
 {
     return m_ringGeometry;
@@ -1302,7 +1335,7 @@ void cwPassageTubeGalleryModel::pushToScene()
         m_linePlot->setGeometry(points);
     }
     if (m_ringPlot) {
-        m_ringPlot->setGeometry(m_ringGeometry.points, {m_ringGeometry.ups, m_ringGeometry.passageReadings, m_ringGeometry.overshoots});
+        m_ringPlot->setGeometry(m_ringGeometry.points, typedRanges(m_ringGeometry));
         applyRingVisibility();
     }
 }
