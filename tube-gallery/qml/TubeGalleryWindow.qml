@@ -21,6 +21,7 @@ QC.ApplicationWindow {
     property bool showReadings: false
     property bool showSections: false
     property bool showOvershoot: false
+    property bool showTranslucent: false
     property list<string> projectFiles: []
     property real projectSpacing: 1.0
     property string focusStation: ""
@@ -515,6 +516,7 @@ QC.ApplicationWindow {
                 QC.CheckBox {
                     id: translucentId
                     text: qsTr("Translucent")
+                    checked: rootId.showTranslucent
                 }
                 QC.CheckBox {
                     id: issuesId
