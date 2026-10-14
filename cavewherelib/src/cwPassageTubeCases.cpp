@@ -297,6 +297,28 @@ cwPassageTubeCases::Case shaftFootCase()
                      {QStringLiteral("f3"), f3, lrudStrings(end)}});
 }
 
+// Three level 10 m legs bearing 0°, 60° and 0°: an S that turns 60° right at
+// s1 and 60° left at s2, from a small section into a large one at s1 and a
+// medium one from s2 on.
+cwPassageTubeCases::Case sBendCase()
+{
+    constexpr float kLegMeters = 10.0f;
+    constexpr double kTurnDegrees = 60.0;
+    const Section small = roundSection(0.5);
+    const Section large {3.0, 3.0, 2.0, 1.0};
+    const Section medium {1.5, 1.5, 1.5, 0.8};
+
+    const QVector3D s0(0.0f, 0.0f, 0.0f);
+    const QVector3D s1 = s0 + kLegMeters * direction(0.0, 0.0);
+    const QVector3D s2 = s1 + kLegMeters * direction(kTurnDegrees, 0.0);
+    const QVector3D s3 = s2 + kLegMeters * direction(0.0, 0.0);
+    return bendCase(QStringLiteral("30. S-bend from a small to a large to a medium section"),
+                    {{QStringLiteral("s0"), s0, lrudStrings(small)},
+                     {QStringLiteral("s1"), s1, lrudStrings(large)},
+                     {QStringLiteral("s2"), s2, lrudStrings(medium)},
+                     {QStringLiteral("s3"), s3, lrudStrings(medium)}});
+}
+
 double distanceToSegment(const QVector3D& point, const QVector3D& start, const QVector3D& end)
 {
     const QVector3D along = end - start;
@@ -686,6 +708,7 @@ QVector<cwPassageTubeCases::Case> cwPassageTubeCases::catalog()
     cases.append(zeroOutsideCornerCase());
     cases.append(unreadSharpBendCase());
     cases.append(shaftFootCase());
+    cases.append(sBendCase());
     cases.append({QStringLiteral("Phake Cave"), {QStringLiteral("phake")}, phakeCave()});
     cases.append(loopCase());
     for (const JunctionCase& junctionCase : sweepCases()) {

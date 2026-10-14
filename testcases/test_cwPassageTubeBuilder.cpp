@@ -1753,6 +1753,325 @@ TEST_CASE("cwPassageTubeBuilder warns of no clamp at an elbow that keeps its mea
     checkMeshClean(debug);
 }
 
+namespace {
+
+constexpr float kSameStationMeters = 1e-4f;
+
+// How far the ring's wall lies from its center along ray, in the ring's
+// (right, up) plane: where the ray meets the chord between the bins either
+// side. A wall a sharp bend reshaped, with either bin unmeasured, has no
+// reach.
+std::optional<double> measuredReachAlong(const Builder::Ring& ring, const QVector2D& ray)
+{
+    const auto local = [&](int k) {
+        return QVector2D(static_cast<float>(ring.radii.at(k) * std::cos(ring.binAngles.at(k))),
+                         static_cast<float>(ring.radii.at(k) * std::sin(ring.binAngles.at(k))));
+    };
+    const auto cross = [](const QVector2D& a, const QVector2D& b) {
+        return a.x() * b.y() - a.y() * b.x();
+    };
+    const int resolution = ring.radii.size();
+    std::optional<double> nearest;
+    bool isMeasured = false;
+    for (int bin = 0; bin < resolution; ++bin) {
+        const int next = (bin + 1) % resolution;
+        const QVector2D a = local(bin);
+        const QVector2D edge = local(next) - local(bin);
+        const float denominator = cross(ray, edge);
+        if (std::abs(denominator) < kParallelEpsilon) {
+            continue;
+        }
+        const float along = cross(a, edge) / denominator;
+        const float onEdge = cross(a, ray) / denominator;
+        if (along > 0.0f && onEdge >= 0.0f && onEdge <= 1.0f && along < nearest.value_or(std::numeric_limits<double>::max())) {
+            nearest = along;
+            isMeasured = ring.measured.at(bin) && ring.measured.at(next);
+        }
+    }
+    return isMeasured ? nearest : std::nullopt;
+}
+
+std::optional<double> lerpReading(const std::optional<double>& a, const std::optional<double>& b, double t)
+{
+    if (a && b) {
+        return *a + (*b - *a) * t;
+    }
+    return std::nullopt;
+}
+
+// The unit directions of the two chain legs that meet at a corner station.
+struct CornerLegs {
+    QVector3D incoming;
+    QVector3D outgoing;
+};
+
+// A station's record across a ring at face value: left and right as read,
+// swapped when the record faces against the ring's tangent; up and down
+// plumb, so a ring square to a sloped leg meets them foreshortened. A corner
+// station's ring meets each plumb wall where the leg it is more square to
+// carries it onto the ring's plane.
+cwStationLrud recordAcross(const cwStationLrud& lrud, const QVector3D& facing, const Builder::Frame& frame, const std::optional<CornerLegs>& corner)
+{
+    const QVector3D worldUp(0.0f, 0.0f, 1.0f);
+    const auto plumbScale = [&]() -> double {
+        if (!corner) {
+            return std::abs(QVector3D::dotProduct(worldUp, frame.up));
+        }
+        const QVector3D& leg = std::abs(corner->incoming.z()) <= std::abs(corner->outgoing.z()) ? corner->incoming : corner->outgoing;
+        return (worldUp - leg * (frame.tangent.z() / QVector3D::dotProduct(leg, frame.tangent))).length();
+    };
+    const double plumb = plumbScale();
+    const auto foreshortened = [&](const std::optional<double>& reading) -> std::optional<double> {
+        if (reading) {
+            return std::max(Builder::kMinRadiusMeters, *reading * plumb);
+        }
+        return std::nullopt;
+    };
+    const bool facesAgainst = QVector3D::dotProduct(facing, frame.tangent) < 0.0f;
+    return {facesAgainst ? lrud.right : lrud.left,
+            facesAgainst ? lrud.left : lrud.right,
+            foreshortened(lrud.up),
+            foreshortened(lrud.down)};
+}
+
+// The record a leg holds for its station at position, as the leg's chunk
+// read it.
+std::optional<std::pair<cwStationLrud, QVector3D>> legRecordAt(const Builder::Leg& leg, const QVector3D& position)
+{
+    if (leg.fromPosition.distanceToPoint(position) < kSameStationMeters) {
+        return std::pair {leg.fromPassageLrud, leg.fromFacing};
+    }
+    if (leg.toPosition.distanceToPoint(position) < kSameStationMeters) {
+        return std::pair {leg.toPassageLrud, leg.toFacing};
+    }
+    return std::nullopt;
+}
+
+// The directions of the chain's legs into and out of station.
+CornerLegs cornerLegsAt(const Builder::Debug& debug, const Builder::Chain& chain, const QVector3D& station)
+{
+    CornerLegs corner;
+    for (const Builder::ChainLeg& chainLeg : chain.legs) {
+        const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+        const QVector3D start = chainLeg.reversed ? leg.toPosition : leg.fromPosition;
+        const QVector3D end = chainLeg.reversed ? leg.fromPosition : leg.toPosition;
+        if (end.distanceToPoint(station) < kSameStationMeters) {
+            corner.incoming = (end - start).normalized();
+        }
+        if (start.distanceToPoint(station) < kSameStationMeters) {
+            corner.outgoing = (end - start).normalized();
+        }
+    }
+    return corner;
+}
+
+// The widest of the station's records on the chain's legs, across the ring
+// at the station, or across the elbow's middle ring at a corner station.
+cwStationLrud stationReadingsAcross(const Builder::Debug& debug, const Builder::Chain& chain, const QVector3D& station, const Builder::Ring& ring)
+{
+    const Builder::Frame& frame = ring.frame;
+    const std::optional<CornerLegs> corner = ring.isElbow ? std::optional<CornerLegs>(cornerLegsAt(debug, chain, station)) : std::nullopt;
+    const auto widen = [](std::optional<double>& widest, const std::optional<double>& reading) {
+        if (reading) {
+            widest = std::max(widest.value_or(*reading), *reading);
+        }
+    };
+    cwStationLrud widest;
+    for (const Builder::ChainLeg& chainLeg : chain.legs) {
+        if (const auto record = legRecordAt(debug.legs.at(chainLeg.legIndex), station)) {
+            const cwStationLrud across = recordAcross(record->first, record->second, frame, corner);
+            widen(widest.left, across.left);
+            widen(widest.right, across.right);
+            widen(widest.up, across.up);
+            widen(widest.down, across.down);
+        }
+    }
+    return widest;
+}
+
+// How far the quadrant ellipse of readings around a station reaches from
+// center, a point given as (right, up) from the station, along each axis.
+cwStationLrud readingsFrom(const cwStationLrud& readings, const QVector2D& center)
+{
+    const auto reach = [](const std::optional<double>& along, const std::optional<double>& across, double offsetAlong, double offsetAcross) -> std::optional<double> {
+        if (!along || !across) {
+            return std::nullopt;
+        }
+        const double fraction = offsetAcross / *across;
+        return *along * std::sqrt(std::max(0.0, 1.0 - fraction * fraction)) - offsetAlong;
+    };
+    const std::optional<double>& horizontal = center.x() >= 0.0f ? readings.right : readings.left;
+    const std::optional<double>& vertical = center.y() >= 0.0f ? readings.up : readings.down;
+    return {reach(readings.left, vertical, -center.x(), center.y()),
+            reach(readings.right, vertical, center.x(), center.y()),
+            reach(readings.up, horizontal, center.y(), center.x()),
+            reach(readings.down, horizontal, -center.y(), center.x())};
+}
+
+// The walls of one ring along ±right and ±up from its center and the
+// readings they should reach; origin is the station the readings were taken
+// at, in the ring's (right, up) plane.
+struct RingWalls {
+    int ring = -1;
+    cwStationLrud expected;
+    cwStationLrud reached;
+    QVector2D origin;
+};
+
+// A ring along a leg reaches its two stations' readings interpolated by its
+// distance along the leg; a ring at a station, or the elbow's middle ring,
+// which sits off its station, reaches the station's readings seen from the
+// ring's center. Rings without readings of their own (blended elbow rings,
+// borrowed, steep and grown rings) carry none.
+std::optional<RingWalls> ringWalls(const Builder::Debug& debug, const Builder::Chain& chain, int ringIndex)
+{
+    const Builder::Ring& ring = chain.rings.at(ringIndex);
+    if (!ring.section || ring.isGrown || ring.frame.inclinationWeight > 0.0) {
+        return std::nullopt;
+    }
+
+    const QVector3D stationOffset = ring.section->station - ring.center;
+    const QVector2D origin(QVector3D::dotProduct(stationOffset, ring.frame.right), QVector3D::dotProduct(stationOffset, ring.frame.up));
+    RingWalls walls {ringIndex, {}, {}, origin};
+    walls.reached = {measuredReachAlong(ring, QVector2D(-1.0f, 0.0f)),
+                     measuredReachAlong(ring, QVector2D(1.0f, 0.0f)),
+                     measuredReachAlong(ring, QVector2D(0.0f, 1.0f)),
+                     measuredReachAlong(ring, QVector2D(0.0f, -1.0f))};
+
+    const Builder::ChainLeg& chainLeg = chain.legs.at(ring.chainLeg);
+    const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+    const QVector3D start = chainLeg.reversed ? leg.toPosition : leg.fromPosition;
+    const QVector3D end = chainLeg.reversed ? leg.fromPosition : leg.toPosition;
+    if (ring.isElbow || ring.center.distanceToPoint(start) < kSameStationMeters || ring.center.distanceToPoint(end) < kSameStationMeters) {
+        walls.expected = readingsFrom(stationReadingsAcross(debug, chain, ring.section->station, ring), -origin);
+        return walls;
+    }
+
+    const QVector3D along = end - start;
+    const double t = std::clamp(static_cast<double>(QVector3D::dotProduct(ring.center - start, along) / along.lengthSquared()), 0.0, 1.0);
+    const auto startRecord = legRecordAt(leg, start);
+    const auto endRecord = legRecordAt(leg, end);
+    REQUIRE(startRecord);
+    REQUIRE(endRecord);
+    const cwStationLrud low = recordAcross(startRecord->first, startRecord->second, ring.frame, std::nullopt);
+    const cwStationLrud high = recordAcross(endRecord->first, endRecord->second, ring.frame, std::nullopt);
+    walls.expected = {lerpReading(low.left, high.left, t),
+                      lerpReading(low.right, high.right, t),
+                      lerpReading(low.up, high.up, t),
+                      lerpReading(low.down, high.down, t)};
+    return walls;
+}
+
+void checkWallsWithinReadings(const RingWalls& walls)
+{
+    INFO("ring " << walls.ring);
+    const auto check = [](const char* name, const std::optional<double>& expected, const std::optional<double>& reached) {
+        if (expected && reached) {
+            INFO(name << " wall reaches " << *reached << ", readings " << *expected);
+            CHECK(std::abs(*reached - *expected) <= cwPassageTubeMeshCheck::kWallTolerance);
+        }
+    };
+    check("left", walls.expected.left, walls.reached.left);
+    check("right", walls.expected.right, walls.reached.right);
+    check("up", walls.expected.up, walls.reached.up);
+    check("down", walls.expected.down, walls.reached.down);
+}
+
+// The chain holding the leg between the two named stations.
+const Builder::Chain& chainWithLeg(const Builder::Debug& debug, const QString& from, const QString& to)
+{
+    const auto it = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [&](const Builder::Chain& chain) {
+        return std::any_of(chain.legs.cbegin(), chain.legs.cend(), [&](const Builder::ChainLeg& chainLeg) {
+            const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+            return leg.from == from && leg.to == to;
+        });
+    });
+    REQUIRE(it != debug.chains.cend());
+    return *it;
+}
+
+// Whether the ring lies on a leg between two of the named stations.
+bool isOnLegBetween(const Builder::Debug& debug, const Builder::Chain& chain, const Builder::Ring& ring, const QStringList& stations)
+{
+    const Builder::Leg& leg = debug.legs.at(chain.legs.at(ring.chainLeg).legIndex);
+    return stations.contains(leg.from) && stations.contains(leg.to);
+}
+
+} // namespace
+
+// Between two stations each wall runs from the first station's reading to
+// the second's by distance along the leg, through the corner stations of an
+// S-bend and of Phake Cave's a1 → a4 chain, whose a2 corner the tube used to
+// bulge around and neck down past.
+TEST_CASE("cwPassageTubeBuilder runs each wall from one station's reading to the next", "[PassageTube][cwPassageTubeBuilder][!mayfail]")
+{
+    SECTION("S-bend")
+    {
+        const cwPassageTubeCases::Case& entry = catalogCase(QStringLiteral("30. S-bend from a small to a large to a medium section"));
+        const Builder::Debug debug = buildCase(entry);
+        REQUIRE(debug.chains.size() == 1);
+        const Builder::Chain& chain = debug.chains.at(0);
+        int checkedRings = 0;
+        for (int i = 0; i < chain.rings.size(); ++i) {
+            if (const std::optional<RingWalls> walls = ringWalls(debug, chain, i)) {
+                checkWallsWithinReadings(*walls);
+                ++checkedRings;
+            }
+        }
+        CHECK(checkedRings > chain.legs.size());
+    }
+
+    SECTION("Phake Cave a1 to a4")
+    {
+        constexpr double kA2Left = 2.5;
+        constexpr double kA3Left = 1.5;
+        constexpr double kMonotonicTolerance = 1e-3;
+        const Builder::Debug debug = buildDebug(makeInput(cwPassageTubeCases::phakeCave()));
+        const Builder::Chain& chain = chainWithLeg(debug, QStringLiteral("a1"), QStringLiteral("a2"));
+        const QStringList stations {QStringLiteral("a1"), QStringLiteral("a2"), QStringLiteral("a3"), QStringLiteral("a4")};
+        const auto a2Leg = std::find_if(debug.legs.cbegin(), debug.legs.cend(), [](const Builder::Leg& leg) {
+            return leg.to == QStringLiteral("a2");
+        });
+        REQUIRE(a2Leg != debug.legs.cend());
+        const QVector3D a2 = a2Leg->toPosition;
+
+        int checkedRings = 0;
+        QVector<std::pair<double, double>> a2ToA3Left;
+        for (int i = 0; i < chain.rings.size(); ++i) {
+            const Builder::Ring& ring = chain.rings.at(i);
+            if (!isOnLegBetween(debug, chain, ring, stations)) {
+                continue;
+            }
+            const std::optional<RingWalls> walls = ringWalls(debug, chain, i);
+            if (!walls) {
+                continue;
+            }
+            checkWallsWithinReadings(*walls);
+            ++checkedRings;
+            const bool isOnA2ToA3 = isOnLegBetween(debug, chain, ring, {QStringLiteral("a2"), QStringLiteral("a3")});
+            const bool isA2Corner = ring.isElbow && ring.section->station.distanceToPoint(a2) < kSameStationMeters;
+            if ((isOnA2ToA3 || isA2Corner) && walls->reached.left) {
+                a2ToA3Left.append({ring.section->station.distanceToPoint(a2), *walls->reached.left + walls->origin.x()});
+            }
+        }
+        CHECK(checkedRings > chain.legs.size());
+
+        std::sort(a2ToA3Left.begin(), a2ToA3Left.end());
+        REQUIRE(a2ToA3Left.size() > 2);
+        QStringList leftText;
+        for (const auto& [distance, left] : std::as_const(a2ToA3Left)) {
+            leftText.append(QStringLiteral("%1 m: %2").arg(distance, 0, 'f', 2).arg(left, 0, 'f', 2));
+        }
+        INFO("a2 to a3 left walls " << leftText.join(QStringLiteral(", ")).toStdString());
+        CHECK(a2ToA3Left.first().second == Catch::Approx(kA2Left).margin(cwPassageTubeMeshCheck::kWallTolerance));
+        CHECK(a2ToA3Left.last().second == Catch::Approx(kA3Left).margin(cwPassageTubeMeshCheck::kWallTolerance));
+        for (int i = 1; i < a2ToA3Left.size(); ++i) {
+            INFO("ring " << i);
+            CHECK(a2ToA3Left.at(i).second <= a2ToA3Left.at(i - 1).second + kMonotonicTolerance);
+        }
+    }
+}
+
 // b–c and c–d belong to the second trip, read only at d; b's ring, read in
 // the first trip, lies nearer the rings on b–c but they borrow d's.
 TEST_CASE("cwPassageTubeBuilder borrows a ring from its own trip before a nearer one across a trip boundary", "[PassageTube][cwPassageTubeBuilder]")

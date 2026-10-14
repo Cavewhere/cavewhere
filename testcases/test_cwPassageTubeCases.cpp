@@ -1341,5 +1341,6 @@ TEST_CASE("cwPassageTubeCases a case survey round-trips its parameters", "[Passa
             CHECK(tags.contains(QString::fromLatin1(tag)));
         }
         CHECK(Cases::galleryCases().size() == 21);
+        CHECK(caseNames([](const Cases::Case& entry) { return entry.tags.contains(QStringLiteral("bend")); }).size() == 4);
     }
 }
