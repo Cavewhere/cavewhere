@@ -31,16 +31,24 @@ MainWindowTest {
             return page
         }
 
-        // The badge on the cave row at `index`, looked up under tryVerify
-        // because the delegate may still be laying out on the first frame.
-        function badgeForCaveRow(page, index) {
+        readonly property int treeRowLimit: 32
+
+        // The badge on `cave`'s row, looked up under tryVerify because the
+        // delegate may still be laying out on the first frame. Rows are
+        // searched by object: an attached cave's trip rows sit between it and
+        // the next cave, so a cave's row index is not its region index.
+        function badgeForCave(page, cave) {
             let badge = null
             tryVerify(() => {
-                          const delegate = findChild(page, "caveDelegate" + index)
-                          badge = delegate === null
-                                  ? null : findChild(delegate, "externalSolveBadge")
-                          return badge !== null
-                      }, 5000, "cave row " + index + " must carry an external solve badge")
+                          for (let row = 0; row < treeRowLimit; row++) {
+                              const delegate = findChild(page, "caveDelegate" + row)
+                              if (delegate !== null && delegate.object === cave) {
+                                  badge = findChild(delegate, "externalSolveBadge")
+                                  return badge !== null
+                              }
+                          }
+                          return false
+                      }, 5000, cave.name + "'s row must carry an external solve badge")
             return badge
         }
 
@@ -72,7 +80,7 @@ MainWindowTest {
             breakCaveCopy(cave)
 
             const page = gotoDataMainPage()
-            const badge = badgeForCaveRow(page, 0)
+            const badge = badgeForCave(page, cave)
 
             tryVerify(() => badge.visible && badge.hasError, 10000,
                       "the broken cave's row must show the error badge; reason: "
@@ -88,19 +96,20 @@ MainWindowTest {
         }
 
         function test_cleanOwnerShowsNoBadge() {
-            makeSavedCaveAttach("solve-badge-clean",
-                                "external-centerlines/survex_simple.svx")
+            const attached = makeSavedCaveAttach("solve-badge-clean",
+                                                 "external-centerlines/survex_simple.svx")
             RootData.region.addCave()
-            RootData.region.cave(1).name = "NativeCave"
+            const native = RootData.region.cave(1)
+            native.name = "NativeCave"
 
             const page = gotoDataMainPage()
 
-            const attachedBadge = badgeForCaveRow(page, 0)
+            const attachedBadge = badgeForCave(page, attached)
             verify(!attachedBadge.visible,
                    "a cleanly attached cave shows no badge; reason: "
                    + attachedBadge.reason)
 
-            const nativeBadge = badgeForCaveRow(page, 1)
+            const nativeBadge = badgeForCave(page, native)
             verify(!nativeBadge.visible, "a native cave shows no badge")
         }
     }

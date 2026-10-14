@@ -218,9 +218,11 @@ FanOut measureGeneratedTree(int files)
 TEST_CASE("A derived node's member views keep exactly its members' stations",
           "[cwCavingRegion][MemberViews]")
 {
-    SECTION("survex_master") {
+    // survex_blocks nests blocks under blocks that hold shots, so the attach
+    // derives nodes (survex_master's leaf blocks are trips).
+    SECTION("survex_blocks") {
         auto fixture = makeProject(QStringLiteral("member-views-survex"));
-        attachAndCheck(fixture.get(), fixturePath(QStringLiteral("survex_master/master.svx")));
+        attachAndCheck(fixture.get(), fixturePath(QStringLiteral("survex_blocks.svx")));
     }
 
     SECTION("compass_project") {

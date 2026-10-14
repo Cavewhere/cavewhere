@@ -269,8 +269,10 @@ MainWindowTest {
 
             tryVerify(() => folder.childNodeCount === 1, 10000, "the root lands under the Folder")
             const sourceRoot = folder.childNode(0)
-            tryVerify(() => sourceRoot.isSourceRoot && sourceRoot.childNodeCount === 3, 10000,
-                      "the Survex master's three blocks land as nodes")
+            // Each block holds shots and no nested block, so it is one trip.
+            tryVerify(() => sourceRoot.isSourceRoot && sourceRoot.childNodeCount === 0
+                            && sourceRoot.tripCount === 3, 10000,
+                      "the Survex master's three blocks land as trips")
             compare(RootData.region.rowCount(), 1, "nothing lands at the top level")
             tryVerify(() => tree.surveyTree.currentObject === sourceRoot, 10000,
                       "the new root's row is current")
