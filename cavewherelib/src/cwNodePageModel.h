@@ -15,7 +15,6 @@
 #include <QObject>
 #include <QPointer>
 #include <QQmlEngine>
-#include <QStringList>
 
 //Our includes
 #include "cwGlobals.h"
@@ -34,8 +33,7 @@ class cwSurveyNode;
  * A node of a sourced subtree also gets what its source card shows: how many
  * derived trips (units of the survey file) sit at or below it, how many
  * stations it holds (cwSurveyTreeModel::sourcedStationCount(), the count its
- * tree row shows), and, on a source root, the names of the derived
- * nodes and trips the user hid from the project.
+ * tree row shows).
  */
 class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
 {
@@ -47,7 +45,6 @@ class CAVEWHERE_LIB_EXPORT cwNodePageModel : public QObject
     Q_PROPERTY(int tripCount READ tripCount NOTIFY tripCountChanged)
     Q_PROPERTY(QDateTime lastSurvey READ lastSurvey NOTIFY lastSurveyChanged)
     Q_PROPERTY(int stationCount READ stationCount NOTIFY stationCountChanged)
-    Q_PROPERTY(QStringList hiddenNames READ hiddenNames NOTIFY hiddenNamesChanged)
 
 public:
     explicit cwNodePageModel(QObject* parent = nullptr);
@@ -68,18 +65,12 @@ public:
     //! trips' harvested stations before a solve; 0 for a native node.
     int stationCount() const { return m_stationCount; }
 
-    //! On a source root, one name per path its source excludes: the last
-    //! segment of the hidden node's or trip's source path, its node's segment
-    //! for a node's own unit. Empty for every other node.
-    QStringList hiddenNames() const { return m_hiddenNames; }
-
 signals:
     void nodeChanged();
     void kindLabelChanged();
     void tripCountChanged();
     void lastSurveyChanged();
     void stationCountChanged();
-    void hiddenNamesChanged();
 
 private:
     QPointer<cwSurveyNode> m_node;
@@ -93,7 +84,6 @@ private:
     int m_tripCount = 0;
     QDateTime m_lastSurvey;
     int m_stationCount = 0;
-    QStringList m_hiddenNames;
 
     void rewireTrips();
     void updateLastSurvey();
@@ -103,7 +93,6 @@ private:
     void rewireSource();
     void disconnectSource();
     void updateStationCount();
-    void updateHiddenNames();
 };
 
 #endif // CWNODEPAGEMODEL_H

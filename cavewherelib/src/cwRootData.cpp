@@ -439,16 +439,6 @@ QFuture<Monad::ResultBase> cwRootData::deleteSourceRoot(cwSurveyNode* root)
     return externalCenterlineManager()->deleteSourceRoot(root);
 }
 
-bool cwRootData::hideDerived(QObject* nodeOrTrip)
-{
-    return externalCenterlineManager()->hideDerived(nodeOrTrip);
-}
-
-QFuture<Monad::ResultBase> cwRootData::restoreHidden(cwSurveyNode* root)
-{
-    return externalCenterlineManager()->restoreHidden(root);
-}
-
 void cwRootData::showInFolder(const QString &path) const
 {
     cwFileRevealer::showInFileManager(path);

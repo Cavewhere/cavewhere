@@ -96,8 +96,8 @@ cwReconcileMergeResult cwCavingRegionSyncMergeHandler::reconcile(const cwReconci
     }
 
     // A merge commit can leave the project file exactly as our side wrote it
-    // (git resolves a conflicting hunk with our lines), so the peer's hide can
-    // sit in a project file that is absent from the changed paths.
+    // (git resolves a conflicting hunk with our lines), so the peer's new source
+    // can sit in a project file that is absent from the changed paths.
     const bool mergeCommitCreated =
         context.report->pullState == cwSaveLoad::SyncReport::PullState::MergeCommitCreated;
     if (changedProjectPaths.isEmpty() && !mergeCommitCreated) {
@@ -188,8 +188,8 @@ cwReconcileMergeResult cwCavingRegionSyncMergeHandler::reconcile(const cwReconci
 
     const QList<cwExternalSource>& mergedSources = context.region->externalSources()->sources();
     const bool sourcesChanged = (mergedSources != sourcesBeforeApply);
-    // The merge kept a source or exclusion the file on disk lacks, so the
-    // project file is written back before the push.
+    // The merge kept a source the file on disk lacks, so the project file is
+    // written back before the push.
     const bool sourcesDifferFromDisk = (mergedSources != context.loadData->region.externalSources);
 
     if (changedProjectPaths.isEmpty()) {

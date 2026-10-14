@@ -197,14 +197,6 @@ public:
     // cwExternalSource row. Reports through detachCompleted.
     QFuture<Monad::ResultBase> deleteSourceRoot(cwSurveyNode* root);
 
-    // Hides a derived node or trip (cwExternalCenterlineAttach::hideDerived);
-    // returns false, leaving the tree as it was, for anything else.
-    Q_INVOKABLE bool hideDerived(QObject* nodeOrTrip);
-
-    // Clears a source root's exclusions and reconciles, which brings every
-    // hidden node and trip back. Reports through attachCompleted.
-    QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root);
-
     // Re-copies ownerId's remembered source into the project, the same
     // overwrite path the trip panel's Reload runs — the verb the app
     // banner's per-row Update calls, which knows owners by id rather than

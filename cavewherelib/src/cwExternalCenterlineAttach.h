@@ -138,8 +138,8 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> attach(
  * Replace and Reload on a source root: re-copy sourceFile's closure into the
  * root's attachment dir (overwriting the copy and removing what the new
  * closure drops), re-write units.json, and reconcile the subtree against the
- * fresh scan. The root's exclusions carry over by exact source path. A node
- * with an external centerline and no source record yet becomes a root here.
+ * fresh scan. A node with an external centerline and no source record yet
+ * becomes a root here.
  */
 CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> replace(
     cwSurveyNode* root,
@@ -157,8 +157,7 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> replace(
  *    ancestor's). A node-and-unit row's trip sits under the row's node; a
  *    unit-only row's (a leaf Survex block, a Compass survey, a Walls .srv)
  *    under its parent's node, so a leaf Survex block is one trip;
- *  - a row whose path, or an ancestor's, is in \a exclusions is skipped, and
- *    so is a missing file;
+ *  - a missing file's row is skipped, and every row below it;
  *  - a derived trip no row matches is removed when it holds no native content
  *    (chunks, notes, LiDAR scans, sketches); a derived node no row matches is
  *    removed when its subtree holds none, and otherwise stays and turns native;
@@ -166,8 +165,7 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::Result<AttachReport>> replace(
  * New names go through uniqueChildName / uniqueTripName.
  */
 CAVEWHERE_LIB_EXPORT void reconcileSubtree(cwSurveyNode* root,
-                                           const QList<cwScanRow>& rows,
-                                           const QStringList& exclusions);
+                                           const QList<cwScanRow>& rows);
 
 /**
  * The source path a derived trip carries for a unit row: the row's own path
@@ -177,9 +175,6 @@ CAVEWHERE_LIB_EXPORT void reconcileSubtree(cwSurveyNode* root,
  * trip's path names it apart from its node's - an empty root path included.
  */
 CAVEWHERE_LIB_EXPORT QString unitSourcePath(const cwScanRow& row);
-
-//! True when \a sourcePath, or one of its '/'-separated ancestors, is listed.
-CAVEWHERE_LIB_EXPORT bool isExcluded(const QString& sourcePath, const QStringList& exclusions);
 
 /**
  * Removes a source root through the ordinary node delete (removeNode, so
@@ -192,21 +187,6 @@ CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> deleteSourceRoot(
     cwSurveyNode* root,
     cwSaveLoad* saveLoad,
     cwExternalSourceSettings* externalSourceSettings);
-
-/**
- * Hides a derived node or trip: the ordinary delete plus its source path
- * appended to its source's exclusions, so Reload leaves it out. Refuses a
- * source root, a native item, and an item whose source has no record.
- */
-CAVEWHERE_LIB_EXPORT Monad::ResultBase hideDerived(QObject* nodeOrTrip);
-
-/**
- * Clears the root's exclusions and reconciles its subtree against a fresh
- * scan of the in-project copy, which recreates every hidden node and trip.
- * units.json is re-written on the way.
- */
-CAVEWHERE_LIB_EXPORT QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root,
-                                                              cwSaveLoad* saveLoad);
 
 } // namespace cwExternalCenterlineAttach
 

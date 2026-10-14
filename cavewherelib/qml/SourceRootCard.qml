@@ -11,8 +11,7 @@ import QtQuick.Layouts
 import cavewherelib
 
 // The source card on a source root's page: the copied file, its format, where
-// the copy came from, the derived nodes and trips the user hid with Restore…
-// to bring them back, and the solve status with the root's station count and
+// the copy came from, and the solve status with the root's station count and
 // a link to the cavern output.
 // Reload and Replace… sit in the header's right-click menus; they act on the
 // whole subtree, so they live on the root and nowhere below it.
@@ -29,8 +28,6 @@ QQ.Item {
     // True while the card pulses to answer a request for it, such as a
     // warning line pointing at the attached file.
     readonly property bool attentionActive: attentionPulseId.running
-
-    readonly property int hiddenCount: root.pageModel !== null ? root.pageModel.hiddenNames.length : 0
 
     // Whether Reload has a file to copy. That follows the disk and has no
     // change signal, so it is re-read whenever the owner's state moves.
@@ -134,8 +131,6 @@ QQ.Item {
         spacing: Theme.tightSpacing
 
         ExternalCenterlineAttachedHeader {
-            id: attachedHeaderId
-
             Layout.fillWidth: true
 
             owner: root.node
@@ -148,29 +143,6 @@ QQ.Item {
             onReplaceRequested: root.openReplaceDialog()
             onReloadFromSourceRequested: RootData.reloadSource(root.node)
             onSourceEligibilityRefreshRequested: root.refreshReloadable()
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            visible: root.hiddenCount > 0
-            spacing: Theme.tightSpacing
-
-            QC.Label {
-                objectName: "sourceRootHiddenLabel"
-                Layout.fillWidth: true
-                wrapMode: QC.Label.WordWrap
-                color: Theme.textSecondary
-                text: root.pageModel !== null
-                      ? qsTr("%1 hidden: %2 ·").arg(root.hiddenCount)
-                                               .arg(root.pageModel.hiddenNames.join(", "))
-                      : ""
-            }
-
-            LinkText {
-                objectName: "sourceRootRestoreLink"
-                text: qsTr("Restore…")
-                onClicked: restoreDialogId.open()
-            }
         }
 
         RowLayout {
@@ -212,41 +184,6 @@ QQ.Item {
             duration: Theme.attentionPulseDuration
             easing.type: QQ.Easing.InOutQuad
         }
-    }
-
-    QC.Dialog {
-        id: restoreDialogId
-        objectName: "sourceRootRestoreDialog"
-
-        anchors.centerIn: QC.Overlay.overlay
-        // A fixed width lets the message wrap rather than size the dialog.
-        width: Theme.inlineBannerWidth
-        modal: true
-        title: qsTr("Restore hidden items")
-
-        contentItem: QC.Label {
-            objectName: "sourceRootRestoreMessage"
-            wrapMode: QC.Label.WordWrap
-            text: qsTr("Restore %n hidden item(s) from %1? They come back as the file describes them.",
-                       "", root.hiddenCount)
-                  .arg(attachedHeaderId.fileName)
-        }
-
-        footer: QC.DialogButtonBox {
-            QC.Button {
-                objectName: "sourceRootRestoreCancelButton"
-                text: qsTr("Cancel")
-                QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.RejectRole
-            }
-
-            QC.Button {
-                objectName: "sourceRootRestoreConfirmButton"
-                text: qsTr("Restore")
-                QC.DialogButtonBox.buttonRole: QC.DialogButtonBox.AcceptRole
-            }
-        }
-
-        onAccepted: RootData.restoreHidden(root.node)
     }
 
     // Built on the first Replace…: the dialog carries a file dialog and a

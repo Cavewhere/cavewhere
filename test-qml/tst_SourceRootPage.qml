@@ -5,8 +5,7 @@ import cw.TestLib
 
 // The page of a source root (SURVEY_TREE_PLAN C7.4b): the source card names
 // the copied file, its format and provenance, and the solve status; Reload and
-// Replace… live in the header's right-click menus (MP.9); the derived items the
-// user hid are listed with Restore….
+// Replace… live in the header's right-click menus (MP.9).
 MainWindowTest {
     id: rootId
 
@@ -76,7 +75,10 @@ MainWindowTest {
             compare(findChild(card, "solveStatusDot"), null,
                     "XC.4: the card shows no colored solve dot")
 
-            verify(!findChild(card, "sourceRootHiddenLabel").visible, "nothing is hidden yet")
+            compare(findChild(card, "sourceRootHiddenLabel"), null,
+                    "XC.11: sourced data is all or nothing, so the card lists nothing hidden")
+            compare(findChild(card, "sourceRootRestoreLink"), null,
+                    "XC.11: the card offers no Restore…")
             compare(findChild(card, "replaceButton"), null, "Replace… is no button on the card")
             const menuArea = openAttachedFileMenu(header)
             const replaceItem = findChild(menuArea, "replaceAction")
@@ -124,41 +126,6 @@ MainWindowTest {
             verify(report.success, "the reload succeeds; got: " + report.errorMessage)
             compare(report.ownerId.toString(), sourceRoot.id.toString(), "the root is what reloads")
             compare(sourceRoot.childNodeCount, 3, "the subtree is rebuilt as it was")
-        }
-
-        function test_hideThenRestore() {
-            const sourceRoot = attachCompassProject("source-root-restore")
-            attachCompletedSpyId.clear()
-            const alpha = childNamed(sourceRoot, "Alpha")
-            verify(alpha !== null)
-            const alpha2 = alpha.trip(0).name === "ALPHA2" ? alpha.trip(0) : alpha.trip(1)
-            compare(alpha2.name, "ALPHA2")
-
-            verify(RootData.hideDerived(alpha2), "a derived trip hides")
-            verify(RootData.hideDerived(childNamed(sourceRoot, "Bravo")), "a derived node hides")
-            compare(alpha.tripCount, 1, "the hidden trip leaves the tree")
-            verify(childNamed(sourceRoot, "Bravo") === null, "the hidden node leaves the tree")
-
-            const page = gotoNodePage("Source/Data/Node=PROJECT", sourceRoot)
-            const card = sourceCard(page)
-
-            const hiddenLabel = findChild(card, "sourceRootHiddenLabel")
-            tryVerify(() => hiddenLabel.visible, 5000, "the card lists what is hidden")
-            compare(findChild(card, "sourceRootHiddenLabel").text, "2 hidden: ALPHA2, BRAVO.DAT ·")
-
-            waitForRendering(card)
-            mouseClick(findChild(card, "sourceRootRestoreLink"))
-            const dialog = findChild(card, "sourceRootRestoreDialog")
-            tryVerify(() => dialog.opened, 5000, "Restore… asks first")
-            compare(findChild(dialog, "sourceRootRestoreMessage").text,
-                    "Restore 2 hidden item(s) from PROJECT.MAK? They come back as the file describes them.")
-            waitForRendering(dialog.contentItem)
-            mouseClick(findChild(dialog, "sourceRootRestoreConfirmButton"))
-
-            tryVerify(() => attachCompletedSpyId.count === 1, 20000, "Restore reconciles the subtree")
-            tryVerify(() => childNamed(sourceRoot, "Bravo") !== null, 10000, "the hidden node comes back")
-            tryCompare(alpha, "tripCount", 2, 10000, "the hidden trip comes back")
-            tryVerify(() => !hiddenLabel.visible, 5000, "nothing is hidden any more")
         }
     }
 }

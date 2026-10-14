@@ -203,8 +203,7 @@ StandardPage {
                                           && !nodePageArea.isEmpty
 
     // The node an attached survey file built its subtree under: its page
-    // shows the source card, whose header menus hold Reload and Replace… and
-    // whose hidden line offers Restore….
+    // shows the source card, whose header menus hold Reload and Replace….
     readonly property bool isSourceRoot: nodePageArea.currentNode !== null
                                          && nodePageArea.currentNode.isSourceRoot
 

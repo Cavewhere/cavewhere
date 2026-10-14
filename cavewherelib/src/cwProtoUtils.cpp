@@ -927,7 +927,6 @@ void saveExternalSource(CavewhereProto::ExternalSource* protoSource, const cwExt
 {
     saveQUuid(protoSource->mutable_id(), source.id());
     saveQUuid(protoSource->mutable_root_node_id(), source.rootNodeId());
-    saveStringList(protoSource->mutable_excluded_source_paths(), source.excludedSourcePaths());
 }
 
 QList<cwExternalSource> fromProtoExternalSources(
@@ -937,8 +936,7 @@ QList<cwExternalSource> fromProtoExternalSources(
     sources.reserve(protoSources.size());
     for (const auto& protoSource : protoSources) {
         sources.append(cwExternalSource(toUuid(protoSource.id()),
-                                        toUuid(protoSource.root_node_id()),
-                                        fromProtoStringList(protoSource.excluded_source_paths())));
+                                        toUuid(protoSource.root_node_id())));
     }
     return sources;
 }

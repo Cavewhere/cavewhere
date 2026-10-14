@@ -37,9 +37,6 @@
 #include <QPointer>
 #include <QtConcurrent>
 
-//Std includes
-#include <algorithm>
-
 namespace {
 
 using cwExternalCenterlineAttach::AttachReport;
@@ -217,17 +214,6 @@ int sourceRowOf(const cwCavingRegion* region, const QUuid& sourceId)
         return -1;
     }
     return region->externalSources()->indexOf(sourceId);
-}
-
-//! The exclusions recorded for \a root's source, empty when it has no record.
-QStringList exclusionsOf(const cwSurveyNode* root)
-{
-    const cwCavingRegion* region = root->parentRegion();
-    const int row = sourceRowOf(region, root->sourceId());
-    if (row < 0) {
-        return QStringList();
-    }
-    return region->externalSources()->sourceAt(row).excludedSourcePaths();
 }
 
 /**
@@ -511,7 +497,7 @@ QFuture<Monad::Result<AttachReport>> attachOwner(
                 cwSurveyNode* root = owner.node();
                 ensureSourceRecord(root, scan.rows.first().kind);
                 report.warnings += writeManifest(attachmentDir, scan.rows);
-                cwExternalCenterlineAttach::reconcileSubtree(root, scan.rows, exclusionsOf(root));
+                cwExternalCenterlineAttach::reconcileSubtree(root, scan.rows);
                 report.root = root;
             } else {
                 report.metadata = seedTripMetadata(owner.trip(), scan.seededMetadata);
@@ -650,19 +636,7 @@ QString unitSourcePath(const cwScanRow& row)
                                     : row.sourcePath + QLatin1Char('/') + ownUnit;
 }
 
-bool isExcluded(const QString& sourcePath, const QStringList& exclusions)
-{
-    return std::any_of(exclusions.cbegin(), exclusions.cend(),
-                       [&sourcePath](const QString& excluded) {
-        return !excluded.isEmpty()
-               && (sourcePath == excluded
-                   || sourcePath.startsWith(excluded + QLatin1Char('/')));
-    });
-}
-
-void reconcileSubtree(cwSurveyNode* root,
-                      const QList<cwScanRow>& rows,
-                      const QStringList& exclusions)
+void reconcileSubtree(cwSurveyNode* root, const QList<cwScanRow>& rows)
 {
     if (root == nullptr || rows.isEmpty()) {
         return;
@@ -671,7 +645,7 @@ void reconcileSubtree(cwSurveyNode* root,
 
     // Every derived record under the root, by the path that names it in the
     // scan. A match is taken out, so what is left at the end is what the scan
-    // no longer lists, or now excludes.
+    // no longer lists.
     QHash<QString, cwSurveyNode*> nodesByPath;
     QHash<QString, cwTrip*> tripsByPath;
     const QList<cwSurveyNode*> descendants = root->allNodes();
@@ -700,7 +674,7 @@ void reconcileSubtree(cwSurveyNode* root,
         skipBelowDepth = -1;
 
         const bool isRootRow = row.depth == 0;
-        if (!isRootRow && (row.missing || isExcluded(row.sourcePath, exclusions))) {
+        if (!isRootRow && row.missing) {
             if (row.isNode) {
                 skipBelowDepth = row.depth;
             }
@@ -737,7 +711,7 @@ void reconcileSubtree(cwSurveyNode* root,
             continue;
         }
         const QString tripPath = unitSourcePath(row);
-        if (isExcluded(tripPath, exclusions) || tripsByPath.take(tripPath) != nullptr) {
+        if (tripsByPath.take(tripPath) != nullptr) {
             continue;
         }
         auto* trip = new cwTrip();
@@ -857,99 +831,6 @@ QFuture<Monad::ResultBase> deleteSourceRoot(cwSurveyNode* root,
 
     // The node's directory Remove job takes the attachment dir with it.
     return attachmentDirRemoved(QStringLiteral("delete"), saveLoad, attachmentDir);
-}
-
-Monad::ResultBase hideDerived(QObject* nodeOrTrip)
-{
-    using Monad::ResultBase;
-
-    auto* trip = qobject_cast<cwTrip*>(nodeOrTrip);
-    auto* node = qobject_cast<cwSurveyNode*>(nodeOrTrip);
-    cwSurveyNode* root = nullptr;
-    QString sourcePath;
-    if (trip != nullptr) {
-        if (trip->parentNode() != nullptr) {
-            root = trip->parentNode()->sourceRoot();
-        }
-        sourcePath = trip->sourcePath();
-    } else if (node != nullptr) {
-        root = node->sourceRoot();
-        sourcePath = node->sourcePath();
-    }
-    if (root == nullptr || sourcePath.isEmpty()) {
-        return ResultBase(QStringLiteral("hide: only a node or trip a survey file derives can be hidden"));
-    }
-
-    cwCavingRegion* region = root->parentRegion();
-    const int sourceRow = sourceRowOf(region, root->sourceId());
-    if (sourceRow < 0) {
-        return ResultBase(QStringLiteral("hide: the survey file this came from has no source record"));
-    }
-
-    cwExternalSource source = region->externalSources()->sourceAt(sourceRow);
-    QStringList exclusions = source.excludedSourcePaths();
-    if (!exclusions.contains(sourcePath)) {
-        exclusions.append(sourcePath);
-        source.setExcludedSourcePaths(exclusions);
-        region->externalSources()->replaceAt(sourceRow, source);
-    }
-
-    if (trip != nullptr) {
-        cwSurveyNode* parent = trip->parentNode();
-        parent->removeTrip(parent->indexOf(trip));
-    } else {
-        cwSurveyNode* parent = node->parentNode();
-        parent->removeNode(parent->indexOfNode(node));
-    }
-    return ResultBase();
-}
-
-QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root, cwSaveLoad* saveLoad)
-{
-    using Monad::ResultBase;
-
-    if (root == nullptr || saveLoad == nullptr) {
-        return AsyncFuture::completed(
-            ResultBase(QStringLiteral("restore: source root or saveLoad is null")));
-    }
-    cwCavingRegion* region = root->parentRegion();
-    const int sourceRow = sourceRowOf(region, root->sourceId());
-    if (!root->isSourceRoot() || sourceRow < 0 || root->externalCenterline().isEmpty()) {
-        return AsyncFuture::completed(
-            ResultBase(QStringLiteral("restore: the node is not an attached source root")));
-    }
-
-    cwExternalSource source = region->externalSources()->sourceAt(sourceRow);
-    source.setExcludedSourcePaths(QStringList());
-    region->externalSources()->replaceAt(sourceRow, source);
-
-    // The in-project copy is what the subtree mirrors, so it is what the
-    // restore scans.
-    const QString attachmentDir = OwnerTarget::forNode(root).attachmentDir(saveLoad);
-    const QString entryFile =
-        QDir(attachmentDir).absoluteFilePath(root->externalCenterline().entryFile());
-    auto scanFuture = QtConcurrent::run([entryFile]() {
-        return cwExternalCenterlineScanner::scan(entryFile);
-    });
-
-    const QPointer<cwSurveyNode> rootPtr(root);
-    return AsyncFuture::observe(scanFuture)
-        .context(saveLoad, [rootPtr, attachmentDir](const Monad::Result<ScanResult>& scanResult) {
-            if (rootPtr.isNull()) {
-                return ResultBase(QStringLiteral("restore: source root was deleted mid-restore"));
-            }
-            if (scanResult.hasError()) {
-                return ResultBase(scanResult.errorMessage(), scanResult.errorCode());
-            }
-            const QList<cwScanRow>& rows = scanResult.value().rows;
-            const QStringList manifestWarnings = writeManifest(attachmentDir, rows);
-            cwExternalCenterlineAttach::reconcileSubtree(rootPtr.data(), rows, exclusionsOf(rootPtr.data()));
-            if (!manifestWarnings.isEmpty()) {
-                return ResultBase(manifestWarnings.join(QLatin1Char('\n')));
-            }
-            return ResultBase();
-        })
-        .future();
 }
 
 } // namespace cwExternalCenterlineAttach

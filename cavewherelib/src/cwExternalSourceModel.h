@@ -36,8 +36,7 @@ public:
     enum Roles {
         SourceRole = Qt::UserRole + 1,
         IdRole,
-        RootNodeIdRole,
-        ExcludedSourcePathsRole
+        RootNodeIdRole
     };
     Q_ENUM(Roles)
 

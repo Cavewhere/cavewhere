@@ -171,9 +171,8 @@ public:
     Q_INVOKABLE QFuture<Monad::ResultBase> detachTripCenterline(cwTrip* trip);
 
     // The verbs for a survey file attached as a sourced subtree (W7): attach
-    // builds a read-only subtree under target; replace, reload, delete, and
-    // restore act on its root; hide removes one derived node or trip and keeps
-    // it out across Reload.
+    // builds a read-only subtree under target; replace, reload, and delete act
+    // on its root.
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     attachSource(cwSurveyNode* target, const QString& sourcePath);
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
@@ -181,8 +180,6 @@ public:
     Q_INVOKABLE QFuture<Monad::Result<cwExternalCenterlineAttach::AttachReport>>
     reloadSource(cwSurveyNode* root);
     Q_INVOKABLE QFuture<Monad::ResultBase> deleteSourceRoot(cwSurveyNode* root);
-    Q_INVOKABLE bool hideDerived(QObject* nodeOrTrip);
-    Q_INVOKABLE QFuture<Monad::ResultBase> restoreHidden(cwSurveyNode* root);
 
     //Helper functions for creating things
     Q_INVOKABLE cwImage emptyImage() const  { return cwImage(); }

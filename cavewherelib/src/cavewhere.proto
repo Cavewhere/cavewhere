@@ -158,9 +158,6 @@ message Equate {
 message ExternalSource {
     optional string id = 1;
     optional string root_node_id = 2;  // Cave.id of the source's root node
-    // source_path of each derived node or trip the user hid; a hidden node
-    // hides its derived descendants too. Survives Reload.
-    repeated string excluded_source_paths = 3;
 }
 
 // What a survey node is called and drawn as. Absent on an older file means

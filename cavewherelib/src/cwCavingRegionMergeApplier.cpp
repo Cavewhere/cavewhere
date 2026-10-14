@@ -15,30 +15,6 @@ const cwExternalSource* findSource(const QList<cwExternalSource>& sources, const
     return nullptr;
 }
 
-QStringList mergeExclusions(const QStringList& ours,
-                            const QStringList& theirs,
-                            const QStringList& base)
-{
-    QStringList merged;
-    const auto keep = [&merged](const QString& path) {
-        if (!merged.contains(path)) {
-            merged.append(path);
-        }
-    };
-
-    for (const QString& path : theirs) {
-        if (ours.contains(path) || !base.contains(path)) {
-            keep(path);
-        }
-    }
-    for (const QString& path : ours) {
-        if (!base.contains(path)) {
-            keep(path);
-        }
-    }
-    return merged;
-}
-
 cwExternalSource mergeSource(const cwExternalSource& ours,
                              const cwExternalSource& theirs,
                              const cwExternalSource* base)
@@ -52,10 +28,6 @@ cwExternalSource mergeSource(const cwExternalSource& ours,
         theirs.rootNodeId(),
         baseRoot,
         [](const QUuid& lhs, const QUuid& rhs) { return lhs == rhs; }));
-    merged.setExcludedSourcePaths(mergeExclusions(
-        ours.excludedSourcePaths(),
-        theirs.excludedSourcePaths(),
-        base != nullptr ? base->excludedSourcePaths() : QStringList()));
     return merged;
 }
 

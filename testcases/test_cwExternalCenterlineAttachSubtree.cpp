@@ -116,32 +116,6 @@ void replace(SavedProjectFixture* fixture, cwSurveyNode* root, const QString& so
     drainPipelines(fixture);
 }
 
-void restore(SavedProjectFixture* fixture, cwSurveyNode* root)
-{
-    auto future = managerOf(fixture)->restoreHidden(root);
-    REQUIRE(AsyncFuture::waitForFinished(future, kAttachWaitMs));
-    INFO("restore: " << future.result().errorMessage().toStdString());
-    REQUIRE_FALSE(future.result().hasError());
-    drainPipelines(fixture);
-}
-
-//! The exclusions the saved project file records for its first source.
-QStringList savedExclusions(SavedProjectFixture* fixture)
-{
-    fixture->project->waitSaveToFinish();
-    const QJsonObject project =
-        QJsonDocument::fromJson(fileContents(fixture->project->filename())).object();
-    const QJsonArray sources = project.value(QStringLiteral("externalSources")).toArray();
-    REQUIRE(sources.size() == 1);
-    QStringList paths;
-    const QJsonArray excluded =
-        sources.at(0).toObject().value(QStringLiteral("excludedSourcePaths")).toArray();
-    for (const QJsonValue& value : excluded) {
-        paths.append(value.toString());
-    }
-    return paths;
-}
-
 } // namespace
 
 TEST_CASE("Attaching compass_project builds a project root, one node per DAT, one trip per survey",
@@ -185,7 +159,6 @@ TEST_CASE("Attaching compass_project builds a project root, one node per DAT, on
     // The project records the source, and units.json sits beside the copy.
     const cwExternalSource source = sourceOf(fixture.get(), root);
     CHECK(source.rootNodeId() == root->id());
-    CHECK(source.excludedSourcePaths().isEmpty());
 
     const QString attachmentDir = attachmentDirOf(fixture.get(), root);
     CHECK(QFileInfo::exists(QDir(attachmentDir).absoluteFilePath(kProjectMak)));
@@ -261,44 +234,7 @@ TEST_CASE("Reload keeps a native trip under a derived node and adds a node for a
     CHECK(root->childNodeCount() == 4);
 }
 
-TEST_CASE("A hidden node stays hidden across Reload and Restore brings it back",
-          "[Attach][ExternalSource]")
-{
-    auto fixture = makeProject(QStringLiteral("subtree-hide-restore"));
-    cwSurveyNode* root = attachSourceThroughManager(
-        fixture.get(), regionRoot(fixture.get()),
-        compassProjectMak());
-    drainPipelines(fixture.get());
-
-    cwSurveyNode* alpha = childNodeNamed(root, QStringLiteral("Alpha"));
-    REQUIRE(managerOf(fixture.get())->hideDerived(childNodeNamed(root, QStringLiteral("Bravo"))));
-    REQUIRE(managerOf(fixture.get())->hideDerived(tripNamed(alpha, QStringLiteral("ALPHA2"))));
-
-    CHECK(childNodeNamed(root, QStringLiteral("Bravo")) == nullptr);
-    CHECK(tripNamed(alpha, QStringLiteral("ALPHA2")) == nullptr);
-    const QStringList hidden({QStringLiteral("BRAVO.DAT"), QStringLiteral("ALPHA.DAT/ALPHA2")});
-    CHECK(sourceOf(fixture.get(), root).excludedSourcePaths() == hidden);
-    CHECK(savedExclusions(fixture.get()) == hidden);
-
-    // Neither a source root nor a native item can be hidden.
-    CHECK_FALSE(managerOf(fixture.get())->hideDerived(root));
-    CHECK_FALSE(managerOf(fixture.get())->hideDerived(fixture->trip));
-    CHECK_FALSE(managerOf(fixture.get())->hideDerived(fixture->cave));
-
-    reload(fixture.get(), root);
-    CHECK(childNodeNames(root) == QStringList({QStringLiteral("Alpha"), QStringLiteral("Charlie")}));
-    CHECK(tripNames(alpha) == QStringList({QStringLiteral("ALPHA1")}));
-    CHECK(sourceOf(fixture.get(), root).excludedSourcePaths() == hidden);
-
-    restore(fixture.get(), root);
-    CHECK(childNodeNames(root) == QStringList({QStringLiteral("Alpha"), QStringLiteral("Charlie"),
-                                           QStringLiteral("Bravo")}));
-    CHECK(tripNames(alpha) == QStringList({QStringLiteral("ALPHA1"), QStringLiteral("ALPHA2")}));
-    CHECK(sourceOf(fixture.get(), root).excludedSourcePaths().isEmpty());
-    CHECK(savedExclusions(fixture.get()).isEmpty());
-}
-
-TEST_CASE("A derived trip holding a note survives Reload, Replace, and hide/Restore",
+TEST_CASE("A derived trip holding a note survives Reload and Replace",
           "[Attach]")
 {
     auto fixture = makeProject(QStringLiteral("subtree-note-survives"));
@@ -336,12 +272,6 @@ TEST_CASE("A derived trip holding a note survives Reload, Replace, and hide/Rest
     CHECK(tripNames(alpha) == QStringList({QStringLiteral("ALPHA1")}));
     CHECK_FALSE(alpha->isSourced());
     CHECK_FALSE(alpha->isReadOnly());
-
-    REQUIRE(managerOf(fixture.get())->hideDerived(childNodeNamed(root, QStringLiteral("Charlie"))));
-    restore(fixture.get(), root);
-    REQUIRE_FALSE(alpha1Ptr.isNull());
-    CHECK(alpha1->notes()->hasNotes());
-    CHECK(childNodeNamed(root, QStringLiteral("Charlie")) != nullptr);
 }
 
 TEST_CASE("Deleting a source root takes its subtree, native trips, copies, and source record",
@@ -375,6 +305,81 @@ TEST_CASE("Deleting a source root takes its subtree, native trips, copies, and s
     CHECK(fixture->project->cavingRegion()->externalSources()->count() == 0);
     CHECK_FALSE(fixture->settings()->hasBreadcrumb(rootId));
     CHECK(regionRoot(fixture.get())->childNodes().contains(fixture->cave));
+}
+
+namespace {
+
+//! Adds \a paths as the first source's excludedSourcePaths in the project
+//! file, as a build that still had the derived hide saved them.
+void writeStaleExclusions(const QString& projectFile, const QStringList& paths)
+{
+    QJsonObject project = QJsonDocument::fromJson(fileContents(projectFile)).object();
+    QJsonArray sources = project.value(QStringLiteral("externalSources")).toArray();
+    REQUIRE(sources.size() == 1);
+    QJsonObject source = sources.at(0).toObject();
+    source.insert(QStringLiteral("excludedSourcePaths"), QJsonArray::fromStringList(paths));
+    sources.replace(0, source);
+    project.insert(QStringLiteral("externalSources"), sources);
+    overwriteFile(projectFile, QJsonDocument(project).toJson());
+}
+
+} // namespace
+
+TEST_CASE("A project saved with exclusions loads and reloads with every derived row",
+          "[Attach][SaveLoad]")
+{
+    auto fixture = makeProject(QStringLiteral("subtree-stale-exclusions"));
+    cwSurveyNode* root = attachSourceThroughManager(fixture.get(), regionRoot(fixture.get()),
+                                                    compassProjectMak());
+    drainPipelines(fixture.get());
+
+    // The tree an earlier build's hide left on disk: Bravo and ALPHA2 are
+    // gone, and the source row names them.
+    cwSurveyNode* alpha = childNodeNamed(root, QStringLiteral("Alpha"));
+    alpha->removeTrip(alpha->indexOf(tripNamed(alpha, QStringLiteral("ALPHA2"))));
+    root->removeNode(root->indexOfNode(childNodeNamed(root, QStringLiteral("Bravo"))));
+    drainPipelines(fixture.get());
+
+    const QUuid rootId = root->id();
+    const QUuid sourceId = root->sourceId();
+    const QString projectFile = fixture->project->filename();
+    fixture->rootData.reset();
+    fixture->cave = nullptr;
+    fixture->trip = nullptr;
+    writeStaleExclusions(projectFile, {QStringLiteral("BRAVO.DAT"), QStringLiteral("ALPHA.DAT/ALPHA2")});
+
+    fixture->rootData = std::make_unique<cwRootData>();
+    fixture->project = fixture->rootData->project();
+    addTokenManager(fixture->project);
+    fixture->project->loadOrConvert(projectFile);
+    fixture->project->waitLoadToFinish();
+    drainPipelines(fixture.get());
+
+    CHECK(fixture->project->errorModel()->isEmpty());
+    const cwExternalSourceModel* sources = fixture->project->cavingRegion()->externalSources();
+    REQUIRE(sources->count() == 1);
+    CHECK(sources->sourceAt(0) == cwExternalSource(sourceId, rootId));
+
+    cwSurveyNode* loadedRoot = childNodeNamed(regionRoot(fixture.get()), QStringLiteral("PROJECT"));
+    REQUIRE(loadedRoot != nullptr);
+    REQUIRE(loadedRoot->isSourceRoot());
+    CHECK(childNodeNames(loadedRoot) == QStringList({QStringLiteral("Alpha"), QStringLiteral("Charlie")}));
+    cwSurveyNode* loadedAlpha = childNodeNamed(loadedRoot, QStringLiteral("Alpha"));
+    REQUIRE(loadedAlpha != nullptr);
+    CHECK(tripNames(loadedAlpha) == QStringList({QStringLiteral("ALPHA1")}));
+
+    const QString source = compassProjectMak();
+    fixture->settings()->setBreadcrumb(
+        rootId, source, cwExternalSourceSettings::computeFingerprint({source}));
+    REQUIRE(managerOf(fixture.get())->canReloadFromSource(loadedRoot));
+    reload(fixture.get(), loadedRoot);
+
+    // Reload builds every row the file lists; nothing it once hid is skipped.
+    CHECK(loadedRoot->childNodeCount() == 3);
+    CHECK(tripNames(loadedAlpha) == QStringList({QStringLiteral("ALPHA1"), QStringLiteral("ALPHA2")}));
+    const cwSurveyNode* bravo = childNodeNamed(loadedRoot, QStringLiteral("Bravo"));
+    REQUIRE(bravo != nullptr);
+    CHECK(tripNames(bravo) == QStringList({QStringLiteral("BRAVO1")}));
 }
 
 TEST_CASE("Attaching walls_project nests its books and keeps the gray ones",
@@ -472,19 +477,6 @@ TEST_CASE("Reloading an outer source root keeps a nested source root's derived t
     CHECK(inner->trip(0)->id() == innerTripId);
     CHECK(inner->trip(0)->sourcePath() == QStringLiteral("A"));
     CHECK(tripNames(alpha) == QStringList({QStringLiteral("ALPHA1"), QStringLiteral("ALPHA2")}));
-}
-
-TEST_CASE("isExcluded matches an excluded path and its descendants",
-          "[Attach]")
-{
-    CHECK(cwExternalCenterlineAttach::isExcluded(QStringLiteral("ALPHA.DAT/ALPHA1"),
-                                                 {QStringLiteral("ALPHA.DAT")}));
-    CHECK(cwExternalCenterlineAttach::isExcluded(QStringLiteral("ALPHA.DAT"),
-                                                 {QStringLiteral("ALPHA.DAT")}));
-    CHECK_FALSE(cwExternalCenterlineAttach::isExcluded(QStringLiteral("ALPHA.DATA"),
-                                                       {QStringLiteral("ALPHA.DAT")}));
-    CHECK_FALSE(cwExternalCenterlineAttach::isExcluded(QStringLiteral("ALPHA.DAT"),
-                                                       {QStringLiteral("ALPHA.DAT/ALPHA1")}));
 }
 
 TEST_CASE("A source root whose harvest fails keeps cavern's warnings off its row",

@@ -1516,53 +1516,6 @@ QFuture<Monad::ResultBase> cwExternalCenterlineManager::deleteSourceRoot(cwSurve
     });
 }
 
-bool cwExternalCenterlineManager::hideDerived(QObject* nodeOrTrip)
-{
-    const bool hidden = !cwExternalCenterlineAttach::hideDerived(nodeOrTrip).hasError();
-    if (hidden) {
-        m_solveOnScanApply = true;
-        recomputeWatchSet();
-    }
-    return hidden;
-}
-
-QFuture<Monad::ResultBase> cwExternalCenterlineManager::restoreHidden(cwSurveyNode* root)
-{
-    using Monad::ResultBase;
-
-    if (root == nullptr) {
-        return refuseOperation<ResultBase>(
-            &cwExternalCenterlineManager::attachCompleted, QUuid(),
-            QStringLiteral("restore: source root is null"));
-    }
-    const QUuid rootId = root->id();
-    if (isOwnerBusy(rootId)) {
-        return refuseOperation<ResultBase>(
-            &cwExternalCenterlineManager::attachCompleted, rootId,
-            QStringLiteral("restore: another operation for this source root is still in progress"));
-    }
-
-    auto guard = std::make_shared<OperationGuard>(
-        this, rootId, OperationKind::Attach, nullptr,
-        &cwExternalCenterlineManager::attachCompleted);
-    auto future = cwExternalCenterlineAttach::restoreHidden(root, m_saveLoad.data());
-    AsyncFuture::observe(future).context(this,
-            [this, guard, rootId](const ResultBase& result) {
-        if (!result.hasError()) {
-            // Restored derived trips need the recompute's station push and solve.
-            m_solveOnScanApply = true;
-            recomputeWatchSet();
-        }
-        guard->finish(result.hasError()
-                          ? cwExternalCenterlineReport::failed(rootId, result.errorMessage())
-                          : cwExternalCenterlineReport::succeeded(rootId));
-    },
-            [guard, rootId]() {
-        guard->finish(cwExternalCenterlineReport::wasCanceled(rootId));
-    });
-    return future;
-}
-
 template<typename OwnerT>
 QString cwExternalCenterlineManager::reloadSourcePathForOwner(const OwnerT* owner) const
 {

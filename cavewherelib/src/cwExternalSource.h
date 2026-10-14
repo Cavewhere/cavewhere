@@ -10,7 +10,6 @@
 
 //Qt includes
 #include <QMetaType>
-#include <QStringList>
 #include <QUuid>
 
 //Our includes
@@ -18,12 +17,9 @@
 
 /**
  * One attached survey source (a Compass .mak, a Walls .wpj, a Survex master):
- * the root node its scan builds and the derived nodes and trips the user hid.
+ * its id and the root node its scan builds.
  *
  * id is the cwSurveyNode::sourceId() of the root and of every derived node.
- * excludedSourcePaths lists the cwSurveyNode::sourcePath() or
- * cwTrip::sourcePath() of each hidden item; a hidden node hides its derived
- * descendants with it.
  *
  * Value type (copyable, equality-comparable). The cwCavingRegion holds every
  * source in its cwExternalSourceModel.
@@ -33,16 +29,12 @@ class CAVEWHERE_LIB_EXPORT cwExternalSource
     Q_GADGET
     Q_PROPERTY(QUuid id READ id WRITE setId FINAL)
     Q_PROPERTY(QUuid rootNodeId READ rootNodeId WRITE setRootNodeId FINAL)
-    Q_PROPERTY(QStringList excludedSourcePaths READ excludedSourcePaths WRITE setExcludedSourcePaths FINAL)
 
 public:
     cwExternalSource() = default;
-    cwExternalSource(const QUuid& id,
-                     const QUuid& rootNodeId,
-                     const QStringList& excludedSourcePaths = {}) :
+    cwExternalSource(const QUuid& id, const QUuid& rootNodeId) :
         m_id(id),
-        m_rootNodeId(rootNodeId),
-        m_excludedSourcePaths(excludedSourcePaths)
+        m_rootNodeId(rootNodeId)
     {}
 
     QUuid id() const { return m_id; }
@@ -51,15 +43,11 @@ public:
     QUuid rootNodeId() const { return m_rootNodeId; }
     void setRootNodeId(const QUuid& rootNodeId) { m_rootNodeId = rootNodeId; }
 
-    QStringList excludedSourcePaths() const { return m_excludedSourcePaths; }
-    void setExcludedSourcePaths(const QStringList& paths) { m_excludedSourcePaths = paths; }
-
     bool operator==(const cwExternalSource& other) const = default;
 
 private:
     QUuid m_id;
     QUuid m_rootNodeId;
-    QStringList m_excludedSourcePaths;
 };
 
 Q_DECLARE_METATYPE(cwExternalSource)

@@ -31,21 +31,19 @@ QVariant cwExternalSourceModel::data(const QModelIndex& index, int role) const
 
     const cwExternalSource& source = m_sources.at(index.row());
     switch (role) {
-    case SourceRole:              return QVariant::fromValue(source);
-    case IdRole:                  return source.id();
-    case RootNodeIdRole:          return source.rootNodeId();
-    case ExcludedSourcePathsRole: return source.excludedSourcePaths();
-    default:                      return QVariant();
+    case SourceRole:     return QVariant::fromValue(source);
+    case IdRole:         return source.id();
+    case RootNodeIdRole: return source.rootNodeId();
+    default:             return QVariant();
     }
 }
 
 QHash<int, QByteArray> cwExternalSourceModel::roleNames() const
 {
     return {
-        {SourceRole,              "source"},
-        {IdRole,                  "sourceId"},
-        {RootNodeIdRole,          "rootNodeId"},
-        {ExcludedSourcePathsRole, "excludedSourcePaths"}
+        {SourceRole,     "source"},
+        {IdRole,         "sourceId"},
+        {RootNodeIdRole, "rootNodeId"}
     };
 }
 
