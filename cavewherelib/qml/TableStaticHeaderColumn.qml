@@ -101,38 +101,16 @@ QQ.Rectangle {
         }
     }
 
-    QQ.Item {
+    ColumnResizeGrip {
         id: resizeGripId
         objectName: "columnResizeGrip." + delegate.text
 
         visible: delegate.resizable
-        width: Theme.columnResizeGripWidth
+        columnWidth: delegate.columnWidth
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.right: parent.right
 
-        QQ.HoverHandler {
-            cursorShape: Qt.SplitHCursor
-        }
-
-        QQ.DragHandler {
-            property int startWidth: 0
-
-            target: null
-            yAxis.enabled: false
-
-            onActiveChanged: {
-                if (active) {
-                    startWidth = delegate.columnWidth
-                }
-            }
-            // Measured from the press, so the drag threshold moves the edge too.
-            onCentroidChanged: {
-                if (active) {
-                    delegate.resizeRequested(Math.round(startWidth + centroid.scenePosition.x
-                                                        - centroid.scenePressPosition.x))
-                }
-            }
-        }
+        onResizeRequested: (newWidth) => delegate.resizeRequested(newWidth)
     }
 }

@@ -6,6 +6,7 @@
 **************************************************************************/
 
 import QtQuick as QQ
+import QtCore as QtCore
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtQml.Models
@@ -57,6 +58,12 @@ ColumnLayout {
                                        + Theme.tightSpacing
                                        + headerId.height
                                        + treeViewId.rows * Theme.treeRowHeight
+
+    //The settings key of each column's stored width, in column order. Name
+    //takes the remainder, so it stores nothing.
+    readonly property list<string> columnWidthKeys: ["", "kindColumnWidth", "tripsColumnWidth",
+        "stationsColumnWidth", "lengthColumnWidth", "depthColumnWidth", "dateColumnWidth",
+        "declColumnWidth"]
 
     //The rows the view draws right now, the rows under rootNode included only
     //while their node is open.
@@ -695,6 +702,53 @@ ColumnLayout {
         return node !== null && (node.childNodeCount + node.tripCount) > 0;
     }
 
+    //The Theme width of fixed column \a column, used until the user drags it.
+    function defaultColumnWidth(column: int) : int {
+        switch(column) {
+        case SurveyTreeModel.Kind:
+            return Theme.treeKindColumnWidth;
+        case SurveyTreeModel.Trips:
+            return Theme.treeCountColumnWidth;
+        case SurveyTreeModel.Stations:
+            return Theme.treeStationsColumnWidth;
+        case SurveyTreeModel.Decl:
+            return Theme.treeDeclColumnWidth;
+        case SurveyTreeModel.Length:
+        case SurveyTreeModel.Depth:
+            return Theme.treeStatColumnWidth;
+        case SurveyTreeModel.Date:
+            return Theme.treeDateColumnWidth;
+        default:
+            return 0;
+        }
+    }
+
+    //Sets fixed column \a column to \a requestedWidth and stores it. The
+    //width stays above the minimum column width, and grows only as far as the
+    //Name column keeps its own minimum, so the tree still fits the view.
+    function resizeColumn(column: int, requestedWidth: int) : void {
+        const key = surveyTreeId.columnWidthKeys[column];
+        const minimum = Theme.tableColumnMinimumWidth;
+        const nameRoom = Math.max(0, treeViewId.columnWidthProvider(SurveyTreeModel.Name)
+                                     - Theme.treeNameColumnMinimumWidth);
+        const maximum = Math.max(minimum, treeViewId.columnWidthProvider(column) + nameRoom);
+        const width = Math.min(maximum, Math.max(minimum, requestedWidth));
+        columnWidthsId[key] = width;
+        columnSettingsId.setValue(key, width);
+        treeViewId.forceLayout();
+    }
+
+    //Picks up the stored column widths, including ones dragged in the tree on
+    //another page while this one sat hidden.
+    function readColumnWidths() : void {
+        for (const key of surveyTreeId.columnWidthKeys) {
+            if (key.length > 0) {
+                columnWidthsId[key] = Number(columnSettingsId.value(key, 0));
+            }
+        }
+        treeViewId.forceLayout();
+    }
+
     //Moves the current row, which is what the arrow keys and the tree's own
     //verbs share.
     function setCurrentRow(row: int) {
@@ -790,8 +844,15 @@ ColumnLayout {
         surveyTreeId.makeFirstRowCurrent();
     }
 
+    onVisibleChanged: {
+        if (visible) {
+            surveyTreeId.readColumnWidths();
+        }
+    }
+
     //A tree built over a region that already holds caves sees no insert.
     QQ.Component.onCompleted: {
+        surveyTreeId.readColumnWidths();
         surveyTreeId.applyRootIndex();
         surveyTreeId.collectSourceRoots(surveyTreeId.rootProxyIndex());
         surveyTreeId.expandPendingSourceRoots();
@@ -813,6 +874,26 @@ ColumnLayout {
         function onMoved(subject) {
             Qt.callLater(surveyTreeId.revealObject, subject);
         }
+    }
+
+    //The widths the user dragged the fixed columns to, shared by every tree
+    //on every page. Read each time the tree shows and written straight
+    //through on each drag. A stored 0 leaves that column at its default.
+    QtCore.Settings {
+        id: columnSettingsId
+        category: "SurveyTreeView"
+    }
+
+    QQ.QtObject {
+        id: columnWidthsId
+
+        property int kindColumnWidth: 0
+        property int tripsColumnWidth: 0
+        property int stationsColumnWidth: 0
+        property int lengthColumnWidth: 0
+        property int depthColumnWidth: 0
+        property int dateColumnWidth: 0
+        property int declColumnWidth: 0
     }
 
     //The prompt answers for whichever row asked for it.
@@ -903,6 +984,8 @@ ColumnLayout {
 
         syncView: treeViewId
         clip: true
+        //The grips own the column widths, through resizeColumn().
+        resizableColumns: false
 
         Layout.fillWidth: true
 
@@ -952,9 +1035,36 @@ ColumnLayout {
             }
 
             //The header is the one sort control the tree has, in both the
-            //Data page's layout and the cave page's.
-            QQ.TapHandler {
-                onTapped: surveyTreeId.toggleSort(headerCellId.column)
+            //Data page's layout and the cave page's. It leaves out the grip, so
+            //a press there resizes without sorting.
+            QQ.Item {
+                anchors.fill: parent
+                anchors.leftMargin: gripLoaderId.active ? Theme.columnResizeGripWidth : 0
+
+                QQ.TapHandler {
+                    onTapped: surveyTreeId.toggleSort(headerCellId.column)
+                }
+            }
+
+            //On the left edge: the Name column to the left takes the remainder,
+            //so the boundary dragged stays under the pointer. Name itself has
+            //no grip.
+            QQ.Loader {
+                id: gripLoaderId
+
+                active: headerCellId.column !== SurveyTreeModel.Name
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+
+                sourceComponent: ColumnResizeGrip {
+                    objectName: "surveyTreeResizeGrip" + headerCellId.column
+
+                    columnWidth: headerCellId.width
+                    growsLeftward: true
+
+                    onResizeRequested: (newWidth) => surveyTreeId.resizeColumn(headerCellId.column, newWidth)
+                }
             }
         }
     }
@@ -1027,24 +1137,12 @@ ColumnLayout {
         //The fixed columns take what they need and the Name column takes the
         //rest, so a cave's name has the room a window gives it.
         columnWidthProvider: function(column) {
-            switch(column) {
-            case SurveyTreeModel.Kind:
-                return Theme.treeKindColumnWidth;
-            case SurveyTreeModel.Trips:
-                return Theme.treeCountColumnWidth;
-            case SurveyTreeModel.Stations:
-                return Theme.treeStationsColumnWidth;
-            case SurveyTreeModel.Decl:
-                return Theme.treeDeclColumnWidth;
-            case SurveyTreeModel.Length:
-            case SurveyTreeModel.Depth:
-                return Theme.treeStatColumnWidth;
-            case SurveyTreeModel.Date:
-                return Theme.treeDateColumnWidth;
-            default:
+            if (column === SurveyTreeModel.Name) {
                 return Math.max(Theme.treeNameColumnMinimumWidth,
                                 treeViewId.width - treeViewId.fixedColumnsWidth);
             }
+            const stored = columnWidthsId[surveyTreeId.columnWidthKeys[column]];
+            return stored > 0 ? stored : surveyTreeId.defaultColumnWidth(column);
         }
 
         onWidthChanged: treeViewId.forceLayout()

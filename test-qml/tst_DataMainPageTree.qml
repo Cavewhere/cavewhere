@@ -1,5 +1,6 @@
 import QtQuick as QQ
 import QtQuick.Controls as QC
+import QtCore as QtCore
 import QtQml.Models
 import QtTest
 import cavewherelib
@@ -57,9 +58,25 @@ MainWindowTest {
         }
     }
 
+    readonly property list<string> treeColumnWidthKeys: ["kindColumnWidth", "tripsColumnWidth",
+        "stationsColumnWidth", "lengthColumnWidth", "depthColumnWidth", "dateColumnWidth",
+        "declColumnWidth"]
+
+    // The survey tree's dragged column widths, shared by the Data page and
+    // the node page. cleanup() puts back whatever a test dragged.
+    QtCore.Settings {
+        id: treeColumnSettingsId
+        category: "SurveyTreeView"
+    }
+
     TestCase {
         name: "DataMainPageTree"
         when: windowShown
+
+        readonly property int defaultWindowWidth: 1200
+        // Wide enough that the Name column stands above its minimum, so a
+        // fixed column has room to widen.
+        readonly property int wideWindowWidth: 1600
 
         function init() {
             RootData.futureManagerModel.waitForFinished()
@@ -86,6 +103,12 @@ MainWindowTest {
             smokeLoaderId.active = false
             RootData.pageSelectionModel.currentPageAddress = "View"
             RootData.newProject()
+
+            rootId.width = defaultWindowWidth
+            for (const key of rootId.treeColumnWidthKeys) {
+                treeColumnSettingsId.setValue(key, 0)
+            }
+            treeColumnSettingsId.sync()
         }
 
         function addCave(name, tripCount) {
@@ -1041,6 +1064,120 @@ MainWindowTest {
                           return cell !== null
                       }, 5000, "header cell " + column + " must exist")
             return cell
+        }
+
+        //! The resize grip on the left edge of header cell \a column.
+        function resizeGripOf(page, column) {
+            const cell = headerCell(page, column)
+            const grip = findChild(cell, "surveyTreeResizeGrip" + column)
+            verify(grip !== null, "header cell " + column + " has a resize grip")
+            verify(grip.visible, "header cell " + column + "'s resize grip shows")
+            return grip
+        }
+
+        //! Drags header cell \a column's left boundary \a dx pixels sideways,
+        //! laid out on the page because the grip follows the boundary it moves.
+        function dragColumnBoundary(page, column, dx) {
+            const grip = resizeGripOf(page, column)
+            const start = grip.mapToItem(page, grip.width / 2, grip.height / 2)
+            mouseDrag(page, start.x, start.y, dx, 0)
+        }
+
+        //! The Data page over one cave, in a window wide enough that the Name
+        //! column has room to give.
+        function gotoWideTree() {
+            rootId.width = wideWindowWidth
+            addCave("Alpha Cave", 1)
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+            waitForRendering(page)
+            return { page: page, tree: tree }
+        }
+
+        // Dragging the Name|Kind boundary leftward widens Kind by the drag,
+        // Name gives up the same, the rows' cells follow the header, and the
+        // width is stored for the node page's tree too.
+        function test_aDraggedHeaderBoundaryResizesItsColumn() {
+            const view = gotoWideTree()
+            const page = view.page
+            const tree = view.tree
+            const kindHeader = headerCell(page, SurveyTreeModel.Kind)
+            const nameHeader = headerCell(page, SurveyTreeModel.Name)
+            const startKind = kindHeader.width
+            const startName = nameHeader.width
+            const drag = 40
+            verify(startName - Theme.treeNameColumnMinimumWidth > drag,
+                   "the Name column (" + startName + ") has room to give " + drag)
+
+            verify(findChild(nameHeader, "surveyTreeResizeGrip" + SurveyTreeModel.Name) === null,
+                   "the Name column takes the remainder, so it has no grip")
+
+            dragColumnBoundary(page, SurveyTreeModel.Kind, -drag)
+            tryVerify(() => Math.abs(kindHeader.width - (startKind + drag)) <= 2, 5000,
+                      "the Kind header widens by the drag, from " + startKind
+                      + " to about " + (startKind + drag) + ", got " + kindHeader.width)
+            const draggedWidth = kindHeader.width
+            tryVerify(() => Math.abs(nameHeader.width - (startName - (draggedWidth - startKind))) <= 1, 5000,
+                      "the Name header gives up what Kind took, from " + startName
+                      + ", got " + nameHeader.width)
+
+            tryVerify(() => {
+                          const cell = tree.itemAtCell(Qt.point(SurveyTreeModel.Kind, 0))
+                          return cell !== null && cell.width === draggedWidth
+                      }, 5000, "the cave row's Kind cell follows its column to " + draggedWidth)
+            tryVerify(() => {
+                          const cell = tree.itemAtCell(Qt.point(SurveyTreeModel.Name, 0))
+                          return cell !== null && cell.width === nameHeader.width
+                      }, 5000, "the cave row's Name cell follows its column")
+
+            compare(Number(treeColumnSettingsId.value("kindColumnWidth", 0)), draggedWidth,
+                    "the dragged width is stored under the survey tree's settings")
+
+            // The cave's own page hosts the same tree and reads the width back.
+            RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=Alpha Cave"
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "cavePage",
+                      5000, "the cave's node page should show")
+            const nodePage = RootData.pageView.currentPageItem
+            let nodeKindHeader = null
+            tryVerify(() => {
+                          nodeKindHeader = findChild(nodePage, "surveyTreeHeaderCell" + SurveyTreeModel.Kind)
+                          return nodeKindHeader !== null
+                      }, 5000, "the node page's tree has a Kind header")
+            tryCompare(nodeKindHeader, "width", draggedWidth, 5000,
+                       "the node page's tree shows the width dragged on the Data page")
+        }
+
+        // A drag far rightward stops the column at the minimum column width.
+        function test_aTreeColumnNarrowsNoFurtherThanItsMinimum() {
+            const view = gotoWideTree()
+            verify(Theme.tableColumnMinimumWidth > 0, "Theme names a minimum column width")
+            const declHeader = headerCell(view.page, SurveyTreeModel.Decl)
+            verify(declHeader.width > Theme.tableColumnMinimumWidth,
+                   "the Decl column starts wider than the minimum")
+
+            dragColumnBoundary(view.page, SurveyTreeModel.Decl, 1000)
+            tryCompare(declHeader, "width", Theme.tableColumnMinimumWidth, 5000,
+                       "the Decl column stops at the minimum width")
+        }
+
+        // Widening a column stops where the Name column reaches its own
+        // minimum, so the tree still fits the view.
+        function test_aTreeColumnWidensOnlyAsFarAsNameGives() {
+            const view = gotoWideTree()
+            const kindHeader = headerCell(view.page, SurveyTreeModel.Kind)
+            const nameHeader = headerCell(view.page, SurveyTreeModel.Name)
+            const startKind = kindHeader.width
+            const room = nameHeader.width - Theme.treeNameColumnMinimumWidth
+            verify(room > 0, "the Name column has room to give")
+
+            dragColumnBoundary(view.page, SurveyTreeModel.Kind, -5000)
+            tryVerify(() => Math.abs(kindHeader.width - (startKind + room)) <= 2, 5000,
+                      "the Kind column widens from " + startKind + " to the Name column's spare room, about "
+                      + (startKind + room) + ", got " + kindHeader.width)
+            tryVerify(() => Math.abs(nameHeader.width - Theme.treeNameColumnMinimumWidth) <= 2, 5000,
+                      "the Name column stops at its minimum, got " + nameHeader.width)
         }
 
         //The names of the view's rows in the order they stand in. surveyTree()

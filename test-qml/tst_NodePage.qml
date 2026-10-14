@@ -1,4 +1,5 @@
 import QtQuick
+import QtCore as QtCore
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -9,9 +10,23 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
+    readonly property list<string> treeColumnWidthKeys: ["kindColumnWidth", "tripsColumnWidth",
+        "stationsColumnWidth", "lengthColumnWidth", "depthColumnWidth", "dateColumnWidth",
+        "declColumnWidth"]
+
+    // The survey tree's dragged column widths; cleanup() puts them back.
+    QtCore.Settings {
+        id: treeColumnSettingsId
+        category: "SurveyTreeView"
+    }
+
     ExternalCenterlineTestCase {
         name: "NodePage"
         when: windowShown
+
+        // Wide enough that the Name column has room to give a dragged column.
+        readonly property int wideWindowWidth: 1600
+        readonly property int headerDragDistance: 40
 
         function init() {
             RootData.project.newProject()
@@ -23,6 +38,11 @@ MainWindowTest {
             RootData.project.newProject()
             rootId.width = 1200
             rootId.height = 700
+
+            for (const key of rootId.treeColumnWidthKeys) {
+                treeColumnSettingsId.setValue(key, 0)
+            }
+            treeColumnSettingsId.sync()
         }
 
         function addNode(parent, kind, name) {
@@ -110,6 +130,44 @@ MainWindowTest {
                       "the name editor must open")
             rootId.shadowEditor.setEditorText(name)
             rootId.shadowEditor.coreClickInput.commitChanges()
+        }
+
+        // The wide node page scrolls as a whole, and a drag on its tree's
+        // header boundary still resizes the column rather than the page, with
+        // the rows' cells following the header.
+        function test_aDraggedHeaderBoundaryResizesTheNodeTreeColumn() {
+            rootId.width = wideWindowWidth
+            const nodes = setupCaveWithSection()
+            const page = gotoNodePage("Source/Data/Node=Side Cave", nodes.cave)
+            const view = tree(page, "caveDelegate0")
+            tryCompare(view, "rows", 2, 5000)
+            const treeHost = findChild(page, "tripTree")
+            verify(!treeHost.scrollable, "the wide node page scrolls the tree with the page")
+
+            const kindHeader = findChild(treeHost, "surveyTreeHeaderCell" + SurveyTreeModel.Kind)
+            const nameHeader = findChild(treeHost, "surveyTreeHeaderCell" + SurveyTreeModel.Name)
+            verify(kindHeader !== null && nameHeader !== null, "the node tree has Name and Kind headers")
+            waitForRendering(page)
+            const startKind = kindHeader.width
+            const drag = headerDragDistance
+            verify(nameHeader.width - Theme.treeNameColumnMinimumWidth > drag,
+                   "the Name column (" + nameHeader.width + ") has room to give " + drag)
+
+            const grip = findChild(kindHeader, "surveyTreeResizeGrip" + SurveyTreeModel.Kind)
+            verify(grip !== null, "the node tree's Kind header has a resize grip")
+            const start = grip.mapToItem(page, grip.width / 2, grip.height / 2)
+            mouseDrag(page, start.x, start.y, -drag, 0)
+
+            tryVerify(() => Math.abs(kindHeader.width - (startKind + drag)) <= 2, 5000,
+                      "the Kind header widens by the drag, from " + startKind
+                      + " to about " + (startKind + drag) + ", got " + kindHeader.width)
+            const draggedWidth = kindHeader.width
+            for (let row = 0; row < 2; row++) {
+                tryVerify(() => {
+                              const cell = view.itemAtCell(Qt.point(SurveyTreeModel.Kind, row))
+                              return cell !== null && cell.width === draggedWidth
+                          }, 5000, "row " + row + "'s Kind cell follows its column to " + draggedWidth)
+            }
         }
 
         function test_childSectionShowsTheSectionAndOpensIt() {
