@@ -10,9 +10,8 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// The source card on a derived node's page: which file the node comes from,
-// what the node is inside that file, and a link to the source root, whose
-// header menus hold Reload and Replace… and whose page holds Restore….
+// The source card on a derived node's page: the file the node comes from and
+// that file's format.
 QQ.Item {
     id: root
     objectName: "derivedNodeCard"
@@ -26,55 +25,29 @@ QQ.Item {
                                         ? root.sourceRoot.externalCenterline.entryFile : ""
     readonly property string fileName: root.entryFile.substring(root.entryFile.lastIndexOf("/") + 1)
 
-    implicitWidth: contentColumnId.implicitWidth
-    implicitHeight: contentColumnId.implicitHeight
+    implicitWidth: contentRowId.implicitWidth
+    implicitHeight: contentRowId.implicitHeight
 
-    ColumnLayout {
-        id: contentColumnId
+    RowLayout {
+        id: contentRowId
 
         anchors.fill: parent
         spacing: Theme.tightSpacing
 
-        RowLayout {
+        QC.Label {
+            objectName: "derivedNodeFileLabel"
             Layout.fillWidth: true
-            spacing: Theme.tightSpacing
-
-            QC.Label {
-                objectName: "derivedNodeFileLabel"
-                elide: QC.Label.ElideMiddle
-                font.bold: true
-                text: root.fileName
-            }
-
-            QC.Label {
-                objectName: "derivedNodeFormatLabel"
-                visible: text.length > 0
-                color: Theme.textSecondary
-                text: root.sourceRoot !== null ? root.sourceRoot.externalCenterline.format : ""
-            }
-
-            QQ.Item { Layout.fillWidth: true }
-
-            LinkText {
-                objectName: "derivedNodeOpenRootLink"
-                visible: root.sourceRoot !== null
-                text: root.sourceRoot !== null ? qsTr("Open %1").arg(root.sourceRoot.name) : ""
-                onClicked: RootData.pageSelectionModel.currentPageAddress =
-                           linkGeneratorId.nodeLink(root.sourceRoot)
-            }
+            Layout.maximumWidth: implicitWidth
+            elide: QC.Label.ElideMiddle
+            font.bold: true
+            text: root.fileName
         }
 
         QC.Label {
-            objectName: "derivedNodeUnitLabel"
-            Layout.fillWidth: true
-            wrapMode: QC.Label.WordWrap
+            objectName: "derivedNodeFormatLabel"
+            visible: text.length > 0
             color: Theme.textSecondary
-            text: root.node !== null ? qsTr("This node is %1 in the project").arg(root.node.sourcePath) : ""
+            text: root.sourceRoot !== null ? root.sourceRoot.externalCenterline.format : ""
         }
-    }
-
-    LinkGenerator {
-        id: linkGeneratorId
-        pageSelectionModel: RootData.pageSelectionModel
     }
 }

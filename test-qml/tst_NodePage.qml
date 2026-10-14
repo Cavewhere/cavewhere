@@ -447,9 +447,10 @@ MainWindowTest {
             tryCompare(nodes.section, "parentNode", nodes.cave, 5000)
         }
 
-        // A derived node's page says what the node is in the file and links to
-        // its root; the root owns the fixed positions, so the node offers none.
-        function test_derivedNodeCardNamesTheNodeAndOpensTheRoot() {
+        // A derived node's page names the file it comes from; the breadcrumb and
+        // the Kind chip carry the root. The root owns the fixed positions, so the
+        // node offers none.
+        function test_derivedNodeCardNamesTheFile() {
             const sourceRoot = attachCompassProject("node-page-derived")
             const alpha = childNamed(sourceRoot, "Alpha")
             verify(alpha !== null)
@@ -459,7 +460,10 @@ MainWindowTest {
             tryVerify(() => card.visible, 5000, "a derived node shows its source card")
             verify(!findChild(page, "sourceRootCard").visible, "the root's card stays on the root")
             compare(findChild(card, "derivedNodeFileLabel").text, "PROJECT.MAK")
-            compare(findChild(card, "derivedNodeUnitLabel").text, "This node is ALPHA.DAT in the project")
+            compare(findChild(card, "derivedNodeOpenRootLink"), null,
+                    "XC.6: the breadcrumb links to the root")
+            compare(findChild(card, "derivedNodeUnitLabel"), null,
+                    "XC.6: the breadcrumb and the Kind chip say what the node is")
             compare(findChild(card, "derivedNodeCountsLabel"), null,
                     "MP.9: the card carries no unit or station count")
 
@@ -470,17 +474,23 @@ MainWindowTest {
             verify(fixLabel.visible)
             compare(fixLabel.text, "Fixed positions come from the survey file")
 
-            const openRoot = findChild(card, "derivedNodeOpenRootLink")
-            compare(openRoot.text, "Open PROJECT")
-            mouseClick(openRoot)
+            const crumbs = findChild(rootId.mainWindow, "linkBarListView")
+            let rootCrumb = null
+            tryVerify(() => {
+                          for (let i = 0; i < crumbs.count; ++i) {
+                              const item = crumbs.itemAtIndex(i)
+                              if (item !== null && item.text === "PROJECT") {
+                                  rootCrumb = findChild(item, "linkBarItemText")
+                                  return rootCrumb !== null
+                              }
+                          }
+                          return false
+                      }, 5000, "the breadcrumb names the root")
+            mouseClick(rootCrumb)
             tryVerify(() => RootData.pageSelectionModel.currentPageAddress === "Source/Data/Node=PROJECT"
                       && RootData.pageView.currentPageItem !== null
                       && RootData.pageView.currentPageItem.currentNode === sourceRoot,
-                      5000, "Open PROJECT opens the root's page")
-            const rootPage = RootData.pageView.currentPageItem
-            tryVerify(() => findChild(rootPage, "sourceRootCard").visible, 5000,
-                      "the root's page shows the root's card")
-            verify(findChild(rootPage, "fixStationsLink").visible, "the root keeps its fix-station row")
+                      5000, "the root's crumb opens the root's page")
         }
 
         // What each drawn trip row's Decl cell shows, keyed by the trip's name:
