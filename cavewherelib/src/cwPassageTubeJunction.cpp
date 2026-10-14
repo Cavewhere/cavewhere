@@ -777,13 +777,21 @@ double junctionSpacing(const Options& options, const Ring& throughRing, const QV
 
 // How far along the through the union reads. It reaches past the growth: a
 // grazing arm's far wall clears the through's wall only where the arm's axis
-// lies the two radii off the through's axis.
-double unionReach(const Ring& throughRing, const QVector<ArmGeometry>& arms, double reach)
+// lies the two radii off the through's axis. Where the through bends at the
+// junction, the arm grazes whichever of its rings within reach runs nearest
+// the arm's direction.
+double unionReach(const QVector<Ring>& rings, const QVector3D& junction, const QVector<ArmGeometry>& arms, double reach)
 {
-    const double throughRadius = largestRadius(throughRing);
+    const ThroughSpan span(rings, junction, reach);
+    const double throughRadius = largestRadius(rings.at(span.junctionRing));
     double result = kUnionReachFactor * reach;
     for (const ArmGeometry& arm : arms) {
-        const double sine = QVector3D::crossProduct(throughRing.frame.tangent, arm.tangent).length();
+        double sine = std::numeric_limits<double>::max();
+        for (int i = span.first; i <= span.last; ++i) {
+            if (hasValidFrame(rings.at(i))) {
+                sine = std::min(sine, static_cast<double>(QVector3D::crossProduct(rings.at(i).frame.tangent, arm.tangent).length()));
+            }
+        }
         const double farWall = (throughRadius + largestRadius(arm.rings.last())) / std::max(sine, kMinJunctionSine);
         result = std::max(result, farWall + kJunctionReachMargin);
     }
@@ -805,7 +813,7 @@ JunctionSolids junctionSolids(const QVector<Chain>& chains, const Junction& junc
     const Ring& throughRing = through.rings.at(junctionRingIndex(through.rings, junction.position));
     solids.throughTangent = throughRing.frame.tangent;
     solids.reach = junctionReach(solids.throughTangent, solids.arms);
-    solids.unionReach = unionReach(throughRing, solids.arms, solids.reach);
+    solids.unionReach = unionReach(through.rings, junction.position, solids.arms, solids.reach);
 
     solids.throughRings = unionThroughRings(through.rings, junction.position, solids.unionReach);
     solids.throughFirst = ThroughSpan(through.rings, junction.position, solids.unionReach).first;

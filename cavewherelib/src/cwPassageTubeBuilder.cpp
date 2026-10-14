@@ -54,8 +54,8 @@ constexpr double kRepeatedShotToleranceMeters = 0.1;
 // of a sphere.
 constexpr float kDomeHalfRingScale = 0.5f;
 constexpr float kDomeHalfRingDepth = static_cast<float>(std::numbers::sqrt3 / 2.0);
-// A wall stretched across a corner's bisector plane reaches at most this many
-// times its reading square to the legs.
+// A wall carried onto a corner's bisector plane reaches at most this many
+// times its reading.
 constexpr double kMaxMiterStretch = 3.0;
 constexpr double kCornerInsetMeters = 0.5;
 constexpr double kCornerInsetLegFraction = 0.45;
@@ -142,12 +142,6 @@ cwStationLrud stationLrud(const cwStation& station,
 bool isPositioned(const cwStation& station, const cwStationPositionLookup& positions)
 {
     return station.isValid() && positions.hasPosition(station.name());
-}
-
-// The station's right direction for LRUD read looking along facing.
-QVector3D rightOfFacing(const QVector3D& facing)
-{
-    return QVector3D(facing.y(), -facing.x(), 0.0f);
 }
 
 // Each chunk station's facing: the horizontal chord between its nearest
@@ -1541,50 +1535,41 @@ QVector<Frame> chainFrames(const QVector<ChainSample>& samples, const Options& o
     return frames;
 }
 
-// The record's walls as seen across the ring: each wall foreshortened to its
-// component along frame.right or frame.up, the side walls swapped when the
-// record faces the other way. A record facing along the ring's tangent keeps
-// only up and down.
-//
-// On a corner station's ring each wall instead slides along the leg whose
-// cross-section holds it onto the bisector plane and reaches as far from
-// the station as it lands, so a wall read square to one leg lands where that
-// leg's wall meets the ring. On a sloped corner the slide also carries a
-// vertical wall sideways, off the ring's up axis.
+// The record's walls as seen across the ring. Left and right are the
+// passage's half-widths as read, so they lie along -frame.right and
+// +frame.right at face value, swapped when the record faces against the
+// ring's tangent. Up and down are plumb, so a ring square to a sloped leg
+// meets them foreshortened to their component along frame.up. A corner
+// station's ring stands square to neither leg: there each plumb wall slides
+// along the leg it is more square to onto the ring's plane, where that leg's
+// ceiling or floor meets the ring.
 cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std::optional<Miter>& miter)
 {
-    const auto acrossRing = [&](const std::optional<double>& reading, const QVector3D& direction, const QVector3D& axis) -> std::optional<double> {
+    const auto plumbAcross = [&](const std::optional<double>& reading, const QVector3D& direction) -> std::optional<double> {
         if (!reading) {
             return std::nullopt;
         }
-        QVector3D wall = direction * static_cast<float>(*reading);
         if (miter) {
-            const bool isAcrossIncoming = std::abs(QVector3D::dotProduct(direction, miter->incoming))
-                                          <= std::abs(QVector3D::dotProduct(direction, miter->outgoing));
-            const QVector3D& leg = isAcrossIncoming ? miter->incoming : miter->outgoing;
-            wall -= leg * (QVector3D::dotProduct(wall, frame.tangent) / QVector3D::dotProduct(leg, frame.tangent));
-            const double stretched = std::min(static_cast<double>(wall.length()), kMaxMiterStretch * *reading);
-            return std::max(cwPassageTubeBuilder::kMinRadiusMeters, stretched);
+            const QVector3D& leg = std::abs(QVector3D::dotProduct(direction, miter->incoming)) <= std::abs(QVector3D::dotProduct(direction, miter->outgoing))
+                                       ? miter->incoming
+                                       : miter->outgoing;
+            const QVector3D slid = direction - leg * (QVector3D::dotProduct(direction, frame.tangent) / QVector3D::dotProduct(leg, frame.tangent));
+            return std::max(cwPassageTubeBuilder::kMinRadiusMeters, *reading * std::min(static_cast<double>(slid.length()), kMaxMiterStretch));
         }
-        return std::max(cwPassageTubeBuilder::kMinRadiusMeters,
-                        static_cast<double>(std::abs(QVector3D::dotProduct(wall, axis))));
+        return std::max(cwPassageTubeBuilder::kMinRadiusMeters, *reading * std::abs(QVector3D::dotProduct(direction, frame.up)));
+    };
+    const auto sideAcross = [](const std::optional<double>& reading) -> std::optional<double> {
+        if (reading) {
+            return std::max(cwPassageTubeBuilder::kMinRadiusMeters, *reading);
+        }
+        return std::nullopt;
     };
 
-    cwStationLrud across {std::nullopt,
-                          std::nullopt,
-                          acrossRing(record.lrud.up, kWorldUp, frame.up),
-                          acrossRing(record.lrud.down, -kWorldUp, frame.up)};
-    const QVector3D right = rightOfFacing(record.facing);
-    const float component = QVector3D::dotProduct(right, frame.right);
-    if (std::abs(component) < kMinProjectedLength) {
-        return across;
-    }
-    const std::optional<double> rightWall = acrossRing(record.lrud.right, right, frame.right);
-    const std::optional<double> leftWall = acrossRing(record.lrud.left, -right, frame.right);
-    const bool facesSameWay = component >= 0.0f;
-    across.right = facesSameWay ? rightWall : leftWall;
-    across.left = facesSameWay ? leftWall : rightWall;
-    return across;
+    const bool facesAgainst = QVector3D::dotProduct(record.facing, frame.tangent) < 0.0f;
+    return {sideAcross(facesAgainst ? record.lrud.right : record.lrud.left),
+            sideAcross(facesAgainst ? record.lrud.left : record.lrud.right),
+            plumbAcross(record.lrud.up, kWorldUp),
+            plumbAcross(record.lrud.down, -kWorldUp)};
 }
 
 // stationRadii are the radii of the station's section around the station

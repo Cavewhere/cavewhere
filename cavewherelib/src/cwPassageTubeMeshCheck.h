@@ -188,6 +188,7 @@ public:
                                                          const cwPassageTubeBuilder::Ring& ring);
 
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
+    // the side walls square to the chain's direction through the station,
     // apart from the stations where the builder warns BendClamped, the
     // junction stations where an arm has a mouth, and the stations of an arm
     // left inside its through passage.

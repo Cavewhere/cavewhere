@@ -557,8 +557,8 @@ std::pair<unsigned int, int> randomSurvey(int seed)
 // station or the inside of a bend. About half also report SelfIntersection
 // and SliverTriangle where the zip band crosses its arm or a second arm's
 // mouth.
-const QVector<int> kJunctionLimitRandomSeeds {2, 4, 5, 6, 10, 11, 15, 16, 17, 20, 21, 23, 24, 25, 27, 28, 29, 30, 32, 34,
-                                             35, 36, 37, 39, 40, 41, 42, 44, 47, 48, 50};
+const QVector<int> kJunctionLimitRandomSeeds {2, 4, 5, 6, 10, 11, 15, 16, 17, 20, 21, 22, 23, 24, 25, 27, 28, 29, 30, 32,
+                                             34, 35, 36, 37, 39, 40, 41, 42, 44, 47, 48, 50};
 
 bool isJunctionLimitRandomSeed(int seed)
 {

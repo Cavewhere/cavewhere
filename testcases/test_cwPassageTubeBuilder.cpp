@@ -805,14 +805,14 @@ TEST_CASE("cwPassageTubeBuilder keeps a ring's world shape whichever way the chu
     }
 }
 
-TEST_CASE("cwPassageTubeBuilder takes the component of a wall across the ring", "[PassageTube][cwPassageTubeBuilder]")
+TEST_CASE("cwPassageTubeBuilder takes a wall at face value across the ring", "[PassageTube][cwPassageTubeBuilder]")
 {
-    // b faces the chord a→c, (1, 1, 0)/√2, so its 5 m left wall lies toward
-    // (−1, 1, 0)/√2 and each ring through b sees 5·cos45° of it. b reads
+    // b faces the chord a→c, (1, 1, 0)/√2, which runs with the through d→b→c,
+    // so b's 5 m left wall lies its full length to the through's left. b reads
     // taller on the chunk b→d than on a→b→c, so a→b→c, though wider, is no
     // big passage there; the chunk b→d comes first, and the walk from d
     // runs on along b→c, as big as a→b at b and straighter.
-    constexpr float kComponent = 5.0f * std::numbers::sqrt2_v<float> / 2.0f;
+    constexpr float kLeftWall = 5.0f;
     constexpr float kToleranceMeters = 0.2f;
     const QStringList ends = lrud(1, 1, 1, 1);
     const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), ends};
@@ -833,7 +833,7 @@ TEST_CASE("cwPassageTubeBuilder takes the component of a wall across the ring", 
     CHECK(chainStations(debug, *arm) == QStringList({QStringLiteral("a"), QStringLiteral("b")}));
 
     const QVector3D bPosition = b.position.value();
-    checkFarthestVertexNear(ringAt(*through, bPosition), bPosition + QVector3D(-kComponent, 0, 0), kToleranceMeters);
+    checkFarthestVertexNear(ringAt(*through, bPosition), bPosition + QVector3D(-kLeftWall, 0, 0), kToleranceMeters);
 
     // The arm arrives along +x into that wall and stops where it meets it,
     // on the through's triangles: between the grown rings at b they lie off
@@ -2003,7 +2003,7 @@ bool isOnLegBetween(const Builder::Debug& debug, const Builder::Chain& chain, co
 // the second's by distance along the leg, through the corner stations of an
 // S-bend and of Phake Cave's a1 → a4 chain, whose a2 corner the tube used to
 // bulge around and neck down past.
-TEST_CASE("cwPassageTubeBuilder runs each wall from one station's reading to the next", "[PassageTube][cwPassageTubeBuilder][!mayfail]")
+TEST_CASE("cwPassageTubeBuilder runs each wall from one station's reading to the next", "[PassageTube][cwPassageTubeBuilder]")
 {
     SECTION("S-bend")
     {

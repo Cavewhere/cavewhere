@@ -1402,6 +1402,54 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         }
     }
 
+    // The chain's direction through each station of its legs, keyed by the
+    // leg and whether the station is its to station: the bisector of the
+    // chain legs either side, or the leg itself at a chain end.
+    QHash<std::pair<int, bool>, QVector3D> chainTangents;
+    for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
+        const int count = chain.legs.size();
+        if (count == 0) {
+            continue;
+        }
+        QVector<QVector3D> directions;
+        directions.reserve(count);
+        for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
+            const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+            const QVector3D along = (leg.toPosition - leg.fromPosition).normalized();
+            directions.append(chainLeg.reversed ? -along : along);
+        }
+        const cwPassageTubeBuilder::ChainLeg& firstLeg = chain.legs.first();
+        const cwPassageTubeBuilder::ChainLeg& lastLeg = chain.legs.last();
+        const QVector3D chainStart = firstLeg.reversed ? debug.legs.at(firstLeg.legIndex).toPosition : debug.legs.at(firstLeg.legIndex).fromPosition;
+        const QVector3D chainEnd = lastLeg.reversed ? debug.legs.at(lastLeg.legIndex).fromPosition : debug.legs.at(lastLeg.legIndex).toPosition;
+        const bool isLoop = count > 1 && isNear(chainStart, chainEnd);
+        for (int k = 0; k < count; ++k) {
+            const QVector3D& direction = directions.at(k);
+            const QVector3D& before = k > 0 ? directions.at(k - 1) : (isLoop ? directions.last() : direction);
+            const QVector3D& after = k + 1 < count ? directions.at(k + 1) : (isLoop ? directions.first() : direction);
+            const bool reversed = chain.legs.at(k).reversed;
+            chainTangents.insert({chain.legs.at(k).legIndex, reversed}, before + direction);
+            chainTangents.insert({chain.legs.at(k).legIndex, !reversed}, direction + after);
+        }
+    }
+
+    // The record's right as the builder takes it: square to the chain's
+    // direction through the station, on the side the record faces. A station
+    // off every chain, or where the chain runs plumb, keeps its facing.
+    const auto rightOf = [&](int legIndex, bool isTo, const QVector3D& facing) {
+        const QVector3D facingRight(facing.y(), -facing.x(), 0.0f);
+        const auto it = chainTangents.constFind({legIndex, isTo});
+        if (it == chainTangents.cend()) {
+            return facingRight;
+        }
+        const QVector3D chainRight = QVector3D(it->y(), -it->x(), 0.0f);
+        if (chainRight.length() < kMinFacingComponent) {
+            return facingRight;
+        }
+        const bool facesAgainst = QVector3D::dotProduct(facing, *it) < 0.0f;
+        return (facesAgainst ? -chainRight : chainRight).normalized();
+    };
+
     constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
     using Occurrence = std::pair<QUuid, std::pair<int, int>>;
     QSet<Occurrence> visited;
@@ -1413,7 +1461,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                                   const QVector3D& position,
                                   const cwStationLrud& lrud,
                                   const cwStationLrud& passage,
-                                  const QVector3D& facing) {
+                                  const QVector3D& right) {
         const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
         if (visited.contains(occurrence) || reshaped.contains(cwStation::canonicalKey(station))) {
             return;
@@ -1421,7 +1469,6 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         visited.insert(occurrence);
 
         const QVector<QVector3D> directions = legDirections.value({leg.caveId, station});
-        const QVector3D right(facing.y(), -facing.x(), 0.0f);
         const auto checkWall = [&](const std::optional<double>& reading,
                                    const std::optional<double>& passageReading,
                                    const QVector3D& direction,
@@ -1443,9 +1490,10 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         checkWall(lrud.down, passage.down, -kWorldUp, QStringLiteral("down"));
     };
 
-    for (const cwPassageTubeBuilder::Leg& leg : debug.legs) {
-        checkStation(leg, leg.shotIndex, leg.from, leg.fromPosition, leg.fromLrud, leg.fromPassageLrud, leg.fromFacing);
-        checkStation(leg, leg.shotIndex + 1, leg.to, leg.toPosition, leg.toLrud, leg.toPassageLrud, leg.toFacing);
+    for (int i = 0; i < debug.legs.size(); ++i) {
+        const cwPassageTubeBuilder::Leg& leg = debug.legs.at(i);
+        checkStation(leg, leg.shotIndex, leg.from, leg.fromPosition, leg.fromLrud, leg.fromPassageLrud, rightOf(i, false, leg.fromFacing));
+        checkStation(leg, leg.shotIndex + 1, leg.to, leg.toPosition, leg.toLrud, leg.toPassageLrud, rightOf(i, true, leg.toFacing));
     }
     return issues;
 }
