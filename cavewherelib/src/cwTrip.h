@@ -82,8 +82,21 @@ class CAVEWHERE_LIB_EXPORT cwTrip : public QObject, public cwUndoer
     Q_PROPERTY(QStringList externalStations READ externalStations NOTIFY externalStationsChanged FINAL)
     Q_PROPERTY(QString externalStationsError READ externalStationsError NOTIFY externalStationsErrorChanged FINAL)
     Q_PROPERTY(cwAttachedFixModel* attachedFixes READ attachedFixes CONSTANT)
+    Q_PROPERTY(double appliedDeclination READ appliedDeclination NOTIFY appliedDeclinationChanged FINAL)
+    Q_PROPERTY(DeclinationOrigin declinationOrigin READ declinationOrigin NOTIFY appliedDeclinationChanged FINAL)
 
 public:
+    //! Where appliedDeclination() comes from.
+    enum DeclinationOrigin {
+        DeclinationAuto,     //!< The trip's calibration, picked by IGRF
+        DeclinationManual,   //!< The trip's calibration, typed in
+        DeclinationFile,     //!< The attached file sets a value
+        DeclinationFileAuto, //!< The attached file asks cavern for IGRF
+        DeclinationNone,     //!< The attached file sets nothing, so cavern applies 0
+        DeclinationUnknown   //!< The scan cannot tell
+    };
+    Q_ENUM(DeclinationOrigin)
+
     explicit cwTrip(QObject *parent = 0);
 
     // [[deprecated]]
@@ -160,10 +173,13 @@ public:
     cwFileDeclination fileDeclination() const { return m_fileDeclination; }
     void setFileDeclination(const cwFileDeclination& declination);
 
-    //! fileDeclination() in degrees east on this trip's date: the value, 0
-    //! for a file that sets none, IGRF for an auto. Empty when it is Unknown
-    //! or Inherited, or IGRF has no answer for the auto's point and date.
-    std::optional<double> fileDeclinationDegrees() const { return m_fileDeclinationDegrees; }
+    //! The declination cavern applies to this trip's shots, in degrees east. A
+    //! native trip, and an attachment whose silent file the driver fills with
+    //! the trip's own calibration, read that calibration; every other
+    //! externally backed trip reads what its file sets. 0 when
+    //! declinationOrigin() is DeclinationUnknown.
+    double appliedDeclination() const;
+    DeclinationOrigin declinationOrigin() const;
 
     //! The fixes this derived trip's leaf Survex block carries, as the attach
     //! scan read them, for the Fix Stations page to list read-only under the
@@ -411,6 +427,10 @@ signals:
     //! answer did not move, as scopeChanged() notes.
     void externallyBackedChanged();
 
+    //! The NOTIFY for appliedDeclination() and declinationOrigin(). May fire
+    //! when neither moved.
+    void appliedDeclinationChanged();
+
     //! The NOTIFY solvedStations() never had. Chained from the owning node's
     //! scopedPositionsChanged in cwSurveyNode::connectTrip, which the region
     //! relays down the tree once per solve: a trip's solved positions live in
@@ -448,7 +468,7 @@ signals:
 
     void solvedLengthChanged();
 
-    //! fileDeclination() or fileDeclinationDegrees() changed.
+    //! fileDeclination() or its value in degrees changed.
     void fileDeclinationChanged();
 
 public slots:
@@ -488,6 +508,9 @@ protected:
     QString m_externalStationsError;
     QString m_cavernLabel;
     cwFileDeclination m_fileDeclination;
+    //m_fileDeclination in degrees east on this trip's date: the value, 0 for a
+    //file that sets none, IGRF for an auto. Empty when it is Unknown or
+    //Inherited, or IGRF has no answer for the auto's point and date.
     std::optional<double> m_fileDeclinationDegrees;
     double m_solvedLength = 0.0;
     cwAttachedFixModel* const m_attachedFixes;
@@ -501,9 +524,12 @@ private:
     //the node's own move command, so the rename and the move undo as one.
     friend class cwSurveyNode;
 
-    //Re-reads fileDeclinationDegrees() from fileDeclination() on date(),
+    //Re-reads m_fileDeclinationDegrees from fileDeclination() on date(),
     //returning whether it changed.
     bool refreshFileDeclinationDegrees();
+
+    //True when appliedDeclination() is the calibration's rather than the file's.
+    bool readsCalibrationDeclination() const;
 
     // void Copy(const cwTrip& object);
 

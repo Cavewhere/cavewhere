@@ -76,7 +76,7 @@ namespace {
     std::optional<double> rowDeclination(const QModelIndex& index)
     {
         if(index.data(cwSurveyTreeModel::DeclinationOriginRole).toInt()
-           == cwSurveyTreeModel::DeclinationUnknown) {
+           == cwTrip::DeclinationUnknown) {
             return std::nullopt;
         }
         return index.data(cwSurveyTreeModel::DeclinationRole).toDouble();

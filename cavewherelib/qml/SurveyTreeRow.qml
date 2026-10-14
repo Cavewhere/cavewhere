@@ -615,51 +615,13 @@ QQ.Item {
             //of drawing past the cell, the way the cave page holds its own.
             clip: true
 
-            RowLayout {
-                id: declRowId
-
-                readonly property bool known: rowId.declinationOrigin !== SurveyTreeModel.DeclinationUnknown
-
+            DeclinationReadout {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: Theme.tightSpacing
-
-                QC.Label {
-                    objectName: rowId.cellName("value")
-                    visible: declRowId.known
-                    text: Utils.fixed(rowId.declination, 2) + "°"
-                    color: rowId.textColor
-                }
-
-                QC.Label {
-                    objectName: rowId.cellName("declinationMode")
-                    visible: declRowId.known
-                    text: {
-                        switch (rowId.declinationOrigin) {
-                        case SurveyTreeModel.DeclinationAuto:
-                            return qsTr("auto")
-                        case SurveyTreeModel.DeclinationManual:
-                            return qsTr("manual")
-                        case SurveyTreeModel.DeclinationFile:
-                            return qsTr("file")
-                        case SurveyTreeModel.DeclinationFileAuto:
-                            return qsTr("file auto")
-                        case SurveyTreeModel.DeclinationNone:
-                            return qsTr("none")
-                        default:
-                            return ""
-                        }
-                    }
-                    color: Theme.textSubtle
-                    font.pixelSize: Theme.fontSizeCaption
-                }
-
-                QC.Label {
-                    objectName: rowId.cellName("declinationEmDash")
-                    visible: !declRowId.known
-                    text: "—"
-                    color: Theme.textSubtle
-                }
+                declination: rowId.declination
+                origin: rowId.declinationOrigin
+                valueColor: rowId.textColor
+                named: !rowId.pooled
             }
         }
     }

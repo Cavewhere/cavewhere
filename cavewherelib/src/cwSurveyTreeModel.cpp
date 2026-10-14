@@ -32,43 +32,6 @@ namespace {
     const QList<int> kSurveyContentRoles = {cwSurveyTreeModel::HasSurveyContentRole};
     const QList<int> kDeclinationRoles = {cwSurveyTreeModel::DeclinationRole,
                                           cwSurveyTreeModel::DeclinationOriginRole};
-
-    //! What a trip row's Decl cell shows.
-    struct RowDeclination {
-        double degrees = 0.0;
-        cwSurveyTreeModel::DeclinationOrigin origin = cwSurveyTreeModel::DeclinationUnknown;
-    };
-
-    //! The declination cavern applies to \a trip's shots. A native trip, and an
-    //! attachment whose silent file the driver fills with the trip's own
-    //! calibration, read that calibration; every other externally backed trip
-    //! reads what its file sets.
-    RowDeclination tripDeclination(const cwTrip* trip)
-    {
-        using Kind = cwFileDeclination::Kind;
-        const Kind fileKind = trip->fileDeclination().kind;
-        if(!trip->externallyBacked() || fileKind == Kind::Inherited) {
-            const cwTripCalibration* calibration = trip->calibrations();
-            const bool isAuto = calibration->autoDeclination() && calibration->autoDeclinationAvailable();
-            return {calibration->declination(),
-                    isAuto ? cwSurveyTreeModel::DeclinationAuto : cwSurveyTreeModel::DeclinationManual};
-        }
-
-        const std::optional<double> degrees = trip->fileDeclinationDegrees();
-        if(!degrees.has_value()) { return {}; }
-        switch(fileKind) {
-        case Kind::Value:
-            return {degrees.value(), cwSurveyTreeModel::DeclinationFile};
-        case Kind::None:
-            return {degrees.value(), cwSurveyTreeModel::DeclinationNone};
-        case Kind::Auto:
-            return {degrees.value(), cwSurveyTreeModel::DeclinationFileAuto};
-        case Kind::Unknown:
-        case Kind::Inherited:
-            break;
-        }
-        return {};
-    }
 }
 
 cwSurveyTreeModel::cwSurveyTreeModel(QObject* parent) :
@@ -287,9 +250,9 @@ QVariant cwSurveyTreeModel::data(const QModelIndex& index, int role) const
     case DeclinationRole:
         //A node row states 0.0 rather than nothing, so the delegate's real
         //property is always handed a number.
-        return node != nullptr ? 0.0 : tripDeclination(trip).degrees;
+        return node != nullptr ? 0.0 : trip->appliedDeclination();
     case DeclinationOriginRole:
-        return node != nullptr ? DeclinationUnknown : tripDeclination(trip).origin;
+        return node != nullptr ? cwTrip::DeclinationUnknown : trip->declinationOrigin();
     case HasSurveyContentRole:
         return node != nullptr ? hasSurveyContent(node) : true;
     case MutedRole:
@@ -690,15 +653,9 @@ void cwSurveyTreeModel::connectTrip(cwTrip* trip)
         emitRowDataChanged(indexOfTrip(trip), Date, Date, {DateRole});
     });
 
-    cwTripCalibration* calibration = trip->calibrations();
-    const auto emitDeclinationChanged = [this, trip]() {
+    connect(trip, &cwTrip::appliedDeclinationChanged, this, [this, trip]() {
         emitRowDataChanged(indexOfTrip(trip), Decl, Decl, kDeclinationRoles);
-    };
-    connect(calibration, &cwTripCalibration::declinationChanged, this, emitDeclinationChanged);
-    connect(calibration, &cwTripCalibration::autoDeclinationChanged, this, emitDeclinationChanged);
-    connect(calibration, &cwTripCalibration::autoDeclinationAvailableChanged, this, emitDeclinationChanged);
-    connect(trip, &cwTrip::fileDeclinationChanged, this, emitDeclinationChanged);
-    connect(trip, &cwTrip::externallyBackedChanged, this, emitDeclinationChanged);
+    });
 
     auto stats = new cwTripStatsWatcher(trip, this);
     m_tripStats.insert(trip, stats);
@@ -709,7 +666,7 @@ void cwSurveyTreeModel::connectTrip(cwTrip* trip)
     connect(stats, &cwTripStatsWatcher::lengthChanged, this, emitLengthChanged);
     connect(trip, &cwTrip::solvedLengthChanged, this, emitLengthChanged);
     connect(trip, &cwTrip::externallyBackedChanged, this, emitLengthChanged);
-    connect(calibration, &cwTripCalibration::distanceUnitChanged, this, emitLengthChanged);
+    connect(trip->calibrations(), &cwTripCalibration::distanceUnitChanged, this, emitLengthChanged);
     connect(stats, &cwTripStatsWatcher::usedStationsChanged, this, [this, trip]() {
         emitRowDataChanged(indexOfTrip(trip), Stations, Stations,
                            {StationCountRole, UsedStationsRole});

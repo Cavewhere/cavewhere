@@ -121,13 +121,15 @@ MainWindowTest {
                       "scoped rows appear for the attached trip")
 
             // The metadata scan resolves survex_simple.svx (no
-            // *calibrate declination) to CaveWhere-owned declination.
-            tryVerify(() => !panelId.fileOwnsDeclination, 10000,
-                      "fixture without a declination directive is CaveWhere-owned")
+            // *calibrate declination) to CaveWhere-owned declination, so the
+            // editor takes the readout's place.
             const declEditor = findChild(metadata, "tripMetadataDeclination")
             verify(declEditor !== null, "tripMetadataDeclination must exist")
-            tryVerify(() => declEditor.visible, 5000,
+            tryVerify(() => declEditor.visible, 10000,
                       "declination editor shows when CaveWhere owns declination")
+            const readout = findChild(metadata, "tripMetadataDeclinationReadout")
+            verify(readout !== null, "tripMetadataDeclinationReadout must exist")
+            verify(!readout.visible, "the editor replaces the read-only declination")
         }
 
         // §16 B2d: a viewport shorter than the content must still reach
@@ -827,14 +829,38 @@ MainWindowTest {
             verify(declEditor !== null, "tripMetadataDeclination must exist")
             verify(!declEditor.visible, "cavern owns a derived trip's declination")
 
-            const caveHint = findChild(metadata, "caveOwnsDeclinationHint")
-            verify(caveHint !== null, "caveOwnsDeclinationHint must exist")
-            verify(caveHint.visible, "the hint names where declination comes from")
-            compare(caveHint.text, "Declination comes from the cave's survey file.")
+            // survex_blocks.svx sets no declination, so east reads the 0
+            // cavern applies, as its tree row does.
+            const readout = findChild(metadata, "tripMetadataDeclinationReadout")
+            verify(readout !== null, "tripMetadataDeclinationReadout must exist")
+            tryVerify(() => readout.visible, 5000, "the page reports the declination it applies")
+            tryCompare(findChild(readout, "value"), "text", "0°")
+            compare(findChild(readout, "declinationMode").text, "none")
 
-            const fileHint = findChild(metadata, "fileOwnsDeclinationHint")
-            verify(fileHint !== null, "fileOwnsDeclinationHint must exist")
-            verify(!fileHint.visible, "the trip's own file is not the source here")
+            compare(findChild(metadata, "caveOwnsDeclinationHint"), null,
+                    "the number replaces the sentence about the cave's file")
+            compare(findChild(metadata, "fileOwnsDeclinationHint"), null,
+                    "the number replaces the sentence about the trip's file")
+        }
+
+        // survex_with_metadata.svx sets *calibrate declination 7.2, so the
+        // trip's own file owns the declination cavern applies: -7.2.
+        function test_anAttachedTripWithAFileDeclinationShowsTheFileValue() {
+            const trip = makeSavedTrip("trip-panel-file-declination")
+            attachSourceToTrip(trip, TestHelper.testcasesDatasetPath(
+                                   "external-centerlines/survex_with_metadata.svx"))
+            rootId.trip = trip
+
+            const metadata = findChild(panelId, "tripMetadata")
+            const readout = findChild(metadata, "tripMetadataDeclinationReadout")
+            verify(readout !== null, "tripMetadataDeclinationReadout must exist")
+            tryVerify(() => readout.visible, 10000, "the page reports the file's declination")
+            tryCompare(findChild(readout, "value"), "text", "-7.2°")
+            compare(findChild(readout, "declinationMode").text, "file")
+
+            const declEditor = findChild(metadata, "tripMetadataDeclination")
+            verify(declEditor !== null, "tripMetadataDeclination must exist")
+            verify(!declEditor.visible, "the trip's file owns its declination")
         }
 
         // The file seeds the date and the user owns it from there: east

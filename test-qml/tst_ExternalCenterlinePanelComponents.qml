@@ -693,13 +693,6 @@ MainWindowTest {
             tryVerify(() => Math.abs(trip.calibration.declinationManual - 3.25) < 1e-6,
                       1000, "manual edit writes declinationManual")
 
-            tripMetadataId.fileOwnsDeclination = true
-            verify(!declEditor.visible, "file-owned declination hides the editor")
-            const hint = findChild(tripMetadataId, "fileOwnsDeclinationHint")
-            verify(hint !== null, "fileOwnsDeclinationHint must exist")
-            verify(hint.visible, "file-owned declination shows the hint")
-
-            tripMetadataId.fileOwnsDeclination = false
             dateSpyId.target = null
         }
 

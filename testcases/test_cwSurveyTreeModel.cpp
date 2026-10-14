@@ -424,7 +424,7 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         //the cave page shows.
         dataChanged.clear();
         CHECK(model.data(topo3Index, cwSurveyTreeModel::DeclinationOriginRole).toInt()
-              == cwSurveyTreeModel::DeclinationManual);
+              == cwTrip::DeclinationManual);
 
         topo3->calibrations()->setAutoDeclination(false);
         CHECK(sawChange(dataChanged, topo3Index, cwSurveyTreeModel::Decl, cwSurveyTreeModel::DeclinationOriginRole));
@@ -440,7 +440,7 @@ TEST_CASE("cwSurveyTreeModel is a tree of nodes and trips", "[SurveyTreeModel]")
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::DeclinationRole).toDouble()
               == Catch::Approx(0.0));
         CHECK(model.data(alphaIndex, cwSurveyTreeModel::DeclinationOriginRole).toInt()
-              == cwSurveyTreeModel::DeclinationUnknown);
+              == cwTrip::DeclinationUnknown);
     }
 
     SECTION("a trip row names its stations while a node row counts them") {

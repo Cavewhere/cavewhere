@@ -5,7 +5,8 @@ import cw.TestLib
 
 // The page of a source root, the node an attached survey file builds its
 // subtree under (SURVEY_TREE_PLAN C7.4b): the source card, and the paperclip
-// and file declination the derived trip rows below it carry.
+// and file declination the derived trip rows below it carry, which each
+// trip's own page reports in the same words.
 MainWindowTest {
     id: rootId
 
@@ -104,6 +105,79 @@ MainWindowTest {
                           return cells.length === count
                       }, 5000, count + " " + objectName + " cells should be drawn")
             return cells
+        }
+
+        // A Decl readout's text: the angle, then its caption, or the em dash.
+        function declinationText(readout) {
+            const emDash = findChild(readout, "declinationEmDash")
+            return emDash.visible
+                    ? emDash.text
+                    : findChild(readout, "value").text + " "
+                      + findChild(readout, "declinationMode").text
+        }
+
+        // What each drawn trip row's Decl cell shows, keyed by the trip's
+        // name. Waits for `tripCount`.
+        function declinationByTrip(cavePage, view, tripCount) {
+            let cells = {}
+            tryVerify(() => {
+                          cells = {}
+                          let found = 0
+                          for (let row = 0; row < view.rows; row++) {
+                              const nameCell = findChild(cavePage, "tripDelegate" + row)
+                              const declCell = findChild(cavePage, "tripDecl" + row)
+                              if (nameCell === null || declCell === null) {
+                                  continue
+                              }
+                              const name = findChild(nameCell, "tripLink").text.replace("📎 ", "")
+                              cells[name] = declinationText(declCell)
+                              found++
+                          }
+                          return found === tripCount
+                      }, 5000, tripCount + " trip rows should draw their Decl cell")
+            return cells
+        }
+
+        // The Decl readout on the trip page of the root's trip `tripName`.
+        function tripPageDeclination(cave, tripName) {
+            RootData.pageSelectionModel.currentPageAddress =
+                    "Source/Data/Node=" + cave.name + "/Trip=" + tripName
+            let page = null
+            tryVerify(() => {
+                          page = RootData.pageView.currentPageItem
+                          return page !== null && page.objectName === "tripPage"
+                          && page.currentTrip !== null && page.currentTrip.name === tripName
+                      }, 10000, "the trip page of " + tripName + " opens")
+            let readout = null
+            tryVerify(() => {
+                          readout = findChild(page, "tripMetadataDeclinationReadout")
+                          return readout !== null && readout.visible
+                      }, 5000, "the trip page of " + tripName + " reports its declination")
+            compare(findChild(page, "tripMetadataDeclination").visible, false,
+                    "cavern owns " + tripName + "'s declination, so nothing edits it")
+            return declinationText(readout)
+        }
+
+        // A derived trip's page reports the declination its tree row shows,
+        // in the same words: a file's value, the 0 of a block that sets none,
+        // and the em dash of a block with no one value.
+        function test_tripPageDeclinationMatchesTheTreeCell() {
+            const cave = makeSavedCaveAttach(
+                           "cavepage-trip-declination",
+                           "external-centerlines/survex_declination/declination.svx")
+            const cavePage = gotoCavePage(cave)
+            //parent, its trip child, and the root's five trips
+            const view = expandedTree(cavePage, 7)
+            const treeTexts = declinationByTrip(cavePage, view, 6)
+            compare(treeTexts["fileset"], "-2.5° file", "*calibrate declination 2.5 applies -2.5")
+            compare(treeTexts["silent"], "0° none", "a block that sets nothing applies 0")
+            compare(treeTexts["mixed"], "—", "a block that changes declination has no one value")
+
+            const trips = ["fileset", "silent", "mixed"]
+            for (let i = 0; i < trips.length; i++) {
+                compare(tripPageDeclination(cave, trips[i]), treeTexts[trips[i]],
+                        trips[i] + "'s page and tree row read the same declination")
+            }
         }
 
         function test_cardVisibleOnlyForAttachedCave() {

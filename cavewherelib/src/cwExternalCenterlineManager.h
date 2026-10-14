@@ -262,13 +262,11 @@ public:
     }
 
     // True when the owner's external file carries its own declination
-    // (master plan §8.8 q7) — the driver then injects nothing and the
-    // trip panel shows the value read-only. Captured from the most recent
-    // scan of the in-project copy; owners that were never scanned
-    // successfully default to file-owned so an unknown state never injects
-    // a declination. QML re-evaluates on solveNeeded() — the scan apply
-    // emits it whenever the flags change.
-    Q_INVOKABLE bool fileOwnsDeclination(const QUuid& ownerId) const
+    // (master plan §8.8 q7), so the driver injects nothing. Captured from
+    // the most recent scan of the in-project copy; owners that were never
+    // scanned successfully default to file-owned so an unknown state never
+    // injects a declination.
+    bool fileOwnsDeclination(const QUuid& ownerId) const
     {
         return m_fileOwnsDeclination.value(ownerId, true);
     }

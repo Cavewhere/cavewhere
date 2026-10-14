@@ -67,7 +67,7 @@ std::string rowDeclination(const cwSurveyTreeModel& model, cwTrip* trip)
     const QVariant origin = model.data(index, cwSurveyTreeModel::DeclinationOriginRole);
     const double degrees = model.data(index, cwSurveyTreeModel::DeclinationRole).toDouble();
     const char* originKey = origin.isValid()
-            ? QMetaEnum::fromType<cwSurveyTreeModel::DeclinationOrigin>().valueToKey(origin.toInt())
+            ? QMetaEnum::fromType<cwTrip::DeclinationOrigin>().valueToKey(origin.toInt())
             : nullptr;
     return expectedDeclination(originKey != nullptr ? originKey : "missing", degrees);
 }

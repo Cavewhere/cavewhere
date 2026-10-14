@@ -13,8 +13,8 @@ import cavewherelib
 // hosting panel or card as plain properties.
 //
 // The manager answers every one of these imperatively (isOwnerBusy,
-// attachmentDir, missingCopyPath, fileOwnsDeclination and the status
-// model's statusFor are Q_INVOKABLE reads with no property NOTIFY), so
+// attachmentDir, missingCopyPath and the status model's statusFor are
+// Q_INVOKABLE reads with no property NOTIFY), so
 // this object re-reads each answer when the signal that can move it
 // arrives, and re-reads all of them when the owner changes.
 QQ.QtObject {
@@ -40,11 +40,6 @@ QQ.QtObject {
     // is gone from disk; empty otherwise.
     property string missingCopyPath: ""
 
-    // Defaults to true (file-owned) until the manager's scan says
-    // otherwise; the scan apply emits solveNeeded whenever the
-    // declination flags change.
-    property bool fileOwnsDeclination: true
-
     function updateOwnerBusy() {
         ownerBusy = owner !== null && manager.isOwnerBusy(owner.id)
     }
@@ -65,15 +60,10 @@ QQ.QtObject {
         missingCopyPath = owner === null ? "" : manager.missingCopyPath(owner.id)
     }
 
-    function updateFileOwnsDeclination() {
-        fileOwnsDeclination = owner === null || manager.fileOwnsDeclination(owner.id)
-    }
-
     // Every answer read in one go — for an owner that just arrived, and
     // for the host's first frame.
     function refresh() {
         updateOwnerBusy()
-        updateFileOwnsDeclination()
         updateMissingCopyPath()
         updateEntryFilePath()
         updateSourceChangedSinceCopy()
@@ -99,7 +89,6 @@ QQ.QtObject {
         }
 
         function onSolveNeeded() {
-            root.updateFileOwnsDeclination()
             root.updateEntryFilePath()
         }
 

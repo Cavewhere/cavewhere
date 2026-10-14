@@ -33,7 +33,6 @@ QQ.Item {
     // What the manager knows about this trip, all of it read
     // imperatively; see ExternalCenterlineOwnerState.
     readonly property bool ownerBusy: ownerStateId.ownerBusy
-    readonly property bool fileOwnsDeclination: ownerStateId.fileOwnsDeclination
     readonly property string missingCopyPath: ownerStateId.missingCopyPath
     readonly property string entryFilePath: ownerStateId.entryFilePath
     readonly property bool sourceChangedSinceCopy: ownerStateId.sourceChangedSinceCopy
@@ -162,8 +161,6 @@ QQ.Item {
                 id: tripMetadataId
                 Layout.fillWidth: true
                 trip: root.trip
-                fileOwnsDeclination: root.fileOwnsDeclination
-                caveOwnsDeclination: !root.isAttached
             }
 
             ExternalCenterlineStationsList {

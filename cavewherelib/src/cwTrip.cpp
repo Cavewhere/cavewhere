@@ -148,6 +148,12 @@ cwTrip::cwTrip(QObject *parent) :
         }
     });
 
+    connect(Calibration, &cwTripCalibration::declinationChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(Calibration, &cwTripCalibration::autoDeclinationChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(Calibration, &cwTripCalibration::autoDeclinationAvailableChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(this, &cwTrip::fileDeclinationChanged, this, &cwTrip::appliedDeclinationChanged);
+    connect(this, &cwTrip::externallyBackedChanged, this, &cwTrip::appliedDeclinationChanged);
+
 //    qDebug() << "Creating:" << this;
 }
 
@@ -317,6 +323,44 @@ bool cwTrip::refreshFileDeclinationDegrees()
     }
     m_fileDeclinationDegrees = degrees;
     return true;
+}
+
+bool cwTrip::readsCalibrationDeclination() const
+{
+    return !externallyBacked() || m_fileDeclination.kind == cwFileDeclination::Kind::Inherited;
+}
+
+double cwTrip::appliedDeclination() const
+{
+    if (readsCalibrationDeclination()) {
+        return Calibration->declination();
+    }
+    return m_fileDeclinationDegrees.value_or(0.0);
+}
+
+cwTrip::DeclinationOrigin cwTrip::declinationOrigin() const
+{
+    if (readsCalibrationDeclination()) {
+        const bool isAuto = Calibration->autoDeclination() && Calibration->autoDeclinationAvailable();
+        return isAuto ? DeclinationAuto : DeclinationManual;
+    }
+
+    if (!m_fileDeclinationDegrees.has_value()) {
+        return DeclinationUnknown;
+    }
+    using Kind = cwFileDeclination::Kind;
+    switch (m_fileDeclination.kind) {
+    case Kind::Value:
+        return DeclinationFile;
+    case Kind::None:
+        return DeclinationNone;
+    case Kind::Auto:
+        return DeclinationFileAuto;
+    case Kind::Unknown:
+    case Kind::Inherited:
+        break;
+    }
+    return DeclinationUnknown;
 }
 
 void cwTrip::setAttachedFixes(const QList<cwAttachedFix>& fixes)
