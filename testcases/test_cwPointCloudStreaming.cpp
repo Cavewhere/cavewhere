@@ -5,6 +5,7 @@
 // is exactly what the builder leaves behind.
 
 //Catch includes
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
@@ -42,6 +43,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <concepts>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -6127,7 +6129,7 @@ namespace {
     //! P4: @a pose held for up to @a frameCount frames from whatever residency
     //! the fixture has, which for a cold start is a fresh one, every frame
     //! recorded and the hold ending at the first quiet frame. The plan's pose
-    //! is P2's worst by hole fraction, which waits on the hole columns.
+    //! is P2's worst by hole fraction, which worstHolePosition() picks.
     PlannedPath coldStartPath(const Pose& pose, int frameCount = kColdStartFrameCount)
     {
         PlannedPath planned;
@@ -6201,10 +6203,13 @@ namespace {
 
     //! One frame of a path, as evalCsv records it
     struct EvalRecord {
+        //! The pose table's index, which a strided path keeps from its parent
         int pose = 0;
+        //! Where the pose sits on the path sweepPath() walked
+        int position = 0;
         int frame = 0;
-        //! The lit share of the whole target. The footprint the oracle masks
-        //! give a perspective frame arrives with the hole columns.
+        //! The lit share of the whole target. The share of O1's footprint
+        //! lit is 1 - holes->fraction.
         double litFraction = 0.0;
         //! The lit fraction's change from the frame recorded before, across
         //! poses too
@@ -6219,7 +6224,51 @@ namespace {
         bool pending = false;
         int finestSelectedLevel = 0;
         int finestDrawnLevel = 0;
+
+        //! Section 5's metrics. The ones read against an oracle are empty when
+        //! sweepPath() runs without oracles, and the shaded ones when the
+        //! fixture or O3 draws without EDL.
+
+        //! Holes against the O1 mask of the same pose
+        std::optional<HoleStats> holes;
+        //! M1: lit-mask IoU inside the O1 mask, and the shaded distance to O3
+        std::optional<double> iouO2;
+        std::optional<double> iouO3;
+        std::optional<double> luminanceDiffO3;
+        std::optional<double> ssimO3;
+        //! M2: the distance to O3, 1 - iouO3, and how far it moved from the
+        //! frame recorded before. o3DistanceStep is 0 on a frame after one that
+        //! lit nothing: the first picture of a cold start is an arrival, not a
+        //! pop, and it is the same whole-frame step under every budget.
+        //! o3DistanceStepRaw keeps that arrival, so a reveal ramp that spreads
+        //! it over frames shows up there.
+        std::optional<double> o3Distance;
+        std::optional<double> o3DistanceStep;
+        std::optional<double> o3DistanceStepRaw;
+        //! M3: the share of 32 px screen tiles whose widest sprite is over
+        //! kSeamRatioThreshold times their narrowest, and the widest such ratio
+        double seamShare = 0.0;
+        double largestSeamRatio = 1.0;
+        //! M4: the coefficient of variation of lit over entitled pixels across
+        //! screen tiles, and the hole fraction of the frame's bottom (near),
+        //! middle and top (far) thirds
+        std::optional<double> densityCv;
+        std::optional<double> nearHoleFraction;
+        std::optional<double> midHoleFraction;
+        std::optional<double> farHoleFraction;
+        //! M5: the CPU twin's drawn point count, every kTwinSampleFrames frames
+        std::optional<qint64> predictedPoints;
+        //! M6: the inflation over the frame before's, the nodes that entered
+        //! and left the drawn set, and over the nodes drawn in both the summed
+        //! change of sprite side and thinning weight the rules alone made
+        double inflationRatio = 1.0;
+        int nodesEntered = 0;
+        int nodesLeft = 0;
+        double spriteSideChangePx = 0.0;
+        double weightChange = 0.0;
     };
+
+    struct EvalOracles;
 
     //! Frames until the frame renderer reports nothing pending and the lit
     //! count matches the frame before, or the timeout runs out. The frame the
@@ -6244,95 +6293,16 @@ namespace {
     }
 
     //! Walks @a fixture along @a path under @a config, one evalCsv line on
-    //! @a out per recorded frame: Quiet records each pose once it has settled,
-    //! Frames records step.framesPerPose bare frames at each. The hole columns
-    //! are in the header and empty until the oracle masks exist.
+    //! @a out per recorded frame and one evalSummary line at the end: Quiet
+    //! records each pose once it has settled, Frames records
+    //! step.framesPerPose bare frames at each. With @a oracles, which hold
+    //! O1, O2 and O3 at every pose of @a path, every section 5 metric is
+    //! filled; without them the columns that read an oracle stay empty.
+    //! Defined after the oracles.
     QVector<EvalRecord> sweepPath(PointCloudFixture& fixture, const EvalPath& path,
                                   const EvalConfig& config, const PathStep& step,
-                                  std::ostream& out = std::cout)
-    {
-        REQUIRE_FALSE(path.poses.isEmpty());
-        REQUIRE(step.framesPerPose > 0);
-        REQUIRE(fixture.targetSize() == config.targetSize);
-
-        fixture.setReadbackEnabled(true);
-        fixture.setBudgets(config.budgets);
-
-        if (step.settleBeforeFirstPose) {
-            const Pose& first = path.poses.first();
-            fixture.setPose(first.view, first.projection);
-            renderUntilSettled(fixture);
-        }
-
-        writeCsvLine(QStringLiteral("evalCsv,path,config,pose,frame,label,litFraction,litStep,"
-                                    "residentNodes,gpuBytes,selectedPoints,selectedBytes,"
-                                    "sseInflation,pointCapped,pending,finestSelected,"
-                                    "finestDrawn,holeFraction,holeCount,maxHoleSide"),
-                     out);
-
-        const QSize target = fixture.targetSize();
-        const double targetPixels = double(target.width()) * double(target.height());
-
-        QVector<EvalRecord> records;
-        const auto recordFrame = [&](const Pose& pose, int frame) {
-            EvalRecord record;
-            record.pose = pose.index;
-            record.frame = frame;
-            record.litFraction = double(fixture.litPixels().size()) / targetPixels;
-            record.litStep = records.isEmpty()
-                                 ? 0.0
-                                 : std::abs(record.litFraction - records.constLast().litFraction);
-            record.residentNodes = Access::residentCount(fixture.backend());
-            record.gpuBytes = fixture.gpuBytes();
-            record.selectedPoints = Access::selectedPoints(fixture.backend());
-            record.selectedBytes = Access::selectedBytes(fixture.backend());
-            record.sseInflation = Access::sseInflation(fixture.backend());
-            record.pointCapped = Access::pointCapped(fixture.backend());
-            record.pending = fixture.frameRenderer()->hasPendingStreamingWork();
-            record.finestSelectedLevel = finestSelectedLevel(fixture);
-            record.finestDrawnLevel = finestDrawnLevel(fixture);
-
-            //The last three fields are the hole columns
-            writeCsvLine(QStringLiteral("evalCsv,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,"
-                                        "%15,%16,,,")
-                             .arg(path.name, config.name)
-                             .arg(record.pose)
-                             .arg(record.frame)
-                             .arg(pose.label)
-                             .arg(record.litFraction, 0, 'f', 5)
-                             .arg(record.litStep, 0, 'f', 5)
-                             .arg(record.residentNodes)
-                             .arg(record.gpuBytes)
-                             .arg(record.selectedPoints)
-                             .arg(record.selectedBytes)
-                             .arg(record.sseInflation, 0, 'f', 4)
-                             .arg(record.pointCapped ? 1 : 0)
-                             .arg(record.pending ? 1 : 0)
-                             .arg(record.finestSelectedLevel)
-                             .arg(record.finestDrawnLevel),
-                         out);
-            records.append(record);
-            return record;
-        };
-
-        for (const Pose& pose : path.poses) {
-            fixture.setPose(pose.view, pose.projection);
-
-            if (step.policy == StepPolicy::Quiet) {
-                renderUntilSettled(fixture);
-                recordFrame(pose, 0);
-            } else {
-                for (int frame = 0; frame < step.framesPerPose; frame++) {
-                    fixture.renderFrame();
-                    const EvalRecord record = recordFrame(pose, frame);
-                    if (step.leavePoseWhenQuiet && !record.pending) {
-                        break;
-                    }
-                }
-            }
-        }
-        return records;
-    }
+                                  std::ostream& out = std::cout,
+                                  const EvalOracles* oracles = nullptr);
 
     //! The lines of @a output that start with @a prefix
     QStringList linesWithPrefix(const std::ostringstream& output, const QString& prefix)
@@ -6380,11 +6350,12 @@ namespace {
     //! inflation to step more than once
     constexpr int kGovernorFramesPerPose = 6;
 
-    //! C-tight's point budget scaled to the 410 k point plane. Its root alone
-    //! holds a 128 x 128 sample of the plane, about 16 k points, and the cut
-    //! at the boundary height asks for several times this, so the cap binds
-    //! and the governor has to inflate.
-    constexpr qint64 kSyntheticTightPointBudget = 24000;
+    //! C-tight's point budget scaled to the 410 k point plane. Its root holds
+    //! a 128 x 128 sample of the plane, about 16 k points, so this admits the
+    //! root and a few children while the cut at the boundary height asks for
+    //! over twice this: the cap binds, the governor inflates, and the drawn
+    //! nodes sit on their thinning ramp where an inflation step moves them.
+    constexpr qint64 kSyntheticTightPointBudget = 120000;
 
     //! Frames a tile pose is recorded for: the plan's two per pose for a
     //! candidate on P2
@@ -6706,40 +6677,6 @@ TEST_CASE("The candidate table holds section 4.3's budgets",
                                 QStringLiteral("C-latent"), QStringLiteral("C-tight")});
 }
 
-TEST_CASE("The oblique orbit runs on a tile under the default budgets",
-          "[PointCloudStreaming][PointCloudEval]")
-{
-    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
-    const OctreeCache& cache = usgsTileCacheOrSkip();
-    const cwPointOctreeManifest& manifest = *cache.source.manifest;
-
-    const EvalConfig config = candidateConfig(Candidate::Default);
-    PathStep step;
-    step.policy = StepPolicy::Frames;
-    step.framesPerPose = kTileFramesPerPose;
-
-    const int boundaryLevel = std::min(kTileBoundaryLevel, deepestLevel(manifest));
-    const QVector<EvalPath> paths {
-        orbitPath(manifest, config.targetSize),
-        levelBoundaryPath(manifest, config.targetSize, rhi->clipSpaceCorrMatrix(),
-                          boundaryLevel, config.budgets)
-    };
-
-    for (const EvalPath& path : paths) {
-        PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
-        fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
-        fixture.synchronize();
-
-        const QVector<EvalRecord> records = sweepPath(fixture, path, config, step);
-
-        INFO(path.name.toStdString());
-        CHECK(records.size() == path.poses.size() * kTileFramesPerPose);
-        for (const EvalRecord& record : records) {
-            CHECK(record.sseInflation >= 1.0);
-        }
-    }
-}
-
 namespace {
 
     // ---- Oracles --------------------------------------------------------
@@ -6970,7 +6907,7 @@ namespace {
     //! Where the oracles are kept between runs: CAVEWHERE_HOLE_METRIC_CACHE_DIR
     //! when it is set, beside the tile octree, and a directory of this process
     //! alone otherwise.
-    [[maybe_unused]] QString evalCacheRoot()
+    QString evalCacheRoot()
     {
         const QString configured =
             QString::fromLocal8Bit(qgetenv(kTileCacheEnvironmentVariable));
@@ -6988,6 +6925,81 @@ namespace {
     }
 
     // ---- The CPU twin over a pose -----------------------------------------
+
+    //! The nodes the cloud's last frame drew: the resident cut, less the
+    //! levels minLevel leaves out of the drawing
+    QVector<int> drawingNodes(const PointCloudFixture& fixture)
+    {
+        const int minLevel = fixture.budgets().minLevel;
+        const cwPointOctreeManifest& manifest = fixture.manifest();
+        QVector<int> drawing;
+        for (int node : Access::drawnNodes(fixture.backend())) {
+            if (manifest.nodes.at(node).level >= minLevel) {
+                drawing.append(node);
+            }
+        }
+        return drawing;
+    }
+
+    //! @a node's own sample spacing, from the quantization step the vertex
+    //! shader reads out of its instance constants, rounded through a float
+    //! the way the constants carry it
+    double nodeSampleSpacing(const cwPointOctreeManifest& manifest, int node)
+    {
+        const QBox3D bounds = manifest.nodeBounds(node);
+        const float quantizationStep = float(double(bounds.maximum().x() - bounds.minimum().x())
+                                             / double(cw::octree::kQuantMax));
+        return cw::clod::nodeSpacingFromQuantizationStep(quantizationStep);
+    }
+
+    //! The side PointCloud.vert gives a sprite of a node whose floor is
+    //! @a floorSpacing and whose own sample spacing is @a nodeSpacing, where a
+    //! meter covers @a pixelsPerMeter pixels, under @a uniform's modes
+    double twinSpriteSidePx(const CwRhiPointCloudTestAccess::PerCloudUniform& uniform,
+                            double floorSpacing, double nodeSpacing, double pixelsPerMeter)
+    {
+        using namespace cw::pointcloud;
+
+        const auto sizeMode = SizeMode(uniform.sizeMode);
+        double sizePx = double(uniform.fixedPointSizePx);
+        if (sizeMode != SizeMode::FixedPixels) {
+            const double spacing = sizeMode == SizeMode::OwnSpacing ? nodeSpacing : floorSpacing;
+            const bool floorOn = FloorMode(uniform.floorMode) == FloorMode::Node;
+            const double coverage = uniform.spacingCoverage;
+            const double floorPx = floorOn ? coverage * spacing * pixelsPerMeter : 0.0;
+            sizePx = std::max(floorPx, coverage * double(uniform.sseThresholdPx));
+        }
+        return std::clamp(sizePx, kMinSpritePx, double(uniform.maxPointSizePx));
+    }
+
+    //! The camera the twin projects with: the fixture's pose through the
+    //! backend's clip-space correction, as the frame drew it
+    struct TwinView {
+        QMatrix4x4 viewProjection;
+        double focalPx = 0.0;
+        QSize target;
+    };
+
+    TwinView twinView(const PointCloudFixture& fixture)
+    {
+        const CameraPose pose = fixture.pose();
+        const cwRhiFrameRenderer::ClipSpaceCamera camera =
+            cwRhiFrameRenderer::clipSpaceCorrectedCamera(fixture.rhi(), pose.projection,
+                                                         pose.view);
+        TwinView view;
+        view.viewProjection = camera.viewProjection;
+        view.target = fixture.targetSize();
+        view.focalPx = std::abs(double(camera.projectionCorrected(1, 1)))
+                       * view.target.height() * 0.5;
+        return view;
+    }
+
+    //! Pixels per meter at the depth of @a point
+    double pixelsPerMeterAt(const TwinView& view, const QVector3D& point)
+    {
+        const double w = (view.viewProjection * QVector4D(point, 1.0f)).w();
+        return view.focalPx / std::max(w, cw::sse::kMinimumClipW);
+    }
 
     //! What the drawn nodes' points come to under the cloud's live uniform,
     //! predicted point by point the way PointCloud.vert sizes and thins them
@@ -7010,20 +7022,13 @@ namespace {
 
         const CwRhiPointCloudTestAccess::PerCloudUniform uniform =
             Access::liveAppearanceUniform(fixture.backend());
-        const CameraPose pose = fixture.pose();
-        const cwRhiFrameRenderer::ClipSpaceCamera camera =
-            cwRhiFrameRenderer::clipSpaceCorrectedCamera(fixture.rhi(), pose.projection,
-                                                         pose.view);
-        const QSize target = fixture.targetSize();
+        const TwinView view = twinView(fixture);
+        const QSize target = view.target;
         const double width = target.width();
         const double height = target.height();
-        const double focalPx = std::abs(double(camera.projectionCorrected(1, 1))) * height * 0.5;
         const bool depthZeroToOne = fixture.rhi()->isClipDepthZeroToOne();
 
         const auto thinning = ThinningMode(uniform.thinningMode);
-        const auto sizeMode = SizeMode(uniform.sizeMode);
-        const bool floorOn = FloorMode(uniform.floorMode) == FloorMode::Node;
-        const double coverage = uniform.spacingCoverage;
         const double thresholdPx = uniform.sseThresholdPx;
 
         const auto overlap = [](double center, double half, double extent) {
@@ -7043,22 +7048,17 @@ namespace {
             prediction.covered = PixelMask(target);
         }
         const cwPointOctreeManifest& manifest = fixture.manifest();
-        for (int node : Access::drawnNodes(fixture.backend())) {
+        for (int node : drawingNodes(fixture)) {
             const QBox3D bounds = manifest.nodeBounds(node);
-            const float quantizationStep =
-                float(double(bounds.maximum().x() - bounds.minimum().x())
-                      / double(cw::octree::kQuantMax));
-            const double nodeSpacing = cw::clod::nodeSpacingFromQuantizationStep(quantizationStep);
-            const double floorSpacing = sizeMode == SizeMode::OwnSpacing
-                                            ? nodeSpacing
-                                            : double(Access::nodeFloorSpacing(fixture.backend(), node));
+            const double nodeSpacing = nodeSampleSpacing(manifest, node);
+            const double floorSpacing = Access::nodeFloorSpacing(fixture.backend(), node);
 
             const QByteArray bytes = Access::nodeBytes(fixture.backend(), node);
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
                  offset += cw::octree::kBytesPerPoint) {
                 const cw::octree::QuantizedPoint quantized = quantizedPointAt(bytes, offset);
 
-                const QVector4D clip = camera.viewProjection
+                const QVector4D clip = view.viewProjection
                                        * QVector4D(cw::octree::dequantize(quantized, bounds), 1.0f);
                 const double w = clip.w();
                 const double nearDepth = depthZeroToOne ? 0.0 : -w;
@@ -7069,19 +7069,15 @@ namespace {
                     continue;
                 }
 
-                const double pixelsPerMeter = focalPx / std::max(w, cw::sse::kMinimumClipW);
+                const double pixelsPerMeter = view.focalPx / std::max(w, cw::sse::kMinimumClipW);
                 const double targetSpacing = cw::clod::targetSpacing(
                     thresholdPx, pixelsPerMeter, double(uniform.rootSpacing));
                 if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing, thinning)) {
                     continue;
                 }
 
-                const double floorPx = floorOn ? coverage * floorSpacing * pixelsPerMeter : 0.0;
-                const double sizePx = sizeMode == SizeMode::FixedPixels
-                                          ? double(uniform.fixedPointSizePx)
-                                          : std::max(floorPx, coverage * thresholdPx);
-                const double side = std::clamp(sizePx, kMinSpritePx,
-                                               double(uniform.maxPointSizePx));
+                const double side = twinSpriteSidePx(uniform, floorSpacing, nodeSpacing,
+                                                     pixelsPerMeter);
 
                 const double centerX = (clip.x() / w * 0.5 + 0.5) * width;
                 const double centerY = (clip.y() / w * 0.5 + 0.5) * height;
@@ -7918,6 +7914,1593 @@ TEST_CASE("Oracle frames come off disk until the shader or the poses change",
         CHECK_FALSE(rendered.fromCache);
         CHECK(fixture.frameCounter() > framesBefore);
         CHECK(oracleFrames(fixture, path, Oracle::O3, cacheRoot.path(), output).fromCache);
+    }
+}
+
+namespace {
+
+    // ---- Metrics --------------------------------------------------------
+    //
+    // Section 5: the numbers sweepPath() records per frame, read off the
+    // candidate's readback, its oracles at the same pose and the CPU twin.
+
+    //! O1, O2 and O3 at every pose of one path, by position on the path
+    struct EvalOracles {
+        OracleFrames o1;
+        OracleFrames o2;
+        OracleFrames o3;
+    };
+
+    //! The three oracles of @a path, drawn by @a fixture or read back from
+    //! under @a cacheRoot, with O2's sweep on @a out. The fixture is left
+    //! wherever the last render put it, so a candidate wants a fixture of its
+    //! own; its EDL setting decides whether the oracles carry a composite.
+    EvalOracles evalOracles(PointCloudFixture& fixture, const EvalPath& path,
+                            const QString& cacheRoot, std::ostream& out = std::cout)
+    {
+        EvalOracles oracles;
+        oracles.o1 = oracleFrames(fixture, path, Oracle::O1, cacheRoot, out);
+        oracles.o2 = oracleFrames(fixture, path, Oracle::O2, cacheRoot, out);
+        oracles.o3 = oracleFrames(fixture, path, Oracle::O3, cacheRoot, out);
+        return oracles;
+    }
+
+    //! M3 and M4 read the frame in screen tiles this many pixels on a side
+    constexpr int kScreenTilePx = 32;
+    //! Screen tiles across @a extentPx pixels, the last one partial
+    int screenTileCount(int extentPx)
+    {
+        return (extentPx + kScreenTilePx - 1) / kScreenTilePx;
+    }
+
+    //! M3: a tile whose widest sprite is more than this times its narrowest
+    //! shows a size seam
+    constexpr double kSeamRatioThreshold = 1.5;
+    //! M4: a tile joins the density spread once O1 entitles this share of it,
+    //! so a tile the horizon or the data's edge clips to a sliver adds no noise
+    constexpr double kMinEntitledTileShare = 0.25;
+    //! M4: the frame's thirds, counted from the top: far, mid, near
+    constexpr int kDepthBandCount = 3;
+    constexpr int kFarBand = 0;
+    constexpr int kMidBand = 1;
+    constexpr int kNearBand = 2;
+    //! M5: the twin walks every drawn point, so it samples one frame in this many
+    constexpr int kTwinSampleFrames = 10;
+    //! M2: a frame whose distance to O3 moves by less than this has stopped
+    //! changing, which is what frames to quiet counts to
+    constexpr double kQuietDistanceStep = 1.0e-4;
+    //! M6: an inflation ratio this close to 1 is no change
+    constexpr double kInflationRatioTolerance = 1.0e-9;
+
+    //! Decimals the eval CSV lines print fractions, ratios and pixel sizes with
+    constexpr int kFractionDecimals = 5;
+    constexpr int kRatioDecimals = 4;
+    constexpr int kPixelDecimals = 3;
+
+    //! SSIM over windows this many pixels on a side, with the stabilizing
+    //! constants of Wang et al. (2004) for 8-bit channels
+    constexpr int kSsimWindowPx = 8;
+    constexpr double kSsimK1 = 0.01;
+    constexpr double kSsimK2 = 0.03;
+
+    //! Rec. 709 luma weights
+    constexpr double kLumaRed = 0.2126;
+    constexpr double kLumaGreen = 0.7152;
+    constexpr double kLumaBlue = 0.0722;
+    constexpr int kRgbaBytesPerPixel = 4;
+
+    //! Intersection over union of @a a and @a b counted inside @a within, and
+    //! 1 where neither lights anything there
+    double maskIoU(const PixelMask& a, const PixelMask& b, const PixelMask& within)
+    {
+        REQUIRE(a.size == within.size);
+        REQUIRE(b.size == within.size);
+
+        qsizetype both = 0;
+        qsizetype either = 0;
+        for (size_t i = 0; i < within.flags.size(); i++) {
+            if (within.flags.at(i) == 0) {
+                continue;
+            }
+            const bool inA = a.flags.at(i) != 0;
+            const bool inB = b.flags.at(i) != 0;
+            both += inA && inB ? 1 : 0;
+            either += inA || inB ? 1 : 0;
+        }
+        return either > 0 ? double(both) / double(either) : 1.0;
+    }
+
+    //! The luma of the RGBA8888 pixel at @a rgba, 0 to 255
+    double lumaOf(const uchar* rgba)
+    {
+        return kLumaRed * rgba[0] + kLumaGreen * rgba[1] + kLumaBlue * rgba[2];
+    }
+
+    //! The mean absolute luma difference of @a a and @a b over the pixels of
+    //! @a within, as a share of the full channel
+    double meanLuminanceDifference(const QImage& a, const QImage& b, const PixelMask& within)
+    {
+        REQUIRE(a.size() == within.size);
+        REQUIRE(b.size() == within.size);
+        REQUIRE(a.format() == QImage::Format_RGBA8888);
+        REQUIRE(b.format() == QImage::Format_RGBA8888);
+
+        double sum = 0.0;
+        qsizetype count = 0;
+        for (int y = 0; y < within.size.height(); y++) {
+            const uchar* rowA = a.constScanLine(y);
+            const uchar* rowB = b.constScanLine(y);
+            for (int x = 0; x < within.size.width(); x++) {
+                if (!within.at(x, y)) {
+                    continue;
+                }
+                const int offset = x * kRgbaBytesPerPixel;
+                sum += std::abs(lumaOf(rowA + offset) - lumaOf(rowB + offset));
+                count++;
+            }
+        }
+        return count > 0 ? sum / (double(count) * kChannelMax) : 0.0;
+    }
+
+    //! The mean SSIM of @a a's and @a b's luma over the kSsimWindowPx windows
+    //! that tile the frame and hold at least one pixel of @a within, or 1 for
+    //! a frame with none
+    double meanSsim(const QImage& a, const QImage& b, const PixelMask& within)
+    {
+        REQUIRE(a.size() == within.size);
+        REQUIRE(b.size() == within.size);
+        REQUIRE(a.format() == QImage::Format_RGBA8888);
+        REQUIRE(b.format() == QImage::Format_RGBA8888);
+
+        const double c1 = std::pow(kSsimK1 * kChannelMax, 2.0);
+        const double c2 = std::pow(kSsimK2 * kChannelMax, 2.0);
+        const int width = within.size.width();
+        const int height = within.size.height();
+
+        double sum = 0.0;
+        int windows = 0;
+        for (int top = 0; top < height; top += kSsimWindowPx) {
+            for (int left = 0; left < width; left += kSsimWindowPx) {
+                const int bottom = std::min(height, top + kSsimWindowPx);
+                const int right = std::min(width, left + kSsimWindowPx);
+
+                bool entitled = false;
+                double sumA = 0.0;
+                double sumB = 0.0;
+                double sumAA = 0.0;
+                double sumBB = 0.0;
+                double sumAB = 0.0;
+                for (int y = top; y < bottom; y++) {
+                    const uchar* rowA = a.constScanLine(y);
+                    const uchar* rowB = b.constScanLine(y);
+                    for (int x = left; x < right; x++) {
+                        entitled = entitled || within.at(x, y);
+                        const double lumaA = lumaOf(rowA + x * kRgbaBytesPerPixel);
+                        const double lumaB = lumaOf(rowB + x * kRgbaBytesPerPixel);
+                        sumA += lumaA;
+                        sumB += lumaB;
+                        sumAA += lumaA * lumaA;
+                        sumBB += lumaB * lumaB;
+                        sumAB += lumaA * lumaB;
+                    }
+                }
+                if (!entitled) {
+                    continue;
+                }
+
+                const double n = double((bottom - top) * (right - left));
+                const double meanA = sumA / n;
+                const double meanB = sumB / n;
+                const double varianceA = sumAA / n - meanA * meanA;
+                const double varianceB = sumBB / n - meanB * meanB;
+                const double covariance = sumAB / n - meanA * meanB;
+                sum += ((2.0 * meanA * meanB + c1) * (2.0 * covariance + c2))
+                       / ((meanA * meanA + meanB * meanB + c1) * (varianceA + varianceB + c2));
+                windows++;
+            }
+        }
+        return windows > 0 ? sum / windows : 1.0;
+    }
+
+    //! M4 over one frame
+    struct DensityStats {
+        //! Coefficient of variation, across the screen tiles O1 entitles, of
+        //! lit pixels per entitled pixel
+        double cv = 0.0;
+        //! The hole fraction of each third of the frame, top (far) first
+        std::array<double, kDepthBandCount> bandHoleFraction {};
+    };
+
+    DensityStats densityUniformity(QRhi* rhi, const PixelMask& lit, const PixelMask& entitled)
+    {
+        REQUIRE(lit.size == entitled.size);
+        const QSize size = entitled.size;
+        const int tilesX = screenTileCount(size.width());
+        const int tilesY = screenTileCount(size.height());
+
+        std::vector<qsizetype> tileEntitled(size_t(tilesX) * size_t(tilesY), 0);
+        std::vector<qsizetype> tileLit(tileEntitled.size(), 0);
+        std::vector<qsizetype> tileArea(tileEntitled.size(), 0);
+        std::array<qsizetype, kDepthBandCount> bandEntitled {};
+        std::array<qsizetype, kDepthBandCount> bandHoles {};
+
+        for (int y = 0; y < size.height(); y++) {
+            const int band = std::min(kDepthBandCount - 1,
+                                      rowFromTop(rhi, QPoint(0, y), size) * kDepthBandCount
+                                          / size.height());
+            for (int x = 0; x < size.width(); x++) {
+                const size_t tile = pixelIndex(tilesX, x / kScreenTilePx, y / kScreenTilePx);
+                tileArea[tile]++;
+                if (!entitled.at(x, y)) {
+                    continue;
+                }
+                const bool drawn = lit.at(x, y);
+                tileEntitled[tile]++;
+                tileLit[tile] += drawn ? 1 : 0;
+                bandEntitled[size_t(band)]++;
+                bandHoles[size_t(band)] += drawn ? 0 : 1;
+            }
+        }
+
+        DensityStats stats;
+        for (int band = 0; band < kDepthBandCount; band++) {
+            const qsizetype count = bandEntitled.at(size_t(band));
+            stats.bandHoleFraction[size_t(band)] =
+                count > 0 ? double(bandHoles.at(size_t(band))) / double(count) : 0.0;
+        }
+
+        QVector<double> ratios;
+        for (size_t tile = 0; tile < tileEntitled.size(); tile++) {
+            const qsizetype count = tileEntitled.at(tile);
+            if (count > 0 && double(count) >= kMinEntitledTileShare * double(tileArea.at(tile))) {
+                ratios.append(double(tileLit.at(tile)) / double(count));
+            }
+        }
+        if (ratios.size() > 1) {
+            double mean = 0.0;
+            for (double ratio : std::as_const(ratios)) {
+                mean += ratio;
+            }
+            mean /= double(ratios.size());
+
+            double variance = 0.0;
+            for (double ratio : std::as_const(ratios)) {
+                variance += (ratio - mean) * (ratio - mean);
+            }
+            variance /= double(ratios.size());
+            stats.cv = mean > 0.0 ? std::sqrt(variance) / mean : 0.0;
+        }
+        return stats;
+    }
+
+    //! The target pixels @a bounds covers: the bounding rectangle of the box
+    //! clipped to the space in front of the eye, then to the target. Nothing
+    //! for a box wholly behind the eye or off the target. Rows run whichever
+    //! way NDC y does, which only the tile grid reads.
+    std::optional<QRect> screenRect(const TwinView& view, const QBox3D& bounds)
+    {
+        constexpr int kCornerCount = 8;
+        constexpr std::array<int, 3> kAxisBits {1, 2, 4};
+        const QVector3D minimum = bounds.minimum();
+        const QVector3D maximum = bounds.maximum();
+
+        std::array<QVector4D, kCornerCount> corners;
+        for (int corner = 0; corner < kCornerCount; corner++) {
+            const QVector3D point((corner & 1) ? maximum.x() : minimum.x(),
+                                  (corner & 2) ? maximum.y() : minimum.y(),
+                                  (corner & 4) ? maximum.z() : minimum.z());
+            corners[size_t(corner)] = view.viewProjection * QVector4D(point, 1.0f);
+        }
+
+        double left = std::numeric_limits<double>::max();
+        double right = std::numeric_limits<double>::lowest();
+        double bottom = std::numeric_limits<double>::max();
+        double top = std::numeric_limits<double>::lowest();
+        bool any = false;
+        const auto include = [&](double x, double y, double w) {
+            const double ndcX = x / w;
+            const double ndcY = y / w;
+            left = std::min(left, ndcX);
+            right = std::max(right, ndcX);
+            bottom = std::min(bottom, ndcY);
+            top = std::max(top, ndcY);
+            any = true;
+        };
+
+        const double nearW = cw::sse::kMinimumClipW;
+        for (const QVector4D& corner : corners) {
+            if (corner.w() >= nearW) {
+                include(corner.x(), corner.y(), corner.w());
+            }
+        }
+        //Where an edge crosses the eye plane, the box reaches the near side of
+        //the frame along it
+        for (int corner = 0; corner < kCornerCount; corner++) {
+            for (int bit : kAxisBits) {
+                if ((corner & bit) != 0) {
+                    continue;
+                }
+                const QVector4D& a = corners.at(size_t(corner));
+                const QVector4D& b = corners.at(size_t(corner | bit));
+                if ((a.w() >= nearW) == (b.w() >= nearW)) {
+                    continue;
+                }
+                const double t = (nearW - a.w()) / (double(b.w()) - a.w());
+                include(a.x() + (b.x() - a.x()) * t, a.y() + (b.y() - a.y()) * t, nearW);
+            }
+        }
+        if (!any) {
+            return std::nullopt;
+        }
+
+        const int width = view.target.width();
+        const int height = view.target.height();
+        const auto toPixels = [](double ndc, int extent) {
+            return std::clamp((ndc + 1.0) * 0.5 * extent, 0.0, double(extent));
+        };
+        const int firstX = int(std::floor(toPixels(left, width)));
+        const int endX = int(std::ceil(toPixels(right, width)));
+        const int firstY = int(std::floor(toPixels(bottom, height)));
+        const int endY = int(std::ceil(toPixels(top, height)));
+        if (firstX >= endX || firstY >= endY) {
+            return std::nullopt;
+        }
+        return QRect(QPoint(firstX, firstY), QPoint(endX - 1, endY - 1));
+    }
+
+    //! M3 over one frame
+    struct SeamStats {
+        double share = 0.0;
+        double largestRatio = 1.0;
+        //! Screen tiles some drawn node's box touches
+        int occupiedTiles = 0;
+    };
+
+    //! M3: every drawn node's box projected to the screen, its sprite side
+    //! assigned to every screen tile the box touches, and per tile the widest
+    //! side over the narrowest. Sides are read at one depth per tile, the
+    //! depth of the center of the finest node touching it, so two nodes side
+    //! by side compare by their sizing rule rather than by how far their
+    //! centers sit from the eye.
+    SeamStats sizeSeams(const PointCloudFixture& fixture, const TwinView& view)
+    {
+        struct NodeOnScreen {
+            QRect rect;
+            int level = 0;
+            double pixelsPerMeter = 0.0;
+            double floorSpacing = 0.0;
+            double nodeSpacing = 0.0;
+        };
+
+        const cwPointOctreeManifest& manifest = fixture.manifest();
+        QVector<NodeOnScreen> nodes;
+        for (int node : drawingNodes(fixture)) {
+            const QBox3D bounds = manifest.nodeBounds(node);
+            const std::optional<QRect> rect = screenRect(view, bounds);
+            if (!rect.has_value()) {
+                continue;
+            }
+            NodeOnScreen onScreen;
+            onScreen.rect = *rect;
+            onScreen.level = manifest.nodes.at(node).level;
+            onScreen.pixelsPerMeter = pixelsPerMeterAt(view, bounds.center());
+            onScreen.floorSpacing = Access::nodeFloorSpacing(fixture.backend(), node);
+            onScreen.nodeSpacing = nodeSampleSpacing(manifest, node);
+            nodes.append(onScreen);
+        }
+
+        const int tilesX = screenTileCount(view.target.width());
+        const int tilesY = screenTileCount(view.target.height());
+        std::vector<QVector<int>> touching(size_t(tilesX) * size_t(tilesY));
+        for (int i = 0; i < nodes.size(); i++) {
+            const QRect& rect = nodes.at(i).rect;
+            for (int ty = rect.top() / kScreenTilePx; ty <= rect.bottom() / kScreenTilePx; ty++) {
+                for (int tx = rect.left() / kScreenTilePx; tx <= rect.right() / kScreenTilePx; tx++) {
+                    touching[pixelIndex(tilesX, tx, ty)].append(i);
+                }
+            }
+        }
+
+        const CwRhiPointCloudTestAccess::PerCloudUniform uniform =
+            Access::liveAppearanceUniform(fixture.backend());
+        SeamStats stats;
+        int seamTiles = 0;
+        for (const QVector<int>& tile : touching) {
+            if (tile.isEmpty()) {
+                continue;
+            }
+            stats.occupiedTiles++;
+
+            const auto finest = std::max_element(
+                tile.cbegin(), tile.cend(), [&](int a, int b) {
+                    return nodes.at(a).level < nodes.at(b).level;
+                });
+            const double pixelsPerMeter = nodes.at(*finest).pixelsPerMeter;
+
+            double narrowest = std::numeric_limits<double>::max();
+            double widest = 0.0;
+            for (int i : tile) {
+                const NodeOnScreen& node = nodes.at(i);
+                const double side = twinSpriteSidePx(uniform, node.floorSpacing,
+                                                     node.nodeSpacing, pixelsPerMeter);
+                narrowest = std::min(narrowest, side);
+                widest = std::max(widest, side);
+            }
+            const double ratio = widest / narrowest;
+            stats.largestRatio = std::max(stats.largestRatio, ratio);
+            seamTiles += ratio > kSeamRatioThreshold ? 1 : 0;
+        }
+        stats.share = stats.occupiedTiles > 0 ? double(seamTiles) / stats.occupiedTiles : 0.0;
+        return stats;
+    }
+
+    //! What M6 compares one frame against: the inflation, the uniform the
+    //! shader read and every drawn node's floor
+    struct TwinFrame {
+        double inflation = 1.0;
+        CwRhiPointCloudTestAccess::PerCloudUniform uniform;
+        QHash<int, double> floors;
+    };
+
+    TwinFrame twinFrame(const PointCloudFixture& fixture)
+    {
+        TwinFrame frame;
+        frame.inflation = Access::sseInflation(fixture.backend());
+        frame.uniform = Access::liveAppearanceUniform(fixture.backend());
+        for (int node : drawingNodes(fixture)) {
+            frame.floors.insert(node, Access::nodeFloorSpacing(fixture.backend(), node));
+        }
+        return frame;
+    }
+
+    //! M6 between two frames
+    struct CauseCounters {
+        double inflationRatio = 1.0;
+        int entered = 0;
+        int left = 0;
+        double spriteSideChangePx = 0.0;
+        double weightChange = 0.0;
+    };
+
+    //! M6: what moved between @a previous and @a current by rule rather than
+    //! by camera. A node drawn in both is sized and weighted at its center
+    //! through the current camera, once under each frame's uniform and floor,
+    //! so a frame that only moved the camera sums to zero.
+    CauseCounters causeCounters(const PointCloudFixture& fixture, const TwinView& view,
+                                const TwinFrame& previous, const TwinFrame& current)
+    {
+        const cwPointOctreeManifest& manifest = fixture.manifest();
+
+        CauseCounters counters;
+        counters.inflationRatio = current.inflation / previous.inflation;
+        for (auto it = previous.floors.cbegin(); it != previous.floors.cend(); ++it) {
+            counters.left += current.floors.contains(it.key()) ? 0 : 1;
+        }
+
+        const auto weightUnder = [](const CwRhiPointCloudTestAccess::PerCloudUniform& uniform,
+                                    double nodeSpacing, double pixelsPerMeter) {
+            const double target = cw::clod::targetSpacing(uniform.sseThresholdPx, pixelsPerMeter,
+                                                          uniform.rootSpacing);
+            return cw::clod::weight(nodeSpacing, target,
+                                    cw::pointcloud::ThinningMode(uniform.thinningMode));
+        };
+
+        for (auto it = current.floors.cbegin(); it != current.floors.cend(); ++it) {
+            const auto before = previous.floors.constFind(it.key());
+            if (before == previous.floors.cend()) {
+                counters.entered++;
+                continue;
+            }
+
+            const int node = it.key();
+            const double nodeSpacing = nodeSampleSpacing(manifest, node);
+            const double pixelsPerMeter = pixelsPerMeterAt(view, manifest.nodeBounds(node).center());
+            const double sideNow = twinSpriteSidePx(current.uniform, it.value(), nodeSpacing,
+                                                    pixelsPerMeter);
+            const double sideBefore = twinSpriteSidePx(previous.uniform, before.value(),
+                                                       nodeSpacing, pixelsPerMeter);
+            counters.spriteSideChangePx += std::abs(sideNow - sideBefore);
+            counters.weightChange += std::abs(weightUnder(current.uniform, nodeSpacing,
+                                                          pixelsPerMeter)
+                                              - weightUnder(previous.uniform, nodeSpacing,
+                                                            pixelsPerMeter));
+        }
+        return counters;
+    }
+
+    bool inflationChanged(double ratio)
+    {
+        return std::abs(std::log(ratio)) > kInflationRatioTolerance;
+    }
+
+    //! @a value to @a precision decimals, or an empty field
+    QString csvField(const std::optional<double>& value, int precision)
+    {
+        return value.has_value() ? QString::number(*value, 'f', precision) : QString();
+    }
+
+    template <std::integral Integer>
+    QString csvField(const std::optional<Integer>& value)
+    {
+        return value.has_value() ? QString::number(*value) : QString();
+    }
+
+    //! One (path, configuration)'s records boiled down to what the report
+    //! tables read: worst, mean, largest single-frame value and sum
+    struct EvalSummary {
+        QString path;
+        QString config;
+        int frames = 0;
+
+        std::optional<double> worstHoleFraction;
+        std::optional<double> meanHoleFraction;
+        std::optional<int> widestHolePx;
+        double largestLitStep = 0.0;
+
+        std::optional<double> meanIouO2;
+        std::optional<double> meanIouO3;
+        std::optional<double> worstIouO3;
+        std::optional<double> meanSsimO3;
+
+        std::optional<double> largestO3Step;
+        std::optional<double> o3StepSum;
+        //! The worst over the path's poses of the frames a pose took until its
+        //! distance to O3 stopped moving; a pose change is the camera, not a pop
+        std::optional<int> framesToQuiet;
+        //! largestO3Step with the first arrival kept
+        std::optional<double> largestRawO3Step;
+
+        double worstSeamShare = 0.0;
+        double largestSeamRatio = 1.0;
+
+        std::optional<double> worstDensityCv;
+        std::optional<double> worstNearHoleFraction;
+
+        int mostResidentNodes = 0;
+        qint64 mostGpuBytes = 0;
+        qint64 mostSelectedPoints = 0;
+        double widestInflation = 1.0;
+        int cappedFrames = 0;
+        std::optional<qint64> mostPredictedPoints;
+
+        int inflationChanges = 0;
+        //! The largest single-frame step, as a factor of at least 1 either way
+        double largestInflationStep = 1.0;
+        int mostEntered = 0;
+        int enteredSum = 0;
+        int mostLeft = 0;
+        int leftSum = 0;
+        double largestSideChangePx = 0.0;
+        double sideChangeSumPx = 0.0;
+        double largestWeightChange = 0.0;
+        double weightChangeSum = 0.0;
+    };
+
+    //! The worst (largest, or with @a smallest the least) of @a values, folded
+    //! into @a into
+    void foldOptional(std::optional<double>& into, const std::optional<double>& value,
+                      bool smallest = false)
+    {
+        if (!value.has_value()) {
+            return;
+        }
+        if (!into.has_value()) {
+            into = value;
+            return;
+        }
+        into = smallest ? std::min(*into, *value) : std::max(*into, *value);
+    }
+
+    //! The mean of the values @a field holds over @a records, or nothing when
+    //! none holds one
+    template <typename Field>
+    std::optional<double> meanOf(const QVector<EvalRecord>& records, Field field)
+    {
+        double sum = 0.0;
+        int count = 0;
+        for (const EvalRecord& record : records) {
+            const std::optional<double> value = field(record);
+            if (value.has_value()) {
+                sum += *value;
+                count++;
+            }
+        }
+        return count > 0 ? std::optional<double>(sum / count) : std::nullopt;
+    }
+
+    EvalSummary summarize(const QString& path, const QString& config,
+                          const QVector<EvalRecord>& records)
+    {
+        EvalSummary summary;
+        summary.path = path;
+        summary.config = config;
+        summary.frames = int(records.size());
+
+        summary.meanHoleFraction = meanOf(records, [](const EvalRecord& record) {
+            return record.holes.has_value() ? std::optional<double>(record.holes->fraction)
+                                            : std::nullopt;
+        });
+        summary.meanIouO2 = meanOf(records, [](const EvalRecord& record) { return record.iouO2; });
+        summary.meanIouO3 = meanOf(records, [](const EvalRecord& record) { return record.iouO3; });
+        summary.meanSsimO3 = meanOf(records, [](const EvalRecord& record) { return record.ssimO3; });
+
+        int poseStart = 0;
+        for (int i = 0; i < records.size(); i++) {
+            const EvalRecord& record = records.at(i);
+            const bool samePose = i > 0 && records.at(i - 1).position == record.position;
+            poseStart = samePose ? poseStart : i;
+            if (record.holes.has_value()) {
+                foldOptional(summary.worstHoleFraction, record.holes->fraction);
+                summary.widestHolePx = std::max(summary.widestHolePx.value_or(0),
+                                                record.holes->maxSidePx);
+            }
+            summary.largestLitStep = std::max(summary.largestLitStep, record.litStep);
+            foldOptional(summary.worstIouO3, record.iouO3, true);
+
+            if (record.o3DistanceStep.has_value()) {
+                foldOptional(summary.largestO3Step, record.o3DistanceStep);
+                summary.o3StepSum = summary.o3StepSum.value_or(0.0) + *record.o3DistanceStep;
+
+                //Quiet counts the first picture's arrival too
+                const double moved = samePose ? std::abs(*record.o3Distance
+                                                         - *records.at(i - 1).o3Distance)
+                                              : 0.0;
+                const int quietFrom = moved > kQuietDistanceStep ? i - poseStart + 1 : 0;
+                summary.framesToQuiet = std::max(summary.framesToQuiet.value_or(0), quietFrom);
+            }
+            foldOptional(summary.largestRawO3Step, record.o3DistanceStepRaw);
+
+            summary.worstSeamShare = std::max(summary.worstSeamShare, record.seamShare);
+            summary.largestSeamRatio = std::max(summary.largestSeamRatio, record.largestSeamRatio);
+            foldOptional(summary.worstDensityCv, record.densityCv);
+            foldOptional(summary.worstNearHoleFraction, record.nearHoleFraction);
+
+            summary.mostResidentNodes = std::max(summary.mostResidentNodes, record.residentNodes);
+            summary.mostGpuBytes = std::max(summary.mostGpuBytes, record.gpuBytes);
+            summary.mostSelectedPoints = std::max(summary.mostSelectedPoints,
+                                                  record.selectedPoints);
+            summary.widestInflation = std::max(summary.widestInflation, record.sseInflation);
+            summary.cappedFrames += record.pointCapped ? 1 : 0;
+            if (record.predictedPoints.has_value()) {
+                summary.mostPredictedPoints = std::max(summary.mostPredictedPoints.value_or(0),
+                                                       *record.predictedPoints);
+            }
+
+            if (inflationChanged(record.inflationRatio)) {
+                summary.inflationChanges++;
+                summary.largestInflationStep =
+                    std::max(summary.largestInflationStep,
+                             std::max(record.inflationRatio, 1.0 / record.inflationRatio));
+            }
+            summary.mostEntered = std::max(summary.mostEntered, record.nodesEntered);
+            summary.enteredSum += record.nodesEntered;
+            summary.mostLeft = std::max(summary.mostLeft, record.nodesLeft);
+            summary.leftSum += record.nodesLeft;
+            summary.largestSideChangePx = std::max(summary.largestSideChangePx,
+                                                   record.spriteSideChangePx);
+            summary.sideChangeSumPx += record.spriteSideChangePx;
+            summary.largestWeightChange = std::max(summary.largestWeightChange,
+                                                   record.weightChange);
+            summary.weightChangeSum += record.weightChange;
+        }
+        return summary;
+    }
+
+    //! The evalSummary header and @a summary's line
+    void writeSummary(const EvalSummary& summary, std::ostream& out = std::cout)
+    {
+        writeCsvLine(QStringLiteral("evalSummary,path,config,frames,worstHoleFraction,"
+                                    "meanHoleFraction,widestHolePx,largestLitStep,meanIouO2,"
+                                    "meanIouO3,worstIouO3,meanSsimO3,largestO3Step,o3StepSum,"
+                                    "framesToQuiet,worstSeamShare,largestSeamRatio,"
+                                    "worstDensityCv,worstNearHoleFraction,mostResidentNodes,"
+                                    "mostGpuBytes,mostSelectedPoints,widestInflation,"
+                                    "cappedFrames,mostPredictedPoints,inflationChanges,"
+                                    "largestInflationStep,mostEntered,enteredSum,mostLeft,"
+                                    "leftSum,largestSideChangePx,sideChangeSumPx,"
+                                    "largestWeightChange,weightChangeSum,largestRawO3Step"),
+                     out);
+
+        const QStringList fields {
+            QStringLiteral("evalSummary"),
+            summary.path,
+            summary.config,
+            QString::number(summary.frames),
+            csvField(summary.worstHoleFraction, kFractionDecimals),
+            csvField(summary.meanHoleFraction, kFractionDecimals),
+            csvField(summary.widestHolePx),
+            QString::number(summary.largestLitStep, 'f', kFractionDecimals),
+            csvField(summary.meanIouO2, kFractionDecimals),
+            csvField(summary.meanIouO3, kFractionDecimals),
+            csvField(summary.worstIouO3, kFractionDecimals),
+            csvField(summary.meanSsimO3, kFractionDecimals),
+            csvField(summary.largestO3Step, kFractionDecimals),
+            csvField(summary.o3StepSum, kFractionDecimals),
+            csvField(summary.framesToQuiet),
+            QString::number(summary.worstSeamShare, 'f', kFractionDecimals),
+            QString::number(summary.largestSeamRatio, 'f', kRatioDecimals),
+            csvField(summary.worstDensityCv, kRatioDecimals),
+            csvField(summary.worstNearHoleFraction, kFractionDecimals),
+            QString::number(summary.mostResidentNodes),
+            QString::number(summary.mostGpuBytes),
+            QString::number(summary.mostSelectedPoints),
+            QString::number(summary.widestInflation, 'f', kRatioDecimals),
+            QString::number(summary.cappedFrames),
+            csvField(summary.mostPredictedPoints),
+            QString::number(summary.inflationChanges),
+            QString::number(summary.largestInflationStep, 'f', kRatioDecimals),
+            QString::number(summary.mostEntered),
+            QString::number(summary.enteredSum),
+            QString::number(summary.mostLeft),
+            QString::number(summary.leftSum),
+            QString::number(summary.largestSideChangePx, 'f', kPixelDecimals),
+            QString::number(summary.sideChangeSumPx, 'f', kPixelDecimals),
+            QString::number(summary.largestWeightChange, 'f', kRatioDecimals),
+            QString::number(summary.weightChangeSum, 'f', kRatioDecimals),
+            csvField(summary.largestRawO3Step, kFractionDecimals)
+        };
+        writeCsvLine(fields.join(QLatin1Char(',')), out);
+    }
+
+    QVector<EvalRecord> sweepPath(PointCloudFixture& fixture, const EvalPath& path,
+                                  const EvalConfig& config, const PathStep& step,
+                                  std::ostream& out, const EvalOracles* oracles)
+    {
+        REQUIRE_FALSE(path.poses.isEmpty());
+        REQUIRE(step.framesPerPose > 0);
+        REQUIRE(fixture.targetSize() == config.targetSize);
+        if (oracles != nullptr) {
+            REQUIRE(oracles->o1.frames.size() == path.poses.size());
+            REQUIRE(oracles->o2.frames.size() == path.poses.size());
+            REQUIRE(oracles->o3.frames.size() == path.poses.size());
+        }
+
+        fixture.setReadbackEnabled(true);
+        fixture.setBudgets(config.budgets);
+
+        if (step.settleBeforeFirstPose) {
+            const Pose& first = path.poses.first();
+            fixture.setPose(first.view, first.projection);
+            renderUntilSettled(fixture);
+        }
+
+        writeCsvLine(QStringLiteral("evalCsv,path,config,pose,frame,label,litFraction,litStep,"
+                                    "residentNodes,gpuBytes,selectedPoints,selectedBytes,"
+                                    "sseInflation,pointCapped,pending,finestSelected,"
+                                    "finestDrawn,holeFraction,holeCount,maxHoleSide,iouO2,"
+                                    "iouO3,luminanceDiffO3,ssimO3,o3DistanceStep,seamShare,"
+                                    "largestSeamRatio,densityCv,holeNear,holeMid,holeFar,"
+                                    "predictedPoints,inflationRatio,nodesEntered,nodesLeft,"
+                                    "spriteSideChangePx,weightChange,o3DistanceStepRaw"),
+                     out);
+
+        const QSize target = fixture.targetSize();
+        const double targetPixels = double(target.width()) * double(target.height());
+
+        QVector<EvalRecord> records;
+        std::optional<TwinFrame> previousTwin;
+        const auto recordFrame = [&](const Pose& pose, int position, int frame) {
+            EvalRecord record;
+            record.pose = pose.index;
+            record.position = position;
+            record.frame = frame;
+            record.litFraction = double(fixture.litPixels().size()) / targetPixels;
+            record.litStep = records.isEmpty()
+                                 ? 0.0
+                                 : std::abs(record.litFraction - records.constLast().litFraction);
+            record.residentNodes = Access::residentCount(fixture.backend());
+            record.gpuBytes = fixture.gpuBytes();
+            record.selectedPoints = Access::selectedPoints(fixture.backend());
+            record.selectedBytes = Access::selectedBytes(fixture.backend());
+            record.sseInflation = Access::sseInflation(fixture.backend());
+            record.pointCapped = Access::pointCapped(fixture.backend());
+            record.pending = fixture.frameRenderer()->hasPendingStreamingWork();
+            record.finestSelectedLevel = finestSelectedLevel(fixture);
+            record.finestDrawnLevel = finestDrawnLevel(fixture);
+
+            const PixelMask lit = litMask(fixture);
+            if (oracles != nullptr) {
+                const OracleFrame& o1 = oracles->o1.frames.at(position);
+                const OracleFrame& o2 = oracles->o2.frames.at(position);
+                const OracleFrame& o3 = oracles->o3.frames.at(position);
+
+                record.holes = holeStats(lit, o1.mask);
+                record.iouO2 = maskIoU(lit, o2.mask, o1.mask);
+                record.iouO3 = maskIoU(lit, o3.mask, o1.mask);
+                if (fixture.edlEnabled() && !o3.composite.isNull()) {
+                    const QImage composite = fixture.compositeImage();
+                    record.luminanceDiffO3 =
+                        meanLuminanceDifference(composite, o3.composite, o1.mask);
+                    record.ssimO3 = meanSsim(composite, o3.composite, o1.mask);
+                }
+
+                record.o3Distance = 1.0 - *record.iouO3;
+                record.o3DistanceStepRaw = records.isEmpty()
+                                               ? 0.0
+                                               : std::abs(*record.o3Distance
+                                                          - *records.constLast().o3Distance);
+                const bool previousLit = !records.isEmpty()
+                                         && records.constLast().litFraction > 0.0;
+                record.o3DistanceStep = previousLit ? *record.o3DistanceStepRaw : 0.0;
+
+                const DensityStats density = densityUniformity(fixture.rhi(), lit, o1.mask);
+                record.densityCv = density.cv;
+                record.nearHoleFraction = density.bandHoleFraction.at(kNearBand);
+                record.midHoleFraction = density.bandHoleFraction.at(kMidBand);
+                record.farHoleFraction = density.bandHoleFraction.at(kFarBand);
+            }
+
+            const TwinView view = twinView(fixture);
+            const SeamStats seams = sizeSeams(fixture, view);
+            record.seamShare = seams.share;
+            record.largestSeamRatio = seams.largestRatio;
+
+            if (records.size() % kTwinSampleFrames == 0) {
+                record.predictedPoints = predictedDraw(fixture).points;
+            }
+
+            const TwinFrame twin = twinFrame(fixture);
+            if (previousTwin.has_value()) {
+                const CauseCounters counters = causeCounters(fixture, view, *previousTwin, twin);
+                record.inflationRatio = counters.inflationRatio;
+                record.nodesEntered = counters.entered;
+                record.nodesLeft = counters.left;
+                record.spriteSideChangePx = counters.spriteSideChangePx;
+                record.weightChange = counters.weightChange;
+            }
+            previousTwin = twin;
+
+            const auto holeField = [&](auto read) {
+                return record.holes.has_value() ? read(*record.holes) : QString();
+            };
+            const QStringList fields {
+                QStringLiteral("evalCsv"),
+                path.name,
+                config.name,
+                QString::number(record.pose),
+                QString::number(record.frame),
+                pose.label,
+                QString::number(record.litFraction, 'f', kFractionDecimals),
+                QString::number(record.litStep, 'f', kFractionDecimals),
+                QString::number(record.residentNodes),
+                QString::number(record.gpuBytes),
+                QString::number(record.selectedPoints),
+                QString::number(record.selectedBytes),
+                QString::number(record.sseInflation, 'f', kRatioDecimals),
+                QString::number(record.pointCapped ? 1 : 0),
+                QString::number(record.pending ? 1 : 0),
+                QString::number(record.finestSelectedLevel),
+                QString::number(record.finestDrawnLevel),
+                holeField([](const HoleStats& holes) {
+                    return QString::number(holes.fraction, 'f', kFractionDecimals);
+                }),
+                holeField([](const HoleStats& holes) { return QString::number(holes.count); }),
+                holeField([](const HoleStats& holes) { return QString::number(holes.maxSidePx); }),
+                csvField(record.iouO2, kFractionDecimals),
+                csvField(record.iouO3, kFractionDecimals),
+                csvField(record.luminanceDiffO3, kFractionDecimals),
+                csvField(record.ssimO3, kFractionDecimals),
+                csvField(record.o3DistanceStep, kFractionDecimals),
+                QString::number(record.seamShare, 'f', kFractionDecimals),
+                QString::number(record.largestSeamRatio, 'f', kRatioDecimals),
+                csvField(record.densityCv, kRatioDecimals),
+                csvField(record.nearHoleFraction, kFractionDecimals),
+                csvField(record.midHoleFraction, kFractionDecimals),
+                csvField(record.farHoleFraction, kFractionDecimals),
+                csvField(record.predictedPoints),
+                QString::number(record.inflationRatio, 'f', kRatioDecimals),
+                QString::number(record.nodesEntered),
+                QString::number(record.nodesLeft),
+                QString::number(record.spriteSideChangePx, 'f', kPixelDecimals),
+                QString::number(record.weightChange, 'f', kRatioDecimals),
+                csvField(record.o3DistanceStepRaw, kFractionDecimals)
+            };
+            writeCsvLine(fields.join(QLatin1Char(',')), out);
+            records.append(record);
+            return record;
+        };
+
+        for (int position = 0; position < path.poses.size(); position++) {
+            const Pose& pose = path.poses.at(position);
+            fixture.setPose(pose.view, pose.projection);
+
+            if (step.policy == StepPolicy::Quiet) {
+                renderUntilSettled(fixture);
+                recordFrame(pose, position, 0);
+            } else {
+                for (int frame = 0; frame < step.framesPerPose; frame++) {
+                    fixture.renderFrame();
+                    const EvalRecord record = recordFrame(pose, position, frame);
+                    if (step.leavePoseWhenQuiet && !record.pending) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        writeSummary(summarize(path.name, config.name, records), out);
+        return records;
+    }
+
+    //! The position on its path of the pose whose worst frame holes the most,
+    //! which is the pose P4 holds
+    int worstHolePosition(const QVector<EvalRecord>& records)
+    {
+        int worst = 0;
+        double worstFraction = -1.0;
+        for (const EvalRecord& record : records) {
+            if (record.holes.has_value() && record.holes->fraction > worstFraction) {
+                worstFraction = record.holes->fraction;
+                worst = record.position;
+            }
+        }
+        return worst;
+    }
+
+    // ---- M7: lit fraction by level ----------------------------------------
+
+    //! One level drawn alone at one pose
+    struct LevelRecord {
+        //! The pose table's index
+        int pose = 0;
+        int level = 0;
+        //! Against O1 of the pose, at the sizing rule's own sprites
+        double litFraction = 0.0;
+        HoleStats holes;
+        //! The same cut at kLevelAloneFixedPointSizePx, which lights wherever
+        //! the level has points at all
+        double litFractionFixed = 0.0;
+        int drawnNodes = 0;
+    };
+
+    //! The threshold a level alone is drawn at: the finest the knob allows,
+    //! so the cut reaches the level over as much of the frame as it can
+    constexpr double kLevelAloneScreenSpaceErrorPx = cw::budgets::kMinScreenSpaceErrorPx;
+    //! A sprite wide enough to close the gaps of any level these poses draw,
+    //! so where the fixed render lights and the sizing rule's leaves holes
+    //! the rule sized the level too small rather than the level missing
+    constexpr float kLevelAloneFixedPointSizePx = 16.0f;
+
+    //! M7: at every pose of @a path, each level from @a firstLevel to
+    //! @a lastLevel drawn alone (minLevel = maxLevel = the level, every budget
+    //! past the whole cloud), once at the default sizing and once at
+    //! kLevelAloneFixedPointSizePx, read against @a o1 of the same pose. One
+    //! m7Csv line per level and pose goes to @a out. The fixture's budgets,
+    //! coverage and shading are put back the way they were.
+    QVector<LevelRecord> litFractionByLevel(PointCloudFixture& fixture, const EvalPath& path,
+                                            const OracleFrames& o1, int firstLevel,
+                                            int lastLevel, std::ostream& out = std::cout)
+    {
+        REQUIRE(o1.frames.size() == path.poses.size());
+        REQUIRE(firstLevel <= lastLevel);
+
+        const cwRenderBudgets savedBudgets = fixture.budgets();
+        const float savedCoverage = fixture.render().spacingCoverage();
+        const cwPointCloudShading savedShading = fixture.render().shading();
+
+        cwPointCloudShading fixedShading;
+        fixedShading.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
+        fixedShading.fixedPointSizePx = kLevelAloneFixedPointSizePx;
+        const auto shadeWith = [&](const cwPointCloudShading& shading) {
+            fixture.render().setShading(shading);
+            fixture.synchronize();
+        };
+
+        fixture.setReadbackEnabled(true);
+        fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
+        writeCsvLine(QStringLiteral("m7Csv,path,pose,level,litFraction,holeFraction,holeCount,"
+                                    "maxHoleSide,litFractionFixed,drawnNodes"),
+                     out);
+
+        QVector<LevelRecord> records;
+        for (int position = 0; position < path.poses.size(); position++) {
+            const Pose& pose = path.poses.at(position);
+            const PixelMask& entitled = o1.frames.at(position).mask;
+            fixture.setPose(pose.view, pose.projection);
+
+            for (int level = firstLevel; level <= lastLevel; level++) {
+                cwRenderBudgets budgets = oracleBudgets(fixture.manifest(),
+                                                        kLevelAloneScreenSpaceErrorPx);
+                budgets.minLevel = level;
+                budgets.maxLevel = level;
+                fixture.setBudgets(budgets);
+                shadeWith(cwPointCloudShading());
+                fixture.renderUntilQuiet();
+                renderUntilSettled(fixture);
+
+                LevelRecord record;
+                record.pose = pose.index;
+                record.level = level;
+                const PixelMask lit = litMask(fixture);
+                record.litFraction = litFractionOf(lit, entitled);
+                record.holes = holeStats(lit, entitled);
+                record.drawnNodes = int(drawingNodes(fixture).size());
+
+                //Sizing alone changes, so the cut and its residency stay put
+                shadeWith(fixedShading);
+                fixture.renderFrame();
+                record.litFractionFixed = litFractionOf(litMask(fixture), entitled);
+
+                writeCsvLine(QStringLiteral("m7Csv,%1,%2,%3,%4,%5,%6,%7,%8,%9")
+                                 .arg(path.name)
+                                 .arg(pose.index)
+                                 .arg(level)
+                                 .arg(record.litFraction, 0, 'f', kFractionDecimals)
+                                 .arg(record.holes.fraction, 0, 'f', kFractionDecimals)
+                                 .arg(record.holes.count)
+                                 .arg(record.holes.maxSidePx)
+                                 .arg(record.litFractionFixed, 0, 'f', kFractionDecimals)
+                                 .arg(record.drawnNodes),
+                             out);
+                records.append(record);
+            }
+        }
+
+        fixture.setBudgets(savedBudgets);
+        fixture.render().setSpacingCoverage(savedCoverage);
+        shadeWith(savedShading);
+        return records;
+    }
+
+    //! The mean over poses of @a field at @a level
+    template <typename Field>
+    double meanAtLevel(const QVector<LevelRecord>& records, int level, Field field)
+    {
+        double sum = 0.0;
+        int count = 0;
+        for (const LevelRecord& record : records) {
+            if (record.level == level) {
+                sum += field(record);
+                count++;
+            }
+        }
+        REQUIRE(count > 0);
+        return sum / count;
+    }
+}
+
+namespace {
+
+    //! The plane's zoomed-in poses the metric cases walk
+    EvalPath planeMetricPath(QRhi* rhi, int poseCount = kSweptPoseCount)
+    {
+        EvalPath path = planeBoundaryPath(rhi, kHalfHdTargetSize);
+        path.poses.resize(poseCount);
+        return path;
+    }
+
+    //! The header's fields and every data line's, which have to agree
+    QVector<QStringList> csvRows(const std::ostringstream& output, const QString& prefix)
+    {
+        QVector<QStringList> rows;
+        for (const QString& line : linesWithPrefix(output, prefix)) {
+            rows.append(line.split(QLatin1Char(',')));
+        }
+        return rows;
+    }
+
+    //! A settled default frame and O3 draw the same cut with the same shader,
+    //! so their EDL composites can differ only by float rounding
+    constexpr double kIdenticalSsim = 0.9999;
+    constexpr double kIdenticalLuminanceDiff = 1.0e-4;
+
+    //! M6: the governor's one step and its relax by whole steps
+    constexpr double kInflationStepTolerance = 1.0e-6;
+
+    //! True when @a ratio is the governor's step up, or a whole number of its
+    //! steps down, or lands on one of the bounds it clamps to
+    bool isGovernorStep(double ratio, double inflation)
+    {
+        const double steps = std::log(ratio) / std::log(cw::octree::kSseInflationStep);
+        const bool wholeSteps = std::abs(steps - std::round(steps)) <= kInflationStepTolerance;
+        const bool stepUp = steps > 0.0;
+        const bool oneStepUp = std::abs(steps - 1.0) <= kInflationStepTolerance;
+        const bool clamped = std::abs(inflation - 1.0) <= kInflationStepTolerance
+                             || std::abs(inflation - cw::octree::kMaxSseInflation)
+                                    <= kInflationStepTolerance;
+        return clamped || (stepUp ? oneStepUp : wholeSteps);
+    }
+
+    //! The 3 px screen-space error the M3 and M4 regression draws at
+    constexpr double kCoarseScreenSpaceErrorPx = 3.0;
+
+    //! M7: how far a level's lit fraction has to move before it counts, when
+    //! two runs agree more closely than this
+    constexpr double kLevelLitNoiseFloor = 0.01;
+    //! M7: the share of O1's footprint a level's fixed-size render must light
+    //! at every pose before its sizing is read there, so a level the cut
+    //! leaves out reads as missing rather than as undersized
+    constexpr double kLevelPresentShare = 0.9;
+
+    //! Requires @a level to be in the cut over kLevelPresentShare of O1's
+    //! footprint at every pose of @a records
+    void requireLevelPresent(const QVector<LevelRecord>& records, int level)
+    {
+        for (const LevelRecord& record : records) {
+            if (record.level == level) {
+                INFO("level " << level << " at pose " << record.pose << " lights "
+                     << record.litFractionFixed << " at " << kLevelAloneFixedPointSizePx
+                     << " px over " << record.drawnNodes << " nodes");
+                REQUIRE(record.litFractionFixed >= kLevelPresentShare);
+            }
+        }
+    }
+    //! Section 13's levels on the BC tile: 5 still closes the surface, 7 opens it
+    constexpr int kTileClosedLevel = 5;
+    constexpr int kTileOpenLevel = 7;
+    //! Section 5's M7 range starts at level 3
+    constexpr int kTileFirstLevelAlone = 3;
+
+    //! The tile cases walk every this many poses of P2 and P2z: the oracles
+    //! draw nine renders a pose at the finest threshold, which on a 76 M point
+    //! tile is minutes a pose
+    constexpr int kTileOrbitPoseStride = 24;
+    constexpr int kTileBoundaryPoseStride = 6;
+
+    EvalPath everyNthPose(const EvalPath& path, int stride)
+    {
+        EvalPath strided;
+        strided.name = QStringLiteral("%1/%2").arg(path.name).arg(stride);
+        for (int i = 0; i < path.poses.size(); i += stride) {
+            strided.poses.append(path.poses.at(i));
+        }
+        return strided;
+    }
+
+    //! The tile's zoomed-in sub-path as the eval cases walk it
+    EvalPath tileBoundaryPath(QRhi* rhi, const cwPointOctreeManifest& manifest,
+                              const EvalConfig& config)
+    {
+        const int boundaryLevel = std::min(kTileBoundaryLevel, deepestLevel(manifest));
+        return everyNthPose(levelBoundaryPath(manifest, config.targetSize,
+                                              rhi->clipSpaceCorrMatrix(), boundaryLevel,
+                                              config.budgets),
+                            kTileBoundaryPoseStride);
+    }
+}
+
+TEST_CASE("Mask IoU, luminance difference, SSIM and density spread read what they claim",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    //Two screen tiles wide, one tall
+    const QSize size(2 * kScreenTilePx, kScreenTilePx);
+    PixelMask within(size);
+    PixelMask half(size);
+    PixelMask all(size);
+    for (int y = 0; y < size.height(); y++) {
+        for (int x = 0; x < size.width(); x++) {
+            within.setAt(x, y, true);
+            all.setAt(x, y, true);
+            half.setAt(x, y, x < size.width() / 2);
+        }
+    }
+
+    CHECK(maskIoU(all, all, within) == 1.0);
+    CHECK(maskIoU(half, all, within) == 0.5);
+    CHECK(maskIoU(PixelMask(size), PixelMask(size), within) == 1.0);
+
+    constexpr int kGray = 128;
+    //Half the rows white, so the luma moves by half the gap to white
+    constexpr double kStripeShare = 0.5;
+    constexpr double kLuminanceTolerance = 0.01;
+    QImage gray(size, QImage::Format_RGBA8888);
+    gray.fill(QColor(kGray, kGray, kGray));
+    QImage stripes = gray.copy();
+    for (int y = 0; y < size.height(); y += 2) {
+        for (int x = 0; x < size.width(); x++) {
+            stripes.setPixelColor(x, y, Qt::white);
+        }
+    }
+
+    CHECK(meanLuminanceDifference(gray, gray, within) == 0.0);
+    CHECK(meanSsim(gray, gray, within) == Catch::Approx(1.0));
+    CHECK(meanSsim(stripes, gray, within) < 1.0);
+    CHECK(meanLuminanceDifference(stripes, gray, within)
+          == Catch::Approx(kStripeShare * (kChannelMax - kGray) / kChannelMax)
+                 .epsilon(kLuminanceTolerance));
+
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const DensityStats even = densityUniformity(rhi.get(), all, within);
+    CHECK(even.cv == 0.0);
+    CHECK(even.bandHoleFraction.at(kNearBand) == 0.0);
+    const DensityStats lopsided = densityUniformity(rhi.get(), half, within);
+    CHECK(lopsided.cv > 0.0);
+}
+
+TEST_CASE("sweepPath fills every metric from the oracles, and a settled default frame is O3",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+    const EvalPath path = planeMetricPath(rhi.get());
+
+    std::ostringstream output;
+    PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    oracleFixture.setEdlEnabled(true);
+    const EvalOracles oracles = evalOracles(oracleFixture, path, cacheRoot.path(), output);
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    fixture.setEdlEnabled(true);
+    PathStep step;
+    step.policy = StepPolicy::Quiet;
+    const QVector<EvalRecord> records =
+        sweepPath(fixture, path, candidateConfig(Candidate::Default), step, output, &oracles);
+    REQUIRE(records.size() == kSweptPoseCount);
+
+    const QVector<QStringList> rows = csvRows(output, QStringLiteral("evalCsv,"));
+    REQUIRE(rows.size() == 1 + records.size());
+    const QStringList& header = rows.constFirst();
+    const qsizetype predictedColumn = header.indexOf(QStringLiteral("predictedPoints"));
+    REQUIRE(predictedColumn > 0);
+    //The hole columns WP2 left empty sit right after finestDrawn
+    CHECK(header.indexOf(QStringLiteral("holeFraction"))
+          == header.indexOf(QStringLiteral("finestDrawn")) + 1);
+    for (int i = 1; i < rows.size(); i++) {
+        const QStringList& fields = rows.at(i);
+        INFO(fields.join(QLatin1Char(',')).toStdString());
+        REQUIRE(fields.size() == header.size());
+        for (qsizetype column = 0; column < fields.size(); column++) {
+            //The twin's point count is sampled; every other column is filled
+            const bool sampled = (i - 1) % kTwinSampleFrames == 0;
+            INFO(header.at(column).toStdString());
+            CHECK(fields.at(column).isEmpty() == (column == predictedColumn && !sampled));
+        }
+    }
+
+    for (const EvalRecord& record : records) {
+        INFO("pose " << record.pose << ": IoU O3 " << record.iouO3.value_or(-1.0) << ", SSIM "
+             << record.ssimO3.value_or(-1.0) << ", luminance "
+             << record.luminanceDiffO3.value_or(-1.0) << ", holes "
+             << record.holes->fraction << ", seams " << record.seamShare);
+        CHECK(*record.iouO3 == 1.0);
+        CHECK(*record.ssimO3 >= kIdenticalSsim);
+        CHECK(*record.luminanceDiffO3 <= kIdenticalLuminanceDiff);
+        CHECK(*record.o3DistanceStep == 0.0);
+        CHECK(*record.iouO2 > 0.0);
+        CHECK(record.largestSeamRatio >= 1.0);
+        CHECK(record.inflationRatio == 1.0);
+    }
+    REQUIRE(records.constFirst().predictedPoints.has_value());
+    CHECK(*records.constFirst().predictedPoints > 0);
+
+    const QVector<QStringList> summaries = csvRows(output, QStringLiteral("evalSummary,"));
+    REQUIRE(summaries.size() == 2);
+    CHECK(summaries.at(1).size() == summaries.at(0).size());
+    CHECK(summaries.at(1).at(1) == path.name);
+    CHECK(summaries.at(1).at(3).toInt() == records.size());
+}
+
+TEST_CASE("M1: O2 at coverage 1 agrees less with O1 than O2 at its pick",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+    const EvalPath path = planeMetricPath(rhi.get(), kO2SweepPoseCount);
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+    const OracleFrames o1 = oracleFrames(fixture, path, Oracle::O1, cacheRoot.path(), output);
+    const OracleFrames o2 = oracleFrames(fixture, path, Oracle::O2, cacheRoot.path(), output);
+    const OracleSet narrowest = oracleSet(fixture, path, o2Config(kO2Coverages.front()),
+                                          cacheRoot.path(), pointCloudShaderHash());
+    REQUIRE(o2.spacingCoverage != kO2Coverages.front());
+
+    double pickIoU = 0.0;
+    double narrowestIoU = 0.0;
+    for (int pose = 0; pose < path.poses.size(); pose++) {
+        const PixelMask& entitled = o1.frames.at(pose).mask;
+        pickIoU += maskIoU(o2.frames.at(pose).mask, entitled, entitled);
+        narrowestIoU += maskIoU(narrowest.frames.at(pose).mask, entitled, entitled);
+    }
+    pickIoU /= double(path.poses.size());
+    narrowestIoU /= double(path.poses.size());
+
+    INFO("IoU with O1: coverage 1 " << narrowestIoU << ", pick (" << o2.spacingCoverage
+         << ") " << pickIoU);
+    CHECK(narrowestIoU < pickIoU);
+}
+
+TEST_CASE("M2: a cold start under a slow disk pops harder and settles later",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+    const EvalPath orbit = planeMetricPath(rhi.get());
+
+    //P4 holds P2's worst pose by holes
+    PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream oracleOutput;
+    const EvalOracles orbitOracles = evalOracles(oracleFixture, orbit, cacheRoot.path(),
+                                                 oracleOutput);
+    PathStep quiet;
+    quiet.policy = StepPolicy::Quiet;
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    QVector<EvalRecord> orbitRecords;
+    {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        orbitRecords = sweepPath(fixture, orbit, defaults, quiet, oracleOutput, &orbitOracles);
+    }
+    const PlannedPath coldStart = coldStartPath(orbit.poses.at(worstHolePosition(orbitRecords)));
+    const EvalOracles oracles = evalOracles(oracleFixture, coldStart.path, cacheRoot.path(),
+                                            oracleOutput);
+
+    const auto run = [&](const EvalConfig& config) {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        return summarize(coldStart.path.name, config.name,
+                         sweepPath(fixture, coldStart.path, config, coldStart.step, std::cout,
+                                   &oracles));
+    };
+    const EvalSummary fast = run(defaults);
+    const EvalSummary slow = run(candidateConfig(Candidate::Latent));
+
+    INFO("C-default: largest step " << fast.largestO3Step.value_or(-1.0) << ", sum "
+         << fast.o3StepSum.value_or(-1.0) << ", quiet after " << fast.framesToQuiet.value_or(-1)
+         << " of " << fast.frames << "; C-latent: largest step "
+         << slow.largestO3Step.value_or(-1.0) << ", sum " << slow.o3StepSum.value_or(-1.0)
+         << ", quiet after " << slow.framesToQuiet.value_or(-1) << " of " << slow.frames);
+    REQUIRE(fast.largestO3Step.has_value());
+    REQUIRE(slow.largestO3Step.has_value());
+    CHECK(*slow.largestO3Step > *fast.largestO3Step);
+    CHECK(*slow.framesToQuiet > *fast.framesToQuiet);
+}
+
+TEST_CASE("M6: a binding point budget steps the inflation where the default budget holds it",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const EvalPath path = planeMetricPath(rhi.get());
+
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kGovernorFramesPerPose;
+    step.settleBeforeFirstPose = false;
+
+    const auto run = [&](const EvalConfig& config) {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        return sweepPath(fixture, path, config, step);
+    };
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    EvalConfig tight = candidateConfig(Candidate::Tight);
+    tight.budgets.pointBudget = kSyntheticTightPointBudget;
+
+    const QVector<EvalRecord> defaultRecords = run(defaults);
+    const QVector<EvalRecord> tightRecords = run(tight);
+    const EvalSummary defaultSummary = summarize(path.name, defaults.name, defaultRecords);
+    const EvalSummary tightSummary = summarize(path.name, tight.name, tightRecords);
+
+    INFO("C-default: " << defaultSummary.inflationChanges << " inflation changes, side sum "
+         << defaultSummary.sideChangeSumPx << " px; C-tight: " << tightSummary.inflationChanges
+         << " changes, largest " << tightSummary.largestInflationStep << ", side sum "
+         << tightSummary.sideChangeSumPx << " px, weight sum " << tightSummary.weightChangeSum);
+    CHECK(defaultSummary.inflationChanges == 0);
+    CHECK(tightSummary.inflationChanges >= 1);
+    CHECK(tightSummary.sideChangeSumPx > 0.0);
+    CHECK(tightSummary.mostResidentNodes > 1);
+
+    bool weightMovedWithInflation = false;
+    for (int i = 0; i < tightRecords.size(); i++) {
+        const EvalRecord& record = tightRecords.at(i);
+        INFO("frame " << i << ": inflation " << record.sseInflation << ", ratio "
+             << record.inflationRatio << ", side change " << record.spriteSideChangePx
+             << " px, weight change " << record.weightChange << ", entered "
+             << record.nodesEntered << ", left " << record.nodesLeft);
+        //A node arriving narrows its parent's floor, which resizes the parent
+        //by rule on a frame the inflation held, so only a frame without
+        //arrivals or departures has to hold every side
+        const bool drawnSetHeld = record.nodesEntered == 0 && record.nodesLeft == 0;
+        if (inflationChanged(record.inflationRatio)) {
+            CHECK(isGovernorStep(record.inflationRatio, record.sseInflation));
+            weightMovedWithInflation = weightMovedWithInflation || record.weightChange > 0.0;
+        } else if (drawnSetHeld) {
+            CHECK(record.spriteSideChangePx == 0.0);
+        }
+    }
+    CHECK(weightMovedWithInflation);
+}
+
+TEST_CASE("M3 and M4: mixed sprite sizes raise the seam share and a floorless capped cut "
+          "opens the near band",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+    const EvalPath path = planeMetricPath(rhi.get());
+
+    PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream oracleOutput;
+    const EvalOracles oracles = evalOracles(oracleFixture, path, cacheRoot.path(),
+                                            oracleOutput);
+
+    PathStep step;
+    step.policy = StepPolicy::Quiet;
+    const auto run = [&](const EvalConfig& config, const cwPointCloudShading& shading) {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+        return summarize(path.name, config.name,
+                         sweepPath(fixture, path, config, step, std::cout, &oracles));
+    };
+
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalSummary baseline = run(defaults, cwPointCloudShading());
+
+    //Section 5.1's regression for these two, a 3 px screen-space error, is
+    //recorded beside the baseline. On a settled plane it moves neither: the
+    //threshold term sizes every node alike, and a coarser cut closes the
+    //near band at least as well.
+    EvalConfig coarse = defaults;
+    coarse.name = QStringLiteral("C-default-sse3");
+    coarse.budgets.screenSpaceErrorPx = kCoarseScreenSpaceErrorPx;
+    const EvalSummary coarseSummary = run(coarse, cwPointCloudShading());
+
+    //Each node sized from its own level is the mixed-size look itself
+    EvalConfig ownSpacingConfig = defaults;
+    ownSpacingConfig.name = QStringLiteral("C-default-ownSpacing");
+    cwPointCloudShading ownSpacing;
+    ownSpacing.sizeMode = cw::pointcloud::SizeMode::OwnSpacing;
+    const EvalSummary mixed = run(ownSpacingConfig, ownSpacing);
+
+    //The root alone sized by the threshold: far away its spacing is under the
+    //threshold and it closes; close up the camera wants finer than it has
+    EvalConfig cappedConfig = defaults;
+    cappedConfig.name = QStringLiteral("C-default-rootFloorless");
+    cappedConfig.budgets.maxLevel = kRootLevel;
+    cwPointCloudShading floorless;
+    floorless.floorMode = cw::pointcloud::FloorMode::Off;
+    const EvalSummary capped = run(cappedConfig, floorless);
+
+    INFO("seam share / largest ratio / near holes / density CV: default "
+         << baseline.worstSeamShare << " / " << baseline.largestSeamRatio << " / "
+         << baseline.worstNearHoleFraction.value_or(-1.0) << " / "
+         << baseline.worstDensityCv.value_or(-1.0) << "; 3 px " << coarseSummary.worstSeamShare
+         << " / " << coarseSummary.largestSeamRatio << " / "
+         << coarseSummary.worstNearHoleFraction.value_or(-1.0) << " / "
+         << coarseSummary.worstDensityCv.value_or(-1.0) << "; own spacing "
+         << mixed.worstSeamShare << " / " << mixed.largestSeamRatio << "; floorless root "
+         << capped.worstNearHoleFraction.value_or(-1.0) << " / "
+         << capped.worstDensityCv.value_or(-1.0));
+    CHECK(mixed.worstSeamShare > baseline.worstSeamShare);
+    CHECK(mixed.largestSeamRatio > kSeamRatioThreshold);
+    CHECK(*capped.worstNearHoleFraction > *baseline.worstNearHoleFraction);
+    CHECK(*capped.worstDensityCv > *baseline.worstDensityCv);
+}
+
+TEST_CASE("M7: the finest level of a cloud sparser than its grid lights less than a coarser one",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const int finest = deepestLevel(manifest);
+    const int coarser = finest - 1;
+    REQUIRE(coarser > kRootLevel);
+    //The plane's step is coarser than the finest level's grid
+    REQUIRE(manifest.spacing(finest) < kPlaneStep);
+
+    const EvalPath path = planeMetricPath(rhi.get(), kO2SweepPoseCount);
+    PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+    const OracleFrames o1 = oracleFrames(oracleFixture, path, Oracle::O1, cacheRoot.path(),
+                                         output);
+
+    const auto run = [&](int firstLevel, int lastLevel) {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        return litFractionByLevel(fixture, path, o1, firstLevel, lastLevel);
+    };
+    const QVector<LevelRecord> records = run(kRootLevel + 1, finest);
+    const QVector<LevelRecord> repeat = run(coarser, coarser);
+    requireLevelPresent(records, finest);
+
+    const auto lit = [](const LevelRecord& record) { return record.litFraction; };
+    const auto litFixed = [](const LevelRecord& record) { return record.litFractionFixed; };
+    const double noise = std::max(kLevelLitNoiseFloor,
+                                  std::abs(meanAtLevel(records, coarser, lit)
+                                           - meanAtLevel(repeat, coarser, lit)));
+    const double finestLit = meanAtLevel(records, finest, lit);
+    const double coarserLit = meanAtLevel(records, coarser, lit);
+    const double finestFixed = meanAtLevel(records, finest, litFixed);
+
+    INFO("level " << coarser << " lights " << coarserLit << ", level " << finest << " "
+         << finestLit << " and " << finestFixed << " at " << kLevelAloneFixedPointSizePx
+         << " px; noise " << noise);
+    CHECK(finestLit < coarserLit - noise);
+    CHECK(finestFixed > finestLit + noise);
+}
+
+TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprites are widened",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+    const int leaf = deepestLevel(manifest);
+    REQUIRE(leaf >= kTileOpenLevel);
+
+    const EvalConfig config = candidateConfig(Candidate::Default);
+    const EvalPath path = tileBoundaryPath(rhi.get(), manifest, config);
+    const QString cacheRoot = evalCacheRoot();
+
+    //EDL on, as the orbit case draws its oracles, so both share O1's cache entry
+    PointCloudFixture oracleFixture(rhi.get(), cache, config.targetSize);
+    oracleFixture.setEdlEnabled(true);
+    const OracleFrames o1 = oracleFrames(oracleFixture, path, Oracle::O1, cacheRoot);
+
+    const auto run = [&](int firstLevel, int lastLevel) {
+        PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
+        return litFractionByLevel(fixture, path, o1, firstLevel, lastLevel);
+    };
+    const QVector<LevelRecord> records = run(kTileFirstLevelAlone, leaf);
+    const QVector<LevelRecord> repeat = run(kTileClosedLevel, kTileClosedLevel);
+
+    const auto lit = [](const LevelRecord& record) { return record.litFraction; };
+    const auto litFixed = [](const LevelRecord& record) { return record.litFractionFixed; };
+    for (int level = kTileFirstLevelAlone; level <= leaf; level++) {
+        writeCsvLine(QStringLiteral("m7Mean,%1,%2,%3,%4")
+                         .arg(path.name)
+                         .arg(level)
+                         .arg(meanAtLevel(records, level, lit), 0, 'f', kFractionDecimals)
+                         .arg(meanAtLevel(records, level, litFixed), 0, 'f', kFractionDecimals));
+    }
+
+    const double closedLit = meanAtLevel(records, kTileClosedLevel, lit);
+    const double noise = std::max(kLevelLitNoiseFloor,
+                                  std::abs(closedLit - meanAtLevel(repeat, kTileClosedLevel, lit)));
+    const double openLit = meanAtLevel(records, kTileOpenLevel, lit);
+    const double openFixed = meanAtLevel(records, kTileOpenLevel, litFixed);
+
+    INFO("level " << kTileClosedLevel << " lights " << closedLit << ", level "
+         << kTileOpenLevel << " " << openLit << " and " << openFixed << " at "
+         << kLevelAloneFixedPointSizePx << " px; noise " << noise);
+    requireLevelPresent(records, kTileOpenLevel);
+    CHECK(openLit < closedLit - noise);
+    CHECK(openFixed > openLit + noise);
+}
+
+TEST_CASE("The oblique orbit on a tile records every metric against its oracles",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    const EvalConfig config = candidateConfig(Candidate::Default);
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kTileFramesPerPose;
+
+    const QVector<EvalPath> paths {
+        everyNthPose(orbitPath(manifest, config.targetSize), kTileOrbitPoseStride),
+        tileBoundaryPath(rhi.get(), manifest, config)
+    };
+
+    const QString cacheRoot = evalCacheRoot();
+    for (const EvalPath& path : paths) {
+        EvalOracles oracles;
+        {
+            PointCloudFixture oracleFixture(rhi.get(), cache, config.targetSize);
+            oracleFixture.setEdlEnabled(true);
+            oracles = evalOracles(oracleFixture, path, cacheRoot);
+        }
+
+        PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
+        fixture.setEdlEnabled(true);
+        const QVector<EvalRecord> records = sweepPath(fixture, path, config, step, std::cout,
+                                                      &oracles);
+
+        INFO(path.name.toStdString());
+        CHECK(records.size() == path.poses.size() * kTileFramesPerPose);
+        for (const EvalRecord& record : records) {
+            CHECK(record.sseInflation >= 1.0);
+            CHECK(record.holes.has_value());
+            CHECK(record.iouO3.has_value());
+            CHECK(record.ssimO3.has_value());
+        }
     }
 }
 
