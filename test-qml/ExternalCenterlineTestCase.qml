@@ -108,6 +108,24 @@ CWTestCase {
         return null
     }
 
+    // A DeclinationReadout's text as it reads on screen: its caption and
+    // angle left to right, or the em dash.
+    function declinationText(readout) {
+        const emDash = findChild(readout, "declinationEmDash")
+        if (emDash.visible) {
+            return emDash.text
+        }
+        return [findChild(readout, "declinationMode"), findChild(readout, "value")]
+                .sort((a, b) => a.mapToItem(readout, 0, 0).x - b.mapToItem(readout, 0, 0).x)
+                .map(label => label.text)
+                .join(" ")
+    }
+
+    // An angle to two decimals, a rounded negative zero reading as 0.00.
+    function twoDecimals(angle) {
+        return (Number(angle.toFixed(2)) + 0).toFixed(2)
+    }
+
     // Saves the fresh project as .cwproj and attaches the
     // survex_simple.svx fixture to a new trip via the cwRootData
     // wrapper. Returns { trip, source }.

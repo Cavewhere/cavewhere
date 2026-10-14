@@ -834,8 +834,8 @@ MainWindowTest {
             const readout = findChild(metadata, "tripMetadataDeclinationReadout")
             verify(readout !== null, "tripMetadataDeclinationReadout must exist")
             tryVerify(() => readout.visible, 5000, "the page reports the declination it applies")
-            tryCompare(findChild(readout, "value"), "text", "0°")
-            compare(findChild(readout, "declinationMode").text, "none")
+            tryCompare(findChild(readout, "value"), "text", "0.00°")
+            compare(declinationText(readout), "none 0.00°", "the caption reads before the angle")
 
             compare(findChild(metadata, "caveOwnsDeclinationHint"), null,
                     "the number replaces the sentence about the cave's file")
@@ -855,8 +855,8 @@ MainWindowTest {
             const readout = findChild(metadata, "tripMetadataDeclinationReadout")
             verify(readout !== null, "tripMetadataDeclinationReadout must exist")
             tryVerify(() => readout.visible, 10000, "the page reports the file's declination")
-            tryCompare(findChild(readout, "value"), "text", "-7.2°")
-            compare(findChild(readout, "declinationMode").text, "file")
+            tryCompare(findChild(readout, "value"), "text", "-7.20°")
+            compare(declinationText(readout), "file -7.20°")
 
             const declEditor = findChild(metadata, "tripMetadataDeclination")
             verify(declEditor !== null, "tripMetadataDeclination must exist")

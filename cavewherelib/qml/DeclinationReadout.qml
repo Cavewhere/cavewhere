@@ -9,12 +9,11 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
-import "Utils.js" as Utils
 
 // A trip's declination as the survey tree's Decl cell and the trip page both
-// read it: the angle, then a caption naming where it comes from, or an em dash
-// when the scan cannot tell. The one place that text is composed, so the two
-// surfaces always agree.
+// read it: a caption naming where it comes from, then the angle to two
+// decimals, or an em dash when the scan cannot tell. The one place that text is
+// composed, so the two surfaces always agree.
 QQ.Item {
     id: root
 
@@ -27,6 +26,7 @@ QQ.Item {
     property bool named: true
 
     readonly property bool known: origin !== Trip.DeclinationUnknown
+    readonly property int decimals: 2
 
     implicitWidth: rowLayoutId.implicitWidth
     implicitHeight: rowLayoutId.implicitHeight
@@ -40,13 +40,6 @@ QQ.Item {
 
         anchors.fill: parent
         spacing: Theme.tightSpacing
-
-        QC.Label {
-            objectName: root.labelName("value")
-            visible: root.known
-            text: Utils.fixed(root.declination, 2) + "°"
-            color: root.valueColor
-        }
 
         QC.Label {
             objectName: root.labelName("declinationMode")
@@ -69,6 +62,14 @@ QQ.Item {
             }
             color: Theme.textSubtle
             font.pixelSize: Theme.fontSizeCaption
+        }
+
+        QC.Label {
+            objectName: root.labelName("value")
+            visible: root.known
+            //Adding zero turns a rounded -0 into 0, so it reads 0.00°.
+            text: (Number(root.declination.toFixed(root.decimals)) + 0).toFixed(root.decimals) + "°"
+            color: root.valueColor
         }
 
         QC.Label {

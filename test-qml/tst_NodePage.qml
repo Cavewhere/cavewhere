@@ -494,7 +494,7 @@ MainWindowTest {
         }
 
         // What each drawn trip row's Decl cell shows, keyed by the trip's name:
-        // "<angle> <caption>", or "—" for the em dash. Waits for `tripCount`.
+        // "<caption> <angle>", or "—" for the em dash. Waits for `tripCount`.
         function declinationByTrip(page, view, tripCount) {
             let cells = {}
             tryVerify(() => {
@@ -507,11 +507,7 @@ MainWindowTest {
                                   continue
                               }
                               const name = findChild(nameCell, "tripLink").text.replace("📎 ", "")
-                              const emDash = findChild(declCell, "declinationEmDash")
-                              cells[name] = emDash.visible
-                                      ? emDash.text
-                                      : findChild(declCell, "value").text + " "
-                                        + findChild(declCell, "declinationMode").text
+                              cells[name] = declinationText(declCell)
                               found++
                           }
                           return found === tripCount
@@ -538,12 +534,16 @@ MainWindowTest {
             waitForRendering(page)
 
             const cells = declinationByTrip(page, view, 6)
-            compare(cells["fileset"], "-2.5° file", "*calibrate declination 2.5 applies -2.5")
-            compare(cells["modern"], "3.25° file", "*declination 3.25 degrees applies +3.25")
-            compare(cells["child"], "-1° file", "child inherits parent's *calibrate declination 1")
-            verify(cells["autoset"] !== undefined && cells["autoset"].endsWith("° file auto"),
-                   "*declination auto reads as IGRF from the file: " + cells["autoset"])
-            compare(cells["silent"], "0° none", "a block that sets nothing applies 0")
+            compare(cells["fileset"], "file -2.50°", "*calibrate declination 2.5 applies -2.50")
+            compare(cells["modern"], "file 3.25°", "*declination 3.25 degrees applies +3.25")
+            compare(cells["child"], "file -1.00°", "child inherits parent's *calibrate declination 1")
+            verify(/^file auto -?\d+\.\d\d°$/.test(cells["autoset"]),
+                   "*declination auto reads the caption, then IGRF to two decimals: "
+                   + cells["autoset"])
+            compare(cells["autoset"],
+                    "file auto " + twoDecimals(tripNamed(sourceRoot, "autoset").appliedDeclination) + "°",
+                    "the number is the declination the trip applies")
+            compare(cells["silent"], "none 0.00°", "a block that sets nothing applies 0")
             const emDashTrips = Object.keys(cells).filter(name => cells[name] === "—")
             compare(emDashTrips, ["mixed"],
                     "only the block that changes declination mid-block has no one value")

@@ -604,7 +604,7 @@ QQ.Item {
     }
 
     //Only a trip carries a declination, and it reads the way the cave page's
-    //trip table reads it: the angle, then where it comes from. An externally
+    //trip table reads it: where it comes from, then the angle. An externally
     //backed trip shows the angle cavern applies to it from its file, and an em
     //dash only when the scan cannot tell which one that is.
     QQ.Component {

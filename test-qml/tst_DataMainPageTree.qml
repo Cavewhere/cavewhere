@@ -607,10 +607,15 @@ MainWindowTest {
             tryCellText(page, "caveLength0", "unit", Units.lengthUnitName(displayUnit),
                         "a cave and the trips under it name the same unit")
 
-            compare(cellValue(page, "tripDecl1").text, "0°")
-            //The Decl cell says how the angle was picked.
-            compare(cellPart(page, "tripDecl1", "declinationMode").text, "manual",
+            compare(cellValue(page, "tripDecl1").text, "0.00°")
+            //The Decl cell says how the angle was picked, before the angle.
+            const declMode = cellPart(page, "tripDecl1", "declinationMode")
+            compare(declMode.text, "manual",
                     "a trip with no fix station has no automatic declination")
+            const declCell = findChild(page, "tripDecl1")
+            verify(declMode.mapToItem(declCell, 0, 0).x
+                   < cellValue(page, "tripDecl1").mapToItem(declCell, 0, 0).x,
+                   "a native trip's caption reads before its angle too")
         }
 
         // A cave's Length cell reads the solved length with its unit; its Decl

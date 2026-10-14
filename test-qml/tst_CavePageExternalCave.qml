@@ -81,20 +81,11 @@ MainWindowTest {
             return view
         }
 
-        // The Decl cell of every drawn trip row: the angle, then its caption.
+        // The Decl cell of every drawn trip row: the caption, then its angle.
         // Waits for `count` of them.
         function declinationTexts(cavePage, count) {
             const modes = cellsNamed(cavePage, "declinationMode", count)
-            const texts = []
-            for (let i = 0; i < modes.length; i++) {
-                const row = modes[i].parent
-                const value = collectByName(row, "value", [])[0]
-                const emDash = collectByName(row, "declinationEmDash", [])[0]
-                texts.push(emDash.visible
-                           ? emDash.text
-                           : value.text + " " + (modes[i].visible ? modes[i].text : ""))
-            }
-            return texts
+            return modes.map(mode => declinationText(mode.parent.parent))
         }
 
         // The cells named `objectName` once `count` of them are drawn.
@@ -105,15 +96,6 @@ MainWindowTest {
                           return cells.length === count
                       }, 5000, count + " " + objectName + " cells should be drawn")
             return cells
-        }
-
-        // A Decl readout's text: the angle, then its caption, or the em dash.
-        function declinationText(readout) {
-            const emDash = findChild(readout, "declinationEmDash")
-            return emDash.visible
-                    ? emDash.text
-                    : findChild(readout, "value").text + " "
-                      + findChild(readout, "declinationMode").text
         }
 
         // What each drawn trip row's Decl cell shows, keyed by the trip's
@@ -169,11 +151,17 @@ MainWindowTest {
             //parent, its trip child, and the root's five trips
             const view = expandedTree(cavePage, 7)
             const treeTexts = declinationByTrip(cavePage, view, 6)
-            compare(treeTexts["fileset"], "-2.5° file", "*calibrate declination 2.5 applies -2.5")
-            compare(treeTexts["silent"], "0° none", "a block that sets nothing applies 0")
+            compare(treeTexts["fileset"], "file -2.50°", "*calibrate declination 2.5 applies -2.50")
+            compare(treeTexts["silent"], "none 0.00°", "a block that sets nothing applies 0")
             compare(treeTexts["mixed"], "—", "a block that changes declination has no one value")
+            verify(/^file auto -?\d+\.\d\d°$/.test(treeTexts["autoset"]),
+                   "*declination auto reads the caption, then IGRF to two decimals: "
+                   + treeTexts["autoset"])
+            compare(treeTexts["autoset"],
+                    "file auto " + twoDecimals(tripNamed(cave, "autoset").appliedDeclination) + "°",
+                    "the number is the declination the trip applies")
 
-            const trips = ["fileset", "silent", "mixed"]
+            const trips = ["fileset", "silent", "mixed", "autoset"]
             for (let i = 0; i < trips.length; i++) {
                 compare(tripPageDeclination(cave, trips[i]), treeTexts[trips[i]],
                         trips[i] + "'s page and tree row read the same declination")
@@ -223,7 +211,7 @@ MainWindowTest {
             }
 
             //survex_blocks.svx sets no declination, so cavern applies 0.
-            compare(declinationTexts(cavePage, 3), ["0° none", "0° none", "0° none"],
+            compare(declinationTexts(cavePage, 3), ["none 0.00°", "none 0.00°", "none 0.00°"],
                     "each derived row shows the 0 cavern applies")
         }
 
@@ -250,7 +238,7 @@ MainWindowTest {
             }
 
             //survex_root_and_block.svx sets no declination either.
-            compare(declinationTexts(cavePage, 2), ["0° none", "0° none"],
+            compare(declinationTexts(cavePage, 2), ["none 0.00°", "none 0.00°"],
                     "each window row shows the 0 cavern applies")
         }
 
@@ -274,7 +262,7 @@ MainWindowTest {
             const caption = calibration.autoDeclination && calibration.autoDeclinationAvailable
                     ? "auto" : "manual"
             compare(declinationTexts(cavePage, 1),
-                    [Number(calibration.declination.toFixed(2)).toString() + "° " + caption],
+                    [caption + " " + twoDecimals(calibration.declination) + "°"],
                     "a silent file's trip row shows the calibration the driver injects")
         }
 
