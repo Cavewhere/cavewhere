@@ -1588,10 +1588,12 @@ cwStationLrud lrudAcross(const LrudRecord& record, const Frame& frame, const std
 }
 
 // stationRadii are the radii of the station's section around the station
-// itself, which a ring without readings borrows; as fitted, they differ from
-// radii only on an elbow's middle ring, until fitSharpBends reshapes the bins
-// that point into a bend. section is set only on a fit from the quadrant
-// readings.
+// itself at binAngles; as fitted, they differ from radii only on an elbow's
+// middle ring, until fitSharpBends reshapes the bins that point into a bend.
+// centeredAngles and centeredRadii are the bins of the section on a ring
+// centered on its station, which a ring without readings borrows; they
+// differ from binAngles and radii only on an elbow's middle ring. section is
+// set only on a fit from the quadrant readings.
 struct RingFit {
     QVector<double> radii;
     QVector<double> binAngles;
@@ -1599,6 +1601,8 @@ struct RingFit {
     int filledBins = 0;
     QVector<double> stationRadii;
     std::optional<Section> section;
+    QVector<double> centeredAngles;
+    QVector<double> centeredRadii;
 };
 
 // Bin k's eccentric anomaly around the ring, 2πk/N.
@@ -1616,7 +1620,7 @@ RingFit emptyFit(int resolution)
     }
 
     const QVector<double> zeros(resolution, 0.0);
-    return RingFit {zeros, roundAngles, QVector<bool>(resolution, false), 0, zeros, std::nullopt};
+    return RingFit {zeros, roundAngles, QVector<bool>(resolution, false), 0, zeros, std::nullopt, roundAngles, zeros};
 }
 
 // A pit's left and right read across it whichever way it is entered, so a
@@ -1637,6 +1641,7 @@ RingFit fitSteepRing(const QVector<LrudRecord>& records, int resolution)
     if (radius) {
         fit.radii.fill(*radius);
         fit.stationRadii = fit.radii;
+        fit.centeredRadii = fit.radii;
         fit.measured.fill(true);
         fit.filledBins = resolution;
     }
@@ -1745,9 +1750,8 @@ double reachFromPoint(const cwStationLrud& lrud, const QPointF& center, double a
 // The section a ring fits to its station's walls, in the ring's (right, up)
 // plane around its center. An elbow's middle ring sits off its station
 // toward the bend's inside, so its section is the walls' quadrant ellipse
-// around its center joined with the same ellipse around the station: the
-// walls on the bend's outside stay where they were read, and the station
-// lies inside by at least its reading there.
+// around the station seen from its center: every wall stays where it was
+// read, grown only as far as holds the center inside.
 class LrudSection
 {
 public:
@@ -1760,7 +1764,7 @@ public:
 
     double reach(double angle) const
     {
-        return std::max(reachAroundStation(angle), reachFromPoint(m_wallsAroundStation, -m_station, angle));
+        return reachFromPoint(m_wallsAroundStation, -m_station, angle);
     }
 
     // The section's reach if the ring were centered on its station.
@@ -1769,7 +1773,22 @@ public:
         return reachFromPoint(m_walls, QPointF(), angle);
     }
 
+    // The polar angle around the ring's center of the bin at eccentric
+    // anomaly t: the angle of the point at t of the quadrant ellipse whose
+    // axes reach as far from the center as the section does, so bins spread
+    // along a thin section's walls instead of bunching at its sides.
+    double binAngle(double t) const
+    {
+        const double horizontal = reach(std::cos(t) >= 0.0 ? 0.0 : kHalfTurn);
+        const double vertical = reach(std::sin(t) >= 0.0 ? kQuarterTurn : kHalfTurn + kQuarterTurn);
+        const double angle = std::atan2(vertical * std::sin(t), horizontal * std::cos(t));
+        return angle < 0.0 ? angle + kTwoPi : angle;
+    }
+
 private:
+    static constexpr double kQuarterTurn = kTwoPi / 4.0;
+    static constexpr double kHalfTurn = kTwoPi / 2.0;
+
     cwStationLrud m_walls;
     QPointF m_station;
     cwStationLrud m_wallsAroundStation;
@@ -1778,10 +1797,11 @@ private:
 // Fits the ring to the LRUD quadrant ellipse. Bin k sits at eccentric anomaly
 // t_k = 2πk/N, the vertex (a cos t_k, b sin t_k) for the quadrant's
 // horizontal and vertical readings a and b, so the bins spread along a thin
-// ellipse's walls instead of bunching at its sides. A bin is measured when
-// the readings its quadrant needs were read; a missing reading is filled from
-// the walls beside it. Bins are left at zero when fewer than kMinFilledBins
-// are measured. Each bin reaches to the LrudSection along its angle.
+// ellipse's walls instead of bunching at its sides (LrudSection::binAngle).
+// A bin is measured when the readings its quadrant needs were read; a missing
+// reading is filled from the walls beside it. Bins are left at zero when
+// fewer than kMinFilledBins are measured. Each bin reaches to the
+// LrudSection along its angle.
 RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolution)
 {
     if (1.0 - frame.inclinationWeight < kMinSampleWeight) {
@@ -1812,15 +1832,15 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
 
     const cwStationLrud filled = filledReadings(read);
     const LrudSection section(filled, frame, sample.stationOffset);
+    const LrudSection centered(filled, frame, QVector3D());
     for (int bin = 0; bin < resolution; ++bin) {
         const double t = binParameter(bin, resolution);
-        const auto [a, b] = quadrantReadings(filled, t);
-        const double x = a.value_or(cwPassageTubeBuilder::kMinRadiusMeters) * std::cos(t);
-        const double y = b.value_or(cwPassageTubeBuilder::kMinRadiusMeters) * std::sin(t);
-        const double angle = std::atan2(y, x);
-        fit.binAngles[bin] = angle < 0.0 ? angle + kTwoPi : angle;
+        const double angle = section.binAngle(t);
+        fit.binAngles[bin] = angle;
         fit.radii[bin] = section.reach(angle);
         fit.stationRadii[bin] = section.reachAroundStation(angle);
+        fit.centeredAngles[bin] = centered.binAngle(t);
+        fit.centeredRadii[bin] = centered.reach(fit.centeredAngles.at(bin));
     }
     fit.section = Section {filled, fit.stationRadii, sample.position + sample.stationOffset};
     return fit;
@@ -1831,10 +1851,11 @@ RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolutio
 // so the pit is round at the fitted ring's horizontal half-width instead.
 RingFit borrowedFit(const RingFit& fitted, const Frame& frame)
 {
-    const QVector<double>& radii = fitted.stationRadii;
+    const QVector<double>& radii = fitted.centeredRadii;
     if (frame.inclinationWeight <= kSteepWeight) {
         RingFit borrowed = fitted;
         borrowed.radii = radii;
+        borrowed.binAngles = fitted.centeredAngles;
         return borrowed;
     }
     const int resolution = radii.size();
@@ -1969,7 +1990,8 @@ void blendElbowRings(const QVector<ChainSample>& samples, Chain& chain)
 }
 
 // Sets each bin of the ring that points into the bend to radiusAt(bin, its
-// current radius), marking the bins that move unmeasured.
+// component along the bend's inside, its current radius), marking the bins
+// that move unmeasured.
 template<typename RadiusAt>
 BendChange reshapeInside(Ring& ring, const BendLimit& bend, RadiusAt radiusAt)
 {
@@ -1981,7 +2003,7 @@ BendChange reshapeInside(Ring& ring, const BendLimit& bend, RadiusAt radiusAt)
             continue;
         }
         const double radius = ring.radii.at(bin);
-        const double reshaped = radiusAt(inside, radius);
+        const double reshaped = radiusAt(bin, inside, radius);
         if (reshaped != radius) {
             change.changed = true;
             if (ring.measured.at(bin)) {
@@ -1997,9 +2019,9 @@ BendChange reshapeInside(Ring& ring, const BendLimit& bend, RadiusAt radiusAt)
 // Keeps every ring on the legs of a sharp bend in front of the corner's
 // bisector plane and of its neighbors' planes by capping the bins that point
 // into the bend. Where an inset ring was capped, the station ring's inner
-// wall becomes the miter of the capped section, even where that moves a
-// measured wall outward, so the inner wall meets the corner without a ridge.
-// An elbow's rings are square to its arc, so its middle ring is only capped.
+// wall becomes the miter of the capped section, so the inner wall meets the
+// corner without a ridge, as far as the station's readings reach. An
+// elbow's rings are square to its arc, so its middle ring is only capped.
 // Warns once per corner whose measured walls moved: by the caps, or on an
 // elbow's middle ring by being read from its center.
 void fitSharpBends(const QVector<Leg>& legs, const QVector<ChainSample>& samples, Chain& chain, QVector<Warning>& warnings)
@@ -2014,7 +2036,7 @@ void fitSharpBends(const QVector<Leg>& legs, const QVector<ChainSample>& samples
 
     const auto capRing = [&](int ringIndex) {
         for (const BendLimit& bend : samples.at(ringIndex).bends) {
-            const BendChange change = reshapeInside(chain.rings[ringIndex], bend, [&](double, double radius) {
+            const BendChange change = reshapeInside(chain.rings[ringIndex], bend, [&](int, double, double radius) {
                 return std::min(radius, bend.maxInnerRadius);
             });
             Corner& corner = corners[bend.cornerLeg];
@@ -2042,8 +2064,9 @@ void fitSharpBends(const QVector<Leg>& legs, const QVector<ChainSample>& samples
                 Ring& ring = chain.rings[i];
                 const double cosine = halfTurnCosine(ring, bend);
                 const double cappedSection = bend.maxInnerRadius * cosine;
-                corner.change.add(reshapeInside(ring, bend, [&](double inside, double) {
-                    return cappedSection / squareOverMiterRadius(cosine, inside);
+                corner.change.add(reshapeInside(ring, bend, [&](int bin, double inside, double) {
+                    const double miter = cappedSection / squareOverMiterRadius(cosine, inside);
+                    return ring.section ? std::min(miter, ring.section->stationRadii.at(bin)) : miter;
                 }));
                 capRing(i);
             }

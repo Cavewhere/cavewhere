@@ -293,36 +293,21 @@ QVector3D sectionPoint(const Builder::Ring& ring, int bin)
     return ring.section->station + cwPassageTubeGeometry::binDirection(ring, bin) * static_cast<float>(ring.section->stationRadii.at(bin));
 }
 
-QVector3D ringVertex(const Builder::Ring& ring, int bin)
-{
-    if (bin < ring.vertices.size()) {
-        return ring.vertices.at(bin);
-    }
-    return ring.center + cwPassageTubeGeometry::binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
-}
-
-// How far bin's radius reaches past its section's station radius.
-double overshootAt(const Builder::Ring& ring, int bin)
-{
-    return ring.radii.at(bin) - ring.section->stationRadii.at(bin);
-}
-
 struct Overshoot {
     int bin = 0;
     double meters = 0.0;
 };
 
-// The bin of the ring with a section that reaches farthest past it.
-std::optional<Overshoot> largestOvershoot(const Builder::Ring& ring)
+// The vertex of the ring that reaches farthest past its station's readings,
+// as cwPassageTubeMeshCheck measures it.
+std::optional<Overshoot> largestOvershoot(const Builder::Debug& debug, const Builder::Chain& chain, const Builder::Ring& ring)
 {
-    if (!ring.section) {
-        return std::nullopt;
-    }
+    const QVector<std::optional<cwPassageTubeMeshCheck::WallReach>> reaches = cwPassageTubeMeshCheck::wallReaches(debug, chain, ring);
     std::optional<Overshoot> largest;
-    for (int bin = 0; bin < ring.radii.size(); ++bin) {
-        const double meters = overshootAt(ring, bin);
-        if (!largest || meters > largest->meters) {
-            largest = Overshoot {bin, meters};
+    for (int bin = 0; bin < reaches.size(); ++bin) {
+        const std::optional<cwPassageTubeMeshCheck::WallReach>& reach = reaches.at(bin);
+        if (reach && (!largest || reach->beyondMeters > largest->meters)) {
+            largest = Overshoot {bin, reach->beyondMeters};
         }
     }
     return largest;
@@ -342,27 +327,6 @@ QString lrudValuesText(const cwStationLrud& lrud)
         values.append(value ? QString::number(*value, 'f', 2) : QStringLiteral("-"));
     }
     return values.join(QLatin1Char('/'));
-}
-
-// One line per ring whose largest overshoot exceeds the wall tolerance.
-QStringList overshootLines(const Builder::Debug& debug)
-{
-    QStringList lines;
-    for (int c = 0; c < debug.chains.size(); ++c) {
-        const QVector<Builder::Ring>& rings = debug.chains.at(c).rings;
-        for (int i = 0; i < rings.size(); ++i) {
-            const Builder::Ring& ring = rings.at(i);
-            const std::optional<Overshoot> overshoot = largestOvershoot(ring);
-            if (overshoot && overshoot->meters > cwPassageTubeMeshCheck::kWallTolerance) {
-                lines.append(QStringLiteral("ring %1 at %2 (chain %3): reaches %4")
-                                 .arg(i)
-                                 .arg(nearestStation(debug, ring.section->station))
-                                 .arg(c)
-                                 .arg(overshootText(ring, *overshoot)));
-            }
-        }
-    }
-    return lines;
 }
 
 // A station occurrence's readings: the walls at one end of a leg.
@@ -502,13 +466,17 @@ cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& deb
         });
     });
     geometry.overshoots = appended([&]() {
-        forEachSectionedRing([&](const Builder::Ring& ring) {
-            for (int bin = 0; bin < ring.radii.size(); ++bin) {
-                if (overshootAt(ring, bin) > cwPassageTubeMeshCheck::kWallTolerance) {
-                    points << sectionPoint(ring, bin) << ringVertex(ring, bin);
+        for (const Builder::Chain& chain : debug.chains) {
+            for (const Builder::Ring& ring : chain.rings) {
+                const QVector<std::optional<cwPassageTubeMeshCheck::WallReach>> reaches = cwPassageTubeMeshCheck::wallReaches(debug, chain, ring);
+                for (int bin = 0; bin < reaches.size(); ++bin) {
+                    const std::optional<cwPassageTubeMeshCheck::WallReach>& reach = reaches.at(bin);
+                    if (reach && reach->beyondMeters > cwPassageTubeMeshCheck::kWallTolerance) {
+                        points << reach->readingPoint << ring.vertices.at(bin);
+                    }
                 }
             }
-        });
+        }
     });
     return geometry;
 }
@@ -899,7 +867,6 @@ QString cwPassageTubeGalleryModel::reportText() const
         lines.append(issueLine(m_current.debug, issue, QStringLiteral("warning: ")));
     }
     lines.append(elbowLines(m_current.debug));
-    lines.append(overshootLines(m_current.debug));
     return lines.join(QLatin1Char('\n'));
 }
 
@@ -1028,7 +995,7 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             const QString station = nearestStation(m_current.debug, entry.section->station);
             sectionText = QStringLiteral(", section L/R/U/D %1 around %2 %3")
                               .arg(lrudValuesText(entry.section->readings), station, vectorText(entry.section->station));
-            if (const std::optional<Overshoot> overshoot = largestOvershoot(entry)) {
+            if (const std::optional<Overshoot> overshoot = largestOvershoot(m_current.debug, chain, entry)) {
                 sectionText += QStringLiteral(", reaches ") + overshootText(entry, *overshoot);
             }
         }

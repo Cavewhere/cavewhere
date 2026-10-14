@@ -110,9 +110,9 @@ public:
     // sectionLoops hold, per ring with a section, the loop of its
     // stationRadii around the section's station in the ring's frame;
     // sectionInsets a segment from the station to the center of each elbow
-    // ring with a section. overshoots hold a whisker from the section loop to
-    // the ring vertex of each bin that reaches more than
-    // cwPassageTubeMeshCheck::kWallTolerance past it.
+    // ring with a section. overshoots hold a whisker from the station's
+    // readings to each ring vertex that cwPassageTubeMeshCheck reports as
+    // WallBeyondReading: more than kWallTolerance past them.
     //
     // The ranges follow one another in the order declared.
     struct RingGeometry {

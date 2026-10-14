@@ -235,7 +235,9 @@ const QString kPhakeCave = QStringLiteral("Phake Cave");
 
 // The issues Phake Cave keeps, by the station nearest each one. a10 reads 0
 // on one side, so its ring and mouth bunch vertices a few centimeters apart,
-// and the arm's strip beside them folds against the zip band.
+// and the arm's strip beside them folds against the zip band; since T07v
+// fits the elbow at a10 within its readings, the strip also crosses itself
+// there between mouth points 3 cm apart, beside a sliver of the zip band.
 struct AcceptedIssue {
     QString station;
     cwPassageTubeMeshCheck::Type type;
@@ -243,6 +245,8 @@ struct AcceptedIssue {
 
 const QVector<AcceptedIssue> kPhakeCaveIssues {
     {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
+    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SelfIntersection},
+    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SliverTriangle},
     // T07s: a9 reads 0 down at the foot of the shaft from a6, so the skin
     // from its elbow's middle ring to the next cuts inside the a9 → a10 leg.
     {QStringLiteral("a9"), cwPassageTubeMeshCheck::CenterlineOutside},
@@ -609,6 +613,31 @@ TEST_CASE("cwPassageTubeCases keeps a corner station inside its elbow ring", "[P
     const std::string name = GENERATE(std::string("23. Sharp bend at a station reading zero on the outside wall"),
                                       std::string("24. Sharp bend in an unread passage next to a zero reading"));
     checkCenterlineInside(name);
+}
+
+// An elbow's middle ring sits off its station toward the bend's inside.
+// Fitted to the station's section seen from its center, it keeps within the
+// readings instead of bulging around the corner as it did when it also took
+// the section around its own center: these junctions bend their through at
+// J, 23 bends at c1 and ends on a plumb ring at c0, and Phake Cave bends
+// sharply from a2 to a9.
+TEST_CASE("cwPassageTubeCases keeps a bend's rings within the station's readings", "[PassageTube][cwPassageTubeCases]")
+{
+    const std::string name = GENERATE(std::string("3. Big arm into a small passage"),
+                                      std::string("10. Passage turning straight down a pit, side arm at the lip"),
+                                      std::string("16. Arm with its own section at J larger than the through"),
+                                      std::string("18. Three big arms into a small passage"),
+                                      std::string("19. Through doubling back beside a big arm"),
+                                      std::string("23. Sharp bend at a station reading zero on the outside wall"),
+                                      kPhakeCave.toStdString());
+    INFO(name);
+    const Cases::Case& entry = catalogCase(name);
+    const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(entry), entry.sampleSpacing);
+    const QVector<cwPassageTubeMeshCheck::Issue> issues = cwPassageTubeMeshCheck::ringIssues(debug);
+    INFO(cwPassageTubeMeshCheck::toText({issues, 0, {}}).toStdString());
+    CHECK(std::none_of(issues.cbegin(), issues.cend(), [](const cwPassageTubeMeshCheck::Issue& issue) {
+        return issue.type == cwPassageTubeMeshCheck::WallBeyondReading;
+    }));
 }
 
 // The foot of the shaft reads 0 down, the bend's outside, so its floor lies

@@ -19,6 +19,9 @@
 #include <QVector>
 #include <QVector3D>
 
+//Std includes
+#include <optional>
+
 /**
  * Algorithmic artifact detectors for a passage tube mesh: each one finds a
  * glitch a viewer would see (a hole, an inside-out face, a wall through a
@@ -68,7 +71,8 @@ public:
         FoldBack,
         WallMissed,
         CenterlineOutside,
-        CapExposed
+        CapExposed,
+        WallBeyondReading
     };
 
     struct Issue {
@@ -155,8 +159,33 @@ public:
 
     // RadiusJump, FrameTwist and FoldBack over the builder's rings. Rings a
     // junction grew follow the arm's outline and may jump.
+    //
+    // WallBeyondReading, once per ring fitted to a station's readings (a
+    // station's ring or an elbow's middle ring, never one a junction grew),
+    // at its farthest vertex: each vertex lies within wallToleranceMeters of
+    // the quadrant ellipse of the station's readings anchored at the station,
+    // as the station's legs or the ring see it (wallReaches).
     static QVector<Issue> ringIssues(const cwPassageTubeBuilder::Debug& debug,
                                      const Options& options = Options());
+
+    // Where a ring vertex would lie on its station's readings, and how far
+    // past them it reaches; negative inside them.
+    struct WallReach {
+        QVector3D readingPoint;
+        double beyondMeters = 0.0;
+    };
+
+    // One entry per vertex of a ring fitted to a station's readings, how far
+    // it lies from the readings' quadrant ellipse around the station in the
+    // section where it lies nearest: the widest passage readings across each
+    // of the chain's legs at the station, seen along that leg (round across a
+    // steep leg, as the builder fits a pit), or the ring's own section as
+    // the builder slid the readings onto the ring's plane, grown to hold the
+    // ring's center. nullopt for a vertex in a quadrant without readings.
+    // Empty for every other ring.
+    static QVector<std::optional<WallReach>> wallReaches(const cwPassageTubeBuilder::Debug& debug,
+                                                         const cwPassageTubeBuilder::Chain& chain,
+                                                         const cwPassageTubeBuilder::Ring& ring);
 
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
     // apart from the stations where the builder warns BendClamped, the

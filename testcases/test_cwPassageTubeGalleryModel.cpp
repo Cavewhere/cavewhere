@@ -330,8 +330,9 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
     }
 }
 
-// Case 23 reads c0 and c1 and leaves c2 unread; the elbow at c1 reaches
-// past c1's readings on the bend's inside.
+// Case 23 reads c0 and c1 and leaves c2 unread; the elbow at c1 keeps
+// within c1's readings, so the overshoot layer, which follows the checker's
+// WallBeyondReading, is empty.
 TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to", "[PassageTube][cwPassageTubeGalleryModel]")
 {
     constexpr int kReadStations = 2;
@@ -385,16 +386,15 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
         }
         CHECK(geometry.sectionInsets.count == 2 * sectionedElbows);
         CHECK(geometry.overshoots.start == geometry.sectionInsets.start + geometry.sectionInsets.count);
-        CHECK(geometry.overshoots.count > 0);
+        CHECK(geometry.overshoots.count == 0);
     }
 
-    SECTION("the report and the ring line name the corner and its overshoot")
+    SECTION("the report names no wall past the readings and the ring line names the corner")
     {
         const QString report = model.reportText();
         INFO(report.toStdString());
-        const QStringList lines = report.split(QLatin1Char('\n')).filter(QStringLiteral("at c1 (chain 0): reaches "));
-        REQUIRE(lines.size() == 1);
-        CHECK(lines.constFirst().contains(QStringLiteral(" m past the readings at ")));
+        CHECK_FALSE(report.contains(cwPassageTubeMeshCheck::typeName(cwPassageTubeMeshCheck::WallBeyondReading)));
+        CHECK_FALSE(report.contains(QStringLiteral(" m past the readings at ")));
 
         const int middle = model.nearestRing(c1);
         const QString line = model.ringLine(middle);
@@ -410,7 +410,7 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
         const QVector<quint8> visibility = model.ringPlot()->visibility();
         CHECK(visibility.at(geometry.readings.start) == cwRenderLinePlot::kVisible);
         CHECK(visibility.at(geometry.sectionLoops.constFirst().start) == cwRenderLinePlot::kHidden);
-        CHECK(visibility.at(geometry.overshoots.start) == cwRenderLinePlot::kHidden);
+        CHECK(visibility.at(geometry.sectionInsets.start) == cwRenderLinePlot::kHidden);
         CHECK(visibility.at(0) == cwRenderLinePlot::kHidden);
     }
 

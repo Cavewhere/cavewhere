@@ -15,6 +15,7 @@
 
 //Std includes
 #include <algorithm>
+#include <array>
 #include <utility>
 
 namespace {
@@ -390,6 +391,94 @@ TEST_CASE("cwPassageTubeMeshCheck reports twisted, folded and jumping rings", "[
         CHECK(issues.at(0).position == QVector3D(2, 0, 0));
         CHECK(issues.at(1).type == Check::RadiusJump);
         CHECK(issues.at(1).position == QVector3D(3, 0, 0));
+    }
+}
+
+TEST_CASE("cwPassageTubeMeshCheck reports ring walls beyond the station's readings", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    constexpr int kResolution = 4;
+    const cwStationLrud lrud {1.0, 2.0, 1.5, 0.5};
+    cwPassageTubeBuilder::Leg leg;
+    leg.from = QStringLiteral("a");
+    leg.to = QStringLiteral("b");
+    leg.fromPosition = QVector3D(0, 0, 0);
+    leg.toPosition = QVector3D(10, 0, 0);
+    leg.fromPassageLrud = lrud;
+    leg.toPassageLrud = lrud;
+    leg.fromFacing = QVector3D(1, 0, 0);
+    leg.toFacing = QVector3D(1, 0, 0);
+
+    // A ring around center whose vertices reach right, up, left and down by
+    // the given walls, fitted to the readings of the station at station.
+    const auto ringAt = [&](const QVector3D& center, const QVector3D& station, const std::array<float, kResolution>& walls) {
+        cwPassageTubeBuilder::Ring ring;
+        ring.center = center;
+        ring.frame = {QVector3D(1, 0, 0), QVector3D(0, 0, 1), QVector3D(0, -1, 0), 0.0};
+        ring.radii = QVector<double>(kResolution, 1.0);
+        ring.measured = QVector<bool>(kResolution, true);
+        ring.section = cwPassageTubeBuilder::Section {lrud, ring.radii, station};
+        const std::array<QVector3D, kResolution> directions {ring.frame.right, ring.frame.up, -ring.frame.right, -ring.frame.up};
+        for (int bin = 0; bin < kResolution; ++bin) {
+            ring.vertices.append(center + directions.at(bin) * walls.at(bin));
+        }
+        return ring;
+    };
+    const QVector3D a = leg.fromPosition;
+    const QVector3D b = leg.toPosition;
+
+    cwPassageTubeBuilder::Debug debug;
+    debug.legs = {leg};
+    cwPassageTubeBuilder::Chain chain;
+    chain.legs = {{0, false}};
+    chain.rings = {ringAt(a, a, {2.0f, 1.5f, 1.0f, 0.5f}), ringAt(b, b, {2.0f, 1.5f, 1.0f, 0.5f})};
+    debug.chains = {chain};
+    CHECK(Check::ringIssues(debug).isEmpty());
+
+    SECTION("A right wall 0.5 m past its reading") {
+        debug.chains[0].rings[1].vertices[0] = b + QVector3D(0, -2.5f, 0);
+        const QVector<Check::Issue> issues = Check::ringIssues(debug);
+        REQUIRE(issues.size() == 1);
+        CHECK(issues.first().type == Check::WallBeyondReading);
+        CHECK(issues.first().position == QVector3D(10, -2.5f, 0));
+        CHECK(issues.first().detail.contains(QStringLiteral("0.50 m past station b")));
+    }
+
+    SECTION("A wall within the tolerance of its reading") {
+        debug.chains[0].rings[1].vertices[1] = b + QVector3D(0, 0, 1.6f);
+        CHECK(Check::ringIssues(debug).isEmpty());
+    }
+
+    SECTION("An inset ring's walls measured from its station") {
+        // 0.5 m down the leg and 0.6 m left of b, as an elbow's middle ring
+        // sits toward the bend's inside: its left wall reaches 1.6 m from b.
+        const QVector3D inset(9.5f, 0.6f, 0);
+        debug.chains[0].rings[1] = ringAt(inset, b, {1.4f, 1.5f, 1.0f, 0.5f});
+        const QVector<Check::Issue> issues = Check::ringIssues(debug);
+        REQUIRE(issues.size() == 1);
+        CHECK(issues.first().type == Check::WallBeyondReading);
+        CHECK(issues.first().position == inset + QVector3D(0, 1.0f, 0));
+    }
+
+    SECTION("An inset ring grown to hold its center past a short reading") {
+        // Centered 1.2 m left of b, past its 1 m left wall: the section is
+        // grown to hold the center 0.05 m inside, to 1.25 m.
+        const QVector3D inset(10, 1.2f, 0);
+        cwPassageTubeBuilder::Ring& ring = debug.chains[0].rings[1];
+        ring = ringAt(inset, b, {3.2f, 0.42f, 0.05f, 0.14f});
+        CHECK(Check::ringIssues(debug).isEmpty());
+
+        ring.vertices[2] = b + QVector3D(0, 1.5f, 0);
+        const QVector<Check::Issue> issues = Check::ringIssues(debug);
+        REQUIRE(issues.size() == 1);
+        CHECK(issues.first().detail.contains(QStringLiteral("0.25 m past station b")));
+    }
+
+    SECTION("Grown rings and rings without a section are left out") {
+        debug.chains[0].rings[0].vertices[0] = a + QVector3D(0, -3, 0);
+        debug.chains[0].rings[0].isGrown = true;
+        debug.chains[0].rings[1].vertices[0] = b + QVector3D(0, -3, 0);
+        debug.chains[0].rings[1].section.reset();
+        CHECK(Check::ringIssues(debug).isEmpty());
     }
 }
 
