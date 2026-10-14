@@ -1262,14 +1262,9 @@ StandardPage {
                     }
 
                     Chip {
-                        text: nodeRowId.ownFixCount === 1 ? "1 fix" : nodeRowId.ownFixCount + " fixes"
-                    }
-
-                    QC.Label {
-                        visible: nodeRowId.ownFixCount === 0
-                        text: "No fixed stations"
-                        color: Theme.textSubtle
-                        font.pixelSize: Theme.fontSizeSmall
+                        text: nodeRowId.ownFixCount === 0 ? "No fixed stations"
+                            : nodeRowId.ownFixCount === 1 ? "1 fix"
+                            : nodeRowId.ownFixCount + " fixes"
                     }
 
                     UnsetFixesBadge {

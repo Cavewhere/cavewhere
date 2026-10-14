@@ -61,22 +61,26 @@ MainWindowTest {
         return null
     }
 
-    //! Whether some item under \a item shows text containing \a text.
-    function showsText(item, text) {
+    //! The visible descendants of \a item whose text contains \a text.
+    function itemsShowingText(item, text) {
+        let found = []
         if (item === null) {
-            return false
+            return found
         }
         const children = item.children
         for (let i = 0; i < children.length; ++i) {
             const child = children[i]
             if (child.visible && typeof child.text === "string" && child.text.indexOf(text) >= 0) {
-                return true
+                found.push(child)
             }
-            if (rootId.showsText(child, text)) {
-                return true
-            }
+            found = found.concat(rootId.itemsShowingText(child, text))
         }
-        return false
+        return found
+    }
+
+    //! Whether some item under \a item shows text containing \a text.
+    function showsText(item, text) {
+        return rootId.itemsShowingText(item, text).length > 0
     }
 
     //! The page's header cell titled \a title, found among the visual
@@ -2091,6 +2095,26 @@ MainWindowTest {
             verify(rowA !== null, "A's row is shown")
             tryVerify(() => rootId.showsText(rowA, "3 fixes"), 5000, "A counts its own three fixes")
             verify(!rootId.showsText(rowA, "with children"), "A's row carries no subtree count")
+        }
+
+        // A node with no fixes of its own shows one chip, "No fixed stations".
+        function test_aFixlessNodeRowShowsOneNoFixedStationsChip() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const rootRow = shownRow(view, "nodeRow.")
+            verify(rootRow !== null, "the project root's row is shown")
+            tryVerify(() => rootId.showsText(rootRow, "No fixed stations"), 5000,
+                      "the root row says it has no fixed stations")
+            verify(!rootId.showsText(rootRow, "0 fixes"), "the root row shows no \"0 fixes\" chip")
+
+            const matches = rootId.itemsShowingText(rootRow, "No fixed stations")
+            compare(matches.length, 1, "one element says \"No fixed stations\"")
+            verify(matches[0].background !== null, "the one element is the count chip")
+
+            const rowA = shownRow(view, "nodeRow.A")
+            verify(rowA !== null, "A's row is shown")
+            tryVerify(() => rootId.showsText(rowA, "3 fixes"), 5000, "A still counts its own fixes")
+            verify(!rootId.showsText(rowA, "No fixed stations"), "a row with fixes shows no empty-state text")
         }
 
         // One button collapses every node below the page's own row and expands
