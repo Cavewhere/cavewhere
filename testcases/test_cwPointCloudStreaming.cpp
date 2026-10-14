@@ -20,6 +20,7 @@
 #include <QHash>
 #include <QRect>
 #include <QSaveFile>
+#include <QScopeGuard>
 #include <QElapsedTimer>
 #include <QMatrix4x4>
 #include <QSet>
@@ -28,10 +29,13 @@
 #include <QStringList>
 #include <QFile>
 #include <QFileInfo>
+#include <QFuture>
 #include <QImage>
 #include <QTemporaryDir>
 #include <QtMath>
 #include <QThread>
+#include <QThreadPool>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QVector3D>
 #include <QVector4D>
 
@@ -44,6 +48,7 @@
 #include <array>
 #include <cmath>
 #include <concepts>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -1401,7 +1406,9 @@ namespace {
     constexpr int kTileMaxHoleSidePx = 6;
     constexpr double kTileMaxHoleFractionJump = 0.0042;
 
-    //! Where a failed case writes its frame, when it is set
+    //! When set, where a failed case writes its frame and where every
+    //! [PointCloudEval] sweep writes all of its recorded and oracle frames, so
+    //! a run with it set spends time encoding PNGs
     const char* const kFrameDumpEnvironmentVariable = "CAVEWHERE_HOLE_METRIC_DUMP_DIR";
     const char* const kTileLazEnvironmentVariable = "CAVEWHERE_HOLE_METRIC_LAZ";
     //! Where the tile's octree is built and kept between runs, when it is set
@@ -7274,11 +7281,19 @@ namespace {
                                                  key.left(kDirectoryKeyChars)));
     }
 
+    //! Pose and frame numbers in file names are zero padded to this width
+    constexpr int kFileIndexDigits = 3;
+
+    //! pose-NNN, the stem every per-pose file name starts with
+    QString poseFileStem(int pose)
+    {
+        return QStringLiteral("pose-%1").arg(pose, kFileIndexDigits, 10, QLatin1Char('0'));
+    }
+
     QString framePath(const QString& directory, int pose, const QString& kind)
     {
-        return QDir(directory).filePath(QStringLiteral("pose-%1-%2.png")
-                                            .arg(pose, 3, 10, QLatin1Char('0'))
-                                            .arg(kind));
+        return QDir(directory).filePath(
+            QStringLiteral("%1-%2.png").arg(poseFileStem(pose), kind));
     }
 
     QImage maskImage(const PixelMask& mask)
@@ -7292,6 +7307,113 @@ namespace {
             }
         }
         return image;
+    }
+
+    // ---- Frame dumps for the report --------------------------------------
+    //
+    // Section 6: with the dump variable set, every frame sweepPath() records
+    // and every oracle frame it was handed is written as a PNG for
+    // scripts/pointcloud_eval_report.py, under a run directory of the sweep's
+    // own that an evalDump line names. Without it nothing is encoded.
+
+    //! The directory frames are dumped under, empty when the variable is unset
+    QString evalDumpRoot()
+    {
+        return QString::fromLocal8Bit(qgetenv(kFrameDumpEnvironmentVariable));
+    }
+
+    //! @a name as one directory name: anything outside ASCII letters, digits,
+    //! '.', '_' and '-' becomes '_', so a strided path "P2/24" lands in "P2_24"
+    QString dumpDirectoryName(const QString& name)
+    {
+        constexpr char16_t kLastAscii = 127;
+        QString safe = name;
+        for (QChar& c : safe) {
+            const bool kept = (c.unicode() <= kLastAscii && c.isLetterOrNumber())
+                              || c == QLatin1Char('.') || c == QLatin1Char('_')
+                              || c == QLatin1Char('-');
+            if (!kept) {
+                c = QLatin1Char('_');
+            }
+        }
+        return safe;
+    }
+
+    //! <path>/<config>/run-<pid>-NNN, relative to the dump root: a directory
+    //! that no other sweep of this process or any other one writes
+    QString newEvalRunDirectory(const QString& pathName, const QString& configName)
+    {
+        static int runCount = 0;
+        runCount++;
+        return QStringLiteral("%1/%2/run-%3-%4")
+            .arg(dumpDirectoryName(pathName), dumpDirectoryName(configName))
+            .arg(QCoreApplication::applicationPid())
+            .arg(runCount, kFileIndexDigits, 10, QLatin1Char('0'));
+    }
+
+    //! Writes one sweep's PNGs under its run directory on a thread of its
+    //! own, so the encode stays out of the render loop. The sweep still shares
+    //! the CPU with it, so a dumped run's timing-driven numbers can differ a
+    //! little from an undumped one's.
+    class FrameDumpWriter
+    {
+    public:
+        explicit FrameDumpWriter(const QString& directory)
+            : m_directory(directory)
+        {
+            REQUIRE(QDir().mkpath(directory));
+            m_pool.setMaxThreadCount(1);
+        }
+
+        //! Draws the image with @a draw on the writer's thread and saves it as
+        //! @a relativeFile under the run directory
+        void save(std::function<QImage()> draw, const QString& relativeFile)
+        {
+            const QString file = m_directory.filePath(relativeFile);
+            m_writes.append(QtConcurrent::run(&m_pool, [draw = std::move(draw), file]() {
+                return QDir().mkpath(QFileInfo(file).path()) && draw().save(file);
+            }));
+        }
+
+        //! Waits for every write and checks that each one landed
+        void finish()
+        {
+            for (const QFuture<bool>& write : std::as_const(m_writes)) {
+                CHECK(write.result());
+            }
+            m_writes.clear();
+        }
+
+    private:
+        const QDir m_directory;
+        QThreadPool m_pool;
+        QList<QFuture<bool>> m_writes;
+    };
+
+    //! A candidate frame's dump: pose-NNN-frame-NNN.png
+    QString candidateDumpFileName(int pose, int frame)
+    {
+        return QStringLiteral("%1-frame-%2.png")
+            .arg(poseFileStem(pose))
+            .arg(frame, kFileIndexDigits, 10, QLatin1Char('0'));
+    }
+
+    //! An oracle frame's dump, pose-NNN.png, and its lit mask, pose-NNN-mask.png
+    QString oracleDumpFileName(int pose)
+    {
+        return QStringLiteral("%1.png").arg(poseFileStem(pose));
+    }
+
+    QString oracleMaskDumpFileName(int pose)
+    {
+        return QStringLiteral("%1-mask.png").arg(poseFileStem(pose));
+    }
+
+    //! The picture a person looks at: the shaded composite when there is one,
+    //! the flat pass otherwise
+    QImage shownFrame(const QImage& flat, const QImage& composite)
+    {
+        return composite.isNull() ? flat : composite;
     }
 
     PixelMask maskFromImage(const QImage& image)
@@ -8642,6 +8764,25 @@ namespace {
         writeCsvLine(fields.join(QLatin1Char(',')), out);
     }
 
+    //! Queues @a oracles' frames and lit masks along @a path on @a writer, as
+    //! O1/, O2/ and O3/ of the run directory, by pose table index
+    void dumpOracleFrames(FrameDumpWriter& writer, const EvalPath& path,
+                          const EvalOracles& oracles)
+    {
+        for (const OracleFrames* frames : {&oracles.o1, &oracles.o2, &oracles.o3}) {
+            const QString directory = oracleName(frames->oracle);
+            for (int position = 0; position < frames->frames.size(); position++) {
+                const OracleFrame& frame = frames->frames.at(position);
+                const int pose = path.poses.at(position).index;
+                writer.save([flat = frame.frame, composite = frame.composite]() {
+                    return shownFrame(flat, composite);
+                }, QStringLiteral("%1/%2").arg(directory, oracleDumpFileName(pose)));
+                writer.save([mask = frame.mask]() { return maskImage(mask); },
+                            QStringLiteral("%1/%2").arg(directory, oracleMaskDumpFileName(pose)));
+            }
+        }
+    }
+
     QVector<EvalRecord> sweepPath(PointCloudFixture& fixture, const EvalPath& path,
                                   const EvalConfig& config, const PathStep& step,
                                   std::ostream& out, const EvalOracles* oracles)
@@ -8676,6 +8817,23 @@ namespace {
 
         const QSize target = fixture.targetSize();
         const double targetPixels = double(target.width()) * double(target.height());
+
+        //The run directory goes on the log, so the report finds each sweep's
+        //frames without rebuilding the name
+        const QString dumpRoot = evalDumpRoot();
+        std::optional<FrameDumpWriter> dump;
+        if (!dumpRoot.isEmpty()) {
+            const QString runDirectory = newEvalRunDirectory(path.name, config.name);
+            dump.emplace(QDir(dumpRoot).filePath(runDirectory));
+            writeCsvLine(QStringLiteral("evalDump,path,config,directory"), out);
+            writeCsvLine(QStringList {QStringLiteral("evalDump"), path.name, config.name,
+                                      runDirectory}
+                             .join(QLatin1Char(',')),
+                         out);
+            if (oracles != nullptr) {
+                dumpOracleFrames(*dump, path, *oracles);
+            }
+        }
 
         QVector<EvalRecord> records;
         std::optional<TwinFrame> previousTwin;
@@ -8796,6 +8954,14 @@ namespace {
                 csvField(record.o3DistanceStepRaw, kFractionDecimals)
             };
             writeCsvLine(fields.join(QLatin1Char(',')), out);
+
+            if (dump.has_value()) {
+                const QImage composite = fixture.edlEnabled() ? fixture.compositeImage() : QImage();
+                dump->save([flat = fixture.frameImage(), composite]() {
+                    return shownFrame(flat, composite);
+                }, candidateDumpFileName(record.pose, record.frame));
+            }
+
             records.append(record);
             return record;
         };
@@ -8818,6 +8984,9 @@ namespace {
             }
         }
 
+        if (dump.has_value()) {
+            dump->finish();
+        }
         writeSummary(summarize(path.name, config.name, records), out);
         return records;
     }
@@ -9169,6 +9338,178 @@ TEST_CASE("sweepPath fills every metric from the oracles, and a settled default 
     CHECK(summaries.at(1).size() == summaries.at(0).size());
     CHECK(summaries.at(1).at(1) == path.name);
     CHECK(summaries.at(1).at(3).toInt() == records.size());
+}
+
+namespace {
+    //! Sets an environment variable, or unsets it for an empty value, for as
+    //! long as it lives, and puts back what was there before, so a failing
+    //! check still leaves the environment the way the suite found it
+    class EnvironmentOverride
+    {
+    public:
+        EnvironmentOverride(const char* name, const QByteArray& value) :
+            m_name(name),
+            m_hadValue(qEnvironmentVariableIsSet(name)),
+            m_previous(qgetenv(name))
+        {
+            if (value.isEmpty()) {
+                qunsetenv(m_name);
+            } else {
+                qputenv(m_name, value);
+            }
+        }
+
+        ~EnvironmentOverride()
+        {
+            if (m_hadValue) {
+                qputenv(m_name, m_previous);
+            } else {
+                qunsetenv(m_name);
+            }
+        }
+
+        EnvironmentOverride(const EnvironmentOverride&) = delete;
+        EnvironmentOverride& operator=(const EnvironmentOverride&) = delete;
+
+    private:
+        const char* m_name;
+        bool m_hadValue;
+        QByteArray m_previous;
+    };
+
+    //! Every file under @a root, as paths relative to it
+    QSet<QString> filesUnder(const QString& root)
+    {
+        QSet<QString> files;
+        const QDir base(root);
+        const QHash<QString, QDateTime> times = fileTimesUnder(root);
+        for (auto it = times.cbegin(); it != times.cend(); ++it) {
+            files.insert(base.relativeFilePath(it.key()));
+        }
+        return files;
+    }
+
+    //! The dump case's path: every other pose of the metric path, so the pose
+    //! table indices skip and the strided name carries a '/'
+    constexpr int kDumpPoseStride = 2;
+    constexpr int kDumpFramesPerPose = 2;
+}
+
+TEST_CASE("Frame dumps write each sweep's frames to a run directory of its own, and nothing without the variable",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    QTemporaryDir dumpRoot;
+    REQUIRE(cacheRoot.isValid());
+    REQUIRE(dumpRoot.isValid());
+
+    const EvalPath path = everyNthPose(planeMetricPath(rhi.get()), kDumpPoseStride);
+    REQUIRE(path.poses.size() == kSweptPoseCount / kDumpPoseStride);
+    const EvalConfig config = candidateConfig(Candidate::Default);
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kDumpFramesPerPose;
+
+    struct DumpRun {
+        QVector<EvalRecord> records;
+        QStringList dumpLines;
+    };
+    const auto run = [&]() {
+        std::ostringstream output;
+        PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        oracleFixture.setEdlEnabled(true);
+        const EvalOracles oracles = evalOracles(oracleFixture, path, cacheRoot.path(), output);
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        fixture.setEdlEnabled(true);
+        DumpRun result;
+        result.records = sweepPath(fixture, path, config, step, output, &oracles);
+        const QStringList lines =
+            QString::fromStdString(output.str()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        for (const QString& line : lines) {
+            if (line.startsWith(QStringLiteral("evalDump,"))) {
+                result.dumpLines.append(line);
+            }
+        }
+        return result;
+    };
+
+    //The run directory is the evalDump line's last field, after its header
+    const auto dumpedRun = [&]() {
+        const EnvironmentOverride dump(kFrameDumpEnvironmentVariable,
+                                       dumpRoot.path().toLocal8Bit());
+        const DumpRun dumped = run();
+        REQUIRE(dumped.records.size() == path.poses.size() * kDumpFramesPerPose);
+        REQUIRE(dumped.dumpLines.size() == 2);
+        CHECK(dumped.dumpLines.at(0) == QStringLiteral("evalDump,path,config,directory"));
+        const QStringList fields = dumped.dumpLines.at(1).split(QLatin1Char(','));
+        REQUIRE(fields.size() == 4);
+        CHECK(fields.at(1) == path.name);
+        CHECK(fields.at(2) == config.name);
+        return fields.at(3);
+    };
+
+    const auto expectedFiles = [&](const QString& runDirectory) {
+        QSet<QString> expected;
+        for (const Pose& pose : path.poses) {
+            for (int frame = 0; frame < kDumpFramesPerPose; frame++) {
+                expected.insert(QStringLiteral("%1/%2").arg(
+                    runDirectory, candidateDumpFileName(pose.index, frame)));
+            }
+            for (Oracle oracle : {Oracle::O1, Oracle::O2, Oracle::O3}) {
+                const QString oracleDirectory =
+                    QStringLiteral("%1/%2").arg(runDirectory, oracleName(oracle));
+                expected.insert(QStringLiteral("%1/%2").arg(oracleDirectory,
+                                                            oracleDumpFileName(pose.index)));
+                expected.insert(QStringLiteral("%1/%2").arg(oracleDirectory,
+                                                            oracleMaskDumpFileName(pose.index)));
+            }
+        }
+        return expected;
+    };
+
+    const QString pathDirectory = dumpDirectoryName(path.name);
+    CHECK(pathDirectory == QStringLiteral("P2z_2"));
+
+    const QString firstRun = dumpedRun();
+    CHECK(firstRun.startsWith(QStringLiteral("%1/%2/run-%3-").arg(
+        pathDirectory, config.name, QString::number(QCoreApplication::applicationPid()))));
+    const QSet<QString> firstFiles = expectedFiles(firstRun);
+    {
+        const QSet<QString> written = filesUnder(dumpRoot.path());
+        INFO("written: " << QStringList(written.values()).join(QStringLiteral(", ")).toStdString());
+        CHECK(written == firstFiles);
+    }
+
+    //The dumps are the shaded picture at the target's size, the masks one channel
+    const QDir root(dumpRoot.path());
+    const QImage candidate(root.filePath(QStringLiteral("%1/%2").arg(
+        firstRun, candidateDumpFileName(path.poses.constLast().index, 0))));
+    CHECK(candidate.size() == kHalfHdTargetSize);
+    const QImage mask(root.filePath(QStringLiteral("%1/O1/%2").arg(
+        firstRun, oracleMaskDumpFileName(path.poses.constFirst().index))));
+    CHECK(mask.size() == kHalfHdTargetSize);
+    CHECK(mask.isGrayscale());
+
+    //A second sweep of the same path and config keeps to a directory of its own
+    const QString secondRun = dumpedRun();
+    CHECK(secondRun != firstRun);
+    const QSet<QString> bothFiles = firstFiles + expectedFiles(secondRun);
+    CHECK(filesUnder(dumpRoot.path()) == bothFiles);
+
+    //Without the variable a run writes nothing, not even beside itself
+    QTemporaryDir workingDirectory;
+    REQUIRE(workingDirectory.isValid());
+    {
+        const QString previousDirectory = QDir::currentPath();
+        const auto restoreDirectory =
+            qScopeGuard([&]() { QDir::setCurrent(previousDirectory); });
+        REQUIRE(QDir::setCurrent(workingDirectory.path()));
+        const EnvironmentOverride noDump(kFrameDumpEnvironmentVariable, QByteArray());
+        CHECK(run().dumpLines.isEmpty());
+    }
+    CHECK(filesUnder(workingDirectory.path()).isEmpty());
+    CHECK(filesUnder(dumpRoot.path()) == bothFiles);
 }
 
 TEST_CASE("M1: O2 at coverage 1 agrees less with O1 than O2 at its pick",
