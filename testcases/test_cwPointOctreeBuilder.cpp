@@ -34,6 +34,7 @@
 #include "cwPointOctree.h"
 #include "cwPointOctreeBuilder.h"
 #include "cwPointOctreeManifest.h"
+#include "cwPointOctreeSampler.h"
 #include "cwTask.h"
 
 #include "LazFixtureHelper.h"
@@ -822,6 +823,21 @@ TEST_CASE("cwPointOctreeBuilder: a small chunk target builds the same octree thr
     REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
 }
 
+namespace {
+    //! The quantized point at @a index of a node payload
+    QuantizedPoint quantizedPointAt(const QByteArray& payload, qsizetype index)
+    {
+        const char* axes = payload.constData() + index * kBytesPerPoint;
+        constexpr int kAxisBytes = int(sizeof(quint16));
+        return QuantizedPoint {
+            qFromLittleEndian<quint16>(axes),
+            qFromLittleEndian<quint16>(axes + kAxisBytes),
+            qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
+            0
+        };
+    }
+}
+
 TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
           "[PointOctree][PointOctreeBuilder]") {
     QTemporaryDir tempDir;
@@ -844,7 +860,7 @@ TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
     REQUIRE(manifest.nodes.size() > 1);
 
     //The generation is part of every id, so an older cache is never read back
-    REQUIRE(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree3")));
+    REQUIRE(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree4")));
 
     const cwDiskCacher cacher {QDir(request.cacheRootPath)};
     for(int i = 0; i < manifest.nodes.size(); i++) {
@@ -855,16 +871,7 @@ TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
         quint64 previous = 0;
         const qsizetype count = payload.size() / kBytesPerPoint;
         for(qsizetype point = 0; point < count; point++) {
-            const char* axes = payload.constData() + point * kBytesPerPoint;
-            constexpr int kAxisBytes = int(sizeof(quint16));
-            const QuantizedPoint quantized {
-                qFromLittleEndian<quint16>(axes),
-                qFromLittleEndian<quint16>(axes + kAxisBytes),
-                qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
-                0
-            };
-
-            const quint64 key = mortonKey(quantized);
+            const quint64 key = mortonKey(quantizedPointAt(payload, point));
             REQUIRE(key >= previous);
             previous = key;
         }
@@ -1904,4 +1911,129 @@ TEST_CASE("cwPointOctreeBuilder: a cell at the deepest chunk level is left whole
     REQUIRE(deepest.cellsSplit == 0);
     verifyOctree(deepest.manifest, deepest.request, sourcePoints);
     REQUIRE(deepestLevel(deepest.manifest) >= kMaxChunkDepth);
+}
+
+namespace {
+    //A plane this many points a side, 2 m apart: 2500 points, under a leaf's
+    //worth, spread over a root whose grid cells are under a meter, so the root
+    //takes every point and is sparser than its grid by about two and a half
+    constexpr int kSparsePlanePointsPerSide = 50;
+    constexpr double kSparsePlaneStep = 2.0;
+    constexpr float kSparsePlaneHeight = 100.0f;
+
+    //The same slack the sampler's measured spacing cases allow a regular grid
+    constexpr double kMeasuredSpacingTolerance = 0.1;
+
+    //Quantization moves each point by under a step of the node's cube, which
+    //moves what the spacing measures by far less than this
+    constexpr double kQuantizedSpacingTolerance = 0.01;
+
+    QVector<QVector3D> sparsePlanePoints()
+    {
+        QVector<QVector3D> points;
+        points.reserve(kSparsePlanePointsPerSide * kSparsePlanePointsPerSide);
+        for(int row = 0; row < kSparsePlanePointsPerSide; row++) {
+            for(int column = 0; column < kSparsePlanePointsPerSide; column++) {
+                points.append(QVector3D(float(column * kSparsePlaneStep),
+                                        float(row * kSparsePlaneStep), kSparsePlaneHeight));
+            }
+        }
+        return points;
+    }
+
+    //! The points of @a index's cached payload, dequantized inside its cube
+    QVector<QVector3D> cachedNodePoints(const cwDiskCacher& cacher, const QString& path,
+                                        const cwPointOctreeManifest& manifest, int index)
+    {
+        const QByteArray payload =
+            cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(index)));
+        const QBox3D bounds = manifest.nodeBounds(index);
+
+        QVector<QVector3D> points;
+        const qsizetype count = payload.size() / kBytesPerPoint;
+        points.reserve(count);
+        for(qsizetype point = 0; point < count; point++) {
+            points.append(dequantize(quantizedPointAt(payload, point), bounds));
+        }
+        return points;
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cloud sparser than its grid records the spacing its points have",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-sparse-plane"));
+    REQUIRE(writeSyntheticLazFile(path, sparsePlanePoints()));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path()
+    };
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+
+    const cwPointOctreeManifest manifest = result.value();
+    REQUIRE(manifest.nodes.size() == 1);
+    REQUIRE(manifest.spacing(0) < kSparsePlaneStep);
+
+    const double measured = manifest.nodes.at(0).measuredSpacing;
+    INFO("root measured " << measured << " m for a " << kSparsePlaneStep << " m step, grid "
+         << manifest.spacing(0) << " m");
+    CHECK(std::abs(measured - kSparsePlaneStep) <= kMeasuredSpacingTolerance * kSparsePlaneStep);
+
+    //The cached manifest carries it back
+    const std::optional<cwPointOctreeManifest> cached =
+        cwPointOctreeBuilder::cachedManifest(request);
+    REQUIRE(cached.has_value());
+    REQUIRE(cached->nodes.size() == manifest.nodes.size());
+    CHECK(cached->nodes.at(0).measuredSpacing == manifest.nodes.at(0).measuredSpacing);
+}
+
+TEST_CASE("cwPointOctreeBuilder: every node through pass B and pass C carries its measured spacing",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-measured"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    //Chunked, so the chunk subtrees come out of pass B and the levels above
+    //them out of pass C
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget
+    };
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+    const cwPointOctreeManifest manifest = result.value();
+    REQUIRE(manifest.nodes.size() > 1);
+
+    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    int measuredNodes = 0;
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        const cwPointOctreeNode& node = manifest.nodes.at(i);
+        const QVector<QVector3D> points = cachedNodePoints(cacher, path, manifest, i);
+        REQUIRE(points.size() == qsizetype(node.pointCount));
+
+        //What the builder recorded is what the estimator says of the node's
+        //own points, measured before they were quantized
+        const double fromPayload = measureNodeSpacing(points);
+        INFO("node " << i << " at level " << node.level << " holds " << node.pointCount
+             << " points, measured " << node.measuredSpacing << " m, its payload "
+             << fromPayload << " m");
+        CHECK(std::abs(double(node.measuredSpacing) - fromPayload)
+              <= kQuantizedSpacingTolerance * std::max(fromPayload, manifest.spacing(node.level)));
+        measuredNodes += node.measuredSpacing > 0.0f ? 1 : 0;
+    }
+
+    //A passage has real spacing in every node with a pair of points to measure
+    CHECK(measuredNodes > 0);
+    CHECK(manifest.nodes.constFirst().measuredSpacing > 0.0f);
 }

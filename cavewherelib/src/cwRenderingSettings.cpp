@@ -27,6 +27,7 @@ QString evictionHoldKey() { return QStringLiteral("rendering/pointCloud/eviction
 QString thinningModeKey() { return QStringLiteral("rendering/pointCloud/thinningMode"); }
 QString sizeModeKey() { return QStringLiteral("rendering/pointCloud/sizeMode"); }
 QString floorModeKey() { return QStringLiteral("rendering/pointCloud/floorMode"); }
+QString spacingSourceKey() { return QStringLiteral("rendering/pointCloud/spacingSource"); }
 QString fixedPointSizePxKey() { return QStringLiteral("rendering/pointCloud/fixedPointSizePx"); }
 QString maxPointSizePxKey() { return QStringLiteral("rendering/pointCloud/maxPointSizePx"); }
 QString minLevelKey() { return QStringLiteral("rendering/pointCloud/minLevel"); }
@@ -173,6 +174,9 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
     m_shading.floorMode = clampMode<cw::pointcloud::FloorMode>(
                 settings.value(floorModeKey(), int(defaultShading.floorMode)).toInt(),
                 cw::pointcloud::kFloorModeCount);
+    m_shading.spacingSource = clampMode<cw::pointcloud::SpacingSource>(
+                settings.value(spacingSourceKey(), int(defaultShading.spacingSource)).toInt(),
+                cw::pointcloud::kSpacingSourceCount);
     m_shading.fixedPointSizePx = clampPointSizePx(
                 settings.value(fixedPointSizePxKey(), defaultShading.fixedPointSizePx).toDouble());
     m_shading.maxPointSizePx = clampPointSizePx(
@@ -216,6 +220,7 @@ void cwRenderingSettings::resetPointCloudKnobsToDefaults()
     setThinningMode(int(defaultShading.thinningMode));
     setSizeMode(int(defaultShading.sizeMode));
     setFloorMode(int(defaultShading.floorMode));
+    setSpacingSource(int(defaultShading.spacingSource));
     setFixedPointSizePx(defaultShading.fixedPointSizePx);
     setMaxPointSizePx(defaultShading.maxPointSizePx);
     setDebugView(int(defaultShading.debugView));
@@ -353,6 +358,17 @@ void cwRenderingSettings::setFloorMode(int mode)
     const auto clamped = clampMode<cw::pointcloud::FloorMode>(mode, cw::pointcloud::kFloorModeCount);
     if (setPersisted(m_shading.floorMode, clamped, floorModeKey())) {
         emit floorModeChanged();
+        emit pointCloudShadingChanged();
+        emit isAtDefaultsChanged();
+    }
+}
+
+void cwRenderingSettings::setSpacingSource(int source)
+{
+    const auto clamped = clampMode<cw::pointcloud::SpacingSource>(
+        source, cw::pointcloud::kSpacingSourceCount);
+    if (setPersisted(m_shading.spacingSource, clamped, spacingSourceKey())) {
+        emit spacingSourceChanged();
         emit pointCloudShadingChanged();
         emit isAtDefaultsChanged();
     }

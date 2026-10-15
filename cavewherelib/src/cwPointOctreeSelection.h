@@ -10,6 +10,7 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
+#include "cwPointCloudShading.h"
 
 class cwPointOctreeManifest;
 class cwFrustum;
@@ -207,6 +208,20 @@ namespace cw::octree {
     CAVEWHERE_LIB_EXPORT QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
                                                         const QVector<int>& drawnNodes,
                                                         const QVector<int>& missingNodes = {});
+
+    /**
+     * The floor of every node in @a drawnNodes, in meters: the spacing of the
+     * node finestDrawnLevels() names for it, as cw::clod::drawSpacing gives it
+     * under @a source. Under Grid that is manifest.spacing() of the level
+     * finestDrawnLevels() returns, value for value; under Measured it is the
+     * larger of that node's grid spacing and its measured spacing, and where
+     * several nodes at that deepest level feed one floor, the narrowest of
+     * them. Either way a floor is at most its own node's spacing.
+     */
+    CAVEWHERE_LIB_EXPORT QVector<double> finestDrawnSpacings(const cwPointOctreeManifest& manifest,
+                                                             const QVector<int>& drawnNodes,
+                                                             const QVector<int>& missingNodes,
+                                                             cw::pointcloud::SpacingSource source);
 
     //What the planner knows about one resident node
     struct CAVEWHERE_LIB_EXPORT NodeResidency

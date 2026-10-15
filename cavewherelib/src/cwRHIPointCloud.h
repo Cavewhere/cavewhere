@@ -341,7 +341,8 @@ private:
     // thins each node against the spacing the cut is aiming for, never wider
     // than rootSpacing — the coarsest level the file has. The second std140 row
     // carries the cwPointCloudShading modes that switch those rules, the third
-    // the debug view and the frame the residency age view counts from.
+    // the debug view, the frame the residency age view counts from, and the
+    // spacing source every node sizes and thins by.
     struct PerCloudUniform {
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
@@ -353,7 +354,8 @@ private:
         float fixedPointSizePx = 0.0f;
         qint32 debugView = 0;
         quint32 currentFrame = 0;
-        float padding[2] = {0.0f, 0.0f};
+        qint32 spacingSource = 0;
+        float padding = 0.0f;
     };
     static_assert(sizeof(PerCloudUniform) == 12 * sizeof(float),
                   "PerCloudBlock in PointCloud.vert is three std140 rows of 16 "
@@ -363,7 +365,7 @@ private:
     // refine threshold along with it.
     PerCloudUniform appearanceUniform(float spacingCoverage) const;
 
-    // Takes each drawn node's floor from cw::octree::finestDrawnLevels over
+    // Takes each drawn node's floor from cw::octree::finestDrawnSpacings over
     // the cut's resident @a drawnNodes and its still-streaming @a missingNodes,
     // and writes the ones that moved onto @a batch, ahead of this frame's draws.
     void writeNodeFloors(QRhiResourceUpdateBatch* batch, const QVector<int>& drawnNodes,
@@ -377,8 +379,8 @@ private:
     void restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
                                     const cw::octree::Selection& previous, quint64 frame);
 
-    // @a index's own sample spacing, the floor a node draws with while nothing
-    // under it counts.
+    // @a index's own sample spacing under the shading's spacing source, the
+    // floor a node draws with while nothing under it counts.
     float ownSpacing(int index) const;
 
     // Writes @a floorSpacing into @a index's constants slot unless it already

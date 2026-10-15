@@ -28,6 +28,10 @@ struct CAVEWHERE_LIB_EXPORT cwPointOctreeNode {
     quint32 pointCount = 0;
     qint64 byteSize = 0;    //pointCount * cw::octree::kBytesPerPoint
 
+    //The spacing between the node's own points, in meters, as
+    //cw::octree::measureNodeSpacing found it; 0 where nothing was measured
+    float measuredSpacing = 0.0f;
+
     //Indices into cwPointOctreeManifest::nodes, -1 when the octant is empty
     std::array<int, cw::octree::kChildCount> children = {-1, -1, -1, -1, -1, -1, -1, -1};
 };

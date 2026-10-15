@@ -137,6 +137,7 @@ QByteArray cwPointOctreeManifest::serialize() const
         nodeProto->set_z(node.z);
         nodeProto->set_point_count(node.pointCount);
         nodeProto->set_byte_size(node.byteSize);
+        nodeProto->set_measured_spacing(node.measuredSpacing);
         for(int child : node.children) {
             nodeProto->add_children(child);
         }
@@ -189,6 +190,7 @@ std::optional<cwPointOctreeManifest> cwPointOctreeManifest::deserialize(const QB
         node.z = nodeProto.z();
         node.pointCount = nodeProto.point_count();
         node.byteSize = nodeProto.byte_size();
+        node.measuredSpacing = nodeProto.measured_spacing();
         for(int octant = 0; octant < cw::octree::kChildCount; octant++) {
             node.children[octant] = nodeProto.children(octant);
         }

@@ -27,6 +27,11 @@ layout(location = 2) in float nodeFloor;
 // 0 of its own draw, so gl_InstanceIndex cannot tell two nodes apart.
 layout(location = 3) in uvec2 nodeIds;
 
+// Per instance, one per node: the spacing, in meters, the builder measured
+// between the node's own points (cwPointOctreeNode::measuredSpacing), 0 where
+// it measured nothing. Read only under spacingSource Measured.
+layout(location = 4) in float nodeMeasuredSpacing;
+
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
     mat4 viewMatrix;
@@ -51,9 +56,10 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // sizeMode picks what a sprite measures (fixedPointSizePx for FixedPixels),
 // and floorMode drops the per-node floor. Their defaults are the rules as
 // described here. The third row picks what the point is colored by
-// (debugView, cw::pointcloud::DebugView) and carries the frame the residency
-// age view counts from. The C++ PerCloudUniform matches the block field for
-// field.
+// (debugView, cw::pointcloud::DebugView), carries the frame the residency
+// age view counts from, and picks the spacing each node sizes and thins by
+// (spacingSource, cw::pointcloud::SpacingSource). The C++ PerCloudUniform
+// matches the block field for field.
 layout(std140, binding = 1) uniform PerCloudBlock {
     float spacingCoverage;
     float sseThresholdPx;
@@ -65,6 +71,7 @@ layout(std140, binding = 1) uniform PerCloudBlock {
     float fixedPointSizePx;
     int debugView;
     uint currentFrame;
+    int spacingSource;
 };
 
 layout(location = 0) out vec4 vColor;
@@ -74,6 +81,7 @@ const int kThinningOff = 2;
 const int kSizeFixedPixels = 1;
 const int kSizeOwnSpacing = 2;
 const int kFloorOff = 1;
+const int kSpacingMeasured = 1;
 
 const int kViewOff = 0;
 const int kViewLevel = 1;
@@ -184,12 +192,12 @@ float pointRank(uvec3 quantized)
 }
 
 // What a drawn point is colored by under debugView. The level is the node's
-// depth below the root, which the spacing ratio gives exactly: every level
-// halves the spacing.
-vec3 debugColor(float nodeSpacing, float rank, float weight, float sizePx)
+// depth below the root, which the grid spacing ratio gives exactly: every
+// level halves the grid spacing.
+vec3 debugColor(float gridSpacing, float nodeSpacing, float rank, float weight, float sizePx)
 {
     if (debugView == kViewLevel) {
-        int level = int(round(log2(rootSpacing / nodeSpacing)));
+        int level = int(round(log2(rootSpacing / gridSpacing)));
         return kLevelPalette[level % kLevelPaletteSize];
     }
     if (debugView == kViewNode) {
@@ -252,7 +260,11 @@ void main(void)
     // outside the clip volume, the cheapest discard a vertex shader has.
     // cw::clod::targetSpacing is this line, root floor included.
     float targetSpacing = min(sseThresholdPx / pixelsPerMeter, rootSpacing);
-    float nodeSpacing = nodeOriginScale.w * kQuantMax / kSampleGridResolution;
+    // cw::clod::drawSpacing: Measured answers for the wider gap of a node
+    // sparser than its grid, and keeps the grid of a denser one
+    float gridSpacing = nodeOriginScale.w * kQuantMax / kSampleGridResolution;
+    float nodeSpacing = spacingSource == kSpacingMeasured ? max(gridSpacing, nodeMeasuredSpacing)
+                                                          : gridSpacing;
     float weight = clamp(log2(kOctave * nodeSpacing / targetSpacing), 0.0, 1.0);
     if (thinningMode == kThinningDiscrete) {
         // Compared directly rather than through log2, so the step lands on the
@@ -309,5 +321,6 @@ void main(void)
     gl_PointSize = clamp(sizePx, 1.0, maxPointSizePx);
 
     vColor = debugView == kViewOff ? kFlatColor
-                            : vec4(debugColor(nodeSpacing, rank, weight, gl_PointSize), 1.0);
+                            : vec4(debugColor(gridSpacing, nodeSpacing, rank, weight, gl_PointSize),
+                                   1.0);
 }

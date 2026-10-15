@@ -91,6 +91,9 @@ m7Csv,P2z/6-L5,0,5,0.85000,0.15000,100,40,0.97000,477
 m7Csv,P2z/6-L5,6,5,0.83000,0.17000,120,42,0.98000,442
 m7Csv,P2z/6-L6,0,6,0.30000,0.70000,800,960,0.50000,342
 m7Csv,P2z/6-L6,6,6,0.10000,0.90000,900,960,0.40000,319
+m7Csv,path,pose,level,litFraction,holeFraction,holeCount,maxHoleSide,litFractionFixed,drawnNodes,spacingSource
+m7Csv,M7/6-L6,0,6,0.60000,0.40000,300,90,0.90000,200,Grid
+m7Csv,M7/6-L6,0,6,0.94000,0.06000,30,9,0.95000,200,Measured
 ===============================================================================
 All tests passed (12 assertions in 3 test cases)
 """
@@ -189,7 +192,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(self.log.builds[0]["nodeCount"], "749446")
         self.assertEqual(len(self.log.sweeps), 1)
         self.assertEqual([row["picked"] for row in self.log.sweeps[0].rows], ["0", "1", "0"])
-        self.assertEqual(len(self.log.m7_rows), 4)
+        self.assertEqual(len(self.log.m7_rows), 6)
         self.assertEqual(self.log.paths(), ["P2", "plane/P2z", "P4", "plane/P4"])
 
     def test_plane_paths_are_told_apart_by_their_prefix(self):
@@ -428,6 +431,23 @@ class ReportTest(unittest.TestCase):
         self.assertIn("<th>path</th>", section)
         self.assertRegex(section, r'<td class="num">5</td><td>P2z/6-L5</td><td class="num">2</td>')
         self.assertRegex(section, r'<td class="num">6</td><td>P2z/6-L6</td><td class="num">2</td>')
+
+    def test_m7_keeps_each_spacing_source_in_a_table_of_its_own(self):
+        text = self.out.read_text(encoding="utf-8")
+        section = text[text.index('id="m7"'):]
+        grid = section.index("<h3>M7/6 (Grid)</h3>")
+        measured = section.index("<h3>M7/6 (Measured)</h3>")
+        # One pose per source at level 6, each its own lit fraction rather
+        # than the 0.77 mean of the two
+        self.assertRegex(section[grid:measured],
+                         r'<td class="num">6</td><td>M7/6-L6</td><td class="num">1</td>'
+                         r'<td class="num">0\.60000</td>')
+        self.assertRegex(section[measured:],
+                         r'<td class="num">6</td><td>M7/6-L6</td><td class="num">1</td>'
+                         r'<td class="num">0\.94000</td>')
+        self.assertNotIn("0.77000", section)
+        # The log's earlier rows, from before the column, keep their family title
+        self.assertIn("<h3>P2z/6</h3>", section)
 
     def test_baseline_deltas_are_judged_by_direction(self):
         text = self.out.read_text(encoding="utf-8")

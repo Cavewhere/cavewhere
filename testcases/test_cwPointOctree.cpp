@@ -640,3 +640,44 @@ TEST_CASE("Octree cache keys land beside the laz file", "[PointOctree]") {
         CHECK(cacher.entry(stale).isEmpty());
     }
 }
+
+TEST_CASE("A manifest round-trips each node's measured spacing", "[PointOctree]") {
+    cwPointOctreeManifest manifest = threeLevelManifest();
+    REQUIRE(manifest.isValid());
+
+    //A spacing per node, none of them the grid's, and one left unmeasured
+    constexpr float kFirstMeasuredSpacing = 0.37f;
+    constexpr float kMeasuredSpacingStep = 0.11f;
+    for(int i = 1; i < manifest.nodes.size(); i++) {
+        manifest.nodes[i].measuredSpacing = kFirstMeasuredSpacing + kMeasuredSpacingStep * float(i);
+    }
+    REQUIRE(manifest.nodes.at(0).measuredSpacing == 0.0f);
+
+    const auto restored = cwPointOctreeManifest::deserialize(manifest.serialize());
+    REQUIRE(restored.has_value());
+    REQUIRE(restored->nodes.size() == manifest.nodes.size());
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        INFO("node " << i);
+        CHECK(restored->nodes.at(i).measuredSpacing == manifest.nodes.at(i).measuredSpacing);
+    }
+}
+
+TEST_CASE("The octree format is generation 4, the one that measures node spacing", "[PointOctree]") {
+    //Generation 4 adds each node's measured spacing and the builder's minimum
+    //to split, so every generation 3 cache rebuilds once
+    CHECK(cw::octree::kFormatGeneration == 4);
+}
+
+TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
+    constexpr int kGenerationWithoutMeasuredSpacing = 3;
+
+    CavewhereProto::PointOctreeManifest proto = parseManifest(threeLevelManifest().serialize());
+    proto.set_format_generation(kGenerationWithoutMeasuredSpacing);
+    CHECK_FALSE(deserializeProto(proto).has_value());
+
+    //The cache key names the generation too, so its entries are never even read
+    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
+                                                          QStringLiteral("fingerprint"));
+    CHECK(key.id.contains(QStringLiteral("octree4")));
+    CHECK_FALSE(key.id.contains(QStringLiteral("octree3")));
+}

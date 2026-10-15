@@ -19,14 +19,29 @@
  */
 namespace cw::octree {
 
-    //Bumping this invalidates every cached manifest and node at once
-    constexpr int kFormatGeneration = 3;
+    //Bumping this invalidates every cached manifest and node at once.
+    //Generation 4 adds each node's measured spacing and kMinSplitPoints.
+    constexpr int kFormatGeneration = 4;
 
     //Points per node edge; spacing = nodeSize / kSampleGridResolution
     constexpr int kSampleGridResolution = 128;
 
     //A leaf holds at most this many points, so a node is at most 160 KB
     constexpr int kLeafMaxPoints = 20000;
+
+    /**
+     * A node that sampled its own points first keeps whatever its grid left
+     * behind, as a leaf, while those leftovers number fewer than this, rather
+     * than splitting them into children. Without it every leftover splits down
+     * to kMaxLevel: on the BC tile 86 % of the 749 k node files sat at level 9
+     * and deeper holding 8 % of the points. The value comes from that tile's
+     * node histogram: at 256 the node count falls to about 117 k, levels 0..7
+     * barely move, and the tree ends near level 11. A kept leaf holds at most
+     * what sampled first, so it stays under kLeafMaxPoints.
+     */
+    constexpr int kMinSplitPoints = 256;
+    static_assert(kMinSplitPoints <= kLeafMaxPoints,
+                  "A kept leaf holds what sampled first, which is at most kLeafMaxPoints");
 
     //Recursion guard for duplicate-heavy input
     constexpr int kMaxLevel = 20;

@@ -10,6 +10,7 @@
 #include "cwAppearanceOverride.h"
 #include "cwFrustum.h"
 #include "cwPointCloudAppearance.h"
+#include "cwPointCloudClod.h"
 #include "cwPointOctree.h"
 #include "cwProfileLog.h"
 #include "cwRenderFrameStats.h"
@@ -35,14 +36,15 @@
 namespace {
 
     // One node's per-instance constants, as PointCloud.vert reads them: the
-    // dequantization (nodeOriginScale), the floor (nodeFloor), and the two ids
-    // the debug views color by (nodeIds).
+    // dequantization (nodeOriginScale), the floor (nodeFloor), the two ids
+    // the debug views color by (nodeIds), and the spacing the builder measured
+    // from the node's own points (nodeMeasuredSpacing).
     struct NodeConstants {
         std::array<float, 4> originScale;
         float floorSpacing = 0.0f;
         quint32 arrivalFrame = 0;
         quint32 nodeIndex = 0;
-        quint32 reserved = 0;
+        float measuredSpacing = 0.0f;
     };
     constexpr quint32 kNodeConstantsBytes = sizeof(NodeConstants);
     static_assert(kNodeConstantsBytes == 32, "Two float4s per node slot");
@@ -75,6 +77,7 @@ namespace {
 
     constexpr quint32 kNodeFloorOffset = offsetof(NodeConstants, floorSpacing);
     constexpr quint32 kNodeIdsOffset = offsetof(NodeConstants, arrivalFrame);
+    constexpr quint32 kNodeMeasuredSpacingOffset = offsetof(NodeConstants, measuredSpacing);
     static_assert(offsetof(NodeConstants, nodeIndex) == kNodeIdsOffset + sizeof(quint32),
                   "nodeIds reads the arrival frame and the node index as one uvec2");
 
@@ -196,7 +199,9 @@ void cwRHIPointCloud::initializeResources(const ResourceUpdateData& data)
         { kNodeConstantsBinding, 2, QRhiVertexInputAttribute::Float,
           kNodeFloorOffset },                                               // nodeFloor
         { kNodeConstantsBinding, 3, QRhiVertexInputAttribute::UInt2,
-          kNodeIdsOffset }                                                  // nodeIds
+          kNodeIdsOffset },                                                 // nodeIds
+        { kNodeConstantsBinding, 4, QRhiVertexInputAttribute::Float,
+          kNodeMeasuredSpacingOffset }                                      // nodeMeasuredSpacing
     });
 
     m_nodeBoxInputLayout.setBindings({
@@ -393,10 +398,11 @@ void cwRHIPointCloud::writeNodeFloors(QRhiResourceUpdateBatch* batch,
                                       const QVector<int>& drawnNodes,
                                       const QVector<int>& missingNodes)
 {
-    const QVector<int> levels =
-        cw::octree::finestDrawnLevels(*m_source.manifest, drawnNodes, missingNodes);
+    const QVector<double> floors =
+        cw::octree::finestDrawnSpacings(*m_source.manifest, drawnNodes, missingNodes,
+                                        m_renderState.value().shading.spacingSource);
     for (int i = 0; i < drawnNodes.size(); i++) {
-        writeNodeFloor(batch, drawnNodes.at(i), float(m_source.manifest->spacing(levels.at(i))));
+        writeNodeFloor(batch, drawnNodes.at(i), float(floors.at(i)));
     }
 }
 
@@ -420,7 +426,10 @@ void cwRHIPointCloud::restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
 
 float cwRHIPointCloud::ownSpacing(int index) const
 {
-    return float(m_source.manifest->spacing(m_source.manifest->nodes.at(index).level));
+    const cwPointOctreeNode& node = m_source.manifest->nodes.at(index);
+    return float(cw::clod::drawSpacing(m_source.manifest->spacing(node.level),
+                                       double(node.measuredSpacing),
+                                       m_renderState.value().shading.spacingSource));
 }
 
 void cwRHIPointCloud::writeNodeFloor(QRhiResourceUpdateBatch* batch, int index,
@@ -455,6 +464,7 @@ cwRHIPointCloud::appearanceUniform(float spacingCoverage) const
     uniform.thinningMode = qint32(shading.thinningMode);
     uniform.sizeMode = qint32(shading.sizeMode);
     uniform.floorMode = qint32(shading.floorMode);
+    uniform.spacingSource = qint32(shading.spacingSource);
     uniform.fixedPointSizePx = shading.fixedPointSizePx;
     uniform.debugView = qint32(shading.debugView);
     // Truncated alongside the arrival frames in the node constants, so the
@@ -741,6 +751,7 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     constants.floorSpacing = nodeOwnSpacing;
     constants.arrivalFrame = quint32(currentFrame());
     constants.nodeIndex = quint32(index);
+    constants.measuredSpacing = m_source.manifest->nodes.at(index).measuredSpacing;
     batch->updateDynamicBuffer(m_nodeConstants, quint32(slot) * kNodeConstantsBytes,
                                kNodeConstantsBytes, &constants);
 

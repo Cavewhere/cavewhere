@@ -55,6 +55,17 @@ namespace cw::pointcloud {
         Off = 1
     };
 
+    //! Which spacing a node sizes and thins by. The cut always refines on the
+    //! grid spacing.
+    enum class SpacingSource : int {
+        //! The node's grid spacing, its cube over kSampleGridResolution
+        Grid = 0,
+        //! The larger of the grid spacing and the spacing the builder measured
+        //! from the node's own points (cwPointOctreeNode::measuredSpacing), so
+        //! a node sparser than its grid sizes and thins by the gap it really has
+        Measured = 1
+    };
+
     //! What PointCloud.vert colors each point by. Every view but Off answers
     //! one question about the octree or the decimation
     //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 8).
@@ -82,6 +93,7 @@ namespace cw::pointcloud {
     constexpr int kThinningModeCount = int(ThinningMode::Off) + 1;
     constexpr int kSizeModeCount = int(SizeMode::OwnSpacing) + 1;
     constexpr int kFloorModeCount = int(FloorMode::Off) + 1;
+    constexpr int kSpacingSourceCount = int(SpacingSource::Measured) + 1;
     constexpr int kDebugViewCount = int(DebugView::DecimationPreview) + 1;
 
     constexpr bool kDefaultShowNodeBoxes = false;
@@ -130,6 +142,8 @@ namespace cw::pointcloud {
                   "PointCloud.vert spells this out");
     static_assert(int(FloorMode::Node) == 0 && int(FloorMode::Off) == 1,
                   "PointCloud.vert spells this out");
+    static_assert(int(SpacingSource::Grid) == 0 && int(SpacingSource::Measured) == 1,
+                  "PointCloud.vert spells this out");
     static_assert(int(DebugView::Off) == 0 && int(DebugView::Level) == 1
                       && int(DebugView::Node) == 2 && int(DebugView::Rank) == 3
                       && int(DebugView::Weight) == 4 && int(DebugView::SpriteSize) == 5
@@ -147,6 +161,7 @@ struct cwPointCloudShading {
     cw::pointcloud::ThinningMode thinningMode = cw::pointcloud::ThinningMode::Continuous;
     cw::pointcloud::SizeMode sizeMode = cw::pointcloud::SizeMode::Coverage;
     cw::pointcloud::FloorMode floorMode = cw::pointcloud::FloorMode::Node;
+    cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::SpacingSource::Grid;
     float fixedPointSizePx = float(cw::pointcloud::kDefaultFixedPointSizePx);
     float maxPointSizePx = float(cw::pointcloud::kDefaultMaxPointSizePx);
     cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;

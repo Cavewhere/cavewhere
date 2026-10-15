@@ -37,6 +37,7 @@ MainWindowTest {
             "sizeModeComboBox",
             "fixedPointSizeSpinBox",
             "floorModeComboBox",
+            "spacingSourceComboBox",
             "spacingCoverageSpinBox",
             "maxPointSizeSpinBox",
             "pointCloudDebugCounts",
@@ -180,6 +181,27 @@ MainWindowTest {
             mouseClick(row("pointCloudDebugResetButton"))
             tryCompare(rootId.renderingSettings, "governorSlew", 1)
             tryCompare(slew, "value", slew.valueScale)
+        }
+
+        function test_spacingSourceRowFollowsTheSetting() {
+            const source = row("spacingSourceComboBox")
+            compare(source.count, rootId.renderingSettings.spacingSourceCount)
+            compare(source.currentIndex, 0)
+
+            rootId.renderingSettings.spacingSource = 1
+            tryCompare(source, "currentIndex", 1)
+        }
+
+        function test_spacingSourceRowWritesTheSetting() {
+            const source = row("spacingSourceComboBox")
+            source.currentIndex = 1
+            source.activated(1)
+            compare(rootId.renderingSettings.spacingSource, 1)
+            verify(!rootId.renderingSettings.isAtDefaults)
+
+            mouseClick(row("pointCloudDebugResetButton"))
+            tryCompare(rootId.renderingSettings, "spacingSource", 0)
+            tryCompare(source, "currentIndex", 0)
         }
 
         function test_closeButtonClosesThePanel() {

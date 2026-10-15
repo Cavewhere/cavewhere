@@ -232,3 +232,57 @@ TEST_CASE("Off draws every point continuous does, which draws every point discre
         }
     }
 }
+
+TEST_CASE("Measured spacing takes the larger of a node's grid and measured spacing, and grid ignores it",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    constexpr double kGridSpacing = 0.25;
+    constexpr double kSparseSpacing = 0.6;
+    constexpr double kDenseSpacing = 0.1;
+    constexpr double kUnmeasured = 0.0;
+
+    //A node sparser than its grid answers for the gap it really has
+    CHECK(drawSpacing(kGridSpacing, kSparseSpacing, SpacingSource::Measured) == kSparseSpacing);
+
+    //A node denser than its grid, or one nothing measured, keeps its grid
+    CHECK(drawSpacing(kGridSpacing, kDenseSpacing, SpacingSource::Measured) == kGridSpacing);
+    CHECK(drawSpacing(kGridSpacing, kUnmeasured, SpacingSource::Measured) == kGridSpacing);
+
+    //Grid is the grid spacing, whatever was measured
+    for (double measured : {kUnmeasured, kDenseSpacing, kSparseSpacing}) {
+        CHECK(drawSpacing(kGridSpacing, measured, SpacingSource::Grid) == kGridSpacing);
+    }
+}
+
+TEST_CASE("Under measured spacing a sparse node thins and sizes by its measured spacing",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+    using cw::pointcloud::ThinningMode;
+
+    constexpr double kGridSpacing = 1.0;
+    //Half an octave sparser than the grid
+    const double sparseSpacing = std::sqrt(2.0) * kGridSpacing;
+    //A target the grid spacing has half faded toward
+    const double target = std::sqrt(2.0) * kGridSpacing;
+
+    const double gridSpacing = drawSpacing(kGridSpacing, sparseSpacing, SpacingSource::Grid);
+    const double measuredSpacing =
+        drawSpacing(kGridSpacing, sparseSpacing, SpacingSource::Measured);
+
+    //Grid draws what it drew before the measured spacing existed
+    CHECK(weight(gridSpacing, target) == weight(kGridSpacing, target));
+    CHECK(weight(gridSpacing, target) == Catch::Approx(0.5));
+
+    //Measured draws the sparse node whole at the same target, under every
+    //thinning mode that reshapes the ramp
+    CHECK(weight(measuredSpacing, target) == Catch::Approx(1.0));
+    CHECK(weight(measuredSpacing, target, ThinningMode::Discrete) == 1.0);
+    CHECK(weight(gridSpacing, target, ThinningMode::Discrete) == 0.0);
+
+    //Own-spacing sizing measures the sprite from the same spacing, so it is
+    //the measured gap's share wider
+    CHECK(measuredSpacing / gridSpacing == Catch::Approx(sparseSpacing / kGridSpacing));
+}

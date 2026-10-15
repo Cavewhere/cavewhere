@@ -189,6 +189,23 @@ namespace cw::clod {
         return double(rank(point)) < weight(nodeSpacing, targetSpacing, mode);
     }
 
+    /**
+     * The spacing a node sizes and thins by under @a source, given its grid
+     * spacing @a gridSpacing and the spacing @a measuredSpacing the builder
+     * measured from its own points (0 where it measured nothing). Grid is the
+     * grid spacing alone; Measured is the larger of the two, so a node sparser
+     * than its grid answers for the gap it really has and a denser one keeps
+     * its grid. PointCloud.vert takes the same maximum.
+     */
+    inline double drawSpacing(double gridSpacing, double measuredSpacing,
+                              cw::pointcloud::SpacingSource source)
+    {
+        if (source == cw::pointcloud::SpacingSource::Measured) {
+            return std::max(gridSpacing, measuredSpacing);
+        }
+        return gridSpacing;
+    }
+
     //! The sample spacing of a node whose quantization step — the w of its
     //! instance's nodeOriginScale — is @a quantizationStep meters.
     constexpr double nodeSpacingFromQuantizationStep(double quantizationStep)

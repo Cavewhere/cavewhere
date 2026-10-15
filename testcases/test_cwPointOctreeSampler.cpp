@@ -608,3 +608,279 @@ TEST_CASE("Every node holds points spaced for its own level",
         CHECK(measured >= kMinSpacingFraction * promised);
     }
 }
+
+namespace {
+    //A node cube whose grid spacing is 16 / 128 = 0.125 m
+    constexpr double kMeasureNodeSize = 16.0;
+    constexpr float kMeasurePlaneHeight = 5.0f;
+
+    //Four grid cells between points: sparser than the node's grid
+    constexpr double kSparseStep = 0.5;
+    //Under half a grid cell between points: denser than the node's grid
+    constexpr double kDenseStep = 0.05;
+
+    /**
+     * How far a measured spacing may sit from a regular grid's step. A plane
+     * of points measured over its own footprint loses half a step along each
+     * edge, which on these grids is a few percent; the rest is room for the
+     * estimator to choose its own occupied-extent rule.
+     */
+    constexpr double kMeasuredSpacingTolerance = 0.1;
+
+    QBox3D measureNodeBounds()
+    {
+        const float size = float(kMeasureNodeSize);
+        return QBox3D(QVector3D(0.0f, 0.0f, 0.0f), QVector3D(size, size, size));
+    }
+
+    double gridSpacingOf(const QBox3D& bounds)
+    {
+        return double(bounds.size().x()) / kSampleGridResolution;
+    }
+}
+
+TEST_CASE("A node sparser than its grid measures the spacing its points really have",
+          "[PointOctree][PointOctreeSampler]") {
+    const QBox3D bounds = measureNodeBounds();
+    REQUIRE(kSparseStep > gridSpacingOf(bounds));
+
+    SECTION("a plane across the whole node") {
+        const QVector<QVector3D> points = gridPatch(QVector3D(0.0f, 0.0f, kMeasurePlaneHeight),
+                                                    kMeasureNodeSize, kSparseStep);
+        const double measured = measureNodeSpacing(points);
+        INFO("measured " << measured << " m for a " << kSparseStep << " m step, grid "
+             << gridSpacingOf(bounds) << " m");
+        CHECK(std::abs(measured - kSparseStep) <= kMeasuredSpacingTolerance * kSparseStep);
+    }
+
+    SECTION("a plane over one quarter of the node's footprint") {
+        //The spacing is the points' own, so the empty three quarters of the
+        //node's footprint are left out of the area it is measured over
+        const QVector<QVector3D> points = gridPatch(QVector3D(0.0f, 0.0f, kMeasurePlaneHeight),
+                                                    kMeasureNodeSize * 0.5, kSparseStep);
+        const double measured = measureNodeSpacing(points);
+        INFO("measured " << measured << " m for a " << kSparseStep << " m step over a quarter");
+        CHECK(std::abs(measured - kSparseStep) <= kMeasuredSpacingTolerance * kSparseStep);
+    }
+}
+
+namespace {
+    /**
+     * How far a measured spacing may sit from the true step on a footprint
+     * that fills little of its bounding rectangle. Footprint cells that catch a
+     * strip's edges count their whole area, so these read a little sparse; the
+     * bounding rectangle alone reads the strip below 2.1 times and the
+     * clusters 3.2 times their step.
+     */
+    constexpr double kFootprintShapeTolerance = 0.35;
+
+    //A road two meters wide, five rows of points across
+    constexpr double kStripHalfWidth = 1.0;
+
+    //Two patches of seven by seven points, in opposite corners of the node
+    constexpr double kClusterSide = 3.0;
+
+    //! A strip of points kSparseStep apart running corner to corner across
+    //! the node's footprint
+    QVector<QVector3D> diagonalStrip()
+    {
+        const double length = kMeasureNodeSize * std::sqrt(2.0);
+        const double inverseRootTwo = 1.0 / std::sqrt(2.0);
+        const int alongCount = int(length / kSparseStep) + 1;
+        const int acrossHalf = int(kStripHalfWidth / kSparseStep);
+
+        QVector<QVector3D> points;
+        for(int along = 0; along < alongCount; along++) {
+            for(int across = -acrossHalf; across <= acrossHalf; across++) {
+                const double t = along * kSparseStep;
+                const double offset = across * kSparseStep;
+                const double x = (t - offset) * inverseRootTwo;
+                const double y = (t + offset) * inverseRootTwo;
+                if(x >= 0.0 && x <= kMeasureNodeSize && y >= 0.0 && y <= kMeasureNodeSize) {
+                    points.append(QVector3D(float(x), float(y), kMeasurePlaneHeight));
+                }
+            }
+        }
+        return points;
+    }
+}
+
+TEST_CASE("A footprint that fills little of its bounding rectangle measures its points' own spacing",
+          "[PointOctree][PointOctreeSampler]") {
+    SECTION("a strip running diagonally across the node") {
+        const QVector<QVector3D> points = diagonalStrip();
+        const double measured = measureNodeSpacing(points);
+        INFO(points.size() << " points measured " << measured << " m for a " << kSparseStep
+             << " m step");
+        CHECK(std::abs(measured - kSparseStep) <= kFootprintShapeTolerance * kSparseStep);
+    }
+
+    SECTION("two clusters in opposite corners of the node") {
+        const double farCorner = kMeasureNodeSize - kClusterSide;
+        QVector<QVector3D> points = gridPatch(QVector3D(0.0f, 0.0f, kMeasurePlaneHeight),
+                                              kClusterSide, kSparseStep);
+        points += gridPatch(QVector3D(float(farCorner), float(farCorner), kMeasurePlaneHeight),
+                            kClusterSide, kSparseStep);
+        const double measured = measureNodeSpacing(points);
+        INFO(points.size() << " points measured " << measured << " m for a " << kSparseStep
+             << " m step");
+        CHECK(std::abs(measured - kSparseStep) <= kFootprintShapeTolerance * kSparseStep);
+    }
+}
+
+TEST_CASE("A node denser than its grid measures under its grid, so measured spacing keeps the grid",
+          "[PointOctree][PointOctreeSampler]") {
+    const QBox3D bounds = measureNodeBounds();
+    const double grid = gridSpacingOf(bounds);
+    REQUIRE(kDenseStep < grid);
+
+    //A patch small enough to stay well under a leaf's worth of points
+    constexpr double kDensePatchSide = 2.0;
+    const QVector<QVector3D> points = gridPatch(QVector3D(1.0f, 1.0f, kMeasurePlaneHeight),
+                                                kDensePatchSide, kDenseStep);
+    const double measured = measureNodeSpacing(points);
+
+    INFO("measured " << measured << " m for a " << kDenseStep << " m step, grid " << grid << " m");
+    CHECK(measured > 0.0);
+    CHECK(std::abs(measured - kDenseStep) <= kMeasuredSpacingTolerance * kDenseStep);
+    CHECK(measured < grid);
+}
+
+TEST_CASE("Nothing to measure measures zero", "[PointOctree][PointOctreeSampler]") {
+    CHECK(measureNodeSpacing({}) == 0.0f);
+}
+
+namespace {
+    //A root whose own grid cells are 8 / 128 = 0.0625 m
+    constexpr double kSplitRootSize = 8.0;
+    //Points two to a root grid cell, a sixth of a cell apart, so the root's
+    //own sample takes one of each pair and leaves the other behind
+    constexpr float kPairOffset = 0.01f;
+    constexpr int kPairCount = 12;
+    constexpr int kSplitLeafMax = 1000;
+
+    //The pairs sit one per root cell along a diagonal, in different octants,
+    //so leftovers that split would make real children
+    QVector<QVector3D> pairedPoints()
+    {
+        QVector<QVector3D> points;
+        const float step = float(kSplitRootSize) / float(kPairCount);
+        for(int i = 0; i < kPairCount; i++) {
+            const float along = (float(i) + 0.5f) * step;
+            const QVector3D first(along, along, along);
+            points.append(first);
+            points.append(first + QVector3D(kPairOffset, 0.0f, 0.0f));
+        }
+        return points;
+    }
+
+    QVector<SampledNode> buildPaired(int minSplitPoints)
+    {
+        return buildSubtree(pairedPoints(), Cell{0, 0, 0, 0}, QVector3D(0.0f, 0.0f, 0.0f),
+                            kSplitRootSize, kSplitLeafMax, minSplitPoints);
+    }
+}
+
+TEST_CASE("Leftovers under the minimum to split stay in their node as a leaf",
+          "[PointOctree][PointOctreeSampler]") {
+    const QVector<QVector3D> points = pairedPoints();
+    REQUIRE(points.size() <= kSplitLeafMax);
+
+    //The root's grid takes one point of every pair, so as many are left over
+    const int leftovers = kPairCount;
+
+    SECTION("fewer leftovers than the minimum keep the whole cloud in the root") {
+        const QVector<SampledNode> nodes = buildPaired(leftovers + 1);
+        REQUIRE(nodes.size() == 1);
+        CHECK(!hasChildren(nodes.at(0)));
+        CHECK(sortedRounded(nodes.at(0).points) == sortedRounded(points));
+        CHECK(nodes.at(0).points.size() <= kSplitLeafMax);
+    }
+
+    SECTION("as many leftovers as the minimum still split into children") {
+        const QVector<SampledNode> nodes = buildPaired(leftovers);
+        REQUIRE(nodes.size() > 1);
+        CHECK(hasChildren(nodes.at(0)));
+        CHECK(nodes.at(0).points.size() == kPairCount);
+        CHECK(sortedRounded(allPoints(nodes)) == sortedRounded(points));
+    }
+
+    SECTION("no minimum splits every leftover, as the sampler always did") {
+        const QVector<SampledNode> nodes = buildPaired(0);
+        REQUIRE(nodes.size() > 1);
+        CHECK(nodes.at(0).points.size() == kPairCount);
+        CHECK(sortedRounded(allPoints(nodes)) == sortedRounded(points));
+    }
+}
+
+TEST_CASE("A node over the leaf cap splits whatever the minimum to split",
+          "[PointOctree][PointOctreeSampler]") {
+    //Under the cap's worth of points no node samples first, so there are no
+    //leftovers for the minimum to keep, and the tree is the one it always was
+    constexpr int kTinyLeafMax = kPairCount;
+    const QVector<QVector3D> points = pairedPoints();
+    REQUIRE(points.size() > kTinyLeafMax);
+
+    const QVector<SampledNode> unbounded =
+        buildSubtree(points, Cell{0, 0, 0, 0}, QVector3D(0.0f, 0.0f, 0.0f), kSplitRootSize,
+                     kTinyLeafMax, 0);
+    const QVector<SampledNode> bounded =
+        buildSubtree(points, Cell{0, 0, 0, 0}, QVector3D(0.0f, 0.0f, 0.0f), kSplitRootSize,
+                     kTinyLeafMax, kTinyLeafMax);
+
+    REQUIRE(bounded.size() > 1);
+    CHECK(hasChildren(bounded.at(0)));
+    CHECK(bounded.at(0).points.size() < points.size());
+    for(const SampledNode& node : bounded) {
+        CHECK(node.points.size() <= kTinyLeafMax);
+    }
+    CHECK(sortedRounded(allPoints(bounded)) == sortedRounded(points));
+    CHECK(hasChildren(unbounded.at(0)));
+}
+
+TEST_CASE("The minimum to split prunes a passage's deep leaves and keeps every point under the leaf cap",
+          "[PointOctree][PointOctreeSampler]") {
+    const QVector<QVector3D> points = passagePoints(kPassagePointCount, kPassageSeed);
+    const RootCube root = rootCubeOf(points);
+
+    const QVector<SampledNode> unbounded =
+        buildSubtree(points, Cell{0, 0, 0, 0}, root.minimum, root.size, kLeafMaxPoints, 0);
+    const QVector<SampledNode> bounded =
+        buildSubtree(points, Cell{0, 0, 0, 0}, root.minimum, root.size, kLeafMaxPoints,
+                     kMinSplitPoints);
+
+    INFO("nodes without a minimum " << unbounded.size() << ", with " << kMinSplitPoints << " "
+         << bounded.size());
+    CHECK(bounded.size() < unbounded.size());
+
+    //Every input point still lands in exactly one node, and a kept leaf holds
+    //no more than the leaf cap the renderer sizes its buffers by
+    CHECK(sortedRounded(allPoints(bounded)) == sortedRounded(points));
+    for(const SampledNode& node : bounded) {
+        CHECK(node.points.size() <= kLeafMaxPoints);
+    }
+
+    //Pruning only ever stops a split: no level gains nodes
+    const auto deepest = [](const QVector<SampledNode>& nodes) {
+        int level = 0;
+        for(const SampledNode& node : nodes) {
+            level = std::max(level, node.cell.level);
+        }
+        return level;
+    };
+    CHECK(deepest(bounded) <= deepest(unbounded));
+}
+
+TEST_CASE("buildSubtree defaults to kMinSplitPoints", "[PointOctree][PointOctreeSampler]") {
+    const QVector<QVector3D> points = passagePoints(kPassagePointCount / 4, kPassageSeed);
+    const RootCube root = rootCubeOf(points);
+
+    const QVector<SampledNode> byDefault =
+        buildSubtree(points, Cell{0, 0, 0, 0}, root.minimum, root.size);
+    const QVector<SampledNode> named =
+        buildSubtree(points, Cell{0, 0, 0, 0}, root.minimum, root.size, kLeafMaxPoints,
+                     kMinSplitPoints);
+    CHECK(sameTree(byDefault, named));
+    CHECK(kMinSplitPoints > 0);
+    CHECK(kMinSplitPoints <= kLeafMaxPoints);
+}

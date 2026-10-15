@@ -353,6 +353,7 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
     using cw::pointcloud::DebugView;
     using cw::pointcloud::FloorMode;
     using cw::pointcloud::SizeMode;
+    using cw::pointcloud::SpacingSource;
     using cw::pointcloud::ThinningMode;
 
     constexpr int kCappedLevel = 3;
@@ -399,6 +400,9 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         {"floorMode", [&] { settings->setFloorMode(int(FloorMode::Off)); },
          QStringLiteral("rendering/pointCloud/floorMode"), int(FloorMode::Off),
          &cwRenderingSettings::floorModeChanged},
+        {"spacingSource", [&] { settings->setSpacingSource(int(SpacingSource::Measured)); },
+         QStringLiteral("rendering/pointCloud/spacingSource"), int(SpacingSource::Measured),
+         &cwRenderingSettings::spacingSourceChanged},
         {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); },
          QStringLiteral("rendering/pointCloud/fixedPointSizePx"), kFixedPointSizePx,
          &cwRenderingSettings::fixedPointSizePxChanged},
@@ -620,6 +624,65 @@ TEST_CASE("cwRenderingSettings governorSlew defaults to the governor's own step,
     settings->resetToDefaults();
 }
 
+TEST_CASE("cwRenderingSettings spacingSource defaults to the grid, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::SpacingSource;
+    const QString key = QStringLiteral("rendering/pointCloud/spacingSource");
+
+    SECTION("the default sizes and thins by the grid, as the renderer always did") {
+        CHECK(cwPointCloudShading().spacingSource == SpacingSource::Grid);
+        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Grid);
+        CHECK(cwRenderingSettings::spacingSourceCount() == cw::pointcloud::kSpacingSourceCount);
+        CHECK(cwRenderingSettings::spacingSourceCount() == 2);
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("values outside the enum clamp to its ends") {
+        settings->setSpacingSource(-1);
+        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
+        settings->setSpacingSource(100);
+        CHECK(settings->spacingSource() == cwRenderingSettings::spacingSourceCount() - 1);
+        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+    }
+
+    SECTION("measured round-trips through QSettings and reaches the shading") {
+        QSignalSpy sourceSpy(settings, &cwRenderingSettings::spacingSourceChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setSpacingSource(int(SpacingSource::Measured));
+
+        CHECK(sourceSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Measured);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Measured));
+
+        settings->setSpacingSource(int(SpacingSource::Measured));
+        CHECK(sourceSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Grid));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
 TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -709,6 +772,8 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
          [&] { settings->setThinningMode(int(cw::pointcloud::ThinningMode::Discrete)); }, false},
         {"sizeMode", [&] { settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels)); }, false},
         {"floorMode", [&] { settings->setFloorMode(int(cw::pointcloud::FloorMode::Off)); }, false},
+        {"spacingSource",
+         [&] { settings->setSpacingSource(int(cw::pointcloud::SpacingSource::Measured)); }, false},
         {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); }, false},
         {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); }, false},
         {"debugView",

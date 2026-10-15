@@ -25,6 +25,7 @@ QC.Popup {
     readonly property list<string> thinningModeNames: [qsTr("Continuous"), qsTr("Discrete"), qsTr("Off")]
     readonly property list<string> sizeModeNames: [qsTr("Coverage"), qsTr("Fixed pixels"), qsTr("Own spacing")]
     readonly property list<string> floorModeNames: [qsTr("Node"), qsTr("Off")]
+    readonly property list<string> spacingSourceNames: [qsTr("Grid"), qsTr("Measured")]
     readonly property list<string> debugViewNames: [qsTr("Off"), qsTr("Level"), qsTr("Node"), qsTr("Rank"),
         qsTr("Weight"), qsTr("Sprite size"), qsTr("Floor ratio"), qsTr("Residency age"),
         qsTr("Decimation preview")]
@@ -268,6 +269,17 @@ QC.Popup {
                 model: panelId.floorModeNames
                 knobValue: panelId.renderingSettings.floorMode
                 onActivated: (index) => panelId.renderingSettings.floorMode = index
+            }
+        }
+
+        RowLayout {
+            KnobLabel { text: qsTr("Spacing source") }
+
+            KnobComboBox {
+                objectName: "spacingSourceComboBox"
+                model: panelId.spacingSourceNames
+                knobValue: panelId.renderingSettings.spacingSource
+                onActivated: (index) => panelId.renderingSettings.spacingSource = index
             }
         }
 

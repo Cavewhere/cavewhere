@@ -878,6 +878,7 @@ namespace {
     struct SubtreeRecord {
         Cell cell;
         quint32 pointCount = 0;
+        float measuredSpacing = 0.0f;
         std::array<int, kChildCount> children = {-1, -1, -1, -1, -1, -1, -1, -1};
     };
 
@@ -959,11 +960,18 @@ namespace {
         result.nodes.reserve(subtree.size());
         for(qsizetype i = 0; i < subtree.size(); i++) {
             const SampledNode& node = subtree.at(i);
-            result.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()), node.children});
 
+            //The chunk root still gives points up to pass C, which measures it
+            //once they are final
             if(i == 0) {
+                result.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()), 0.0f,
+                                                   node.children});
                 continue;
             }
+
+            result.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
+                                               measureNodeSpacing(node.points),
+                                               node.children});
 
             if(context.cancel->load(std::memory_order_relaxed)) {
                 result.errorCode = cwPointOctreeBuilder::Cancelled;
@@ -1139,7 +1147,13 @@ namespace {
         QVector<QVector3D> points;
     };
 
-    cwPointOctreeNode manifestNode(const Cell& cell, quint32 pointCount)
+    //What pass C knows of a node it wrote
+    struct TopNodeRecord {
+        quint32 pointCount = 0;
+        float measuredSpacing = 0.0f;
+    };
+
+    cwPointOctreeNode manifestNode(const Cell& cell, quint32 pointCount, float measuredSpacing)
     {
         cwPointOctreeNode node;
         node.level = cell.level;
@@ -1148,6 +1162,7 @@ namespace {
         node.z = cell.z;
         node.pointCount = pointCount;
         node.byteSize = qint64(pointCount) * kBytesPerPoint;
+        node.measuredSpacing = measuredSpacing;
         return node;
     }
 }
@@ -1428,7 +1443,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             insertChunkRootsAt(deepestChunkLevel, level);
 
             //Pass C: every node the sampler pulls from is final only once its parent has sampled it
-            QHash<quint64, quint32> topPointCounts;
+            QHash<quint64, TopNodeRecord> topNodes;
             qint64 nodesWritten = 0;
 
             const auto writeTopNode = [&](const LevelNode& node) {
@@ -1443,7 +1458,9 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                     return false;
                 }
 
-                topPointCounts.insert(cellKey(node.cell), quint32(node.points.size()));
+                topNodes.insert(cellKey(node.cell),
+                                TopNodeRecord {quint32(node.points.size()),
+                                               measureNodeSpacing(node.points)});
                 nodesWritten++;
                 progress.report(2 * passA.pointCount + nodesWritten);
                 return true;
@@ -1522,7 +1539,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
 
             const auto appendNode = [&](const Cell& cell, const auto& self) -> int {
                 const int index = manifest.nodes.size();
-                manifest.nodes.append(manifestNode(cell, topPointCounts.value(cellKey(cell), 0)));
+                const TopNodeRecord top = topNodes.value(cellKey(cell));
+                manifest.nodes.append(manifestNode(cell, top.pointCount, top.measuredSpacing));
 
                 if(chunkIndexByCell.contains(cellKey(cell))) {
                     const QVector<SubtreeRecord>& records =
@@ -1531,7 +1549,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                     for(qsizetype i = 1; i < records.size(); i++) {
                         const SubtreeRecord& record = records.at(i);
 
-                        cwPointOctreeNode child = manifestNode(record.cell, record.pointCount);
+                        cwPointOctreeNode child =
+                            manifestNode(record.cell, record.pointCount, record.measuredSpacing);
                         for(int octant = 0; octant < kChildCount; octant++) {
                             const int local = record.children.at(octant);
                             child.children[octant] = local >= 0 ? local + index : -1;
@@ -1550,7 +1569,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
 
                 for(int octant = 0; octant < kChildCount; octant++) {
                     const Cell child = childCell(cell, octant);
-                    if(!topPointCounts.contains(cellKey(child))) {
+                    if(!topNodes.contains(cellKey(child))) {
                         continue;
                     }
 

@@ -287,6 +287,7 @@ namespace {
             entry.z = node.cell.z;
             entry.pointCount = quint32(node.points.size());
             entry.byteSize = qint64(node.points.size()) * cw::octree::kBytesPerPoint;
+            entry.measuredSpacing = cw::octree::measureNodeSpacing(node.points);
             entry.children = node.children;
             manifest->nodes.append(entry);
         }
@@ -2116,6 +2117,23 @@ namespace {
         return cache;
     }
 
+    //! @a cache with every node's measured spacing set to @a factor times its
+    //! grid spacing and its payloads untouched, so a frame drawn from it
+    //! differs from @a cache's only where the renderer reads the measured
+    //! spacing
+    OctreeCache withMeasuredSpacing(const OctreeCache& cache, float factor)
+    {
+        auto manifest = std::make_shared<cwPointOctreeManifest>(*cache.source.manifest);
+        for (cwPointOctreeNode& node : manifest->nodes) {
+            node.measuredSpacing = factor * float(manifest->spacing(node.level));
+        }
+
+        OctreeCache measured = cache;
+        measured.source = cwPointOctreeSource(cache.source.cacheRootPath(), cache.source.lazPath,
+                                              cache.source.fingerprint, manifest);
+        return measured;
+    }
+
     //! The tile octree, or a skip when CAVEWHERE_HOLE_METRIC_LAZ names nothing.
     const OctreeCache& usgsTileCacheOrSkip()
     {
@@ -2533,7 +2551,9 @@ namespace {
     //! so the prediction reads the same quantized coordinates the shader does.
     int predictedDrawnCount(const PointCloudFixture& fixture, float height,
                             cw::pointcloud::ThinningMode mode =
-                                cw::pointcloud::ThinningMode::Continuous)
+                                cw::pointcloud::ThinningMode::Continuous,
+                            cw::pointcloud::SpacingSource source =
+                                cw::pointcloud::SpacingSource::Grid)
     {
         const cwPointOctreeManifest& manifest = fixture.manifest();
         const double pixelsPerMeter = double(kTargetDimension) / double(height);
@@ -2546,7 +2566,9 @@ namespace {
         for (int index : Access::drawnNodes(fixture.backend())) {
             const QByteArray bytes = Access::nodeBytes(fixture.backend(), index);
             const QBox3D bounds = manifest.nodeBounds(index);
-            const double nodeSpacing = manifest.spacing(manifest.nodes.at(index).level);
+            const cwPointOctreeNode& node = manifest.nodes.at(index);
+            const double nodeSpacing = cw::clod::drawSpacing(
+                manifest.spacing(node.level), double(node.measuredSpacing), source);
 
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
                  offset += cw::octree::kBytesPerPoint) {
@@ -6594,6 +6616,9 @@ namespace {
         QString name;
         cwRenderBudgets budgets;
         QSize targetSize;
+        //! What every node sizes and thins by; sweepPath() draws with it and
+        //! evalCsv records it
+        cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::SpacingSource::Grid;
     };
 
     enum class Candidate {
@@ -6601,7 +6626,8 @@ namespace {
         Starved,  //!< a phone-class budget
         Latent,   //!< slow disk: arrival spread over many frames
         Tight,    //!< the governor binding on every pose, as section 13 saw it
-        TightSlew //!< C-tight with the inflation slewing toward the governor's target
+        TightSlew, //!< C-tight with the inflation slewing toward the governor's target
+        DefaultMeasured //!< C-default sizing and thinning by each node's measured spacing
     };
 
     constexpr int kStarvedGpuBudgetMb = 256;
@@ -6644,8 +6670,36 @@ namespace {
             config.name = QStringLiteral("C-tight-slew");
             config.budgets.governorSlew = kTightSlewGovernorSlew;
             break;
+        case Candidate::DefaultMeasured:
+            config.name = QStringLiteral("C-default-measured");
+            config.spacingSource = cw::pointcloud::SpacingSource::Measured;
+            break;
         }
         return config;
+    }
+
+    //! How evalCsv spells @a source
+    QString spacingSourceName(cw::pointcloud::SpacingSource source)
+    {
+        switch (source) {
+        case cw::pointcloud::SpacingSource::Measured:
+            return QStringLiteral("Measured");
+        case cw::pointcloud::SpacingSource::Grid:
+            break;
+        }
+        return QStringLiteral("Grid");
+    }
+
+    //! Sets @a fixture's spacing source, every other shading knob kept
+    void setSpacingSource(PointCloudFixture& fixture, cw::pointcloud::SpacingSource source)
+    {
+        if (fixture.render().shading().spacingSource == source) {
+            return;
+        }
+        cwPointCloudShading shading = fixture.render().shading();
+        shading.spacingSource = source;
+        fixture.render().setShading(shading);
+        fixture.synchronize();
     }
 
     // ---- sweepPath ------------------------------------------------------
@@ -7425,6 +7479,22 @@ namespace {
         return cw::clod::nodeSpacingFromQuantizationStep(quantizationStep);
     }
 
+    //! The spacing PointCloud.vert sizes and thins @a node by under @a source:
+    //! its sample spacing, or the larger of that and its measured spacing
+    double nodeDrawSpacing(const cwPointOctreeManifest& manifest, int node,
+                           cw::pointcloud::SpacingSource source)
+    {
+        return cw::clod::drawSpacing(nodeSampleSpacing(manifest, node),
+                                     double(manifest.nodes.at(node).measuredSpacing), source);
+    }
+
+    //! The spacing source @a uniform draws with
+    cw::pointcloud::SpacingSource spacingSourceOf(
+        const CwRhiPointCloudTestAccess::PerCloudUniform& uniform)
+    {
+        return cw::pointcloud::SpacingSource(uniform.spacingSource);
+    }
+
     //! The side PointCloud.vert gives a sprite of a node whose floor is
     //! @a floorSpacing and whose own sample spacing is @a nodeSpacing, where a
     //! meter covers @a pixelsPerMeter pixels, under @a uniform's modes
@@ -7523,7 +7593,7 @@ namespace {
         const cwPointOctreeManifest& manifest = fixture.manifest();
         for (int node : drawingNodes(fixture)) {
             const QBox3D bounds = manifest.nodeBounds(node);
-            const double nodeSpacing = nodeSampleSpacing(manifest, node);
+            const double nodeSpacing = nodeDrawSpacing(manifest, node, spacingSourceOf(uniform));
             const double floorSpacing = Access::drawnNodeFloorSpacing(fixture.backend(), node);
 
             const QByteArray bytes = Access::nodeBytes(fixture.backend(), node);
@@ -8943,6 +9013,8 @@ namespace {
         };
 
         const cwPointOctreeManifest& manifest = fixture.manifest();
+        const cw::pointcloud::SpacingSource source =
+            spacingSourceOf(Access::liveAppearanceUniform(fixture.backend()));
         QVector<NodeOnScreen> nodes;
         for (int node : drawingNodes(fixture)) {
             const QBox3D bounds = manifest.nodeBounds(node);
@@ -8955,7 +9027,7 @@ namespace {
             onScreen.level = manifest.nodes.at(node).level;
             onScreen.pixelsPerMeter = pixelsPerMeterAt(view, bounds.center());
             onScreen.floorSpacing = Access::drawnNodeFloorSpacing(fixture.backend(), node);
-            onScreen.nodeSpacing = nodeSampleSpacing(manifest, node);
+            onScreen.nodeSpacing = nodeDrawSpacing(manifest, node, source);
             nodes.append(onScreen);
         }
 
@@ -9064,7 +9136,8 @@ namespace {
             }
 
             const int node = it.key();
-            const double nodeSpacing = nodeSampleSpacing(manifest, node);
+            const double nodeSpacing =
+                nodeDrawSpacing(manifest, node, spacingSourceOf(current.uniform));
             const double pixelsPerMeter = pixelsPerMeterAt(view, manifest.nodeBounds(node).center());
             const double sideNow = twinSpriteSidePx(current.uniform, it.value(), nodeSpacing,
                                                     pixelsPerMeter);
@@ -9355,6 +9428,7 @@ namespace {
 
         fixture.setReadbackEnabled(true);
         fixture.setBudgets(config.budgets);
+        setSpacingSource(fixture, config.spacingSource);
 
         if (step.settleBeforeFirstPose) {
             const Pose& first = path.poses.first();
@@ -9375,7 +9449,7 @@ namespace {
                                     "largestSeamRatio,densityCv,holeNear,holeMid,holeFar,"
                                     "predictedPoints,inflationRatio,nodesEntered,nodesLeft,"
                                     "spriteSideChangePx,weightChange,o3DistanceStepRaw,"
-                                    "sseInflationTarget"),
+                                    "sseInflationTarget,spacingSource"),
                      out);
 
         const QSize target = fixture.targetSize();
@@ -9518,7 +9592,8 @@ namespace {
                 QString::number(record.spriteSideChangePx, 'f', kPixelDecimals),
                 QString::number(record.weightChange, 'f', kRatioDecimals),
                 csvField(record.o3DistanceStepRaw, kFractionDecimals),
-                QString::number(record.sseInflationTarget, 'f', kRatioDecimals)
+                QString::number(record.sseInflationTarget, 'f', kRatioDecimals),
+                spacingSourceName(config.spacingSource)
             };
             writeCsvLine(fields.join(QLatin1Char(',')), out);
 
@@ -9672,9 +9747,14 @@ namespace {
 
     //! @a path renamed for the one level drawn alone on it, so every level's
     //! m7Csv lines name a path of their own
+    QString levelAloneName(const QString& pathName, int level)
+    {
+        return QStringLiteral("%1-L%2").arg(pathName).arg(level);
+    }
+
     EvalPath levelAlonePath(EvalPath path, int level)
     {
-        path.name = QStringLiteral("%1-L%2").arg(path.name).arg(level);
+        path.name = levelAloneName(path.name, level);
         return path;
     }
 
@@ -9713,17 +9793,23 @@ namespace {
     //! level, every budget past the whole cloud) at every pose of its own
     //! path, once at the default sizing and once at
     //! kLevelAloneFixedPointSizePx, read against its path's O1 at the same
-    //! pose. One m7Csv line per level and pose goes to @a out. The fixture's
-    //! budgets, coverage and shading are put back the way they were.
+    //! pose. One m7Csv line per level and pose goes to @a out, naming
+    //! @a spacingSource last so a report keeps the two sources' rows apart.
+    //! The fixture's budgets, coverage and shading are put back the way they
+    //! were. Both renders draw under @a spacingSource.
     QVector<LevelRecord> litFractionByLevel(PointCloudFixture& fixture,
                                             const QVector<LevelPath>& paths,
-                                            std::ostream& out = std::cout)
+                                            std::ostream& out = std::cout,
+                                            cw::pointcloud::SpacingSource spacingSource =
+                                                cw::pointcloud::SpacingSource::Grid)
     {
         const cwRenderBudgets savedBudgets = fixture.budgets();
         const float savedCoverage = fixture.render().spacingCoverage();
         const cwPointCloudShading savedShading = fixture.render().shading();
 
-        cwPointCloudShading fixedShading;
+        cwPointCloudShading ruleShading;
+        ruleShading.spacingSource = spacingSource;
+        cwPointCloudShading fixedShading = ruleShading;
         fixedShading.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
         fixedShading.fixedPointSizePx = kLevelAloneFixedPointSizePx;
         const auto shadeWith = [&](const cwPointCloudShading& shading) {
@@ -9734,7 +9820,7 @@ namespace {
         fixture.setReadbackEnabled(true);
         fixture.render().setSpacingCoverage(cw::pointcloud::kDefaultSpacingCoverage);
         writeCsvLine(QStringLiteral("m7Csv,path,pose,level,litFraction,holeFraction,holeCount,"
-                                    "maxHoleSide,litFractionFixed,drawnNodes"),
+                                    "maxHoleSide,litFractionFixed,drawnNodes,spacingSource"),
                      out);
 
         QVector<LevelRecord> records;
@@ -9748,7 +9834,7 @@ namespace {
                 const Pose& pose = path.poses.at(position);
                 const PixelMask& entitled = levelPath.o1.frames.at(position).mask;
                 fixture.setPose(pose.view, pose.projection);
-                shadeWith(cwPointCloudShading());
+                shadeWith(ruleShading);
                 fixture.renderUntilQuiet();
                 renderUntilSettled(fixture);
 
@@ -9765,7 +9851,7 @@ namespace {
                 fixture.renderFrame();
                 record.litFractionFixed = litFractionOf(litMask(fixture), entitled);
 
-                writeCsvLine(QStringLiteral("m7Csv,%1,%2,%3,%4,%5,%6,%7,%8,%9")
+                writeCsvLine(QStringLiteral("m7Csv,%1,%2,%3,%4,%5,%6,%7,%8,%9,%10")
                                  .arg(path.name)
                                  .arg(pose.index)
                                  .arg(levelPath.level)
@@ -9774,7 +9860,8 @@ namespace {
                                  .arg(record.holes.count)
                                  .arg(record.holes.maxSidePx)
                                  .arg(record.litFractionFixed, 0, 'f', kFractionDecimals)
-                                 .arg(record.drawnNodes),
+                                 .arg(record.drawnNodes)
+                                 .arg(spacingSourceName(spacingSource)),
                              out);
                 records.append(record);
             }
@@ -9800,6 +9887,52 @@ namespace {
         }
         REQUIRE(count > 0);
         return sum / count;
+    }
+
+    //! One m7Mean line per level from @a firstLevel to @a lastLevel: the mean
+    //! lit fraction at the sizing rule's sprites and at the fixed size. A level
+    //! @a paths has no path for, because the octree no longer reaches it, is
+    //! reported empty rather than failing the run. Every line names
+    //! @a spacingSource, the source @a records were drawn under, last.
+    void writeLevelMeans(const QVector<LevelPath>& paths, const QVector<LevelRecord>& records,
+                         int firstLevel, int lastLevel, std::ostream& out = std::cout,
+                         cw::pointcloud::SpacingSource spacingSource =
+                             cw::pointcloud::SpacingSource::Grid)
+    {
+        const QString sourceName = spacingSourceName(spacingSource);
+        //An empty level is named the way levelAlonePath() names a present one
+        QString baseName;
+        if (!paths.isEmpty()) {
+            const LevelPath& first = paths.constFirst();
+            const QString suffix = levelAloneName(QString(), first.level);
+            baseName = first.path.name.endsWith(suffix) ? first.path.name.chopped(suffix.size())
+                                                        : first.path.name;
+        }
+
+        const auto lit = [](const LevelRecord& record) { return record.litFraction; };
+        const auto litFixed = [](const LevelRecord& record) { return record.litFractionFixed; };
+        for (int level = firstLevel; level <= lastLevel; level++) {
+            const auto found = std::find_if(paths.cbegin(), paths.cend(),
+                                            [level](const LevelPath& entry) {
+                                                return entry.level == level;
+                                            });
+            if (found == paths.cend()) {
+                writeCsvLine(QStringLiteral("m7Mean,%1,%2,,,%3")
+                                 .arg(levelAloneName(baseName, level))
+                                 .arg(level)
+                                 .arg(sourceName),
+                             out);
+                continue;
+            }
+            writeCsvLine(QStringLiteral("m7Mean,%1,%2,%3,%4,%5")
+                             .arg(found->path.name)
+                             .arg(level)
+                             .arg(meanAtLevel(records, level, lit), 0, 'f', kFractionDecimals)
+                             .arg(meanAtLevel(records, level, litFixed), 0, 'f',
+                                  kFractionDecimals)
+                             .arg(sourceName),
+                         out);
+        }
     }
 }
 
@@ -9932,6 +10065,18 @@ namespace {
     EvalPath tileFlyInPath(const cwPointOctreeManifest& manifest, const EvalConfig& config)
     {
         return everyNthPose(flyInPath(manifest, config.targetSize), kTileFlyInPoseStride);
+    }
+
+    //! The level-alone orbit for @a level as the tile M7 cases walk it, low
+    //! enough that the level fills the frame
+    EvalPath tileLevelAlonePath(QRhi* rhi, const cwPointOctreeManifest& manifest,
+                                const EvalConfig& config, int level)
+    {
+        const float height = levelAloneHeight(manifest, config.targetSize,
+                                              rhi->clipSpaceCorrMatrix(), level);
+        return everyNthPose(levelAloneOrbit(manifest, config.targetSize, level, height,
+                                            kBoundaryPoseCount),
+                            kTileBoundaryPoseStride);
     }
 
     //! The oracles of @a path on the tile, shaded the way the candidates are
@@ -10604,7 +10749,8 @@ TEST_CASE("M6 counts a floor the gather moved on the frame it moved",
             }
 
             INFO("frame " << i << ", node " << node);
-            const double nodeSpacing = nodeSampleSpacing(manifest, node);
+            const double nodeSpacing =
+                nodeDrawSpacing(manifest, node, spacingSourceOf(moved.twin.uniform));
             const double pixelsPerMeter = pixelsPerMeterAt(view,
                                                            manifest.nodeBounds(node).center());
             const double expected =
@@ -10751,14 +10897,10 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
     const EvalConfig config = candidateConfig(Candidate::Default);
     const QString cacheRoot = evalCacheRoot();
 
-    //Each level on its own level-alone orbit, low enough that the level fills
-    //the frame, with EDL on as the orbit case draws its oracles
+    //Each level on its own level-alone orbit, with EDL on as the orbit case
+    //draws its oracles
     const auto levelAlonePathFor = [&](int level) {
-        const float height = levelAloneHeight(manifest, config.targetSize,
-                                              rhi->clipSpaceCorrMatrix(), level);
-        return everyNthPose(levelAloneOrbit(manifest, config.targetSize, level, height,
-                                            kBoundaryPoseCount),
-                            kTileBoundaryPoseStride);
+        return tileLevelAlonePath(rhi.get(), manifest, config, level);
     };
     PointCloudFixture oracleFixture(rhi.get(), cache, config.targetSize);
     oracleFixture.setEdlEnabled(true);
@@ -10787,16 +10929,11 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
                               0, 'f', kHeightDecimals));
     }
 
+    //Levels past the tile's deepest are reported empty
+    writeLevelMeans(paths, records, kM7FirstLevel, kM7LastLevel);
+
     const auto lit = [](const LevelRecord& record) { return record.litFraction; };
     const auto litFixed = [](const LevelRecord& record) { return record.litFractionFixed; };
-    for (const LevelPath& levelPath : paths) {
-        const int level = levelPath.level;
-        writeCsvLine(QStringLiteral("m7Mean,%1,%2,%3,%4")
-                         .arg(levelPath.path.name)
-                         .arg(level)
-                         .arg(meanAtLevel(records, level, lit), 0, 'f', kFractionDecimals)
-                         .arg(meanAtLevel(records, level, litFixed), 0, 'f', kFractionDecimals));
-    }
 
     const double closedLit = meanAtLevel(records, kTileClosedLevel, lit);
     const double noise = std::max(kLevelLitNoiseFloor,
@@ -11493,4 +11630,436 @@ TEST_CASE("A dense patch draws sprites sized for the spacing it holds",
          << patchPoints.size() << " points at " << measured << " m under a "
          << floorSpacing << " m sprite floor");
     CHECK(floorSpacing <= kMaxFloorOverMeasuredSpacing * measured);
+}
+
+// ---- WP10: measured node spacing -----------------------------------------
+
+namespace {
+
+    //! A measured spacing a quarter wider than every node's grid: enough to
+    //! move the thinning fixture's refined level from a half weight to most of
+    //! its points, while the root, capped by the root spacing, still draws whole
+    constexpr float kSlightlySparseFactor = 1.25f;
+
+    //! A measured spacing well past every node's grid, so a floor taken from
+    //! it is unmistakable
+    constexpr float kSparseFactor = 3.0f;
+
+} // namespace
+
+TEST_CASE("The GPU thins the points the CPU predicts under measured spacing",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    const OctreeCache measuredCache = withMeasuredSpacing(thinningCache(), kSlightlySparseFactor);
+    PointCloudFixture fixture(rhi.get(), measuredCache, kTargetDimension);
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = kThinningScreenSpaceErrorPx;
+    fixture.setBudgets(budgets);
+    fixture.render().setSpacingCoverage(kThinningSpacingCoverage);
+    fixture.synchronize();
+    fixture.setReadbackEnabled(true);
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Measured);
+
+    fixture.setOrthoHeight(kThinningHalfWeightHeight);
+    fixture.renderUntilQuiet();
+    fixture.renderFrame();
+    REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+    const qsizetype lit = fixture.litPixels().size();
+
+    const int measured = predictedDrawnCount(fixture, kThinningHalfWeightHeight,
+                                             cw::pointcloud::ThinningMode::Continuous,
+                                             cw::pointcloud::SpacingSource::Measured);
+    const int grid = predictedDrawnCount(fixture, kThinningHalfWeightHeight,
+                                         cw::pointcloud::ThinningMode::Continuous,
+                                         cw::pointcloud::SpacingSource::Grid);
+    const int resident = int(residentPoints(fixture).size());
+
+    INFO("predicted " << measured << " points under measured spacing, " << grid
+         << " under the grid, lit " << lit << " pixels, " << resident << " resident");
+    //The refined level is a quarter sparser than its grid, so it keeps more
+    //of its points at the same target, and the GPU lights the ones the twin keeps
+    CHECK(measured > grid);
+    CHECK(std::abs(double(lit) - double(measured)) <= kThinnedCountTolerance * double(measured));
+}
+
+TEST_CASE("Under measured spacing a drawn node floors at the measured gap of the finest node under it",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    const OctreeCache measuredCache = withMeasuredSpacing(planeCache(), kSparseFactor);
+    PointCloudFixture fixture(rhi.get(), measuredCache, kTargetDimension);
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Measured);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+    fixture.renderFrame();
+
+    const cwPointOctreeManifest& manifest = fixture.manifest();
+    const QVector<int> drawnNodes = Access::drawnNodes(fixture.backend());
+    const QVector<int> missingNodes = Access::missingNodes(fixture.backend());
+    REQUIRE(drawnNodes.size() > 1);
+    REQUIRE(finestDrawnLevel(fixture) > kRootLevel);
+
+    //Every node measures kSparseFactor times its grid, so the finest node
+    //drawn under each one answers for that much of its own grid spacing
+    const QVector<int> levels = cw::octree::finestDrawnLevels(manifest, drawnNodes, missingNodes);
+    for (int i = 0; i < drawnNodes.size(); i++) {
+        const int node = drawnNodes.at(i);
+        const float expected = kSparseFactor * float(manifest.spacing(levels.at(i)));
+        INFO("node " << node << " at level " << manifest.nodes.at(node).level
+             << " floors at the level " << levels.at(i) << " node under it");
+        CHECK(Access::drawnNodeFloorSpacing(fixture.backend(), node) == expected);
+    }
+}
+
+TEST_CASE("Under grid spacing a measured spacing in the manifest changes nothing on screen",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    //The same payloads under two manifests, one with every node measured
+    //three times sparser than its grid, both drawn at the default source
+    struct Drawn {
+        QImage frame;
+        QVector<int> nodes;
+        QVector<float> floors;
+    };
+    const auto draw = [&](const OctreeCache& cache) {
+        PointCloudFixture fixture(rhi.get(), cache, kTargetDimension);
+        fixture.setReadbackEnabled(true);
+        REQUIRE(fixture.render().shading().spacingSource == cw::pointcloud::SpacingSource::Grid);
+        fixture.setOrthoHeight(kCloseOrthoHeight);
+        fixture.renderUntilQuiet();
+        fixture.renderFrame();
+
+        Drawn drawn;
+        drawn.frame = fixture.frameImage();
+        drawn.nodes = Access::drawnNodes(fixture.backend());
+        for (int node : std::as_const(drawn.nodes)) {
+            drawn.floors.append(Access::drawnNodeFloorSpacing(fixture.backend(), node));
+        }
+        return drawn;
+    };
+
+    const Drawn unmeasured = draw(withMeasuredSpacing(planeCache(), 0.0f));
+    const Drawn measured = draw(withMeasuredSpacing(planeCache(), kSparseFactor));
+
+    REQUIRE_FALSE(unmeasured.frame.isNull());
+    CHECK(measured.nodes == unmeasured.nodes);
+    CHECK(measured.floors == unmeasured.floors);
+    //Bit for bit
+    CHECK(measured.frame == unmeasured.frame);
+}
+
+TEST_CASE("Under grid spacing the plane's boundary path lights what it lit before measured spacing",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    //The lit fractions the Quiet sweep above logged at 03ae4e51, the commit
+    //before measured spacing, on the Metal backend. Grid draws the same
+    //pixels, so they come back to the logged precision; a change to the
+    //grid's own sizing or flooring moves them.
+    constexpr std::array<double, kSweptPoseCount> kLitFractionsBeforeMeasured {
+        0.19978, 0.19961, 0.20000, 0.20055};
+    constexpr double kLoggedPrecision = 0.5e-5;
+
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    path.poses.resize(kSweptPoseCount);
+
+    PathStep step;
+    step.policy = StepPolicy::Quiet;
+    step.settleBeforeFirstPose = false;
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    const EvalConfig config = candidateConfig(Candidate::Default);
+    REQUIRE(config.spacingSource == cw::pointcloud::SpacingSource::Grid);
+    const QVector<EvalRecord> records = sweepPath(fixture, path, config, step);
+
+    REQUIRE(records.size() == kSweptPoseCount);
+    for (int i = 0; i < records.size(); i++) {
+        INFO("pose " << i << " lights " << records.at(i).litFraction);
+        CHECK(std::abs(records.at(i).litFraction - kLitFractionsBeforeMeasured.at(i))
+              <= kLoggedPrecision);
+    }
+}
+
+namespace {
+    /**
+     * The share of the grid's fall at the finest level that measured spacing
+     * may leave open. The finest level of an additive octree holds what its
+     * ancestors left behind, which on the plane is a cross of points in every
+     * half-meter block rather than an even grid, so a spacing averaged over
+     * the node's footprint closes most of the fall but leaves the middle of
+     * each block open. Measured at about 15 % on the plane, and on the BC
+     * tile at about 4 % at level 6 and 21 % at level 7.
+     */
+    constexpr double kMeasuredFallShareLeft = 0.25;
+}
+
+TEST_CASE("M7: under measured spacing the finest level of a sparse cloud closes most of its fall",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const int finest = deepestLevel(manifest);
+    const int coarser = finest - 1;
+    REQUIRE(coarser > kRootLevel);
+    REQUIRE(manifest.spacing(finest) < kPlaneStep);
+
+    //The builder measured the finest level's own points sparser than its grid,
+    //which is the gap measured spacing sizes them to close
+    CHECK(std::any_of(manifest.nodes.cbegin(), manifest.nodes.cend(),
+                      [&](const cwPointOctreeNode& node) {
+                          return node.level == finest
+                                 && double(node.measuredSpacing) > manifest.spacing(finest);
+                      }));
+
+    PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+    const QVector<LevelPath> paths = levelPaths(
+        oracleFixture, kRootLevel + 1, finest, cacheRoot.path(),
+        [&](int level) { return planeLevelPath(rhi.get(), level, kO2SweepPoseCount); },
+        output);
+
+    const auto run = [&](const QVector<LevelPath>& levels, cw::pointcloud::SpacingSource source) {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        return litFractionByLevel(fixture, levels, output, source);
+    };
+    const QVector<LevelRecord> records = run(paths, cw::pointcloud::SpacingSource::Measured);
+    const QVector<LevelRecord> repeat =
+        run({levelPathAt(paths, coarser)}, cw::pointcloud::SpacingSource::Measured);
+    const QVector<LevelRecord> grid =
+        run({levelPathAt(paths, coarser), levelPathAt(paths, finest)},
+            cw::pointcloud::SpacingSource::Grid);
+    requireLevelPresent(records, coarser);
+    requireLevelPresent(records, finest);
+
+    const auto lit = [](const LevelRecord& record) { return record.litFraction; };
+    const double noise = std::max(kLevelLitNoiseFloor,
+                                  std::abs(meanAtLevel(records, coarser, lit)
+                                           - meanAtLevel(repeat, coarser, lit)));
+    const double finestLit = meanAtLevel(records, finest, lit);
+    const double coarserLit = meanAtLevel(records, coarser, lit);
+    const double gridFall = meanAtLevel(grid, coarser, lit) - meanAtLevel(grid, finest, lit);
+    const double measuredFall = coarserLit - finestLit;
+
+    INFO("under measured spacing level " << coarser << " lights " << coarserLit << ", level "
+         << finest << " " << finestLit << "; the grid falls " << gridFall
+         << " between them; noise " << noise);
+    //The grid's fall at the finest level (the M7 case above) is there to close
+    REQUIRE(gridFall > noise);
+    CHECK(measuredFall <= kMeasuredFallShareLeft * gridFall);
+}
+
+TEST_CASE("M7 reports a level the octree no longer reaches as empty instead of failing",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    constexpr int kFirstLevel = 4;
+    constexpr int kDeepestLevel = 5;
+    constexpr int kLastLevel = 7;
+    constexpr double kLit = 0.5;
+    constexpr double kLitFixed = 0.9;
+
+    QVector<LevelPath> paths;
+    QVector<LevelRecord> records;
+    for (int level = kFirstLevel; level <= kDeepestLevel; level++) {
+        LevelPath levelPath;
+        levelPath.level = level;
+        levelPath.path.name = QStringLiteral("M7-L%1").arg(level);
+        paths.append(levelPath);
+
+        LevelRecord record;
+        record.level = level;
+        record.litFraction = kLit;
+        record.litFractionFixed = kLitFixed;
+        records.append(record);
+    }
+
+    std::ostringstream output;
+    writeLevelMeans(paths, records, kFirstLevel, kLastLevel, output,
+                    cw::pointcloud::SpacingSource::Measured);
+    const QVector<QStringList> rows = csvRows(output, QStringLiteral("m7Mean,"));
+
+    constexpr int kLevelField = 2;
+    constexpr int kLitField = 3;
+    constexpr int kLitFixedField = 4;
+    constexpr int kSpacingSourceField = 5;
+    REQUIRE(rows.size() == kLastLevel - kFirstLevel + 1);
+    for (int i = 0; i < rows.size(); i++) {
+        const int level = kFirstLevel + i;
+        const QStringList& fields = rows.at(i);
+        INFO("level " << level << ": " << fields.join(QLatin1Char(',')).toStdString());
+        REQUIRE(fields.size() == kSpacingSourceField + 1);
+        CHECK(fields.at(kLevelField).toInt() == level);
+        //Present and empty levels alike name the source, so a report keeps a
+        //measured run's levels apart from a grid run's
+        CHECK(fields.at(kSpacingSourceField) == QStringLiteral("Measured"));
+        if (level <= kDeepestLevel) {
+            CHECK(fields.at(kLitField).toDouble() == Catch::Approx(kLit));
+            CHECK(fields.at(kLitFixedField).toDouble() == Catch::Approx(kLitFixed));
+        } else {
+            CHECK(fields.at(kLitField).isEmpty());
+            CHECK(fields.at(kLitFixedField).isEmpty());
+        }
+    }
+}
+
+TEST_CASE("C-default-measured is C-default sizing and thinning by measured spacing",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalConfig measured = candidateConfig(Candidate::DefaultMeasured);
+
+    CHECK(measured.name == QStringLiteral("C-default-measured"));
+    CHECK(measured.spacingSource == cw::pointcloud::SpacingSource::Measured);
+    CHECK(measured.targetSize == defaults.targetSize);
+    CHECK(measured.budgets.gpuBudgetBytes == defaults.budgets.gpuBudgetBytes);
+    CHECK(measured.budgets.pointBudget == defaults.budgets.pointBudget);
+    CHECK(measured.budgets.uploadBudgetBytesPerFrame == defaults.budgets.uploadBudgetBytesPerFrame);
+    CHECK(measured.budgets.screenSpaceErrorPx == defaults.budgets.screenSpaceErrorPx);
+    CHECK(measured.budgets.governorSlew == defaults.budgets.governorSlew);
+
+    //Every other candidate draws by the grid, as before
+    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
+                                      Candidate::Tight, Candidate::TightSlew}) {
+        const EvalConfig config = candidateConfig(candidate);
+        INFO(config.name.toStdString());
+        CHECK(config.spacingSource == cw::pointcloud::SpacingSource::Grid);
+    }
+}
+
+TEST_CASE("evalCsv records the spacing source each sweep draws with",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    path.poses.resize(kSweptPoseCount);
+
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kSweptFramesPerPose;
+
+    for (const Candidate candidate : {Candidate::Default, Candidate::DefaultMeasured}) {
+        const EvalConfig config = candidateConfig(candidate);
+        INFO(config.name.toStdString());
+
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        std::ostringstream output;
+        const QVector<EvalRecord> records = sweepPath(fixture, path, config, step, output);
+        REQUIRE_FALSE(records.isEmpty());
+
+        //The sweep drew with the config's source, not whatever the fixture held
+        CHECK(fixture.render().shading().spacingSource == config.spacingSource);
+
+        const QVector<QStringList> rows = csvRows(output, QStringLiteral("evalCsv,"));
+        REQUIRE(rows.size() == 1 + records.size());
+        const QStringList& header = rows.constFirst();
+        INFO("evalCsv header: " << header.join(QLatin1Char(',')).toStdString());
+        //Appended last, so every older column keeps its place
+        CHECK(header.constLast() == QStringLiteral("spacingSource"));
+        CHECK(header.indexOf(QStringLiteral("sseInflationTarget")) == header.size() - 2);
+
+        const QString expected = spacingSourceName(config.spacingSource);
+        for (int i = 1; i < rows.size(); i++) {
+            const QStringList& fields = rows.at(i);
+            REQUIRE(fields.size() == header.size());
+            CHECK(fields.constLast() == expected);
+        }
+    }
+}
+
+TEST_CASE("The orbit and its boundary path on a tile under C-default-measured record every metric",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    //C-default's poses (P2/24 and P2z/6) and oracles, so the two compare pose
+    //for pose and the spacing source is the only difference
+    const EvalConfig config = candidateConfig(Candidate::DefaultMeasured);
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    REQUIRE(config.targetSize == defaults.targetSize);
+    REQUIRE(config.spacingSource == cw::pointcloud::SpacingSource::Measured);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    for (const EvalPath& path : {tileOrbitPath(manifest, defaults),
+                                 tileBoundaryPath(rhi.get(), manifest, defaults)}) {
+        const EvalOracles oracles = tileOracles(rhi.get(), cache, path, config.targetSize);
+        checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step, oracles), path,
+                         step);
+    }
+}
+
+TEST_CASE("M7: on a tile under measured spacing, levels 6 and 7 alone close most of their fall",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+    const int leaf = deepestLevel(manifest);
+    REQUIRE(leaf >= kTileOpenLevel);
+
+    //The minimum to split may leave the tile shallower than the M7 range;
+    //levels past its deepest are reported empty
+    const int lastLevel = std::min(kM7LastLevel, leaf);
+
+    const EvalConfig config = candidateConfig(Candidate::DefaultMeasured);
+    const QString cacheRoot = evalCacheRoot();
+
+    const auto levelAlonePathFor = [&](int level) {
+        return tileLevelAlonePath(rhi.get(), manifest, config, level);
+    };
+    PointCloudFixture oracleFixture(rhi.get(), cache, config.targetSize);
+    oracleFixture.setEdlEnabled(true);
+    const QVector<LevelPath> paths = levelPaths(oracleFixture, kM7FirstLevel, lastLevel,
+                                                cacheRoot, levelAlonePathFor);
+
+    const auto run = [&](const QVector<LevelPath>& levels, std::ostream& out,
+                         cw::pointcloud::SpacingSource source) {
+        PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
+        return litFractionByLevel(fixture, levels, out, source);
+    };
+    const QVector<LevelRecord> records = run(paths, std::cout, config.spacingSource);
+    std::ostringstream repeatOutput;
+    const QVector<LevelRecord> repeat =
+        run({levelPathAt(paths, kTileClosedLevel)}, repeatOutput, config.spacingSource);
+
+    //The same levels under the grid, kept off the log so its m7Csv rows are
+    //the measured run's alone
+    QVector<LevelPath> gridPaths;
+    for (int level = kTileClosedLevel; level <= kTileOpenLevel; level++) {
+        gridPaths.append(levelPathAt(paths, level));
+    }
+    std::ostringstream gridOutput;
+    const QVector<LevelRecord> grid =
+        run(gridPaths, gridOutput, cw::pointcloud::SpacingSource::Grid);
+
+    writeLevelMeans(paths, records, kM7FirstLevel, kM7LastLevel, std::cout, config.spacingSource);
+
+    const auto lit = [](const LevelRecord& record) { return record.litFraction; };
+    const double closedLit = meanAtLevel(records, kTileClosedLevel, lit);
+    const double noise = std::max(kLevelLitNoiseFloor,
+                                  std::abs(closedLit - meanAtLevel(repeat, kTileClosedLevel, lit)));
+
+    requireLevelPresent(records, kTileClosedLevel);
+    const double gridClosedLit = meanAtLevel(grid, kTileClosedLevel, lit);
+    for (int level = kTileClosedLevel + 1; level <= kTileOpenLevel; level++) {
+        requireLevelPresent(records, level);
+        const double levelLit = meanAtLevel(records, level, lit);
+        const double gridFall = gridClosedLit - meanAtLevel(grid, level, lit);
+        const double measuredFall = closedLit - levelLit;
+        INFO("level " << kTileClosedLevel << " lights " << closedLit << ", level " << level
+             << " " << levelLit << "; the grid falls " << gridFall << " between them; noise "
+             << noise);
+        //The grid's fall (the M7 tile case above) is there to close, and a
+        //finer level holds what its ancestors left, so measured spacing closes
+        //most of it rather than all of it (kMeasuredFallShareLeft)
+        REQUIRE(gridFall > noise);
+        CHECK(measuredFall <= kMeasuredFallShareLeft * gridFall);
+    }
 }

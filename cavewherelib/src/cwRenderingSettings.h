@@ -59,6 +59,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int thinningMode READ thinningMode WRITE setThinningMode NOTIFY thinningModeChanged)
     Q_PROPERTY(int sizeMode READ sizeMode WRITE setSizeMode NOTIFY sizeModeChanged)
     Q_PROPERTY(int floorMode READ floorMode WRITE setFloorMode NOTIFY floorModeChanged)
+    Q_PROPERTY(int spacingSource READ spacingSource WRITE setSpacingSource NOTIFY spacingSourceChanged)
     Q_PROPERTY(double fixedPointSizePx READ fixedPointSizePx WRITE setFixedPointSizePx NOTIFY fixedPointSizePxChanged)
     Q_PROPERTY(double maxPointSizePx READ maxPointSizePx WRITE setMaxPointSizePx NOTIFY maxPointSizePxChanged)
     Q_PROPERTY(int debugView READ debugView WRITE setDebugView NOTIFY debugViewChanged)
@@ -85,6 +86,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int thinningModeCount READ thinningModeCount CONSTANT)
     Q_PROPERTY(int sizeModeCount READ sizeModeCount CONSTANT)
     Q_PROPERTY(int floorModeCount READ floorModeCount CONSTANT)
+    Q_PROPERTY(int spacingSourceCount READ spacingSourceCount CONSTANT)
     Q_PROPERTY(int debugViewCount READ debugViewCount CONSTANT)
     Q_PROPERTY(double minimumPointSizePx READ minimumPointSizePx CONSTANT)
     Q_PROPERTY(double maximumPointSizePx READ maximumPointSizePx CONSTANT)
@@ -150,6 +152,10 @@ public:
     int floorMode() const { return int(m_shading.floorMode); }
     void setFloorMode(int mode);
 
+    //! A cw::pointcloud::SpacingSource
+    int spacingSource() const { return int(m_shading.spacingSource); }
+    void setSpacingSource(int source);
+
     double fixedPointSizePx() const { return m_shading.fixedPointSizePx; }
     void setFixedPointSizePx(double pixels);
 
@@ -187,6 +193,7 @@ public:
     static int thinningModeCount() { return cw::pointcloud::kThinningModeCount; }
     static int sizeModeCount() { return cw::pointcloud::kSizeModeCount; }
     static int floorModeCount() { return cw::pointcloud::kFloorModeCount; }
+    static int spacingSourceCount() { return cw::pointcloud::kSpacingSourceCount; }
     static int debugViewCount() { return cw::pointcloud::kDebugViewCount; }
     static double minimumPointSizePx() { return cw::pointcloud::kMinPointSizePx; }
     static double maximumPointSizePx() { return cw::pointcloud::kMaxPointSizePx; }
@@ -221,6 +228,7 @@ signals:
     void thinningModeChanged();
     void sizeModeChanged();
     void floorModeChanged();
+    void spacingSourceChanged();
     void fixedPointSizePxChanged();
     void maxPointSizePxChanged();
     void debugViewChanged();

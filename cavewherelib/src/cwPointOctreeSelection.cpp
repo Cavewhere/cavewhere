@@ -6,6 +6,7 @@
 
 //Our includes
 #include "cwFrustum.h"
+#include "cwPointCloudClod.h"
 #include "cwPointOctreeManifest.h"
 #include "cwScreenSpace.h"
 
@@ -186,21 +187,43 @@ QVector<SelectedNode> selectNodes(const SelectionInput& input)
     return selectCut(input).nodes;
 }
 
-QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
-                               const QVector<int>& drawnNodes,
-                               const QVector<int>& missingNodes)
+namespace {
+
+//! What one drawn node floors its sprites at: the level of the finest node
+//! drawn under it and that node's spacing under the frame's source
+struct DrawnFloor {
+    int level = 0;
+    double spacing = 0.0;
+    bool incomplete = false;
+};
+
+//! The walk finestDrawnLevels() documents, carrying each floor's spacing
+//! beside its level. Where two nodes at the same deepest level feed one
+//! floor, the narrower spacing wins, so the floor is the finest drawn. A
+//! floor is at most its node's own spacing, so one sparse deep leaf (a few
+//! stray returns measured wide) never draws its ancestor's dense points
+//! larger than the ancestor's own spacing would. Under Grid both rules are
+//! no-ops: a deeper level's grid spacing is never wider, and one level has
+//! one grid spacing.
+QVector<DrawnFloor> finestDrawnFloors(const cwPointOctreeManifest& manifest,
+                                      const QVector<int>& drawnNodes,
+                                      const QVector<int>& missingNodes,
+                                      cw::pointcloud::SpacingSource source)
 {
     const QVector<int>& parents = manifest.parents();
 
-    struct DrawnLevel {
-        int level = 0;
-        bool incomplete = false;
+    const auto ownFloor = [&](int node) {
+        const cwPointOctreeNode& entry = manifest.nodes.at(node);
+        return DrawnFloor {entry.level,
+                           cw::clod::drawSpacing(manifest.spacing(entry.level),
+                                                 double(entry.measuredSpacing), source),
+                           false};
     };
 
-    QHash<int, DrawnLevel> drawn;
+    QHash<int, DrawnFloor> drawn;
     drawn.reserve(drawnNodes.size());
     for(int node : drawnNodes) {
-        drawn.insert(node, {manifest.nodes.at(node).level, false});
+        drawn.insert(node, ownFloor(node));
     }
 
     const auto nearestDrawnAncestor = [&](int node) {
@@ -231,23 +254,64 @@ QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
         return manifest.nodes.at(left).level > manifest.nodes.at(right).level;
     });
     for(int node : std::as_const(deepestFirst)) {
-        DrawnLevel& entry = drawn[node];
+        DrawnFloor& entry = drawn[node];
         if(entry.incomplete) {
-            entry.level = manifest.nodes.at(node).level;
+            const DrawnFloor own = ownFloor(node);
+            entry.level = own.level;
+            entry.spacing = own.spacing;
         }
 
         const auto ancestor = nearestDrawnAncestor(node);
-        if(ancestor != drawn.end()) {
-            ancestor->level = std::max(ancestor->level, entry.level);
+        if(ancestor == drawn.end()) {
+            continue;
+        }
+        if(entry.level > ancestor->level) {
+            ancestor->level = entry.level;
+            ancestor->spacing = entry.spacing;
+        } else if(entry.level == ancestor->level) {
+            ancestor->spacing = std::min(ancestor->spacing, entry.spacing);
         }
     }
 
-    QVector<int> levels;
-    levels.reserve(drawnNodes.size());
+    QVector<DrawnFloor> floors;
+    floors.reserve(drawnNodes.size());
     for(int node : drawnNodes) {
-        levels.append(drawn.value(node).level);
+        DrawnFloor floor = drawn.value(node);
+        floor.spacing = std::min(floor.spacing, ownFloor(node).spacing);
+        floors.append(floor);
+    }
+    return floors;
+}
+
+}
+
+QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
+                               const QVector<int>& drawnNodes,
+                               const QVector<int>& missingNodes)
+{
+    const QVector<DrawnFloor> floors =
+        finestDrawnFloors(manifest, drawnNodes, missingNodes, cw::pointcloud::SpacingSource::Grid);
+    QVector<int> levels;
+    levels.reserve(floors.size());
+    for(const DrawnFloor& floor : floors) {
+        levels.append(floor.level);
     }
     return levels;
+}
+
+QVector<double> finestDrawnSpacings(const cwPointOctreeManifest& manifest,
+                                    const QVector<int>& drawnNodes,
+                                    const QVector<int>& missingNodes,
+                                    cw::pointcloud::SpacingSource source)
+{
+    const QVector<DrawnFloor> floors =
+        finestDrawnFloors(manifest, drawnNodes, missingNodes, source);
+    QVector<double> spacings;
+    spacings.reserve(floors.size());
+    for(const DrawnFloor& floor : floors) {
+        spacings.append(floor.spacing);
+    }
+    return spacings;
 }
 
 QVector<int> planNodeEvictions(const QVector<NodeResidency>& nodes, qint64 overshootBytes)

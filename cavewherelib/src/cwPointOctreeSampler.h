@@ -59,6 +59,15 @@ namespace cw::octree {
     CAVEWHERE_LIB_EXPORT QVector<QVector3D> sampleUp(const QBox3D& parentBounds,
                                                      const QVector<QVector<QVector3D>*>& childrenPoints);
 
+    /**
+     * The spacing between @a points, in meters, measured over the xy extent
+     * they occupy. A node's grid spacing is what its level promises; this is
+     * what its points hold, which is wider where the data is sparser than the
+     * grid. 0 when there is nothing to measure: fewer than two points, or
+     * points stacked on one spot of the xy plane.
+     */
+    CAVEWHERE_LIB_EXPORT float measureNodeSpacing(const QVector<QVector3D>& points);
+
     struct SampledNode {
         Cell cell;
         QVector<QVector3D> points;
@@ -75,10 +84,15 @@ namespace cw::octree {
      * A child the parent's sample drained is dropped, so a node whose children
      * were all drained comes back childless while holding up to
      * kSampleGridResolution^3 points, which can exceed leafMaxPoints.
+     *
+     * A node that sampled first keeps the points its grid left behind as a
+     * leaf while they number fewer than @a minSplitPoints (kMinSplitPoints);
+     * 0 splits every leftover.
      */
     CAVEWHERE_LIB_EXPORT QVector<SampledNode> buildSubtree(QVector<QVector3D> points,
                                                            const Cell& root,
                                                            const QVector3D& rootMin,
                                                            double rootSize,
-                                                           int leafMaxPoints = kLeafMaxPoints);
+                                                           int leafMaxPoints = kLeafMaxPoints,
+                                                           int minSplitPoints = kMinSplitPoints);
 }

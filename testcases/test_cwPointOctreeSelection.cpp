@@ -1041,3 +1041,107 @@ TEST_CASE("cw::octree::selectForest: maxNodes counts across the whole forest",
         CHECK(forest.points == 0);
     }
 }
+
+TEST_CASE("cw::octree::finestDrawnSpacings: grid spacing floors exactly where finestDrawnLevels does",
+          "[PointOctree][PointOctreeSelection]")
+{
+    //Measured spacings on every node, so grid has something to ignore
+    cwPointOctreeManifest manifest = buildManifest();
+    constexpr float kSparseFactor = 3.0f;
+    for(cwPointOctreeNode& node : manifest.nodes) {
+        node.measuredSpacing = kSparseFactor * float(manifest.spacing(node.level));
+    }
+
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int missingGrandchild = manifest.nodes.at(refinedChild).children.at(1);
+    const int coarseChild = manifest.nodes.at(0).children.at(1);
+
+    struct Cut {
+        QVector<int> drawn;
+        QVector<int> missing;
+    };
+    const QVector<Cut> cuts {
+        {{0}, {}},
+        {{0, refinedChild, grandchild}, {}},
+        {{0, refinedChild, grandchild, coarseChild}, {}},
+        {{0, refinedChild, grandchild}, {coarseChild}},
+        {{0, refinedChild, grandchild}, {missingGrandchild}},
+        {{grandchild, 0, refinedChild}, {missingGrandchild}},
+    };
+
+    for(const Cut& cut : cuts) {
+        const QVector<int> levels = finestDrawnLevels(manifest, cut.drawn, cut.missing);
+        const QVector<double> spacings =
+            finestDrawnSpacings(manifest, cut.drawn, cut.missing,
+                                cw::pointcloud::SpacingSource::Grid);
+        REQUIRE(spacings.size() == levels.size());
+        for(int i = 0; i < levels.size(); i++) {
+            //Bit for bit: the floor a grid frame writes is the one it always wrote
+            CHECK(spacings.at(i) == manifest.spacing(levels.at(i)));
+        }
+    }
+}
+
+TEST_CASE("cw::octree::finestDrawnSpacings: measured spacing floors at the finest drawn node's measured gap",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    cwPointOctreeManifest manifest = buildManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int missingGrandchild = manifest.nodes.at(refinedChild).children.at(1);
+
+    constexpr double kSparseFactor = 3.0;
+    constexpr double kDenseFactor = 0.5;
+    const double grandchildGrid = manifest.spacing(manifest.nodes.at(grandchild).level);
+    const double childGrid = manifest.spacing(manifest.nodes.at(refinedChild).level);
+
+    SECTION("a sparse finest node floors its ancestors at its measured gap, up to their own spacing") {
+        //Wider than the child's own grid, narrower than the root's
+        manifest.nodes[grandchild].measuredSpacing = float(kSparseFactor * grandchildGrid);
+        const double rootGrid = manifest.spacing(manifest.nodes.at(0).level);
+        const double expected = double(manifest.nodes.at(grandchild).measuredSpacing);
+        REQUIRE(expected > childGrid);
+        REQUIRE(expected < rootGrid);
+
+        const QVector<int> drawn {0, refinedChild, grandchild};
+        const QVector<double> floors =
+            finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Measured);
+        REQUIRE(floors.size() == drawn.size());
+        CHECK(floors.at(0) == expected);
+        //One sparse leaf draws the dense child's points at the child's own
+        //spacing at most, never wider
+        CHECK(floors.at(1) == childGrid);
+        CHECK(floors.at(2) == expected);
+    }
+
+    SECTION("two finest nodes at one level floor their ancestor at the narrower of them") {
+        const int siblingGrandchild = manifest.nodes.at(refinedChild).children.at(1);
+        manifest.nodes[grandchild].measuredSpacing = float(kSparseFactor * grandchildGrid);
+        const QVector<int> drawn {0, refinedChild, grandchild, siblingGrandchild};
+        const QVector<double> floors =
+            finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Measured);
+        REQUIRE(floors.size() == drawn.size());
+        CHECK(floors.at(0) == grandchildGrid);
+        CHECK(floors.at(1) == grandchildGrid);
+    }
+
+    SECTION("a finest node denser than its grid floors at its grid") {
+        manifest.nodes[grandchild].measuredSpacing = float(kDenseFactor * grandchildGrid);
+        const QVector<int> drawn {0, refinedChild, grandchild};
+        CHECK(finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Measured)
+              == QVector<double>({grandchildGrid, grandchildGrid, grandchildGrid}));
+    }
+
+    SECTION("an incomplete node floors at its own measured gap") {
+        manifest.nodes[refinedChild].measuredSpacing = float(kSparseFactor * childGrid);
+        const QVector<int> drawn {0, refinedChild, grandchild};
+        const QVector<double> floors =
+            finestDrawnSpacings(manifest, drawn, {missingGrandchild}, SpacingSource::Measured);
+        REQUIRE(floors.size() == drawn.size());
+        CHECK(floors.at(1) == double(manifest.nodes.at(refinedChild).measuredSpacing));
+        CHECK(floors.at(2) == grandchildGrid);
+    }
+}

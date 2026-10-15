@@ -609,6 +609,7 @@ message PointOctreeNode {
     uint32 point_count = 5;
     int64 byte_size = 6;
     repeated int32 children = 7;    // exactly 8 entries, -1 = no child
+    float measured_spacing = 8;     // meters between the node's own points, 0 = not measured
 }
 
 message PointOctreeManifest {

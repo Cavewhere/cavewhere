@@ -1225,10 +1225,14 @@ def m7_section(log):
              "starts asking for that level, every budget past the cloud, at the default coverage "
              "sizing and at the fixed-pixel size; the mean over the path's poses against that "
              "path's O1. Levels on their own paths are compared at their own heights.</p>"]
+    # A grid run and a measured run of one path family draw the same levels on
+    # the same paths, so each source gets a table of its own. Logs from before
+    # the spacingSource column carry none and keep one table per family.
     by_family = {}
     for row in log.m7_rows:
-        by_family.setdefault(level_path_family(row.get("path", "")), []).append(row)
-    for family, rows in by_family.items():
+        key = (level_path_family(row.get("path", "")), row.get("spacingSource") or "")
+        by_family.setdefault(key, []).append(row)
+    for (family, source), rows in by_family.items():
         by_level = {}
         for row in rows:
             by_level.setdefault(int(number(row.get("level")) or 0), []).append(row)
@@ -1250,7 +1254,8 @@ def m7_section(log):
                          "<td class=\"num\">{}</td><td class=\"num\">{}</td></tr>".format(
                              level, escape(", ".join(paths)), len(at), format_value(lit),
                              format_value(fixed), format_value(holes), format_value(drawn, 1)))
-        parts.append("<h3>{}</h3>".format(escape(family)))
+        title = "{} ({})".format(family, source) if source else family
+        parts.append("<h3>{}</h3>".format(escape(title)))
         parts.append('<div class="scroll"><table><tr><th>level</th><th>path</th><th>poses</th>'
                      "<th>lit, default sizing</th><th>lit, fixed pixels</th>"
                      "<th>holes, default</th><th>drawn nodes</th></tr>{}</table></div>".format(
