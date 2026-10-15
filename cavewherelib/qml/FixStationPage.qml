@@ -874,8 +874,8 @@ StandardPage {
         }
     }
 
-    // The system a row's bare fixes read in, chosen on fromNode, with a link
-    // to fromNode's Fix Stations page.
+    // The system a row's bare fixes read in and the node it was chosen on,
+    // with a link to that node's Fix Stations page.
     component InheritedSystemRow : RowLayout {
         id: inheritedSystemRow
         property string rowName: ""
@@ -887,11 +887,10 @@ StandardPage {
 
         QC.Label {
             objectName: "inheritedSystem." + inheritedSystemRow.rowName
-            text: "Coordinate system for bare fixes: "
-                  + (inheritedSystemRow.system !== "" ? inheritedSystemRow.system : "unset")
+            text: "Coordinate system for bare fixes: " + inheritedSystemRow.system
                   + " (set on " + (inheritedSystemRow.fromNode?.name ?? "") + ")"
             textFormat: QC.Label.PlainText
-            color: inheritedSystemRow.system !== "" ? Theme.textSubtle : Theme.errorText
+            color: Theme.textSubtle
             font.pixelSize: Theme.fontSizeSmall
         }
 
@@ -1181,13 +1180,9 @@ StandardPage {
             readonly property bool isPageNode: nodeRowId.node === fixStationPage.cave
             // The region's root node has no name of its own.
             readonly property string displayName: nodeRowId.nodeName !== "" ? nodeRowId.nodeName : "Project"
-            // The system the node's bare fixes read in: its own choice on an
-            // owner, the owner's above it otherwise.
-            readonly property string bareFixSystem: nodeRowId.isAttachmentOwner
-                                                    ? nodeRowId.fixCoordinateSystem
-                                                    : nodeRowId.inheritedFixCoordinateSystem
             readonly property bool showsInheritedSystem: !nodeRowId.isAttachmentOwner
                                                          && nodeRowId.inheritedFromNode !== null
+                                                         && nodeRowId.inheritedFixCoordinateSystem !== ""
                                                          && nodeRowId.subtreeBareFixCount > 0
 
             implicitWidth: nodeColumnId.implicitWidth + nodeColumnId.anchors.leftMargin + Theme.delegatePadding
@@ -1276,7 +1271,7 @@ StandardPage {
                 InheritedSystemRow {
                     visible: nodeRowId.showsInheritedSystem
                     rowName: nodeRowId.nodeName
-                    system: nodeRowId.bareFixSystem
+                    system: nodeRowId.inheritedFixCoordinateSystem
                     fromNode: nodeRowId.inheritedFromNode
                 }
             }
@@ -1308,6 +1303,7 @@ StandardPage {
             required property SurveyNode inheritedFromNode
 
             readonly property bool showsInheritedSystem: tripRowId.inheritedFromNode !== null
+                                                         && tripRowId.inheritedFixCoordinateSystem !== ""
                                                          && tripRowId.subtreeBareFixCount > 0
 
             implicitWidth: tripColumnId.implicitWidth + tripColumnId.anchors.leftMargin + Theme.delegatePadding

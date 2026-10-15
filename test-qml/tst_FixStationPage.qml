@@ -2723,6 +2723,13 @@ MainWindowTest {
             tryVerify(() => findChild(ownerRow, "bareFixSystemCombo.ridge") !== null, 5000,
                       "the owner's row offers a system for the file's bare fixes")
 
+            const entrancesRow = waitForChild("tripRow.entrances")
+            tryVerify(() => rootId.showsText(entrancesRow, "without coordinate system"), 5000,
+                      "the descendant's badge carries the unset system")
+            const unsetInherited = liveChild("inheritedSystem.entrances")
+            verify(unsetInherited === null || !unsetInherited.visible,
+                   "an unset subtree shows no inherited-system row")
+
             // The page's own node is attachmentOwners[0].
             page.setBareFixCoordinateSystem(0, "UTM48N")
             tryVerify(() => root.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
@@ -2781,6 +2788,10 @@ MainWindowTest {
                       "the trip row carries the block's badge")
             compare(findChild(tripRow, "bareFixSystemCombo.simmons_hall"), null,
                     "the trip row offers no system of its own")
+
+            const unsetInherited = liveChild("inheritedSystem.simmons_hall")
+            verify(unsetInherited === null || !unsetInherited.visible,
+                   "an unset subtree shows no inherited-system row")
 
             // The owner's control stays on the owner's node row.
             const ownerRow = waitForChild("nodeRow.leaf")
