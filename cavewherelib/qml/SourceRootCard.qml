@@ -10,9 +10,9 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// The source card on a source root's page: the copied file, its format, where
-// the copy came from, and the solve status with the root's station count and
-// a link to the cavern output.
+// The source card on a source root's page: the copied file, where the copy
+// came from, and the solve status with the root's station count and a link
+// to the cavern output.
 // Reload and Replace… sit in the header's right-click menus; they act on the
 // whole subtree, so they live on the root and nowhere below it.
 QQ.Item {

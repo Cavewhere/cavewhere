@@ -18,7 +18,7 @@ import cavewherelib
 // A trip reaches this panel in one of two modes: Attached, where the trip
 // owns a survey file of its own, and Derived, where the trip windows one
 // block of its source root's file. Everything that acts on a file of the
-// trip's own — the header with its file name, format and provenance, Reload
+// trip's own — the header with its file name and provenance, Reload
 // and Replace…, and the missing-copy and file-error banners — belongs to
 // Attached alone. The solve status lives on the source root's card.
 QQ.Item {

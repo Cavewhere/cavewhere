@@ -464,10 +464,8 @@ CAVEWHERE_LIB_EXPORT Format formatFor(const QString& entryFile);
 
 /**
  * User-facing name for a format: "Survex", "Compass", or "Walls";
- * empty for Format::Unknown. The single source for the format label
- * shown by cwExternalCenterline::format() (attached owners) and the
- * picker's "Format:" line (via
- * cwExternalCenterlineScanPreview). Proper nouns, so untranslated.
+ * empty for Format::Unknown. The picker's "Format:" line reads it
+ * via cwExternalCenterlineScanPreview. Proper nouns, so untranslated.
  */
 CAVEWHERE_LIB_EXPORT QString formatName(Format format);
 

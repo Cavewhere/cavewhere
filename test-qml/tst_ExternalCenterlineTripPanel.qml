@@ -322,7 +322,7 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
 
             // MP.9 took Replace… off the file-name row into its menu, so the
-            // row holds the name and format and nothing to click.
+            // row holds the name and nothing to click.
             const fileRow = findChild(panelId, "attachedHeaderFileRow")
             verify(fileRow !== null, "attachedHeaderFileRow must exist")
             const fileLabel = findChild(fileRow, "attachedFileLabel")
@@ -339,12 +339,12 @@ MainWindowTest {
                 }
             }
             compare(rowNames.join(","),
-                    "attachedFileLabel,attachedFormatLabel",
-                    "the file row holds the name and format and no action")
-            // The two labels and the fill spacer — pins the row's size so an
+                    "attachedFileLabel",
+                    "the file row holds the name and no action")
+            // The label and the fill spacer — pins the row's size so an
             // action added without an objectName fails here too.
-            compare(rowLayout.children.length, 3,
-                    "the file row holds the name, format and spacer")
+            compare(rowLayout.children.length, 2,
+                    "the file row holds the name and spacer")
 
             // §16 B2e: the panel hands the header an absolute path, so the
             // file-name context menu acts on the copy inside the project.

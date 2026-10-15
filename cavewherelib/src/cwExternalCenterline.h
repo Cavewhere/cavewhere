@@ -40,7 +40,6 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterline
     QML_VALUE_TYPE(cwExternalCenterline)
     Q_PROPERTY(QString entryFile READ entryFile WRITE setEntryFile FINAL)
     Q_PROPERTY(bool isEmpty READ isEmpty FINAL)
-    Q_PROPERTY(QString format READ format FINAL)
     //! The coordinate system the solve reads the attachment's fixes in when
     //! the file names none for them; empty when the user has chosen none.
     Q_PROPERTY(QString fixCoordinateSystem READ fixCoordinateSystem WRITE setFixCoordinateSystem FINAL)
@@ -54,11 +53,6 @@ public:
 
     QString fixCoordinateSystem() const { return m_fixCoordinateSystem; }
     void setFixCoordinateSystem(const QString& system) { m_fixCoordinateSystem = system; }
-
-    // Display name of the entry file's survey format ("Survex",
-    // "Compass", "Walls"; empty when unrecognized or unattached),
-    // derived from the extension via the scanner's formatFor.
-    QString format() const;
 
     bool isEmpty() const { return m_entryFile.isEmpty(); }
 

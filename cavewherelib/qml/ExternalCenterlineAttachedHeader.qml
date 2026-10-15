@@ -12,7 +12,7 @@ import cavewherelib
 
 // Attached-mode header for an external-centerline owner — a trip or a
 // node, both of which expose externalCenterline and id: the entry file
-// name and format, and the provenance line ("Copied from: <path>" or
+// name and the provenance line ("Copied from: <path>" or
 // "Copied from an unknown location (this machine)"), which names where
 // the copy came from. Each line has a right-click menu that leads with
 // Reload and Replace…, then reveals or opens that line's own file: the
@@ -66,7 +66,6 @@ ColumnLayout {
 
     readonly property string entryFile: owner !== null ? owner.externalCenterline.entryFile : ""
     readonly property string fileName: entryFile.substring(entryFile.lastIndexOf("/") + 1)
-    readonly property string formatName: owner !== null ? owner.externalCenterline.format : ""
     readonly property bool attached: entryFile.length > 0
 
     spacing: Theme.tightSpacing
@@ -131,13 +130,6 @@ ColumnLayout {
                 QQ.HoverHandler {
                     id: fileHoverId
                 }
-            }
-
-            QC.Label {
-                objectName: "attachedFormatLabel"
-                visible: root.formatName.length > 0
-                color: Theme.textSecondary
-                text: root.formatName
             }
 
             QQ.Item { Layout.fillWidth: true }

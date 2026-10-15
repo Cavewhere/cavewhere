@@ -4,7 +4,7 @@ import cavewherelib
 import cw.TestLib
 
 // The page of a source root (SURVEY_TREE_PLAN C7.4b): the source card names
-// the copied file, its format and provenance, and the solve status; Reload and
+// the copied file and its provenance, and the solve status; Reload and
 // Replace… live in the header's right-click menus (MP.9).
 MainWindowTest {
     id: rootId
@@ -58,8 +58,10 @@ MainWindowTest {
 
             const header = findChild(card, "attachedHeader")
             compare(header.fileName, "PROJECT.MAK", "the card names the copied file")
-            compare(findChild(card, "attachedFormatLabel").text, sourceRoot.externalCenterline.format)
-            verify(sourceRoot.externalCenterline.format.length > 0, "the card names the format")
+            compare(findChild(card, "attachedFormatLabel"), null,
+                    "the file extension carries the format, so the card shows no format label")
+            compare(sourceRoot.externalCenterline.format, undefined,
+                    "the external centerline exposes no format property")
             tryVerify(() => findChild(card, "sourceModeLabel").text.indexOf("compass_project/PROJECT.MAK") >= 0,
                       5000, "the card says where the copy came from")
 

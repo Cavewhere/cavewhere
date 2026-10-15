@@ -183,7 +183,7 @@ MainWindowTest {
             return attachedHeaderId.entryFilePath
         }
 
-        function test_attachedHeaderShowsFileFormatAndSource() {
+        function test_attachedHeaderShowsFileAndSource() {
             const fixture = attachFixtureTrip("panel-header")
             rootId.trip = fixture.trip
 
@@ -191,10 +191,11 @@ MainWindowTest {
             verify(fileLabel !== null, "attachedFileLabel must exist")
             tryCompare(fileLabel, "text", "survex_simple.svx")
 
-            const formatLabel = findChild(attachedHeaderId, "attachedFormatLabel")
-            verify(formatLabel !== null, "attachedFormatLabel must exist")
-            compare(formatLabel.text, "Survex")
-            verify(formatLabel.visible)
+            // The file extension carries the format.
+            compare(findChild(attachedHeaderId, "attachedFormatLabel"), null,
+                    "the header shows no format label")
+            compare(attachedHeaderId.formatName, undefined,
+                    "the header carries no formatName property")
 
             const sourceLabel = findChild(attachedHeaderId, "sourceModeLabel")
             verify(sourceLabel !== null, "sourceModeLabel must exist")
