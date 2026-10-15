@@ -207,9 +207,19 @@ StandardPage {
     readonly property bool isSourceRoot: nodePageArea.currentNode !== null
                                          && nodePageArea.currentNode.isSourceRoot
 
-    // A node below a source root that the file describes: its page names
-    // what it is in the file and links to the root.
+    // A node below a source root that the file describes: its page names the
+    // file it comes from.
     readonly property bool isDerived: nodePageArea.isSourced && !nodePageArea.isSourceRoot
+
+    // The base name of the file a derived node comes from. A derived node
+    // stays under the root that built it, so the root is read once per node.
+    readonly property SurveyNode derivedSourceRoot: nodePageArea.isDerived
+                                                    ? nodePageArea.currentNode.sourceRoot() : null
+    readonly property string derivedEntryFile: nodePageArea.derivedSourceRoot !== null
+                                               ? nodePageArea.derivedSourceRoot.externalCenterline.entryFile
+                                               : ""
+    readonly property string derivedFileName: nodePageArea.derivedEntryFile.substring(
+                                                  nodePageArea.derivedEntryFile.lastIndexOf("/") + 1)
 
     // Whether the warnings banner has anything to list. Drives the banner
     // proxies' visibility directly — the banner's own visibility is controlled
@@ -466,10 +476,15 @@ StandardPage {
         pageModel: nodePageModelId
     }
 
-    DerivedNodeCard {
-        id: derivedNodeCardId
+    QC.Label {
+        id: derivedNodeFileLabelId
+        objectName: "derivedNodeFileLabel"
+
         Layout.fillWidth: true
-        node: nodePageArea.isDerived ? nodePageArea.currentNode : null
+        Layout.maximumWidth: implicitWidth
+        elide: QC.Label.ElideMiddle
+        font.bold: true
+        text: nodePageArea.derivedFileName
     }
 
     // The node's contents, in the same tree the Data page shows, rooted at
@@ -710,7 +725,7 @@ StandardPage {
                 }
 
                 LayoutItemProxy {
-                    target: derivedNodeCardId
+                    target: derivedNodeFileLabelId
                     visible: nodePageArea.isDerived && !nodePageArea.isNarrow
                 }
 
@@ -861,7 +876,7 @@ StandardPage {
             }
 
             LayoutItemProxy {
-                target: derivedNodeCardId
+                target: derivedNodeFileLabelId
                 visible: nodePageArea.isDerived && nodePageArea.isNarrow
             }
 

@@ -567,25 +567,21 @@ MainWindowTest {
             tryCompare(nodes.section, "parentNode", nodes.cave, 5000)
         }
 
-        // A derived node's page names the file it comes from; the breadcrumb and
-        // the Kind chip carry the root. The root owns the fixed positions, so the
-        // node offers none.
-        function test_derivedNodeCardNamesTheFile() {
+        // A derived node's page names the file it comes from; the Kind chip names
+        // its format and the breadcrumb carries the root. The root owns the fixed
+        // positions, so the node offers none.
+        function test_derivedNodeNamesTheFile() {
             const sourceRoot = attachCompassProject("node-page-derived")
             const alpha = childNamed(sourceRoot, "Alpha")
             verify(alpha !== null)
             const page = gotoNodePage("Source/Data/Node=PROJECT/Node=Alpha", alpha)
 
-            const card = findChild(page, "derivedNodeCard")
-            tryVerify(() => card.visible, 5000, "a derived node shows its source card")
+            const fileLabel = findChild(page, "derivedNodeFileLabel")
+            tryVerify(() => fileLabel.visible, 5000, "a derived node names its source file")
             verify(!findChild(page, "sourceRootCard").visible, "the root's card stays on the root")
-            compare(findChild(card, "derivedNodeFileLabel").text, "PROJECT.MAK")
-            compare(findChild(card, "derivedNodeOpenRootLink"), null,
-                    "XC.6: the breadcrumb links to the root")
-            compare(findChild(card, "derivedNodeUnitLabel"), null,
-                    "XC.6: the breadcrumb and the Kind chip say what the node is")
-            compare(findChild(card, "derivedNodeCountsLabel"), null,
-                    "MP.9: the card carries no unit or station count")
+            compare(fileLabel.text, "PROJECT.MAK")
+            compare(findChild(page, "derivedNodeFormatLabel"), null,
+                    "XC.12a: the Kind chip names the format")
 
             verify(!findChild(page, "fixStationsLink").visible, "a derived node offers no fix stations")
             verify(!findChild(page, "fixStationsBadge").parent.visible,

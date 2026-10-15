@@ -86,7 +86,7 @@ MainWindowTest {
             verify(replaceItem.enabled, "an idle root offers Replace…")
             closeMenu(menuArea)
             verify(findChild(page, "fixStationsLink").visible, "the root keeps its fix-station row")
-            verify(!findChild(page, "derivedNodeCard").visible, "a root shows no derived-node card")
+            verify(!findChild(page, "derivedNodeFileLabel").visible, "a root shows no derived-node file name")
         }
 
         // The cavern output covers the whole project, so its link sits on the
