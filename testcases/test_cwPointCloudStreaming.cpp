@@ -36,6 +36,7 @@
 #include <QThread>
 #include <QThreadPool>
 #include <QtConcurrent/QtConcurrentRun>
+#include <QVector2D>
 #include <QVector3D>
 #include <QVector4D>
 
@@ -5944,11 +5945,63 @@ namespace {
         PathStep step;
     };
 
-    //! Where every path aims: the center of the data's bounding box, at its
-    //! middle elevation
+    //! The level groundElevation() reads the ground from. Level 8 cells are
+    //! about 7 m on the BC tile, fine enough to place the ground within a few
+    //! meters.
+    constexpr int kGroundLevel = 8;
+    //! A node needs this many points to count as ground: the octree build
+    //! keeps every return, so a lone low-noise point below the surface still
+    //! makes a node of its own
+    constexpr quint32 kGroundMinPoints = 16;
+
+    //! Whether node @a index's footprint holds @a xy
+    bool footprintHolds(const cwPointOctreeManifest& manifest, int index, const QVector2D& xy)
+    {
+        const QBox3D bounds = manifest.nodeBounds(index);
+        return xy.x() >= bounds.minimum().x() && xy.x() <= bounds.maximum().x()
+               && xy.y() >= bounds.minimum().y() && xy.y() <= bounds.maximum().y();
+    }
+
+    bool isLeaf(const cwPointOctreeNode& node)
+    {
+        return std::all_of(node.children.cbegin(), node.children.cend(),
+                           [](int child) { return child < 0; });
+    }
+
+    //! The ground under @a xy, from the manifest alone: the lowest center among
+    //! the nodes over @a xy in the cut at kGroundLevel, which are the nodes at
+    //! that level and the shallower leaves, counting only nodes with
+    //! kGroundMinPoints or more. A column ends at the level where its points
+    //! stop splitting, so the ground cell can be a shallower leaf under a
+    //! canopy that split deeper. The result stays inside the data's bounding
+    //! box, and with no such node it is the box's middle elevation.
+    float groundElevation(const cwPointOctreeManifest& manifest, const QVector2D& xy)
+    {
+        std::optional<float> lowest;
+        for (int i = 0; i < manifest.nodes.size(); i++) {
+            const cwPointOctreeNode& node = manifest.nodes.at(i);
+            const bool inGroundCut = node.level == kGroundLevel
+                                     || (node.level < kGroundLevel && isLeaf(node));
+            if (inGroundCut && node.pointCount >= kGroundMinPoints
+                && footprintHolds(manifest, i, xy)) {
+                const float elevation = manifest.nodeBounds(i).center().z();
+                lowest = std::min(lowest.value_or(elevation), elevation);
+            }
+        }
+
+        if (lowest.has_value()) {
+            return std::clamp(*lowest, manifest.bboxMin.z(), manifest.bboxMax.z());
+        }
+        return 0.5f * (manifest.bboxMin.z() + manifest.bboxMax.z());
+    }
+
+    //! Where every path aims: the ground under the middle of the data's
+    //! bounding box. The box's middle elevation sits far underground on a
+    //! mountain tile, where no orbit height reaches the finer levels.
     QVector3D pathCenter(const cwPointOctreeManifest& manifest)
     {
-        return (manifest.bboxMin + manifest.bboxMax) * 0.5f;
+        const QVector3D middle = (manifest.bboxMin + manifest.bboxMax) * 0.5f;
+        return QVector3D(middle.toVector2D(), groundElevation(manifest, middle.toVector2D()));
     }
 
     //! The perspective every path draws through
@@ -5971,12 +6024,13 @@ namespace {
         return pose;
     }
 
-    //! A camera @a height above @a center, pitched kOrbitPitchDownDegrees down
+    //! A camera @a height above @a center, pitched @a pitchDownDegrees down
     //! onto it from the side @a headingDegrees names
     Pose orbitPose(const QVector3D& center, float height, float headingDegrees,
-                   const QMatrix4x4& projection, const QString& label, int index)
+                   const QMatrix4x4& projection, const QString& label, int index,
+                   float pitchDownDegrees = kOrbitPitchDownDegrees)
     {
-        const double range = height / std::tan(qDegreesToRadians(double(kOrbitPitchDownDegrees)));
+        const double range = height / std::tan(qDegreesToRadians(double(pitchDownDegrees)));
         const double heading = qDegreesToRadians(double(headingDegrees));
         const QVector3D eye = center + QVector3D(float(range * std::cos(heading)),
                                                  float(range * std::sin(heading)),
@@ -5984,12 +6038,14 @@ namespace {
         return lookAtPose(eye, center, projection, label, index);
     }
 
-    //! @a poseCount orbit poses @a height above the path center, starting at
-    //! heading 0 and turning kOrbitHeadingStepDegrees a pose, each labeled
-    //! @a labelPrefix and its heading
+    //! @a poseCount orbit poses @a height above the path center, pitched
+    //! @a pitchDownDegrees down, starting at heading 0 and turning
+    //! kOrbitHeadingStepDegrees a pose, each labeled @a labelPrefix and its
+    //! heading
     EvalPath orbitSweep(const QString& name, const QString& labelPrefix,
                         const cwPointOctreeManifest& manifest, QSize target,
-                        float height, int poseCount)
+                        float height, int poseCount,
+                        float pitchDownDegrees = kOrbitPitchDownDegrees)
     {
         EvalPath path;
         path.name = name;
@@ -6000,7 +6056,8 @@ namespace {
             const QString label = QStringLiteral("%1heading-%2")
                                       .arg(labelPrefix)
                                       .arg(double(heading), 0, 'f', 0);
-            path.poses.append(orbitPose(center, height, heading, projection, label, i));
+            path.poses.append(orbitPose(center, height, heading, projection, label, i,
+                                        pitchDownDegrees));
         }
         return path;
     }
@@ -6022,12 +6079,12 @@ namespace {
         return deepest;
     }
 
-    //! The finest level the cut asks for from @a pose, through the very
-    //! selection the forest runs: the corrected camera, the frustum, the
-    //! target's height and the budgets' threshold, point cap and level cap.
-    int finestCutLevel(const cwPointOctreeManifest& manifest, const Pose& pose,
-                       QSize target, const QMatrix4x4& clipSpaceCorrection,
-                       const cwRenderBudgets& budgets)
+    //! The cut @a pose asks for, through the very selection the forest runs:
+    //! the corrected camera, the frustum, the target's height and the budgets'
+    //! threshold, point cap and level cap
+    cw::octree::Selection cutFrom(const cwPointOctreeManifest& manifest, const Pose& pose,
+                                  QSize target, const QMatrix4x4& clipSpaceCorrection,
+                                  const cwRenderBudgets& budgets)
     {
         const QMatrix4x4 projection = clipSpaceCorrection * pose.projection;
         const QMatrix4x4 viewProjection = projection * pose.view;
@@ -6042,24 +6099,70 @@ namespace {
         input.screenSpaceErrorPx = budgets.screenSpaceErrorPx;
         input.maxPoints = budgets.pointBudget;
         input.maxLevel = budgets.maxLevel;
+        return cw::octree::selectCut(input);
+    }
 
+    //! The finest level the cut asks for from @a pose
+    int finestCutLevel(const cwPointOctreeManifest& manifest, const Pose& pose,
+                       QSize target, const QMatrix4x4& clipSpaceCorrection,
+                       const cwRenderBudgets& budgets)
+    {
         int finest = kRootLevel;
-        for (const cw::octree::SelectedNode& selected : cw::octree::selectCut(input).nodes) {
+        for (const cw::octree::SelectedNode& selected :
+             cutFrom(manifest, pose, target, clipSpaceCorrection, budgets).nodes) {
             finest = std::max(finest, manifest.nodes.at(selected.node).level);
         }
         return finest;
+    }
+
+    //! The camera height where @a holdsAt(height) turns from true below to
+    //! false above, bracketed from @a guess and bisected to
+    //! kBoundaryHeightTolerance
+    template <typename HoldsAt>
+    float bisectHeight(double guess, HoldsAt holdsAt)
+    {
+        double low = guess;
+        double high = guess;
+        for (int step = 0; step < kMaxBoundaryBracketSteps && !holdsAt(low); step++) {
+            low /= kBoundaryBracketFactor;
+        }
+        for (int step = 0; step < kMaxBoundaryBracketSteps && holdsAt(high); step++) {
+            high *= kBoundaryBracketFactor;
+        }
+        REQUIRE(holdsAt(low));
+        REQUIRE_FALSE(holdsAt(high));
+
+        while ((high - low) > high * kBoundaryHeightTolerance) {
+            const double middle = 0.5 * (low + high);
+            if (holdsAt(middle)) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        return float(0.5 * (low + high));
+    }
+
+    //! The first guess at the height where @a level starts to refine: the
+    //! parent level's spacing projected to @a thresholdPx at a depth of the
+    //! height itself, which the bottom of an orbit frame sees the ground at
+    double levelHeightGuess(const cwPointOctreeManifest& manifest, QSize target,
+                            const QMatrix4x4& clipSpaceCorrection, int level,
+                            double thresholdPx)
+    {
+        const QMatrix4x4 projection = pathProjection(target);
+        const double focalPx = std::abs(double((clipSpaceCorrection * projection)(1, 1)))
+                               * target.height() * 0.5;
+        return manifest.spacing(level - 1) * focalPx / thresholdPx;
     }
 
     //! The height above the path center at which the orbit pose looking from
     //! heading 0 starts asking for @a level: just above it the cut stops at
     //! @a level - 1, just below it reaches @a level.
     //!
-    //! The first guess is the closed form from the level spacings: the parent
-    //! level refines once its spacing projects past the threshold, and at the
-    //! orbit's pitch and field of view the bottom of the frame sees the ground
-    //! at a depth of the height itself. Node boxes reach nearer the eye than
-    //! the ground they hold, so the guess is only a bracket, and the height is
-    //! bisected on the cut itself, which makes it a boundary on any tile.
+    //! Node boxes reach nearer the eye than the ground they hold, so
+    //! levelHeightGuess() is only a bracket, and the height is bisected on the
+    //! cut itself, which makes it a boundary on any tile.
     float levelBoundaryHeight(const cwPointOctreeManifest& manifest, QSize target,
                               const QMatrix4x4& clipSpaceCorrection, int level,
                               const cwRenderBudgets& budgets = {})
@@ -6073,31 +6176,9 @@ namespace {
             const Pose pose = orbitPose(center, float(height), 0.0f, projection, QString(), 0);
             return finestCutLevel(manifest, pose, target, clipSpaceCorrection, budgets) >= level;
         };
-
-        const double focalPx = std::abs(double((clipSpaceCorrection * projection)(1, 1)))
-                               * target.height() * 0.5;
-        const double guess = manifest.spacing(level - 1) * focalPx / budgets.screenSpaceErrorPx;
-
-        double low = guess;
-        double high = guess;
-        for (int step = 0; step < kMaxBoundaryBracketSteps && !reachesLevel(low); step++) {
-            low /= kBoundaryBracketFactor;
-        }
-        for (int step = 0; step < kMaxBoundaryBracketSteps && reachesLevel(high); step++) {
-            high *= kBoundaryBracketFactor;
-        }
-        REQUIRE(reachesLevel(low));
-        REQUIRE_FALSE(reachesLevel(high));
-
-        while ((high - low) > high * kBoundaryHeightTolerance) {
-            const double middle = 0.5 * (low + high);
-            if (reachesLevel(middle)) {
-                low = middle;
-            } else {
-                high = middle;
-            }
-        }
-        return float(0.5 * (low + high));
+        return bisectHeight(levelHeightGuess(manifest, target, clipSpaceCorrection, level,
+                                             budgets.screenSpaceErrorPx),
+                            reachesLevel);
     }
 
     //! P2's zoomed-in sub-path: the orbit pitch at the height where the cut
@@ -8168,10 +8249,12 @@ namespace {
     //! M6: an inflation ratio this close to 1 is no change
     constexpr double kInflationRatioTolerance = 1.0e-9;
 
-    //! Decimals the eval CSV lines print fractions, ratios and pixel sizes with
+    //! Decimals the eval CSV lines print fractions, ratios, pixel sizes and
+    //! meters with
     constexpr int kFractionDecimals = 5;
     constexpr int kRatioDecimals = 4;
     constexpr int kPixelDecimals = 3;
+    constexpr int kHeightDecimals = 2;
 
     //! SSIM over windows this many pixels on a side, with the stabilizing
     //! constants of Wang et al. (2004) for 8-bit channels
@@ -9104,10 +9187,71 @@ namespace {
     //! the rule sized the level too small rather than the level missing
     constexpr float kLevelAloneFixedPointSizePx = 16.0f;
 
-    //! Section 5's M7 range: the shallowest level drawn alone, and the deepest
-    //! where the octree goes that far
+    //! Section 5's M7 range: the shallowest level drawn alone, and the deepest,
+    //! capped at the deepest level the octree holds
     constexpr int kM7FirstLevel = 4;
     constexpr int kM7LastLevel = 10;
+
+    //! A level-alone orbit looks nearly straight down, so its whole frame
+    //! stays on the ground near the center. An oblique frame on a mountain
+    //! tile sees slopes falling away hundreds of meters off, which no height
+    //! refines to a fine level. Straight down would leave lookAt() without an
+    //! up direction.
+    constexpr float kLevelAlonePitchDownDegrees = 80.0f;
+
+    //! The budgets a level is drawn alone with: the level-alone threshold,
+    //! every budget past the whole cloud, and the cut capped at @a level
+    cwRenderBudgets levelAloneBudgets(const cwPointOctreeManifest& manifest, int level)
+    {
+        cwRenderBudgets budgets = oracleBudgets(manifest, kLevelAloneScreenSpaceErrorPx);
+        budgets.minLevel = level;
+        budgets.maxLevel = level;
+        return budgets;
+    }
+
+    //! @a poseCount poses of the level-alone orbit for @a level @a height
+    //! above the path center
+    EvalPath levelAloneOrbit(const cwPointOctreeManifest& manifest, QSize target, int level,
+                             float height, int poseCount)
+    {
+        return orbitSweep(QStringLiteral("M7"), QStringLiteral("level-%1-").arg(level),
+                          manifest, target, height, poseCount, kLevelAlonePitchDownDegrees);
+    }
+
+    //! The height of the level-alone orbit for @a level: the highest where,
+    //! at every pose of the orbit, the level-alone cut has refined every node
+    //! in view to @a level or to a leaf. Drawn there, the level covers the
+    //! whole frame except where the data ends above it, so a pixel it leaves
+    //! dark reads on its sizing rather than on a coarser band of the frame.
+    float levelAloneHeight(const cwPointOctreeManifest& manifest, QSize target,
+                           const QMatrix4x4& clipSpaceCorrection, int level)
+    {
+        REQUIRE(level > kRootLevel);
+        REQUIRE(level <= deepestLevel(manifest));
+
+        const cwRenderBudgets budgets = levelAloneBudgets(manifest, level);
+        //The cut holds every ancestor of what it refines to, so a node short of
+        //the level holds the frame back only when it has children and stayed
+        //under the threshold. cutFrom() leaves the threshold uninflated.
+        const auto stopsShort = [&](const cw::octree::SelectedNode& selected) {
+            const cwPointOctreeNode& node = manifest.nodes.at(selected.node);
+            return node.level < level && !isLeaf(node)
+                   && selected.projectedSpacingPx <= budgets.screenSpaceErrorPx;
+        };
+        const auto refinedAt = [&](const Pose& pose) {
+            const cw::octree::Selection cut =
+                cutFrom(manifest, pose, target, clipSpaceCorrection, budgets);
+            return std::none_of(cut.nodes.cbegin(), cut.nodes.cend(), stopsShort);
+        };
+        const auto refinedEverywhere = [&](double height) {
+            const EvalPath orbit = levelAloneOrbit(manifest, target, level, float(height),
+                                                   kBoundaryPoseCount);
+            return std::all_of(orbit.poses.cbegin(), orbit.poses.cend(), refinedAt);
+        };
+        return bisectHeight(levelHeightGuess(manifest, target, clipSpaceCorrection, level,
+                                             kLevelAloneScreenSpaceErrorPx),
+                            refinedEverywhere);
+    }
 
     //! One level and the path it is drawn alone on, with O1 over that path
     struct LevelPath {
@@ -9188,11 +9332,7 @@ namespace {
             const EvalPath& path = levelPath.path;
             REQUIRE(levelPath.o1.frames.size() == path.poses.size());
 
-            cwRenderBudgets budgets = oracleBudgets(fixture.manifest(),
-                                                    kLevelAloneScreenSpaceErrorPx);
-            budgets.minLevel = levelPath.level;
-            budgets.maxLevel = levelPath.level;
-            fixture.setBudgets(budgets);
+            fixture.setBudgets(levelAloneBudgets(fixture.manifest(), levelPath.level));
 
             for (int position = 0; position < path.poses.size(); position++) {
                 const Pose& pose = path.poses.at(position);
@@ -9912,13 +10052,19 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
     const EvalConfig config = candidateConfig(Candidate::Default);
     const QString cacheRoot = evalCacheRoot();
 
-    //Each level on its own boundary path, where the cut starts asking for it,
-    //with EDL on as the orbit case draws its oracles
+    //Each level on its own level-alone orbit, low enough that the level fills
+    //the frame, with EDL on as the orbit case draws its oracles
+    const auto levelAlonePathFor = [&](int level) {
+        const float height = levelAloneHeight(manifest, config.targetSize,
+                                              rhi->clipSpaceCorrMatrix(), level);
+        return everyNthPose(levelAloneOrbit(manifest, config.targetSize, level, height,
+                                            kBoundaryPoseCount),
+                            kTileBoundaryPoseStride);
+    };
     PointCloudFixture oracleFixture(rhi.get(), cache, config.targetSize);
     oracleFixture.setEdlEnabled(true);
-    const QVector<LevelPath> paths = levelPaths(
-        oracleFixture, kM7FirstLevel, lastLevel, cacheRoot,
-        [&](int level) { return tileLevelPath(rhi.get(), manifest, config, level); });
+    const QVector<LevelPath> paths = levelPaths(oracleFixture, kM7FirstLevel, lastLevel,
+                                                cacheRoot, levelAlonePathFor);
 
     const auto run = [&](const QVector<LevelPath>& levels, std::ostream& out) {
         PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
@@ -9928,6 +10074,19 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
     //The repeat only measures the noise, so its lines stay out of the log
     std::ostringstream repeatOutput;
     const QVector<LevelRecord> repeat = run({levelPathAt(paths, kTileClosedLevel)}, repeatOutput);
+
+    //Where the level-alone orbits circle, and the height each one circles at
+    const QVector3D center = pathCenter(manifest);
+    writeCsvLine(QStringLiteral("m7Height,center,%1,%2,%3")
+                     .arg(double(center.x()), 0, 'f', kHeightDecimals)
+                     .arg(double(center.y()), 0, 'f', kHeightDecimals)
+                     .arg(double(center.z()), 0, 'f', kHeightDecimals));
+    for (const LevelPath& levelPath : paths) {
+        writeCsvLine(QStringLiteral("m7Height,level,%1,%2")
+                         .arg(levelPath.level)
+                         .arg(double(eyeOf(levelPath.path.poses.constFirst()).z() - center.z()),
+                              0, 'f', kHeightDecimals));
+    }
 
     const auto lit = [](const LevelRecord& record) { return record.litFraction; };
     const auto litFixed = [](const LevelRecord& record) { return record.litFractionFixed; };
