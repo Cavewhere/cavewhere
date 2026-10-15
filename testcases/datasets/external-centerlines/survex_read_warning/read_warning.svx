@@ -1,0 +1,15 @@
+; Solves cleanly in cavern; the scanner seeds declination in degrees only,
+; so it reads this file with one warning about the declination units.
+; The nested block gives the attach a derived node below the owner.
+*begin ReadWarning
+*declination 2 grads
+*fix A1 0 0 0
+*data normal from to tape compass clino
+A1 A2 5.0 0 0
+A2 A3 5.0 90 0
+*begin Inner
+*data normal from to tape compass clino
+B1 B2 4.0 180 0
+*end Inner
+*equate A3 Inner.B1
+*end ReadWarning

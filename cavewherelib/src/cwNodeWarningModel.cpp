@@ -38,6 +38,7 @@ constexpr std::array kRollUpKindOrder = {
     static_cast<int>(cwErrorTypeId::AttachedFileFixWithoutCS),
     static_cast<int>(cwErrorTypeId::AttachedFileUnfixed),
     static_cast<int>(cwErrorTypeId::AttachedFileDefaultDatum),
+    static_cast<int>(cwErrorTypeId::AttachedFileReadWarnings),
     static_cast<int>(cwErrorTypeId::UnconnectedStations),
     static_cast<int>(cwErrorTypeId::FixStationOutlier),
     static_cast<int>(cwErrorTypeId::FixStationDomain),
@@ -121,6 +122,10 @@ QString rollUpMessage(int kind, int nodeCount)
         return countedPhrase(nodeCount,
                              QStringLiteral("reads a Compass file in the default datum."),
                              QStringLiteral("read Compass files in the default datum."));
+    case static_cast<int>(cwErrorTypeId::AttachedFileReadWarnings):
+        return countedPhrase(nodeCount,
+                             QStringLiteral("has a survey file read with warnings."),
+                             QStringLiteral("have survey files read with warnings."));
     case static_cast<int>(cwErrorTypeId::UnconnectedStations):
         return countedPhrase(nodeCount,
                              QStringLiteral("has stations that are not tied to the cave."),

@@ -195,12 +195,6 @@ QString cwAttachedCenterlinesModel::errorFor(const QUuid& ownerId) const
     return row == nullptr ? QString() : row->error;
 }
 
-int cwAttachedCenterlinesModel::warningCountFor(const QUuid& ownerId) const
-{
-    const Row* row = rowFor(ownerId);
-    return row == nullptr ? 0 : row->warningCount;
-}
-
 void cwAttachedCenterlinesModel::markSolved(const QDateTime& when)
 {
     if (m_rows.isEmpty()) {

@@ -11,6 +11,7 @@
 #include "cwCavernRunner.h"
 #include "cwCavingRegion.h"
 #include "cwConcurrent.h"
+#include "cwErrorListModel.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineScanner.h"
@@ -123,6 +124,40 @@ QString withProjectRelativePaths(const QString& message, const QString& boundary
         rewritten.replace(nativePrefix, QString());
     }
     return rewritten;
+}
+
+// The AttachedFileReadWarnings row for an owner whose scan raised
+// `warnings`. The scanner names files canonically, so the data root is
+// canonicalized before the paths are made project-relative.
+cwError readWarningsFor(const QString& entryFile, const QStringList& warnings,
+                        const QString& dataRootDir)
+{
+    const QString fileName = QFileInfo(entryFile).fileName();
+    const QString message = warnings.size() == 1
+        ? QStringLiteral("%1 was read with 1 warning.").arg(fileName)
+        : QStringLiteral("%1 was read with %2 warnings.")
+              .arg(fileName, QString::number(warnings.size()));
+
+    const QString boundary = QFileInfo(dataRootDir).canonicalFilePath();
+    QStringList lines;
+    lines.reserve(warnings.size());
+    for (const QString& warning : warnings) {
+        lines.append(withProjectRelativePaths(warning, boundary));
+    }
+
+    cwError error(message, cwError::Warning);
+    error.setDetail(lines.join(QLatin1Char('\n')));
+    return error;
+}
+
+// Installs an owner's read-warnings row on its own error model; an empty
+// `warning` removes the row, which is how a clean rescan clears it.
+void setReadWarnings(cwErrorModel* errorModel, const cwError& warning, const QUuid& ownerId)
+{
+    if (errorModel != nullptr) {
+        errorModel->errors()->setTypedWarning(cwErrorTypeId::AttachedFileReadWarnings,
+                                              warning.message(), warning.detail(), ownerId);
+    }
 }
 
 // True when every file in `stored` is on disk with the size and
@@ -806,6 +841,12 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     }
                     row.depCount = scan.value().dependencies.size();
                     row.warningCount = scan.value().warnings.size();
+                    if (!scan.value().warnings.isEmpty()) {
+                        result.ownerReadWarnings.insert(
+                            owner.ownerId,
+                            readWarningsFor(owner.entryFile, scan.value().warnings,
+                                            owner.dataRootDir));
+                    }
                 }
             } else {
                 // The one file the project reads is gone. Nothing below can
@@ -919,6 +960,8 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
     bool memberViewsMoved = false;
     for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
         node->setExternalStations(result.ownerStations.value(node->id()));
+        setReadWarnings(node->errorModel(), result.ownerReadWarnings.value(node->id()),
+                        node->id());
 
         const cwSurveyNode* sourceRoot = node->sourceRoot();
         const cwExternalUnitManifest::SolveView sourceView =
@@ -944,6 +987,8 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
                 trip->setFileDeclination(sourceView.unitDeclinations.value(trip->sourcePath()));
                 continue;
             }
+            setReadWarnings(trip->errorModel(), result.ownerReadWarnings.value(trip->id()),
+                            trip->id());
             trip->setExternalStations(result.ownerStations.value(trip->id()));
             trip->setFileDeclination(result.tripDeclinations.value(trip->id()));
             // A containment failure skipped the harvest, so the two are

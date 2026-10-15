@@ -9,15 +9,14 @@ import QtQuick as QQ
 import QtQuick.Controls as QC
 import cavewherelib
 
-// A single dot on a source root's or trip's row saying that the owner's
-// external centerline kept it out of the solve (danger) or solved with
-// warnings (warning). Hidden for a clean owner and for an owner with no
-// external centerline at all, so a native row's layout is untouched.
+// A red dot on a source root's or trip's row saying that the owner's
+// external centerline kept it out of the solve. The row's warnings belong
+// to its ErrorIconBar.
 //
-// The attached-centerlines model answers per owner imperatively
-// (errorFor / warningCountFor are Q_INVOKABLE reads with no property
-// NOTIFY), so this badge re-reads on the model's own row signals — the
-// same shape ExternalCenterlineOwnerState uses for the manager.
+// The attached-centerlines model answers per owner imperatively (errorFor
+// is a Q_INVOKABLE read with no property NOTIFY), so this badge re-reads on
+// the model's own row signals — the same shape ExternalCenterlineOwnerState
+// uses for the manager.
 QQ.Rectangle {
     id: root
     objectName: "externalSolveBadge"
@@ -38,9 +37,8 @@ QQ.Rectangle {
     // hosts this badge already has in scope as its row's data.
     readonly property AttachedCenterlinesModel attachedModel: RootData.externalCenterlineManager.attachedCenterlinesModel
 
-    // The model row's answers for this owner, re-read on its signals.
+    // The model row's answer for this owner, re-read on its signals.
     property string modelError: ""
-    property int warningCount: 0
 
     readonly property string reason: modelError !== "" ? modelError : fallbackError
     readonly property bool hasError: reason !== ""
@@ -49,19 +47,14 @@ QQ.Rectangle {
     implicitWidth: dotSize
     implicitHeight: dotSize
     radius: dotSize / 2
-    visible: externallyBacked && (hasError || warningCount > 0)
-    color: hasError ? Theme.danger : Theme.warning
+    visible: externallyBacked && hasError
+    color: Theme.danger
 
     QC.ToolTip.visible: hoverHandlerId.hovered
-    QC.ToolTip.text: root.hasError
-                     ? root.reason
-                     : root.warningCount === 1
-                       ? qsTr("Solved with 1 warning")
-                       : qsTr("Solved with %1 warnings").arg(root.warningCount)
+    QC.ToolTip.text: root.reason
 
     function refresh() {
         modelError = owner === null ? "" : attachedModel.errorFor(owner.id)
-        warningCount = owner === null ? 0 : attachedModel.warningCountFor(owner.id)
     }
 
     onOwnerChanged: refresh()

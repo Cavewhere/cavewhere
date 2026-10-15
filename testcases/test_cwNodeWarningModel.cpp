@@ -421,3 +421,29 @@ TEST_CASE("A descendant's file error rolls up and opens the node that holds the 
     attachedCenterlines.setRows({});
     CHECK(waitUntil([&rootModel]() { return rootModel.count() == 0; }));
 }
+
+TEST_CASE("A descendant's file read with warnings rolls up under its own kind",
+          "[cwNodeWarningModel]")
+{
+    NestedRegion nested;
+    nested.deep->errorModel()->errors()->setTypedWarning(
+        cwErrorTypeId::AttachedFileReadWarnings,
+        QStringLiteral("deep.svx was read with 1 warning."),
+        QStringLiteral("*declination units 'grads' not supported, assuming degrees"),
+        nested.deep->id());
+
+    cwNodeWarningModel deepModel;
+    deepModel.setNode(nested.deep);
+    REQUIRE(deepModel.count() == 1);
+    CHECK(targetAt(deepModel, 0) == Target::SourceLine);
+
+    cwNodeWarningModel topModel;
+    topModel.setNode(nested.top);
+    CHECK(waitUntil([&topModel]() { return topModel.count() == 1; }));
+    REQUIRE(topModel.count() == 1);
+    INFO("message: " << messageAt(topModel, 0).toStdString());
+    CHECK(messageAt(topModel, 0)
+          == QStringLiteral("1 node below has a survey file read with warnings."));
+    CHECK(targetAt(topModel, 0) == Target::NodePage);
+    CHECK(nodeAt(topModel, 0) == nested.deep);
+}

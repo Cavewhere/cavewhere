@@ -95,6 +95,35 @@ MainWindowTest {
                       5000, "clicking the badge must land on cavernOutputPage")
         }
 
+        // The file solves cleanly, but its scan warns about the *declination
+        // units: the row's one warning glyph is ErrorIconBar's, and the
+        // badge stays for errors only.
+        function test_readWarningsShowNoBadgeAndCountOnErrorIconBar() {
+            const cave = makeSavedCaveAttach(
+                "solve-badge-warning",
+                "external-centerlines/survex_read_warning/read_warning.svx")
+            const attachedModel = RootData.externalCenterlineManager.attachedCenterlinesModel
+            tryVerify(() => attachedModel.rowCount() > 0, 10000,
+                      "the attach must land a row in the attached-centerlines model")
+
+            const page = gotoDataMainPage()
+            const badge = badgeForCave(page, cave)
+            verify(!badge.hasError, "the file solves cleanly; reason: " + badge.reason)
+            verify(!badge.visible, "a file read with warnings shows no solve badge")
+
+            tryVerify(() => cave.errorModel.warningCount === 1, 10000,
+                      "the cave's error model counts the read warnings once; got: "
+                      + cave.errorModel.warningCount)
+
+            const row = badge.parent
+            const iconBar = findChild(row, "errorIconBar")
+            verify(iconBar !== null, "the cave's row must carry an ErrorIconBar")
+            compare(iconBar.warningCount, 1, "ErrorIconBar counts the read warnings")
+            const warningBadge = findChild(iconBar, "warningBadge")
+            verify(warningBadge !== null && warningBadge.visible,
+                   "ErrorIconBar shows its warning glyph")
+        }
+
         function test_cleanOwnerShowsNoBadge() {
             const attached = makeSavedCaveAttach("solve-badge-clean",
                                                  "external-centerlines/survex_simple.svx")

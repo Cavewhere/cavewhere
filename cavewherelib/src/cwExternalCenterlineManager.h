@@ -14,6 +14,7 @@ class cwSaveLoad;
 class cwSurveyChunkSignaler;
 class cwTrip;
 #include "cwAttachedCenterlinesModel.h"
+#include "cwError.h"
 #include "cwExternalCenterlineAttach.h"
 #include "cwExternalCenterlineReport.h"
 #include "cwExternalCenterlineScanner.h"
@@ -434,6 +435,10 @@ private:
         // Per trip owner, the declination its file leaves cavern to apply
         // (cwExternalCenterlineScanner::attachmentDeclination).
         QHash<QUuid, cwFileDeclination> tripDeclinations;
+        // The advisories each owner's scan raised (ScanResult::warnings),
+        // as the owner's AttachedFileReadWarnings row reads them, for owners
+        // with any.
+        QHash<QUuid, cwError> ownerReadWarnings;
         QVector<cwAttachedCenterlinesModel::Row> rows;
     };
 

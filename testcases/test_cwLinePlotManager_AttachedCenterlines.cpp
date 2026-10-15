@@ -245,13 +245,12 @@ TEST_CASE("Detach removes the owner's row via rowsRemoved with correct indices",
           == QStringLiteral("Second"));
 }
 
-TEST_CASE("Attached model answers errorFor and warningCountFor by owner",
+TEST_CASE("Attached model answers errorFor by owner",
           "[LinePlotManager][AttachedCenterlinesModel]")
 {
     const QUuid errorOwner = QUuid::createUuid();
-    const QUuid warnOwner = QUuid::createUuid();
+    const QUuid cleanOwner = QUuid::createUuid();
     const QString message = QStringLiteral("reaches outside the project");
-    constexpr int kWarnings = 3;
 
     cwAttachedCenterlinesModel model;
 
@@ -264,27 +263,21 @@ TEST_CASE("Attached model answers errorFor and warningCountFor by owner",
     errorRow.error = message;
     rows.append(errorRow);
 
-    cwAttachedCenterlinesModel::Row warnRow;
-    warnRow.ownerId = warnOwner;
-    warnRow.caveName = QStringLiteral("Beta");
-    warnRow.ownerName = QStringLiteral("Beta Trip");
-    warnRow.ownerKind = QStringLiteral("Trip");
-    warnRow.warningCount = kWarnings;
-    rows.append(warnRow);
+    cwAttachedCenterlinesModel::Row cleanRow;
+    cleanRow.ownerId = cleanOwner;
+    cleanRow.caveName = QStringLiteral("Beta");
+    cleanRow.ownerName = QStringLiteral("Beta Trip");
+    cleanRow.ownerKind = QStringLiteral("Trip");
+    rows.append(cleanRow);
 
     model.setRows(rows);
     REQUIRE(model.rowCount() == 2);
 
     CHECK(model.errorFor(errorOwner) == message);
-    CHECK(model.warningCountFor(errorOwner) == 0);
-
-    CHECK(model.errorFor(warnOwner).isEmpty());
-    CHECK(model.warningCountFor(warnOwner) == kWarnings);
+    CHECK(model.errorFor(cleanOwner).isEmpty());
 
     // An owner with no row reads as clean.
-    const QUuid unknownOwner = QUuid::createUuid();
-    CHECK(model.errorFor(unknownOwner).isEmpty());
-    CHECK(model.warningCountFor(unknownOwner) == 0);
+    CHECK(model.errorFor(QUuid::createUuid()).isEmpty());
 }
 
 TEST_CASE("A cave-level Compass attach with an untied survey warns on its node",

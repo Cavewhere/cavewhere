@@ -776,3 +776,120 @@ TEST_CASE("A file whose every *fix names its *cs is attached as written",
     CHECK(managerOf(fixture.get())->solveInputs().externalOutputSystems.isEmpty());
     CHECK(subtreeAttachedFixFor(cave, QStringLiteral("own.a1")).readInWarning().isEmpty());
 }
+
+namespace {
+
+const QString kReadWarningSvx = QStringLiteral("read_warning.svx");
+
+QList<cwError> readWarningsOn(const cwErrorModel* errorModel)
+{
+    QList<cwError> found;
+    for (const cwError& error : errorModel->errors()->toList()) {
+        if (error.errorTypeId() == static_cast<int>(cwErrorTypeId::AttachedFileReadWarnings)) {
+            found.append(error);
+        }
+    }
+    return found;
+}
+
+} // namespace
+
+TEST_CASE("A file the scan reads with warnings warns once on its owner and clears when clean",
+          "[Attach][ReadWarnings]")
+{
+    auto fixture = makeProject(QStringLiteral("source-read-warnings"));
+    auto manager = managerOf(fixture.get());
+
+    // A copy of the fixture the reload below can rewrite.
+    QTemporaryDir sourceDir;
+    REQUIRE(sourceDir.isValid());
+    const QByteArray warningBytes =
+        fileContents(fixturePath(QStringLiteral("survex_read_warning/") + kReadWarningSvx));
+    REQUIRE(warningBytes.contains("grads"));
+    const QString source = writeSurvey(sourceDir, kReadWarningSvx, warningBytes);
+
+    cwCave* cave = attachAndSolve(fixture.get(), source);
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    // The owner carries one row naming the file; its detail lists the advisory.
+    const QList<cwError> ownerWarnings = readWarningsOn(cave->errorModel());
+    REQUIRE(ownerWarnings.size() == 1);
+    const cwError& warning = ownerWarnings.first();
+    INFO("message: " << warning.message().toStdString());
+    INFO("detail: " << warning.detail().toStdString());
+    CHECK(warning.type() == cwError::Warning);
+    CHECK(warning.message().contains(kReadWarningSvx));
+    CHECK(warning.detail().contains(QStringLiteral("grads")));
+    CHECK(cave->errorModel()->warningCount() >= 1);
+
+    // Counted once, on the owner: the derived nodes and trips under it carry none.
+    REQUIRE_FALSE(cave->allNodes().isEmpty());
+    REQUIRE_FALSE(cave->allTrips().isEmpty());
+    for (const cwSurveyNode* node : cave->allNodes()) {
+        INFO("node " << node->name().toStdString());
+        CHECK(readWarningsOn(node->errorModel()).isEmpty());
+    }
+    for (const cwTrip* trip : cave->allTrips()) {
+        INFO("trip " << trip->name().toStdString());
+        CHECK(readWarningsOn(trip->errorModel()).isEmpty());
+    }
+
+    // The owner's warnings banner lists it and opens the file's source line.
+    cwNodeWarningModel warningModel;
+    warningModel.setNode(cave);
+    bool listed = false;
+    for (int row = 0; row < warningModel.rowCount(); ++row) {
+        const QModelIndex index = warningModel.index(row);
+        if (warningModel.data(index, cwNodeWarningModel::MessageRole).toString()
+            == warning.message()) {
+            listed = true;
+            CHECK(warningModel.data(index, cwNodeWarningModel::TargetRole).toInt()
+                  == static_cast<int>(cwNodeWarningModel::Target::SourceLine));
+        }
+    }
+    CHECK(listed);
+
+    SECTION("Reloading a clean source clears the warning")
+    {
+        QByteArray cleanBytes = warningBytes;
+        cleanBytes.replace("*declination 2 grads\n", "");
+        REQUIRE_FALSE(cleanBytes.contains("grads"));
+        writeFileWithMtime(source, cleanBytes,
+                           QDateTime::currentDateTimeUtc().addSecs(-kEditIsOlderSeconds));
+
+        auto reloadFuture = manager->reloadFromSource(cave);
+        REQUIRE(AsyncFuture::waitForFinished(reloadFuture, kAttachWaitMs));
+        REQUIRE_FALSE(reloadFuture.result().hasError());
+        drainPipelines(fixture.get());
+
+        CHECK(readWarningsOn(cave->errorModel()).isEmpty());
+    }
+}
+
+TEST_CASE("A trip whose attached file reads with warnings warns once on the trip",
+          "[Attach][ReadWarnings]")
+{
+    auto fixture = makeProject(QStringLiteral("trip-read-warnings"));
+    const QString source =
+        fixturePath(QStringLiteral("survex_read_warning/") + kReadWarningSvx);
+
+    attachThroughManager(fixture.get(), fixture->trip, source);
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    const QList<cwError> tripWarnings = readWarningsOn(fixture->trip->errorModel());
+    REQUIRE(tripWarnings.size() == 1);
+    CHECK(tripWarnings.first().type() == cwError::Warning);
+    CHECK(tripWarnings.first().message().contains(kReadWarningSvx));
+
+    // The trip's row rolls into its cave's count; the cave carries no row of its own.
+    CHECK(readWarningsOn(fixture->cave->errorModel()).isEmpty());
+    CHECK(fixture->cave->errorModel()->warningCount() >= 1);
+}
