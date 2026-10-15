@@ -31,7 +31,6 @@ namespace {
 using namespace cwPassageTubeGeometry;
 
 constexpr int kMinFilledBins = 4;
-constexpr int kTwistDistributionSamples = 4;
 constexpr double kMinSampleWeight = 0.05;
 constexpr double kSteepWeight = 0.5;
 constexpr double kAlongLegDegrees = 45.0;
@@ -844,16 +843,16 @@ struct ChainSample {
         return it != bends.cend() ? &*it : nullptr;
     }
 
-    // The corner an elbow sample rounds, as BendLimit::cornerLeg names it.
-    std::optional<int> elbowCorner() const
+    // The corner an elbow sample rounds.
+    const BendLimit* elbowBend() const
     {
         if (!isElbow) {
-            return std::nullopt;
+            return nullptr;
         }
         const auto it = std::find_if(bends.cbegin(), bends.cend(), [](const BendLimit& bend) {
             return bend.role == BendLimit::Station || bend.role == BendLimit::Elbow;
         });
-        return it != bends.cend() ? std::optional<int>(it->cornerLeg) : std::nullopt;
+        return it != bends.cend() ? &*it : nullptr;
     }
 };
 
@@ -1473,6 +1472,42 @@ Frame makeFrame(const QVector3D& tangent, const QVector3D& up, double weight)
     return Frame {tangent, up, QVector3D::crossProduct(tangent, up), weight};
 }
 
+// A ring this steep is round (fitSteepRing), so rolling it changes nothing.
+bool hasRoundRings(double weight)
+{
+    return 1.0 - weight < kMinSampleWeight;
+}
+
+// The frame of an elbow ring rounding a corner between a leg whose rings are
+// round and one whose rings are not, or nullopt at any other sample. The ring
+// lies in the plane of the two legs: right is the bend axis, signed to agree
+// with the gentle leg's level right, so the gentle leg starts on its own
+// frame.
+std::optional<Frame> steepCornerFrame(const ChainSample& sample, double weight, const Options& options)
+{
+    const BendLimit* bend = sample.elbowBend();
+    if (bend == nullptr) {
+        return std::nullopt;
+    }
+    const QVector3D& incoming = bend->miter.incoming;
+    const QVector3D& outgoing = bend->miter.outgoing;
+    const bool isIncomingSteep = hasRoundRings(inclinationWeight(incoming, options));
+    const bool isOutgoingSteep = hasRoundRings(inclinationWeight(outgoing, options));
+    const QVector3D axis = QVector3D::crossProduct(incoming, outgoing);
+    if (isIncomingSteep == isOutgoingSteep || axis.length() < kMinProjectedLength) {
+        return std::nullopt;
+    }
+    const QVector3D& gentle = isIncomingSteep ? outgoing : incoming;
+    const std::optional<QVector3D> gentleUp = projectedInPlane(kWorldUp, gentle);
+    if (!gentleUp) {
+        return std::nullopt;
+    }
+    const QVector3D gentleRight = QVector3D::crossProduct(gentle, *gentleUp);
+    const QVector3D right = QVector3D::dotProduct(axis, gentleRight) < 0.0f ? -axis.normalized() : axis.normalized();
+    const QVector3D up = QVector3D::crossProduct(right, sample.tangent).normalized();
+    return makeFrame(sample.tangent, up, weight);
+}
+
 QVector<Frame> chainFrames(const QVector<ChainSample>& samples, const Options& options)
 {
     const int count = samples.size();
@@ -1480,6 +1515,11 @@ QVector<Frame> chainFrames(const QVector<ChainSample>& samples, const Options& o
     weights.reserve(count);
     for (const ChainSample& sample : samples) {
         weights.append(inclinationWeight(sample.tangent, options));
+    }
+    QVector<std::optional<Frame>> cornerFrames;
+    cornerFrames.reserve(count);
+    for (int i = 0; i < count; ++i) {
+        cornerFrames.append(steepCornerFrame(samples.at(i), weights.at(i), options));
     }
 
     QVector<Frame> frames(count);
@@ -1490,6 +1530,10 @@ QVector<Frame> chainFrames(const QVector<ChainSample>& samples, const Options& o
                                 samples.at(index).position,
                                 samples.at(index).tangent);
     };
+    const auto horizontalUpAt = [&](int index, const QVector3D& fallback) {
+        const QVector3D& tangent = samples.at(index).tangent;
+        return projectedInPlane(kWorldUp, tangent).value_or(projectedInPlane(frames.at(index - 1).up, tangent).value_or(fallback));
+    };
 
     // Seed at the first sample short of vertical; a chain vertical
     // throughout seeds from world +Y.
@@ -1499,45 +1543,55 @@ QVector<Frame> chainFrames(const QVector<ChainSample>& samples, const Options& o
     const QVector3D seedTangent = samples.at(seed).tangent;
     const QVector3D seedUp = projectedInPlane(isVertical ? kWorldNorth : kWorldUp, seedTangent)
                                  .value_or(projectedInPlane(kWorldEast, seedTangent).value_or(kWorldNorth));
-    frames[seed] = makeFrame(seedTangent, seedUp, weights.at(seed));
+    frames[seed] = cornerFrames.at(seed).value_or(makeFrame(seedTangent, seedUp, weights.at(seed)));
 
     // Samples before the seed are steep, so they follow the transported frame.
     for (int i = seed - 1; i >= 0; --i) {
-        frames[i] = makeFrame(samples.at(i).tangent, rmfFrom(i + 1, i), weights.at(i));
+        frames[i] = cornerFrames.at(i).value_or(makeFrame(samples.at(i).tangent, rmfFrom(i + 1, i), weights.at(i)));
     }
 
+    const auto isInRoundRun = [&](int index) {
+        return !cornerFrames.at(index) && hasRoundRings(weights.at(index));
+    };
+
+    // The roll between the frame a run of round rings carries and the one its
+    // far end wants is spread along the run.
+    const auto spreadRoll = [&](int first, int end, const QVector3D& wantedUp) {
+        const QVector3D& tangent = samples.at(end).tangent;
+        const double roll = signedAngle(rmfFrom(end - 1, end), wantedUp, tangent);
+        const int runLength = end - first;
+        for (int i = first; i < end; ++i) {
+            const Frame& frame = frames.at(i);
+            const QVector3D up = rotateAbout(frame.tangent, frame.up, roll * (i - first + 1) / runLength).normalized();
+            frames[i] = makeFrame(frame.tangent, up, frame.inclinationWeight);
+        }
+    };
+
     double previousAngle = 0.0;
-    bool inSteepRun = weights.at(seed) > kSteepWeight;
-    double residualTwist = 0.0;
-    int twistStep = kTwistDistributionSamples;
+    int runStart = isInRoundRun(seed) ? seed : -1;
     for (int i = seed + 1; i < count; ++i) {
         const QVector3D tangent = samples.at(i).tangent;
         const double weight = weights.at(i);
+
+        if (runStart >= 0 && !isInRoundRun(i)) {
+            const QVector3D wantedUp = cornerFrames.at(i) ? cornerFrames.at(i)->up : horizontalUpAt(i, frames.at(i - 1).up);
+            spreadRoll(runStart, i, wantedUp);
+            runStart = -1;
+            previousAngle = 0.0;
+        } else if (runStart < 0 && isInRoundRun(i)) {
+            runStart = i;
+        }
+
         const QVector3D rmfUp = rmfFrom(i - 1, i);
-        const QVector3D horizontalUp = projectedInPlane(kWorldUp, tangent)
-                                           .value_or(projectedInPlane(frames.at(i - 1).up, tangent).value_or(rmfUp));
+        const QVector3D horizontalUp = horizontalUpAt(i, rmfUp);
+        if (cornerFrames.at(i)) {
+            frames[i] = *cornerFrames.at(i);
+            previousAngle = unwrapped(signedAngle(horizontalUp, frames.at(i).up, tangent), previousAngle);
+            continue;
+        }
 
         const double angle = unwrapped(signedAngle(horizontalUp, rmfUp, tangent), previousAngle);
-        double appliedAngle = weight * angle;
-
-        if (weight > kSteepWeight) {
-            inSteepRun = true;
-            twistStep = kTwistDistributionSamples;
-        } else if (inSteepRun) {
-            inSteepRun = false;
-            residualTwist = angle;
-            twistStep = 0;
-        }
-
-        // Leaving a pit, unwind the twist the transported frame picked up
-        // over the next few samples instead of all at once.
-        if (twistStep < kTwistDistributionSamples) {
-            ++twistStep;
-            const double remaining = 1.0 - static_cast<double>(twistStep) / kTwistDistributionSamples;
-            appliedAngle += (1.0 - weight) * residualTwist * remaining;
-        }
-
-        frames[i] = makeFrame(tangent, rotateAbout(tangent, horizontalUp, appliedAngle).normalized(), weight);
+        frames[i] = makeFrame(tangent, rotateAbout(tangent, horizontalUp, weight * angle).normalized(), weight);
         previousAngle = angle;
     }
 
@@ -1890,7 +1944,7 @@ class LegTube
 public:
     LegTube(const WalkedLeg& leg, const Frame& frame) :
         m_leg(leg),
-        m_isSteep(1.0 - frame.inclinationWeight < kMinSampleWeight),
+        m_isSteep(hasRoundRings(frame.inclinationWeight)),
         m_frame(frame)
     {
     }
@@ -2077,7 +2131,7 @@ private:
 // LrudSection along its angle.
 RingFit fitLrudRing(const ChainSample& sample, const Frame& frame, int resolution)
 {
-    if (1.0 - frame.inclinationWeight < kMinSampleWeight) {
+    if (hasRoundRings(frame.inclinationWeight)) {
         return fitSteepRing(sample.records, resolution);
     }
 
@@ -2315,8 +2369,8 @@ void fitElbowsToLegWalls(const QVector<Leg>& legs,
 {
     QMap<int, QVector<int>> elbowRings;
     for (int i = 0; i < samples.size(); ++i) {
-        if (const std::optional<int> corner = samples.at(i).elbowCorner()) {
-            elbowRings[*corner].append(i);
+        if (const BendLimit* bend = samples.at(i).elbowBend()) {
+            elbowRings[bend->cornerLeg].append(i);
         }
     }
 

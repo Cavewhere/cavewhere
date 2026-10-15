@@ -567,12 +567,9 @@ bool isJunctionLimitRandomSeed(int seed)
 
 // 24's corner has no readings, so it insets by the default radius, short of
 // the 1.2 m floor it borrows: capping the bend's inside leaves the floor's
-// lowest bin a spike that creases by 155° (Crease). 25's foot reads 0 down,
-// and the skin from its elbow's middle ring to the next cuts inside the leg
-// leaving it (CenterlineOutside).
+// lowest bin a spike that creases by 155° (Crease).
 const QStringList kOpenJunctionFreeCases {
     QStringLiteral("24. Sharp bend in an unread passage next to a zero reading"),
-    QStringLiteral("25. Zero floor reading at the foot of a shaft"),
 };
 
 void checkCenterlineInside(const std::string& name)
@@ -638,14 +635,6 @@ TEST_CASE("cwPassageTubeCases keeps a bend's rings within the station's readings
     CHECK(std::none_of(issues.cbegin(), issues.cend(), [](const cwPassageTubeMeshCheck::Issue& issue) {
         return issue.type == cwPassageTubeMeshCheck::WallBeyondReading;
     }));
-}
-
-// The foot of the shaft reads 0 down, the bend's outside, so its floor lies
-// on the station, and the skin from the elbow's middle ring to the next is a
-// chord across the bend that cuts inside the leg leaving the station.
-TEST_CASE("cwPassageTubeCases keeps the centerline inside between elbow rings", "[PassageTube][cwPassageTubeCases][!mayfail]")
-{
-    checkCenterlineInside("25. Zero floor reading at the foot of a shaft");
 }
 
 // The arm's ceiling runs level with the through's, so its mouth runs along

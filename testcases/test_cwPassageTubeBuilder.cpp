@@ -2398,6 +2398,61 @@ TEST_CASE("cwPassageTubeBuilder keeps a corner's walls on the legs' walls", "[Pa
     }
 }
 
+// Case 25's shaft turns square at f1 and f2. Each elbow ring's right lies
+// along its bend's axis, so the ring's up stays in the plane of the two legs
+// and f2's down reading points at the floor. The exit leg starts level.
+TEST_CASE("cwPassageTubeBuilder keeps a shaft corner's rings in the plane of its legs", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kRollToleranceDegrees = 2.0;
+    const float alongAxis = static_cast<float>(std::cos(qDegreesToRadians(kRollToleranceDegrees)));
+    const float level = static_cast<float>(std::sin(qDegreesToRadians(kRollToleranceDegrees)));
+    const QVector3D worldUp(0.0f, 0.0f, 1.0f);
+    const cwPassageTubeCases::Case& entry = catalogCase(QStringLiteral("25. Zero floor reading at the foot of a shaft"));
+    const Builder::Debug debug = buildCase(entry);
+    const Builder::Chain& chain = chainWithLeg(debug, QStringLiteral("f0"), QStringLiteral("f1"));
+
+    int lastFootElbowRing = -1;
+    for (const QString& name : {QStringLiteral("f1"), QStringLiteral("f2")}) {
+        int checkedRings = 0;
+        for (int i = 0; i < chain.rings.size(); ++i) {
+            const Builder::Ring& ring = chain.rings.at(i);
+            const Corner corner = nearestCorner(debug, chain, ring.center);
+            if (!ring.isElbow || corner.name != name) {
+                continue;
+            }
+            ++checkedRings;
+            if (name == QStringLiteral("f2")) {
+                lastFootElbowRing = i;
+            }
+            const QVector3D axis = QVector3D::crossProduct(corner.incoming, corner.outgoing).normalized();
+            const float rightOnAxis = std::abs(QVector3D::dotProduct(ring.frame.right, axis));
+            INFO(name.toStdString() << " elbow ring " << i << ": |right . axis| " << rightOnAxis << ", roll "
+                                    << qRadiansToDegrees(std::acos(std::min(rightOnAxis, 1.0f))) << " degrees");
+            CHECK(rightOnAxis > alongAxis);
+        }
+        INFO(name.toStdString() << " elbow rings");
+        CHECK(checkedRings > 0);
+    }
+
+    REQUIRE(lastFootElbowRing >= 0);
+    REQUIRE(lastFootElbowRing + 1 < chain.rings.size());
+    const Builder::Ring& firstExitRing = chain.rings.at(lastFootElbowRing + 1);
+    const float rightUp = std::abs(QVector3D::dotProduct(firstExitRing.frame.right, worldUp));
+    INFO("first exit ring " << lastFootElbowRing + 1 << ": |right . worldUp| " << rightUp << ", roll "
+                            << qRadiansToDegrees(std::asin(std::min(rightUp, 1.0f))) << " degrees");
+    CHECK(rightUp < level);
+
+    const QVector3D f2 = casePosition(entry, QStringLiteral("f2"));
+    const Builder::Ring& middle = elbowMiddleRing(chain, f2);
+    const auto lowest = std::min_element(middle.vertices.cbegin(), middle.vertices.cend(), [](const QVector3D& a, const QVector3D& b) {
+        return a.z() < b.z();
+    });
+    REQUIRE(lowest != middle.vertices.cend());
+    const double underFoot = f2.z() - lowest->z();
+    INFO("f2 middle ring's lowest vertex lies " << underFoot << " m under f2");
+    CHECK(underFoot <= Builder::kMinRadiusMeters + cwPassageTubeMeshCheck::kWallTolerance);
+}
+
 // b–c and c–d belong to the second trip, read only at d; b's ring, read in
 // the first trip, lies nearer the rings on b–c but they borrow d's.
 TEST_CASE("cwPassageTubeBuilder borrows a ring from its own trip before a nearer one across a trip boundary", "[PassageTube][cwPassageTubeBuilder]")
