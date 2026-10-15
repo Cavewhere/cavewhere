@@ -186,22 +186,22 @@ MainWindowTest {
         function test_spacingSourceRowFollowsTheSetting() {
             const source = row("spacingSourceComboBox")
             compare(source.count, rootId.renderingSettings.spacingSourceCount)
-            compare(source.currentIndex, 0)
+            compare(source.currentIndex, 1)
 
-            rootId.renderingSettings.spacingSource = 1
-            tryCompare(source, "currentIndex", 1)
+            rootId.renderingSettings.spacingSource = 0
+            tryCompare(source, "currentIndex", 0)
         }
 
         function test_spacingSourceRowWritesTheSetting() {
             const source = row("spacingSourceComboBox")
-            source.currentIndex = 1
-            source.activated(1)
-            compare(rootId.renderingSettings.spacingSource, 1)
+            source.currentIndex = 0
+            source.activated(0)
+            compare(rootId.renderingSettings.spacingSource, 0)
             verify(!rootId.renderingSettings.isAtDefaults)
 
             mouseClick(row("pointCloudDebugResetButton"))
-            tryCompare(rootId.renderingSettings, "spacingSource", 0)
-            tryCompare(source, "currentIndex", 0)
+            tryCompare(rootId.renderingSettings, "spacingSource", 1)
+            tryCompare(source, "currentIndex", 1)
         }
 
         function test_closeButtonClosesThePanel() {

@@ -98,6 +98,11 @@ namespace cw::pointcloud {
 
     constexpr bool kDefaultShowNodeBoxes = false;
 
+    //! Measured, because a node sparser than its grid otherwise draws sprites
+    //! sized for points it does not have, and deep levels lit less of the
+    //! ground (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html WP10)
+    constexpr SpacingSource kDefaultSpacingSource = SpacingSource::Measured;
+
     //! One color per octree level, cycling past the last. The first six are the
     //! level colors of plans/POINT_CLOUD_CLOD_FIGURES.html. PointCloud.vert
     //! spells the same table out for the level view, and the node boxes read it
@@ -161,7 +166,7 @@ struct cwPointCloudShading {
     cw::pointcloud::ThinningMode thinningMode = cw::pointcloud::ThinningMode::Continuous;
     cw::pointcloud::SizeMode sizeMode = cw::pointcloud::SizeMode::Coverage;
     cw::pointcloud::FloorMode floorMode = cw::pointcloud::FloorMode::Node;
-    cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::SpacingSource::Grid;
+    cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::kDefaultSpacingSource;
     float fixedPointSizePx = float(cw::pointcloud::kDefaultFixedPointSizePx);
     float maxPointSizePx = float(cw::pointcloud::kDefaultMaxPointSizePx);
     cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;

@@ -400,8 +400,8 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         {"floorMode", [&] { settings->setFloorMode(int(FloorMode::Off)); },
          QStringLiteral("rendering/pointCloud/floorMode"), int(FloorMode::Off),
          &cwRenderingSettings::floorModeChanged},
-        {"spacingSource", [&] { settings->setSpacingSource(int(SpacingSource::Measured)); },
-         QStringLiteral("rendering/pointCloud/spacingSource"), int(SpacingSource::Measured),
+        {"spacingSource", [&] { settings->setSpacingSource(int(SpacingSource::Grid)); },
+         QStringLiteral("rendering/pointCloud/spacingSource"), int(SpacingSource::Grid),
          &cwRenderingSettings::spacingSourceChanged},
         {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); },
          QStringLiteral("rendering/pointCloud/fixedPointSizePx"), kFixedPointSizePx,
@@ -624,7 +624,7 @@ TEST_CASE("cwRenderingSettings governorSlew defaults to the governor's own step,
     settings->resetToDefaults();
 }
 
-TEST_CASE("cwRenderingSettings spacingSource defaults to the grid, clamps, and persists",
+TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and persists",
           "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -635,10 +635,11 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to the grid, clamps, and p
     using cw::pointcloud::SpacingSource;
     const QString key = QStringLiteral("rendering/pointCloud/spacingSource");
 
-    SECTION("the default sizes and thins by the grid, as the renderer always did") {
-        CHECK(cwPointCloudShading().spacingSource == SpacingSource::Grid);
-        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
-        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Grid);
+    SECTION("the default sizes and thins by each node's measured spacing") {
+        CHECK(cw::pointcloud::kDefaultSpacingSource == SpacingSource::Measured);
+        CHECK(cwPointCloudShading().spacingSource == SpacingSource::Measured);
+        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Measured);
         CHECK(cwRenderingSettings::spacingSourceCount() == cw::pointcloud::kSpacingSourceCount);
         CHECK(cwRenderingSettings::spacingSourceCount() == 2);
         CHECK(settings->isAtDefaults());
@@ -652,31 +653,31 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to the grid, clamps, and p
         CHECK(settings->spacingSource() == int(SpacingSource::Measured));
     }
 
-    SECTION("measured round-trips through QSettings and reaches the shading") {
+    SECTION("grid round-trips through QSettings and reaches the shading") {
         QSignalSpy sourceSpy(settings, &cwRenderingSettings::spacingSourceChanged);
         QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
         QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
         QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
 
-        settings->setSpacingSource(int(SpacingSource::Measured));
+        settings->setSpacingSource(int(SpacingSource::Grid));
 
         CHECK(sourceSpy.count() == 1);
         CHECK(shadingSpy.count() == 1);
         CHECK(budgetsSpy.count() == 0);
         CHECK(defaultsSpy.count() == 1);
-        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
-        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Measured);
+        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Grid);
         CHECK_FALSE(settings->isAtDefaults());
 
         QSettings diskSettings;
-        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Measured));
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Grid));
 
-        settings->setSpacingSource(int(SpacingSource::Measured));
+        settings->setSpacingSource(int(SpacingSource::Grid));
         CHECK(sourceSpy.count() == 1);
 
         settings->resetPointCloudKnobsToDefaults();
-        CHECK(settings->spacingSource() == int(SpacingSource::Grid));
-        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Grid));
+        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Measured));
         CHECK(settings->isAtDefaults());
     }
 
@@ -773,7 +774,7 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
         {"sizeMode", [&] { settings->setSizeMode(int(cw::pointcloud::SizeMode::FixedPixels)); }, false},
         {"floorMode", [&] { settings->setFloorMode(int(cw::pointcloud::FloorMode::Off)); }, false},
         {"spacingSource",
-         [&] { settings->setSpacingSource(int(cw::pointcloud::SpacingSource::Measured)); }, false},
+         [&] { settings->setSpacingSource(int(cw::pointcloud::SpacingSource::Grid)); }, false},
         {"fixedPointSizePx", [&] { settings->setFixedPointSizePx(kFixedPointSizePx); }, false},
         {"maxPointSizePx", [&] { settings->setMaxPointSizePx(kMaxPointSizePx); }, false},
         {"debugView",

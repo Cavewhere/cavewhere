@@ -1455,6 +1455,12 @@ namespace {
     //! departure, and what is left is the ordinary step-to-step drift inside a
     //! level. Measured plus a tenth.
     constexpr double kMaxLitFractionJump = 0.0046;
+    //! The same jump under measured spacing, which thins the plane's sparse
+    //! finest level by its measured gap while the cut still refines by the
+    //! grid. It measured 0.0202 when measured spacing became the default,
+    //! over four times the grid's bound, and the step behind it is still to be
+    //! traced; this bound only keeps it from growing. Measured plus a tenth.
+    constexpr double kMeasuredMaxLitFractionJump = 0.0222;
 
     //! The same criteria on the tile, which is measured against a reference
     //! render rather than a rectangle and carries the residual the erosion
@@ -2545,16 +2551,32 @@ namespace {
         fixture.synchronize();
     }
 
+    //! Sets @a fixture's spacing source, every other shading knob kept
+    void setSpacingSource(PointCloudFixture& fixture, cw::pointcloud::SpacingSource source)
+    {
+        if (fixture.render().shading().spacingSource == source) {
+            return;
+        }
+        cwPointCloudShading shading = fixture.render().shading();
+        shading.spacingSource = source;
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+    }
+
     //! Every point of @a fixture's drawn nodes that cw::clod keeps at @a height
     //! and the view holds, which is what the frame's lit pixels have to come
     //! to. The points come out of the payloads the nodes were uploaded from,
     //! so the prediction reads the same quantized coordinates the shader does.
+    //! Each node sizes by @a source, or by the spacing source the frame drew
+    //! with when none is given.
     int predictedDrawnCount(const PointCloudFixture& fixture, float height,
                             cw::pointcloud::ThinningMode mode =
                                 cw::pointcloud::ThinningMode::Continuous,
-                            cw::pointcloud::SpacingSource source =
-                                cw::pointcloud::SpacingSource::Grid)
+                            std::optional<cw::pointcloud::SpacingSource> source = std::nullopt)
     {
+        const cw::pointcloud::SpacingSource spacingSource =
+            source.value_or(cw::pointcloud::SpacingSource(
+                Access::liveAppearanceUniform(fixture.backend()).spacingSource));
         const cwPointOctreeManifest& manifest = fixture.manifest();
         const double pixelsPerMeter = double(kTargetDimension) / double(height);
         const double targetSpacing =
@@ -2568,7 +2590,7 @@ namespace {
             const QBox3D bounds = manifest.nodeBounds(index);
             const cwPointOctreeNode& node = manifest.nodes.at(index);
             const double nodeSpacing = cw::clod::drawSpacing(
-                manifest.spacing(node.level), double(node.measuredSpacing), source);
+                manifest.spacing(node.level), double(node.measuredSpacing), spacingSource);
 
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
                  offset += cw::octree::kBytesPerPoint) {
@@ -3310,6 +3332,8 @@ TEST_CASE("The frame the last nodes land writes their floors and asks for no oth
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("floor-frame"));
+    //The grid's floor rule, which expectedFloorSpacing() spells out
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setOrthoHeight(kCloseOrthoHeight);
 
     // Frames until the last nodes land: nothing waits in the ready queue and
@@ -3994,6 +4018,9 @@ TEST_CASE("The wheel coverage changes every sprite", "[PointCloudStreaming]")
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("wheel-coverage"));
+    //The grid's sizing rule, which gives every level one sprite; measured
+    //spacing widens the sprites of a level sparser than its grid
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setReadbackEnabled(true);
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.synchronize();
@@ -4037,6 +4064,9 @@ TEST_CASE("Every level on screen shares one sprite size", "[PointCloudStreaming]
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("one-sprite-size"));
+    //The grid's sizing rule, which gives every level one sprite; measured
+    //spacing widens the sprites of a level sparser than its grid
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setReadbackEnabled(true);
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.synchronize();
@@ -4080,6 +4110,9 @@ TEST_CASE("The spacing floor rises with the threshold the cut refines to",
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("floor-falls-back"));
+    //The grid's sizing rule, which gives every level one sprite; measured
+    //spacing widens the sprites of a level sparser than its grid
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setReadbackEnabled(true);
     fixture.setOrthoHeight(kCloseOrthoHeight);
 
@@ -4178,6 +4211,8 @@ TEST_CASE("The floor holds to what is drawn while the children stream",
     cwRenderBudgets budgets = fixture.budgets();
     budgets.uploadBudgetBytesPerFrame = kOneNodePerFrameUploadBytes;
     fixture.setBudgets(budgets);
+    //The grid's floor rule, which floorLevelOf() spells out
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.synchronize();
     fixture.renderUntilResident(kRootIndex);
@@ -4217,6 +4252,8 @@ TEST_CASE("A node keeps its own spacing until the children the cut asked for lan
     cwRenderBudgets budgets = fixture.budgets();
     budgets.uploadBudgetBytesPerFrame = kOneNodePerFrameUploadBytes;
     fixture.setBudgets(budgets);
+    //The grid's floor rule, which expectedFloorSpacing() spells out
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.synchronize();
     fixture.renderUntilResident(kRootIndex);
@@ -4281,6 +4318,8 @@ TEST_CASE("A pan that opens a drawn node's missing children floors it at its own
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("pan-floor"));
+    //The grid's floor rule, which expectedFloorSpacing() spells out
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     const auto stretchOffset = [&fixture](double along) {
         return QVector3D(float(along * kTubeLength),
                          float(kTubeBend * along * along),
@@ -4363,6 +4402,8 @@ TEST_CASE("A node that leaves the cut holds its own spacing until the cut takes 
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("reentry-floor"));
+    //The grid's floor rule, which expectedFloorSpacing() spells out
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.synchronize();
     fixture.renderUntilQuiet();
@@ -4613,6 +4654,9 @@ TEST_CASE("Perspective sprites share one size across levels too",
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("perspective-size"));
+    //The grid's sizing rule, which gives every level one sprite; measured
+    //spacing widens the sprites of a level sparser than its grid
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setReadbackEnabled(true);
     fixture.setPerspective(true);
     fixture.setOrthoHeight(kCloseOrthoHeight);
@@ -6618,7 +6662,7 @@ namespace {
         QSize targetSize;
         //! What every node sizes and thins by; sweepPath() draws with it and
         //! evalCsv records it
-        cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::SpacingSource::Grid;
+        cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::kDefaultSpacingSource;
     };
 
     enum class Candidate {
@@ -6627,7 +6671,7 @@ namespace {
         Latent,   //!< slow disk: arrival spread over many frames
         Tight,    //!< the governor binding on every pose, as section 13 saw it
         TightSlew, //!< C-tight with the inflation slewing toward the governor's target
-        DefaultMeasured //!< C-default sizing and thinning by each node's measured spacing
+        DefaultGrid //!< C-default sizing and thinning by each node's grid spacing
     };
 
     constexpr int kStarvedGpuBudgetMb = 256;
@@ -6670,9 +6714,9 @@ namespace {
             config.name = QStringLiteral("C-tight-slew");
             config.budgets.governorSlew = kTightSlewGovernorSlew;
             break;
-        case Candidate::DefaultMeasured:
-            config.name = QStringLiteral("C-default-measured");
-            config.spacingSource = cw::pointcloud::SpacingSource::Measured;
+        case Candidate::DefaultGrid:
+            config.name = QStringLiteral("C-default-grid");
+            config.spacingSource = cw::pointcloud::SpacingSource::Grid;
             break;
         }
         return config;
@@ -6688,18 +6732,6 @@ namespace {
             break;
         }
         return QStringLiteral("Grid");
-    }
-
-    //! Sets @a fixture's spacing source, every other shading knob kept
-    void setSpacingSource(PointCloudFixture& fixture, cw::pointcloud::SpacingSource source)
-    {
-        if (fixture.render().shading().spacingSource == source) {
-            return;
-        }
-        cwPointCloudShading shading = fixture.render().shading();
-        shading.spacingSource = source;
-        fixture.render().setShading(shading);
-        fixture.synchronize();
     }
 
     // ---- sweepPath ------------------------------------------------------
@@ -7283,6 +7315,9 @@ namespace {
         //! which leaves its lit pixels where the flat pass puts them and tells
         //! the erosion how far each sprite spills.
         cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;
+        //! The renderer's default, except where a test measures the oracles'
+        //! own mechanics under the grid
+        cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::kDefaultSpacingSource;
     };
 
     //! O1: the cut refined to the minimum threshold, eroded the way the
@@ -7290,10 +7325,12 @@ namespace {
     //! sweep rather than the [HoleMetric] reference's coverage. A reference
     //! drawn inside the sweep would be one of O2's own renders, and every
     //! coverage from it up would score no holes by construction.
-    OracleConfig o1Config()
+    OracleConfig o1Config(cw::pointcloud::SpacingSource spacingSource =
+                              cw::pointcloud::kDefaultSpacingSource)
     {
         OracleConfig config;
         config.oracle = Oracle::O1;
+        config.spacingSource = spacingSource;
         config.screenSpaceErrorPx = kReferenceScreenSpaceErrorPx;
         config.spacingCoverage = kO2Coverages.back();
         config.debugView = cw::pointcloud::DebugView::SpriteSize;
@@ -7301,10 +7338,13 @@ namespace {
     }
 
     //! O2 at one coverage of the sweep
-    OracleConfig o2Config(float spacingCoverage)
+    OracleConfig o2Config(float spacingCoverage,
+                          cw::pointcloud::SpacingSource spacingSource =
+                              cw::pointcloud::kDefaultSpacingSource)
     {
         OracleConfig config;
         config.oracle = Oracle::O2;
+        config.spacingSource = spacingSource;
         config.screenSpaceErrorPx = cw::budgets::kMinScreenSpaceErrorPx;
         config.spacingCoverage = spacingCoverage;
         return config;
@@ -7339,7 +7379,8 @@ namespace {
                 .arg(kSmallSpriteRed, 0, 'g', 6)
                 .arg(kLargeSpriteRed, 0, 'g', 6);
         return QStringLiteral("%1,sse=%2,coverage=%3,view=%4,thinning=%5,size=%6,floor=%7,"
-                              "fixedPx=%8,maxPx=%9,gpu=%10,points=%11,minLevel=%12,maxLevel=%13")
+                              "fixedPx=%8,maxPx=%9,gpu=%10,points=%11,minLevel=%12,maxLevel=%13,"
+                              "spacing=%14")
             .arg(oracleName(config.oracle))
             .arg(config.screenSpaceErrorPx, 0, 'g', 6)
             .arg(double(config.spacingCoverage), 0, 'g', 6)
@@ -7353,6 +7394,7 @@ namespace {
             .arg(budgets.pointBudget)
             .arg(budgets.minLevel)
             .arg(budgets.maxLevel)
+            .arg(int(config.spacingSource))
                + constants;
     }
 
@@ -8142,6 +8184,7 @@ namespace {
         fixture.render().setSpacingCoverage(config.spacingCoverage);
         cwPointCloudShading shading;
         shading.debugView = config.debugView;
+        shading.spacingSource = config.spacingSource;
         fixture.render().setShading(shading);
         fixture.synchronize();
 
@@ -8248,17 +8291,22 @@ namespace {
     }
 
     //! O2's frames over @a path at the coverage its sweep against O1 picks
-    //! under @a holeTolerance; oracleFrames() says how they are drawn and cached
+    //! under @a holeTolerance, O1 and O2 both drawn under @a spacingSource;
+    //! oracleFrames() says how they are drawn and cached
     OracleFrames o2Frames(PointCloudFixture& fixture, const EvalPath& path,
                           const QString& cacheRoot, double holeTolerance,
                           std::ostream& out = std::cout,
-                          const QByteArray& shaderHash = pointCloudShaderHash())
+                          const QByteArray& shaderHash = pointCloudShaderHash(),
+                          cw::pointcloud::SpacingSource spacingSource =
+                              cw::pointcloud::kDefaultSpacingSource)
     {
-        const OracleSet o1 = oracleSet(fixture, path, o1Config(), cacheRoot, shaderHash);
+        const OracleSet o1 =
+            oracleSet(fixture, path, o1Config(spacingSource), cacheRoot, shaderHash);
         bool allCached = o1.fromCache;
         QVector<OracleSet> sets;
         for (float coverage : kO2Coverages) {
-            sets.append(oracleSet(fixture, path, o2Config(coverage), cacheRoot, shaderHash));
+            sets.append(oracleSet(fixture, path, o2Config(coverage, spacingSource), cacheRoot,
+                                  shaderHash));
             allCached = allCached && sets.constLast().fromCache;
         }
 
@@ -8411,8 +8459,11 @@ TEST_CASE("O2's coverage sweep picks the smallest coverage that holes under the 
 
     PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
     std::ostringstream output;
+    //Under the grid, coverage 1 leaves the plane's holes open for the sweep to
+    //close; measured spacing closes them at coverage 1 already
     const OracleFrames o2 = o2Frames(fixture, path, cacheRoot.path(), kPlaneO2HoleTolerance,
-                                     output);
+                                     output, pointCloudShaderHash(),
+                                     cw::pointcloud::SpacingSource::Grid);
     const QStringList lines = linesWithPrefix(output, QStringLiteral("oracleCsv,"));
 
     constexpr int kHeaderLines = 1;
@@ -9801,7 +9852,7 @@ namespace {
                                             const QVector<LevelPath>& paths,
                                             std::ostream& out = std::cout,
                                             cw::pointcloud::SpacingSource spacingSource =
-                                                cw::pointcloud::SpacingSource::Grid)
+                                                cw::pointcloud::kDefaultSpacingSource)
     {
         const cwRenderBudgets savedBudgets = fixture.budgets();
         const float savedCoverage = fixture.render().spacingCoverage();
@@ -9897,7 +9948,7 @@ namespace {
     void writeLevelMeans(const QVector<LevelPath>& paths, const QVector<LevelRecord>& records,
                          int firstLevel, int lastLevel, std::ostream& out = std::cout,
                          cw::pointcloud::SpacingSource spacingSource =
-                             cw::pointcloud::SpacingSource::Grid)
+                             cw::pointcloud::kDefaultSpacingSource)
     {
         const QString sourceName = spacingSourceName(spacingSource);
         //An empty level is named the way levelAlonePath() names a present one
@@ -10464,11 +10515,15 @@ TEST_CASE("M1: O2 at coverage 1 agrees less with O1 than O2 at its pick",
 
     PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
     std::ostringstream output;
-    const OracleFrames o1 = oracleFrames(fixture, path, Oracle::O1, cacheRoot.path(), output);
+    //Under the grid, where coverage 1 leaves holes for the pick to close;
+    //measured spacing picks coverage 1 on the plane
+    constexpr cw::pointcloud::SpacingSource kSource = cw::pointcloud::SpacingSource::Grid;
+    const OracleSet o1 = oracleSet(fixture, path, o1Config(kSource), cacheRoot.path(),
+                                   pointCloudShaderHash());
     //The plane's own tolerance, for the reason kPlaneO2HoleTolerance gives
     const OracleFrames o2 = o2Frames(fixture, path, cacheRoot.path(), kPlaneO2HoleTolerance,
-                                     output);
-    const OracleSet narrowest = oracleSet(fixture, path, o2Config(kO2Coverages.front()),
+                                     output, pointCloudShaderHash(), kSource);
+    const OracleSet narrowest = oracleSet(fixture, path, o2Config(kO2Coverages.front(), kSource),
                                           cacheRoot.path(), pointCloudShaderHash());
     REQUIRE(o2.spacingCoverage != kO2Coverages.front());
 
@@ -10682,6 +10737,8 @@ TEST_CASE("M6 counts a floor the gather moved on the frame it moved",
     cwRenderBudgets budgets = fixture.budgets();
     budgets.uploadBudgetBytesPerFrame = kOneNodePerFrameUploadBytes;
     fixture.setBudgets(budgets);
+    //The grid's floor rule, which expectedFloorSpacing() spells out
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
     fixture.setOrthoHeight(kCloseOrthoHeight);
     fixture.synchronize();
     fixture.renderUntilResident(kRootIndex);
@@ -10835,7 +10892,7 @@ TEST_CASE("M3 and M4: mixed sprite sizes raise the seam share and a floorless ca
     CHECK(*capped.worstDensityCv > *baseline.worstDensityCv);
 }
 
-TEST_CASE("M7: the finest level of a cloud sparser than its grid lights less than a coarser one",
+TEST_CASE("M7: under grid spacing the finest level of a cloud sparser than its grid lights less than a coarser one",
           "[PointCloudStreaming][PointCloudEval]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -10857,9 +10914,10 @@ TEST_CASE("M7: the finest level of a cloud sparser than its grid lights less tha
         [&](int level) { return planeLevelPath(rhi.get(), level, kO2SweepPoseCount); },
         output);
 
+    //Grid spacing sizes the finest level for points it does not have
     const auto run = [&](const QVector<LevelPath>& levels) {
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
-        return litFractionByLevel(fixture, levels, output);
+        return litFractionByLevel(fixture, levels, output, cw::pointcloud::SpacingSource::Grid);
     };
     const QVector<LevelRecord> records = run(paths);
     const QVector<LevelRecord> repeat = run({levelPathAt(paths, coarser)});
@@ -10882,7 +10940,7 @@ TEST_CASE("M7: the finest level of a cloud sparser than its grid lights less tha
     CHECK(finestFixed > finestLit + noise);
 }
 
-TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprites are widened",
+TEST_CASE("M7: on a tile under grid spacing, level 7 alone lights less than level 5 until its sprites are widened",
           "[PointCloudStreaming][PointCloudEval]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -10894,7 +10952,7 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
     const int lastLevel = std::min(kM7LastLevel, leaf);
     static_assert(kM7FirstLevel <= kTileClosedLevel);
 
-    const EvalConfig config = candidateConfig(Candidate::Default);
+    const EvalConfig config = candidateConfig(Candidate::DefaultGrid);
     const QString cacheRoot = evalCacheRoot();
 
     //Each level on its own level-alone orbit, with EDL on as the orbit case
@@ -10909,7 +10967,7 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
 
     const auto run = [&](const QVector<LevelPath>& levels, std::ostream& out) {
         PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
-        return litFractionByLevel(fixture, levels, out);
+        return litFractionByLevel(fixture, levels, out, config.spacingSource);
     };
     const QVector<LevelRecord> records = run(paths, std::cout);
     //The repeat only measures the noise, so its lines stay out of the log
@@ -10930,7 +10988,7 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
     }
 
     //Levels past the tile's deepest are reported empty
-    writeLevelMeans(paths, records, kM7FirstLevel, kM7LastLevel);
+    writeLevelMeans(paths, records, kM7FirstLevel, kM7LastLevel, std::cout, config.spacingSource);
 
     const auto lit = [](const LevelRecord& record) { return record.litFraction; };
     const auto litFixed = [](const LevelRecord& record) { return record.litFractionFixed; };
@@ -11136,6 +11194,8 @@ TEST_CASE("Zooming out until quiet leaves the holes bounded",
         fixture.setBudgets(budgets);
         fixture.render().setSpacingCoverage(kDensitySpacingCoverage);
         fixture.synchronize();
+        //The grid's fade; the next section holds measured spacing to its own bound
+        setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
 
         const QVector<SweepRecord> records = sweep(fixture, QStringLiteral("quiet-plane-density"),
                                                    heights, StepPolicy::Quiet, 1, {});
@@ -11147,6 +11207,28 @@ TEST_CASE("Zooming out until quiet leaves the holes bounded",
         const double largestJump = largestLitFractionJump(records);
         INFO("largest lit fraction jump " << largestJump);
         CHECK(largestJump <= kMaxLitFractionJump);
+    }
+
+    SECTION("zooming out under measured spacing thins the cloud within its own bound") {
+        const QVector<float> heights = zoomOutHeights(kDensitySweepLowHeight,
+                                                      kDensitySweepHighHeight, kSweepStepFraction);
+
+        PointCloudFixture fixture(rhi.get(), planeCache(), kTargetDimension);
+        cwRenderBudgets budgets = fixture.budgets();
+        budgets.screenSpaceErrorPx = kDensityScreenSpaceErrorPx;
+        fixture.setBudgets(budgets);
+        fixture.render().setSpacingCoverage(kDensitySpacingCoverage);
+        fixture.synchronize();
+        setSpacingSource(fixture, cw::pointcloud::SpacingSource::Measured);
+
+        const QVector<SweepRecord> records =
+            sweep(fixture, QStringLiteral("quiet-plane-density-measured"), heights,
+                  StepPolicy::Quiet, 1, {});
+
+        //The section above, at the renderer's default source
+        const double largestJump = largestLitFractionJump(records);
+        INFO("largest lit fraction jump " << largestJump);
+        CHECK(largestJump <= kMeasuredMaxLitFractionJump);
     }
 
     SECTION("a USGS tile measured against its own densest render") {
@@ -11720,7 +11802,7 @@ TEST_CASE("Under grid spacing a measured spacing in the manifest changes nothing
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     //The same payloads under two manifests, one with every node measured
-    //three times sparser than its grid, both drawn at the default source
+    //three times sparser than its grid, both drawn under the grid
     struct Drawn {
         QImage frame;
         QVector<int> nodes;
@@ -11729,7 +11811,7 @@ TEST_CASE("Under grid spacing a measured spacing in the manifest changes nothing
     const auto draw = [&](const OctreeCache& cache) {
         PointCloudFixture fixture(rhi.get(), cache, kTargetDimension);
         fixture.setReadbackEnabled(true);
-        REQUIRE(fixture.render().shading().spacingSource == cw::pointcloud::SpacingSource::Grid);
+        setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
         fixture.setOrthoHeight(kCloseOrthoHeight);
         fixture.renderUntilQuiet();
         fixture.renderFrame();
@@ -11773,7 +11855,7 @@ TEST_CASE("Under grid spacing the plane's boundary path lights what it lit befor
     step.settleBeforeFirstPose = false;
 
     PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
-    const EvalConfig config = candidateConfig(Candidate::Default);
+    const EvalConfig config = candidateConfig(Candidate::DefaultGrid);
     REQUIRE(config.spacingSource == cw::pointcloud::SpacingSource::Grid);
     const QVector<EvalRecord> records = sweepPath(fixture, path, config, step);
 
@@ -11909,27 +11991,28 @@ TEST_CASE("M7 reports a level the octree no longer reaches as empty instead of f
     }
 }
 
-TEST_CASE("C-default-measured is C-default sizing and thinning by measured spacing",
+TEST_CASE("C-default-grid is C-default sizing and thinning by grid spacing",
           "[PointCloudStreaming][PointCloudEval]")
 {
     const EvalConfig defaults = candidateConfig(Candidate::Default);
-    const EvalConfig measured = candidateConfig(Candidate::DefaultMeasured);
+    const EvalConfig grid = candidateConfig(Candidate::DefaultGrid);
 
-    CHECK(measured.name == QStringLiteral("C-default-measured"));
-    CHECK(measured.spacingSource == cw::pointcloud::SpacingSource::Measured);
-    CHECK(measured.targetSize == defaults.targetSize);
-    CHECK(measured.budgets.gpuBudgetBytes == defaults.budgets.gpuBudgetBytes);
-    CHECK(measured.budgets.pointBudget == defaults.budgets.pointBudget);
-    CHECK(measured.budgets.uploadBudgetBytesPerFrame == defaults.budgets.uploadBudgetBytesPerFrame);
-    CHECK(measured.budgets.screenSpaceErrorPx == defaults.budgets.screenSpaceErrorPx);
-    CHECK(measured.budgets.governorSlew == defaults.budgets.governorSlew);
+    CHECK(grid.name == QStringLiteral("C-default-grid"));
+    CHECK(grid.spacingSource == cw::pointcloud::SpacingSource::Grid);
+    CHECK(grid.targetSize == defaults.targetSize);
+    CHECK(grid.budgets.gpuBudgetBytes == defaults.budgets.gpuBudgetBytes);
+    CHECK(grid.budgets.pointBudget == defaults.budgets.pointBudget);
+    CHECK(grid.budgets.uploadBudgetBytesPerFrame == defaults.budgets.uploadBudgetBytesPerFrame);
+    CHECK(grid.budgets.screenSpaceErrorPx == defaults.budgets.screenSpaceErrorPx);
+    CHECK(grid.budgets.governorSlew == defaults.budgets.governorSlew);
 
-    //Every other candidate draws by the grid, as before
+    //Every other candidate draws by the renderer's default, measured spacing
+    CHECK(cw::pointcloud::kDefaultSpacingSource == cw::pointcloud::SpacingSource::Measured);
     for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
                                       Candidate::Tight, Candidate::TightSlew}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
-        CHECK(config.spacingSource == cw::pointcloud::SpacingSource::Grid);
+        CHECK(config.spacingSource == cw::pointcloud::kDefaultSpacingSource);
     }
 }
 
@@ -11944,7 +12027,7 @@ TEST_CASE("evalCsv records the spacing source each sweep draws with",
     step.policy = StepPolicy::Frames;
     step.framesPerPose = kSweptFramesPerPose;
 
-    for (const Candidate candidate : {Candidate::Default, Candidate::DefaultMeasured}) {
+    for (const Candidate candidate : {Candidate::Default, Candidate::DefaultGrid}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
 
@@ -11973,7 +12056,7 @@ TEST_CASE("evalCsv records the spacing source each sweep draws with",
     }
 }
 
-TEST_CASE("The orbit and its boundary path on a tile under C-default-measured record every metric",
+TEST_CASE("The orbit and its boundary path on a tile under C-default-grid record every metric",
           "[PointCloudStreaming][PointCloudEval]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -11982,10 +12065,10 @@ TEST_CASE("The orbit and its boundary path on a tile under C-default-measured re
 
     //C-default's poses (P2/24 and P2z/6) and oracles, so the two compare pose
     //for pose and the spacing source is the only difference
-    const EvalConfig config = candidateConfig(Candidate::DefaultMeasured);
+    const EvalConfig config = candidateConfig(Candidate::DefaultGrid);
     const EvalConfig defaults = candidateConfig(Candidate::Default);
     REQUIRE(config.targetSize == defaults.targetSize);
-    REQUIRE(config.spacingSource == cw::pointcloud::SpacingSource::Measured);
+    REQUIRE(config.spacingSource == cw::pointcloud::SpacingSource::Grid);
     const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
     for (const EvalPath& path : {tileOrbitPath(manifest, defaults),
                                  tileBoundaryPath(rhi.get(), manifest, defaults)}) {
@@ -12008,7 +12091,8 @@ TEST_CASE("M7: on a tile under measured spacing, levels 6 and 7 alone close most
     //levels past its deepest are reported empty
     const int lastLevel = std::min(kM7LastLevel, leaf);
 
-    const EvalConfig config = candidateConfig(Candidate::DefaultMeasured);
+    const EvalConfig config = candidateConfig(Candidate::Default);
+    REQUIRE(config.spacingSource == cw::pointcloud::SpacingSource::Measured);
     const QString cacheRoot = evalCacheRoot();
 
     const auto levelAlonePathFor = [&](int level) {
@@ -12030,7 +12114,7 @@ TEST_CASE("M7: on a tile under measured spacing, levels 6 and 7 alone close most
         run({levelPathAt(paths, kTileClosedLevel)}, repeatOutput, config.spacingSource);
 
     //The same levels under the grid, kept off the log so its m7Csv rows are
-    //the measured run's alone
+    //the measured run's alone; the grid case above logs the grid's
     QVector<LevelPath> gridPaths;
     for (int level = kTileClosedLevel; level <= kTileOpenLevel; level++) {
         gridPaths.append(levelPathAt(paths, level));
