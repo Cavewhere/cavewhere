@@ -15,14 +15,16 @@
 #include <QString>
 #include <QVector>
 #include <QVector3D>
+#include <QtMath>
 
 //Std includes
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <optional>
 
-// Ring and chain helpers shared by cwPassageTubeBuilder and
-// cwPassageTubeJunction.
+// Ring, chain and wall helpers shared by cwPassageTubeBuilder,
+// cwPassageTubeJunction and cwPassageTubeMeshCheck.
 namespace cwPassageTubeGeometry {
 
 constexpr double kTwoPi = 2.0 * std::numbers::pi;
@@ -112,6 +114,82 @@ inline const QString& chainEndStation(const QVector<cwPassageTubeBuilder::Leg>& 
 {
     const cwPassageTubeBuilder::Leg& leg = legs.at(chainLeg.legIndex);
     return chainLeg.reversed ? leg.from : leg.to;
+}
+
+// A side reading as a point on the wall, by its fraction along a leg and its
+// half-width square to the leg.
+struct WallPoint {
+    double fraction = 0.0;
+    double halfWidth = 0.0;
+    double reading = 0.0;
+};
+
+struct SideWallPoints {
+    std::optional<WallPoint> left;
+    std::optional<WallPoint> right;
+};
+
+// A record's side readings as points on the wall: the station, at
+// stationFraction along a leg one unit of towardFar long, plus each reading
+// along the record's right (its horizontal facing turned clockwise) or
+// against it for the left. A record facing more than kMaxFacingDegrees off
+// the leg, such as a hairpin's chord, would put its points near the
+// centerline, so it reads along squareRight, the leg's own right, instead.
+inline SideWallPoints sideWallPoints(const cwStationLrud& lrud,
+                                     const QVector3D& facing,
+                                     double stationFraction,
+                                     const QVector3D& towardFar,
+                                     const QVector3D& squareRight)
+{
+    const QVector3D facingRight = QVector3D(facing.y(), -facing.x(), 0.0f).normalized();
+    const double component = QVector3D::dotProduct(facingRight, squareRight);
+    const bool facesAgainst = component < 0.0;
+    const bool readsAlongFacing = std::abs(component) >= std::cos(qDegreesToRadians(cwPassageTubeBuilder::kMaxFacingDegrees));
+    const QVector3D recordRight = readsAlongFacing ? facingRight * (facesAgainst ? -1.0f : 1.0f) : squareRight;
+    const auto point = [&](const std::optional<double>& reading, float side) -> std::optional<WallPoint> {
+        if (!reading) {
+            return std::nullopt;
+        }
+        const QVector3D offset = recordRight * (side * static_cast<float>(*reading));
+        return WallPoint {stationFraction + QVector3D::dotProduct(offset, towardFar),
+                          QVector3D::dotProduct(offset, squareRight) * side,
+                          *reading};
+    };
+    return {point(facesAgainst ? lrud.right : lrud.left, -1.0f), point(facesAgainst ? lrud.left : lrud.right, 1.0f)};
+}
+
+// One side's wall along a leg: the straight line between its two stations'
+// reading points, as the half-width square to the leg at each point's
+// fraction along it. It runs on across the whole leg and holds beyond the
+// leg and the points.
+struct SideWall {
+    double startFraction = 0.0;
+    double startHalfWidth = 0.0;
+    double endFraction = 1.0;
+    double endHalfWidth = 0.0;
+
+    double at(double fraction) const
+    {
+        const double clamped = std::clamp(fraction, std::min(startFraction, 0.0), std::max(endFraction, 1.0));
+        const double t = (clamped - startFraction) / (endFraction - startFraction);
+        return std::max(cwPassageTubeBuilder::kMinRadiusMeters, startHalfWidth + (endHalfWidth - startHalfWidth) * t);
+    }
+};
+
+// The wall through a leg's two reading points on one side, or between the
+// readings at face value at the stations when the points cross over along
+// the leg.
+inline std::optional<SideWall> sideWallBetween(const std::optional<WallPoint>& start,
+                                               const std::optional<WallPoint>& end,
+                                               double legLength)
+{
+    if (!start || !end) {
+        return std::nullopt;
+    }
+    if ((end->fraction - start->fraction) * legLength < kMinRingSpacingMeters) {
+        return SideWall {0.0, start->reading, 1.0, end->reading};
+    }
+    return SideWall {start->fraction, start->halfWidth, end->fraction, end->halfWidth};
 }
 
 } // namespace cwPassageTubeGeometry

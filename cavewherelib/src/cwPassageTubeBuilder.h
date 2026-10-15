@@ -72,6 +72,9 @@ public:
     static constexpr double kMinLegLength = 0.01;
     static constexpr double kMinRadiusMeters = 0.05;
     static constexpr double kMaxRadiusMeters = 100.0;
+    // A station whose facing lies more than this off a leg reads its side
+    // walls square to that leg.
+    static constexpr double kMaxFacingDegrees = 60.0;
 
     struct Options {
         double sampleSpacingMeters = 1.0;

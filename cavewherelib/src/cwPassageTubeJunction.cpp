@@ -21,6 +21,8 @@
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <set>
+#include <tuple>
 #include <variant>
 
 namespace {
@@ -2410,10 +2412,47 @@ bool isIsland(const QVector<LoopVertex>& loop, int resolution)
     return signedArea(polygon) < 0.0;
 }
 
+// The vertex a zip corner places: a mouth point welded to another point or
+// to a boundary vertex is that one.
+ZipCorner placedCorner(const JunctionWindow& window, ZipCorner corner)
+{
+    while (corner.ring == ZipCorner::kMouthRing) {
+        const ZipCorner& welded = window.mouths.at(corner.mouth).mouthCorners.at(corner.column);
+        if (welded == corner) {
+            break;
+        }
+        corner = welded;
+    }
+    return corner;
+}
+
+// Whether the zip band runs each of its edges once in each direction, as a
+// surface does. A band that wraps a mouth around a boundary too short for it
+// lays triangles over each other and runs an edge twice the same way.
+bool isZipBandManifold(const JunctionWindow& window)
+{
+    using Corner = std::tuple<int, int, int>;
+    const auto key = [&](const ZipCorner& corner) {
+        const ZipCorner placed = placedCorner(window, corner);
+        return Corner {placed.ring, placed.column, placed.ring == ZipCorner::kMouthRing ? placed.mouth : 0};
+    };
+    std::set<std::pair<Corner, Corner>> edges;
+    for (const std::array<ZipCorner, 3>& triangle : window.zip) {
+        for (int i = 0; i < 3; ++i) {
+            const std::pair<Corner, Corner> edge {key(triangle.at(i)), key(triangle.at((i + 1) % 3))};
+            if (!edges.insert(edge).second) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 // The window that zips the mouths of members into the through: the union of
 // their quads, its boundary loops and one zip band from the outer boundary
 // to the other loops and the mouths, joined into one inner loop. nullopt
-// when the union pinches or a loop cannot be joined.
+// when the union pinches, a loop cannot be joined or the band folds over
+// itself.
 std::optional<JunctionWindow> zippedWindow(const Chain& through,
                                            const QVector<Chain>& chains,
                                            const QVector<MouthCut>& cuts,
@@ -2489,6 +2528,9 @@ std::optional<JunctionWindow> zippedWindow(const Chain& through,
     }
     const int offset = isSingleMouth ? centroidStartOffset(*outer, *inner, resolution) : closestStartOffset(*outer, *inner, resolution);
     window.zip = zipBand(rings, *outer, *inner, offset, resolution);
+    if (!isZipBandManifold(window)) {
+        return std::nullopt;
+    }
     return window;
 }
 

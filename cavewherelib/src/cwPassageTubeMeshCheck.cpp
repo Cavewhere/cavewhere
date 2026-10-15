@@ -31,6 +31,8 @@ namespace {
 using Issue = cwPassageTubeMeshCheck::Issue;
 using Range = cwPassageTubeMeshCheck::Range;
 using Debug = cwPassageTubeBuilder::Debug;
+using SideWall = cwPassageTubeGeometry::SideWall;
+using WallPoint = cwPassageTubeGeometry::WallPoint;
 
 constexpr double kPlaneEpsilon = 1e-7;
 constexpr double kTouchTolerance = 1e-6;
@@ -685,7 +687,9 @@ void widenTo(std::optional<double>& widest, const std::optional<double>& reading
 
 // A section's quadrant ellipse of walls around station, in the plane square
 // to tangent with axes right and up. Along a leg the walls run toward
-// farWalls, reached one unit of towardFar past the station, and hold beyond.
+// farWalls, reached one unit of towardFar past the station, and hold beyond;
+// a gentle leg's side walls instead take the widest of leftLines or
+// rightLines.
 struct SectionPlane {
     cwStationLrud walls;
     QVector3D station;
@@ -694,17 +698,31 @@ struct SectionPlane {
     QVector3D up;
     cwStationLrud farWalls = walls;
     QVector3D towardFar;
+    QVector<SideWall> leftLines;
+    QVector<SideWall> rightLines;
 
     cwStationLrud wallsAt(const QVector3D& point) const
     {
-        const double t = std::clamp(static_cast<double>(QVector3D::dotProduct(point - station, towardFar)), 0.0, 1.0);
+        const double fraction = QVector3D::dotProduct(point - station, towardFar);
+        const double t = std::clamp(fraction, 0.0, 1.0);
         const auto lerp = [t](const std::optional<double>& near, const std::optional<double>& far) -> std::optional<double> {
             if (near && far) {
                 return *near + (*far - *near) * t;
             }
             return near;
         };
-        return {lerp(walls.left, farWalls.left), lerp(walls.right, farWalls.right), lerp(walls.up, farWalls.up), lerp(walls.down, farWalls.down)};
+        const auto side = [&](const QVector<SideWall>& lines, const std::optional<double>& near, const std::optional<double>& far) {
+            if (lines.isEmpty()) {
+                return lerp(near, far);
+            }
+            std::optional<double> widest;
+            for (const SideWall& line : lines) {
+                widenTo(widest, line.at(fraction));
+            }
+            return widest;
+        };
+        return {side(leftLines, walls.left, farWalls.left), side(rightLines, walls.right, farWalls.right),
+                lerp(walls.up, farWalls.up), lerp(walls.down, farWalls.down)};
     }
 };
 
@@ -784,6 +802,18 @@ cwStationLrud holdingCenter(const cwStationLrud& walls, const QPointF& center)
     return grown;
 }
 
+// The record's reading points (cwPassageTubeGeometry::sideWallPoints) at
+// stationFraction along a leg one unit of towardFar long. A record facing
+// square to the leg reads no side walls (wallsAcross).
+cwPassageTubeGeometry::SideWallPoints readingPoints(const StationLeg& record, double stationFraction, const QVector3D& towardFar, const QVector3D& right)
+{
+    const QVector3D facingRight = QVector3D(record.facing.y(), -record.facing.x(), 0.0f).normalized();
+    if (std::abs(QVector3D::dotProduct(facingRight, right)) < kMinFacingComponent) {
+        return {};
+    }
+    return cwPassageTubeGeometry::sideWallPoints(record.lrud, record.facing, stationFraction, towardFar, right);
+}
+
 // The station's readings across leg, in the plane square to it, facing the
 // ring's way: the widest of the records, each wall as the builder fits a
 // ring square to the leg, with its up axis toward world up, running along
@@ -832,8 +862,24 @@ std::optional<SectionPlane> legSection(const StationLeg& leg, const QVector<Stat
     StationLeg farRecord = leg;
     farRecord.lrud = leg.farLrud;
     farRecord.facing = leg.farFacing;
-    return SectionPlane {widestWalls(records), leg.station, tangent, right, up,
-                         widestWalls({farRecord}), leg.direction / static_cast<float>(leg.length)};
+    SectionPlane section {widestWalls(records), leg.station, tangent, right, up,
+                          widestWalls({farRecord}), leg.direction / static_cast<float>(leg.length)};
+    if (!isPit) {
+        const auto appendWall = [&](QVector<SideWall>& lines,
+                                    const std::optional<WallPoint>& near,
+                                    const std::optional<WallPoint>& far) {
+            if (const auto wall = cwPassageTubeGeometry::sideWallBetween(near, far, leg.length)) {
+                lines.append(*wall);
+            }
+        };
+        const auto far = readingPoints(farRecord, 1.0, section.towardFar, right);
+        for (const StationLeg& record : records) {
+            const auto near = readingPoints(record, 0.0, section.towardFar, right);
+            appendWall(section.leftLines, near.left, far.left);
+            appendWall(section.rightLines, near.right, far.right);
+        }
+    }
+    return section;
 }
 
 bool isAlongLeg(const QVector3D& direction, const QVector<QVector3D>& legDirections)

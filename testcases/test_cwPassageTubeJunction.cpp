@@ -718,8 +718,8 @@ TEST_CASE("cwPassageTubeJunction keeps the elbow of an arm bending beside the th
 // These arms enter their through along a straight run, where the cut at the
 // axis keeps the rings the first column's entry kept, so their mouths stay
 // where they were before the axis cut. Phake Cave's through rounds its sharp
-// bends within the stations' readings (T07v) and takes its side walls at
-// face value (T07ac), which moves its mouths.
+// bends within the stations' readings (T07v) and runs its side walls
+// through the stations' reading points (T07ag), which moves its mouths.
 TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into the through", "[PassageTube][cwPassageTubeJunction]")
 {
     constexpr float kMouthShiftTolerance = 1e-3f;
@@ -734,9 +734,9 @@ TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into
         {QStringLiteral("1. "), 1, 9, 16, QVector3D(0.6399f, 0.0f, 0.1574f)},
         {QStringLiteral("5. "), 1, 6, 25, QVector3D(0.7489f, -1.6127f, 0.1090f)},
         {QStringLiteral("11. "), 1, 10, 16, QVector3D(0.0387f, 0.0f, 0.1572f)},
-        {QStringLiteral("Phake Cave"), 1, 3, 25, QVector3D(22.7393f, 21.5895f, -3.0161f)},
-        {QStringLiteral("Phake Cave"), 2, 15, 16, QVector3D(31.8872f, 8.8838f, -4.0433f)},
-        {QStringLiteral("Phake Cave"), 3, 22, 21, QVector3D(26.6433f, 1.9880f, -30.7570f)},
+        {QStringLiteral("Phake Cave"), 1, 3, 23, QVector3D(22.6727f, 21.7212f, -3.0751f)},
+        {QStringLiteral("Phake Cave"), 2, 15, 16, QVector3D(31.7678f, 8.7949f, -4.1110f)},
+        {QStringLiteral("Phake Cave"), 3, 23, 20, QVector3D(26.5397f, 2.0511f, -30.8274f)},
     };
     // Rows of one case sit together, so each case is built once.
     QString builtPrefix;

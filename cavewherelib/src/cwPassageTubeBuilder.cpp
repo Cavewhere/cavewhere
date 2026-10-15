@@ -914,7 +914,8 @@ cwStationLrud ringLrud(const cwStationLrud& lrud, const QVector<QVector3D>& legD
 
 // A chain leg as walked: start and end in travel order. The ring records
 // leave out readings that run along a leg at the station; on a gentle leg the
-// other end's floor or ceiling continues to the station.
+// other end's floor or ceiling continues to the station. A gentle leg's side
+// walls run between its stations' reading points (fitSideWalls).
 struct WalkedLeg {
     QVector3D start;
     QVector3D end;
@@ -922,9 +923,47 @@ struct WalkedLeg {
     cwStationLrud endLrud;
     LrudRecord startRing;
     LrudRecord endRing;
+    bool hasSideWalls = false;
+    std::optional<SideWall> leftWall;
+    std::optional<SideWall> rightWall;
 
     QVector3D direction() const { return (end - start).normalized(); }
+
+    // The leg's record square to it at fraction along it: up and down run
+    // from one station's readings to the other's and hold beyond them; left
+    // and right lie on the side walls, facing along the leg.
+    LrudRecord recordAt(double fraction) const
+    {
+        LrudRecord record = lerpRecord(startRing, endRing, std::clamp(fraction, 0.0, 1.0));
+        if (hasSideWalls) {
+            const auto halfWidth = [fraction](const std::optional<SideWall>& wall) {
+                return wall ? std::optional<double>(wall->at(fraction)) : std::nullopt;
+            };
+            record.lrud.left = halfWidth(leftWall);
+            record.lrud.right = halfWidth(rightWall);
+            record.facing = direction();
+        }
+        return record;
+    }
 };
+
+// Fits a gentle leg's side walls through its stations' reading points
+// (sideWallPoints).
+void fitSideWalls(WalkedLeg& leg)
+{
+    const QVector3D direction = leg.direction();
+    if (isSteep(direction)) {
+        return;
+    }
+    const QVector3D squareRight = QVector3D(direction.y(), -direction.x(), 0.0f).normalized();
+    const double length = leg.start.distanceToPoint(leg.end);
+    const QVector3D towardEnd = direction / static_cast<float>(length);
+    const SideWallPoints start = sideWallPoints(leg.startRing.lrud, leg.startRing.facing, 0.0, towardEnd, squareRight);
+    const SideWallPoints end = sideWallPoints(leg.endRing.lrud, leg.endRing.facing, 1.0, towardEnd, squareRight);
+    leg.hasSideWalls = true;
+    leg.leftWall = sideWallBetween(start.left, end.left, length);
+    leg.rightWall = sideWallBetween(start.right, end.right, length);
+}
 
 void continueAlongGentleLeg(WalkedLeg& leg)
 {
@@ -956,6 +995,7 @@ WalkedLeg walkedLeg(const QVector<Leg>& legs, const ChainLeg& chainLeg, const St
         ? WalkedLeg {leg.toPosition, leg.fromPosition, leg.toLrud, leg.fromLrud, toRing, fromRing}
         : WalkedLeg {leg.fromPosition, leg.toPosition, leg.fromLrud, leg.toLrud, fromRing, toRing};
     continueAlongGentleLeg(walked);
+    fitSideWalls(walked);
     return walked;
 }
 
@@ -1348,7 +1388,7 @@ QVector<ChainSample> chainSamples(const QVector<WalkedLeg>& walked, const ChainE
                 leg.start + (leg.end - leg.start) * static_cast<float>(t),
                 direction,
                 distance + length * t,
-                {lerpRecord(leg.startRing, leg.endRing, t)},
+                {leg.recordAt(t)},
                 legIndex,
                 false,
                 bends
@@ -2017,7 +2057,7 @@ private:
 
     std::optional<LegSectionAt> sectionAt(double fraction) const
     {
-        const LrudRecord record = lerpRecord(m_leg.startRing, m_leg.endRing, std::clamp(fraction, 0.0, 1.0));
+        const LrudRecord record = m_leg.recordAt(fraction);
         if (m_isSteep) {
             const RingFit round = fitSteepRing({record}, 1);
             if (round.filledBins == 0) {
