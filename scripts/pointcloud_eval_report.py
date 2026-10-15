@@ -22,6 +22,11 @@ keep their frames apart:
 where <run> is <path>/<config>/run-<pid>-NNN. A sweep without an evalDump line
 in the log has no frames in the report.
 
+The unit cases walk a synthetic plane rather than the tile, and name their
+paths with a "plane/" prefix (plane/P2z, plane/P4). The report lists those runs
+in a section of their own after the tile runs, so dumped unit runs stay apart
+from the tile data.
+
 The report (--out) is self-contained: inline CSS and SVG, no external
 resources. Beside it the script writes contact-<path>.html for every P2 and P3
 path, flipbook-<path>-<config>.html for every P4 run, and the difference
@@ -101,6 +106,20 @@ class Run:
 
     def series(self, column):
         return [number(row.get(column)) for row in self.rows]
+
+
+# The prefix the bench gives the synthetic plane's path names
+PLANE_PATH_PREFIX = "plane/"
+
+
+def is_plane_path(path):
+    return path.startswith(PLANE_PATH_PREFIX)
+
+
+def bare_path(path):
+    """The path's name without its dataset prefix, which is what names the
+    path family: plane/P4 is a P4 run on the plane."""
+    return path[len(PLANE_PATH_PREFIX):] if is_plane_path(path) else path
 
 
 class SweepBlock:
@@ -778,7 +797,7 @@ SUMMARY_DIRECTIONS = {
     "widestInflation": LOWER, "cappedFrames": LOWER, "inflationChanges": LOWER,
     "largestInflationStep": LOWER, "mostEntered": LOWER, "mostLeft": LOWER,
     "largestSideChangePx": LOWER, "sideChangeSumPx": LOWER, "largestWeightChange": LOWER,
-    "weightChangeSum": LOWER, "largestRawO3Step": LOWER,
+    "weightChangeSum": LOWER, "largestRawO3Step": LOWER, "pendingPoses": LOWER,
 }
 SUMMARY_KEY_COLUMNS = ("path", "config")
 # A delta smaller than this share of the larger value is no change
@@ -924,6 +943,40 @@ def sweep_tolerance(block):
     return None
 
 
+def sweep_blocks(sweeps):
+    """The sweeps worth a table, each with its heading: one block per path,
+    target size and set of rows, since every tile case re-announces the
+    oracles it shares. The heading names the target size when the log has one,
+    and counts the distinct sweeps of one path at one size."""
+    shown = []
+    seen = {}
+    distinct = {}
+    for block in sweeps:
+        target = block.rows[0].get("targetSize", "") if block.rows else ""
+        signature = (block.path, target,
+                     tuple(tuple(sorted(row.items())) for row in block.rows))
+        if signature in seen:
+            seen[signature][1] += 1
+            continue
+        count = distinct.get((block.path, target), 0) + 1
+        distinct[(block.path, target)] = count
+        entry = [block, 1, target, count]
+        seen[signature] = entry
+        shown.append(entry)
+
+    result = []
+    for block, announced, target, count in shown:
+        label = block.path
+        if target:
+            label += " at " + target
+        if count > 1:
+            label += " (sweep {})".format(count)
+        if announced > 1:
+            label += ", announced {} times".format(announced)
+        result.append((block, label))
+    return result
+
+
 def sweep_section(log):
     if not log.sweeps:
         return ""
@@ -933,15 +986,13 @@ def sweep_section(log):
              "hole tolerance, or the coverage with the fewest holes when none is; the picked "
              "coverage is in bold. Overdraw is shown for information and gates nothing.</p>"]
     columns = log.headers.get("oracleCsv", [])
-    for block in log.sweeps:
-        label = block.path if block.occurrence == 1 else "{} (sweep {})".format(
-            block.path, block.occurrence)
+    for block, label in sweep_blocks(log.sweeps):
         tolerance = sweep_tolerance(block)
         parts.append("<h3>{}</h3>".format(escape(label)))
         # The bench decides "under" on the raw mean, which the line rounds, so
         # the report reads the bench's flag
-        hidden = ("path", "oracle") if tolerance is None else (
-            "path", "oracle", "holeTolerance", "underTolerance")
+        hidden = ("path", "oracle", "targetSize") if tolerance is None else (
+            "path", "oracle", "targetSize", "holeTolerance", "underTolerance")
         shown = [c for c in columns if c not in hidden]
         head = "".join("<th>{}</th>".format(escape(c)) for c in shown)
         if tolerance is not None:
@@ -1332,12 +1383,12 @@ def build_report(log, frames, out_file, baseline=None, log_name="", baseline_nam
     contact_pages = {}
     flipbook_pages = {}
     for path in log.paths():
-        if path.startswith(CONTACT_PREFIXES) and frames.available():
+        if bare_path(path).startswith(CONTACT_PREFIXES) and frames.available():
             written = contact_sheet(path, log.runs_for_path(path), frames, out_directory,
                                     out_file.name)
             if written:
                 contact_pages[path] = written
-        if path.startswith(FLIPBOOK_PREFIXES):
+        if bare_path(path).startswith(FLIPBOOK_PREFIXES):
             for run in log.runs_for_path(path):
                 if run.rows:
                     flipbook_pages.setdefault(path, []).append(
@@ -1359,7 +1410,14 @@ def build_report(log, frames, out_file, baseline=None, log_name="", baseline_nam
     if summary_columns:
         parts.append(direction_legend(summary_columns))
 
-    nav = ['<a href="#path-{}">{}</a>'.format(directory_name(p), escape(p)) for p in log.paths()]
+    tile_paths = [p for p in log.paths() if not is_plane_path(p)]
+    plane_paths = [p for p in log.paths() if is_plane_path(p)]
+    def path_link(path):
+        return '<a href="#path-{}">{}</a>'.format(directory_name(path), escape(path))
+
+    nav = [path_link(p) for p in tile_paths]
+    if plane_paths:
+        nav.append('<a href="#plane">Plane runs</a>')
     if log.sweeps:
         nav.append('<a href="#o2">O2 sweep</a>')
     if log.m7_rows:
@@ -1375,13 +1433,25 @@ def build_report(log, frames, out_file, baseline=None, log_name="", baseline_nam
                      "the contact sheets show the last run of each config.</p>".format(
                          escape(", ".join(duplicated))))
 
-    for path in log.paths():
-        links = []
-        if path in contact_pages:
-            links.append('<a href="{}">contact sheet</a>'.format(escape(contact_pages[path])))
-        for label, file_name in flipbook_pages.get(path, []):
-            links.append('<a href="{}">flipbook {}</a>'.format(escape(file_name), escape(label)))
-        parts.append(path_section(path, log.runs_for_path(path), baseline, summary_columns, links))
+    def path_sections(paths):
+        for path in paths:
+            links = []
+            if path in contact_pages:
+                links.append('<a href="{}">contact sheet</a>'.format(escape(contact_pages[path])))
+            for label, file_name in flipbook_pages.get(path, []):
+                links.append('<a href="{}">flipbook {}</a>'.format(escape(file_name),
+                                                                  escape(label)))
+            parts.append(path_section(path, log.runs_for_path(path), baseline, summary_columns,
+                                      links))
+
+    path_sections(tile_paths)
+    if plane_paths:
+        parts.append('<h2 id="plane">Plane runs</h2>'
+                     '<p class="lede">The unit cases\' synthetic plane: these runs check that '
+                     "each metric can fail; the tile runs above measure the renderer. "
+                     "{}.</p>".format(
+                         " · ".join(path_link(p) for p in plane_paths)))
+        path_sections(plane_paths)
 
     parts.append(sweep_section(log))
     parts.append(m7_section(log))

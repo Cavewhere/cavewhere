@@ -5945,6 +5945,18 @@ namespace {
         PathStep step;
     };
 
+    //! Every frame recorded at each pose until the first one with nothing
+    //! pending, which is the cut, the streaming and the governor all settled,
+    //! or until @a maxFramesPerPose frames
+    PathStep untilQuietStep(int maxFramesPerPose)
+    {
+        PathStep step;
+        step.policy = StepPolicy::Frames;
+        step.framesPerPose = maxFramesPerPose;
+        step.leavePoseWhenQuiet = true;
+        return step;
+    }
+
     //! The level groundElevation() reads the ground from. Level 8 cells are
     //! about 7 m on the BC tile, fine enough to place the ground within a few
     //! meters.
@@ -6225,10 +6237,8 @@ namespace {
         Pose held = pose;
         held.index = 0;
         planned.path.poses.append(held);
-        planned.step.policy = StepPolicy::Frames;
-        planned.step.framesPerPose = frameCount;
+        planned.step = untilQuietStep(frameCount);
         planned.step.settleBeforeFirstPose = false;
-        planned.step.leavePoseWhenQuiet = true;
         return planned;
     }
 
@@ -6325,11 +6335,13 @@ namespace {
         std::optional<double> luminanceDiffO3;
         std::optional<double> ssimO3;
         //! M2: the distance to O3, 1 - iouO3, and how far it moved from the
-        //! frame recorded before. o3DistanceStep is 0 on a frame after one that
-        //! lit nothing: the first picture of a cold start is an arrival, not a
-        //! pop, and it is the same whole-frame step under every budget.
-        //! o3DistanceStepRaw keeps that arrival, so a reveal ramp that spreads
-        //! it over frames shows up there.
+        //! frame recorded before at the same pose. Both steps are 0 on a pose's
+        //! first frame: the move from the pose before is the camera, not a pop,
+        //! and o3Distance on that frame holds the entry gap. o3DistanceStep is
+        //! also 0 on a frame after one that lit nothing: the first picture of a
+        //! cold start is an arrival, not a pop, and it is the same whole-frame
+        //! step under every budget. o3DistanceStepRaw keeps that arrival, so a
+        //! reveal ramp that spreads it over frames shows up there.
         std::optional<double> o3Distance;
         std::optional<double> o3DistanceStep;
         std::optional<double> o3DistanceStepRaw;
@@ -6445,16 +6457,30 @@ namespace {
     //! nodes sit on their thinning ramp where an inflation step moves them.
     constexpr qint64 kSyntheticTightPointBudget = 120000;
 
-    //! Frames a tile pose is recorded for: the plan's two per pose for a
-    //! candidate on P2
-    constexpr int kTileFramesPerPose = 2;
+    //! The synthetic plane's path names start with this, so its log lines
+    //! and dumped frames read as the plane's and the report keeps them apart
+    //! from the tile's
+    const QString kPlanePathPrefix = QStringLiteral("plane/");
+
+    //! @a path named as the synthetic plane's
+    EvalPath onPlane(EvalPath path)
+    {
+        path.name.prepend(kPlanePathPrefix);
+        return path;
+    }
+
+    PlannedPath onPlane(PlannedPath planned)
+    {
+        planned.path = onPlane(std::move(planned.path));
+        return planned;
+    }
 
     //! The plane octree's own zoomed-in sub-path, at its deepest boundary
     EvalPath planeBoundaryPath(QRhi* rhi, QSize target)
     {
         const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
-        return levelBoundaryPath(manifest, target, rhi->clipSpaceCorrMatrix(),
-                                 deepestLevel(manifest));
+        return onPlane(levelBoundaryPath(manifest, target, rhi->clipSpaceCorrMatrix(),
+                                         deepestLevel(manifest)));
     }
 }
 
@@ -6551,8 +6577,9 @@ TEST_CASE("A cold start holds one pose and stops at quiet",
 
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
     PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    const PlannedPath onThePlane = onPlane(planned);
     const QVector<EvalRecord> records =
-        sweepPath(fixture, planned.path, candidateConfig(Candidate::Default), planned.step);
+        sweepPath(fixture, onThePlane.path, candidateConfig(Candidate::Default), onThePlane.step);
 
     //From an empty residency the first frame has the root to load, and the
     //hold ends on the first frame with nothing left
@@ -7738,11 +7765,13 @@ namespace {
     //! path. The pick is the smallest coverage whose mean hole fraction is
     //! under @a holeTolerance, or, when none is, the one with the lowest mean
     //! hole fraction, the smaller coverage on a tie. Overdraw is reported and
-    //! gates nothing. One oracleCsv line per coverage goes to @a out.
+    //! gates nothing. One oracleCsv line per coverage goes to @a out, naming
+    //! @a targetSize, since one path's oracles can be drawn at more than one.
     CoverageSweep coverageSweep(const OracleSet& o1, const QVector<OracleSet>& o2Sets,
-                                const EvalPath& path, double holeTolerance, std::ostream& out)
+                                const EvalPath& path, const QSize& targetSize,
+                                double holeTolerance, std::ostream& out)
     {
-        writeCsvLine(QStringLiteral("oracleCsv,path,oracle,coverage,meanHoleFraction,"
+        writeCsvLine(QStringLiteral("oracleCsv,path,oracle,targetSize,coverage,meanHoleFraction,"
                                     "worstHoleFraction,meanOverdraw,worstOverdraw,"
                                     "holeTolerance,underTolerance,picked"),
                      out);
@@ -7774,8 +7803,10 @@ namespace {
 
         for (int i = 0; i < sweep.rows.size(); i++) {
             const CoverageRow& row = sweep.rows.at(i);
-            writeCsvLine(QStringLiteral("oracleCsv,%1,O2,%2,%3,%4,%5,%6,%7,%8,%9")
+            writeCsvLine(QStringLiteral("oracleCsv,%1,O2,%2x%3,%4,%5,%6,%7,%8,%9,%10,%11")
                              .arg(path.name)
+                             .arg(targetSize.width())
+                             .arg(targetSize.height())
                              .arg(double(row.spacingCoverage), 0, 'g', 3)
                              .arg(row.meanHoleFraction, 0, 'f', 5)
                              .arg(row.worstHoleFraction, 0, 'f', 5)
@@ -7806,7 +7837,7 @@ namespace {
 
         OracleFrames result;
         result.oracle = Oracle::O2;
-        result.sweep = coverageSweep(o1, sets, path, holeTolerance, out);
+        result.sweep = coverageSweep(o1, sets, path, fixture.targetSize(), holeTolerance, out);
         const OracleSet& picked = sets.at(result.sweep.pickIndex);
         result.spacingCoverage = picked.config.spacingCoverage;
         result.frames = picked.frames;
@@ -7860,7 +7891,7 @@ namespace {
         EvalPath path;
         path.name = QStringLiteral("oblique");
         path.poses.append(pose);
-        return path;
+        return onPlane(path);
     }
 
     //! The share of the target O1's mask has to hold at the oblique pose for
@@ -7962,7 +7993,8 @@ TEST_CASE("O2's coverage sweep picks the smallest coverage that holes under the 
     REQUIRE(coverageCount == 7);
     REQUIRE(o2.sweep.rows.size() == coverageCount);
     REQUIRE(lines.size() == kHeaderLines + coverageCount);
-    CHECK(lines.constFirst().startsWith(QStringLiteral("oracleCsv,path,oracle,coverage,")));
+    CHECK(lines.constFirst().startsWith(
+        QStringLiteral("oracleCsv,path,oracle,targetSize,coverage,")));
 
     REQUIRE(o2.sweep.pickIndex >= 0);
     CHECK(o2.sweep.pickWithinTolerance);
@@ -7974,6 +8006,8 @@ TEST_CASE("O2's coverage sweep picks the smallest coverage that holes under the 
         CHECK(row.spacingCoverage == kO2Coverages.at(size_t(i)));
         CHECK(fields.at(1) == path.name);
         CHECK(fields.at(2) == QStringLiteral("O2"));
+        CHECK(fields.at(3) == QStringLiteral("%1x%2").arg(kHalfHdTargetSize.width())
+                                  .arg(kHalfHdTargetSize.height()));
         CHECK(fields.at(fields.size() - 3).toDouble() == kPlaneO2HoleTolerance);
         CHECK(fields.constLast() == (i == o2.sweep.pickIndex ? QStringLiteral("1")
                                                              : QStringLiteral("0")));
@@ -8740,6 +8774,9 @@ namespace {
         qint64 mostSelectedPoints = 0;
         double widestInflation = 1.0;
         int cappedFrames = 0;
+        //! Poses whose last frame still had streaming work pending: under an
+        //! until-quiet step, the poses that ran into the frame cap
+        int pendingPoses = 0;
         std::optional<qint64> mostPredictedPoints;
 
         int inflationChanges = 0;
@@ -8840,6 +8877,9 @@ namespace {
                                                   record.selectedPoints);
             summary.widestInflation = std::max(summary.widestInflation, record.sseInflation);
             summary.cappedFrames += record.pointCapped ? 1 : 0;
+            const bool lastOfPose = i + 1 == records.size()
+                                    || records.at(i + 1).position != record.position;
+            summary.pendingPoses += lastOfPose && record.pending ? 1 : 0;
             if (record.predictedPoints.has_value()) {
                 summary.mostPredictedPoints = std::max(summary.mostPredictedPoints.value_or(0),
                                                        *record.predictedPoints);
@@ -8877,7 +8917,8 @@ namespace {
                                     "cappedFrames,mostPredictedPoints,inflationChanges,"
                                     "largestInflationStep,mostEntered,enteredSum,mostLeft,"
                                     "leftSum,largestSideChangePx,sideChangeSumPx,"
-                                    "largestWeightChange,weightChangeSum,largestRawO3Step"),
+                                    "largestWeightChange,weightChangeSum,largestRawO3Step,"
+                                    "pendingPoses"),
                      out);
 
         const QStringList fields {
@@ -8916,7 +8957,8 @@ namespace {
             QString::number(summary.sideChangeSumPx, 'f', kPixelDecimals),
             QString::number(summary.largestWeightChange, 'f', kRatioDecimals),
             QString::number(summary.weightChangeSum, 'f', kRatioDecimals),
-            csvField(summary.largestRawO3Step, kFractionDecimals)
+            csvField(summary.largestRawO3Step, kFractionDecimals),
+            QString::number(summary.pendingPoses)
         };
         writeCsvLine(fields.join(QLatin1Char(',')), out);
     }
@@ -9030,12 +9072,13 @@ namespace {
                 }
 
                 record.o3Distance = 1.0 - *record.iouO3;
-                record.o3DistanceStepRaw = records.isEmpty()
-                                               ? 0.0
-                                               : std::abs(*record.o3Distance
-                                                          - *records.constLast().o3Distance);
-                const bool previousLit = !records.isEmpty()
-                                         && records.constLast().litFraction > 0.0;
+                const bool samePose = !records.isEmpty()
+                                      && records.constLast().position == position;
+                record.o3DistanceStepRaw = samePose
+                                               ? std::abs(*record.o3Distance
+                                                          - *records.constLast().o3Distance)
+                                               : 0.0;
+                const bool previousLit = samePose && records.constLast().litFraction > 0.0;
                 record.o3DistanceStep = previousLit ? *record.o3DistanceStepRaw : 0.0;
 
                 const DensityStats density = densityUniformity(fixture.rhi(), lit, o1.mask);
@@ -9402,7 +9445,7 @@ namespace {
         EvalPath path = levelBoundaryPath(manifest, kHalfHdTargetSize,
                                           rhi->clipSpaceCorrMatrix(), level);
         path.poses.resize(poseCount);
-        return path;
+        return onPlane(path);
     }
 
     //! The plane's zoomed-in poses the metric cases walk
@@ -9471,11 +9514,18 @@ namespace {
     constexpr int kTileClosedLevel = 5;
     constexpr int kTileOpenLevel = 7;
 
-    //! The tile cases walk every this many poses of P2 and P2z: the oracles
-    //! draw nine renders a pose at the finest threshold, which on a 76 M point
-    //! tile is minutes a pose
+    //! The tile cases walk every this many poses of P2, P2z and P3: the
+    //! oracles draw nine renders a pose at the finest threshold, which on a
+    //! 76 M point tile is minutes a pose
     constexpr int kTileOrbitPoseStride = 24;
     constexpr int kTileBoundaryPoseStride = 6;
+    constexpr int kTileFlyInPoseStride = 24;
+
+    //! Frames a tile pose is held for at most while it settles. A strided
+    //! pose is a jump, so its first frames are streaming latency; holding it
+    //! until quiet records that transient frame by frame and then the settled
+    //! frame, which is the one the oracles compare against.
+    constexpr int kTileMaxFramesPerPose = 300;
 
     EvalPath everyNthPose(const EvalPath& path, int stride)
     {
@@ -9503,6 +9553,108 @@ namespace {
     {
         return tileLevelPath(rhi, manifest, config,
                              std::min(kTileBoundaryLevel, deepestLevel(manifest)));
+    }
+
+    //! P2 as the tile cases walk it
+    EvalPath tileOrbitPath(const cwPointOctreeManifest& manifest, const EvalConfig& config)
+    {
+        return everyNthPose(orbitPath(manifest, config.targetSize), kTileOrbitPoseStride);
+    }
+
+    //! P3 as the tile cases walk it
+    EvalPath tileFlyInPath(const cwPointOctreeManifest& manifest, const EvalConfig& config)
+    {
+        return everyNthPose(flyInPath(manifest, config.targetSize), kTileFlyInPoseStride);
+    }
+
+    //! The oracles of @a path on the tile, shaded the way the candidates are
+    EvalOracles tileOracles(QRhi* rhi, const OctreeCache& cache, const EvalPath& path,
+                            QSize target)
+    {
+        PointCloudFixture oracleFixture(rhi, cache, target);
+        oracleFixture.setEdlEnabled(true);
+        return evalOracles(oracleFixture, path, evalCacheRoot());
+    }
+
+    //! @a path walked on the tile under @a config against @a oracles, from a
+    //! fresh residency, the evalCsv and evalSummary lines on stdout
+    QVector<EvalRecord> sweepTilePath(QRhi* rhi, const OctreeCache& cache, const EvalPath& path,
+                                      const EvalConfig& config, const PathStep& step,
+                                      const EvalOracles& oracles)
+    {
+        PointCloudFixture fixture(rhi, cache, config.targetSize);
+        fixture.setEdlEnabled(true);
+        return sweepPath(fixture, path, config, step, std::cout, &oracles);
+    }
+
+    //! @a path walked on the tile under @a config against its own oracles
+    QVector<EvalRecord> sweepTilePath(QRhi* rhi, const OctreeCache& cache, const EvalPath& path,
+                                      const EvalConfig& config, const PathStep& step)
+    {
+        return sweepTilePath(rhi, cache, path, config, step,
+                             tileOracles(rhi, cache, path, config.targetSize));
+    }
+
+    //! Checks that @a records walked every pose of @a path in order under
+    //! @a step, with the oracle metrics on every frame: each pose's frames
+    //! count up from 0 and, under an until-quiet step, end on its first quiet
+    //! frame before the cap
+    void checkTileRecords(const QVector<EvalRecord>& records, const EvalPath& path,
+                          const PathStep& step)
+    {
+        INFO(path.name.toStdString());
+        REQUIRE_FALSE(records.isEmpty());
+        //Before the first pose, so the first record has to be position 0
+        int position = -1;
+        int frames = 0;
+        for (int i = 0; i < records.size(); i++) {
+            const EvalRecord& record = records.at(i);
+            const bool samePose = record.position == position;
+            if (samePose) {
+                frames++;
+            } else {
+                CHECK(record.position == position + 1);
+                position = record.position;
+                frames = 1;
+            }
+            CHECK(record.pose == path.poses.at(position).index);
+            CHECK(record.frame == frames - 1);
+            CHECK(frames <= step.framesPerPose);
+
+            //A pose that reaches the cap still pending never went quiet
+            const bool lastOfPose = i + 1 == records.size()
+                                    || records.at(i + 1).position != position;
+            if (lastOfPose && step.leavePoseWhenQuiet) {
+                INFO("pose " << record.pose << " ends at frame " << record.frame);
+                CHECK_FALSE(record.pending);
+            }
+
+            CHECK(record.sseInflation >= 1.0);
+            CHECK(record.holes.has_value());
+            CHECK(record.iouO3.has_value());
+            CHECK(record.ssimO3.has_value());
+        }
+        CHECK(position == path.poses.size() - 1);
+    }
+
+    //! The position on @a path whose O3 frame holes the most against O1: the
+    //! pose P4 holds. O3 is the settled default frame, so this is P2's worst
+    //! pose by hole fraction with the streaming taken out, and it reads off
+    //! the cached oracles rather than a sweep.
+    int worstOracleHolePosition(const EvalOracles& oracles)
+    {
+        int worst = 0;
+        double worstFraction = -1.0;
+        for (int position = 0; position < oracles.o3.frames.size(); position++) {
+            const double fraction = holeStats(oracles.o3.frames.at(position).mask,
+                                              oracles.o1.frames.at(position).mask)
+                                        .fraction;
+            if (fraction > worstFraction) {
+                worstFraction = fraction;
+                worst = position;
+            }
+        }
+        return worst;
     }
 }
 
@@ -9747,7 +9899,7 @@ TEST_CASE("Frame dumps write each sweep's frames to a run directory of its own, 
     };
 
     const QString pathDirectory = dumpDirectoryName(path.name);
-    CHECK(pathDirectory == QStringLiteral("P2z_2"));
+    CHECK(pathDirectory == QStringLiteral("plane_P2z_2"));
 
     const QString firstRun = dumpedRun();
     CHECK(firstRun.startsWith(QStringLiteral("%1/%2/run-%3-").arg(
@@ -9844,7 +9996,8 @@ TEST_CASE("M2: a cold start under a slow disk pops harder and settles later",
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
         orbitRecords = sweepPath(fixture, orbit, defaults, quiet, oracleOutput, &orbitOracles);
     }
-    const PlannedPath coldStart = coldStartPath(orbit.poses.at(worstHolePosition(orbitRecords)));
+    const PlannedPath coldStart =
+        onPlane(coldStartPath(orbit.poses.at(worstHolePosition(orbitRecords))));
     const EvalOracles oracles = evalOracles(oracleFixture, coldStart.path, cacheRoot.path(),
                                             oracleOutput);
 
@@ -10122,37 +10275,86 @@ TEST_CASE("The oblique orbit on a tile records every metric against its oracles"
     const cwPointOctreeManifest& manifest = *cache.source.manifest;
 
     const EvalConfig config = candidateConfig(Candidate::Default);
-    PathStep step;
-    step.policy = StepPolicy::Frames;
-    step.framesPerPose = kTileFramesPerPose;
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    for (const EvalPath& path : {tileOrbitPath(manifest, config),
+                                 tileBoundaryPath(rhi.get(), manifest, config)}) {
+        checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step), path, step);
+    }
+}
 
-    const QVector<EvalPath> paths {
-        everyNthPose(orbitPath(manifest, config.targetSize), kTileOrbitPoseStride),
-        tileBoundaryPath(rhi.get(), manifest, config)
-    };
+TEST_CASE("The oblique orbit on a tile under a phone-class budget records every metric",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
 
-    const QString cacheRoot = evalCacheRoot();
-    for (const EvalPath& path : paths) {
-        EvalOracles oracles;
-        {
-            PointCloudFixture oracleFixture(rhi.get(), cache, config.targetSize);
-            oracleFixture.setEdlEnabled(true);
-            oracles = evalOracles(oracleFixture, path, cacheRoot);
-        }
+    const EvalConfig config = candidateConfig(Candidate::Starved);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    const EvalPath path = tileOrbitPath(manifest, config);
+    checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step), path, step);
+}
 
-        PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
-        fixture.setEdlEnabled(true);
-        const QVector<EvalRecord> records = sweepPath(fixture, path, config, step, std::cout,
-                                                      &oracles);
+TEST_CASE("The oblique orbit and its boundary path on a tile under C-tight record every metric",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
 
-        INFO(path.name.toStdString());
-        CHECK(records.size() == path.poses.size() * kTileFramesPerPose);
-        for (const EvalRecord& record : records) {
-            CHECK(record.sseInflation >= 1.0);
-            CHECK(record.holes.has_value());
-            CHECK(record.iouO3.has_value());
-            CHECK(record.ssimO3.has_value());
-        }
+    //The boundary is found under the default budgets, so C-tight walks the
+    //poses C-default walks and the two compare pose for pose on one set of
+    //oracles
+    const EvalConfig config = candidateConfig(Candidate::Tight);
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    REQUIRE(config.targetSize == defaults.targetSize);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    for (const EvalPath& path : {tileOrbitPath(manifest, config),
+                                 tileBoundaryPath(rhi.get(), manifest, defaults)}) {
+        checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step), path, step);
+    }
+}
+
+TEST_CASE("The fly-in on a tile records every metric against its oracles",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    const EvalConfig config = candidateConfig(Candidate::Default);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    const EvalPath path = tileFlyInPath(manifest, config);
+    checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step), path, step);
+}
+
+TEST_CASE("A cold start on a tile holds the orbit's worst pose until quiet",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalPath orbit = tileOrbitPath(manifest, defaults);
+    const EvalOracles orbitOracles = tileOracles(rhi.get(), cache, orbit, defaults.targetSize);
+
+    //Named for the strided orbit the pose comes from
+    PlannedPath coldStart = coldStartPath(orbit.poses.at(worstOracleHolePosition(orbitOracles)));
+    coldStart.path.name = QStringLiteral("P4/%1").arg(kTileOrbitPoseStride);
+    const EvalOracles oracles = tileOracles(rhi.get(), cache, coldStart.path,
+                                            defaults.targetSize);
+
+    for (const Candidate candidate : {Candidate::Default, Candidate::Latent}) {
+        const EvalConfig config = candidateConfig(candidate);
+        REQUIRE(config.targetSize == defaults.targetSize);
+        const QVector<EvalRecord> records =
+            sweepTilePath(rhi.get(), cache, coldStart.path, config, coldStart.step, oracles);
+        checkTileRecords(records, coldStart.path, coldStart.step);
+        //A fresh fixture starts with nothing resident, so the first frame is dark
+        CHECK(records.constFirst().pending);
+        CHECK(records.constFirst().litFraction == 0.0);
+        CHECK(records.constFirst().residentNodes == 0);
     }
 }
 

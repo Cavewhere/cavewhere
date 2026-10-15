@@ -50,6 +50,10 @@ evalSummary,path,config,frames,worstHoleFraction,meanIouO3,framesToQuiet,mostPre
 evalSummary,P2,C-default,4,0.01000,0.99275,2,1000
 0.512 s: The oblique orbit records every metric
 evalCsv,path,config,pose,frame,label,litFraction,holeFraction,iouO3,o3DistanceStep,o3DistanceStepRaw,inflationRatio,nodesEntered,nodesLeft,spriteSideChangePx,pending
+evalCsv,plane/P2z,C-default,0,0,level-9-heading-0,0.60000,0.00000,1.00000,0.00000,0.00000,1.0000,0,0,0.000,0
+evalSummary,path,config,frames,worstHoleFraction,meanIouO3,framesToQuiet,mostPredictedPoints
+evalSummary,plane/P2z,C-default,1,0.00000,1.00000,0,
+evalCsv,path,config,pose,frame,label,litFraction,holeFraction,iouO3,o3DistanceStep,o3DistanceStepRaw,inflationRatio,nodesEntered,nodesLeft,spriteSideChangePx,pending
 evalCsv,P2,C-starved,0,0,heading-0,0.30000,0.20000,0.80000,0.00000,0.00000,1.2500,2,0,0.500,1
 evalCsv,P2,C-starved,1,0,heading-5,0.31000,0.19000,0.81000,0.01000,0.01000,1.0000,0,0,0.000,1
 evalSummary,path,config,frames,worstHoleFraction,meanIouO3,framesToQuiet,mostPredictedPoints
@@ -75,6 +79,13 @@ evalCsv,P4,C-default,0,0,heading-0,0.00000,1.00000,0.00000,0.00000,0.00000,1.000
 evalCsv,P4,C-default,0,1,heading-0,0.50000,0.01000,0.99000,0.00000,0.99000,1.0000,7,0,0.000,0
 evalSummary,path,config,frames,worstHoleFraction,meanIouO3,framesToQuiet,mostPredictedPoints
 evalSummary,P4,C-default,2,1.00000,0.49500,1,
+evalCsv,path,config,pose,frame,label,litFraction,holeFraction,iouO3,o3DistanceStep,o3DistanceStepRaw,inflationRatio,nodesEntered,nodesLeft,spriteSideChangePx,pending
+evalDump,path,config,directory
+evalDump,plane/P4,C-default,plane_P4/C-default/run-42-005
+evalCsv,plane/P4,C-default,0,0,heading-20,0.00000,1.00000,0.00000,0.00000,0.00000,1.0000,0,0,0.000,1
+evalCsv,plane/P4,C-default,0,1,heading-20,0.70000,0.00000,1.00000,0.00000,1.00000,1.0000,9,0,0.000,0
+evalSummary,path,config,frames,worstHoleFraction,meanIouO3,framesToQuiet,mostPredictedPoints
+evalSummary,plane/P4,C-default,2,1.00000,0.50000,1,
 m7Csv,path,pose,level,litFraction,holeFraction,holeCount,maxHoleSide,litFractionFixed,drawnNodes
 m7Csv,P2z/6-L5,0,5,0.85000,0.15000,100,40,0.97000,477
 m7Csv,P2z/6-L5,6,5,0.83000,0.17000,120,42,0.98000,442
@@ -147,14 +158,15 @@ class ParseTest(unittest.TestCase):
 
     def test_runs_group_by_header_path_and_config(self):
         keys = [run.key for run in self.log.runs]
-        self.assertEqual(keys, [("P2", "C-default", 1), ("P2", "C-starved", 1),
-                                ("P2", "C-default", 2), ("P4", "C-default", 1),
-                                ("P4", "C-default", 2)])
-        self.assertEqual([len(run.rows) for run in self.log.runs], [4, 2, 1, 3, 2])
+        self.assertEqual(keys, [("P2", "C-default", 1), ("plane/P2z", "C-default", 1),
+                                ("P2", "C-starved", 1), ("P2", "C-default", 2),
+                                ("P4", "C-default", 1), ("P4", "C-default", 2),
+                                ("plane/P4", "C-default", 1)])
+        self.assertEqual([len(run.rows) for run in self.log.runs], [4, 1, 2, 1, 3, 2, 2])
 
     def test_each_summary_pairs_with_its_run(self):
         frames = [run.summary["frames"] for run in self.log.runs]
-        self.assertEqual(frames, ["4", "2", "1", "3", "2"])
+        self.assertEqual(frames, ["4", "1", "2", "1", "3", "2", "2"])
 
     def test_columns_are_read_by_name(self):
         # The sample header puts holeFraction right after litFraction, where
@@ -165,11 +177,12 @@ class ParseTest(unittest.TestCase):
 
     def test_each_run_names_its_own_dump_directory(self):
         self.assertEqual([run.dump for run in self.log.runs],
-                         ["P2/C-default/run-42-001", None, "P2/C-default/run-42-004",
-                          "P4/C-default/run-42-002", "P4/C-default/run-42-003"])
+                         ["P2/C-default/run-42-001", None, None, "P2/C-default/run-42-004",
+                          "P4/C-default/run-42-002", "P4/C-default/run-42-003",
+                          "plane_P4/C-default/run-42-005"])
 
     def test_empty_fields_read_as_none(self):
-        self.assertIsNone(report.number(self.log.runs[1].summary["framesToQuiet"]))
+        self.assertIsNone(report.number(self.log.runs[2].summary["framesToQuiet"]))
 
     def test_other_families_and_noise(self):
         self.assertEqual(len(self.log.hole_rows), 2)
@@ -177,7 +190,13 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(len(self.log.sweeps), 1)
         self.assertEqual([row["picked"] for row in self.log.sweeps[0].rows], ["0", "1", "0"])
         self.assertEqual(len(self.log.m7_rows), 4)
-        self.assertEqual(self.log.paths(), ["P2", "P4"])
+        self.assertEqual(self.log.paths(), ["P2", "plane/P2z", "P4", "plane/P4"])
+
+    def test_plane_paths_are_told_apart_by_their_prefix(self):
+        self.assertTrue(report.is_plane_path("plane/P2z"))
+        self.assertFalse(report.is_plane_path("P2z/6"))
+        self.assertEqual(report.bare_path("plane/P4"), "P4")
+        self.assertEqual(report.bare_path("P2/24"), "P2/24")
 
     def test_level_paths_group_into_their_family(self):
         self.assertEqual(report.level_path_family("P2z/6-L7"), "P2z/6")
@@ -201,6 +220,21 @@ class ParseTest(unittest.TestCase):
         self.assertIn("Pick: picked under the earlier overdraw rule, at most 4.", section)
         self.assertNotIn("under 0.001", section)
         self.assertNotIn("smallest coverage under the hole tolerance.", section)
+
+    def test_sweeps_name_their_target_and_collapse_repeats(self):
+        header = ("oracleCsv,path,oracle,targetSize,coverage,meanHoleFraction,worstHoleFraction,"
+                  "meanOverdraw,worstOverdraw,holeTolerance,underTolerance,picked")
+        half = ["oracleCsv,P2/24,O2,960x540,1,0.00100,0.00200,3.000,3.500,0.01,1,1",
+                "oracleCsv,P2/24,O2,960x540,2,0.00050,0.00080,4.800,4.900,0.01,1,0"]
+        full = ["oracleCsv,P2/24,O2,1920x1080,1,0.02000,0.03000,3.000,3.500,0.01,0,0",
+                "oracleCsv,P2/24,O2,1920x1080,2,0.00500,0.00800,4.800,4.900,0.01,1,1"]
+        log = report.parse_log_lines([header] + half + [header] + half + [header] + full)
+        self.assertEqual(len(log.sweeps), 3)
+        labels = [label for _, label in report.sweep_blocks(log.sweeps)]
+        self.assertEqual(labels, ["P2/24 at 960x540, announced 2 times", "P2/24 at 1920x1080"])
+        section = report.sweep_section(log)
+        self.assertIn("<h3>P2/24 at 1920x1080</h3>", section)
+        self.assertNotIn("<th>targetSize</th>", section)
 
     def test_header_detection(self):
         self.assertTrue(report.is_header(["evalCsv", "path", "config", "pose"]))
@@ -326,9 +360,10 @@ class ReportTest(unittest.TestCase):
         later.mkdir(parents=True)
         write_rgba_png(later / report.candidate_frame_name(0, 0), 9)
 
-        p4_runs = {"run-42-002": 3, "run-42-003": 2}
-        for name, frame_count in p4_runs.items():
-            directory = self.frames / "P4" / "C-default" / name
+        p4_runs = {("P4", "run-42-002"): 3, ("P4", "run-42-003"): 2,
+                   ("plane_P4", "run-42-005"): 2}
+        for (path, name), frame_count in p4_runs.items():
+            directory = self.frames / path / "C-default" / name
             directory.mkdir(parents=True, exist_ok=True)
             for frame in range(frame_count):
                 write_rgba_png(directory / report.candidate_frame_name(0, frame), frame)
@@ -354,6 +389,24 @@ class ReportTest(unittest.TestCase):
         for section in ("Path P2", "Path P4", "O2 coverage sweep", "M7: lit fraction by level",
                         "P1: hole metric sweeps", "M2 and its causes"):
             self.assertIn(section, text)
+
+    def test_plane_runs_have_a_section_of_their_own(self):
+        text = self.out.read_text(encoding="utf-8")
+        nav = text[text.index("<nav>"):text.index("</nav>")]
+        self.assertIn('href="#path-P4"', nav)
+        self.assertNotIn("path-plane_", nav)
+        self.assertIn('href="#plane"', nav)
+        # Every tile path comes before the plane section, whatever the log's
+        # order, and every plane path after it
+        plane = text.index('<h2 id="plane">')
+        for tile_path in ("P2", "P4"):
+            self.assertLess(text.index('<h2 id="path-{}">'.format(tile_path)), plane)
+        for plane_path in ("plane_P2z", "plane_P4"):
+            self.assertGreater(text.index('<h2 id="path-{}">'.format(plane_path)), plane)
+        self.assertNotIn("plane/", text[:plane])
+        # A plane cold start still gets its flipbook, beside the plane's section
+        self.assertIn('href="flipbook-plane_P4-C-default.html"', text[plane:])
+        self.assertTrue((self.out.parent / "flipbook-plane_P4-C-default.html").is_file())
 
     def test_o2_table_marks_the_tolerance_rule(self):
         text = self.out.read_text(encoding="utf-8")
