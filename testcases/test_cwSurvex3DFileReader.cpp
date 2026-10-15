@@ -406,10 +406,10 @@ TEST_CASE("cavern warns about a Compass MAK naming a DAT which is absent",
           == Catch::Approx(6.10).margin(0.01));
 }
 
-TEST_CASE("cavern rejects two Compass MAK fixed points for one station",
+TEST_CASE("cavern keeps the first of two Compass MAK fixed points for one station",
           "[cwSurvex3DFileReader]") {
-    // Guard for the case above: contradictory fixed points within one DAT's
-    // link station list are still an error, since nothing can place the file.
+    // Compass quietly accepts contradictory fixed points within one DAT's link
+    // station list, so cavern (upstream f4704a03) warns and keeps the first.
     const QString driver = testcasesDatasetSourcePath(
         QStringLiteral("test_cwSurvex3DFileReader/compass_mak_refix_driver.svx"));
     REQUIRE(QFile::exists(driver));
@@ -419,8 +419,18 @@ TEST_CASE("cavern rejects two Compass MAK fixed points for one station",
     const QString output3dPath = workDir.filePath(QStringLiteral("compass_mak_refix.3d"));
 
     auto cavernResult = cwCavernRunner::run(driver, output3dPath);
-    REQUIRE(cavernResult.hasError());
-    CHECK_FALSE(QFileInfo(output3dPath).exists());
+    REQUIRE(!cavernResult.hasError());
+    CHECK(cavernResult.value().warningCount == 1);
+    CHECK(cavernResult.value().logText.contains(QStringLiteral("already fixed")));
+    REQUIRE(QFileInfo(output3dPath).exists());
+
+    cwSurvex3DFileReader reader;
+    auto parsed = reader.readNetworkAndLookup(output3dPath);
+    CHECK(parsed.network.stations().size() == 3);
+    CHECK(parsed.lookup.position(QStringLiteral("cave0.a.1")).x()
+          == Catch::Approx(0.0).margin(0.01));
+    CHECK(parsed.lookup.position(QStringLiteral("cave0.a.A3")).x()
+          == Catch::Approx(6.10).margin(0.01));
 }
 
 TEST_CASE("cavern survives a fatal error inside a Walls file with a pushed options level",
