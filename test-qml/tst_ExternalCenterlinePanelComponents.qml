@@ -672,6 +672,8 @@ MainWindowTest {
             const dateItem = findChild(tripMetadataId, "tripMetadataDate")
             verify(dateItem !== null, "tripMetadataDate must exist")
             compare(dateItem.text, "2024-06-01", "the date renders as the file has it")
+            verify(dateItem instanceof QC.Label, "the file owns the date, so it reads as a label")
+            compare(dateItem.finishedEditting, undefined, "the date readout has no commit path")
             trip.date = new Date(2025, 2, 4)
             tryVerify(() => dateSpyId.count === 1, 1000,
                       "the trip's date change reaches the panel")
@@ -795,8 +797,10 @@ MainWindowTest {
             const dateItem = findChild(tripMetadataId, "tripMetadataDate")
             verify(dateItem !== null, "tripMetadataDate must exist")
             compare(dateItem.text, "2024-06-01", "the date reads as the file has it")
-            verify(findChild(dateItem.parent, "coreTextInput") === null,
-                   "the date row holds a label, not a text field")
+            verify(dateItem instanceof QC.Label, "the date row holds a label, not a text field")
+            compare(dateItem.finishedEditting, undefined, "the date readout has no commit path")
+            verify(findChild(dateItem, "coreTextInput") === null,
+                   "the date readout holds no text input")
             scrollIntoView(dateItem)
             mouseDoubleClickSequence(dateItem)
             verify(rootId.shadowEditor.coreClickInput === null,

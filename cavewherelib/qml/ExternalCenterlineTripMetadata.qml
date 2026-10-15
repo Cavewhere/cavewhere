@@ -11,13 +11,11 @@ import QtQuick.Layouts
 import cavewherelib
 
 // Trip metadata block for the external-centerline trip panel: date
-// (drives auto-declination), declination, and team. The survey file
-// seeds the date, and the user owns it from there: it stays editable so a
-// trip whose file writes no date, or writes the wrong one, can be
-// corrected by hand (§5 Q6). The team stays the file's, so it is
-// presented read-only. The declination is editable only while CaveWhere
-// supplies it (an auto or manual origin); otherwise the page reads the
-// value cavern applies, in the words the survey tree's Decl cell uses.
+// (drives auto-declination), declination, and team. The survey file owns
+// the date and the team, so both are read-only. The declination is
+// editable only while CaveWhere supplies it (an auto or manual origin);
+// otherwise the page reads the value cavern applies, in the words the
+// survey tree's Decl cell uses.
 ColumnLayout {
     id: root
     objectName: "tripMetadata"
@@ -39,19 +37,9 @@ ColumnLayout {
             text: qsTr("Date")
         }
 
-        DoubleClickTextInput {
+        QC.Label {
             objectName: "tripMetadataDate"
-
             text: root.trip !== null ? Qt.formatDate(root.trip.date, "yyyy-MM-dd") : ""
-
-            onFinishedEditting: function(newText) {
-                if(root.trip === null) {
-                    return
-                }
-                root.trip.date = Date.fromLocaleString(Qt.locale(),
-                                                       newText + " 00:00:00",
-                                                       "yyyy-MM-dd HH:mm:ss")
-            }
         }
     }
 

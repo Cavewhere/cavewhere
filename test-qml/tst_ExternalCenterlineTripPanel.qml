@@ -1,4 +1,5 @@
 import QtQuick as QQ
+import QtQuick.Controls as QC
 import QtTest
 import cavewherelib
 import cw.TestLib
@@ -863,23 +864,18 @@ MainWindowTest {
             verify(!declEditor.visible, "the trip's file owns its declination")
         }
 
-        // The file seeds the date and the user owns it from there: east
-        // inherits its ancestor block's *date, and an edit lands on the trip
-        // (§5 Q6).
-        function test_aDerivedTripDateShowsTheSeedAndStaysEditable() {
+        // The file seeds the date and owns it: east inherits its ancestor
+        // block's *date, and the page shows it read-only.
+        function test_aDerivedTripDateShowsTheSeedReadOnly() {
             bindDerivedTrip("trip-panel-scope-date")
-            const trip = rootId.trip
 
             const metadata = findChild(panelId, "tripMetadata")
             const dateField = findChild(metadata, "tripMetadataDate")
             verify(dateField !== null, "tripMetadataDate must exist")
             tryCompare(dateField, "text", "2024-01-05", 5000,
                        "the block's date seeded the derived trip")
-            verify(!dateField.readOnly, "the date is the user's to correct")
-
-            dateField.finishedEditting("2020-02-02")
-            tryVerify(() => Qt.formatDate(trip.date, "yyyy-MM-dd") === "2020-02-02",
-                      5000, "the edit lands on the trip")
+            verify(dateField instanceof QC.Label, "the file owns the date, so it reads as a label")
+            compare(dateField.finishedEditting, undefined, "the date readout has no commit path")
         }
 
         // The station list is the one block the two modes share: a derived
