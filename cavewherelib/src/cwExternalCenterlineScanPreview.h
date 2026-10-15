@@ -50,10 +50,6 @@ class CAVEWHERE_LIB_EXPORT cwExternalCenterlineScanPreview : public QObject
     Q_PROPERTY(QStringList warnings READ warnings NOTIFY scanChanged FINAL)
     Q_PROPERTY(int fileCount READ fileCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(QList<cwScanBlock> blocks READ blocks NOTIFY scanChanged FINAL)
-    Q_PROPERTY(QList<cwScanRow> rows READ rows NOTIFY scanChanged FINAL)
-    Q_PROPERTY(int surveyCount READ surveyCount NOTIFY scanChanged FINAL)
-    Q_PROPERTY(int stationCount READ stationCount NOTIFY scanChanged FINAL)
-    Q_PROPERTY(int missingFileCount READ missingFileCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(int topLevelBlockCount READ topLevelBlockCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(int rootStationCount READ rootStationCount NOTIFY scanChanged FINAL)
     Q_PROPERTY(QDate rootDate READ rootDate NOTIFY scanChanged FINAL)
@@ -68,8 +64,7 @@ public:
     void setSourcePath(const QString& sourcePath);
 
     // Derived synchronously from the path's extension alone, so the
-    // dialog's "Format: <name> (auto-detected)" line updates before
-    // the scan lands.
+    // picker's "Format: <name>" line updates before the scan lands.
     QString formatName() const;
 
     // Whether the copy-import path (cwSurveyImportManager) handles the
@@ -84,24 +79,8 @@ public:
     int fileCount() const { return m_fileCount; }
 
     // Every named survey block in the closure, parents before
-    // children. The dialog's structure preview walks it directly.
+    // children.
     QList<cwScanBlock> blocks() const { return m_blocks; }
-
-    // The tree an attach builds, root first in pre-order. The dialog's
-    // structure preview walks it directly.
-    QList<cwScanRow> rows() const { return m_rows; }
-
-    // Summary counts over rows(): the units with a file on disk, the distinct
-    // cavern-relative station names they hold (a Compass link station is one
-    // name per file until cavern equates them), and the listed files the disk
-    // lacks.
-    int surveyCount() const;
-    int stationCount() const;
-    int missingFileCount() const;
-
-    // What a preview row reads as: its node kind for a node, "Trip" for a
-    // unit-only row (the trip an attach derives from it).
-    Q_INVOKABLE QString kindLabel(const cwScanRow& row) const;
 
     // What Replace with the scanned file costs \a root's derived trips (§6.11
     // case 5): a scrap loses an anchor when one of its stations is a name the
@@ -137,7 +116,7 @@ signals:
     void scanningChanged();
 
     // One signal for the whole result payload (valid / errorMessage /
-    // warnings / fileCount / blocks / rows / rootStationCount / rootDate /
+    // warnings / fileCount / blocks / rootStationCount / rootDate /
     // entryHasOwnShots / entryDirectIncludes) - they only ever change
     // together.
     void scanChanged();

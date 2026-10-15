@@ -78,7 +78,6 @@ QQ.Item {
             ExternalCenterlineFilePicker {
                 id: pickerId
                 Layout.fillWidth: true
-                promptText: qsTr("Pick the replacement file:")
                 fileDialogTitle: dialogId.title
                 showsSupportedFormats: false
                 locked: sessionId.busy

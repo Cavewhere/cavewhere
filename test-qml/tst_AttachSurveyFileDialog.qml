@@ -5,11 +5,10 @@ import cw.TestLib
 import QmlTestRecorder
 
 // C7.4a: the Data page's Add ▾ → Attach survey file… and the
-// AttachSurveyFileDialog it opens - the summary line, "Place under", the
-// subtree preview with its gray rows, the happy path (a source root under the
-// target, named from the file, with the file's blocks as nodes), Attach under
-// a Folder through a row's Add submenu, Import a copy, and a dismissal that
-// leaves the project as it was.
+// AttachSurveyFileDialog it opens - the picker's lines as the one summary,
+// the happy path (a source root under the target, named from the file, with
+// the file's blocks as nodes), Attach under a Folder through a row's Add
+// submenu, Import a copy, and a dismissal that leaves the project as it was.
 MainWindowTest {
     id: rootId
 
@@ -120,16 +119,10 @@ MainWindowTest {
             const dialog = openDialog(dataPage)
             compare(dialog.target, RootData.region.rootNode,
                     "Attach builds under the region's root")
-            compare(findChild(dialog, "placeUnderText").text, "Region root (top level)")
             compare(RootData.region.rowCount(), 0,
                     "opening the dialog creates nothing")
 
             const attachButton = pickFixture(dialog, "survex_blocks.svx")
-
-            const preview = findChild(dialog, "blockPreview")
-            verify(preview !== null, "block preview must exist")
-            tryVerify(() => preview.visible, 5000, "the preview shows the subtree")
-            compare(findChild(dialog, "blockPreviewTitle").text, "Subtree CaveWhere will create")
 
             waitForRendering(rootId)
             mouseClick(attachButton)
@@ -159,72 +152,29 @@ MainWindowTest {
             RootData.futureManagerModel.waitForFinished()
         }
 
-        // The summary line counts what the scan found and names the listed
-        // file the disk lacks.
-        function test_summaryCountsFilesSurveysAndMissingFiles() {
+        // The picker's format and file-count lines are the dialog's one
+        // summary: no summary line, "Place under", or subtree preview of its
+        // own.
+        function test_pickerLinesAreTheOneSummary() {
             saveProjectAs("attach-summary")
             const dataPage = gotoDataMainPage()
             const dialog = openDialog(dataPage)
 
             pickFixture(dialog, "compass_project/PROJECT.MAK")
-            const summary = findChild(dialog, "scanSummaryText")
-            tryVerify(() => summary.visible, 10000, "the summary shows once the scan lands")
-            compare(summary.text,
-                    "✓ Compass project — 4 files, 4 surveys, 14 stations · 1 listed file missing")
-            compare(findChild(dialog, "blockPreviewHint").text,
-                    "One node per .dat file, one trip per survey.")
+            tryCompare(findChild(dialog, "formatLabel"), "text", "Format: Compass")
+            tryCompare(findChild(dialog, "scanSummaryLabel"), "text", "✓ Found 4 file(s)")
+            compare(findChild(dialog, "scanSummaryText"), null, "no summary line of its own")
+            compare(findChild(dialog, "placeUnderText"), null, "no \"Place under\" line")
+            compare(findChild(dialog, "blockPreview"), null, "no subtree preview")
+            compare(findChild(dialog, "blockPreviewList"), null, "no subtree preview rows")
 
-            cancelDialog(dialog)
-        }
-
-        // The preview row the list draws for \a name, once the scan lands.
-        function previewRow(dialog, name) {
-            const list = findChild(dialog, "blockPreviewList")
-            verify(list !== null, "blockPreviewList must exist")
-            let row = null
-            tryVerify(() => {
-                for (let i = 0; i < list.count; ++i) {
-                    const item = list.itemAtIndex(i)
-                    if (item !== null && item.modelData.displayName === name) {
-                        row = item
-                        return true
-                    }
-                }
-                return false
-            }, 10000, "the preview lists " + name)
-            return row
-        }
-
-        // Rows name their kind and station count, and gray out a book with no
-        // survey data under it and a file the disk lacks.
-        function test_previewGraysEmptyBooksAndMissingFiles() {
-            saveProjectAs("attach-preview-rows")
-            const dataPage = gotoDataMainPage()
-            const dialog = openDialog(dataPage)
-
-            pickFixture(dialog, "walls_project/KAUA.WPJ")
-            const drawings = previewRow(dialog, "Drawings")
-            verify(drawings.grayed, "a book holding no survey file is gray")
-            compare(drawings.color, Theme.textSubtle)
-            verify(drawings.text.startsWith("Drawings · Walls book — 0 station"), drawings.text)
-
-            const surveys = previewRow(dialog, "Surveys")
-            verify(!surveys.grayed, "a book with surveys under it reads normally")
-            compare(surveys.color, Theme.text)
-            verify(surveys.text.startsWith("Surveys · Walls book — 8 station"), surveys.text)
-
-            const unit = previewRow(dialog, "N Surveys")
-            verify(unit.text.startsWith("N Surveys · Trip — 4 station"), unit.text)
-
-            pickFixture(dialog, "compass_project/PROJECT.MAK")
-            const delta = previewRow(dialog, "Delta")
-            verify(delta.grayed, "an absent file is gray")
-            compare(delta.color, Theme.textSubtle)
-            compare(delta.text, "Delta · Compass file — missing")
-
-            const alpha = previewRow(dialog, "Alpha")
-            verify(!alpha.grayed, "a present file with surveys reads normally")
-            verify(alpha.text.startsWith("Alpha · Compass file — 7 station"), alpha.text)
+            // The same sentence the Add survey file dialog shows.
+            compare(findChild(dialog, "attachExplainerText").text,
+                    "The file stays the source of truth — keep editing it in your "
+                    + "survey tool and Reload brings the changes in. A copy travels "
+                    + "with your project for git sync, backups, and sharing; "
+                    + "CaveWhere never writes to your original files. Survey data "
+                    + "is read-only in CaveWhere.")
 
             cancelDialog(dialog)
         }
@@ -261,7 +211,6 @@ MainWindowTest {
 
             const dialog = openedDialog(dataPage)
             compare(dialog.target, folder, "the dialog places the file under the row's node")
-            compare(findChild(dialog, "placeUnderText").text, "Kentucky (Folder)")
 
             const attachButton = pickFixture(dialog, "survex_master/master.svx")
             waitForRendering(rootId)

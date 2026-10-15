@@ -150,8 +150,8 @@ Q_DECLARE_METATYPE(cwScanBlock)
  * to belongs to the whole-node window. stationCount counts the distinct names
  * of the row's own unit and every descendant unit.
  *
- * missing marks a file the source lists and the disk lacks; such a row is
- * shown and never made into a node or trip. hasSurveyContent is true when the
+ * missing marks a file the source lists and the disk lacks; the attach skips
+ * such a row when it builds nodes and trips. hasSurveyContent is true when the
  * row's own unit or a descendant unit holds stations.
  *
  * kind names a node row's node kind. A unit-only Survex block row keeps
@@ -159,22 +159,6 @@ Q_DECLARE_METATYPE(cwScanBlock)
  */
 class CAVEWHERE_LIB_EXPORT cwScanRow
 {
-    Q_GADGET
-    QML_VALUE_TYPE(cwScanRow)
-
-    Q_PROPERTY(cwSurveyNodeKind::Kind kind MEMBER kind FINAL)
-    Q_PROPERTY(QString sourcePath MEMBER sourcePath FINAL)
-    Q_PROPERTY(QString displayName MEMBER displayName FINAL)
-    Q_PROPERTY(QString cavernLabel MEMBER cavernLabel FINAL)
-    Q_PROPERTY(int depth MEMBER depth FINAL)
-    Q_PROPERTY(bool isNode MEMBER isNode FINAL)
-    Q_PROPERTY(bool isUnit MEMBER isUnit FINAL)
-    Q_PROPERTY(bool hasSurveyContent MEMBER hasSurveyContent FINAL)
-    Q_PROPERTY(bool missing MEMBER missing FINAL)
-    Q_PROPERTY(int stationCount MEMBER stationCount FINAL)
-    Q_PROPERTY(QDate date MEMBER date FINAL)
-    Q_PROPERTY(QStringList stations MEMBER stations FINAL)
-
 public:
     cwSurveyNodeKind::Kind kind = cwSurveyNodeKind::Kind::Cave;
     QString sourcePath;
@@ -194,16 +178,6 @@ public:
 
     bool operator==(const cwScanRow& other) const = default;
 };
-
-class cwScanRowListRegistration
-{
-    Q_GADGET
-    QML_FOREIGN(QList<cwScanRow>)
-    QML_ANONYMOUS
-    QML_SEQUENTIAL_CONTAINER(cwScanRow)
-};
-
-Q_DECLARE_METATYPE(cwScanRow)
 
 /**
  * Free-function scanner that walks the dependency closure of an
@@ -374,7 +348,7 @@ struct ScanResult {
     /**
      * Every named survey block in the closure, in document order -
      * a parent always precedes its children. Feeds Scope-trip
-     * creation and the attach dialog's structure preview. See
+     * creation. See
      * cwScanBlock for the per-format mapping.
      */
     QList<cwScanBlock> blocks;
@@ -492,7 +466,7 @@ CAVEWHERE_LIB_EXPORT Format formatFor(const QString& entryFile);
  * User-facing name for a format: "Survex", "Compass", or "Walls";
  * empty for Format::Unknown. The single source for the format label
  * shown by cwExternalCenterline::format() (attached owners) and the
- * attach dialog's "auto-detected" line (via
+ * picker's "Format:" line (via
  * cwExternalCenterlineScanPreview). Proper nouns, so untranslated.
  */
 CAVEWHERE_LIB_EXPORT QString formatName(Format format);

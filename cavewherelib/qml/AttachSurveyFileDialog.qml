@@ -11,7 +11,6 @@ import QtQuick.Layouts
 import cavewherelib
 
 // The Attach survey file dialog (SURVEY_TREE_PLAN C7.4a). Pick an entry file,
-// read the scan's summary, see where the subtree goes and the subtree itself,
 // then Attach: the file's tree becomes a read-only subtree under target. Import
 // a copy stays beside it for Survex files, where the target takes caves: the
 // parsed shots land in a native trip of a new cave there.
@@ -93,60 +92,6 @@ QQ.Item {
         return null
     }
 
-    // "Region root (top level)", or the target's path from the top with its
-    // kind: "Kentucky › Side Cave (Cave)".
-    function placeUnderText() : string {
-        if (root.target === null || root.target === RootData.region.rootNode) {
-            return qsTr("Region root (top level)")
-        }
-        let names = []
-        for (let node = root.target;
-             node !== null && node !== RootData.region.rootNode;
-             node = node.parentNode) {
-            names.unshift(node.name)
-        }
-        const kindLabel = RegionSurveyTree.data(RegionSurveyTree.indexOf(root.target),
-                                                SurveyTreeModel.KindLabelRole)
-        return qsTr("%1 (%2)").arg(names.join(" › ")).arg(kindLabel)
-    }
-
-    // "1 file", "4 files".
-    function countText(count: int, singular: string, plural: string) : string {
-        return qsTr("%1 %2").arg(count).arg(count === 1 ? singular : plural)
-    }
-
-    // One line for what the scan found: the kind, the files, the surveys and
-    // stations they hold, and the listed files the disk lacks.
-    function summaryText() : string {
-        if (pickerId.rows.length === 0) {
-            return ""
-        }
-        const counts = [root.countText(pickerId.fileCount, qsTr("file"), qsTr("files")),
-                        root.countText(pickerId.surveyCount, qsTr("survey"), qsTr("surveys")),
-                        root.countText(pickerId.stationCount, qsTr("station"), qsTr("stations"))]
-        const found = qsTr("✓ %1 — %2").arg(pickerId.kindLabel(pickerId.rows[0])).arg(counts.join(", "))
-        return pickerId.missingFileCount > 0
-                ? qsTr("%1 · %2 missing").arg(found)
-                      .arg(root.countText(pickerId.missingFileCount, qsTr("listed file"), qsTr("listed files")))
-                : found
-    }
-
-    // How the scan's tree becomes nodes and trips, said for the format of the
-    // subtree's root, the scan's first row.
-    function previewHintText() : string {
-        switch (pickerId.rows.length > 0 ? pickerId.rows[0].kind : SurveyNodeKind.Folder) {
-        case SurveyNodeKind.CompassProject:
-        case SurveyNodeKind.CompassFile:
-            return qsTr("One node per .dat file, one trip per survey.")
-        case SurveyNodeKind.WallsBook:
-            return qsTr("One node per book, at the depth the project file gives it; "
-                        + "one trip per survey file with shots. Books without "
-                        + "surveys stay in the tree, grayed.")
-        default:
-            return qsTr("One node per block; a block with its own shots also gets a trip.")
-        }
-    }
-
     ExternalCenterlineAttachSession {
         id: sessionId
 
@@ -194,8 +139,6 @@ QQ.Item {
         readonly property int wideWidth: 640
         readonly property int compactWidth: 400
 
-        readonly property int blockIndentWidth: Theme.actionBarSpacing
-
         anchors.centerIn: QC.Overlay.overlay
         modal: true
         implicitWidth: {
@@ -218,97 +161,6 @@ QQ.Item {
                 locked: root.busy
                 operationError: sessionId.errorMessage
                 onPathEdited: sessionId.errorMessage = ""
-            }
-
-            QC.Label {
-                objectName: "scanSummaryText"
-                Layout.fillWidth: true
-                visible: pickerId.valid && pickerId.rows.length > 0
-                wrapMode: QC.Label.WordWrap
-                color: Theme.textSecondary
-                text: root.summaryText()
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: Theme.sectionSpacing
-                spacing: Theme.tightSpacing
-
-                QC.Label {
-                    text: qsTr("Place under")
-                    font.bold: true
-                }
-
-                QC.Label {
-                    objectName: "placeUnderText"
-                    Layout.fillWidth: true
-                    elide: QC.Label.ElideMiddle
-                    color: Theme.textSecondary
-                    text: root.placeUnderText()
-                }
-            }
-
-            // Disclosure, not a picker: the subtree is built as scanned, so
-            // this is where the user sees what the attach is about to make.
-            ColumnLayout {
-                objectName: "blockPreview"
-                Layout.fillWidth: true
-                Layout.topMargin: Theme.sectionSpacing
-                spacing: Theme.tightSpacing
-                visible: pickerId.valid && pickerId.rows.length > 0
-
-                QC.Label {
-                    objectName: "blockPreviewTitle"
-                    text: qsTr("Subtree CaveWhere will create")
-                    font.bold: true
-                }
-
-                QC.Label {
-                    objectName: "blockPreviewHint"
-                    Layout.fillWidth: true
-                    wrapMode: QC.Label.WordWrap
-                    color: Theme.textSubtle
-                    font.pixelSize: Theme.fontSizeSmall
-                    text: root.previewHintText()
-                }
-
-                // The tree scrolls once it outgrows the shared list cap, so a
-                // whole survey project never pushes the buttons off the screen.
-                QQ.ListView {
-                    objectName: "blockPreviewList"
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(contentHeight,
-                                                     Theme.floatingListMaxHeight)
-                    clip: true
-                    model: pickerId.rows
-
-                    delegate: QC.Label {
-                        id: blockRowId
-                        objectName: "blockRow"
-
-                        required property cwScanRow modelData
-
-                        // A row with no survey data under it, or a file the
-                        // source lists and the disk lacks, is shown so the
-                        // structure reads whole, grayed so it reads as skipped.
-                        readonly property bool grayed: !blockRowId.modelData.hasSurveyContent
-                                                       || blockRowId.modelData.missing
-                        readonly property string kindText: pickerId.kindLabel(blockRowId.modelData)
-
-                        width: QQ.ListView.view.width
-                        leftPadding: blockRowId.modelData.depth * dialogId.blockIndentWidth
-                        elide: QC.Label.ElideRight
-                        color: blockRowId.grayed ? Theme.textSubtle : Theme.text
-                        text: blockRowId.modelData.missing
-                              ? qsTr("%1 · %2 — missing")
-                                    .arg(blockRowId.modelData.displayName)
-                                    .arg(blockRowId.kindText)
-                              : qsTr("%1 · %2 — %n station(s)", "",
-                                     blockRowId.modelData.stationCount)
-                                    .arg(blockRowId.modelData.displayName)
-                                    .arg(blockRowId.kindText)
-                    }
-                }
             }
 
             QC.Label {

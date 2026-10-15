@@ -8,7 +8,6 @@
 //Our includes
 #include "cwExternalCenterlineScanPreview.h"
 #include "cwConcurrent.h"
-#include "cwSurveyTreeModel.h"
 #include "cwTrip.h"
 #include "cwSurveyNoteModel.h"
 #include "cwNote.h"
@@ -115,33 +114,6 @@ int cwExternalCenterlineScanPreview::topLevelBlockCount() const
         }
     }
     return count;
-}
-
-int cwExternalCenterlineScanPreview::surveyCount() const
-{
-    return static_cast<int>(std::count_if(m_rows.cbegin(), m_rows.cend(), [](const cwScanRow& row) {
-        return row.isUnit && !row.missing;
-    }));
-}
-
-int cwExternalCenterlineScanPreview::stationCount() const
-{
-    return m_rows.isEmpty() ? 0 : m_rows.constFirst().stationCount;
-}
-
-int cwExternalCenterlineScanPreview::missingFileCount() const
-{
-    return static_cast<int>(std::count_if(m_rows.cbegin(), m_rows.cend(), [](const cwScanRow& row) {
-        return row.missing;
-    }));
-}
-
-QString cwExternalCenterlineScanPreview::kindLabel(const cwScanRow& row) const
-{
-    if (row.isNode) {
-        return cwSurveyTreeModel::kindLabel(row.kind);
-    }
-    return QStringLiteral("Trip");
 }
 
 int cwExternalCenterlineScanPreview::notesLosingAnchors(cwSurveyNode* root) const

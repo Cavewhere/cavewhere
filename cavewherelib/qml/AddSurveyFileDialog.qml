@@ -11,7 +11,7 @@ import QtQuick.Layouts
 import cavewherelib
 
 // Unified add-from-survey-file dialog (Add Trip UX plan §3). Pick an
-// entry file, preview the scan (auto-detected format, file count,
+// entry file, preview the scan (format, file count,
 // warnings, errors), then choose how CaveWhere uses it: Attach
 // (recommended - the file stays the source of truth) or Import a copy
 // (Survex only). Attach runs through the manager's completion-signal
@@ -165,12 +165,12 @@ QQ.Item {
                             Layout.fillWidth: true
                             wrapMode: QC.Label.WordWrap
                             text: qsTr("The file stays the source of truth — keep "
-                                     + "editing it in your survey tool and CaveWhere "
-                                     + "stays in sync. A copy travels with your "
-                                     + "project for git sync, backups, and sharing; "
-                                     + "CaveWhere never writes to your original "
-                                     + "files. Survey data is read-only in "
-                                     + "CaveWhere.")
+                                     + "editing it in your survey tool and Reload "
+                                     + "brings the changes in. A copy travels with "
+                                     + "your project for git sync, backups, and "
+                                     + "sharing; CaveWhere never writes to your "
+                                     + "original files. Survey data is read-only "
+                                     + "in CaveWhere.")
                         }
 
                         QQ.Item { Layout.fillHeight: true }

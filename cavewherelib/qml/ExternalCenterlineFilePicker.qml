@@ -41,24 +41,10 @@ ColumnLayout {
     readonly property alias valid: previewId.valid
     readonly property alias importSupported: previewId.importSupported
 
-    // The scanned tree and the counts the attach dialog's summary and
-    // preview read. Aliased off the one preview the picker already owns, so
-    // the gate and the disclosure can never disagree about the file in the
-    // field.
-    readonly property alias rows: previewId.rows
-    readonly property alias fileCount: previewId.fileCount
-    readonly property alias surveyCount: previewId.surveyCount
-    readonly property alias stationCount: previewId.stationCount
-    readonly property alias missingFileCount: previewId.missingFileCount
-
     signal pathEdited()
 
     function clear() {
         root.setPath("")
-    }
-
-    function kindLabel(row: cwScanRow): string {
-        return previewId.kindLabel(row)
     }
 
     // What replacing \a root with the picked file costs its derived trips'
@@ -125,7 +111,7 @@ ColumnLayout {
         objectName: "formatLabel"
         visible: previewId.formatName.length > 0
         color: Theme.textSecondary
-        text: qsTr("Format: %1 (auto-detected)").arg(previewId.formatName)
+        text: qsTr("Format: %1").arg(previewId.formatName)
     }
 
     QC.Label {

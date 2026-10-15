@@ -104,7 +104,15 @@ MainWindowTest {
 
             const formatLabel = findChild(attachDialogId, "formatLabel")
             verify(formatLabel !== null, "formatLabel must exist")
-            tryCompare(formatLabel, "text", "Format: Survex (auto-detected)")
+            tryCompare(formatLabel, "text", "Format: Survex")
+
+            // The same sentence the Attach survey file dialog shows.
+            compare(findChild(attachDialogId, "attachExplainerText").text,
+                    "The file stays the source of truth — keep editing it in your "
+                    + "survey tool and Reload brings the changes in. A copy travels "
+                    + "with your project for git sync, backups, and sharing; "
+                    + "CaveWhere never writes to your original files. Survey data "
+                    + "is read-only in CaveWhere.")
 
             const summaryLabel = findChild(attachDialogId, "scanSummaryLabel")
             tryVerify(() => summaryLabel.visible, 10000, "preview scan lands")

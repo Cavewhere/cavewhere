@@ -597,6 +597,9 @@ MainWindowTest {
             verify(explainer.text.indexOf("including any edits made to them") >= 0,
                    "the statement says the in-project copies are replaced; got: "
                    + explainer.text)
+            // The title and the path field say what to pick.
+            const picker = findChild(replaceDialogId, "sourcePathField").parent.parent
+            compare(picker.promptText, "", "the picker carries no prompt line")
 
             const cancelButton = findChild(replaceDialogId, "replaceCancelButton")
             verify(cancelButton !== null, "replaceCancelButton must exist")
