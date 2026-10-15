@@ -35,10 +35,10 @@ holeBuild,usgsTile,0,76091515,cached,749446
 holeCsv,variant,height,frame,finestSelected,finestDrawn,holeFraction,holeCount,maxHoleSide,litFraction,litFractionJump,geometricCoverage,sseInflation,pointCapped,residentNodes
 holeCsv,quiet-plane,30.00,0,2,2,0.42496,4022,256,0.57504,0.00000,1.034,1.000,0,9
 holeCsv,quiet-plane,60.00,0,3,3,0.10000,40,12,0.80000,0.01000,1.100,1.000,0,12
-oracleCsv,path,oracle,coverage,meanHoleFraction,worstHoleFraction,meanOverdraw,worstOverdraw,picked
-oracleCsv,P2,O2,1,0.01000,0.02000,3.000,3.500,0
-oracleCsv,P2,O2,2,0.00500,0.00800,3.800,3.900,1
-oracleCsv,P2,O2,4,0.00100,0.00200,6.000,7.000,0
+oracleCsv,path,oracle,coverage,meanHoleFraction,worstHoleFraction,meanOverdraw,worstOverdraw,holeTolerance,underTolerance,picked
+oracleCsv,P2,O2,1,0.01000,0.02000,3.000,3.500,0.001,0,0
+oracleCsv,P2,O2,2,0.00100,0.00180,3.800,3.900,0.001,1,1
+oracleCsv,P2,O2,4,0.00010,0.00020,6.000,7.000,0.001,1,0
 evalCsv,path,config,pose,frame,label,litFraction,holeFraction,iouO3,o3DistanceStep,o3DistanceStepRaw,inflationRatio,nodesEntered,nodesLeft,spriteSideChangePx,pending
 evalDump,path,config,directory
 evalDump,P2,C-default,P2/C-default/run-42-001
@@ -76,10 +76,10 @@ evalCsv,P4,C-default,0,1,heading-0,0.50000,0.01000,0.99000,0.00000,0.99000,1.000
 evalSummary,path,config,frames,worstHoleFraction,meanIouO3,framesToQuiet,mostPredictedPoints
 evalSummary,P4,C-default,2,1.00000,0.49500,1,
 m7Csv,path,pose,level,litFraction,holeFraction,holeCount,maxHoleSide,litFractionFixed,drawnNodes
-m7Csv,P2z,0,5,0.85000,0.15000,100,40,0.97000,477
-m7Csv,P2z,1,5,0.83000,0.17000,120,42,0.98000,442
-m7Csv,P2z,0,6,0.30000,0.70000,800,960,0.50000,342
-m7Csv,P2z,1,6,0.10000,0.90000,900,960,0.40000,319
+m7Csv,P2z/6-L5,0,5,0.85000,0.15000,100,40,0.97000,477
+m7Csv,P2z/6-L5,6,5,0.83000,0.17000,120,42,0.98000,442
+m7Csv,P2z/6-L6,0,6,0.30000,0.70000,800,960,0.50000,342
+m7Csv,P2z/6-L6,6,6,0.10000,0.90000,900,960,0.40000,319
 ===============================================================================
 All tests passed (12 assertions in 3 test cases)
 """
@@ -178,6 +178,29 @@ class ParseTest(unittest.TestCase):
         self.assertEqual([row["picked"] for row in self.log.sweeps[0].rows], ["0", "1", "0"])
         self.assertEqual(len(self.log.m7_rows), 4)
         self.assertEqual(self.log.paths(), ["P2", "P4"])
+
+    def test_level_paths_group_into_their_family(self):
+        self.assertEqual(report.level_path_family("P2z/6-L7"), "P2z/6")
+        self.assertEqual(report.level_path_family("P2z-L10/6"), "P2z/6")
+        # A shared-path log carries no level tag
+        self.assertEqual(report.level_path_family("P2z/6"), "P2z/6")
+
+    def test_sweep_tolerance_comes_from_the_log(self):
+        self.assertEqual(report.sweep_tolerance(self.log.sweeps[0]), 0.001)
+        # A log from before the column picked under the overdraw rule
+        self.assertIsNone(report.sweep_tolerance(report.SweepBlock("P2", 1)))
+
+    def test_a_log_before_the_tolerance_names_the_overdraw_rule(self):
+        log = report.parse_log_lines([
+            "oracleCsv,path,oracle,coverage,meanHoleFraction,worstHoleFraction,"
+            "meanOverdraw,worstOverdraw,picked",
+            "oracleCsv,P2,O2,1,0.01000,0.02000,3.000,3.500,1",
+            "oracleCsv,P2,O2,2,0.00050,0.00080,4.800,4.900,0",
+        ])
+        section = report.sweep_section(log)
+        self.assertIn("Pick: picked under the earlier overdraw rule, at most 4.", section)
+        self.assertNotIn("under 0.001", section)
+        self.assertNotIn("smallest coverage under the hole tolerance.", section)
 
     def test_header_detection(self):
         self.assertTrue(report.is_header(["evalCsv", "path", "config", "pose"]))
@@ -331,6 +354,27 @@ class ReportTest(unittest.TestCase):
         for section in ("Path P2", "Path P4", "O2 coverage sweep", "M7: lit fraction by level",
                         "P1: hole metric sweeps", "M2 and its causes"):
             self.assertIn(section, text)
+
+    def test_o2_table_marks_the_tolerance_rule(self):
+        text = self.out.read_text(encoding="utf-8")
+        section = text[text.index('id="o2"'):text.index('id="m7"')]
+        self.assertIn("<th>under 0.001</th>", section)
+        self.assertNotIn("<th>holeTolerance</th>", section)
+        self.assertNotIn("<th>underTolerance</th>", section)
+        # Coverage 1 holes past the tolerance; the pick, coverage 2, is the
+        # smallest under it, by the bench's flag, though its mean rounds to
+        # the tolerance
+        self.assertRegex(section, r'<td class="num">0\.01000</td>.*?<td class="num">no</td>')
+        self.assertRegex(section, r'<td class="num pick">yes</td>')
+        self.assertIn("Pick: smallest coverage under the hole tolerance.", section)
+
+    def test_m7_groups_levels_with_their_own_paths(self):
+        text = self.out.read_text(encoding="utf-8")
+        section = text[text.index('id="m7"'):]
+        self.assertIn("<h3>P2z/6</h3>", section)
+        self.assertIn("<th>path</th>", section)
+        self.assertRegex(section, r'<td class="num">5</td><td>P2z/6-L5</td><td class="num">2</td>')
+        self.assertRegex(section, r'<td class="num">6</td><td>P2z/6-L6</td><td class="num">2</td>')
 
     def test_baseline_deltas_are_judged_by_direction(self):
         text = self.out.read_text(encoding="utf-8")

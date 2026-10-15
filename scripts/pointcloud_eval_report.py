@@ -909,8 +909,19 @@ def path_section(path, runs, baseline, summary_columns, links):
 
 # ---- O2 sweep and M7 ----------------------------------------------------------
 
-# Section 4.1's overdraw bound on O2's pick, the bench's kMaxO2Overdraw
+# Section 4.1's earlier overdraw bound, which picked O2's coverage in logs
+# written before the hole tolerance rule
 O2_OVERDRAW_BOUND = 4.0
+
+
+def sweep_tolerance(block):
+    """The hole tolerance the bench picked this sweep's coverage under, or None
+    for a log whose pick came from the earlier overdraw rule."""
+    for row in block.rows:
+        value = number(row.get("holeTolerance"))
+        if value is not None:
+            return value
+    return None
 
 
 def sweep_section(log):
@@ -918,22 +929,44 @@ def sweep_section(log):
         return ""
     parts = ['<h2 id="o2">O2 coverage sweep</h2>',
              '<p class="lede">Section 4.1: O2 at every coverage, its holes against O1 and its '
-             "overdraw. The picked coverage is in bold.</p>"]
+             "overdraw. The pick is the smallest coverage whose mean hole fraction is under the "
+             "hole tolerance, or the coverage with the fewest holes when none is; the picked "
+             "coverage is in bold. Overdraw is shown for information and gates nothing.</p>"]
+    columns = log.headers.get("oracleCsv", [])
     for block in log.sweeps:
         label = block.path if block.occurrence == 1 else "{} (sweep {})".format(
             block.path, block.occurrence)
+        tolerance = sweep_tolerance(block)
         parts.append("<h3>{}</h3>".format(escape(label)))
-        columns = log.headers.get("oracleCsv", [])
-        shown = [c for c in columns if c not in ("path", "oracle")]
+        # The bench decides "under" on the raw mean, which the line rounds, so
+        # the report reads the bench's flag
+        hidden = ("path", "oracle") if tolerance is None else (
+            "path", "oracle", "holeTolerance", "underTolerance")
+        shown = [c for c in columns if c not in hidden]
         head = "".join("<th>{}</th>".format(escape(c)) for c in shown)
+        if tolerance is not None:
+            head += "<th>under {}</th>".format(escape(tick_label(tolerance)))
         body = []
+        within_any = False
         for row in block.rows:
-            picked = row.get("picked") == "1"
-            body.append("<tr>{}</tr>".format("".join(
-                '<td class="num{}">{}</td>'.format(" pick" if picked else "", escape(row.get(c, "")))
-                for c in shown)))
+            mark = " pick" if row.get("picked") == "1" else ""
+            cells = "".join('<td class="num{}">{}</td>'.format(mark, escape(row.get(c, "")))
+                            for c in shown)
+            if tolerance is not None:
+                within = row.get("underTolerance") == "1"
+                within_any = within_any or within
+                cells += '<td class="num{}">{}</td>'.format(mark, "yes" if within else "no")
+            body.append("<tr>{}</tr>".format(cells))
         parts.append('<div class="scroll"><table><tr>{}</tr>{}</table></div>'.format(
             head, "".join(body)))
+        if tolerance is None:
+            rule = "picked under the earlier overdraw rule, at most {}".format(
+                tick_label(O2_OVERDRAW_BOUND))
+        elif within_any:
+            rule = "smallest coverage under the hole tolerance"
+        else:
+            rule = "no coverage is under the hole tolerance, so the fewest holes"
+        parts.append('<p class="lede">Pick: {}.</p>'.format(escape(rule)))
 
         coverages = [number(row.get("coverage")) for row in block.rows]
 
@@ -952,10 +985,15 @@ def sweep_section(log):
         coverage_ticks = sorted(c for c in coverages if c is not None)
         parts.append(legend([("mean", "var(--o2)"), ("worst", "var(--o1)")]))
         parts.append(figure(line_chart("Holes against O1 by coverage", holes, "spacing coverage",
-                                       "hole fraction", x_ticks=coverage_ticks, show_points=True)))
-        parts.append(figure(line_chart("Overdraw by coverage", overdraw, "spacing coverage",
-                                       "lit px per footprint px",
-                                       reference_lines=(O2_OVERDRAW_BOUND,),
+                                       "hole fraction",
+                                       reference_lines=() if tolerance is None else (tolerance,),
+                                       x_ticks=coverage_ticks, show_points=True)))
+        overdraw_title = ("Overdraw by coverage" if tolerance is None
+                          else "Overdraw by coverage (information)")
+        parts.append(figure(line_chart(overdraw_title, overdraw,
+                                       "spacing coverage", "lit px per footprint px",
+                                       reference_lines=(O2_OVERDRAW_BOUND,) if tolerance is None
+                                       else (),
                                        x_ticks=coverage_ticks, show_points=True)))
     return "".join(parts)
 
@@ -965,17 +1003,29 @@ def mean(values):
     return sum(present) / len(present) if present else None
 
 
+# The bench names each level's own path <path>-L<level>, before or after the
+# /stride suffix; the section groups the levels of one family of paths
+LEVEL_PATH_TAG = re.compile(r"-L\d+")
+
+
+def level_path_family(path):
+    """The path a level's own path was built from, or the path itself when it
+    carries no level tag, as the shared-path logs before per-level paths do."""
+    return LEVEL_PATH_TAG.sub("", path)
+
+
 def m7_section(log):
     if not log.m7_rows:
         return ""
     parts = ['<h2 id="m7">M7: lit fraction by level</h2>',
-             '<p class="lede">Each level drawn alone, every budget past the cloud, at the default '
-             "coverage sizing and at the fixed-pixel size; the mean over the path's poses against "
-             "O1.</p>"]
-    by_path = {}
+             '<p class="lede">Each level drawn alone on its own boundary path, where the cut '
+             "starts asking for that level, every budget past the cloud, at the default coverage "
+             "sizing and at the fixed-pixel size; the mean over the path's poses against that "
+             "path's O1. Levels on their own paths are compared at their own heights.</p>"]
+    by_family = {}
     for row in log.m7_rows:
-        by_path.setdefault(row.get("path", ""), []).append(row)
-    for path, rows in by_path.items():
+        by_family.setdefault(level_path_family(row.get("path", "")), []).append(row)
+    for family, rows in by_family.items():
         by_level = {}
         for row in rows:
             by_level.setdefault(int(number(row.get("level")) or 0), []).append(row)
@@ -985,27 +1035,28 @@ def m7_section(log):
         fixed_points = []
         for level in levels:
             at = by_level[level]
+            paths = sorted({row.get("path", "") for row in at})
             lit = mean(number(row.get("litFraction")) for row in at)
             fixed = mean(number(row.get("litFractionFixed")) for row in at)
             holes = mean(number(row.get("holeFraction")) for row in at)
             drawn = mean(number(row.get("drawnNodes")) for row in at)
             default_points.append((level, lit))
             fixed_points.append((level, fixed))
-            table.append("<tr><td class=\"num\">{}</td><td class=\"num\">{}</td>"
-                         "<td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}"
-                         "</td><td class=\"num\">{}</td></tr>".format(
-                             level, len(at), format_value(lit), format_value(fixed),
-                             format_value(holes), format_value(drawn, 1)))
-        parts.append("<h3>{}</h3>".format(escape(path)))
-        parts.append('<div class="scroll"><table><tr><th>level</th><th>poses</th>'
+            table.append("<tr><td class=\"num\">{}</td><td>{}</td><td class=\"num\">{}</td>"
+                         "<td class=\"num\">{}</td><td class=\"num\">{}</td>"
+                         "<td class=\"num\">{}</td><td class=\"num\">{}</td></tr>".format(
+                             level, escape(", ".join(paths)), len(at), format_value(lit),
+                             format_value(fixed), format_value(holes), format_value(drawn, 1)))
+        parts.append("<h3>{}</h3>".format(escape(family)))
+        parts.append('<div class="scroll"><table><tr><th>level</th><th>path</th><th>poses</th>'
                      "<th>lit, default sizing</th><th>lit, fixed pixels</th>"
                      "<th>holes, default</th><th>drawn nodes</th></tr>{}</table></div>".format(
                          "".join(table)))
         series = [{"name": "default sizing", "color": "var(--cand)", "points": default_points},
                   {"name": "fixed pixels", "color": "var(--o3)", "points": fixed_points}]
         parts.append(legend([("default sizing", "var(--cand)"), ("fixed pixels", "var(--o3)")]))
-        parts.append(figure(line_chart("Lit fraction of O1 by level drawn alone", series,
-                                       "octree level", "lit fraction", x_ticks=levels,
+        parts.append(figure(line_chart("Lit fraction of O1 by level, each on its own path",
+                                       series, "octree level", "lit fraction", x_ticks=levels,
                                        show_points=True)))
     return "".join(parts)
 

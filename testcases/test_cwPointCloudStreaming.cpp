@@ -6716,8 +6716,9 @@ namespace {
 
     //! Section 4.1's coverage sweep
     constexpr std::array<float, 7> kO2Coverages {1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f, 8.0f};
-    //! The most lit pixels O2's pick may draw per footprint pixel
-    constexpr double kMaxO2Overdraw = 4.0;
+    //! The mean hole fraction against O1 under which a coverage counts as
+    //! closing the surface; O2 draws at the smallest coverage that does
+    constexpr double kO2HoleTolerance = 0.001;
 
     //! How far past the whole cloud the oracle budgets reach. The GPU ledger
     //! carries the node constants and pick mirrors beside the payloads, so the
@@ -7249,9 +7250,9 @@ namespace {
         QVector<CoverageRow> rows;
         //! The row O2 draws at
         int pickIndex = -1;
-        //! False when every coverage overdraws past kMaxO2Overdraw somewhere on
-        //! the path, and the pick fell back to the one that overdraws least
-        bool pickWithinOverdraw = false;
+        //! False when every coverage holes past kO2HoleTolerance, and the pick
+        //! fell back to the one that holes least
+        bool pickWithinTolerance = false;
     };
 
     //! What oracleFrames() hands back: the oracle's frame at every pose and,
@@ -7626,18 +7627,43 @@ namespace {
         return set;
     }
 
+    //! Sets @a sweep's pick from its rows, which ascend by coverage: the first
+    //! row under @a holeTolerance, or the row with the fewest holes when none
+    //! is, the first of equal rows
+    void pickCoverage(CoverageSweep& sweep, double holeTolerance = kO2HoleTolerance)
+    {
+        const auto withinTolerance = std::find_if(
+            sweep.rows.cbegin(), sweep.rows.cend(), [holeTolerance](const CoverageRow& row) {
+                return row.meanHoleFraction < holeTolerance;
+            });
+        sweep.pickWithinTolerance = withinTolerance != sweep.rows.cend();
+        if (sweep.pickWithinTolerance) {
+            sweep.pickIndex = int(std::distance(sweep.rows.cbegin(), withinTolerance));
+        } else {
+            const auto fewestHoles = std::min_element(
+                sweep.rows.cbegin(), sweep.rows.cend(),
+                [](const CoverageRow& a, const CoverageRow& b) {
+                    return a.meanHoleFraction < b.meanHoleFraction;
+                });
+            sweep.pickIndex = fewestHoles == sweep.rows.cend()
+                                  ? -1
+                                  : int(std::distance(sweep.rows.cbegin(), fewestHoles));
+        }
+    }
+
     //! Section 4.1's sweep: O2 at every coverage of kO2Coverages, each pose's
     //! hole fraction against @a o1 and its overdraw — the twin's predicted
     //! sprite pixels over the pixels of O1's mask — summarized over the
-    //! path. The pick is the lowest mean hole fraction among the coverages
-    //! whose worst pose stays under kMaxO2Overdraw, the smaller coverage on a
-    //! tie, and the least overdrawn coverage when none stays under the bound.
-    //! One oracleCsv line per coverage goes to @a out.
+    //! path. The pick is the smallest coverage whose mean hole fraction is
+    //! under @a holeTolerance, or, when none is, the one with the lowest mean
+    //! hole fraction, the smaller coverage on a tie. Overdraw is reported and
+    //! gates nothing. One oracleCsv line per coverage goes to @a out.
     CoverageSweep coverageSweep(const OracleSet& o1, const QVector<OracleSet>& o2Sets,
-                                const EvalPath& path, std::ostream& out)
+                                const EvalPath& path, double holeTolerance, std::ostream& out)
     {
         writeCsvLine(QStringLiteral("oracleCsv,path,oracle,coverage,meanHoleFraction,"
-                                    "worstHoleFraction,meanOverdraw,worstOverdraw,picked"),
+                                    "worstHoleFraction,meanOverdraw,worstOverdraw,"
+                                    "holeTolerance,underTolerance,picked"),
                      out);
 
         CoverageSweep sweep;
@@ -7663,37 +7689,48 @@ namespace {
             sweep.rows.append(row);
         }
 
-        for (int i = 0; i < sweep.rows.size(); i++) {
-            const CoverageRow& row = sweep.rows.at(i);
-            if (row.worstOverdraw < kMaxO2Overdraw
-                && (sweep.pickIndex < 0
-                    || row.meanHoleFraction < sweep.rows.at(sweep.pickIndex).meanHoleFraction)) {
-                sweep.pickIndex = i;
-            }
-        }
-        sweep.pickWithinOverdraw = sweep.pickIndex >= 0;
-        if (!sweep.pickWithinOverdraw) {
-            const auto least = std::min_element(
-                sweep.rows.cbegin(), sweep.rows.cend(),
-                [](const CoverageRow& a, const CoverageRow& b) {
-                    return a.worstOverdraw < b.worstOverdraw;
-                });
-            sweep.pickIndex = int(std::distance(sweep.rows.cbegin(), least));
-        }
+        pickCoverage(sweep, holeTolerance);
 
         for (int i = 0; i < sweep.rows.size(); i++) {
             const CoverageRow& row = sweep.rows.at(i);
-            writeCsvLine(QStringLiteral("oracleCsv,%1,O2,%2,%3,%4,%5,%6,%7")
+            writeCsvLine(QStringLiteral("oracleCsv,%1,O2,%2,%3,%4,%5,%6,%7,%8,%9")
                              .arg(path.name)
                              .arg(double(row.spacingCoverage), 0, 'g', 3)
                              .arg(row.meanHoleFraction, 0, 'f', 5)
                              .arg(row.worstHoleFraction, 0, 'f', 5)
                              .arg(row.meanOverdraw, 0, 'f', 3)
                              .arg(row.worstOverdraw, 0, 'f', 3)
+                             .arg(holeTolerance, 0, 'g', 3)
+                             .arg(row.meanHoleFraction < holeTolerance ? 1 : 0)
                              .arg(i == sweep.pickIndex ? 1 : 0),
                          out);
         }
         return sweep;
+    }
+
+    //! O2's frames over @a path at the coverage its sweep against O1 picks
+    //! under @a holeTolerance; oracleFrames() says how they are drawn and cached
+    OracleFrames o2Frames(PointCloudFixture& fixture, const EvalPath& path,
+                          const QString& cacheRoot, double holeTolerance,
+                          std::ostream& out = std::cout,
+                          const QByteArray& shaderHash = pointCloudShaderHash())
+    {
+        const OracleSet o1 = oracleSet(fixture, path, o1Config(), cacheRoot, shaderHash);
+        bool allCached = o1.fromCache;
+        QVector<OracleSet> sets;
+        for (float coverage : kO2Coverages) {
+            sets.append(oracleSet(fixture, path, o2Config(coverage), cacheRoot, shaderHash));
+            allCached = allCached && sets.constLast().fromCache;
+        }
+
+        OracleFrames result;
+        result.oracle = Oracle::O2;
+        result.sweep = coverageSweep(o1, sets, path, holeTolerance, out);
+        const OracleSet& picked = sets.at(result.sweep.pickIndex);
+        result.spacingCoverage = picked.config.spacingCoverage;
+        result.frames = picked.frames;
+        result.fromCache = allCached;
+        return result;
     }
 
     //! @a oracle's frame at every pose of @a path, drawn by @a fixture into its
@@ -7701,9 +7738,9 @@ namespace {
     //! poses, oracle configuration, EDL setting and @a shaderHash drew them
     //! before. O2 runs its coverage sweep first, against O1, writes the sweep's
     //! oracleCsv lines to @a out, and hands back the frames at the coverage it
-    //! picked. A render leaves @a fixture at the oracle's last pose with every
-    //! leaf resident, and a cache hit leaves it untouched, so a candidate
-    //! measured after the oracles wants a fixture of its own.
+    //! picks under kO2HoleTolerance. A render leaves @a fixture at the oracle's
+    //! last pose with every leaf resident, and a cache hit leaves it untouched,
+    //! so a candidate measured after the oracles wants a fixture of its own.
     OracleFrames oracleFrames(PointCloudFixture& fixture, const EvalPath& path, Oracle oracle,
                               const QString& cacheRoot, std::ostream& out = std::cout,
                               const QByteArray& shaderHash = pointCloudShaderHash())
@@ -7724,20 +7761,8 @@ namespace {
         case Oracle::O3:
             take(oracleSet(fixture, path, o3Config(), cacheRoot, shaderHash));
             break;
-        case Oracle::O2: {
-            const OracleSet o1 = oracleSet(fixture, path, o1Config(), cacheRoot, shaderHash);
-            bool allCached = o1.fromCache;
-            QVector<OracleSet> sets;
-            for (float coverage : kO2Coverages) {
-                sets.append(oracleSet(fixture, path, o2Config(coverage), cacheRoot, shaderHash));
-                allCached = allCached && sets.constLast().fromCache;
-            }
-
-            result.sweep = coverageSweep(o1, sets, path, out);
-            take(sets.at(result.sweep.pickIndex));
-            result.fromCache = allCached;
-            break;
-        }
+        case Oracle::O2:
+            return o2Frames(fixture, path, cacheRoot, kO2HoleTolerance, out, shaderHash);
         }
         return result;
     }
@@ -7764,6 +7789,12 @@ namespace {
 
     //! Poses of the boundary path O2's sweep case walks
     constexpr int kO2SweepPoseCount = 2;
+    //! O2's hole tolerance on the plane. The plane is dense on screen at its
+    //! boundary path, so coverage 1 holes only about 3e-4 of O1's footprint,
+    //! under kO2HoleTolerance, and the tile's rule would pick coverage 1
+    //! there. A third of that holing keeps coverage 1 out of the pick, so the
+    //! cases can tell the pick from the narrowest sprites.
+    constexpr double kPlaneO2HoleTolerance = 1.0e-4;
 
     //! How far, in pixels, a pixel the twin and the GPU disagree on may sit
     //! from one the other side lights. A sprite edge rounds to either side,
@@ -7829,7 +7860,7 @@ TEST_CASE("O1 at a perspective pose holds every pixel O3 lights there up to a sp
     CHECK(reference.litCount > reference.mask.count());
 }
 
-TEST_CASE("O2's coverage sweep picks the fewest holes that stay under the overdraw bound",
+TEST_CASE("O2's coverage sweep picks the smallest coverage that holes under the tolerance",
           "[PointCloudStreaming][PointCloudEval]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -7841,7 +7872,8 @@ TEST_CASE("O2's coverage sweep picks the fewest holes that stay under the overdr
 
     PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
     std::ostringstream output;
-    const OracleFrames o2 = oracleFrames(fixture, path, Oracle::O2, cacheRoot.path(), output);
+    const OracleFrames o2 = o2Frames(fixture, path, cacheRoot.path(), kPlaneO2HoleTolerance,
+                                     output);
     const QStringList lines = linesWithPrefix(output, QStringLiteral("oracleCsv,"));
 
     constexpr int kHeaderLines = 1;
@@ -7852,7 +7884,7 @@ TEST_CASE("O2's coverage sweep picks the fewest holes that stay under the overdr
     CHECK(lines.constFirst().startsWith(QStringLiteral("oracleCsv,path,oracle,coverage,")));
 
     REQUIRE(o2.sweep.pickIndex >= 0);
-    CHECK(o2.sweep.pickWithinOverdraw);
+    CHECK(o2.sweep.pickWithinTolerance);
     const CoverageRow& picked = o2.sweep.rows.at(o2.sweep.pickIndex);
     for (int i = 0; i < coverageCount; i++) {
         const CoverageRow& row = o2.sweep.rows.at(i);
@@ -7861,27 +7893,69 @@ TEST_CASE("O2's coverage sweep picks the fewest holes that stay under the overdr
         CHECK(row.spacingCoverage == kO2Coverages.at(size_t(i)));
         CHECK(fields.at(1) == path.name);
         CHECK(fields.at(2) == QStringLiteral("O2"));
+        CHECK(fields.at(fields.size() - 3).toDouble() == kPlaneO2HoleTolerance);
         CHECK(fields.constLast() == (i == o2.sweep.pickIndex ? QStringLiteral("1")
                                                              : QStringLiteral("0")));
-        if (row.worstOverdraw < kMaxO2Overdraw) {
-            CHECK(picked.meanHoleFraction <= row.meanHoleFraction);
-        }
         //Wider sprites draw more of the target over again
         if (i > 0) {
             CHECK(row.meanOverdraw >= o2.sweep.rows.at(i - 1).meanOverdraw);
         }
     }
 
-    CHECK(picked.worstOverdraw < kMaxO2Overdraw);
+    //The CSV's picked row is its first row under the tolerance it states
+    const auto underTolerance = [&](int i) {
+        const QStringList fields = lines.at(kHeaderLines + i).split(QLatin1Char(','));
+        return fields.at(fields.size() - 2) == QStringLiteral("1");
+    };
+    int firstUnder = -1;
+    for (int i = 0; i < coverageCount && firstUnder < 0; i++) {
+        if (underTolerance(i)) {
+            firstUnder = i;
+        }
+    }
+    CHECK(firstUnder == o2.sweep.pickIndex);
     //The hole column moves: the narrowest sprites open holes the pick closes
     const CoverageRow& narrowest = o2.sweep.rows.constFirst();
     CHECK(narrowest.meanHoleFraction > 0.0);
     CHECK(narrowest.meanHoleFraction > picked.meanHoleFraction);
     CHECK(o2.spacingCoverage == picked.spacingCoverage);
     CHECK(o2.frames.size() == kO2SweepPoseCount);
-    //The sweep has both sides of the bound to choose between
-    CHECK(o2.sweep.rows.constLast().worstOverdraw >= kMaxO2Overdraw);
+    //The sweep has both sides of the tolerance to choose between
+    CHECK(narrowest.meanHoleFraction >= kPlaneO2HoleTolerance);
     CHECK(o2.sweep.rows.constLast().meanOverdraw > o2.sweep.rows.constFirst().meanOverdraw);
+}
+
+TEST_CASE("O2's pick falls back to the fewest holes, smaller coverage first, when none is under the tolerance",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const auto sweepOf = [](const QVector<double>& holes) {
+        CoverageSweep sweep;
+        for (int i = 0; i < holes.size(); i++) {
+            CoverageRow row;
+            row.spacingCoverage = kO2Coverages.at(size_t(i));
+            row.meanHoleFraction = holes.at(i);
+            sweep.rows.append(row);
+        }
+        pickCoverage(sweep);
+        return sweep;
+    };
+
+    constexpr double kUnder = kO2HoleTolerance / 2.0;
+    constexpr double kFewer = kUnder / 2.0;
+    constexpr double kAbove = kO2HoleTolerance * 2.0;
+    constexpr double kMore = kAbove * 2.0;
+
+    //The smallest coverage under the tolerance wins over one with fewer holes
+    const CoverageSweep within = sweepOf({kAbove, kUnder, kFewer});
+    CHECK(within.pickWithinTolerance);
+    CHECK(within.pickIndex == 1);
+
+    //None under: the fewest holes, and of two equal rows the smaller coverage
+    const CoverageSweep fallback = sweepOf({kMore, kAbove, kMore, kAbove});
+    CHECK_FALSE(fallback.pickWithinTolerance);
+    CHECK(fallback.pickIndex == 1);
+
+    CHECK(sweepOf({}).pickIndex == -1);
 }
 
 TEST_CASE("O3 drawn twice at one pose lights the same pixels",
@@ -9030,19 +9104,67 @@ namespace {
     //! the rule sized the level too small rather than the level missing
     constexpr float kLevelAloneFixedPointSizePx = 16.0f;
 
-    //! M7: at every pose of @a path, each level from @a firstLevel to
-    //! @a lastLevel drawn alone (minLevel = maxLevel = the level, every budget
-    //! past the whole cloud), once at the default sizing and once at
-    //! kLevelAloneFixedPointSizePx, read against @a o1 of the same pose. One
-    //! m7Csv line per level and pose goes to @a out. The fixture's budgets,
-    //! coverage and shading are put back the way they were.
-    QVector<LevelRecord> litFractionByLevel(PointCloudFixture& fixture, const EvalPath& path,
-                                            const OracleFrames& o1, int firstLevel,
-                                            int lastLevel, std::ostream& out = std::cout)
-    {
-        REQUIRE(o1.frames.size() == path.poses.size());
-        REQUIRE(firstLevel <= lastLevel);
+    //! Section 5's M7 range: the shallowest level drawn alone, and the deepest
+    //! where the octree goes that far
+    constexpr int kM7FirstLevel = 4;
+    constexpr int kM7LastLevel = 10;
 
+    //! One level and the path it is drawn alone on, with O1 over that path
+    struct LevelPath {
+        int level = 0;
+        EvalPath path;
+        OracleFrames o1;
+    };
+
+    //! @a path renamed for the one level drawn alone on it, so every level's
+    //! m7Csv lines name a path of their own
+    EvalPath levelAlonePath(EvalPath path, int level)
+    {
+        path.name = QStringLiteral("%1-L%2").arg(path.name).arg(level);
+        return path;
+    }
+
+    //! Each level from @a firstLevel to @a lastLevel on the path
+    //! @a pathForLevel builds for it, with O1 over that path drawn by
+    //! @a oracleFixture or read from under @a cacheRoot
+    template <typename PathForLevel>
+    QVector<LevelPath> levelPaths(PointCloudFixture& oracleFixture, int firstLevel,
+                                  int lastLevel, const QString& cacheRoot,
+                                  PathForLevel pathForLevel, std::ostream& out = std::cout)
+    {
+        REQUIRE(firstLevel <= lastLevel);
+        QVector<LevelPath> paths;
+        for (int level = firstLevel; level <= lastLevel; level++) {
+            LevelPath levelPath;
+            levelPath.level = level;
+            levelPath.path = levelAlonePath(pathForLevel(level), level);
+            levelPath.o1 = oracleFrames(oracleFixture, levelPath.path, Oracle::O1, cacheRoot, out);
+            paths.append(levelPath);
+        }
+        return paths;
+    }
+
+    //! The entry of @a paths for @a level
+    const LevelPath& levelPathAt(const QVector<LevelPath>& paths, int level)
+    {
+        const auto found = std::find_if(paths.cbegin(), paths.cend(),
+                                        [level](const LevelPath& entry) {
+                                            return entry.level == level;
+                                        });
+        REQUIRE(found != paths.cend());
+        return *found;
+    }
+
+    //! M7: each level of @a paths drawn alone (minLevel = maxLevel = the
+    //! level, every budget past the whole cloud) at every pose of its own
+    //! path, once at the default sizing and once at
+    //! kLevelAloneFixedPointSizePx, read against its path's O1 at the same
+    //! pose. One m7Csv line per level and pose goes to @a out. The fixture's
+    //! budgets, coverage and shading are put back the way they were.
+    QVector<LevelRecord> litFractionByLevel(PointCloudFixture& fixture,
+                                            const QVector<LevelPath>& paths,
+                                            std::ostream& out = std::cout)
+    {
         const cwRenderBudgets savedBudgets = fixture.budgets();
         const float savedCoverage = fixture.render().spacingCoverage();
         const cwPointCloudShading savedShading = fixture.render().shading();
@@ -9062,24 +9184,27 @@ namespace {
                      out);
 
         QVector<LevelRecord> records;
-        for (int position = 0; position < path.poses.size(); position++) {
-            const Pose& pose = path.poses.at(position);
-            const PixelMask& entitled = o1.frames.at(position).mask;
-            fixture.setPose(pose.view, pose.projection);
+        for (const LevelPath& levelPath : paths) {
+            const EvalPath& path = levelPath.path;
+            REQUIRE(levelPath.o1.frames.size() == path.poses.size());
 
-            for (int level = firstLevel; level <= lastLevel; level++) {
-                cwRenderBudgets budgets = oracleBudgets(fixture.manifest(),
-                                                        kLevelAloneScreenSpaceErrorPx);
-                budgets.minLevel = level;
-                budgets.maxLevel = level;
-                fixture.setBudgets(budgets);
+            cwRenderBudgets budgets = oracleBudgets(fixture.manifest(),
+                                                    kLevelAloneScreenSpaceErrorPx);
+            budgets.minLevel = levelPath.level;
+            budgets.maxLevel = levelPath.level;
+            fixture.setBudgets(budgets);
+
+            for (int position = 0; position < path.poses.size(); position++) {
+                const Pose& pose = path.poses.at(position);
+                const PixelMask& entitled = levelPath.o1.frames.at(position).mask;
+                fixture.setPose(pose.view, pose.projection);
                 shadeWith(cwPointCloudShading());
                 fixture.renderUntilQuiet();
                 renderUntilSettled(fixture);
 
                 LevelRecord record;
                 record.pose = pose.index;
-                record.level = level;
+                record.level = levelPath.level;
                 const PixelMask lit = litMask(fixture);
                 record.litFraction = litFractionOf(lit, entitled);
                 record.holes = holeStats(lit, entitled);
@@ -9093,7 +9218,7 @@ namespace {
                 writeCsvLine(QStringLiteral("m7Csv,%1,%2,%3,%4,%5,%6,%7,%8,%9")
                                  .arg(path.name)
                                  .arg(pose.index)
-                                 .arg(level)
+                                 .arg(levelPath.level)
                                  .arg(record.litFraction, 0, 'f', kFractionDecimals)
                                  .arg(record.holes.fraction, 0, 'f', kFractionDecimals)
                                  .arg(record.holes.count)
@@ -9130,12 +9255,20 @@ namespace {
 
 namespace {
 
+    //! The first @a poseCount poses of the plane's boundary path for @a level
+    EvalPath planeLevelPath(QRhi* rhi, int level, int poseCount)
+    {
+        const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+        EvalPath path = levelBoundaryPath(manifest, kHalfHdTargetSize,
+                                          rhi->clipSpaceCorrMatrix(), level);
+        path.poses.resize(poseCount);
+        return path;
+    }
+
     //! The plane's zoomed-in poses the metric cases walk
     EvalPath planeMetricPath(QRhi* rhi, int poseCount = kSweptPoseCount)
     {
-        EvalPath path = planeBoundaryPath(rhi, kHalfHdTargetSize);
-        path.poses.resize(poseCount);
-        return path;
+        return planeLevelPath(rhi, deepestLevel(*planeCache().source.manifest), poseCount);
     }
 
     //! The header's fields and every data line's, which have to agree
@@ -9197,8 +9330,6 @@ namespace {
     //! Section 13's levels on the BC tile: 5 still closes the surface, 7 opens it
     constexpr int kTileClosedLevel = 5;
     constexpr int kTileOpenLevel = 7;
-    //! Section 5's M7 range starts at level 3
-    constexpr int kTileFirstLevelAlone = 3;
 
     //! The tile cases walk every this many poses of P2 and P2z: the oracles
     //! draw nine renders a pose at the finest threshold, which on a 76 M point
@@ -9216,15 +9347,22 @@ namespace {
         return strided;
     }
 
+    //! The tile's boundary path for @a level as the eval cases walk it
+    EvalPath tileLevelPath(QRhi* rhi, const cwPointOctreeManifest& manifest,
+                           const EvalConfig& config, int level)
+    {
+        return everyNthPose(levelBoundaryPath(manifest, config.targetSize,
+                                              rhi->clipSpaceCorrMatrix(), level,
+                                              config.budgets),
+                            kTileBoundaryPoseStride);
+    }
+
     //! The tile's zoomed-in sub-path as the eval cases walk it
     EvalPath tileBoundaryPath(QRhi* rhi, const cwPointOctreeManifest& manifest,
                               const EvalConfig& config)
     {
-        const int boundaryLevel = std::min(kTileBoundaryLevel, deepestLevel(manifest));
-        return everyNthPose(levelBoundaryPath(manifest, config.targetSize,
-                                              rhi->clipSpaceCorrMatrix(), boundaryLevel,
-                                              config.budgets),
-                            kTileBoundaryPoseStride);
+        return tileLevelPath(rhi, manifest, config,
+                             std::min(kTileBoundaryLevel, deepestLevel(manifest)));
     }
 }
 
@@ -9523,7 +9661,9 @@ TEST_CASE("M1: O2 at coverage 1 agrees less with O1 than O2 at its pick",
     PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
     std::ostringstream output;
     const OracleFrames o1 = oracleFrames(fixture, path, Oracle::O1, cacheRoot.path(), output);
-    const OracleFrames o2 = oracleFrames(fixture, path, Oracle::O2, cacheRoot.path(), output);
+    //The plane's own tolerance, for the reason kPlaneO2HoleTolerance gives
+    const OracleFrames o2 = o2Frames(fixture, path, cacheRoot.path(), kPlaneO2HoleTolerance,
+                                     output);
     const OracleSet narrowest = oracleSet(fixture, path, o2Config(kO2Coverages.front()),
                                           cacheRoot.path(), pointCloudShaderHash());
     REQUIRE(o2.spacingCoverage != kO2Coverages.front());
@@ -9724,18 +9864,21 @@ TEST_CASE("M7: the finest level of a cloud sparser than its grid lights less tha
     //The plane's step is coarser than the finest level's grid
     REQUIRE(manifest.spacing(finest) < kPlaneStep);
 
-    const EvalPath path = planeMetricPath(rhi.get(), kO2SweepPoseCount);
+    //Each level on its own boundary path, where the cut starts asking for it
     PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
     std::ostringstream output;
-    const OracleFrames o1 = oracleFrames(oracleFixture, path, Oracle::O1, cacheRoot.path(),
-                                         output);
+    const QVector<LevelPath> paths = levelPaths(
+        oracleFixture, kRootLevel + 1, finest, cacheRoot.path(),
+        [&](int level) { return planeLevelPath(rhi.get(), level, kO2SweepPoseCount); },
+        output);
 
-    const auto run = [&](int firstLevel, int lastLevel) {
+    const auto run = [&](const QVector<LevelPath>& levels) {
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
-        return litFractionByLevel(fixture, path, o1, firstLevel, lastLevel);
+        return litFractionByLevel(fixture, levels, output);
     };
-    const QVector<LevelRecord> records = run(kRootLevel + 1, finest);
-    const QVector<LevelRecord> repeat = run(coarser, coarser);
+    const QVector<LevelRecord> records = run(paths);
+    const QVector<LevelRecord> repeat = run({levelPathAt(paths, coarser)});
+    requireLevelPresent(records, coarser);
     requireLevelPresent(records, finest);
 
     const auto lit = [](const LevelRecord& record) { return record.litFraction; };
@@ -9763,27 +9906,35 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
     const int leaf = deepestLevel(manifest);
     REQUIRE(leaf >= kTileOpenLevel);
 
+    const int lastLevel = std::min(kM7LastLevel, leaf);
+    static_assert(kM7FirstLevel <= kTileClosedLevel);
+
     const EvalConfig config = candidateConfig(Candidate::Default);
-    const EvalPath path = tileBoundaryPath(rhi.get(), manifest, config);
     const QString cacheRoot = evalCacheRoot();
 
-    //EDL on, as the orbit case draws its oracles, so both share O1's cache entry
+    //Each level on its own boundary path, where the cut starts asking for it,
+    //with EDL on as the orbit case draws its oracles
     PointCloudFixture oracleFixture(rhi.get(), cache, config.targetSize);
     oracleFixture.setEdlEnabled(true);
-    const OracleFrames o1 = oracleFrames(oracleFixture, path, Oracle::O1, cacheRoot);
+    const QVector<LevelPath> paths = levelPaths(
+        oracleFixture, kM7FirstLevel, lastLevel, cacheRoot,
+        [&](int level) { return tileLevelPath(rhi.get(), manifest, config, level); });
 
-    const auto run = [&](int firstLevel, int lastLevel) {
+    const auto run = [&](const QVector<LevelPath>& levels, std::ostream& out) {
         PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
-        return litFractionByLevel(fixture, path, o1, firstLevel, lastLevel);
+        return litFractionByLevel(fixture, levels, out);
     };
-    const QVector<LevelRecord> records = run(kTileFirstLevelAlone, leaf);
-    const QVector<LevelRecord> repeat = run(kTileClosedLevel, kTileClosedLevel);
+    const QVector<LevelRecord> records = run(paths, std::cout);
+    //The repeat only measures the noise, so its lines stay out of the log
+    std::ostringstream repeatOutput;
+    const QVector<LevelRecord> repeat = run({levelPathAt(paths, kTileClosedLevel)}, repeatOutput);
 
     const auto lit = [](const LevelRecord& record) { return record.litFraction; };
     const auto litFixed = [](const LevelRecord& record) { return record.litFractionFixed; };
-    for (int level = kTileFirstLevelAlone; level <= leaf; level++) {
+    for (const LevelPath& levelPath : paths) {
+        const int level = levelPath.level;
         writeCsvLine(QStringLiteral("m7Mean,%1,%2,%3,%4")
-                         .arg(path.name)
+                         .arg(levelPath.path.name)
                          .arg(level)
                          .arg(meanAtLevel(records, level, lit), 0, 'f', kFractionDecimals)
                          .arg(meanAtLevel(records, level, litFixed), 0, 'f', kFractionDecimals));
@@ -9798,6 +9949,7 @@ TEST_CASE("M7: on a tile, level 7 alone lights less than level 5 until its sprit
     INFO("level " << kTileClosedLevel << " lights " << closedLit << ", level "
          << kTileOpenLevel << " " << openLit << " and " << openFixed << " at "
          << kLevelAloneFixedPointSizePx << " px; noise " << noise);
+    requireLevelPresent(records, kTileClosedLevel);
     requireLevelPresent(records, kTileOpenLevel);
     CHECK(openLit < closedLit - noise);
     CHECK(openFixed > openLit + noise);
