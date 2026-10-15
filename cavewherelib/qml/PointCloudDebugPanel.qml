@@ -34,6 +34,8 @@ QC.Popup {
     readonly property int screenSpaceErrorDecimals: 1
     readonly property int spacingCoverageScale: 100
     readonly property int spacingCoverageDecimals: 2
+    readonly property int governorSlewScale: 100
+    readonly property int governorSlewDecimals: 2
     readonly property int labelColumnWidth: Math.round(150 * Theme.fontScale)
 
     // Left open while the camera orbits, with key focus left on the 3D view so
@@ -86,6 +88,21 @@ QC.Popup {
                 text: qsTr("Eviction hold")
                 knobValue: panelId.renderingSettings.evictionHold
                 onToggled: panelId.renderingSettings.evictionHold = checked
+            }
+        }
+
+        RowLayout {
+            KnobLabel { text: qsTr("Governor slew") }
+
+            KnobSpinBox {
+                objectName: "governorSlewSpinBox"
+                enabled: panelId.renderingSettings.inflationGovernor
+                valueScale: panelId.governorSlewScale
+                decimals: panelId.governorSlewDecimals
+                from: Math.round(panelId.renderingSettings.minimumGovernorSlew * panelId.governorSlewScale)
+                to: Math.round(panelId.renderingSettings.maximumGovernorSlew * panelId.governorSlewScale)
+                knobValue: panelId.renderingSettings.governorSlew
+                onKnobEdited: (editedValue) => panelId.renderingSettings.governorSlew = editedValue
             }
         }
 

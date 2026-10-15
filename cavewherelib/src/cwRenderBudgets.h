@@ -49,6 +49,14 @@ namespace cw::budgets {
     constexpr int kRootLevel = 0;
     constexpr int kDefaultMinLevel = kRootLevel;
     constexpr bool kDefaultInflationGovernor = true;
+
+    // The share of the gap to the governor's target inflation the frame's own
+    // inflation closes each frame, in log space. 1 jumps to the target in one
+    // frame, which is the governor's own step.
+    constexpr double kDefaultGovernorSlew = 1.0;
+    constexpr double kMinGovernorSlew = 0.05;
+    constexpr double kMaxGovernorSlew = 1.0;
+
     constexpr bool kDefaultEvictionHold = false;
 
     constexpr qint64 kDefaultGpuBudgetBytes = kDefaultGpuBudgetMb * kBytesPerMegabyte;
@@ -85,6 +93,10 @@ struct cwRenderBudgets {
     //! The forest steps its screen-space-error inflation under budget pressure;
     //! off holds it at 1
     bool inflationGovernor = cw::budgets::kDefaultInflationGovernor;
+
+    //! The share of the log-space gap to the governor's target the inflation a
+    //! frame uses closes per frame, in (0, 1]; 1 takes the target at once
+    double governorSlew = cw::budgets::kDefaultGovernorSlew;
 
     //! Resident nodes stay resident, over the GPU budget if it comes to that
     bool evictionHold = cw::budgets::kDefaultEvictionHold;

@@ -20,6 +20,15 @@
 #include "cwPointOctreeSelection.h"
 #include "cwRHIObject.h"
 #include "cwRenderBudgets.h"
+#include "cwRenderMemoryLedger.h"
+
+//Std includes
+#include <cmath>
+#include <limits>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <vector>
 
 namespace {
 
@@ -149,6 +158,209 @@ namespace {
             points += manifest.nodes.at(node.node).pointCount;
         }
         return points;
+    }
+
+    // ---- The governor's slew ------------------------------------------------
+
+    constexpr double kQuarterSlew = 0.25;
+    constexpr double kLogTolerance = 1e-9;
+
+    //The inflation at which the level one nodes stop refining. Just above 1,
+    //so the first slewed frame of a step up already clears it.
+    constexpr double kLevelOneBreakpoint = 1.01;
+
+    //The cut at inflation 1, and at any inflation past the breakpoint
+    constexpr int kFullCutNodes = 17;
+    constexpr int kCoarseCutNodes = 9;
+
+    //Room for the coarse cut and short of the full one, and room for the full
+    //one past the relax margin
+    constexpr int kTightNodes = 13;
+    constexpr int kRoomyNodes = 40;
+
+    constexpr int kZeroBudgetFrames = 16;
+    constexpr int kRoomyFrames = 12;
+    constexpr int kMostFrames = 200;
+
+    qint64 bytesOfNodes(int count)
+    {
+        return qint64(count) * kPointsPerNode * cw::octree::kBytesPerPoint;
+    }
+
+    //! What the forest takes off the GPU budget before the clouds see any of it
+    qint64 bytesOutsideClouds()
+    {
+        const auto* ledger = cwRenderMemoryLedger::instance();
+        return ledger->totalBytes(cwRenderMemoryLedger::Residency::Gpu)
+               - ledger->bytes(cwRenderMemoryLedger::Category::PointCloudGeometry,
+                               cwRenderMemoryLedger::Residency::Gpu);
+    }
+
+    //! The inflation @a k frames into a slew from @a from toward @a to
+    double slewedInflation(double from, double to, double slew, int k)
+    {
+        const double closed = 1.0 - std::pow(1.0 - slew, k);
+        return std::exp(std::log(from) + closed * (std::log(to) - std::log(from)));
+    }
+
+    //! The frame a slew of @a ratio arrives on: the first whose remaining
+    //! log-space gap is within kSseSlewArrivalLogGap
+    int framesToArrive(double slew, double ratio)
+    {
+        double gap = std::abs(std::log(ratio));
+        int frames = 0;
+        do {
+            gap *= 1.0 - slew;
+            frames++;
+        } while (gap > cw::octree::kSseSlewArrivalLogGap);
+        return frames;
+    }
+
+    QVector<int> nodesOf(const cw::octree::Selection& selection)
+    {
+        QVector<int> nodes;
+        for (const cw::octree::SelectedNode& node : selection.nodes) {
+            nodes.append(node.node);
+        }
+        return nodes;
+    }
+
+    //! One tree under one governed camera whose level one nodes stop refining
+    //! at kLevelOneBreakpoint, framed the way the live view frames it: the
+    //! governor's step at the top, then the cut
+    struct GovernedTree {
+        cwPointOctreeManifest manifest = buildManifest();
+        StubCloud cloud;
+        cwPointCloudForest forest;
+        cwFrustum frustum;
+        cwRHIObject::RenderData renderData = orthoRenderData();
+        cwRenderBudgets budgets;
+
+        explicit GovernedTree(double slew)
+        {
+            budgets.governorSlew = slew;
+            budgets.screenSpaceErrorPx = levelOneSpacingPx() / kLevelOneBreakpoint;
+            forest.setTree(&cloud, &manifest);
+        }
+
+        void frame()
+        {
+            forest.advance(budgets);
+            renderData.budgets = budgets;
+            forest.select(renderData, frustum, drawsEverything);
+        }
+
+        void setRoomFor(int nodes)
+        {
+            budgets.gpuBudgetBytes = bytesOutsideClouds() + bytesOfNodes(nodes);
+        }
+
+        int cutNodes() const
+        {
+            return int(forest.selectionFor(&cloud).nodes.size());
+        }
+
+        //! The cut a camera with this one's view and a fixed @a inflation selects
+        QVector<int> cutAtFixedInflation(double inflation) const
+        {
+            cwPointCloudForest reference;
+            reference.setTree(&cloud, &manifest);
+            cwRHIObject::RenderData fixed = renderData;
+            fixed.budgets.screenSpaceErrorPx = budgets.screenSpaceErrorPx * inflation;
+            reference.select(fixed, frustum, drawsEverything);
+            return nodesOf(reference.selectionFor(&cloud));
+        }
+
+        //! Frames until the governor's target leaves @a target, at most kMostFrames
+        bool frameUntilTargetLeaves(double target)
+        {
+            for (int i = 0; i < kMostFrames; i++) {
+                frame();
+                if (forest.sseInflationTarget() != target) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        //! Frames from the one the target moved on until the inflation takes
+        //! it, at most kMostFrames
+        int framesUntilArrived()
+        {
+            int frames = 1;
+            while (forest.sseInflation() != forest.sseInflationTarget() && frames < kMostFrames) {
+                frame();
+                frames++;
+            }
+            return frames;
+        }
+
+    private:
+        double levelOneSpacingPx() const
+        {
+            cwPointCloudForest probe;
+            probe.setTree(&cloud, &manifest);
+            probe.select(orthoRenderData(), frustum, drawsEverything);
+            for (const cw::octree::SelectedNode& node : probe.selectionFor(&cloud).nodes) {
+                if (manifest.nodes.at(node.node).level == 1) {
+                    return node.projectedSpacingPx;
+                }
+            }
+            return 0.0;
+        }
+    };
+
+    //! One frame of a slew: the inflation the forest used, the one the slew
+    //! puts there, and the governor's target
+    struct SlewFrame {
+        int frame = 0;
+        double inflation = 1.0;
+        double expected = 1.0;
+        double target = 1.0;
+
+        bool onCurve(double logTolerance) const
+        {
+            return std::abs(std::log(inflation) - std::log(expected)) <= logTolerance;
+        }
+    };
+
+    std::string describe(const std::optional<SlewFrame>& frame)
+    {
+        if (!frame.has_value()) {
+            return "every frame held";
+        }
+        std::ostringstream text;
+        text.precision(17);
+        text << "frame " << frame->frame << " used " << frame->inflation << " where the slew puts "
+             << frame->expected << ", target " << frame->target;
+        return text.str();
+    }
+
+    //! The first of the frames before @a arrival that reports itself settled
+    //! while still short of its target, counted from the frame the target
+    //! moved away from @a from on
+    std::optional<SlewFrame> firstSettledFrame(GovernedTree& governed, double from, int arrival)
+    {
+        const double to = governed.forest.sseInflationTarget();
+        for (int k = 1; k < arrival; k++) {
+            if (!governed.forest.isSettling(governed.budgets)) {
+                return SlewFrame{k, governed.forest.sseInflation(),
+                                 slewedInflation(from, to, kQuarterSlew, k), to};
+            }
+            governed.frame();
+        }
+        return std::nullopt;
+    }
+
+    //! @a governed stepped up once from 1 to kSseInflationStep under a budget
+    //! that holds the coarse cut alone, on the frame the target moved
+    void stepUpOnce(GovernedTree& governed)
+    {
+        governed.setRoomFor(kTightNodes);
+        governed.frame();
+        REQUIRE(governed.cutNodes() == kFullCutNodes);
+        REQUIRE(governed.frameUntilTargetLeaves(1.0));
+        REQUIRE(governed.forest.sseInflationTarget() == cw::octree::kSseInflationStep);
     }
 }
 
@@ -311,5 +523,234 @@ TEST_CASE("cwPointCloudForest coarsens one governor for every cloud",
 
         forest.removeTree(&eastCloud);
         CHECK(forest.sseInflation() == 1.0);
+    }
+}
+
+TEST_CASE("A slew of one steps the inflation exactly as the governor always has",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    GovernedTree governed(cw::budgets::kDefaultGovernorSlew);
+
+    std::vector<double> inflations;
+    std::vector<double> targets;
+    const auto frames = [&](int count) {
+        for (int i = 0; i < count; i++) {
+            governed.frame();
+            inflations.push_back(governed.forest.sseInflation());
+            targets.push_back(governed.forest.sseInflationTarget());
+        }
+    };
+
+    governed.budgets.gpuBudgetBytes = 0;
+    frames(kZeroBudgetFrames);
+    governed.setRoomFor(kRoomyNodes);
+    frames(kRoomyFrames);
+
+    //The sequence the governor stepped through before it had a slew
+    const std::vector<double> pinned = {
+        1.0, 1.25, 1.5625, 1.953125, 2.44140625, 3.0517578125, 3.814697265625,
+        4.76837158203125, 5.9604644775390625, 7.450580596923828125,
+        9.31322574615478515625, 11.6415321826934814453125,
+        14.551915228366851806640625,
+        16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0, 16.0,
+        1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0
+    };
+    CHECK(inflations == pinned);
+    CHECK(targets == pinned);
+}
+
+TEST_CASE("A slewed step up closes the slew's share of the log-space gap each frame",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    GovernedTree governed(kQuarterSlew);
+    stepUpOnce(governed);
+
+    constexpr double kFrom = 1.0;
+    const double to = governed.forest.sseInflationTarget();
+    const int arrival = framesToArrive(kQuarterSlew, to / kFrom);
+
+    //The first frame short of arrival that is off the slewed curve, or that
+    //has already arrived; none on a governor that slews
+    std::optional<SlewFrame> firstOff;
+    for (int k = 1; k < arrival && !firstOff.has_value(); k++) {
+        const SlewFrame frame{k, governed.forest.sseInflation(),
+                              slewedInflation(kFrom, to, kQuarterSlew, k),
+                              governed.forest.sseInflationTarget()};
+        if (!frame.onCurve(kLogTolerance) || frame.inflation == to) {
+            firstOff = frame;
+        }
+        governed.frame();
+    }
+
+    INFO("arrival on frame " << arrival << "; " << describe(firstOff));
+    CHECK_FALSE(firstOff.has_value());
+    CHECK(governed.forest.sseInflation() == to);
+    CHECK(governed.forest.sseInflationTarget() == to);
+}
+
+TEST_CASE("A slewed step down takes as many frames as the step up of the same ratio",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    GovernedTree governed(kQuarterSlew);
+    stepUpOnce(governed);
+    const int upFrames = governed.framesUntilArrived();
+    const double inflated = governed.forest.sseInflation();
+    REQUIRE(inflated == cw::octree::kSseInflationStep);
+
+    governed.setRoomFor(kRoomyNodes);
+    REQUIRE(governed.frameUntilTargetLeaves(inflated));
+    REQUIRE(governed.forest.sseInflationTarget() == 1.0);
+    const int downFrames = governed.framesUntilArrived();
+
+    const int expected = framesToArrive(kQuarterSlew, cw::octree::kSseInflationStep);
+    INFO("up " << upFrames << " frames, down " << downFrames << ", expected " << expected);
+    CHECK(upFrames == expected);
+    CHECK(downFrames == upFrames);
+    CHECK(governed.forest.sseInflation() == 1.0);
+}
+
+TEST_CASE("Every frame of a slew cuts what a fixed threshold at the slewed inflation selects",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    GovernedTree governed(kQuarterSlew);
+    stepUpOnce(governed);
+    governed.framesUntilArrived();
+
+    governed.setRoomFor(kRoomyNodes);
+    REQUIRE(governed.frameUntilTargetLeaves(cw::octree::kSseInflationStep));
+    REQUIRE(governed.forest.sseInflationTarget() == 1.0);
+
+    const int arrival = framesToArrive(kQuarterSlew, cw::octree::kSseInflationStep);
+    bool coarseMidSlew = false;
+    std::optional<SlewFrame> cutOffItsOwnInflation;
+    std::optional<SlewFrame> cutOffTheCurve;
+    for (int k = 1; k <= arrival; k++) {
+        const double expected = k < arrival
+                                    ? slewedInflation(cw::octree::kSseInflationStep, 1.0,
+                                                      kQuarterSlew, k)
+                                    : 1.0;
+        const SlewFrame frame{k, governed.forest.sseInflation(), expected,
+                              governed.forest.sseInflationTarget()};
+        const QVector<int> cut = nodesOf(governed.forest.selectionFor(&governed.cloud));
+        if (!cutOffItsOwnInflation.has_value()
+            && cut != governed.cutAtFixedInflation(frame.inflation)) {
+            cutOffItsOwnInflation = frame;
+        }
+        if (!cutOffTheCurve.has_value() && cut != governed.cutAtFixedInflation(expected)) {
+            cutOffTheCurve = frame;
+        }
+        coarseMidSlew = coarseMidSlew || cut.size() == kCoarseCutNodes;
+        governed.frame();
+    }
+
+    {
+        INFO("cut against its own inflation: " << describe(cutOffItsOwnInflation));
+        CHECK_FALSE(cutOffItsOwnInflation.has_value());
+    }
+    {
+        INFO("cut against the slewed curve: " << describe(cutOffTheCurve));
+        CHECK_FALSE(cutOffTheCurve.has_value());
+    }
+
+    //The slew crosses the breakpoint, so the cut changes part way down
+    CHECK(coarseMidSlew);
+}
+
+TEST_CASE("The forest settles only once the slewed inflation has reached its target",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    GovernedTree governed(kQuarterSlew);
+    stepUpOnce(governed);
+
+    SECTION("on the way up") {
+        const int arrival = framesToArrive(kQuarterSlew, cw::octree::kSseInflationStep);
+        const std::optional<SlewFrame> settled = firstSettledFrame(governed, 1.0, arrival);
+        INFO("arrival on frame " << arrival << "; " << describe(settled));
+        CHECK_FALSE(settled.has_value());
+    }
+
+    SECTION("on the way down to an uninflated view, which has no probe left to run") {
+        governed.framesUntilArrived();
+        governed.setRoomFor(kRoomyNodes);
+        REQUIRE(governed.frameUntilTargetLeaves(cw::octree::kSseInflationStep));
+        REQUIRE(governed.forest.sseInflationTarget() == 1.0);
+
+        const int arrival = framesToArrive(kQuarterSlew, cw::octree::kSseInflationStep);
+        const std::optional<SlewFrame> settled =
+            firstSettledFrame(governed, cw::octree::kSseInflationStep, arrival);
+        INFO("arrival on frame " << arrival << "; " << describe(settled));
+        CHECK_FALSE(settled.has_value());
+
+        CHECK(governed.forest.sseInflation() == 1.0);
+        CHECK_FALSE(governed.forest.isSettling(governed.budgets));
+        governed.frame();
+        CHECK_FALSE(governed.forest.isSettling(governed.budgets));
+    }
+}
+
+TEST_CASE("The governor switched off drops a slewing inflation to 1 in one frame",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    GovernedTree governed(kQuarterSlew);
+    stepUpOnce(governed);
+    REQUIRE(governed.forest.sseInflation() > 1.0);
+
+    governed.budgets.inflationGovernor = false;
+    governed.frame();
+
+    CHECK(governed.forest.sseInflation() == 1.0);
+    CHECK(governed.forest.sseInflationTarget() == 1.0);
+    CHECK_FALSE(governed.forest.isSettling(governed.budgets));
+}
+
+TEST_CASE("A slewed governor short of GPU memory climbs at least every other frame",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    GovernedTree governed(kQuarterSlew);
+    governed.budgets.gpuBudgetBytes = 0;
+
+    //The governor's own climb from 1 takes one frame a step; a slew whose cut
+    //is over the budget ends on the frame after its step
+    const int steps = int(std::ceil(std::log(cw::octree::kMaxSseInflation)
+                                    / std::log(cw::octree::kSseInflationStep)));
+    constexpr int kFirstFrameSelectsNothing = 1;
+    constexpr int kFramesPerStep = 2;
+    const int mostFrames = kFirstFrameSelectsNothing + kFramesPerStep * steps;
+
+    int frames = 0;
+    while (governed.forest.sseInflation() < cw::octree::kMaxSseInflation && frames < kMostFrames) {
+        governed.frame();
+        frames++;
+    }
+
+    INFO("reached " << governed.forest.sseInflation() << " in " << frames << " frames, at most "
+         << mostFrames);
+    CHECK(governed.forest.sseInflation() == cw::octree::kMaxSseInflation);
+    CHECK(frames <= mostFrames);
+}
+
+TEST_CASE("The forest clamps a governor slew outside the knob's range",
+          "[PointCloudForest][PointCloudStreaming]")
+{
+    SECTION("a slew of zero arrives at the knob's slowest") {
+        GovernedTree governed(0.0);
+        stepUpOnce(governed);
+        const int expected =
+            framesToArrive(cw::budgets::kMinGovernorSlew, cw::octree::kSseInflationStep);
+        CHECK(governed.framesUntilArrived() == expected);
+        CHECK(governed.forest.sseInflation() == cw::octree::kSseInflationStep);
+    }
+
+    SECTION("a slew past one takes the target at once") {
+        constexpr double kPastWholeSlew = 2.0;
+        GovernedTree governed(kPastWholeSlew);
+        stepUpOnce(governed);
+        CHECK(governed.forest.sseInflation() == cw::octree::kSseInflationStep);
+    }
+
+    SECTION("a slew that is not a number takes the target at once") {
+        GovernedTree governed(std::numeric_limits<double>::quiet_NaN());
+        stepUpOnce(governed);
+        CHECK(governed.forest.sseInflation() == cw::octree::kSseInflationStep);
     }
 }

@@ -31,6 +31,12 @@ namespace cw::octree {
     constexpr double kSseInflationStep = 1.25;
     constexpr double kMaxSseInflation = 16.0;
 
+    //A slewed inflation within this log-space gap of the governor's target has
+    //arrived, and takes the target itself. About a 1% ratio, which no sprite
+    //shows, so the slew's exponential tail ends rather than keeping the frame
+    //loop drawing and the governor's target held.
+    constexpr double kSseSlewArrivalLogGap = 1e-2;
+
     //How far under the budget share the relaxed cut must fit before inflation steps back down
     constexpr double kSseRelaxMargin = 0.10;
 

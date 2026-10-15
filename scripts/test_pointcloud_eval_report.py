@@ -475,5 +475,213 @@ class ReportTest(unittest.TestCase):
         self.assertIn('href="report.html"', text)
 
 
+# One C-tight sweep under a slewed governor: the target steps once and the
+# inflation the frame used climbs to it over three frames
+SLEW_LOG = """\
+evalCsv,path,config,pose,frame,label,litFraction,sseInflation,sseInflationTarget,inflationRatio
+evalCsv,P2,C-tight,0,0,heading-0,0.50000,1.0000,1.0000,1.0000
+evalCsv,P2,C-tight,0,1,heading-0,0.50000,1.1180,1.2500,1.1180
+evalCsv,P2,C-tight,0,2,heading-0,0.50000,1.1822,1.2500,1.0574
+evalCsv,P2,C-tight,0,3,heading-0,0.50000,1.2500,1.2500,1.0574
+evalSummary,path,config,frames,widestInflation,inflationChanges
+evalSummary,P2,C-tight,4,1.2500,3
+"""
+
+# The same sweep from a log written before the target column
+UNSLEWED_LOG = """\
+evalCsv,path,config,pose,frame,label,litFraction,sseInflation,inflationRatio
+evalCsv,P2,C-tight,0,0,heading-0,0.50000,1.0000,1.0000
+evalCsv,P2,C-tight,0,1,heading-0,0.50000,1.2500,1.2500
+evalSummary,path,config,frames,widestInflation,inflationChanges
+evalSummary,P2,C-tight,2,1.2500,1
+"""
+
+# Two test cases sweep the same plane path under the same config. Catch2 names
+# each case on the duration line after its output, and runs the cases in a
+# random order, so the baseline holds them the other way around.
+SHARED_KEY_LOG = """\
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.90000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,1,0.90000
+0.443 s: M6: a binding point budget steps the inflation where the default budget holds it
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.80000
+evalCsv,plane/P2z,C-tight,0,1,heading-0,0.80000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,2,0.80000
+0.444 s: C-tight's point budget inflates the threshold where C-default leaves it at 1
+"""
+
+SHARED_KEY_BASELINE = """\
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.70000
+evalCsv,plane/P2z,C-tight,0,1,heading-0,0.70000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,2,0.70000
+0.444 s: C-tight's point budget inflates the threshold where C-default leaves it at 1
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.95000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,1,0.95000
+0.443 s: M6: a binding point budget steps the inflation where the default budget holds it
+"""
+
+# Two test cases each sweep the plane path under C-tight in a section named
+# "plane", so Catch2's innermost duration line names both runs alike; the
+# bench's evalCase line names each run's own case, and the baseline ran the
+# cases the other way around.
+SHARED_SECTION_LOG = """\
+evalCase,M6: a binding point budget steps the inflation
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.90000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,1,0.90000
+0.443 s: plane
+0.443 s: M6: a binding point budget steps the inflation
+evalCase,C-tight's point budget inflates the threshold, where C-default holds
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.80000
+evalCsv,plane/P2z,C-tight,0,1,heading-0,0.80000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,2,0.80000
+0.444 s: plane
+0.444 s: C-tight's point budget inflates the threshold, where C-default holds
+"""
+
+SHARED_SECTION_BASELINE = """\
+evalCase,C-tight's point budget inflates the threshold, where C-default holds
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.70000
+evalCsv,plane/P2z,C-tight,0,1,heading-0,0.70000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,2,0.70000
+0.444 s: plane
+0.444 s: C-tight's point budget inflates the threshold, where C-default holds
+evalCase,M6: a binding point budget steps the inflation
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,plane/P2z,C-tight,0,0,heading-0,0.95000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,plane/P2z,C-tight,1,0.95000
+0.443 s: plane
+0.443 s: M6: a binding point budget steps the inflation
+"""
+
+# A Frames sweep that quiets a frame later than its baseline at every pose:
+# the mean over the frames favors the baseline, the settled frames this run
+SETTLED_LOG = """\
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,P2,C-tight,0,0,heading-0,0.50000
+evalCsv,P2,C-tight,0,1,heading-0,0.90000
+evalCsv,P2,C-tight,0,2,heading-0,0.95000
+evalCsv,P2,C-tight,1,0,heading-5,0.60000
+evalCsv,P2,C-tight,1,1,heading-5,0.97000
+evalCsv,P2,C-tight,1,2,heading-5,0.97000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,P2,C-tight,6,0.81500
+"""
+
+SETTLED_BASELINE = """\
+evalCsv,path,config,pose,frame,label,ssimO3
+evalCsv,P2,C-tight,0,0,heading-0,0.40000
+evalCsv,P2,C-tight,0,1,heading-0,0.93000
+evalCsv,P2,C-tight,1,0,heading-5,0.50000
+evalCsv,P2,C-tight,1,1,heading-5,0.96000
+evalSummary,path,config,frames,meanSsimO3
+evalSummary,P2,C-tight,4,0.69750
+"""
+
+
+def report_text(log_text, baseline_text=None):
+    """The report built from @log_text, against @baseline_text when given"""
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        log_file = root / "run.log"
+        log_file.write_text(log_text, encoding="utf-8")
+        arguments = ["--log", str(log_file), "--out", str(root / "index.html")]
+        if baseline_text is not None:
+            baseline_file = root / "baseline.log"
+            baseline_file.write_text(baseline_text, encoding="utf-8")
+            arguments += ["--baseline", str(baseline_file)]
+        with contextlib.redirect_stdout(io.StringIO()):
+            report.main(arguments)
+        return (root / "index.html").read_text(encoding="utf-8")
+
+
+def assert_contains(test, needle, text):
+    """assertIn without the whole report in the failure message"""
+    test.assertTrue(needle in text, "the report has no {!r}".format(needle))
+
+
+def assert_lacks(test, needle, text):
+    test.assertFalse(needle in text, "the report has {!r}".format(needle))
+
+
+def settled_section(test, text):
+    """The report from the settled-frame SSIM heading on"""
+    assert_contains(test, SETTLED_HEADING, text)
+    return text[text.index(SETTLED_HEADING):] if SETTLED_HEADING in text else ""
+
+
+SETTLED_HEADING = "<h3>SSIM at the settled frame of each pose</h3>"
+
+
+def compared_cell(run, base, verdict=None, delta=None):
+    """A summary cell's run and baseline spans, with its verdict when given"""
+    cell = '<span class="cell-run">{}</span><span class="cell-base">base {}</span>'.format(
+        run, base)
+    if verdict is not None:
+        cell += '<span class="cell-base {}">Δ {}</span>'.format(verdict, delta)
+    return cell
+
+
+class SlewChartTest(unittest.TestCase):
+    def test_the_target_and_the_used_inflation_chart_together(self):
+        text = report_text(SLEW_LOG)
+        assert_contains(self, "<title>C-tight target</title>", text)
+        assert_contains(self, "<title>C-tight used</title>", text)
+        # One chart holds both lines
+        target = text.index("<title>C-tight target</title>")
+        used = text.index("<title>C-tight used</title>")
+        assert_lacks(self, "<svg", text[min(target, used):max(target, used)])
+
+    def test_a_log_before_the_target_column_charts_no_target(self):
+        text = report_text(UNSLEWED_LOG)
+        assert_lacks(self, "<title>C-tight target</title>", text)
+
+
+class BaselineMatchTest(unittest.TestCase):
+    def test_runs_sharing_path_and_config_match_their_own_test_case(self):
+        text = report_text(SHARED_KEY_LOG, SHARED_KEY_BASELINE)
+        # The one-frame run is the M6 case's in both logs, the two-frame run
+        # the C-tight case's, whatever order the cases ran in
+        assert_contains(self, compared_cell("1", "1"), text)
+        assert_contains(self, compared_cell("2", "2"), text)
+        assert_contains(self, compared_cell("0.90000", "0.95000", "worse", "-0.05"), text)
+        assert_contains(self, compared_cell("0.80000", "0.70000", "better", "+0.1"), text)
+
+    def test_runs_in_equally_named_sections_match_their_own_test_case(self):
+        text = report_text(SHARED_SECTION_LOG, SHARED_SECTION_BASELINE)
+        assert_contains(self, compared_cell("1", "1"), text)
+        assert_contains(self, compared_cell("2", "2"), text)
+        assert_contains(self, compared_cell("0.90000", "0.95000", "worse", "-0.05"), text)
+        assert_contains(self, compared_cell("0.80000", "0.70000", "better", "+0.1"), text)
+
+
+class SettledSsimTest(unittest.TestCase):
+    def test_ssim_is_compared_pose_by_pose_at_each_settled_frame(self):
+        text = report_text(SETTLED_LOG, SETTLED_BASELINE)
+        section = settled_section(self, text)
+        assert_contains(self, compared_cell("0.95000", "0.93000", "better", "+0.02"), section)
+        assert_contains(self, compared_cell("0.97000", "0.96000", "better", "+0.01"), section)
+
+    def test_settled_ssim_reads_the_last_frame_of_each_pose(self):
+        text = report_text(SETTLED_LOG)
+        section = settled_section(self, text)
+        assert_contains(self, '<td class="num">0.95000</td>', section)
+        assert_contains(self, '<td class="num">0.97000</td>', section)
+        assert_lacks(self, '<td class="num">0.90000</td>', section)
+
+
 if __name__ == "__main__":
     unittest.main()

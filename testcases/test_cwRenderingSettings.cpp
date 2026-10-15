@@ -359,6 +359,7 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
     constexpr int kIsolatedLevel = 2;
     constexpr double kFixedPointSizePx = 5.0;
     constexpr double kMaxPointSizePx = 12.0;
+    constexpr double kGovernorSlew = 0.25;
 
     // One knob each: how to move it off its default, what QSettings holds
     // afterward, and the notify signal that has to fire once.
@@ -383,6 +384,9 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         {"inflationGovernor", [&] { settings->setInflationGovernor(false); },
          QStringLiteral("rendering/pointCloud/inflationGovernor"), false,
          &cwRenderingSettings::inflationGovernorChanged},
+        {"governorSlew", [&] { settings->setGovernorSlew(kGovernorSlew); },
+         QStringLiteral("rendering/pointCloud/governorSlew"), kGovernorSlew,
+         &cwRenderingSettings::governorSlewChanged},
         {"evictionHold", [&] { settings->setEvictionHold(true); },
          QStringLiteral("rendering/pointCloud/evictionHold"), true,
          &cwRenderingSettings::evictionHoldChanged},
@@ -550,6 +554,72 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
     settings->resetToDefaults();
 }
 
+TEST_CASE("cwRenderingSettings governorSlew defaults to the governor's own step, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    constexpr double kQuarterSlew = 0.25;
+    constexpr double kBelowRange = 0.0;
+    constexpr double kAboveRange = 2.0;
+    const QString key = QStringLiteral("rendering/pointCloud/governorSlew");
+
+    SECTION("the default jumps to the target in one frame") {
+        CHECK(cw::budgets::kDefaultGovernorSlew == 1.0);
+        CHECK(settings->governorSlew() == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(cwRenderBudgets().governorSlew == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(settings->budgets().governorSlew == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("the range is the open-closed unit interval the forest steps over") {
+        CHECK(cwRenderingSettings::minimumGovernorSlew() == Catch::Approx(cw::budgets::kMinGovernorSlew));
+        CHECK(cwRenderingSettings::maximumGovernorSlew() == Catch::Approx(cw::budgets::kMaxGovernorSlew));
+        CHECK(cwRenderingSettings::minimumGovernorSlew() > 0.0);
+        CHECK(cwRenderingSettings::maximumGovernorSlew() == Catch::Approx(1.0));
+        CHECK(cwRenderingSettings::minimumGovernorSlew() < cwRenderingSettings::maximumGovernorSlew());
+    }
+
+    SECTION("values outside the range clamp to its ends") {
+        settings->setGovernorSlew(kBelowRange);
+        CHECK(settings->governorSlew() == Catch::Approx(cwRenderingSettings::minimumGovernorSlew()));
+        settings->setGovernorSlew(kAboveRange);
+        CHECK(settings->governorSlew() == Catch::Approx(cwRenderingSettings::maximumGovernorSlew()));
+    }
+
+    SECTION("a slew round-trips through QSettings and reaches the budgets") {
+        QSignalSpy slewSpy(settings, &cwRenderingSettings::governorSlewChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setGovernorSlew(kQuarterSlew);
+
+        CHECK(slewSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 1);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->governorSlew() == Catch::Approx(kQuarterSlew));
+        CHECK(settings->budgets().governorSlew == Catch::Approx(kQuarterSlew));
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toDouble() == Catch::Approx(kQuarterSlew));
+
+        settings->setGovernorSlew(kQuarterSlew);
+        CHECK(slewSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->governorSlew() == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(diskSettings.value(key).toDouble() == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
 TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -632,6 +702,8 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
         {"maxLevel", [&] { settings->setMaxLevel(kCappedLevel); }, true},
         {"minLevel", [&] { settings->setMinLevel(kIsolatedLevel); }, true},
         {"inflationGovernor", [&] { settings->setInflationGovernor(false); }, true},
+        {"governorSlew",
+         [&] { settings->setGovernorSlew(cw::budgets::kMinGovernorSlew); }, true},
         {"evictionHold", [&] { settings->setEvictionHold(true); }, true},
         {"thinningMode",
          [&] { settings->setThinningMode(int(cw::pointcloud::ThinningMode::Discrete)); }, false},

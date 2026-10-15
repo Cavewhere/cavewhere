@@ -22,6 +22,7 @@ MainWindowTest {
         readonly property list<string> rowNames: [
             "freezeCutCheckBox",
             "inflationGovernorCheckBox",
+            "governorSlewSpinBox",
             "evictionHoldCheckBox",
             "maxLevelSpinBox",
             "minLevelSpinBox",
@@ -125,6 +126,7 @@ MainWindowTest {
         function test_resetReturnsEveryKnobToItsDefault() {
             rootId.renderingSettings.freezeCut = true
             rootId.renderingSettings.inflationGovernor = false
+            rootId.renderingSettings.governorSlew = 0.25
             rootId.renderingSettings.thinningMode = 1
             rootId.renderingSettings.floorMode = 1
             rootId.renderingSettings.debugView = 2
@@ -139,6 +141,7 @@ MainWindowTest {
 
             tryCompare(rootId.renderingSettings, "freezeCut", false)
             compare(rootId.renderingSettings.inflationGovernor, true)
+            compare(rootId.renderingSettings.governorSlew, 1)
             compare(rootId.renderingSettings.thinningMode, 0)
             compare(rootId.renderingSettings.floorMode, 0)
             compare(rootId.renderingSettings.debugView, 0)
@@ -157,6 +160,26 @@ MainWindowTest {
             tryCompare(row("floorModeComboBox"), "currentIndex", 0)
             tryCompare(row("debugViewComboBox"), "currentIndex", 0)
             tryCompare(row("showNodeBoxesCheckBox"), "checked", false)
+        }
+
+        function test_governorSlewRowFollowsTheSetting() {
+            const slew = row("governorSlewSpinBox")
+            rootId.renderingSettings.governorSlew = 0.25
+            tryCompare(slew, "value", Math.round(0.25 * slew.valueScale))
+            compare(slew.from, Math.round(rootId.renderingSettings.minimumGovernorSlew * slew.valueScale))
+            compare(slew.to, Math.round(rootId.renderingSettings.maximumGovernorSlew * slew.valueScale))
+        }
+
+        function test_governorSlewRowWritesTheSetting() {
+            const slew = row("governorSlewSpinBox")
+            slew.value = Math.round(0.5 * slew.valueScale)
+            slew.valueModified()
+            compare(rootId.renderingSettings.governorSlew, 0.5)
+            verify(!rootId.renderingSettings.isAtDefaults)
+
+            mouseClick(row("pointCloudDebugResetButton"))
+            tryCompare(rootId.renderingSettings, "governorSlew", 1)
+            tryCompare(slew, "value", slew.valueScale)
         }
 
         function test_closeButtonClosesThePanel() {

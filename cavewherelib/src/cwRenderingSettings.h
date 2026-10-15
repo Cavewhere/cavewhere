@@ -28,9 +28,10 @@ class QQuickRhiItem;
 //
 // The point cloud knobs switch one streaming or CLOD rule each so a picture
 // can be A/B'd (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 7). freezeCut,
-// maxLevel, inflationGovernor and evictionHold ride cwRenderBudgets to the
-// planner, forest and eviction; the thinning, sizing and floor modes and the
-// two pixel sizes ride pointCloudShading() to every cloud's per-cloud uniform.
+// maxLevel, inflationGovernor, governorSlew and evictionHold ride
+// cwRenderBudgets to the planner, forest and eviction; the thinning, sizing
+// and floor modes and the two pixel sizes ride pointCloudShading() to every
+// cloud's per-cloud uniform.
 // The section 8 debug knobs travel the same two ways: minLevel with the
 // budgets, debugView and showNodeBoxes with the shading.
 // Every default is the renderer's own rule.
@@ -53,6 +54,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int maxLevel READ maxLevel WRITE setMaxLevel NOTIFY maxLevelChanged)
     Q_PROPERTY(int minLevel READ minLevel WRITE setMinLevel NOTIFY minLevelChanged)
     Q_PROPERTY(bool inflationGovernor READ inflationGovernor WRITE setInflationGovernor NOTIFY inflationGovernorChanged)
+    Q_PROPERTY(double governorSlew READ governorSlew WRITE setGovernorSlew NOTIFY governorSlewChanged)
     Q_PROPERTY(bool evictionHold READ evictionHold WRITE setEvictionHold NOTIFY evictionHoldChanged)
     Q_PROPERTY(int thinningMode READ thinningMode WRITE setThinningMode NOTIFY thinningModeChanged)
     Q_PROPERTY(int sizeMode READ sizeMode WRITE setSizeMode NOTIFY sizeModeChanged)
@@ -75,6 +77,8 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(double maximumScreenSpaceErrorPx READ maximumScreenSpaceErrorPx CONSTANT)
     Q_PROPERTY(int minimumPointBudgetMillions READ minimumPointBudgetMillions CONSTANT)
     Q_PROPERTY(int maximumPointBudgetMillions READ maximumPointBudgetMillions CONSTANT)
+    Q_PROPERTY(double minimumGovernorSlew READ minimumGovernorSlew CONSTANT)
+    Q_PROPERTY(double maximumGovernorSlew READ maximumGovernorSlew CONSTANT)
     Q_PROPERTY(int unlimitedLevel READ unlimitedLevel CONSTANT)
     Q_PROPERTY(int maximumLevel READ maximumLevel CONSTANT)
     Q_PROPERTY(int rootLevel READ rootLevel CONSTANT)
@@ -126,6 +130,11 @@ public:
     bool inflationGovernor() const { return m_inflationGovernor; }
     void setInflationGovernor(bool governed);
 
+    //! The share of the gap to the governor's target the frame's inflation
+    //! closes per frame, 1 for the governor's own step
+    double governorSlew() const { return m_governorSlew; }
+    void setGovernorSlew(double slew);
+
     bool evictionHold() const { return m_evictionHold; }
     void setEvictionHold(bool hold);
 
@@ -170,6 +179,8 @@ public:
     static double maximumScreenSpaceErrorPx() { return cw::budgets::kMaxScreenSpaceErrorPx; }
     static int minimumPointBudgetMillions() { return cw::budgets::kMinPointBudgetMillions; }
     static int maximumPointBudgetMillions() { return cw::budgets::kMaxPointBudgetMillions; }
+    static double minimumGovernorSlew() { return cw::budgets::kMinGovernorSlew; }
+    static double maximumGovernorSlew() { return cw::budgets::kMaxGovernorSlew; }
     static int unlimitedLevel() { return cw::budgets::kUnlimitedLevel; }
     static int maximumLevel();
     static int rootLevel() { return cw::budgets::kRootLevel; }
@@ -205,6 +216,7 @@ signals:
     void maxLevelChanged();
     void minLevelChanged();
     void inflationGovernorChanged();
+    void governorSlewChanged();
     void evictionHoldChanged();
     void thinningModeChanged();
     void sizeModeChanged();
@@ -246,6 +258,7 @@ private:
     int m_maxLevel = cw::budgets::kDefaultMaxLevel;
     int m_minLevel = cw::budgets::kDefaultMinLevel;
     bool m_inflationGovernor = cw::budgets::kDefaultInflationGovernor;
+    double m_governorSlew = cw::budgets::kDefaultGovernorSlew;
     bool m_evictionHold = cw::budgets::kDefaultEvictionHold;
     cwPointCloudShading m_shading;
 

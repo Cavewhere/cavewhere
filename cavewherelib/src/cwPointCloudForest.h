@@ -69,7 +69,12 @@ public:
     //! cloud that select() left out
     const cw::octree::Selection& selectionFor(const cwRHIObject* cloud) const;
 
+    //! The inflation this frame cuts and sizes with
     double sseInflation() const { return m_sseInflation; }
+
+    //! The inflation the governor steers toward, which sseInflation() reaches
+    //! at the budgets' governorSlew
+    double sseInflationTarget() const { return m_sseInflationTarget; }
     bool pointCapped() const { return m_selected.pointCapped; }
     qint64 points() const { return m_selected.points; }
     qint64 bytes() const { return m_selected.bytes; }
@@ -82,7 +87,8 @@ public:
 
     /**
      * True while the governor has steps left to take under @a budgets: the
-     * next advance() would move the inflation, or the view is inflated and no
+     * inflation is still slewing toward the target, the next advance() would
+     * move the target, or the view is inflated and no
      * probe has yet measured the cut it holds now against what @a budgets
      * leave the clouds. Asked after select(), so the frame renderer keeps
      * drawing frames until the cut stops moving.
@@ -117,6 +123,13 @@ private:
 
     bool anyNodeSelected() const;
 
+    //! Moves the inflation this frame uses toward the target by @a requestedSlew,
+    //! clamped to the knob's range, of the log-space gap left, taking the target
+    //! once within kSseSlewArrivalLogGap
+    void slewTowardTarget(double requestedSlew);
+
+    bool isSlewing() const { return m_sseInflation != m_sseInflationTarget; }
+
     //! Drops the last cut, whose trees the probe would otherwise re-select from
     void forgetLastCut();
 
@@ -127,7 +140,10 @@ private:
 
     cw::octree::ForestSelection m_selected;
 
+    //The inflation select() cuts with and the shader sizes against, which
+    //trails the governor's target by the budgets' governorSlew
     double m_sseInflation = 1.0;
+    double m_sseInflationTarget = 1.0;
     qint64 m_desiredBytesRelaxed = -1;
     bool m_pointCappedRelaxed = false;
     int m_relaxedSteps = 1;

@@ -7,6 +7,7 @@
 //Catch includes
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/interfaces/catch_interfaces_capture.hpp>
 
 //Qt includes
 #include <QColor>
@@ -1340,6 +1341,19 @@ namespace {
         for (int i = 0; i < mostFrames && Access::sseInflation(fixture.backend()) > 1.0; i++) {
             fixture.renderFrame();
         }
+    }
+
+    // The frames a slew of @a slew takes over one step of @a ratio: the first
+    // whose remaining log-space gap is within kSseSlewArrivalLogGap
+    int slewArrivalFrames(double slew, double ratio)
+    {
+        double gap = std::abs(std::log(ratio));
+        int frames = 0;
+        do {
+            gap *= 1.0 - slew;
+            frames++;
+        } while (gap > cw::octree::kSseSlewArrivalLogGap);
+        return frames;
     }
 
     // ---- Hole metric ---------------------------------------------------
@@ -3223,6 +3237,49 @@ TEST_CASE("A budget knob keeps the view drawing until the governor settles, and 
     fixture.renderFrame();
     CHECK(Access::sseInflation(fixture.backend()) == 1.0);
     CHECK_FALSE(forest.isSettling(fixture.budgets()));
+
+    // A slewed governor asks for frames until the inflation the view draws
+    // with has reached the target, and no longer
+    constexpr double kQuarterSlew = 0.25;
+    const int slewFrames = slewArrivalFrames(kQuarterSlew, cw::octree::kSseInflationStep);
+
+    budgets.inflationGovernor = true;
+    budgets.gpuBudgetBytes = roomyBudget;
+    fixture.setBudgets(budgets);
+    renderUntilSettled();
+    REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
+
+    budgets.governorSlew = kQuarterSlew;
+    budgets.gpuBudgetBytes = tightBudget;
+    fixture.setBudgets(budgets);
+    CHECK(forest.isSettling(fixture.budgets()));
+
+    int slewingFrames = 0;
+    {
+        QElapsedTimer timer;
+        timer.start();
+        fixture.renderFrame();
+        slewingFrames++;
+        while (needsAnotherFrame() && timer.elapsed() < kWaitTimeoutMs) {
+            QThread::msleep(kFramePauseMs);
+            fixture.renderFrame();
+            slewingFrames++;
+        }
+    }
+
+    INFO("slewing took " << slewingFrames << " frames, one slewed step takes " << slewFrames
+         << ", inflation " << forest.sseInflation() << " target " << forest.sseInflationTarget());
+    CHECK_FALSE(needsAnotherFrame());
+    CHECK(forest.sseInflation() > 1.0);
+    CHECK(forest.sseInflation() == forest.sseInflationTarget());
+    CHECK(slewingFrames >= slewFrames);
+
+    const double slewed = forest.sseInflation();
+    for (int i = 0; i < kRestingFrames; i++) {
+        fixture.renderFrame();
+        REQUIRE(forest.sseInflation() == slewed);
+        REQUIRE_FALSE(needsAnotherFrame());
+    }
 }
 
 TEST_CASE("The frame the last nodes land writes their floors and asks for no other",
@@ -4402,6 +4459,45 @@ TEST_CASE("The per-cloud uniform carries the view's refine threshold",
     CHECK(coarse.sseThresholdPx
           == float(cw::budgets::kMaxScreenSpaceErrorPx
                    * Access::sseInflation(fixture.backend())));
+}
+
+TEST_CASE("The per-cloud uniform carries the slewed inflation rather than the governor's target",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("slewed-uniform"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderUntilQuiet();
+
+    const cwPointCloudForest& forest = fixture.frameRenderer()->pointCloudForest();
+    const qint64 cutBytes = Access::selectedBytes(fixture.backend());
+    REQUIRE(cutBytes > 0);
+    REQUIRE(forest.sseInflation() == 1.0);
+
+    // A share the cut cannot hold, so the governor's target steps up
+    constexpr qint64 kTightShareDivisor = 2;
+    constexpr double kHalfSlew = 0.5;
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.gpuBudgetBytes = totalGpuBytes() - fixture.gpuBytes() + cutBytes / kTightShareDivisor;
+    budgets.governorSlew = kHalfSlew;
+    fixture.setBudgets(budgets);
+
+    constexpr int kMostFrames = 4 * cw::octree::kSseRelaxProbeFrames;
+    for (int i = 0; i < kMostFrames && forest.sseInflationTarget() == 1.0; i++) {
+        fixture.renderFrame();
+    }
+    REQUIRE(forest.sseInflationTarget() == cw::octree::kSseInflationStep);
+
+    // The first frame of the step: half the log-space way from 1 to the target
+    const Access::PerCloudUniform uniform = Access::liveAppearanceUniform(fixture.backend());
+    const double slewed = std::pow(cw::octree::kSseInflationStep, kHalfSlew);
+    INFO("inflation " << forest.sseInflation() << ", target " << forest.sseInflationTarget()
+         << ", threshold " << uniform.sseThresholdPx << " px");
+    CHECK(uniform.sseThresholdPx == float(budgets.screenSpaceErrorPx * forest.sseInflation()));
+    CHECK(forest.sseInflation() < forest.sseInflationTarget());
+    CHECK(forest.sseInflation() == Catch::Approx(slewed));
+    CHECK(uniform.sseThresholdPx == Catch::Approx(float(budgets.screenSpaceErrorPx * slewed)));
 }
 
 TEST_CASE("An export job leaves the live sprite size alone", "[PointCloudStreaming]")
@@ -6504,7 +6600,8 @@ namespace {
         Default,  //!< the desktop app as shipped
         Starved,  //!< a phone-class budget
         Latent,   //!< slow disk: arrival spread over many frames
-        Tight     //!< the governor binding on every pose, as section 13 saw it
+        Tight,    //!< the governor binding on every pose, as section 13 saw it
+        TightSlew //!< C-tight with the inflation slewing toward the governor's target
     };
 
     constexpr int kStarvedGpuBudgetMb = 256;
@@ -6513,6 +6610,7 @@ namespace {
     constexpr qint64 kLatentUploadBudgetBytesPerFrame = 256 * 1024;
     constexpr int kTightGpuBudgetMb = 256;
     constexpr int kTightPointBudgetMillions = 1;
+    constexpr double kTightSlewGovernorSlew = 0.25;
 
     EvalConfig candidateConfig(Candidate candidate)
     {
@@ -6541,6 +6639,11 @@ namespace {
             config.budgets.gpuBudgetBytes = kTightGpuBudgetMb * kBytesPerMegabyte;
             config.budgets.pointBudget = kTightPointBudgetMillions * kPointsPerMillion;
             break;
+        case Candidate::TightSlew:
+            config = candidateConfig(Candidate::Tight);
+            config.name = QStringLiteral("C-tight-slew");
+            config.budgets.governorSlew = kTightSlewGovernorSlew;
+            break;
         }
         return config;
     }
@@ -6564,7 +6667,10 @@ namespace {
         qint64 gpuBytes = 0;
         qint64 selectedPoints = 0;
         qint64 selectedBytes = 0;
+        //! The inflation the frame cut and sized with, and the governor's
+        //! target it slews toward
         double sseInflation = 1.0;
+        double sseInflationTarget = 1.0;
         bool pointCapped = false;
         //! The frame renderer still had streaming work, or a governor settling
         bool pending = false;
@@ -6908,6 +7014,9 @@ TEST_CASE("sweepPath writes one evalCsv line per frame under the Frames policy",
     REQUIRE(records.size() == expectedFrames);
     REQUIRE(lines.size() == kHeaderLines + expectedFrames);
     CHECK(lines.constFirst().startsWith(QStringLiteral("evalCsv,path,config,pose,frame,")));
+    CHECK(linesWithPrefix(output, QStringLiteral("evalCase,"))
+          == QStringList{QStringLiteral("evalCase,sweepPath writes one evalCsv line per frame "
+                                        "under the Frames policy")});
 
     constexpr int kPoseField = 3;
     constexpr int kFrameField = 4;
@@ -9253,6 +9362,11 @@ namespace {
             renderUntilSettled(fixture);
         }
 
+        //The test case the sweep runs in, so the report matches a run to its
+        //baseline whatever order the cases ran in
+        writeCsvLine(QStringLiteral("evalCase,")
+                         + QString::fromStdString(Catch::getResultCapture().getCurrentTestName()),
+                     out);
         writeCsvLine(QStringLiteral("evalCsv,path,config,pose,frame,label,litFraction,litStep,"
                                     "residentNodes,gpuBytes,selectedPoints,selectedBytes,"
                                     "sseInflation,pointCapped,pending,finestSelected,"
@@ -9260,7 +9374,8 @@ namespace {
                                     "iouO3,luminanceDiffO3,ssimO3,o3DistanceStep,seamShare,"
                                     "largestSeamRatio,densityCv,holeNear,holeMid,holeFar,"
                                     "predictedPoints,inflationRatio,nodesEntered,nodesLeft,"
-                                    "spriteSideChangePx,weightChange,o3DistanceStepRaw"),
+                                    "spriteSideChangePx,weightChange,o3DistanceStepRaw,"
+                                    "sseInflationTarget"),
                      out);
 
         const QSize target = fixture.targetSize();
@@ -9299,6 +9414,8 @@ namespace {
             record.selectedPoints = Access::selectedPoints(fixture.backend());
             record.selectedBytes = Access::selectedBytes(fixture.backend());
             record.sseInflation = Access::sseInflation(fixture.backend());
+            record.sseInflationTarget =
+                fixture.frameRenderer()->pointCloudForest().sseInflationTarget();
             record.pointCapped = Access::pointCapped(fixture.backend());
             record.pending = fixture.frameRenderer()->hasPendingStreamingWork();
             record.finestSelectedLevel = finestSelectedLevel(fixture);
@@ -9400,7 +9517,8 @@ namespace {
                 QString::number(record.nodesLeft),
                 QString::number(record.spriteSideChangePx, 'f', kPixelDecimals),
                 QString::number(record.weightChange, 'f', kRatioDecimals),
-                csvField(record.o3DistanceStepRaw, kFractionDecimals)
+                csvField(record.o3DistanceStepRaw, kFractionDecimals),
+                QString::number(record.sseInflationTarget, 'f', kRatioDecimals)
             };
             writeCsvLine(fields.join(QLatin1Char(',')), out);
 
@@ -10331,6 +10449,83 @@ TEST_CASE("M6: a binding point budget steps the inflation where the default budg
     CHECK(weightMovedWithInflation);
 }
 
+TEST_CASE("evalCsv records the governor's target beside the slewed inflation M6 counts",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const EvalPath path = planeMetricPath(rhi.get());
+
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kGovernorFramesPerPose;
+    step.settleBeforeFirstPose = false;
+
+    constexpr double kHalfSlew = 0.5;
+    EvalConfig tight = candidateConfig(Candidate::Tight);
+    tight.budgets.pointBudget = kSyntheticTightPointBudget;
+    tight.budgets.governorSlew = kHalfSlew;
+
+    PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream output;
+    const QVector<EvalRecord> records = sweepPath(fixture, path, tight, step, output);
+    const EvalSummary summary = summarize(path.name, tight.name, records);
+    REQUIRE_FALSE(records.isEmpty());
+
+    const QVector<QStringList> rows = csvRows(output, QStringLiteral("evalCsv,"));
+    REQUIRE(rows.size() == 1 + records.size());
+    const QStringList& header = rows.constFirst();
+    const qsizetype usedColumn = header.indexOf(QStringLiteral("sseInflation"));
+    const qsizetype targetColumn = header.indexOf(QStringLiteral("sseInflationTarget"));
+    INFO("evalCsv header: " << header.join(QLatin1Char(',')).toStdString());
+    CHECK(usedColumn > 0);
+    CHECK(targetColumn > 0);
+
+    // The slew shows as frames whose used inflation trails the target
+    int trailingFrames = 0;
+    if (usedColumn > 0 && targetColumn > 0) {
+        for (int i = 1; i < rows.size(); i++) {
+            const QStringList& fields = rows.at(i);
+            REQUIRE(fields.size() == header.size());
+            const double used = fields.at(usedColumn).toDouble();
+            const double target = fields.at(targetColumn).toDouble();
+            CHECK(used >= 1.0);
+            CHECK(target >= 1.0);
+            trailingFrames += used != target ? 1 : 0;
+        }
+    }
+    CHECK(trailingFrames > 0);
+
+    // M6 counts the frames whose used inflation moved, and with a slew of one
+    // half each move up is at most the square root of the governor's step
+    int usedChanges = 0;
+    double largestStepUp = 1.0;
+    for (int i = 1; i < records.size(); i++) {
+        const double ratio = records.at(i).sseInflation / records.at(i - 1).sseInflation;
+        if (inflationChanged(ratio)) {
+            usedChanges++;
+            largestStepUp = std::max(largestStepUp, ratio);
+        }
+    }
+    const double slewedStep = std::pow(cw::octree::kSseInflationStep, kHalfSlew);
+    INFO("inflation changes " << summary.inflationChanges << ", used changes " << usedChanges
+         << ", largest step up " << largestStepUp << ", a half slew of one step "
+         << slewedStep << ", widest inflation " << summary.widestInflation);
+    CHECK(summary.widestInflation > 1.0);
+    CHECK(summary.inflationChanges == usedChanges);
+    CHECK(largestStepUp <= slewedStep * (1.0 + kInflationRatioTolerance));
+}
+
+TEST_CASE("Every candidate configuration takes the governor's own step",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
+                                      Candidate::Tight}) {
+        const EvalConfig config = candidateConfig(candidate);
+        INFO(config.name.toStdString());
+        CHECK(config.budgets.governorSlew == cw::budgets::kDefaultGovernorSlew);
+    }
+}
+
 TEST_CASE("M6 counts a floor the gather moved on the frame it moved",
           "[PointCloudStreaming][PointCloudEval]")
 {
@@ -10663,6 +10858,29 @@ TEST_CASE("The oblique orbit and its boundary path on a tile under C-tight recor
     for (const EvalPath& path : {tileOrbitPath(manifest, config),
                                  tileBoundaryPath(rhi.get(), manifest, defaults)}) {
         checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step), path, step);
+    }
+}
+
+TEST_CASE("The oblique orbit and its boundary path on a tile under C-tight-slew record every metric",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    //C-tight's poses and oracles, so the two compare pose for pose and the
+    //slew is the only difference
+    const EvalConfig config = candidateConfig(Candidate::TightSlew);
+    const EvalConfig tight = candidateConfig(Candidate::Tight);
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    REQUIRE(config.targetSize == tight.targetSize);
+    REQUIRE(config.budgets.governorSlew < cw::budgets::kDefaultGovernorSlew);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    for (const EvalPath& path : {tileOrbitPath(manifest, tight),
+                                 tileBoundaryPath(rhi.get(), manifest, defaults)}) {
+        const EvalOracles oracles = tileOracles(rhi.get(), cache, path, config.targetSize);
+        checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step, oracles), path,
+                         step);
     }
 }
 

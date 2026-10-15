@@ -64,6 +64,14 @@ HEADERLESS_COLUMNS = {
 
 IDENTIFIER = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
 
+# The line Catch2 writes under -d yes once a test case or section finishes. It
+# follows the case's output, so it names every run that came before it.
+DURATION_LINE = re.compile(r"^\d+(?:\.\d+)? s: (.+)$")
+
+# The line the bench writes before each sweep's header, naming the Catch2 test
+# case the sweep runs in. Everything after the prefix is the name, commas and all.
+CASE_PREFIX = "evalCase,"
+
 
 def is_header(fields):
     """A header's fields after the family name are all bare identifiers; a data
@@ -89,6 +97,15 @@ class Run:
         self.path = path
         self.config = config
         self.occurrence = occurrence
+        # The Catch2 test case or section the run belongs to, None for a log
+        # written without durations, and the run's order within that case
+        self.test_case = None
+        self.case_occurrence = 0
+        # The test case from the bench's evalCase line, None for a log written
+        # before it, and the run's order within that case, which the case's
+        # declared section order fixes
+        self.eval_case = None
+        self.eval_occurrence = 0
         self.rows = []
         self.summary = None
         # The run directory under the frame directory, from its evalDump line
@@ -97,6 +114,18 @@ class Run:
     @property
     def key(self):
         return (self.path, self.config, self.occurrence)
+
+    @property
+    def case_key(self):
+        """What a baseline run is matched on: the test case names the run
+        whatever order the cases ran in."""
+        return (self.path, self.config, self.test_case, self.case_occurrence)
+
+    @property
+    def eval_key(self):
+        """The match from the bench's own test case name, which a section of
+        one case sharing its name with a section of another leaves apart."""
+        return (self.path, self.config, self.eval_case, self.eval_occurrence)
 
     @property
     def label(self):
@@ -158,13 +187,38 @@ def parse_log_lines(lines):
     open_sweeps = {}
     summary_queue = {}
     pending_dumps = {}
+    unnamed_runs = []
+    current_case = None
 
     def occurrence_of(key):
         occurrences[key] = occurrences.get(key, 0) + 1
         return occurrences[key]
 
+    def new_run(key):
+        run = Run(key[0], key[1], occurrence_of(("run",) + key))
+        run.dump = pending_dumps.pop(key, None)
+        if current_case is not None:
+            run.eval_case = current_case
+            run.eval_occurrence = occurrence_of(("eval",) + key + (current_case,))
+        log.runs.append(run)
+        unnamed_runs.append(run)
+        return run
+
+    def name_runs(test_case):
+        for run in unnamed_runs:
+            run.test_case = test_case
+            run.case_occurrence = occurrence_of(("case", run.path, run.config, test_case))
+        unnamed_runs.clear()
+
     for raw in lines:
         line = raw.strip()
+        duration = DURATION_LINE.match(line)
+        if duration:
+            name_runs(duration.group(1))
+            continue
+        if line.startswith(CASE_PREFIX):
+            current_case = line[len(CASE_PREFIX):]
+            continue
         family, _, _ = line.partition(",")
         if family not in FAMILIES:
             continue
@@ -188,10 +242,8 @@ def parse_log_lines(lines):
             key = (row.get("path", ""), row.get("config", ""))
             run = open_runs.get(key)
             if run is None:
-                run = Run(key[0], key[1], occurrence_of(("run",) + key))
-                run.dump = pending_dumps.pop(key, None)
+                run = new_run(key)
                 open_runs[key] = run
-                log.runs.append(run)
                 summary_queue.setdefault(key, []).append(run)
             run.rows.append(row)
         elif family == "evalDump":
@@ -203,10 +255,8 @@ def parse_log_lines(lines):
             if waiting:
                 waiting.pop(0).summary = row
             else:
-                run = Run(key[0], key[1], occurrence_of(("run",) + key))
-                run.dump = pending_dumps.pop(key, None)
+                run = new_run(key)
                 run.summary = row
-                log.runs.append(run)
             open_runs.pop(key, None)
         elif family == "oracleCsv":
             path = row.get("path", "")
@@ -728,6 +778,7 @@ def line_chart(title, series, x_label, y_label, x_range=None, include_zero=True,
             plot_right - 4, y - 4, escape("bound {}".format(tick_label(value)))))
 
     for s in series:
+        dash = ' stroke-dasharray="{}"'.format(s["dash"]) if s.get("dash") else ""
         segments = []
         current = []
         for x, y in s["points"]:
@@ -746,8 +797,8 @@ def line_chart(title, series, x_label, y_label, x_range=None, include_zero=True,
                 continue
             points = " ".join("{:.1f},{:.1f}".format(x, y) for x, y in segment)
             parts.append('<polyline points="{}" fill="none" stroke="{}" stroke-width="1.6" '
-                         'stroke-linejoin="round"><title>{}</title></polyline>'.format(
-                             points, s["color"], escape(s["name"])))
+                         'stroke-linejoin="round"{}><title>{}</title></polyline>'.format(
+                             points, s["color"], dash, escape(s["name"])))
             if show_points:
                 parts.extend(point_marker(x, y, s["color"]) for x, y in segment)
 
@@ -798,6 +849,7 @@ SUMMARY_DIRECTIONS = {
     "largestInflationStep": LOWER, "mostEntered": LOWER, "mostLeft": LOWER,
     "largestSideChangePx": LOWER, "sideChangeSumPx": LOWER, "largestWeightChange": LOWER,
     "weightChangeSum": LOWER, "largestRawO3Step": LOWER, "pendingPoses": LOWER,
+    "ssimO3": HIGHER,
 }
 SUMMARY_KEY_COLUMNS = ("path", "config")
 # A delta smaller than this share of the larger value is no change
@@ -832,6 +884,24 @@ def summary_cell(column, text, base_text, has_baseline):
             .format(escape(text or "–"), escape(base_text or "–"), verdict, escape(delta)))
 
 
+def baseline_run(run, baseline):
+    """@run's counterpart in @baseline: the run of the same test case, path and
+    config, named by the bench's evalCase lines when both logs carry them and
+    by Catch2's duration lines otherwise, and only when either log lacks test
+    case names, the run at the same place in the log."""
+    if baseline is None:
+        return None
+    if run.eval_case is not None:
+        cased = [b for b in baseline.runs if b.eval_case is not None]
+        if cased:
+            return next((b for b in cased if b.eval_key == run.eval_key), None)
+    if run.test_case is not None:
+        named = [b for b in baseline.runs if b.test_case is not None]
+        if named:
+            return next((b for b in named if b.case_key == run.case_key), None)
+    return next((b for b in baseline.runs if b.key == run.key), None)
+
+
 def summary_table(runs, baseline, columns):
     """Rows are summary columns, columns are the path's runs, so a long list of
     metrics reads down the page."""
@@ -840,7 +910,7 @@ def summary_table(runs, baseline, columns):
         "".join("<th>{}</th>".format(escape(run.label)) for run in runs))
     base_summaries = []
     for run in runs:
-        match = next((b for b in baseline.runs if b.key == run.key), None) if has_baseline else None
+        match = baseline_run(run, baseline)
         base_summaries.append((match.summary or {}) if match else None)
     rows = []
     for column in columns:
@@ -876,6 +946,86 @@ M6_CHARTS = [
 ]
 STACKED_CHART_HEIGHT = 150
 FRAME_AXIS_LABEL = "recorded frame along the path"
+# The governor's target beside the slewed inflation the frame used
+INFLATION_CHART_TITLE = "Inflation: the governor's target (dashed) and the value the frame used"
+TARGET_DASH = "5 3"
+SETTLED_SSIM_COLUMN = "ssimO3"
+
+
+def inflation_chart(runs, x_range):
+    """Target and used inflation per run on one chart, or "" when no run
+    recorded a target"""
+    series = []
+    for index, run in enumerate(runs):
+        targets = run.series("sseInflationTarget")
+        if all(value is None for value in targets):
+            continue
+        color = color_for(run.config, index)
+        series.append({"name": run.label + " target", "color": color, "dash": TARGET_DASH,
+                       "points": list(enumerate(targets))})
+        series.append({"name": run.label + " used", "color": color,
+                       "points": list(enumerate(run.series("sseInflation")))})
+    if not series:
+        return ""
+    return figure(line_chart(INFLATION_CHART_TITLE, series, FRAME_AXIS_LABEL, "inflation",
+                             x_range, include_zero=False, integer_x=True))
+
+
+def settled_rows(run):
+    """The last recorded frame of each visit to a pose, keyed by the pose and
+    the visit, in path order"""
+    settled = {}
+    visits = {}
+    previous = None
+    for row in run.rows:
+        pose = row.get("pose", "")
+        if pose != previous:
+            visits[pose] = visits.get(pose, 0) + 1
+            previous = pose
+        settled[(pose, visits[pose])] = row
+    return settled
+
+
+def settled_ssim_table(runs, baseline):
+    """SSIM to O3 at each pose's settled frame, which a Frames sweep that quiets
+    sooner records more of, so the mean over frames alone undersells it"""
+    charted = [run for run in runs
+               if any(value is not None for value in run.series(SETTLED_SSIM_COLUMN))]
+    if not charted:
+        return ""
+    has_baseline = baseline is not None
+    settled = [settled_rows(run) for run in charted]
+    base_settled = []
+    for run in charted:
+        match = baseline_run(run, baseline)
+        base_settled.append(settled_rows(match) if match else {})
+
+    poses = []
+    labels = {}
+    for rows in settled:
+        for key, row in rows.items():
+            if key not in labels:
+                poses.append(key)
+                labels[key] = row.get("label", "")
+
+    head = "<tr><th>pose</th><th>label</th>{}</tr>".format(
+        "".join("<th>{}</th>".format(escape(run.label)) for run in charted))
+    body = []
+    for key in poses:
+        cells = []
+        for rows, base_rows in zip(settled, base_settled):
+            text = rows.get(key, {}).get(SETTLED_SSIM_COLUMN, "")
+            base = base_rows.get(key, {}).get(SETTLED_SSIM_COLUMN, "") if has_baseline else None
+            cells.append(summary_cell(SETTLED_SSIM_COLUMN, text, base, has_baseline))
+        pose, visit = key
+        name = pose if visit == 1 else "{} (visit {})".format(pose, visit)
+        body.append('<tr><td class="num">{}</td><td>{}</td>{}</tr>'.format(
+            escape(name), escape(labels[key]), "".join(cells)))
+    return ("<h3>SSIM at the settled frame of each pose</h3>"
+            '<p class="muted">The last recorded frame of each pose, compared pose for pose, so a '
+            "run that quiets sooner is not penalized for the fewer settled frames its mean "
+            "holds.</p>"
+            '<div class="scroll"><table>{}{}</table></div>'.format(head, "".join(body)))
 
 
 def run_series(runs, column):
@@ -896,6 +1046,7 @@ def path_section(path, runs, baseline, summary_columns, links):
         parts.append("<h3>Summary</h3>")
         parts.append(summary_table([run for run in runs if run.summary], baseline,
                                    summary_columns))
+    parts.append(settled_ssim_table(runs, baseline))
 
     charted = [run for run in runs if run.rows]
     if not charted:
@@ -910,6 +1061,7 @@ def path_section(path, runs, baseline, summary_columns, links):
             continue
         parts.append(figure(line_chart(title, series, FRAME_AXIS_LABEL, y_label, x_range,
                                        integer_x=True)))
+    parts.append(inflation_chart(charted, x_range))
 
     stack = []
     column, title, y_label = M2_CHART
@@ -1405,8 +1557,10 @@ def build_report(log, frames, out_file, baseline=None, log_name="", baseline_nam
         parts.append('<p>Every summary cell shows this run, the baseline (<span class="muted">base'
                      '</span>) and the change: <span class="better">better</span>, '
                      '<span class="worse">worse</span>, <span class="same">no change or no '
-                     "direction</span>. Runs are matched by path, config and their order in the "
-                     "log.</p>")
+                     "direction</span>. Runs are matched by test case, path, config and their order "
+                     "within the test case; a log written without Catch2's durations "
+                     "(<code>-d yes</code>) matches by path, config and order in the log."
+                     "</p>")
     if summary_columns:
         parts.append(direction_legend(summary_columns))
 

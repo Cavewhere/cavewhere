@@ -22,6 +22,7 @@ QString pointBudgetMillionsKey() { return QStringLiteral("rendering/pointBudgetM
 QString freezeCutKey() { return QStringLiteral("rendering/pointCloud/freezeCut"); }
 QString maxLevelKey() { return QStringLiteral("rendering/pointCloud/maxLevel"); }
 QString inflationGovernorKey() { return QStringLiteral("rendering/pointCloud/inflationGovernor"); }
+QString governorSlewKey() { return QStringLiteral("rendering/pointCloud/governorSlew"); }
 QString evictionHoldKey() { return QStringLiteral("rendering/pointCloud/evictionHold"); }
 QString thinningModeKey() { return QStringLiteral("rendering/pointCloud/thinningMode"); }
 QString sizeModeKey() { return QStringLiteral("rendering/pointCloud/sizeMode"); }
@@ -70,6 +71,11 @@ double clampScreenSpaceErrorPx(double pixels)
     return std::clamp(pixels,
                       cw::budgets::kMinScreenSpaceErrorPx,
                       cw::budgets::kMaxScreenSpaceErrorPx);
+}
+
+double clampGovernorSlew(double slew)
+{
+    return std::clamp(slew, cw::budgets::kMinGovernorSlew, cw::budgets::kMaxGovernorSlew);
 }
 
 int clampMaxLevel(int level)
@@ -155,6 +161,8 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
     }
     m_inflationGovernor = settings.value(inflationGovernorKey(),
                                          cw::budgets::kDefaultInflationGovernor).toBool();
+    m_governorSlew = clampGovernorSlew(
+                settings.value(governorSlewKey(), cw::budgets::kDefaultGovernorSlew).toDouble());
     m_evictionHold = settings.value(evictionHoldKey(), cw::budgets::kDefaultEvictionHold).toBool();
     m_shading.thinningMode = clampMode<cw::pointcloud::ThinningMode>(
                 settings.value(thinningModeKey(), int(defaultShading.thinningMode)).toInt(),
@@ -203,6 +211,7 @@ void cwRenderingSettings::resetPointCloudKnobsToDefaults()
     setMaxLevel(cw::budgets::kDefaultMaxLevel);
     setMinLevel(cw::budgets::kDefaultMinLevel);
     setInflationGovernor(cw::budgets::kDefaultInflationGovernor);
+    setGovernorSlew(cw::budgets::kDefaultGovernorSlew);
     setEvictionHold(cw::budgets::kDefaultEvictionHold);
     setThinningMode(int(defaultShading.thinningMode));
     setSizeMode(int(defaultShading.sizeMode));
@@ -231,6 +240,7 @@ bool cwRenderingSettings::isAtDefaults() const
             && m_maxLevel == cw::budgets::kDefaultMaxLevel
             && m_minLevel == cw::budgets::kDefaultMinLevel
             && m_inflationGovernor == cw::budgets::kDefaultInflationGovernor
+            && qFuzzyCompare(m_governorSlew, cw::budgets::kDefaultGovernorSlew)
             && m_evictionHold == cw::budgets::kDefaultEvictionHold
             && m_shading == cwPointCloudShading();
 }
@@ -252,6 +262,7 @@ cwRenderBudgets cwRenderingSettings::budgets() const
     budgets.maxLevel = m_maxLevel;
     budgets.minLevel = m_minLevel;
     budgets.inflationGovernor = m_inflationGovernor;
+    budgets.governorSlew = m_governorSlew;
     budgets.evictionHold = m_evictionHold;
     return budgets;
 }
@@ -293,6 +304,15 @@ void cwRenderingSettings::setInflationGovernor(bool governed)
 {
     if (setPersisted(m_inflationGovernor, governed, inflationGovernorKey())) {
         emit inflationGovernorChanged();
+        emit budgetsChanged();
+        emit isAtDefaultsChanged();
+    }
+}
+
+void cwRenderingSettings::setGovernorSlew(double slew)
+{
+    if (setPersisted(m_governorSlew, clampGovernorSlew(slew), governorSlewKey())) {
+        emit governorSlewChanged();
         emit budgetsChanged();
         emit isAtDefaultsChanged();
     }

@@ -70,6 +70,7 @@ void cwPointCloudForest::removeTree(const cwRHIObject* cloud)
     //where a first frame starts rather than at the inflation the view left
     if (m_trees.isEmpty()) {
         m_sseInflation = 1.0;
+        m_sseInflationTarget = 1.0;
         m_relaxedSteps = 1;
         m_relaxProbeFrame = 0;
         m_availableBytes = 0;
@@ -120,6 +121,7 @@ void cwPointCloudForest::advance(const cwRenderBudgets& budgets)
 
     if (!budgets.inflationGovernor) {
         m_sseInflation = 1.0;
+        m_sseInflationTarget = 1.0;
         m_desiredBytesRelaxed = -1;
         m_pointCappedRelaxed = false;
         m_relaxedSteps = 1;
@@ -137,12 +139,56 @@ void cwPointCloudForest::advance(const cwRenderBudgets& budgets)
         return;
     }
 
-    m_sseInflation = cw::octree::nextSseInflation(inflationInput(availableBytes));
+    //The governor rules on the cut at its own target, which a slew in progress
+    //has not drawn yet, so the target holds until the inflation reaches it.
+    //A slew whose cut is over the GPU budget ends at once at the coarser of the
+    //two, so a view short of memory steps up every other frame rather than
+    //once per slew, and the next frame rules on a cut drawn at the target.
+    if (isSlewing()) {
+        if (m_selected.bytes > availableBytes) {
+            const double coarser = std::max(m_sseInflation, m_sseInflationTarget);
+            m_sseInflation = coarser;
+            m_sseInflationTarget = coarser;
+        } else {
+            slewTowardTarget(budgets.governorSlew);
+        }
+        return;
+    }
+
+    m_sseInflationTarget = cw::octree::nextSseInflation(inflationInput(availableBytes));
+    slewTowardTarget(budgets.governorSlew);
 
     //What the next probe measures its relaxations against
     m_availableBytes = availableBytes;
 
     probeRelaxedCut();
+}
+
+void cwPointCloudForest::slewTowardTarget(double requestedSlew)
+{
+    //The budgets are a plain struct anyone can fill, and a slew outside the
+    //knob's range would stall or run away from the target; NaN takes the
+    //governor's own step
+    const double slew = std::isnan(requestedSlew)
+                            ? cw::budgets::kMaxGovernorSlew
+                            : std::clamp(requestedSlew, cw::budgets::kMinGovernorSlew,
+                                         cw::budgets::kMaxGovernorSlew);
+
+    //A whole slew is the governor's own step, assigned rather than computed so
+    //it carries no rounding
+    if (slew == cw::budgets::kMaxGovernorSlew) {
+        m_sseInflation = m_sseInflationTarget;
+        return;
+    }
+
+    //In log space, so a step up and a step down of one ratio take as many frames
+    const double remainingLogGap =
+        std::log(m_sseInflationTarget / m_sseInflation) * (1.0 - slew);
+    if (std::abs(remainingLogGap) <= cw::octree::kSseSlewArrivalLogGap) {
+        m_sseInflation = m_sseInflationTarget;
+    } else {
+        m_sseInflation = m_sseInflationTarget * std::exp(-remainingLogGap);
+    }
 }
 
 bool cwPointCloudForest::isSettling(const cwRenderBudgets& budgets) const
@@ -154,21 +200,25 @@ bool cwPointCloudForest::isSettling(const cwRenderBudgets& budgets) const
 
     //The next advance() puts an ungoverned view back at 1
     if (!budgets.inflationGovernor) {
-        return m_sseInflation != 1.0;
+        return m_sseInflation != 1.0 || m_sseInflationTarget != 1.0;
     }
 
     if (!anyNodeSelected()) {
         return false;
     }
 
+    if (isSlewing()) {
+        return true;
+    }
+
     const qint64 availableBytes = availableBytesFor(budgets);
-    if (cw::octree::nextSseInflation(inflationInput(availableBytes)) != m_sseInflation) {
+    if (cw::octree::nextSseInflation(inflationInput(availableBytes)) != m_sseInflationTarget) {
         return true;
     }
 
     //An inflated view steps down only on a probe's evidence, so it has settled
     //once a probe has measured the cut it holds now, under the budget it has now
-    return m_sseInflation > 1.0 && !probedLastCut(availableBytes);
+    return m_sseInflationTarget > 1.0 && !probedLastCut(availableBytes);
 }
 
 qint64 cwPointCloudForest::availableBytesFor(const cwRenderBudgets& budgets)
@@ -188,7 +238,7 @@ qint64 cwPointCloudForest::availableBytesFor(const cwRenderBudgets& budgets)
 cw::octree::InflationInput cwPointCloudForest::inflationInput(qint64 availableBytes) const
 {
     cw::octree::InflationInput inflation;
-    inflation.current = m_sseInflation;
+    inflation.current = m_sseInflationTarget;
     inflation.desiredBytes = m_selected.bytes;
     inflation.desiredBytesRelaxed = m_desiredBytesRelaxed;
     inflation.availableBytes = availableBytes;
@@ -211,7 +261,9 @@ void cwPointCloudForest::probeRelaxedCut()
     m_pointCappedRelaxed = false;
     m_relaxedSteps = 1;
 
-    if (m_sseInflation <= 1.0) {
+    //The probe asks whether the target can step down, so it relaxes from the
+    //target; advance() runs it only once the inflation has reached it
+    if (m_sseInflationTarget <= 1.0) {
         m_relaxProbeFrame = 0;
         return;
     }
@@ -229,7 +281,7 @@ void cwPointCloudForest::probeRelaxedCut()
     //The cut the next select() takes, once nothing else moves: the last one's
     //camera and knobs at the inflation this probe relaxes from
     m_lastProbe = Probe{m_lastInput, m_availableBytes};
-    m_lastProbe->input.sseInflation = m_sseInflation;
+    m_lastProbe->input.sseInflation = m_sseInflationTarget;
 
     // The step down is only taken on evidence: the cut one step finer, selected
     // for real rather than estimated, and only on a probe frame because
@@ -238,7 +290,7 @@ void cwPointCloudForest::probeRelaxedCut()
     // probe rather than one probe per step. nextSseInflation() checks the
     // deepest level again against this frame's bytes before taking it.
     cw::octree::ForestInput relaxed = m_lastInput;
-    double level = m_sseInflation;
+    double level = m_sseInflationTarget;
     int steps = 0;
 
     while (level > 1.0) {
