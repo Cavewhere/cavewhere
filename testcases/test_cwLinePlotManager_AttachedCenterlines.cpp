@@ -49,6 +49,9 @@
 #include <QUuid>
 #include <QVector3D>
 
+// Std
+#include <cmath>
+
 namespace {
 
 // Solved station positions are floats, so a total assembled from them drifts
@@ -371,6 +374,9 @@ constexpr int kWallsProjectLegCount = 7;
 constexpr double kWallsWestFixEasting = 500.0;
 // E1.SRV's two legs and the West files' four.
 constexpr int kWallsTwoCavesLegCount = 6;
+// EAST.SRV's two legs and WEST.SRV's two, over five stations.
+constexpr int kWallsEmptyDatumLegCount = 4;
+constexpr int kWallsEmptyDatumStationCount = 5;
 
 constexpr double kSurvexUtmEasting = 500000.0;
 constexpr double kSurvexUtmNorthing = 4000000.0;
@@ -517,6 +523,35 @@ TEST_CASE("walls_two_caves solves as a source root",
     CHECK(lookup.positions().size() == 8);
     CHECK(cave->length()->value()
           == Catch::Approx(kWallsTwoCavesLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("walls_empty_datum solves as a source root",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("walls-empty-datum-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(),
+                                              QStringLiteral("walls_empty_datum/walls_empty_datum.wpj"));
+    requireSolved(project.get());
+
+    // The .REF's grid convergence turns the legs off the grid axes, so compare
+    // distances, which survive the turn. The positions are floats at UTM
+    // magnitudes, so the distances carry the float margin.
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    CHECK(lookup.positions().size() == kWallsEmptyDatumStationCount);
+    for (const QString& station : {QStringLiteral("A1"), QStringLiteral("A3"), QStringLiteral("B2")}) {
+        INFO("station " << station.toStdString());
+        REQUIRE(lookup.hasPosition(station));
+    }
+    const QVector3D a1 = lookup.position(QStringLiteral("A1"));
+    // EAST.SRV runs north then east to A3; WEST.SRV runs north then west back
+    // over A1's easting.
+    CHECK(a1.distanceToPoint(lookup.position(QStringLiteral("A3")))
+          == Catch::Approx(std::sqrt(2.0) * kWallsTapeMeters).margin(kUtmFloatMarginMeters));
+    CHECK(a1.distanceToPoint(lookup.position(QStringLiteral("B2")))
+          == Catch::Approx(2.0 * kWallsTapeMeters).margin(kUtmFloatMarginMeters));
+    CHECK(cave->length()->value()
+          == Catch::Approx(kWallsEmptyDatumLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
 }
 
 TEST_CASE("survex_two_cs solves as two source roots in one output system",

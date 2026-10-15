@@ -206,6 +206,21 @@ TEST_CASE("Walls #FIX stations take their coordinate system from the project's .
     checkGeoFixAt(fixes.at(1), QStringLiteral("EPSG:4269"));
 }
 
+TEST_CASE("A Walls .REF with an empty datum name reads its fixes in the datum its index names",
+          "[cwWallsImporter]") {
+    const QList<cwFixStation> fixes =
+        importedFixStations("external-centerlines/walls_empty_datum/walls_empty_datum.wpj");
+    REQUIRE(fixes.size() == 1);
+
+    //Index 15 is Walls' NAD27 CONUS, in the .REF's zone 16.
+    const cwFixStation rectFix = fixes.at(0);
+    CHECK(rectFix.stationName() == "A1");
+    CHECK(rectFix.inputCS() == QStringLiteral("EPSG:26716"));
+    CHECK(rectFix.state() == cwFixStation::Valid);
+    CHECK(rectFix.easting() == Catch::Approx(580661.570));
+    CHECK(rectFix.northing() == Catch::Approx(4113846.340));
+}
+
 TEST_CASE("A Walls survey imported without its project file has no .REF to read fixes in",
           "[cwWallsImporter]") {
     const QList<cwFixStation> fixes = importedFixStations("walls/GEOREF.SRV");

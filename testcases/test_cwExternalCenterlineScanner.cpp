@@ -1751,6 +1751,99 @@ TEST_CASE("scanWalls records #FIX lines and the system their .wpj's .REF names",
                                      {QStringLiteral("A3"), a3, QString()}});
 }
 
+TEST_CASE("scanWalls reads a .REF's datum from its index when the name is empty",
+          "[Scanner][Walls][Attach]")
+{
+    const QString fixture = QStringLiteral("walls_empty_datum/walls_empty_datum.wpj");
+    const QString a1 = QStringLiteral("580661.570 4113846.340 219");
+
+    SECTION("the fixture's index 15 is NAD27 CONUS")
+    {
+        const auto scan = cwExternalCenterlineScanner::scan(datasetExternalCenterlinePath(fixture));
+        INFO("scan: " << scan.errorMessage().toStdString());
+        REQUIRE_FALSE(scan.hasError());
+        CHECK(scan.value().dependencies.size() == 3);
+        CHECK(hasFileNameInDeps(scan.value(), QStringLiteral("walls_empty_datum.wpj")));
+        CHECK(hasFileNameInDeps(scan.value(), QStringLiteral("EAST.SRV")));
+        CHECK(hasFileNameInDeps(scan.value(), QStringLiteral("WEST.SRV")));
+        CHECK(scan.value().warnings.isEmpty());
+        CHECK(withoutLocation(scan.value().fixes)
+              == QList<ScannedFix>{{QStringLiteral("A1"), a1,
+                                    QStringLiteral("NAD27 CONUS, UTM zone 16N")}});
+    }
+
+    SECTION("Walls' legacy index codes")
+    {
+        const QByteArray original = [&]() {
+            QFile file(datasetExternalCenterlinePath(fixture));
+            REQUIRE(file.open(QFile::ReadOnly));
+            return file.readAll();
+        }();
+        const QByteArray fixtureRef = QByteArrayLiteral(" 15 \"\"");
+        REQUIRE(original.contains(fixtureRef));
+
+        QByteArray index;
+        QString expectedSystem;
+        SECTION("254 is NAD27 CONUS")
+        {
+            index = QByteArrayLiteral("254");
+            expectedSystem = QStringLiteral("NAD27 CONUS, UTM zone 16N");
+        }
+        SECTION("the other codes from 251 to 255 are WGS 1984")
+        {
+            index = QByteArrayLiteral("253");
+            expectedSystem = QStringLiteral("WGS 1984, UTM zone 16N");
+        }
+        SECTION("an index outside Walls' table leaves the datum unnamed")
+        {
+            index = QByteArrayLiteral("99");
+            expectedSystem = QStringLiteral("UTM zone 16N");
+        }
+
+        QTemporaryDir tempDir;
+        REQUIRE(tempDir.isValid());
+        for (const QString& srv : {QStringLiteral("EAST.SRV"), QStringLiteral("WEST.SRV")}) {
+            REQUIRE(QFile::copy(datasetExternalCenterlinePath(QStringLiteral("walls_empty_datum/%1").arg(srv)),
+                                tempPath(tempDir, srv)));
+        }
+        QByteArray rewritten = original;
+        rewritten.replace(fixtureRef, QByteArrayLiteral(" ") + index + QByteArrayLiteral(" \"\""));
+        const QString wpjPath = writeUtf8File(tempPath(tempDir, QStringLiteral("legacy_index.wpj")),
+                                              rewritten);
+
+        CHECK(scannedFixes(wpjPath) == QList<ScannedFix>{{QStringLiteral("A1"), a1, expectedSystem}});
+    }
+}
+
+TEST_CASE("scanWalls fails on a malformed entry .wpj with the parser's message",
+          "[Scanner][Walls]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    writeUtf8File(tempPath(tempDir, QStringLiteral("MAIN.SRV")),
+                  QByteArrayLiteral("A1\tA2\t5.0\t0\t0\n"));
+    // The .REF on line 5 stops after the UTM zone.
+    const QString wpjPath = writeUtf8File(tempPath(tempDir, QStringLiteral("malformed.wpj")),
+                                          QByteArrayLiteral(";WALLS Project file\n"
+                                                            ".BOOK\tTest Cave\n"
+                                                            ".NAME\tTEST-CAVE\n"
+                                                            ".STATUS\t8\n"
+                                                            ".REF\t4113846.340 580661.570 16\n"
+                                                            ".SURVEY\tMain\n"
+                                                            ".NAME\tMAIN\n"
+                                                            ".STATUS\t8\n"
+                                                            ".ENDBOOK\n"));
+
+    const auto scan = cwExternalCenterlineScanner::scan(wpjPath);
+    REQUIRE(scan.hasError());
+    const QString error = scan.errorMessage();
+    INFO("error: " << error.toStdString());
+    CHECK(error.contains(QStringLiteral("malformed.wpj")));
+    CHECK(error.contains(QStringLiteral("line 5")));
+    CHECK(error.contains(QStringLiteral("Expected")));
+    CHECK_FALSE(error.contains(QStringLiteral("could not be read")));
+}
+
 TEST_CASE("scanWalls names a #FIX under the prefix levels in force", "[Scanner][Attach]")
 {
     QTemporaryDir tempDir;

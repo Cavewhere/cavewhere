@@ -1844,6 +1844,17 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
     }
 }
 
+QString wallsProjectParseError(const QString& filePath, const dewalls::WallsMessage& message)
+{
+    const QString file = message.source().isEmpty() ? filePath : message.source();
+    if (message.startLine() < 0) {
+        return QStringLiteral("could not parse Walls project %1: %2")
+            .arg(file, message.message());
+    }
+    return QStringLiteral("could not parse Walls project %1, line %2: %3")
+        .arg(file, QString::number(message.startLine() + 1), message.message());
+}
+
 void scanWallsFile(const QString& filePath, ScanState& state)
 {
     const QString canonical = canonicalize(filePath);
@@ -1865,15 +1876,28 @@ void scanWallsFile(const QString& filePath, ScanState& state)
     const bool isWpj = hasExtension(canonical, kWallsWpjExtension);
 
     if (isWpj) {
-        // .wpj: parse first; if dewalls returns a null root the file
-        // exists on disk but isn't usable to cavern, so drop it from
-        // the dependency list with a warning rather than carrying a
-        // broken project file into reconcile.
+        // .wpj: parse first. A null root fails the scan for the entry
+        // file and drops a nested project from the dependency list with
+        // a warning; either way the reason is the parser's own message.
         dewalls::WallsProjectParser parser;
+        QString parseError;
+        QObject::connect(&parser, &dewalls::WallsProjectParser::message, &parser,
+                         [&parseError, &canonical](const dewalls::WallsMessage& message) {
+            if (parseError.isEmpty() && message.severity() == QLatin1String("error")) {
+                parseError = wallsProjectParseError(canonical, message);
+            }
+        });
         dewalls::WpjBookPtr root = parser.parseFile(canonical);
         if (root.isNull()) {
-            recordWarning(state,
-                          QStringLiteral("could not parse Walls project: %1").arg(canonical));
+            const QString reason = parseError.isEmpty()
+                ? QStringLiteral("could not parse Walls project %1").arg(canonical)
+                : parseError;
+            // This file is not on inProgress yet, so an empty stack means the entry file.
+            if (state.inProgress.isEmpty()) {
+                state.error = reason;
+            } else {
+                recordWarning(state, reason);
+            }
             return;
         }
 
