@@ -39,6 +39,7 @@ using Model = cwPassageTubeGalleryModel;
 const QString kSymmetricT = QStringLiteral("1. symmetric T");
 const QString kJunctionFreeCase = QStringLiteral("no arms, through profile 0, bend 0, same section");
 const QString kShaftFootCase = QStringLiteral("25. Zero floor reading at the foot of a shaft");
+const QString kCaseWithIssues = QStringLiteral("24. Sharp bend in an unread passage next to a zero reading");
 const QString kSharpBendCase = QStringLiteral("23. Sharp bend at a station reading zero on the outside wall");
 constexpr float kLengthTolerance = 1e-4f;
 constexpr float kPositionTolerance = 1e-3f;
@@ -554,7 +555,7 @@ TEST_CASE("cwPassageTubeGalleryModel opens a CaveWhere project", "[PassageTube][
 TEST_CASE("cwPassageTubeGalleryModel names the station nearest each issue", "[PassageTube][cwPassageTubeGalleryModel]")
 {
     Model model;
-    const int row = model.indexOf(kShaftFootCase);
+    const int row = model.indexOf(kCaseWithIssues);
     REQUIRE(row >= 0);
     model.setCurrentIndex(row);
 

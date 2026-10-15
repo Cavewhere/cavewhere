@@ -1112,16 +1112,17 @@ TEST_CASE("cwPassageTubeBuilder keeps the pit depth out of the lip ring and roun
 
     // The approach floor continues to the lip in place of the dropped reading.
     // The lip and the bottom turn 90°, so their elbows' middle rings lie at
-    // 45° and each vertical reading slides along the level leg onto them, √2
-    // longer. The rings sit off their stations toward the bend's inside and
-    // take the station's section seen from their centers: every wall stays
-    // where it was read, the lip's floor only as far as holds the center.
+    // 45°, off their stations toward the bend's inside, and reach the walls
+    // of the two legs: the level leg's ceiling or floor √2 times its reading
+    // from the station outside the bend, the shaft's wall inside it, where
+    // the level leg's floor or ceiling runs on into the shaft.
+    constexpr double kShaftRadius = 2.0;
     const QVector3D lipStation(0, 10, 0);
     const Builder::Ring& lip = stationRing(chain, lipStation);
     const double lipOffset = QVector3D::dotProduct(lipStation - lip.center, lip.frame.up);
     REQUIRE(lipOffset > 0.0);
     CHECK(lip.radii.at(binAt(90)) == Catch::Approx(1.0 * std::numbers::sqrt2 + lipOffset));
-    CHECK(lip.radii.at(binAt(270)) == Catch::Approx(std::max(0.5 * std::numbers::sqrt2 - lipOffset, Builder::kMinRadiusMeters)));
+    CHECK(lip.radii.at(binAt(270)) == Catch::Approx((lip.center.y() - (lipStation.y() - kShaftRadius)) * std::numbers::sqrt2));
     // The corner inset is 1.1 × the 2 m walls × tan 45°.
     const Builder::Ring& approach = ringAt(chain, QVector3D(0, 7.8f, 0));
     CHECK(approach.radii.at(binAt(270)) == Catch::Approx(0.5));
@@ -1130,7 +1131,7 @@ TEST_CASE("cwPassageTubeBuilder keeps the pit depth out of the lip ring and roun
     const Builder::Ring& bottom = stationRing(chain, bottomStation);
     const double bottomOffset = QVector3D::dotProduct(bottomStation - bottom.center, -bottom.frame.up);
     REQUIRE(bottomOffset > 0.0);
-    CHECK(bottom.radii.at(binAt(90)) == Catch::Approx(1.0 * std::numbers::sqrt2 - bottomOffset));
+    CHECK(bottom.radii.at(binAt(90)) == Catch::Approx((bottomStation.y() + kShaftRadius - bottom.center.y()) * std::numbers::sqrt2));
     CHECK(bottom.radii.at(binAt(270)) == Catch::Approx(0.5 * std::numbers::sqrt2 + bottomOffset));
 
     // The shaft is round at its stations' left and right.
@@ -1757,11 +1758,17 @@ namespace {
 
 constexpr float kSameStationMeters = 1e-4f;
 
+// Where a ray from a ring's center meets its wall, and whether both bins
+// either side of the hit were measured.
+struct WallHit {
+    double reach = 0.0;
+    bool isMeasured = false;
+};
+
 // How far the ring's wall lies from its center along ray, in the ring's
 // (right, up) plane: where the ray meets the chord between the bins either
-// side. A wall a sharp bend reshaped, with either bin unmeasured, has no
-// reach.
-std::optional<double> measuredReachAlong(const Builder::Ring& ring, const QVector2D& ray)
+// side.
+std::optional<WallHit> wallHitAlong(const Builder::Ring& ring, const QVector2D& ray)
 {
     const auto local = [&](int k) {
         return QVector2D(static_cast<float>(ring.radii.at(k) * std::cos(ring.binAngles.at(k))),
@@ -1771,8 +1778,7 @@ std::optional<double> measuredReachAlong(const Builder::Ring& ring, const QVecto
         return a.x() * b.y() - a.y() * b.x();
     };
     const int resolution = ring.radii.size();
-    std::optional<double> nearest;
-    bool isMeasured = false;
+    std::optional<WallHit> nearest;
     for (int bin = 0; bin < resolution; ++bin) {
         const int next = (bin + 1) % resolution;
         const QVector2D a = local(bin);
@@ -1783,12 +1789,22 @@ std::optional<double> measuredReachAlong(const Builder::Ring& ring, const QVecto
         }
         const float along = cross(a, edge) / denominator;
         const float onEdge = cross(a, ray) / denominator;
-        if (along > 0.0f && onEdge >= 0.0f && onEdge <= 1.0f && along < nearest.value_or(std::numeric_limits<double>::max())) {
-            nearest = along;
-            isMeasured = ring.measured.at(bin) && ring.measured.at(next);
+        if (along > 0.0f && onEdge >= 0.0f && onEdge <= 1.0f && (!nearest || along < nearest->reach)) {
+            nearest = WallHit {along, ring.measured.at(bin) && ring.measured.at(next)};
         }
     }
-    return isMeasured ? nearest : std::nullopt;
+    return nearest;
+}
+
+// The ring's wall along ray, unless a sharp bend reshaped it, leaving either
+// bin unmeasured.
+std::optional<double> measuredReachAlong(const Builder::Ring& ring, const QVector2D& ray)
+{
+    const std::optional<WallHit> hit = wallHitAlong(ring, ray);
+    if (hit && hit->isMeasured) {
+        return hit->reach;
+    }
+    return std::nullopt;
 }
 
 std::optional<double> lerpReading(const std::optional<double>& a, const std::optional<double>& b, double t)
@@ -1799,28 +1815,13 @@ std::optional<double> lerpReading(const std::optional<double>& a, const std::opt
     return std::nullopt;
 }
 
-// The unit directions of the two chain legs that meet at a corner station.
-struct CornerLegs {
-    QVector3D incoming;
-    QVector3D outgoing;
-};
-
 // A station's record across a ring at face value: left and right as read,
 // swapped when the record faces against the ring's tangent; up and down
-// plumb, so a ring square to a sloped leg meets them foreshortened. A corner
-// station's ring meets each plumb wall where the leg it is more square to
-// carries it onto the ring's plane.
-cwStationLrud recordAcross(const cwStationLrud& lrud, const QVector3D& facing, const Builder::Frame& frame, const std::optional<CornerLegs>& corner)
+// plumb, so a ring square to a sloped leg meets them foreshortened.
+cwStationLrud recordAcross(const cwStationLrud& lrud, const QVector3D& facing, const Builder::Frame& frame)
 {
     const QVector3D worldUp(0.0f, 0.0f, 1.0f);
-    const auto plumbScale = [&]() -> double {
-        if (!corner) {
-            return std::abs(QVector3D::dotProduct(worldUp, frame.up));
-        }
-        const QVector3D& leg = std::abs(corner->incoming.z()) <= std::abs(corner->outgoing.z()) ? corner->incoming : corner->outgoing;
-        return (worldUp - leg * (frame.tangent.z() / QVector3D::dotProduct(leg, frame.tangent))).length();
-    };
-    const double plumb = plumbScale();
+    const double plumb = std::abs(QVector3D::dotProduct(worldUp, frame.up));
     const auto foreshortened = [&](const std::optional<double>& reading) -> std::optional<double> {
         if (reading) {
             return std::max(Builder::kMinRadiusMeters, *reading * plumb);
@@ -1847,30 +1848,10 @@ std::optional<std::pair<cwStationLrud, QVector3D>> legRecordAt(const Builder::Le
     return std::nullopt;
 }
 
-// The directions of the chain's legs into and out of station.
-CornerLegs cornerLegsAt(const Builder::Debug& debug, const Builder::Chain& chain, const QVector3D& station)
-{
-    CornerLegs corner;
-    for (const Builder::ChainLeg& chainLeg : chain.legs) {
-        const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
-        const QVector3D start = chainLeg.reversed ? leg.toPosition : leg.fromPosition;
-        const QVector3D end = chainLeg.reversed ? leg.fromPosition : leg.toPosition;
-        if (end.distanceToPoint(station) < kSameStationMeters) {
-            corner.incoming = (end - start).normalized();
-        }
-        if (start.distanceToPoint(station) < kSameStationMeters) {
-            corner.outgoing = (end - start).normalized();
-        }
-    }
-    return corner;
-}
-
 // The widest of the station's records on the chain's legs, across the ring
-// at the station, or across the elbow's middle ring at a corner station.
-cwStationLrud stationReadingsAcross(const Builder::Debug& debug, const Builder::Chain& chain, const QVector3D& station, const Builder::Ring& ring)
+// at the station.
+cwStationLrud stationReadingsAcross(const Builder::Debug& debug, const Builder::Chain& chain, const QVector3D& station, const Builder::Frame& frame)
 {
-    const Builder::Frame& frame = ring.frame;
-    const std::optional<CornerLegs> corner = ring.isElbow ? std::optional<CornerLegs>(cornerLegsAt(debug, chain, station)) : std::nullopt;
     const auto widen = [](std::optional<double>& widest, const std::optional<double>& reading) {
         if (reading) {
             widest = std::max(widest.value_or(*reading), *reading);
@@ -1879,7 +1860,7 @@ cwStationLrud stationReadingsAcross(const Builder::Debug& debug, const Builder::
     cwStationLrud widest;
     for (const Builder::ChainLeg& chainLeg : chain.legs) {
         if (const auto record = legRecordAt(debug.legs.at(chainLeg.legIndex), station)) {
-            const cwStationLrud across = recordAcross(record->first, record->second, frame, corner);
+            const cwStationLrud across = recordAcross(record->first, record->second, frame);
             widen(widest.left, across.left);
             widen(widest.right, across.right);
             widen(widest.up, across.up);
@@ -1889,50 +1870,27 @@ cwStationLrud stationReadingsAcross(const Builder::Debug& debug, const Builder::
     return widest;
 }
 
-// How far the quadrant ellipse of readings around a station reaches from
-// center, a point given as (right, up) from the station, along each axis.
-cwStationLrud readingsFrom(const cwStationLrud& readings, const QVector2D& center)
-{
-    const auto reach = [](const std::optional<double>& along, const std::optional<double>& across, double offsetAlong, double offsetAcross) -> std::optional<double> {
-        if (!along || !across) {
-            return std::nullopt;
-        }
-        const double fraction = offsetAcross / *across;
-        return *along * std::sqrt(std::max(0.0, 1.0 - fraction * fraction)) - offsetAlong;
-    };
-    const std::optional<double>& horizontal = center.x() >= 0.0f ? readings.right : readings.left;
-    const std::optional<double>& vertical = center.y() >= 0.0f ? readings.up : readings.down;
-    return {reach(readings.left, vertical, -center.x(), center.y()),
-            reach(readings.right, vertical, center.x(), center.y()),
-            reach(readings.up, horizontal, center.y(), center.x()),
-            reach(readings.down, horizontal, -center.y(), center.x())};
-}
-
 // The walls of one ring along ±right and ±up from its center and the
-// readings they should reach; origin is the station the readings were taken
-// at, in the ring's (right, up) plane.
+// readings they should reach.
 struct RingWalls {
     int ring = -1;
     cwStationLrud expected;
     cwStationLrud reached;
-    QVector2D origin;
 };
 
 // A ring along a leg reaches its two stations' readings interpolated by its
-// distance along the leg; a ring at a station, or the elbow's middle ring,
-// which sits off its station, reaches the station's readings seen from the
-// ring's center. Rings without readings of their own (blended elbow rings,
-// borrowed, steep and grown rings) carry none.
+// distance along the leg; a ring at a station reaches the station's
+// readings. Elbow rings, which reach the walls of the corner's two legs, and
+// rings without readings of their own (borrowed, steep and grown rings)
+// carry none.
 std::optional<RingWalls> ringWalls(const Builder::Debug& debug, const Builder::Chain& chain, int ringIndex)
 {
     const Builder::Ring& ring = chain.rings.at(ringIndex);
-    if (!ring.section || ring.isGrown || ring.frame.inclinationWeight > 0.0) {
+    if (!ring.section || ring.isElbow || ring.isGrown || ring.frame.inclinationWeight > 0.0) {
         return std::nullopt;
     }
 
-    const QVector3D stationOffset = ring.section->station - ring.center;
-    const QVector2D origin(QVector3D::dotProduct(stationOffset, ring.frame.right), QVector3D::dotProduct(stationOffset, ring.frame.up));
-    RingWalls walls {ringIndex, {}, {}, origin};
+    RingWalls walls {ringIndex, {}, {}};
     walls.reached = {measuredReachAlong(ring, QVector2D(-1.0f, 0.0f)),
                      measuredReachAlong(ring, QVector2D(1.0f, 0.0f)),
                      measuredReachAlong(ring, QVector2D(0.0f, 1.0f)),
@@ -1942,8 +1900,8 @@ std::optional<RingWalls> ringWalls(const Builder::Debug& debug, const Builder::C
     const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
     const QVector3D start = chainLeg.reversed ? leg.toPosition : leg.fromPosition;
     const QVector3D end = chainLeg.reversed ? leg.fromPosition : leg.toPosition;
-    if (ring.isElbow || ring.center.distanceToPoint(start) < kSameStationMeters || ring.center.distanceToPoint(end) < kSameStationMeters) {
-        walls.expected = readingsFrom(stationReadingsAcross(debug, chain, ring.section->station, ring), -origin);
+    if (ring.center.distanceToPoint(start) < kSameStationMeters || ring.center.distanceToPoint(end) < kSameStationMeters) {
+        walls.expected = stationReadingsAcross(debug, chain, ring.center, ring.frame);
         return walls;
     }
 
@@ -1953,8 +1911,8 @@ std::optional<RingWalls> ringWalls(const Builder::Debug& debug, const Builder::C
     const auto endRecord = legRecordAt(leg, end);
     REQUIRE(startRecord);
     REQUIRE(endRecord);
-    const cwStationLrud low = recordAcross(startRecord->first, startRecord->second, ring.frame, std::nullopt);
-    const cwStationLrud high = recordAcross(endRecord->first, endRecord->second, ring.frame, std::nullopt);
+    const cwStationLrud low = recordAcross(startRecord->first, startRecord->second, ring.frame);
+    const cwStationLrud high = recordAcross(endRecord->first, endRecord->second, ring.frame);
     walls.expected = {lerpReading(low.left, high.left, t),
                       lerpReading(low.right, high.right, t),
                       lerpReading(low.up, high.up, t),
@@ -2000,9 +1958,10 @@ bool isOnLegBetween(const Builder::Debug& debug, const Builder::Chain& chain, co
 } // namespace
 
 // Between two stations each wall runs from the first station's reading to
-// the second's by distance along the leg, through the corner stations of an
-// S-bend and of Phake Cave's a1 → a4 chain, whose a2 corner the tube used to
-// bulge around and neck down past.
+// the second's by distance along the leg, on the legs of an S-bend and of
+// Phake Cave's a1 → a4 chain, whose a2 corner the tube used to bulge around
+// and neck down past. The corners' elbow rings are checked against the legs'
+// walls on their own.
 TEST_CASE("cwPassageTubeBuilder runs each wall from one station's reading to the next", "[PassageTube][cwPassageTubeBuilder]")
 {
     SECTION("S-bend")
@@ -2049,9 +2008,8 @@ TEST_CASE("cwPassageTubeBuilder runs each wall from one station's reading to the
             checkWallsWithinReadings(*walls);
             ++checkedRings;
             const bool isOnA2ToA3 = isOnLegBetween(debug, chain, ring, {QStringLiteral("a2"), QStringLiteral("a3")});
-            const bool isA2Corner = ring.isElbow && ring.section->station.distanceToPoint(a2) < kSameStationMeters;
-            if ((isOnA2ToA3 || isA2Corner) && walls->reached.left) {
-                a2ToA3Left.append({ring.section->station.distanceToPoint(a2), *walls->reached.left + walls->origin.x()});
+            if (isOnA2ToA3 && walls->reached.left) {
+                a2ToA3Left.append({ring.section->station.distanceToPoint(a2), *walls->reached.left});
             }
         }
         CHECK(checkedRings > chain.legs.size());
@@ -2063,12 +2021,380 @@ TEST_CASE("cwPassageTubeBuilder runs each wall from one station's reading to the
             leftText.append(QStringLiteral("%1 m: %2").arg(distance, 0, 'f', 2).arg(left, 0, 'f', 2));
         }
         INFO("a2 to a3 left walls " << leftText.join(QStringLiteral(", ")).toStdString());
-        CHECK(a2ToA3Left.first().second == Catch::Approx(kA2Left).margin(cwPassageTubeMeshCheck::kWallTolerance));
-        CHECK(a2ToA3Left.last().second == Catch::Approx(kA3Left).margin(cwPassageTubeMeshCheck::kWallTolerance));
+        CHECK(a2ToA3Left.first().second <= kA2Left + cwPassageTubeMeshCheck::kWallTolerance);
+        CHECK(a2ToA3Left.last().second >= kA3Left - cwPassageTubeMeshCheck::kWallTolerance);
         for (int i = 1; i < a2ToA3Left.size(); ++i) {
             INFO("ring " << i);
             CHECK(a2ToA3Left.at(i).second <= a2ToA3Left.at(i - 1).second + kMonotonicTolerance);
         }
+    }
+}
+
+namespace {
+
+// A station the chain walks through, in walking order.
+struct ChainStation {
+    QString name;
+    QVector3D position;
+};
+
+QVector<ChainStation> chainStationPoints(const Builder::Debug& debug, const Builder::Chain& chain)
+{
+    QVector<ChainStation> stations;
+    for (const Builder::ChainLeg& chainLeg : chain.legs) {
+        const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+        if (stations.isEmpty()) {
+            stations.append(chainLeg.reversed ? ChainStation {leg.to, leg.toPosition} : ChainStation {leg.from, leg.fromPosition});
+        }
+        stations.append(chainLeg.reversed ? ChainStation {leg.from, leg.fromPosition} : ChainStation {leg.to, leg.toPosition});
+    }
+    return stations;
+}
+
+// A corner station of the chain and the legs into and out of it, as indices
+// into Chain::legs.
+struct Corner {
+    QString name;
+    QVector3D station;
+    int incomingLeg = -1;
+    int outgoingLeg = -1;
+    QVector3D incoming;
+    QVector3D outgoing;
+
+    // Horizontal, toward the inside of the bend.
+    QVector3D inside() const
+    {
+        QVector3D toward = outgoing - incoming;
+        toward.setZ(0.0f);
+        return toward.normalized();
+    }
+};
+
+// The interior station of the chain nearest point.
+Corner nearestCorner(const Builder::Debug& debug, const Builder::Chain& chain, const QVector3D& point)
+{
+    const QVector<ChainStation> stations = chainStationPoints(debug, chain);
+    REQUIRE(stations.size() > 2);
+    int nearest = 1;
+    for (int i = 2; i + 1 < stations.size(); ++i) {
+        if (stations.at(i).position.distanceToPoint(point) < stations.at(nearest).position.distanceToPoint(point)) {
+            nearest = i;
+        }
+    }
+    const QVector3D& previous = stations.at(nearest - 1).position;
+    const QVector3D& station = stations.at(nearest).position;
+    const QVector3D& next = stations.at(nearest + 1).position;
+    return {stations.at(nearest).name, station, nearest - 1, nearest, (station - previous).normalized(), (next - station).normalized()};
+}
+
+// A point's offset from a chain leg's axis, extended both ways without
+// limit, and the leg's wall in that direction: the quadrant ellipse of its
+// two stations' readings interpolated by the point's distance along the leg,
+// holding either station's reading beyond it.
+struct LegWall {
+    double offset = 0.0;
+    std::optional<double> wall;
+};
+
+LegWall legWallAt(const Builder::Debug& debug, const Builder::Chain& chain, int chainLegIndex, const QVector3D& point)
+{
+    const Builder::ChainLeg& chainLeg = chain.legs.at(chainLegIndex);
+    const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+    const QVector3D start = chainLeg.reversed ? leg.toPosition : leg.fromPosition;
+    const QVector3D end = chainLeg.reversed ? leg.fromPosition : leg.toPosition;
+    const QVector3D along = end - start;
+    const float alongPoint = QVector3D::dotProduct(point - start, along) / along.lengthSquared();
+    const QVector3D offset = point - (start + along * alongPoint);
+
+    const QVector3D worldUp(0.0f, 0.0f, 1.0f);
+    Builder::Frame frame;
+    frame.tangent = along.normalized();
+    frame.up = (worldUp - frame.tangent * QVector3D::dotProduct(worldUp, frame.tangent)).normalized();
+    frame.right = QVector3D::crossProduct(frame.tangent, frame.up);
+
+    const auto startRecord = legRecordAt(leg, start);
+    const auto endRecord = legRecordAt(leg, end);
+    REQUIRE(startRecord);
+    REQUIRE(endRecord);
+    const cwStationLrud low = recordAcross(startRecord->first, startRecord->second, frame);
+    const cwStationLrud high = recordAcross(endRecord->first, endRecord->second, frame);
+    const double t = std::clamp(static_cast<double>(alongPoint), 0.0, 1.0);
+
+    const double x = QVector3D::dotProduct(offset, frame.right);
+    const double y = QVector3D::dotProduct(offset, frame.up);
+    const std::optional<double> a = x >= 0.0 ? lerpReading(low.right, high.right, t) : lerpReading(low.left, high.left, t);
+    const std::optional<double> b = y >= 0.0 ? lerpReading(low.up, high.up, t) : lerpReading(low.down, high.down, t);
+    LegWall result {offset.length(), std::nullopt};
+    if (a && b) {
+        const double theta = std::atan2(y, x);
+        result.wall = *a * *b / std::hypot(*b * std::cos(theta), *a * std::sin(theta));
+    }
+    return result;
+}
+
+// The point's offset from, and wall of, whichever of the corner's two legs
+// has the nearer extended axis.
+LegWall nearerLegWall(const Builder::Debug& debug, const Builder::Chain& chain, const Corner& corner, const QVector3D& point)
+{
+    const LegWall incoming = legWallAt(debug, chain, corner.incomingLeg, point);
+    const LegWall outgoing = legWallAt(debug, chain, corner.outgoingLeg, point);
+    return incoming.offset <= outgoing.offset ? incoming : outgoing;
+}
+
+// Every measured bin of an elbow ring lies on the corner's envelope: the
+// union of the two leg tubes, each run on past the corner station at the
+// station's reading as far as it lies inside the other. A vertex is on the
+// envelope when it is on one leg's wall where that leg's tube reaches, and
+// lies short of the interior of either tube's reach.
+void checkElbowRingOnLegWalls(const Builder::Debug& debug, const Builder::Chain& chain, int ringIndex, const Corner& corner)
+{
+    constexpr double kTolerance = cwPassageTubeMeshCheck::kWallTolerance;
+    const Builder::Ring& ring = chain.rings.at(ringIndex);
+    for (int bin = 0; bin < ring.radii.size(); ++bin) {
+        if (!ring.measured.at(bin)) {
+            continue;
+        }
+        const QVector3D vertex = ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
+        const LegWall incoming = legWallAt(debug, chain, corner.incomingLeg, vertex);
+        const LegWall outgoing = legWallAt(debug, chain, corner.outgoingLeg, vertex);
+        if (!incoming.wall || !outgoing.wall) {
+            continue;
+        }
+        const double pastStation = QVector3D::dotProduct(vertex - corner.station, corner.incoming);
+        const double beforeStation = -QVector3D::dotProduct(vertex - corner.station, corner.outgoing);
+        const auto isOnWall = [](const LegWall& leg) {
+            return std::abs(leg.offset - *leg.wall) <= kTolerance;
+        };
+        const auto isWithin = [](const LegWall& leg, double margin) {
+            return leg.offset <= *leg.wall + margin;
+        };
+        const bool isOnIncoming = isOnWall(incoming) && (pastStation <= kTolerance || isWithin(outgoing, kTolerance));
+        const bool isOnOutgoing = isOnWall(outgoing) && (beforeStation <= kTolerance || isWithin(incoming, kTolerance));
+        const bool isInsideIncoming = isWithin(incoming, -kTolerance) && (pastStation < -kTolerance || isWithin(outgoing, -kTolerance));
+        const bool isInsideOutgoing = isWithin(outgoing, -kTolerance) && (beforeStation < -kTolerance || isWithin(incoming, -kTolerance));
+        INFO("corner " << corner.name.toStdString() << " elbow ring " << ringIndex << " bin " << bin
+                       << ": vertex " << incoming.offset << " m off the incoming leg's axis, its wall " << *incoming.wall
+                       << ", " << outgoing.offset << " m off the outgoing leg's axis, its wall " << *outgoing.wall
+                       << ", " << pastStation << " m past the station");
+        CHECK((isOnIncoming || isOnOutgoing));
+        CHECK_FALSE((isInsideIncoming || isInsideOutgoing));
+    }
+}
+
+// Checks each ring of the chain on a leg between two of stations: rings
+// along a leg against their two stations' readings, elbow rings of a corner
+// between two such legs against the two legs' walls. Returns how many rings
+// it checked.
+int checkRingsOnLegWalls(const Builder::Debug& debug, const Builder::Chain& chain, const QStringList& stations)
+{
+    const auto isLegBetween = [&](int chainLeg) {
+        const Builder::Leg& leg = debug.legs.at(chain.legs.at(chainLeg).legIndex);
+        return stations.contains(leg.from) && stations.contains(leg.to);
+    };
+    int checkedRings = 0;
+    for (int i = 0; i < chain.rings.size(); ++i) {
+        const Builder::Ring& ring = chain.rings.at(i);
+        if (ring.isElbow) {
+            const Corner corner = nearestCorner(debug, chain, ring.center);
+            if (isLegBetween(corner.incomingLeg) && isLegBetween(corner.outgoingLeg) && ring.frame.inclinationWeight == 0.0) {
+                checkElbowRingOnLegWalls(debug, chain, i, corner);
+                ++checkedRings;
+            }
+        } else if (isOnLegBetween(debug, chain, ring, stations)) {
+            if (const std::optional<RingWalls> walls = ringWalls(debug, chain, i)) {
+                checkWallsWithinReadings(*walls);
+                ++checkedRings;
+            }
+        }
+    }
+    return checkedRings;
+}
+
+// Where the ring's horizontal axis meets its wall on the inside of the
+// corner's bend, or on the outside.
+QVector3D sideWallPoint(const Builder::Ring& ring, const Corner& corner, bool isInside)
+{
+    const bool rightIsInside = QVector3D::dotProduct(ring.frame.right, corner.inside()) > 0.0f;
+    const float sign = rightIsInside == isInside ? 1.0f : -1.0f;
+    const std::optional<WallHit> hit = wallHitAlong(ring, QVector2D(sign, 0.0f));
+    REQUIRE(hit);
+    return ring.center + ring.frame.right * (sign * static_cast<float>(hit->reach));
+}
+
+const Builder::Ring& elbowMiddleRing(const Builder::Chain& chain, const QVector3D& station)
+{
+    const auto it = std::find_if(chain.rings.cbegin(), chain.rings.cend(), [&](const Builder::Ring& ring) {
+        return ring.isElbow && ring.section && ring.section->station.distanceToPoint(station) < kSameStationMeters;
+    });
+    REQUIRE(it != chain.rings.cend());
+    return *it;
+}
+
+QVector3D legPosition(const Builder::Debug& debug, const QString& station)
+{
+    for (const Builder::Leg& leg : debug.legs) {
+        if (leg.from == station) {
+            return leg.fromPosition;
+        }
+        if (leg.to == station) {
+            return leg.toPosition;
+        }
+    }
+    FAIL("no leg at " << station.toStdString());
+    return {};
+}
+
+QString wallsText(const QVector<double>& walls)
+{
+    QStringList text;
+    for (double wall : walls) {
+        text.append(QString::number(wall, 'f', 2));
+    }
+    return text.join(QStringLiteral(" -> "));
+}
+
+} // namespace
+
+// A corner's walls are the two leg tubes, each at its interpolated width and
+// run on past the corner station at the station's reading as far as it stays
+// inside the other: a miter outside, a square corner inside. Every elbow
+// ring reaches from its own center to that envelope, through the S-bend of
+// case 30, Phake Cave's a1 -> a4 chain and the top of case 25's shaft.
+TEST_CASE("cwPassageTubeBuilder keeps a corner's walls on the legs' walls", "[PassageTube][cwPassageTubeBuilder]")
+{
+    SECTION("S-bend")
+    {
+        constexpr double kS1Reading = 3.0;
+        constexpr double kMonotonicTolerance = 1e-3;
+        const cwPassageTubeCases::Case& entry = catalogCase(QStringLiteral("30. S-bend from a small to a large to a medium section"));
+        const Builder::Debug debug = buildCase(entry);
+        REQUIRE(debug.chains.size() == 1);
+        const Builder::Chain& chain = debug.chains.at(0);
+        CHECK(checkRingsOnLegWalls(debug, chain, {QStringLiteral("s0"), QStringLiteral("s1"), QStringLiteral("s2"), QStringLiteral("s3")}) > chain.legs.size());
+
+        const QVector3D s0 = casePosition(entry, QStringLiteral("s0"));
+        const QVector3D s1 = casePosition(entry, QStringLiteral("s1"));
+        const Corner corner = nearestCorner(debug, chain, s1);
+        REQUIRE(corner.name == QStringLiteral("s1"));
+
+        // The outside wall before s1 runs on the incoming leg's wall, rising
+        // toward s1's reading without a bulge, and meets the outgoing leg's
+        // wall in a miter on the bisector.
+        QVector<double> outsideBefore;
+        for (const Builder::Ring& ring : chain.rings) {
+            const QVector3D outside = sideWallPoint(ring, corner, false);
+            const float along = QVector3D::dotProduct(outside - s0, corner.incoming);
+            if (along > 0.0f && along < s0.distanceToPoint(s1)) {
+                const LegWall wall = legWallAt(debug, chain, corner.incomingLeg, outside);
+                REQUIRE(wall.wall);
+                INFO("outside wall " << wall.offset << " at " << along << " m along, the leg's wall " << *wall.wall);
+                CHECK(std::abs(wall.offset - *wall.wall) <= cwPassageTubeMeshCheck::kWallTolerance);
+                outsideBefore.append(wall.offset);
+            }
+        }
+        REQUIRE_FALSE(outsideBefore.isEmpty());
+        INFO("s1 outside walls before the station " << wallsText(outsideBefore).toStdString());
+        for (int i = 1; i < outsideBefore.size(); ++i) {
+            CHECK(outsideBefore.at(i) >= outsideBefore.at(i - 1) - kMonotonicTolerance);
+        }
+        const Builder::Ring& middle = elbowMiddleRing(chain, s1);
+        const double halfTurn = std::acos(static_cast<double>(QVector3D::dotProduct(corner.incoming, corner.outgoing))) / 2.0;
+        const QVector3D miter = sideWallPoint(middle, corner, false);
+        CHECK(miter.distanceToPoint(s1) == Catch::Approx(kS1Reading / std::cos(halfTurn)).margin(cwPassageTubeMeshCheck::kWallTolerance));
+
+        // The inside wall from the inset ring before s1 to the one after,
+        // off the nearer leg's axis: rising to the middle ring, falling after.
+        QVector<int> elbow;
+        for (int i = 0; i < chain.rings.size(); ++i) {
+            if (chain.rings.at(i).isElbow && nearestCorner(debug, chain, chain.rings.at(i).center).name == corner.name) {
+                elbow.append(i);
+            }
+        }
+        REQUIRE_FALSE(elbow.isEmpty());
+        REQUIRE(elbow.first() > 0);
+        REQUIRE(elbow.last() + 1 < chain.rings.size());
+        QVector<double> inside;
+        int middleIndex = -1;
+        for (int i = elbow.first() - 1; i <= elbow.last() + 1; ++i) {
+            const Builder::Ring& ring = chain.rings.at(i);
+            if (&ring == &middle) {
+                middleIndex = inside.size();
+            }
+            inside.append(nearerLegWall(debug, chain, corner, sideWallPoint(ring, corner, true)).offset);
+        }
+        REQUIRE(middleIndex >= 0);
+        INFO("s1 inside walls " << wallsText(inside).toStdString());
+        for (int i = 1; i < inside.size(); ++i) {
+            INFO("inside wall " << i);
+            if (i <= middleIndex) {
+                CHECK(inside.at(i) >= inside.at(i - 1) - kMonotonicTolerance);
+            } else {
+                CHECK(inside.at(i) <= inside.at(i - 1) + kMonotonicTolerance);
+            }
+        }
+    }
+
+    SECTION("Phake Cave a1 to a4")
+    {
+        constexpr double kA2Inside = 2.5;
+        const Builder::Debug debug = buildDebug(makeInput(cwPassageTubeCases::phakeCave()));
+        const Builder::Chain& chain = chainWithLeg(debug, QStringLiteral("a1"), QStringLiteral("a2"));
+        const QStringList stations {QStringLiteral("a1"), QStringLiteral("a2"), QStringLiteral("a3"), QStringLiteral("a4")};
+        CHECK(checkRingsOnLegWalls(debug, chain, stations) > chain.legs.size());
+
+        const QVector3D a2 = legPosition(debug, QStringLiteral("a2"));
+        const Corner corner = nearestCorner(debug, chain, a2);
+        REQUIRE(corner.name == QStringLiteral("a2"));
+        const Builder::Ring& middle = elbowMiddleRing(chain, a2);
+        const double inside = nearerLegWall(debug, chain, corner, sideWallPoint(middle, corner, true)).offset;
+        INFO("a2 middle ring's inside wall " << inside);
+        CHECK(inside == Catch::Approx(kA2Inside).margin(cwPassageTubeMeshCheck::kWallTolerance));
+    }
+
+    SECTION("Top of a shaft")
+    {
+        constexpr double kLeadInCeiling = 2.0;
+        constexpr double kShaftHalfWidth = 2.0;
+        constexpr double kLeadInFloor = 1.0;
+        const cwPassageTubeCases::Case& entry = catalogCase(QStringLiteral("25. Zero floor reading at the foot of a shaft"));
+        const Builder::Debug debug = buildCase(entry);
+        const Builder::Chain& chain = chainWithLeg(debug, QStringLiteral("f0"), QStringLiteral("f1"));
+        const QVector3D f0 = casePosition(entry, QStringLiteral("f0"));
+        const QVector3D f1 = casePosition(entry, QStringLiteral("f1"));
+
+        // The lead-in's floor meets the shaft's south wall in a square corner,
+        // which the elbow rings reach and no vertex reaches past.
+        const QVector2D insideCorner(f1.y() - kShaftHalfWidth, f0.z() - kLeadInFloor);
+        double nearestToCorner = std::numeric_limits<double>::max();
+        int checkedRings = 0;
+        for (int i = 0; i < chain.rings.size(); ++i) {
+            const Builder::Ring& ring = chain.rings.at(i);
+            if (!ring.isElbow || nearestCorner(debug, chain, ring.center).name != QStringLiteral("f1")) {
+                continue;
+            }
+            ++checkedRings;
+            const auto highest = std::max_element(ring.vertices.cbegin(), ring.vertices.cend(), [](const QVector3D& a, const QVector3D& b) {
+                return a.z() < b.z();
+            });
+            const auto northernmost = std::max_element(ring.vertices.cbegin(), ring.vertices.cend(), [](const QVector3D& a, const QVector3D& b) {
+                return a.y() < b.y();
+            });
+            REQUIRE(highest != ring.vertices.cend());
+            INFO("f1 elbow ring " << i << ": highest vertex " << highest->z() - f0.z() << " m over the lead-in's axis, northernmost "
+                                  << northernmost->y() - f0.y() << " m north");
+            CHECK(highest->z() - f0.z() <= kLeadInCeiling + cwPassageTubeMeshCheck::kWallTolerance);
+            CHECK(northernmost->y() - f0.y() <= f1.y() - f0.y() + kShaftHalfWidth + cwPassageTubeMeshCheck::kWallTolerance);
+
+            for (const QVector3D& vertex : ring.vertices) {
+                INFO("vertex at " << vertex.y() << " north, " << vertex.z() << " up");
+                CHECK((vertex.y() >= insideCorner.x() - cwPassageTubeMeshCheck::kWallTolerance
+                       || vertex.z() >= insideCorner.y() - cwPassageTubeMeshCheck::kWallTolerance));
+                nearestToCorner = std::min(nearestToCorner, static_cast<double>((QVector2D(vertex.y(), vertex.z()) - insideCorner).length()));
+            }
+        }
+        CHECK(checkedRings > 0);
+        INFO("the nearest f1 elbow vertex lies " << nearestToCorner << " m from the lead-in floor's corner with the shaft");
+        CHECK(nearestToCorner <= cwPassageTubeMeshCheck::kWallTolerance);
     }
 }
 

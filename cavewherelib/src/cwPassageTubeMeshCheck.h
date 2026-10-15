@@ -162,9 +162,10 @@ public:
     //
     // WallBeyondReading, once per ring fitted to a station's readings (a
     // station's ring or an elbow's middle ring, never one a junction grew),
-    // at its farthest vertex: each vertex lies within wallToleranceMeters of
-    // the quadrant ellipse of the station's readings anchored at the station,
-    // as the station's legs or the ring see it (wallReaches).
+    // at its farthest vertex: each vertex (on an elbow ring, each measured
+    // one) lies within wallToleranceMeters of the quadrant ellipse of the
+    // station's readings anchored at the station, as the station's legs or
+    // the ring see it (wallReaches).
     static QVector<Issue> ringIssues(const cwPassageTubeBuilder::Debug& debug,
                                      const Options& options = Options());
 
@@ -188,10 +189,10 @@ public:
                                                          const cwPassageTubeBuilder::Ring& ring);
 
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
-    // the side walls square to the chain's direction through the station,
-    // apart from the stations where the builder warns BendClamped, the
-    // junction stations where an arm has a mouth, and the stations of an arm
-    // left inside its through passage.
+    // the side walls square to the chain's direction through the station or
+    // to one of the station's legs, apart from the stations where the
+    // builder warns BendClamped, the junction stations where an arm has a
+    // mouth, and the stations of an arm left inside its through passage.
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 

@@ -58,6 +58,7 @@ constexpr int kCenterlineInsideVotes = 2;
 // A record whose right lies this close to square with a section reads no
 // side walls across it, as in the builder.
 constexpr double kMinFacingComponent = 1e-6;
+constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
 // Halving the quarter arc this many times places its nearest point to well
 // under a micrometer on any cave-sized section.
 constexpr int kArcBisections = 48;
@@ -609,13 +610,17 @@ std::optional<Issue> foldBack(const cwPassageTubeBuilder::Ring& previous,
 }
 
 // A leg of a chain at one of its stations, with the readings the station
-// occurrence on that leg's chunk took.
+// occurrence on that leg's chunk took, and those of its station at the far
+// end, length meters along direction.
 struct StationLeg {
     QVector3D station;
     QVector3D direction;
     QString name;
     cwStationLrud lrud;
     QVector3D facing;
+    double length = 0.0;
+    cwStationLrud farLrud;
+    QVector3D farFacing;
 };
 
 QVector<StationLeg> stationLegs(const Debug& debug, const cwPassageTubeBuilder::Chain& chain, const QVector3D& station)
@@ -629,20 +634,22 @@ QVector<StationLeg> stationLegs(const Debug& debug, const cwPassageTubeBuilder::
             continue;
         }
         if (isNear(leg.fromPosition, station)) {
-            found.append({station, along / static_cast<float>(length), leg.from, leg.fromPassageLrud, leg.fromFacing});
+            found.append({station, along / static_cast<float>(length), leg.from, leg.fromPassageLrud, leg.fromFacing,
+                          length, leg.toPassageLrud, leg.toFacing});
         } else if (isNear(leg.toPosition, station)) {
-            found.append({station, -along / static_cast<float>(length), leg.to, leg.toPassageLrud, leg.toFacing});
+            found.append({station, -along / static_cast<float>(length), leg.to, leg.toPassageLrud, leg.toFacing,
+                          length, leg.fromPassageLrud, leg.fromFacing});
         }
     }
     return found;
 }
 
-// The record's walls across a section with axes right and up: each wall
-// foreshortened onto its axis, the side walls swapped when the record faces
-// the other way, and left out when it faces along the section's normal.
+// The record's walls across a section with axes right and up, as the
+// builder's lrudAcross reads them: the side walls at face value, swapped
+// when the record faces the other way and left out when it faces along the
+// section's normal; up and down foreshortened onto the up axis.
 cwStationLrud wallsAcross(const StationLeg& record, const QVector3D& right, const QVector3D& up)
 {
-    constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
     const auto across = [](const std::optional<double>& reading, double component) -> std::optional<double> {
         if (!reading) {
             return std::nullopt;
@@ -655,8 +662,8 @@ cwStationLrud wallsAcross(const StationLeg& record, const QVector3D& right, cons
     const double component = QVector3D::dotProduct(facingRight, right);
     if (std::abs(component) >= kMinFacingComponent) {
         const bool facesSameWay = component >= 0.0;
-        walls.right = across(facesSameWay ? record.lrud.right : record.lrud.left, component);
-        walls.left = across(facesSameWay ? record.lrud.left : record.lrud.right, component);
+        walls.right = across(facesSameWay ? record.lrud.right : record.lrud.left, 1.0);
+        walls.left = across(facesSameWay ? record.lrud.left : record.lrud.right, 1.0);
     }
     return walls;
 }
@@ -677,13 +684,28 @@ void widenTo(std::optional<double>& widest, const std::optional<double>& reading
 }
 
 // A section's quadrant ellipse of walls around station, in the plane square
-// to tangent with axes right and up.
+// to tangent with axes right and up. Along a leg the walls run toward
+// farWalls, reached one unit of towardFar past the station, and hold beyond.
 struct SectionPlane {
     cwStationLrud walls;
     QVector3D station;
     QVector3D tangent;
     QVector3D right;
     QVector3D up;
+    cwStationLrud farWalls = walls;
+    QVector3D towardFar;
+
+    cwStationLrud wallsAt(const QVector3D& point) const
+    {
+        const double t = std::clamp(static_cast<double>(QVector3D::dotProduct(point - station, towardFar)), 0.0, 1.0);
+        const auto lerp = [t](const std::optional<double>& near, const std::optional<double>& far) -> std::optional<double> {
+            if (near && far) {
+                return *near + (*far - *near) * t;
+            }
+            return near;
+        };
+        return {lerp(walls.left, farWalls.left), lerp(walls.right, farWalls.right), lerp(walls.up, farWalls.up), lerp(walls.down, farWalls.down)};
+    }
 };
 
 // The point of the ellipse arc (a cos t, b sin t), 0 <= t <= π/2, nearest
@@ -718,8 +740,9 @@ std::optional<cwPassageTubeMeshCheck::WallReach> reachOf(const SectionPlane& pla
     const double x = QVector3D::dotProduct(section, plane.right);
     const double y = QVector3D::dotProduct(section, plane.up);
     const double distance = std::hypot(x, y);
-    const std::optional<double>& a = x >= 0.0 ? plane.walls.right : plane.walls.left;
-    const std::optional<double>& b = y >= 0.0 ? plane.walls.up : plane.walls.down;
+    const cwStationLrud walls = plane.wallsAt(vertex);
+    const std::optional<double>& a = x >= 0.0 ? walls.right : walls.left;
+    const std::optional<double>& b = y >= 0.0 ? walls.up : walls.down;
     if (!a || !b || distance <= 0.0) {
         return std::nullopt;
     }
@@ -761,41 +784,56 @@ cwStationLrud holdingCenter(const cwStationLrud& walls, const QPointF& center)
     return grown;
 }
 
-// The station's readings across leg, in the plane square to it with its
-// right axis nearest the ring's: the widest of the records, each wall
-// foreshortened as the builder fits a ring square to the leg. A steep leg's
-// section is round, as the builder fits a pit, at the widest of them.
+// The station's readings across leg, in the plane square to it, facing the
+// ring's way: the widest of the records, each wall as the builder fits a
+// ring square to the leg, with its up axis toward world up, running along
+// the leg toward its far station's readings. A steep leg's section is
+// round, as the builder fits a pit, at the widest of them.
 std::optional<SectionPlane> legSection(const StationLeg& leg, const QVector<StationLeg>& records, const cwPassageTubeBuilder::Frame& ringFrame)
 {
     const QVector3D tangent = QVector3D::dotProduct(leg.direction, ringFrame.tangent) >= 0.0f ? leg.direction : -leg.direction;
-    const QVector3D projectedRight = ringFrame.right - tangent * QVector3D::dotProduct(ringFrame.right, tangent);
-    if (projectedRight.length() < kMinFacingComponent) {
-        return std::nullopt;
-    }
-    const QVector3D right = projectedRight.normalized();
-    const QVector3D up = QVector3D::crossProduct(right, tangent);
     const bool isPit = isSteep(tangent);
-
-    cwStationLrud walls;
-    for (const StationLeg& record : records) {
-        const cwStationLrud across = wallsAcross(record, right, up);
-        widenTo(walls.left, across.left);
-        widenTo(walls.right, across.right);
-        widenTo(walls.up, across.up);
-        widenTo(walls.down, across.down);
-        if (isPit) {
-            widenTo(walls.left, record.lrud.left);
-            widenTo(walls.left, record.lrud.right);
-        }
-    }
+    QVector3D right;
+    QVector3D up;
     if (isPit) {
-        std::optional<double> radius;
-        for (const std::optional<double>& wall : {walls.left, walls.right, walls.up, walls.down}) {
-            widenTo(radius, wall);
+        const QVector3D projectedRight = ringFrame.right - tangent * QVector3D::dotProduct(ringFrame.right, tangent);
+        if (projectedRight.length() < kMinFacingComponent) {
+            return std::nullopt;
         }
-        walls = {radius, radius, radius, radius};
+        right = projectedRight.normalized();
+        up = QVector3D::crossProduct(right, tangent);
+    } else {
+        up = (kWorldUp - tangent * QVector3D::dotProduct(kWorldUp, tangent)).normalized();
+        right = QVector3D::crossProduct(tangent, up);
     }
-    return SectionPlane {walls, leg.station, tangent, right, up};
+
+    const auto widestWalls = [&](const QVector<StationLeg>& stationRecords) {
+        cwStationLrud walls;
+        for (const StationLeg& record : stationRecords) {
+            const cwStationLrud across = wallsAcross(record, right, up);
+            widenTo(walls.left, across.left);
+            widenTo(walls.right, across.right);
+            widenTo(walls.up, across.up);
+            widenTo(walls.down, across.down);
+            if (isPit) {
+                widenTo(walls.left, record.lrud.left);
+                widenTo(walls.left, record.lrud.right);
+            }
+        }
+        if (isPit) {
+            std::optional<double> radius;
+            for (const std::optional<double>& wall : {walls.left, walls.right, walls.up, walls.down}) {
+                widenTo(radius, wall);
+            }
+            walls = {radius, radius, radius, radius};
+        }
+        return walls;
+    };
+    StationLeg farRecord = leg;
+    farRecord.lrud = leg.farLrud;
+    farRecord.facing = leg.farFacing;
+    return SectionPlane {widestWalls(records), leg.station, tangent, right, up,
+                         widestWalls({farRecord}), leg.direction / static_cast<float>(leg.length)};
 }
 
 bool isAlongLeg(const QVector3D& direction, const QVector<QVector3D>& legDirections)
@@ -1290,7 +1328,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const 
             const QVector<std::optional<WallReach>> reaches = wallReaches(debug, chain, ring);
             int farthest = -1;
             for (int k = 0; k < reaches.size(); ++k) {
-                const bool isBeyond = reaches.at(k) && reaches.at(k)->beyondMeters > options.wallToleranceMeters;
+                const bool isBeyond = (ring.measured.at(k) || !ring.isElbow) && reaches.at(k) && reaches.at(k)->beyondMeters > options.wallToleranceMeters;
                 if (isBeyond && (farthest < 0 || reaches.at(k)->beyondMeters > reaches.at(farthest)->beyondMeters)) {
                     farthest = k;
                 }
@@ -1450,7 +1488,6 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         return (facesAgainst ? -chainRight : chainRight).normalized();
     };
 
-    constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
     using Occurrence = std::pair<QUuid, std::pair<int, int>>;
     QSet<Occurrence> visited;
     QVector<Issue> issues;
@@ -1479,7 +1516,20 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                 return;
             }
             const Vec wall = Vec(position) + Vec(direction) * *passageReading;
-            if (!isOnSurface(wall)) {
+            if (isOnSurface(wall)) {
+                return;
+            }
+            // A reading is a width of the station's legs: around a corner the
+            // side walls run on square to each leg and meet past the station.
+            const bool isOnLegWall = direction.z() == 0.0f && std::any_of(directions.cbegin(), directions.cend(), [&](const QVector3D& legDirection) {
+                const QVector3D legSide(legDirection.y(), -legDirection.x(), 0.0f);
+                if (legSide.length() < kMinFacingComponent) {
+                    return false;
+                }
+                const QVector3D side = QVector3D::dotProduct(legSide, direction) >= 0.0f ? legSide.normalized() : -legSide.normalized();
+                return isOnSurface(Vec(position) + Vec(side) * *passageReading);
+            });
+            if (!isOnLegWall) {
                 issues.append(Issue {WallMissed, wall.toQVector3D(),
                                      QStringLiteral("station %1's %2 wall at %3 m lies off the tube").arg(station, name).arg(*passageReading)});
             }
