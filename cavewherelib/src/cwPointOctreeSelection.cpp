@@ -187,34 +187,65 @@ QVector<SelectedNode> selectNodes(const SelectionInput& input)
 }
 
 QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
-                               const QVector<int>& drawnNodes)
+                               const QVector<int>& drawnNodes,
+                               const QVector<int>& missingNodes)
 {
-    QHash<int, int> finest;
-    finest.reserve(drawnNodes.size());
+    const QVector<int>& parents = manifest.parents();
+
+    struct DrawnLevel {
+        int level = 0;
+        bool incomplete = false;
+    };
+
+    QHash<int, DrawnLevel> drawn;
+    drawn.reserve(drawnNodes.size());
     for(int node : drawnNodes) {
-        finest.insert(node, manifest.nodes.at(node).level);
+        drawn.insert(node, {manifest.nodes.at(node).level, false});
     }
 
-    //Every drawn node lifts its own level into the drawn ancestors above it, so
-    //each of them ends at the deepest level drawn anywhere under it.
-    const QVector<int>& parents = manifest.parents();
-    for(int node : drawnNodes) {
-        const int level = manifest.nodes.at(node).level;
+    const auto nearestDrawnAncestor = [&](int node) {
         for(int ancestor = parents.at(node); ancestor >= 0; ancestor = parents.at(ancestor)) {
-            auto entry = finest.find(ancestor);
-            if(entry != finest.end()) {
-                if(entry.value() >= level) {
-                    break;
-                }
-                entry.value() = level;
+            const auto entry = drawn.find(ancestor);
+            if(entry != drawn.end()) {
+                return entry;
             }
+        }
+        return drawn.end();
+    };
+
+    //A missing node leaves a hole that only its nearest drawn ancestor covers,
+    //at that ancestor's own spacing
+    for(int node : missingNodes) {
+        const auto ancestor = nearestDrawnAncestor(node);
+        if(ancestor != drawn.end()) {
+            ancestor->incomplete = true;
+        }
+    }
+
+    //Deepest first, so every node holds its final value before it lifts it
+    //into the nearest drawn node above it. A complete node passes on the
+    //deepest level drawn under it; an incomplete one passes on its own level,
+    //which caps what its subtree lifts into the nodes above it.
+    QVector<int> deepestFirst = drawnNodes;
+    std::stable_sort(deepestFirst.begin(), deepestFirst.end(), [&manifest](int left, int right) {
+        return manifest.nodes.at(left).level > manifest.nodes.at(right).level;
+    });
+    for(int node : std::as_const(deepestFirst)) {
+        DrawnLevel& entry = drawn[node];
+        if(entry.incomplete) {
+            entry.level = manifest.nodes.at(node).level;
+        }
+
+        const auto ancestor = nearestDrawnAncestor(node);
+        if(ancestor != drawn.end()) {
+            ancestor->level = std::max(ancestor->level, entry.level);
         }
     }
 
     QVector<int> levels;
     levels.reserve(drawnNodes.size());
     for(int node : drawnNodes) {
-        levels.append(finest.value(node));
+        levels.append(drawn.value(node).level);
     }
     return levels;
 }

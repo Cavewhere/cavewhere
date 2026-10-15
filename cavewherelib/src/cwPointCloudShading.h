@@ -46,7 +46,10 @@ namespace cw::pointcloud {
 
     //! Whether the per-node floor takes part in sizing
     enum class FloorMode : int {
-        //! The world-space term floors the threshold term
+        //! The world-space term floors the threshold term. Each node's floor
+        //! is the finest spacing drawn under it, except that a node whose
+        //! children are still streaming keeps its own spacing until they land
+        //! (cw::octree::finestDrawnLevels).
         Node = 0,
         //! The threshold term alone
         Off = 1

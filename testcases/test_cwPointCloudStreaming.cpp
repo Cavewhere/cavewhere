@@ -1122,6 +1122,43 @@ namespace {
         return finest;
     }
 
+    //! The nearest node of @a drawnNodes above @a node, or -1 for none
+    int nearestDrawnAncestor(const cwPointOctreeManifest& manifest,
+                             const QVector<int>& drawnNodes, int node)
+    {
+        const QVector<int>& parents = manifest.parents();
+        for (int ancestor = parents.at(node); ancestor >= 0; ancestor = parents.at(ancestor)) {
+            if (drawnNodes.contains(ancestor)) {
+                return ancestor;
+            }
+        }
+        return -1;
+    }
+
+    //! The level the floor rule gives @a node, worked out top down rather than
+    //! the way cw::octree::finestDrawnLevels lifts levels up: its own level
+    //! while any of @a missingNodes has it as its nearest drawn ancestor, and
+    //! otherwise the deepest of its own level and what the drawn nodes right
+    //! under it come to.
+    int floorLevelOf(const cwPointOctreeManifest& manifest, const QVector<int>& drawnNodes,
+                     const QVector<int>& missingNodes, int node)
+    {
+        const int ownLevel = manifest.nodes.at(node).level;
+        for (int missing : missingNodes) {
+            if (nearestDrawnAncestor(manifest, drawnNodes, missing) == node) {
+                return ownLevel;
+            }
+        }
+
+        int level = ownLevel;
+        for (int under : drawnNodes) {
+            if (nearestDrawnAncestor(manifest, drawnNodes, under) == node) {
+                level = std::max(level, floorLevelOf(manifest, drawnNodes, missingNodes, under));
+            }
+        }
+        return level;
+    }
+
     //! A drawn node with nothing drawn under it while the frame draws something
     //! finer elsewhere, or -1 when every drawn node sits at the finest level on
     //! screen. It is the node the per-node floor exists for.
@@ -1609,7 +1646,8 @@ namespace {
     {
         double widest = 0.0;
         for (int node : Access::drawnNodes(fixture.backend())) {
-            widest = std::max(widest, double(nodeFloorSpacing(fixture, node)));
+            widest = std::max(widest,
+                              double(Access::drawnNodeFloorSpacing(fixture.backend(), node)));
         }
         return widest;
     }
@@ -4049,11 +4087,7 @@ TEST_CASE("The floor holds to what is drawn while the children stream",
     fixture.renderUntilResident(kRootIndex);
     fixture.renderFrame();
 
-    const int drawn = finestDrawnLevel(fixture);
-    REQUIRE(drawn < finestSelectedLevel(fixture));
-    // The root draws over everything finer the frame got to, so its own floor
-    // is the finest spacing on screen rather than the root's coarse spacing.
-    CHECK(drawnFloorSpacing(fixture) == float(fixture.manifest().spacing(drawn)));
+    REQUIRE(finestDrawnLevel(fixture) < finestSelectedLevel(fixture));
 
     // The floor is a per-node value, so the nodes the frame left coarse keep
     // their own wide sprites while the refined subtrees shrink. One floor
@@ -4062,9 +4096,10 @@ TEST_CASE("The floor holds to what is drawn while the children stream",
     REQUIRE(starved >= 0);
 
     const QVector<int> drawnNodes = Access::drawnNodes(fixture.backend());
+    const QVector<int> missingNodes = Access::missingNodes(fixture.backend());
     const int finest = finestDrawnLevel(fixture);
     for (int node : drawnNodes) {
-        const int level = finestDrawnLevelUnder(fixture.manifest(), drawnNodes, node);
+        const int level = floorLevelOf(fixture.manifest(), drawnNodes, missingNodes, node);
         CHECK(nodeFloorSpacing(fixture, node) == float(fixture.manifest().spacing(level)));
     }
 
@@ -4072,6 +4107,126 @@ TEST_CASE("The floor holds to what is drawn while the children stream",
     // refined past it, so its floor stays wider than the finest spacing on
     // screen — otherwise its cell draws holes until its children arrive.
     CHECK(nodeFloorSpacing(fixture, starved) > float(fixture.manifest().spacing(finest)));
+}
+
+TEST_CASE("A node keeps its own spacing until the children the cut asked for land",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("incomplete-floor"));
+
+    // One node a frame, so the root sits under a refined branch for many
+    // frames while its other children are still missing
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.uploadBudgetBytesPerFrame = kOneNodePerFrameUploadBytes;
+    fixture.setBudgets(budgets);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.synchronize();
+    fixture.renderUntilResident(kRootIndex);
+
+    const cwPointOctreeManifest& manifest = fixture.manifest();
+    const float rootSpacing = float(manifest.spacing(kRootLevel));
+
+    bool sawIncompleteRootOverRefinedBranch = false;
+    QHash<int, float> gatheredBefore;
+    for (int node : Access::drawnNodes(fixture.backend())) {
+        gatheredBefore.insert(node, Access::nodeFloorSpacing(fixture.backend(), node));
+    }
+    QElapsedTimer timer;
+    timer.start();
+    for (;;) {
+        fixture.renderFrame();
+
+        const QVector<int> drawnNodes = Access::drawnNodes(fixture.backend());
+        const QVector<int> missingNodes = Access::missingNodes(fixture.backend());
+
+        QHash<int, float> gathered;
+        for (int node : drawnNodes) {
+            const int level = floorLevelOf(manifest, drawnNodes, missingNodes, node);
+            const float floorSpacing = float(manifest.spacing(level));
+            gathered.insert(node, floorSpacing);
+            INFO("node " << node << " at level " << manifest.nodes.at(node).level);
+            CHECK(Access::nodeFloorSpacing(fixture.backend(), node) == floorSpacing);
+
+            // The GPU draws with the floor the gather before worked out, and a
+            // node the frame before left undrawn, arriving or coming back,
+            // with its own spacing
+            const float drawnFloor = Access::drawnNodeFloorSpacing(fixture.backend(), node);
+            const auto before = gatheredBefore.constFind(node);
+            if (before != gatheredBefore.cend()) {
+                CHECK(drawnFloor == before.value());
+            } else {
+                CHECK(drawnFloor == float(manifest.spacing(manifest.nodes.at(node).level)));
+            }
+        }
+        gatheredBefore = gathered;
+
+        const bool rootIncomplete = std::any_of(
+            missingNodes.cbegin(), missingNodes.cend(), [&](int missing) {
+                return nearestDrawnAncestor(manifest, drawnNodes, missing) == kRootIndex;
+            });
+        if (rootIncomplete && finestDrawnLevel(fixture) > kRootLevel) {
+            sawIncompleteRootOverRefinedBranch = true;
+            CHECK(Access::nodeFloorSpacing(fixture.backend(), kRootIndex) == rootSpacing);
+        }
+
+        if (missingNodes.isEmpty() || timer.elapsed() >= kWaitTimeoutMs) {
+            break;
+        }
+        QThread::msleep(kFramePauseMs);
+    }
+
+    REQUIRE(sawIncompleteRootOverRefinedBranch);
+    REQUIRE(Access::missingNodes(fixture.backend()).isEmpty());
+
+    // Every child the cut asked for has landed, so the root floors at the
+    // finest level drawn anywhere, as it would have without streaming
+    const int finest = finestDrawnLevel(fixture);
+    REQUIRE(finest > kRootLevel);
+    CHECK(Access::nodeFloorSpacing(fixture.backend(), kRootIndex)
+          == float(manifest.spacing(finest)));
+}
+
+TEST_CASE("A node that leaves the cut comes back at its own spacing",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reentry-floor"));
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.synchronize();
+    fixture.renderUntilQuiet();
+
+    // A node drawn over finer drawn nodes, so its slot holds a floor finer
+    // than its own spacing
+    const cwPointOctreeManifest& manifest = fixture.manifest();
+    const auto ownSpacing = [&](int node) {
+        return float(manifest.spacing(manifest.nodes.at(node).level));
+    };
+    int lifted = -1;
+    for (int node : Access::drawnNodes(fixture.backend())) {
+        if (node != kRootIndex
+            && Access::drawnNodeFloorSpacing(fixture.backend(), node) < ownSpacing(node)) {
+            lifted = node;
+            break;
+        }
+    }
+    REQUIRE(lifted >= 0);
+
+    // The far cut is the root alone, so the lifted node leaves it while it
+    // stays resident
+    fixture.setOrthoHeight(kFarOrthoHeight);
+    fixture.renderUntilQuiet();
+    REQUIRE_FALSE(Access::drawnNodes(fixture.backend()).contains(lifted));
+    REQUIRE(Access::nodeState(fixture.backend(), lifted) == NodeState::Resident);
+
+    // Its first frame back draws it at its own spacing, as a fresh arrival
+    // would, rather than at the floor its children gave it before it left
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.renderFrame();
+    REQUIRE(Access::drawnNodes(fixture.backend()).contains(lifted));
+    CHECK(Access::drawnNodeFloorSpacing(fixture.backend(), lifted) == ownSpacing(lifted));
 }
 
 TEST_CASE("A frame that draws nothing keeps the sprite size it had",
@@ -7167,7 +7322,7 @@ namespace {
         for (int node : drawingNodes(fixture)) {
             const QBox3D bounds = manifest.nodeBounds(node);
             const double nodeSpacing = nodeSampleSpacing(manifest, node);
-            const double floorSpacing = Access::nodeFloorSpacing(fixture.backend(), node);
+            const double floorSpacing = Access::drawnNodeFloorSpacing(fixture.backend(), node);
 
             const QByteArray bytes = Access::nodeBytes(fixture.backend(), node);
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
@@ -8597,7 +8752,7 @@ namespace {
             onScreen.rect = *rect;
             onScreen.level = manifest.nodes.at(node).level;
             onScreen.pixelsPerMeter = pixelsPerMeterAt(view, bounds.center());
-            onScreen.floorSpacing = Access::nodeFloorSpacing(fixture.backend(), node);
+            onScreen.floorSpacing = Access::drawnNodeFloorSpacing(fixture.backend(), node);
             onScreen.nodeSpacing = nodeSampleSpacing(manifest, node);
             nodes.append(onScreen);
         }
@@ -8648,7 +8803,10 @@ namespace {
     }
 
     //! What M6 compares one frame against: the inflation, the uniform the
-    //! shader read and every drawn node's floor
+    //! shader read and the floor every drawn node's constants slot held. That
+    //! is the floor the GPU drew with, a frame behind the gather's, and on a
+    //! node's arrival frame its own spacing, so the arrival-to-floor resize
+    //! counts as a side change on the frame after it.
     struct TwinFrame {
         double inflation = 1.0;
         CwRhiPointCloudTestAccess::PerCloudUniform uniform;
@@ -8661,7 +8819,7 @@ namespace {
         frame.inflation = Access::sseInflation(fixture.backend());
         frame.uniform = Access::liveAppearanceUniform(fixture.backend());
         for (int node : drawingNodes(fixture)) {
-            frame.floors.insert(node, Access::nodeFloorSpacing(fixture.backend(), node));
+            frame.floors.insert(node, Access::drawnNodeFloorSpacing(fixture.backend(), node));
         }
         return frame;
     }
@@ -10054,6 +10212,17 @@ TEST_CASE("M6: a binding point budget steps the inflation where the default budg
     CHECK(tightSummary.sideChangeSumPx > 0.0);
     CHECK(tightSummary.mostResidentNodes > 1);
 
+    //A node arriving or leaving, the inflation moving the cut, or the camera
+    //moving to the next pose all change the floors the gather works out, and
+    //the GPU draws with those one frame later. So the frame that has to hold
+    //every side is one whose frame before also held its cut and drawn set.
+    const auto cutHeld = [&](int i) {
+        const EvalRecord& record = tightRecords.at(i);
+        return i > 0 && record.position == tightRecords.at(i - 1).position
+               && record.nodesEntered == 0 && record.nodesLeft == 0
+               && !inflationChanged(record.inflationRatio);
+    };
+
     bool weightMovedWithInflation = false;
     for (int i = 0; i < tightRecords.size(); i++) {
         const EvalRecord& record = tightRecords.at(i);
@@ -10061,18 +10230,108 @@ TEST_CASE("M6: a binding point budget steps the inflation where the default budg
              << record.inflationRatio << ", side change " << record.spriteSideChangePx
              << " px, weight change " << record.weightChange << ", entered "
              << record.nodesEntered << ", left " << record.nodesLeft);
-        //A node arriving narrows its parent's floor, which resizes the parent
-        //by rule on a frame the inflation held, so only a frame without
-        //arrivals or departures has to hold every side
-        const bool drawnSetHeld = record.nodesEntered == 0 && record.nodesLeft == 0;
         if (inflationChanged(record.inflationRatio)) {
             CHECK(isGovernorStep(record.inflationRatio, record.sseInflation));
             weightMovedWithInflation = weightMovedWithInflation || record.weightChange > 0.0;
-        } else if (drawnSetHeld) {
+        } else if (cutHeld(i) && cutHeld(i - 1)) {
             CHECK(record.spriteSideChangePx == 0.0);
         }
     }
     CHECK(weightMovedWithInflation);
+}
+
+TEST_CASE("M6 counts a floor the gather moved on the frame the GPU draws it",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    // One node a frame, so arrivals keep moving their ancestors' floors while
+    // the camera holds still
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("m6-floor-timing"));
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.uploadBudgetBytesPerFrame = kOneNodePerFrameUploadBytes;
+    fixture.setBudgets(budgets);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+    fixture.synchronize();
+    fixture.renderUntilResident(kRootIndex);
+
+    struct Frame {
+        TwinFrame twin;
+        QHash<int, float> gathered;
+    };
+    const auto captureFrame = [&]() {
+        Frame frame;
+        frame.twin = twinFrame(fixture);
+        for (int node : drawingNodes(fixture)) {
+            frame.gathered.insert(node, Access::nodeFloorSpacing(fixture.backend(), node));
+        }
+        return frame;
+    };
+    const auto onlyNode = [](const TwinFrame& frame, int node) {
+        TwinFrame single = frame;
+        single.floors = {{node, frame.floors.value(node)}};
+        return single;
+    };
+
+    QVector<Frame> frames;
+    frames.append(captureFrame());
+    QElapsedTimer timer;
+    timer.start();
+    while (!Access::missingNodes(fixture.backend()).isEmpty() && timer.elapsed() < kWaitTimeoutMs) {
+        QThread::msleep(kFramePauseMs);
+        fixture.renderFrame();
+        frames.append(captureFrame());
+    }
+
+    // A node whose floor gather i moved, drawn on frames i - 2 through i + 1
+    // under one inflation and with gathers i - 2 and i - 1 agreeing, holds its
+    // size between frames i - 1 and i and resizes between frames i and i + 1
+    // by exactly the move
+    const TwinView view = twinView(fixture);
+    const cwPointOctreeManifest& manifest = fixture.manifest();
+    int movesChecked = 0;
+    for (int i = 2; i + 1 < frames.size(); i++) {
+        const Frame& earlier = frames.at(i - 2);
+        const Frame& before = frames.at(i - 1);
+        const Frame& moved = frames.at(i);
+        const Frame& after = frames.at(i + 1);
+        if (inflationChanged(before.twin.inflation / earlier.twin.inflation)
+            || inflationChanged(moved.twin.inflation / before.twin.inflation)
+            || inflationChanged(after.twin.inflation / moved.twin.inflation)) {
+            continue;
+        }
+
+        for (auto it = moved.gathered.cbegin(); it != moved.gathered.cend(); ++it) {
+            const int node = it.key();
+            const auto previousFloor = before.gathered.constFind(node);
+            const auto earlierFloor = earlier.gathered.constFind(node);
+            if (previousFloor == before.gathered.cend() || previousFloor.value() == it.value()
+                || earlierFloor == earlier.gathered.cend()
+                || earlierFloor.value() != previousFloor.value()
+                || !after.gathered.contains(node)) {
+                continue;
+            }
+
+            INFO("frame " << i << ", node " << node);
+            const CauseCounters held = causeCounters(fixture, view, onlyNode(before.twin, node),
+                                                     onlyNode(moved.twin, node));
+            CHECK(held.spriteSideChangePx == 0.0);
+
+            const double nodeSpacing = nodeSampleSpacing(manifest, node);
+            const double pixelsPerMeter = pixelsPerMeterAt(view,
+                                                           manifest.nodeBounds(node).center());
+            const double expected =
+                std::abs(twinSpriteSidePx(after.twin.uniform, it.value(), nodeSpacing,
+                                          pixelsPerMeter)
+                         - twinSpriteSidePx(moved.twin.uniform, previousFloor.value(),
+                                            nodeSpacing, pixelsPerMeter));
+            const CauseCounters drawn = causeCounters(fixture, view, onlyNode(moved.twin, node),
+                                                      onlyNode(after.twin, node));
+            CHECK(drawn.spriteSideChangePx == expected);
+            movesChecked += expected > 0.0 ? 1 : 0;
+        }
+    }
+    CHECK(movesChecked > 0);
 }
 
 TEST_CASE("M3 and M4: mixed sprite sizes raise the seam share and a floorless capped cut "

@@ -176,18 +176,31 @@ namespace cw::octree {
     CAVEWHERE_LIB_EXPORT ForestSelection selectForest(const ForestInput& input);
 
     /**
-     * The finest level drawn inside each of @a drawnNodes, one entry per input
-     * node and in the same order. Every index has to name a node of @a manifest.
+     * The level whose spacing each of @a drawnNodes floors its sprites at, one
+     * entry per input node and in the same order. Every index has to name a
+     * node of @a manifest.
      *
      * @a drawnNodes is the resident subset of one frame's cut — what the frame
-     * really draws, rather than what the cut asked for. The tree is additive,
-     * so a drawn node draws its own points over whatever its drawn descendants
-     * draw; the answer for it is the deepest level any of them sits at, and its
-     * own level when none of them is drawn. That is the spacing its sprites
-     * have to close, which is what the shader floors against.
+     * really draws, rather than what the cut asked for — and @a missingNodes
+     * is the rest of that cut, the nodes still streaming. The tree is
+     * additive, so a drawn node draws its own points over whatever its drawn
+     * descendants draw, and the answer for it is the deepest level any of them
+     * sits at, or its own level when none of them is drawn.
+     *
+     * A drawn node is incomplete while any missing node has it as its nearest
+     * drawn ancestor: it is all that covers that missing node's cell, so it
+     * keeps its own level until its children land. An incomplete node also
+     * caps what its subtree lifts into the drawn nodes above it, which get at
+     * most its level from that branch. Without this, one small deep leaf that
+     * lands early would shrink the root's sprites across every octant whose
+     * children have not arrived yet, and open holes there.
+     *
+     * The renderer writes these floors a frame after the gather that worked
+     * them out, so the protection takes effect the frame after the cut changes.
      */
     CAVEWHERE_LIB_EXPORT QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
-                                                        const QVector<int>& drawnNodes);
+                                                        const QVector<int>& drawnNodes,
+                                                        const QVector<int>& missingNodes = {});
 
     //What the planner knows about one resident node
     struct CAVEWHERE_LIB_EXPORT NodeResidency

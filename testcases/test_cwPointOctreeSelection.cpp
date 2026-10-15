@@ -527,6 +527,46 @@ TEST_CASE("cw::octree::finestDrawnLevels: a node floors at the finest level draw
     }
 }
 
+TEST_CASE("cw::octree::finestDrawnLevels: a node keeps its own level until its children land",
+          "[PointOctree][PointOctreeSelection]")
+{
+    const cwPointOctreeManifest manifest = buildManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int missingGrandchild = manifest.nodes.at(refinedChild).children.at(1);
+    const int coarseChild = manifest.nodes.at(0).children.at(1);
+
+    SECTION("one deep leaf under the root leaves the root at its own level while a sibling streams") {
+        const QVector<int> drawn {0, refinedChild, grandchild};
+        REQUIRE(finestDrawnLevels(manifest, drawn, {coarseChild}) == QVector<int>({0, 2, 2}));
+    }
+
+    SECTION("the root drops to the deepest drawn level once that sibling lands") {
+        const QVector<int> drawn {0, refinedChild, grandchild, coarseChild};
+        REQUIRE(finestDrawnLevels(manifest, drawn, {}) == QVector<int>({2, 2, 2, 1}));
+    }
+
+    SECTION("an incomplete node caps what its subtree lifts into the nodes above it") {
+        const QVector<int> drawn {0, refinedChild, grandchild};
+        REQUIRE(finestDrawnLevels(manifest, drawn, {missingGrandchild})
+                == QVector<int>({1, 1, 2}));
+    }
+
+    SECTION("a missing node answers to its nearest drawn ancestor alone") {
+        //refinedChild is missing too, so its missing grandchild leaves the root
+        //incomplete, and the root's other branch has nothing deeper to lift
+        const QVector<int> drawn {0, coarseChild};
+        REQUIRE(finestDrawnLevels(manifest, drawn, {refinedChild, missingGrandchild})
+                == QVector<int>({0, 1}));
+    }
+
+    SECTION("the input order says nothing about depth") {
+        const QVector<int> drawn {grandchild, 0, refinedChild};
+        REQUIRE(finestDrawnLevels(manifest, drawn, {missingGrandchild})
+                == QVector<int>({2, 1, 1}));
+    }
+}
+
 TEST_CASE("cw::octree::planNodeEvictions: releases the least wanted nodes first",
           "[PointOctree][PointOctreeSelection]")
 {

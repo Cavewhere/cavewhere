@@ -93,10 +93,20 @@ struct CwRhiPointCloudTestAccess {
         return cloud.appearanceUniform(live.spacingCoverage);
     }
 
-    // The world spacing @a index's sprites floor against — the finest spacing
-    // drawn under it, as the last live gather worked it out. 0 for a node that
-    // is not resident.
+    // The world spacing @a index's sprites floor against as the last live
+    // gather worked it out, which the GPU draws with from the next frame on.
+    // 0 for a node that is not resident.
     static float nodeFloorSpacing(const cwRHIPointCloud& cloud, int index) {
+        if (index < 0 || index >= cloud.m_nodes.size()) {
+            return 0.0f;
+        }
+        return cloud.m_pendingFloors.value(index, cloud.m_nodes.at(index).floorSpacing);
+    }
+
+    // The world spacing @a index's constants slot held when the last frame
+    // drew: the floor flushed at the top of that frame, or the node's own
+    // spacing on the frame it arrived. 0 for a node that is not resident.
+    static float drawnNodeFloorSpacing(const cwRHIPointCloud& cloud, int index) {
         if (index < 0 || index >= cloud.m_nodes.size()) {
             return 0.0f;
         }
@@ -136,6 +146,24 @@ struct CwRhiPointCloudTestAccess {
             }
         }
         return drawn;
+    }
+
+    // The nodes of the last cut the cloud does not have resident yet — what
+    // the frame drew a coarser ancestor in place of.
+    static QVector<int> missingNodes(const cwRHIPointCloud& cloud) {
+        QVector<int> missing;
+        if (!cloud.m_source.manifest) {
+            return missing;
+        }
+
+        const QVector<cwPointOctreeNode>& nodes = cloud.m_source.manifest->nodes;
+        for (const cw::octree::SelectedNode& selected : cloud.m_selected.nodes) {
+            if (selected.node >= 0 && selected.node < nodes.size()
+                && cloud.m_nodes.at(selected.node).state != NodeState::Resident) {
+                missing.append(selected.node);
+            }
+        }
+        return missing;
     }
 
     // The levels of the nodes the cloud has resident out of the last cut — what
