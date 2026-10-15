@@ -48,7 +48,17 @@ QString cwAttachedFix::readInWarning() const
 
 QString cwAttachedFix::solveSystem() const
 {
+    if (!placementSystem.isEmpty()) {
+        return placementSystem;
+    }
     return coordinateSystem.isEmpty() ? readInSystem : coordinateSystem;
+}
+
+QString cwAttachedFix::systemLabel() const
+{
+    return placementSystem.isEmpty()
+        ? coordinateSystem
+        : QStringLiteral("%1 (%2)").arg(coordinateSystem, placementSystem);
 }
 
 std::optional<cwAttachedFix::Placement> cwAttachedFix::placementIn(const QString& system) const

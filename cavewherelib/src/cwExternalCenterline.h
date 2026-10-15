@@ -88,11 +88,16 @@ class CAVEWHERE_LIB_EXPORT cwAttachedFix
     //! The station as a fix on the node names it ("doghill.d1"): qualified by
     //! the file's own blocks, and by the trip's scopePrefix() for a trip's file.
     Q_PROPERTY(QString station MEMBER station FINAL)
-    //! The coordinate text: the file's numbers; a Compass .mak fix in meters,
-    //! as cavern reads it.
+    //! The coordinate text as cavern reads it
+    //! (cwExternalCenterlineScanner::ScannedFix::coordinate).
     Q_PROPERTY(QString coordinate MEMBER coordinate FINAL)
-    //! The input coordinate system in force for the fix, empty when none.
+    //! The name of the input coordinate system in force for the fix, empty
+    //! when none.
     Q_PROPERTY(QString coordinateSystem MEMBER coordinateSystem FINAL)
+    //! The system cavern places the fix in ("EPSG:26716"), empty when
+    //! coordinateSystem is that system already, cavern recognizes none, or a
+    //! Walls #FIX keeps its written text because the reader refuses the line.
+    Q_PROPERTY(QString placementSystem MEMBER placementSystem FINAL)
     //! The attached entry file's name.
     Q_PROPERTY(QString fileName MEMBER fileName FINAL)
     //! The file whose line fixes the station, relative to the attachment's
@@ -126,14 +131,20 @@ public:
     bool reference = false;
     bool readInFileOutput = false;
     QUuid ownerId;
+    QString placementSystem;
 
     //! The note the Fix Stations page shows on the row: where the fix is read
     //! in and which line left it there. Empty when readInSystem is.
     QString readInWarning() const;
 
-    //! The system the driver solves the fix in: its own coordinateSystem, else
-    //! readInSystem. Empty when nothing names one.
+    //! The system the driver solves the fix in: its placementSystem, else its
+    //! own coordinateSystem, else readInSystem. Empty when nothing names one.
     QString solveSystem() const;
+
+    //! The system as the row shows it: coordinateSystem, followed by the
+    //! placementSystem in parentheses when there is one
+    //! ("NAD27 CONUS, UTM zone 16N (EPSG:26716)").
+    QString systemLabel() const;
 
     //! Where the fix sits once read in a system: the PROJ text of that system
     //! and the point in its own axis order.

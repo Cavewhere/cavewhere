@@ -7,9 +7,13 @@
 
 #include "cwExternalCenterlineScanner.h"
 #include "cwCompassMakFile.h"
+#include "cwCoordinateText.h"
+#include "cwWallsReferenceCS.h"
 
 //Walls
+#include "segmentparseexception.h"
 #include "wallsprojectparser.h"
+#include "wallssurveyparser.h"
 
 //Qt includes
 #include <QByteArray>
@@ -26,6 +30,7 @@
 //Std includes
 #include <array>
 #include <cstdlib>
+#include <optional>
 #include <utility>
 
 namespace {
@@ -735,14 +740,12 @@ struct ScanState {
     // project's files, so an entry outlives the file that first
     // wrote its path.
     QHash<QString, WallsBlockCount> wallsBlocks;
-    // the prefix levels the .wpj entry's inherited options put in
-    // force, handed from the project walk to the .srv about to be
-    // scanned
-    WallsPrefixLevels pendingWallsPrefix;
-    // the system that same entry's .REF georeference names, empty for none
-    QString pendingWallsCoordinateSystem;
-    // the declination that same entry's inherited options put in force
-    cwFileDeclination pendingWallsDeclination = {cwFileDeclination::Kind::None};
+    // the options the .wpj entry inherits and sets, which put its prefix
+    // levels, declination and #UNITS in force, handed from the project walk
+    // to the .srv about to be scanned
+    QList<dewalls::Segment> pendingWallsOptions;
+    // that same entry's .REF georeference, null for none
+    dewalls::GeoReferencePtr pendingWallsReference;
     // the IGRF auto a .mak's base location puts in force for the .dat about
     // to be read, over each section's header
     std::optional<cwFileDeclination> pendingCompassDeclination;
@@ -750,7 +753,7 @@ struct ScanState {
     QList<TreeRow> tree;
     // the row the next file read fills - a .mak's Compass file row for its
     // .dat, a .wpj's survey row for its .srv - handed over like
-    // pendingWallsPrefix
+    // pendingWallsOptions
     int pendingRow = kNoRow;
 };
 
@@ -1047,7 +1050,8 @@ QString nodeSourcePath(const ScanState& state, int row)
  */
 void recordFix(ScanState& state, int row, const QString& scopePath, const QString& station,
                const QString& coordinate, const QString& coordinateSystem,
-               const QString& file, int line, bool reference = false)
+               const QString& placementSystem, const QString& file, int line,
+               bool reference = false)
 {
     QStringList segments = state.blockSegments;
     if (!scopePath.isEmpty()) {
@@ -1055,7 +1059,8 @@ void recordFix(ScanState& state, int row, const QString& scopePath, const QStrin
     }
     segments.append(station);
     const cwExternalCenterlineScanner::ScannedFix fix{segments.join(QLatin1Char('.')), coordinate,
-                                                      coordinateSystem, file, line, reference};
+                                                      coordinateSystem, placementSystem, file, line,
+                                                      reference};
     for (qsizetype i = 0; i < state.fixes.size(); ++i) {
         if (state.fixRows.at(i) == row && state.fixes.at(i) == fix) {
             return;
@@ -1246,7 +1251,7 @@ void scanSurvexFile(const QString& filePath, ScanState& state)
         if (const auto fixMatch = survexFixRegex().match(line); fixMatch.hasMatch()) {
             recordFix(state, containerRow(state), QString(), fixMatch.captured(1),
                       line.mid(fixMatch.capturedEnd(0)).trimmed(),
-                      state.coordinateSystems.constLast(),
+                      state.coordinateSystems.constLast(), QString(),
                       canonical, static_cast<int>(lineIndex) + 1,
                       fixMatch.hasCaptured(2));
             continue;
@@ -1497,10 +1502,12 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                     break;
                 }
                 // Until the .mak names a datum or zone itself, the system in
-                // force around it stands.
-                const QString system = !reference.namesSystem && !outerSystem.isEmpty()
-                    ? outerSystem
-                    : reference.coordinateSystemName();
+                // force around it stands, and that Survex *cs places the fix.
+                const bool outerSystemStands = !reference.namesSystem && !outerSystem.isEmpty();
+                const QString system = outerSystemStands ? outerSystem
+                                                         : reference.coordinateSystemName();
+                const QString placementSystem = outerSystemStands ? QString()
+                                                                  : reference.coordinateSystem();
                 const QString datSurvey = cwCompassMakFile::datSurveyName(target);
                 const int fileRow = childNodeRow(state, makRow,
                                                  QString(target).replace(QLatin1Char('\\'),
@@ -1509,7 +1516,7 @@ void scanCompassFile(const QString& filePath, ScanState& state)
                                                  titleCased(referenceStem(target)), datSurvey);
                 for (const cwCompassMakFile::Fix& fix : reference.fixes) {
                     recordFix(state, fileRow, datSurvey, fix.station, fix.meterText(), system,
-                              canonical, 0);
+                              placementSystem, canonical, 0);
                 }
                 const IncludeResolveResult resolution =
                     resolveIncludeTarget(target, baseDir);
@@ -1645,6 +1652,96 @@ WallsStationName wallsStationName(const WallsPrefixLevels& prefix, const QString
 }
 
 /**
+ * The #UNITS and #FIX reading cavern applies to a Walls .srv's fixes: the
+ * length unit (FEET, METERS, D=), ORDER=, SAVE, RESTORE and RESET, starting
+ * from the options the .wpj entry puts in force. dewalls' survey parser,
+ * which the importer reads the same lines with, does the reading.
+ */
+class WallsFixReader
+{
+public:
+    explicit WallsFixReader(const QList<dewalls::Segment>& options)
+    {
+        QObject::connect(&m_parser, &dewalls::WallsSurveyParser::parsedFixStation, &m_parser,
+                         [this](const dewalls::FixStation& fix) { m_parsedFix.emplace(fix); });
+        for (const dewalls::Segment& option : options) {
+            try {
+                m_parser.parseUnitsOptions(option);
+            } catch (const dewalls::SegmentParseException&) {
+                // The options before the one refused stay in force.
+            }
+        }
+    }
+
+    void readUnits(const QString& line)
+    {
+        try {
+            m_parser.parseLine(line);
+        } catch (const dewalls::SegmentParseException&) {
+            // The options before the one refused stay in force.
+        }
+    }
+
+    //! The fix \a line writes, or nothing when its syntax is not cavern's.
+    std::optional<dewalls::FixStation> readFix(const QString& line)
+    {
+        m_parsedFix.reset();
+        try {
+            m_parser.parseLine(line);
+        } catch (const dewalls::SegmentParseException&) {
+            return std::nullopt;
+        }
+        return std::exchange(m_parsedFix, std::nullopt);
+    }
+
+private:
+    dewalls::WallsSurveyParser m_parser;
+    std::optional<dewalls::FixStation> m_parsedFix;
+};
+
+//! A Walls #FIX as a ScannedFix records it.
+struct WallsFixReading
+{
+    QString coordinate;
+    QString coordinateSystem;
+    QString placementSystem;
+};
+
+/**
+ * \a fix as cavern reads it (survex datain.c WALLS_CMD_FIX): a grid fix in
+ * meters, east, north, up, in the .REF's UTM system; a lat/long fix in decimal
+ * degrees, longitude first, in the .REF datum's geographic system. A fix with
+ * no up reads 0 there. The fix keeps \a writtenText when cavern places it in no
+ * system CaveWhere can name: a lat/long fix with no .REF, one whose datum
+ * cavern does not know, or one that mixes grid and angle numbers.
+ */
+WallsFixReading readWallsFix(dewalls::FixStation fix,
+                             const QString& writtenText,
+                             const QString& gridSystem,
+                             const dewalls::GeoReferencePtr& reference,
+                             const WallsReferenceCS& referenceCS)
+{
+    const double up = fix.rectUp().isValid() ? fix.rectUp().get(dewalls::Length::Meters) : 0.0;
+    if (fix.east().isValid() && fix.north().isValid()) {
+        return {cwCoordinateText::componentText({fix.east().get(dewalls::Length::Meters),
+                                                 fix.north().get(dewalls::Length::Meters), up},
+                                                cwCoordinateText::kMeterTextScale),
+                gridSystem, referenceCS.rect};
+    }
+    if (fix.longitude().isValid() && fix.latitude().isValid() && !reference.isNull()) {
+        const QString latLongSystem = cwCompassMakFile::latLongSystemName(reference->datumName);
+        if (referenceCS.geo.isEmpty()) {
+            return {writtenText, latLongSystem, QString()};
+        }
+        return {cwCoordinateText::componentText({fix.longitude().get(dewalls::Angle::Degrees),
+                                                 fix.latitude().get(dewalls::Angle::Degrees), up},
+                                                cwCoordinateText::kDegreeTextScale),
+                latLongSystem, referenceCS.geo};
+    }
+    return {writtenText, gridSystem, QString()};
+}
+
+/**
  * Walks one Walls .srv, counting its stations under the prefix
  * levels in force. They start from the levels the project entry's
  * inherited options put in force and change as the file writes
@@ -1662,14 +1759,22 @@ WallsStationName wallsStationName(const WallsPrefixLevels& prefix, const QString
  * georeference (\a coordinateSystem) cavern switches between IGRF and the
  * written value at each #DATE and DECL=, which the scan does not model, so
  * the unit's declination is Unknown there.
+ *
+ * Each #FIX is recorded as cavern reads it under the #UNITS in force, which
+ * start from \a options (see readWallsFix()), in the systems \a reference
+ * names.
  */
 void collectWallsStations(const QString& canonical,
                           WallsPrefixLevels prefix,
                           const QString& coordinateSystem,
+                          const dewalls::GeoReferencePtr& reference,
+                          const QList<dewalls::Segment>& options,
                           cwFileDeclination declination,
                           ScanState& state,
                           int unitRow)
 {
+    const WallsReferenceCS referenceCS = wallsReferenceCS(reference);
+    WallsFixReader fixReader(options);
     const bool modelsDeclination = coordinateSystem.isEmpty();
     if (!modelsDeclination) {
         declination = cwFileDeclination();
@@ -1685,9 +1790,15 @@ void collectWallsStations(const QString& canonical,
         if (line.startsWith(QLatin1Char('#'))) {
             if (const auto fixMatch = wallsFixRegex().match(line); fixMatch.hasMatch()) {
                 const WallsStationName name = wallsStationName(prefix, fixMatch.captured(1));
-                recordFix(state, unitRow, name.path, name.station,
-                          stripCommentAndWhitespace(line.mid(fixMatch.capturedEnd(1))),
-                          coordinateSystem, canonical, static_cast<int>(lineIndex) + 1);
+                const QString writtenText =
+                    stripCommentAndWhitespace(line.mid(fixMatch.capturedEnd(1)));
+                const std::optional<dewalls::FixStation> fix = fixReader.readFix(line);
+                const WallsFixReading reading = fix.has_value()
+                    ? readWallsFix(*fix, writtenText, coordinateSystem, reference, referenceCS)
+                    : WallsFixReading{writtenText, coordinateSystem, QString()};
+                recordFix(state, unitRow, name.path, name.station, reading.coordinate,
+                          reading.coordinateSystem, reading.placementSystem, canonical,
+                          static_cast<int>(lineIndex) + 1);
                 continue;
             }
             if (const auto dateMatch = wallsDateRegex().match(line);
@@ -1710,6 +1821,7 @@ void collectWallsStations(const QString& canonical,
             // brackets a prefix change with save/restore keeps the
             // changed prefix here.
             if (wallsUnitsDirectiveRegex().match(line).hasMatch()) {
+                fixReader.readUnits(line);
                 applyWallsPrefixOptions(line, prefix);
                 if (modelsDeclination) {
                     applyWallsUnitsDeclination(line, declination, savedDeclinations);
@@ -1829,18 +1941,16 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
             continue;
         }
         recordEntryDirectInclude(state, canonicalize(absolutePath));
-        // The prefix levels come from the entry's inherited options,
-        // not from the .srv, so hand them to the scan about to read
-        // that file.
-        state.pendingWallsPrefix = wallsPrefixFromOptions(child->allOptions());
-        state.pendingWallsDeclination = wallsDeclinationFromOptions(child->allOptions());
-        const dewalls::GeoReferencePtr reference = child->reference();
-        state.pendingWallsCoordinateSystem = reference.isNull()
-            ? QString()
-            : cwCompassMakFile::utmSystemName(reference->datumName, reference->zone);
+        // The prefix levels, declination, units and georeference come from
+        // the entry, not from the .srv, so hand them to the scan about to
+        // read that file.
+        state.pendingWallsOptions = child->allOptions();
+        state.pendingWallsReference = child->reference();
         state.pendingRow = unitRow;
         scanByFormat(absolutePath, state);
         state.pendingRow = kNoRow;
+        state.pendingWallsOptions.clear();
+        state.pendingWallsReference.reset();
     }
 }
 
@@ -1918,13 +2028,13 @@ void scanWallsFile(const QString& filePath, ScanState& state)
         // levels; one attached on its own starts from none.
         state.inProgress.insert(canonical);
         state.dependencies.append(canonical);
-        const WallsPrefixLevels prefix = state.pendingWallsPrefix;
-        const QString coordinateSystem = state.pendingWallsCoordinateSystem;
-        const cwFileDeclination declination =
-            std::exchange(state.pendingWallsDeclination,
-                          cwFileDeclination{cwFileDeclination::Kind::None});
-        state.pendingWallsPrefix = WallsPrefixLevels();
-        state.pendingWallsCoordinateSystem.clear();
+        const QList<dewalls::Segment> options =
+            std::exchange(state.pendingWallsOptions, QList<dewalls::Segment>());
+        const dewalls::GeoReferencePtr reference =
+            std::exchange(state.pendingWallsReference, dewalls::GeoReferencePtr());
+        const QString coordinateSystem = reference.isNull()
+            ? QString()
+            : cwCompassMakFile::utmSystemName(reference->datumName, reference->zone);
         // A .srv no project entry handed over is a unit of its own under the
         // row around it, named after the file.
         int unitRow = state.pendingRow;
@@ -1934,7 +2044,9 @@ void scanWallsFile(const QString& filePath, ScanState& state)
             unitRow = childRow(state, containerRow(state), stem,
                                cwSurveyNodeKind::Kind::WallsBook, stem, QString());
         }
-        collectWallsStations(canonical, prefix, coordinateSystem, declination, state, unitRow);
+        collectWallsStations(canonical, wallsPrefixFromOptions(options), coordinateSystem,
+                             reference, options, wallsDeclinationFromOptions(options), state,
+                             unitRow);
     }
 
     state.inProgress.remove(canonical);

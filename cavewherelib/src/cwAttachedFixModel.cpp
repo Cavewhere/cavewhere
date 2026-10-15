@@ -41,11 +41,11 @@ QVariant cwAttachedFixModel::data(const QModelIndex& index, int role) const
     case cwFixStationModel::StationNameRole:
         return fix.station;
     case cwFixStationModel::InputCSRole:
-        return fix.coordinateSystem;
+        return fix.systemLabel();
     case cwFixStationModel::CoordinateTextRole:
         return fix.coordinate;
-    // The scan keeps the coordinate as text (a Compass .mak fix in meters)
-    // and reads no components out of it, so those roles say "no value".
+    // The scan keeps the coordinate as text, as cavern reads it, and reads
+    // no components out of it, so those roles say "no value".
     case cwFixStationModel::EastingRole:
     case cwFixStationModel::NorthingRole:
     case cwFixStationModel::ElevationRole:

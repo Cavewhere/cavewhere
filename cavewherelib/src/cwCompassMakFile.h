@@ -133,6 +133,10 @@ CAVEWHERE_LIB_EXPORT QString utmZoneName(int zone);
 //! with no datum.
 CAVEWHERE_LIB_EXPORT QString utmSystemName(const QString& datum, int zone);
 
+//! A geographic system's name: "<datum>, latitude/longitude", or
+//! "latitude/longitude" with no datum.
+CAVEWHERE_LIB_EXPORT QString latLongSystemName(const QString& datum);
+
 /**
  * The system cavern reads a Compass datum and UTM zone in (survex img.c
  * img_compass_utm_proj_str): "EPSG:<code>" for the pairs EPSG catalogs, a

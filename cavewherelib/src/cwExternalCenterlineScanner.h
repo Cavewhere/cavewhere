@@ -277,10 +277,20 @@ struct SeededTripMetadata {
  */
 struct ScannedFix {
     QString station;
-    //! The file's numbers; a Compass .mak fix in meters, as cavern reads it.
+    //! The coordinate as cavern reads it: a Compass .mak fix, or a Walls #FIX
+    //! grid fix, in meters as "E N U"; a Walls lat/long fix under a .REF whose
+    //! datum cavern knows as "longitude latitude elevation" in decimal degrees
+    //! and meters; else the file's numbers.
     QString coordinate;
-    //! Empty when no input coordinate system is in force.
+    //! The name of the input coordinate system in force, as the row shows it;
+    //! empty when none is.
     QString coordinateSystem;
+    //! The system cavern places the fix in, as *cs or PROJ takes it
+    //! ("EPSG:26716"). Empty when coordinateSystem is that system already (a
+    //! Survex *cs, or one standing in around a .mak), when cavern recognizes
+    //! none, or when a Walls #FIX keeps its written text because the reader
+    //! refuses the line.
+    QString placementSystem;
     //! The canonical absolute path of the file whose line fixes the station.
     QString file;
     //! That line, counting from 1; 0 when the format's reader keeps no line

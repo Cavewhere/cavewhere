@@ -67,6 +67,36 @@ TEST_CASE("An attached fix model's rows follow setAttachedFixes", "[cwAttachedFi
     CHECK(countSpy.count() == 2);
 }
 
+TEST_CASE("An attached fix row's system names the system and the code that places it",
+          "[cwAttachedFixModel]")
+{
+    const auto placedFix = [](const QString& station, const QString& system, const QString& placement) {
+        cwAttachedFix fix{station, QStringLiteral("0 0 0"), system, QStringLiteral("attached.wpj")};
+        fix.placementSystem = placement;
+        return fix;
+    };
+
+    cwAttachedFixModel model;
+    model.setAttachedFixes({placedFix(QStringLiteral("M1"), QStringLiteral("NAD27 CONUS, UTM zone 16N"),
+                                      QStringLiteral("EPSG:26716")),
+                            placedFix(QStringLiteral("L1"), QStringLiteral("NAD27 CONUS, latitude/longitude"),
+                                      QStringLiteral("EPSG:4267")),
+                            placedFix(QStringLiteral("A1"), QStringLiteral("North American 1927, UTM zone 13N"),
+                                      QStringLiteral("EPSG:26713")),
+                            utm13NFix(QStringLiteral("a.p1"))});
+    REQUIRE(model.rowCount() == 4);
+
+    CHECK(model.data(model.index(0), cwFixStationModel::InputCSRole).toString().toStdString()
+          == "NAD27 CONUS, UTM zone 16N (EPSG:26716)");
+    CHECK(model.data(model.index(1), cwFixStationModel::InputCSRole).toString().toStdString()
+          == "NAD27 CONUS, latitude/longitude (EPSG:4267)");
+    CHECK(model.data(model.index(2), cwFixStationModel::InputCSRole).toString().toStdString()
+          == "North American 1927, UTM zone 13N (EPSG:26713)");
+    // A Survex *cs is its own code, so its row shows it once.
+    CHECK(model.data(model.index(3), cwFixStationModel::InputCSRole).toString().toStdString()
+          == "EPSG:32613");
+}
+
 TEST_CASE("An attached fix model answers the fix station roles read-only", "[cwAttachedFixModel]")
 {
     cwAttachedFixModel model;

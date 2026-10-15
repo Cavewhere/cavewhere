@@ -2463,7 +2463,8 @@ MainWindowTest {
                       5000, "should land on fixStationPage")
             tryCompare(findChild(RootData.pageView.currentPageItem, "fixStationTreeView"), "count", 1)
             compare(waitForChild("stationCell.0").text, "compass_zone_no_datum.A1")
-            compare(waitForChild("inputCSText.0").text, "North American 1927, UTM zone 13N")
+            // The System column names the system and the code cavern places it in.
+            compare(waitForChild("inputCSText.0").text, "North American 1927, UTM zone 13N (EPSG:26713)")
             // The .mak writes [f,1568241.5,14534120.7,5429.8]; the row shows
             // the meters cavern solves with, and no unit letter.
             compare(waitForChild("coordinateCell.0").text, "478000.0092 4429999.98936 1655.00304")

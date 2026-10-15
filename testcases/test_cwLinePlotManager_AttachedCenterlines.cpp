@@ -13,6 +13,7 @@
 #include "cwAttachedCenterlinesModel.h"
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwCoordinateTransform.h"
 #include "cwExternalCenterline.h"
 #include "cwExternalCenterlineManager.h"
 #include "cwLength.h"
@@ -51,6 +52,7 @@
 
 // Std
 #include <cmath>
+#include <optional>
 
 namespace {
 
@@ -552,6 +554,34 @@ TEST_CASE("walls_empty_datum solves as a source root",
           == Catch::Approx(2.0 * kWallsTapeMeters).margin(kUtmFloatMarginMeters));
     CHECK(cave->length()->value()
           == Catch::Approx(kWallsEmptyDatumLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("walls_fix_units solves its fixes where their rows place them",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("walls-fix-units-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(),
+                                              QStringLiteral("walls_fix_units/walls_fix_units.wpj"));
+    requireSolved(project.get());
+
+    // The project keeps no frame of its own, so the positions are the .REF's
+    // NAD27 UTM zone 16N grid as floats. Each .srv is its own component with
+    // one fix, so its fixed station sits exactly where the fix places it.
+    const QString solvedCS = QStringLiteral("EPSG:26716");
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    for (const QString& station : {QStringLiteral("M1"), QStringLiteral("F1"), QStringLiteral("L1")}) {
+        INFO("station " << station.toStdString());
+        const cwAttachedFix fix = subtreeAttachedFixFor(cave, station);
+        INFO("coordinate " << fix.coordinate.toStdString() << ", solve system "
+                           << fix.solveSystem().toStdString());
+        const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(fix.solveSystem());
+        REQUIRE(placement.has_value());
+        const std::optional<cwGeoPoint> solved =
+            cwCoordinateTransform::transformPoint(placement->cs, solvedCS, placement->point);
+        REQUIRE(solved.has_value());
+        checkPosition(lookup, station, solved->x, solved->y, solved->z, kUtmFloatMarginMeters);
+    }
 }
 
 TEST_CASE("survex_two_cs solves as two source roots in one output system",

@@ -1032,7 +1032,8 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
                            bare ? readIn.system : QString(),
                            fix.reference,
                            bare && readIn.fileOutput,
-                           ownerId});
+                           ownerId,
+                           fix.placementSystem});
         }
         return listed;
     };

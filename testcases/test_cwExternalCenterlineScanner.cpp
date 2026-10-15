@@ -6,6 +6,7 @@
 **************************************************************************/
 
 // Catch
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 // Our
@@ -1504,6 +1505,23 @@ TEST_CASE("rootStationCount counts the stations outside every Survex block",
     }
 }
 
+namespace Catch {
+
+//! Prints a fix's station, coordinate and systems, so a failed comparison
+//! shows which part differs.
+template<>
+struct StringMaker<cwExternalCenterlineScanner::ScannedFix>
+{
+    static std::string convert(const cwExternalCenterlineScanner::ScannedFix& fix)
+    {
+        return QStringLiteral("{%1 \"%2\" \"%3\" \"%4\"}")
+            .arg(fix.station, fix.coordinate, fix.coordinateSystem, fix.placementSystem)
+            .toStdString();
+    }
+};
+
+} // namespace Catch
+
 namespace {
 
 using cwExternalCenterlineScanner::ScannedFix;
@@ -1526,6 +1544,56 @@ QList<ScannedFix> scannedFixes(const QString& entryFile)
     INFO("scan: " << result.errorMessage().toStdString());
     REQUIRE_FALSE(result.hasError());
     return withoutLocation(result.value().fixes);
+}
+
+//! A fix as a case compares it, with the system cavern places it in beside the
+//! name its row shows.
+ScannedFix placedFix(const QString& station, const QString& coordinate,
+                     const QString& coordinateSystem, const QString& placementSystem)
+{
+    return {.station = station,
+            .coordinate = coordinate,
+            .coordinateSystem = coordinateSystem,
+            .placementSystem = placementSystem};
+}
+
+ScannedFix fixNamed(const QList<ScannedFix>& fixes, const QString& station)
+{
+    for (const ScannedFix& fix : fixes) {
+        if (fix.station == station) {
+            return fix;
+        }
+    }
+    FAIL("No scanned fix names " << station.toStdString());
+    return ScannedFix();
+}
+
+constexpr double kMinutesPerDegree = 60.0;
+constexpr double kSecondsPerDegree = 3600.0;
+// A lat/long fix's text keeps its degrees to a billionth (about 0.1 mm).
+constexpr double kDegreeTextMargin = 1e-9;
+
+double degrees(double wholeDegrees, double minutes, double seconds)
+{
+    return wholeDegrees + minutes / kMinutesPerDegree + seconds / kSecondsPerDegree;
+}
+
+//! Checks that \a text reads "longitude latitude elevation" in decimal degrees
+//! and meters, as cavern reads a Walls lat/long #FIX.
+void checkDegreeText(const QString& text, double longitude, double latitude, double elevation)
+{
+    INFO("coordinate text: " << text.toStdString());
+    const QStringList tokens = text.split(QLatin1Char(' '));
+    REQUIRE(tokens.size() == 3);
+    bool longitudeOk = false;
+    bool latitudeOk = false;
+    bool elevationOk = false;
+    CHECK(tokens.at(0).toDouble(&longitudeOk) == Catch::Approx(longitude).margin(kDegreeTextMargin));
+    CHECK(tokens.at(1).toDouble(&latitudeOk) == Catch::Approx(latitude).margin(kDegreeTextMargin));
+    CHECK(tokens.at(2).toDouble(&elevationOk) == Catch::Approx(elevation));
+    CHECK(longitudeOk);
+    CHECK(latitudeOk);
+    CHECK(elevationOk);
 }
 
 } // namespace
@@ -1617,8 +1685,9 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
                               "#cave.dat,B1[M,580661.57,4113846.34,219];\n"));
         CHECK(scannedFixes(makPath)
               == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("0 0 0"), QString()},
-                                   {QStringLiteral("cave.B1"), QStringLiteral("580661.57 4113846.34 219"),
-                                    QStringLiteral("North American 1983, UTM zone 16N")}});
+                                   placedFix(QStringLiteral("cave.B1"), QStringLiteral("580661.57 4113846.34 219"),
+                                             QStringLiteral("North American 1983, UTM zone 16N"),
+                                             QStringLiteral("EPSG:26916"))});
     }
 
     SECTION("a base location's zone stands in for a missing zone line")
@@ -1629,8 +1698,9 @@ TEST_CASE("scanCompass records .mak fixes and the datum and zone in force",
                               "&North American 1983;\n"
                               "#cave.dat,A1[m,580661.57,4113846.34,219];\n"));
         CHECK(scannedFixes(makPath)
-              == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("580661.57 4113846.34 219"),
-                                    QStringLiteral("North American 1983, UTM zone 16N")}});
+              == QList<ScannedFix>{placedFix(QStringLiteral("cave.A1"), QStringLiteral("580661.57 4113846.34 219"),
+                                             QStringLiteral("North American 1983, UTM zone 16N"),
+                                             QStringLiteral("EPSG:26916"))});
     }
 
     SECTION("a fix is named under its DAT's survey, as cavern reads the line")
@@ -1664,8 +1734,9 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
             datasetExternalCenterlinePath(fixtureName + QStringLiteral(".mak")));
         REQUIRE_FALSE(scan.hasError());
         CHECK(withoutLocation(scan.value().fixes)
-              == QList<ScannedFix>{{QStringLiteral("compass_zone_no_datum.A1"),
-                                    QStringLiteral("478000.0092 4429999.98936 1655.00304"), nad27Zone13}});
+              == QList<ScannedFix>{placedFix(QStringLiteral("compass_zone_no_datum.A1"),
+                                             QStringLiteral("478000.0092 4429999.98936 1655.00304"), nad27Zone13,
+                                             QStringLiteral("EPSG:26713"))});
         CHECK(scan.value().defaultedDatums
               == QList<DefaultedDatum>{{fixtureName + QStringLiteral(".mak"), QStringLiteral("13N")}});
     }
@@ -1682,8 +1753,9 @@ TEST_CASE("A .mak that names a UTM zone but no datum reads in Compass's default"
         const auto scan = cwExternalCenterlineScanner::scan(makPath);
         REQUIRE_FALSE(scan.hasError());
         CHECK(withoutLocation(scan.value().fixes)
-              == QList<ScannedFix>{{QStringLiteral("a.B1"), QStringLiteral("0 0 0"),
-                                    QStringLiteral("North American 1927, UTM zone 16N")}});
+              == QList<ScannedFix>{placedFix(QStringLiteral("a.B1"), QStringLiteral("0 0 0"),
+                                             QStringLiteral("North American 1927, UTM zone 16N"),
+                                             QStringLiteral("EPSG:26716"))});
         CHECK(scan.value().defaultedDatums
               == QList<DefaultedDatum>{{QStringLiteral("base.mak"), QStringLiteral("16N")}});
     }
@@ -1727,35 +1799,147 @@ TEST_CASE("scanCompass reads a .mak '#' line that spans lines", "[Scanner][Attac
     const auto scan = cwExternalCenterlineScanner::scan(makPath);
     REQUIRE_FALSE(scan.hasError());
     const QString system = QStringLiteral("North American 1983, UTM zone 16N");
+    const QString placement = QStringLiteral("EPSG:26916");
     CHECK(withoutLocation(scan.value().fixes)
-          == QList<ScannedFix>{{QStringLiteral("cave.A1"), QStringLiteral("580661.57 4113846.34 219"), system},
-                               {QStringLiteral("cave.A3"), QStringLiteral("580641.5616 4114045.9248 218.9988"), system}});
+          == QList<ScannedFix>{placedFix(QStringLiteral("cave.A1"), QStringLiteral("580661.57 4113846.34 219"),
+                                         system, placement),
+                               placedFix(QStringLiteral("cave.A3"), QStringLiteral("580641.5616 4114045.9248 218.9988"),
+                                         system, placement)});
     CHECK(scan.value().dependencies.size() == 2);
     CHECK(scan.value().warnings.isEmpty());
 }
 
-TEST_CASE("scanWalls records #FIX lines and the system their .wpj's .REF names",
+TEST_CASE("scanWalls records #FIX lines as cavern reads them and the system their .wpj's .REF names",
           "[Scanner][Attach]")
 {
-    const QList<ScannedFix> georeferenced =
-        scannedFixes(testcasesDatasetSourcePath(QStringLiteral("walls/georef_cave.wpj")));
-    const QString nad83Utm16 = QStringLiteral("NAD83, UTM zone 16N");
-    const QString a1 = QStringLiteral("580661.570 4113846.340 219");
-    const QString a3 = QStringLiteral("W86:5:29.254 N37:10:3.195 219");
-    CHECK(georeferenced == QList<ScannedFix>{{QStringLiteral("A1"), a1, nad83Utm16},
-                                             {QStringLiteral("A3"), a3, nad83Utm16}});
+    // GEOREF.SRV fixes A1 in grid meters and A3 as W86:5:29.254 N37:10:3.195.
+    const QString a1 = QStringLiteral("580661.57 4113846.34 219");
+    const double a3Longitude = -degrees(86.0, 5.0, 29.254);
+    const double a3Latitude = degrees(37.0, 10.0, 3.195);
+    constexpr double a3Elevation = 219.0;
 
-    const QList<ScannedFix> alone =
-        scannedFixes(testcasesDatasetSourcePath(QStringLiteral("walls/GEOREF.SRV")));
-    CHECK(alone == QList<ScannedFix>{{QStringLiteral("A1"), a1, QString()},
-                                     {QStringLiteral("A3"), a3, QString()}});
+    SECTION("under the .wpj's NAD83 .REF")
+    {
+        const QList<ScannedFix> georeferenced =
+            scannedFixes(testcasesDatasetSourcePath(QStringLiteral("walls/georef_cave.wpj")));
+        REQUIRE(georeferenced.size() == 2);
+        CHECK(fixNamed(georeferenced, QStringLiteral("A1"))
+              == placedFix(QStringLiteral("A1"), a1, QStringLiteral("NAD83, UTM zone 16N"),
+                           QStringLiteral("EPSG:26916")));
+        const ScannedFix a3 = fixNamed(georeferenced, QStringLiteral("A3"));
+        CHECK(a3.coordinateSystem.toStdString() == "NAD83, latitude/longitude");
+        CHECK(a3.placementSystem.toStdString() == "EPSG:4269");
+        checkDegreeText(a3.coordinate, a3Longitude, a3Latitude, a3Elevation);
+    }
+
+    SECTION("a .srv alone resolves its grid fix and keeps its lat/long fix as written")
+    {
+        // Cavern refuses a lat/long #FIX with no .REF to name its datum.
+        const QList<ScannedFix> alone =
+            scannedFixes(testcasesDatasetSourcePath(QStringLiteral("walls/GEOREF.SRV")));
+        CHECK(alone == QList<ScannedFix>{
+                  placedFix(QStringLiteral("A1"), a1, QString(), QString()),
+                  placedFix(QStringLiteral("A3"), QStringLiteral("W86:5:29.254 N37:10:3.195 219"),
+                            QString(), QString())});
+    }
+}
+
+TEST_CASE("scanWalls resolves a #FIX under the file's #UNITS as cavern reads it",
+          "[Scanner][Walls][Attach]")
+{
+    SECTION("the walls_fix_units fixture: ORDER=NEU with an F suffix, feet with a variance, d:m:s")
+    {
+        const QList<ScannedFix> fixes =
+            scannedFixes(datasetExternalCenterlinePath(QStringLiteral("walls_fix_units/walls_fix_units.wpj")));
+        REQUIRE(fixes.size() == 3);
+        const QString grid = QStringLiteral("NAD27 CONUS, UTM zone 16N");
+        const QString gridCode = QStringLiteral("EPSG:26716");
+
+        // "#UNITS Meters ORDER=NEU" then "4040000.00 520000.00 766.19F /Invented benchmark".
+        CHECK(fixNamed(fixes, QStringLiteral("M1"))
+              == placedFix(QStringLiteral("M1"), QStringLiteral("520000 4040000 233.534712"), grid, gridCode));
+        // "#Units feet" then "1707000 13256000 1000 (R5,?)".
+        CHECK(fixNamed(fixes, QStringLiteral("F1"))
+              == placedFix(QStringLiteral("F1"), QStringLiteral("520293.6 4040428.8 304.8"), grid, gridCode));
+
+        // "W86:57:30.5 N36:31:15.25 120", read in the .REF datum's lat/long.
+        const ScannedFix l1 = fixNamed(fixes, QStringLiteral("L1"));
+        CHECK(l1.coordinateSystem.toStdString() == "NAD27 CONUS, latitude/longitude");
+        CHECK(l1.placementSystem.toStdString() == "EPSG:4267");
+        checkDegreeText(l1.coordinate, -degrees(86.0, 57.0, 30.5), degrees(36.0, 31.0, 15.25), 120.0);
+    }
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    SECTION("#UNITS SAVE and RESTORE bracket a change of length unit")
+    {
+        const QString srv = writeUtf8File(tempPath(tempDir, QStringLiteral("SAVED.SRV")),
+                                          QByteArrayLiteral("#UNITS SAVE Feet\n"
+                                                            "#FIX S1 100 200 300\n"
+                                                            "#UNITS RESTORE\n"
+                                                            "#FIX S2 100 200 300\n"));
+        CHECK(scannedFixes(srv) == QList<ScannedFix>{
+                  placedFix(QStringLiteral("S1"), QStringLiteral("30.48 60.96 91.44"), QString(), QString()),
+                  placedFix(QStringLiteral("S2"), QStringLiteral("100 200 300"), QString(), QString())});
+    }
+
+    SECTION("#UNITS RESET returns to meters and ENU")
+    {
+        const QString srv = writeUtf8File(tempPath(tempDir, QStringLiteral("RESET.SRV")),
+                                          QByteArrayLiteral("#UNITS Feet ORDER=NEU\n"
+                                                            "#FIX R1 20 10 30\n"
+                                                            "#UNITS RESET\n"
+                                                            "#FIX R2 10 20 30\n"));
+        CHECK(scannedFixes(srv) == QList<ScannedFix>{
+                  placedFix(QStringLiteral("R1"), QStringLiteral("3.048 6.096 9.144"), QString(), QString()),
+                  placedFix(QStringLiteral("R2"), QStringLiteral("10 20 30"), QString(), QString())});
+    }
+
+    SECTION("ORDER=NE reads north first and leaves the elevation 0")
+    {
+        const QString srv = writeUtf8File(tempPath(tempDir, QStringLiteral("NORTH.SRV")),
+                                          QByteArrayLiteral("#UNITS ORDER=NE\n"
+                                                            "#FIX N1 200 100\n"));
+        CHECK(scannedFixes(srv) == QList<ScannedFix>{
+                  placedFix(QStringLiteral("N1"), QStringLiteral("100 200 0"), QString(), QString())});
+    }
+
+    SECTION("a .wpj entry's .OPTIONS reach its .srv")
+    {
+        writeUtf8File(tempPath(tempDir, QStringLiteral("OPTFEET.SRV")),
+                      QByteArrayLiteral("#FIX P1 10 20 30\n"
+                                        "P1\tP2\t10.0\t0\t0\n"));
+        const QString wpj = writeUtf8File(tempPath(tempDir, QStringLiteral("options.wpj")),
+                                          QByteArrayLiteral(";WALLS Project file\n"
+                                                            ".BOOK\tOptions Cave\n"
+                                                            ".NAME\tOPTIONS-CAVE\n"
+                                                            ".STATUS\t8\n"
+                                                            ".SURVEY\tFeet Passage\n"
+                                                            ".NAME\tOPTFEET\n"
+                                                            ".OPTIONS\tFeet\n"
+                                                            ".STATUS\t8\n"
+                                                            ".ENDBOOK\n"));
+        CHECK(scannedFixes(wpj) == QList<ScannedFix>{
+                  placedFix(QStringLiteral("P1"), QStringLiteral("3.048 6.096 9.144"), QString(), QString())});
+    }
+
+    SECTION("a note and a comment drop off, and a line cavern's syntax refuses keeps its text")
+    {
+        const QString srv = writeUtf8File(tempPath(tempDir, QStringLiteral("NOTES.SRV")),
+                                          QByteArrayLiteral("#FIX U1 1 2 3 /Spring ; found 1990\n"
+                                                            "#FIX U2 north of the spring\n"));
+        CHECK(scannedFixes(srv) == QList<ScannedFix>{
+                  placedFix(QStringLiteral("U1"), QStringLiteral("1 2 3"), QString(), QString()),
+                  placedFix(QStringLiteral("U2"), QStringLiteral("north of the spring"), QString(), QString())});
+    }
 }
 
 TEST_CASE("scanWalls reads a .REF's datum from its index when the name is empty",
           "[Scanner][Walls][Attach]")
 {
     const QString fixture = QStringLiteral("walls_empty_datum/walls_empty_datum.wpj");
-    const QString a1 = QStringLiteral("580661.570 4113846.340 219");
+    const QString a1 = QStringLiteral("580661.57 4113846.34 219");
 
     SECTION("the fixture's index 15 is NAD27 CONUS")
     {
@@ -1768,8 +1952,9 @@ TEST_CASE("scanWalls reads a .REF's datum from its index when the name is empty"
         CHECK(hasFileNameInDeps(scan.value(), QStringLiteral("WEST.SRV")));
         CHECK(scan.value().warnings.isEmpty());
         CHECK(withoutLocation(scan.value().fixes)
-              == QList<ScannedFix>{{QStringLiteral("A1"), a1,
-                                    QStringLiteral("NAD27 CONUS, UTM zone 16N")}});
+              == QList<ScannedFix>{placedFix(QStringLiteral("A1"), a1,
+                                             QStringLiteral("NAD27 CONUS, UTM zone 16N"),
+                                             QStringLiteral("EPSG:26716"))});
     }
 
     SECTION("Walls' legacy index codes")
@@ -1784,18 +1969,22 @@ TEST_CASE("scanWalls reads a .REF's datum from its index when the name is empty"
 
         QByteArray index;
         QString expectedSystem;
+        QString expectedPlacement;
         SECTION("254 is NAD27 CONUS")
         {
             index = QByteArrayLiteral("254");
             expectedSystem = QStringLiteral("NAD27 CONUS, UTM zone 16N");
+            expectedPlacement = QStringLiteral("EPSG:26716");
         }
         SECTION("the other codes from 251 to 255 are WGS 1984")
         {
             index = QByteArrayLiteral("253");
             expectedSystem = QStringLiteral("WGS 1984, UTM zone 16N");
+            expectedPlacement = QStringLiteral("EPSG:32616");
         }
         SECTION("an index outside Walls' table leaves the datum unnamed")
         {
+            // Cavern knows no system for an unnamed datum, so none places the fix.
             index = QByteArrayLiteral("99");
             expectedSystem = QStringLiteral("UTM zone 16N");
         }
@@ -1811,7 +2000,8 @@ TEST_CASE("scanWalls reads a .REF's datum from its index when the name is empty"
         const QString wpjPath = writeUtf8File(tempPath(tempDir, QStringLiteral("legacy_index.wpj")),
                                               rewritten);
 
-        CHECK(scannedFixes(wpjPath) == QList<ScannedFix>{{QStringLiteral("A1"), a1, expectedSystem}});
+        CHECK(scannedFixes(wpjPath)
+              == QList<ScannedFix>{placedFix(QStringLiteral("A1"), a1, expectedSystem, expectedPlacement)});
     }
 }
 
