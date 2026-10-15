@@ -1754,14 +1754,6 @@ StandardPage {
                         onClicked: fixStationPage.pickFromView(narrowDelegateId.fixRow)
                     }
                 }
-
-                QC.Label {
-                    objectName: "readOnlySource." + narrowDelegateId.fixRow
-                    visible: narrowDelegateId.readOnly
-                    text: "from " + narrowDelegateId.sourceFile
-                    textFormat: QC.Label.PlainText
-                    color: Theme.textSubtle
-                }
             }
         }
     }

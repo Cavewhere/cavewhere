@@ -2394,11 +2394,19 @@ MainWindowTest {
             compare(findChild(page, "noFixStationsHelpBox").visible, false,
                     "the table is not empty while the file's fix is listed")
 
-            // The narrow layout says where the row comes from in words.
+            // The narrow layout marks the row with the lock alone, as the wide
+            // one does; the lock's tooltip names the file.
             const wideWidth = rootId.width
             rootId.width = Theme.breakpointPanelCollapse / 2
-            tryCompare(waitForChild("readOnlySource.0"), "text", "from survex_blocks.svx")
-            verify(waitForChild("readOnlyLock.0") !== null, "the narrow row carries the lock too")
+            const narrowRow = waitForChild("narrowFixRow.0")
+            const narrowLock = waitForChild("readOnlyLock.0")
+            const narrowTip = rootId.toolTipOf(narrowLock)
+            verify(narrowTip !== null && narrowTip.text.indexOf("survex_blocks.svx") >= 0,
+                   "the narrow lock's tooltip names the file")
+            const wordedSource = Array.from(narrowRow.children).filter(
+                                     child => child instanceof QC.Label
+                                     && String(child.text).indexOf("survex_blocks.svx") >= 0)
+            compare(wordedSource.length, 0, "the narrow row names the file only in the lock's tooltip")
             compare(liveChild("inputCSComboBox.0"), null)
             compare(waitForChild("inputCSText.0").text, "none")
             compare(liveChild("pickFromViewButton.0"), null)
