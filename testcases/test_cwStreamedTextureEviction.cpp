@@ -220,7 +220,7 @@ namespace {
             m_backend->streamResources(resourceUpdateData, remainingUploadBytes);
 
             std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiFrameRenderer::kPassCount> passBatches;
-            frameRenderer()->gatherScene(passBatches, perPassRenderData);
+            frameRenderer()->gatherScene(passBatches, perPassRenderData, {.resourceUpdateBatch = batch});
 
             m_itemGathered = false;
             for (const auto& batches : passBatches) {

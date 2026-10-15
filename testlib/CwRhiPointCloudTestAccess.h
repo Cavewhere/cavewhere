@@ -93,19 +93,13 @@ struct CwRhiPointCloudTestAccess {
         return cloud.appearanceUniform(live.spacingCoverage);
     }
 
-    // The world spacing @a index's sprites floor against as the last live
-    // gather worked it out, which the GPU draws with from the next frame on.
-    // 0 for a node that is not resident.
-    static float nodeFloorSpacing(const cwRHIPointCloud& cloud, int index) {
-        if (index < 0 || index >= cloud.m_nodes.size()) {
-            return 0.0f;
-        }
-        return cloud.m_pendingFloors.value(index, cloud.m_nodes.at(index).floorSpacing);
-    }
-
     // The world spacing @a index's constants slot held when the last frame
-    // drew: the floor flushed at the top of that frame, or the node's own
-    // spacing on the frame it arrived. 0 for a node that is not resident.
+    // drew: the floor that frame's live gather worked out, or the node's own
+    // spacing while no live gather has drawn it. 0 for a node that is not
+    // resident. This is the CPU mirror of the write: that the write reaches the
+    // GPU ahead of the same frame's draws rests on cwRhiFrameRenderer gathering
+    // into the batch drawScene() submits first, and the [PointCloudEval] bench
+    // is what judges the drawn result.
     static float drawnNodeFloorSpacing(const cwRHIPointCloud& cloud, int index) {
         if (index < 0 || index >= cloud.m_nodes.size()) {
             return 0.0f;
@@ -234,12 +228,6 @@ struct CwRhiPointCloudTestAccess {
 
     static bool streamerHasWork(const cwRHIPointCloud& cloud) {
         return cloud.m_streamer.hasWork();
-    }
-
-    // Nodes whose floor the last gather moved, waiting for the next frame's
-    // streamResources() to write it
-    static int pendingFloorCount(const cwRHIPointCloud& cloud) {
-        return int(cloud.m_pendingFloors.size());
     }
 
     static bool exportRequested(const cwRHIPointCloud& cloud, int index) {

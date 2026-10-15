@@ -117,9 +117,9 @@ private:
         quint64 lastDesiredFrame = 0;
 
         // The world-space floor this node's sprites cover, in meters, as its
-        // constants slot holds it — what the GPU draws the node with. A floor
-        // the last live gather worked out waits in m_pendingFloors until the
-        // next resource pass writes it here and into the slot.
+        // constants slot holds it — what the GPU draws the node with. The live
+        // gather writes it here and into the slot on the frame it works it
+        // out, on the batch that frame's draws consume.
         float floorSpacing = 0.0f;
 
         // Where the node sits in m_residentIndices, so releasing it is a
@@ -363,24 +363,27 @@ private:
     // refine threshold along with it.
     PerCloudUniform appearanceUniform(float spacingCoverage) const;
 
-    // Writes every floor the last live gather queued, and empties the queue.
-    void flushNodeFloors(QRhiResourceUpdateBatch* batch);
-
     // Takes each drawn node's floor from cw::octree::finestDrawnLevels over
     // the cut's resident @a drawnNodes and its still-streaming @a missingNodes,
-    // and queues the ones that moved for the next resource pass.
-    void refreshNodeFloors(const QVector<int>& drawnNodes, const QVector<int>& missingNodes);
+    // and writes the ones that moved onto @a batch, ahead of this frame's draws.
+    void writeNodeFloors(QRhiResourceUpdateBatch* batch, const QVector<int>& drawnNodes,
+                         const QVector<int>& missingNodes);
 
-    // Queues its own spacing for every resident node of @a previous that this
-    // frame's cut dropped (it carries no @a frame stamp), so a node that comes
-    // back draws at its own spacing until a gather works out its floor again,
-    // the way uploadNode() lands a fresh arrival. A culled frame leaves the
-    // floors alone, so the cloud comes back at the sprite size it had.
-    void restoreOwnFloorsLeavingCut(const cw::octree::Selection& previous, quint64 frame);
+    // Writes its own spacing for every resident node of @a previous that this
+    // frame's cut dropped (it carries no @a frame stamp), so an export job that
+    // draws it out of the live cut sees the floor uploadNode() lands a fresh
+    // arrival with, rather than one its children gave it. A culled frame leaves
+    // the floors alone, so the cloud comes back at the sprite size it had.
+    void restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
+                                    const cw::octree::Selection& previous, quint64 frame);
 
-    // Queues @a floorSpacing for @a index's slot, or drops a queued floor when
-    // the slot already holds it.
-    void queueNodeFloor(int index, float floorSpacing);
+    // @a index's own sample spacing, the floor a node draws with while nothing
+    // under it counts.
+    float ownSpacing(int index) const;
+
+    // Writes @a floorSpacing into @a index's constants slot unless it already
+    // holds it.
+    void writeNodeFloor(QRhiResourceUpdateBatch* batch, int index, float floorSpacing);
 
     // The node box overlay (cwPointCloudShading::showNodeBoxes): a wire cube
     // per node of the last cut and per resident node outside it, drawn in the
@@ -481,12 +484,6 @@ private:
     // times the forest's inflation — which is what PointCloud.vert turns back
     // into a world spacing at each vertex's own depth. Render-thread only.
     float m_sseThresholdPx = float(cw::budgets::kDefaultScreenSpaceErrorPx);
-
-    // Node index to the floor the last live gather worked out for it, for the
-    // nodes whose floor moved, waiting for a resource pass to write it into
-    // their constants slot. The same one-frame lag the per-cloud floor had
-    // before it went per instance.
-    QHash<int, float> m_pendingFloors;
 
     // m_sseThresholdPx moved, so slot 0 is behind the view; the next resource
     // pass rewrites it.

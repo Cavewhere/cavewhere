@@ -245,7 +245,6 @@ void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
     m_residentIndices.clear();
     m_residentCount = 0;
     m_coldNodes.clear();
-    m_pendingFloors.clear();
     m_liveAppearanceStale = true;
     if (m_source.manifest) {
         m_nodes.resize(m_source.manifest->nodes.size());
@@ -292,7 +291,6 @@ void cwRHIPointCloud::releaseNode(int index)
     node.state = NodeState::Absent;
     node.exportRequested = false;
     node.floorSpacing = 0.0f;
-    m_pendingFloors.remove(index);
     m_residencyChanged = true;
 }
 
@@ -391,32 +389,19 @@ void cwRHIPointCloud::writeLiveAppearanceSlot(QRhiResourceUpdateBatch* batch)
     m_liveAppearanceStale = false;
 }
 
-void cwRHIPointCloud::flushNodeFloors(QRhiResourceUpdateBatch* batch)
-{
-    // releaseNode() drops a node's queued floor, so every node here still
-    // holds the slot the floor goes into
-    for (auto pending = m_pendingFloors.cbegin(); pending != m_pendingFloors.cend(); ++pending) {
-        NodeRecord& node = m_nodes[pending.key()];
-        node.floorSpacing = pending.value();
-        batch->updateDynamicBuffer(m_nodeConstants,
-                                   quint32(node.constantSlot) * kNodeConstantsBytes
-                                       + kNodeFloorOffset,
-                                   sizeof(float), &node.floorSpacing);
-    }
-    m_pendingFloors.clear();
-}
-
-void cwRHIPointCloud::refreshNodeFloors(const QVector<int>& drawnNodes,
-                                        const QVector<int>& missingNodes)
+void cwRHIPointCloud::writeNodeFloors(QRhiResourceUpdateBatch* batch,
+                                      const QVector<int>& drawnNodes,
+                                      const QVector<int>& missingNodes)
 {
     const QVector<int> levels =
         cw::octree::finestDrawnLevels(*m_source.manifest, drawnNodes, missingNodes);
     for (int i = 0; i < drawnNodes.size(); i++) {
-        queueNodeFloor(drawnNodes.at(i), float(m_source.manifest->spacing(levels.at(i))));
+        writeNodeFloor(batch, drawnNodes.at(i), float(m_source.manifest->spacing(levels.at(i))));
     }
 }
 
-void cwRHIPointCloud::restoreOwnFloorsLeavingCut(const cw::octree::Selection& previous,
+void cwRHIPointCloud::restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
+                                                 const cw::octree::Selection& previous,
                                                  quint64 frame)
 {
     for (const cw::octree::SelectedNode& selected : previous.nodes) {
@@ -429,18 +414,29 @@ void cwRHIPointCloud::restoreOwnFloorsLeavingCut(const cw::octree::Selection& pr
             continue;
         }
 
-        const int level = m_source.manifest->nodes.at(selected.node).level;
-        queueNodeFloor(selected.node, float(m_source.manifest->spacing(level)));
+        writeNodeFloor(batch, selected.node, ownSpacing(selected.node));
     }
 }
 
-void cwRHIPointCloud::queueNodeFloor(int index, float floorSpacing)
+float cwRHIPointCloud::ownSpacing(int index) const
 {
-    if (floorSpacing == m_nodes.at(index).floorSpacing) {
-        m_pendingFloors.remove(index);
-    } else {
-        m_pendingFloors.insert(index, floorSpacing);
+    return float(m_source.manifest->spacing(m_source.manifest->nodes.at(index).level));
+}
+
+void cwRHIPointCloud::writeNodeFloor(QRhiResourceUpdateBatch* batch, int index,
+                                     float floorSpacing)
+{
+    // Only resident nodes reach here, so the node holds the slot the floor
+    // goes into
+    NodeRecord& node = m_nodes[index];
+    if (floorSpacing == node.floorSpacing) {
+        return;
     }
+    node.floorSpacing = floorSpacing;
+    batch->updateDynamicBuffer(m_nodeConstants,
+                               quint32(node.constantSlot) * kNodeConstantsBytes
+                                   + kNodeFloorOffset,
+                               sizeof(float), &node.floorSpacing);
 }
 
 cwRHIPointCloud::PerCloudUniform
@@ -650,10 +646,6 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
         writeLiveAppearanceSlot(data.resourceUpdateBatch);
     }
 
-    // And where the floors the last live gather queued reach their nodes'
-    // constants slots: one write per node per change.
-    flushNodeFloors(data.resourceUpdateBatch);
-
     writeNodeBoxes(rhi, data.resourceUpdateBatch);
 
     publishPickSet();
@@ -675,10 +667,6 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
 
 bool cwRHIPointCloud::hasStreamingWork() const
 {
-    if (!m_pendingFloors.isEmpty()) {
-        return true;
-    }
-
     // A queue waiting on the eviction hold for a slot moves only once the hold
     // is let go, and letting go asks for its own frame through budgetsChanged.
     if (m_waitingForSlot) {
@@ -742,23 +730,22 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     const float quantizationStep =
         float(double(bounds.maximum().x() - minimum.x()) / double(cw::octree::kQuantMax));
     // Until a live gather says what is drawn under it, a node stands for its
-    // own points alone, so its own sample spacing is the gap to close. No
-    // gather has a floor for it yet: it was not drawn, and releaseNode() let
-    // go of any floor queued for an earlier stay. A node that lands ahead of
-    // its children has either nothing drawn under it or children still
-    // missing, so the next gather keeps it at this same spacing either way.
-    const float ownSpacing =
-        float(m_source.manifest->spacing(m_source.manifest->nodes.at(index).level));
+    // own points alone, so its own sample spacing is the gap to close. The
+    // live gather that follows this frame's uploads works out the floor of the
+    // node and of every ancestor it completes, and writes them on this same
+    // batch. Until a live gather writes its floor, this value is what an
+    // export job draws it with, and what the slot keeps through a culled frame.
+    const float nodeOwnSpacing = ownSpacing(index);
     NodeConstants constants;
     constants.originScale = {minimum.x(), minimum.y(), minimum.z(), quantizationStep};
-    constants.floorSpacing = ownSpacing;
+    constants.floorSpacing = nodeOwnSpacing;
     constants.arrivalFrame = quint32(currentFrame());
     constants.nodeIndex = quint32(index);
     batch->updateDynamicBuffer(m_nodeConstants, quint32(slot) * kNodeConstantsBytes,
                                kNodeConstantsBytes, &constants);
 
     NodeRecord& node = m_nodes[index];
-    node.floorSpacing = ownSpacing;
+    node.floorSpacing = nodeOwnSpacing;
     node.buffer = buffer;
     node.bytes = bytes;
     node.index = payload.index;
@@ -1151,7 +1138,6 @@ void cwRHIPointCloud::releaseStreamedResources()
     m_requested.clear();
     m_readyQueue.clear();
     m_waitingForSlot = false;
-    m_pendingFloors.clear();
     m_nodeBoxCount = 0;
 
     // releaseNode swap-removes out of the back, so taking the back each time
@@ -1382,16 +1368,23 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     // Taking it from what is drawn is what holds the surface together where
     // the point cap left the cut coarser than the threshold describes. While
     // children stream, a node whose children are still missing keeps its own
-    // spacing, since it alone covers their cells. That protection reaches the
-    // GPU with the floors, a frame after the cut changes. A resident node
-    // leaving the cut goes back to its own spacing, so it re-enters the way a
-    // fresh arrival lands. An export job renders its own camera, so it leaves
-    // the live view's floors where the live frame put them.
+    // spacing, since it alone covers their cells. The floors ride the batch
+    // this frame's draws consume, so a node draws at the floor this cut gives
+    // it on the frame the cut changes and on the frame its last child lands. A
+    // resident node leaving the cut goes back to its own spacing. An export
+    // job renders its own camera, so it leaves the live view's floors where
+    // the live frame put them.
+    // A live gather without the frame's batch would freeze every floor at the
+    // spacing uploadNode() landed it with, so it is a caller bug.
     if (context.liveFrame) {
-        if (!drawnNodes.isEmpty()) {
-            refreshNodeFloors(drawnNodes, missingNodes);
+        Q_ASSERT_X(context.resourceUpdateBatch, "cwRHIPointCloud::gather",
+                   "a live gather needs the frame's resource batch to write node floors");
+        if (context.resourceUpdateBatch) {
+            if (!drawnNodes.isEmpty()) {
+                writeNodeFloors(context.resourceUpdateBatch, drawnNodes, missingNodes);
+            }
+            restoreOwnFloorsLeavingCut(context.resourceUpdateBatch, previousSelection, frame);
         }
-        restoreOwnFloorsLeavingCut(previousSelection, frame);
     }
 
     // Every node this frame's cut holds now carries this frame's stamp, so the

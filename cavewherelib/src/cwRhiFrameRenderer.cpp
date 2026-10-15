@@ -294,7 +294,9 @@ void cwRhiFrameRenderer::renderLiveFrame(QRhiCommandBuffer *cb, cwRhiItemRendere
 
     std::array<QVector<cwRHIObject::PipelineBatch>, kPassCount> passBatches;
 
-    gatherScene(passBatches, perPassRenderData);
+    // drawScene() submits the batch with its first pass, so what a gather
+    // writes into it lands before this frame's draws.
+    gatherScene(passBatches, perPassRenderData, {.resourceUpdateBatch = resources});
 
     recordPendingStreamingWork(streamedWorkLeft);
 
@@ -611,7 +613,8 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
             &frustum,
             &cullingStats,
             options.appearanceSlotForObject.value(object, 0),
-            options.liveFrame
+            options.liveFrame,
+            options.resourceUpdateBatch
         });
     };
 
@@ -665,7 +668,8 @@ void cwRhiFrameRenderer::gatherScene(std::array<QVector<cwRHIObject::PipelineBat
                 &frustum,
                 &cullingStats,
                 options.appearanceSlotForObject.value(object, 0),
-                options.liveFrame
+                options.liveFrame,
+                options.resourceUpdateBatch
             };
             object->gather(context, batches);
         }

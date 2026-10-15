@@ -487,7 +487,8 @@ bool cwRhiOffscreenRenderer::renderJobIntoScratch(QRhiCommandBuffer* cb,
     m_frame.gatherScene(passBatches, perPassRenderData,
                          {.hiddenObjectIds = p.hiddenObjectIds,
                           .appearanceSlotForObject = appearanceSlotForObject,
-                          .liveFrame = false});
+                          .liveFrame = false,
+                          .resourceUpdateBatch = cameraBatch});
 
     const cwRhiPostProcessEffect::FrameUniformContext offscreenFrameContext{
         clipCamera.projectionCorrected, size, p.devicePixelRatio

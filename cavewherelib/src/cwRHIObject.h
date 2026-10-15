@@ -152,6 +152,11 @@ public:
         // at full detail: the per-frame point budget and the relax probe belong
         // to the view the user is watching, not to a job that draws once.
         bool liveFrame = true;
+        // The batch this job's first pass consumes, stamped from
+        // cwSceneGatherOptions::resourceUpdateBatch. It is submitted after the
+        // gather, so a write an object records here reaches the GPU before the
+        // draws it gathers this frame. Null means the job offers no batch.
+        QRhiResourceUpdateBatch* resourceUpdateBatch = nullptr;
     };
 
     struct Drawable {

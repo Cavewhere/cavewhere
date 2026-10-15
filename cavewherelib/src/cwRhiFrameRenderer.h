@@ -42,6 +42,10 @@ struct cwSceneGatherOptions {
     // into cwRenderFrameStats. Offscreen export jobs pass false so their
     // momentary counts leave the HUD's live frame alone.
     bool liveFrame = true;
+    // The batch drawScene() hands this job's first pass, stamped into every
+    // GatherContext so an object can write what its gather worked out in time
+    // for the draws it gathers (cwRHIPointCloud's node floors).
+    QRhiResourceUpdateBatch* resourceUpdateBatch = nullptr;
 };
 
 /**

@@ -261,7 +261,7 @@ TEST_CASE("A streamed texture swap rebuilds the shader resource bindings when th
         backend->streamResources(resourceUpdateData, remainingUploadBytes);
 
         std::array<QVector<cwRHIObject::PipelineBatch>, cwRhiFrameRenderer::kPassCount> passBatches;
-        frameRenderer->gatherScene(passBatches, perPassRenderData);
+        frameRenderer->gatherScene(passBatches, perPassRenderData, {.resourceUpdateBatch = batch});
 
         const cwRhiPostProcessEffect::FrameUniformContext frameContext{
             camera.projectionCorrected, size, 1.0f
