@@ -26,6 +26,7 @@ QC.Popup {
     readonly property list<string> sizeModeNames: [qsTr("Coverage"), qsTr("Fixed pixels"), qsTr("Own spacing")]
     readonly property list<string> floorModeNames: [qsTr("Node"), qsTr("Off")]
     readonly property list<string> spacingSourceNames: [qsTr("Grid"), qsTr("Measured")]
+    readonly property list<string> revealModeNames: [qsTr("Cover"), qsTr("Grow")]
     readonly property list<string> debugViewNames: [qsTr("Off"), qsTr("Level"), qsTr("Node"), qsTr("Rank"),
         qsTr("Weight"), qsTr("Sprite size"), qsTr("Floor ratio"), qsTr("Residency age"),
         qsTr("Decimation preview")]
@@ -292,6 +293,17 @@ QC.Popup {
                 to: panelId.renderingSettings.maximumRevealFrames
                 knobValue: panelId.renderingSettings.revealFrames
                 onKnobEdited: (editedValue) => panelId.renderingSettings.revealFrames = editedValue
+            }
+        }
+
+        RowLayout {
+            KnobLabel { text: qsTr("Reveal mode") }
+
+            KnobComboBox {
+                objectName: "revealModeComboBox"
+                model: panelId.revealModeNames
+                knobValue: panelId.renderingSettings.revealMode
+                onActivated: (index) => panelId.renderingSettings.revealMode = index
             }
         }
 

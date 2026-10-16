@@ -24,6 +24,7 @@
 
 // Std includes
 #include <algorithm>
+#include <array>
 #include <deque>
 #include <memory>
 
@@ -370,7 +371,8 @@ private:
     // carries the cwPointCloudShading modes that switch those rules, the third
     // the debug view, the frame the residency age view counts from, the
     // spacing source every node sizes and thins by, and the frames the reveal
-    // ramp spans.
+    // ramp spans; the fourth what an arrival does over that ramp, padded out
+    // to a whole row.
     struct PerCloudUniform {
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
@@ -384,9 +386,11 @@ private:
         quint32 currentFrame = 0;
         qint32 spacingSource = 0;
         qint32 revealFrames = 0;
+        qint32 revealMode = 0;
+        std::array<qint32, 3> padding {};
     };
-    static_assert(sizeof(PerCloudUniform) == 12 * sizeof(float),
-                  "PerCloudBlock in PointCloud.vert is three std140 rows of 16 "
+    static_assert(sizeof(PerCloudUniform) == 16 * sizeof(float),
+                  "PerCloudBlock in PointCloud.vert is four std140 rows of 16 "
                   "bytes; the C++ struct has to match it field for field.");
 
     // The block the shader reads for @a spacingCoverage, carrying this frame's

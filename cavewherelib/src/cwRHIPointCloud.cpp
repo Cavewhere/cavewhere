@@ -442,14 +442,40 @@ void cwRHIPointCloud::writeNodeFloors(QRhiResourceUpdateBatch* batch,
                                       const QVector<int>& drawnNodes,
                                       const QVector<int>& missingNodes, quint64 revealClock)
 {
+    const cwPointCloudShading& shading = m_renderState.value().shading;
+    if (shading.revealMode == cw::pointcloud::RevealMode::Grow) {
+        // Floored at the cut the forest asked for, so the sprites keep their
+        // target size while children stream: the governor refines a node while
+        // its spacing projects wider than sseThresholdPx, so a requested
+        // floor projects at or under spacingCoverage * sseThresholdPx and the
+        // missing children show as holes between the ancestor's sparse points.
+        // Once every requested node is resident this is the drawn cut, so a
+        // settled frame matches Cover's. What still moves the floors (the cut
+        // following the camera, the governor's inflation) ramps as under Cover.
+        // A failed node is not on its way, so its ancestor covers its cell.
+        QVector<int> streamingNodes;
+        streamingNodes.reserve(missingNodes.size());
+        for (const int index : missingNodes) {
+            if (m_nodes.at(index).state != NodeState::Failed) {
+                streamingNodes.append(index);
+            }
+        }
+        const QVector<double> floors = cw::octree::requestedCutSpacings(
+            *m_source.manifest, drawnNodes, streamingNodes, shading.spacingSource);
+        for (int i = 0; i < drawnNodes.size(); i++) {
+            writeNodeFloor(batch, drawnNodes.at(i), float(floors.at(i)), revealClock);
+        }
+        return;
+    }
+
     const QVector<double> floors =
         cw::octree::finestDrawnSpacings(*m_source.manifest, drawnNodes, missingNodes,
-                                        m_renderState.value().shading.spacingSource);
+                                        shading.spacingSource);
 
     // A missing node's cell has only its nearest drawn ancestor's points in
     // it, so that ancestor's floor has to cover the cell from the first frame
     // or the reveal ramp would open a hole there for revealFrames frames
-    const QSet<int> incomplete = m_renderState.value().shading.revealFrames > 0
+    const QSet<int> incomplete = shading.revealFrames > 0
                                      ? cw::octree::incompleteDrawnNodes(*m_source.manifest,
                                                                         drawnNodes, missingNodes)
                                      : QSet<int>();
@@ -589,6 +615,12 @@ void cwRHIPointCloud::startFade(QRhiResourceUpdateBatch* batch, int index, NodeF
 void cwRHIPointCloud::closeOverReleasedNode(QRhiResourceUpdateBatch* batch, int index,
                                             quint64 frame)
 {
+    // Grow lets a hole show rather than snap a floor over it, so a released
+    // node's ancestor keeps ramping toward its new floor
+    if (m_renderState.value().shading.revealMode == cw::pointcloud::RevealMode::Grow) {
+        return;
+    }
+
     const QVector<int>& parents = m_source.manifest->parents();
     for (int ancestor = parents.at(index); ancestor >= 0; ancestor = parents.at(ancestor)) {
         const NodeRecord& covering = m_nodes.at(ancestor);
@@ -718,6 +750,7 @@ cwRHIPointCloud::appearanceUniform(float spacingCoverage) const
     uniform.fixedPointSizePx = shading.fixedPointSizePx;
     uniform.debugView = qint32(shading.debugView);
     uniform.revealFrames = qint32(shading.revealFrames);
+    uniform.revealMode = qint32(shading.revealMode);
     // Truncated alongside the arrival frames in the node constants, so the
     // unsigned difference the shader takes stays right across the wrap.
     uniform.currentFrame = quint32(currentFrame());
@@ -1666,7 +1699,9 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
     // Taking it from what is drawn is what holds the surface together where
     // the point cap left the cut coarser than the threshold describes. While
     // children stream, a node whose children are still missing keeps its own
-    // spacing, since it alone covers their cells. The floors ride the batch
+    // spacing, since it alone covers their cells (under RevealMode::Grow it
+    // takes the requested cut's floor instead and lets them show as holes,
+    // see writeNodeFloors()). The floors ride the batch
     // this frame's draws consume, so a node draws at the floor this cut gives
     // it on the frame the cut changes and on the frame its last child lands. A
     // resident node leaving the cut goes back to its own spacing. An export

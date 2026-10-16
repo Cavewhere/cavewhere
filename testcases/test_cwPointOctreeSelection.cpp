@@ -1145,3 +1145,88 @@ TEST_CASE("cw::octree::finestDrawnSpacings: measured spacing floors at the fines
         CHECK(floors.at(2) == grandchildGrid);
     }
 }
+
+TEST_CASE("cw::octree::requestedCutSpacings: under Grow a drawn node floors at the cut it asked for, drawn or streaming",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    cwPointOctreeManifest manifest = buildManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int missingGrandchild = manifest.nodes.at(refinedChild).children.at(1);
+    const int coarseChild = manifest.nodes.at(0).children.at(1);
+
+    const double rootGrid = manifest.spacing(manifest.nodes.at(0).level);
+    const double childGrid = manifest.spacing(manifest.nodes.at(refinedChild).level);
+    const double grandchildGrid = manifest.spacing(manifest.nodes.at(grandchild).level);
+    REQUIRE(childGrid < rootGrid);
+    REQUIRE(grandchildGrid < childGrid);
+
+    //finestDrawnSpacings() with the missing nodes drawn and nothing missing,
+    //each drawn node's floor read back out of it
+    const auto requestedCutFloors = [&](const QVector<int>& drawn, const QVector<int>& missing,
+                                        SpacingSource source) {
+        const QVector<int> requested = drawn + missing;
+        const QVector<double> all = finestDrawnSpacings(manifest, requested, {}, source);
+        return all.mid(0, drawn.size());
+    };
+
+    for (const SpacingSource source : {SpacingSource::Grid, SpacingSource::Measured}) {
+        DYNAMIC_SECTION("a missing child floors its drawn parent at the child's spacing, not the parent's own, spacing source " << int(source)) {
+            const QVector<int> drawn {0};
+            const QVector<int> missing {refinedChild};
+            const QVector<double> floors = requestedCutSpacings(manifest, drawn, missing, source);
+            REQUIRE(floors.size() == drawn.size());
+            CHECK(floors.at(0) == childGrid);
+            CHECK(floors.at(0) < rootGrid);
+            //Cover keeps the incomplete parent at its own spacing
+            CHECK(finestDrawnSpacings(manifest, drawn, missing, source).at(0) == rootGrid);
+            CHECK(floors == requestedCutFloors(drawn, missing, source));
+        }
+
+        DYNAMIC_SECTION("a missing grandchild floors every drawn ancestor above it at its spacing, spacing source " << int(source)) {
+            const QVector<int> drawn {0, refinedChild, grandchild};
+            const QVector<int> missing {missingGrandchild};
+            const QVector<double> floors = requestedCutSpacings(manifest, drawn, missing, source);
+            REQUIRE(floors.size() == drawn.size());
+            CHECK(floors.at(0) == grandchildGrid);
+            CHECK(floors.at(1) == grandchildGrid);
+            CHECK(floors.at(2) == grandchildGrid);
+            //Cover holds the incomplete child at its own spacing, and the root
+            //at what that branch lifts into it
+            CHECK(finestDrawnSpacings(manifest, drawn, missing, source).at(1) == childGrid);
+            CHECK(floors == requestedCutFloors(drawn, missing, source));
+        }
+
+        DYNAMIC_SECTION("the drawn order is kept, whatever order the cut lists its nodes in, spacing source " << int(source)) {
+            const QVector<int> drawn {grandchild, 0, refinedChild};
+            const QVector<int> missing {missingGrandchild, coarseChild};
+            const QVector<double> floors = requestedCutSpacings(manifest, drawn, missing, source);
+            REQUIRE(floors.size() == drawn.size());
+            CHECK(floors == requestedCutFloors(drawn, missing, source));
+            CHECK(floors.at(1) == grandchildGrid);
+        }
+
+        DYNAMIC_SECTION("with nothing missing the requested cut is the drawn cut, floor for floor, spacing source " << int(source)) {
+            for (const QVector<int>& drawn : {QVector<int>{0},
+                                              QVector<int>{0, refinedChild, grandchild},
+                                              QVector<int>{0, refinedChild, grandchild,
+                                                           coarseChild}}) {
+                CHECK(requestedCutSpacings(manifest, drawn, {}, source)
+                      == finestDrawnSpacings(manifest, drawn, {}, source));
+            }
+        }
+    }
+
+    SECTION("under measured spacing a sparse missing child floors its parent at its measured gap") {
+        constexpr double kSparseFactor = 1.5;
+        manifest.nodes[refinedChild].measuredSpacing = float(kSparseFactor * childGrid);
+        const double sparse = double(manifest.nodes.at(refinedChild).measuredSpacing);
+        REQUIRE(sparse < rootGrid);
+        const QVector<double> floors =
+            requestedCutSpacings(manifest, {0}, {refinedChild}, SpacingSource::Measured);
+        REQUIRE(floors.size() == 1);
+        CHECK(floors.at(0) == sparse);
+    }
+}

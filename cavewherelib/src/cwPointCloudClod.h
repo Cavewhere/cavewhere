@@ -232,6 +232,25 @@ namespace cw::clod {
     }
 
     /**
+     * The side, in pixels, of a sprite whose settled side is @a sizePx, @a age
+     * frames into a Grow arrival under a reveal ramp of @a revealFrames
+     * frames (cw::pointcloud::RevealMode::Grow): one pixel growing to
+     * @a sizePx with the sprite's area linear in revealScale(age,
+     * revealFrames), so side = sqrt(1 + (sizePx^2 - 1) * revealScale), and
+     * exactly @a sizePx from frame revealFrames - 1 on and at every age while
+     * @a revealFrames is 0. PointCloud.vert grows its sprites the same way.
+     */
+    inline double grownSize(double sizePx, quint32 age, int revealFrames)
+    {
+        const double scale = revealScale(age, revealFrames);
+        if (scale >= 1.0 || sizePx <= cw::pointcloud::kMinPointSizePx) {
+            return sizePx;
+        }
+        const double minArea = cw::pointcloud::kMinPointSizePx * cw::pointcloud::kMinPointSizePx;
+        return std::sqrt(minArea + (sizePx * sizePx - minArea) * scale);
+    }
+
+    /**
      * The floor a node sizes by @a age frames after its floor moved from
      * @a previousFloor to @a floor, under a reveal ramp of @a revealFrames
      * frames: the two interpolated in log space by revealScale(age,

@@ -334,6 +334,20 @@ QVector<double> finestDrawnSpacings(const cwPointOctreeManifest& manifest,
     return spacings;
 }
 
+QVector<double> requestedCutSpacings(const cwPointOctreeManifest& manifest,
+                                     const QVector<int>& drawnNodes,
+                                     const QVector<int>& missingNodes,
+                                     cw::pointcloud::SpacingSource source)
+{
+    //Treated as drawn with nothing missing, so no node counts as incomplete and
+    //each requested node lifts its spacing into the drawn nodes above it. The
+    //drawn nodes lead the list, so their floors lead the answer.
+    const QVector<int> requestedNodes = drawnNodes + missingNodes;
+    QVector<double> spacings = finestDrawnSpacings(manifest, requestedNodes, {}, source);
+    spacings.resize(drawnNodes.size());
+    return spacings;
+}
+
 QVector<int> planNodeEvictions(const QVector<NodeResidency>& nodes, qint64 overshootBytes)
 {
     QVector<int> plan;

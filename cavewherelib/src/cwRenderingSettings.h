@@ -65,6 +65,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int debugView READ debugView WRITE setDebugView NOTIFY debugViewChanged)
     Q_PROPERTY(bool showNodeBoxes READ showNodeBoxes WRITE setShowNodeBoxes NOTIFY showNodeBoxesChanged)
     Q_PROPERTY(int revealFrames READ revealFrames WRITE setRevealFrames NOTIFY revealFramesChanged)
+    Q_PROPERTY(int revealMode READ revealMode WRITE setRevealMode NOTIFY revealModeChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
     // The shared budget limits, exposed so the settings UI spin boxes range over
@@ -89,6 +90,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int floorModeCount READ floorModeCount CONSTANT)
     Q_PROPERTY(int spacingSourceCount READ spacingSourceCount CONSTANT)
     Q_PROPERTY(int debugViewCount READ debugViewCount CONSTANT)
+    Q_PROPERTY(int revealModeCount READ revealModeCount CONSTANT)
     Q_PROPERTY(double minimumPointSizePx READ minimumPointSizePx CONSTANT)
     Q_PROPERTY(double maximumPointSizePx READ maximumPointSizePx CONSTANT)
     Q_PROPERTY(int minimumRevealFrames READ minimumRevealFrames CONSTANT)
@@ -177,6 +179,10 @@ public:
     int revealFrames() const { return m_shading.revealFrames; }
     void setRevealFrames(int frames);
 
+    //! A cw::pointcloud::RevealMode
+    int revealMode() const { return int(m_shading.revealMode); }
+    void setRevealMode(int mode);
+
     //! The budget knobs in bytes, the form the render thread consumes
     cwRenderBudgets budgets() const;
 
@@ -203,6 +209,7 @@ public:
     static int floorModeCount() { return cw::pointcloud::kFloorModeCount; }
     static int spacingSourceCount() { return cw::pointcloud::kSpacingSourceCount; }
     static int debugViewCount() { return cw::pointcloud::kDebugViewCount; }
+    static int revealModeCount() { return cw::pointcloud::kRevealModeCount; }
     static double minimumPointSizePx() { return cw::pointcloud::kMinPointSizePx; }
     static double maximumPointSizePx() { return cw::pointcloud::kMaxPointSizePx; }
     static int minimumRevealFrames() { return cw::pointcloud::kMinRevealFrames; }
@@ -244,6 +251,7 @@ signals:
     void debugViewChanged();
     void showNodeBoxesChanged();
     void revealFramesChanged();
+    void revealModeChanged();
 
     //! Any one of the budgets() knobs moved
     void budgetsChanged();

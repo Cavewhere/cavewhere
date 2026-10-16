@@ -435,3 +435,85 @@ TEST_CASE("A fade that takes over from another carries on from the share it drew
         }
     }
 }
+
+namespace {
+    //! A settled sprite side and a long ramp, the user's case
+    constexpr double kSettledSidePx = 4.0;
+    constexpr int kLongRevealFrames = 60;
+    //! A side whose square is not exact in binary, so "exactly the settled
+    //! side" cannot pass by sqrt(side * side) happening to round back
+    constexpr double kInexactSidePx = 3.7;
+    //! How close to one pixel the arrival frame's side sits under the long
+    //! ramp: sqrt(1 + 15 / 60) is about 1.118
+    constexpr double kNearOnePixel = 1.2;
+}
+
+TEST_CASE("A Grow arrival's sprite grows from one pixel to its size with its area linear in the ramp",
+          "[PointCloudClod]")
+{
+    const auto area = [](double side) { return side * side; };
+    const double minArea = area(cw::pointcloud::kMinPointSizePx);
+
+    SECTION("the arrival frame draws a sprite near one pixel wide") {
+        const double first = grownSize(kSettledSidePx, 0, kLongRevealFrames);
+        CHECK(first >= cw::pointcloud::kMinPointSizePx);
+        CHECK(first < kNearOnePixel);
+        CHECK(first == Catch::Approx(std::sqrt(minArea + (area(kSettledSidePx) - minArea)
+                                                         / kLongRevealFrames)));
+    }
+
+    SECTION("the area above one pixel is the reveal share of the settled area above it") {
+        for (quint32 age = 0; age < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            const double side = grownSize(kSettledSidePx, age, kTestRevealFrames);
+            CHECK((area(side) - minArea) / (area(kSettledSidePx) - minArea)
+                  == Catch::Approx(revealScale(age, kTestRevealFrames)));
+        }
+    }
+
+    SECTION("every frame of the growth is at least as wide as the one before") {
+        double previous = 0.0;
+        for (quint32 age = 0; age <= quint32(kLongRevealFrames); age++) {
+            INFO("age " << age);
+            const double side = grownSize(kSettledSidePx, age, kLongRevealFrames);
+            CHECK(side >= previous);
+            CHECK(side <= kSettledSidePx);
+            previous = side;
+        }
+    }
+
+    SECTION("the last ramp frame and every frame after draw exactly the settled side") {
+        CHECK(grownSize(kInexactSidePx, kTestRevealFrames - 1, kTestRevealFrames)
+              == kInexactSidePx);
+        CHECK(grownSize(kInexactSidePx, kTestRevealFrames, kTestRevealFrames) == kInexactSidePx);
+        CHECK(grownSize(kInexactSidePx, kLongAfter, kTestRevealFrames) == kInexactSidePx);
+        CHECK(grownSize(kSettledSidePx, kTestRevealFrames - 2, kTestRevealFrames)
+              < kSettledSidePx);
+    }
+
+    SECTION("no ramp draws every arrival at its settled side") {
+        for (quint32 age : {0u, 1u, kLongAfter}) {
+            INFO("age " << age);
+            CHECK(grownSize(kInexactSidePx, age, cw::pointcloud::kDefaultRevealFrames)
+                  == kInexactSidePx);
+        }
+    }
+
+    SECTION("a one pixel sprite stays one pixel") {
+        CHECK(grownSize(cw::pointcloud::kMinPointSizePx, 0, kTestRevealFrames)
+              == cw::pointcloud::kMinPointSizePx);
+    }
+
+    SECTION("a re-entry grows on from the share it carried rather than from one pixel") {
+        for (int step = 1; step < kTestRevealFrames; step++) {
+            const double share = double(step) / kTestRevealFrames;
+            INFO("share " << share);
+            const quint32 age = fadeInAgeFor(share, kTestRevealFrames);
+            const double side = grownSize(kSettledSidePx, age, kTestRevealFrames);
+            //One step past the carried share, as the Cover fade-in takes over
+            CHECK((area(side) - minArea) / (area(kSettledSidePx) - minArea)
+                  == Catch::Approx(std::min(1.0, share + 1.0 / kTestRevealFrames)));
+            CHECK(side > grownSize(kSettledSidePx, 0, kTestRevealFrames));
+        }
+    }
+}

@@ -703,5 +703,140 @@ class SettledSsimTest(unittest.TestCase):
         assert_lacks(self, '<td class="num">0.90000</td>', section)
 
 
+# WP12: P2z/6 under C-default, C-default-reveal (Cover) and C-default-grow,
+# and a P4/24 cold start under the latter two, the way the bench writes them:
+# revealMode appended last. Grow holds every drawn sprite's side (M6) and pays
+# in holes while children stream (M4, streamingHolePeak: the frames past the
+# first with work pending, so a cold start's empty first frame stays out of it).
+REVEAL_MODE_LOG = """\
+evalCsv,path,config,pose,frame,label,litFraction,holeFraction,spriteSideChangePx,pending,spacingSource,revealFrames,revealMode
+evalDump,path,config,directory
+evalDump,P2z/6,C-default,P2z_6/C-default/run-7-001
+evalCsv,P2z/6,C-default,0,0,heading-0,0.50000,0.01000,28.500,1,Measured,0,Cover
+evalCsv,P2z/6,C-default,0,1,heading-0,0.55000,0.00900,0.000,0,Measured,0,Cover
+evalSummary,path,config,frames,worstHoleFraction,largestSideChangePx,streamingHolePeak,largestSideShrinkPx
+evalSummary,P2z/6,C-default,2,0.01000,28.500,,0.000
+evalCsv,path,config,pose,frame,label,litFraction,holeFraction,spriteSideChangePx,pending,spacingSource,revealFrames,revealMode
+evalDump,path,config,directory
+evalDump,P2z/6,C-default-reveal,P2z_6/C-default-reveal/run-7-002
+evalCsv,P2z/6,C-default-reveal,0,0,heading-0,0.50000,0.01000,13.700,1,Measured,8,Cover
+evalCsv,P2z/6,C-default-reveal,0,1,heading-0,0.55000,0.00900,0.000,1,Measured,8,Cover
+evalSummary,path,config,frames,worstHoleFraction,largestSideChangePx,streamingHolePeak,largestSideShrinkPx
+evalSummary,P2z/6,C-default-reveal,2,0.01000,13.700,0.00900,13.700
+evalCsv,path,config,pose,frame,label,litFraction,holeFraction,spriteSideChangePx,pending,spacingSource,revealFrames,revealMode
+evalDump,path,config,directory
+evalDump,P2z/6,C-default-grow,P2z_6/C-default-grow/run-7-003
+evalCsv,P2z/6,C-default-grow,0,0,heading-0,0.40000,0.03000,0.000,1,Measured,8,Grow
+evalCsv,P2z/6,C-default-grow,0,1,heading-0,0.55000,0.02500,0.000,1,Measured,8,Grow
+evalSummary,path,config,frames,worstHoleFraction,largestSideChangePx,streamingHolePeak,largestSideShrinkPx
+evalSummary,P2z/6,C-default-grow,2,0.03000,0.000,0.02500,0.000
+evalCsv,path,config,pose,frame,label,litFraction,holeFraction,spriteSideChangePx,pending,spacingSource,revealFrames,revealMode
+evalCsv,P4/24,C-latent-reveal,0,0,heading-0,0.00000,1.00000,0.000,1,Measured,8,Cover
+evalCsv,P4/24,C-latent-reveal,0,1,heading-0,0.50000,0.01000,4.000,1,Measured,8,Cover
+evalSummary,path,config,frames,worstHoleFraction,largestSideChangePx,streamingHolePeak,largestSideShrinkPx
+evalSummary,P4/24,C-latent-reveal,2,1.00000,4.000,0.01000,4.000
+evalCsv,path,config,pose,frame,label,litFraction,holeFraction,spriteSideChangePx,pending,spacingSource,revealFrames,revealMode
+evalCsv,P4/24,C-latent-grow,0,0,heading-0,0.00000,1.00000,0.000,1,Measured,8,Grow
+evalCsv,P4/24,C-latent-grow,0,1,heading-0,0.45000,0.02000,0.000,1,Measured,8,Grow
+evalSummary,path,config,frames,worstHoleFraction,largestSideChangePx,streamingHolePeak,largestSideShrinkPx
+evalSummary,P4/24,C-latent-grow,2,1.00000,0.000,0.02000,0.000
+"""
+
+REVEAL_MODE_CONFIGS = ("C-default", "C-default-reveal", "C-default-grow")
+
+
+def summary_row(section, column):
+    """The summary table's row for @column in @section, or "" when it has none"""
+    start = section.find("<tr><th><code>{}</code></th>".format(column))
+    return section[start:section.index("</tr>", start)] if start >= 0 else ""
+
+
+def assert_last_two_cells(test, section, column, cover, grow):
+    """@column's row ends in Cover's then Grow's value, the two runs a path's
+    table puts last"""
+    row = summary_row(section, column)
+    test.assertTrue(row, "the section has no {} row".format(column))
+    test.assertTrue(row.endswith('<td class="num">{}</td><td class="num">{}</td>'.format(cover, grow)),
+                    "{} row is {!r}".format(column, row))
+
+
+class RevealModeTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.frames = root / "frames"
+        self.out = root / "report" / "index.html"
+        for config, run in zip(REVEAL_MODE_CONFIGS, ("run-7-001", "run-7-002", "run-7-003")):
+            directory = self.frames / "P2z_6" / config / run
+            directory.mkdir(parents=True)
+            for frame in (0, 1):
+                write_rgba_png(directory / report.candidate_frame_name(0, frame), frame)
+            if config == report.DIFF_CANDIDATE:
+                for oracle in ("O2", "O3"):
+                    (directory / oracle).mkdir()
+                    write_rgba_png(directory / oracle / report.oracle_frame_name(0), 5)
+        log_file = root / "run.log"
+        log_file.write_text(REVEAL_MODE_LOG, encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.exit_code = report.main(["--log", str(log_file), "--frames", str(self.frames),
+                                          "--out", str(self.out)])
+        self.text = self.out.read_text(encoding="utf-8")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def path_section(self, path):
+        start = self.text.index('<h2 id="path-{}">'.format(report.directory_name(path)))
+        end = self.text.find("<h2", start + 1)
+        return self.text[start:end if end >= 0 else len(self.text)]
+
+    def test_the_reveal_mode_column_is_read_by_name(self):
+        self.assertEqual(self.exit_code, 0)
+        log = report.parse_log_lines(REVEAL_MODE_LOG.splitlines())
+        modes = {run.config: {row.get("revealMode") for row in run.rows} for run in log.runs}
+        self.assertEqual(modes["C-default-reveal"], {"Cover"})
+        self.assertEqual(modes["C-default-grow"], {"Grow"})
+        self.assertEqual(modes["C-latent-grow"], {"Grow"})
+        frames = {run.config: {row.get("revealFrames") for row in run.rows} for run in log.runs}
+        self.assertEqual(frames["C-default-grow"], {"8"})
+
+    def test_cover_and_grow_sit_side_by_side_with_the_side_change_and_the_hole_peak(self):
+        for path, cover, grow, side_change, cover_peak, grow_peak in (
+                ("P2z/6", "C-default-reveal", "C-default-grow", "13.700", "0.00900", "0.02500"),
+                ("P4/24", "C-latent-reveal", "C-latent-grow", "4.000", "0.01000", "0.02000")):
+            section = self.path_section(path)
+            head = "<th>{}</th><th>{}</th>".format(cover, grow)
+            assert_contains(self, head, section)
+            # M6, the metric Grow exists to drive to zero, and its shrink-only
+            # reading, the user's rule that sprites only ever grow
+            for column in ("largestSideChangePx", "largestSideShrinkPx"):
+                assert_last_two_cells(self, section, column, side_change, "0.000")
+            # M4 while children stream, Grow's cost, apart from the worst hole
+            # a cold start's empty first frame sets
+            assert_last_two_cells(self, section, "streamingHolePeak", cover_peak, grow_peak)
+        assert_last_two_cells(self, self.path_section("P4/24"), "worstHoleFraction",
+                              "1.00000", "1.00000")
+        assert_last_two_cells(self, self.path_section("P2z/6"), "worstHoleFraction",
+                              "0.01000", "0.03000")
+
+    def test_the_contact_sheet_shows_each_reveal_mode_beside_c_default(self):
+        sheet = self.out.parent / "contact-P2z_6.html"
+        self.assertTrue(sheet.is_file())
+        text = sheet.read_text(encoding="utf-8")
+        for config in REVEAL_MODE_CONFIGS:
+            assert_contains(self, "<th>{}</th>".format(config), text)
+            self.assertNotIn("no {} frame".format(config), text)
+        # Cover and Grow at the same ramp sit side by side
+        assert_contains(self, "<th>C-default-reveal</th><th>C-default-grow</th>", text)
+        assert_contains(self, "P2z_6/C-default-grow/run-7-003/"
+                        + report.candidate_frame_name(0, 1), text)
+
+    def test_every_grow_run_on_a_cold_start_gets_a_flipbook(self):
+        for config in ("C-latent-reveal", "C-latent-grow"):
+            name = "flipbook-P4_24-{}.html".format(config)
+            self.assertTrue((self.out.parent / name).is_file(), name)
+            assert_contains(self, 'href="{}"'.format(name), self.text)
+
+
 if __name__ == "__main__":
     unittest.main()

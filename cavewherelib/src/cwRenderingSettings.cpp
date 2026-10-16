@@ -34,6 +34,7 @@ QString minLevelKey() { return QStringLiteral("rendering/pointCloud/minLevel"); 
 QString debugViewKey() { return QStringLiteral("rendering/pointCloud/debugView"); }
 QString showNodeBoxesKey() { return QStringLiteral("rendering/pointCloud/showNodeBoxes"); }
 QString revealFramesKey() { return QStringLiteral("rendering/pointCloud/revealFrames"); }
+QString revealModeKey() { return QStringLiteral("rendering/pointCloud/revealMode"); }
 
 // 4x MSAA is the historical default and a good quality/cost balance. Snapped to
 // the device's supported set if 4 happens to be unavailable.
@@ -194,6 +195,9 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
                                              defaultShading.showNodeBoxes).toBool();
     m_shading.revealFrames = clampRevealFrames(
                 settings.value(revealFramesKey(), defaultShading.revealFrames).toInt());
+    m_shading.revealMode = clampMode<cw::pointcloud::RevealMode>(
+                settings.value(revealModeKey(), int(defaultShading.revealMode)).toInt(),
+                cw::pointcloud::kRevealModeCount);
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -234,6 +238,7 @@ void cwRenderingSettings::resetPointCloudKnobsToDefaults()
     setDebugView(int(defaultShading.debugView));
     setShowNodeBoxes(defaultShading.showNodeBoxes);
     setRevealFrames(defaultShading.revealFrames);
+    setRevealMode(int(defaultShading.revealMode));
     setGpuMemoryBudgetMb(cw::budgets::kDefaultGpuBudgetMb);
     setCpuCacheBudgetMb(cw::budgets::kDefaultCpuBudgetMb);
     setUploadBudgetMbPerFrame(cw::budgets::kDefaultUploadBudgetMbPerFrame);
@@ -424,6 +429,16 @@ void cwRenderingSettings::setRevealFrames(int frames)
 {
     if (setPersisted(m_shading.revealFrames, clampRevealFrames(frames), revealFramesKey())) {
         emit revealFramesChanged();
+        emit pointCloudShadingChanged();
+        emit isAtDefaultsChanged();
+    }
+}
+
+void cwRenderingSettings::setRevealMode(int mode)
+{
+    const auto clamped = clampMode<cw::pointcloud::RevealMode>(mode, cw::pointcloud::kRevealModeCount);
+    if (setPersisted(m_shading.revealMode, clamped, revealModeKey())) {
+        emit revealModeChanged();
         emit pointCloudShadingChanged();
         emit isAtDefaultsChanged();
     }

@@ -66,6 +66,22 @@ namespace cw::pointcloud {
         Measured = 1
     };
 
+    //! What an arrival does while the reveal ramp (revealFrames) runs, and
+    //! what a drawn node's floor is taken from
+    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.4, WP12)
+    enum class RevealMode : int {
+        //! An arrival fades its weight in, and an ancestor whose children are
+        //! still streaming keeps its own spacing until they land, so the
+        //! surface stays closed and the ancestor's sprites shrink once they do
+        Cover = 0,
+        //! Every drawn node floors at the finest spacing of the cut the forest
+        //! asked for under it, drawn or still streaming, so sprites keep their
+        //! target size and the missing children show as holes; an arrival
+        //! draws all its kept points at once and grows each sprite from one
+        //! pixel to its size
+        Grow = 1
+    };
+
     //! What PointCloud.vert colors each point by. Every view but Off answers
     //! one question about the octree or the decimation
     //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 8).
@@ -95,6 +111,7 @@ namespace cw::pointcloud {
     constexpr int kFloorModeCount = int(FloorMode::Off) + 1;
     constexpr int kSpacingSourceCount = int(SpacingSource::Measured) + 1;
     constexpr int kDebugViewCount = int(DebugView::DecimationPreview) + 1;
+    constexpr int kRevealModeCount = int(RevealMode::Grow) + 1;
 
     constexpr bool kDefaultShowNodeBoxes = false;
 
@@ -141,6 +158,9 @@ namespace cw::pointcloud {
     constexpr int kMinRevealFrames = 0;
     constexpr int kMaxRevealFrames = 60;
 
+    //! Cover, the rule WP11 shipped with
+    constexpr RevealMode kDefaultRevealMode = RevealMode::Cover;
+
     constexpr double kMinPointSizePx = 1.0;
     constexpr double kMaxPointSizePx = 64.0;
     constexpr double kDefaultMaxPointSizePx = kMaxPointSizePx;
@@ -156,6 +176,8 @@ namespace cw::pointcloud {
     static_assert(int(FloorMode::Node) == 0 && int(FloorMode::Off) == 1,
                   "PointCloud.vert spells this out");
     static_assert(int(SpacingSource::Grid) == 0 && int(SpacingSource::Measured) == 1,
+                  "PointCloud.vert spells this out");
+    static_assert(int(RevealMode::Cover) == 0 && int(RevealMode::Grow) == 1,
                   "PointCloud.vert spells this out");
     static_assert(int(DebugView::Off) == 0 && int(DebugView::Level) == 1
                       && int(DebugView::Node) == 2 && int(DebugView::Rank) == 3
@@ -179,6 +201,7 @@ struct cwPointCloudShading {
     float maxPointSizePx = float(cw::pointcloud::kDefaultMaxPointSizePx);
     cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;
     int revealFrames = cw::pointcloud::kDefaultRevealFrames;
+    cw::pointcloud::RevealMode revealMode = cw::pointcloud::kDefaultRevealMode;
     bool showNodeBoxes = cw::pointcloud::kDefaultShowNodeBoxes;
 
     bool operator==(const cwPointCloudShading& other) const = default;

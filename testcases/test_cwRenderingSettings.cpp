@@ -419,6 +419,10 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         {"revealFrames", [&] { settings->setRevealFrames(kRevealFrames); },
          QStringLiteral("rendering/pointCloud/revealFrames"), kRevealFrames,
          &cwRenderingSettings::revealFramesChanged},
+        {"revealMode",
+         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Grow)); },
+         QStringLiteral("rendering/pointCloud/revealMode"),
+         int(cw::pointcloud::RevealMode::Grow), &cwRenderingSettings::revealModeChanged},
     };
 
     SECTION("the knobs start at the renderer's own rules") {
@@ -754,6 +758,71 @@ TEST_CASE("cwRenderingSettings revealFrames defaults to off, clamps, and persist
     settings->resetToDefaults();
 }
 
+TEST_CASE("cwRenderingSettings revealMode defaults to cover, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::RevealMode;
+    const QString key = QStringLiteral("rendering/pointCloud/revealMode");
+    constexpr int kBelowRange = -1;
+    constexpr int kAboveRange = 100;
+
+    SECTION("the enum holds cover and grow, and the default is the rule WP11 shipped") {
+        CHECK(int(RevealMode::Cover) == 0);
+        CHECK(int(RevealMode::Grow) == 1);
+        CHECK(cw::pointcloud::kRevealModeCount == 2);
+        CHECK(cw::pointcloud::kDefaultRevealMode == RevealMode::Cover);
+        CHECK(cwPointCloudShading().revealMode == RevealMode::Cover);
+        CHECK(settings->revealMode() == int(RevealMode::Cover));
+        CHECK(settings->pointCloudShading().revealMode == RevealMode::Cover);
+        CHECK(cwRenderingSettings::revealModeCount() == cw::pointcloud::kRevealModeCount);
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("values outside the enum clamp to its ends") {
+        settings->setRevealMode(kAboveRange);
+        CHECK(settings->revealMode() == cwRenderingSettings::revealModeCount() - 1);
+        CHECK(settings->revealMode() == int(RevealMode::Grow));
+        settings->setRevealMode(kBelowRange);
+        CHECK(settings->revealMode() == int(RevealMode::Cover));
+    }
+
+    SECTION("grow round-trips through QSettings and reaches the shading") {
+        QSignalSpy modeSpy(settings, &cwRenderingSettings::revealModeChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setRevealMode(int(RevealMode::Grow));
+
+        CHECK(modeSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->revealMode() == int(RevealMode::Grow));
+        CHECK(settings->pointCloudShading().revealMode == RevealMode::Grow);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Grow));
+
+        settings->setRevealMode(int(RevealMode::Grow));
+        CHECK(modeSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(modeSpy.count() == 2);
+        CHECK(settings->revealMode() == int(RevealMode::Cover));
+        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Cover));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
 TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -852,6 +921,8 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
         {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); }, false},
         {"revealFrames",
          [&] { settings->setRevealFrames(cw::pointcloud::kMaxRevealFrames); }, false},
+        {"revealMode",
+         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Grow)); }, false},
     };
 
     for (const Knob& knob : knobs) {

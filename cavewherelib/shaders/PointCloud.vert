@@ -74,8 +74,9 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // age view and the reveal ramp count from, picks the spacing each node sizes
 // and thins by (spacingSource, cw::pointcloud::SpacingSource), and sets how
 // many frames an arriving node fades in over and a moved floor travels over
-// (revealFrames, 0 for neither). The C++ PerCloudUniform matches the block
-// field for field.
+// (revealFrames, 0 for neither). The fourth row says what an arrival does over
+// that ramp (revealMode, cw::pointcloud::RevealMode). The C++ PerCloudUniform
+// matches the block field for field.
 layout(std140, binding = 1) uniform PerCloudBlock {
     float spacingCoverage;
     float sseThresholdPx;
@@ -89,6 +90,10 @@ layout(std140, binding = 1) uniform PerCloudBlock {
     uint currentFrame;
     int spacingSource;
     int revealFrames;
+    int revealMode;
+    int revealModePadding0;
+    int revealModePadding1;
+    int revealModePadding2;
 };
 
 layout(location = 0) out vec4 vColor;
@@ -99,6 +104,7 @@ const int kSizeFixedPixels = 1;
 const int kSizeOwnSpacing = 2;
 const int kFloorOff = 1;
 const int kSpacingMeasured = 1;
+const int kRevealGrow = 1;
 const uint kFadeOut = 1u;
 const uint kFadeIn = 2u;
 
@@ -139,6 +145,8 @@ const float kMinimumFloorSpacing = 1e-6;
 const vec3 kSettledColor = vec3(0.4);
 const float kResidencyFadeFrames = 60.0;
 const vec3 kDecimatedColor = vec3(0.25);
+// The smallest sprite drawn, and the side a Grow arrival starts from
+const float kMinSpritePx = 1.0;
 const float kDecimatedSizePx = 1.0;
 const uint kByteMask = 0xFFu;
 const uint kGreenShift = 8u;
@@ -218,6 +226,28 @@ float revealScale(uint age)
         return 1.0;
     }
     return min(1.0, (float(age) + 1.0) / float(revealFrames));
+}
+
+// cw::clod::grownSize: under RevealMode::Grow, a sprite age frames into its
+// arrival grows from one pixel to sizePx with its area linear in the ramp
+float grownSize(float sizePx, uint age)
+{
+    float scale = revealScale(age);
+    if (scale >= 1.0 || sizePx <= kMinSpritePx) {
+        return sizePx;
+    }
+    float minArea = kMinSpritePx * kMinSpritePx;
+    return sqrt(minArea + (sizePx * sizePx - minArea) * scale);
+}
+
+// The age a Grow sprite grows by: its arrival's, or its re-entry's when that
+// is younger, as cw::clod's twin takes it
+uint growthAge()
+{
+    // Compared rather than min()ed: legacy GLSL targets have no unsigned min
+    uint arrivalAge = currentFrame - nodeIds.x;
+    uint reentryAge = currentFrame - nodeFade.x;
+    return nodeFade.y == kFadeIn && reentryAge < arrivalAge ? reentryAge : arrivalAge;
 }
 
 // cw::clod::revealedFloor: nodeFloor reached from nodePreviousFloor in log
@@ -315,14 +345,20 @@ void main(void)
         weight = 1.0;
     }
 
-    // The reveal ramp: an arrival draws a growing share of what its weight
-    // keeps, so its points land over revealFrames frames rather than in one.
-    // The rank order makes each frame's set a superset of the one before.
+    // The reveal ramp: under Cover an arrival draws a growing share of what
+    // its weight keeps, so its points land over revealFrames frames rather
+    // than in one. The rank order makes each frame's set a superset of the one
+    // before. Under Grow an arrival or a re-entry draws every point its weight
+    // keeps at once and grows its sprites instead (below); a departure fades
+    // its weight out under both.
+    bool growMode = revealFrames > 0 && revealMode == kRevealGrow;
     if (revealFrames > 0) {
-        weight *= revealScale(currentFrame - nodeIds.x);
+        if (!growMode) {
+            weight *= revealScale(currentFrame - nodeIds.x);
+        }
         if (nodeFade.y == kFadeOut) {
             weight *= 1.0 - revealScale(currentFrame - nodeFade.x);
-        } else if (nodeFade.y == kFadeIn) {
+        } else if (nodeFade.y == kFadeIn && !growMode) {
             weight *= revealScale(currentFrame - nodeFade.x);
         }
     }
@@ -372,7 +408,10 @@ void main(void)
     // darkening. Letting size shrink to a single pixel keeps overdraw flat
     // across zoom levels. EDL response gets noisier on lone 1px sprites but
     // that's preferable to the inconsistent intensity.
-    gl_PointSize = clamp(sizePx, 1.0, maxPointSizePx);
+    gl_PointSize = clamp(sizePx, kMinSpritePx, maxPointSizePx);
+    if (growMode) {
+        gl_PointSize = grownSize(gl_PointSize, growthAge());
+    }
 
     vColor = debugView == kViewOff ? kFlatColor
                             : vec4(debugColor(gridSpacing, nodeSpacing, drawnFloor, rank, weight,

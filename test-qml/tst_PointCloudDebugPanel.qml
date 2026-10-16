@@ -39,6 +39,7 @@ MainWindowTest {
             "floorModeComboBox",
             "spacingSourceComboBox",
             "revealFramesSpinBox",
+            "revealModeComboBox",
             "spacingCoverageSpinBox",
             "maxPointSizeSpinBox",
             "pointCloudDebugCounts",
@@ -135,6 +136,7 @@ MainWindowTest {
             rootId.renderingSettings.showNodeBoxes = true
             rootId.renderingSettings.minLevel = 1
             rootId.renderingSettings.revealFrames = 8
+            rootId.renderingSettings.revealMode = 1
             rootId.renderingSettings.screenSpaceErrorPx = 4
             rootId.lazLayersSceneNode.spacingCoverage = 3
             rootId.renderingSettings.showRenderStatsHud = true
@@ -151,6 +153,7 @@ MainWindowTest {
             compare(rootId.renderingSettings.showNodeBoxes, false)
             compare(rootId.renderingSettings.minLevel, 0)
             compare(rootId.renderingSettings.revealFrames, 0)
+            compare(rootId.renderingSettings.revealMode, 0)
             compare(rootId.renderingSettings.screenSpaceErrorPx, 1.5)
             compare(rootId.lazLayersSceneNode.spacingCoverage,
                     rootId.lazLayersSceneNode.defaultSpacingCoverage)
@@ -227,6 +230,29 @@ MainWindowTest {
             mouseClick(row("pointCloudDebugResetButton"))
             tryCompare(rootId.renderingSettings, "revealFrames", 0)
             tryCompare(reveal, "value", 0)
+        }
+
+        function test_revealModeRowFollowsTheSetting() {
+            const mode = row("revealModeComboBox")
+            compare(mode.count, rootId.renderingSettings.revealModeCount)
+            compare(mode.textAt(0), "Cover")
+            compare(mode.textAt(1), "Grow")
+            compare(mode.currentIndex, 0)
+
+            rootId.renderingSettings.revealMode = 1
+            tryCompare(mode, "currentIndex", 1)
+        }
+
+        function test_revealModeRowWritesTheSetting() {
+            const mode = row("revealModeComboBox")
+            mode.currentIndex = 1
+            mode.activated(1)
+            compare(rootId.renderingSettings.revealMode, 1)
+            verify(!rootId.renderingSettings.isAtDefaults)
+
+            mouseClick(row("pointCloudDebugResetButton"))
+            tryCompare(rootId.renderingSettings, "revealMode", 0)
+            tryCompare(mode, "currentIndex", 0)
         }
 
         function test_closeButtonClosesThePanel() {

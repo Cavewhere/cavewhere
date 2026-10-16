@@ -849,7 +849,7 @@ SUMMARY_DIRECTIONS = {
     "largestInflationStep": LOWER, "mostEntered": LOWER, "mostLeft": LOWER,
     "largestSideChangePx": LOWER, "sideChangeSumPx": LOWER, "largestWeightChange": LOWER,
     "weightChangeSum": LOWER, "largestRawO3Step": LOWER, "pendingPoses": LOWER,
-    "ssimO3": HIGHER,
+    "streamingHolePeak": LOWER, "largestSideShrinkPx": LOWER, "ssimO3": HIGHER,
 }
 SUMMARY_KEY_COLUMNS = ("path", "config")
 # A delta smaller than this share of the larger value is no change
@@ -1307,6 +1307,9 @@ CONTACT_PREFIXES = ("P2", "P3")
 FLIPBOOK_PREFIXES = ("P4",)
 CONTACT_POSES = 8
 CONTACT_CANDIDATES = ("C-default", "C-starved")
+# Shown beside those when the path ran them: the reveal ramp under Cover and
+# under Grow at the same frames, side by side
+CONTACT_REVEAL_CANDIDATES = ("C-default-reveal", "C-default-grow")
 DIFF_CANDIDATE = "C-default"
 
 
@@ -1345,11 +1348,14 @@ def contact_sheet(path, runs, frames, out_directory, report_name):
     candidate's run, so the difference compares frames one sweep drew against
     the oracle that sweep used. Returns the page's file name, or None when
     nothing was dumped for the path."""
-    candidates = {config: last_dumped_run(runs, config, frames) for config in CONTACT_CANDIDATES}
+    ran = {run.config for run in runs}
+    shown = list(CONTACT_CANDIDATES) + [config for config in CONTACT_REVEAL_CANDIDATES
+                                        if config in ran]
+    candidates = {config: last_dumped_run(runs, config, frames) for config in shown}
     # The difference wants the oracle the candidate's own sweep used
     candidates[DIFF_CANDIDATE] = (last_dumped_run(runs, DIFF_CANDIDATE, frames, True)
                                   or candidates.get(DIFF_CANDIDATE))
-    oracle_runs = [candidates.get(DIFF_CANDIDATE)] + [candidates[c] for c in CONTACT_CANDIDATES]
+    oracle_runs = [candidates.get(DIFF_CANDIDATE)] + [candidates[c] for c in shown]
     oracle_run = next((run for run in oracle_runs
                        if run is not None and frames.oracle_poses(run, "O3")), None)
 
@@ -1375,13 +1381,13 @@ def contact_sheet(path, runs, frames, out_directory, report_name):
         run = candidates.get(config)
         return frames.last_candidate_frame(run, pose) if run else None
 
-    columns = ["O2", "O3"] + list(CONTACT_CANDIDATES) + ["{} − O3".format(DIFF_CANDIDATE)]
+    columns = ["O2", "O3"] + shown + ["{} − O3".format(DIFF_CANDIDATE)]
     rows = []
     for pose in chosen:
         cells = ['<th class="num">pose {}</th>'.format(pose)]
         for oracle in ("O2", "O3"):
             cells.append(image_cell(oracle_frame(oracle, pose), out_directory, oracle))
-        for config in CONTACT_CANDIDATES:
+        for config in shown:
             cells.append(image_cell(candidate_frame(config, pose), out_directory, config))
 
         candidate = candidate_frame(DIFF_CANDIDATE, pose)

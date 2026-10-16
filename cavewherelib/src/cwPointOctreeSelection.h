@@ -233,6 +233,20 @@ namespace cw::octree {
                                                              const QVector<int>& missingNodes,
                                                              cw::pointcloud::SpacingSource source);
 
+    /**
+     * The floor of every node in @a drawnNodes under RevealMode::Grow, in
+     * meters: the finest spacing of the cut the forest asked for under it,
+     * drawn or still streaming, under @a source. It is finestDrawnSpacings()
+     * over @a drawnNodes and @a missingNodes together, all treated as drawn,
+     * so a missing child floors its drawn ancestor at the child's spacing
+     * rather than leaving the ancestor at its own. With @a missingNodes empty
+     * it is finestDrawnSpacings() value for value.
+     */
+    CAVEWHERE_LIB_EXPORT QVector<double> requestedCutSpacings(const cwPointOctreeManifest& manifest,
+                                                              const QVector<int>& drawnNodes,
+                                                              const QVector<int>& missingNodes,
+                                                              cw::pointcloud::SpacingSource source);
+
     //What the planner knows about one resident node
     struct CAVEWHERE_LIB_EXPORT NodeResidency
     {
