@@ -25,6 +25,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QSet>
 
 // Std includes
 #include <algorithm>
@@ -37,21 +38,42 @@ namespace {
 
     // One node's per-instance constants, as PointCloud.vert reads them: the
     // dequantization (nodeOriginScale), the floor (nodeFloor), the two ids
-    // the debug views color by (nodeIds), and the spacing the builder measured
-    // from the node's own points (nodeMeasuredSpacing).
+    // the debug views color by and the fade-in counts from (nodeIds), the
+    // spacing the builder measured from the node's own points
+    // (nodeMeasuredSpacing), where the floor's reveal ramp starts from
+    // (nodePreviousFloor, nodeFloorChangedFrame), and the frame a node's fade
+    // out of the cut or back into it started on, with which one it is
+    // (nodeFade).
     struct NodeConstants {
         std::array<float, 4> originScale;
         float floorSpacing = 0.0f;
         quint32 arrivalFrame = 0;
         quint32 nodeIndex = 0;
         float measuredSpacing = 0.0f;
+        float previousFloorSpacing = 0.0f;
+        quint32 floorChangedFrame = 0;
+        quint32 fadeFrame = 0;
+        quint32 fade = 0;
     };
-    constexpr quint32 kNodeConstantsBytes = sizeof(NodeConstants);
-    static_assert(kNodeConstantsBytes == 32, "Two float4s per node slot");
 
-    // Slots in the shared per-instance constants buffer, at 32 bytes each (1 MB
-    // in all). A view selects at most cw::octree::kMaxDesiredNodes nodes per
-    // frame, so at least half the slots are unselected in any frame and an
+    // The two words of NodeConstants a floor move rewrites beside the floor
+    struct FloorRampStart {
+        float previousFloorSpacing = 0.0f;
+        quint32 floorChangedFrame = 0;
+    };
+
+    // The two words of NodeConstants a fade's start or end rewrites
+    struct FadeWords {
+        quint32 fadeFrame = 0;
+        quint32 fade = 0;
+    };
+
+    constexpr quint32 kNodeConstantsBytes = sizeof(NodeConstants);
+    static_assert(kNodeConstantsBytes == 48, "Three float4s per node slot");
+
+    // Slots in the shared per-instance constants buffer, at 48 bytes each
+    // (1.5 MB in all). A view selects at most cw::octree::kMaxDesiredNodes nodes
+    // per frame, so at least half the slots are unselected in any frame and an
     // incoming node can always find one to take. Deep enough that the byte budget
     // binds first at every budget the settings allow; the eviction fallback below
     // is what a cloud of tiny nodes still leans on.
@@ -78,6 +100,13 @@ namespace {
     constexpr quint32 kNodeFloorOffset = offsetof(NodeConstants, floorSpacing);
     constexpr quint32 kNodeIdsOffset = offsetof(NodeConstants, arrivalFrame);
     constexpr quint32 kNodeMeasuredSpacingOffset = offsetof(NodeConstants, measuredSpacing);
+    constexpr quint32 kNodeFloorRampOffset = offsetof(NodeConstants, previousFloorSpacing);
+    constexpr quint32 kNodeFloorChangedFrameOffset = offsetof(NodeConstants, floorChangedFrame);
+    constexpr quint32 kNodeFadeOffset = offsetof(NodeConstants, fadeFrame);
+    static_assert(offsetof(NodeConstants, fade) == kNodeFadeOffset + sizeof(quint32),
+                  "nodeFade reads the fade frame and the fade as one uvec2");
+    static_assert(kNodeFloorChangedFrameOffset == kNodeFloorRampOffset + sizeof(float),
+                  "A floor ramp's start is written as one pair of words");
     static_assert(offsetof(NodeConstants, nodeIndex) == kNodeIdsOffset + sizeof(quint32),
                   "nodeIds reads the arrival frame and the node index as one uvec2");
 
@@ -201,7 +230,13 @@ void cwRHIPointCloud::initializeResources(const ResourceUpdateData& data)
         { kNodeConstantsBinding, 3, QRhiVertexInputAttribute::UInt2,
           kNodeIdsOffset },                                                 // nodeIds
         { kNodeConstantsBinding, 4, QRhiVertexInputAttribute::Float,
-          kNodeMeasuredSpacingOffset }                                      // nodeMeasuredSpacing
+          kNodeMeasuredSpacingOffset },                                     // nodeMeasuredSpacing
+        { kNodeConstantsBinding, 5, QRhiVertexInputAttribute::Float,
+          kNodeFloorRampOffset },                                           // nodePreviousFloor
+        { kNodeConstantsBinding, 6, QRhiVertexInputAttribute::UInt,
+          kNodeFloorChangedFrameOffset },                                   // nodeFloorChangedFrame
+        { kNodeConstantsBinding, 7, QRhiVertexInputAttribute::UInt2,
+          kNodeFadeOffset }                                                 // nodeFade
     });
 
     m_nodeBoxInputLayout.setBindings({
@@ -296,6 +331,8 @@ void cwRHIPointCloud::releaseNode(int index)
     node.state = NodeState::Absent;
     node.exportRequested = false;
     node.floorSpacing = 0.0f;
+    node.previousFloorSpacing = 0.0f;
+    node.fade = NodeFade::None;
     m_residencyChanged = true;
 }
 
@@ -382,7 +419,14 @@ void cwRHIPointCloud::updateResources(const ResourceUpdateData& data)
 void cwRHIPointCloud::writeAppearanceSlot(QRhiResourceUpdateBatch* batch, int slot,
                                           float spacingCoverage)
 {
-    const PerCloudUniform uniform = appearanceUniform(spacingCoverage);
+    PerCloudUniform uniform = appearanceUniform(spacingCoverage);
+
+    // An export job draws its own camera once, so it draws every node at its
+    // settled weight and floor rather than wherever the live view's ramps
+    // stand: revealFrames 0 has the shader skip the fades and floor ramps
+    if (slot != kLiveAppearanceSlot) {
+        uniform.revealFrames = cw::pointcloud::kMinRevealFrames;
+    }
     batch->updateDynamicBuffer(m_perCloudUBO, slot * m_perCloudStride,
                                sizeof(PerCloudUniform), &uniform);
 }
@@ -396,19 +440,33 @@ void cwRHIPointCloud::writeLiveAppearanceSlot(QRhiResourceUpdateBatch* batch)
 
 void cwRHIPointCloud::writeNodeFloors(QRhiResourceUpdateBatch* batch,
                                       const QVector<int>& drawnNodes,
-                                      const QVector<int>& missingNodes)
+                                      const QVector<int>& missingNodes, quint64 revealClock)
 {
     const QVector<double> floors =
         cw::octree::finestDrawnSpacings(*m_source.manifest, drawnNodes, missingNodes,
                                         m_renderState.value().shading.spacingSource);
+
+    // A missing node's cell has only its nearest drawn ancestor's points in
+    // it, so that ancestor's floor has to cover the cell from the first frame
+    // or the reveal ramp would open a hole there for revealFrames frames
+    const QSet<int> incomplete = m_renderState.value().shading.revealFrames > 0
+                                     ? cw::octree::incompleteDrawnNodes(*m_source.manifest,
+                                                                        drawnNodes, missingNodes)
+                                     : QSet<int>();
+
     for (int i = 0; i < drawnNodes.size(); i++) {
-        writeNodeFloor(batch, drawnNodes.at(i), float(floors.at(i)));
+        const int node = drawnNodes.at(i);
+        const float floor = float(floors.at(i));
+        const bool coversMissingCell = incomplete.contains(node)
+                                       && floor > m_nodes.at(node).floorSpacing;
+        writeNodeFloor(batch, node, floor, revealClock,
+                       coversMissingCell ? FloorMove::AtOnce : FloorMove::Ramped);
     }
 }
 
 void cwRHIPointCloud::restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
                                                  const cw::octree::Selection& previous,
-                                                 quint64 frame)
+                                                 quint64 frame, quint64 revealClock)
 {
     for (const cw::octree::SelectedNode& selected : previous.nodes) {
         if (selected.node < 0 || selected.node >= m_nodes.size()) {
@@ -416,11 +474,12 @@ void cwRHIPointCloud::restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
         }
 
         const NodeRecord& node = m_nodes.at(selected.node);
-        if (node.state != NodeState::Resident || node.lastDesiredFrame == frame) {
+        if (node.state != NodeState::Resident || node.lastDesiredFrame == frame
+            || node.fade == NodeFade::Out) {
             continue;
         }
 
-        writeNodeFloor(batch, selected.node, ownSpacing(selected.node));
+        writeNodeFloor(batch, selected.node, ownSpacing(selected.node), revealClock);
     }
 }
 
@@ -433,7 +492,7 @@ float cwRHIPointCloud::ownSpacing(int index) const
 }
 
 void cwRHIPointCloud::writeNodeFloor(QRhiResourceUpdateBatch* batch, int index,
-                                     float floorSpacing)
+                                     float floorSpacing, quint64 revealClock, FloorMove move)
 {
     // Only resident nodes reach here, so the node holds the slot the floor
     // goes into
@@ -441,11 +500,202 @@ void cwRHIPointCloud::writeNodeFloor(QRhiResourceUpdateBatch* batch, int index,
     if (floorSpacing == node.floorSpacing) {
         return;
     }
+
+    // The ramp starts from the floor the node drew with last frame, so a move
+    // that interrupts a ramp carries on from where that one had got to. A
+    // node arriving this frame has drawn nothing yet, and its fade-in carries
+    // the change, so it takes its first floor at once.
+    if (node.arrivalFrame == revealClock || move == FloorMove::AtOnce) {
+        node.previousFloorSpacing = 0.0f;
+    } else if (node.floorChangedFrame < revealClock) {
+        const quint32 lastDrawnAge = quint32(revealClock - node.floorChangedFrame - 1);
+        node.previousFloorSpacing = float(cw::clod::revealedFloor(
+            double(node.previousFloorSpacing), double(node.floorSpacing), lastDrawnAge,
+            m_renderState.value().shading.revealFrames));
+    }
     node.floorSpacing = floorSpacing;
-    batch->updateDynamicBuffer(m_nodeConstants,
-                               quint32(node.constantSlot) * kNodeConstantsBytes
-                                   + kNodeFloorOffset,
+    node.floorChangedFrame = revealClock;
+
+    const quint32 slotOffset = quint32(node.constantSlot) * kNodeConstantsBytes;
+    batch->updateDynamicBuffer(m_nodeConstants, slotOffset + kNodeFloorOffset,
                                sizeof(float), &node.floorSpacing);
+
+    const FloorRampStart rampStart{node.previousFloorSpacing, quint32(revealClock)};
+    batch->updateDynamicBuffer(m_nodeConstants, slotOffset + kNodeFloorRampOffset,
+                               sizeof(FloorRampStart), &rampStart);
+}
+
+bool cwRHIPointCloud::nodeRevealing(const NodeRecord& node, quint64 revealClock) const
+{
+    const int revealFrames = m_renderState.value().shading.revealFrames;
+    const auto rampingSince = [&](quint64 since) {
+        return cw::clod::revealing(cw::clod::revealAge(revealClock, since), revealFrames);
+    };
+
+    const bool arriving = rampingSince(node.arrivalFrame);
+    const bool floorMoving = node.previousFloorSpacing > 0.0f
+                             && node.previousFloorSpacing != node.floorSpacing
+                             && rampingSince(node.floorChangedFrame);
+    const bool fading = node.fade != NodeFade::None && rampingSince(node.fadeFrame);
+    return arriving || floorMoving || fading;
+}
+
+void cwRHIPointCloud::writeFade(QRhiResourceUpdateBatch* batch, int index, NodeFade fade,
+                                quint64 fadeFrame)
+{
+    NodeRecord& node = m_nodes[index];
+    node.fade = fade;
+    node.fadeFrame = fadeFrame;
+
+    const FadeWords words{quint32(fadeFrame), quint32(fade)};
+    batch->updateDynamicBuffer(m_nodeConstants,
+                               quint32(node.constantSlot) * kNodeConstantsBytes + kNodeFadeOffset,
+                               sizeof(FadeWords), &words);
+}
+
+double cwRHIPointCloud::fadeShare(const NodeRecord& node, quint64 revealClock) const
+{
+    const int revealFrames = m_renderState.value().shading.revealFrames;
+    const quint32 age = cw::clod::revealAge(revealClock, node.fadeFrame);
+    switch (node.fade) {
+    case NodeFade::Out:
+        return cw::clod::departureScale(age, revealFrames);
+    case NodeFade::In:
+        return cw::clod::revealScale(age, revealFrames);
+    case NodeFade::None:
+        break;
+    }
+    return 1.0;
+}
+
+void cwRHIPointCloud::startFade(QRhiResourceUpdateBatch* batch, int index, NodeFade fade,
+                                quint64 revealClock)
+{
+    // The share of its weight the last frame drew the node at: one turning
+    // around mid-fade carries on from where its fade had got to, one coming
+    // back into the cut otherwise starts from nothing, and one leaving it
+    // otherwise starts from all of it
+    const NodeRecord& node = m_nodes.at(index);
+    const bool turning = node.fade != NodeFade::None && node.fade != fade;
+    const double share = turning ? fadeShare(node, revealClock - 1)
+                                 : (fade == NodeFade::Out ? 1.0 : 0.0);
+
+    const int revealFrames = m_renderState.value().shading.revealFrames;
+    const quint32 age = fade == NodeFade::In ? cw::clod::fadeInAgeFor(share, revealFrames)
+                                             : cw::clod::fadeOutAgeFor(share, revealFrames);
+    writeFade(batch, index, fade, revealClock > age ? revealClock - age : 0);
+}
+
+void cwRHIPointCloud::closeOverReleasedNode(QRhiResourceUpdateBatch* batch, int index,
+                                            quint64 frame)
+{
+    const QVector<int>& parents = m_source.manifest->parents();
+    for (int ancestor = parents.at(index); ancestor >= 0; ancestor = parents.at(ancestor)) {
+        const NodeRecord& covering = m_nodes.at(ancestor);
+        if (covering.state != NodeState::Resident || covering.lastDesiredFrame != frame) {
+            continue;
+        }
+
+        // Only a rising floor: a falling one is shrinking over children of
+        // its own that are fading in
+        const bool rising = covering.previousFloorSpacing > 0.0f
+                            && covering.floorSpacing > covering.previousFloorSpacing;
+        if (rising) {
+            NodeRecord& node = m_nodes[ancestor];
+            node.previousFloorSpacing = 0.0f;
+            const FloorRampStart rampStart{0.0f, quint32(node.floorChangedFrame)};
+            batch->updateDynamicBuffer(m_nodeConstants,
+                                       quint32(node.constantSlot) * kNodeConstantsBytes
+                                           + kNodeFloorRampOffset,
+                                       sizeof(FloorRampStart), &rampStart);
+        }
+        return;
+    }
+}
+
+void cwRHIPointCloud::updateFades(QRhiResourceUpdateBatch* batch,
+                                  const cw::octree::Selection& previous,
+                                  const QVector<int>& drawnNodes, quint64 frame,
+                                  quint64 revealClock)
+{
+    QSet<int> previousNodes;
+    previousNodes.reserve(previous.nodes.size());
+    for (const cw::octree::SelectedNode& selected : previous.nodes) {
+        previousNodes.insert(selected.node);
+    }
+
+    // A node coming back into the cut already resident fades in as an
+    // arrival does, so a cached node shows up over the ramp too; one still
+    // fading out turns around where it stands
+    for (const int index : drawnNodes) {
+        if (!previousNodes.contains(index) && m_nodes.at(index).arrivalFrame != revealClock) {
+            startFade(batch, index, NodeFade::In, revealClock);
+        }
+    }
+
+    // The nodes the last frame drew that this cut dropped start fading out,
+    // so the cells they covered thin away over the frames their ancestors'
+    // floors take to grow over them, the arrival ramp run backwards. One
+    // already gone leaves nothing to fade, so its ancestor covers its cells
+    // at once.
+    for (const cw::octree::SelectedNode& selected : previous.nodes) {
+        if (selected.node < 0 || selected.node >= m_nodes.size()) {
+            continue;
+        }
+        const NodeRecord& node = m_nodes.at(selected.node);
+        if (node.lastDesiredFrame == frame || node.fade == NodeFade::Out) {
+            continue;
+        }
+        if (node.state == NodeState::Resident) {
+            startFade(batch, selected.node, NodeFade::Out, revealClock);
+            m_departingNodes.append(selected.node);
+        } else {
+            closeOverReleasedNode(batch, selected.node, frame);
+        }
+    }
+
+    // A fade-out ends when its node turned back into the cut, was evicted
+    // (its ancestor then covers its cells at once), or has faded to nothing;
+    // the node then sizes by its own spacing again, as every resident node
+    // outside the cut does
+    const int revealFrames = m_renderState.value().shading.revealFrames;
+    const auto ended = [&](int index) {
+        const NodeRecord& node = m_nodes.at(index);
+        if (node.state != NodeState::Resident) {
+            closeOverReleasedNode(batch, index, frame);
+            return true;
+        }
+        if (node.fade != NodeFade::Out) {
+            return true;
+        }
+        if (cw::clod::revealing(cw::clod::revealAge(revealClock, node.fadeFrame),
+                                revealFrames)) {
+            return false;
+        }
+        finishDeparture(batch, index, revealClock);
+        return true;
+    };
+    m_departingNodes.erase(std::remove_if(m_departingNodes.begin(), m_departingNodes.end(),
+                                          ended),
+                           m_departingNodes.end());
+}
+
+void cwRHIPointCloud::finishDeparture(QRhiResourceUpdateBatch* batch, int index,
+                                      quint64 revealClock)
+{
+    writeFade(batch, index, NodeFade::None, revealClock);
+    writeNodeFloor(batch, index, ownSpacing(index), revealClock);
+}
+
+void cwRHIPointCloud::endDepartures(QRhiResourceUpdateBatch* batch, quint64 revealClock)
+{
+    for (const int index : std::as_const(m_departingNodes)) {
+        const NodeRecord& node = m_nodes.at(index);
+        if (node.state == NodeState::Resident && node.fade == NodeFade::Out) {
+            finishDeparture(batch, index, revealClock);
+        }
+    }
+    m_departingNodes.clear();
 }
 
 cwRHIPointCloud::PerCloudUniform
@@ -467,6 +717,7 @@ cwRHIPointCloud::appearanceUniform(float spacingCoverage) const
     uniform.spacingSource = qint32(shading.spacingSource);
     uniform.fixedPointSizePx = shading.fixedPointSizePx;
     uniform.debugView = qint32(shading.debugView);
+    uniform.revealFrames = qint32(shading.revealFrames);
     // Truncated alongside the arrival frames in the node constants, so the
     // unsigned difference the shader takes stays right across the wrap.
     uniform.currentFrame = quint32(currentFrame());
@@ -642,9 +893,11 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
     // time for this frame's draws.
     refreshSseThreshold(data.renderData.budgets);
 
-    // The residency age view counts from the current frame, so it is the one
-    // view whose uniform moves every frame.
-    if (m_renderState.value().shading.debugView == cw::pointcloud::DebugView::ResidencyAge) {
+    // The residency age view and the reveal ramp count from the current
+    // frame, so their uniform moves every frame.
+    const cwPointCloudShading& shading = m_renderState.value().shading;
+    if (shading.debugView == cw::pointcloud::DebugView::ResidencyAge
+        || shading.revealFrames > 0) {
         m_liveAppearanceStale = true;
     }
 
@@ -672,10 +925,18 @@ bool cwRHIPointCloud::streamResources(ResourceUpdateData& data, qint64& remainin
         maybeFlushProfileBlock();
     }
 
-    return hasStreamingWork();
+    // The reveal ramp is left out: whether a ramp still has frames to draw is
+    // only known once this frame's gather has drawn it, which
+    // hasStreamingWork() reports.
+    return hasLoadingWork();
 }
 
 bool cwRHIPointCloud::hasStreamingWork() const
+{
+    return m_revealing || hasLoadingWork();
+}
+
+bool cwRHIPointCloud::hasLoadingWork() const
 {
     // A queue waiting on the eviction hold for a slot moves only once the hold
     // is let go, and letting go asks for its own frame through budgetsChanged.
@@ -749,14 +1010,23 @@ bool cwRHIPointCloud::uploadNode(QRhi* rhi, QRhiResourceUpdateBatch* batch, int 
     NodeConstants constants;
     constants.originScale = {minimum.x(), minimum.y(), minimum.z(), quantizationStep};
     constants.floorSpacing = nodeOwnSpacing;
-    constants.arrivalFrame = quint32(currentFrame());
+    // The frame the shader's reveal ramp counts this arrival's fade-in from,
+    // the counter streamResources() writes the uniform's currentFrame with.
+    const quint64 arrivalFrame = currentFrame();
+    constants.arrivalFrame = quint32(arrivalFrame);
     constants.nodeIndex = quint32(index);
     constants.measuredSpacing = m_source.manifest->nodes.at(index).measuredSpacing;
+    constants.floorChangedFrame = quint32(arrivalFrame);
     batch->updateDynamicBuffer(m_nodeConstants, quint32(slot) * kNodeConstantsBytes,
                                kNodeConstantsBytes, &constants);
 
     NodeRecord& node = m_nodes[index];
     node.floorSpacing = nodeOwnSpacing;
+    node.arrivalFrame = arrivalFrame;
+    node.previousFloorSpacing = 0.0f;
+    node.floorChangedFrame = arrivalFrame;
+    node.fade = NodeFade::None;
+    node.fadeFrame = 0;
     node.buffer = buffer;
     node.bytes = bytes;
     node.index = payload.index;
@@ -1149,6 +1419,8 @@ void cwRHIPointCloud::releaseStreamedResources()
     m_requested.clear();
     m_readyQueue.clear();
     m_waitingForSlot = false;
+    m_revealing = false;
+    m_departingNodes.clear();
     m_nodeBoxCount = 0;
 
     // releaseNode swap-removes out of the back, so taking the back each time
@@ -1219,6 +1491,10 @@ void cwRHIPointCloud::gatherCulled(const GatherContext& context)
     // would keep reporting a cut no one can see.
     const cw::octree::Selection previousSelection = m_selected;
     m_selected = cw::octree::Selection{};
+    m_revealing = false;
+    if (!m_departingNodes.isEmpty() && context.resourceUpdateBatch) {
+        endDepartures(context.resourceUpdateBatch, m_frame->frameCounter() - 1);
+    }
 
     // gather() never ran, so no node carries this frame's stamp: every node the
     // dropped cut held just went cold, and every open request that no export is
@@ -1301,6 +1577,12 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
 
     const quint64 frame = m_frame->frameCounter();
 
+    // The frame the shader's reveal ramp reads this draw at: the counter as
+    // streamResources() stamped arrivals and wrote the uniform's currentFrame
+    // with, before gatherScene() advanced it for this gather.
+    const quint64 revealClock = frame - 1;
+    const int revealFrames = m_renderState.value().shading.revealFrames;
+
     // binding 1 = per-cloud appearance UBO (dynamic offset). The job picks the
     // appearance slot; resolve it to this cloud's byte offset. Clamp to the slots
     // actually allocated so an out-of-range slot falls back to the live appearance
@@ -1312,6 +1594,24 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
 
     QVector<Drawable> drawables;
     drawables.reserve(m_selected.nodes.size());
+
+    const auto nodeDrawable = [&](int index) {
+        const NodeRecord& node = m_nodes.at(index);
+        Drawable drawable;
+        drawable.type = Drawable::Type::NonIndexed;
+        drawable.vertexBindings = {
+            QRhiCommandBuffer::VertexInput(node.buffer, 0),
+            QRhiCommandBuffer::VertexInput(m_nodeConstants,
+                                           quint32(node.constantSlot) * kNodeConstantsBytes)
+        };
+        drawable.vertexCount = m_source.manifest->nodes.at(index).pointCount;
+        drawable.instanceCount = 1;
+        drawable.bindings = m_srb;
+        drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
+        drawable.appearanceBinding = 1;
+        drawable.appearanceUniformOffset = appearanceOffset;
+        return drawable;
+    };
 
     //The cut split by residency, which is what each node's floor is taken from
     QVector<int> drawnNodes;
@@ -1337,20 +1637,7 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
                 break;
             }
 
-            Drawable drawable;
-            drawable.type = Drawable::Type::NonIndexed;
-            drawable.vertexBindings = {
-                QRhiCommandBuffer::VertexInput(node.buffer, 0),
-                QRhiCommandBuffer::VertexInput(m_nodeConstants,
-                                               quint32(node.constantSlot) * kNodeConstantsBytes)
-            };
-            drawable.vertexCount = drawn.pointCount;
-            drawable.instanceCount = 1;
-            drawable.bindings = m_srb;
-            drawable.globalCameraBinding = 0; // binding 0 = global camera UBO (dynamic offset)
-            drawable.appearanceBinding = 1;
-            drawable.appearanceUniformOffset = appearanceOffset;
-            drawables.append(drawable);
+            drawables.append(nodeDrawable(selected.node));
             break;
         }
         case NodeState::Absent: {
@@ -1392,10 +1679,37 @@ bool cwRHIPointCloud::gather(const GatherContext& context, QVector<PipelineBatch
                    "a live gather needs the frame's resource batch to write node floors");
         if (context.resourceUpdateBatch) {
             if (!drawnNodes.isEmpty()) {
-                writeNodeFloors(context.resourceUpdateBatch, drawnNodes, missingNodes);
+                writeNodeFloors(context.resourceUpdateBatch, drawnNodes, missingNodes,
+                                revealClock);
             }
-            restoreOwnFloorsLeavingCut(context.resourceUpdateBatch, previousSelection, frame);
+
+            // Ahead of the restore, which leaves a fading node's floor where
+            // the last frame drew it
+            if (revealFrames > 0) {
+                updateFades(context.resourceUpdateBatch, previousSelection, drawnNodes, frame,
+                            revealClock);
+            } else if (!m_departingNodes.isEmpty()) {
+                endDepartures(context.resourceUpdateBatch, revealClock);
+            }
+            restoreOwnFloorsLeavingCut(context.resourceUpdateBatch, previousSelection, frame,
+                                       revealClock);
         }
+
+        for (const int index : std::as_const(m_departingNodes)) {
+            if (m_source.manifest->nodes.at(index).level >= renderData.budgets.minLevel) {
+                drawables.append(nodeDrawable(index));
+            }
+        }
+
+        // A ramp still short of its end needs the next frame drawn, so the loop
+        // stops on the frame the last one lands
+        const auto stillRamping = [&](int index) {
+            return nodeRevealing(m_nodes.at(index), revealClock);
+        };
+        m_revealing = revealFrames > 0
+                      && (std::any_of(drawnNodes.cbegin(), drawnNodes.cend(), stillRamping)
+                          || std::any_of(m_departingNodes.cbegin(), m_departingNodes.cend(),
+                                         stillRamping));
     }
 
     // Every node this frame's cut holds now carries this frame's stamp, so the

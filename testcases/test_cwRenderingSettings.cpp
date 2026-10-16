@@ -361,6 +361,7 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
     constexpr double kFixedPointSizePx = 5.0;
     constexpr double kMaxPointSizePx = 12.0;
     constexpr double kGovernorSlew = 0.25;
+    constexpr int kRevealFrames = 8;
 
     // One knob each: how to move it off its default, what QSettings holds
     // afterward, and the notify signal that has to fire once.
@@ -415,6 +416,9 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
         {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); },
          QStringLiteral("rendering/pointCloud/showNodeBoxes"), true,
          &cwRenderingSettings::showNodeBoxesChanged},
+        {"revealFrames", [&] { settings->setRevealFrames(kRevealFrames); },
+         QStringLiteral("rendering/pointCloud/revealFrames"), kRevealFrames,
+         &cwRenderingSettings::revealFramesChanged},
     };
 
     SECTION("the knobs start at the renderer's own rules") {
@@ -684,6 +688,72 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and p
     settings->resetToDefaults();
 }
 
+TEST_CASE("cwRenderingSettings revealFrames defaults to off, clamps, and persists",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    const QString key = QStringLiteral("rendering/pointCloud/revealFrames");
+    constexpr int kEightFrames = 8;
+    constexpr int kBelowRange = -3;
+    constexpr int kAboveRange = 1000;
+
+    SECTION("the default shows an arrival whole and moves a floor at once") {
+        CHECK(cw::pointcloud::kDefaultRevealFrames == 0);
+        CHECK(cwPointCloudShading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->revealFrames() == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->pointCloudShading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->isAtDefaults());
+    }
+
+    SECTION("the range runs from off to sixty frames") {
+        CHECK(cwRenderingSettings::minimumRevealFrames() == cw::pointcloud::kMinRevealFrames);
+        CHECK(cwRenderingSettings::maximumRevealFrames() == cw::pointcloud::kMaxRevealFrames);
+        CHECK(cwRenderingSettings::minimumRevealFrames() == 0);
+        CHECK(cwRenderingSettings::maximumRevealFrames() == 60);
+    }
+
+    SECTION("values outside the range clamp to its ends") {
+        settings->setRevealFrames(kAboveRange);
+        CHECK(settings->revealFrames() == cwRenderingSettings::maximumRevealFrames());
+        settings->setRevealFrames(kBelowRange);
+        CHECK(settings->revealFrames() == cwRenderingSettings::minimumRevealFrames());
+    }
+
+    SECTION("a ramp round-trips through QSettings and reaches the shading") {
+        QSignalSpy framesSpy(settings, &cwRenderingSettings::revealFramesChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+        QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
+
+        settings->setRevealFrames(kEightFrames);
+
+        CHECK(framesSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(defaultsSpy.count() == 1);
+        CHECK(settings->revealFrames() == kEightFrames);
+        CHECK(settings->pointCloudShading().revealFrames == kEightFrames);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == kEightFrames);
+
+        settings->setRevealFrames(kEightFrames);
+        CHECK(framesSpy.count() == 1);
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->revealFrames() == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(diskSettings.value(key).toInt() == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
 TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -780,6 +850,8 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
         {"debugView",
          [&] { settings->setDebugView(int(cw::pointcloud::DebugView::ResidencyAge)); }, false},
         {"showNodeBoxes", [&] { settings->setShowNodeBoxes(true); }, false},
+        {"revealFrames",
+         [&] { settings->setRevealFrames(cw::pointcloud::kMaxRevealFrames); }, false},
     };
 
     for (const Knob& knob : knobs) {

@@ -11,6 +11,9 @@
 //Our includes
 #include "cwRHIPointCloud.h"
 
+//Std includes
+#include <optional>
+
 // Friend accessor (declared `friend struct CwRhiPointCloudTestAccess` in
 // cwRHIPointCloud.h) for the node table the render thread streams into.
 // Nothing in production reads it from outside the class, so it stays private
@@ -105,6 +108,60 @@ struct CwRhiPointCloudTestAccess {
             return 0.0f;
         }
         return cloud.m_nodes.at(index).floorSpacing;
+    }
+
+    // The frame @a index became resident, which its reveal ramp counts from,
+    // as its constants slot holds it. 0 for a node that is not resident.
+    static quint64 arrivalFrame(const cwRHIPointCloud& cloud, int index) {
+        if (index < 0 || index >= cloud.m_nodes.size()
+            || cloud.m_nodes.at(index).state != cwRHIPointCloud::NodeState::Resident) {
+            return 0;
+        }
+        return cloud.m_nodes.at(index).arrivalFrame;
+    }
+
+    // What @a index's floor ramp moves between, as its constants slot holds
+    // it: the floor before the last move, the floor the move aims for (the
+    // value drawnNodeFloorSpacing() reads) and the frame the move happened.
+    // cw::clod::revealedFloor() turns the three into the floor a frame draws.
+    struct FloorRamp {
+        float previous = 0.0f;
+        float target = 0.0f;
+        quint64 changedFrame = 0;
+    };
+
+    static FloorRamp nodeFloorRamp(const cwRHIPointCloud& cloud, int index) {
+        if (index < 0 || index >= cloud.m_nodes.size()) {
+            return FloorRamp();
+        }
+        const auto& node = cloud.m_nodes.at(index);
+        return FloorRamp{node.previousFloorSpacing, node.floorSpacing, node.floorChangedFrame};
+    }
+
+    // The resident nodes the last live gather drew fading out beside its cut
+    // (cwPointCloudShading::revealFrames), in no order.
+    static QVector<int> departingNodes(const cwRHIPointCloud& cloud) {
+        return cloud.m_departingNodes;
+    }
+
+    // The frame @a index's fade-out counts from, as its constants slot holds
+    // it, while it is departing; std::nullopt for a node that is not.
+    static std::optional<quint64> departureFrame(const cwRHIPointCloud& cloud, int index) {
+        return fadeFrame(cloud, index, cwRHIPointCloud::NodeFade::Out);
+    }
+
+    // The frame @a index's fade back into the cut counts from, as its
+    // constants slot holds it, while it has one; std::nullopt otherwise.
+    static std::optional<quint64> reentryFrame(const cwRHIPointCloud& cloud, int index) {
+        return fadeFrame(cloud, index, cwRHIPointCloud::NodeFade::In);
+    }
+
+    static std::optional<quint64> fadeFrame(const cwRHIPointCloud& cloud, int index,
+                                            cwRHIPointCloud::NodeFade fade) {
+        if (index < 0 || index >= cloud.m_nodes.size() || cloud.m_nodes.at(index).fade != fade) {
+            return std::nullopt;
+        }
+        return cloud.m_nodes.at(index).fadeFrame;
     }
 
     // The levels the last cut asked for, so a test can say what the camera

@@ -32,6 +32,20 @@ layout(location = 3) in uvec2 nodeIds;
 // it measured nothing. Read only under spacingSource Measured.
 layout(location = 4) in float nodeMeasuredSpacing;
 
+// Per instance, one per node, for the reveal ramp alone (revealFrames): the
+// floor the node drew with before nodeFloor last moved, 0 where the move
+// takes effect at once, and the frame that move happened. The node's floor
+// travels from the one to the other in log space over revealFrames frames.
+layout(location = 5) in float nodePreviousFloor;
+layout(location = 6) in uint nodeFloorChangedFrame;
+
+// Per instance, one per node, for the reveal ramp alone: the frame the
+// node's fade started on, and which fade it is (cwRHIPointCloud::NodeFade):
+// kFadeOut after it left the cut, the arrival's fade-in run backwards, or
+// kFadeIn after it came back into the cut already resident, a fade-in like an
+// arrival's.
+layout(location = 7) in uvec2 nodeFade;
+
 layout(std140, binding = 0) uniform GlobalBlock {
     mat4 viewProjectionMatrix;
     mat4 viewMatrix;
@@ -57,9 +71,11 @@ layout(std140, binding = 0) uniform GlobalBlock {
 // and floorMode drops the per-node floor. Their defaults are the rules as
 // described here. The third row picks what the point is colored by
 // (debugView, cw::pointcloud::DebugView), carries the frame the residency
-// age view counts from, and picks the spacing each node sizes and thins by
-// (spacingSource, cw::pointcloud::SpacingSource). The C++ PerCloudUniform
-// matches the block field for field.
+// age view and the reveal ramp count from, picks the spacing each node sizes
+// and thins by (spacingSource, cw::pointcloud::SpacingSource), and sets how
+// many frames an arriving node fades in over and a moved floor travels over
+// (revealFrames, 0 for neither). The C++ PerCloudUniform matches the block
+// field for field.
 layout(std140, binding = 1) uniform PerCloudBlock {
     float spacingCoverage;
     float sseThresholdPx;
@@ -72,6 +88,7 @@ layout(std140, binding = 1) uniform PerCloudBlock {
     int debugView;
     uint currentFrame;
     int spacingSource;
+    int revealFrames;
 };
 
 layout(location = 0) out vec4 vColor;
@@ -82,6 +99,8 @@ const int kSizeFixedPixels = 1;
 const int kSizeOwnSpacing = 2;
 const int kFloorOff = 1;
 const int kSpacingMeasured = 1;
+const uint kFadeOut = 1u;
+const uint kFadeIn = 2u;
 
 const int kViewOff = 0;
 const int kViewLevel = 1;
@@ -191,10 +210,32 @@ float pointRank(uvec3 quantized)
     return (steps + subCellHash01(quantized)) / kRankSteps;
 }
 
+// cw::clod::revealScale: the share of its weight a node draws age frames
+// after it arrived, and how far along a moved floor is
+float revealScale(uint age)
+{
+    if (revealFrames <= 0) {
+        return 1.0;
+    }
+    return min(1.0, (float(age) + 1.0) / float(revealFrames));
+}
+
+// cw::clod::revealedFloor: nodeFloor reached from nodePreviousFloor in log
+// space, so a floor halves or doubles by equal ratios frame to frame
+float revealedFloor()
+{
+    float scale = revealScale(currentFrame - nodeFloorChangedFrame);
+    if (scale >= 1.0 || nodePreviousFloor <= 0.0 || nodeFloor <= 0.0) {
+        return nodeFloor;
+    }
+    return exp2(mix(log2(nodePreviousFloor), log2(nodeFloor), scale));
+}
+
 // What a drawn point is colored by under debugView. The level is the node's
 // depth below the root, which the grid spacing ratio gives exactly: every
 // level halves the grid spacing.
-vec3 debugColor(float gridSpacing, float nodeSpacing, float rank, float weight, float sizePx)
+vec3 debugColor(float gridSpacing, float nodeSpacing, float drawnFloor, float rank, float weight,
+                float sizePx)
 {
     if (debugView == kViewLevel) {
         int level = int(round(log2(rootSpacing / gridSpacing)));
@@ -217,7 +258,7 @@ vec3 debugColor(float gridSpacing, float nodeSpacing, float rank, float weight, 
         return mix(kSmallSpriteColor, kLargeSpriteColor, clamp(log2(sizePx) / largest, 0.0, 1.0));
     }
     if (debugView == kViewFloorRatio) {
-        float octaves = log2(nodeSpacing / max(nodeFloor, kMinimumFloorSpacing));
+        float octaves = log2(nodeSpacing / max(drawnFloor, kMinimumFloorSpacing));
         return mix(kWhite, kOversizedFloorColor, clamp(octaves / kFloorRatioOctaves, 0.0, 1.0));
     }
     if (debugView == kViewResidencyAge) {
@@ -274,6 +315,18 @@ void main(void)
         weight = 1.0;
     }
 
+    // The reveal ramp: an arrival draws a growing share of what its weight
+    // keeps, so its points land over revealFrames frames rather than in one.
+    // The rank order makes each frame's set a superset of the one before.
+    if (revealFrames > 0) {
+        weight *= revealScale(currentFrame - nodeIds.x);
+        if (nodeFade.y == kFadeOut) {
+            weight *= 1.0 - revealScale(currentFrame - nodeFade.x);
+        } else if (nodeFade.y == kFadeIn) {
+            weight *= revealScale(currentFrame - nodeFade.x);
+        }
+    }
+
     float rank = pointRank(qpos.xyz);
     if (rank >= weight) {
         if (debugView == kViewDecimationPreview) {
@@ -307,7 +360,8 @@ void main(void)
     // finest spacing drawn under this node rather than this node's own, so a
     // refined region's ancestors keep the size of the region they sit in
     // instead of blowing up to their own coarse spacing.
-    float floorSpacing = sizeMode == kSizeOwnSpacing ? nodeSpacing : nodeFloor;
+    float drawnFloor = revealFrames > 0 ? revealedFloor() : nodeFloor;
+    float floorSpacing = sizeMode == kSizeOwnSpacing ? nodeSpacing : drawnFloor;
     float floorPx = floorMode == kFloorOff ? 0.0
                                            : spacingCoverage * floorSpacing * pixelsPerMeter;
     float sizePx = sizeMode == kSizeFixedPixels
@@ -321,6 +375,7 @@ void main(void)
     gl_PointSize = clamp(sizePx, 1.0, maxPointSizePx);
 
     vColor = debugView == kViewOff ? kFlatColor
-                            : vec4(debugColor(gridSpacing, nodeSpacing, rank, weight, gl_PointSize),
+                            : vec4(debugColor(gridSpacing, nodeSpacing, drawnFloor, rank, weight,
+                                              gl_PointSize),
                                    1.0);
 }

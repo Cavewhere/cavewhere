@@ -206,6 +206,86 @@ namespace cw::clod {
         return gridSpacing;
     }
 
+    //! The frames from @a since to @a frame, the age the reveal ramp reads:
+    //! the unsigned difference of the two truncated to 32 bits, as
+    //! PointCloud.vert takes it, so a @a since after @a frame wraps to an age
+    //! long past every ramp just as it does on the GPU
+    constexpr quint32 revealAge(quint64 frame, quint64 since)
+    {
+        return quint32(frame) - quint32(since);
+    }
+
+    /**
+     * The share of its weight a node draws @a age frames after it arrived,
+     * under a reveal ramp of @a revealFrames frames: (age + 1) / revealFrames,
+     * capped at 1, so the arrival frame draws 1 / revealFrames of what the
+     * weight keeps and frame revealFrames - 1 draws all of it. 1 at every age
+     * while @a revealFrames is 0. PointCloud.vert scales its weight the same
+     * way.
+     */
+    inline double revealScale(quint32 age, int revealFrames)
+    {
+        if (revealFrames <= 0) {
+            return 1.0;
+        }
+        return std::min(1.0, (double(age) + 1.0) / double(revealFrames));
+    }
+
+    /**
+     * The floor a node sizes by @a age frames after its floor moved from
+     * @a previousFloor to @a floor, under a reveal ramp of @a revealFrames
+     * frames: the two interpolated in log space by revealScale(age,
+     * revealFrames), so a floor halves or doubles by equal ratios frame to
+     * frame and a rise takes as many frames as a fall. @a floor itself while
+     * @a revealFrames is 0 or the node has no previous floor.
+     */
+    inline double revealedFloor(double previousFloor, double floor, quint32 age,
+                                int revealFrames)
+    {
+        const double scale = revealScale(age, revealFrames);
+        if (scale >= 1.0 || previousFloor <= 0.0 || floor <= 0.0) {
+            return floor;
+        }
+        return std::exp2(std::log2(previousFloor)
+                         + (std::log2(floor) - std::log2(previousFloor)) * scale);
+    }
+
+    //! The share of its weight a node that left the cut @a age frames ago
+    //! still draws: the arrival's revealScale() run backwards, so the frame it
+    //! leaves draws 1 - 1 / revealFrames and frame revealFrames - 1 draws
+    //! nothing. PointCloud.vert fades a departing node the same way.
+    inline double departureScale(quint32 age, int revealFrames)
+    {
+        return 1.0 - revealScale(age, revealFrames);
+    }
+
+    //! The age a fade-in takes over at from a node drawing @a share of its
+    //! weight, so its first frame draws one step past that share rather than
+    //! starting again from 1 / @a revealFrames
+    inline quint32 fadeInAgeFor(double share, int revealFrames)
+    {
+        if (revealFrames <= 0) {
+            return 0u;
+        }
+        return quint32(std::lround(std::clamp(share, 0.0, 1.0) * double(revealFrames)));
+    }
+
+    //! The age a fade-out takes over at from a node drawing @a share of its
+    //! weight, so its first frame draws one step under that share:
+    //! departureScale() at that age is @a share less 1 / @a revealFrames
+    inline quint32 fadeOutAgeFor(double share, int revealFrames)
+    {
+        return quint32(std::max(revealFrames, 0)) - fadeInAgeFor(share, revealFrames);
+    }
+
+    //! Whether a ramp @a age frames old still has frames to draw under a
+    //! reveal ramp of @a revealFrames frames, which is what keeps the frame
+    //! loop drawing: revealScale() is still under 1.
+    inline bool revealing(quint32 age, int revealFrames)
+    {
+        return revealScale(age, revealFrames) < 1.0;
+    }
+
     //! The sample spacing of a node whose quantization step — the w of its
     //! instance's nodeOriginScale — is @a quantizationStep meters.
     constexpr double nodeSpacingFromQuantizationStep(double quantizationStep)

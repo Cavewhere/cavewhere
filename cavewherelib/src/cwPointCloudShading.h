@@ -133,6 +133,14 @@ namespace cw::pointcloud {
         return kLevelPalette[std::size_t(((level % count) + count) % count)];
     }
 
+    //! The frames an arriving node fades in over, and that a node's floor
+    //! takes to move from its previous value to its new one, in log space
+    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html WP11). 0 shows an arrival
+    //! whole and moves a floor on the frame it changes.
+    constexpr int kDefaultRevealFrames = 0;
+    constexpr int kMinRevealFrames = 0;
+    constexpr int kMaxRevealFrames = 60;
+
     constexpr double kMinPointSizePx = 1.0;
     constexpr double kMaxPointSizePx = 64.0;
     constexpr double kDefaultMaxPointSizePx = kMaxPointSizePx;
@@ -170,6 +178,7 @@ struct cwPointCloudShading {
     float fixedPointSizePx = float(cw::pointcloud::kDefaultFixedPointSizePx);
     float maxPointSizePx = float(cw::pointcloud::kDefaultMaxPointSizePx);
     cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;
+    int revealFrames = cw::pointcloud::kDefaultRevealFrames;
     bool showNodeBoxes = cw::pointcloud::kDefaultShowNodeBoxes;
 
     bool operator==(const cwPointCloudShading& other) const = default;

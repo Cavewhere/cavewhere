@@ -2563,6 +2563,78 @@ namespace {
         fixture.synchronize();
     }
 
+    //! Sets @a fixture's reveal ramp to @a frames, every other shading knob kept
+    void setRevealFrames(PointCloudFixture& fixture, int frames)
+    {
+        if (fixture.render().shading().revealFrames == frames) {
+            return;
+        }
+        cwPointCloudShading shading = fixture.render().shading();
+        shading.revealFrames = frames;
+        fixture.render().setShading(shading);
+        fixture.synchronize();
+    }
+
+    //! The frame the shader counted the reveal ramp from on the last
+    //! renderFrame(): streamResources writes the uniform's currentFrame and
+    //! stamps arrivals with the frame counter as it stood before that frame's
+    //! gather advanced it, and a floor move is stamped on the same clock, so
+    //! a ramp is 0 frames old on the frame it first draws.
+    quint64 lastDrawnFrame(const PointCloudFixture& fixture)
+    {
+        return fixture.frameCounter() - 1;
+    }
+
+    //! How many frames before the last drawn one @a since was
+    quint32 revealAgeOf(const PointCloudFixture& fixture, quint64 since)
+    {
+        return cw::clod::revealAge(lastDrawnFrame(fixture), since);
+    }
+
+    //! The reveal ramp's length the shader read on the last frame
+    int revealFramesOf(const PointCloudFixture& fixture)
+    {
+        return Access::liveAppearanceUniform(fixture.backend()).revealFrames;
+    }
+
+    //! The share of its weight @a node drew on the last frame, by cw::clod:
+    //! its arrival's fade-in, times its fade-out while it is departing the
+    //! cut or its fade back in after it re-entered the cut already resident
+    double revealScaleOf(const PointCloudFixture& fixture, int node)
+    {
+        const int revealFrames = revealFramesOf(fixture);
+        const double fadeIn = cw::clod::revealScale(
+            revealAgeOf(fixture, Access::arrivalFrame(fixture.backend(), node)), revealFrames);
+        const std::optional<quint64> departure = Access::departureFrame(fixture.backend(), node);
+        if (departure.has_value()) {
+            return fadeIn
+                   * cw::clod::departureScale(revealAgeOf(fixture, *departure), revealFrames);
+        }
+        const std::optional<quint64> reentry = Access::reentryFrame(fixture.backend(), node);
+        if (reentry.has_value()) {
+            return fadeIn * cw::clod::revealScale(revealAgeOf(fixture, *reentry), revealFrames);
+        }
+        return fadeIn;
+    }
+
+    //! The nodes the last frame drew: the cut's resident nodes, and the ones
+    //! fading out beside it under the reveal ramp
+    QVector<int> revealDrawnNodes(const PointCloudFixture& fixture)
+    {
+        return Access::drawnNodes(fixture.backend())
+               + Access::departingNodes(fixture.backend());
+    }
+
+    //! The floor @a node sized by on the last frame, by cw::clod: its constants
+    //! slot's floor ramp at the ramp's age
+    double revealedFloorOf(const PointCloudFixture& fixture, int node)
+    {
+        const Access::FloorRamp ramp = Access::nodeFloorRamp(fixture.backend(), node);
+        return cw::clod::revealedFloor(double(ramp.previous), double(ramp.target),
+                                       revealAgeOf(fixture, ramp.changedFrame),
+                                       revealFramesOf(fixture));
+    }
+
     //! Every point of @a fixture's drawn nodes that cw::clod keeps at @a height
     //! and the view holds, which is what the frame's lit pixels have to come
     //! to. The points come out of the payloads the nodes were uploaded from,
@@ -2585,18 +2657,20 @@ namespace {
         const double halfExtent = double(height) * 0.5;
 
         int count = 0;
-        for (int index : Access::drawnNodes(fixture.backend())) {
+        for (int index : revealDrawnNodes(fixture)) {
             const QByteArray bytes = Access::nodeBytes(fixture.backend(), index);
             const QBox3D bounds = manifest.nodeBounds(index);
             const cwPointOctreeNode& node = manifest.nodes.at(index);
             const double nodeSpacing = cw::clod::drawSpacing(
                 manifest.spacing(node.level), double(node.measuredSpacing), spacingSource);
+            const double weight = cw::clod::weight(nodeSpacing, targetSpacing, mode)
+                                  * revealScaleOf(fixture, index);
 
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
                  offset += cw::octree::kBytesPerPoint) {
                 const cw::octree::QuantizedPoint quantized = quantizedPointAt(bytes, offset);
 
-                if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing, mode)) {
+                if (double(cw::clod::rank(quantized)) >= weight) {
                     continue;
                 }
 
@@ -6663,6 +6737,9 @@ namespace {
         //! What every node sizes and thins by; sweepPath() draws with it and
         //! evalCsv records it
         cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::kDefaultSpacingSource;
+        //! The reveal ramp's length; sweepPath() draws with it and evalCsv
+        //! records it
+        int revealFrames = cw::pointcloud::kDefaultRevealFrames;
     };
 
     enum class Candidate {
@@ -6671,7 +6748,9 @@ namespace {
         Latent,   //!< slow disk: arrival spread over many frames
         Tight,    //!< the governor binding on every pose, as section 13 saw it
         TightSlew, //!< C-tight with the inflation slewing toward the governor's target
-        DefaultGrid //!< C-default sizing and thinning by each node's grid spacing
+        DefaultGrid, //!< C-default sizing and thinning by each node's grid spacing
+        DefaultReveal, //!< C-default with arrivals fading in and floors ramping
+        LatentReveal //!< C-latent with arrivals fading in and floors ramping
     };
 
     constexpr int kStarvedGpuBudgetMb = 256;
@@ -6681,6 +6760,10 @@ namespace {
     constexpr int kTightGpuBudgetMb = 256;
     constexpr int kTightPointBudgetMillions = 1;
     constexpr double kTightSlewGovernorSlew = 0.25;
+    //! About the frames C-latent's coarse-to-fine handoff dips over on P4
+    //! (frames 8..10), so the ramp spreads a handoff without doubling the
+    //! frames to quiet
+    constexpr int kRevealCandidateFrames = 8;
 
     EvalConfig candidateConfig(Candidate candidate)
     {
@@ -6717,6 +6800,15 @@ namespace {
         case Candidate::DefaultGrid:
             config.name = QStringLiteral("C-default-grid");
             config.spacingSource = cw::pointcloud::SpacingSource::Grid;
+            break;
+        case Candidate::DefaultReveal:
+            config.name = QStringLiteral("C-default-reveal");
+            config.revealFrames = kRevealCandidateFrames;
+            break;
+        case Candidate::LatentReveal:
+            config = candidateConfig(Candidate::Latent);
+            config.name = QStringLiteral("C-latent-reveal");
+            config.revealFrames = kRevealCandidateFrames;
             break;
         }
         return config;
@@ -7495,14 +7587,14 @@ namespace {
 
     // ---- The CPU twin over a pose -----------------------------------------
 
-    //! The nodes the cloud's last frame drew: the resident cut, less the
-    //! levels minLevel leaves out of the drawing
+    //! The nodes the cloud's last frame drew: the resident cut and the nodes
+    //! fading out beside it, less the levels minLevel leaves out of the drawing
     QVector<int> drawingNodes(const PointCloudFixture& fixture)
     {
         const int minLevel = fixture.budgets().minLevel;
         const cwPointOctreeManifest& manifest = fixture.manifest();
         QVector<int> drawing;
-        for (int node : Access::drawnNodes(fixture.backend())) {
+        for (int node : revealDrawnNodes(fixture)) {
             if (manifest.nodes.at(node).level >= minLevel) {
                 drawing.append(node);
             }
@@ -7600,7 +7692,10 @@ namespace {
     //! The twin over the fixture's current camera: every point of every drawn
     //! node that cw::clod keeps and the clip volume holds, sized as the vertex
     //! shader sizes it, its square clipped to the target. With @a rasterize
-    //! the squares are also drawn into covered, top row first like the readback.
+    //! the squares are also drawn into covered, top row first like the readback,
+    //! and so are the squares of kept points just off the target's sides: the
+    //! GPU draws a sprite whose center the viewport clips as long as its depth
+    //! is inside, so its square reaches in from the edge.
     DrawPrediction predictedDraw(const PointCloudFixture& fixture, bool rasterize = false)
     {
         using namespace cw::pointcloud;
@@ -7636,7 +7731,8 @@ namespace {
         for (int node : drawingNodes(fixture)) {
             const QBox3D bounds = manifest.nodeBounds(node);
             const double nodeSpacing = nodeDrawSpacing(manifest, node, spacingSourceOf(uniform));
-            const double floorSpacing = Access::drawnNodeFloorSpacing(fixture.backend(), node);
+            const double floorSpacing = revealedFloorOf(fixture, node);
+            const double revealScale = revealScaleOf(fixture, node);
 
             const QByteArray bytes = Access::nodeBytes(fixture.backend(), node);
             for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
@@ -7647,17 +7743,20 @@ namespace {
                                        * QVector4D(cw::octree::dequantize(quantized, bounds), 1.0f);
                 const double w = clip.w();
                 const double nearDepth = depthZeroToOne ? 0.0 : -w;
-                const bool inside = w > 0.0 && std::abs(double(clip.x())) <= w
-                                    && std::abs(double(clip.y())) <= w
-                                    && double(clip.z()) >= nearDepth && double(clip.z()) <= w;
-                if (!inside) {
+                const bool depthInside = w > 0.0 && double(clip.z()) >= nearDepth
+                                         && double(clip.z()) <= w;
+                const bool centerInside = depthInside && std::abs(double(clip.x())) <= w
+                                          && std::abs(double(clip.y())) <= w;
+                if (!centerInside && !(rasterize && depthInside)) {
                     continue;
                 }
 
                 const double pixelsPerMeter = view.focalPx / std::max(w, cw::sse::kMinimumClipW);
                 const double targetSpacing = cw::clod::targetSpacing(
                     thresholdPx, pixelsPerMeter, double(uniform.rootSpacing));
-                if (!cw::clod::drawn(quantized, nodeSpacing, targetSpacing, thinning)) {
+                const double weight =
+                    cw::clod::weight(nodeSpacing, targetSpacing, thinning) * revealScale;
+                if (double(cw::clod::rank(quantized)) >= weight) {
                     continue;
                 }
 
@@ -7666,10 +7765,12 @@ namespace {
 
                 const double centerX = (clip.x() / w * 0.5 + 0.5) * width;
                 const double centerY = (clip.y() / w * 0.5 + 0.5) * height;
-                prediction.points++;
-                prediction.fragments += overlap(centerX, side * 0.5, width)
-                                        * overlap(centerY, side * 0.5, height);
-                prediction.widestSidePx = std::max(prediction.widestSidePx, side);
+                if (centerInside) {
+                    prediction.points++;
+                    prediction.fragments += overlap(centerX, side * 0.5, width)
+                                            * overlap(centerY, side * 0.5, height);
+                    prediction.widestSidePx = std::max(prediction.widestSidePx, side);
+                }
 
                 if (rasterize) {
                     const auto [firstX, endX] = coveredRange(centerX, side * 0.5, target.width());
@@ -9077,7 +9178,7 @@ namespace {
             onScreen.rect = *rect;
             onScreen.level = manifest.nodes.at(node).level;
             onScreen.pixelsPerMeter = pixelsPerMeterAt(view, bounds.center());
-            onScreen.floorSpacing = Access::drawnNodeFloorSpacing(fixture.backend(), node);
+            onScreen.floorSpacing = revealedFloorOf(fixture, node);
             onScreen.nodeSpacing = nodeDrawSpacing(manifest, node, source);
             nodes.append(onScreen);
         }
@@ -9142,7 +9243,7 @@ namespace {
         frame.inflation = Access::sseInflation(fixture.backend());
         frame.uniform = Access::liveAppearanceUniform(fixture.backend());
         for (int node : drawingNodes(fixture)) {
-            frame.floors.insert(node, Access::drawnNodeFloorSpacing(fixture.backend(), node));
+            frame.floors.insert(node, revealedFloorOf(fixture, node));
         }
         return frame;
     }
@@ -9480,6 +9581,7 @@ namespace {
         fixture.setReadbackEnabled(true);
         fixture.setBudgets(config.budgets);
         setSpacingSource(fixture, config.spacingSource);
+        setRevealFrames(fixture, config.revealFrames);
 
         if (step.settleBeforeFirstPose) {
             const Pose& first = path.poses.first();
@@ -9500,7 +9602,7 @@ namespace {
                                     "largestSeamRatio,densityCv,holeNear,holeMid,holeFar,"
                                     "predictedPoints,inflationRatio,nodesEntered,nodesLeft,"
                                     "spriteSideChangePx,weightChange,o3DistanceStepRaw,"
-                                    "sseInflationTarget,spacingSource"),
+                                    "sseInflationTarget,spacingSource,revealFrames"),
                      out);
 
         const QSize target = fixture.targetSize();
@@ -9644,7 +9746,8 @@ namespace {
                 QString::number(record.weightChange, 'f', kRatioDecimals),
                 csvField(record.o3DistanceStepRaw, kFractionDecimals),
                 QString::number(record.sseInflationTarget, 'f', kRatioDecimals),
-                spacingSourceName(config.spacingSource)
+                spacingSourceName(config.spacingSource),
+                QString::number(config.revealFrames)
             };
             writeCsvLine(fields.join(QLatin1Char(',')), out);
 
@@ -12043,15 +12146,17 @@ TEST_CASE("evalCsv records the spacing source each sweep draws with",
         REQUIRE(rows.size() == 1 + records.size());
         const QStringList& header = rows.constFirst();
         INFO("evalCsv header: " << header.join(QLatin1Char(',')).toStdString());
-        //Appended last, so every older column keeps its place
-        CHECK(header.constLast() == QStringLiteral("spacingSource"));
-        CHECK(header.indexOf(QStringLiteral("sseInflationTarget")) == header.size() - 2);
+        //Appended after sseInflationTarget, so every older column keeps its
+        //place; revealFrames came after it
+        const qsizetype sourceColumn = header.indexOf(QStringLiteral("spacingSource"));
+        CHECK(sourceColumn == header.size() - 2);
+        CHECK(header.indexOf(QStringLiteral("sseInflationTarget")) == sourceColumn - 1);
 
         const QString expected = spacingSourceName(config.spacingSource);
         for (int i = 1; i < rows.size(); i++) {
             const QStringList& fields = rows.at(i);
             REQUIRE(fields.size() == header.size());
-            CHECK(fields.constLast() == expected);
+            CHECK(fields.at(sourceColumn) == expected);
         }
     }
 }
@@ -12146,4 +12251,1037 @@ TEST_CASE("M7: on a tile under measured spacing, levels 6 and 7 alone close most
         REQUIRE(gridFall > noise);
         CHECK(measuredFall <= kMeasuredFallShareLeft * gridFall);
     }
+}
+
+namespace {
+
+    // ---- WP11 reveal ramp -------------------------------------------------
+
+    //! A ramp long enough that a one-frame jump and a ramp cannot be confused,
+    //! short enough to keep each case to a few dozen frames
+    constexpr int kStreamingRevealFrames = 8;
+
+    //! Frames drawn past a ramp's end, to see that it holds
+    constexpr int kFramesPastRamp = 3;
+
+    //! How far inside its two ends a floor has to sit to count as mid-ramp
+    constexpr double kRampSlack = 1e-3;
+
+    //! An arriving node, alone in its cut: the thinning plane's root held there
+    //! by maxLevel, drawn at the full-weight height where every root point the
+    //! view holds is its own lit pixel, so the lit count is the drawn count.
+    //! Returns once the root has drawn its first frame, which is the frame it
+    //! arrived on.
+    void arriveRootAlone(PointCloudFixture& fixture, int revealFrames)
+    {
+        cwRenderBudgets budgets = fixture.budgets();
+        budgets.screenSpaceErrorPx = kThinningScreenSpaceErrorPx;
+        budgets.maxLevel = kRootLevel;
+        fixture.setBudgets(budgets);
+        fixture.render().setSpacingCoverage(kThinningSpacingCoverage);
+        fixture.synchronize();
+        setRevealFrames(fixture, revealFrames);
+        fixture.setReadbackEnabled(true);
+        fixture.setOrthoHeight(kThinningFullWeightHeight);
+
+        fixture.renderUntilResident(kRootIndex);
+        REQUIRE(Access::nodeState(fixture.backend(), kRootIndex) == NodeState::Resident);
+        REQUIRE(Access::drawnNodes(fixture.backend()) == QVector<int>{kRootIndex});
+    }
+
+    //! One frame of a ramp as the GPU and the twin saw it
+    struct RampFrame {
+        qsizetype lit = 0;
+        int predicted = 0;
+        bool pending = false;
+        quint32 age = 0;
+    };
+
+    RampFrame rampFrame(const PointCloudFixture& fixture)
+    {
+        RampFrame frame;
+        frame.lit = fixture.litPixels().size();
+        frame.predicted = predictedDrawnCount(fixture, kThinningFullWeightHeight);
+        frame.pending = fixture.frameRenderer()->hasPendingStreamingWork();
+        frame.age = revealAgeOf(fixture, Access::arrivalFrame(fixture.backend(), kRootIndex));
+        return frame;
+    }
+
+    //! The arrival frame and the @a count frames after it
+    QVector<RampFrame> rampFrames(PointCloudFixture& fixture, int count)
+    {
+        QVector<RampFrame> frames {rampFrame(fixture)};
+        for (int i = 0; i < count; i++) {
+            fixture.renderFrame();
+            frames.append(rampFrame(fixture));
+        }
+        return frames;
+    }
+
+    //! Pixels where @a fixture's last frame and the twin's rasterized
+    //! prediction disagree farther than a sprite's rasterized edge
+    qsizetype twinDisagreementBeyondEdge(const PointCloudFixture& fixture)
+    {
+        const PixelMask gpu = litMask(fixture);
+        const PixelMask twin = predictedDraw(fixture, true).covered;
+        REQUIRE(twin.size == gpu.size);
+        const std::vector<int> toLit = distanceToOther(gpu, false, false);
+        const std::vector<int> toCovered = distanceToOther(twin, false, false);
+        const int width = gpu.size.width();
+        qsizetype beyondEdge = 0;
+        for (int y = 0; y < gpu.size.height(); y++) {
+            for (int x = 0; x < width; x++) {
+                const bool lit = gpu.at(x, y);
+                if (lit == twin.at(x, y)) {
+                    continue;
+                }
+                const size_t index = pixelIndex(width, x, y);
+                const int distance = lit ? toCovered.at(index) : toLit.at(index);
+                beyondEdge += distance > kTwinRasterTolerancePx ? 1 : 0;
+            }
+        }
+        return beyondEdge;
+    }
+
+    //! One frame of an ancestor's floor ramp
+    struct FloorFrame {
+        double floor = 0.0;
+        float target = 0.0f;
+        qsizetype twinDisagreement = 0;
+    };
+
+    //! Frames, each recorded, until @a node's floor target has moved off
+    //! @a from and @a revealFrames + kFramesPastRamp more frames have drawn,
+    //! or the timeout runs out
+    QVector<FloorFrame> floorRampFrames(PointCloudFixture& fixture, int node, float from,
+                                        int revealFrames)
+    {
+        QVector<FloorFrame> frames;
+        int framesAfterMove = -1;
+        QElapsedTimer timer;
+        timer.start();
+        while (framesAfterMove < revealFrames + kFramesPastRamp
+               && timer.elapsed() < kWaitTimeoutMs) {
+            fixture.renderFrame();
+            FloorFrame frame;
+            frame.floor = revealedFloorOf(fixture, node);
+            frame.target = Access::nodeFloorRamp(fixture.backend(), node).target;
+            frame.twinDisagreement = twinDisagreementBeyondEdge(fixture);
+            frames.append(frame);
+            if (framesAfterMove >= 0 || frame.target != from) {
+                framesAfterMove++;
+            }
+            QThread::msleep(kFramePauseMs);
+        }
+        return frames;
+    }
+
+    //! Checks @a frames move a floor from @a from to @a to over exactly
+    //! @a revealFrames frames by one ratio a frame, the GPU drawing what the
+    //! twin predicts on every one of them
+    void checkFloorRamp(const QVector<FloorFrame>& frames, double from, double to,
+                        int revealFrames)
+    {
+        REQUIRE(from != to);
+        const auto moved = std::find_if(frames.cbegin(), frames.cend(), [&](const FloorFrame& frame) {
+            return double(frame.target) != from;
+        });
+        REQUIRE(moved != frames.cend());
+        CHECK(double(moved->target) == Catch::Approx(to));
+        const qsizetype first = moved - frames.cbegin();
+        REQUIRE(first + revealFrames + kFramesPastRamp <= frames.size());
+
+        //The frames before the move draw the old floor
+        for (qsizetype i = 0; i < first; i++) {
+            CHECK(frames.at(i).floor == Catch::Approx(from));
+        }
+
+        //Strictly between the two for revealFrames - 1 frames, then the new
+        //floor and nothing after
+        int framesBetween = 0;
+        const double lower = std::min(from, to);
+        const double upper = std::max(from, to);
+        for (const FloorFrame& frame : frames) {
+            framesBetween += frame.floor > lower && frame.floor < upper ? 1 : 0;
+        }
+        INFO("floor moves " << from << " -> " << to << " starting at frame " << first);
+        CHECK(framesBetween == revealFrames - 1);
+        CHECK(frames.at(first + revealFrames - 1).floor == Catch::Approx(to));
+        CHECK(frames.constLast().floor == Catch::Approx(to));
+
+        //In log space: every frame of the ramp moves the floor by one ratio
+        const double logStep = std::log(to / from) / double(revealFrames);
+        double previous = from;
+        for (qsizetype i = first; i < first + revealFrames; i++) {
+            INFO("ramp frame " << i - first);
+            CHECK(std::log(frames.at(i).floor / previous) == Catch::Approx(logStep));
+            previous = frames.at(i).floor;
+        }
+
+        for (qsizetype i = 0; i < frames.size(); i++) {
+            INFO("frame " << i);
+            CHECK(frames.at(i).twinDisagreement == 0);
+        }
+    }
+
+} // namespace
+
+TEST_CASE("The per-cloud uniform carries the reveal ramp's length",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-uniform"));
+    fixture.renderFrame();
+    CHECK(Access::liveAppearanceUniform(fixture.backend()).revealFrames
+          == cw::pointcloud::kDefaultRevealFrames);
+
+    setRevealFrames(fixture, kStreamingRevealFrames);
+    fixture.renderFrame();
+    CHECK(Access::liveAppearanceUniform(fixture.backend()).revealFrames
+          == kStreamingRevealFrames);
+
+    //The ramp took the uniform's padding word, so the block is still three rows
+    static_assert(sizeof(Access::PerCloudUniform) == 12 * sizeof(float),
+                  "PerCloudBlock stays three std140 rows");
+}
+
+TEST_CASE("Under a still camera an arriving node fades in over revealFrames frames",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    arriveRootAlone(fixture, kStreamingRevealFrames);
+
+    const QVector<RampFrame> frames =
+        rampFrames(fixture, kStreamingRevealFrames + kFramesPastRamp);
+    const qsizetype settled = frames.constLast().lit;
+    REQUIRE(settled > 0);
+
+    for (int i = 0; i < frames.size(); i++) {
+        const RampFrame& frame = frames.at(i);
+        INFO("frame " << i << " after arrival, age " << frame.age << ": lit " << frame.lit
+             << ", predicted " << frame.predicted << ", settled " << settled);
+
+        //The ramp counts the frames since the node arrived
+        CHECK(frame.age == quint32(i));
+
+        //The twin predicts the ramped weight and the GPU draws it
+        CHECK(std::abs(double(frame.lit) - double(frame.predicted))
+              <= kThinnedCountTolerance * double(frame.predicted));
+
+        //Monotonically up, never back down
+        if (i > 0) {
+            CHECK(frame.lit >= frames.at(i - 1).lit);
+        }
+    }
+
+    //Spread over revealFrames frames rather than landing in one: the arrival
+    //frame draws part of the node and frame revealFrames - 1 draws all of it.
+    //The plane's points sit in four of a cell's eight sub-octants, so their
+    //ranks bunch into quarters and the count climbs a step every other frame:
+    //the frames under settled are fewer than revealFrames - 1, but more than
+    //one, and the counts between take more than one value.
+    int framesUnderSettled = 0;
+    QSet<qsizetype> partialCounts;
+    for (const RampFrame& frame : frames) {
+        if (frame.lit < settled) {
+            framesUnderSettled++;
+            partialCounts.insert(frame.lit);
+        }
+    }
+    CHECK(frames.constFirst().lit > 0);
+    CHECK(frames.constFirst().lit < settled);
+    CHECK(framesUnderSettled > 1);
+    CHECK(framesUnderSettled <= kStreamingRevealFrames - 1);
+    CHECK(partialCounts.size() > 1);
+    CHECK(frames.at(kStreamingRevealFrames - 1).lit == settled);
+}
+
+TEST_CASE("The first node a cold start draws ramps from its first frame under a frozen camera",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    //A fresh fixture: nothing was resident before the root, and the camera
+    //never moves, so nothing but the ramp itself rewrites the uniform
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    arriveRootAlone(fixture, kStreamingRevealFrames);
+
+    const RampFrame first = rampFrame(fixture);
+    INFO("arrival frame " << Access::arrivalFrame(fixture.backend(), kRootIndex)
+         << ", drawn frame " << lastDrawnFrame(fixture) << ", lit " << first.lit
+         << ", predicted " << first.predicted);
+    CHECK(first.age == 0u);
+    CHECK(revealScaleOf(fixture, kRootIndex)
+          == Catch::Approx(1.0 / kStreamingRevealFrames));
+    CHECK(first.lit > 0);
+    CHECK(std::abs(double(first.lit) - double(first.predicted))
+          <= kThinnedCountTolerance * double(first.predicted));
+
+    //Its ramp runs to the end, so the cold start's first frame was partial
+    const QVector<RampFrame> frames = rampFrames(fixture, kStreamingRevealFrames);
+    CHECK(first.lit < frames.constLast().lit);
+}
+
+TEST_CASE("Under revealFrames 0 an arriving node draws whole on its first frame, bit for bit",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    REQUIRE(fixture.render().shading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
+    arriveRootAlone(fixture, cw::pointcloud::kDefaultRevealFrames);
+
+    const QImage arrival = fixture.frameImage();
+    const RampFrame first = rampFrame(fixture);
+    REQUIRE_FALSE(arrival.isNull());
+    CHECK(Access::liveAppearanceUniform(fixture.backend()).revealFrames == 0);
+    CHECK(revealScaleOf(fixture, kRootIndex) == 1.0);
+    CHECK(revealedFloorOf(fixture, kRootIndex)
+          == double(Access::drawnNodeFloorSpacing(fixture.backend(), kRootIndex)));
+
+    //Nothing ramps, so the frame loop is done on the arrival frame
+    CHECK_FALSE(first.pending);
+
+    for (int i = 0; i < kFramesPastRamp; i++) {
+        fixture.renderFrame();
+        INFO("frame " << i + 1 << " after arrival");
+        CHECK(fixture.frameImage() == arrival);
+    }
+}
+
+TEST_CASE("The frame loop keeps drawing until the last ramp ends and stops on that frame",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    arriveRootAlone(fixture, kStreamingRevealFrames);
+
+    //The live loop draws another frame while the last one left work pending
+    QVector<RampFrame> drawn {rampFrame(fixture)};
+    while (drawn.constLast().pending && drawn.size() <= kStreamingRevealFrames + kFramesPastRamp) {
+        fixture.renderFrame();
+        drawn.append(rampFrame(fixture));
+    }
+
+    for (int i = 0; i < drawn.size(); i++) {
+        INFO("frame " << i << " after arrival, age " << drawn.at(i).age);
+        //Pending exactly while the ramp has frames left to draw
+        CHECK(drawn.at(i).pending == (i + 1 < kStreamingRevealFrames));
+    }
+    CHECK(drawn.size() == kStreamingRevealFrames);
+
+    //The frame it stopped on is the settled one
+    const qsizetype stoppedLit = drawn.constLast().lit;
+    const QVector<RampFrame> after = rampFrames(fixture, kFramesPastRamp);
+    for (const RampFrame& frame : after) {
+        CHECK(frame.lit == stoppedLit);
+        CHECK_FALSE(frame.pending);
+    }
+}
+
+TEST_CASE("An ancestor's floor ramps in log space as its children land and again as they leave",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-floor"));
+    fixture.setReadbackEnabled(true);
+    //Every resident point draws, so the root's floor shows in every frame
+    //rather than thinning away under its children; the grid's floor rule, so
+    //the two floors are the two levels' spacings
+    setThinningMode(fixture, cw::pointcloud::ThinningMode::Off);
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
+    fixture.render().setSpacingCoverage(kWheelCoverage);
+    fixture.synchronize();
+    setRevealFrames(fixture, kStreamingRevealFrames);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+
+    const cwPointOctreeManifest& manifest = fixture.manifest();
+    const float rootSpacing = ownFloorSpacing(manifest, kRootIndex);
+    const float childSpacing = float(manifest.spacing(kRootLevel + 1));
+
+    //The root alone, past its own fade-in
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.maxLevel = kRootLevel;
+    fixture.setBudgets(budgets);
+    fixture.renderUntilQuiet();
+    for (int i = 0; i < kStreamingRevealFrames; i++) {
+        fixture.renderFrame();
+    }
+    REQUIRE(Access::nodeFloorRamp(fixture.backend(), kRootIndex).target == rootSpacing);
+    REQUIRE(revealedFloorOf(fixture, kRootIndex) == Catch::Approx(rootSpacing));
+
+    SECTION("children landing shrink it to their spacing over revealFrames frames") {
+        budgets.maxLevel = kRootLevel + 1;
+        fixture.setBudgets(budgets);
+        const QVector<FloorFrame> frames =
+            floorRampFrames(fixture, kRootIndex, rootSpacing, kStreamingRevealFrames);
+        REQUIRE(Access::missingNodes(fixture.backend()).isEmpty());
+        checkFloorRamp(frames, rootSpacing, childSpacing, kStreamingRevealFrames);
+
+        //And children leaving the cut grow it back over as many frames
+        budgets.maxLevel = kRootLevel;
+        fixture.setBudgets(budgets);
+        const QVector<FloorFrame> leaving =
+            floorRampFrames(fixture, kRootIndex, childSpacing, kStreamingRevealFrames);
+        checkFloorRamp(leaving, childSpacing, rootSpacing, kStreamingRevealFrames);
+    }
+
+    SECTION("revealFrames 0 moves it on the frame its target moves") {
+        setRevealFrames(fixture, cw::pointcloud::kDefaultRevealFrames);
+        budgets.maxLevel = kRootLevel + 1;
+        fixture.setBudgets(budgets);
+        const QVector<FloorFrame> frames =
+            floorRampFrames(fixture, kRootIndex, rootSpacing, kStreamingRevealFrames);
+        for (int i = 0; i < frames.size(); i++) {
+            INFO("frame " << i);
+            CHECK(frames.at(i).floor == double(frames.at(i).target));
+            CHECK(frames.at(i).twinDisagreement == 0);
+        }
+        CHECK(frames.constLast().target == childSpacing);
+    }
+}
+
+TEST_CASE("Under the reveal ramp children leaving the cut fade out while their ancestor's floor grows",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-departure"));
+    fixture.setReadbackEnabled(true);
+    //Every resident point draws, so the fading children show in every frame
+    setThinningMode(fixture, cw::pointcloud::ThinningMode::Off);
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
+    fixture.render().setSpacingCoverage(kWheelCoverage);
+    fixture.synchronize();
+    setRevealFrames(fixture, kStreamingRevealFrames);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
+
+    //The root and its children, past every ramp
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.maxLevel = kRootLevel + 1;
+    fixture.setBudgets(budgets);
+    fixture.renderUntilQuiet();
+    for (int i = 0; i < kStreamingRevealFrames; i++) {
+        fixture.renderFrame();
+    }
+    REQUIRE(Access::drawnNodes(fixture.backend()).size() > 1);
+    REQUIRE(Access::departingNodes(fixture.backend()).isEmpty());
+
+    //The children leave the cut and stay resident
+    budgets.maxLevel = kRootLevel;
+    fixture.setBudgets(budgets);
+
+    QVector<qsizetype> departing;
+    QVector<int> predicted;
+    QVector<bool> pending;
+    for (int i = 0; i < kStreamingRevealFrames + kFramesPastRamp; i++) {
+        fixture.renderFrame();
+        departing.append(Access::departingNodes(fixture.backend()).size());
+        predicted.append(predictedDrawnCount(fixture, kCloseOrthoHeight,
+                                             cw::pointcloud::ThinningMode::Off,
+                                             cw::pointcloud::SpacingSource::Grid));
+        pending.append(fixture.frameRenderer()->hasPendingStreamingWork());
+        INFO("frame " << i << " after the children left: " << departing.constLast()
+             << " departing, " << predicted.constLast() << " points predicted");
+        CHECK(twinDisagreementBeyondEdge(fixture) == 0);
+    }
+
+    //They draw, thinning, for revealFrames - 1 frames and then not at all; the
+    //frame loop runs exactly as long
+    for (int i = 0; i < departing.size(); i++) {
+        INFO("frame " << i);
+        const bool fading = i + 1 < kStreamingRevealFrames;
+        CHECK((departing.at(i) > 0) == fading);
+        CHECK(pending.at(i) == fading);
+        if (i > 0) {
+            CHECK(predicted.at(i) <= predicted.at(i - 1));
+        }
+    }
+    CHECK(predicted.constFirst() > predicted.constLast());
+
+    SECTION("revealFrames 0 drops them on the frame they leave") {
+        budgets.maxLevel = kRootLevel + 1;
+        fixture.setBudgets(budgets);
+        fixture.renderUntilQuiet();
+        setRevealFrames(fixture, cw::pointcloud::kDefaultRevealFrames);
+        fixture.renderFrame();
+        budgets.maxLevel = kRootLevel;
+        fixture.setBudgets(budgets);
+        fixture.renderFrame();
+        CHECK(Access::departingNodes(fixture.backend()).isEmpty());
+        CHECK(Access::drawnNodes(fixture.backend()) == QVector<int>{kRootIndex});
+    }
+}
+
+namespace {
+
+    //! The thinning-off, grid-spaced fixture the departure cases share: the
+    //! root and its children resident and past every ramp under
+    //! @a revealFrames, every resident point drawing
+    cwRenderBudgets settleRootAndChildren(PointCloudFixture& fixture, int revealFrames)
+    {
+        fixture.setReadbackEnabled(true);
+        setThinningMode(fixture, cw::pointcloud::ThinningMode::Off);
+        setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
+        fixture.render().setSpacingCoverage(kWheelCoverage);
+        fixture.synchronize();
+        setRevealFrames(fixture, revealFrames);
+        fixture.setOrthoHeight(kCloseOrthoHeight);
+
+        cwRenderBudgets budgets = fixture.budgets();
+        budgets.maxLevel = kRootLevel + 1;
+        fixture.setBudgets(budgets);
+        fixture.renderUntilQuiet();
+        for (int i = 0; i < kStreamingRevealFrames; i++) {
+            fixture.renderFrame();
+        }
+        REQUIRE(Access::drawnNodes(fixture.backend()).size() > 1);
+        REQUIRE(Access::departingNodes(fixture.backend()).isEmpty());
+        return budgets;
+    }
+
+    //! The drawn nodes of @a fixture's last frame below the root
+    QVector<int> drawnChildren(const PointCloudFixture& fixture)
+    {
+        QVector<int> children = Access::drawnNodes(fixture.backend());
+        children.removeAll(kRootIndex);
+        return children;
+    }
+
+    //! What the twin says the last frame drew of the thinning-off fixture
+    int predictedCloseCount(const PointCloudFixture& fixture)
+    {
+        return predictedDrawnCount(fixture, kCloseOrthoHeight,
+                                   cw::pointcloud::ThinningMode::Off,
+                                   cw::pointcloud::SpacingSource::Grid);
+    }
+
+    //! Frames a departure runs before the children turn back, well inside
+    //! kStreamingRevealFrames
+    constexpr int kTurnAroundFrames = 3;
+
+} // namespace
+
+TEST_CASE("Under the reveal ramp a departing node evicted mid-fade hands its cells to its ancestor at once",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-departure-evicted"));
+    cwRenderBudgets budgets = settleRootAndChildren(fixture, kStreamingRevealFrames);
+    const QVector<int> children = drawnChildren(fixture);
+    const float rootSpacing = ownFloorSpacing(fixture.manifest(), kRootIndex);
+
+    //The children leave the cut with the GPU budget one byte short, so the
+    //frame after they start fading the budget evicts the coldest of them
+    budgets.maxLevel = kRootLevel;
+    budgets.gpuBudgetBytes = totalGpuBytes() - 1;
+    fixture.setBudgets(budgets);
+
+    fixture.renderFrame();
+    REQUIRE(Access::departingNodes(fixture.backend()).size() == children.size());
+    const double rampStart = revealedFloorOf(fixture, kRootIndex);
+    INFO("root floor on the departure frame " << rampStart << ", own spacing " << rootSpacing);
+    REQUIRE(rampStart < double(rootSpacing));
+
+    fixture.renderFrame();
+    const auto evicted = std::count_if(children.cbegin(), children.cend(), [&](int child) {
+        return Access::nodeState(fixture.backend(), child) != NodeState::Resident;
+    });
+    REQUIRE(evicted > 0);
+    CHECK(Access::departingNodes(fixture.backend()).size() == children.size() - evicted);
+
+    //The ramp would still be two frames in; the root covers the evicted
+    //child's cells at its own spacing instead, with the GPU drawing it so
+    CHECK(Access::nodeFloorRamp(fixture.backend(), kRootIndex).previous == 0.0f);
+    CHECK(revealedFloorOf(fixture, kRootIndex) == Catch::Approx(rootSpacing));
+    CHECK(twinDisagreementBeyondEdge(fixture) == 0);
+}
+
+TEST_CASE("Under the reveal ramp a resident node coming back into the cut fades in",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-reentry"));
+    cwRenderBudgets budgets = settleRootAndChildren(fixture, kStreamingRevealFrames);
+    const QVector<int> children = drawnChildren(fixture);
+    const int settled = predictedCloseCount(fixture);
+
+    budgets.maxLevel = kRootLevel;
+
+    SECTION("after its fade-out ended, it fades in from nothing over revealFrames frames") {
+        fixture.setBudgets(budgets);
+        for (int i = 0; i < kStreamingRevealFrames + kFramesPastRamp; i++) {
+            fixture.renderFrame();
+        }
+        REQUIRE(Access::departingNodes(fixture.backend()).isEmpty());
+        const int rootAlone = predictedCloseCount(fixture);
+        for (const int child : children) {
+            REQUIRE(Access::nodeState(fixture.backend(), child) == NodeState::Resident);
+        }
+
+        //Back into the cut, still resident: nothing arrives, so only the
+        //re-entry fade can spread them out
+        budgets.maxLevel = kRootLevel + 1;
+        fixture.setBudgets(budgets);
+        QVector<int> predicted;
+        for (int i = 0; i < kStreamingRevealFrames + kFramesPastRamp; i++) {
+            fixture.renderFrame();
+            predicted.append(predictedCloseCount(fixture));
+            INFO("frame " << i << " after re-entry: " << predicted.constLast() << " predicted, "
+                 << rootAlone << " root alone, " << settled << " settled");
+            CHECK(twinDisagreementBeyondEdge(fixture) == 0);
+            for (const int child : children) {
+                CHECK(Access::reentryFrame(fixture.backend(), child).has_value());
+            }
+            if (i > 0) {
+                CHECK(predicted.at(i) >= predicted.at(i - 1));
+            }
+        }
+        CHECK(predicted.constFirst() > rootAlone);
+        CHECK(predicted.constFirst() < settled);
+        CHECK(predicted.at(kStreamingRevealFrames - 1) == settled);
+        CHECK(predicted.constLast() == settled);
+    }
+
+    SECTION("turning back mid-fade, it carries on from the weight it had") {
+        fixture.setBudgets(budgets);
+        QVector<int> leaving;
+        for (int i = 0; i < kTurnAroundFrames; i++) {
+            fixture.renderFrame();
+            leaving.append(predictedCloseCount(fixture));
+        }
+        REQUIRE(Access::departingNodes(fixture.backend()).size() == children.size());
+
+        budgets.maxLevel = kRootLevel + 1;
+        fixture.setBudgets(budgets);
+        fixture.renderFrame();
+        const int turned = predictedCloseCount(fixture);
+        INFO("last fading frame " << leaving.constLast() << ", turned " << turned << ", settled "
+             << settled);
+        CHECK(Access::departingNodes(fixture.backend()).isEmpty());
+        CHECK(twinDisagreementBeyondEdge(fixture) == 0);
+
+        //Neither a jump back to all of it nor a drop to the start of a fresh
+        //fade-in: one step up from where the fade-out stood
+        CHECK(turned >= leaving.constLast());
+        CHECK(turned < settled);
+        CHECK(turned <= leaving.constFirst());
+    }
+}
+
+TEST_CASE("Under revealFrames 0 every frame of a refinement and a pull back draws the cut's floors at full weight",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-off-sequence"));
+    cwRenderBudgets budgets =
+        settleRootAndChildren(fixture, cw::pointcloud::kDefaultRevealFrames);
+
+    //The ramp words still move under revealFrames 0 (a moved floor records
+    //where it came from), so the GPU matching the twin's rules without them
+    //on every frame is what pins today's draw
+    const auto checkToday = [&](const char* phase, int frame) {
+        INFO(phase << " frame " << frame);
+        CHECK(Access::liveAppearanceUniform(fixture.backend()).revealFrames == 0);
+        CHECK(Access::departingNodes(fixture.backend()).isEmpty());
+        for (const int node : Access::drawnNodes(fixture.backend())) {
+            INFO("node " << node);
+            CHECK(revealScaleOf(fixture, node) == 1.0);
+            CHECK(revealedFloorOf(fixture, node)
+                  == double(Access::drawnNodeFloorSpacing(fixture.backend(), node)));
+            CHECK_FALSE(Access::reentryFrame(fixture.backend(), node).has_value());
+        }
+        CHECK(twinDisagreementBeyondEdge(fixture) == 0);
+        CHECK_FALSE(fixture.frameRenderer()->hasPendingStreamingWork());
+    };
+
+    budgets.maxLevel = kRootLevel;
+    fixture.setBudgets(budgets);
+    for (int i = 0; i < kStreamingRevealFrames; i++) {
+        fixture.renderFrame();
+        checkToday("pull back", i);
+    }
+    CHECK(Access::drawnNodes(fixture.backend()) == QVector<int>{kRootIndex});
+
+    budgets.maxLevel = kRootLevel + 1;
+    fixture.setBudgets(budgets);
+    for (int i = 0; i < kStreamingRevealFrames; i++) {
+        fixture.renderFrame();
+        checkToday("refine", i);
+    }
+    CHECK(Access::drawnNodes(fixture.backend()).size() > 1);
+}
+
+TEST_CASE("Under the reveal ramp a pan that opens a node's missing children floors it at its own spacing that frame",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-pan-floor"));
+    setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
+    setRevealFrames(fixture, kStreamingRevealFrames);
+    const auto stretchOffset = [&fixture](double along) {
+        return QVector3D(float(along * kTubeLength),
+                         float(kTubeBend * along * along),
+                         0.0f) - fixture.center();
+    };
+
+    fixture.setOrthoHeight(kChurnOrthoHeight);
+    fixture.setViewOffset(stretchOffset(kChurnNearAlong));
+    fixture.synchronize();
+    fixture.renderUntilQuiet();
+
+    //One node a frame, so each pan step leaves the children it opens missing
+    //for a few frames under ancestors that already draw finer nodes
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.uploadBudgetBytesPerFrame = kOneNodePerFrameUploadBytes;
+    fixture.setBudgets(budgets);
+
+    const cwPointOctreeManifest& manifest = fixture.manifest();
+
+    //A missing child's cell holds only its drawn ancestor's points, so the
+    //rise that covers it lands on the pan's own frame instead of ramping, or
+    //the cell would show holes until the ramp caught up. The fall once the
+    //children land ramps, under their fade-in.
+    bool sawRiseOnPan = false;
+    bool sawRampedFall = false;
+    QHash<int, double> floorsBefore;
+    const auto checkFrame = [&](bool panFrame) {
+        const QVector<int> drawnNodes = Access::drawnNodes(fixture.backend());
+        const QVector<int> missingNodes = Access::missingNodes(fixture.backend());
+        const QSet<int> covering =
+            cw::octree::incompleteDrawnNodes(manifest, drawnNodes, missingNodes);
+        QHash<int, double> floors;
+        for (int node : drawnNodes) {
+            const double drawn = revealedFloorOf(fixture, node);
+            const double own = ownFloorSpacing(manifest, node);
+            const double target = Access::nodeFloorRamp(fixture.backend(), node).target;
+            floors.insert(node, drawn);
+            const auto before = floorsBefore.constFind(node);
+            if (before == floorsBefore.cend()) {
+                continue;
+            }
+            INFO("node " << node << " at level " << manifest.nodes.at(node).level << " drew "
+                 << before.value() << " then " << drawn << ", own " << own);
+            if (panFrame && covering.contains(node) && before.value() < own) {
+                CHECK(drawn == Catch::Approx(own));
+                sawRiseOnPan = true;
+            }
+            //Strictly between the old floor and the new one: a fall in progress
+            if (target < own && drawn > target * (1.0 + kRampSlack)
+                && drawn < own * (1.0 - kRampSlack) && before.value() > drawn) {
+                sawRampedFall = true;
+            }
+        }
+        floorsBefore = floors;
+        return missingNodes.isEmpty();
+    };
+    checkFrame(false);
+
+    constexpr int kPanSteps = 8;
+    for (int step = 1; step <= kPanSteps; step++) {
+        const double along = kChurnNearAlong
+                             + (kChurnFarAlong - kChurnNearAlong) * double(step) / kPanSteps;
+        fixture.setViewOffset(stretchOffset(along));
+        fixture.renderFrame();
+        bool landed = checkFrame(true);
+
+        QElapsedTimer timer;
+        timer.start();
+        while (!landed && timer.elapsed() < kWaitTimeoutMs) {
+            QThread::msleep(kFramePauseMs);
+            fixture.renderFrame();
+            landed = checkFrame(false);
+        }
+        REQUIRE(landed);
+    }
+
+    REQUIRE(sawRiseOnPan);
+    CHECK(sawRampedFall);
+}
+
+TEST_CASE("C-default-reveal and C-latent-reveal are their bases with the reveal ramp on",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const auto checkRevealOf = [](Candidate reveal, Candidate base, const QString& name) {
+        const EvalConfig config = candidateConfig(reveal);
+        const EvalConfig baseline = candidateConfig(base);
+        INFO(config.name.toStdString());
+        CHECK(config.name == name);
+        CHECK(config.revealFrames == kRevealCandidateFrames);
+        CHECK(config.revealFrames > cw::pointcloud::kMinRevealFrames);
+        CHECK(config.revealFrames <= cw::pointcloud::kMaxRevealFrames);
+        CHECK(config.targetSize == baseline.targetSize);
+        CHECK(config.spacingSource == baseline.spacingSource);
+        CHECK(config.budgets.gpuBudgetBytes == baseline.budgets.gpuBudgetBytes);
+        CHECK(config.budgets.pointBudget == baseline.budgets.pointBudget);
+        CHECK(config.budgets.uploadBudgetBytesPerFrame
+              == baseline.budgets.uploadBudgetBytesPerFrame);
+        CHECK(config.budgets.screenSpaceErrorPx == baseline.budgets.screenSpaceErrorPx);
+        CHECK(config.budgets.governorSlew == baseline.budgets.governorSlew);
+    };
+    checkRevealOf(Candidate::DefaultReveal, Candidate::Default,
+                  QStringLiteral("C-default-reveal"));
+    checkRevealOf(Candidate::LatentReveal, Candidate::Latent, QStringLiteral("C-latent-reveal"));
+
+    //Every other candidate draws an arrival whole, as the renderer does by default
+    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
+                                      Candidate::Tight, Candidate::TightSlew,
+                                      Candidate::DefaultGrid}) {
+        const EvalConfig config = candidateConfig(candidate);
+        INFO(config.name.toStdString());
+        CHECK(config.revealFrames == cw::pointcloud::kDefaultRevealFrames);
+    }
+}
+
+TEST_CASE("evalCsv records the reveal frames each sweep draws with",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    EvalPath path = planeBoundaryPath(rhi.get(), kHalfHdTargetSize);
+    path.poses.resize(kSweptPoseCount);
+
+    PathStep step;
+    step.policy = StepPolicy::Frames;
+    step.framesPerPose = kSweptFramesPerPose;
+
+    for (const Candidate candidate : {Candidate::Default, Candidate::DefaultReveal}) {
+        const EvalConfig config = candidateConfig(candidate);
+        INFO(config.name.toStdString());
+
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        std::ostringstream output;
+        const QVector<EvalRecord> records = sweepPath(fixture, path, config, step, output);
+        REQUIRE_FALSE(records.isEmpty());
+
+        //The sweep drew with the config's ramp, not whatever the fixture held
+        CHECK(fixture.render().shading().revealFrames == config.revealFrames);
+
+        const QVector<QStringList> rows = csvRows(output, QStringLiteral("evalCsv,"));
+        REQUIRE(rows.size() == 1 + records.size());
+        const QStringList& header = rows.constFirst();
+        INFO("evalCsv header: " << header.join(QLatin1Char(',')).toStdString());
+        //Appended last, so every older column keeps its place
+        CHECK(header.constLast() == QStringLiteral("revealFrames"));
+        CHECK(header.indexOf(QStringLiteral("spacingSource")) == header.size() - 2);
+
+        const QString expected = QString::number(config.revealFrames);
+        for (int i = 1; i < rows.size(); i++) {
+            const QStringList& fields = rows.at(i);
+            REQUIRE(fields.size() == header.size());
+            CHECK(fields.constLast() == expected);
+        }
+    }
+}
+
+namespace {
+
+    //! How far the reveal ramp may let a sweep's worst hole fraction rise over
+    //! its base candidate's before the two ramps count as opening holes: a
+    //! fading child under a shrinking ancestor has to keep the surface closed
+    constexpr double kRevealHoleFractionSlack = 0.001;
+
+    //! The share the nodes a sweep saw enter may differ by between a candidate
+    //! and its reveal twin: the ramp changes how a node appears, not when, so
+    //! only the streaming's own timing moves it
+    constexpr double kRevealEnteredShareSlack = 0.05;
+
+    //! P2z/6's pose whose first frame drew the blocky field of incomplete
+    //! ancestors at their own spacing (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html
+    //! section 14.3, WP11), and how far the ramp may move that frame's SSIM
+    constexpr int kBlockyFieldPose = 12;
+    constexpr double kBlockyFieldSsimSlack = 0.01;
+
+    int enteredNodes(const QVector<EvalRecord>& records)
+    {
+        int entered = 0;
+        for (const EvalRecord& record : records) {
+            entered += record.nodesEntered;
+        }
+        return entered;
+    }
+
+    double worstHoleFractionOf(const QVector<EvalRecord>& records)
+    {
+        double worst = 0.0;
+        for (const EvalRecord& record : records) {
+            if (record.holes.has_value()) {
+                worst = std::max(worst, record.holes->fraction);
+            }
+        }
+        return worst;
+    }
+
+    //! Checks @a reveal against @a base, the same path under the same budgets
+    //! without the ramp: its largest arrival step is smaller, it takes about
+    //! revealFrames more frames to go quiet, the same nodes enter, and it
+    //! opens no holes the base did not have
+    void checkRevealSpreadsArrivals(const QVector<EvalRecord>& base,
+                                    const QVector<EvalRecord>& reveal, const QString& path,
+                                    const EvalConfig& baseConfig, const EvalConfig& revealConfig)
+    {
+        const EvalSummary baseSummary = summarize(path, baseConfig.name, base);
+        const EvalSummary revealSummary = summarize(path, revealConfig.name, reveal);
+        const int baseEntered = enteredNodes(base);
+        const int revealEntered = enteredNodes(reveal);
+        const double baseWorstHole = worstHoleFractionOf(base);
+        const double revealWorstHole = worstHoleFractionOf(reveal);
+
+        INFO(path.toStdString() << ": " << baseConfig.name.toStdString() << " largest raw step "
+             << baseSummary.largestRawO3Step.value_or(-1.0) << ", " << baseSummary.frames
+             << " frames, " << baseEntered << " entered, worst hole " << baseWorstHole << "; "
+             << revealConfig.name.toStdString() << " largest raw step "
+             << revealSummary.largestRawO3Step.value_or(-1.0) << ", " << revealSummary.frames
+             << " frames, " << revealEntered << " entered, worst hole " << revealWorstHole);
+        REQUIRE(baseSummary.largestRawO3Step.has_value());
+        REQUIRE(revealSummary.largestRawO3Step.has_value());
+
+        //The handoff spreads into plateaus instead of landing in one frame
+        CHECK(*revealSummary.largestRawO3Step < *baseSummary.largestRawO3Step);
+
+        //The last arrival's ramp is drawn out before the loop goes quiet
+        const int extraFrames = revealSummary.frames - baseSummary.frames;
+        CHECK(extraFrames >= revealConfig.revealFrames - 1);
+        CHECK(extraFrames <= 2 * revealConfig.revealFrames);
+
+        //How a node appears, not when
+        CHECK(std::abs(revealEntered - baseEntered)
+              <= kRevealEnteredShareSlack * double(std::max(baseEntered, 1)));
+
+        //A fading child under a shrinking ancestor keeps the surface closed;
+        //evalCsv carries the holes frame by frame through the ramps
+        CHECK(revealWorstHole <= baseWorstHole + kRevealHoleFractionSlack);
+    }
+
+} // namespace
+
+TEST_CASE("M2: the reveal ramp spreads a cold start on the plane into plateaus",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    QTemporaryDir cacheRoot;
+    REQUIRE(cacheRoot.isValid());
+    const EvalPath orbit = planeMetricPath(rhi.get());
+
+    //P4 holds P2's worst pose by holes, as the M2 case above does
+    PointCloudFixture oracleFixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+    std::ostringstream oracleOutput;
+    const EvalOracles orbitOracles = evalOracles(oracleFixture, orbit, cacheRoot.path(),
+                                                 oracleOutput);
+    PathStep quiet;
+    quiet.policy = StepPolicy::Quiet;
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    QVector<EvalRecord> orbitRecords;
+    {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        orbitRecords = sweepPath(fixture, orbit, defaults, quiet, oracleOutput, &orbitOracles);
+    }
+    const PlannedPath coldStart =
+        onPlane(coldStartPath(orbit.poses.at(worstHolePosition(orbitRecords))));
+    const EvalOracles oracles = evalOracles(oracleFixture, coldStart.path, cacheRoot.path(),
+                                            oracleOutput);
+
+    const auto run = [&](const EvalConfig& config) {
+        PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
+        return sweepPath(fixture, coldStart.path, config, coldStart.step, std::cout, &oracles);
+    };
+    //C-default rather than C-latent: the plane has two or three nodes, and
+    //under the slow disk they land one or two frames apart at random, so
+    //C-latent's largest step swings from 0.50 (an even split) to 1.00 (all at
+    //once) run to run and the comparison is a coin toss. Under C-default they
+    //land together, the step the ramp exists to spread.
+    const EvalConfig defaultReveal = candidateConfig(Candidate::DefaultReveal);
+    checkRevealSpreadsArrivals(run(defaults), run(defaultReveal), coldStart.path.name, defaults,
+                               defaultReveal);
+}
+
+TEST_CASE("A cold start on a tile under the reveal ramp spreads the coarse-to-fine handoff",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    //P4/24, the pose and oracles of the cold start case above
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalPath orbit = tileOrbitPath(manifest, defaults);
+    const EvalOracles orbitOracles = tileOracles(rhi.get(), cache, orbit, defaults.targetSize);
+    PlannedPath coldStart = coldStartPath(orbit.poses.at(worstOracleHolePosition(orbitOracles)));
+    coldStart.path.name = QStringLiteral("P4/%1").arg(kTileOrbitPoseStride);
+    const EvalOracles oracles = tileOracles(rhi.get(), cache, coldStart.path,
+                                            defaults.targetSize);
+
+    for (const auto& [base, reveal] : {std::pair(Candidate::Default, Candidate::DefaultReveal),
+                                       std::pair(Candidate::Latent, Candidate::LatentReveal)}) {
+        const EvalConfig baseConfig = candidateConfig(base);
+        const EvalConfig revealConfig = candidateConfig(reveal);
+        REQUIRE(revealConfig.targetSize == defaults.targetSize);
+        const QVector<EvalRecord> baseRecords =
+            sweepTilePath(rhi.get(), cache, coldStart.path, baseConfig, coldStart.step, oracles);
+        const QVector<EvalRecord> revealRecords = sweepTilePath(
+            rhi.get(), cache, coldStart.path, revealConfig, coldStart.step, oracles);
+        checkTileRecords(revealRecords, coldStart.path, coldStart.step);
+        checkRevealSpreadsArrivals(baseRecords, revealRecords, coldStart.path.name, baseConfig,
+                                   revealConfig);
+    }
+}
+
+TEST_CASE("The boundary path on a tile under C-default-reveal shrinks the first frame's side change and keeps it closed",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    //P2z/6 on C-default's oracles, so the two compare pose for pose and the
+    //ramp is the only difference
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalConfig reveal = candidateConfig(Candidate::DefaultReveal);
+    REQUIRE(reveal.targetSize == defaults.targetSize);
+    const EvalPath path = tileBoundaryPath(rhi.get(), manifest, defaults);
+    const EvalOracles oracles = tileOracles(rhi.get(), cache, path, defaults.targetSize);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+
+    const QVector<EvalRecord> baseRecords =
+        sweepTilePath(rhi.get(), cache, path, defaults, step, oracles);
+    const QVector<EvalRecord> revealRecords =
+        sweepTilePath(rhi.get(), cache, path, reveal, step, oracles);
+    checkTileRecords(revealRecords, path, step);
+
+    const auto firstFrameOf = [](const QVector<EvalRecord>& records) {
+        const auto found = std::find_if(records.cbegin(), records.cend(),
+                                        [](const EvalRecord& record) {
+                                            return record.pose == kBlockyFieldPose
+                                                   && record.frame == 0;
+                                        });
+        REQUIRE(found != records.cend());
+        return *found;
+    };
+    const EvalRecord before = firstFrameOf(baseRecords);
+    const EvalRecord after = firstFrameOf(revealRecords);
+    REQUIRE(before.ssimO3.has_value());
+    REQUIRE(after.ssimO3.has_value());
+
+    INFO("pose " << kBlockyFieldPose << " frame 0: SSIM " << *before.ssimO3 << " -> "
+         << *after.ssimO3 << ", side change " << before.spriteSideChangePx << " -> "
+         << after.spriteSideChangePx << " px");
+    //The floors above the incomplete nodes rise over the ramp instead of at
+    //once, so the first frame's sprites change size less. The incomplete
+    //nodes themselves rise at once: a missing child's cell holds their points
+    //alone, and a floor that crept up over it opened holes there (worst hole
+    //0.0170 against C-default's 0.0096 when it ramped). They are the blocky
+    //field, so that frame's SSIM stays where C-default has it.
+    CHECK(after.spriteSideChangePx < before.spriteSideChangePx);
+    CHECK(*after.ssimO3 >= *before.ssimO3 - kBlockyFieldSsimSlack);
+
+    CHECK(worstHoleFractionOf(revealRecords)
+          <= worstHoleFractionOf(baseRecords) + kRevealHoleFractionSlack);
 }

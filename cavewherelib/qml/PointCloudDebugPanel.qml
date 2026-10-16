@@ -284,6 +284,18 @@ QC.Popup {
         }
 
         RowLayout {
+            KnobLabel { text: qsTr("Reveal frames") }
+
+            KnobSpinBox {
+                objectName: "revealFramesSpinBox"
+                from: panelId.renderingSettings.minimumRevealFrames
+                to: panelId.renderingSettings.maximumRevealFrames
+                knobValue: panelId.renderingSettings.revealFrames
+                onKnobEdited: (editedValue) => panelId.renderingSettings.revealFrames = editedValue
+            }
+        }
+
+        RowLayout {
             KnobLabel { text: qsTr("Spacing coverage (P + wheel)") }
 
             KnobSpinBox {

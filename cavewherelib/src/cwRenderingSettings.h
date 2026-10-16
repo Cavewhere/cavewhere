@@ -64,6 +64,7 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(double maxPointSizePx READ maxPointSizePx WRITE setMaxPointSizePx NOTIFY maxPointSizePxChanged)
     Q_PROPERTY(int debugView READ debugView WRITE setDebugView NOTIFY debugViewChanged)
     Q_PROPERTY(bool showNodeBoxes READ showNodeBoxes WRITE setShowNodeBoxes NOTIFY showNodeBoxesChanged)
+    Q_PROPERTY(int revealFrames READ revealFrames WRITE setRevealFrames NOTIFY revealFramesChanged)
     Q_PROPERTY(bool isAtDefaults READ isAtDefaults NOTIFY isAtDefaultsChanged)
 
     // The shared budget limits, exposed so the settings UI spin boxes range over
@@ -90,6 +91,8 @@ class CAVEWHERE_LIB_EXPORT cwRenderingSettings : public QObject
     Q_PROPERTY(int debugViewCount READ debugViewCount CONSTANT)
     Q_PROPERTY(double minimumPointSizePx READ minimumPointSizePx CONSTANT)
     Q_PROPERTY(double maximumPointSizePx READ maximumPointSizePx CONSTANT)
+    Q_PROPERTY(int minimumRevealFrames READ minimumRevealFrames CONSTANT)
+    Q_PROPERTY(int maximumRevealFrames READ maximumRevealFrames CONSTANT)
 
 public:
     int sampleCount() const { return m_sampleCount; }
@@ -169,6 +172,11 @@ public:
     bool showNodeBoxes() const { return m_shading.showNodeBoxes; }
     void setShowNodeBoxes(bool show);
 
+    //! The frames an arrival fades in over and a floor takes to move, 0 for
+    //! neither (cwPointCloudShading::revealFrames)
+    int revealFrames() const { return m_shading.revealFrames; }
+    void setRevealFrames(int frames);
+
     //! The budget knobs in bytes, the form the render thread consumes
     cwRenderBudgets budgets() const;
 
@@ -197,6 +205,8 @@ public:
     static int debugViewCount() { return cw::pointcloud::kDebugViewCount; }
     static double minimumPointSizePx() { return cw::pointcloud::kMinPointSizePx; }
     static double maximumPointSizePx() { return cw::pointcloud::kMaxPointSizePx; }
+    static int minimumRevealFrames() { return cw::pointcloud::kMinRevealFrames; }
+    static int maximumRevealFrames() { return cw::pointcloud::kMaxRevealFrames; }
 
     bool isAtDefaults() const;
     Q_INVOKABLE void resetToDefaults();
@@ -233,6 +243,7 @@ signals:
     void maxPointSizePxChanged();
     void debugViewChanged();
     void showNodeBoxesChanged();
+    void revealFramesChanged();
 
     //! Any one of the budgets() knobs moved
     void budgetsChanged();

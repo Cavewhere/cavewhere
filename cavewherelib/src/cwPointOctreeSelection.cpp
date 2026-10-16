@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QHash>
+#include <QSet>
 
 //Our includes
 #include "cwFrustum.h"
@@ -238,11 +239,8 @@ QVector<DrawnFloor> finestDrawnFloors(const cwPointOctreeManifest& manifest,
 
     //A missing node leaves a hole that only its nearest drawn ancestor covers,
     //at that ancestor's own spacing
-    for(int node : missingNodes) {
-        const auto ancestor = nearestDrawnAncestor(node);
-        if(ancestor != drawn.end()) {
-            ancestor->incomplete = true;
-        }
+    for(int node : incompleteDrawnNodes(manifest, drawnNodes, missingNodes)) {
+        drawn[node].incomplete = true;
     }
 
     //Deepest first, so every node holds its final value before it lifts it
@@ -297,6 +295,28 @@ QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
         levels.append(floor.level);
     }
     return levels;
+}
+
+QSet<int> incompleteDrawnNodes(const cwPointOctreeManifest& manifest,
+                               const QVector<int>& drawnNodes,
+                               const QVector<int>& missingNodes)
+{
+    QSet<int> incomplete;
+    if(missingNodes.isEmpty()) {
+        return incomplete;
+    }
+
+    const QSet<int> drawn(drawnNodes.cbegin(), drawnNodes.cend());
+    const QVector<int>& parents = manifest.parents();
+    for(int missing : missingNodes) {
+        for(int ancestor = parents.at(missing); ancestor >= 0; ancestor = parents.at(ancestor)) {
+            if(drawn.contains(ancestor)) {
+                incomplete.insert(ancestor);
+                break;
+            }
+        }
+    }
+    return incomplete;
 }
 
 QVector<double> finestDrawnSpacings(const cwPointOctreeManifest& manifest,

@@ -62,9 +62,10 @@ public:
     void updateResources(const ResourceUpdateData& data) override;
     bool streamResources(ResourceUpdateData& data, qint64& remainingUploadBytes) override;
 
-    // The loads gather() just asked for count too, and so do the floors it
-    // queued, which only the next frame's streamResources() writes. A queue
-    // waiting on the eviction hold for a slot is left for the hold's release.
+    // The loads gather() just asked for count too, and so does a drawn node
+    // whose reveal ramp (cwPointCloudShading::revealFrames) has frames left
+    // to draw. A queue waiting on the eviction hold for a slot is left for the
+    // hold's release.
     bool hasStreamingWork() const override;
 
     bool residencyReady(const RenderData& jobRenderData) override;
@@ -98,6 +99,15 @@ private:
         Failed
     };
 
+    // A resident node's fade under the reveal ramp (cwPointCloudShading::
+    // revealFrames), apart from its arrival's. The values are the ones
+    // PointCloud.vert reads from nodeFade.
+    enum class NodeFade : quint32 {
+        None = 0,
+        Out = 1,
+        In = 2
+    };
+
     // One entry of the node table, parallel to the manifest's node list.
     struct NodeRecord {
         NodeState state = NodeState::Absent;
@@ -121,6 +131,23 @@ private:
         // gather writes it here and into the slot on the frame it works it
         // out, on the batch that frame's draws consume.
         float floorSpacing = 0.0f;
+
+        // The reveal ramp's state (cwPointCloudShading::revealFrames): the
+        // frame the node became resident, which its fade-in counts from, and
+        // the floor it drew with before floorSpacing last moved and the frame
+        // that move happened, which its floor ramp counts from. The constants
+        // slot holds the same values for the shader.
+        quint64 arrivalFrame = 0;
+        float previousFloorSpacing = 0.0f;
+        quint64 floorChangedFrame = 0;
+
+        // How the node's weight fades on top of its arrival's fade-in, from
+        // fadeFrame on: Out after it left the live cut, still drawing while
+        // its ancestors' floors grow over the cells it covered, and In after
+        // it came back into the cut already resident. The constants slot
+        // holds both.
+        quint64 fadeFrame = 0;
+        NodeFade fade = NodeFade::None;
 
         // Where the node sits in m_residentIndices, so releasing it is a
         // swap-remove instead of a search. -1 while the node is not resident.
@@ -341,8 +368,9 @@ private:
     // thins each node against the spacing the cut is aiming for, never wider
     // than rootSpacing — the coarsest level the file has. The second std140 row
     // carries the cwPointCloudShading modes that switch those rules, the third
-    // the debug view, the frame the residency age view counts from, and the
-    // spacing source every node sizes and thins by.
+    // the debug view, the frame the residency age view counts from, the
+    // spacing source every node sizes and thins by, and the frames the reveal
+    // ramp spans.
     struct PerCloudUniform {
         float spacingCoverage = 0.0f;
         float sseThresholdPx = 0.0f;
@@ -355,7 +383,7 @@ private:
         qint32 debugView = 0;
         quint32 currentFrame = 0;
         qint32 spacingSource = 0;
-        float padding = 0.0f;
+        qint32 revealFrames = 0;
     };
     static_assert(sizeof(PerCloudUniform) == 12 * sizeof(float),
                   "PerCloudBlock in PointCloud.vert is three std140 rows of 16 "
@@ -368,24 +396,78 @@ private:
     // Takes each drawn node's floor from cw::octree::finestDrawnSpacings over
     // the cut's resident @a drawnNodes and its still-streaming @a missingNodes,
     // and writes the ones that moved onto @a batch, ahead of this frame's draws.
+    // @a revealClock is the frame the shader reads this draw at, which a moved
+    // floor's ramp counts from.
     void writeNodeFloors(QRhiResourceUpdateBatch* batch, const QVector<int>& drawnNodes,
-                         const QVector<int>& missingNodes);
+                         const QVector<int>& missingNodes, quint64 revealClock);
 
     // Writes its own spacing for every resident node of @a previous that this
-    // frame's cut dropped (it carries no @a frame stamp), so an export job that
+    // frame's cut dropped (it carries no @a frame stamp) and that is not
+    // fading out under the reveal ramp, so an export job that
     // draws it out of the live cut sees the floor uploadNode() lands a fresh
     // arrival with, rather than one its children gave it. A culled frame leaves
     // the floors alone, so the cloud comes back at the sprite size it had.
     void restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
-                                    const cw::octree::Selection& previous, quint64 frame);
+                                    const cw::octree::Selection& previous, quint64 frame,
+                                    quint64 revealClock);
 
     // @a index's own sample spacing under the shading's spacing source, the
     // floor a node draws with while nothing under it counts.
     float ownSpacing(int index) const;
 
+    // How a floor reaches its new value under the reveal ramp: Ramped
+    // travels there over revealFrames frames, AtOnce takes it on this frame
+    enum class FloorMove {
+        Ramped,
+        AtOnce
+    };
+
     // Writes @a floorSpacing into @a index's constants slot unless it already
-    // holds it.
-    void writeNodeFloor(QRhiResourceUpdateBatch* batch, int index, float floorSpacing);
+    // holds it, along with where its reveal ramp starts: the floor the node
+    // drew with on the frame before @a revealClock, or none for @a move
+    // AtOnce.
+    void writeNodeFloor(QRhiResourceUpdateBatch* batch, int index, float floorSpacing,
+                        quint64 revealClock, FloorMove move = FloorMove::Ramped);
+
+    // Whether @a node's fade-in, floor ramp, or fade-out still has frames to
+    // draw after the frame the shader reads at @a revealClock
+    bool nodeRevealing(const NodeRecord& node, quint64 revealClock) const;
+
+    // The loads and uploads still to come: hasStreamingWork() without the
+    // reveal ramp, which is what streamResources() can know before gather()
+    bool hasLoadingWork() const;
+
+    // Writes @a fade into @a index's constants slot, stamped at @a fadeFrame
+    void writeFade(QRhiResourceUpdateBatch* batch, int index, NodeFade fade, quint64 fadeFrame);
+
+    // Starts @a index fading @a fade (In or Out) on @a revealClock, carrying
+    // on from the share of its weight its current fade drew last frame, so a
+    // node that turns around mid-fade keeps its weight instead of jumping
+    void startFade(QRhiResourceUpdateBatch* batch, int index, NodeFade fade, quint64 revealClock);
+
+    // The share of its weight @a node's fade (apart from its arrival's)
+    // draws on the frame the shader reads at @a revealClock
+    double fadeShare(const NodeRecord& node, quint64 revealClock) const;
+
+    // Under the reveal ramp: fades in every resident node of @a drawnNodes
+    // that @a previous did not hold and that did not arrive this frame,
+    // starts a fade-out for every resident node of @a previous this frame's
+    // cut dropped, and ends the fade-outs evicted, back in the cut, or faded
+    // out.
+    void updateFades(QRhiResourceUpdateBatch* batch, const cw::octree::Selection& previous,
+                     const QVector<int>& drawnNodes, quint64 frame, quint64 revealClock);
+
+    // @a index, which the last frame drew, is gone: its nearest ancestor in
+    // this @a frame's cut takes a rising floor at once rather than over the
+    // ramp, since nothing else covers that node's cells any more
+    void closeOverReleasedNode(QRhiResourceUpdateBatch* batch, int index, quint64 frame);
+
+    // Ends @a index's fade-out and gives it back its own spacing as its floor
+    void finishDeparture(QRhiResourceUpdateBatch* batch, int index, quint64 revealClock);
+
+    // Ends every fade-out at once: the ramp was turned off or nothing draws
+    // the cloud
+    void endDepartures(QRhiResourceUpdateBatch* batch, quint64 revealClock);
 
     // The node box overlay (cwPointCloudShading::showNodeBoxes): a wire cube
     // per node of the last cut and per resident node outside it, drawn in the
@@ -461,9 +543,17 @@ private:
     // eviction hold left the slot pool full.
     bool m_waitingForSlot = false;
 
-    // {nodeMin.xyz, nodeSize / kQuantMax} and {floorSpacing, arrival frame,
-    // node index, 0} per resident node, one 32 byte slot each, bound per
-    // instance at the drawing node's slot offset.
+    // The last live gather drew a node whose reveal ramp has frames left
+    bool m_revealing = false;
+
+    // The resident nodes fading out after leaving the live cut, which the
+    // live gather draws beside the cut until they have faded to nothing
+    QVector<int> m_departingNodes;
+
+    // {nodeMin.xyz, nodeSize / kQuantMax}, {floorSpacing, arrival frame,
+    // node index, measured spacing} and {previous floor, floor changed frame,
+    // fade frame, fade} per resident node, one 48 byte slot each,
+    // bound per instance at the drawing node's slot offset.
     QRhiBuffer* m_nodeConstants = nullptr;
     QVector<int> m_freeSlots;
 

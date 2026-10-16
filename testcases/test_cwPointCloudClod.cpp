@@ -11,6 +11,7 @@
 
 //Std includes
 #include <cmath>
+#include <limits>
 
 //Our includes
 #include "cwPointCloudClod.h"
@@ -285,4 +286,152 @@ TEST_CASE("Under measured spacing a sparse node thins and sizes by its measured 
     //Own-spacing sizing measures the sprite from the same spacing, so it is
     //the measured gap's share wider
     CHECK(measuredSpacing / gridSpacing == Catch::Approx(sparseSpacing / kGridSpacing));
+}
+
+namespace {
+    //! A reveal ramp about as long as the bench candidates run
+    constexpr int kTestRevealFrames = 8;
+    constexpr double kChildFloor = 0.25;
+    constexpr double kParentFloor = 4.0;
+    //! Ages well past any ramp, which must all draw whole
+    constexpr quint32 kLongAfter = 1000;
+    //! Rounding in a sum of logs whose exact value is 0
+    constexpr double kLogSumMargin = 1e-12;
+    //! Rounding in a fade share whose exact value is 0
+    constexpr double kZeroShareMargin = 1e-12;
+}
+
+TEST_CASE("The reveal ramp scales an arrival's weight up over revealFrames frames",
+          "[PointCloudClod]")
+{
+    SECTION("the arrival frame draws one revealFrames-th and the last ramp frame draws all") {
+        CHECK(revealScale(0, kTestRevealFrames) == Catch::Approx(1.0 / kTestRevealFrames));
+        CHECK(revealScale(kTestRevealFrames - 1, kTestRevealFrames) == 1.0);
+        CHECK(revealScale(kTestRevealFrames, kTestRevealFrames) == 1.0);
+        CHECK(revealScale(kLongAfter, kTestRevealFrames) == 1.0);
+    }
+
+    SECTION("every frame of the ramp draws more than the one before, by the same share") {
+        for (quint32 age = 1; age < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            const double step = revealScale(age, kTestRevealFrames)
+                                - revealScale(age - 1, kTestRevealFrames);
+            CHECK(step == Catch::Approx(1.0 / kTestRevealFrames));
+        }
+    }
+
+    SECTION("a ramp is in progress until the frame it reaches one") {
+        for (quint32 age = 0; age + 1 < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            CHECK(revealing(age, kTestRevealFrames));
+        }
+        CHECK_FALSE(revealing(kTestRevealFrames - 1, kTestRevealFrames));
+        CHECK_FALSE(revealing(kLongAfter, kTestRevealFrames));
+    }
+
+    SECTION("no ramp draws every arrival whole and is never in progress") {
+        for (quint32 age : {0u, 1u, kLongAfter}) {
+            INFO("age " << age);
+            CHECK(revealScale(age, cw::pointcloud::kDefaultRevealFrames) == 1.0);
+            CHECK_FALSE(revealing(age, cw::pointcloud::kDefaultRevealFrames));
+        }
+        CHECK(cw::pointcloud::kDefaultRevealFrames == 0);
+    }
+}
+
+TEST_CASE("The reveal ramp moves a floor in log space over revealFrames frames, both ways",
+          "[PointCloudClod]")
+{
+    const auto logStep = [](double from, double to) { return std::log(to / from); };
+
+    SECTION("a falling floor shrinks by one ratio per frame and lands on the new floor") {
+        const double ratio = std::pow(kChildFloor / kParentFloor, 1.0 / kTestRevealFrames);
+        double previous = kParentFloor;
+        for (quint32 age = 0; age < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            const double floor = revealedFloor(kParentFloor, kChildFloor, age, kTestRevealFrames);
+            CHECK(floor < previous);
+            CHECK(logStep(previous, floor) == Catch::Approx(std::log(ratio)));
+            previous = floor;
+        }
+        CHECK(previous == Catch::Approx(kChildFloor));
+    }
+
+    SECTION("a rising floor grows by the inverse ratio, so a rise takes as long as a fall") {
+        double previous = kChildFloor;
+        for (quint32 age = 0; age < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            const double up = revealedFloor(kChildFloor, kParentFloor, age, kTestRevealFrames);
+            const double down = revealedFloor(kParentFloor, kChildFloor, age, kTestRevealFrames);
+            CHECK(up > previous);
+            //Mirror images in log space: the geometric mean is the midpoint
+            //The two floors multiply to 1, so the sum is 0 and needs an
+            //absolute margin: Approx's relative epsilon of 0 is 0
+            CHECK(std::log(up) + std::log(down)
+                  == Catch::Approx(std::log(kChildFloor) + std::log(kParentFloor))
+                         .margin(kLogSumMargin));
+            CHECK(std::log(up / kChildFloor)
+                  == Catch::Approx(revealScale(age, kTestRevealFrames)
+                                   * std::log(kParentFloor / kChildFloor)));
+            previous = up;
+        }
+        CHECK(previous == Catch::Approx(kParentFloor));
+    }
+
+    SECTION("the floor holds at its new value once the ramp is over") {
+        CHECK(revealedFloor(kParentFloor, kChildFloor, kLongAfter, kTestRevealFrames)
+              == kChildFloor);
+        CHECK(revealedFloor(kChildFloor, kParentFloor, kLongAfter, kTestRevealFrames)
+              == kParentFloor);
+    }
+
+    SECTION("no ramp, or no previous floor, takes the new floor at once") {
+        CHECK(revealedFloor(kParentFloor, kChildFloor, 0, cw::pointcloud::kDefaultRevealFrames)
+              == kChildFloor);
+        CHECK(revealedFloor(0.0, kChildFloor, 0, kTestRevealFrames) == kChildFloor);
+    }
+}
+
+TEST_CASE("The reveal ramp's age wraps as the shader's unsigned difference does",
+          "[PointCloudClod]")
+{
+    constexpr quint64 kFrame = 100;
+    CHECK(revealAge(kFrame, kFrame) == 0u);
+    CHECK(revealAge(kFrame, kFrame - 3) == 3u);
+
+    //A stamp ahead of the frame read wraps to an age past every ramp, so the
+    //twin draws it whole as the GPU does
+    CHECK(revealAge(kFrame, kFrame + 1) == std::numeric_limits<quint32>::max());
+    CHECK(revealScale(revealAge(kFrame, kFrame + 1), kTestRevealFrames) == 1.0);
+
+    //Truncated to the 32 bits the constants slot carries
+    constexpr quint64 kPastWrap = (quint64(1) << 32) + 5;
+    CHECK(revealAge(kPastWrap, kPastWrap - 7) == 7u);
+}
+
+TEST_CASE("A fade that takes over from another carries on from the share it drew",
+          "[PointCloudClod]")
+{
+    SECTION("a fade-in from nothing starts at its first step, from all of it ends at once") {
+        CHECK(revealScale(fadeInAgeFor(0.0, kTestRevealFrames), kTestRevealFrames)
+              == Catch::Approx(1.0 / kTestRevealFrames));
+        CHECK(revealScale(fadeInAgeFor(1.0, kTestRevealFrames), kTestRevealFrames) == 1.0);
+    }
+
+    SECTION("a fade-out from all of it starts one step down, as a departure does") {
+        CHECK(fadeOutAgeFor(1.0, kTestRevealFrames) == 0u);
+        CHECK(departureScale(fadeOutAgeFor(1.0, kTestRevealFrames), kTestRevealFrames)
+              == Catch::Approx(1.0 - 1.0 / kTestRevealFrames));
+    }
+
+    SECTION("turning around mid-fade moves one step from the share it stood at") {
+        for (int step = 1; step < kTestRevealFrames; step++) {
+            const double share = double(step) / kTestRevealFrames;
+            INFO("share " << share);
+            CHECK(revealScale(fadeInAgeFor(share, kTestRevealFrames), kTestRevealFrames)
+                  == Catch::Approx(share + 1.0 / kTestRevealFrames));
+            CHECK(departureScale(fadeOutAgeFor(share, kTestRevealFrames), kTestRevealFrames)
+                  == Catch::Approx(share - 1.0 / kTestRevealFrames).margin(kZeroShareMargin));
+        }
+    }
 }

@@ -3,6 +3,7 @@
 
 //Qt includes
 #include <QMatrix4x4>
+#include <QSet>
 #include <QVector>
 
 //Std includes
@@ -208,6 +209,15 @@ namespace cw::octree {
     CAVEWHERE_LIB_EXPORT QVector<int> finestDrawnLevels(const cwPointOctreeManifest& manifest,
                                                         const QVector<int>& drawnNodes,
                                                         const QVector<int>& missingNodes = {});
+
+    /**
+     * The nodes of @a drawnNodes that are the nearest drawn ancestor of some
+     * node of @a missingNodes: all that covers that missing node's cell, which
+     * finestDrawnLevels() keeps at its own level until its children land.
+     */
+    CAVEWHERE_LIB_EXPORT QSet<int> incompleteDrawnNodes(const cwPointOctreeManifest& manifest,
+                                                        const QVector<int>& drawnNodes,
+                                                        const QVector<int>& missingNodes);
 
     /**
      * The floor of every node in @a drawnNodes, in meters: the spacing of the

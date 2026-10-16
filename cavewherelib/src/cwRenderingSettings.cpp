@@ -33,6 +33,7 @@ QString maxPointSizePxKey() { return QStringLiteral("rendering/pointCloud/maxPoi
 QString minLevelKey() { return QStringLiteral("rendering/pointCloud/minLevel"); }
 QString debugViewKey() { return QStringLiteral("rendering/pointCloud/debugView"); }
 QString showNodeBoxesKey() { return QStringLiteral("rendering/pointCloud/showNodeBoxes"); }
+QString revealFramesKey() { return QStringLiteral("rendering/pointCloud/revealFrames"); }
 
 // 4x MSAA is the historical default and a good quality/cost balance. Snapped to
 // the device's supported set if 4 happens to be unavailable.
@@ -100,6 +101,11 @@ template <typename Mode>
 Mode clampMode(int mode, int modeCount)
 {
     return Mode(std::clamp(mode, 0, modeCount - 1));
+}
+
+int clampRevealFrames(int frames)
+{
+    return std::clamp(frames, cw::pointcloud::kMinRevealFrames, cw::pointcloud::kMaxRevealFrames);
 }
 
 float clampPointSizePx(double pixels)
@@ -186,6 +192,8 @@ cwRenderingSettings::cwRenderingSettings(QObject* parent) :
                 cw::pointcloud::kDebugViewCount);
     m_shading.showNodeBoxes = settings.value(showNodeBoxesKey(),
                                              defaultShading.showNodeBoxes).toBool();
+    m_shading.revealFrames = clampRevealFrames(
+                settings.value(revealFramesKey(), defaultShading.revealFrames).toInt());
 }
 
 int cwRenderingSettings::clampToSupported(int samples) const
@@ -225,6 +233,7 @@ void cwRenderingSettings::resetPointCloudKnobsToDefaults()
     setMaxPointSizePx(defaultShading.maxPointSizePx);
     setDebugView(int(defaultShading.debugView));
     setShowNodeBoxes(defaultShading.showNodeBoxes);
+    setRevealFrames(defaultShading.revealFrames);
     setGpuMemoryBudgetMb(cw::budgets::kDefaultGpuBudgetMb);
     setCpuCacheBudgetMb(cw::budgets::kDefaultCpuBudgetMb);
     setUploadBudgetMbPerFrame(cw::budgets::kDefaultUploadBudgetMbPerFrame);
@@ -406,6 +415,15 @@ void cwRenderingSettings::setShowNodeBoxes(bool show)
 {
     if (setPersisted(m_shading.showNodeBoxes, show, showNodeBoxesKey())) {
         emit showNodeBoxesChanged();
+        emit pointCloudShadingChanged();
+        emit isAtDefaultsChanged();
+    }
+}
+
+void cwRenderingSettings::setRevealFrames(int frames)
+{
+    if (setPersisted(m_shading.revealFrames, clampRevealFrames(frames), revealFramesKey())) {
+        emit revealFramesChanged();
         emit pointCloudShadingChanged();
         emit isAtDefaultsChanged();
     }
