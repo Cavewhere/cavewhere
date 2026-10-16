@@ -160,12 +160,11 @@ public:
     // RadiusJump, FrameTwist and FoldBack over the builder's rings. Rings a
     // junction grew follow the arm's outline and may jump.
     //
-    // WallBeyondReading, once per ring fitted to a station's readings (a
-    // station's ring or an elbow's middle ring, never one a junction grew),
-    // at its farthest vertex: each vertex (on an elbow ring, each measured
-    // one) lies within wallToleranceMeters of the quadrant ellipse of the
-    // station's readings anchored at the station, as the station's legs or
-    // the ring see it (wallReaches).
+    // WallBeyondReading, once per ring that is a station's section (never
+    // one a junction grew), at its farthest vertex: each vertex lies within
+    // wallToleranceMeters of the quadrant ellipse of the station's readings
+    // anchored at the station, as the station's legs or the ring see it
+    // (wallReaches).
     static QVector<Issue> ringIssues(const cwPassageTubeBuilder::Debug& debug,
                                      const Options& options = Options());
 
@@ -190,9 +189,9 @@ public:
 
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
     // the side walls square to the chain's direction through the station or
-    // to one of the station's legs, apart from the stations where the
-    // builder warns BendClamped, the junction stations where an arm has a
-    // mouth, and the stations of an arm left inside its through passage.
+    // to one of the station's legs, apart from the junction stations where
+    // an arm has a mouth and the stations of an arm left inside its through
+    // passage.
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 

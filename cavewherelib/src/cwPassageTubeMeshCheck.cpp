@@ -583,12 +583,10 @@ bool isNear(const QVector3D& a, const QVector3D& b)
     return a.distanceToPoint(b) < kStationTolerance;
 }
 
-// A station's ring, or a ring of the elbow that carries a sharp corner
-// station's readings.
 bool isStationRing(const Debug& debug, const cwPassageTubeBuilder::Chain& chain, const cwPassageTubeBuilder::Ring& ring)
 {
     const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chain.legs.at(ring.chainLeg).legIndex);
-    return ring.isElbow || isNear(ring.center, leg.fromPosition) || isNear(ring.center, leg.toPosition);
+    return isNear(ring.center, leg.fromPosition) || isNear(ring.center, leg.toPosition);
 }
 
 std::optional<Issue> foldBack(const cwPassageTubeBuilder::Ring& previous,
@@ -646,10 +644,10 @@ QVector<StationLeg> stationLegs(const Debug& debug, const cwPassageTubeBuilder::
     return found;
 }
 
-// The record's walls across a section with axes right and up, as the
-// builder's lrudAcross reads them: the side walls at face value, swapped
-// when the record faces the other way and left out when it faces along the
-// section's normal; up and down foreshortened onto the up axis.
+// The record's walls across a section with axes right and up: the side
+// walls at face value, swapped when the record faces the other way and left
+// out when it faces along the section's normal; up and down scaled by the
+// up axis's plumb component.
 cwStationLrud wallsAcross(const StationLeg& record, const QVector3D& right, const QVector3D& up)
 {
     const auto across = [](const std::optional<double>& reading, double component) -> std::optional<double> {
@@ -775,10 +773,8 @@ std::optional<cwPassageTubeMeshCheck::WallReach> reachOf(const SectionPlane& pla
     return cwPassageTubeMeshCheck::WallReach {vertex + moved, static_cast<double>(moved.length())};
 }
 
-// The walls grown as the builder grows them to hold a ring's center, a
-// point given as (right, up) from the station, kMinRadiusMeters inside
-// their quadrant ellipse: an elbow's middle ring sits inset from its
-// station, past a reading on the bend's inside shorter than the inset.
+// The walls grown to hold a ring's center, a point given as (right, up)
+// from the station, kMinRadiusMeters inside their quadrant ellipse.
 cwStationLrud holdingCenter(const cwStationLrud& walls, const QPointF& center)
 {
     constexpr double kMinRadius = cwPassageTubeBuilder::kMinRadiusMeters;
@@ -1374,7 +1370,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const 
             const QVector<std::optional<WallReach>> reaches = wallReaches(debug, chain, ring);
             int farthest = -1;
             for (int k = 0; k < reaches.size(); ++k) {
-                const bool isBeyond = (ring.measured.at(k) || !ring.isElbow) && reaches.at(k) && reaches.at(k)->beyondMeters > options.wallToleranceMeters;
+                const bool isBeyond = reaches.at(k) && reaches.at(k)->beyondMeters > options.wallToleranceMeters;
                 if (isBeyond && (farthest < 0 || reaches.at(k)->beyondMeters > reaches.at(farthest)->beyondMeters)) {
                     farthest = k;
                 }
@@ -1455,17 +1451,10 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         legDirections[{leg.caveId, leg.to}].append(-direction);
     }
 
-    // The builder reshapes the inside of a bend too sharp for its walls and
-    // warns at the corner station; its walls there are no longer the tube's.
     // Where an arm joins a through passage, the walls of the junction station
     // open into the other passage, and an arm left inside the through passage
     // has its walls inside it.
-    QSet<QString> reshaped;
-    for (const cwPassageTubeMesh::Warning& warning : debug.warnings) {
-        if (warning.type == cwPassageTubeMesh::Warning::BendClamped) {
-            reshaped.insert(cwStation::canonicalKey(warning.station));
-        }
-    }
+    QSet<QString> openStations;
     const auto stationOf = [&](const cwPassageTubeBuilder::ChainLeg& chainLeg, bool atEnd) {
         const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
         return cwStation::canonicalKey(atEnd != chainLeg.reversed ? leg.to : leg.from);
@@ -1473,16 +1462,16 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
     for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
         if (chain.rings.isEmpty()) {
             for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
-                reshaped.insert(stationOf(chainLeg, false));
-                reshaped.insert(stationOf(chainLeg, true));
+                openStations.insert(stationOf(chainLeg, false));
+                openStations.insert(stationOf(chainLeg, true));
             }
             continue;
         }
         if (!chain.startMouth.isEmpty()) {
-            reshaped.insert(stationOf(chain.legs.first(), false));
+            openStations.insert(stationOf(chain.legs.first(), false));
         }
         if (!chain.endMouth.isEmpty()) {
-            reshaped.insert(stationOf(chain.legs.last(), true));
+            openStations.insert(stationOf(chain.legs.last(), true));
         }
     }
 
@@ -1546,7 +1535,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                                   const cwStationLrud& passage,
                                   const QVector3D& right) {
         const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
-        if (visited.contains(occurrence) || reshaped.contains(cwStation::canonicalKey(station))) {
+        if (visited.contains(occurrence) || openStations.contains(cwStation::canonicalKey(station))) {
             return;
         }
         visited.insert(occurrence);

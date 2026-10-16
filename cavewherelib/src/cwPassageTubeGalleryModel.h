@@ -93,10 +93,8 @@ public:
     };
     Q_ENUM(Role)
 
-    // How far a ring's frame cross reaches from its center along right and up;
-    // an elbow ring's reaches kElbowFrameScale times as far.
+    // How far a ring's frame cross reaches from its center along right and up.
     static constexpr double kFrameAxisMeters = 0.5;
-    static constexpr double kElbowFrameScale = 2.0;
 
     // The rings of every chain as a line list. Each ring's loop runs through
     // its vertices back to the first; a grown ring draws every other edge.
@@ -109,11 +107,10 @@ public:
     // LRUD's spokes where they differ from the reading.
     //
     // sectionLoops hold, per ring with a section, the loop of its
-    // stationRadii around the section's station in the ring's frame;
-    // sectionInsets a segment from the station to the center of each elbow
-    // ring with a section. overshoots hold a whisker from the station's
-    // readings to each ring vertex that cwPassageTubeMeshCheck reports as
-    // WallBeyondReading: more than kWallTolerance past them.
+    // stationRadii around the section's station in the ring's frame.
+    // overshoots hold a whisker from the station's readings to each ring
+    // vertex that cwPassageTubeMeshCheck reports as WallBeyondReading: more
+    // than kWallTolerance past them.
     //
     // The ranges follow one another in the order declared.
     struct RingGeometry {
@@ -124,7 +121,6 @@ public:
         cwLinePlotGeometry::VertexRange readings;
         cwLinePlotGeometry::VertexRange passageReadings;
         QVector<cwLinePlotGeometry::VertexRange> sectionLoops;
-        cwLinePlotGeometry::VertexRange sectionInsets;
         cwLinePlotGeometry::VertexRange overshoots;
     };
 

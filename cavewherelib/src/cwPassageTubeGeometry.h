@@ -31,13 +31,21 @@ constexpr double kTwoPi = 2.0 * std::numbers::pi;
 constexpr double kMinRingSpacingMeters = 0.05;
 constexpr float kMinAxisLengthSquared = 0.25f;
 constexpr int kMinLoopRings = 3;
-// The most a sharp bend's elbow turns from one ring to the next.
-constexpr double kElbowStepDegrees = 30.0;
+constexpr float kMinInPlaneLength = 1e-6f;
 
 inline QVector3D binDirection(const cwPassageTubeBuilder::Ring& ring, int bin)
 {
     const double theta = ring.binAngles.at(bin);
     return ring.frame.right * static_cast<float>(std::cos(theta)) + ring.frame.up * static_cast<float>(std::sin(theta));
+}
+
+// Where the ring's bin lies: radii[bin] along its direction in the ring's
+// plane, offsetsAlong[bin] off it.
+inline QVector3D ringPoint(const cwPassageTubeBuilder::Ring& ring, int bin)
+{
+    const double along = ring.offsetsAlong.isEmpty() ? 0.0 : ring.offsetsAlong.at(bin);
+    return ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin))
+           + ring.frame.tangent * static_cast<float>(along);
 }
 
 inline bool isFinite(const QVector3D& v)
@@ -55,28 +63,75 @@ inline bool hasValidFrame(const cwPassageTubeBuilder::Ring& ring)
            && ring.frame.right.lengthSquared() > kMinAxisLengthSquared;
 }
 
-// Places the ring's vertices. A vertex that would land behind the previous
-// ring's plane, folding the tube inside out on the inside of a bend, slides
-// along its own ray onto that plane.
+// Makes vertices the ring's, around its center: its frame faces along
+// tangent with right toward vertex 0, or toward rightHint where vertex 0
+// lies on the tangent, and radii, binAngles and offsetsAlong place each
+// vertex. A vertex whose angle would fall behind the previous one's takes
+// that angle, so the angles keep rising.
+inline void setRingVertices(cwPassageTubeBuilder::Ring& ring,
+                            const QVector<QVector3D>& vertices,
+                            const QVector3D& tangent,
+                            const QVector3D& rightHint,
+                            double inclinationWeight)
+{
+    const QVector3D unitTangent = tangent.normalized();
+    const auto inPlane = [&](const QVector3D& v) {
+        return v - unitTangent * QVector3D::dotProduct(v, unitTangent);
+    };
+    QVector3D right = inPlane(vertices.first() - ring.center);
+    if (right.length() < kMinInPlaneLength) {
+        right = inPlane(rightHint);
+    }
+    right.normalize();
+    const QVector3D up = QVector3D::crossProduct(right, unitTangent);
+    ring.frame = cwPassageTubeBuilder::Frame {unitTangent, up, right, inclinationWeight};
+
+    const int resolution = vertices.size();
+    ring.vertices = vertices;
+    ring.radii.resize(resolution);
+    ring.binAngles.resize(resolution);
+    ring.offsetsAlong.resize(resolution);
+    double previousAngle = 0.0;
+    for (int bin = 0; bin < resolution; ++bin) {
+        const QVector3D offset = vertices.at(bin) - ring.center;
+        const double x = QVector3D::dotProduct(offset, right);
+        const double y = QVector3D::dotProduct(offset, up);
+        const double angle = bin == 0 ? 0.0 : std::atan2(y, x);
+        const double wrapped = angle < 0.0 ? angle + kTwoPi : angle;
+        previousAngle = std::max(previousAngle, wrapped);
+        ring.binAngles[bin] = previousAngle;
+        ring.radii[bin] = std::hypot(x, y);
+        ring.offsetsAlong[bin] = QVector3D::dotProduct(offset, unitTangent);
+    }
+}
+
+// Places the ring's vertices where its radii, angles and offsets put them.
+// A vertex that would land behind the same bin's vertex of the previous ring,
+// along that ring's tangent, folds the tube inside out where a junction grew
+// a column; it slides along its own ray until it lies level with that vertex.
+// Two rings at one station, the sections its legs read there, keep their
+// vertices where the sections put them.
 inline void placeRingVertices(cwPassageTubeBuilder::Ring& ring, const cwPassageTubeBuilder::Ring* previous)
 {
     const int resolution = ring.radii.size();
     ring.vertices.resize(resolution);
+    const bool isApartFromPrevious = previous != nullptr && previous->center.distanceToPoint(ring.center) >= kMinRingSpacingMeters;
     for (int bin = 0; bin < resolution; ++bin) {
-        const QVector3D direction = binDirection(ring, bin);
-        double radius = ring.radii.at(bin);
-        if (previous != nullptr) {
+        QVector3D vertex = ringPoint(ring, bin);
+        if (isApartFromPrevious && bin < previous->vertices.size()) {
             const QVector3D& planeNormal = previous->frame.tangent;
-            const QVector3D vertex = ring.center + direction * static_cast<float>(radius);
-            if (QVector3D::dotProduct(vertex - previous->center, planeNormal) < 0.0f) {
+            const QVector3D& previousVertex = previous->vertices.at(bin);
+            if (QVector3D::dotProduct(vertex - previousVertex, planeNormal) < 0.0f) {
+                const QVector3D direction = binDirection(ring, bin);
                 const float approach = QVector3D::dotProduct(direction, planeNormal);
+                const QVector3D offAxis = vertex - direction * static_cast<float>(ring.radii.at(bin));
                 const double toPlane = approach < 0.0f
-                                           ? QVector3D::dotProduct(previous->center - ring.center, planeNormal) / approach
+                                           ? QVector3D::dotProduct(previousVertex - offAxis, planeNormal) / approach
                                            : 0.0;
-                radius = std::max(toPlane, cwPassageTubeBuilder::kMinRadiusMeters);
+                vertex = offAxis + direction * static_cast<float>(std::max(toPlane, cwPassageTubeBuilder::kMinRadiusMeters));
             }
         }
-        ring.vertices[bin] = ring.center + direction * static_cast<float>(radius);
+        ring.vertices[bin] = vertex;
     }
 }
 

@@ -165,12 +165,6 @@ std::optional<WalkedLeg> walkedLeg(const Builder::Debug& debug, const Builder::C
     return WalkedLeg {leg.from, leg.to, leg.fromPosition, leg.toPosition};
 }
 
-double angleDegrees(const QVector3D& a, const QVector3D& b)
-{
-    const double cosine = QVector3D::dotProduct(a.normalized(), b.normalized());
-    return qRadiansToDegrees(std::acos(std::clamp(cosine, -1.0, 1.0)));
-}
-
 // The station of the leg's two ends nearer position.
 std::pair<QString, QVector3D> nearerStation(const WalkedLeg& leg, const QVector3D& position)
 {
@@ -178,90 +172,6 @@ std::pair<QString, QVector3D> nearerStation(const WalkedLeg& leg, const QVector3
         return {leg.start, leg.startPosition};
     }
     return {leg.end, leg.endPosition};
-}
-
-// One line per run of elbow rings: its corner station, the turn there, how
-// far the middle ring sits off the station and the roll of the middle
-// ring's frame against each neighbor's.
-QStringList elbowLines(const Builder::Debug& debug)
-{
-    QStringList lines;
-    for (int c = 0; c < debug.chains.size(); ++c) {
-        const Builder::Chain& chain = debug.chains.at(c);
-        const QVector<Builder::Ring>& rings = chain.rings;
-        int first = 0;
-        while (first < rings.size()) {
-            if (!rings.at(first).isElbow) {
-                ++first;
-                continue;
-            }
-            int last = first;
-            while (last + 1 < rings.size() && rings.at(last + 1).isElbow) {
-                ++last;
-            }
-
-            // The corner is the leg end nearest the run's middle ring.
-            const QVector3D runMiddle = rings.at((first + last) / 2).center;
-            QString station;
-            QVector3D stationPosition;
-            float stationDistance = std::numeric_limits<float>::max();
-            QSet<int> runLegs;
-            for (int r = first; r <= last; ++r) {
-                runLegs.insert(rings.at(r).chainLeg);
-                if (const auto leg = walkedLeg(debug, chain, rings.at(r).chainLeg)) {
-                    const auto [name, position] = nearerStation(*leg, runMiddle);
-                    const float distance = runMiddle.distanceToPoint(position);
-                    if (distance < stationDistance) {
-                        station = name;
-                        stationPosition = position;
-                        stationDistance = distance;
-                    }
-                }
-            }
-
-            int middle = first;
-            for (int r = first; r <= last; ++r) {
-                if (rings.at(r).center.distanceToPoint(stationPosition) < rings.at(middle).center.distanceToPoint(stationPosition)) {
-                    middle = r;
-                }
-            }
-
-            const auto turn = [&]() -> double {
-                for (int legIndex : std::as_const(runLegs)) {
-                    const auto incoming = walkedLeg(debug, chain, legIndex);
-                    if (!incoming) {
-                        continue;
-                    }
-                    const auto outgoing = walkedLeg(debug, chain, (legIndex + 1) % static_cast<int>(chain.legs.size()));
-                    if (outgoing && incoming->end == station && outgoing->start == station) {
-                        return angleDegrees(incoming->endPosition - incoming->startPosition,
-                                            outgoing->endPosition - outgoing->startPosition);
-                    }
-                }
-                return angleDegrees(rings.at(first).frame.tangent, rings.at(last).frame.tangent);
-            }();
-
-            const QVector3D& up = rings.at(middle).frame.up;
-            const auto rollText = [&](int neighbor) {
-                if (neighbor < 0 || neighbor >= rings.size()) {
-                    return QStringLiteral("-");
-                }
-                return QStringLiteral("%1°").arg(angleDegrees(up, rings.at(neighbor).frame.up), 0, 'f', 1);
-            };
-
-            lines.append(QStringLiteral("elbow at %1 (chain %2, rings %3-%4): turn %5°, middle ring %6 off by %7 m, roll %8 before, %9 after")
-                             .arg(station)
-                             .arg(c)
-                             .arg(first)
-                             .arg(last)
-                             .arg(turn, 0, 'f', 1)
-                             .arg(middle)
-                             .arg(rings.at(middle).center.distanceToPoint(stationPosition), 0, 'f', 2)
-                             .arg(rollText(middle - 1), rollText(middle + 1)));
-            first = last + 1;
-        }
-    }
-    return lines;
 }
 
 // The index, numbered across chains in chain order, of the ring whose center
@@ -397,9 +307,7 @@ cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& deb
         const int start = static_cast<int>(points.size());
         for (const Builder::Chain& chain : debug.chains) {
             for (const Builder::Ring& ring : chain.rings) {
-                const double reach = cwPassageTubeGalleryModel::kFrameAxisMeters
-                                     * (ring.isElbow ? cwPassageTubeGalleryModel::kElbowFrameScale : 1.0);
-                points << ring.center << ring.center + ring.frame.*axis * static_cast<float>(reach);
+                points << ring.center << ring.center + ring.frame.*axis * static_cast<float>(cwPassageTubeGalleryModel::kFrameAxisMeters);
             }
         }
         return Range {start, static_cast<int>(points.size()) - start};
@@ -458,13 +366,6 @@ cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& deb
             }
         }));
     });
-    geometry.sectionInsets = appended([&]() {
-        forEachSectionedRing([&](const Builder::Ring& ring) {
-            if (ring.isElbow) {
-                points << ring.section->station << ring.center;
-            }
-        });
-    });
     geometry.overshoots = appended([&]() {
         for (const Builder::Chain& chain : debug.chains) {
             for (const Builder::Ring& ring : chain.rings) {
@@ -493,7 +394,6 @@ QVector<cwRenderLinePlot::TypedRange> typedRanges(const cwPassageTubeGalleryMode
     appendAll({geometry.rights, geometry.ups}, cwRenderLinePlot::kFrameSegment);
     appendAll({geometry.readings, geometry.passageReadings}, cwRenderLinePlot::kReadingSegment);
     appendAll(geometry.sectionLoops, cwRenderLinePlot::kSectionSegment);
-    appendAll({geometry.sectionInsets}, cwRenderLinePlot::kSectionSegment);
     appendAll({geometry.overshoots}, cwRenderLinePlot::kOvershootSegment);
     return ranges;
 }
@@ -883,7 +783,6 @@ QString cwPassageTubeGalleryModel::reportText() const
     for (const cwPassageTubeMeshCheck::Issue& issue : std::as_const(m_current.report.warnings)) {
         lines.append(issueLine(m_current.debug, issue, QStringLiteral("warning: ")));
     }
-    lines.append(elbowLines(m_current.debug));
     return lines.join(QLatin1Char('\n'));
 }
 
@@ -1034,9 +933,6 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
         }
 
         QStringList kinds;
-        if (entry.isElbow) {
-            kinds.append(QStringLiteral("elbow"));
-        }
         if (entry.isGrown) {
             kinds.append(QStringLiteral("grown"));
         }

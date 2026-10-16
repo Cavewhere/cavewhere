@@ -39,8 +39,9 @@ using Model = cwPassageTubeGalleryModel;
 const QString kSymmetricT = QStringLiteral("1. symmetric T");
 const QString kJunctionFreeCase = QStringLiteral("no arms, through profile 0, bend 0, same section");
 const QString kShaftFootCase = QStringLiteral("25. Zero floor reading at the foot of a shaft");
-const QString kCaseWithIssues = QStringLiteral("24. Sharp bend in an unread passage next to a zero reading");
 const QString kSharpBendCase = QStringLiteral("23. Sharp bend at a station reading zero on the outside wall");
+// c1 joins a plumb section to a level one, stitched until T07ah3.
+const QString kCaseWithIssues = kSharpBendCase;
 constexpr float kLengthTolerance = 1e-4f;
 constexpr float kPositionTolerance = 1e-3f;
 constexpr int kProjectLoadTimeoutMs = 30000;
@@ -278,7 +279,6 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
     REQUIRE(geometry.ups.count == 2 * rings.size());
     CHECK(model.ringPlot()->points() == geometry.points);
 
-    int elbowRings = 0;
     for (int i = 0; i < rings.size(); ++i) {
         INFO("ring " << i);
         const cwPassageTubeBuilder::Ring& ring = rings.at(i);
@@ -293,7 +293,7 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
             CHECK(geometry.points.at(loop.start + loop.count - 1) == ring.vertices.constFirst());
         }
 
-        const double reach = Model::kFrameAxisMeters * (ring.isElbow ? Model::kElbowFrameScale : 1.0);
+        const double reach = Model::kFrameAxisMeters;
         const QVector3D rightStart = geometry.points.at(geometry.rights.start + 2 * i);
         const QVector3D rightEnd = geometry.points.at(geometry.rights.start + 2 * i + 1);
         const QVector3D upStart = geometry.points.at(geometry.ups.start + 2 * i);
@@ -303,23 +303,13 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
         CHECK(std::abs(rightStart.distanceToPoint(rightEnd) - reach) < kLengthTolerance);
         CHECK(std::abs(upStart.distanceToPoint(upEnd) - reach) < kLengthTolerance);
         CHECK(QVector3D::dotProduct((upEnd - upStart).normalized(), ring.frame.up) > 1.0f - kLengthTolerance);
-        if (ring.isElbow) {
-            ++elbowRings;
-        }
     }
-    CHECK(elbowRings > 0);
 
-    SECTION("the report lists each elbow with its roll")
+    SECTION("the report lists no elbow")
     {
         const QString report = model.reportText();
         INFO(report.toStdString());
-        CHECK(report.contains(QStringLiteral("elbow at f2")));
-        const QStringList elbowLines = report.split(QLatin1Char('\n')).filter(QStringLiteral("elbow at "));
-        REQUIRE_FALSE(elbowLines.isEmpty());
-        for (const QString& line : elbowLines) {
-            CHECK(line.contains(QStringLiteral("turn ")));
-            CHECK(line.contains(QStringLiteral("roll ")));
-        }
+        CHECK_FALSE(report.contains(QStringLiteral("elbow at ")));
     }
 
     SECTION("a ring line names the nearest ring to a position")
@@ -331,9 +321,9 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
     }
 }
 
-// Case 23 reads c0 and c1 and leaves c2 unread; the elbow at c1 keeps
-// within c1's readings, so the overshoot layer, which follows the checker's
-// WallBeyondReading, is empty.
+// Case 23 reads c0 and c1 and leaves c2 unread; every ring lies on its leg's
+// loft or its station's sections, so the overshoot layer, which follows the
+// checker's WallBeyondReading, is empty.
 TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to", "[PassageTube][cwPassageTubeGalleryModel]")
 {
     constexpr int kReadStations = 2;
@@ -366,16 +356,12 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
         CHECK(geometry.passageReadings.start == geometry.readings.start + geometry.readings.count);
     }
 
-    SECTION("a loop per sectioned ring and an inset per sectioned elbow ring")
+    SECTION("a loop per sectioned ring")
     {
         const qsizetype sectioned = std::count_if(rings.cbegin(), rings.cend(), [](const cwPassageTubeBuilder::Ring& ring) {
             return ring.section.has_value();
         });
-        const qsizetype sectionedElbows = std::count_if(rings.cbegin(), rings.cend(), [](const cwPassageTubeBuilder::Ring& ring) {
-            return ring.section.has_value() && ring.isElbow;
-        });
         REQUIRE(sectioned > 0);
-        REQUIRE(sectionedElbows > 0);
         REQUIRE(geometry.sectionLoops.size() == sectioned);
         int loop = 0;
         for (const cwPassageTubeBuilder::Ring& ring : rings) {
@@ -385,8 +371,8 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
                 CHECK(geometry.points.at(range.start) == geometry.points.at(range.start + range.count - 1));
             }
         }
-        CHECK(geometry.sectionInsets.count == 2 * sectionedElbows);
-        CHECK(geometry.overshoots.start == geometry.sectionInsets.start + geometry.sectionInsets.count);
+        const cwLinePlotGeometry::VertexRange& lastLoop = geometry.sectionLoops.constLast();
+        CHECK(geometry.overshoots.start == lastLoop.start + lastLoop.count);
         CHECK(geometry.overshoots.count == 0);
     }
 
@@ -411,7 +397,6 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
         const QVector<quint8> visibility = model.ringPlot()->visibility();
         CHECK(visibility.at(geometry.readings.start) == cwRenderLinePlot::kVisible);
         CHECK(visibility.at(geometry.sectionLoops.constFirst().start) == cwRenderLinePlot::kHidden);
-        CHECK(visibility.at(geometry.sectionInsets.start) == cwRenderLinePlot::kHidden);
         CHECK(visibility.at(0) == cwRenderLinePlot::kHidden);
     }
 
@@ -467,8 +452,6 @@ TEST_CASE("cwPassageTubeGalleryModel colors each ring plot layer on its own", "[
     for (const Range& loop : geometry.sectionLoops) {
         checkType(loop, cwRenderLinePlot::kSectionSegment);
     }
-    REQUIRE(geometry.sectionInsets.count > 0);
-    checkType(geometry.sectionInsets, cwRenderLinePlot::kSectionSegment);
     checkType(geometry.overshoots, cwRenderLinePlot::kOvershootSegment);
 
     SECTION("each layer's swatch is its segment color")

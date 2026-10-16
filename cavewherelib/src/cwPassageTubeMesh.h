@@ -51,7 +51,6 @@ struct cwPassageTubeMesh {
             ScrapOpening,
             SourceChange,
             ShaftReading,
-            BendClamped,
             ArmInsideThrough,
             JunctionOverlap,
             JunctionUnzipped,

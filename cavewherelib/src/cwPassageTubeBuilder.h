@@ -49,15 +49,15 @@ struct cwStationLrud {
  *
  * Pure compute over value snapshots: callable from any thread.
  *
- * Pipeline: survey shots → legs → chains → frames → rings → mesh. A chain is
- * a run of legs skinned as one tube; it passes through degree-2 stations, and
- * exactly one chain passes straight through each junction (Loch's rule), so
- * every other arm starts or ends there.
+ * Pipeline: survey shots → legs → chains → sections → rings → mesh. A chain
+ * is a run of legs skinned as one tube; it passes through degree-2 stations,
+ * and exactly one chain passes straight through each junction (Loch's rule),
+ * so every other arm starts or ends there.
  *
- * Each chain is sampled at its stations and evenly along its legs. A sample's
- * cross-section frame keeps world up in the section plane for gentle passage
- * and rolls toward a rotation-minimizing frame as the passage steepens into a
- * pit, so rings stay continuous through vertical shots.
+ * Each leg is the loft between its two stations' sections: its rings, at its
+ * stations and evenly along it, are the point-wise lerps of the two. Two legs
+ * that read the same section at a station share its ring; where they read
+ * different ones, the chain holds both rings there.
  *
  * At a junction, cwPassageTubeJunction trims each arm where it meets the
  * through tube, grows the through rings to take the arm's section across to
@@ -82,12 +82,12 @@ public:
         double defaultRadiusMeters = 0.5;
         double blendLowDegrees = 45.0;
         double blendHighDegrees = 75.0;
-        double subdivideBendDegrees = 60.0;
     };
 
     // One surveyed shot with both endpoints positioned. LRUD come from the
-    // station occurrences on the chunk that owns the shot; the passage LRUD
-    // are the same readings with shaft depths replaced, and feed the rings.
+    // station occurrences on the chunk that owns the shot and give the leg's
+    // sections at face value; the passage LRUD are the same readings with
+    // shaft depths replaced, and size the legs when chains are chosen.
     // A facing is the unit horizontal direction its station's LRUD were read
     // looking along: the chord between the station's chunk neighbors. The
     // reading's right wall lies clockwise of it.
@@ -114,10 +114,10 @@ public:
         bool reversed = false;
     };
 
-    // A cross-section frame. right = tangent × up; inclinationWeight is 0 for
-    // passage gentler than Options::blendLowDegrees and 1 for passage steeper
-    // than Options::blendHighDegrees, where up follows the chain rather than
-    // world up.
+    // A ring's frame: tangent along the chain, square to the ring's plane,
+    // and right = tangent × up. inclinationWeight is 0 for a leg gentler than
+    // Options::blendLowDegrees and 1 for one steeper than
+    // Options::blendHighDegrees.
     struct Frame {
         QVector3D tangent;
         QVector3D up;
@@ -125,14 +125,12 @@ public:
         double inclinationWeight = 0.0;
     };
 
-    // The section a ring was fitted to. readings are the quadrant readings in
-    // the ring's (right, up) plane, as lrudAcross, widestReadings and
-    // filledReadings left them; stationRadii are their quadrant ellipse
-    // around station, per bin, at the ring's binAngles, as the fit left them.
-    // station is the ring center except on an elbow's middle ring, which sits
-    // inset from it. A sharp bend later reshapes the bins that point into it
-    // and marks them unmeasured, so stationRadii equal radii on the measured
-    // bins of every ring other than an elbow's middle ring.
+    // A gentle leg's section at one of its stations, which a ring centered on
+    // the station is: the quadrant ellipse through the reading points of the
+    // record the leg's own chunk took there, at face value. readings are the
+    // walls along -right, right, up and -up of the ring's frame, a missing one
+    // filled from those beside it; stationRadii are the ellipse's radii
+    // around station at the ring's binAngles.
     struct Section {
         cwStationLrud readings;
         QVector<double> stationRadii;
@@ -140,29 +138,30 @@ public:
     };
 
     // A cross-section ring around center with N = Options::ringResolution
-    // bins. Bin k lies at polar angle binAngles[k] from frame.right toward
-    // frame.up, radii[k] from the center; the angles rise with k from
-    // binAngles[0] = 0 and keep each bin in the quadrant of 2πk/N, so a round
-    // ring's bins sit at 2πk/N. measured[k] is true when survey data filled
-    // the bin, false when it was interpolated or borrowed from another ring.
-    // chainLeg is the index into Chain::legs of the leg the ring lies on or
-    // ends. vertices are the ring's mesh vertices, one per bin, pulled onto
-    // the previous ring's plane where they would fold behind it. isGrown is
-    // true when a junction grew the ring to take an arm's section across to
-    // the far wall. isElbow is true for the rings that round a sharp corner,
-    // which carry its station's readings off the station, and for rings
-    // inserted beside them. section is set on the rings fitted from their own
-    // readings; steep, borrowed, blended and grown rings have none.
+    // bins. vertices are the ring's mesh vertices, one per bin: a station's
+    // section at its station, and the point-wise lerp of the leg's two
+    // sections at the ring's fraction along it between them, so a ring
+    // between sections that face different ways is not planar. Bin k lies at
+    // polar angle binAngles[k] from frame.right toward frame.up, radii[k] from
+    // the center in the plane square to frame.tangent and offsetsAlong[k]
+    // along frame.tangent off it; the angles rise with k from binAngles[0] =
+    // 0, where frame.right points at vertex 0. measured[k] is true when the
+    // readings at both ends of the leg filled the bin, false when it was
+    // filled from the walls beside it or borrowed. chainLeg is the index into
+    // Chain::legs of the leg the ring lies on or ends. isGrown is true when a
+    // junction grew the ring to take an arm's section across to the far wall.
+    // section is set on the rings that are a gentle leg's section from its
+    // own record.
     struct Ring {
         QVector3D center;
         QVector<double> radii;
         QVector<double> binAngles;
+        QVector<double> offsetsAlong;
         Frame frame;
         QVector<bool> measured;
         int chainLeg = 0;
         QVector<QVector3D> vertices;
         bool isGrown = false;
-        bool isElbow = false;
         std::optional<Section> section;
     };
 
@@ -228,7 +227,8 @@ public:
 
     struct Chain {
         QVector<ChainLeg> legs;
-        // In chain order: one ring per station and per sample along each leg.
+        // In chain order: one ring per station and per sample along each leg;
+        // two at a station whose legs read different sections there.
         QVector<Ring> rings;
         // How far a pit dead-end cap sits past the end station: the station's
         // up when the chain ends climbing, its down when it ends descending,

@@ -58,12 +58,6 @@ constexpr int kGrowBisections = 12;
 // through's axis, the search for the through wall reaches.
 constexpr double kWallSearchFactor = 3.0;
 constexpr double kJunctionTolerance = 0.02;
-constexpr double kParallelRingDegrees = 1.0;
-const float kParallelRingCosine = static_cast<float>(std::cos(qDegreesToRadians(kParallelRingDegrees)));
-// Elbow rings turning at most this much from one to the next take rings
-// between them.
-constexpr double kDensifiableRingDegrees = kElbowStepDegrees + 1.0;
-const float kDensifiableRingCosine = static_cast<float>(std::cos(qDegreesToRadians(kDensifiableRingDegrees)));
 // How far, in quads, the window reaches past the mouth, so its edge stays
 // clear of the mouth and the zip band keeps a width.
 constexpr double kWindowMarginQuads = 0.25;
@@ -112,11 +106,6 @@ const float kStraightArmCosine = static_cast<float>(std::cos(qDegreesToRadians(k
 
 using StationKey = QPair<QUuid, QString>;
 using Vertex = QPair<int, int>;
-
-QVector3D unpulledVertex(const Ring& ring, int bin)
-{
-    return ring.center + binDirection(ring, bin) * static_cast<float>(ring.radii.at(bin));
-}
 
 double largestRadius(const Ring& ring)
 {
@@ -460,60 +449,30 @@ QVector3D slerp(const QVector3D& a, const QVector3D& b, double fraction)
     return (a * weightA + b * weightB).normalized();
 }
 
-// A ring fraction of the way along the chord from a to b, facing between
-// their tangents, with radii and up blended between the two.
+// The ring fraction of the way from a to b: each vertex on the line between
+// theirs, as the loft of a leg places its rings, facing between them.
 Ring lerpRing(const Ring& a, const Ring& b, double fraction)
 {
     const float f = static_cast<float>(fraction);
     Ring ring;
     ring.center = a.center + (b.center - a.center) * f;
-    ring.radii.reserve(a.radii.size());
-    ring.binAngles.reserve(a.radii.size());
+    QVector<QVector3D> points;
+    points.reserve(a.radii.size());
     for (int bin = 0; bin < a.radii.size(); ++bin) {
-        ring.radii.append(a.radii.at(bin) + (b.radii.at(bin) - a.radii.at(bin)) * fraction);
-        ring.binAngles.append(a.binAngles.at(bin) + (b.binAngles.at(bin) - a.binAngles.at(bin)) * fraction);
+        points.append(ringPoint(a, bin) + (ringPoint(b, bin) - ringPoint(a, bin)) * f);
     }
     ring.measured = QVector<bool>(a.radii.size(), false);
     ring.chainLeg = b.chainLeg;
-    ring.isElbow = a.isElbow || b.isElbow;
-
     const QVector3D tangent = slerp(a.frame.tangent, b.frame.tangent, fraction);
-    QVector3D up = a.frame.up * (1.0f - f) + b.frame.up * f;
-    up -= tangent * QVector3D::dotProduct(up, tangent);
-    if (up.lengthSquared() < kDegenerateLengthSquared) {
-        up = a.frame.up - tangent * QVector3D::dotProduct(a.frame.up, tangent);
-    }
-    up.normalize();
+    const QVector3D rightHint = a.frame.right + (b.frame.right - a.frame.right) * f;
     const double weight = a.frame.inclinationWeight + (b.frame.inclinationWeight - a.frame.inclinationWeight) * fraction;
-    ring.frame = Builder::Frame {tangent, up, QVector3D::crossProduct(tangent, up), weight};
+    setRingVertices(ring, points, tangent, rightHint, weight);
     return ring;
 }
 
-// Whether every wall vertex of ring lies in front of previous's plane, so
-// placing the mesh vertices never pulls one back onto it.
-bool isInFrontOf(const Ring& ring, const Ring& previous)
-{
-    for (int bin = 0; bin < ring.radii.size(); ++bin) {
-        if (QVector3D::dotProduct(unpulledVertex(ring, bin) - previous.center, previous.frame.tangent) < kMinRingSpacingMeters) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Whether rings can be inserted between two rings: they face the same way,
-// as along a straight leg, or turn by an elbow's step. Between a mitered
-// corner ring and its inset rings they would crease its inner wall.
-bool isDensifiable(const Ring& a, const Ring& b)
-{
-    const float limit = (a.isElbow || b.isElbow) ? kDensifiableRingCosine : kParallelRingCosine;
-    return QVector3D::dotProduct(a.frame.tangent, b.frame.tangent) >= limit;
-}
-
 // Inserts rings between the through rings around the junction so no two
-// within reach lie farther apart than spacing, on the chord between them and
-// facing between their tangents. A ring that would fold against its
-// neighbors, as one near an elbow's inner wall can, is left out.
+// within reach lie farther apart than spacing, each a lerp of its
+// neighbors, which lies on the loft between them.
 void densify(Chain& through, const QVector3D& junction, double reach, double spacing)
 {
     const ThroughSpan span(through.rings, junction, reach);
@@ -530,17 +489,14 @@ void densify(Chain& through, const QVector3D& junction, double reach, double spa
         const double start = span.along.at(i);
         const double end = span.along.at(i + 1);
         const bool overlapsReach = end >= center - reach && start <= center + reach;
-        if (!overlapsReach || !hasValidFrame(ring) || !hasValidFrame(next) || !isDensifiable(ring, next)) {
+        if (!overlapsReach || !hasValidFrame(ring) || !hasValidFrame(next)) {
             continue;
         }
         const double gap = end - start;
         const int intervals = std::min(static_cast<int>(std::ceil(gap / spacing)),
                                        static_cast<int>(std::floor(gap / kMinRingSpacingMeters)));
         for (int j = 1; j < intervals; ++j) {
-            const Ring inserted = lerpRing(ring, next, static_cast<double>(j) / intervals);
-            if (isInFrontOf(inserted, rings.last()) && isInFrontOf(next, inserted)) {
-                rings.append(inserted);
-            }
+            rings.append(lerpRing(ring, next, static_cast<double>(j) / intervals));
         }
     }
     through.rings = rings;
@@ -768,7 +724,7 @@ double junctionSpacing(const Options& options, const Ring& throughRing, const QV
         double low = std::numeric_limits<double>::max();
         double high = std::numeric_limits<double>::lowest();
         for (int bin = 0; bin < ring.radii.size(); ++bin) {
-            const double along = QVector3D::dotProduct(unpulledVertex(ring, bin) - ring.center, throughTangent);
+            const double along = QVector3D::dotProduct(ringPoint(ring, bin) - ring.center, throughTangent);
             low = std::min(low, along);
             high = std::max(high, along);
         }
@@ -891,7 +847,8 @@ void growThrough(Chain& through, const JunctionSolids& solids)
                 });
             };
             const double own = ring.radii.at(bin);
-            const auto pointAt = [&](double radius) { return ring.center + direction * static_cast<float>(radius); };
+            const QVector3D columnStart = ringPoint(ring, bin) - direction * static_cast<float>(ring.radii.at(bin));
+            const auto pointAt = [&](double radius) { return columnStart + direction * static_cast<float>(radius); };
             if (!solids.mayCrossFill(pointAt(own), pointAt(limit))) {
                 continue;
             }
@@ -1336,7 +1293,7 @@ Trim trimArm(const QVector<Ring>& rings,
         QVector<QVector3D> polyline;
         polyline.reserve(count - firstRing + 1);
         for (int i = firstRing; i < count; ++i) {
-            polyline.append(unpulledVertex(rings.at(i), bin));
+            polyline.append(ringPoint(rings.at(i), bin));
         }
         return polyline;
     };
@@ -1363,7 +1320,7 @@ Trim trimArm(const QVector<Ring>& rings,
         keptRings = std::min(keptRings, axisKept);
         const int endRing = keptRings - 1;
         for (int bin : std::as_const(insideColumns)) {
-            const QVector3D vertex = unpulledVertex(rings.at(endRing), bin);
+            const QVector3D vertex = ringPoint(rings.at(endRing), bin);
             wholeColumns[bin] = entryFrom(columnPolyline(bin, endRing), endRing).value_or(ColumnEntry {vertex, std::nullopt, endRing});
         }
     }
@@ -1371,7 +1328,7 @@ Trim trimArm(const QVector<Ring>& rings,
     // A kept ring right at the mouth would leave a strip of slivers.
     const auto isAtMouth = [&](int ring) {
         for (int bin = 0; bin < resolution; ++bin) {
-            if (unpulledVertex(rings.at(ring), bin).distanceToPoint(wholeColumns.at(bin).position) < kMinRingSpacingMeters) {
+            if (ringPoint(rings.at(ring), bin).distanceToPoint(wholeColumns.at(bin).position) < kMinRingSpacingMeters) {
                 return true;
             }
         }
@@ -1392,8 +1349,8 @@ Trim trimArm(const QVector<Ring>& rings,
         QVector<QVector3D> polyline;
         polyline.reserve(count - keptRings + 2);
         for (int i = keptRings - 1; i < count; ++i) {
-            const QVector3D low = unpulledVertex(rings.at(i), bin);
-            polyline.append(low + (unpulledVertex(rings.at(i), next) - low) * f);
+            const QVector3D low = ringPoint(rings.at(i), bin);
+            polyline.append(low + (ringPoint(rings.at(i), next) - low) * f);
         }
         const std::optional<ColumnEntry> column = entryFrom(polyline, keptRings - 1);
         if (!column || !column->parameter || column->position.distanceToPoint(polyline.first()) < kMinRingSpacingMeters) {
@@ -2010,7 +1967,7 @@ QVector<LoopVertex> throughColumnPath(const QVector<Ring>& rings, const LoopVert
     }
     const int step = b.ring > a.ring ? 1 : -1;
     for (int ring = a.ring + step; ring != b.ring; ring += step) {
-        path.append(LoopVertex {ZipCorner {ring, a.column}, QPointF(ring, from.parameter.y()), unpulledVertex(rings.at(ring), a.column)});
+        path.append(LoopVertex {ZipCorner {ring, a.column}, QPointF(ring, from.parameter.y()), ringPoint(rings.at(ring), a.column)});
     }
     return path;
 }
@@ -2130,7 +2087,7 @@ QVector<ZipCorner> weldedMouthCorners(const QVector<Ring>& rings,
     const QVector<ZipCorner> unwelded = corners;
 
     const auto positionOf = [&](const ZipCorner& corner) {
-        return corner.ring == ZipCorner::kMouthRing ? mouth.at(corner.column).position : unpulledVertex(rings.at(corner.ring), corner.column);
+        return corner.ring == ZipCorner::kMouthRing ? mouth.at(corner.column).position : ringPoint(rings.at(corner.ring), corner.column);
     };
     const auto parameterOf = [&](const ZipCorner& corner, double reference) {
         return parameterNear(corner.ring == ZipCorner::kMouthRing ? polygon.at(corner.column) : QPointF(corner.ring, corner.column),
@@ -2278,7 +2235,7 @@ struct WindowMouthPoints {
                                points.at(corner.mouth)->at(corner.column).position};
         }
         return LoopVertex {corner, QPointF(corner.ring, columnNear(corner.column, referenceColumn, resolution)),
-                           unpulledVertex(rings.at(corner.ring), corner.column)};
+                           ringPoint(rings.at(corner.ring), corner.column)};
     }
 };
 
@@ -2383,7 +2340,7 @@ QVector<LoopVertex> boundaryLoop(const QVector<Ring>& rings, const QVector<Verte
     for (const Vertex& vertex : boundary) {
         const double column = loop.isEmpty() ? vertex.second : columnNear(vertex.second, loop.last().parameter.y(), resolution);
         loop.append(LoopVertex {ZipCorner {vertex.first, vertex.second}, QPointF(vertex.first, column),
-                                unpulledVertex(rings.at(vertex.first), vertex.second)});
+                                ringPoint(rings.at(vertex.first), vertex.second)});
     }
     return loop;
 }
@@ -2633,7 +2590,7 @@ void applyWelds(QVector<Chain>& chains, const Chain& through, const JunctionWind
         positions.reserve(windowMouth.mouthCorners.size());
         for (const ZipCorner& corner : windowMouth.mouthCorners) {
             positions.append(corner.ring == ZipCorner::kMouthRing ? mouthOf(window.mouths.at(corner.mouth)).at(corner.column).position
-                                                                   : unpulledVertex(through.rings.at(corner.ring), corner.column));
+                                                                   : ringPoint(through.rings.at(corner.ring), corner.column));
         }
         welded.append(positions);
     }
