@@ -256,6 +256,9 @@ const QVector<AcceptedIssue> kPhakeCaveIssues {
     {QStringLiteral("a9"), cwPassageTubeMeshCheck::Crease},
     {QStringLiteral("a9"), cwPassageTubeMeshCheck::FrameTwist},
     {QStringLiteral("a9"), cwPassageTubeMeshCheck::SelfIntersection},
+    // a9's level section meets its plumb one at the left and right reading
+    // points, so the stitch between them runs to slivers there.
+    {QStringLiteral("a9"), cwPassageTubeMeshCheck::SliverTriangle},
     // a10 reads 0 on one side, so its ring and mouth bunch vertices a few
     // centimeters apart, and the arm's strip beside them folds against the
     // zip band and crosses itself beside a sliver of it.
@@ -672,10 +675,14 @@ const QVector<int> kOpenJunctionFreeRandomSeeds {20, 32, 33, 41};
 
 // Wild random surveys, as (seed, junctions), whose stitched stations of two
 // sections share a reading point, which leaves a zero-area triangle
-// between the two rings (DegenerateTriangle).
+// between the two rings (DegenerateTriangle). A plumb leg's level section
+// shares its left and right reading points with a level leg's plumb one
+// (T07ah2).
 const QVector<std::pair<int, int>> kTwoSectionWildSurveys {
-    {6, 0}, {6, 6}, {9, 0}, {9, 3}, {11, 5}, {12, 6}, {14, 2}, {16, 4}, {17, 5}, {18, 6}, {21, 3}, {23, 5},
-    {24, 6}, {27, 3}, {28, 4}, {30, 6}, {35, 5}, {36, 6}, {38, 2}, {40, 4}, {41, 5}, {47, 5}, {49, 1},
+    {1, 0}, {1, 1}, {5, 0}, {5, 5}, {6, 0}, {6, 6}, {9, 0}, {9, 3}, {10, 0}, {10, 4}, {11, 5}, {12, 6},
+    {14, 0}, {14, 2}, {15, 3}, {16, 4}, {17, 0}, {17, 5}, {18, 6}, {21, 3}, {22, 0}, {22, 4}, {23, 5}, {24, 6},
+    {26, 2}, {27, 3}, {28, 4}, {29, 5}, {30, 6}, {35, 5}, {36, 6}, {38, 2}, {40, 4}, {41, 0}, {41, 5}, {42, 0},
+    {42, 6}, {46, 0}, {46, 4}, {47, 5}, {49, 1},
 };
 
 void checkCenterlineInside(const std::string& name)

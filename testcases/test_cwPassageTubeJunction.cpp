@@ -724,7 +724,8 @@ TEST_CASE("cwPassageTubeJunction keeps the corner of an arm bending beside the t
 // axis keeps the rings the first column's entry kept, so their mouths stay
 // where they were before the axis cut. Lofting each leg between its
 // stations' sections at face value (T07ah1) moved case 5's mouth and Phake
-// Cave's, whose through draws a4's 23 m drop.
+// Cave's, whose through draws a4's 23 m drop, and reading the pit's sections
+// through its left and right (T07ah2) moved the mouth of Phake Cave's chain 2.
 TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into the through", "[PassageTube][cwPassageTubeJunction]")
 {
     constexpr float kMouthShiftTolerance = 1e-3f;
@@ -740,7 +741,7 @@ TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into
         {QStringLiteral("5. "), 1, 6, 24, QVector3D(0.7522f, -1.6691f, 0.0629f)},
         {QStringLiteral("11. "), 1, 10, 16, QVector3D(0.0387f, 0.0f, 0.1572f)},
         {QStringLiteral("Phake Cave"), 1, 5, 25, QVector3D(22.3960f, 20.1385f, -3.4583f)},
-        {QStringLiteral("Phake Cave"), 2, 15, 25, QVector3D(30.8333f, 8.3871f, -9.5865f)},
+        {QStringLiteral("Phake Cave"), 2, 15, 29, QVector3D(30.7167f, 8.3593f, -10.7573f)},
         {QStringLiteral("Phake Cave"), 3, 23, 26, QVector3D(26.5937f, 2.1608f, -30.8991f)},
     };
     // Rows of one case sit together, so each case is built once.

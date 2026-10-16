@@ -811,9 +811,11 @@ TEST_CASE("cwPassageTubeBuilder takes a wall at face value across the ring", "[P
 TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a vertical shot", "[PassageTube][cwPassageTubeBuilder]")
 {
     // b's chord in chunk 2 drops straight down, so b takes q's facing (the
-    // chord b→r, west). The drop b→q is steep, so its section at b is level
-    // and round at the mean of b's 3 m left and 0 m right walls.
-    constexpr double kShaftRadius = (3.0 + Builder::kMinRadiusMeters) / 2.0;
+    // chord b→r, west). The drop b→q is steep, so its section at b is level:
+    // b's 3 m left wall to the south, its 0 m right wall to the north, and
+    // front and back along the facing at the mean of them.
+    constexpr double kLeftMeters = 3.0;
+    constexpr double kHalfDepth = (kLeftMeters + Builder::kMinRadiusMeters) / 2.0;
     constexpr float kToleranceMeters = 1e-4f;
     const QVector3D bPosition(10, 0, 0);
     const BuilderInput input = makeInput({{
@@ -842,10 +844,18 @@ TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a ver
         return ring.center == bPosition && ring.frame.tangent.z() < -1.0f + kToleranceMeters;
     });
     REQUIRE(shaftTop != chain.rings.cend());
+    QVector3D least = shaftTop->vertices.first() - bPosition;
+    QVector3D most = least;
     for (const QVector3D& vertex : shaftTop->vertices) {
         CHECK(vertex.z() == Catch::Approx(bPosition.z()).margin(kToleranceMeters));
-        CHECK(vertex.distanceToPoint(bPosition) == Catch::Approx(kShaftRadius));
+        const QVector3D offset = vertex - bPosition;
+        least = QVector3D(std::min(least.x(), offset.x()), std::min(least.y(), offset.y()), 0.0f);
+        most = QVector3D(std::max(most.x(), offset.x()), std::max(most.y(), offset.y()), 0.0f);
     }
+    CHECK(least.y() == Catch::Approx(-kLeftMeters));
+    CHECK(most.y() == Catch::Approx(Builder::kMinRadiusMeters));
+    CHECK(least.x() == Catch::Approx(-kHalfDepth));
+    CHECK(most.x() == Catch::Approx(kHalfDepth));
 }
 
 TEST_CASE("cwPassageTubeBuilder borrows the neighbor ring for all-zero LRUD", "[PassageTube][cwPassageTubeBuilder]")
@@ -2353,4 +2363,68 @@ TEST_CASE("cwPassageTubeBuilder reads one record per leg end", "[PassageTube][cw
     {
         checkLoftEndsOn(debug, QStringLiteral("a4"), QStringLiteral("a6"), QStringLiteral("a4"), chunkTwoRecord);
     }
+}
+
+// T07ah rule 2: a plumb leg's section is horizontal, left and right along the
+// facing's sides at the record's left and right and front and back along
+// ±facing at their mean, so the loft between two plumb sections runs each
+// side wall straight through the two stations' reading points. Phake's a6
+// reads L1 R5 and a9 reads L2.3 R2, both facing 230° along a9 -> a10.
+TEST_CASE("cwPassageTubeBuilder lofts a plumb leg between its horizontal sections", "[PassageTube][cwPassageTubeBuilder]")
+{
+    constexpr double kFacingAzimuthDegrees = 230.0;
+    constexpr double kFacingToleranceDegrees = 1.0;
+    constexpr float kA6LeftMeters = 1.0f;
+    constexpr float kA6RightMeters = 5.0f;
+    constexpr float kA9LeftMeters = 2.3f;
+    constexpr float kA9RightMeters = 2.0f;
+
+    const Builder::Debug debug = buildDebug(makeInput(cwPassageTubeCases::phakeCave()));
+    const QString a6Name = QStringLiteral("a6");
+    const QString a9Name = QStringLiteral("a9");
+    const Builder::Chain& chain = chainJoining(debug, a6Name, a9Name);
+    const Loft loft = loftOf(debug, chain, a6Name, a9Name);
+    const Builder::Leg& leg = debug.legs.at(chain.legs.at(loft.chainLeg).legIndex);
+    const bool a6IsFrom = leg.from == a6Name;
+    const QVector3D a6 = a6IsFrom ? leg.fromPosition : leg.toPosition;
+    const QVector3D a9 = a6IsFrom ? leg.toPosition : leg.fromPosition;
+    const QVector3D a6Facing = a6IsFrom ? leg.fromFacing : leg.toFacing;
+    const QVector3D a9Facing = a6IsFrom ? leg.toFacing : leg.fromFacing;
+
+    const auto azimuthOf = [](const QVector3D& direction) {
+        const double degrees = qRadiansToDegrees(std::atan2(direction.x(), direction.y()));
+        return degrees < 0.0 ? degrees + 360.0 : degrees;
+    };
+    INFO("a6 faces " << azimuthOf(a6Facing) << "°, a9 faces " << azimuthOf(a9Facing) << "°");
+    REQUIRE(azimuthOf(a6Facing) == Catch::Approx(kFacingAzimuthDegrees).margin(kFacingToleranceDegrees));
+    REQUIRE(azimuthOf(a9Facing) == Catch::Approx(kFacingAzimuthDegrees).margin(kFacingToleranceDegrees));
+
+    const QVector3D facing = QVector3D(a6Facing.x(), a6Facing.y(), 0.0f).normalized();
+    const QVector3D right(facing.y(), -facing.x(), 0.0f);
+    const QVector3D shot = a9 - a6;
+    const auto extremeVertex = [](const Builder::Ring& ring, const QVector3D& direction) {
+        return *std::max_element(ring.vertices.cbegin(), ring.vertices.cend(), [&](const QVector3D& p, const QVector3D& q) {
+            return QVector3D::dotProduct(p, direction) < QVector3D::dotProduct(q, direction);
+        });
+    };
+
+    int checkedRings = 0;
+    for (int i = 0; i < chain.rings.size(); ++i) {
+        const Builder::Ring& ring = chain.rings.at(i);
+        if (ring.chainLeg != loft.chainLeg || ring.vertices.isEmpty()) {
+            continue;
+        }
+        ++checkedRings;
+        const float t = std::clamp(QVector3D::dotProduct(ring.center - a6, shot) / shot.lengthSquared(), 0.0f, 1.0f);
+        const QVector3D onShot = a6 + shot * t;
+        const float leftReading = std::lerp(kA6LeftMeters, kA9LeftMeters, t);
+        const float rightReading = std::lerp(kA6RightMeters, kA9RightMeters, t);
+        const float halfDepth = (leftReading + rightReading) / 2.0f;
+        INFO("ring " << i << " at t " << t << ": left " << leftReading << " m, right " << rightReading << " m, half depth " << halfDepth << " m");
+        CHECK(extremeVertex(ring, -right).distanceToPoint(onShot - right * leftReading) <= cwPassageTubeMeshCheck::kWallTolerance);
+        CHECK(extremeVertex(ring, right).distanceToPoint(onShot + right * rightReading) <= cwPassageTubeMeshCheck::kWallTolerance);
+        CHECK(extremeVertex(ring, facing).distanceToPoint(onShot + facing * halfDepth) <= cwPassageTubeMeshCheck::kWallTolerance);
+        CHECK(extremeVertex(ring, -facing).distanceToPoint(onShot - facing * halfDepth) <= cwPassageTubeMeshCheck::kWallTolerance);
+    }
+    CHECK(checkedRings > 0);
 }

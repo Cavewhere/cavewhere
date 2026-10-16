@@ -876,22 +876,25 @@ struct SectionAxes {
 // facing (T07ah rule 1). A gentle leg's section stands plumb: right is the
 // facing turned clockwise, reversed with the walls it reads when the record
 // faces against the leg, or the leg's own right when the facing lies more
-// than kMaxFacingDegrees off the leg. A steep leg's section lies level and
-// round at the mean of left and right; a circle reads the same whichever way
-// its right points, so it takes previousRight, the right of the section
-// before it along the chain, and the loft between it and that one does not
-// twist, or the facing's right without one.
+// than kMaxFacingDegrees off the leg. A steep leg's section lies level
+// (T07ah rule 2): left and right across the facing, front and back along it
+// at the mean of left and right. Its right turns with the walls it reads to
+// agree with previousRight, the right of the section before it along the
+// chain, so the loft between them joins each bin to its match.
 SectionAxes sectionAxes(const cwStationLrud& record,
                         const QVector3D& facing,
                         const QVector3D& direction,
                         const std::optional<QVector3D>& previousRight)
 {
     if (isSteep(direction)) {
-        const QVector3D levelPrevious = previousRight ? inPlan(*previousRight) : QVector3D();
-        const QVector3D right = levelPrevious.length() >= kMinHorizontalLength ? levelPrevious.normalized() : clockwiseOf(facing);
+        const QVector3D facingRight = clockwiseOf(facing);
+        const bool turnsAgainst = previousRight && QVector3D::dotProduct(inPlan(*previousRight), facingRight) < 0.0f;
+        const QVector3D right = turnsAgainst ? -facingRight : facingRight;
         const QVector3D walkUp = direction.z() < 0.0f ? -kWorldUp : kWorldUp;
-        const std::optional<double> radius = meanReading(record.left, record.right);
-        return SectionAxes {right, QVector3D::crossProduct(right, walkUp), {radius, radius, radius, radius}};
+        const std::optional<double> halfDepth = meanReading(record.left, record.right);
+        const std::optional<double>& leftWall = turnsAgainst ? record.right : record.left;
+        const std::optional<double>& rightWall = turnsAgainst ? record.left : record.right;
+        return SectionAxes {right, QVector3D::crossProduct(right, walkUp), {leftWall, rightWall, halfDepth, halfDepth}};
     }
 
     const QVector3D squareRight = clockwiseOf(direction);
@@ -985,9 +988,9 @@ Warning chainWarning(const QVector<Leg>& legs, const Chain& chain, Warning::Type
 // Each leg end's walls, as its own record reads them or, when it reads too
 // little, borrowed from the nearest leg end of the chain that reads enough,
 // first from its own trip within kSameTripBorrowLegs legs; a steep leg's end
-// takes them round at the mean of their left and right. ends run in chain
-// order, each leg's start before its end. Without any, the sections are round
-// at the default radius and the chain warns.
+// keeps their left and right and reads front and back at the mean of them.
+// ends run in chain order, each leg's start before its end. Without any, the
+// sections are round at the default radius and the chain warns.
 void borrowWalls(QVector<LegEnd>& ends, const QVector<Leg>& legs, const Chain& chain, const Options& options, QVector<Warning>& warnings)
 {
     QVector<int> read;
@@ -1035,8 +1038,8 @@ void borrowWalls(QVector<LegEnd>& ends, const QVector<Leg>& legs, const Chain& c
 
     for (LegEnd& end : ends) {
         if (end.isBorrowed && end.isSteep) {
-            const std::optional<double> radius = meanReading(end.walls->left, end.walls->right);
-            end.walls = cwStationLrud {radius, radius, radius, radius};
+            const std::optional<double> halfDepth = meanReading(end.walls->left, end.walls->right);
+            end.walls = cwStationLrud {end.walls->left, end.walls->right, halfDepth, halfDepth};
         }
     }
 }
