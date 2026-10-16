@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <utility>
 
 //Our includes
@@ -31,15 +32,20 @@
 #include "cwGeoPoint.h"
 #include "cwFutureManagerModel.h"
 #include "cwFutureManagerToken.h"
+#include "cavewhere.pb.h"
+#include "cwMath.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeBuilder.h"
 #include "cwPointOctreeManifest.h"
 #include "cwPointOctreeSampler.h"
+#include "cwPointOctreeSelection.h"
 #include "cwTask.h"
 
 #include "LazFixtureHelper.h"
+#include "LocalSpacingFixtureHelper.h"
 
 using namespace cw::octree;
+using cwLocalSpacingFixture::estimateLocalSpacing;
 
 namespace {
     constexpr int kPassagePointCount = 300000;
@@ -833,7 +839,7 @@ namespace {
             qFromLittleEndian<quint16>(axes),
             qFromLittleEndian<quint16>(axes + kAxisBytes),
             qFromLittleEndian<quint16>(axes + 2 * kAxisBytes),
-            0
+            qFromLittleEndian<quint16>(axes + 3 * kAxisBytes)
         };
     }
 }
@@ -860,7 +866,7 @@ TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
     REQUIRE(manifest.nodes.size() > 1);
 
     //The generation is part of every id, so an older cache is never read back
-    REQUIRE(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree4")));
+    CHECK(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree6")));
 
     const cwDiskCacher cacher {QDir(request.cacheRootPath)};
     for(int i = 0; i < manifest.nodes.size(); i++) {
@@ -2036,4 +2042,386 @@ TEST_CASE("cwPointOctreeBuilder: every node through pass B and pass C carries it
     //A passage has real spacing in every node with a pair of points to measure
     CHECK(measuredNodes > 0);
     CHECK(manifest.nodes.constFirst().measuredSpacing > 0.0f);
+}
+
+// ---- WP13: per-point native spacing in the payload ----------------------------
+
+namespace {
+    //! The share of a node's points whose payload code the estimator gives
+    //! again from the dequantized payload, to kRoundTripTolerance: quantization
+    //! moves a point by under a step of its node's cube, a few parts in ten
+    //! thousand of the sparse plane's spacing
+    constexpr double kMinRepeatedCodeShare = 0.95;
+    constexpr double kRoundTripTolerance = 0.01;
+
+    //! The id the generation @a generation builder spelled @a suffix's entry with
+    cwDiskCacher::Key generationKey(int generation, const QString& lazPath,
+                                    const QString& fingerprint, const QString& suffix)
+    {
+        const QFileInfo info(lazPath);
+        return cwDiskCacher::Key {
+            info.fileName() + QStringLiteral("-octree") + QString::number(generation)
+                + QStringLiteral("-") + suffix,
+            info.dir(),
+            fingerprint
+        };
+    }
+
+    //! Every point of @a index's cached payload, quantized as written
+    QVector<QuantizedPoint> cachedQuantizedPoints(const cwDiskCacher& cacher, const QString& path,
+                                                  const cwPointOctreeManifest& manifest, int index)
+    {
+        const QByteArray payload =
+            cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(index)));
+        QVector<QuantizedPoint> points;
+        const qsizetype count = payload.size() / kBytesPerPoint;
+        points.reserve(count);
+        for(qsizetype point = 0; point < count; point++) {
+            points.append(quantizedPointAt(payload, point));
+        }
+        return points;
+    }
+
+    //! The chunked plane: kChunkedPlaneStep apart over kChunkedPlaneSide, so
+    //! at kTwoLevelChunkTarget pass B builds it as 16 chunks and pass C pulls
+    //! its coarse levels up into the top tree
+    constexpr double kChunkedPlaneSide = 96.0;
+    constexpr double kChunkedPlaneStep = 0.3;
+    constexpr float kChunkedPlaneHeight = 10.0f;
+    //! Points this close to the data's own edge have neighbors on one side only
+    constexpr double kChunkedPlaneEdgeMargin = 1.0;
+    constexpr double kNativeSpacingTolerance = 0.25;
+    //! Neighbors stop at a chunk's faces: on a lattice a point beside one face
+    //! finds its k-th distinct neighbor sqrt(2) farther than an interior point
+    //! does, and one beside two faces, at a chunk's corner, twice as far
+    constexpr double kFaceSpacingFactor = std::numbers::sqrt2;
+    constexpr double kCornerSpacingFactor = 2.0;
+    //! Beside one face the k-th neighbor reaches two rows along it, so a point
+    //! that close to a second face loses neighbors to both: a corner point
+    constexpr double kFaceReachRows = 2.0;
+    constexpr double kFaceFactorSlack = 0.02;
+
+    QVector<QVector3D> chunkedPlanePoints()
+    {
+        const int perAxis = int(kChunkedPlaneSide / kChunkedPlaneStep);
+        QVector<QVector3D> points;
+        points.reserve(qsizetype(perAxis) * perAxis);
+        for(int row = 0; row < perAxis; row++) {
+            for(int column = 0; column < perAxis; column++) {
+                points.append(QVector3D(float((column + 0.5) * kChunkedPlaneStep),
+                                        float((row + 0.5) * kChunkedPlaneStep),
+                                        kChunkedPlaneHeight));
+            }
+        }
+        return points;
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: every point through pass B and pass C carries a native spacing code inside its caps",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-local-spacing"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget
+    };
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+    const cwPointOctreeManifest manifest = result.value();
+    REQUIRE(manifest.nodes.size() > 1);
+
+    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    qint64 unmeasured = 0;
+    qint64 outOfRange = 0;
+    qint64 points = 0;
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        const QVector<QuantizedPoint> node = cachedQuantizedPoints(cacher, path, manifest, i);
+        REQUIRE(node.size() == qsizetype(manifest.nodes.at(i).pointCount));
+
+        //The absolute range, and the node's own grid cap
+        const double grid = manifest.spacing(manifest.nodes.at(i).level);
+        const double cap = std::min(kMaxLocalSpacingGridRatio * grid, kMaxLocalSpacingUnits);
+        quint64 previous = 0;
+        for(const QuantizedPoint& point : node) {
+            //The reserved word rides through the Morton sort with its point
+            const quint64 key = mortonKey(point);
+            REQUIRE(key >= previous);
+            previous = key;
+            unmeasured += point.reserved == kUnmeasuredLocalSpacingCode ? 1 : 0;
+            const double spacing = decodeLocalSpacing(point.reserved, grid);
+            constexpr double kCodeSlack = 1.001;
+            outOfRange += spacing < kMinLocalSpacingUnits / kCodeSlack
+                                  || spacing > cap * kCodeSlack
+                              ? 1 : 0;
+        }
+        points += node.size();
+    }
+    INFO(unmeasured << " of " << points << " points unmeasured, " << outOfRange
+         << " outside their caps");
+    CHECK(points == manifest.pointCount);
+    CHECK(unmeasured == 0);
+    CHECK(outOfRange == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a node's payload codes are the estimator's codes for its points",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    //The sparse plane builds a single node, so its subtree is the whole tree
+    //and the estimator sees exactly the points the builder did
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-local-sparse-plane"));
+    REQUIRE(writeSyntheticLazFile(path, sparsePlanePoints()));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path()
+    };
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+    const cwPointOctreeManifest manifest = result.value();
+    REQUIRE(manifest.nodes.size() == 1);
+
+    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const QVector<QuantizedPoint> written = cachedQuantizedPoints(cacher, path, manifest, 0);
+    REQUIRE_FALSE(written.isEmpty());
+
+    const QBox3D bounds = manifest.nodeBounds(0);
+    SampledNode node {Cell {0, 0, 0, 0}, {}};
+    for(const QuantizedPoint& point : written) {
+        node.points.append(dequantize(point, bounds));
+    }
+    const QVector<QVector<quint16>> again =
+        estimateLocalSpacing({node}, manifest.rootMin, manifest.rootSize);
+    REQUIRE(again.size() == 1);
+    REQUIRE(again.constFirst().size() == written.size());
+
+    const double grid = manifest.spacing(0);
+    qsizetype repeated = 0;
+    qsizetype measured = 0;
+    for(qsizetype i = 0; i < written.size(); i++) {
+        const double payload = decodeLocalSpacing(written.at(i).reserved, grid);
+        const double estimated = decodeLocalSpacing(again.constFirst().at(i), grid);
+        repeated += std::abs(payload - estimated) <= kRoundTripTolerance * estimated ? 1 : 0;
+        measured += written.at(i).reserved != kUnmeasuredLocalSpacingCode ? 1 : 0;
+    }
+    INFO(repeated << " of " << written.size() << " codes repeat, " << measured << " measured");
+    CHECK(measured == written.size());
+    CHECK(double(repeated) >= kMinRepeatedCodeShare * double(written.size()));
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cache written at generation 5 is rejected and rebuilt with native spacing",
+          "[PointOctree][PointOctreeBuilder]") {
+    constexpr int kGenerationWithLocalSpacingRatios = 5;
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-generation-5"));
+    REQUIRE(writeSyntheticLazFile(path, sparsePlanePoints()));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path()
+    };
+    const cwPointOctreeBuilder::Result first =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(first.hasError());
+    const cwPointOctreeManifest manifest = first.value();
+
+    //Leave on disk only what the generation 5 builder would have: its
+    //manifest, stamped generation 5, and its payloads, under its own keys
+    cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const QByteArray manifestBytes = cacher.entry(manifestKey(path, manifest.fingerprint));
+    REQUIRE_FALSE(manifestBytes.isEmpty());
+    CavewhereProto::PointOctreeManifest proto;
+    REQUIRE(proto.ParseFromArray(manifestBytes.constData(), int(manifestBytes.size())));
+    proto.set_format_generation(kGenerationWithLocalSpacingRatios);
+    const std::string oldBytes = proto.SerializeAsString();
+
+    QVector<QByteArray> payloads;
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        payloads.append(cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(i))));
+        REQUIRE(QFile::remove(cacher.filePath(nodeKey(path, manifest.fingerprint,
+                                                      manifest.nodeName(i)))));
+    }
+    REQUIRE(QFile::remove(cacher.filePath(manifestKey(path, manifest.fingerprint))));
+    REQUIRE(cacher.insert(generationKey(kGenerationWithLocalSpacingRatios, path,
+                                        manifest.fingerprint, QStringLiteral("manifest")),
+                          QByteArray(oldBytes.data(), qsizetype(oldBytes.size()))));
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        REQUIRE(cacher.insert(generationKey(kGenerationWithLocalSpacingRatios, path,
+                                            manifest.fingerprint, manifest.nodeName(i)),
+                              payloads.at(i)));
+    }
+
+    //Never read back
+    CHECK_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+
+    //and rebuilt, every point carrying its code
+    const cwPointOctreeBuilder::Result rebuilt =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(rebuilt.hasError());
+    REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+    const QVector<QuantizedPoint> points =
+        cachedQuantizedPoints(cacher, path, rebuilt.value(), 0);
+    REQUIRE_FALSE(points.isEmpty());
+    CHECK(std::none_of(points.cbegin(), points.cend(), [](const QuantizedPoint& point) {
+        return point.reserved == kUnmeasuredLocalSpacingCode;
+    }));
+}
+
+TEST_CASE("cwPointOctreeBuilder: every level of a chunked plane carries the plane's native spacing, a chunk-face point at most sqrt(2) wider",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QVector<QVector3D> plane = chunkedPlanePoints();
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-native-chunked-plane"));
+    REQUIRE(writeSyntheticLazFile(path, plane));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget
+    };
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+    const cwPointOctreeManifest manifest = result.value();
+
+    //The chunk cells pass B built, whose faces the estimate's neighbors stop at
+    const int chunkDepth = cwPointOctreeBuilder::chunkDepthFor(plane.size(), kTwoLevelChunkTarget);
+    REQUIRE(chunkDepth > 0);
+    const double chunkSize = std::ldexp(manifest.rootSize, -chunkDepth);
+    const auto facesBeside = [&](const QVector3D& point) {
+        int faces = 0;
+        for(int axis = 0; axis < 2; axis++) {
+            const double offset = (double(point[axis]) - double(manifest.rootMin[axis])) / chunkSize;
+            const double toFace = std::abs(offset - std::round(offset)) * chunkSize;
+            faces += toFace < kFaceReachRows * kChunkedPlaneStep ? 1 : 0;
+        }
+        return faces;
+    };
+    const auto inside = [](const QVector3D& point) {
+        const double low = kChunkedPlaneEdgeMargin;
+        const double high = kChunkedPlaneSide - kChunkedPlaneEdgeMargin;
+        return point.x() >= low && point.x() <= high && point.y() >= low && point.y() <= high;
+    };
+
+    struct Coded {
+        int level = 0;
+        int faces = 0;
+        double spacing = 0.0;
+    };
+    QVector<Coded> coded;
+    QHash<int, QVector<double>> byLevel;
+    QVector<double> interior;
+    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        const cwPointOctreeNode& node = manifest.nodes.at(i);
+        const QBox3D bounds = manifest.nodeBounds(i);
+        const double grid = manifest.spacing(node.level);
+        for(const QuantizedPoint& point : cachedQuantizedPoints(cacher, path, manifest, i)) {
+            const QVector3D position = dequantize(point, bounds);
+            if(!inside(position)) {
+                continue;
+            }
+            const Coded entry {node.level, facesBeside(position),
+                               decodeLocalSpacing(point.reserved, grid)};
+            coded.append(entry);
+            byLevel[node.level].append(entry.spacing);
+            if(entry.faces == 0) {
+                interior.append(entry.spacing);
+            }
+        }
+    }
+    REQUIRE(byLevel.size() > chunkDepth);
+    REQUIRE_FALSE(interior.isEmpty());
+
+    //An absolute density: the top tree's levels, which pass C sampled, read
+    //the data's spacing just as the chunks' leaves do
+    for(auto level = byLevel.cbegin(); level != byLevel.cend(); ++level) {
+        const double median = cwMedian(level.value());
+        INFO("level " << level.key() << " median " << median << " m over " << level.value().size()
+             << " points");
+        CHECK(std::abs(median - kChunkedPlaneStep) <= kNativeSpacingTolerance * kChunkedPlaneStep);
+    }
+
+    const double typical = cwMedian(interior);
+    double widestFace = 0.0;
+    double widestCorner = 0.0;
+    int tooWide = 0;
+    int tooNarrow = 0;
+    for(const Coded& entry : std::as_const(coded)) {
+        const double factor = entry.spacing / typical;
+        const double bound = entry.faces == 0   ? 1.0
+                             : entry.faces == 1 ? kFaceSpacingFactor
+                                                : kCornerSpacingFactor;
+        if(entry.faces == 1) {
+            widestFace = std::max(widestFace, factor);
+        } else if(entry.faces == 2) {
+            widestCorner = std::max(widestCorner, factor);
+        }
+        tooWide += factor > bound * (1.0 + kFaceFactorSlack) ? 1 : 0;
+        tooNarrow += entry.spacing < (1.0 - kNativeSpacingTolerance) * kChunkedPlaneStep ? 1 : 0;
+    }
+    INFO("interior median " << typical << " m; widest beside a chunk face " << widestFace
+         << " times it, beside a chunk corner " << widestCorner << "; " << tooWide
+         << " too wide, " << tooNarrow << " too narrow of " << coded.size());
+    CHECK(tooWide == 0);
+    CHECK(tooNarrow == 0);
+}
+
+TEST_CASE("cwPointOctreeBuilder: under Local a built tree floors every drawn node exactly as under Measured",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-local-floors"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget
+    };
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+    const cwPointOctreeManifest manifest = result.value();
+    REQUIRE(manifest.nodes.size() > 1);
+
+    //The whole tree drawn, and a coarse cut whose floors lift from its deepest
+    //level: a native spacing is the point's, never the node's
+    constexpr int kCoarseCutLevel = 3;
+    QVector<int> everyNode;
+    QVector<int> coarseCut;
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        everyNode.append(i);
+        if(manifest.nodes.at(i).level <= kCoarseCutLevel) {
+            coarseCut.append(i);
+        }
+    }
+    for(const QVector<int>& drawn : {everyNode, coarseCut}) {
+        const QVector<double> local =
+            finestDrawnSpacings(manifest, drawn, {}, cw::pointcloud::SpacingSource::Local);
+        const QVector<double> measured =
+            finestDrawnSpacings(manifest, drawn, {}, cw::pointcloud::SpacingSource::Measured);
+        REQUIRE(local.size() == measured.size());
+        int differing = 0;
+        for(int i = 0; i < local.size(); i++) {
+            differing += local.at(i) != measured.at(i) ? 1 : 0;
+        }
+        INFO(differing << " of " << drawn.size() << " drawn nodes floor differently");
+        CHECK(differing == 0);
+    }
 }

@@ -649,7 +649,7 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and p
         CHECK(settings->spacingSource() == int(SpacingSource::Measured));
         CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Measured);
         CHECK(cwRenderingSettings::spacingSourceCount() == cw::pointcloud::kSpacingSourceCount);
-        CHECK(cwRenderingSettings::spacingSourceCount() == 2);
+        CHECK(cwRenderingSettings::spacingSourceCount() == 3);
         CHECK(settings->isAtDefaults());
     }
 
@@ -658,7 +658,29 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and p
         CHECK(settings->spacingSource() == int(SpacingSource::Grid));
         settings->setSpacingSource(100);
         CHECK(settings->spacingSource() == cwRenderingSettings::spacingSourceCount() - 1);
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+    }
+
+    SECTION("local round-trips through QSettings and reaches the shading") {
+        QSignalSpy sourceSpy(settings, &cwRenderingSettings::spacingSourceChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+
+        settings->setSpacingSource(int(SpacingSource::Local));
+
+        CHECK(sourceSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Local);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Local));
+
+        settings->resetPointCloudKnobsToDefaults();
         CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+        CHECK(settings->isAtDefaults());
     }
 
     SECTION("grid round-trips through QSettings and reaches the shading") {

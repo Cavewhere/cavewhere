@@ -195,15 +195,52 @@ namespace cw::clod {
      * measured from its own points (0 where it measured nothing). Grid is the
      * grid spacing alone; Measured is the larger of the two, so a node sparser
      * than its grid answers for the gap it really has and a denser one keeps
-     * its grid. PointCloud.vert takes the same maximum.
+     * its grid. Local thins and cuts as Measured does. PointCloud.vert takes
+     * the same maximum.
      */
     inline double drawSpacing(double gridSpacing, double measuredSpacing,
                               cw::pointcloud::SpacingSource source)
     {
-        if (source == cw::pointcloud::SpacingSource::Measured) {
-            return std::max(gridSpacing, measuredSpacing);
+        if (source == cw::pointcloud::SpacingSource::Grid) {
+            return gridSpacing;
         }
-        return gridSpacing;
+        return std::max(gridSpacing, measuredSpacing);
+    }
+
+    /**
+     * The native spacing, in meters, of a point whose reserved word holds
+     * @a code (cw::octree::encodeLocalSpacing): an absolute spacing whatever
+     * the grid, and @a gridSpacing, its node's, for an unmeasured code.
+     * PointCloud.vert decodes qpos.w the same way.
+     */
+    inline double localSpacing(quint16 code, double gridSpacing)
+    {
+        return cw::octree::decodeLocalSpacing(code, gridSpacing);
+    }
+
+    static_assert(cw::octree::kMinLocalSpacingUnits == 0.005
+                      && cw::octree::kMaxLocalSpacingUnits == 64.0
+                      && cw::octree::kUnmeasuredLocalSpacingCode == 0
+                      && cw::octree::kQuantMax == 65535,
+                  "PointCloud.vert spells this out");
+
+    /**
+     * The spacing a sprite's world-space floor covers under @a source, given
+     * the floor its node draws with this frame @a drawnFloor (revealedFloor()
+     * of the floor ramp, finestDrawnSpacings() or requestedCutSpacings() once
+     * it settles) and the point's own @a nativeSpacing (localSpacing()). Grid
+     * and Measured cover the drawn floor. Local covers the larger of the two,
+     * so a point whose node's floor a tiny dense descendant lifted still
+     * covers the data's spacing around it. PointCloud.vert takes the same
+     * maximum.
+     */
+    inline double sizeSpacing(double drawnFloor, double nativeSpacing,
+                              cw::pointcloud::SpacingSource source)
+    {
+        if (source == cw::pointcloud::SpacingSource::Local) {
+            return std::max(drawnFloor, nativeSpacing);
+        }
+        return drawnFloor;
     }
 
     //! The frames from @a since to @a frame, the age the reveal ramp reads:

@@ -1,6 +1,11 @@
 // cwPointOctree.h
 #pragma once
 
+//Std includes
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+
 //Qt includes
 #include <QByteArray>
 #include <QString>
@@ -20,11 +25,19 @@
 namespace cw::octree {
 
     //Bumping this invalidates every cached manifest and node at once.
-    //Generation 4 adds each node's measured spacing and kMinSplitPoints.
-    constexpr int kFormatGeneration = 4;
+    //Generation 4 adds each node's measured spacing and kMinSplitPoints;
+    //generation 5 wrote a local spacing ratio into each point's reserved word,
+    //and generation 6 writes the point's absolute native spacing code there.
+    constexpr int kFormatGeneration = 6;
 
     //Points per node edge; spacing = nodeSize / kSampleGridResolution
     constexpr int kSampleGridResolution = 128;
+
+    //! The grid spacing of a level in a root cube @a rootSize on a side
+    inline double levelGridSpacing(double rootSize, int level)
+    {
+        return std::ldexp(rootSize / double(kSampleGridResolution), -level);
+    }
 
     //A leaf holds at most this many points, so a node is at most 160 KB
     constexpr int kLeafMaxPoints = 20000;
@@ -63,8 +76,75 @@ namespace cw::octree {
         quint16 x = 0;
         quint16 y = 0;
         quint16 z = 0;
+        //! The point's native spacing code (encodeLocalSpacing), 0 where
+        //! nothing was measured
         quint16 reserved = 0;
     };
+
+    //! The code of a point nothing measured, which sizes by its grid spacing
+    constexpr quint16 kUnmeasuredLocalSpacingCode = 0;
+
+    /**
+     * Per-point native spacing (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section
+     * 14.5, WP13). Every point carries the spacing of the raw data around it:
+     * the distance r_k to its kLocalSpacingNeighbors-th nearest distinct
+     * neighbor among every point of the cloud near it, duplicates counted
+     * once, as a surface spacing s = r_k * kLocalSpacingSurfaceFactor. The
+     * spacing is clamped to [kMinLocalSpacingUnits, kMaxLocalSpacingUnits]
+     * and to kMaxLocalSpacingGridRatio times the point's own node's grid
+     * spacing, and stored as a 16-bit log2 code over that absolute range
+     * (cw::octree::estimateNativeSpacing).
+     *
+     * The range is in the octree's own units, which are the frame CS's
+     * meters whenever the layer has a frame CS and the source's native units
+     * otherwise: a cloud in US survey feet with no frame CS codes over 0.005
+     * to 64 feet (1.5 mm to 19.5 m), which still spans every spacing a lidar
+     * tile carries, and the grid cap usually binds first. The builder knows
+     * nothing of the layer's horizontalMetersPerUnit, and a per-cloud range
+     * would need a per-cloud decode in the shader, so the range stays fixed.
+     */
+    constexpr int kLocalSpacingNeighbors = 8;
+
+    //! sqrt(pi / k): on a surface, the k nearest neighbors fill a disc of
+    //! radius r_k, so pi r_k^2 = k s^2
+    inline const double kLocalSpacingSurfaceFactor =
+        std::sqrt(std::numbers::pi / double(kLocalSpacingNeighbors));
+
+    //! The absolute range a native spacing codes over, in the octree's units
+    constexpr double kMinLocalSpacingUnits = 0.005;
+    constexpr double kMaxLocalSpacingUnits = 64.0;
+
+    //! The octaves the codes from 1 to kQuantMax split evenly
+    inline const double kLocalSpacingCodeOctaves =
+        std::log2(kMaxLocalSpacingUnits / kMinLocalSpacingUnits);
+
+    //! The cap, in grid spacings of the point's own node, that keeps a lone
+    //! canopy return from drawing a giant disc
+    constexpr double kMaxLocalSpacingGridRatio = 4.0;
+
+    //! The widest native spacing a point of a node of grid spacing
+    //! @a gridSpacing may carry: kMaxLocalSpacingGridRatio grids, at most
+    //! kMaxLocalSpacingUnits
+    inline double localSpacingCap(double gridSpacing)
+    {
+        return std::min(kMaxLocalSpacingGridRatio * gridSpacing, kMaxLocalSpacingUnits);
+    }
+
+    //! localSpacingCap() of a node at @a level in a root cube @a rootSize on a side
+    inline double levelLocalSpacingCap(double rootSize, int level)
+    {
+        return localSpacingCap(levelGridSpacing(rootSize, level));
+    }
+
+    //! The 16-bit code of a native @a spacing: its log2 over
+    //! [kMinLocalSpacingUnits, kMaxLocalSpacingUnits] after the clamp, from 1
+    //! at the floor to kQuantMax at the cap, so a measured point never codes
+    //! to kUnmeasuredLocalSpacingCode
+    CAVEWHERE_LIB_EXPORT quint16 encodeLocalSpacing(double spacing);
+
+    //! The native spacing @a code stands for, whatever the grid; @a gridSpacing
+    //! itself for kUnmeasuredLocalSpacingCode
+    CAVEWHERE_LIB_EXPORT double decodeLocalSpacing(quint16 code, double gridSpacing);
 
     /**
      * Quantizes point to the node's cell. Each axis is rounded to the nearest
@@ -91,6 +171,15 @@ namespace cw::octree {
      * payload is deterministic and a pick can index it by spatial locality.
      */
     CAVEWHERE_LIB_EXPORT QByteArray quantizeAll(const QVector<QVector3D>& points, const QBox3D& nodeBounds);
+
+    /**
+     * quantizeAll() with @a localSpacingCodes, one per point in @a points'
+     * order, written into each point's reserved word. A code travels with its
+     * point through the Morton sort.
+     */
+    CAVEWHERE_LIB_EXPORT QByteArray quantizeAll(const QVector<QVector3D>& points,
+                                                const QVector<quint16>& localSpacingCodes,
+                                                const QBox3D& nodeBounds);
 
     /**
      * The Potree style name of a node, where each digit is an octant index:

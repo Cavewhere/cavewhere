@@ -96,6 +96,32 @@ struct CwRhiPointCloudTestAccess {
         return cloud.appearanceUniform(live.spacingCoverage);
     }
 
+    // Writes the live appearance block into override @a slot with its debug
+    // view swapped for @a debugView, every other field as the live slot holds
+    // it this frame (reveal ramps included, which an export job's slot drops).
+    // Drawing the frame's gathered drawables again at this slot redraws the
+    // very same sprites colored by the view, which is how the [PointCloudEval]
+    // bench reads the sprite sides the GPU drew without a second frame.
+    static void writeDebugViewSlot(const cwRHIPointCloud& cloud, QRhiResourceUpdateBatch* batch,
+                                   int slot, cw::pointcloud::DebugView debugView) {
+        PerCloudUniform uniform = cloud.appearanceUniform(cloud.m_renderState.value().spacingCoverage);
+        uniform.debugView = qint32(debugView);
+        batch->updateDynamicBuffer(cloud.m_perCloudUBO, appearanceSlotOffset(cloud, slot),
+                                   sizeof(PerCloudUniform), &uniform);
+    }
+
+    // The byte offset of appearance @a slot in the cloud's appearance block,
+    // the offset its drawables bind for that slot
+    static quint32 appearanceSlotOffset(const cwRHIPointCloud& cloud, int slot) {
+        return quint32(slot) * cloud.m_perCloudStride;
+    }
+
+    // The bindings the cloud's point drawables carry, which tells them apart
+    // from another object's in a gathered pass
+    static const QRhiShaderResourceBindings* pointBindings(const cwRHIPointCloud& cloud) {
+        return cloud.m_srb;
+    }
+
     // The world spacing @a index's constants slot held when the last frame
     // drew: the floor that frame's live gather worked out, or the node's own
     // spacing while no live gather has drawn it. 0 for a node that is not

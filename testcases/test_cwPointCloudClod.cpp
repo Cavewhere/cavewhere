@@ -517,3 +517,141 @@ TEST_CASE("A Grow arrival's sprite grows from one pixel to its size with its are
         }
     }
 }
+
+// ---- WP13: per-point local spacing -------------------------------------------
+
+TEST_CASE("SpacingSource has a third value, Local, and the default stays Measured",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    CHECK(int(SpacingSource::Grid) == 0);
+    CHECK(int(SpacingSource::Measured) == 1);
+    CHECK(int(SpacingSource::Local) == 2);
+    CHECK(cw::pointcloud::kSpacingSourceCount == 3);
+    CHECK(cw::pointcloud::kDefaultSpacingSource == SpacingSource::Measured);
+    CHECK(cwPointCloudShading().spacingSource == SpacingSource::Measured);
+}
+
+TEST_CASE("Under Local a node thins by the same spacing it thins by under Measured",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    constexpr double kGridSpacing = 1.0;
+    constexpr double kSparseSpacing = 3.0;
+    constexpr double kDenseSpacing = 0.5;
+    constexpr double kUnmeasured = 0.0;
+
+    //Everything a node decides as a whole stays Measured's
+    for (double measured : {kUnmeasured, kDenseSpacing, kSparseSpacing}) {
+        INFO("measured " << measured);
+        CHECK(drawSpacing(kGridSpacing, measured, SpacingSource::Local)
+              == drawSpacing(kGridSpacing, measured, SpacingSource::Measured));
+    }
+}
+
+namespace {
+    //! The spacings of the user's spot on the BC tile: a lifted floor from a
+    //! node of duplicate returns, the data's native spacing, and a coarse floor
+    constexpr double kLiftedFloor = 0.0144;
+    constexpr double kNativeSpacing = 0.27;
+    constexpr double kCoarseFloor = 0.5;
+    //! One code step, as a factor on the spacing
+    const double kLocalCodeStepFactor =
+        std::exp2(std::log2(cw::octree::kMaxLocalSpacingUnits
+                            / cw::octree::kMinLocalSpacingUnits)
+                  / double(cw::octree::kQuantMax - 1));
+}
+
+TEST_CASE("cw::clod::localSpacing decodes a code to the same absolute spacing whatever the grid, and 0 to the grid spacing",
+          "[PointCloudClod]")
+{
+    using namespace cw::octree;
+
+    constexpr double kFineGrid = 0.014;
+    constexpr double kCoarseGrid = 14.3;
+
+    //Unmeasured reads as the grid spacing, which is what an old payload holds
+    CHECK(localSpacing(kUnmeasuredLocalSpacingCode, kFineGrid) == kFineGrid);
+    CHECK(localSpacing(kUnmeasuredLocalSpacingCode, kCoarseGrid) == kCoarseGrid);
+
+    //Every other code is the octree's own decode, the grid playing no part
+    constexpr quint16 kHalfCode = kQuantMax / 2;
+    for (const quint16 code : {quint16(1), kHalfCode, kQuantMax}) {
+        INFO("code " << code);
+        CHECK(localSpacing(code, kFineGrid) == decodeLocalSpacing(code, kFineGrid));
+        CHECK(localSpacing(code, kFineGrid) == localSpacing(code, kCoarseGrid));
+    }
+    CHECK(localSpacing(1, kCoarseGrid) == Catch::Approx(kMinLocalSpacingUnits));
+    CHECK(localSpacing(kQuantMax, kFineGrid) == Catch::Approx(kMaxLocalSpacingUnits));
+}
+
+TEST_CASE("The twin's decode of an encoded native spacing equals the encoder's input",
+          "[PointCloudClod]")
+{
+    using namespace cw::octree;
+
+    constexpr double kAnyGrid = 0.5;
+    for (double spacing : {kMinLocalSpacingUnits, kLiftedFloor, kNativeSpacing, 1.0, 10.0,
+                           kMaxLocalSpacingUnits}) {
+        INFO("spacing " << spacing);
+        const quint16 code = encodeLocalSpacing(spacing);
+        CHECK(code != kUnmeasuredLocalSpacingCode);
+        //Rounding to the nearest code moves the spacing by at most half a step
+        CHECK(std::abs(std::log2(localSpacing(code, kAnyGrid) / spacing))
+              <= 0.5 * std::log2(kLocalCodeStepFactor) * (1.0 + 1e-6));
+    }
+}
+
+TEST_CASE("Under Local a sprite covers the larger of its node's drawn floor and its point's native spacing",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    //An ancestor whose floor a tiny dense descendant lifted still covers the
+    //data's spacing at its point: the user's spot, 0.5 px against 9 px
+    CHECK(sizeSpacing(kLiftedFloor, kNativeSpacing, SpacingSource::Local) == kNativeSpacing);
+    //and a floor wider than the data, a cut held coarse, stays the floor
+    CHECK(sizeSpacing(kCoarseFloor, kNativeSpacing, SpacingSource::Local) == kCoarseFloor);
+    //A finest-drawn node's floor is its own draw spacing, so the rule is the
+    //same there: no finest-drawn branch
+    CHECK(sizeSpacing(kNativeSpacing, kLiftedFloor, SpacingSource::Local) == kNativeSpacing);
+
+    //Grid and Measured cover the drawn floor, bit for bit, whatever the point
+    //measured
+    for (const SpacingSource source : {SpacingSource::Grid, SpacingSource::Measured}) {
+        INFO("source " << int(source));
+        for (double floor : {kLiftedFloor, kNativeSpacing, kCoarseFloor}) {
+            for (double native : {kLiftedFloor, kNativeSpacing, kCoarseFloor}) {
+                CHECK(sizeSpacing(floor, native, source) == floor);
+            }
+        }
+    }
+}
+
+TEST_CASE("Under Local a sprite follows its floor ramp once the ramp passes its native spacing",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    //Children leaving: the floor ramps from a lifted one up to a coarse one
+    constexpr int kRevealFrames = 8;
+
+    double previous = 0.0;
+    bool passed = false;
+    for (quint32 age = 0; age <= quint32(kRevealFrames); age++) {
+        INFO("age " << age);
+        const double drawn = revealedFloor(kLiftedFloor, kCoarseFloor, age, kRevealFrames);
+        const double spacing = sizeSpacing(drawn, kNativeSpacing, SpacingSource::Local);
+        CHECK(spacing == std::max(drawn, kNativeSpacing));
+        //Never under the data's spacing, never shrinking
+        CHECK(spacing >= kNativeSpacing);
+        CHECK(spacing >= previous);
+        passed = passed || drawn > kNativeSpacing;
+        previous = spacing;
+    }
+    REQUIRE(passed);
+    //and settles on the floor exactly
+    CHECK(previous == kCoarseFloor);
+}

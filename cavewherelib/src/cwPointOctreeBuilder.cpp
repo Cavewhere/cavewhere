@@ -17,6 +17,7 @@
 //Std includes
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <atomic>
 #include <cmath>
 #include <limits>
@@ -73,6 +74,13 @@ namespace {
     //(§2.11's calibration: 12.7 M points held 1.76 GB on their own)
     constexpr qint64 kPassBWorkingSetBytesPerPoint = 144;
 
+    //What the native spacing estimate adds to that while it runs on a chunk:
+    //every chunk point copied into the neighbor index with its key (24 bytes
+    //with padding), the key and index each worker sorts a node's points by
+    //(16), and each point's 4 byte spacing and 2 byte code, which stay until
+    //the payloads are written.
+    constexpr qint64 kPassBLocalSpacingBytesPerPoint = 48;
+
     //The root cube of a cloud with no extent, so quantization still has a range
     constexpr double kMinimumRootSize = 1.0;
 
@@ -81,12 +89,18 @@ namespace {
 
     constexpr int kMapPollMs = 30;
 
-    //A build log line's elapsed field, in seconds
-    QString secondsSince(const QElapsedTimer& timer)
+    //A build log line's field for @a milliseconds, in seconds
+    QString seconds(qint64 milliseconds)
     {
         constexpr double kMillisecondsPerSecond = 1000.0;
         constexpr int kSecondsPrecision = 3;
-        return QString::number(double(timer.elapsed()) / kMillisecondsPerSecond, 'f', kSecondsPrecision);
+        return QString::number(double(milliseconds) / kMillisecondsPerSecond, 'f', kSecondsPrecision);
+    }
+
+    //A build log line's elapsed field, in seconds
+    QString secondsSince(const QElapsedTimer& timer)
+    {
+        return seconds(timer.elapsed());
     }
 
     //A top cell packs into one key: level in the high bits, then x, y, z
@@ -902,7 +916,12 @@ namespace {
         int errorCode = Monad::ResultBase::NoError;
         QString errorMessage;
         QVector<QVector3D> rootPoints;
+        //Each root point's native spacing, capped at the octree root's grid:
+        //pass C caps it again at whatever level the point ends up in
+        QVector<float> rootSpacings;
         QVector<SubtreeRecord> nodes;
+        //What estimateNativeSpacing() took on this chunk
+        qint64 localSpacingMilliseconds = 0;
     };
 
     /**
@@ -955,6 +974,20 @@ namespace {
                                                     context.rootMin,
                                                     context.rootSize);
 
+        //Every point of the chunk, its root's included, measures its native
+        //spacing against the chunk's raw data, which the subtree's nodes hold
+        //together, so the estimate's neighbors stop at the chunk cell's
+        //faces: a point beside one reads at most sqrt(2) wider. The root's
+        //points move up into pass C's top tree, so they are capped there, at
+        //the level each one lands in, and only at the octree root's grid here.
+        QElapsedTimer localSpacingTimer;
+        localSpacingTimer.start();
+        constexpr int kOctreeRootLevel = 0;
+        QVector<QVector<float>> nativeSpacings =
+            estimateNativeSpacing(subtree, context.rootMin, context.rootSize,
+                                  subtree.first().cell.level, kOctreeRootLevel);
+        result.localSpacingMilliseconds = localSpacingTimer.elapsed();
+
         cwDiskCacher cacher {QDir(context.cacheRootPath)};
 
         result.nodes.reserve(subtree.size());
@@ -969,6 +1002,8 @@ namespace {
                 continue;
             }
 
+            const QVector<quint16> codes = encodeLocalSpacings(
+                nativeSpacings.at(i), levelLocalSpacingCap(context.rootSize, node.cell.level));
             result.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
                                                measureNodeSpacing(node.points),
                                                node.children});
@@ -979,7 +1014,8 @@ namespace {
             }
 
             const QByteArray payload =
-                quantizeAll(node.points, cellBounds(node.cell, context.rootMin, context.rootSize));
+                quantizeAll(node.points, codes,
+                            cellBounds(node.cell, context.rootMin, context.rootSize));
             const cwDiskCacher::Key key =
                 nodeKey(context.lazPath, context.fingerprint, nodeNameForCell(node.cell));
 
@@ -992,6 +1028,7 @@ namespace {
         }
 
         result.rootPoints = std::move(subtree.first().points);
+        result.rootSpacings = std::move(nativeSpacings.first());
         context.pointsDone->fetch_add(task.pointCount, std::memory_order_relaxed);
         return result;
     }
@@ -1059,7 +1096,9 @@ namespace {
 
             while(admitting && nextTask < tasks.size() && running.size() < maxRunning) {
                 const ChunkTask& task = tasks.at(nextTask);
-                const qint64 bytes = task.pointCount * kPassBWorkingSetBytesPerPoint;
+                const qint64 bytes = task.pointCount
+                                     * (kPassBWorkingSetBytesPerPoint
+                                        + kPassBLocalSpacingBytesPerPoint);
 
                 //The first chunk of a round runs whatever it costs, so a chunk
                 //bigger than the whole budget still gets built, on its own
@@ -1145,6 +1184,67 @@ namespace {
     struct LevelNode {
         Cell cell;
         QVector<QVector3D> points;
+        //Each point's native spacing from pass B, in points' order
+        QVector<float> spacings;
+    };
+
+    //A point's exact position, which bit-identical duplicates share
+    struct PositionKey {
+        quint32 x = 0;
+        quint32 y = 0;
+        quint32 z = 0;
+
+        explicit PositionKey(const QVector3D& point) :
+            x(std::bit_cast<quint32>(point.x())),
+            y(std::bit_cast<quint32>(point.y())),
+            z(std::bit_cast<quint32>(point.z()))
+        {
+        }
+
+        bool operator==(const PositionKey& other) const = default;
+    };
+
+    size_t qHash(const PositionKey& key, size_t seed = 0)
+    {
+        return qHashMulti(seed, key.x, key.y, key.z);
+    }
+
+    /**
+     * Rebuilds the spacings of @a nodes after sampleUp() moved points among
+     * their point lists, from what each position carried before. Duplicates
+     * share a position and saw the same distinct neighbors in pass B, so
+     * they carry the same spacing and the lookup is exact.
+     */
+    class SpacingByPosition {
+    public:
+        explicit SpacingByPosition(const QVector<LevelNode>& nodes)
+        {
+            for(const LevelNode& node : nodes) {
+                Q_ASSERT(node.spacings.size() == node.points.size());
+                for(qsizetype i = 0; i < node.points.size(); i++) {
+                    m_spacings.insert(PositionKey(node.points.at(i)), node.spacings.at(i));
+                }
+            }
+        }
+
+        QVector<float> spacingsOf(const QVector<QVector3D>& points) const
+        {
+            QVector<float> spacings;
+            spacings.reserve(points.size());
+            for(const QVector3D& point : points) {
+                //sampleUp only moves points, so every position is held; one
+                //that is not draws at the cap rather than at the floor
+                const auto found = m_spacings.constFind(PositionKey(point));
+                Q_ASSERT(found != m_spacings.constEnd());
+                spacings.append(found != m_spacings.constEnd()
+                                    ? found.value()
+                                    : std::numeric_limits<float>::infinity());
+            }
+            return spacings;
+        }
+
+    private:
+        QHash<PositionKey, float> m_spacings;
     };
 
     //What pass C knows of a node it wrote
@@ -1397,13 +1497,19 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             PassBResult passB = runPassB(tasks, context, memoryBudgetBytes,
                                          promise, progress, passA.pointCount);
 
+            qint64 localSpacingMilliseconds = 0;
+            for(const std::optional<ChunkResult>& chunk : std::as_const(passB.chunks)) {
+                localSpacingMilliseconds += chunk ? chunk->localSpacingMilliseconds : 0;
+            }
             cw::profile::write(lcProfileLoad(),
                                QStringLiteral("build passB chunks=%1 budgetBytes=%2 "
-                                              "inFlightPeakBytes=%3 seconds=%4")
+                                              "inFlightPeakBytes=%3 seconds=%4 "
+                                              "localSpacingChunkSeconds=%5")
                                    .arg(tasks.size())
                                    .arg(memoryBudgetBytes)
                                    .arg(passB.peakBytes)
-                                   .arg(secondsSince(passTimer)));
+                                   .arg(secondsSince(passTimer))
+                                   .arg(seconds(localSpacingMilliseconds)));
             passTimer.restart();
 
             if(passB.errorCode != Monad::ResultBase::NoError) {
@@ -1434,7 +1540,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                     }
 
                     into.insert(cellKey(cell),
-                                LevelNode {cell, std::move(chunkResults[i]->rootPoints)});
+                                LevelNode {cell, std::move(chunkResults[i]->rootPoints),
+                                           std::move(chunkResults[i]->rootSpacings)});
                 }
             };
 
@@ -1446,9 +1553,15 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             QHash<quint64, TopNodeRecord> topNodes;
             qint64 nodesWritten = 0;
 
+            //What carrying pass B's native spacings through the top tree took
+            QElapsedTimer topLocalSpacingTimer;
+            qint64 topLocalSpacingMilliseconds = 0;
+
             const auto writeTopNode = [&](const LevelNode& node) {
+                const QVector<quint16> codes = encodeLocalSpacings(
+                    node.spacings, levelLocalSpacingCap(root.size, node.cell.level));
                 const QByteArray payload =
-                    quantizeAll(node.points, cellBounds(node.cell, root.minimum, root.size));
+                    quantizeAll(node.points, codes, cellBounds(node.cell, root.minimum, root.size));
                 const cwDiskCacher::Key key =
                     nodeKey(request.path, fingerprint, nodeNameForCell(node.cell));
 
@@ -1493,8 +1606,13 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                     children.reserve(it->size());
                     for(quint64 childKey : std::as_const(it.value())) {
                         const auto found = level.find(childKey);
-                        children.append(LevelNode {found->cell, std::move(found->points)});
+                        children.append(LevelNode {found->cell, std::move(found->points),
+                                                   std::move(found->spacings)});
                     }
+
+                    topLocalSpacingTimer.start();
+                    const SpacingByPosition spacingByPosition(children);
+                    topLocalSpacingMilliseconds += topLocalSpacingTimer.elapsed();
 
                     QVector<QVector<QVector3D>*> sources;
                     sources.reserve(children.size());
@@ -1502,9 +1620,20 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                         sources.append(&child.points);
                     }
 
-                    parents.insert(it.key(),
-                                   LevelNode {parentCell,
-                                              sampleUp(cellBounds(parentCell, root.minimum, root.size), sources)});
+                    QVector<QVector3D> parentPoints =
+                        sampleUp(cellBounds(parentCell, root.minimum, root.size), sources);
+
+                    //sampleUp moved points out of the children, so their
+                    //spacings follow by position
+                    topLocalSpacingTimer.start();
+                    QVector<float> parentSpacings = spacingByPosition.spacingsOf(parentPoints);
+                    for(LevelNode& child : children) {
+                        child.spacings = spacingByPosition.spacingsOf(child.points);
+                    }
+                    topLocalSpacingMilliseconds += topLocalSpacingTimer.elapsed();
+
+                    parents.insert(it.key(), LevelNode {parentCell, std::move(parentPoints),
+                                                        std::move(parentSpacings)});
 
                     for(const LevelNode& child : std::as_const(children)) {
                         if(promise.isCanceled()) {
@@ -1523,7 +1652,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             }
 
             const Cell rootCell {0, 0, 0, 0};
-            const LevelNode rootNode = level.value(cellKey(rootCell), LevelNode {rootCell, {}});
+            const LevelNode rootNode = level.value(cellKey(rootCell), LevelNode {rootCell, {}, {}});
             if(!writeTopNode(rootNode)) {
                 return;
             }
@@ -1596,9 +1725,11 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             }
 
             cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build passC nodes=%1 seconds=%2")
+                               QStringLiteral("build passC nodes=%1 seconds=%2 "
+                                              "localSpacingSeconds=%3")
                                    .arg(manifest.nodes.size())
-                                   .arg(secondsSince(passTimer)));
+                                   .arg(secondsSince(passTimer))
+                                   .arg(seconds(topLocalSpacingMilliseconds)));
             cw::profile::write(lcProfileLoad(),
                                QStringLiteral("build total seconds=%1 peakRssBytes=%2")
                                    .arg(secondsSince(buildTimer))

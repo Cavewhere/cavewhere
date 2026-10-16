@@ -43,7 +43,7 @@ QBox3D cwPointOctreeManifest::nodeBounds(int index) const
 
 double cwPointOctreeManifest::spacing(int level) const
 {
-    return std::ldexp(rootSize / cw::octree::kSampleGridResolution, -level);
+    return cw::octree::levelGridSpacing(rootSize, level);
 }
 
 const QVector<int>& cwPointOctreeManifest::parents() const

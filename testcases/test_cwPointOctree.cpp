@@ -1,4 +1,5 @@
 //Catch includes
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -6,10 +7,15 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QSet>
 #include <QTemporaryDir>
 #include <QVector3D>
 #include <QtEndian>
+
+//Std includes
+#include <cmath>
+#include <numbers>
 
 //Our includes
 #include "cavewhere.pb.h"
@@ -662,10 +668,12 @@ TEST_CASE("A manifest round-trips each node's measured spacing", "[PointOctree]"
     }
 }
 
-TEST_CASE("The octree format is generation 4, the one that measures node spacing", "[PointOctree]") {
-    //Generation 4 adds each node's measured spacing and the builder's minimum
-    //to split, so every generation 3 cache rebuilds once
-    CHECK(cw::octree::kFormatGeneration == 4);
+TEST_CASE("The octree format is generation 6, the one that carries each point's native spacing", "[PointOctree]") {
+    //Generation 4 added each node's measured spacing and the builder's minimum
+    //to split; generation 5 wrote a local spacing ratio into each point's
+    //reserved word; generation 6 writes the point's absolute native spacing
+    //there instead, so every generation 5 cache rebuilds once
+    CHECK(cw::octree::kFormatGeneration == 6);
 }
 
 TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
@@ -678,6 +686,170 @@ TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
     //The cache key names the generation too, so its entries are never even read
     const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
                                                           QStringLiteral("fingerprint"));
-    CHECK(key.id.contains(QStringLiteral("octree4")));
+    CHECK(key.id.contains(QStringLiteral("octree6")));
     CHECK_FALSE(key.id.contains(QStringLiteral("octree3")));
+}
+
+TEST_CASE("A generation 4 manifest is rejected", "[PointOctree]") {
+    constexpr int kGenerationWithoutLocalSpacing = 4;
+
+    CavewhereProto::PointOctreeManifest proto = parseManifest(threeLevelManifest().serialize());
+    proto.set_format_generation(kGenerationWithoutLocalSpacing);
+    CHECK_FALSE(deserializeProto(proto).has_value());
+
+    //Its payloads hold no local spacing, so the key never reaches them either
+    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
+                                                          QStringLiteral("fingerprint"));
+    CHECK_FALSE(key.id.contains(QStringLiteral("octree4")));
+}
+
+TEST_CASE("A generation 5 manifest is rejected", "[PointOctree]") {
+    constexpr int kGenerationWithLocalSpacingRatios = 5;
+
+    CavewhereProto::PointOctreeManifest proto = parseManifest(threeLevelManifest().serialize());
+    proto.set_format_generation(kGenerationWithLocalSpacingRatios);
+    CHECK_FALSE(deserializeProto(proto).has_value());
+
+    //Its payloads hold ratios to the grid rather than native spacings, so the
+    //key never reaches them either
+    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
+                                                          QStringLiteral("fingerprint"));
+    CHECK_FALSE(key.id.contains(QStringLiteral("octree5")));
+}
+
+// ---- WP13: per-point local spacing codes ------------------------------------
+
+namespace {
+    //! The octaves the native spacing codes span
+    const double kLocalCodeOctaves =
+        std::log2(cw::octree::kMaxLocalSpacingUnits / cw::octree::kMinLocalSpacingUnits);
+    //! One code step, as a factor on the spacing: the codes from 1 to
+    //! kQuantMax split kLocalCodeOctaves evenly
+    const double kLocalCodeStepFactor =
+        std::exp2(kLocalCodeOctaves / double(cw::octree::kQuantMax - 1));
+    //! The reserved word is the fourth axis of a point
+    constexpr int kReservedAxis = 3;
+}
+
+TEST_CASE("The native spacing estimate's constants are the plan's", "[PointOctree]") {
+    using namespace cw::octree;
+
+    CHECK(kLocalSpacingNeighbors == 8);
+    CHECK(kLocalSpacingSurfaceFactor == std::sqrt(std::numbers::pi / 8.0));
+    CHECK(kMinLocalSpacingUnits == 0.005);
+    CHECK(kMaxLocalSpacingUnits == 64.0);
+    CHECK(kMaxLocalSpacingGridRatio == 4.0);
+    CHECK(kUnmeasuredLocalSpacingCode == 0);
+}
+
+TEST_CASE("A native spacing round-trips through its 16-bit log2 code over the absolute range", "[PointOctree]") {
+    using namespace cw::octree;
+
+    //Log-spaced from the floor to the cap, ends included
+    constexpr int kSteps = 96;
+    quint16 previous = kUnmeasuredLocalSpacingCode;
+    for(int step = 0; step <= kSteps; step++) {
+        const double spacing = kMinLocalSpacingUnits
+                               * std::exp2(kLocalCodeOctaves * double(step) / kSteps);
+        INFO("spacing " << spacing << " m");
+        const quint16 code = encodeLocalSpacing(spacing);
+        CHECK(code != kUnmeasuredLocalSpacingCode);
+        //Wider spacings take larger codes
+        CHECK(code > previous);
+        previous = code;
+        //Rounding to the nearest code moves the spacing by at most half a step
+        const double decoded = decodeLocalSpacing(code, 1.0);
+        CHECK(std::abs(std::log2(decoded / spacing))
+              <= 0.5 * std::log2(kLocalCodeStepFactor) * (1.0 + 1e-6));
+    }
+
+    //The ends are the first and last codes
+    CHECK(encodeLocalSpacing(kMinLocalSpacingUnits) == 1);
+    CHECK(encodeLocalSpacing(kMaxLocalSpacingUnits) == kQuantMax);
+}
+
+TEST_CASE("A native spacing clamps to the absolute range, decodes the same whatever the grid, and 0 decodes to the grid spacing", "[PointOctree]") {
+    using namespace cw::octree;
+
+    //A code stands for meters, not for grid spacings, so the grid the point
+    //sits in never changes what it decodes to
+    constexpr double kFineGrid = 0.01;
+    constexpr double kCoarseGrid = 10.0;
+    constexpr double kNativeSpacing = 0.27;
+    const quint16 native = encodeLocalSpacing(kNativeSpacing);
+    CHECK(decodeLocalSpacing(native, kFineGrid) == decodeLocalSpacing(native, kCoarseGrid));
+    CHECK(decodeLocalSpacing(native, kFineGrid) == Catch::Approx(kNativeSpacing).epsilon(1e-3));
+
+    //Past the cap codes to the cap, the widest a code goes
+    constexpr double kLoneSpacing = 1000.0;
+    CHECK(encodeLocalSpacing(kLoneSpacing) == kQuantMax);
+    CHECK(decodeLocalSpacing(kQuantMax, kFineGrid)
+          == Catch::Approx(kMaxLocalSpacingUnits).epsilon(1e-6));
+
+    //Under the floor codes to the floor, which is never the unmeasured code
+    constexpr double kStackSpacing = 0.0001;
+    const quint16 stack = encodeLocalSpacing(kStackSpacing);
+    CHECK(stack == encodeLocalSpacing(kMinLocalSpacingUnits));
+    CHECK(stack != kUnmeasuredLocalSpacingCode);
+    CHECK(encodeLocalSpacing(0.0) == stack);
+    CHECK(decodeLocalSpacing(stack, kCoarseGrid)
+          == Catch::Approx(kMinLocalSpacingUnits).epsilon(1e-6));
+
+    //An unmeasured point, as an old payload holds, sizes by its grid spacing
+    CHECK(decodeLocalSpacing(kUnmeasuredLocalSpacingCode, kFineGrid) == kFineGrid);
+    CHECK(decodeLocalSpacing(kUnmeasuredLocalSpacingCode, kCoarseGrid) == kCoarseGrid);
+}
+
+TEST_CASE("quantizeAll carries each point's local spacing code through the Morton sort", "[PointOctree]") {
+    const QBox3D node = unitNode();
+
+    QVector<QVector3D> points;
+    QVector<quint16> codes;
+    constexpr int kRandomPoints = 3000;
+    constexpr quint32 kFractionBits = 24;
+    RandomSequence random {24680u};
+    const auto nextAxis = [&random]() {
+        return float(double(random.next() >> 8) / double(1u << kFractionBits) * kNodeSize);
+    };
+
+    //Every point a code of its own, so a point that lost its code or took a
+    //neighbor's shows
+    QHash<quint64, quint16> codeForKey;
+    for(int i = 0; i < kRandomPoints; i++) {
+        const QVector3D point(nextAxis(), nextAxis(), nextAxis());
+        const quint16 code = quint16(1 + i);
+        const quint64 key = cw::octree::mortonKey(cw::octree::quantize(point, node));
+        if(codeForKey.contains(key)) {
+            continue;
+        }
+        codeForKey.insert(key, code);
+        points.append(point);
+        codes.append(code);
+    }
+
+    const QByteArray bytes = cw::octree::quantizeAll(points, codes, node);
+    REQUIRE(bytes.size() == points.size() * cw::octree::kBytesPerPoint);
+
+    quint64 previous = 0;
+    int matching = 0;
+    for(int i = 0; i < points.size(); i++) {
+        const cw::octree::QuantizedPoint written {
+            readAxis(bytes, i, 0), readAxis(bytes, i, 1), readAxis(bytes, i, 2),
+            readAxis(bytes, i, kReservedAxis)
+        };
+        const quint64 key = cw::octree::mortonKey(written);
+        CHECK(key >= previous);
+        previous = key;
+        matching += written.reserved == codeForKey.value(key) ? 1 : 0;
+    }
+    CHECK(matching == points.size());
+
+    //The positions are quantizeAll()'s own; the codes only fill the reserved word
+    const QByteArray plain = cw::octree::quantizeAll(points, node);
+    REQUIRE(plain.size() == bytes.size());
+    for(int i = 0; i < points.size(); i++) {
+        for(int axis = 0; axis < kReservedAxis; axis++) {
+            CHECK(readAxis(plain, i, axis) == readAxis(bytes, i, axis));
+        }
+    }
 }

@@ -869,6 +869,28 @@ def judge(column, run_value, base_value):
     return "better" if improved else "worse"
 
 
+# The M3 columns, which read the GPU's drawn sides in a log whose evalSummary
+# names an m3Method and the twin's sizes in one from before the column
+M3_COLUMNS = ("worstSeamShare", "largestSeamRatio")
+M3_METHOD_COLUMN = "m3Method"
+
+
+def m3_comparable(summary, base_summary):
+    """Whether @summary's M3 columns measure the same way as @base_summary's:
+    both name the same m3Method, or neither names one."""
+    return (summary or {}).get(M3_METHOD_COLUMN, "") == \
+        (base_summary or {}).get(M3_METHOD_COLUMN, "")
+
+
+def incomparable_cell(text, base_text):
+    """A summary cell whose baseline measured the column another way, so it
+    shows both values and no verdict."""
+    return ('<td class="num"><span class="cell-run">{}</span>'
+            '<span class="cell-base">base {}</span><span class="cell-base same">'
+            'Δ n/a, M3 method changed</span></td>'
+            .format(escape(text or "–"), escape(base_text or "–")))
+
+
 def summary_cell(column, text, base_text, has_baseline):
     if not has_baseline:
         return '<td class="num">{}</td>'.format(escape(text if text else "–"))
@@ -920,7 +942,12 @@ def summary_table(runs, baseline, columns):
         for run, base_summary in zip(runs, base_summaries):
             text = (run.summary or {}).get(column, "")
             base = base_summary.get(column, "") if base_summary is not None else None
-            cells.append(summary_cell(column, text, base, has_baseline))
+            comparable = (column not in M3_COLUMNS or base_summary is None
+                          or m3_comparable(run.summary, base_summary))
+            if comparable:
+                cells.append(summary_cell(column, text, base, has_baseline))
+            else:
+                cells.append(incomparable_cell(text, base))
         direction = SUMMARY_DIRECTIONS.get(column, "")
         rows.append("<tr><th><code>{}</code></th><td class=\"muted\">{}</td>{}</tr>".format(
             escape(column), escape(direction), "".join(cells)))
@@ -1037,6 +1064,35 @@ def run_series(runs, column):
     return series
 
 
+def seam_by_source_table(runs):
+    """M3 per run side by side with the run's spacing source, when the path
+    ran more than one source: the mean and worst seam share over the run's
+    frames, in the order the runs went. Empty otherwise."""
+    sources = [next((row.get("spacingSource") for row in run.rows if row.get("spacingSource")),
+                    None) for run in runs]
+    if len({source for source in sources if source}) < 2:
+        return ""
+    table = []
+    for run, source in zip(runs, sources):
+        shares = [value for value in run.series("seamShare") if value is not None]
+        if not shares:
+            continue
+        table.append('<tr><td>{}</td><td>{}</td><td class="num">{}</td>'
+                     '<td class="num">{}</td></tr>'.format(
+                         escape(run.label), escape(source or "–"), format_value(mean(shares)),
+                         format_value(max(shares))))
+    if not table:
+        return ""
+    return ("<h3>M3: seam share by spacing source</h3>"
+            '<p class="muted">The share of 32 px screen tiles whose widest sprite is over 1.5 times '
+            "its narrowest, per run. The sides are the ones the GPU drew on top, read pixel by "
+            "pixel out of the frame's sprite size view the same way under every source, so a "
+            "hidden point adds no side and the sources compare directly.</p>"
+            '<div class="scroll"><table><tr><th>config</th><th>spacing source</th>'
+            "<th>mean seam share</th><th>worst seam share</th></tr>{}</table></div>".format(
+                "".join(table)))
+
+
 def path_section(path, runs, baseline, summary_columns, links):
     anchor = "path-" + directory_name(path)
     parts = ['<h2 id="{}">Path {}</h2>'.format(anchor, escape(path))]
@@ -1047,6 +1103,7 @@ def path_section(path, runs, baseline, summary_columns, links):
         parts.append(summary_table([run for run in runs if run.summary], baseline,
                                    summary_columns))
     parts.append(settled_ssim_table(runs, baseline))
+    parts.append(seam_by_source_table([run for run in runs if run.rows]))
 
     charted = [run for run in runs if run.rows]
     if not charted:
@@ -1217,6 +1274,20 @@ def level_path_family(path):
     return LEVEL_PATH_TAG.sub("", path)
 
 
+# cw::pointcloud::kDefaultSpacingCoverage, the coverage the bench's runs draw
+# at unless a candidate names another (cwRenderPointCloud.h)
+DEFAULT_SPACING_COVERAGE = 1.5
+
+
+def is_default_coverage(coverage):
+    """Whether a spacingCoverage field is the bench's default; an empty one,
+    from a log before the column, is."""
+    if not coverage:
+        return True
+    value = number(coverage)
+    return value is not None and math.isclose(value, DEFAULT_SPACING_COVERAGE)
+
+
 def m7_section(log):
     if not log.m7_rows:
         return ""
@@ -1225,14 +1296,50 @@ def m7_section(log):
              "starts asking for that level, every budget past the cloud, at the default coverage "
              "sizing and at the fixed-pixel size; the mean over the path's poses against that "
              "path's O1. Levels on their own paths are compared at their own heights.</p>"]
-    # A grid run and a measured run of one path family draw the same levels on
-    # the same paths, so each source gets a table of its own. Logs from before
-    # the spacingSource column carry none and keep one table per family.
+    # Runs of one path family under different sources or coverages draw the
+    # same levels on the same paths, so each source and coverage gets a table
+    # of its own, and a family drawn more than one way gets them side by side
+    # first. Logs from before the spacingSource or spacingCoverage column
+    # carry none and keep one table per family or per source. The bench's
+    # default coverage, and a log with no coverage column, go unnamed; any
+    # other coverage is named, whichever order the runs came in.
     by_family = {}
     for row in log.m7_rows:
-        key = (level_path_family(row.get("path", "")), row.get("spacingSource") or "")
+        family = level_path_family(row.get("path", ""))
+        coverage = row.get("spacingCoverage") or ""
+        key = (family, row.get("spacingSource") or "", coverage)
         by_family.setdefault(key, []).append(row)
-    for (family, source), rows in by_family.items():
+
+    def variant_name(source, coverage):
+        if is_default_coverage(coverage):
+            return source
+        return "{} @{}".format(source, coverage)
+
+    families = {}
+    for family, source, coverage in by_family:
+        families.setdefault(family, []).append((source, coverage))
+    for family, variants in families.items():
+        if len(variants) < 2:
+            continue
+        lit_by_variant = []
+        for source, coverage in variants:
+            lit = {}
+            for row in by_family[(family, source, coverage)]:
+                level = int(number(row.get("level")) or 0)
+                lit.setdefault(level, []).append(number(row.get("litFraction")))
+            lit_by_variant.append({level: mean(values) for level, values in lit.items()})
+        levels = sorted({level for lit in lit_by_variant for level in lit})
+        rows = "".join('<tr><td class="num">{}</td>{}</tr>'.format(
+            level, "".join('<td class="num">{}</td>'.format(format_value(lit.get(level)))
+                           for lit in lit_by_variant)) for level in levels)
+        parts.append("<h3>{} by spacing source</h3>".format(escape(family)))
+        parts.append('<p class="muted">Lit fraction at the default sizing, the mean over each '
+                     "level's poses.</p>")
+        parts.append('<div class="scroll"><table><tr><th>level</th>{}</tr>{}</table></div>'.format(
+            "".join("<th>{}</th>".format(escape(variant_name(source, coverage)))
+                    for source, coverage in variants), rows))
+
+    for (family, source, coverage), rows in by_family.items():
         by_level = {}
         for row in rows:
             by_level.setdefault(int(number(row.get("level")) or 0), []).append(row)
@@ -1254,7 +1361,12 @@ def m7_section(log):
                          "<td class=\"num\">{}</td><td class=\"num\">{}</td></tr>".format(
                              level, escape(", ".join(paths)), len(at), format_value(lit),
                              format_value(fixed), format_value(holes), format_value(drawn, 1)))
-        title = "{} ({})".format(family, source) if source else family
+        if not is_default_coverage(coverage):
+            title = "{} ({}, coverage {})".format(family, source, coverage)
+        elif source:
+            title = "{} ({})".format(family, source)
+        else:
+            title = family
         parts.append("<h3>{}</h3>".format(escape(title)))
         parts.append('<div class="scroll"><table><tr><th>level</th><th>path</th><th>poses</th>'
                      "<th>lit, default sizing</th><th>lit, fixed pixels</th>"
@@ -1310,6 +1422,10 @@ CONTACT_CANDIDATES = ("C-default", "C-starved")
 # Shown beside those when the path ran them: the reveal ramp under Cover and
 # under Grow at the same frames, side by side
 CONTACT_REVEAL_CANDIDATES = ("C-default-reveal", "C-default-grow")
+# And the spacing sources and the zoomed-in coverage, the coverage-1.25 pair
+# side by side: the artifact and its fix
+CONTACT_SOURCE_CANDIDATES = ("C-default-grid", "C-default-local", "C-measured-cover125",
+                             "C-local-cover125")
 DIFF_CANDIDATE = "C-default"
 
 
@@ -1349,7 +1465,8 @@ def contact_sheet(path, runs, frames, out_directory, report_name):
     the oracle that sweep used. Returns the page's file name, or None when
     nothing was dumped for the path."""
     ran = {run.config for run in runs}
-    shown = list(CONTACT_CANDIDATES) + [config for config in CONTACT_REVEAL_CANDIDATES
+    shown = list(CONTACT_CANDIDATES) + [config for config in
+                                        CONTACT_REVEAL_CANDIDATES + CONTACT_SOURCE_CANDIDATES
                                         if config in ran]
     candidates = {config: last_dumped_run(runs, config, frames) for config in shown}
     # The difference wants the oracle the candidate's own sweep used

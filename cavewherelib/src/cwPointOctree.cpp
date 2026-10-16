@@ -18,6 +18,9 @@ namespace {
     //The uint16 x, y, z, reserved of one on-disk point
     constexpr int kAxesPerPoint = 4;
 
+    //The steps between the first and last native spacing codes, 1 and kQuantMax
+    constexpr double kLocalSpacingCodeSteps = double(cw::octree::kQuantMax - 1);
+
     quint16 quantizeAxis(double value, double minimum, double maximum)
     {
         const double size = maximum - minimum;
@@ -118,12 +121,43 @@ quint64 mortonKey(const QuantizedPoint& point)
 
 QByteArray quantizeAll(const QVector<QVector3D>& points, const QBox3D& nodeBounds)
 {
+    return quantizeAll(points, QVector<quint16>(), nodeBounds);
+}
+
+quint16 encodeLocalSpacing(double spacing)
+{
+    //std::clamp keeps a NaN, so the lower clamp is written to send it to the floor
+    const double clamped = spacing >= kMinLocalSpacingUnits
+                               ? std::min(spacing, kMaxLocalSpacingUnits)
+                               : kMinLocalSpacingUnits;
+    const double position = std::log2(clamped / kMinLocalSpacingUnits) / kLocalSpacingCodeOctaves;
+    return quint16(1 + std::lround(position * kLocalSpacingCodeSteps));
+}
+
+double decodeLocalSpacing(quint16 code, double gridSpacing)
+{
+    if(code == kUnmeasuredLocalSpacingCode) {
+        return gridSpacing;
+    }
+    return kMinLocalSpacingUnits
+           * std::exp2(double(code - 1) / kLocalSpacingCodeSteps * kLocalSpacingCodeOctaves);
+}
+
+QByteArray quantizeAll(const QVector<QVector3D>& points,
+                       const QVector<quint16>& localSpacingCodes,
+                       const QBox3D& nodeBounds)
+{
+    Q_ASSERT(localSpacingCodes.isEmpty() || localSpacingCodes.size() == points.size());
+    const bool hasCodes = localSpacingCodes.size() == points.size();
+
     //The key travels with its point so the sort compares a field rather than
-    //re-deriving the interleave on every comparison
+    //re-deriving the interleave on every comparison; the reserved word rides
+    //in the point, so a code stays with its point through the sort
     QVector<KeyedPoint> quantized;
     quantized.reserve(points.size());
-    for(const QVector3D& point : points) {
-        const QuantizedPoint value = quantize(point, nodeBounds);
+    for(qsizetype i = 0; i < points.size(); i++) {
+        QuantizedPoint value = quantize(points.at(i), nodeBounds);
+        value.reserved = hasCodes ? localSpacingCodes.at(i) : kUnmeasuredLocalSpacingCode;
         quantized.append(KeyedPoint {mortonKey(value), value});
     }
 

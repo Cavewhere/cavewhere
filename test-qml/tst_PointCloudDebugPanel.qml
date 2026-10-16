@@ -210,6 +210,31 @@ MainWindowTest {
             tryCompare(source, "currentIndex", 1)
         }
 
+        function test_spacingSourceRowNamesEverySource() {
+            const source = row("spacingSourceComboBox")
+            compare(source.count, 3)
+            compare(source.textAt(0), "Grid")
+            compare(source.textAt(1), "Measured")
+            compare(source.textAt(2), "Local")
+        }
+
+        function test_spacingSourceRowWritesLocal() {
+            const source = row("spacingSourceComboBox")
+            source.currentIndex = 2
+            source.activated(2)
+            compare(rootId.renderingSettings.spacingSource, 2)
+            verify(!rootId.renderingSettings.isAtDefaults)
+
+            rootId.renderingSettings.spacingSource = 1
+            tryCompare(source, "currentIndex", 1)
+            rootId.renderingSettings.spacingSource = 2
+            tryCompare(source, "currentIndex", 2)
+
+            mouseClick(row("pointCloudDebugResetButton"))
+            tryCompare(rootId.renderingSettings, "spacingSource", 1)
+            tryCompare(source, "currentIndex", 1)
+        }
+
         function test_revealFramesRowFollowsTheSetting() {
             const reveal = row("revealFramesSpinBox")
             compare(reveal.value, 0)

@@ -3,11 +3,18 @@
 
 //Qt includes
 #include <QHash>
+#include <QSemaphore>
+#include <QThreadPool>
+
+//Our includes
+#include "cwTask.h"
 
 //Std includes
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -340,6 +347,325 @@ float measureNodeSpacing(const QVector<QVector3D>& points)
     const double spacing = std::min(rectangleSpacing(footprint, count),
                                     occupiedCellSpacing(points, footprint));
     return float(spacing);
+}
+
+namespace {
+    //! Bits an axis of an index key takes, three axes interleaved in a quint64
+    constexpr int kIndexAxisBits = 21;
+    constexpr qint64 kIndexAxisCells = qint64(1) << kIndexAxisBits;
+    //! The extent an index over a root with no size spans, so its cells keep a size
+    constexpr double kEmptyIndexExtent = 1.0;
+
+    //! The search radius under which every k-th neighbor reads the floor
+    double minimumSearchRadius()
+    {
+        return kMinLocalSpacingUnits / kLocalSpacingSurfaceFactor;
+    }
+
+    //! @a x, @a y and @a z's bits interleaved, x lowest
+    quint64 interleavedKey(quint64 x, quint64 y, quint64 z)
+    {
+        quint64 key = 0;
+        for(int bit = 0; bit < kIndexAxisBits; bit++) {
+            key |= ((x >> bit) & 1u) << (kAxisCount * bit);
+            key |= ((y >> bit) & 1u) << (kAxisCount * bit + 1);
+            key |= ((z >> bit) & 1u) << (kAxisCount * bit + 2);
+        }
+        return key;
+    }
+
+    double squaredDistance(const QVector3D& a, const QVector3D& b)
+    {
+        double sum = 0.0;
+        for(int axis = 0; axis < kAxisCount; axis++) {
+            const double delta = double(a[axis]) - double(b[axis]);
+            sum += delta * delta;
+        }
+        return sum;
+    }
+
+    /**
+     * The kLocalSpacingNeighbors nearest distinct positions offered, nearest
+     * first. A position equal to the query's, or to one already held, counts
+     * once: duplicate returns are one neighbor, however many of them there are.
+     */
+    class DistinctNearest {
+    public:
+        void clear() { m_size = 0; }
+        bool full() const { return m_size == kLocalSpacingNeighbors; }
+        double farthestSquared() const { return m_neighbors.at(size_t(m_size - 1)).squaredDistance; }
+
+        void offer(double squared, const QVector3D& position)
+        {
+            if(squared <= 0.0 || (full() && squared >= farthestSquared())) {
+                return;
+            }
+            //Bit-identical positions sit at the same distance, so only those compare
+            for(int i = 0; i < m_size; i++) {
+                const Neighbor& held = m_neighbors.at(size_t(i));
+                if(held.squaredDistance == squared && held.position == position) {
+                    return;
+                }
+            }
+            int slot = full() ? m_size - 1 : m_size;
+            m_size = full() ? m_size : m_size + 1;
+            for(; slot > 0 && m_neighbors.at(size_t(slot - 1)).squaredDistance > squared; slot--) {
+                m_neighbors[size_t(slot)] = m_neighbors.at(size_t(slot - 1));
+            }
+            m_neighbors[size_t(slot)] = Neighbor {squared, position};
+        }
+
+    private:
+        struct Neighbor {
+            double squaredDistance = 0.0;
+            QVector3D position;
+        };
+        std::array<Neighbor, kLocalSpacingNeighbors> m_neighbors = {};
+        int m_size = 0;
+    };
+
+    /**
+     * Every point of a subtree, sorted by the interleaved key of the finest
+     * cube it sits in, so any coarser cube of the same grid is one contiguous
+     * run: the box around a point, at the coarsest level whose cubes are at
+     * least as wide as the box, is at most eight runs.
+     */
+    class NativeSpacingIndex {
+    public:
+        NativeSpacingIndex(const QVector<SampledNode>& nodes, const QVector3D& origin,
+                           double extent) :
+            m_origin(origin),
+            m_cellSize(extent / double(kIndexAxisCells))
+        {
+            qsizetype total = 0;
+            for(const SampledNode& node : nodes) {
+                total += node.points.size();
+            }
+            m_entries.reserve(size_t(total));
+            for(const SampledNode& node : nodes) {
+                for(const QVector3D& point : node.points) {
+                    m_entries.push_back(Entry {keyOf(point), point});
+                }
+            }
+            std::sort(m_entries.begin(), m_entries.end(),
+                      [](const Entry& left, const Entry& right) { return left.key < right.key; });
+        }
+
+        quint64 keyOf(const QVector3D& point) const
+        {
+            const std::array<qint64, kAxisCount> cell = cellOf(point, 0.0);
+            return interleavedKey(quint64(cell[0]), quint64(cell[1]), quint64(cell[2]));
+        }
+
+        /**
+         * The distance from @a point to its kLocalSpacingNeighbors-th nearest
+         * distinct neighbor, searched from @a radius outward, or infinity when
+         * fewer than that many lie within @a reach. Each search finds every
+         * point within its guaranteed radius, the distance from @a point to the
+         * outside of the cubes it read, so a k-th neighbor inside that radius is
+         * exact; past it, the search widens to the k-th neighbor it found, or
+         * doubles where it found too few.
+         */
+        double kthDistinctDistance(const QVector3D& point, double radius, double reach) const
+        {
+            DistinctNearest nearest;
+            radius = std::clamp(radius, minimumSearchRadius(), reach);
+            for(;;) {
+                const bool widest = radius >= reach;
+                const double guaranteed = search(point, radius, nearest);
+                if(nearest.full() && nearest.farthestSquared() <= guaranteed * guaranteed) {
+                    return std::sqrt(nearest.farthestSquared());
+                }
+                if(widest || guaranteed >= reach) {
+                    return std::numeric_limits<double>::infinity();
+                }
+                const double next = nearest.full() ? std::sqrt(nearest.farthestSquared())
+                                                   : 2.0 * guaranteed;
+                radius = std::min(std::max(next, 2.0 * radius), reach);
+            }
+        }
+
+    private:
+        struct Entry {
+            quint64 key = 0;
+            QVector3D point;
+        };
+
+        QVector3D m_origin;
+        double m_cellSize = 0.0;
+        std::vector<Entry> m_entries;
+
+        std::array<qint64, kAxisCount> cellOf(const QVector3D& point, double offset) const
+        {
+            std::array<qint64, kAxisCount> cell = {};
+            for(int axis = 0; axis < kAxisCount; axis++) {
+                const double scaled =
+                    std::floor((double(point[axis]) + offset - double(m_origin[axis])) / m_cellSize);
+                cell[axis] = qint64(std::clamp(scaled, 0.0, double(kIndexAxisCells - 1)));
+            }
+            return cell;
+        }
+
+        //! Offers @a nearest every point in the cubes the box of half-width
+        //! @a radius around @a point touches, at the coarsest level whose cubes
+        //! are as wide as the box; returns the radius inside which it read
+        //! every point
+        double search(const QVector3D& point, double radius, DistinctNearest& nearest) const
+        {
+            const int level = std::clamp(int(std::ceil(std::log2(2.0 * radius / m_cellSize))), 0,
+                                         kIndexAxisBits);
+            const qint64 lastCube = (kIndexAxisCells - 1) >> level;
+            const std::array<qint64, kAxisCount> low = cellOf(point, -radius);
+            const std::array<qint64, kAxisCount> high = cellOf(point, radius);
+            std::array<qint64, kAxisCount> first = {};
+            std::array<qint64, kAxisCount> last = {};
+            double guaranteed = std::numeric_limits<double>::infinity();
+            const double cubeSize = std::ldexp(m_cellSize, level);
+            for(int axis = 0; axis < kAxisCount; axis++) {
+                first[axis] = low[axis] >> level;
+                last[axis] = high[axis] >> level;
+                const double value = double(point[axis]) - double(m_origin[axis]);
+                //Nothing lies past the index's own edge, so the edge cube bounds nothing
+                if(first[axis] > 0) {
+                    guaranteed = std::min(guaranteed, value - double(first[axis]) * cubeSize);
+                }
+                if(last[axis] < lastCube) {
+                    guaranteed = std::min(guaranteed, double(last[axis] + 1) * cubeSize - value);
+                }
+            }
+
+            nearest.clear();
+            const int shift = kAxisCount * level;
+            const auto before = [](const Entry& entry, quint64 key) { return entry.key < key; };
+            for(qint64 z = first[2]; z <= last[2]; z++) {
+                for(qint64 y = first[1]; y <= last[1]; y++) {
+                    for(qint64 x = first[0]; x <= last[0]; x++) {
+                        const quint64 cube = interleavedKey(quint64(x), quint64(y), quint64(z));
+                        const quint64 begin = cube << shift;
+                        const quint64 end = (cube + 1) << shift;
+                        auto entry = std::lower_bound(m_entries.cbegin(), m_entries.cend(), begin,
+                                                      before);
+                        for(; entry != m_entries.cend() && entry->key < end; ++entry) {
+                            nearest.offer(squaredDistance(entry->point, point), entry->point);
+                        }
+                    }
+                }
+            }
+            return guaranteed;
+        }
+    };
+
+    /**
+     * Calls @a visit for every index under @a count, on the calling thread
+     * and on whichever of cwTask::threadPool()'s threads are idle right now.
+     * A helper only starts on a free thread and never waits on anything, so
+     * a caller that is itself a pool task finishes even while the pool is
+     * full: a nested blockingMap there waits on tasks no thread is left to
+     * run.
+     */
+    template<typename Visit>
+    void forEachIndexWithIdleThreads(qsizetype count, const Visit& visit)
+    {
+        std::atomic<qsizetype> next {0};
+        const auto work = [&]() {
+            for(qsizetype index = next.fetch_add(1); index < count; index = next.fetch_add(1)) {
+                visit(index);
+            }
+        };
+
+        QThreadPool* pool = cwTask::threadPool();
+        QSemaphore finished;
+        int helpers = 0;
+        const int wanted = int(std::min(qsizetype(pool->maxThreadCount()), count - 1));
+        for(; helpers < wanted; helpers++) {
+            const bool started = pool->tryStart([&]() {
+                work();
+                finished.release();
+            });
+            if(!started) {
+                break;
+            }
+        }
+        work();
+        finished.acquire(helpers);
+    }
+
+    //! The native spacing of each of @a points against @a index, none wider
+    //! than @a cap; walked in key order, so each search starts from its
+    //! neighbor's answer and a run of duplicates searches once
+    QVector<float> nativeSpacings(const NativeSpacingIndex& index,
+                                  const QVector<QVector3D>& points, double cap)
+    {
+        std::vector<std::pair<quint64, qint32>> order;
+        order.reserve(size_t(points.size()));
+        for(qsizetype i = 0; i < points.size(); i++) {
+            order.emplace_back(index.keyOf(points.at(i)), qint32(i));
+        }
+        std::sort(order.begin(), order.end());
+
+        const double ceiling = std::max(cap, kMinLocalSpacingUnits);
+        const double reach = ceiling / kLocalSpacingSurfaceFactor;
+        QVector<float> spacings(points.size(), 0.0f);
+        double guess = minimumSearchRadius();
+        std::optional<QVector3D> previous;
+        float previousSpacing = 0.0f;
+        for(const auto& [key, i] : order) {
+            const QVector3D& point = points.at(i);
+            if(previous.has_value() && *previous == point) {
+                spacings[i] = previousSpacing;
+                continue;
+            }
+            const double distance = index.kthDistinctDistance(point, guess, reach);
+            const bool found = std::isfinite(distance);
+            const double spacing = found ? distance * kLocalSpacingSurfaceFactor : ceiling;
+            guess = found ? distance : guess;
+            previous = point;
+            previousSpacing = float(std::clamp(spacing, kMinLocalSpacingUnits, ceiling));
+            spacings[i] = previousSpacing;
+        }
+        return spacings;
+    }
+}
+
+QVector<QVector<float>> estimateNativeSpacing(const QVector<SampledNode>& nodes,
+                                              const QVector3D& rootMin, double rootSize,
+                                              int firstCodedLevel,
+                                              std::optional<int> firstNodeCapLevel)
+{
+    //A std::vector, so the workers write their own entries without a shared
+    //detach check
+    std::vector<QVector<float>> spacings(size_t(nodes.size()));
+    std::vector<qsizetype> coded;
+    for(qsizetype i = 0; i < nodes.size(); i++) {
+        if(nodes.at(i).cell.level >= firstCodedLevel) {
+            coded.push_back(i);
+        }
+    }
+
+    if(!coded.empty()) {
+        const NativeSpacingIndex index(nodes, rootMin,
+                                       rootSize > 0.0 ? rootSize : kEmptyIndexExtent);
+        forEachIndexWithIdleThreads(qsizetype(coded.size()), [&](qsizetype i) {
+            const qsizetype node = coded.at(size_t(i));
+            const int capLevel = node == 0 && firstNodeCapLevel.has_value()
+                                     ? *firstNodeCapLevel
+                                     : nodes.at(node).cell.level;
+            spacings[size_t(node)] = nativeSpacings(index, nodes.at(node).points,
+                                                    levelLocalSpacingCap(rootSize, capLevel));
+        });
+    }
+    return QVector<QVector<float>>(std::make_move_iterator(spacings.begin()),
+                                   std::make_move_iterator(spacings.end()));
+}
+
+QVector<quint16> encodeLocalSpacings(const QVector<float>& spacings, double cap)
+{
+    QVector<quint16> codes;
+    codes.reserve(spacings.size());
+    for(float spacing : spacings) {
+        codes.append(encodeLocalSpacing(std::min(double(spacing), cap)));
+    }
+    return codes;
 }
 
 QVector<SampledNode> buildSubtree(QVector<QVector3D> points,

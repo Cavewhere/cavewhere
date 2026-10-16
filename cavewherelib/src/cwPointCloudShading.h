@@ -63,7 +63,13 @@ namespace cw::pointcloud {
         //! The larger of the grid spacing and the spacing the builder measured
         //! from the node's own points (cwPointOctreeNode::measuredSpacing), so
         //! a node sparser than its grid sizes and thins by the gap it really has
-        Measured = 1
+        Measured = 1,
+        //! Measured for how a node thins and floors, while each sprite covers
+        //! at least the native spacing the builder measured around its own
+        //! point (cw::octree::QuantizedPoint::reserved, cw::clod::localSpacing,
+        //! cw::clod::sizeSpacing) (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html
+        //! section 14.5, WP13)
+        Local = 2
     };
 
     //! What an arrival does while the reveal ramp (revealFrames) runs, and
@@ -109,7 +115,7 @@ namespace cw::pointcloud {
     constexpr int kThinningModeCount = int(ThinningMode::Off) + 1;
     constexpr int kSizeModeCount = int(SizeMode::OwnSpacing) + 1;
     constexpr int kFloorModeCount = int(FloorMode::Off) + 1;
-    constexpr int kSpacingSourceCount = int(SpacingSource::Measured) + 1;
+    constexpr int kSpacingSourceCount = int(SpacingSource::Local) + 1;
     constexpr int kDebugViewCount = int(DebugView::DecimationPreview) + 1;
     constexpr int kRevealModeCount = int(RevealMode::Grow) + 1;
 
@@ -175,7 +181,8 @@ namespace cw::pointcloud {
                   "PointCloud.vert spells this out");
     static_assert(int(FloorMode::Node) == 0 && int(FloorMode::Off) == 1,
                   "PointCloud.vert spells this out");
-    static_assert(int(SpacingSource::Grid) == 0 && int(SpacingSource::Measured) == 1,
+    static_assert(int(SpacingSource::Grid) == 0 && int(SpacingSource::Measured) == 1
+                      && int(SpacingSource::Local) == 2,
                   "PointCloud.vert spells this out");
     static_assert(int(RevealMode::Cover) == 0 && int(RevealMode::Grow) == 1,
                   "PointCloud.vert spells this out");

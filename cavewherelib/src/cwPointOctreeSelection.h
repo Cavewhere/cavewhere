@@ -226,7 +226,9 @@ namespace cw::octree {
      * finestDrawnLevels() returns, value for value; under Measured it is the
      * larger of that node's grid spacing and its measured spacing, and where
      * several nodes at that deepest level feed one floor, the narrowest of
-     * them. Either way a floor is at most its own node's spacing.
+     * them; Local floors exactly as Measured does, since its points' native
+     * spacings only raise their own sprites (cw::clod::sizeSpacing). Either
+     * way a floor is at most its own node's spacing.
      */
     CAVEWHERE_LIB_EXPORT QVector<double> finestDrawnSpacings(const cwPointOctreeManifest& manifest,
                                                              const QVector<int>& drawnNodes,

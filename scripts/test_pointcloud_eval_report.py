@@ -838,5 +838,188 @@ class RevealModeTest(unittest.TestCase):
             assert_contains(self, 'href="{}"'.format(name), self.text)
 
 
+# WP13: P2z/6 under the three spacing sources at the default coverage and at
+# 1.25, the way the bench writes them, and the M7 level-alone orbit at each,
+# m7Csv naming spacingSource and then spacingCoverage last. The seam the
+# depth step draws under Grid and Measured is M3's to show; Local is there to
+# lower it.
+LOCAL_SPACING_CONFIGS = (("C-default-grid", "Grid", "0.20000", "0.30000"),
+                         ("C-default", "Measured", "0.15000", "0.25000"),
+                         ("C-default-local", "Local", "0.05000", "0.07000"),
+                         ("C-measured-cover125", "Measured", "0.18000", "0.28000"),
+                         ("C-local-cover125", "Local", "0.04000", "0.06000"))
+
+
+def local_spacing_log():
+    lines = []
+    for index, (config, source, first, second) in enumerate(LOCAL_SPACING_CONFIGS):
+        lines.append("evalCsv,path,config,pose,frame,label,litFraction,holeFraction,seamShare,"
+                     "largestSeamRatio,pending,spacingSource,revealFrames,revealMode")
+        lines.append("evalDump,path,config,directory")
+        lines.append("evalDump,P2z/6,{c},P2z_6/{c}/run-9-00{i}".format(c=config, i=index + 1))
+        lines.append("evalCsv,P2z/6,{},0,0,heading-0,0.50000,0.01000,{},2.0000,0,{},0,Cover"
+                     .format(config, first, source))
+        lines.append("evalCsv,P2z/6,{},0,1,heading-0,0.55000,0.00900,{},2.5000,0,{},0,Cover"
+                     .format(config, second, source))
+        lines.append("evalSummary,path,config,frames,worstHoleFraction,worstSeamShare,"
+                     "largestSeamRatio")
+        lines.append("evalSummary,P2z/6,{},2,0.01000,{},2.5000".format(config, second))
+    lines.append("m7Csv,path,pose,level,litFraction,holeFraction,holeCount,maxHoleSide,"
+                 "litFractionFixed,drawnNodes,spacingSource,spacingCoverage")
+    for source, coverage, lit in (("Grid", "1.50", "0.60000"), ("Measured", "1.50", "0.92000"),
+                                  ("Local", "1.50", "0.95000"), ("Measured", "1.25", "0.88000"),
+                                  ("Local", "1.25", "0.93000")):
+        lines.append("m7Csv,M7/6-L6,0,6,{l},0.05000,30,9,0.97000,200,{s},{c}"
+                     .format(l=lit, s=source, c=coverage))
+    return "\n".join(lines) + "\n"
+
+
+class LocalSpacingTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.frames = root / "frames"
+        self.out = root / "report" / "index.html"
+        for index, (config, _, _, _) in enumerate(LOCAL_SPACING_CONFIGS):
+            directory = self.frames / "P2z_6" / config / "run-9-00{}".format(index + 1)
+            directory.mkdir(parents=True)
+            for frame in (0, 1):
+                write_rgba_png(directory / report.candidate_frame_name(0, frame), frame + index)
+            if config == report.DIFF_CANDIDATE:
+                for oracle in ("O2", "O3"):
+                    (directory / oracle).mkdir()
+                    write_rgba_png(directory / oracle / report.oracle_frame_name(0), 5)
+        self.log_text = local_spacing_log()
+        log_file = root / "run.log"
+        log_file.write_text(self.log_text, encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.exit_code = report.main(["--log", str(log_file), "--frames", str(self.frames),
+                                          "--out", str(self.out)])
+        self.text = self.out.read_text(encoding="utf-8")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_the_spacing_coverage_column_is_read_by_name(self):
+        self.assertEqual(self.exit_code, 0)
+        log = report.parse_log_lines(self.log_text.splitlines())
+        coverages = {(row.get("spacingSource"), row.get("spacingCoverage")) for row in log.m7_rows}
+        self.assertEqual(coverages, {("Grid", "1.50"), ("Measured", "1.50"), ("Local", "1.50"),
+                                     ("Measured", "1.25"), ("Local", "1.25")})
+
+    def test_m3_seam_share_sits_side_by_side_by_spacing_source(self):
+        start = self.text.index('<h2 id="path-P2z_6">')
+        end = self.text.find("<h2", start + 1)
+        section = self.text[start:end if end >= 0 else len(self.text)]
+        heading = "<h3>M3: seam share by spacing source</h3>"
+        assert_contains(self, heading, section)
+        table = section[section.index(heading):]
+        table = table[:table.index("</table>")]
+        assert_contains(self, "<th>config</th><th>spacing source</th><th>mean seam share</th>"
+                        "<th>worst seam share</th>", table)
+        # Every source's M3 reads the sides the GPU drew, so the note says so
+        # rather than telling the sources apart
+        assert_contains(self, "the same way under every source", table)
+        self.assertNotIn("Under Local each point sizes itself", section)
+        # One row per config, in the order the configs ran, each with its own
+        # source and its mean and worst seam share over the run's frames
+        rows = re.findall(r"<tr><td>([^<]+)</td><td>([^<]+)</td>"
+                          r"<td class=\"num\">([^<]+)</td><td class=\"num\">([^<]+)</td>", table)
+        self.assertEqual(rows, [("C-default-grid", "Grid", "0.25000", "0.30000"),
+                                ("C-default", "Measured", "0.20000", "0.25000"),
+                                ("C-default-local", "Local", "0.06000", "0.07000"),
+                                ("C-measured-cover125", "Measured", "0.23000", "0.28000"),
+                                ("C-local-cover125", "Local", "0.05000", "0.06000")])
+
+    def test_m7_sets_every_source_and_coverage_side_by_side(self):
+        section = self.text[self.text.index('id="m7"'):]
+        heading = "<h3>M7/6 by spacing source</h3>"
+        assert_contains(self, heading, section)
+        table = section[section.index(heading):]
+        table = table[:table.index("</table>")]
+        assert_contains(self, "<th>level</th><th>Grid</th><th>Measured</th><th>Local</th>"
+                        "<th>Measured @1.25</th><th>Local @1.25</th>", table)
+        assert_contains(self, '<td class="num">6</td><td class="num">0.60000</td>'
+                        '<td class="num">0.92000</td><td class="num">0.95000</td>'
+                        '<td class="num">0.88000</td><td class="num">0.93000</td>', table)
+        # The coverages keep apart in the per-source tables too, rather than
+        # averaging Local at 1.50 with Local at 1.25
+        assert_contains(self, "<h3>M7/6 (Local, coverage 1.25)</h3>", section)
+        self.assertNotIn("0.94000", section)
+
+    def test_m7_names_the_coverage_off_the_default_whichever_runs_first(self):
+        # The coverage-1.25 runs lead this log, yet the default coverage's
+        # tables stay unnamed and the 1.25 ones are named
+        lines = ["m7Csv,path,pose,level,litFraction,holeFraction,holeCount,maxHoleSide,"
+                 "litFractionFixed,drawnNodes,spacingSource,spacingCoverage"]
+        for source, coverage, lit in (("Local", "1.25", "0.93000"), ("Local", "1.50", "0.95000")):
+            lines.append("m7Csv,M7/6-L6,0,6,{l},0.05000,30,9,0.97000,200,{s},{c}"
+                         .format(l=lit, s=source, c=coverage))
+        log = report.parse_log_lines(lines)
+        section = report.m7_section(log)
+        assert_contains(self, "<th>level</th><th>Local @1.25</th><th>Local</th>", section)
+        assert_contains(self, "<h3>M7/6 (Local, coverage 1.25)</h3>", section)
+        assert_contains(self, "<h3>M7/6 (Local)</h3>", section)
+        self.assertNotIn("coverage 1.50", section)
+
+    def test_the_contact_sheet_shows_each_source_and_coverage_beside_c_default(self):
+        sheet = self.out.parent / "contact-P2z_6.html"
+        self.assertTrue(sheet.is_file())
+        text = sheet.read_text(encoding="utf-8")
+        for config in ("C-default-grid", "C-default-local", "C-measured-cover125",
+                       "C-local-cover125"):
+            assert_contains(self, "<th>{}</th>".format(config), text)
+            self.assertNotIn("no {} frame".format(config), text)
+        # The two coverage-1.25 runs sit side by side, the zoomed-in artifact
+        # and its fix
+        assert_contains(self, "<th>C-measured-cover125</th><th>C-local-cover125</th>", text)
+        assert_contains(self, "P2z_6/C-local-cover125/run-9-005/"
+                        + report.candidate_frame_name(0, 1), text)
+
+
+# WP13 M3 method: the run's evalSummary names m3Method, the baseline's is
+# from before the column and sized every drawn point by the twin, so its M3
+# columns compare nothing while every other column still does
+def m3_method_log(method_column, worst_seam, holes):
+    header = "evalSummary,path,config,frames,worstHoleFraction,worstSeamShare,largestSeamRatio"
+    row = "evalSummary,P2,C-default,2,{},{},7.0000".format(holes, worst_seam)
+    if method_column:
+        header += ",m3Method"
+        row += "," + method_column
+    return "\n".join([
+        "evalCsv,path,config,pose,frame,label,litFraction,holeFraction",
+        "evalCsv,P2,C-default,0,0,heading-0,0.50000,{}".format(holes),
+        header, row]) + "\n"
+
+
+class M3MethodTest(unittest.TestCase):
+    def build(self, run_method, base_method):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run_log = root / "run.log"
+            base_log = root / "base.log"
+            run_log.write_text(m3_method_log(run_method, "0.30200", "0.01000"), encoding="utf-8")
+            base_log.write_text(m3_method_log(base_method, "0.97800", "0.02000"),
+                                encoding="utf-8")
+            out = root / "report" / "index.html"
+            with contextlib.redirect_stdout(io.StringIO()):
+                exit_code = report.main(["--log", str(run_log), "--frames", str(root / "frames"),
+                                         "--out", str(out), "--baseline", str(base_log)])
+            self.assertEqual(exit_code, 0)
+            return out.read_text(encoding="utf-8")
+
+    def test_m3_against_a_baseline_from_before_the_method_shows_no_verdict(self):
+        text = self.build("drawnSides", None)
+        self.assertEqual(text.count("Δ n/a, M3 method changed"), 2)
+        self.assertNotRegex(text, r'class="cell-base better">Δ -0\.676<')
+        # Columns other than M3 are still judged
+        self.assertRegex(text, r'class="cell-base better">Δ -0\.01<')
+
+    def test_m3_against_a_baseline_of_the_same_method_is_judged(self):
+        text = self.build("drawnSides", "drawnSides")
+        self.assertNotIn("M3 method changed", text)
+        self.assertRegex(text, r'class="cell-base better">Δ -0\.676<')
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -8,7 +8,8 @@
 #version 440 core
 
 // One octree node's points, quantized to uint16 per axis inside the node's
-// cube (cw::octree::quantize). w is reserved.
+// cube (cw::octree::quantize). w is the point's native spacing code
+// (cw::octree::encodeLocalSpacing), read only under spacingSource Local.
 layout(location = 0) in uvec4 qpos;
 
 // Per instance, one per node: the node cube's min corner and the world size of
@@ -103,7 +104,13 @@ const int kThinningOff = 2;
 const int kSizeFixedPixels = 1;
 const int kSizeOwnSpacing = 2;
 const int kFloorOff = 1;
-const int kSpacingMeasured = 1;
+const int kSpacingGrid = 0;
+const int kSpacingLocal = 2;
+// cw::octree::decodeLocalSpacing: code 1 is kMinLocalSpacingUnits, and the
+// codes up to kQuantMax split log2(kMaxLocalSpacingUnits /
+// kMinLocalSpacingUnits) octaves evenly
+const float kMinLocalSpacingUnits = 0.005;
+const float kLocalSpacingCodeOctaves = 13.643856189774725;
 const int kRevealGrow = 1;
 const uint kFadeOut = 1u;
 const uint kFadeIn = 2u;
@@ -334,8 +341,8 @@ void main(void)
     // cw::clod::drawSpacing: Measured answers for the wider gap of a node
     // sparser than its grid, and keeps the grid of a denser one
     float gridSpacing = nodeOriginScale.w * kQuantMax / kSampleGridResolution;
-    float nodeSpacing = spacingSource == kSpacingMeasured ? max(gridSpacing, nodeMeasuredSpacing)
-                                                          : gridSpacing;
+    float nodeSpacing = spacingSource == kSpacingGrid ? gridSpacing
+                                                      : max(gridSpacing, nodeMeasuredSpacing);
     float weight = clamp(log2(kOctave * nodeSpacing / targetSpacing), 0.0, 1.0);
     if (thinningMode == kThinningDiscrete) {
         // Compared directly rather than through log2, so the step lands on the
@@ -398,6 +405,17 @@ void main(void)
     // instead of blowing up to their own coarse spacing.
     float drawnFloor = revealFrames > 0 ? revealedFloor() : nodeFloor;
     float floorSpacing = sizeMode == kSizeOwnSpacing ? nodeSpacing : drawnFloor;
+    // cw::clod::localSpacing and sizeSpacing: under Local a sprite covers the
+    // larger of its node's drawn floor and its own point's native spacing, so
+    // a point whose floor a tiny dense descendant lifted still covers the
+    // data's spacing around it.
+    if (spacingSource == kSpacingLocal && sizeMode != kSizeOwnSpacing) {
+        float nativeSpacing = qpos.w == 0u
+            ? gridSpacing
+            : kMinLocalSpacingUnits
+                  * exp2(float(qpos.w - 1u) / (kQuantMax - 1.0) * kLocalSpacingCodeOctaves);
+        floorSpacing = max(drawnFloor, nativeSpacing);
+    }
     float floorPx = floorMode == kFloorOff ? 0.0
                                            : spacingCoverage * floorSpacing * pixelsPerMeter;
     float sizePx = sizeMode == kSizeFixedPixels

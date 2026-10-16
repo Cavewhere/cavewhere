@@ -7,6 +7,7 @@
 
 //Std includes
 #include <array>
+#include <optional>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -95,4 +96,37 @@ namespace cw::octree {
                                                            double rootSize,
                                                            int leafMaxPoints = kLeafMaxPoints,
                                                            int minSplitPoints = kMinSplitPoints);
+
+    /**
+     * The native spacing (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5,
+     * WP13) of every point of every node of @a nodes, a subtree as
+     * buildSubtree() returns it with its root at index 0: one vector per node,
+     * one spacing per point in the node's order, in the octree's units.
+     *
+     * A point's native spacing is the distance r_k to its
+     * kLocalSpacingNeighbors-th nearest distinct neighbor among every point of
+     * every node of @a nodes, times kLocalSpacingSurfaceFactor. The octree is
+     * additive, so those nodes together are the raw data of the subtree's
+     * cell: a point measures the data around it whatever level it sits at.
+     * Bit-identical points count once, so a stack of duplicate returns reads
+     * as one neighbor rather than a dense patch. Neighbor information stops at
+     * the subtree's own cell: a point beside one of its faces finds its k-th
+     * neighbor at most sqrt(2) farther than it would with the cell's
+     * neighbors there (half the disc), and one at a corner of two faces at
+     * most twice as far.
+     *
+     * Each spacing is clamped to [kMinLocalSpacingUnits, localSpacingCap()]
+     * of its node's grid spacing, or of @a firstNodeCapLevel's grid for the
+     * root when given; a point with fewer than k distinct neighbors inside
+     * that cap's reach takes the cap. Nodes shallower than
+     * @a firstCodedLevel come back empty and still count as neighbors.
+     * @a rootMin and @a rootSize are the octree root cube's.
+     */
+    CAVEWHERE_LIB_EXPORT QVector<QVector<float>> estimateNativeSpacing(
+        const QVector<SampledNode>& nodes, const QVector3D& rootMin, double rootSize,
+        int firstCodedLevel = 0, std::optional<int> firstNodeCapLevel = std::nullopt);
+
+    //! The codes (encodeLocalSpacing) of @a spacings, each held to @a cap first
+    CAVEWHERE_LIB_EXPORT QVector<quint16> encodeLocalSpacings(const QVector<float>& spacings,
+                                                              double cap);
 }
