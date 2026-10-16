@@ -124,6 +124,7 @@ const int kViewSpriteSize = 5;
 const int kViewFloorRatio = 6;
 const int kViewResidencyAge = 7;
 const int kViewDecimationPreview = 8;
+const int kViewSpriteDensity = 9;
 
 // cw::pointcloud::kLevelPalette, value for value
 const int kLevelPaletteSize = 8;
@@ -148,6 +149,10 @@ const vec3 kLargeSpriteColor = vec3(1.0, 0.9, 0.2);
 const vec3 kOversizedFloorColor = vec3(1.0, 0.2, 1.0);
 // Octaves between a node's own spacing and its floor the ramp spans
 const float kFloorRatioOctaves = 4.0;
+// cw::pointcloud::kDensityViewOctaves, kUnderCoveredColor and kOverCoveredColor
+const float kDensityViewOctaves = 2.0;
+const vec3 kUnderCoveredColor = vec3(0.85, 0.2, 0.15);
+const vec3 kOverCoveredColor = vec3(0.2, 0.4, 0.95);
 const float kMinimumFloorSpacing = 1e-6;
 const vec3 kSettledColor = vec3(0.4);
 const float kResidencyFadeFrames = 60.0;
@@ -268,11 +273,22 @@ float revealedFloor()
     return exp2(mix(log2(nodePreviousFloor), log2(nodeFloor), scale));
 }
 
+// cw::clod::localSpacing: the point's native spacing in meters from its code
+// in qpos.w, the node's grid spacing for an unmeasured code
+float nativeSpacing(float gridSpacing)
+{
+    if (qpos.w == 0u) {
+        return gridSpacing;
+    }
+    return kMinLocalSpacingUnits
+           * exp2(float(qpos.w - 1u) / (kQuantMax - 1.0) * kLocalSpacingCodeOctaves);
+}
+
 // What a drawn point is colored by under debugView. The level is the node's
 // depth below the root, which the grid spacing ratio gives exactly: every
 // level halves the grid spacing.
 vec3 debugColor(float gridSpacing, float nodeSpacing, float drawnFloor, float rank, float weight,
-                float sizePx)
+                float sizePx, float pixelsPerMeter)
 {
     if (debugView == kViewLevel) {
         int level = int(round(log2(rootSpacing / gridSpacing)));
@@ -301,6 +317,14 @@ vec3 debugColor(float gridSpacing, float nodeSpacing, float drawnFloor, float ra
     if (debugView == kViewResidencyAge) {
         float age = float(currentFrame - nodeIds.x);
         return mix(kWhite, kSettledColor, clamp(age / kResidencyFadeFrames, 0.0, 1.0));
+    }
+    if (debugView == kViewSpriteDensity) {
+        // cw::clod::spriteDensity and spriteDensityRamp, read from the code
+        // under every spacing source
+        float density = sizePx / (nativeSpacing(gridSpacing) * pixelsPerMeter);
+        float ramp = clamp(log2(density / spacingCoverage) / kDensityViewOctaves, -1.0, 1.0);
+        return ramp < 0.0 ? mix(kWhite, kUnderCoveredColor, -ramp)
+                          : mix(kWhite, kOverCoveredColor, ramp);
     }
     return kWhite;
 }
@@ -405,16 +429,12 @@ void main(void)
     // instead of blowing up to their own coarse spacing.
     float drawnFloor = revealFrames > 0 ? revealedFloor() : nodeFloor;
     float floorSpacing = sizeMode == kSizeOwnSpacing ? nodeSpacing : drawnFloor;
-    // cw::clod::localSpacing and sizeSpacing: under Local a sprite covers the
-    // larger of its node's drawn floor and its own point's native spacing, so
-    // a point whose floor a tiny dense descendant lifted still covers the
-    // data's spacing around it.
+    // cw::clod::sizeSpacing: under Local a sprite covers the larger of its
+    // node's drawn floor and its own point's native spacing, so a point whose
+    // floor a tiny dense descendant lifted still covers the data's spacing
+    // around it.
     if (spacingSource == kSpacingLocal && sizeMode != kSizeOwnSpacing) {
-        float nativeSpacing = qpos.w == 0u
-            ? gridSpacing
-            : kMinLocalSpacingUnits
-                  * exp2(float(qpos.w - 1u) / (kQuantMax - 1.0) * kLocalSpacingCodeOctaves);
-        floorSpacing = max(drawnFloor, nativeSpacing);
+        floorSpacing = max(drawnFloor, nativeSpacing(gridSpacing));
     }
     float floorPx = floorMode == kFloorOff ? 0.0
                                            : spacingCoverage * floorSpacing * pixelsPerMeter;
@@ -433,6 +453,6 @@ void main(void)
 
     vColor = debugView == kViewOff ? kFlatColor
                             : vec4(debugColor(gridSpacing, nodeSpacing, drawnFloor, rank, weight,
-                                              gl_PointSize),
+                                              gl_PointSize, pixelsPerMeter),
                                    1.0);
 }

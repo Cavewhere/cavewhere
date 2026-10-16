@@ -655,3 +655,107 @@ TEST_CASE("Under Local a sprite follows its floor ramp once the ramp passes its 
     //and settles on the floor exactly
     CHECK(previous == kCoarseFloor);
 }
+
+// ---- WP14: the sprite density view -------------------------------------------
+
+TEST_CASE("DebugView gains SpriteDensity after DecimationPreview, so stored views keep their meaning",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::DebugView;
+
+    CHECK(int(DebugView::DecimationPreview) == 8);
+    CHECK(int(DebugView::SpriteDensity) == 9);
+    CHECK(cw::pointcloud::kDebugViewCount == int(DebugView::SpriteDensity) + 1);
+    CHECK(cwPointCloudShading().debugView == DebugView::Off);
+}
+
+namespace {
+    //! A native spacing and a projection the density cases share: the BC
+    //! tile's 0.27 m data seen at 40 px a meter
+    constexpr double kDensityNativeSpacing = 0.27;
+    constexpr double kDensityPixelsPerMeter = 40.0;
+    //! The renderer's default coverage, and one off it
+    constexpr double kDensityCoverage = 1.5;
+    constexpr double kOtherDensityCoverage = 1.25;
+    //! A floor under the native spacing and one over it
+    constexpr double kDensityLiftedFloor = 0.0144;
+    constexpr double kDensityCoarseFloor = 0.5;
+}
+
+TEST_CASE("cw::clod::spriteDensity is 1 where a sprite is as wide as its point's projected native spacing",
+          "[PointCloudClod]")
+{
+    const double projected = kDensityNativeSpacing * kDensityPixelsPerMeter;
+    CHECK(spriteDensity(projected, kDensityNativeSpacing, kDensityPixelsPerMeter)
+          == Catch::Approx(1.0));
+    //Linear in the side, and the same ratio at any zoom
+    constexpr double kTwice = 2.0;
+    CHECK(spriteDensity(kTwice * projected, kDensityNativeSpacing, kDensityPixelsPerMeter)
+          == Catch::Approx(kTwice));
+    CHECK(spriteDensity(kTwice * projected, kDensityNativeSpacing,
+                        kTwice * kDensityPixelsPerMeter)
+          == Catch::Approx(1.0));
+}
+
+TEST_CASE("cw::clod::spriteDensity reads spacingCoverage where the sizing rule covers the native spacing exactly, and the floor's excess where it does not",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    for (double coverage : {kDensityCoverage, kOtherDensityCoverage}) {
+        INFO("coverage " << coverage);
+        //Under Local a lifted floor gives way to the native spacing, so the
+        //sprite covers exactly coverage of it
+        const double local = coverage
+                             * sizeSpacing(kDensityLiftedFloor, kDensityNativeSpacing,
+                                           SpacingSource::Local)
+                             * kDensityPixelsPerMeter;
+        CHECK(spriteDensity(local, kDensityNativeSpacing, kDensityPixelsPerMeter)
+              == Catch::Approx(coverage));
+
+        //Under Measured the same point covers the lifted floor, under-covered
+        //by their ratio, which is the seam the view is there to show
+        const double measured = coverage
+                                * sizeSpacing(kDensityLiftedFloor, kDensityNativeSpacing,
+                                              SpacingSource::Measured)
+                                * kDensityPixelsPerMeter;
+        CHECK(spriteDensity(measured, kDensityNativeSpacing, kDensityPixelsPerMeter)
+              == Catch::Approx(coverage * kDensityLiftedFloor / kDensityNativeSpacing));
+
+        //and a floor wider than the data over-covers it under every source
+        for (const SpacingSource source :
+             {SpacingSource::Grid, SpacingSource::Measured, SpacingSource::Local}) {
+            INFO("source " << int(source));
+            const double coarse = coverage
+                                  * sizeSpacing(kDensityCoarseFloor, kDensityNativeSpacing,
+                                                source)
+                                  * kDensityPixelsPerMeter;
+            CHECK(spriteDensity(coarse, kDensityNativeSpacing, kDensityPixelsPerMeter)
+                  == Catch::Approx(coverage * kDensityCoarseFloor / kDensityNativeSpacing));
+        }
+    }
+}
+
+TEST_CASE("The sprite density ramp is white at spacingCoverage and reaches its ends kDensityViewOctaves either side",
+          "[PointCloudClod]")
+{
+    const double span = std::exp2(cw::pointcloud::kDensityViewOctaves);
+    constexpr double kOneOctave = 2.0;
+    constexpr double kPastTheEnd = 4.0;
+
+    CHECK(cw::pointcloud::kDensityViewOctaves == 2.0);
+    for (double coverage : {kDensityCoverage, kOtherDensityCoverage}) {
+        INFO("coverage " << coverage);
+        CHECK(spriteDensityRamp(coverage, coverage) == Catch::Approx(0.0).margin(1e-12));
+        CHECK(spriteDensityRamp(coverage * span, coverage) == Catch::Approx(1.0));
+        CHECK(spriteDensityRamp(coverage / span, coverage) == Catch::Approx(-1.0));
+        //Linear in octaves between
+        CHECK(spriteDensityRamp(coverage * kOneOctave, coverage)
+              == Catch::Approx(1.0 / cw::pointcloud::kDensityViewOctaves));
+        CHECK(spriteDensityRamp(coverage / kOneOctave, coverage)
+              == Catch::Approx(-1.0 / cw::pointcloud::kDensityViewOctaves));
+        //and held at the ends past them
+        CHECK(spriteDensityRamp(coverage * span * kPastTheEnd, coverage) == 1.0);
+        CHECK(spriteDensityRamp(coverage / span / kPastTheEnd, coverage) == -1.0);
+    }
+}

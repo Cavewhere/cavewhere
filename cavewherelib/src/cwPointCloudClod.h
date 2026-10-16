@@ -243,6 +243,32 @@ namespace cw::clod {
         return drawnFloor;
     }
 
+    /**
+     * How much of a point's own native spacing its drawn sprite covers on
+     * screen: the sprite's side @a sizePx over @a nativeSpacing meters
+     * (localSpacing()) projected at @a pixelsPerMeter. 1 where the sprite is
+     * exactly as wide as the gap to the point's neighbors. The sprite density
+     * view colors each point by it. PointCloud.vert computes the same ratio.
+     */
+    inline double spriteDensity(double sizePx, double nativeSpacing, double pixelsPerMeter)
+    {
+        return sizePx / (nativeSpacing * pixelsPerMeter);
+    }
+
+    /**
+     * Where @a density (spriteDensity()) sits on the sprite density view's
+     * ramp under @a spacingCoverage: log2(density / spacingCoverage) over
+     * cw::pointcloud::kDensityViewOctaves, clamped to [-1, 1], so 0 is white,
+     * -1 kUnderCoveredColor and 1 kOverCoveredColor. PointCloud.vert mixes
+     * its color by the same position.
+     */
+    inline double spriteDensityRamp(double density, double spacingCoverage)
+    {
+        return std::clamp(std::log2(density / spacingCoverage)
+                              / cw::pointcloud::kDensityViewOctaves,
+                          -1.0, 1.0);
+    }
+
     //! The frames from @a since to @a frame, the age the reveal ramp reads:
     //! the unsigned difference of the two truncated to 32 bits, as
     //! PointCloud.vert takes it, so a @a since after @a frame wraps to an age

@@ -29,7 +29,7 @@ QC.Popup {
     readonly property list<string> revealModeNames: [qsTr("Cover"), qsTr("Grow")]
     readonly property list<string> debugViewNames: [qsTr("Off"), qsTr("Level"), qsTr("Node"), qsTr("Rank"),
         qsTr("Weight"), qsTr("Sprite size"), qsTr("Floor ratio"), qsTr("Residency age"),
-        qsTr("Decimation preview")]
+        qsTr("Decimation preview"), qsTr("Sprite density")]
 
     // QC.SpinBox counts in integers, so fractional knobs are held scaled.
     readonly property int screenSpaceErrorScale: 10

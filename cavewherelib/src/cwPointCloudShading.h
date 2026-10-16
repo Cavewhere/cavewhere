@@ -109,14 +109,18 @@ namespace cw::pointcloud {
         //! White the frame a node arrives, fading to gray
         ResidencyAge = 7,
         //! Kept points as Off draws them, thinned ones dim at one pixel
-        DecimationPreview = 8
+        DecimationPreview = 8,
+        //! A diverging ramp over how much of the point's own native spacing
+        //! its sprite covers on screen, white where it covers exactly
+        //! spacingCoverage of it
+        SpriteDensity = 9
     };
 
     constexpr int kThinningModeCount = int(ThinningMode::Off) + 1;
     constexpr int kSizeModeCount = int(SizeMode::OwnSpacing) + 1;
     constexpr int kFloorModeCount = int(FloorMode::Off) + 1;
     constexpr int kSpacingSourceCount = int(SpacingSource::Local) + 1;
-    constexpr int kDebugViewCount = int(DebugView::DecimationPreview) + 1;
+    constexpr int kDebugViewCount = int(DebugView::SpriteDensity) + 1;
     constexpr int kRevealModeCount = int(RevealMode::Grow) + 1;
 
     constexpr bool kDefaultShowNodeBoxes = false;
@@ -149,6 +153,15 @@ namespace cw::pointcloud {
     //! A node box's color while its node is resident outside the cut, which is
     //! what eviction takes from
     constexpr Rgb kEvictableNodeBoxColor {1.0f, 0.15f, 0.15f};
+
+    //! The sprite density view's ramp ends: a sprite covering
+    //! kDensityViewOctaves octaves less of its native spacing than
+    //! spacingCoverage asks for reads kUnderCoveredColor (holes), one covering
+    //! that many octaves more reads kOverCoveredColor, and one covering exactly
+    //! spacingCoverage reads white. PointCloud.vert spells all three out.
+    constexpr double kDensityViewOctaves = 2.0;
+    constexpr Rgb kUnderCoveredColor {0.85f, 0.2f, 0.15f};
+    constexpr Rgb kOverCoveredColor {0.2f, 0.4f, 0.95f};
 
     constexpr Rgb levelColor(int level)
     {
@@ -190,7 +203,8 @@ namespace cw::pointcloud {
                       && int(DebugView::Node) == 2 && int(DebugView::Rank) == 3
                       && int(DebugView::Weight) == 4 && int(DebugView::SpriteSize) == 5
                       && int(DebugView::FloorRatio) == 6 && int(DebugView::ResidencyAge) == 7
-                      && int(DebugView::DecimationPreview) == 8,
+                      && int(DebugView::DecimationPreview) == 8
+                      && int(DebugView::SpriteDensity) == 9,
                   "PointCloud.vert spells this out");
 }
 

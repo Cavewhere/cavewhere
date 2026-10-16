@@ -845,6 +845,59 @@ TEST_CASE("cwRenderingSettings revealMode defaults to cover, clamps, and persist
     settings->resetToDefaults();
 }
 
+TEST_CASE("cwRenderingSettings debugView reaches the sprite density view, clamps to it, and persists it",
+          "[cwRenderingSettings]")
+{
+    cwRenderingSettings::initialize();
+    auto settings = cwRenderingSettings::instance();
+    REQUIRE(settings);
+    settings->resetToDefaults();
+
+    using cw::pointcloud::DebugView;
+    const QString key = QStringLiteral("rendering/pointCloud/debugView");
+    constexpr int kAboveRange = 100;
+
+    SECTION("the count reaches past the sprite density view") {
+        CHECK(cwRenderingSettings::debugViewCount() == cw::pointcloud::kDebugViewCount);
+        CHECK(cwRenderingSettings::debugViewCount() == int(DebugView::SpriteDensity) + 1);
+    }
+
+    SECTION("a value past the enum clamps to the sprite density view") {
+        settings->setDebugView(kAboveRange);
+        CHECK(settings->debugView() == cwRenderingSettings::debugViewCount() - 1);
+        CHECK(settings->debugView() == int(DebugView::SpriteDensity));
+    }
+
+    SECTION("the sprite density view round-trips through QSettings and reaches the shading") {
+        QSignalSpy viewSpy(settings, &cwRenderingSettings::debugViewChanged);
+        QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
+        QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
+
+        settings->setDebugView(int(DebugView::SpriteDensity));
+
+        CHECK(viewSpy.count() == 1);
+        CHECK(shadingSpy.count() == 1);
+        CHECK(budgetsSpy.count() == 0);
+        CHECK(settings->debugView() == int(DebugView::SpriteDensity));
+        CHECK(settings->pointCloudShading().debugView == DebugView::SpriteDensity);
+        CHECK_FALSE(settings->isAtDefaults());
+
+        QSettings diskSettings;
+        CHECK(diskSettings.value(key).toInt() == int(DebugView::SpriteDensity));
+
+        //The view before it keeps its stored value's meaning
+        settings->setDebugView(int(DebugView::DecimationPreview));
+        CHECK(settings->debugView() == int(DebugView::DecimationPreview));
+        CHECK(diskSettings.value(key).toInt() == int(DebugView::DecimationPreview));
+
+        settings->resetPointCloudKnobsToDefaults();
+        CHECK(settings->debugView() == int(DebugView::Off));
+        CHECK(settings->isAtDefaults());
+    }
+
+    settings->resetToDefaults();
+}
+
 TEST_CASE("cwRenderingSettings honors the backend's supported sample counts", "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();

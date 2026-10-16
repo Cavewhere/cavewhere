@@ -1021,5 +1021,80 @@ class M3MethodTest(unittest.TestCase):
         self.assertRegex(text, r'class="cell-base better">Δ -0\.676<')
 
 
+# WP14: P2z/6 and the M7 level-alone orbit (M7/6) under the sprite density
+# view for Measured and Local, beside C-default, the way the bench writes
+# them. The views add no metric; the contact sheets are where they show.
+DENSITY_PATHS = (("P2z/6", "P2z_6"), ("M7/6", "M7_6"))
+DENSITY_CONFIGS = ("C-default", "C-measured-density", "C-local-density")
+DENSITY_SOURCES = {"C-default": "Measured", "C-measured-density": "Measured",
+                   "C-local-density": "Local"}
+
+
+def density_log():
+    lines = []
+    for path, directory in DENSITY_PATHS:
+        for index, config in enumerate(DENSITY_CONFIGS):
+            lines.append("evalCsv,path,config,pose,frame,label,litFraction,holeFraction,"
+                         "pending,spacingSource,revealFrames,revealMode")
+            lines.append("evalDump,path,config,directory")
+            lines.append("evalDump,{p},{c},{d}/{c}/run-14-00{i}".format(
+                p=path, c=config, d=directory, i=index + 1))
+            for frame in (0, 1):
+                lines.append("evalCsv,{p},{c},0,{f},heading-0,0.50000,0.01000,0,{s},0,Cover"
+                             .format(p=path, c=config, f=frame, s=DENSITY_SOURCES[config]))
+    return "\n".join(lines) + "\n"
+
+
+class SpriteDensityContactSheetTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.frames = root / "frames"
+        self.out = root / "report" / "index.html"
+        for _, path_directory in DENSITY_PATHS:
+            for index, config in enumerate(DENSITY_CONFIGS):
+                directory = (self.frames / path_directory / config
+                             / "run-14-00{}".format(index + 1))
+                directory.mkdir(parents=True)
+                for frame in (0, 1):
+                    write_rgba_png(directory / report.candidate_frame_name(0, frame),
+                                   frame + index)
+                if config == report.DIFF_CANDIDATE:
+                    for oracle in ("O2", "O3"):
+                        (directory / oracle).mkdir()
+                        write_rgba_png(directory / oracle / report.oracle_frame_name(0), 5)
+        log_file = root / "run.log"
+        log_file.write_text(density_log(), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.exit_code = report.main(["--log", str(log_file), "--frames", str(self.frames),
+                                          "--out", str(self.out)])
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def sheet_text(self, directory):
+        sheet = self.out.parent / "contact-{}.html".format(directory)
+        self.assertTrue(sheet.is_file(), "no contact sheet for {}".format(directory))
+        return sheet.read_text(encoding="utf-8")
+
+    def check_density_columns(self, directory):
+        text = self.sheet_text(directory)
+        for config in ("C-measured-density", "C-local-density"):
+            assert_contains(self, "<th>{}</th>".format(config), text)
+            self.assertNotIn("no {} frame".format(config), text)
+        # Measured and Local side by side, the seam and its fix
+        assert_contains(self, "<th>C-measured-density</th><th>C-local-density</th>", text)
+        assert_contains(self, "{}/C-local-density/run-14-003/".format(directory)
+                        + report.candidate_frame_name(0, 1), text)
+
+    def test_the_boundary_path_sheet_shows_both_density_views(self):
+        self.assertEqual(self.exit_code, 0)
+        self.check_density_columns("P2z_6")
+
+    def test_the_m7_orbit_gets_a_sheet_showing_both_density_views(self):
+        self.assertEqual(self.exit_code, 0)
+        self.check_density_columns("M7_6")
+
+
 if __name__ == "__main__":
     unittest.main()

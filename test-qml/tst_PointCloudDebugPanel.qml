@@ -9,6 +9,8 @@ MainWindowTest {
 
     readonly property RenderingSettings renderingSettings: RootData.settings.renderingSettings
     readonly property LazLayersSceneNode lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
+    // cw::pointcloud::DebugView::SpriteDensity
+    readonly property int spriteDensityView: 9
 
     PointCloudDebugPanel {
         id: panelId
@@ -64,6 +66,21 @@ MainWindowTest {
             const found = findChild(panelId.contentItem, name)
             verify(found !== null, name + " not found")
             return found
+        }
+
+        function test_theColorByRowNamesEveryViewThroughSpriteDensity() {
+            compare(panelId.debugViewNames.length, rootId.renderingSettings.debugViewCount)
+            compare(panelId.debugViewNames[rootId.spriteDensityView], qsTr("Sprite density"))
+
+            const debugView = row("debugViewComboBox")
+            debugView.currentIndex = rootId.spriteDensityView
+            debugView.activated(rootId.spriteDensityView)
+            compare(rootId.renderingSettings.debugView, rootId.spriteDensityView)
+
+            rootId.renderingSettings.debugView = 0
+            tryCompare(debugView, "currentIndex", 0)
+            rootId.renderingSettings.debugView = rootId.spriteDensityView
+            tryCompare(debugView, "currentIndex", rootId.spriteDensityView)
         }
 
         function test_everyKnobHasARow() {
@@ -333,6 +350,18 @@ MainWindowTest {
                 tryCompare(rootId.renderingSettings, "debugView",
                            step % rootId.renderingSettings.debugViewCount)
             }
+        }
+
+        function test_vCyclesThroughSpriteDensityBackToOff() {
+            const view = renderer()
+            view.forceActiveFocus()
+            tryVerify(() => view.activeFocus)
+
+            rootId.renderingSettings.debugView = rootId.spriteDensityView - 1
+            keyClick(Qt.Key_V)
+            tryCompare(rootId.renderingSettings, "debugView", rootId.spriteDensityView)
+            keyClick(Qt.Key_V)
+            tryCompare(rootId.renderingSettings, "debugView", 0)
         }
 
         function test_theHudOpensThePanel() {
