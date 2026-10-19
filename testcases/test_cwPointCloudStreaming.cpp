@@ -6989,9 +6989,13 @@ namespace {
         MeasuredCover125Density, //!< C-measured-cover125 under the sprite density view
         LocalCover125Density, //!< C-local-cover125 under the sprite density view
         MeasuredSize, //!< C-default under the sprite size view, for TT's sheet
-        LocalSize //!< C-default-local under the sprite size view, for TT's sheet
+        LocalSize, //!< C-default-local under the sprite size view, for TT's sheet
+        TightCover, //!< C-tight with arrivals fading in and floors ramping
+        TightGrow, //!< C-tight-cover with arrivals growing over the requested cut's floors
+        TightSlewCover, //!< C-tight-slew with arrivals fading in and floors ramping
+        TightSlewGrow //!< C-tight-slew-cover with arrivals growing over the requested cut's floors
     };
-    constexpr int kCandidateCount = int(Candidate::LocalSize) + 1;
+    constexpr int kCandidateCount = int(Candidate::TightSlewGrow) + 1;
 
     constexpr int kStarvedGpuBudgetMb = 256;
     constexpr int kStarvedPointBudgetMillions = 4;
@@ -7117,6 +7121,26 @@ namespace {
             config = candidateConfig(Candidate::DefaultLocal);
             config.name = QStringLiteral("C-local-size");
             config.debugView = cw::pointcloud::DebugView::SpriteSize;
+            break;
+        case Candidate::TightCover:
+            config = candidateConfig(Candidate::Tight);
+            config.name = QStringLiteral("C-tight-cover");
+            config.revealFrames = kRevealCandidateFrames;
+            break;
+        case Candidate::TightGrow:
+            config = candidateConfig(Candidate::TightCover);
+            config.name = QStringLiteral("C-tight-grow");
+            config.revealMode = cw::pointcloud::RevealMode::Grow;
+            break;
+        case Candidate::TightSlewCover:
+            config = candidateConfig(Candidate::TightSlew);
+            config.name = QStringLiteral("C-tight-slew-cover");
+            config.revealFrames = kRevealCandidateFrames;
+            break;
+        case Candidate::TightSlewGrow:
+            config = candidateConfig(Candidate::TightSlewCover);
+            config.name = QStringLiteral("C-tight-slew-grow");
+            config.revealMode = cw::pointcloud::RevealMode::Grow;
             break;
         }
         return config;
@@ -11594,6 +11618,34 @@ TEST_CASE("The oblique orbit and its boundary path on a tile under C-tight-slew 
     }
 }
 
+TEST_CASE("The oblique orbit and its boundary path on a tile under C-tight and C-tight-slew with the reveal ramp under Cover and Grow record every metric",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    //C-tight's poses and oracles, so each twin compares pose for pose with its
+    //base and the ramp is the only difference. The capped cut drops from
+    //level 5 to level 4 on P2z/6, which is the departure the twins draw.
+    const EvalConfig tight = candidateConfig(Candidate::Tight);
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    for (const EvalPath& path : {tileOrbitPath(manifest, tight),
+                                 tileBoundaryPath(rhi.get(), manifest, defaults)}) {
+        const EvalOracles oracles = tileOracles(rhi.get(), cache, path, tight.targetSize);
+        for (const Candidate candidate : {Candidate::TightCover, Candidate::TightGrow,
+                                          Candidate::TightSlewCover, Candidate::TightSlewGrow}) {
+            const EvalConfig config = candidateConfig(candidate);
+            INFO(config.name.toStdString());
+            REQUIRE(config.targetSize == tight.targetSize);
+            REQUIRE(config.revealFrames == kRevealCandidateFrames);
+            checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step, oracles), path,
+                             step);
+        }
+    }
+}
+
 TEST_CASE("The fly-in on a tile records every metric against its oracles",
           "[PointCloudStreaming][PointCloudEval]")
 {
@@ -12536,7 +12588,9 @@ TEST_CASE("C-default-grid is C-default sizing and thinning by grid spacing",
     //Every other candidate draws by the renderer's default, measured spacing
     CHECK(cw::pointcloud::kDefaultSpacingSource == cw::pointcloud::SpacingSource::Measured);
     for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
-                                      Candidate::Tight, Candidate::TightSlew}) {
+                                      Candidate::Tight, Candidate::TightSlew,
+                                      Candidate::TightCover, Candidate::TightGrow,
+                                      Candidate::TightSlewCover, Candidate::TightSlewGrow}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
         CHECK(config.spacingSource == cw::pointcloud::kDefaultSpacingSource);
@@ -14379,11 +14433,60 @@ TEST_CASE("C-default-grow and C-latent-grow are their reveal twins with revealMo
     for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
                                       Candidate::Tight, Candidate::TightSlew,
                                       Candidate::DefaultGrid, Candidate::DefaultReveal,
-                                      Candidate::LatentReveal}) {
+                                      Candidate::LatentReveal, Candidate::TightCover,
+                                      Candidate::TightSlewCover}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
         CHECK(config.revealMode == cw::pointcloud::kDefaultRevealMode);
     }
+}
+
+TEST_CASE("C-tight-cover, C-tight-grow, C-tight-slew-cover and C-tight-slew-grow are their tight bases with the reveal ramp on",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    using namespace cw::budgets;
+
+    const auto checkRevealOf = [](Candidate reveal, Candidate base, const QString& name,
+                                  cw::pointcloud::RevealMode mode, double governorSlew) {
+        const EvalConfig config = candidateConfig(reveal);
+        const EvalConfig baseline = candidateConfig(base);
+        INFO(config.name.toStdString());
+        CHECK(config.name == name);
+        CHECK(config.revealFrames == kRevealCandidateFrames);
+        CHECK(config.revealMode == mode);
+        CHECK(baseline.revealFrames == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(config.budgets.gpuBudgetBytes == kTightGpuBudgetMb * kBytesPerMegabyte);
+        CHECK(config.budgets.pointBudget == kTightPointBudgetMillions * kPointsPerMillion);
+        CHECK(config.budgets.uploadBudgetBytesPerFrame == kDefaultUploadBudgetBytesPerFrame);
+        CHECK(config.budgets.governorSlew == governorSlew);
+        CHECK(config.budgets.gpuBudgetBytes == baseline.budgets.gpuBudgetBytes);
+        CHECK(config.budgets.pointBudget == baseline.budgets.pointBudget);
+        CHECK(config.budgets.uploadBudgetBytesPerFrame
+              == baseline.budgets.uploadBudgetBytesPerFrame);
+        CHECK(config.budgets.screenSpaceErrorPx == baseline.budgets.screenSpaceErrorPx);
+        CHECK(config.budgets.governorSlew == baseline.budgets.governorSlew);
+        CHECK(config.targetSize == baseline.targetSize);
+        CHECK(config.spacingSource == baseline.spacingSource);
+        CHECK(config.spacingCoverage == baseline.spacingCoverage);
+        CHECK(config.debugView == baseline.debugView);
+    };
+    using cw::pointcloud::RevealMode;
+    checkRevealOf(Candidate::TightCover, Candidate::Tight, QStringLiteral("C-tight-cover"),
+                  RevealMode::Cover, kDefaultGovernorSlew);
+    checkRevealOf(Candidate::TightGrow, Candidate::Tight, QStringLiteral("C-tight-grow"),
+                  RevealMode::Grow, kDefaultGovernorSlew);
+    checkRevealOf(Candidate::TightSlewCover, Candidate::TightSlew,
+                  QStringLiteral("C-tight-slew-cover"), RevealMode::Cover,
+                  kTightSlewGovernorSlew);
+    checkRevealOf(Candidate::TightSlewGrow, Candidate::TightSlew,
+                  QStringLiteral("C-tight-slew-grow"), RevealMode::Grow, kTightSlewGovernorSlew);
+
+    //Every candidate keeps a name of its own
+    QSet<QString> names;
+    for (int index = 0; index < kCandidateCount; index++) {
+        names.insert(candidateConfig(Candidate(index)).name);
+    }
+    CHECK(names.size() == kCandidateCount);
 }
 
 TEST_CASE("evalCsv records the reveal mode each sweep draws with",
@@ -14954,7 +15057,9 @@ TEST_CASE("C-default-local, C-measured-cover125 and C-local-cover125 are C-defau
                                       Candidate::Tight, Candidate::TightSlew,
                                       Candidate::DefaultGrid, Candidate::DefaultReveal,
                                       Candidate::LatentReveal, Candidate::DefaultGrow,
-                                      Candidate::LatentGrow}) {
+                                      Candidate::LatentGrow, Candidate::TightCover,
+                                      Candidate::TightGrow, Candidate::TightSlewCover,
+                                      Candidate::TightSlewGrow}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
         CHECK(config.spacingCoverage == cw::pointcloud::kDefaultSpacingCoverage);

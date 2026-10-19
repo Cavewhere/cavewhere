@@ -1260,5 +1260,70 @@ class TreeTopsContactSheetTest(unittest.TestCase):
         assert_contains(self, "TT/C-local-size/run-16-004/"
                         + report.candidate_frame_name(0, 1), text)
 
+# WP17: P2/24 under C-default, C-tight and C-tight-slew and their reveal twins
+# under Cover and Grow, the way the bench writes them. The departure a capped
+# cut makes as it drops from fine to coarse is what the sheet shows, so each
+# tight base sits beside its Cover and Grow twins.
+TIGHT_REVEAL_CONFIGS = (("C-default", "0", "Cover"), ("C-tight", "0", "Cover"),
+                        ("C-tight-cover", "8", "Cover"), ("C-tight-grow", "8", "Grow"),
+                        ("C-tight-slew", "0", "Cover"), ("C-tight-slew-cover", "8", "Cover"),
+                        ("C-tight-slew-grow", "8", "Grow"))
+
+
+def tight_reveal_log():
+    lines = []
+    for index, (config, frames, mode) in enumerate(TIGHT_REVEAL_CONFIGS):
+        lines.append("evalCsv,path,config,pose,frame,label,litFraction,holeFraction,"
+                     "spriteSideChangePx,pending,spacingSource,revealFrames,revealMode")
+        lines.append("evalDump,path,config,directory")
+        lines.append("evalDump,P2/24,{c},P2_24/{c}/run-17-00{i}".format(c=config, i=index + 1))
+        lines.append("evalCsv,P2/24,{},0,0,heading-0,0.50000,0.01000,20.000,1,Measured,{},{}"
+                     .format(config, frames, mode))
+        lines.append("evalCsv,P2/24,{},0,1,heading-0,0.55000,0.00900,0.000,0,Measured,{},{}"
+                     .format(config, frames, mode))
+        lines.append("evalSummary,path,config,frames,worstHoleFraction,largestSideChangePx")
+        lines.append("evalSummary,P2/24,{},2,0.01000,20.000".format(config))
+    return "\n".join(lines) + "\n"
+
+
+class TightRevealTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.frames = root / "frames"
+        self.out = root / "report" / "index.html"
+        for index, (config, _, _) in enumerate(TIGHT_REVEAL_CONFIGS):
+            directory = self.frames / "P2_24" / config / "run-17-00{}".format(index + 1)
+            directory.mkdir(parents=True)
+            for frame in (0, 1):
+                write_rgba_png(directory / report.candidate_frame_name(0, frame), frame + index)
+            if config == report.DIFF_CANDIDATE:
+                for oracle in ("O2", "O3"):
+                    (directory / oracle).mkdir()
+                    write_rgba_png(directory / oracle / report.oracle_frame_name(0), 5)
+        log_file = root / "run.log"
+        log_file.write_text(tight_reveal_log(), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.exit_code = report.main(["--log", str(log_file), "--frames", str(self.frames),
+                                          "--out", str(self.out)])
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_the_contact_sheet_shows_each_tight_base_beside_its_cover_and_grow_twins(self):
+        self.assertEqual(self.exit_code, 0)
+        sheet = self.out.parent / "contact-P2_24.html"
+        self.assertTrue(sheet.is_file())
+        text = sheet.read_text(encoding="utf-8")
+        for config, _, _ in TIGHT_REVEAL_CONFIGS:
+            assert_contains(self, "<th>{}</th>".format(config), text)
+            self.assertNotIn("no {} frame".format(config), text)
+        assert_contains(self, "<th>C-tight</th><th>C-tight-cover</th><th>C-tight-grow</th>"
+                        "<th>C-tight-slew</th><th>C-tight-slew-cover</th>"
+                        "<th>C-tight-slew-grow</th>", text)
+        assert_contains(self, "P2_24/C-tight-slew-grow/run-17-007/"
+                        + report.candidate_frame_name(0, 1), text)
+
+
 if __name__ == "__main__":
     unittest.main()

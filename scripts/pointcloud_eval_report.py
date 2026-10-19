@@ -1425,6 +1425,10 @@ CONTACT_CANDIDATES = ("C-default", "C-starved")
 # Shown beside those when the path ran them: the reveal ramp under Cover and
 # under Grow at the same frames, side by side
 CONTACT_REVEAL_CANDIDATES = ("C-default-reveal", "C-default-grow")
+# And each binding point budget beside its reveal twins under Cover and Grow,
+# where a capped cut's drop from fine to coarse shows how a departure draws
+CONTACT_TIGHT_CANDIDATES = ("C-tight", "C-tight-cover", "C-tight-grow", "C-tight-slew",
+                            "C-tight-slew-cover", "C-tight-slew-grow")
 # And the spacing sources and the zoomed-in coverage, the coverage-1.25 pair
 # side by side: the artifact and its fix
 CONTACT_SOURCE_CANDIDATES = ("C-default-grid", "C-default-local", "C-measured-cover125",
@@ -1484,7 +1488,8 @@ def contact_sheet(path, runs, frames, out_directory, report_name):
     nothing was dumped for the path."""
     ran = {run.config for run in runs}
     shown = list(CONTACT_CANDIDATES) + [config for config in
-                                        CONTACT_REVEAL_CANDIDATES + CONTACT_SOURCE_CANDIDATES
+                                        CONTACT_REVEAL_CANDIDATES + CONTACT_TIGHT_CANDIDATES
+                                        + CONTACT_SOURCE_CANDIDATES
                                         + CONTACT_VIEW_CANDIDATES + CONTACT_SIZE_CANDIDATES
                                         + CONTACT_DENSITY_CANDIDATES
                                         if config in ran]
