@@ -70,6 +70,8 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(bool sectionsVisible READ sectionsVisible WRITE setSectionsVisible NOTIFY sectionsVisibleChanged)
     Q_PROPERTY(bool overshootVisible READ overshootVisible WRITE setOvershootVisible NOTIFY overshootVisibleChanged)
     Q_PROPERTY(QString station READ station WRITE setStation NOTIFY stationChanged)
+    Q_PROPERTY(bool unionVisible READ unionVisible WRITE setUnionVisible NOTIFY unionVisibleChanged)
+    Q_PROPERTY(bool capsSlid READ capsSlid WRITE setCapsSlid NOTIFY capsSlidChanged)
 
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged)
     Q_PROPERTY(QString parameters READ parameters NOTIFY currentChanged)
@@ -169,6 +171,21 @@ public:
     QString station() const;
     void setStation(const QString& station);
 
+    // Draws the boolean union of each chain's closed tube, per connected
+    // component, through cwPassageTubeUnion, and checks it for a closed,
+    // manifold surface without degenerate triangles or crossings, in place
+    // of the builder's mesh. The list's issue counts stay the builder's.
+    bool unionVisible() const;
+    void setUnionVisible(bool unionVisible);
+
+    // With unionVisible, slides each chain's end cap into the passages it
+    // meets first (cwPassageTubeUnion::slideCaps).
+    bool capsSlid() const;
+    void setCapsSlid(bool capsSlid);
+
+    // Adds cwPassageTubeCases::wideArmFork.
+    Q_INVOKABLE void addWideArmFork();
+
     // Adds a cwPassageTubeCases::random survey, or a randomWild one when wild.
     Q_INVOKABLE void addRandom(int seed, int junctionCount, bool wild = false);
 
@@ -237,6 +254,8 @@ signals:
     void sectionsVisibleChanged();
     void overshootVisibleChanged();
     void stationChanged();
+    void unionVisibleChanged();
+    void capsSlidChanged();
     void projectOpened(int firstRow, int rowCount);
     void projectFailed(const QString& message);
 
@@ -262,10 +281,13 @@ private:
     struct Build {
         cwPassageTubeBuilder::Debug debug;
         cwPassageTubeMeshCheck::Report report;
+        // What the union did, for the report: empty for the builder's mesh.
+        QString unionText;
     };
 
     static Row caseRow(const cwPassageTubeCases::Case& entry);
     static Build build(const cwPassageTubeCases::Survey& survey, double sampleSpacing);
+    static Build buildUnion(const cwPassageTubeCases::Survey& survey, double sampleSpacing, bool slideCaps);
     static QString summary(const cwPassageTubeMeshCheck::Report& report);
 
     void loadCatalog();
@@ -299,6 +321,8 @@ private:
     bool m_sectionsVisible = false;
     bool m_overshootVisible = false;
     QString m_station;
+    bool m_unionVisible = false;
+    bool m_capsSlid = false;
 
     Build m_current;
     RingGeometry m_ringGeometry;

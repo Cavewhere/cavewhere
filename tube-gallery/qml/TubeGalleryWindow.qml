@@ -22,6 +22,9 @@ QC.ApplicationWindow {
     property bool showSections: false
     property bool showOvershoot: false
     property bool showTranslucent: false
+    property bool showUnion: false
+    property bool slideCaps: false
+    property bool openFork: false
     property list<string> projectFiles: []
     property real projectSpacing: 1.0
     property string focusStation: ""
@@ -197,7 +200,10 @@ QC.ApplicationWindow {
     }
 
     function selectInitialRow() {
-        if (randomSeed >= 0) {
+        if (openFork) {
+            galleryModelId.addWideArmFork()
+            selectRow(galleryModelId.count - 1)
+        } else if (randomSeed >= 0) {
             galleryModelId.addRandom(randomSeed, randomJunctions, randomWild)
             selectRow(galleryModelId.count - 1)
         } else if (initialCase !== "") {
@@ -255,6 +261,8 @@ QC.ApplicationWindow {
         sectionsVisible: sectionsId.checked
         overshootVisible: overshootId.checked
         station: stationFieldId.text
+        unionVisible: unionId.checked
+        capsSlid: slideCapsId.checked
 
         onCurrentChanged: rootId.inspectedRing = -1
         onProjectOpened: (firstRow, rowCount) => {
@@ -418,6 +426,14 @@ QC.ApplicationWindow {
                         rootId.selectRow(galleryModelId.count - 1)
                     }
                 }
+
+                QC.Button {
+                    text: qsTr("Add fork")
+                    onClicked: {
+                        galleryModelId.addWideArmFork()
+                        rootId.selectRow(galleryModelId.count - 1)
+                    }
+                }
             }
 
             QQ.ListView {
@@ -529,6 +545,17 @@ QC.ApplicationWindow {
                     id: translucentId
                     text: qsTr("Translucent")
                     checked: rootId.showTranslucent
+                }
+                QC.CheckBox {
+                    id: unionId
+                    text: qsTr("Union")
+                    checked: rootId.showUnion
+                }
+                QC.CheckBox {
+                    id: slideCapsId
+                    text: qsTr("Slide caps")
+                    checked: rootId.slideCaps
+                    enabled: unionId.checked
                 }
                 QC.CheckBox {
                     id: issuesId

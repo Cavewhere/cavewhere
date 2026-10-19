@@ -14,6 +14,7 @@
 #include "cwGlobals.h"
 #include "cwLinePlotManager.h"
 #include "cwPassageTubeGeometry.h"
+#include "cwPassageTubeUnion.h"
 #include "cwProject.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderPassageTube.h"
@@ -23,6 +24,7 @@
 
 //Qt includes
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QHash>
 #include <QLineF>
@@ -652,6 +654,43 @@ void cwPassageTubeGalleryModel::setStation(const QString& station)
     emit currentChanged();
 }
 
+bool cwPassageTubeGalleryModel::unionVisible() const
+{
+    return m_unionVisible;
+}
+
+void cwPassageTubeGalleryModel::setUnionVisible(bool unionVisible)
+{
+    if (m_unionVisible == unionVisible) {
+        return;
+    }
+    m_unionVisible = unionVisible;
+    emit unionVisibleChanged();
+    selectCurrent();
+}
+
+bool cwPassageTubeGalleryModel::capsSlid() const
+{
+    return m_capsSlid;
+}
+
+void cwPassageTubeGalleryModel::setCapsSlid(bool capsSlid)
+{
+    if (m_capsSlid == capsSlid) {
+        return;
+    }
+    m_capsSlid = capsSlid;
+    emit capsSlidChanged();
+    if (m_unionVisible) {
+        selectCurrent();
+    }
+}
+
+void cwPassageTubeGalleryModel::addWideArmFork()
+{
+    appendRows({caseRow(Cases::toCase(Cases::wideArmFork()))});
+}
+
 void cwPassageTubeGalleryModel::openProject(const QString& path, double sampleSpacing)
 {
     const QString localPath = cwGlobals::convertFromURL(path);
@@ -777,6 +816,10 @@ QString cwPassageTubeGalleryModel::reportText() const
         return QString();
     }
     QStringList lines;
+    if (!m_current.unionText.isEmpty()) {
+        lines.append(m_current.unionText);
+        lines.append(QStringLiteral("Union mesh: %1 issues, %2 components").arg(m_current.report.issues.size()).arg(m_current.report.componentCount));
+    }
     for (const cwPassageTubeMeshCheck::Issue& issue : std::as_const(m_current.report.issues)) {
         lines.append(issueLine(m_current.debug, issue));
     }
@@ -966,6 +1009,65 @@ cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::S
     return result;
 }
 
+cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::buildUnion(const Cases::Survey& survey, double sampleSpacing, bool slideCaps)
+{
+    using Union = cwPassageTubeUnion;
+    using Check = cwPassageTubeMeshCheck;
+    cwPassageTubeBuilder::Options options;
+    options.sampleSpacingMeters = sampleSpacing;
+
+    Build result;
+    result.debug = cwPassageTubeBuilder::buildChainRings(survey.region, survey.positionsByCave, options);
+    QStringList lines;
+    if (slideCaps) {
+        const QVector<Union::CapVertex> notch = Union::slideCaps(result.debug);
+        const auto inside = std::count_if(notch.cbegin(), notch.cend(), [](const Union::CapVertex& vertex) { return vertex.isInside(); });
+        lines.append(QStringLiteral("Slid %1 of %2 cap vertices outside the passages they meet inside them").arg(inside).arg(notch.size()));
+    } else {
+        lines.append(QStringLiteral("%1 cap vertices outside the passages they meet").arg(Union::capNotch(result.debug).size()));
+    }
+
+    const QVector<Union::ChainTube> tubes = Union::chainTubes(result.debug);
+    const QVector<QVector<int>> components = Union::chainComponents(result.debug);
+    QVector<cwPassageTubeMesh> united;
+    QElapsedTimer timer;
+    timer.start();
+    for (int c = 0; c < components.size(); ++c) {
+        QVector<cwPassageTubeMesh> meshes;
+        QVector<int> chains;
+        for (const Union::ChainTube& tube : tubes) {
+            if (components.at(c).contains(tube.chain)) {
+                meshes.append(tube.mesh);
+                chains.append(tube.chain);
+            }
+        }
+        const Union::Result component = Union::unite(meshes);
+        QStringList rejected;
+        for (int i = 0; i < component.inputStatus.size(); ++i) {
+            if (component.inputStatus.at(i) != Union::Status::NoError) {
+                rejected.append(QStringLiteral("chain %1 %2").arg(chains.at(i)).arg(Union::statusName(component.inputStatus.at(i))));
+            }
+        }
+        lines.append(QStringLiteral("Component %1: %2 tubes, %3, volume %4 m³, genus %5%6")
+                         .arg(c)
+                         .arg(meshes.size())
+                         .arg(Union::statusName(component.status))
+                         .arg(component.volume, 0, 'f', 2)
+                         .arg(component.genus)
+                         .arg(rejected.isEmpty() ? QString() : QStringLiteral(", rejected: ") + rejected.join(QStringLiteral(", "))));
+        united.append(component.mesh);
+    }
+    lines.prepend(QStringLiteral("Union of %1 tubes in %2 components, %3 ms").arg(tubes.size()).arg(components.size()).arg(timer.elapsed()));
+
+    result.debug.mesh = Union::merged(united);
+    const Check::Range range = Check::wholeMesh(result.debug.mesh);
+    result.report = Check::closed(result.debug.mesh, range);
+    result.report.issues.append(Check::degenerateTriangles(result.debug.mesh, range));
+    result.report.issues.append(Check::selfIntersections(result.debug.mesh, range));
+    result.unionText = lines.join(QLatin1Char('\n'));
+    return result;
+}
+
 QString cwPassageTubeGalleryModel::summary(const cwPassageTubeMeshCheck::Report& report)
 {
     QMap<int, int> countsByType;
@@ -1033,10 +1135,10 @@ void cwPassageTubeGalleryModel::selectCurrent()
     } else {
         const Row& row = m_rows.at(m_currentIndex);
         const Cases::Survey survey = row.survey();
-        m_current = build(survey, row.sampleSpacing);
+        m_current = m_unionVisible ? buildUnion(survey, row.sampleSpacing, m_capsSlid) : build(survey, row.sampleSpacing);
         m_ringGeometry = ringGeometryOf(m_current.debug);
 
-        if (!row.issueCount) {
+        if (!m_unionVisible && !row.issueCount) {
             cacheIssues(row, m_current.report);
             const QModelIndex changed = index(m_currentIndex);
             emit dataChanged(changed, changed, {IssueCountRole, IssueSummaryRole});

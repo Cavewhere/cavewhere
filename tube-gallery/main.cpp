@@ -90,8 +90,15 @@ int main(int argc, char* argv[])
     const QCommandLineOption stationOption(QStringLiteral("station"),
                                            QStringLiteral("Frame the camera on this station; the along-arm view looks down its longest leg."),
                                            QStringLiteral("name"));
+    const QCommandLineOption unionOption(QStringLiteral("union"),
+                                         QStringLiteral("Draw the boolean union of each chain's closed tube, also in grabs."));
+    const QCommandLineOption slideCapsOption(QStringLiteral("slide-caps"),
+                                             QStringLiteral("With --union, slide each end cap into the passages it meets first."));
+    const QCommandLineOption forkOption(QStringLiteral("fork"),
+                                        QStringLiteral("Open on the 30 degree fork with a wide arm, which the catalog leaves out."));
     parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption, ringsOption,
-                       readingsOption, sectionsOption, overshootOption, translucentOption, projectOption, spacingOption, stationOption});
+                       readingsOption, sectionsOption, overshootOption, translucentOption, projectOption, spacingOption, stationOption,
+                       unionOption, slideCapsOption, forkOption});
     parser.process(app);
 
     cwMetaTypeSystem::registerTypes();
@@ -127,6 +134,9 @@ int main(int argc, char* argv[])
         {QStringLiteral("showSections"), parser.isSet(sectionsOption)},
         {QStringLiteral("showOvershoot"), parser.isSet(overshootOption)},
         {QStringLiteral("showTranslucent"), parser.isSet(translucentOption)},
+        {QStringLiteral("showUnion"), parser.isSet(unionOption)},
+        {QStringLiteral("slideCaps"), parser.isSet(slideCapsOption)},
+        {QStringLiteral("openFork"), parser.isSet(forkOption)},
         {QStringLiteral("projectFiles"), projectFiles},
         {QStringLiteral("projectSpacing"), projectSpacing},
         {QStringLiteral("focusStation"), parser.value(stationOption)},
