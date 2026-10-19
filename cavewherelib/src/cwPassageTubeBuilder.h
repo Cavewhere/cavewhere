@@ -296,6 +296,13 @@ public:
                             const QHash<QUuid, cwStationPositionLookup>& positionsByCave,
                             const QHash<QUuid, cwSplayTipsByStation>& splaysByCave,
                             const Options& options);
+
+    // The legs and each chain's placed rings as buildRings leaves them,
+    // before junctions are stitched: every chain is its own tube, and no
+    // mesh is written.
+    static Debug buildChainRings(const cwCavingRegionData& region,
+                                 const QHash<QUuid, cwStationPositionLookup>& positionsByCave,
+                                 const Options& options);
 };
 
 #endif // CWPASSAGETUBEBUILDER_H

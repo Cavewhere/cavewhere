@@ -596,6 +596,16 @@ QVector<cwPassageTubeCases::JunctionCase> cwPassageTubeCases::galleryCases()
     return cases;
 }
 
+cwPassageTubeCases::JunctionCase cwPassageTubeCases::wideArmFork()
+{
+    const Section through {2.0, 1.0, 1.5, 1.0};
+    const Section wideArm {3.0, 1.5, 1.5, 1.0};
+    JunctionCase fork = galleryCase(QStringLiteral("Fork %1 degrees off a through, with a wider arm").arg(kWideArmForkDegrees),
+                                    through, {arm(kHalfTurnDegrees - kWideArmForkDegrees, wideArm)});
+    fork.tags = {QStringLiteral("union")};
+    return fork;
+}
+
 QVector<cwPassageTubeCases::JunctionCase> cwPassageTubeCases::sweepCases()
 {
     enum class Layout {

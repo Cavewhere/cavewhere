@@ -42,6 +42,9 @@ class CaveWhereConan(ConanFile):
         # PROJ is needed by survex (cavernlib/survex_core) on all platforms
         self.requires("proj/[=9.3.1]")
 
+        # Mesh boolean union of overlapping passage tubes.
+        self.requires("manifold/3.5.1")
+
         # tinygltf 2.9.7 pulls nlohmann_json/3.12.0 while proj/9.3.1 pins
         # 3.11.3; force a single (header-only) version to resolve the conflict.
         self.requires("nlohmann_json/3.11.3", override=True)

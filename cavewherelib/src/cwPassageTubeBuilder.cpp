@@ -2010,3 +2010,19 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildDebug(const cwCavingRegio
     debug.mesh.warnings = debug.warnings;
     return debug;
 }
+
+cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildChainRings(const cwCavingRegionData& region,
+                                                                  const QHash<QUuid, cwStationPositionLookup>& positionsByCave,
+                                                                  const Options& options)
+{
+    Debug debug;
+    debug.legs = extractLegs(region, positionsByCave, debug.warnings);
+    replaceShaftReadings(debug.legs, debug.warnings);
+    debug.chains = buildChains(debug.legs, options.defaultRadiusMeters);
+    classifyChainEnds(debug.legs, debug.chains);
+    for (Chain& chain : debug.chains) {
+        buildRings(debug.legs, chain, options, debug.warnings);
+        placeChainVertices(chain);
+    }
+    return debug;
+}

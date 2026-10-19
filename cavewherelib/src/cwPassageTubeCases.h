@@ -149,6 +149,13 @@ public:
     // The tube gallery's hand-made junctions.
     static QVector<JunctionCase> galleryCases();
 
+    // A through passage reading L2 R1 U1.5 D1 all along and a wider arm,
+    // L3 R1.5 U1.5 D1, forking kWideArmForkDegrees off its forward direction,
+    // to the right: the fork whose arm cap stands outside the through. Kept
+    // out of the catalog.
+    static constexpr double kWideArmForkDegrees = 30.0;
+    static JunctionCase wideArmFork();
+
     // Every combination of the junction parameters, plus the junction-free
     // variants tagged arms:0. Cases with an arm inside another passage at J
     // are tagged crowded.
