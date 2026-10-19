@@ -39,6 +39,9 @@ public:
     // thinner than this, which manifold leaves where an intersection lands
     // within float rounding of an input edge.
     static constexpr double kMergeToleranceMeters = 0.001;
+    // How far inside a tube's surface, square to it, a sliding cap vertex
+    // comes to rest.
+    static constexpr double kSlideMarginMeters = 0.05;
 
     // manifold::Manifold::Error, one to one.
     enum class Status {
@@ -79,13 +82,16 @@ public:
     };
 
     // A cap vertex at a station other chains reach, outside every one of
-    // their tubes.
+    // their tubes. to is where the slide put it, inside one of them; it
+    // equals from when no point along the leg within its length is inside.
     struct CapVertex {
         int chain = -1;
         bool atStart = true;
         int bin = 0;
         QVector3D from;
         QVector3D to;
+
+        bool isInside() const { return from != to; }
     };
 
     static Result unite(const QVector<cwPassageTubeMesh>& tubes);
@@ -121,6 +127,14 @@ public:
     // The end-cap notch: each vertex of a chain's end ring at a station that
     // other chains reach, lying outside all of their tubes. to is from.
     static QVector<CapVertex> capNotch(const cwPassageTubeBuilder::Debug& rings);
+
+    // Slides each notch vertex along its end ring's tangent, forward or back,
+    // within the end leg's length, to the nearest point inside another
+    // chain's tube at the station: kSlideMarginMeters inside the wall it
+    // crosses, or nearer the crossing where the line leaves the tube again.
+    // The vertex's bin along that leg lerps to it. Returns the notch with
+    // where each vertex went.
+    static QVector<CapVertex> slideCaps(cwPassageTubeBuilder::Debug& rings);
 };
 
 #endif // CWPASSAGETUBEUNION_H

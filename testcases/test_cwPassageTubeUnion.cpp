@@ -294,16 +294,16 @@ TEST_CASE("The T junction's chain tubes unite into one clean surface", "[Passage
     }
 }
 
-TEST_CASE("The 30 degree fork's chain tubes unite, with its arm cap outside the through", "[PassageTubeUnion]")
+TEST_CASE("The 30 degree fork's chain tubes unite, and its cap slides into the through", "[PassageTubeUnion]")
 {
     const Cases::JunctionCase fork = Cases::wideArmFork();
-    const Builder::Debug rings = chainRings(Cases::toSurvey(fork));
+    Builder::Debug rings = chainRings(Cases::toSurvey(fork));
     const QVector<Union::ChainTube> tubes = Union::chainTubes(rings);
     REQUIRE(tubes.size() == 2);
-    checkUnion(meshesOf(tubes), QStringLiteral("fork"));
+    const Union::Result before = checkUnion(meshesOf(tubes), QStringLiteral("fork"));
 
     const QVector<Union::CapVertex> notch = Union::capNotch(rings);
-    qInfo().noquote() << QStringLiteral("fork: %1 cap vertices outside the other tube").arg(notch.size());
+    qInfo().noquote() << QStringLiteral("fork: %1 cap vertices outside the other tube before the slide").arg(notch.size());
     for (const Union::CapVertex& vertex : notch) {
         qInfo().noquote() << QStringLiteral("  chain %1 %2 bin %3 at (%4, %5, %6)")
                                  .arg(vertex.chain)
@@ -314,6 +314,34 @@ TEST_CASE("The 30 degree fork's chain tubes unite, with its arm cap outside the 
                                  .arg(vertex.from.z(), 0, 'f', 2);
     }
     CHECK_FALSE(notch.isEmpty());
+
+    // The arm's ceiling and floor vertices lie on the through's ceiling and
+    // floor, which are as high and as low: a slide along the arm keeps them
+    // on that plane. Every other notch vertex slides inside.
+    const auto isOnThroughCeilingOrFloor = [&](const QVector3D& vertex) {
+        return std::abs(vertex.z() - fork.throughAtJunction.up) < Union::kSurfaceToleranceMeters
+               || std::abs(vertex.z() + fork.throughAtJunction.down) < Union::kSurfaceToleranceMeters;
+    };
+    const QVector<Union::CapVertex> slid = Union::slideCaps(rings);
+    REQUIRE(slid.size() == notch.size());
+    int stayed = 0;
+    for (const Union::CapVertex& vertex : slid) {
+        const Builder::Chain& chain = rings.chains.at(vertex.chain);
+        const QVector3D& tangent = (vertex.atStart ? chain.rings.first() : chain.rings.last()).frame.tangent;
+        qInfo().noquote() << QStringLiteral("  chain %1 bin %2 slid %3 m along the arm")
+                                 .arg(vertex.chain)
+                                 .arg(vertex.bin)
+                                 .arg(QVector3D::dotProduct(vertex.to - vertex.from, tangent), 0, 'f', 2);
+        INFO("bin " << vertex.bin);
+        CHECK(vertex.isInside() != isOnThroughCeilingOrFloor(vertex.from));
+        stayed += vertex.isInside() ? 0 : 1;
+    }
+    CHECK(Union::capNotch(rings).size() == stayed);
+
+    // The arm's wall now runs on to where it enters the through, filling the
+    // step the cap made outside it.
+    const Union::Result after = checkUnion(meshesOf(Union::chainTubes(rings)), QStringLiteral("fork after the slide"));
+    CHECK(after.volume > before.volume);
 }
 
 TEST_CASE("A slot, a plumb shaft and a floor passage unite as three boxes", "[PassageTubeUnion]")

@@ -42,6 +42,14 @@ constexpr double kFourPi = 4.0 * std::numbers::pi;
 // A winding number above this is inside a closed surface (1 inside, 0
 // outside, 1/2 on a face).
 constexpr double kInsideWinding = 0.5;
+constexpr double kParallelEpsilon = 1e-12;
+constexpr float kMinLegLengthSquared = 1e-8f;
+// The smallest incidence cosine a slide's margin is scaled by, so a line
+// grazing a wall still comes to rest kSlideMarginMeters inside it.
+constexpr double kMinIncidence = 0.05;
+// Crossings closer than this along a slide's line are one, a shared edge.
+constexpr double kMinStepMeters = 1e-4;
+constexpr int kBisectionSteps = 12;
 constexpr int kMaxCleanupPasses = 16;
 
 Status toStatus(manifold::Manifold::Error error)
@@ -239,6 +247,31 @@ Vec closestPoint(const Vec& p, const Triangle& t)
     }
     const double denominator = 1.0 / (va + vb + vc);
     return t.a + ab * (vb * denominator) + ac * (vc * denominator);
+}
+
+// Where the line origin + t·direction crosses the triangle, by t
+// (Möller–Trumbore, both directions along the line).
+std::optional<double> lineCrossing(const Vec& origin, const Vec& direction, const Triangle& t)
+{
+    const Vec edge1 = t.b - t.a;
+    const Vec edge2 = t.c - t.a;
+    const Vec p = Vec::cross(direction, edge2);
+    const double determinant = Vec::dot(edge1, p);
+    if (std::abs(determinant) < kParallelEpsilon) {
+        return std::nullopt;
+    }
+    const double inverse = 1.0 / determinant;
+    const Vec s = origin - t.a;
+    const double u = Vec::dot(s, p) * inverse;
+    if (u < 0.0 || u > 1.0) {
+        return std::nullopt;
+    }
+    const Vec q = Vec::cross(s, edge1);
+    const double v = Vec::dot(direction, q) * inverse;
+    if (v < 0.0 || u + v > 1.0) {
+        return std::nullopt;
+    }
+    return Vec::dot(edge2, q) * inverse;
 }
 
 // Twice the triangle's area along its normal, wound a → b → c.
@@ -734,6 +767,103 @@ QVector<cwPassageTubeUnion::CapVertex> cwPassageTubeUnion::capNotch(const cwPass
             if (!insideAny(neighbors, cap.at(bin))) {
                 notch.append({end.chain, end.atStart, bin, cap.at(bin), cap.at(bin)});
             }
+        }
+    }
+    return notch;
+}
+
+QVector<cwPassageTubeUnion::CapVertex> cwPassageTubeUnion::slideCaps(cwPassageTubeBuilder::Debug& rings)
+{
+    const QVector<ChainTube> tubes = chainTubes(rings);
+    const QHash<StationKey, QVector<int>> chainsAt = chainsByStation(rings);
+    QVector<CapVertex> notch;
+    for (const ChainEnd& end : chainEnds(rings)) {
+        const QVector<const cwPassageTubeMesh*> neighbors = neighborTubes(end, chainsAt, tubes);
+        if (neighbors.isEmpty()) {
+            continue;
+        }
+        Builder::Chain& chain = rings.chains[end.chain];
+        const double legLength = chain.rings.at(end.capRing).center.distanceToPoint(chain.rings.at(end.farRing).center);
+        const Vec axis(end.outward.normalized());
+
+        for (int bin = 0; bin < chain.rings.at(end.capRing).vertices.size(); ++bin) {
+            const QVector3D from = chain.rings.at(end.capRing).vertices.at(bin);
+            if (insideAny(neighbors, from)) {
+                continue;
+            }
+
+            // Each crossing by its distance along the axis and how far along
+            // the axis the margin lies square to the wall it crosses.
+            QVector<QPair<double, double>> crossings;
+            for (const cwPassageTubeMesh* tube : neighbors) {
+                for (qsizetype i = 0; i + 2 < tube->indices.size(); i += 3) {
+                    const Triangle triangle = triangleAt(*tube, i);
+                    if (const std::optional<double> t = lineCrossing(Vec(from), axis, triangle)) {
+                        if (std::abs(*t) <= legLength) {
+                            const Vec normal = Vec::cross(triangle.b - triangle.a, triangle.c - triangle.a);
+                            const double incidence = std::abs(Vec::dot(normal, axis)) / normal.length();
+                            crossings.append({*t, kSlideMarginMeters / std::max(incidence, kMinIncidence)});
+                        }
+                    }
+                }
+            }
+            std::sort(crossings.begin(), crossings.end(), [](const QPair<double, double>& a, const QPair<double, double>& b) {
+                return std::abs(a.first) < std::abs(b.first);
+            });
+
+            // The nearest crossing past which the line runs inside: the
+            // margin past it, else the point nearest it that is inside
+            // toward the middle of the stretch to the next crossing.
+            const auto pointAt = [&](double t) { return from + end.outward.normalized() * static_cast<float>(t); };
+            QVector3D to = from;
+            for (int i = 0; i < crossings.size(); ++i) {
+                const double crossing = crossings.at(i).first;
+                const double sign = crossing < 0.0 ? -1.0 : 1.0;
+                double next = sign * legLength;
+                for (int j = i + 1; j < crossings.size(); ++j) {
+                    if (crossings.at(j).first * sign > crossing * sign + kMinStepMeters) {
+                        next = crossings.at(j).first;
+                        break;
+                    }
+                }
+                const double past = crossing + sign * std::min(crossings.at(i).second, (next - crossing) * sign / 2.0);
+                if (insideAny(neighbors, pointAt(past))) {
+                    to = pointAt(past);
+                    break;
+                }
+                double outside = crossing;
+                double inside = (crossing + next) / 2.0;
+                if (!insideAny(neighbors, pointAt(inside))) {
+                    continue;
+                }
+                for (int step = 0; step < kBisectionSteps; ++step) {
+                    const double middle = (outside + inside) / 2.0;
+                    if (insideAny(neighbors, pointAt(middle))) {
+                        inside = middle;
+                    } else {
+                        outside = middle;
+                    }
+                }
+                to = pointAt(inside);
+                break;
+            }
+            notch.append({end.chain, end.atStart, bin, from, to});
+            if (to == from) {
+                continue;
+            }
+
+            // The bin's wall along the end leg runs from the slid vertex to
+            // the leg's far ring, at each ring's original fraction.
+            const QVector3D farVertex = chain.rings.at(end.farRing).vertices.at(bin);
+            const QVector3D wall = farVertex - from;
+            const float wallLengthSquared = wall.lengthSquared();
+            const int step = end.farRing > end.capRing ? 1 : -1;
+            for (int r = end.capRing + step; r != end.farRing && wallLengthSquared > kMinLegLengthSquared; r += step) {
+                QVector3D& vertex = chain.rings[r].vertices[bin];
+                const float fraction = QVector3D::dotProduct(vertex - from, wall) / wallLengthSquared;
+                vertex = to + (farVertex - to) * fraction;
+            }
+            chain.rings[end.capRing].vertices[bin] = to;
         }
     }
     return notch;
