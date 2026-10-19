@@ -656,6 +656,61 @@ TEST_CASE("Under Local a sprite follows its floor ramp once the ramp passes its 
     CHECK(previous == kCoarseFloor);
 }
 
+// ---- WP15: grid floors under Local --------------------------------------------
+
+namespace {
+    //! The user's spot on the BC tile, rounded: a finest-drawn sparse leaf
+    //! whose grid is finer than the data and whose measured median is wider,
+    //! and two points in it, one at the data's native spacing and one denser
+    //! than the grid
+    constexpr double kSparseLeafGrid = 0.2;
+    constexpr double kSparseLeafMeasured = 1.0;
+    constexpr double kSpotNative = 0.31;
+    constexpr double kDenseNative = 0.1;
+}
+
+TEST_CASE("Under Local a node floors at its grid spacing, Measured at its measured median, Grid at its grid",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    CHECK(floorSpacing(kSparseLeafGrid, kSparseLeafMeasured, SpacingSource::Local)
+          == kSparseLeafGrid);
+    CHECK(floorSpacing(kSparseLeafGrid, kSparseLeafMeasured, SpacingSource::Measured)
+          == kSparseLeafMeasured);
+    CHECK(floorSpacing(kSparseLeafGrid, kSparseLeafMeasured, SpacingSource::Grid)
+          == kSparseLeafGrid);
+
+    //Grid and Measured floor exactly as they thin
+    for (const SpacingSource source : {SpacingSource::Grid, SpacingSource::Measured}) {
+        INFO("source " << int(source));
+        for (double measured : {0.0, kDenseNative, kSparseLeafMeasured}) {
+            CHECK(floorSpacing(kSparseLeafGrid, measured, source)
+                  == drawSpacing(kSparseLeafGrid, measured, source));
+        }
+    }
+    //while Local still thins as Measured does: the cut is Measured's
+    CHECK(drawSpacing(kSparseLeafGrid, kSparseLeafMeasured, SpacingSource::Local)
+          == kSparseLeafMeasured);
+}
+
+TEST_CASE("Under Local a point in a sparse leaf sizes at its native spacing, and at the leaf's grid where it is denser",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    const double floor = floorSpacing(kSparseLeafGrid, kSparseLeafMeasured, SpacingSource::Local);
+    CHECK(sizeSpacing(floor, kSpotNative, SpacingSource::Local) == kSpotNative);
+    CHECK(sizeSpacing(floor, kDenseNative, SpacingSource::Local) == kSparseLeafGrid);
+
+    //Measured lifts both to the leaf's measured median: the 1.47x seam
+    const double measuredFloor =
+        floorSpacing(kSparseLeafGrid, kSparseLeafMeasured, SpacingSource::Measured);
+    CHECK(sizeSpacing(measuredFloor, kSpotNative, SpacingSource::Measured) == kSparseLeafMeasured);
+    CHECK(sizeSpacing(measuredFloor, kDenseNative, SpacingSource::Measured)
+          == kSparseLeafMeasured);
+}
+
 // ---- WP14: the sprite density view -------------------------------------------
 
 TEST_CASE("DebugView gains SpriteDensity after DecimationPreview, so stored views keep their meaning",

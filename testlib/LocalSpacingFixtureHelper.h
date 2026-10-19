@@ -12,21 +12,20 @@
 namespace cwLocalSpacingFixture {
 
     /**
-     * cw::octree::estimateNativeSpacing() as the codes a node's payload
-     * carries in each point's reserved word, every node capped at its own
-     * grid: what tests that build an octree by hand write beside each point.
+     * cw::octree::measureNativeSpacing()'s spacings as the codes a node's payload
+     * carries in each point's reserved word: what tests that build an octree
+     * by hand write beside each point. The estimator applies every cap
+     * itself (WP15's data-relative one and the absolute clamp).
      */
     inline QVector<QVector<quint16>> estimateLocalSpacing(const QVector<cw::octree::SampledNode>& nodes,
                                                           const QVector3D& rootMin, double rootSize)
     {
         const QVector<QVector<float>> spacings =
-            cw::octree::estimateNativeSpacing(nodes, rootMin, rootSize);
+            cw::octree::measureNativeSpacing(nodes, rootMin, rootSize).spacings;
         QVector<QVector<quint16>> codes;
         codes.reserve(nodes.size());
-        for(qsizetype i = 0; i < nodes.size(); i++) {
-            codes.append(cw::octree::encodeLocalSpacings(
-                spacings.at(i),
-                cw::octree::levelLocalSpacingCap(rootSize, nodes.at(i).cell.level)));
+        for(const QVector<float>& nodeSpacings : spacings) {
+            codes.append(cw::octree::encodeLocalSpacings(nodeSpacings));
         }
         return codes;
     }

@@ -221,13 +221,13 @@ namespace cw::octree {
 
     /**
      * The floor of every node in @a drawnNodes, in meters: the spacing of the
-     * node finestDrawnLevels() names for it, as cw::clod::drawSpacing gives it
-     * under @a source. Under Grid that is manifest.spacing() of the level
+     * node finestDrawnLevels() names for it, as cw::clod::floorSpacing gives
+     * it under @a source. Under Grid that is manifest.spacing() of the level
      * finestDrawnLevels() returns, value for value; under Measured it is the
      * larger of that node's grid spacing and its measured spacing, and where
      * several nodes at that deepest level feed one floor, the narrowest of
-     * them; Local floors exactly as Measured does, since its points' native
-     * spacings only raise their own sprites (cw::clod::sizeSpacing). Either
+     * them; Local floors exactly as Grid does, since its points' native
+     * spacings answer for the data's gaps (cw::clod::sizeSpacing). Either
      * way a floor is at most its own node's spacing.
      */
     CAVEWHERE_LIB_EXPORT QVector<double> finestDrawnSpacings(const cwPointOctreeManifest& manifest,

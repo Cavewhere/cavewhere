@@ -3,6 +3,7 @@
 
 //Std includes
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 
@@ -27,8 +28,10 @@ namespace cw::octree {
     //Bumping this invalidates every cached manifest and node at once.
     //Generation 4 adds each node's measured spacing and kMinSplitPoints;
     //generation 5 wrote a local spacing ratio into each point's reserved word,
-    //and generation 6 writes the point's absolute native spacing code there.
-    constexpr int kFormatGeneration = 6;
+    //generation 6 wrote the point's absolute 3D native spacing code there,
+    //and generation 7 writes its horizontal native spacing under the
+    //data-relative cap.
+    constexpr int kFormatGeneration = 7;
 
     //Points per node edge; spacing = nodeSize / kSampleGridResolution
     constexpr int kSampleGridResolution = 128;
@@ -86,24 +89,37 @@ namespace cw::octree {
 
     /**
      * Per-point native spacing (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section
-     * 14.5, WP13). Every point carries the spacing of the raw data around it:
-     * the distance r_k to its kLocalSpacingNeighbors-th nearest distinct
-     * neighbor among every point of the cloud near it, duplicates counted
-     * once, as a surface spacing s = r_k * kLocalSpacingSurfaceFactor. The
-     * spacing is clamped to [kMinLocalSpacingUnits, kMaxLocalSpacingUnits]
-     * and to kMaxLocalSpacingGridRatio times the point's own node's grid
-     * spacing, and stored as a 16-bit log2 code over that absolute range
-     * (cw::octree::estimateNativeSpacing).
+     * 14.5, WP13 and WP15). Every point carries the spacing of the raw data
+     * around it: the distance r_k, measured along kNativeSpacingAxes, to its
+     * kLocalSpacingNeighbors-th nearest neighbor at a distinct position there
+     * among every point of the cloud near it, as a surface spacing
+     * s = r_k * kLocalSpacingSurfaceFactor. The spacing is held to
+     * kLoneSpacingMedianRatio times the median of its pass B chunk, clamped
+     * to [kMinLocalSpacingUnits, kMaxLocalSpacingUnits], and stored as a
+     * 16-bit log2 code over that absolute range
+     * (cw::octree::measureNativeSpacing).
      *
      * The range is in the octree's own units, which are the frame CS's
      * meters whenever the layer has a frame CS and the source's native units
      * otherwise: a cloud in US survey feet with no frame CS codes over 0.005
      * to 64 feet (1.5 mm to 19.5 m), which still spans every spacing a lidar
-     * tile carries, and the grid cap usually binds first. The builder knows
+     * tile carries, and the median cap usually binds first. The builder knows
      * nothing of the layer's horizontalMetersPerUnit, and a per-cloud range
      * would need a per-cloud decode in the shader, so the range stays fixed.
      */
     constexpr int kLocalSpacingNeighbors = 8;
+
+    /**
+     * The axes a native spacing is measured along: x and y, the horizontal
+     * plane, with z ignored. This assumes nadir airborne lidar, which lays its
+     * pulses down at a density per ground area: horizontal spacing is what is
+     * uniform there, so a canopy return spaces by the pulses around it rather
+     * than by the other returns meters above or below it, a slope reads its
+     * pulse spacing rather than a secant longer, and returns stacked at one
+     * xy count as one neighbor. A vertical or terrestrial scan (a cave wall, a
+     * cliff) needs a per-cloud choice of axes later.
+     */
+    constexpr std::array<int, 2> kNativeSpacingAxes {0, 1};
 
     //! sqrt(pi / k): on a surface, the k nearest neighbors fill a disc of
     //! radius r_k, so pi r_k^2 = k s^2
@@ -118,23 +134,13 @@ namespace cw::octree {
     inline const double kLocalSpacingCodeOctaves =
         std::log2(kMaxLocalSpacingUnits / kMinLocalSpacingUnits);
 
-    //! The cap, in grid spacings of the point's own node, that keeps a lone
-    //! canopy return from drawing a giant disc
-    constexpr double kMaxLocalSpacingGridRatio = 4.0;
-
-    //! The widest native spacing a point of a node of grid spacing
-    //! @a gridSpacing may carry: kMaxLocalSpacingGridRatio grids, at most
-    //! kMaxLocalSpacingUnits
-    inline double localSpacingCap(double gridSpacing)
-    {
-        return std::min(kMaxLocalSpacingGridRatio * gridSpacing, kMaxLocalSpacingUnits);
-    }
-
-    //! localSpacingCap() of a node at @a level in a root cube @a rootSize on a side
-    inline double levelLocalSpacingCap(double rootSize, int level)
-    {
-        return localSpacingCap(levelGridSpacing(rootSize, level));
-    }
+    //! The cap, in median native spacings of the points of the point's own
+    //! pass B chunk that found kLocalSpacingNeighbors neighbors, that keeps a
+    //! lone return from drawing a giant disc
+    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP15). Pass C
+    //! carries each top point's chunk spacing, so a top point is capped by the
+    //! chunk it was measured in.
+    constexpr double kLoneSpacingMedianRatio = 4.0;
 
     //! The 16-bit code of a native @a spacing: its log2 over
     //! [kMinLocalSpacingUnits, kMaxLocalSpacingUnits] after the clamp, from 1

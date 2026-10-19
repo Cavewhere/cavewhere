@@ -208,6 +208,25 @@ namespace cw::clod {
     }
 
     /**
+     * The spacing a node's sprites floor at under @a source, given its grid
+     * spacing @a gridSpacing and its measured spacing @a measuredSpacing
+     * (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP15 (C)). Grid
+     * and Measured floor at drawSpacing(), the spacing they thin by. Local
+     * floors at the grid: thinning keeps one sample per grid cell, so the
+     * grid spacing is the only gap thinning makes, and each point's own
+     * native spacing (sizeSpacing()) answers for the data's gaps. Local
+     * still thins and cuts by drawSpacing(), as Measured does.
+     */
+    inline double floorSpacing(double gridSpacing, double measuredSpacing,
+                               cw::pointcloud::SpacingSource source)
+    {
+        if (source == cw::pointcloud::SpacingSource::Local) {
+            return gridSpacing;
+        }
+        return drawSpacing(gridSpacing, measuredSpacing, source);
+    }
+
+    /**
      * The native spacing, in meters, of a point whose reserved word holds
      * @a code (cw::octree::encodeLocalSpacing): an absolute spacing whatever
      * the grid, and @a gridSpacing, its node's, for an unmeasured code.

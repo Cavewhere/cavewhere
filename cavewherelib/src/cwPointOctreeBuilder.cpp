@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <utility>
 
 //Our includes
@@ -75,10 +76,11 @@ namespace {
     constexpr qint64 kPassBWorkingSetBytesPerPoint = 144;
 
     //What the native spacing estimate adds to that while it runs on a chunk:
-    //every chunk point copied into the neighbor index with its key (24 bytes
-    //with padding), the key and index each worker sorts a node's points by
-    //(16), and each point's 4 byte spacing and 2 byte code, which stay until
-    //the payloads are written.
+    //every chunk point's horizontal position copied into the neighbor index
+    //with its key (16 bytes), the key and index each worker sorts a node's
+    //points by (16), the 4 byte copy of each spacing the chunk's median reads,
+    //and each point's 4 byte spacing and 2 byte code, which stay until the
+    //payloads are written.
     constexpr qint64 kPassBLocalSpacingBytesPerPoint = 48;
 
     //The root cube of a cloud with no extent, so quantization still has a range
@@ -916,12 +918,15 @@ namespace {
         int errorCode = Monad::ResultBase::NoError;
         QString errorMessage;
         QVector<QVector3D> rootPoints;
-        //Each root point's native spacing, capped at the octree root's grid:
-        //pass C caps it again at whatever level the point ends up in
+        //Each root point's native spacing under the chunk's ceiling, which
+        //pass C carries to whatever level the point ends up in
         QVector<float> rootSpacings;
         QVector<SubtreeRecord> nodes;
-        //What estimateNativeSpacing() took on this chunk
+        //What measureNativeSpacing() took on this chunk
         qint64 localSpacingMilliseconds = 0;
+        //The chunk's points that took its ceiling, and the ceiling itself
+        qint64 localSpacingCappedPoints = 0;
+        double localSpacingCeiling = 0.0;
     };
 
     /**
@@ -977,16 +982,18 @@ namespace {
         //Every point of the chunk, its root's included, measures its native
         //spacing against the chunk's raw data, which the subtree's nodes hold
         //together, so the estimate's neighbors stop at the chunk cell's
-        //faces: a point beside one reads at most sqrt(2) wider. The root's
-        //points move up into pass C's top tree, so they are capped there, at
-        //the level each one lands in, and only at the octree root's grid here.
+        //faces: a point beside a side face reads at most sqrt(2) wider, and a
+        //face above or below cuts off the rest of the column past it. The
+        //chunk's own median sets the ceiling of every point measured here,
+        //the root's too, which carry it up into pass C's top tree.
         QElapsedTimer localSpacingTimer;
         localSpacingTimer.start();
-        constexpr int kOctreeRootLevel = 0;
-        QVector<QVector<float>> nativeSpacings =
-            estimateNativeSpacing(subtree, context.rootMin, context.rootSize,
-                                  subtree.first().cell.level, kOctreeRootLevel);
+        NativeSpacingEstimate estimate = measureNativeSpacing(
+            subtree, context.rootMin, context.rootSize, subtree.first().cell.level);
+        QVector<QVector<float>> nativeSpacings = std::move(estimate.spacings);
         result.localSpacingMilliseconds = localSpacingTimer.elapsed();
+        result.localSpacingCappedPoints = estimate.cappedPoints;
+        result.localSpacingCeiling = estimate.ceiling;
 
         cwDiskCacher cacher {QDir(context.cacheRootPath)};
 
@@ -1002,8 +1009,7 @@ namespace {
                 continue;
             }
 
-            const QVector<quint16> codes = encodeLocalSpacings(
-                nativeSpacings.at(i), levelLocalSpacingCap(context.rootSize, node.cell.level));
+            const QVector<quint16> codes = encodeLocalSpacings(nativeSpacings.at(i));
             result.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
                                                measureNodeSpacing(node.points),
                                                node.children});
@@ -1498,18 +1504,40 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                          promise, progress, passA.pointCount);
 
             qint64 localSpacingMilliseconds = 0;
+            qint64 localSpacingCappedPoints = 0;
+            std::optional<std::pair<double, double>> ceilingRange;
             for(const std::optional<ChunkResult>& chunk : std::as_const(passB.chunks)) {
-                localSpacingMilliseconds += chunk ? chunk->localSpacingMilliseconds : 0;
+                if(!chunk) {
+                    continue;
+                }
+                localSpacingMilliseconds += chunk->localSpacingMilliseconds;
+                localSpacingCappedPoints += chunk->localSpacingCappedPoints;
+                const double ceiling = chunk->localSpacingCeiling;
+                if(ceilingRange) {
+                    ceilingRange->first = std::min(ceilingRange->first, ceiling);
+                    ceilingRange->second = std::max(ceilingRange->second, ceiling);
+                } else {
+                    ceilingRange = std::pair {ceiling, ceiling};
+                }
             }
+            const QString ceilings = ceilingRange
+                                         ? QStringLiteral("%1..%2")
+                                               .arg(ceilingRange->first)
+                                               .arg(ceilingRange->second)
+                                         : QStringLiteral("none");
             cw::profile::write(lcProfileLoad(),
                                QStringLiteral("build passB chunks=%1 budgetBytes=%2 "
                                               "inFlightPeakBytes=%3 seconds=%4 "
-                                              "localSpacingChunkSeconds=%5")
+                                              "localSpacingChunkSeconds=%5 "
+                                              "localSpacingCappedPoints=%6 "
+                                              "localSpacingCeilings=%7")
                                    .arg(tasks.size())
                                    .arg(memoryBudgetBytes)
                                    .arg(passB.peakBytes)
                                    .arg(secondsSince(passTimer))
-                                   .arg(seconds(localSpacingMilliseconds)));
+                                   .arg(seconds(localSpacingMilliseconds))
+                                   .arg(localSpacingCappedPoints)
+                                   .arg(ceilings));
             passTimer.restart();
 
             if(passB.errorCode != Monad::ResultBase::NoError) {
@@ -1558,8 +1586,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             qint64 topLocalSpacingMilliseconds = 0;
 
             const auto writeTopNode = [&](const LevelNode& node) {
-                const QVector<quint16> codes = encodeLocalSpacings(
-                    node.spacings, levelLocalSpacingCap(root.size, node.cell.level));
+                const QVector<quint16> codes = encodeLocalSpacings(node.spacings);
                 const QByteArray payload =
                     quantizeAll(node.points, codes, cellBounds(node.cell, root.minimum, root.size));
                 const cwDiskCacher::Key key =

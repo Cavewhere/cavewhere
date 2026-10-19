@@ -29,7 +29,8 @@ from the tile data.
 
 The report (--out) is self-contained: inline CSS and SVG, no external
 resources. Beside it the script writes contact-<path>.html for every P2 and P3
-path and every path that ran a sprite density candidate,
+path and every path that ran a sprite density candidate or one of the
+coverage-1.25 sprite size and sprite density candidates (PF),
 flipbook-<path>-<config>.html for every P4 run, and the difference images the
 contact sheets show, which it computes from the PNGs itself with a
 zlib-based PNG reader and writer.
@@ -1431,6 +1432,13 @@ CONTACT_SOURCE_CANDIDATES = ("C-default-grid", "C-default-local", "C-measured-co
 # the seam and its fix. A path that ran either gets a sheet whatever its family,
 # which is how the M7 level-alone orbit gets one.
 CONTACT_DENSITY_CANDIDATES = ("C-measured-density", "C-local-density")
+# And the coverage-1.25 pair under the sprite size and sprite density views,
+# each pair side by side. A path that ran any of them gets a sheet too, which
+# is how PF, the oblique forest pose, gets one.
+CONTACT_VIEW_CANDIDATES = ("C-measured-cover125-size", "C-local-cover125-size",
+                           "C-measured-cover125-density", "C-local-cover125-density")
+# The candidates that earn any path a sheet of its own
+CONTACT_SHEET_CANDIDATES = CONTACT_DENSITY_CANDIDATES + CONTACT_VIEW_CANDIDATES
 DIFF_CANDIDATE = "C-default"
 
 
@@ -1472,7 +1480,7 @@ def contact_sheet(path, runs, frames, out_directory, report_name):
     ran = {run.config for run in runs}
     shown = list(CONTACT_CANDIDATES) + [config for config in
                                         CONTACT_REVEAL_CANDIDATES + CONTACT_SOURCE_CANDIDATES
-                                        + CONTACT_DENSITY_CANDIDATES
+                                        + CONTACT_VIEW_CANDIDATES + CONTACT_DENSITY_CANDIDATES
                                         if config in ran]
     candidates = {config: last_dumped_run(runs, config, frames) for config in shown}
     # The difference wants the oracle the candidate's own sweep used
@@ -1670,8 +1678,8 @@ def build_report(log, frames, out_file, baseline=None, log_name="", baseline_nam
     flipbook_pages = {}
     for path in log.paths():
         runs = log.runs_for_path(path)
-        ran_density = any(run.config in CONTACT_DENSITY_CANDIDATES for run in runs)
-        if ((bare_path(path).startswith(CONTACT_PREFIXES) or ran_density)
+        ran_sheet_candidate = any(run.config in CONTACT_SHEET_CANDIDATES for run in runs)
+        if ((bare_path(path).startswith(CONTACT_PREFIXES) or ran_sheet_candidate)
                 and frames.available()):
             written = contact_sheet(path, runs, frames, out_directory, out_file.name)
             if written:

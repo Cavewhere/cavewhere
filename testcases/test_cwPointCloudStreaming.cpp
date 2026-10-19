@@ -6726,6 +6726,33 @@ namespace {
                           kOrbitHeightMeters, kOrbitPoseCount);
     }
 
+    //! WP15's oblique forest pose, PF: the user's reference spot on the BC
+    //! tile (lat 51.11747430 lon -121.83504609) in the tile's own UTM 10N
+    //! coordinates. forestSpotInFrame() carries it into the tile's bench frame.
+    constexpr double kForestSpotEasting = 581536.57;
+    constexpr double kForestSpotNorthing = 5663533.90;
+    //! Where PF's camera sits: this high over the ground at the spot,
+    //! pitched this far down onto it
+    constexpr float kForestHeightMeters = 60.0f;
+    constexpr float kForestPitchDownDegrees = 20.0f;
+    constexpr int kForestPoseCount = 1;
+
+    //! The side PF looks from, as orbitPose() names a heading
+    constexpr float kForestHeadingDegrees = 0.0f;
+
+    //! PF: one pose kForestHeightMeters over the ground at @a spot, pitched
+    //! kForestPitchDownDegrees down onto it from kForestHeadingDegrees
+    EvalPath forestPath(const cwPointOctreeManifest& manifest, const QVector2D& spot, QSize target)
+    {
+        EvalPath path;
+        path.name = QStringLiteral("PF");
+        const QVector3D ground(spot, groundElevation(manifest, spot));
+        path.poses.append(orbitPose(ground, kForestHeightMeters, kForestHeadingDegrees,
+                                    pathProjection(target), QStringLiteral("forest"), 0,
+                                    kForestPitchDownDegrees));
+        return path;
+    }
+
     //! The deepest level @a manifest holds
     int deepestLevel(const cwPointOctreeManifest& manifest)
     {
@@ -6927,9 +6954,13 @@ namespace {
         MeasuredCover125, //!< C-default at kZoomedCoverage, where the leaf floor sizes every sprite
         LocalCover125, //!< C-default-local at kZoomedCoverage
         MeasuredDensity, //!< C-default under the sprite density view, for the contact sheets
-        LocalDensity //!< C-default-local under the sprite density view, for the contact sheets
+        LocalDensity, //!< C-default-local under the sprite density view, for the contact sheets
+        MeasuredCover125Size, //!< C-measured-cover125 under the sprite size view, for PF's sheet
+        LocalCover125Size, //!< C-local-cover125 under the sprite size view, for PF's sheet
+        MeasuredCover125Density, //!< C-measured-cover125 under the sprite density view
+        LocalCover125Density //!< C-local-cover125 under the sprite density view
     };
-    constexpr int kCandidateCount = int(Candidate::LocalDensity) + 1;
+    constexpr int kCandidateCount = int(Candidate::LocalCover125Density) + 1;
 
     constexpr int kStarvedGpuBudgetMb = 256;
     constexpr int kStarvedPointBudgetMillions = 4;
@@ -7024,6 +7055,26 @@ namespace {
         case Candidate::LocalDensity:
             config = candidateConfig(Candidate::DefaultLocal);
             config.name = QStringLiteral("C-local-density");
+            config.debugView = cw::pointcloud::DebugView::SpriteDensity;
+            break;
+        case Candidate::MeasuredCover125Size:
+            config = candidateConfig(Candidate::MeasuredCover125);
+            config.name = QStringLiteral("C-measured-cover125-size");
+            config.debugView = cw::pointcloud::DebugView::SpriteSize;
+            break;
+        case Candidate::LocalCover125Size:
+            config = candidateConfig(Candidate::LocalCover125);
+            config.name = QStringLiteral("C-local-cover125-size");
+            config.debugView = cw::pointcloud::DebugView::SpriteSize;
+            break;
+        case Candidate::MeasuredCover125Density:
+            config = candidateConfig(Candidate::MeasuredCover125);
+            config.name = QStringLiteral("C-measured-cover125-density");
+            config.debugView = cw::pointcloud::DebugView::SpriteDensity;
+            break;
+        case Candidate::LocalCover125Density:
+            config = candidateConfig(Candidate::LocalCover125);
+            config.name = QStringLiteral("C-local-cover125-density");
             config.debugView = cw::pointcloud::DebugView::SpriteDensity;
             break;
         }
@@ -15342,12 +15393,11 @@ TEST_CASE("On a sparse plane under a duplicate streak Local draws the plane insi
     REQUIRE(measured > kStreakSideRatioTolerance);
 
     //and Local, covering at least each point's native spacing, closes it.
-    //What it leaves is the neighbor leaf's own floor against the native
-    //spacing: Local floors as Measured does, and Measured floors the leaf at
+    //Under WP13 it left the neighbor leaf's own floor against the native
+    //spacing: Local floored as Measured does, and Measured floors the leaf at
     //its own points' spacing, the data less what the root sampled out of it
     //(0.37 m on this 0.3 m plane), where the plane's points read the 8th
-    //distinct neighbor of a lattice, sqrt(2) steps out (0.27 m). The same
-    //ratio stands between any two leaf cells under Measured.
+    //distinct neighbor of a lattice, sqrt(2) steps out (0.27 m).
     double neighborFloor = 0.0;
     for (int i = 0; i < manifest.nodes.size(); i++) {
         const cwPointOctreeNode& node = manifest.nodes.at(i);
@@ -15361,12 +15411,12 @@ TEST_CASE("On a sparse plane under a duplicate streak Local draws the plane insi
     }
     const double latticeNative = std::numbers::sqrt2 * kStreakPlaneStep
                                  * cw::octree::kLocalSpacingSurfaceFactor;
-    //That residue, 0.37 / 0.27 = 1.39 at WP13, is over the spec's 1.25;
-    //which way to close it (accept it, size finest-drawn leaves by native
-    //too, or calibrate one estimator to the other) is the user's open call.
-    //Until then the bound is fixed just above it, so a change to Local that
-    //widens the jump fails here whatever Measured's floor does.
-    constexpr double kStreakLocalResidueRatio = 1.45;
+    //That residue read 0.37 / 0.27 = 1.39 at WP13. WP15 floors Local at the
+    //finest drawn level's grid instead (0.25 m on level 1, under the native
+    //spacing), so every plane sprite covers its own native spacing on both
+    //sides of the streak's ancestor cell and the jump closes to within
+    //kStreakLocalResidueRatio.
+    constexpr double kStreakLocalResidueRatio = 1.1;
     const double leafOverNative = neighborFloor / latticeNative;
     const double local = sideRatio(SpacingSource::Local);
     INFO("the neighbor leaf floors at " << neighborFloor << " m against a native "
@@ -15402,14 +15452,18 @@ TEST_CASE("On a sparse plane under a duplicate streak M3 seam share under Local 
     CHECK(local.twinDisagreement == 0);
 }
 
-TEST_CASE("M3 reads Local's sprites the way it reads Measured's: a cloud coded under every floor draws Measured's frame and seams",
+TEST_CASE("M3 reads Local's sprites the way the twin sizes them: a cloud coded under every floor draws Local's grid floors, no wider seams than Measured's",
           "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
     using cw::pointcloud::SpacingSource;
 
     //Every point at the absolute floor, under every node's drawn floor, so
-    //Local covers the drawn floor at every point, exactly as Measured does
+    //Local covers the drawn floor at every point. Until WP15 that floor was
+    //Measured's and the frame was Measured's bit for bit; WP15 floors Local
+    //at the finest drawn grid while it still thins as Measured does, so no
+    //other source draws this frame, and what is left to pin is that M3 reads
+    //it as the twin predicts and the grid floors open no wider seam
     const RecodedCache floored = withLocalSpacingCode(
         steepTwoDensityCache(), cw::octree::encodeLocalSpacing(cw::octree::kMinLocalSpacingUnits));
     const SettledFrame measured = settledFrame(rhi.get(), steepTwoDensityCache(),
@@ -15420,9 +15474,8 @@ TEST_CASE("M3 reads Local's sprites the way it reads Measured's: a cloud coded u
     INFO("M3 seam share: measured " << measured.seamShare << " (largest " << measured.largestSeamRatio
          << "), local " << local.seamShare << " (largest " << local.largestSeamRatio << ")");
     REQUIRE_FALSE(measured.frame.isNull());
-    CHECK(local.frame == measured.frame);
-    CHECK(local.seamShare == measured.seamShare);
-    CHECK(local.largestSeamRatio == measured.largestSeamRatio);
+    REQUIRE_FALSE(local.frame.isNull());
+    CHECK(local.largestSeamRatio <= measured.largestSeamRatio);
     CHECK(local.twinDisagreement == 0);
 }
 
@@ -15708,10 +15761,11 @@ TEST_CASE("On a sparse plane under a duplicate streak the sprite density view re
     CHECK(measured.streak < -kNearWhiteOctaves);
 
     //Local covers at least each point's native spacing on both sides. Where
-    //the native term sizes a sprite it reads exactly white, so the floor
-    //residue beside the streak is what shows the view is lit under Local
+    //the native term sizes a sprite it reads exactly white; under WP15's grid
+    //floors that is every plane sprite, so Measured's colored readings are
+    //what show the view is lit on this cloud
+    REQUIRE(measured.largest > kRampColoredOctaves);
     const Medians local = medians(SpacingSource::Local);
-    REQUIRE(local.largest > kRampColoredOctaves);
     CHECK(std::abs(local.streak) <= kNearWhiteOctaves);
     CHECK(std::abs(local.neighbor) <= kNearWhiteOctaves);
 }
@@ -15744,16 +15798,24 @@ TEST_CASE("C-measured-density and C-local-density are C-default and C-default-lo
     checkAgainst(Candidate::LocalDensity, Candidate::DefaultLocal,
                  QStringLiteral("C-local-density"));
 
-    //Every other candidate draws flat white
+    //Only the view candidates draw a debug view; every other one draws flat white
+    QStringList viewCandidates;
     for (int index = 0; index < kCandidateCount; index++) {
-        const Candidate candidate = Candidate(index);
-        if (candidate == Candidate::MeasuredDensity || candidate == Candidate::LocalDensity) {
-            continue;
+        const EvalConfig config = candidateConfig(Candidate(index));
+        if (config.debugView != DebugView::Off) {
+            viewCandidates.append(config.name);
         }
-        const EvalConfig config = candidateConfig(candidate);
-        INFO(config.name.toStdString());
-        CHECK(config.debugView == DebugView::Off);
     }
+    const QStringList expectedViewCandidates {
+        candidateConfig(Candidate::MeasuredDensity).name,
+        candidateConfig(Candidate::LocalDensity).name,
+        candidateConfig(Candidate::MeasuredCover125Size).name,
+        candidateConfig(Candidate::LocalCover125Size).name,
+        candidateConfig(Candidate::MeasuredCover125Density).name,
+        candidateConfig(Candidate::LocalCover125Density).name};
+    CHECK(QSet<QString>(viewCandidates.cbegin(), viewCandidates.cend())
+          == QSet<QString>(expectedViewCandidates.cbegin(), expectedViewCandidates.cend()));
+    CHECK(viewCandidates.size() == expectedViewCandidates.size());
 }
 
 TEST_CASE("A sweep draws with its config's debug view, and under the sprite density view lights what the same config lights flat",
@@ -16012,4 +16074,267 @@ TEST_CASE("The tile request leaves the recenter shift of a UTM cloud horizontall
     //cloud's own elevation
     CHECK(std::hypot(double(shifted.shift.x()), double(shifted.shift.y()))
           <= kFrameCenterTolerance);
+}
+
+// ---- WP15: horizontal native spacing, grid floors under Local, PF -------------
+
+namespace {
+    //! The canopy treetop fixture: a sparse ground lattice kCanopyGroundStep
+    //! apart over kCanopyGroundSide, and two 4 x 4 blobs of returns
+    //! kTreetopBlobSpacing apart standing over it at different heights, all
+    //! in one root whose grid is finer than every spacing in it. Measured
+    //! floors the root at its measured median, near the ground's spacing, so
+    //! the blobs draw several times their own spacing; grid floors leave
+    //! every point at its own.
+    constexpr double kCanopyGroundSide = 16.0;
+    constexpr double kCanopyGroundStep = 1.0;
+    //! The blobs' low corners, off the ground lattice's positions, and their
+    //! heights over the ground
+    constexpr std::array<std::array<float, 3>, 2> kCanopyBlobCorners {{
+        {4.1f, 4.1f, 6.0f}, {11.1f, 11.1f, 10.0f}}};
+    //! Reach past a blob's last row that still counts as the blob
+    constexpr float kCanopyBlobMargin = 0.1f;
+
+    QVector<QVector3D> canopyTreetopPoints()
+    {
+        QVector<QVector3D> points;
+        const int perAxis = int(kCanopyGroundSide / kCanopyGroundStep) + 1;
+        for (int row = 0; row < perAxis; row++) {
+            for (int column = 0; column < perAxis; column++) {
+                points.append(QVector3D(float(column * kCanopyGroundStep),
+                                        float(row * kCanopyGroundStep), 0.0f));
+            }
+        }
+        for (const auto& [x, y, z] : kCanopyBlobCorners) {
+            for (int dy = 0; dy < kTreetopBlobSide; dy++) {
+                for (int dx = 0; dx < kTreetopBlobSide; dx++) {
+                    points.append(QVector3D(x + float(dx * kTreetopBlobSpacing),
+                                            y + float(dy * kTreetopBlobSpacing), z));
+                }
+            }
+        }
+        return points;
+    }
+
+    const OctreeCache& canopyTreetopCache()
+    {
+        static QTemporaryDir directory {
+            QDir::temp().filePath(QStringLiteral("cwCanopyTreetop-%1-XXXXXX")
+                                      .arg(QCoreApplication::applicationPid()))
+        };
+        static OctreeCache cache = [] {
+            REQUIRE(directory.isValid());
+            return buildOctreeCache(directory.path(), QStringLiteral("canopy-treetop"),
+                                    canopyTreetopPoints());
+        }();
+        return cache;
+    }
+
+    //! Whether @a at, in world coordinates, falls on the blob whose low corner
+    //! is @a corner
+    bool onCanopyBlob(QPointF at, const std::array<float, 3>& corner)
+    {
+        const float side = float((kTreetopBlobSide - 1) * kTreetopBlobSpacing);
+        return at.x() >= corner.at(0) - kCanopyBlobMargin
+               && at.x() <= corner.at(0) + side + kCanopyBlobMargin
+               && at.y() >= corner.at(1) - kCanopyBlobMargin
+               && at.y() <= corner.at(1) + side + kCanopyBlobMargin;
+    }
+}
+
+TEST_CASE("On canopy blobs over a sparse ground the sprite density view reads every point near white under Local and the blobs over-covered under Measured",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    using cw::pointcloud::SpacingSource;
+
+    //One root holds every point, its grid finer than the blobs' spacing and
+    //its measured median near the ground's
+    const cwPointOctreeManifest& manifest = *canopyTreetopCache().source.manifest;
+    REQUIRE(manifest.nodes.size() == 1);
+    const cwPointOctreeNode& root = manifest.nodes.at(kRootIndex);
+    const double grid = manifest.spacing(kRootLevel);
+    const double measuredFloor = cw::clod::drawSpacing(grid, double(root.measuredSpacing),
+                                                       SpacingSource::Measured);
+    INFO("the root's grid is " << grid << " m and Measured floors it at " << measuredFloor
+         << " m, for blobs " << kTreetopBlobSpacing << " m apart");
+    REQUIRE(grid < kTreetopBlobSpacing);
+    REQUIRE(measuredFloor >= kTreetopFloorOverBlob * kTreetopBlobSpacing);
+
+    //Zoomed in on the first blob, the ground around it in view
+    const auto& firstCorner = kCanopyBlobCorners.front();
+    const float middle = float(kTreetopBlobSide - 1) * float(kTreetopBlobSpacing) * 0.5f;
+    const QVector3D offset(firstCorner.at(0) + middle - canopyTreetopCache().center.x(),
+                           firstCorner.at(1) + middle - canopyTreetopCache().center.y(), 0.0f);
+    const auto onBlob = [&](QPointF at) { return onCanopyBlob(at, firstCorner); };
+    const auto onGround = [&](QPointF at) {
+        return !onCanopyBlob(at, kCanopyBlobCorners.front())
+               && !onCanopyBlob(at, kCanopyBlobCorners.back());
+    };
+    const auto medians = [&](SpacingSource source) {
+        const QVector<QVector<double>> octaves =
+            drawnDensityOctaves(rhi.get(), canopyTreetopCache(), source, kTreetopOrthoHeight,
+                                {onBlob, onGround}, offset);
+        REQUIRE_FALSE(octaves.at(0).isEmpty());
+        REQUIRE_FALSE(octaves.at(1).isEmpty());
+        const std::pair<double, double> found {cwMedian(octaves.at(0)), cwMedian(octaves.at(1))};
+        UNSCOPED_INFO("source " << int(source) << ": median " << found.first
+                      << " octaves off white on the blob, " << found.second << " on the ground");
+        return found;
+    };
+
+    //Measured draws the blob at the root's floor, several times its spacing
+    const auto [measuredBlob, measuredGround] = medians(SpacingSource::Measured);
+    CHECK(measuredBlob > kNearWhiteOctaves);
+
+    //Local floors at the root's grid, under every point's own spacing, so
+    //blob and ground sprites each cover their own horizontal spacing
+    const auto [localBlob, localGround] = medians(SpacingSource::Local);
+    CHECK(std::abs(localBlob) <= kNearWhiteOctaves);
+    CHECK(std::abs(localGround) <= kNearWhiteOctaves);
+    CHECK(localBlob < measuredBlob);
+}
+
+TEST_CASE("Under Grid and Measured the streak and canopy frames are the frames of the same octree with every code unmeasured",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    using cw::pointcloud::SpacingSource;
+
+    //WP15 changes what the codes say and how Local floors; Grid and Measured
+    //read neither, so they draw bit for bit what an uncoded octree draws
+    struct Fixture {
+        const OctreeCache* cache = nullptr;
+        float orthoHeight = 0.0f;
+    };
+    for (const Fixture& fixture : {Fixture {&streakCache(), kStreakOrthoHeight},
+                                   Fixture {&canopyTreetopCache(), kTreetopOrthoHeight}}) {
+        const RecodedCache uncoded =
+            withLocalSpacingCode(*fixture.cache, cw::octree::kUnmeasuredLocalSpacingCode);
+        for (const SpacingSource source : {SpacingSource::Grid, SpacingSource::Measured}) {
+            INFO("source " << spacingSourceName(source).toStdString() << ", ortho height "
+                 << fixture.orthoHeight);
+            const SettledFrame coded = settledFrame(rhi.get(), *fixture.cache, source,
+                                                    fixture.orthoHeight);
+            const SettledFrame plain = settledFrame(rhi.get(), uncoded.cache, source,
+                                                    fixture.orthoHeight);
+            REQUIRE_FALSE(coded.frame.isNull());
+            CHECK(coded.frame == plain.frame);
+            CHECK(coded.twinDisagreement == 0);
+        }
+    }
+}
+
+TEST_CASE("C-measured-cover125-size, C-local-cover125-size, C-measured-cover125-density and C-local-cover125-density are the coverage 1.25 pair under the sprite size and sprite density views",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    using cw::pointcloud::DebugView;
+
+    const auto checkAgainst = [](Candidate candidate, Candidate base, const QString& name,
+                                 DebugView view) {
+        const EvalConfig config = candidateConfig(candidate);
+        const EvalConfig expected = candidateConfig(base);
+        INFO(name.toStdString());
+        CHECK(config.name == name);
+        CHECK(config.debugView == view);
+        CHECK(config.spacingSource == expected.spacingSource);
+        CHECK(config.spacingCoverage == expected.spacingCoverage);
+        CHECK(config.targetSize == expected.targetSize);
+        CHECK(config.revealFrames == expected.revealFrames);
+        CHECK(config.revealMode == expected.revealMode);
+        CHECK(config.budgets.gpuBudgetBytes == expected.budgets.gpuBudgetBytes);
+        CHECK(config.budgets.pointBudget == expected.budgets.pointBudget);
+        CHECK(config.budgets.uploadBudgetBytesPerFrame
+              == expected.budgets.uploadBudgetBytesPerFrame);
+        CHECK(config.budgets.screenSpaceErrorPx == expected.budgets.screenSpaceErrorPx);
+        CHECK(config.budgets.governorSlew == expected.budgets.governorSlew);
+    };
+    checkAgainst(Candidate::MeasuredCover125Size, Candidate::MeasuredCover125,
+                 QStringLiteral("C-measured-cover125-size"), DebugView::SpriteSize);
+    checkAgainst(Candidate::LocalCover125Size, Candidate::LocalCover125,
+                 QStringLiteral("C-local-cover125-size"), DebugView::SpriteSize);
+    checkAgainst(Candidate::MeasuredCover125Density, Candidate::MeasuredCover125,
+                 QStringLiteral("C-measured-cover125-density"), DebugView::SpriteDensity);
+    checkAgainst(Candidate::LocalCover125Density, Candidate::LocalCover125,
+                 QStringLiteral("C-local-cover125-density"), DebugView::SpriteDensity);
+
+    //Every candidate keeps a name of its own
+    QSet<QString> names;
+    for (int index = 0; index < kCandidateCount; index++) {
+        names.insert(candidateConfig(Candidate(index)).name);
+    }
+    CHECK(names.size() == kCandidateCount);
+}
+
+TEST_CASE("PF is one pose kForestHeightMeters above the ground at its spot, pitched kForestPitchDownDegrees down onto it",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    //Any manifest with ground under the spot will do: the plane's own middle
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const QVector2D spot = ((manifest.bboxMin + manifest.bboxMax) * 0.5f).toVector2D();
+    const QVector3D ground(spot, groundElevation(manifest, spot));
+    const EvalPath path = forestPath(manifest, spot, kHalfHdTargetSize);
+
+    CHECK(path.name == QStringLiteral("PF"));
+    REQUIRE(path.poses.size() == kForestPoseCount);
+    const Pose& pose = path.poses.constFirst();
+    const QVector3D eye = eyeOf(pose);
+    const QVector3D forward = forwardOf(pose);
+    const double pitchDegrees = qRadiansToDegrees(std::asin(double(forward.z())));
+    INFO("eye " << eye.x() << ", " << eye.y() << ", " << eye.z() << "; pitch " << pitchDegrees);
+    CHECK(pose.index == 0);
+    CHECK(std::abs(eye.z() - ground.z() - kForestHeightMeters) <= kPoseToleranceMeters);
+    CHECK(std::abs(pitchDegrees + kForestPitchDownDegrees) <= kPoseToleranceDegrees);
+    //and it looks at the spot itself
+    const QVector3D toGround = (ground - eye).normalized();
+    CHECK((toGround - forward).length() <= kPoseToleranceMeters);
+    CHECK(pose.projection == pathProjection(kHalfHdTargetSize));
+
+}
+
+TEST_CASE("PF on a tile under Measured and Local at coverage 1.25, flat and under the sprite size and sprite density views, records every metric for the contact sheet",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    //The user's spot, carried from the file's CS into the tile's frame and
+    //then by the tile's shift into the manifest's recentered coordinates
+    const TileCache& tile = usgsTileCache();
+    const QString lazPath = QString::fromLocal8Bit(qgetenv(kTileLazEnvironmentVariable));
+    const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(lazPath);
+    REQUIRE(probe.valid);
+    REQUIRE_FALSE(probe.sourceCS.isEmpty());
+    REQUIRE_FALSE(tile.frameCS.isEmpty());
+    const cwCoordinateTransform toFrame(probe.sourceCS, tile.frameCS);
+    const cwGeoPoint inFrame = toFrame.transform(
+        cwGeoPoint(kForestSpotEasting, kForestSpotNorthing,
+                   (probe.bboxMin.z + probe.bboxMax.z) * 0.5));
+    INFO("the spot sits at " << inFrame.x << ", " << inFrame.y << " in the tile's frame");
+    const QVector3D shift = tile.originalCenter;
+    const QVector2D spot(float(inFrame.x - double(shift.x())),
+                         float(inFrame.y - double(shift.y())));
+    REQUIRE(spot.x() >= manifest.bboxMin.x());
+    REQUIRE(spot.x() <= manifest.bboxMax.x());
+    REQUIRE(spot.y() >= manifest.bboxMin.y());
+    REQUIRE(spot.y() <= manifest.bboxMax.y());
+
+    //C-default's oracles, so the sheet sets every view beside C-default's
+    //frame and the O3 difference
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalPath path = forestPath(manifest, spot, defaults.targetSize);
+    REQUIRE(path.poses.size() == kForestPoseCount);
+    const EvalOracles oracles = tileOracles(rhi.get(), cache, path, defaults.targetSize);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    for (const Candidate candidate :
+         {Candidate::Default, Candidate::MeasuredCover125, Candidate::LocalCover125,
+          Candidate::MeasuredCover125Size, Candidate::LocalCover125Size,
+          Candidate::MeasuredCover125Density, Candidate::LocalCover125Density}) {
+        const EvalConfig config = candidateConfig(candidate);
+        INFO(config.name.toStdString());
+        REQUIRE(config.targetSize == defaults.targetSize);
+        checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step, oracles), path,
+                         step);
+    }
 }

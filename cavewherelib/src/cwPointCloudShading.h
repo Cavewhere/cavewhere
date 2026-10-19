@@ -64,11 +64,12 @@ namespace cw::pointcloud {
         //! from the node's own points (cwPointOctreeNode::measuredSpacing), so
         //! a node sparser than its grid sizes and thins by the gap it really has
         Measured = 1,
-        //! Measured for how a node thins and floors, while each sprite covers
-        //! at least the native spacing the builder measured around its own
-        //! point (cw::octree::QuantizedPoint::reserved, cw::clod::localSpacing,
-        //! cw::clod::sizeSpacing) (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html
-        //! section 14.5, WP13)
+        //! Measured for how a node thins and cuts, Grid for how it floors,
+        //! while each sprite covers at least the horizontal native spacing
+        //! the builder measured around its own point
+        //! (cw::octree::QuantizedPoint::reserved, cw::clod::localSpacing,
+        //! cw::clod::floorSpacing, cw::clod::sizeSpacing)
+        //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP13, WP15)
         Local = 2
     };
 

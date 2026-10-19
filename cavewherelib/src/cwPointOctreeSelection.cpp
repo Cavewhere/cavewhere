@@ -216,8 +216,8 @@ QVector<DrawnFloor> finestDrawnFloors(const cwPointOctreeManifest& manifest,
     const auto ownFloor = [&](int node) {
         const cwPointOctreeNode& entry = manifest.nodes.at(node);
         return DrawnFloor {entry.level,
-                           cw::clod::drawSpacing(manifest.spacing(entry.level),
-                                                 double(entry.measuredSpacing), source),
+                           cw::clod::floorSpacing(manifest.spacing(entry.level),
+                                                  double(entry.measuredSpacing), source),
                            false};
     };
 

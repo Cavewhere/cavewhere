@@ -1096,5 +1096,86 @@ class SpriteDensityContactSheetTest(unittest.TestCase):
         self.check_density_columns("M7_6")
 
 
+# WP15: PF, the oblique forest pose on the tile, settled under Measured and
+# Local at coverage 1.25, flat and under the sprite size and sprite density
+# views, beside C-default, the way the bench writes it. PF is no P2 or P3
+# path, so the coverage-1.25 views are what earn it a sheet.
+FOREST_PATH = ("PF", "PF")
+FOREST_CONFIGS = ("C-default", "C-measured-cover125", "C-local-cover125",
+                  "C-measured-cover125-size", "C-local-cover125-size",
+                  "C-measured-cover125-density", "C-local-cover125-density")
+FOREST_SOURCES = {config: "Local" if config.startswith("C-local") else "Measured"
+                  for config in FOREST_CONFIGS}
+
+
+def forest_log():
+    path, directory = FOREST_PATH
+    lines = []
+    for index, config in enumerate(FOREST_CONFIGS):
+        lines.append("evalCsv,path,config,pose,frame,label,litFraction,holeFraction,"
+                     "pending,spacingSource,spacingCoverage,revealFrames,revealMode")
+        lines.append("evalDump,path,config,directory")
+        lines.append("evalDump,{p},{c},{d}/{c}/run-15-00{i}".format(
+            p=path, c=config, d=directory, i=index + 1))
+        coverage = "1" if config == "C-default" else "1.25"
+        for frame in (0, 1):
+            lines.append("evalCsv,{p},{c},0,{f},forest-spot,0.50000,0.01000,0,{s},{v},0,Cover"
+                         .format(p=path, c=config, f=frame, s=FOREST_SOURCES[config],
+                                 v=coverage))
+    return "\n".join(lines) + "\n"
+
+
+class ForestContactSheetTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.frames = root / "frames"
+        self.out = root / "report" / "index.html"
+        _, path_directory = FOREST_PATH
+        for index, config in enumerate(FOREST_CONFIGS):
+            directory = self.frames / path_directory / config / "run-15-00{}".format(index + 1)
+            directory.mkdir(parents=True)
+            for frame in (0, 1):
+                write_rgba_png(directory / report.candidate_frame_name(0, frame), frame + index)
+            if config == report.DIFF_CANDIDATE:
+                for oracle in ("O2", "O3"):
+                    (directory / oracle).mkdir()
+                    write_rgba_png(directory / oracle / report.oracle_frame_name(0), 5)
+        log_file = root / "run.log"
+        log_file.write_text(forest_log(), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.exit_code = report.main(["--log", str(log_file), "--frames", str(self.frames),
+                                          "--out", str(self.out)])
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def sheet_text(self):
+        sheet = self.out.parent / "contact-PF.html"
+        self.assertTrue(sheet.is_file(), "no contact sheet for PF")
+        return sheet.read_text(encoding="utf-8")
+
+    def test_the_forest_pose_gets_a_sheet(self):
+        self.assertEqual(self.exit_code, 0)
+        self.sheet_text()
+        index = self.out.read_text(encoding="utf-8")
+        assert_contains(self, 'href="contact-PF.html"', index)
+
+    def test_the_forest_sheet_shows_every_view_of_measured_and_local(self):
+        self.assertEqual(self.exit_code, 0)
+        text = self.sheet_text()
+        for config in FOREST_CONFIGS[1:]:
+            assert_contains(self, "<th>{}</th>".format(config), text)
+            self.assertNotIn("no {} frame".format(config), text)
+        # Each view's Measured and Local side by side
+        assert_contains(self, "<th>C-measured-cover125</th><th>C-local-cover125</th>", text)
+        assert_contains(self, "<th>C-measured-cover125-size</th><th>C-local-cover125-size</th>",
+                        text)
+        assert_contains(self, "<th>C-measured-cover125-density</th>"
+                        "<th>C-local-cover125-density</th>", text)
+        assert_contains(self, "PF/C-local-cover125-density/run-15-007/"
+                        + report.candidate_frame_name(0, 1), text)
+
+
 if __name__ == "__main__":
     unittest.main()

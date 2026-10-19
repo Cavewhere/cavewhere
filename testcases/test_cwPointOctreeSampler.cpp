@@ -13,6 +13,7 @@
 #include <bit>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <random>
 #include <utility>
 
@@ -925,14 +926,6 @@ namespace {
     //! neighbors agree to float rounding of their coordinates
     constexpr double kSameNeighborhoodTolerance = 1e-3;
 
-    //! The widest native spacing a point of a node at @a level may carry,
-    //! spelled out rather than read from localSpacingCap() so the cap is checked
-    double nativeSpacingCap(double rootSize, int level)
-    {
-        return std::min(kMaxLocalSpacingGridRatio * levelGridSpacing(rootSize, level),
-                        kMaxLocalSpacingUnits);
-    }
-
     //! The regular plane, one point per kLocalPlaneStep over the root's footprint
     QVector<QVector3D> nativePlanePoints()
     {
@@ -984,7 +977,8 @@ namespace {
                && column < kStreakFirstColumn + kStreakGroups - 0.9;
     }
 
-    //! A position's key, exact for points that are bit-identical
+    //! A position's horizontal key, x and y only: exact for points that share
+    //! x and y bit for bit, whatever their z
     quint64 positionKey(const QVector3D& point)
     {
         const quint64 x = std::bit_cast<quint32>(point.x());
@@ -1080,18 +1074,17 @@ TEST_CASE("A sparse 0.3 m plane's native spacing is its data spacing at every po
     CHECK(outside == 0);
 }
 
-TEST_CASE("A duplicate streak on a sparse 0.3 m plane codes to the plane's spacing, and so does the plane around it",
+TEST_CASE("A duplicate streak on a sparse 0.3 m plane codes to the plane's spacing at every level, and so does the plane around it",
           "[PointOctree][PointOctreeSampler]") {
     const QVector<CodedPoint> coded = estimatedPlane(streakPlanePoints());
 
     //A sphere count reads a stack of identical returns as a dense patch; the
     //k-th distinct neighbor counts each position once, so the streak and the
-    //plane beside it read the plane's spacing. A copy pushed into a node whose
-    //grid is fine enough codes to that node's cap instead.
+    //plane beside it read the plane's spacing at every level the copies
+    //were pushed down to.
     int planeChecked = 0;
     int planeOutside = 0;
     int streakChecked = 0;
-    int streakUncapped = 0;
     int streakOutside = 0;
     double worstPlane = 0.0;
     double worstStreak = 0.0;
@@ -1100,12 +1093,9 @@ TEST_CASE("A duplicate streak on a sparse 0.3 m plane codes to the plane's spaci
         if(!insidePlane(point.point)) {
             continue;
         }
-        const double cap = nativeSpacingCap(kLocalPlaneRootSize, point.level);
-        const double expected = std::min(kLocalPlaneStep, cap);
-        const double error = relativeError(point.spacing, expected);
+        const double error = relativeError(point.spacing, kLocalPlaneStep);
         if(onStreak(point.point)) {
             streakChecked++;
-            streakUncapped += cap >= kLocalPlaneStep ? 1 : 0;
             streakOutside += error > kNativeSpacingTolerance ? 1 : 0;
             worstStreak = std::max(worstStreak, error);
             deepestStreakLevel = std::max(deepestStreakLevel, point.level);
@@ -1116,13 +1106,11 @@ TEST_CASE("A duplicate streak on a sparse 0.3 m plane codes to the plane's spaci
         }
     }
     INFO("plane: " << planeChecked << " points, " << planeOutside << " outside, worst "
-         << worstPlane << "; streak: " << streakChecked << " points (" << streakUncapped
-         << " under no cap) down to level " << deepestStreakLevel << ", " << streakOutside
-         << " outside, worst " << worstStreak);
+         << worstPlane << "; streak: " << streakChecked << " points down to level "
+         << deepestStreakLevel << ", " << streakOutside << " outside, worst " << worstStreak);
     //The streak's copies really do stack up through the levels
     REQUIRE(streakChecked > kStreakGroups * kStreakMinCopies - 1);
     REQUIRE(deepestStreakLevel > 1);
-    REQUIRE(streakUncapped > kStreakGroups);
     CHECK(planeOutside == 0);
     CHECK(streakOutside == 0);
 }
@@ -1142,31 +1130,24 @@ TEST_CASE("A plane with every point four times over codes the same as the plain 
     }
     REQUIRE(plainByPosition.size() == plain.size());
 
-    //Every copy codes what the plain plane's point there does, up to the cap
-    //of the node it was pushed into
+    //Every copy codes what the plain plane's point there does, whatever node
+    //it was pushed into
     int compared = 0;
-    int uncapped = 0;
     int differing = 0;
-    int differingUncapped = 0;
+    int differingCode = 0;
     for(const CodedPoint& point : estimatedPlane(duplicated)) {
         const auto found = plainByPosition.constFind(positionKey(point.point));
         REQUIRE(found != plainByPosition.constEnd());
-        const double cap = nativeSpacingCap(kLocalPlaneRootSize, point.level);
-        const bool underCap = cap >= found->spacing * (1.0 + kSameNeighborhoodTolerance);
-        const double expected = std::min(found->spacing, cap);
-        differing += relativeError(point.spacing, expected) > kSameNeighborhoodTolerance ? 1 : 0;
-        if(underCap) {
-            uncapped++;
-            differingUncapped += point.code != found->code ? 1 : 0;
-        }
+        differing += relativeError(point.spacing, found->spacing) > kSameNeighborhoodTolerance
+                         ? 1 : 0;
+        differingCode += point.code != found->code ? 1 : 0;
         compared++;
     }
-    INFO(compared << " copies, " << uncapped << " under no cap; " << differing
-         << " differ from the plain plane, " << differingUncapped << " of them by code");
+    INFO(compared << " copies; " << differing << " differ from the plain plane, "
+         << differingCode << " by code");
     REQUIRE(compared == duplicated.size());
-    REQUIRE(uncapped > plain.size());
     CHECK(differing == 0);
-    CHECK(differingUncapped == 0);
+    CHECK(differingCode == 0);
 }
 
 TEST_CASE("A plane point beside a node boundary measures the same as an interior one",
@@ -1264,35 +1245,6 @@ TEST_CASE("A node holding dense blobs far apart codes each blob point near the b
     CHECK(measuredNodeSpacing >= kMeasuredOverMedian * typical);
 }
 
-TEST_CASE("A lone point caps at kMaxLocalSpacingGridRatio times its own node's grid spacing, and at kMaxLocalSpacingUnits",
-          "[PointOctree][PointOctreeSampler]") {
-    struct Case {
-        double rootSize = 0.0;
-        int level = 0;
-    };
-    //A coarse node, a deep one, and one so coarse that the grid ratio passes
-    //the absolute cap
-    constexpr double kSmallRoot = 256.0;
-    constexpr double kHugeRoot = 4096.0;
-    constexpr int kDeepLevel = 5;
-    for(const Case& lone : {Case {kSmallRoot, 0}, Case {kSmallRoot, kDeepLevel},
-                            Case {kHugeRoot, 0}}) {
-        const double cellSize = std::ldexp(lone.rootSize, -lone.level);
-        const QVector3D center(float(cellSize * 0.5), float(cellSize * 0.5),
-                               float(cellSize * 0.5));
-        const QVector<SampledNode> nodes {SampledNode {Cell {lone.level, 0, 0, 0}, {center}}};
-        const QVector<CodedPoint> coded =
-            codedPoints(nodes, estimateLocalSpacing(nodes, QVector3D(), lone.rootSize),
-                        lone.rootSize);
-        REQUIRE(coded.size() == 1);
-        const double cap = nativeSpacingCap(lone.rootSize, lone.level);
-        INFO("root " << lone.rootSize << " level " << lone.level << ": decodes to "
-             << coded.constFirst().spacing << " m against a cap of " << cap << " m");
-        CHECK(coded.constFirst().code != kUnmeasuredLocalSpacingCode);
-        CHECK(relativeError(coded.constFirst().spacing, cap) <= kSameNeighborhoodTolerance);
-    }
-}
-
 TEST_CASE("A dense stack codes to kMinLocalSpacingUnits", "[PointOctree][PointOctreeSampler]") {
     //Points 1 mm apart, far under the absolute floor
     constexpr int kStackSide = 20;
@@ -1320,4 +1272,316 @@ TEST_CASE("A dense stack codes to kMinLocalSpacingUnits", "[PointOctree][PointOc
     }
     INFO(offFloor << " of " << coded.size() << " points off the floor, widest " << widest << " m");
     CHECK(offFloor == 0);
+}
+
+// ---- WP15: horizontal native spacing and the data-relative cap ----------------
+
+namespace {
+    //! The plain plane's decoded spacing at every horizontal position
+    QHash<quint64, CodedPoint> plainPlaneByPosition()
+    {
+        QHash<quint64, CodedPoint> byPosition;
+        for(const CodedPoint& point : estimatedPlane(nativePlanePoints())) {
+            byPosition.insert(positionKey(point.point), point);
+        }
+        return byPosition;
+    }
+
+    //! The median decoded spacing of the plane points inside the plane among
+    //! @a coded, those @a isPlane accepts
+    template<typename IsPlane>
+    double interiorPlaneMedian(const QVector<CodedPoint>& coded, const IsPlane& isPlane)
+    {
+        QVector<double> spacings;
+        for(const CodedPoint& point : coded) {
+            if(insidePlane(point.point) && isPlane(point)) {
+                spacings.append(point.spacing);
+            }
+        }
+        REQUIRE_FALSE(spacings.isEmpty());
+        return cwMedian(spacings);
+    }
+
+    //! The plane tilted 45 degrees about the x axis: the same 0.3 m lattice
+    //! seen from above, its height rising one meter per meter of y, so a 3D
+    //! distance across it reads up to sqrt(2) times the horizontal one
+    QVector<QVector3D> tiltedPlanePoints()
+    {
+        QVector<QVector3D> points = nativePlanePoints();
+        for(QVector3D& point : points) {
+            point.setZ(point.y());
+        }
+        return points;
+    }
+
+    //! The canopy fixture: kCanopyColumns columns over the plain plane, each
+    //! kCanopyReturns returns from kCanopyHeightLow to kCanopyHeightHigh above
+    //! the ground, three pulses inside a kCanopyFootprint footprint at the
+    //! middle of a ground cell, each pulse's returns stacked at one xy, the way
+    //! nadir airborne lidar returns them
+    constexpr int kCanopyReturns = 12;
+    constexpr double kCanopyHeightLow = 2.0;
+    constexpr double kCanopyHeightHigh = 10.0;
+    constexpr double kCanopyFootprint = 0.2;
+    constexpr int kCanopyPulses = 3;
+    //! The pulses' offsets from the column's center, inside kCanopyFootprint
+    constexpr std::array<std::array<double, 2>, kCanopyPulses> kCanopyPulseOffsets {{
+        {-0.05, -0.05}, {0.05, -0.05}, {0.0, 0.05}}};
+    //! The ground cells, by lattice row and column, the columns stand in
+    constexpr std::array<std::array<int, 2>, 5> kCanopyCells {{
+        {40, 40}, {100, 60}, {150, 150}, {60, 170}, {180, 30}}};
+    //! The plan's tolerance for a canopy point against the ground's spacing
+    constexpr double kCanopyTolerance = 0.25;
+
+    //! A column's center: the middle of the ground cell whose low corner is
+    //! the lattice point at @a row, @a column
+    QVector3D canopyColumnCenter(int row, int column)
+    {
+        const double half = 0.5 * kLocalPlaneStep;
+        return QVector3D(float((column + 0.5) * kLocalPlaneStep + half),
+                         float((row + 0.5) * kLocalPlaneStep + half), kLocalPlaneHeight);
+    }
+
+    QVector<QVector3D> canopyColumnPoints()
+    {
+        static_assert(kCanopyReturns > 1);
+        QVector<QVector3D> points;
+        for(const auto& [row, column] : kCanopyCells) {
+            const QVector3D center = canopyColumnCenter(row, column);
+            for(int i = 0; i < kCanopyReturns; i++) {
+                const auto& [dx, dy] = kCanopyPulseOffsets.at(size_t(i % kCanopyPulses));
+                const double height = kCanopyHeightLow
+                                      + (kCanopyHeightHigh - kCanopyHeightLow) * double(i)
+                                            / double(kCanopyReturns - 1);
+                points.append(center + QVector3D(float(dx), float(dy), float(height)));
+            }
+        }
+        return points;
+    }
+
+    bool aboveGround(const CodedPoint& point)
+    {
+        return point.point.z() > kLocalPlaneHeight + float(0.5 * kCanopyHeightLow);
+    }
+}
+
+TEST_CASE("A 0.3 m lattice tilted 45 degrees codes the same native spacing as the flat lattice",
+          "[PointOctree][PointOctreeSampler]") {
+    const QHash<quint64, CodedPoint> flat = plainPlaneByPosition();
+    const QVector<CodedPoint> tilted = estimatedPlane(tiltedPlanePoints());
+
+    //Airborne lidar lays its pulses down per ground area, so the slope keeps
+    //the flat lattice's horizontal spacing; a 3D distance reads it wider by
+    //up to the secant of the slope
+    int compared = 0;
+    int differing = 0;
+    double worst = 0.0;
+    QVector<double> ratios;
+    for(const CodedPoint& point : tilted) {
+        if(!insidePlane(point.point)) {
+            continue;
+        }
+        const auto found = flat.constFind(positionKey(point.point));
+        REQUIRE(found != flat.constEnd());
+        const double error = relativeError(point.spacing, found->spacing);
+        worst = std::max(worst, error);
+        differing += error > kSameNeighborhoodTolerance ? 1 : 0;
+        ratios.append(point.spacing / found->spacing);
+        compared++;
+    }
+    REQUIRE(compared > 0);
+    INFO(compared << " interior points; " << differing << " differ from the flat lattice, worst "
+         << worst << ", median tilted over flat " << cwMedian(ratios));
+    CHECK(differing == 0);
+}
+
+TEST_CASE("Canopy returns stacked over a 0.3 m ground lattice code within 25 percent of the ground's spacing",
+          "[PointOctree][PointOctreeSampler]") {
+    QVector<QVector3D> points = nativePlanePoints();
+    points.append(canopyColumnPoints());
+    const QVector<CodedPoint> coded = estimatedPlane(points);
+
+    const double ground = interiorPlaneMedian(coded, [](const CodedPoint& point) {
+        return !aboveGround(point);
+    });
+
+    //A canopy return's 3D neighbors are the other returns of its column,
+    //meters apart; seen from above they stack on three pulses, and the
+    //ground lattice around them is what spaces the column
+    int canopy = 0;
+    int outside = 0;
+    double widest = 0.0;
+    double narrowest = std::numeric_limits<double>::max();
+    for(const CodedPoint& point : coded) {
+        if(!aboveGround(point)) {
+            continue;
+        }
+        canopy++;
+        widest = std::max(widest, point.spacing);
+        narrowest = std::min(narrowest, point.spacing);
+        outside += relativeError(point.spacing, ground) > kCanopyTolerance ? 1 : 0;
+    }
+    INFO(canopy << " canopy returns over a ground median of " << ground << " m: from "
+         << narrowest << " to " << widest << " m, " << outside << " off by more than "
+         << kCanopyTolerance);
+    REQUIRE(canopy == qsizetype(kCanopyCells.size()) * kCanopyReturns);
+    CHECK(outside == 0);
+}
+
+TEST_CASE("A lone return 10 m above a 0.3 m lattice codes the lattice's spacing",
+          "[PointOctree][PointOctreeSampler]") {
+    constexpr int kLoneRow = 100;
+    constexpr int kLoneColumn = 100;
+    QVector<QVector3D> points = nativePlanePoints();
+    points.append(canopyColumnCenter(kLoneRow, kLoneColumn)
+                  + QVector3D(0.0f, 0.0f, float(kCanopyHeightHigh)));
+    const QVector<CodedPoint> coded = estimatedPlane(points);
+
+    const double ground = interiorPlaneMedian(coded, [](const CodedPoint& point) {
+        return !aboveGround(point);
+    });
+    QVector<CodedPoint> lone;
+    for(const CodedPoint& point : coded) {
+        if(aboveGround(point)) {
+            lone.append(point);
+        }
+    }
+    REQUIRE(lone.size() == 1);
+    INFO("the lone return codes " << lone.constFirst().spacing << " m over a ground median of "
+         << ground << " m");
+    CHECK(relativeError(lone.constFirst().spacing, ground) <= kCanopyTolerance);
+}
+
+TEST_CASE("Returns stacked at one xy count as one distinct neighbor: a lattice doubled above itself codes as the plain lattice",
+          "[PointOctree][PointOctreeSampler]") {
+    const QHash<quint64, CodedPoint> plain = plainPlaneByPosition();
+
+    //The plan's +1 m, and a stack close enough that a 3D distance would
+    //count the copy as a nearer neighbor than the lattice's own
+    constexpr std::array<float, 2> kStackOffsets {1.0f, 0.1f};
+    for(const float offset : kStackOffsets) {
+        QVector<QVector3D> doubled = nativePlanePoints();
+        const qsizetype plainCount = doubled.size();
+        for(qsizetype i = 0; i < plainCount; i++) {
+            doubled.append(doubled.at(i) + QVector3D(0.0f, 0.0f, offset));
+        }
+
+        int compared = 0;
+        int differing = 0;
+        int differingCode = 0;
+        for(const CodedPoint& point : estimatedPlane(doubled)) {
+            const auto found = plain.constFind(positionKey(point.point));
+            REQUIRE(found != plain.constEnd());
+            differing += relativeError(point.spacing, found->spacing) > kSameNeighborhoodTolerance
+                             ? 1 : 0;
+            differingCode += point.code != found->code ? 1 : 0;
+            compared++;
+        }
+        INFO("stacked " << offset << " m above: " << compared << " points, " << differing
+             << " differ from the plain lattice, " << differingCode << " by code");
+        REQUIRE(compared == doubled.size());
+        CHECK(differing == 0);
+        CHECK(differingCode == 0);
+    }
+}
+
+TEST_CASE("A tilted lattice point beside a node boundary measures the same as an interior one",
+          "[PointOctree][PointOctreeSampler]") {
+    const QVector<CodedPoint> coded = estimatedPlane(tiltedPlanePoints());
+
+    //Level 1's children meet at x = 32, y = 32 and z = 32, which the tilted
+    //lattice crosses at y = 32; every neighbor across them is in the subtree
+    const double boundary = kLocalPlaneRootSize * 0.5;
+    constexpr double kInteriorDistance = 3.0;
+    QVector<double> interior;
+    QVector<CodedPoint> beside;
+    for(const CodedPoint& point : coded) {
+        if(point.level != 1 || !insidePlane(point.point)) {
+            continue;
+        }
+        const double toBoundary = std::min({std::abs(point.point.x() - boundary),
+                                            std::abs(point.point.y() - boundary),
+                                            std::abs(point.point.z() - boundary)});
+        if(toBoundary < kLocalPlaneStep) {
+            beside.append(point);
+        } else if(toBoundary > kInteriorDistance) {
+            interior.append(point.spacing);
+        }
+    }
+    REQUIRE_FALSE(beside.isEmpty());
+    REQUIRE_FALSE(interior.isEmpty());
+    const double typical = cwMedian(interior);
+
+    int differing = 0;
+    double worst = 0.0;
+    for(const CodedPoint& point : std::as_const(beside)) {
+        const double error = relativeError(point.spacing, typical);
+        worst = std::max(worst, error);
+        differing += error > kSameNeighborhoodTolerance ? 1 : 0;
+    }
+    INFO(beside.size() << " points beside the boundary against an interior median of "
+         << typical << " m, worst off by " << worst);
+    CHECK(differing == 0);
+}
+
+TEST_CASE("A return 200 m from a 0.3 m lattice in the same chunk codes kLoneSpacingMedianRatio times the lattice's median",
+          "[PointOctree][PointOctreeSampler]") {
+    //Room for the lattice and a return 200 m past its edge in one root
+    constexpr double kCapRootSize = 512.0;
+    constexpr double kLoneDistance = 200.0;
+    QVector<QVector3D> points = nativePlanePoints();
+    const QVector3D lonePoint(float(kLocalPlaneRootSize + kLoneDistance),
+                              float(kLocalPlaneRootSize * 0.5), kLocalPlaneHeight);
+    points.append(lonePoint);
+
+    const QVector<SampledNode> nodes = buildSubtree(points, Cell {0, 0, 0, 0}, QVector3D(),
+                                                    kCapRootSize, kLocalLeafMaxPoints);
+    const QVector<CodedPoint> coded =
+        codedPoints(nodes, estimateLocalSpacing(nodes, QVector3D(), kCapRootSize), kCapRootSize);
+
+    QVector<double> lattice;
+    std::optional<double> lone;
+    for(const CodedPoint& point : coded) {
+        if(point.point == lonePoint) {
+            lone = point.spacing;
+        } else {
+            lattice.append(point.spacing);
+        }
+    }
+    REQUIRE(lone.has_value());
+    REQUIRE(lattice.size() == nativePlanePoints().size());
+    //Every lattice point finds its k neighbors, so they all set the median
+    const double median = cwMedian(lattice);
+    const double ceiling = kLoneSpacingMedianRatio * median;
+    INFO("the lone return codes " << *lone << " m against the lattice's median " << median
+         << " m, a ceiling of " << ceiling << " m");
+    CHECK(relativeError(*lone, ceiling) <= kSameNeighborhoodTolerance);
+    //and the ceiling binds nothing on the lattice
+    CHECK(*std::max_element(lattice.cbegin(), lattice.cend()) < ceiling);
+}
+
+TEST_CASE("A chunk whose points all find fewer than k neighbors codes the absolute maximum",
+          "[PointOctree][PointOctreeSampler]") {
+    //Fewer points than kLocalSpacingNeighbors + 1, so none finds k neighbors
+    //and there is no median to cap by; a 256 m root, whose grid ratio cap
+    //would have been 8 m
+    constexpr double kSparseRootSize = 256.0;
+    constexpr std::array kSparsePoints {
+        QVector3D(10.0f, 10.0f, 10.0f), QVector3D(200.0f, 30.0f, 12.0f),
+        QVector3D(60.0f, 180.0f, 14.0f), QVector3D(240.0f, 240.0f, 20.0f),
+        QVector3D(128.0f, 128.0f, 128.0f)};
+    static_assert(qsizetype(kSparsePoints.size()) < kLocalSpacingNeighbors + 1);
+    const QVector<QVector3D> points(kSparsePoints.cbegin(), kSparsePoints.cend());
+
+    const QVector<SampledNode> nodes = buildSubtree(points, Cell {0, 0, 0, 0}, QVector3D(),
+                                                    kSparseRootSize, kLocalLeafMaxPoints);
+    const QVector<CodedPoint> coded =
+        codedPoints(nodes, estimateLocalSpacing(nodes, QVector3D(), kSparseRootSize),
+                    kSparseRootSize);
+    REQUIRE(coded.size() == points.size());
+    for(const CodedPoint& point : coded) {
+        INFO("(" << point.point.x() << ", " << point.point.y() << ", " << point.point.z()
+             << ") decodes to " << point.spacing << " m");
+        CHECK(point.code == encodeLocalSpacing(kMaxLocalSpacingUnits));
+    }
 }

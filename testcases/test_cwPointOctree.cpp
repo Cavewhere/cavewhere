@@ -668,12 +668,13 @@ TEST_CASE("A manifest round-trips each node's measured spacing", "[PointOctree]"
     }
 }
 
-TEST_CASE("The octree format is generation 6, the one that carries each point's native spacing", "[PointOctree]") {
+TEST_CASE("The octree format is generation 7, the one whose native spacing is horizontal", "[PointOctree]") {
     //Generation 4 added each node's measured spacing and the builder's minimum
     //to split; generation 5 wrote a local spacing ratio into each point's
-    //reserved word; generation 6 writes the point's absolute native spacing
-    //there instead, so every generation 5 cache rebuilds once
-    CHECK(cw::octree::kFormatGeneration == 6);
+    //reserved word; generation 6 wrote the point's absolute 3D native spacing
+    //there; generation 7 writes its horizontal native spacing under the
+    //data-relative cap, so every generation 6 cache rebuilds once
+    CHECK(cw::octree::kFormatGeneration == 7);
 }
 
 TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
@@ -686,7 +687,7 @@ TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
     //The cache key names the generation too, so its entries are never even read
     const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
                                                           QStringLiteral("fingerprint"));
-    CHECK(key.id.contains(QStringLiteral("octree6")));
+    CHECK(key.id.contains(QStringLiteral("octree7")));
     CHECK_FALSE(key.id.contains(QStringLiteral("octree3")));
 }
 
@@ -717,6 +718,20 @@ TEST_CASE("A generation 5 manifest is rejected", "[PointOctree]") {
     CHECK_FALSE(key.id.contains(QStringLiteral("octree5")));
 }
 
+TEST_CASE("A generation 6 manifest is rejected", "[PointOctree]") {
+    constexpr int kGenerationWithSpatialNativeSpacing = 6;
+
+    CavewhereProto::PointOctreeManifest proto = parseManifest(threeLevelManifest().serialize());
+    proto.set_format_generation(kGenerationWithSpatialNativeSpacing);
+    CHECK_FALSE(deserializeProto(proto).has_value());
+
+    //Its payloads hold 3D native spacings under the grid-ratio cap, so the
+    //key never reaches them either
+    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
+                                                          QStringLiteral("fingerprint"));
+    CHECK_FALSE(key.id.contains(QStringLiteral("octree6")));
+}
+
 // ---- WP13: per-point local spacing codes ------------------------------------
 
 namespace {
@@ -738,7 +753,7 @@ TEST_CASE("The native spacing estimate's constants are the plan's", "[PointOctre
     CHECK(kLocalSpacingSurfaceFactor == std::sqrt(std::numbers::pi / 8.0));
     CHECK(kMinLocalSpacingUnits == 0.005);
     CHECK(kMaxLocalSpacingUnits == 64.0);
-    CHECK(kMaxLocalSpacingGridRatio == 4.0);
+    CHECK(kLoneSpacingMedianRatio == 4.0);
     CHECK(kUnmeasuredLocalSpacingCode == 0);
 }
 

@@ -512,9 +512,9 @@ void cwRHIPointCloud::restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
 float cwRHIPointCloud::ownSpacing(int index) const
 {
     const cwPointOctreeNode& node = m_source.manifest->nodes.at(index);
-    return float(cw::clod::drawSpacing(m_source.manifest->spacing(node.level),
-                                       double(node.measuredSpacing),
-                                       m_renderState.value().shading.spacingSource));
+    return float(cw::clod::floorSpacing(m_source.manifest->spacing(node.level),
+                                        double(node.measuredSpacing),
+                                        m_renderState.value().shading.spacingSource));
 }
 
 void cwRHIPointCloud::writeNodeFloor(QRhiResourceUpdateBatch* batch, int index,

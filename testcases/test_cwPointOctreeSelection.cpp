@@ -1230,3 +1230,83 @@ TEST_CASE("cw::octree::requestedCutSpacings: under Grow a drawn node floors at t
         CHECK(floors.at(0) == sparse);
     }
 }
+
+// ---- WP15: grid floors under Local ----------------------------------------------
+
+TEST_CASE("cw::octree::finestDrawnSpacings: under Local every node floors at the grid of its finest drawn level, as under Grid",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    //Every node sparser than its grid, so Measured floors wider than Grid
+    //everywhere and a Local floor that took the measured gap would show
+    cwPointOctreeManifest manifest = buildManifest();
+    constexpr float kSparseFactor = 3.0f;
+    for(cwPointOctreeNode& node : manifest.nodes) {
+        node.measuredSpacing = kSparseFactor * float(manifest.spacing(node.level));
+    }
+
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int missingGrandchild = manifest.nodes.at(refinedChild).children.at(1);
+    const int coarseChild = manifest.nodes.at(0).children.at(1);
+
+    struct Cut {
+        QVector<int> drawn;
+        QVector<int> missing;
+    };
+    const QVector<Cut> cuts {
+        {{0}, {}},
+        {{0, refinedChild, grandchild}, {}},
+        {{0, refinedChild, grandchild, coarseChild}, {}},
+        {{0, refinedChild, grandchild}, {coarseChild}},
+        {{0, refinedChild, grandchild}, {missingGrandchild}},
+        {{grandchild, 0, refinedChild}, {missingGrandchild}},
+    };
+
+    for(qsizetype c = 0; c < cuts.size(); c++) {
+        const Cut& cut = cuts.at(c);
+        INFO("cut " << c);
+        const QVector<double> grid =
+            finestDrawnSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Grid);
+        const QVector<double> measured =
+            finestDrawnSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Measured);
+        const QVector<double> local =
+            finestDrawnSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Local);
+        REQUIRE(local.size() == grid.size());
+        //Bit for bit Grid's floors, with the incomplete-ancestor rule
+        CHECK(local == grid);
+        REQUIRE(measured.size() == grid.size());
+        CHECK(measured != grid);
+
+        //and under Grow the requested cut floors at the grid value as well
+        CHECK(requestedCutSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Local)
+              == requestedCutSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Grid));
+    }
+}
+
+TEST_CASE("cw::octree::finestDrawnSpacings: Grid and Measured floor exactly as they did before Local took grid floors",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    //Today's rules spelled out over a mixed manifest: Grid is the finest
+    //drawn level's grid, Measured the larger of that node's grid and its
+    //measured spacing, held to each node's own
+    cwPointOctreeManifest manifest = buildManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    constexpr double kSparseFactor = 3.0;
+    const double grandchildGrid = manifest.spacing(manifest.nodes.at(grandchild).level);
+    const double childGrid = manifest.spacing(manifest.nodes.at(refinedChild).level);
+    manifest.nodes[grandchild].measuredSpacing = float(kSparseFactor * grandchildGrid);
+    const double sparse = double(manifest.nodes.at(grandchild).measuredSpacing);
+
+    const QVector<int> drawn {0, refinedChild, grandchild};
+    CHECK(finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Grid)
+          == QVector<double>({grandchildGrid, grandchildGrid, grandchildGrid}));
+    CHECK(finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Measured)
+          == QVector<double>({sparse, childGrid, sparse}));
+    CHECK(requestedCutSpacings(manifest, {0}, {grandchild}, SpacingSource::Measured)
+          == QVector<double>({sparse}));
+}
