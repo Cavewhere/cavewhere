@@ -9,6 +9,8 @@
 #include <QVector3D>
 #include <QtTypes>
 
+#include "cwGeoPoint.h"
+
 class cwFutureManagerModel;
 class cwLazLayer;
 class cwLazLayerModel;
@@ -88,6 +90,15 @@ bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
                            const QString& wktCS = QString(),
                            LazCompression compression = LazCompression::ByExtension);
+
+/**
+ * writeSyntheticLazFile for points in double precision, for a fixture whose
+ * coordinates run to millions of meters, where a float holds half a meter.
+ */
+bool writeSyntheticGeoLazFile(const QString& outPath,
+                              const QVector<cwGeoPoint>& points,
+                              const QString& wktCS = QString(),
+                              LazCompression compression = LazCompression::ByExtension);
 
 /**
  * Build a PID-tagged .laz path inside @a dir. Including

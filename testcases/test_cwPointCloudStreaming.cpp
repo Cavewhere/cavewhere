@@ -63,10 +63,12 @@
 
 //Our includes
 #include "cwAppearanceOverride.h"
+#include "cwCoordinateTransform.h"
 #include "cwDiskCacher.h"
 #include "cwFrustum.h"
 #include "cwLazClipOperation.h"
 #include "cwLazLoader.h"
+#include "cwLocalProjection.h"
 #include "cwPointCloudAppearance.h"
 #include "cwMath.h"
 #include "cwPointCloudClod.h"
@@ -1907,33 +1909,64 @@ namespace {
         return shifted;
     }
 
-    //! The request every tile build makes: an empty frame CS leaves the points
-    //! in the file's own meters.
+    //! The local frame the app would build @a lazPath in were the tile its
+    //! project's anchor: the transverse Mercator cwLocalProjection derives from
+    //! the file's own CS, centered on the middle of its header bounds. The
+    //! builder carries every point into it in double precision, so the octree
+    //! holds the file's centimeters rather than the half-meter rows a float
+    //! keeps at a UTM northing.
+    //!
+    //! Empty for a file that names no CS, or one PROJ can't read, which leaves
+    //! the points in the file's own units.
+    QString tileFrameCS(const QString& lazPath)
+    {
+        const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(lazPath);
+        if (probe.valid && !probe.sourceCS.isEmpty()) {
+            const cwGeoPoint center((probe.bboxMin.x + probe.bboxMax.x) * 0.5,
+                                    (probe.bboxMin.y + probe.bboxMax.y) * 0.5,
+                                    (probe.bboxMin.z + probe.bboxMax.z) * 0.5);
+            return cwLocalProjection::deriveFrom(probe.sourceCS, center);
+        }
+        return QString();
+    }
+
+    //! A build of @a lazPath into @a frameCS
     cwPointOctreeBuilder::Request tileBuildRequest(const QString& cacheRoot,
-                                                   const QString& lazPath)
+                                                   const QString& lazPath,
+                                                   const QString& frameCS)
     {
         return cwPointOctreeBuilder::Request {
             .path = lazPath,
+            .frameCS = frameCS,
             .cacheRootPath = cacheRoot
         };
     }
 
-    ShiftedOctree buildShiftedOctree(const QString& cacheRoot, const QString& lazPath,
+    //! The request every tile build makes: the file in its own local frame,
+    //! from tileFrameCS().
+    cwPointOctreeBuilder::Request tileBuildRequest(const QString& cacheRoot,
+                                                   const QString& lazPath)
+    {
+        return tileBuildRequest(cacheRoot, lazPath, tileFrameCS(lazPath));
+    }
+
+    ShiftedOctree buildShiftedOctree(const cwPointOctreeBuilder::Request& request,
                                      std::optional<QVector3D> shift)
     {
-        QFuture<cwPointOctreeBuilder::Result> future =
-            cwPointOctreeBuilder::build(tileBuildRequest(cacheRoot, lazPath));
+        QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
         future.waitForFinished();
         REQUIRE(future.resultCount() == 1);
         const cwPointOctreeBuilder::Result result = future.result();
         REQUIRE_FALSE(result.hasError());
 
-        return shiftedOctree(cacheRoot, lazPath, result.value(), shift);
+        return shiftedOctree(request.cacheRootPath, request.path, result.value(), shift);
     }
 
     //! A tile octree and how it came to be.
     struct LoadedTileOctree {
         ShiftedOctree shifted;
+        //! The frame the octree was built in, from tileFrameCS()
+        QString frameCS;
         //! Zero when the octree was read back from the cache
         qint64 buildMilliseconds = 0;
         bool reused = false;
@@ -1959,9 +1992,12 @@ namespace {
     LoadedTileOctree loadOrBuildTileOctree(const QString& cacheRoot, const QString& lazPath)
     {
         LoadedTileOctree loaded;
+        loaded.frameCS = tileFrameCS(lazPath);
+        const cwPointOctreeBuilder::Request request =
+            tileBuildRequest(cacheRoot, lazPath, loaded.frameCS);
 
         const std::optional<cwPointOctreeManifest> cached =
-            cwPointOctreeBuilder::cachedManifest(tileBuildRequest(cacheRoot, lazPath));
+            cwPointOctreeBuilder::cachedManifest(request);
         const auto rootReadsBack = [&]() {
             const cwDiskCacher cacher {QDir(cacheRoot)};
             return !cacher.entry(cw::octree::nodeKey(lazPath, cached->fingerprint,
@@ -1976,23 +2012,28 @@ namespace {
 
         QElapsedTimer timer;
         timer.start();
-        loaded.shifted = buildShiftedOctree(cacheRoot, lazPath, std::nullopt);
+        loaded.shifted = buildShiftedOctree(request, std::nullopt);
         loaded.buildMilliseconds = timer.elapsed();
         return loaded;
     }
 
-    //! The octree of a real LAZ tile, built once per process. The file is a
-    //! 1 km USGS lidar tile — USGS_LPC_WY_FEMA_East_2019_D19_w1145n2340.laz,
-    //! 5.5 M points, downloaded from the USGS 3DEP lidar catalog — and it is
-    //! too big to check in, so the path comes from CAVEWHERE_HOLE_METRIC_LAZ
-    //! and the tile cases skip without it. CAVEWHERE_HOLE_METRIC_CACHE_DIR
-    //! keeps the octree between runs; without it the octree lives in a
-    //! temporary directory for the process alone.
+    //! The octree of a real LAZ tile, built once per process in the tile's own
+    //! local frame. The bench runs whichever georeferenced lidar tile
+    //! CAVEWHERE_HOLE_METRIC_LAZ names; tiles are too big to check in, so the
+    //! tile cases skip without it. The current one is the LidarBC tile
+    //! bc_092p011_2_2_3_xyes_8_utm10_2019.laz: 76 M points of airborne lidar
+    //! over 1.77 x 1.42 km, on NAD83(CSRS) / UTM 10N with CGVD2013 heights.
+    //! CAVEWHERE_HOLE_METRIC_CACHE_DIR keeps the octree between runs; without
+    //! it the octree lives in a temporary directory for the process alone.
     struct TileCache {
         std::optional<QTemporaryDir> temporaryDirectory;
         OctreeCache cache;
-        //! Where the tile sat in its own Albers meters before the recenter, so
-        //! anything clipped out of the file can be shifted onto the same frame
+        //! The local frame the tile was built in, from tileFrameCS()
+        QString frameCS;
+        //! Where the tile's bounding-box center sat in frameCS before the
+        //! recenter: horizontally within a meter or so of the frame's origin,
+        //! and vertically the tile's mid elevation. Anything clipped out of the
+        //! file into frameCS is shifted by it onto the same frame.
         QVector3D originalCenter;
         qint64 buildMilliseconds = 0;
         bool reused = false;
@@ -2026,6 +2067,7 @@ namespace {
 
         const LoadedTileOctree loaded = loadOrBuildTileOctree(cacheRoot, lazPath);
         tile.cache = loaded.shifted.cache;
+        tile.frameCS = loaded.frameCS;
         tile.originalCenter = loaded.shifted.shift;
         tile.buildMilliseconds = loaded.buildMilliseconds;
         tile.reused = loaded.reused;
@@ -2223,7 +2265,7 @@ namespace {
     {
         const TileCache& tile = usgsTileCache();
         if (!tile.built) {
-            SKIP("Set CAVEWHERE_HOLE_METRIC_LAZ to a USGS lidar tile to measure "
+            SKIP("Set CAVEWHERE_HOLE_METRIC_LAZ to a georeferenced lidar tile to measure "
                  "holes on real data");
         }
         REQUIRE(tile.cache.source.manifest->nodes.size() > 1);
@@ -2273,33 +2315,6 @@ namespace {
     //! together hold every point of the tile
     constexpr double kSeamClipPadMeters = 10.0;
 
-    //! The tile is a USGS 3DEP product on the national Albers grid. The clip
-    //! writes its output with no header offset — the project's local frame is
-    //! what it is built for — and a northing of 2.34 million meters overruns
-    //! the int32 a LAZ encodes at millimeter scale. So the output CS is that
-    //! same Albers with its false origin moved onto the tile's center: an
-    //! exact translation, which lands the halves around zero and puts them in
-    //! the frame the union tile's recenter leaves behind.
-    const char* const kSeamSourceCS = "EPSG:5070";
-
-    //! True when @a sourceCS names the grid seamOutputCS() is built from. A
-    //! 3DEP tile in UTM would clip to a frame nowhere near the union's, so the
-    //! tile the environment variable names is checked rather than assumed.
-    bool isConusAlbers(const QString& sourceCS)
-    {
-        return sourceCS.contains(QStringLiteral("5070"))
-               || sourceCS.contains(QStringLiteral("Albers"), Qt::CaseInsensitive)
-               || sourceCS.contains(QStringLiteral("aea"));
-    }
-
-    QString seamOutputCS(const QVector3D& center)
-    {
-        return QStringLiteral("+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 "
-                              "+x_0=%1 +y_0=%2 +datum=NAD83 +units=m +no_defs")
-            .arg(-double(center.x()), 0, 'f', 3)
-            .arg(-double(center.y()), 0, 'f', 3);
-    }
-
     //! How far the split scene's left-right lit difference may sit from the
     //! union's, and how far either strip may sit from the union's own strip.
     //! The union is one cloud over the whole tile, so its seam is the reference
@@ -2342,12 +2357,16 @@ namespace {
 
     //! Writes the points of @a lazPath inside @a polygon to @a outputPath, the
     //! way the clip tool cuts a layer out of a tile.
+    //!
+    //! The clip writes its output with no header offset, at millimeter scale,
+    //! so @a outputCS has to keep coordinates small. The seam cases hand it the
+    //! tile's own local frame: a few hundred meters either side of the origin,
+    //! and the frame the union was built in.
     void clipHalf(const QString& lazPath, const QString& outputPath,
                   const QList<QVector3D>& polygon, const QString& outputCS)
     {
         cwLazClipSource source;
         source.sourcePath = lazPath;
-        source.sourceCSOverride = QString::fromLatin1(kSeamSourceCS);
 
         cwLazClipOperation::Request request;
         request.sources.append(source);
@@ -2395,40 +2414,43 @@ namespace {
 
         REQUIRE(split.directory.isValid());
 
-        //The clip tests containment in its output CS, which the false origin
-        //puts on the tile's own center — the same frame the union is recentered
-        //into. So the split line is x = 0.
+        //The clip needs a CS to carry the tile into its frame
+        INFO("the seam cases clip into the tile's local frame, and this tile names no CS");
+        REQUIRE_FALSE(tile.frameCS.isEmpty());
+
+        //The clip tests containment in its output CS, the tile's frame, where
+        //the union's recentered origin sits at originalCenter. So the split
+        //line runs through it, and the rectangles are the union's bounds slid
+        //back into the frame.
         const cwPointOctreeManifest& manifest = *tile.cache.source.manifest;
-        constexpr double kSplitX = 0.0;
-        const double minX = double(manifest.bboxMin.x()) - kSeamClipPadMeters;
-        const double maxX = double(manifest.bboxMax.x()) + kSeamClipPadMeters;
-        const double minY = double(manifest.bboxMin.y()) - kSeamClipPadMeters;
-        const double maxY = double(manifest.bboxMax.y()) + kSeamClipPadMeters;
+        const QVector3D center = tile.originalCenter;
+        const double splitX = double(center.x());
+        const double minX = double(manifest.bboxMin.x() + center.x()) - kSeamClipPadMeters;
+        const double maxX = double(manifest.bboxMax.x() + center.x()) + kSeamClipPadMeters;
+        const double minY = double(manifest.bboxMin.y() + center.y()) - kSeamClipPadMeters;
+        const double maxY = double(manifest.bboxMax.y() + center.y()) + kSeamClipPadMeters;
 
         const QString lazPath = QString::fromLocal8Bit(qgetenv(kTileLazEnvironmentVariable));
-
-        const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(lazPath);
-        REQUIRE(probe.valid);
-        INFO("the seam cases clip in Conus Albers; this tile names "
-             << probe.sourceCS.toStdString());
-        REQUIRE(isConusAlbers(probe.sourceCS));
 
         const QDir directory(split.directory.path());
         const QString westPath = directory.filePath(QStringLiteral("seam-west.laz"));
         const QString eastPath = directory.filePath(QStringLiteral("seam-east.laz"));
 
-        //The clip's output CS has already taken the horizontal recenter out,
-        //so only the elevation shift is left for the manifests
-        const QString outputCS = seamOutputCS(tile.originalCenter);
-        const QVector3D shift(0.0f, 0.0f, tile.originalCenter.z());
-
         QElapsedTimer timer;
         timer.start();
-        clipHalf(lazPath, westPath, rectanglePolygon(minX, kSplitX, minY, maxY), outputCS);
-        clipHalf(lazPath, eastPath, rectanglePolygon(kSplitX, maxX, minY, maxY), outputCS);
+        clipHalf(lazPath, westPath, rectanglePolygon(minX, splitX, minY, maxY), tile.frameCS);
+        clipHalf(lazPath, eastPath, rectanglePolygon(splitX, maxX, minY, maxY), tile.frameCS);
 
-        split.west = buildShiftedOctree(split.directory.path(), westPath, shift).cache;
-        split.east = buildShiftedOctree(split.directory.path(), eastPath, shift).cache;
+        //Each half is built into the union's frame, rather than a frame of its
+        //own, and slid by the union's own shift
+        const auto buildHalf = [&](const QString& halfPath) {
+            return buildShiftedOctree(
+                       tileBuildRequest(split.directory.path(), halfPath, tile.frameCS),
+                       tile.originalCenter)
+                .cache;
+        };
+        split.west = buildHalf(westPath);
+        split.east = buildHalf(eastPath);
 
         const cwPointOctreeManifest& westManifest = *split.west.source.manifest;
         const cwPointOctreeManifest& eastManifest = *split.east.source.manifest;
@@ -2462,7 +2484,7 @@ namespace {
     {
         const SplitTileCache& split = splitTileCache();
         if (!split.built) {
-            SKIP("Set CAVEWHERE_HOLE_METRIC_LAZ to a USGS lidar tile to measure the "
+            SKIP("Set CAVEWHERE_HOLE_METRIC_LAZ to a georeferenced lidar tile to measure the "
                  "seam between two clipped layers");
         }
         writeCsvLine(QStringLiteral("seamBuild,%1,%2,%3")
@@ -12275,10 +12297,19 @@ namespace {
      * ancestors left behind, which on the plane is a cross of points in every
      * half-meter block rather than an even grid, so a spacing averaged over
      * the node's footprint closes most of the fall but leaves the middle of
-     * each block open. Measured at about 15 % on the plane, and on the BC
-     * tile at about 4 % at level 6 and 21 % at level 7.
+     * each block open. Measured at about 15 % on the plane.
      */
     constexpr double kMeasuredFallShareLeft = 0.25;
+
+    /**
+     * kMeasuredFallShareLeft on the BC tile, built in its own local frame.
+     * Measured at about 41 % at level 6 and 20 % at level 7: the grid falls
+     * 0.156 between levels 5 and 6 and measured spacing 0.064. The tile built
+     * in its own UTM meters read about 4 % and 21 %, but that octree held
+     * positions a float had snapped onto half-meter rows, which no build in
+     * the app produces.
+     */
+    constexpr double kTileMeasuredFallShareLeft = 0.5;
 }
 
 TEST_CASE("M7: under measured spacing the finest level of a sparse cloud closes most of its fall",
@@ -12548,9 +12579,9 @@ TEST_CASE("M7: on a tile under measured spacing, levels 6 and 7 alone close most
              << noise);
         //The grid's fall (the M7 tile case above) is there to close, and a
         //finer level holds what its ancestors left, so measured spacing closes
-        //most of it rather than all of it (kMeasuredFallShareLeft)
+        //most of it rather than all of it (kTileMeasuredFallShareLeft)
         REQUIRE(gridFall > noise);
-        CHECK(measuredFall <= kMeasuredFallShareLeft * gridFall);
+        CHECK(measuredFall <= kTileMeasuredFallShareLeft * gridFall);
     }
 }
 
@@ -13412,6 +13443,19 @@ namespace {
         return entered;
     }
 
+    //! The frames a sweep drew after the last one a node entered on. The
+    //! streaming decides when that last node lands, so this counts only what
+    //! the loop draws once everything is resident.
+    int framesAfterLastArrival(const QVector<EvalRecord>& records)
+    {
+        for (int i = int(records.size()) - 1; i >= 0; i--) {
+            if (records.at(i).nodesEntered > 0) {
+                return int(records.size()) - 1 - i;
+            }
+        }
+        return int(records.size());
+    }
+
     double worstHoleFractionOf(const QVector<EvalRecord>& records)
     {
         double worst = 0.0;
@@ -13424,9 +13468,9 @@ namespace {
     }
 
     //! Checks @a reveal against @a base, the same path under the same budgets
-    //! without the ramp: its largest arrival step is smaller, it takes about
-    //! revealFrames more frames to go quiet, the same nodes enter, and it
-    //! opens no holes the base did not have
+    //! without the ramp: its largest arrival step is smaller, it draws about
+    //! revealFrames more frames after its last arrival, the same nodes enter,
+    //! and it opens no holes the base did not have
     void checkRevealSpreadsArrivals(const QVector<EvalRecord>& base,
                                     const QVector<EvalRecord>& reveal, const QString& path,
                                     const EvalConfig& baseConfig, const EvalConfig& revealConfig)
@@ -13450,8 +13494,10 @@ namespace {
         //The handoff spreads into plateaus instead of landing in one frame
         CHECK(*revealSummary.largestRawO3Step < *baseSummary.largestRawO3Step);
 
-        //The last arrival's ramp is drawn out before the loop goes quiet
-        const int extraFrames = revealSummary.frames - baseSummary.frames;
+        //The last arrival's ramp is drawn out before the loop goes quiet. Both
+        //sweeps count from their own last arrival: the total frame count rides
+        //on when the disk delivers that node, which moves run to run.
+        const int extraFrames = framesAfterLastArrival(reveal) - framesAfterLastArrival(base);
         CHECK(extraFrames >= revealConfig.revealFrames - 1);
         CHECK(extraFrames <= 2 * revealConfig.revealFrames);
 
@@ -15776,4 +15822,194 @@ TEST_CASE("P2z/6 and the M7 orbit on a tile under C-measured-density and C-local
                              step);
         }
     }
+}
+
+namespace {
+    //! NAD83(CSRS) / UTM zone 10N, the system the LidarBC tiles declare
+    const QString kCsrsUtm10Wkt = QStringLiteral(
+        "PROJCS[\"NAD83(CSRS) / UTM zone 10N\",GEOGCS[\"NAD83(CSRS)\","
+        "DATUM[\"NAD83_Canadian_Spatial_Reference_System\","
+        "SPHEROID[\"GRS 1980\",6378137,298.257222101,AUTHORITY[\"EPSG\",\"7019\"]],"
+        "AUTHORITY[\"EPSG\",\"6140\"]],PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],"
+        "UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],"
+        "AUTHORITY[\"EPSG\",\"4617\"]],PROJECTION[\"Transverse_Mercator\"],"
+        "PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",-123],"
+        "PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],"
+        "PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],"
+        "AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH],AUTHORITY[\"EPSG\",\"3157\"]]");
+
+    //Where the lattice's corner sits, about where the BC tile does
+    constexpr double kLatticeEasting = 581000.0;
+    constexpr double kLatticeNorthing = 5663000.0;
+    constexpr double kLatticeElevation = 100.0;
+    constexpr double kLatticeStep = 0.1;
+    constexpr int kLatticeSide = 60;
+
+    //How far a decoded point may sit from the lattice point it came from
+    constexpr double kLatticeTolerance = 0.01;
+
+    //How far the frame's origin may sit from the tile's center, and the
+    //recenter shift from zero, in the file's meters
+    constexpr double kFrameCenterTolerance = 1.0;
+
+    QVector<cwGeoPoint> utmLatticePoints()
+    {
+        QVector<cwGeoPoint> points;
+        points.reserve(kLatticeSide * kLatticeSide);
+        for (int row = 0; row < kLatticeSide; row++) {
+            for (int column = 0; column < kLatticeSide; column++) {
+                points.append(cwGeoPoint(kLatticeEasting + column * kLatticeStep,
+                                         kLatticeNorthing + row * kLatticeStep,
+                                         kLatticeElevation));
+            }
+        }
+        return points;
+    }
+
+    QString writeUtmLatticeLaz(QTemporaryDir& dir)
+    {
+        const QString path = tempLazPath(dir, QStringLiteral("utm-lattice"));
+        REQUIRE(writeSyntheticGeoLazFile(path, utmLatticePoints(), kCsrsUtm10Wkt));
+        return path;
+    }
+
+    //! How far @a value sits from the nearest multiple of kLatticeStep past @a corner
+    double latticeResidual(double value, double corner)
+    {
+        const double steps = (value - corner) / kLatticeStep;
+        return std::abs(steps - std::round(steps)) * kLatticeStep;
+    }
+
+    //! How the decoded points of a lattice cloud land against the lattice
+    struct LatticeDecode {
+        //! The farthest any point sits from its nearest lattice point
+        double worstResidual = 0.0;
+        //! How many lattice points some decoded point lands nearest
+        qsizetype distinctLatticePoints = 0;
+    };
+
+    //! Where the points of @a shifted land against the lattice, once each is
+    //! slid back by its shift and carried from @a frameCS into @a sourceCS
+    LatticeDecode decodeAgainstLattice(const ShiftedOctree& shifted, const QString& frameCS,
+                                       const QString& sourceCS)
+    {
+        const cwPointOctreeSource& source = shifted.cache.source;
+        const cwPointOctreeManifest& manifest = *source.manifest;
+        const cwCoordinateTransform toSource(frameCS, sourceCS);
+        const cwDiskCacher cacher {QDir(source.cacheRootPath())};
+
+        LatticeDecode result;
+        QSet<QPair<qint64, qint64>> latticePoints;
+        for (int i = 0; i < manifest.nodes.size(); i++) {
+            const QByteArray bytes = cacher.entry(
+                cw::octree::nodeKey(source.lazPath, source.fingerprint, manifest.nodeName(i)));
+            REQUIRE(bytes.size() == qsizetype(manifest.nodes.at(i).pointCount)
+                                        * cw::octree::kBytesPerPoint);
+            const QBox3D bounds = manifest.nodeBounds(i);
+            for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
+                 offset += cw::octree::kBytesPerPoint) {
+                const QVector3D local =
+                    cw::octree::dequantize(quantizedPointAt(bytes, offset), bounds);
+                const cwGeoPoint inFrame(double(local.x()) + double(shifted.shift.x()),
+                                         double(local.y()) + double(shifted.shift.y()),
+                                         double(local.z()) + double(shifted.shift.z()));
+                const cwGeoPoint inSource = toSource.transform(inFrame);
+                result.worstResidual = std::max({result.worstResidual,
+                                                 latticeResidual(inSource.x, kLatticeEasting),
+                                                 latticeResidual(inSource.y, kLatticeNorthing),
+                                                 std::abs(inSource.z - kLatticeElevation)});
+                latticePoints.insert(
+                    {std::llround((inSource.x - kLatticeEasting) / kLatticeStep),
+                     std::llround((inSource.y - kLatticeNorthing) / kLatticeStep)});
+            }
+        }
+        result.distinctLatticePoints = latticePoints.size();
+        return result;
+    }
+} // namespace
+
+TEST_CASE("The tile request builds a projected LAZ in a local frame centered on the tile",
+          "[PointCloudEval]")
+{
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString lazPath = writeUtmLatticeLaz(dir);
+
+    const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(lazPath);
+    REQUIRE(probe.valid);
+    REQUIRE_FALSE(probe.sourceCS.isEmpty());
+
+    const QString frameCS = tileBuildRequest(dir.path(), lazPath).frameCS;
+    INFO("frameCS: " << frameCS.toStdString());
+
+    const std::string fileDatum = cwLocalProjection::datumName(probe.sourceCS).toStdString();
+    CHECK_FALSE(fileDatum.empty());
+    CHECK(cwLocalProjection::datumName(frameCS).toStdString() == fileDatum);
+
+    REQUIRE(cwLocalProjection::origin(frameCS).has_value());
+
+    //The frame has no false origin, so its (0, 0) is the point cwLocalProjection::origin() reports
+    const std::optional<cwGeoPoint> originInFile =
+        cwCoordinateTransform::transformPoint(frameCS, probe.sourceCS, cwGeoPoint());
+    REQUIRE(originInFile.has_value());
+    INFO("origin in the file's meters: " << originInFile->x << ", " << originInFile->y);
+    CHECK(originInFile->x >= probe.bboxMin.x);
+    CHECK(originInFile->x <= probe.bboxMax.x);
+    CHECK(originInFile->y >= probe.bboxMin.y);
+    CHECK(originInFile->y <= probe.bboxMax.y);
+    CHECK(originInFile->x
+          == Catch::Approx((probe.bboxMin.x + probe.bboxMax.x) * 0.5).margin(kFrameCenterTolerance));
+    CHECK(originInFile->y
+          == Catch::Approx((probe.bboxMin.y + probe.bboxMax.y) * 0.5).margin(kFrameCenterTolerance));
+}
+
+TEST_CASE("The tile request leaves a LAZ that names no CS in its own meters and still builds it",
+          "[PointCloudEval]")
+{
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString lazPath = writeMinimalLaz(tempLazPath(dir, QStringLiteral("no-cs")));
+    REQUIRE_FALSE(lazPath.isEmpty());
+
+    const cwPointOctreeBuilder::Request request = tileBuildRequest(dir.path(), lazPath);
+    CHECK(request.frameCS.isEmpty());
+
+    const ShiftedOctree shifted = buildShiftedOctree(request, std::nullopt);
+    CHECK(shifted.cache.source.manifest->pointCount > 0);
+}
+
+TEST_CASE("The tile request decodes a UTM lattice to within a centimeter of where it was surveyed",
+          "[PointCloudEval]")
+{
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString lazPath = writeUtmLatticeLaz(dir);
+
+    const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(lazPath);
+    REQUIRE(probe.valid);
+    const cwPointOctreeBuilder::Request request = tileBuildRequest(dir.path(), lazPath);
+
+    const ShiftedOctree shifted = buildShiftedOctree(request, std::nullopt);
+    const LatticeDecode decode = decodeAgainstLattice(shifted, request.frameCS, probe.sourceCS);
+    INFO("worst residual from the lattice: " << decode.worstResidual << " m");
+    CHECK(decode.worstResidual <= kLatticeTolerance);
+    //Every lattice point survives as itself, rather than merged onto a neighbor
+    CHECK(decode.distinctLatticePoints == qsizetype(kLatticeSide) * kLatticeSide);
+}
+
+TEST_CASE("The tile request leaves the recenter shift of a UTM cloud horizontally near zero",
+          "[PointCloudEval]")
+{
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString lazPath = writeUtmLatticeLaz(dir);
+
+    const ShiftedOctree shifted =
+        buildShiftedOctree(tileBuildRequest(dir.path(), lazPath), std::nullopt);
+    INFO("shift: " << shifted.shift.x() << ", " << shifted.shift.y() << ", "
+                   << shifted.shift.z());
+    //The frame carries heights through untouched, so the vertical shift is the
+    //cloud's own elevation
+    CHECK(std::hypot(double(shifted.shift.x()), double(shifted.shift.y()))
+          <= kFrameCenterTolerance);
 }

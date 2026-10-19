@@ -48,10 +48,10 @@ void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get
     double maxX = 0.0, maxY = 0.0, maxZ = 0.0;
     bool first = true;
     for (const auto& point : points) {
-        const QVector3D position = get(point);
-        const double x = double(position.x());
-        const double y = double(position.y());
-        const double z = double(position.z());
+        const cwGeoPoint position = get(point);
+        const double x = position.x;
+        const double y = position.y;
+        const double z = position.z;
         if (first) {
             minX = maxX = x;
             minY = maxY = y;
@@ -79,6 +79,19 @@ bool writeSyntheticLazFile(const QString& outPath,
                            const QString& wktCS,
                            LazCompression compression)
 {
+    QVector<cwGeoPoint> geoPoints;
+    geoPoints.reserve(points.size());
+    for (const QVector3D& p : points) {
+        geoPoints.append(cwGeoPoint::fromSceneLocal(p));
+    }
+    return writeSyntheticGeoLazFile(outPath, geoPoints, wktCS, compression);
+}
+
+bool writeSyntheticGeoLazFile(const QString& outPath,
+                              const QVector<cwGeoPoint>& points,
+                              const QString& wktCS,
+                              LazCompression compression)
+{
     LASheader header;
     header.clean_las_header();
     header.x_scale_factor = 0.001;
@@ -86,7 +99,7 @@ bool writeSyntheticLazFile(const QString& outPath,
     header.z_scale_factor = 0.001;
     header.point_data_format = 0;
     header.point_data_record_length = 20;
-    centerHeaderOffsets(&header, points, [](const QVector3D& p) { return p; });
+    centerHeaderOffsets(&header, points, [](const cwGeoPoint& p) { return p; });
 
     QByteArray wktBytes;
     if (!wktCS.isEmpty()) {
@@ -122,10 +135,10 @@ bool writeSyntheticLazFile(const QString& outPath,
         return false;
     }
 
-    for (const QVector3D& p : points) {
-        pointTemplate.set_x(double(p.x()));
-        pointTemplate.set_y(double(p.y()));
-        pointTemplate.set_z(double(p.z()));
+    for (const cwGeoPoint& p : points) {
+        pointTemplate.set_x(p.x);
+        pointTemplate.set_y(p.y);
+        pointTemplate.set_z(p.z);
         writer->write_point(&pointTemplate);
         writer->update_inventory(&pointTemplate);
     }
@@ -160,7 +173,9 @@ bool writeAttributedLazFile(const QString& outPath,
     header.point_data_format = pointDataFormat;
     header.point_data_record_length = recordLength;
     centerHeaderOffsets(&header, points,
-                        [](const LazAttributePoint& p) { return p.position; });
+                        [](const LazAttributePoint& p) {
+                            return cwGeoPoint::fromSceneLocal(p.position);
+                        });
     // Formats 6+ are LAS 1.4 only; a 1.2 header can't store their point count.
     if (pointDataFormat >= 6) {
         header.version_minor = 4;
