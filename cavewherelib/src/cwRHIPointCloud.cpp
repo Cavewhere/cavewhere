@@ -626,10 +626,22 @@ void cwRHIPointCloud::startFade(QRhiResourceUpdateBatch* batch, int index, NodeF
     // otherwise starts from all of it
     const NodeRecord& node = m_nodes.at(index);
     const bool turning = node.fade != NodeFade::None && node.fade != fade;
-    const double share = turning ? fadeShare(node, revealClock - 1)
-                                 : (fade == NodeFade::Out ? 1.0 : 0.0);
+    const double fadedShare = turning ? fadeShare(node, revealClock - 1)
+                                      : (fade == NodeFade::Out ? 1.0 : 0.0);
 
-    const int revealFrames = m_renderState.value().shading.revealFrames;
+    // Under Grow the share is the sprite's area, so one leaving before its
+    // arrival finished growing shrinks from the area it had reached
+    const cwPointCloudShading& shading = m_renderState.value().shading;
+    const int revealFrames = shading.revealFrames;
+    const bool leavingGrowing = fade == NodeFade::Out
+                                && shading.revealMode == cw::pointcloud::RevealMode::Grow;
+    const double share =
+        leavingGrowing
+            ? std::min(fadedShare,
+                       cw::clod::revealScale(cw::clod::revealAge(revealClock - 1, node.arrivalFrame),
+                                             revealFrames))
+            : fadedShare;
+
     const quint32 age = fade == NodeFade::In ? cw::clod::fadeInAgeFor(share, revealFrames)
                                              : cw::clod::fadeOutAgeFor(share, revealFrames);
     writeFade(batch, index, fade, revealClock > age ? revealClock - age : 0);

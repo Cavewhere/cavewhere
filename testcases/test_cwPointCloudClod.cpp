@@ -446,6 +446,8 @@ namespace {
     //! How close to one pixel the arrival frame's side sits under the long
     //! ramp: sqrt(1 + 15 / 60) is about 1.118
     constexpr double kNearOnePixel = 1.2;
+    //! A reveal ramp of no frames, whatever the shipped default is
+    constexpr int kNoRamp = 0;
 }
 
 TEST_CASE("A Grow arrival's sprite grows from one pixel to its size with its area linear in the ramp",
@@ -514,6 +516,92 @@ TEST_CASE("A Grow arrival's sprite grows from one pixel to its size with its are
             CHECK((area(side) - minArea) / (area(kSettledSidePx) - minArea)
                   == Catch::Approx(std::min(1.0, share + 1.0 / kTestRevealFrames)));
             CHECK(side > grownSize(kSettledSidePx, 0, kTestRevealFrames));
+        }
+    }
+}
+
+// ---- WP17: a Grow departure shrinks its sprites ------------------------------
+
+TEST_CASE("A Grow departure's sprite shrinks from its size to one pixel, the arrival's growth run backwards",
+          "[PointCloudClod]")
+{
+    const auto area = [](double side) { return side * side; };
+    const double minArea = area(cw::pointcloud::kMinPointSizePx);
+    const auto areaShare = [&](double side) {
+        return (area(side) - minArea) / (area(kSettledSidePx) - minArea);
+    };
+
+    SECTION("the frame a node leaves draws a sprite one step under its settled side") {
+        const double first = shrunkSize(kSettledSidePx, 0, kTestRevealFrames);
+        CHECK(first < kSettledSidePx);
+        CHECK(first > grownSize(kSettledSidePx, kTestRevealFrames - 3, kTestRevealFrames));
+        CHECK(areaShare(first) == Catch::Approx(1.0 - 1.0 / kTestRevealFrames));
+    }
+
+    SECTION("the area above one pixel is the departure share of the settled area above it") {
+        for (quint32 age = 0; age < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            const double side = shrunkSize(kSettledSidePx, age, kTestRevealFrames);
+            CHECK(areaShare(side)
+                  == Catch::Approx(departureScale(age, kTestRevealFrames)).margin(kZeroShareMargin));
+        }
+    }
+
+    SECTION("the last ramp frame and every frame after draw exactly one pixel") {
+        CHECK(shrunkSize(kInexactSidePx, kTestRevealFrames - 1, kTestRevealFrames)
+              == cw::pointcloud::kMinPointSizePx);
+        CHECK(shrunkSize(kInexactSidePx, kTestRevealFrames, kTestRevealFrames)
+              == cw::pointcloud::kMinPointSizePx);
+        CHECK(shrunkSize(kInexactSidePx, kLongAfter, kTestRevealFrames)
+              == cw::pointcloud::kMinPointSizePx);
+        CHECK(shrunkSize(kSettledSidePx, kTestRevealFrames - 2, kTestRevealFrames)
+              > cw::pointcloud::kMinPointSizePx);
+    }
+
+    SECTION("no ramp draws a departure at one pixel, as departureScale() draws it at nothing") {
+        for (quint32 age : {0u, 1u, kLongAfter}) {
+            INFO("age " << age);
+            CHECK(shrunkSize(kInexactSidePx, age, kNoRamp)
+                  == cw::pointcloud::kMinPointSizePx);
+        }
+    }
+
+    SECTION("every frame of the shrink is at most as wide as the one before") {
+        double previous = kSettledSidePx;
+        for (quint32 age = 0; age <= quint32(kLongRevealFrames); age++) {
+            INFO("age " << age);
+            const double side = shrunkSize(kSettledSidePx, age, kLongRevealFrames);
+            CHECK(side <= previous);
+            CHECK(side >= cw::pointcloud::kMinPointSizePx);
+            previous = side;
+        }
+    }
+
+    SECTION("the shrink is the growth's frames in reverse order") {
+        //departureScale(age) is revealScale(revealFrames - 2 - age): the
+        //arrival's first frame already draws 1 / revealFrames of the area, so
+        //the departure's one pixel frame, revealFrames - 1, has no mirror
+        for (quint32 age = 0; age + 1 < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            const quint32 mirror = quint32(kTestRevealFrames) - 2u - age;
+            CHECK(shrunkSize(kInexactSidePx, age, kTestRevealFrames)
+                  == Catch::Approx(grownSize(kInexactSidePx, mirror, kTestRevealFrames)));
+        }
+    }
+
+    SECTION("a one pixel sprite stays one pixel") {
+        CHECK(shrunkSize(cw::pointcloud::kMinPointSizePx, 0, kTestRevealFrames)
+              == cw::pointcloud::kMinPointSizePx);
+    }
+
+    SECTION("a node turning back mid-shrink grows on one step from the side it had") {
+        for (quint32 age = 0; age + 1 < quint32(kTestRevealFrames); age++) {
+            INFO("age " << age);
+            const double share = departureScale(age, kTestRevealFrames);
+            const double turned =
+                grownSize(kSettledSidePx, fadeInAgeFor(share, kTestRevealFrames), kTestRevealFrames);
+            CHECK(turned > shrunkSize(kSettledSidePx, age, kTestRevealFrames));
+            CHECK(areaShare(turned) == Catch::Approx(share + 1.0 / kTestRevealFrames));
         }
     }
 }

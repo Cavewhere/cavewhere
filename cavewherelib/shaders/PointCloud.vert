@@ -240,6 +240,14 @@ float revealScale(uint age)
     return min(1.0, (float(age) + 1.0) / float(revealFrames));
 }
 
+// cw::clod::spriteSideAtAreaShare: share of the way from one pixel to sizePx
+// with the sprite's area linear in share
+float spriteSideAtAreaShare(float sizePx, float share)
+{
+    float minArea = kMinSpritePx * kMinSpritePx;
+    return sqrt(minArea + (sizePx * sizePx - minArea) * share);
+}
+
 // cw::clod::grownSize: under RevealMode::Grow, a sprite age frames into its
 // arrival grows from one pixel to sizePx with its area linear in the ramp
 float grownSize(float sizePx, uint age)
@@ -248,8 +256,17 @@ float grownSize(float sizePx, uint age)
     if (scale >= 1.0 || sizePx <= kMinSpritePx) {
         return sizePx;
     }
-    float minArea = kMinSpritePx * kMinSpritePx;
-    return sqrt(minArea + (sizePx * sizePx - minArea) * scale);
+    return spriteSideAtAreaShare(sizePx, scale);
+}
+
+// cw::clod::shrunkSize: under RevealMode::Grow, a sprite age frames into its
+// departure shrinks from sizePx to one pixel, grownSize run backwards
+float shrunkSize(float sizePx, uint age)
+{
+    if (sizePx <= kMinSpritePx) {
+        return sizePx;
+    }
+    return spriteSideAtAreaShare(sizePx, 1.0 - revealScale(age));
 }
 
 // The age a Grow sprite grows by: its arrival's, or its re-entry's when that
@@ -379,17 +396,15 @@ void main(void)
     // The reveal ramp: under Cover an arrival draws a growing share of what
     // its weight keeps, so its points land over revealFrames frames rather
     // than in one. The rank order makes each frame's set a superset of the one
-    // before. Under Grow an arrival or a re-entry draws every point its weight
-    // keeps at once and grows its sprites instead (below); a departure fades
-    // its weight out under both.
+    // before, and a departure fades its weight out the same way. Under Grow an
+    // arrival, a re-entry or a departure draws every point its weight keeps
+    // and grows or shrinks its sprites instead (below).
     bool growMode = revealFrames > 0 && revealMode == kRevealGrow;
-    if (revealFrames > 0) {
-        if (!growMode) {
-            weight *= revealScale(currentFrame - nodeIds.x);
-        }
+    if (revealFrames > 0 && !growMode) {
+        weight *= revealScale(currentFrame - nodeIds.x);
         if (nodeFade.y == kFadeOut) {
             weight *= 1.0 - revealScale(currentFrame - nodeFade.x);
-        } else if (nodeFade.y == kFadeIn && !growMode) {
+        } else if (nodeFade.y == kFadeIn) {
             weight *= revealScale(currentFrame - nodeFade.x);
         }
     }
@@ -448,7 +463,14 @@ void main(void)
     // that's preferable to the inconsistent intensity.
     gl_PointSize = clamp(sizePx, kMinSpritePx, maxPointSizePx);
     if (growMode) {
-        gl_PointSize = grownSize(gl_PointSize, growthAge());
+        float side = grownSize(gl_PointSize, growthAge());
+        if (nodeFade.y == kFadeOut) {
+            // A departure shrinks from the side its growth had reached: startFade
+            // starts its ramp at that share, and the smaller of the two keeps the
+            // side from jumping up if the ramp's length changed since
+            side = min(side, shrunkSize(gl_PointSize, currentFrame - nodeFade.x));
+        }
+        gl_PointSize = side;
     }
 
     vColor = debugView == kViewOff ? kFlatColor

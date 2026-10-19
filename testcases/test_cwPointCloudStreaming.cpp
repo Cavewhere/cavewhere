@@ -2716,10 +2716,11 @@ namespace {
     }
 
     //! The share of its weight @a node drew on the last frame, by cw::clod:
-    //! its arrival's fade-in, times its fade-out while it is departing the
-    //! cut or its fade back in after it re-entered the cut already resident.
-    //! Under Grow an arrival and a re-entry draw every point their weight
-    //! keeps from their first frame, so only the fade-out scales the weight.
+    //! under Cover its arrival's fade-in, times its fade-out while it is
+    //! departing the cut or its fade back in after it re-entered the cut
+    //! already resident. Under Grow an arrival, a re-entry and a departure
+    //! all draw every point their weight keeps and move the sprite side
+    //! instead, so nothing scales the weight.
     double revealScaleOf(const PointCloudFixture& fixture, int node)
     {
         const int revealFrames = revealFramesOf(fixture);
@@ -2731,8 +2732,10 @@ namespace {
                                   : 1.0;
         const std::optional<quint64> departure = Access::departureFrame(fixture.backend(), node);
         if (departure.has_value()) {
-            return fadeIn
-                   * cw::clod::departureScale(revealAgeOf(fixture, *departure), revealFrames);
+            return covers ? fadeIn
+                                * cw::clod::departureScale(revealAgeOf(fixture, *departure),
+                                                           revealFrames)
+                          : fadeIn;
         }
         const std::optional<quint64> reentry = Access::reentryFrame(fixture.backend(), node);
         if (covers && reentry.has_value()) {
@@ -2766,13 +2769,36 @@ namespace {
         return age.has_value() ? cw::clod::grownSize(sidePx, *age, revealFrames) : sidePx;
     }
 
+    //! The age @a node's sprites shrank at on the last frame, by cw::clod:
+    //! under Grow with a ramp, its departure's age while it is departing;
+    //! otherwise nothing
+    std::optional<quint32> shrinkAgeOf(const PointCloudFixture& fixture, int node)
+    {
+        if (revealModeOf(fixture) != cw::pointcloud::RevealMode::Grow
+            || revealFramesOf(fixture) <= 0) {
+            return std::nullopt;
+        }
+        const std::optional<quint64> departure = Access::departureFrame(fixture.backend(), node);
+        if (departure.has_value()) {
+            return revealAgeOf(fixture, *departure);
+        }
+        return std::nullopt;
+    }
+
     //! The side @a node's sprites drew at on the last frame whose settled side
     //! is @a sidePx, by cw::clod: under Grow an arrival or a re-entry grows
-    //! from one pixel by grownSize() at the younger of its two ramps' ages;
-    //! under Cover, or with no ramp, the settled side itself
+    //! from one pixel by grownSize() at the younger of its two ramps' ages,
+    //! and a departure shrinks to one pixel by shrunkSize(), the smaller of
+    //! the two for a node that left before its growth ended; under Cover, or
+    //! with no ramp, the settled side itself
     double grownSidePxOf(const PointCloudFixture& fixture, int node, double sidePx)
     {
-        return grownSidePx(sidePx, growthAgeOf(fixture, node), revealFramesOf(fixture));
+        const int revealFrames = revealFramesOf(fixture);
+        const double grown = grownSidePx(sidePx, growthAgeOf(fixture, node), revealFrames);
+        const std::optional<quint32> shrinkAge = shrinkAgeOf(fixture, node);
+        return shrinkAge.has_value()
+                   ? std::min(grown, cw::clod::shrunkSize(sidePx, *shrinkAge, revealFrames))
+                   : grown;
     }
 
     //! The nodes the last frame drew: the cut's resident nodes, and the ones
@@ -8061,8 +8087,10 @@ namespace {
     //! the squares are also drawn into covered, top row first like the readback,
     //! and so are the squares of kept points just off the target's sides: the
     //! GPU draws a sprite whose center the viewport clips as long as its depth
-    //! is inside, so its square reaches in from the edge.
-    DrawPrediction predictedDraw(const PointCloudFixture& fixture, bool rasterize = false)
+    //! is inside, so its square reaches in from the edge. With @a onlyNode
+    //! the prediction covers that drawn node's points alone.
+    DrawPrediction predictedDraw(const PointCloudFixture& fixture, bool rasterize = false,
+                                 std::optional<int> onlyNode = std::nullopt)
     {
         using namespace cw::pointcloud;
 
@@ -8095,6 +8123,9 @@ namespace {
         }
         const cwPointOctreeManifest& manifest = fixture.manifest();
         for (int node : drawingNodes(fixture)) {
+            if (onlyNode.has_value() && node != *onlyNode) {
+                continue;
+            }
             const QBox3D bounds = manifest.nodeBounds(node);
             const double nodeSpacing = nodeDrawSpacing(manifest, node, spacingSourceOf(uniform));
             const double floorSpacing = revealedFloorOf(fixture, node);
@@ -9616,6 +9647,7 @@ namespace {
         CwRhiPointCloudTestAccess::PerCloudUniform uniform;
         QHash<int, double> floors;
         QHash<int, quint32> growthAges;
+        QHash<int, quint32> shrinkAges;
     };
 
     TwinFrame twinFrame(const PointCloudFixture& fixture)
@@ -9629,6 +9661,10 @@ namespace {
             if (age.has_value()) {
                 frame.growthAges.insert(node, *age);
             }
+            const std::optional<quint32> shrinkAge = shrinkAgeOf(fixture, node);
+            if (shrinkAge.has_value()) {
+                frame.shrinkAges.insert(node, *shrinkAge);
+            }
         }
         return frame;
     }
@@ -9640,6 +9676,18 @@ namespace {
         const auto found = frame.growthAges.constFind(node);
         return found != frame.growthAges.cend() ? std::optional<quint32>(found.value())
                                                 : std::nullopt;
+    }
+
+    //! The side @a node drew at in @a frame whose settled side is @a sidePx:
+    //! grownSidePxOf() read back from the frame's recorded ages
+    double drawnSidePxIn(const TwinFrame& frame, int node, double sidePx)
+    {
+        const int revealFrames = frame.uniform.revealFrames;
+        const double grown = grownSidePx(sidePx, growthAgeIn(frame, node), revealFrames);
+        const auto shrinkAge = frame.shrinkAges.constFind(node);
+        return shrinkAge != frame.shrinkAges.cend()
+                   ? std::min(grown, cw::clod::shrunkSize(sidePx, shrinkAge.value(), revealFrames))
+                   : grown;
     }
 
     //! M6 between two frames
@@ -9691,10 +9739,8 @@ namespace {
             const double sideBefore = twinSpriteSidePx(previous.uniform, before.value(),
                                                        nodeSpacing, pixelsPerMeter);
             counters.spriteSideChangePx += std::abs(sideNow - sideBefore);
-            const double drawnNow = grownSidePx(sideNow, growthAgeIn(current, node),
-                                                current.uniform.revealFrames);
-            const double drawnBefore = grownSidePx(sideBefore, growthAgeIn(previous, node),
-                                                   previous.uniform.revealFrames);
+            const double drawnNow = drawnSidePxIn(current, node, sideNow);
+            const double drawnBefore = drawnSidePxIn(previous, node, sideBefore);
             counters.spriteSideShrinkPx += std::max(0.0, drawnBefore - drawnNow);
             counters.weightChange += std::abs(weightUnder(current.uniform, nodeSpacing,
                                                           pixelsPerMeter)
@@ -13198,18 +13244,31 @@ TEST_CASE("Under the reveal ramp children leaving the cut fade out while their a
 
 namespace {
 
-    //! The thinning-off, grid-spaced fixture the departure cases share: the
-    //! root and its children resident and past every ramp under
-    //! @a revealFrames, every resident point drawing
-    cwRenderBudgets settleRootAndChildren(PointCloudFixture& fixture, int revealFrames)
+    //! The thinning-off, grid-spaced shading the departure cases share, every
+    //! resident point drawing at @a coverage under @a revealFrames and @a mode,
+    //! seen from the close ortho height
+    void configureCloseGrid(PointCloudFixture& fixture, int revealFrames,
+                            cw::pointcloud::RevealMode mode, float coverage)
     {
         fixture.setReadbackEnabled(true);
         setThinningMode(fixture, cw::pointcloud::ThinningMode::Off);
         setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
-        fixture.render().setSpacingCoverage(kWheelCoverage);
+        fixture.render().setSpacingCoverage(coverage);
         fixture.synchronize();
         setRevealFrames(fixture, revealFrames);
+        setRevealMode(fixture, mode);
+        REQUIRE(revealModeOf(fixture) == mode);
         fixture.setOrthoHeight(kCloseOrthoHeight);
+    }
+
+    //! The fixture configureCloseGrid() sets up with the root and its children
+    //! resident and past every ramp
+    cwRenderBudgets settleRootAndChildren(PointCloudFixture& fixture, int revealFrames,
+                                          cw::pointcloud::RevealMode mode
+                                          = cw::pointcloud::kDefaultRevealMode,
+                                          float coverage = kWheelCoverage)
+    {
+        configureCloseGrid(fixture, revealFrames, mode, coverage);
 
         cwRenderBudgets budgets = fixture.budgets();
         budgets.maxLevel = kRootLevel + 1;
@@ -14353,6 +14412,511 @@ TEST_CASE("Under Grow a child whose load failed leaves its ancestor floored at t
     //A failed node stays missing for good, so its ancestor covers its cell
     CHECK(Access::nodeFloorRamp(fixture.backend(), parent).target
           == float(drawnCut.at(drawnParent)));
+}
+
+namespace {
+
+    // ---- WP17 a Grow departure shrinks its sprites -------------------------
+
+    //! A coverage at which the settled frames on either side of a departure
+    //! light the surface solid, so the holes the ramp opens show inside it
+    constexpr float kDepartureCoverage = 1.0f;
+
+    //! How far past the settled frames on either side of the ramp, as a share
+    //! of their lit pixels, a Grow departure's frames may light: the departing
+    //! children keep their cells lit while their ancestor grows over them
+    constexpr double kGrowDepartureLitBand = 0.01;
+
+    //! How far, as a share of the children's settled points, the points a
+    //! Cover departure thins to may sit off the departure's share of them: the
+    //! rank order is stratified over a node's octants, so a few hundred points
+    //! split it only roughly
+    constexpr double kDepartureRankShareTolerance = 0.1;
+
+    //! Frames a child draws its growth for before it is dropped mid-arrival,
+    //! well inside kStreamingRevealFrames
+    constexpr int kMidArrivalFrames = 2;
+
+    //! One frame of a departure, as the GPU and the twin saw it
+    struct DepartureFrame {
+        qsizetype lit = 0;
+        PixelMask litMask;
+        qsizetype twinDisagreement = 0;
+        double rootFloor = 0.0;
+        int departing = 0;
+        //! Each child's points the twin draws, its widest sprite side and its
+        //! departure's age, when it is departing
+        QHash<int, qint64> childPoints;
+        QHash<int, double> childSidePx;
+        QHash<int, quint32> departureAge;
+    };
+
+    //! The drawn nodes below the root with points the view holds
+    QVector<int> visibleChildren(const PointCloudFixture& fixture)
+    {
+        QVector<int> visible;
+        for (const int child : drawnChildren(fixture)) {
+            if (predictedDraw(fixture, false, child).points > 0) {
+                visible.append(child);
+            }
+        }
+        return visible;
+    }
+
+    DepartureFrame departureFrame(const PointCloudFixture& fixture, const QVector<int>& children)
+    {
+        DepartureFrame frame;
+        frame.lit = fixture.litPixels().size();
+        frame.litMask = litMask(fixture);
+        frame.twinDisagreement = twinDisagreementBeyondEdge(fixture);
+        frame.rootFloor = revealedFloorOf(fixture, kRootIndex);
+        frame.departing = Access::departingNodes(fixture.backend()).size();
+        for (const int child : children) {
+            const DrawPrediction prediction = predictedDraw(fixture, false, child);
+            frame.childPoints.insert(child, prediction.points);
+            frame.childSidePx.insert(child, prediction.widestSidePx);
+            const std::optional<quint64> departure = Access::departureFrame(fixture.backend(), child);
+            if (departure.has_value()) {
+                frame.departureAge.insert(child, revealAgeOf(fixture, *departure));
+            }
+        }
+        return frame;
+    }
+
+    //! The root and its children settled under @a mode, then the children
+    //! dropped from the cut and still resident, recorded from the frame they
+    //! leave until kFramesPastRamp frames past their ramp
+    struct Departure {
+        QVector<int> children;
+        DepartureFrame settled;
+        QVector<DepartureFrame> frames;
+        float rootSpacing = 0.0f;
+        float childSpacing = 0.0f;
+    };
+
+    Departure departure(QRhi* rhi, cw::pointcloud::RevealMode mode, float coverage)
+    {
+        PointCloudFixture fixture(rhi, QStringLiteral("reveal-departure-mode"));
+        cwRenderBudgets budgets =
+            settleRootAndChildren(fixture, kStreamingRevealFrames, mode, coverage);
+
+        Departure run;
+        run.children = visibleChildren(fixture);
+        run.settled = departureFrame(fixture, run.children);
+        run.rootSpacing = ownFloorSpacing(fixture.manifest(), kRootIndex);
+        run.childSpacing = float(fixture.manifest().spacing(kRootLevel + 1));
+
+        budgets.maxLevel = kRootLevel;
+        fixture.setBudgets(budgets);
+        for (int i = 0; i < kStreamingRevealFrames + kFramesPastRamp; i++) {
+            fixture.renderFrame();
+            run.frames.append(departureFrame(fixture, run.children));
+        }
+        return run;
+    }
+
+    //! The side a sprite whose settled side is @a settledSidePx draws
+    //! @a share of the way through its area above one pixel, spelled out
+    //! rather than taken from cw::clod
+    double sideAtAreaShare(double settledSidePx, double share)
+    {
+        constexpr double kMinSpriteArea = kMinSpritePx * kMinSpritePx;
+        return std::sqrt(kMinSpriteArea
+                         + (settledSidePx * settledSidePx - kMinSpriteArea) * share);
+    }
+
+    //! The lit pixels of the settled frames on either side of @a run's ramp
+    struct LitBand {
+        double lower = 0.0;
+        double upper = 0.0;
+    };
+
+    LitBand litBand(const Departure& run)
+    {
+        const double before = double(run.settled.lit);
+        const double after = double(run.frames.constLast().lit);
+        return {std::min(before, after), std::max(before, after)};
+    }
+
+    //! The fewest lit pixels any frame of @a run drew, as a share of
+    //! @a band's lower end
+    double deepestLitShare(const Departure& run, const LitBand& band)
+    {
+        double deepest = std::numeric_limits<double>::max();
+        for (const DepartureFrame& frame : run.frames) {
+            deepest = std::min(deepest, double(frame.lit) / band.lower);
+        }
+        return deepest;
+    }
+
+} // namespace
+
+TEST_CASE("Under Grow a departing child keeps every point and shrinks its sprites to one pixel over the ramp",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    const Departure grow = departure(rhi.get(), cw::pointcloud::RevealMode::Grow, kWheelCoverage);
+    const Departure cover = departure(rhi.get(), cw::pointcloud::RevealMode::Cover, kWheelCoverage);
+    REQUIRE_FALSE(grow.children.isEmpty());
+    REQUIRE(grow.children == cover.children);
+    REQUIRE(grow.frames.size() == cover.frames.size());
+
+    for (qsizetype i = 0; i < grow.frames.size(); i++) {
+        const DepartureFrame& frame = grow.frames.at(i);
+        const bool fading = i + 1 < kStreamingRevealFrames;
+        INFO("Grow frame " << i << " after the children left: " << frame.departing
+             << " departing, root floor " << frame.rootFloor << ", lit " << frame.lit);
+        CHECK((frame.departing > 0) == fading);
+        CHECK(frame.twinDisagreement == 0);
+
+        for (const int child : grow.children) {
+            const qint64 settledPoints = grow.settled.childPoints.value(child);
+            const double settledSide = grow.settled.childSidePx.value(child);
+            INFO("child " << child << ": " << frame.childPoints.value(child) << " of "
+                 << settledPoints << " points, side " << frame.childSidePx.value(child)
+                 << " of " << settledSide << " px");
+            REQUIRE(settledPoints > 0);
+            REQUIRE(settledSide > kVisibleGrowthSidePx);
+            if (!fading) {
+                //Its ramp ran out: finishDeparture() took it out of the drawing
+                CHECK(frame.childPoints.value(child) == 0);
+                continue;
+            }
+            REQUIRE(frame.departureAge.contains(child));
+            const quint32 age = frame.departureAge.value(child);
+            CHECK(age == quint32(i));
+
+            //Every point its weight keeps, all the way down the ramp
+            CHECK(std::abs(double(frame.childPoints.value(child)) - double(settledPoints))
+                  <= kThinnedCountTolerance * double(settledPoints));
+
+            //Its side shrinks to one pixel with its area linear in the
+            //departure's share
+            CHECK(frame.childSidePx.value(child)
+                  == Catch::Approx(sideAtAreaShare(
+                                       settledSide,
+                                       cw::clod::departureScale(age, kStreamingRevealFrames)))
+                         .margin(kSideTolerancePx));
+        }
+    }
+
+    //The ancestor's floor ramps exactly as Cover's does
+    for (qsizetype i = 0; i < grow.frames.size(); i++) {
+        INFO("frame " << i << ": Grow root floor " << grow.frames.at(i).rootFloor << ", Cover "
+             << cover.frames.at(i).rootFloor);
+        CHECK(grow.frames.at(i).rootFloor == Catch::Approx(cover.frames.at(i).rootFloor));
+    }
+    CHECK(grow.frames.constFirst().rootFloor > double(grow.childSpacing));
+    CHECK(grow.frames.constFirst().rootFloor < double(grow.rootSpacing));
+    CHECK(grow.frames.constLast().rootFloor == Catch::Approx(grow.rootSpacing));
+}
+
+TEST_CASE("Under Cover a departing child thins by the departure's share and keeps its sprite side",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    const Departure cover = departure(rhi.get(), cw::pointcloud::RevealMode::Cover, kWheelCoverage);
+    REQUIRE_FALSE(cover.children.isEmpty());
+
+    for (qsizetype i = 0; i < cover.frames.size(); i++) {
+        const DepartureFrame& frame = cover.frames.at(i);
+        const bool fading = i + 1 < kStreamingRevealFrames;
+        INFO("Cover frame " << i << " after the children left: " << frame.departing
+             << " departing");
+        CHECK((frame.departing > 0) == fading);
+        CHECK(frame.twinDisagreement == 0);
+
+        qint64 settledPoints = 0;
+        qint64 points = 0;
+        for (const int child : cover.children) {
+            const qint64 settledChildPoints = cover.settled.childPoints.value(child);
+            const double settledSide = cover.settled.childSidePx.value(child);
+            INFO("child " << child << ": " << frame.childPoints.value(child) << " of "
+                 << settledChildPoints << " points, side " << frame.childSidePx.value(child)
+                 << " of " << settledSide << " px");
+            REQUIRE(settledChildPoints > 0);
+            settledPoints += settledChildPoints;
+            points += frame.childPoints.value(child);
+            if (!fading) {
+                CHECK(frame.childPoints.value(child) == 0);
+                continue;
+            }
+            REQUIRE(frame.departureAge.contains(child));
+            CHECK(frame.departureAge.value(child) == quint32(i));
+            CHECK(frame.childPoints.value(child) < settledChildPoints);
+            if (i > 0) {
+                CHECK(frame.childPoints.value(child)
+                      <= cover.frames.at(i - 1).childPoints.value(child));
+            }
+            CHECK(frame.childSidePx.value(child)
+                  == Catch::Approx(settledSide).margin(kSideTolerancePx));
+        }
+
+        //Thinned by the departure's share, over the children together since
+        //the rank order spreads a share evenly over a node's octants rather
+        //than over a handful of its points
+        if (fading) {
+            const double share = cw::clod::departureScale(quint32(i), kStreamingRevealFrames);
+            INFO(points << " of " << settledPoints << " child points at share " << share);
+            CHECK(std::abs(double(points) - share * double(settledPoints))
+                  <= kDepartureRankShareTolerance * double(settledPoints));
+        }
+    }
+}
+
+TEST_CASE("Under Grow a child turning back mid-departure grows on from the side it had",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-departure-turnaround"));
+    cwRenderBudgets budgets = settleRootAndChildren(fixture, kStreamingRevealFrames,
+                                                    cw::pointcloud::RevealMode::Grow);
+    const QVector<int> children = visibleChildren(fixture);
+    REQUIRE_FALSE(children.isEmpty());
+    const DepartureFrame settled = departureFrame(fixture, children);
+
+    budgets.maxLevel = kRootLevel;
+    fixture.setBudgets(budgets);
+    QVector<DepartureFrame> leaving;
+    for (int i = 0; i < kTurnAroundFrames; i++) {
+        fixture.renderFrame();
+        leaving.append(departureFrame(fixture, children));
+    }
+    for (const int child : children) {
+        REQUIRE(Access::departingNodes(fixture.backend()).contains(child));
+    }
+
+    budgets.maxLevel = kRootLevel + 1;
+    fixture.setBudgets(budgets);
+    QVector<DepartureFrame> back;
+    for (int i = 0; i < kStreamingRevealFrames + kFramesPastRamp; i++) {
+        fixture.renderFrame();
+        back.append(departureFrame(fixture, children));
+    }
+    CHECK(Access::departingNodes(fixture.backend()).isEmpty());
+
+    for (const int child : children) {
+        const double settledSide = settled.childSidePx.value(child);
+        const double lastLeavingSide = leaving.constLast().childSidePx.value(child);
+        const double turnedSide = back.constFirst().childSidePx.value(child);
+        REQUIRE(leaving.constLast().departureAge.contains(child));
+        const double lastShare = cw::clod::departureScale(
+            leaving.constLast().departureAge.value(child), kStreamingRevealFrames);
+        INFO("child " << child << ": settled side " << settledSide << " px, last leaving "
+             << lastLeavingSide << " px at share " << lastShare << ", turned " << turnedSide
+             << " px");
+        REQUIRE(settledSide > kVisibleGrowthSidePx);
+
+        //It shrank while it left, and turned around one step up from there
+        CHECK(lastLeavingSide < settledSide - kSideTolerancePx);
+        CHECK(turnedSide >= lastLeavingSide - kSideTolerancePx);
+        CHECK(turnedSide
+              == Catch::Approx(sideAtAreaShare(settledSide,
+                                               lastShare + 1.0 / kStreamingRevealFrames))
+                     .margin(kSideTolerancePx));
+
+        for (int i = 0; i < back.size(); i++) {
+            const DepartureFrame& frame = back.at(i);
+            const double side = frame.childSidePx.value(child);
+            INFO("frame " << i << " after turning back: side " << side << " px, "
+                 << frame.childPoints.value(child) << " of " << settled.childPoints.value(child)
+                 << " points");
+            CHECK(side <= settledSide + kSideTolerancePx);
+            CHECK(side >= turnedSide - kSideTolerancePx);
+            CHECK(frame.childPoints.value(child) == settled.childPoints.value(child));
+            CHECK(frame.twinDisagreement == 0);
+            if (i > 0) {
+                CHECK(side >= back.at(i - 1).childSidePx.value(child) - kSideTolerancePx);
+            }
+        }
+        CHECK(back.constLast().childSidePx.value(child)
+              == Catch::Approx(settledSide).margin(kSideTolerancePx));
+    }
+}
+
+TEST_CASE("Under Grow a child dropped mid-arrival shrinks from the side it had reached",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-departure-mid-arrival"));
+    configureCloseGrid(fixture, kStreamingRevealFrames, cw::pointcloud::RevealMode::Grow,
+                       kWheelCoverage);
+
+    //The root alone, past its own ramp
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.maxLevel = kRootLevel;
+    fixture.setBudgets(budgets);
+    fixture.renderUntilQuiet();
+    for (int i = 0; i < kStreamingRevealFrames; i++) {
+        fixture.renderFrame();
+    }
+    REQUIRE(Access::drawnNodes(fixture.backend()) == QVector<int>{kRootIndex});
+
+    //Its children land and grow for a few frames
+    budgets.maxLevel = kRootLevel + 1;
+    fixture.setBudgets(budgets);
+    QElapsedTimer timer;
+    timer.start();
+    while (drawnChildren(fixture).isEmpty() && timer.elapsed() < kWaitTimeoutMs) {
+        fixture.renderFrame();
+        QThread::msleep(kFramePauseMs);
+    }
+    for (int i = 0; i < kMidArrivalFrames; i++) {
+        fixture.renderFrame();
+    }
+    const QVector<int> children = visibleChildren(fixture);
+    REQUIRE_FALSE(children.isEmpty());
+    const DepartureFrame beforeDrop = departureFrame(fixture, children);
+    for (const int child : children) {
+        const quint32 growthAge =
+            revealAgeOf(fixture, Access::arrivalFrame(fixture.backend(), child));
+        INFO("child " << child << " growth age " << growthAge);
+        REQUIRE(cw::clod::revealing(growthAge, kStreamingRevealFrames));
+    }
+
+    //Dropped before their growth ended
+    budgets.maxLevel = kRootLevel;
+    fixture.setBudgets(budgets);
+    QVector<DepartureFrame> leaving;
+    for (int i = 0; i < kStreamingRevealFrames + kFramesPastRamp; i++) {
+        fixture.renderFrame();
+        leaving.append(departureFrame(fixture, children));
+    }
+
+    for (const int child : children) {
+        double previous = beforeDrop.childSidePx.value(child);
+        REQUIRE(previous > 0.0);
+        for (int i = 0; i < leaving.size(); i++) {
+            const DepartureFrame& frame = leaving.at(i);
+            if (!frame.departureAge.contains(child)) {
+                CHECK(frame.childPoints.value(child) == 0);
+                continue;
+            }
+            const double side = frame.childSidePx.value(child);
+            INFO("child " << child << ", frame " << i << " after the drop: side " << side
+                 << " px, the frame before " << previous << " px");
+            CHECK(side <= previous + kSideTolerancePx);
+            CHECK(frame.twinDisagreement == 0);
+            previous = side;
+        }
+    }
+}
+
+TEST_CASE("Under Grow a departing child's points stay lit on every frame of its ramp, as the twin predicts",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    //The thinning plane at its full-weight height, where every drawn point
+    //is its own lit pixel, so the lit count is the drawn count
+    PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
+    cwRenderBudgets budgets = fixture.budgets();
+    budgets.screenSpaceErrorPx = kThinningScreenSpaceErrorPx;
+    budgets.maxLevel = kRootLevel + 1;
+    fixture.setBudgets(budgets);
+    fixture.render().setSpacingCoverage(kThinningSpacingCoverage);
+    fixture.synchronize();
+    setRevealFrames(fixture, kStreamingRevealFrames);
+    setRevealMode(fixture, cw::pointcloud::RevealMode::Grow);
+    fixture.setReadbackEnabled(true);
+    fixture.setOrthoHeight(kThinningFullWeightHeight);
+    fixture.renderUntilQuiet();
+    for (int i = 0; i < kStreamingRevealFrames; i++) {
+        fixture.renderFrame();
+    }
+    REQUIRE(Access::drawnNodes(fixture.backend()).size() > 1);
+    const qsizetype settled = fixture.litPixels().size();
+    REQUIRE(settled > 0);
+
+    budgets.maxLevel = kRootLevel;
+    fixture.setBudgets(budgets);
+    for (int i = 0; i + 1 < kStreamingRevealFrames; i++) {
+        fixture.renderFrame();
+        const qsizetype lit = fixture.litPixels().size();
+        const int predicted = predictedDrawnCount(fixture, kThinningFullWeightHeight);
+        INFO("frame " << i << " after the children left: lit " << lit << ", predicted "
+             << predicted << ", settled " << settled << ", "
+             << Access::departingNodes(fixture.backend()).size() << " departing");
+        REQUIRE_FALSE(Access::departingNodes(fixture.backend()).isEmpty());
+        CHECK(std::abs(double(lit) - double(predicted))
+              <= kThinnedCountTolerance * double(predicted));
+        CHECK(std::abs(double(lit) - double(settled)) <= kThinnedCountTolerance * double(settled));
+    }
+}
+
+TEST_CASE("Under Grow a departure holds the lit pixels its children and their ancestor draw, where Cover dips",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+
+    const Departure grow =
+        departure(rhi.get(), cw::pointcloud::RevealMode::Grow, kDepartureCoverage);
+    const Departure cover =
+        departure(rhi.get(), cw::pointcloud::RevealMode::Cover, kDepartureCoverage);
+    REQUIRE(grow.settled.lit > 0);
+    REQUIRE(cover.settled.lit == grow.settled.lit);
+    REQUIRE(cover.frames.constLast().lit == grow.frames.constLast().lit);
+
+    //The settled frames on either side of the ramp: the root and its
+    //children, and the root alone at its own spacing
+    const LitBand band = litBand(grow);
+    QString growLit;
+    QString coverLit;
+    for (qsizetype i = 0; i < grow.frames.size(); i++) {
+        growLit += QStringLiteral(" %1").arg(grow.frames.at(i).lit);
+        coverLit += QStringLiteral(" %1").arg(cover.frames.at(i).lit);
+    }
+    //Holes inside the surface the settled frames light on both sides of the
+    //ramp: Cover's thinned children leave whole cells open where Grow's
+    //shrunk ones leave a gap around each point
+    const auto holesOf = [](const Departure& run) {
+        const PixelMask& before = run.settled.litMask;
+        const PixelMask& after = run.frames.constLast().litMask;
+        PixelMask surface(before.size);
+        for (int y = 0; y < before.size.height(); y++) {
+            for (int x = 0; x < before.size.width(); x++) {
+                surface.setAt(x, y, before.at(x, y) && after.at(x, y));
+            }
+        }
+        QVector<HoleStats> holes;
+        for (const DepartureFrame& frame : run.frames) {
+            holes.append(holeStats(frame.litMask, surface));
+        }
+        return holes;
+    };
+    const QVector<HoleStats> growHoles = holesOf(grow);
+    const QVector<HoleStats> coverHoles = holesOf(cover);
+    const auto widestHole = [](const QVector<HoleStats>& holes) {
+        int widest = 0;
+        QString text;
+        for (const HoleStats& stats : holes) {
+            widest = std::max(widest, stats.maxSidePx);
+            text += QStringLiteral(" %1/%2").arg(stats.fraction, 0, 'f', 5).arg(stats.maxSidePx);
+        }
+        return std::pair<int, QString>(widest, text);
+    };
+    const auto [growWidest, growHoleText] = widestHole(growHoles);
+    const auto [coverWidest, coverHoleText] = widestHole(coverHoles);
+    WARN("Holes inside the settled surface over the departure ramp (fraction/widest px): Cover"
+         << coverHoleText.toStdString() << ", widest " << coverWidest << "\n  Grow "
+         << growHoleText.toStdString() << ", widest " << growWidest);
+
+    WARN("Lit pixels over the departure ramp, settled " << grow.settled.lit << " before and "
+         << grow.frames.constLast().lit << " after; the deepest frame's share of the lower: Cover "
+         << deepestLitShare(cover, band) << ", Grow " << deepestLitShare(grow, band)
+         << "\n  Cover:" << coverLit.toStdString() << "\n  Grow: " << growLit.toStdString());
+
+    for (qsizetype i = 0; i < grow.frames.size(); i++) {
+        const qsizetype lit = grow.frames.at(i).lit;
+        INFO("frame " << i << ": Grow lit " << lit << ", Cover lit " << cover.frames.at(i).lit
+             << ", band " << band.lower << " to " << band.upper);
+        CHECK(double(lit) >= band.lower * (1.0 - kGrowDepartureLitBand));
+        CHECK(double(lit) <= band.upper * (1.0 + kGrowDepartureLitBand));
+    }
 }
 
 TEST_CASE("Under Cover, the default, the reveal ramp floors from the drawn cut and agrees with the twin at revealFrames 0 and 8",

@@ -335,6 +335,25 @@ namespace cw::clod {
         return std::min(1.0, (double(age) + 1.0) / double(revealFrames));
     }
 
+    //! The share of its weight a node that left the cut @a age frames ago
+    //! still draws: the arrival's revealScale() run backwards, so the frame it
+    //! leaves draws 1 - 1 / revealFrames and frame revealFrames - 1 draws
+    //! nothing. Under Cover PointCloud.vert fades a departing node's weight
+    //! the same way; under Grow shrunkSize() shrinks its sprites by it.
+    inline double departureScale(quint32 age, int revealFrames)
+    {
+        return 1.0 - revealScale(age, revealFrames);
+    }
+
+    //! The side, in pixels, of a sprite @a share of the way from one pixel to
+    //! its settled side @a sizePx with its area linear in @a share: side =
+    //! sqrt(1 + (sizePx^2 - 1) * share). Both Grow ramps size by it.
+    inline double spriteSideAtAreaShare(double sizePx, double share)
+    {
+        const double minArea = cw::pointcloud::kMinPointSizePx * cw::pointcloud::kMinPointSizePx;
+        return std::sqrt(minArea + (sizePx * sizePx - minArea) * share);
+    }
+
     /**
      * The side, in pixels, of a sprite whose settled side is @a sizePx, @a age
      * frames into a Grow arrival under a reveal ramp of @a revealFrames
@@ -350,8 +369,25 @@ namespace cw::clod {
         if (scale >= 1.0 || sizePx <= cw::pointcloud::kMinPointSizePx) {
             return sizePx;
         }
-        const double minArea = cw::pointcloud::kMinPointSizePx * cw::pointcloud::kMinPointSizePx;
-        return std::sqrt(minArea + (sizePx * sizePx - minArea) * scale);
+        return spriteSideAtAreaShare(sizePx, scale);
+    }
+
+    /**
+     * The side, in pixels, of a sprite whose settled side is @a sizePx, @a age
+     * frames into a Grow departure under a reveal ramp of @a revealFrames
+     * frames (cw::pointcloud::RevealMode::Grow): grownSize() run backwards,
+     * @a sizePx shrinking to one pixel with the sprite's area linear in
+     * departureScale(age, revealFrames), so the frame a node leaves draws one
+     * step under @a sizePx and frame revealFrames - 1 on, and every age while
+     * @a revealFrames is 0, draws exactly one pixel. PointCloud.vert shrinks a
+     * departing node's sprites the same way.
+     */
+    inline double shrunkSize(double sizePx, quint32 age, int revealFrames)
+    {
+        if (sizePx <= cw::pointcloud::kMinPointSizePx) {
+            return sizePx;
+        }
+        return spriteSideAtAreaShare(sizePx, departureScale(age, revealFrames));
     }
 
     /**
@@ -371,15 +407,6 @@ namespace cw::clod {
         }
         return std::exp2(std::log2(previousFloor)
                          + (std::log2(floor) - std::log2(previousFloor)) * scale);
-    }
-
-    //! The share of its weight a node that left the cut @a age frames ago
-    //! still draws: the arrival's revealScale() run backwards, so the frame it
-    //! leaves draws 1 - 1 / revealFrames and frame revealFrames - 1 draws
-    //! nothing. PointCloud.vert fades a departing node the same way.
-    inline double departureScale(quint32 age, int revealFrames)
-    {
-        return 1.0 - revealScale(age, revealFrames);
     }
 
     //! The age a fade-in takes over at from a node drawing @a share of its
