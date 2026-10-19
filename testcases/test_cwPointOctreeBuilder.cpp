@@ -9,7 +9,10 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QLoggingCategory>
+#include <QMap>
 #include <QMutex>
+#include <QPair>
+#include <QSet>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QThreadPool>
@@ -24,6 +27,8 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <optional>
+#include <tuple>
 #include <utility>
 
 //Our includes
@@ -866,7 +871,8 @@ TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
     REQUIRE(manifest.nodes.size() > 1);
 
     //The generation is part of every id, so an older cache is never read back
-    CHECK(manifestKey(path, manifest.fingerprint).id.contains(QStringLiteral("octree7")));
+    CHECK(manifestKey(path, manifest.fingerprint)
+              .id.contains(QStringLiteral("octree%1").arg(cw::octree::kFormatGeneration)));
 
     const cwDiskCacher cacher {QDir(request.cacheRootPath)};
     for(int i = 0; i < manifest.nodes.size(); i++) {
@@ -1872,9 +1878,16 @@ TEST_CASE("cwPointOctreeBuilder: a split holds one copy of the cloud in temp",
 
     QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
 
+    //The split's own peak: past its log line the halo pass (WP16 (B)) writes
+    //the halo files beside the cells' parts. A sample taken before the line
+    //was seen was taken before the split finished, so it counts.
     qint64 peakTempBytes = 0;
     while(!future.isFinished()) {
-        peakTempBytes = std::max(peakTempBytes, octreeTempBytes());
+        const qint64 sample = octreeTempBytes();
+        if(log.hasLineContaining(QStringLiteral("build split"))) {
+            break;
+        }
+        peakTempBytes = std::max(peakTempBytes, sample);
         QThread::msleep(kTempPollMs);
     }
 
@@ -2449,7 +2462,7 @@ TEST_CASE("cwPointOctreeBuilder: every level of a chunked plane carries the plan
     CHECK(tooNarrow == 0);
 }
 
-TEST_CASE("cwPointOctreeBuilder: under Local a built tree floors every drawn node exactly as under Grid",
+TEST_CASE("cwPointOctreeBuilder: under Local a built tree floors every drawn node with children exactly as under Grid, and every drawn leaf at kMinLocalSpacingUnits",
           "[PointOctree][PointOctreeBuilder]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -2493,14 +2506,607 @@ TEST_CASE("cwPointOctreeBuilder: under Local a built tree floors every drawn nod
         REQUIRE(measured.size() == grid.size());
         int differing = 0;
         int measuredWider = 0;
+        int leaves = 0;
+        int leavesOffTheFloor = 0;
         for(int i = 0; i < local.size(); i++) {
-            differing += local.at(i) != grid.at(i) ? 1 : 0;
             measuredWider += measured.at(i) > grid.at(i) ? 1 : 0;
+            if(manifest.nodes.at(drawn.at(i)).isLeaf()) {
+                //Both cuts hold every ancestor of every node they draw, so a
+                //drawn leaf is the raw data of its cell (WP16 (A))
+                leaves++;
+                leavesOffTheFloor += local.at(i) != kMinLocalSpacingUnits ? 1 : 0;
+            } else {
+                differing += local.at(i) != grid.at(i) ? 1 : 0;
+            }
         }
-        INFO(differing << " of " << drawn.size() << " drawn nodes floor differently from Grid; "
-             << measuredWider << " floor wider under Measured");
+        INFO(differing << " of " << drawn.size() << " drawn nodes with children floor differently "
+             << "from Grid; " << measuredWider << " floor wider under Measured; "
+             << leavesOffTheFloor << " of " << leaves << " drawn leaves floor off "
+             << kMinLocalSpacingUnits);
         //Some node floors wider under Measured, so the comparison can fail
         REQUIRE(measuredWider > 0);
         CHECK(differing == 0);
+        CHECK(leavesOffTheFloor == 0);
     }
+}
+
+// ---- WP16 (B): the column index with a halo ------------------------------------
+
+namespace {
+    //! One point of a built octree as its payload carries it
+    struct CodedPosition {
+        QVector3D position;
+        double spacing = 0.0;
+    };
+
+    //! Every point of every node of @a manifest, dequantized, with its
+    //! decoded native spacing
+    QVector<CodedPosition> codedPositions(const cwDiskCacher& cacher, const QString& path,
+                                          const cwPointOctreeManifest& manifest)
+    {
+        QVector<CodedPosition> coded;
+        for(int i = 0; i < manifest.nodes.size(); i++) {
+            const QBox3D bounds = manifest.nodeBounds(i);
+            const double grid = manifest.spacing(manifest.nodes.at(i).level);
+            for(const QuantizedPoint& point : cachedQuantizedPoints(cacher, path, manifest, i)) {
+                coded.append(CodedPosition {dequantize(point, bounds),
+                                            decodeLocalSpacing(point.reserved, grid)});
+            }
+        }
+        return coded;
+    }
+
+    //! Points of the cloud this close in xy to a query are the query itself:
+    //! the payload's quantization moves a point by well under it
+    constexpr double kSelfDistance = 1e-3;
+    //! How far the brute force looks: past every k-th neighbor its fixtures
+    //! have, so the search only skips points that cannot count
+    constexpr double kGlobalSearchReach = 10.0;
+
+    //! The native spacing of a point at @a at over every point of @a cloud,
+    //! by brute force: the kLocalSpacingNeighbors-th nearest distinct xy
+    //! position, the point's own excluded, times kLocalSpacingSurfaceFactor,
+    //! inside the absolute range. The global search WP16's halo answers to,
+    //! for a cloud whose chunk ceilings bind nowhere.
+    double globalNativeSpacing(const QVector<QVector3D>& cloud, const QVector3D& at)
+    {
+        QSet<QPair<float, float>> seen;
+        std::vector<double> distances;
+        for(const QVector3D& point : cloud) {
+            const double distance = std::hypot(double(point.x()) - double(at.x()),
+                                               double(point.y()) - double(at.y()));
+            if(distance <= kSelfDistance || distance > kGlobalSearchReach
+               || seen.contains({point.x(), point.y()})) {
+                continue;
+            }
+            seen.insert({point.x(), point.y()});
+            distances.push_back(distance);
+        }
+        REQUIRE(qsizetype(distances.size()) >= kLocalSpacingNeighbors);
+        const auto kth = distances.begin() + (kLocalSpacingNeighbors - 1);
+        std::nth_element(distances.begin(), kth, distances.end());
+        return std::clamp(*kth * kLocalSpacingSurfaceFactor, kMinLocalSpacingUnits,
+                          kMaxLocalSpacingUnits);
+    }
+
+    //! The xy distance from @a point to the nearest face of the depth
+    //! @a depth chunk cell it sits in, along x or y
+    double toVerticalChunkFace(const QVector3D& point, const cwPointOctreeManifest& manifest,
+                               int depth)
+    {
+        const double chunkSize = std::ldexp(manifest.rootSize, -depth);
+        double nearest = std::numeric_limits<double>::max();
+        for(int axis = 0; axis < 2; axis++) {
+            const double offset = (double(point[axis]) - double(manifest.rootMin[axis])) / chunkSize;
+            nearest = std::min(nearest, std::abs(offset - std::round(offset)) * chunkSize);
+        }
+        return nearest;
+    }
+
+    //! The z of the root's level-1 face, the plane every depth-1 chunk sits
+    //! above or below
+    float rootZFace(const cwPointOctreeManifest& manifest)
+    {
+        return manifest.rootMin.z() + float(manifest.rootSize) * 0.5f;
+    }
+
+    //! The xy column, at chunk depth @a depth, @a point falls in, packed x
+    //! then y
+    QPair<int, int> chunkColumn(const QVector3D& point, const cwPointOctreeManifest& manifest,
+                                int depth)
+    {
+        const int cells = 1 << depth;
+        const double chunkSize = std::ldexp(manifest.rootSize, -depth);
+        const auto index = [&](int axis) {
+            const double offset = (double(point[axis]) - double(manifest.rootMin[axis])) / chunkSize;
+            return std::clamp(int(std::floor(offset)), 0, cells - 1);
+        };
+        return {index(0), index(1)};
+    }
+
+    //! The canopy straddle: a 0.3 m lattice of pulses where one position in
+    //! kStraddleCrownStride^2 is a crown return over the root's z face and
+    //! every other one a ground return under it. Every position is one pulse,
+    //! so the whole lattice's spacing is every point's native spacing; a crown
+    //! measured against its own chunk sees only the other crowns.
+    constexpr int kStraddleSide = 100;
+    constexpr double kStraddleStep = 0.3;
+    constexpr int kStraddleCrownStride = 5;
+    constexpr int kStraddleCrownPhase = 2;
+    constexpr float kStraddleGroundZ = -1.0f;
+    constexpr float kStraddleCrownZ = 1.0f;
+    //! Pass B builds it at chunk depth 1: eight cells, four xy columns of two
+    constexpr qint64 kStraddleChunkTarget = 2500;
+    constexpr int kStraddleChunkDepth = 1;
+    //! Points this close to the data's own edge have neighbors on one side only
+    constexpr double kStraddleEdgeMargin = 1.0;
+    //! The spec's bound on the two sides' medians
+    constexpr double kStraddleSideTolerance = 0.10;
+
+    bool isStraddleCrown(int column, int row)
+    {
+        return column % kStraddleCrownStride == kStraddleCrownPhase
+               && row % kStraddleCrownStride == kStraddleCrownPhase;
+    }
+
+    QVector<QVector3D> straddlePoints()
+    {
+        QVector<QVector3D> points;
+        points.reserve(kStraddleSide * kStraddleSide);
+        for(int row = 0; row < kStraddleSide; row++) {
+            for(int column = 0; column < kStraddleSide; column++) {
+                points.append(QVector3D(float((column + 0.5) * kStraddleStep),
+                                        float((row + 0.5) * kStraddleStep),
+                                        isStraddleCrown(column, row) ? kStraddleCrownZ
+                                                                     : kStraddleGroundZ));
+            }
+        }
+        return points;
+    }
+
+    bool insideStraddle(const QVector3D& point)
+    {
+        const double high = kStraddleSide * kStraddleStep - kStraddleEdgeMargin;
+        return point.x() >= kStraddleEdgeMargin && point.x() <= high
+               && point.y() >= kStraddleEdgeMargin && point.y() <= high;
+    }
+
+    struct BuiltCloud {
+        QString path;
+        cwPointOctreeBuilder::Request request;
+        cwPointOctreeManifest manifest;
+        qint64 inFlightPeakBytes = 0;
+        qint64 cellsSplit = 0;
+        qint64 haloPoints = 0;
+    };
+
+    //! @a points written to a LAZ under @a tempDir and built at
+    //! @a chunkTarget points a chunk under @a budgetBytes, a chunk over
+    //! @a chunkMaxPoints split a level deeper; at 0 its chunks never split
+    BuiltCloud buildCloud(QTemporaryDir& tempDir, const QString& tag,
+                          const QVector<QVector3D>& points, qint64 chunkTarget,
+                          qint64 budgetBytes = cw::octree::kDefaultBuildMemoryBudgetBytes,
+                          qint64 chunkMaxPoints = 0)
+    {
+        BuiltCloud built;
+        built.path = tempLazPath(tempDir, tag);
+        REQUIRE(writeSyntheticLazFile(built.path, points));
+        const QString cacheRoot = tempDir.filePath(QStringLiteral("cache-%1").arg(tag));
+        REQUIRE(QDir().mkpath(cacheRoot));
+        built.request = cwPointOctreeBuilder::Request {
+            .path = built.path,
+            .cacheRootPath = cacheRoot,
+            .chunkTargetPoints = chunkTarget,
+            .chunkMaxPoints = chunkMaxPoints > 0 ? chunkMaxPoints : qint64(points.size()) + 1,
+            .memoryBudgetBytes = budgetBytes
+        };
+
+        BuildLog log;
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(built.request));
+        REQUIRE_FALSE(result.hasError());
+        built.manifest = result.value();
+        const QStringList passB = log.linesStartingWith(QStringLiteral("build passB"));
+        REQUIRE(passB.size() == 1);
+        built.inFlightPeakBytes =
+            buildLogField(passB.constFirst(), QStringLiteral("inFlightPeakBytes"));
+        const QStringList split = log.linesStartingWith(QStringLiteral("build split"));
+        REQUIRE(split.size() == 1);
+        built.cellsSplit = buildLogField(split.constFirst(), QStringLiteral("cells"));
+        const QStringList halo = log.linesStartingWith(QStringLiteral("build halo"));
+        REQUIRE(halo.size() == 1);
+        built.haloPoints = buildLogField(halo.constFirst(), QStringLiteral("haloPoints"));
+        return built;
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: crowns just over a pass B chunk's z face code the same native spacing as the ground just under it, within 10 percent",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    //Request::chunkTargetPoints is the knob that chunks the fixture: at
+    //kStraddleChunkTarget the crowns and the ground fall in two chunks of one
+    //column, the root's z face between them
+    const QVector<QVector3D> cloud = straddlePoints();
+    REQUIRE(cwPointOctreeBuilder::chunkDepthFor(cloud.size(), kStraddleChunkTarget)
+            == kStraddleChunkDepth);
+    const BuiltCloud built = buildCloud(tempDir, QStringLiteral("octree-straddle"), cloud,
+                                        kStraddleChunkTarget);
+    const cwPointOctreeManifest& manifest = built.manifest;
+    const float face = rootZFace(manifest);
+    REQUIRE(face > kStraddleGroundZ);
+    REQUIRE(face < kStraddleCrownZ);
+
+    //Clear of the vertical chunk faces, so the z face alone is under test
+    QVector<double> crowns;
+    QVector<double> ground;
+    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
+    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+        if(!insideStraddle(point.position)
+           || toVerticalChunkFace(point.position, manifest, kStraddleChunkDepth)
+                  <= kLocalSpacingHaloUnits) {
+            continue;
+        }
+        (point.position.z() > face ? crowns : ground).append(point.spacing);
+    }
+    REQUIRE_FALSE(crowns.isEmpty());
+    REQUIRE_FALSE(ground.isEmpty());
+
+    const double crownMedian = cwMedian(crowns);
+    const double groundMedian = cwMedian(ground);
+    const double lattice = std::numbers::sqrt2 * kStraddleStep * kLocalSpacingSurfaceFactor;
+    INFO("median native spacing " << crownMedian << " over the face (" << crowns.size()
+         << " crowns), " << groundMedian << " under it (" << ground.size()
+         << " ground returns); the lattice's is " << lattice);
+    CHECK(std::abs(crownMedian / groundMedian - 1.0) <= kStraddleSideTolerance);
+    //and both read the lattice, every pulse of it
+    CHECK(std::abs(crownMedian / lattice - 1.0) <= kStraddleSideTolerance);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a chunked plane's point within one spacing of a vertical chunk face codes the same native spacing as an interior point",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QVector<QVector3D> plane = chunkedPlanePoints();
+    const BuiltCloud built = buildCloud(tempDir, QStringLiteral("octree-face-plane"), plane,
+                                        kTwoLevelChunkTarget);
+    const cwPointOctreeManifest& manifest = built.manifest;
+    const int chunkDepth = cwPointOctreeBuilder::chunkDepthFor(plane.size(), kTwoLevelChunkTarget);
+    REQUIRE(chunkDepth > 0);
+
+    const auto inside = [](const QVector3D& point) {
+        const double low = kChunkedPlaneEdgeMargin;
+        const double high = kChunkedPlaneSide - kChunkedPlaneEdgeMargin;
+        return point.x() >= low && point.x() <= high && point.y() >= low && point.y() <= high;
+    };
+
+    QVector<double> interior;
+    QVector<double> beside;
+    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
+    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+        if(!inside(point.position)) {
+            continue;
+        }
+        const double toFace = toVerticalChunkFace(point.position, manifest, chunkDepth);
+        if(toFace <= kChunkedPlaneStep) {
+            beside.append(point.spacing);
+        } else if(toFace > kLocalSpacingHaloUnits) {
+            interior.append(point.spacing);
+        }
+    }
+    REQUIRE_FALSE(beside.isEmpty());
+    REQUIRE_FALSE(interior.isEmpty());
+
+    const double typical = cwMedian(interior);
+    const double widest = *std::max_element(beside.cbegin(), beside.cend());
+    const double narrowest = *std::min_element(beside.cbegin(), beside.cend());
+    INFO("interior median " << typical << "; beside a face " << narrowest << " to " << widest
+         << " over " << beside.size() << " points");
+    //Today a face point reads sqrt(2) wider and a corner one twice
+    CHECK(widest <= typical * (1.0 + kFaceFactorSlack));
+    CHECK(narrowest >= typical * (1.0 - kFaceFactorSlack));
+}
+
+TEST_CASE("cwPointOctreeBuilder: a chunked plane's point farther than the halo from every chunk face codes what a search over the whole cloud gives, as at generation 7",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QVector<QVector3D> plane = chunkedPlanePoints();
+    const BuiltCloud built = buildCloud(tempDir, QStringLiteral("octree-far-plane"), plane,
+                                        kTwoLevelChunkTarget);
+    const cwPointOctreeManifest& manifest = built.manifest;
+    const int chunkDepth = cwPointOctreeBuilder::chunkDepthFor(plane.size(), kTwoLevelChunkTarget);
+    REQUIRE(chunkDepth > 0);
+
+    //A spread of far points is plenty for the brute force
+    constexpr qsizetype kSampledPoints = 64;
+    constexpr double kOracleTolerance = 0.01;
+    QVector<CodedPosition> far;
+    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
+    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+        const double low = kChunkedPlaneEdgeMargin + kLocalSpacingHaloUnits;
+        const double high = kChunkedPlaneSide - low;
+        const bool clearOfEdge = point.position.x() >= low && point.position.x() <= high
+                                 && point.position.y() >= low && point.position.y() <= high;
+        if(clearOfEdge
+           && toVerticalChunkFace(point.position, manifest, chunkDepth) > kLocalSpacingHaloUnits) {
+            far.append(point);
+        }
+    }
+    REQUIRE(far.size() >= kSampledPoints);
+
+    const qsizetype stride = far.size() / kSampledPoints;
+    int offOracle = 0;
+    double worst = 0.0;
+    for(qsizetype i = 0; i < kSampledPoints; i++) {
+        const CodedPosition& point = far.at(i * stride);
+        const double oracle = globalNativeSpacing(plane, point.position);
+        const double error = std::abs(point.spacing / oracle - 1.0);
+        worst = std::max(worst, error);
+        offOracle += error > kOracleTolerance ? 1 : 0;
+    }
+    INFO(offOracle << " of " << kSampledPoints << " far points off the global search, the worst by "
+         << worst);
+    CHECK(offOracle == 0);
+}
+
+namespace {
+    //! The column ceiling fixture: one xy column whose lower chunk holds a
+    //! dense 0.3 m lattice and whose upper chunk a sparse 1.2 m one over it,
+    //! with a lone return in the upper chunk far from both, which every
+    //! ceiling caps. Measured against its own chunk the upper lattice's
+    //! median is the sparse one's; against its column it is the dense one's.
+    constexpr double kCeilingDenseStep = 0.3;
+    constexpr double kCeilingSparseStep = 1.2;
+    constexpr double kCeilingLatticeWidth = 10.0;
+    constexpr double kCeilingLatticeLength = 20.0;
+    constexpr float kCeilingLowerZ = -1.0f;
+    constexpr float kCeilingUpperZ = 1.0f;
+    const QVector3D kCeilingLonePoint(19.0f, 10.0f, kCeilingUpperZ);
+    //! Holds the bounding box at 40 m a side, so the column's faces sit at
+    //! its middle, past both lattices and the lone return
+    const QVector3D kCeilingBoxAnchor(40.0f, 40.0f, kCeilingUpperZ);
+    constexpr qint64 kCeilingChunkTarget = 1000;
+    constexpr double kCeilingTolerance = 0.02;
+
+    QVector<QVector3D> columnCeilingPoints()
+    {
+        QVector<QVector3D> points;
+        const auto lattice = [&](double step, float z) {
+            for(int row = 0; (row + 0.5) * step < kCeilingLatticeLength; row++) {
+                for(int column = 0; (column + 0.5) * step < kCeilingLatticeWidth; column++) {
+                    points.append(QVector3D(float((column + 0.5) * step),
+                                            float((row + 0.5) * step), z));
+                }
+            }
+        };
+        lattice(kCeilingDenseStep, kCeilingLowerZ);
+        lattice(kCeilingSparseStep, kCeilingUpperZ);
+        points.append(kCeilingLonePoint);
+        points.append(kCeilingBoxAnchor);
+        return points;
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: a lone return takes kLoneSpacingMedianRatio times the median of its whole xy column, not of its own pass B chunk",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QVector<QVector3D> cloud = columnCeilingPoints();
+    const int chunkDepth = cwPointOctreeBuilder::chunkDepthFor(cloud.size(), kCeilingChunkTarget);
+    REQUIRE(chunkDepth == 1);
+    const BuiltCloud built = buildCloud(tempDir, QStringLiteral("octree-column-ceiling"), cloud,
+                                        kCeilingChunkTarget);
+    const cwPointOctreeManifest& manifest = built.manifest;
+    const float face = rootZFace(manifest);
+    REQUIRE(face > kCeilingLowerZ);
+    REQUIRE(face < kCeilingUpperZ);
+    const QPair<int, int> column = chunkColumn(kCeilingLonePoint, manifest, chunkDepth);
+    REQUIRE(column == chunkColumn(QVector3D(0.0f, 0.0f, 0.0f), manifest, chunkDepth));
+    REQUIRE(column != chunkColumn(kCeilingBoxAnchor, manifest, chunkDepth));
+
+    //The lone return, and every other point of its column, either chunk
+    std::optional<double> lone;
+    QVector<double> others;
+    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
+    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+        if(chunkColumn(point.position, manifest, chunkDepth) != column) {
+            continue;
+        }
+        if((point.position - kCeilingLonePoint).length() <= kSelfDistance) {
+            lone = point.spacing;
+        } else {
+            others.append(point.spacing);
+        }
+    }
+    REQUIRE(lone.has_value());
+    REQUIRE_FALSE(others.isEmpty());
+
+    const double ceiling = kLoneSpacingMedianRatio * cwMedian(others);
+    INFO("the lone return codes " << *lone << " against the column's ceiling " << ceiling
+         << " over " << others.size() << " points");
+    CHECK(std::abs(*lone / ceiling - 1.0) <= kCeilingTolerance);
+}
+
+TEST_CASE("cwPointOctreeBuilder: a cache written at generation 7 is rejected and rebuilt with column native spacing",
+          "[PointOctree][PointOctreeBuilder]") {
+    constexpr int kGenerationWithChunkBoundedNativeSpacing = 7;
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-generation-7"));
+    REQUIRE(writeSyntheticLazFile(path, sparsePlanePoints()));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path()
+    };
+    const cwPointOctreeBuilder::Result first =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(first.hasError());
+    const cwPointOctreeManifest manifest = first.value();
+
+    //Leave on disk only what the generation 7 builder would have
+    cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    restampAsGeneration(cacher, path, manifest, kGenerationWithChunkBoundedNativeSpacing);
+
+    //Never read back
+    CHECK_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+
+    //and rebuilt under the current generation's key, every code surviving the
+    //Morton sort and the payload round trip as the estimator's code for its
+    //point
+    const cwPointOctreeBuilder::Result rebuilt =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(rebuilt.hasError());
+    REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+    const QVector<QuantizedPoint> points =
+        cachedQuantizedPoints(cacher, path, rebuilt.value(), 0);
+    REQUIRE_FALSE(points.isEmpty());
+    CHECK(std::none_of(points.cbegin(), points.cend(), [](const QuantizedPoint& point) {
+        return point.reserved == kUnmeasuredLocalSpacingCode;
+    }));
+    CHECK(manifestKey(path, rebuilt.value().fingerprint).id
+          != generationKey(kGenerationWithChunkBoundedNativeSpacing, path, manifest.fingerprint,
+                           QStringLiteral("manifest")).id);
+
+    const qsizetype repeated = repeatedRootCodes(rebuilt.value(), points);
+    INFO(repeated << " of " << points.size() << " codes repeat");
+    CHECK(double(repeated) >= kMinRepeatedCodeShare * double(points.size()));
+}
+
+TEST_CASE("cwPointOctreeBuilder: pass B charges its admission budget each column's chunks and its native spacing index over the column and its halo",
+          "[PointOctree][PointOctreeBuilder]") {
+    //The index over a column and its halo is charged on top of its chunks
+    constexpr qint64 kChunkPoints = 1000;
+    constexpr qint64 kHaloPoints = 100;
+    CHECK(passBColumnBytes({kChunkPoints}, kHaloPoints) > passBColumnBytes({kChunkPoints}, 0));
+    CHECK(passBColumnBytes({kChunkPoints, kChunkPoints}, 0)
+          > passBColumnBytes({kChunkPoints}, 0));
+    CHECK(passBColumnBytes({}, 0) == 0);
+
+    //One column at a time, the build's peak is the most any column costs,
+    //counted from the data: each column's chunks, and the points of the other
+    //columns within kLocalSpacingHaloUnits of its xy box
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QVector<QVector3D> cloud = straddlePoints();
+    const BuiltCloud built = buildCloud(tempDir, QStringLiteral("octree-column-budget"), cloud,
+                                        kStraddleChunkTarget, kOneChunkAtATimeBudget);
+    const cwPointOctreeManifest& manifest = built.manifest;
+    const double chunkSize = std::ldexp(manifest.rootSize, -kStraddleChunkDepth);
+    const float face = rootZFace(manifest);
+
+    QHash<QPair<int, int>, QVector<qint64>> chunksByColumn;
+    for(const QVector3D& point : cloud) {
+        const QPair<int, int> column = chunkColumn(point, manifest, kStraddleChunkDepth);
+        QVector<qint64>& chunks = chunksByColumn[column];
+        chunks.resize(2);
+        chunks[point.z() > face ? 1 : 0]++;
+    }
+    qint64 expectedPeak = 0;
+    for(auto column = chunksByColumn.cbegin(); column != chunksByColumn.cend(); ++column) {
+        const double xLow = double(manifest.rootMin.x()) + column.key().first * chunkSize;
+        const double yLow = double(manifest.rootMin.y()) + column.key().second * chunkSize;
+        qint64 halo = 0;
+        for(const QVector3D& point : cloud) {
+            const bool inHaloBox = point.x() >= xLow - kLocalSpacingHaloUnits
+                                   && point.x() < xLow + chunkSize + kLocalSpacingHaloUnits
+                                   && point.y() >= yLow - kLocalSpacingHaloUnits
+                                   && point.y() < yLow + chunkSize + kLocalSpacingHaloUnits;
+            halo += inHaloBox && chunkColumn(point, manifest, kStraddleChunkDepth) != column.key()
+                        ? 1 : 0;
+        }
+        QVector<qint64> chunks;
+        for(const qint64 count : column.value()) {
+            if(count > 0) {
+                chunks.append(count);
+            }
+        }
+        const qint64 bytes = passBColumnBytes(chunks, halo);
+        INFO("column " << column.key().first << ", " << column.key().second << ": "
+             << chunks.size() << " chunks, " << halo << " halo points, " << bytes << " bytes");
+        expectedPeak = std::max(expectedPeak, bytes);
+    }
+    INFO("the build peaked at " << built.inFlightPeakBytes << " bytes against " << expectedPeak);
+    CHECK(built.inFlightPeakBytes == expectedPeak);
+}
+
+TEST_CASE("cwPointOctreeBuilder: where one z cell of an xy footprint splits and its sibling stays, the two levels' columns lend each other their whole overlap and pass B charges it",
+          "[PointOctree][PointOctreeBuilder]") {
+    //Over this many points a depth-1 chunk splits: the straddle's ground
+    //chunks (2400 points each) split into four depth-2 chunks of 600 while
+    //its crown chunks (100 each) stay at depth 1 over them
+    constexpr qint64 kGroundSplitMaxPoints = 1000;
+    constexpr int kGroundChunkDepth = kStraddleChunkDepth + 1;
+    constexpr int kStraddleFootprints = 4;
+    constexpr int kGroundChunksPerFootprint = 4;
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QVector<QVector3D> cloud = straddlePoints();
+    const BuiltCloud built = buildCloud(tempDir, QStringLiteral("octree-mixed-level-halo"), cloud,
+                                        kStraddleChunkTarget, kOneChunkAtATimeBudget,
+                                        kGroundSplitMaxPoints);
+    const cwPointOctreeManifest& manifest = built.manifest;
+    CHECK(built.cellsSplit == kStraddleFootprints);
+    const float face = rootZFace(manifest);
+
+    //A column is its chunk level and xy cell; a crown sits in a depth-1
+    //chunk, a ground return in a depth-2 one
+    using Column = std::tuple<int, int, int>;
+    const auto columnOf = [&](const QVector3D& point) {
+        const int level = point.z() > face ? kStraddleChunkDepth : kGroundChunkDepth;
+        const QPair<int, int> cell = chunkColumn(point, manifest, level);
+        return Column {level, cell.first, cell.second};
+    };
+    QMap<Column, qint64> pointsByColumn;
+    for(const QVector3D& point : cloud) {
+        pointsByColumn[columnOf(point)]++;
+    }
+    REQUIRE(pointsByColumn.size() == kStraddleFootprints * (1 + kGroundChunksPerFootprint));
+
+    qint64 expectedHalo = 0;
+    qint64 expectedPeak = 0;
+    for(auto column = pointsByColumn.cbegin(); column != pointsByColumn.cend(); ++column) {
+        const auto [level, x, y] = column.key();
+        const double size = std::ldexp(manifest.rootSize, -level);
+        const double xLow = double(manifest.rootMin.x()) + x * size;
+        const double yLow = double(manifest.rootMin.y()) + y * size;
+        qint64 halo = 0;
+        qint64 overlap = 0;
+        for(const QVector3D& point : cloud) {
+            if(columnOf(point) == column.key()) {
+                continue;
+            }
+            const bool inFootprint = point.x() >= xLow && point.x() < xLow + size
+                                     && point.y() >= yLow && point.y() < yLow + size;
+            const bool inHaloBox = point.x() >= xLow - kLocalSpacingHaloUnits
+                                   && point.x() < xLow + size + kLocalSpacingHaloUnits
+                                   && point.y() >= yLow - kLocalSpacingHaloUnits
+                                   && point.y() < yLow + size + kLocalSpacingHaloUnits;
+            halo += inHaloBox ? 1 : 0;
+            overlap += inFootprint ? 1 : 0;
+        }
+        const qint64 bytes = passBColumnBytes({column.value()}, halo);
+        INFO("column level " << level << " (" << x << ", " << y << "): " << column.value()
+             << " points, " << halo << " halo points of which " << overlap
+             << " overlap it, " << bytes << " bytes");
+        //The other level's points over its footprint are all lent, and the
+        //face band on top of them
+        CHECK(overlap > 0);
+        CHECK(halo > overlap);
+        expectedHalo += halo;
+        expectedPeak = std::max(expectedPeak, bytes);
+    }
+
+    INFO("the build lent " << built.haloPoints << " halo points against " << expectedHalo
+         << " and peaked at " << built.inFlightPeakBytes << " bytes against " << expectedPeak);
+    CHECK(built.haloPoints == expectedHalo);
+    CHECK(built.inFlightPeakBytes == expectedPeak);
 }

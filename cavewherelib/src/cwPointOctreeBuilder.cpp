@@ -21,6 +21,7 @@
 #include <atomic>
 #include <cmath>
 #include <limits>
+#include <numeric>
 #include <optional>
 #include <utility>
 
@@ -75,13 +76,27 @@ namespace {
     //(§2.11's calibration: 12.7 M points held 1.76 GB on their own)
     constexpr qint64 kPassBWorkingSetBytesPerPoint = 144;
 
-    //What the native spacing estimate adds to that while it runs on a chunk:
-    //every chunk point's horizontal position copied into the neighbor index
-    //with its key (16 bytes), the key and index each worker sorts a node's
-    //points by (16), the 4 byte copy of each spacing the chunk's median reads,
-    //and each point's 4 byte spacing and 2 byte code, which stay until the
-    //payloads are written.
+    //What the native spacing estimate adds to that while it runs on a
+    //chunk's column: every chunk point's horizontal position copied into the
+    //column's neighbor index with its key (16 bytes), the key and index each
+    //worker sorts a node's points by (16), the 4 byte copy of each spacing
+    //the column's median reads, and each point's 4 byte spacing and 2 byte
+    //code, which stay until the payloads are written.
     constexpr qint64 kPassBLocalSpacingBytesPerPoint = 48;
+
+    //One point's entry in a column's neighbor index: its key and its
+    //horizontal position
+    constexpr qint64 kPassBIndexEntryBytes = 16;
+
+    //What one point a column's neighbors lend it costs while the column runs:
+    //its bytes read back from the halo file and its entry in the column's
+    //neighbor index. It is never coded there, so it carries none of a chunk
+    //point's spacing state.
+    constexpr qint64 kPassBHaloBytesPerPoint = kTempBytesPerPoint + kPassBIndexEntryBytes;
+
+    //Widens the cells a halo point's columns are looked for in, so a point a
+    //rounding error from a column's widened box still reaches the exact test
+    constexpr double kHaloCellSlack = 1e-6;
 
     //The root cube of a cloud with no extent, so quantization still has a range
     constexpr double kMinimumRootSize = 1.0;
@@ -241,6 +256,78 @@ namespace {
         return points;
     }
 
+    //! Appends @a chunk's buffered points to its file and empties the buffer;
+    //! false where the file would not take them
+    bool flushChunkBuffer(ChunkBuffer& chunk)
+    {
+        if(chunk.buffer.isEmpty()) {
+            return true;
+        }
+
+        QFile file(chunk.path);
+        if(!file.open(QIODevice::WriteOnly | QIODevice::Append)
+           || file.write(chunk.buffer) != chunk.buffer.size()) {
+            return false;
+        }
+
+        chunk.buffer.clear();
+        return true;
+    }
+
+    //! Appends @a point to @a chunk's buffer and adds its bytes to @a bufferedBytes
+    void bufferPoint(ChunkBuffer& chunk, const QVector3D& point, qint64& bufferedBytes)
+    {
+        chunk.buffer.append(reinterpret_cast<const char*>(&point), kTempBytesPerPoint);
+        chunk.pointCount++;
+        bufferedBytes += kTempBytesPerPoint;
+    }
+
+    template<typename Result>
+    void setChunkReadError(Result& result, int errorCode, const QString& path)
+    {
+        result.errorCode = errorCode;
+        result.errorMessage = QStringLiteral("Could not read the octree chunk file %1.").arg(path);
+    }
+
+    /**
+     * Reads every point of @a parts, in order, a batch of at most
+     * kPointChunkSize points at a time, and hands each batch to
+     * @a visitBatch(points, count), which returns false to stop. Returns false
+     * where a part would not read, with the error in @a result, or where
+     * @a visitBatch stopped.
+     */
+    template<typename Result, typename VisitBatch>
+    bool streamParts(const QVector<ChunkPart>& parts, Result& result, const VisitBatch& visitBatch)
+    {
+        //QVector3D is three contiguous floats, the layout pass A wrote, so a
+        //batch reads straight into the vector rather than through a second copy
+        static_assert(sizeof(QVector3D) == kTempBytesPerPoint);
+
+        QVector<QVector3D> batch(kPointChunkSize);
+        for(const ChunkPart& part : parts) {
+            QFile file(part.path);
+            if(!file.open(QIODevice::ReadOnly)) {
+                setChunkReadError(result, cwPointOctreeBuilder::TempDirFailed, part.path);
+                return false;
+            }
+
+            for(qint64 remaining = part.pointCount; remaining > 0; ) {
+                const qsizetype count = qsizetype(std::min<qint64>(remaining, kPointChunkSize));
+                const qint64 wanted = count * kTempBytesPerPoint;
+                if(file.read(reinterpret_cast<char*>(batch.data()), wanted) != wanted) {
+                    setChunkReadError(result, cwPointOctreeBuilder::ReadFailed, part.path);
+                    return false;
+                }
+                remaining -= count;
+
+                if(!visitBatch(std::as_const(batch).constData(), count)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     //A contiguous span of the file's points, decoded by one worker
     struct DecodeRange {
         qint64 startIndex = 0;
@@ -339,18 +426,9 @@ namespace {
         bool writeFailed = false;
 
         const auto flushChunk = [&](ChunkBuffer& chunk) {
-            if(chunk.buffer.isEmpty()) {
-                return;
-            }
-
-            QFile file(chunk.path);
-            if(!file.open(QIODevice::WriteOnly | QIODevice::Append)
-               || file.write(chunk.buffer) != chunk.buffer.size()) {
+            if(!flushChunkBuffer(chunk)) {
                 writeFailed = true;
-                return;
             }
-
-            chunk.buffer.clear();
         };
 
         const auto flushAll = [&]() {
@@ -714,10 +792,6 @@ namespace {
                           const RootCube& root,
                           const QDir& tempDir)
     {
-        //QVector3D is three contiguous floats, the layout pass A wrote, so a
-        //batch reads straight into the vector rather than through a second copy
-        static_assert(sizeof(QVector3D) == kTempBytesPerPoint);
-
         SplitResult result;
 
         const Cell cell = cellFromKey(key);
@@ -736,17 +810,9 @@ namespace {
 
         const auto flushAll = [&]() {
             for(ChunkBuffer& child : children) {
-                if(child.buffer.isEmpty()) {
-                    continue;
-                }
-
-                QFile file(child.path);
-                if(!file.open(QIODevice::WriteOnly | QIODevice::Append)
-                   || file.write(child.buffer) != child.buffer.size()) {
+                if(!flushChunkBuffer(child)) {
                     return false;
                 }
-
-                child.buffer.clear();
             }
 
             bufferedBytes = 0;
@@ -772,50 +838,26 @@ namespace {
             //The octant the point's own cell at childLevel sits in, so the
             //child it lands in is the one pass A would have written it to
             const Cell pointCell {childLevel, coordinate[0], coordinate[1], coordinate[2]};
-            ChunkBuffer& child = children[octantInParent(pointCell)];
-
-            child.buffer.append(reinterpret_cast<const char*>(&point), kTempBytesPerPoint);
-            child.pointCount++;
-            bufferedBytes += kTempBytesPerPoint;
+            bufferPoint(children[octantInParent(pointCell)], point, bufferedBytes);
         };
 
         const QVector<ChunkPart> sourceParts = parts.value(key);
-        QVector<QVector3D> batch(kPointChunkSize);
 
-        for(const ChunkPart& part : sourceParts) {
-            QFile file(part.path);
-            if(!file.open(QIODevice::ReadOnly)) {
-                result.errorCode = cwPointOctreeBuilder::TempDirFailed;
-                result.errorMessage =
-                    QStringLiteral("Could not read the octree chunk file %1.").arg(part.path);
-                return result;
+        bool flushFailed = false;
+        const bool streamed = streamParts(sourceParts, result,
+                                          [&](const QVector3D* points, qsizetype count) {
+            for(qsizetype i = 0; i < count; i++) {
+                appendPoint(points[i]);
             }
+            flushFailed = bufferedBytes >= kDecodeWorkerBufferBytes && !flushAll();
+            return !flushFailed;
+        });
 
-            for(qint64 remaining = part.pointCount; remaining > 0; ) {
-                const qsizetype count = qsizetype(std::min<qint64>(remaining, kPointChunkSize));
-                const qint64 wanted = count * kTempBytesPerPoint;
-
-                if(file.read(reinterpret_cast<char*>(batch.data()), wanted) != wanted) {
-                    result.errorCode = cwPointOctreeBuilder::ReadFailed;
-                    result.errorMessage =
-                        QStringLiteral("Could not read the octree chunk file %1.").arg(part.path);
-                    return result;
-                }
-
-                remaining -= count;
-
-                for(qsizetype i = 0; i < count; i++) {
-                    appendPoint(batch.at(i));
-                }
-
-                if(bufferedBytes >= kDecodeWorkerBufferBytes && !flushAll()) {
-                    return writeFailure();
-                }
-            }
-        }
-
-        if(!flushAll()) {
+        if(flushFailed || (streamed && !flushAll())) {
             return writeFailure();
+        }
+        if(!streamed) {
+            return result;
         }
 
         for(const ChunkPart& part : sourceParts) {
@@ -915,127 +957,436 @@ namespace {
     };
 
     struct ChunkResult {
-        int errorCode = Monad::ResultBase::NoError;
-        QString errorMessage;
         QVector<QVector3D> rootPoints;
-        //Each root point's native spacing under the chunk's ceiling, which
+        //Each root point's native spacing under its column's ceiling, which
         //pass C carries to whatever level the point ends up in
         QVector<float> rootSpacings;
         QVector<SubtreeRecord> nodes;
-        //What measureNativeSpacing() took on this chunk
+    };
+
+    //! One xy column of pass B: every chunk whose cell shares a level, an x
+    //! and a y, which measure their native spacings against one index
+    struct ColumnTask {
+        Cell column;                //!< the chunks' level, x and y, z 0
+        QVector<qsizetype> chunks;  //!< indices into the chunk tasks, in task order
+        QVector<ChunkPart> halo;    //!< what the other columns lend it, in chunk task order
+        qint64 haloPoints = 0;      //!< the halo's points together
+        qint64 bytes = 0;           //!< passBColumnBytes() of the column
+    };
+
+    quint64 columnKey(const Cell& cell)
+    {
+        return cellKey(Cell {cell.level, cell.x, cell.y, 0});
+    }
+
+    struct ColumnResult {
+        int errorCode = Monad::ResultBase::NoError;
+        QString errorMessage;
+        //One entry a chunk, in ColumnTask::chunks order
+        QVector<ChunkResult> chunks;
+        //What measureNativeSpacing() took on this column
         qint64 localSpacingMilliseconds = 0;
-        //The chunk's points that took its ceiling, and the ceiling itself
+        //The column's points that took its ceiling, and the ceiling itself
         qint64 localSpacingCappedPoints = 0;
         double localSpacingCeiling = 0.0;
     };
 
-    /**
-     * Pass B on one chunk: read it back, build its subtree, and write every
-     * node but the chunk root, whose points Pass C still pulls from.
-     */
-    ChunkResult buildChunk(const ChunkTask& task, const ChunkContext& context)
+    //! Reads every part of @a parts, in order, onto the end of @a points;
+    //! false, with the error in @a result, where a part would not read
+    template<typename Result>
+    bool readParts(const QVector<ChunkPart>& parts, QVector<QVector3D>& points, Result& result)
     {
-        ChunkResult result;
+        //QVector3D is three contiguous floats, the layout pass A wrote, so the
+        //parts read straight into the vector rather than through a second copy
+        static_assert(sizeof(QVector3D) == kTempBytesPerPoint);
+
+        const qsizetype first = points.size();
+        points.resize(first + qsizetype(pointsIn(parts)));
+        char* cursor = reinterpret_cast<char*>(points.data() + first);
+
+        //Range order is the order one reader would have read these points in
+        for(const ChunkPart& part : parts) {
+            QFile file(part.path);
+            if(!file.open(QIODevice::ReadOnly)) {
+                setChunkReadError(result, cwPointOctreeBuilder::TempDirFailed, part.path);
+                return false;
+            }
+
+            const qint64 wanted = part.pointCount * kTempBytesPerPoint;
+            if(file.read(cursor, wanted) != wanted) {
+                setChunkReadError(result, cwPointOctreeBuilder::ReadFailed, part.path);
+                return false;
+            }
+
+            file.close();
+            cursor += wanted;
+
+            //Each part has one reader, so temp scratch declines through pass B
+            //rather than peaking at the manifest
+            QFile::remove(part.path);
+        }
+        return true;
+    }
+
+    /**
+     * Pass B on one xy column: read its chunks back and build each one's
+     * subtree, measure every point of the column against the column and the
+     * halo its neighbors lend it, and write every node but the chunk roots,
+     * whose points pass C still pulls from.
+     */
+    ColumnResult buildColumn(const ColumnTask& column, const QVector<ChunkTask>& chunkTasks,
+                             const ChunkContext& context)
+    {
+        ColumnResult result;
 
         if(context.cancel->load(std::memory_order_relaxed)) {
             result.errorCode = cwPointOctreeBuilder::Cancelled;
             return result;
         }
 
-        //QVector3D is three contiguous floats, the layout pass A wrote, so the
-        //parts read straight into the vector rather than through a second copy
-        static_assert(sizeof(QVector3D) == kTempBytesPerPoint);
-
-        QVector<QVector3D> points(qsizetype(task.pointCount));
-        char* cursor = reinterpret_cast<char*>(points.data());
-
-        //Range order is the order one reader would have read these points in
-        for(const ChunkPart& part : task.parts) {
-            QFile file(part.path);
-            if(!file.open(QIODevice::ReadOnly)) {
-                result.errorCode = cwPointOctreeBuilder::TempDirFailed;
-                result.errorMessage = QStringLiteral("Could not read the octree chunk file %1.")
-                                          .arg(part.path);
-                return result;
-            }
-
-            const qint64 wanted = part.pointCount * kTempBytesPerPoint;
-            if(file.read(cursor, wanted) != wanted) {
-                result.errorCode = cwPointOctreeBuilder::ReadFailed;
-                result.errorMessage = QStringLiteral("Could not read the octree chunk file %1.")
-                                          .arg(part.path);
-                return result;
-            }
-
-            file.close();
-            cursor += wanted;
-
-            //Temp scratch declines through pass B rather than peaking at the manifest
-            QFile::remove(part.path);
+        QVector<QVector3D> halo;
+        if(!readParts(column.halo, halo, result)) {
+            return result;
         }
 
-        QVector<SampledNode> subtree = buildSubtree(std::move(points),
-                                                    task.cell,
-                                                    context.rootMin,
-                                                    context.rootSize);
+        QVector<QVector<SampledNode>> subtrees;
+        subtrees.reserve(chunkTasks.size());
+        for(const ChunkTask& task : chunkTasks) {
+            QVector<QVector3D> points;
+            if(!readParts(task.parts, points, result)) {
+                return result;
+            }
+            subtrees.append(buildSubtree(std::move(points), task.cell, context.rootMin,
+                                         context.rootSize));
+        }
 
-        //Every point of the chunk, its root's included, measures its native
-        //spacing against the chunk's raw data, which the subtree's nodes hold
-        //together, so the estimate's neighbors stop at the chunk cell's
-        //faces: a point beside a side face reads at most sqrt(2) wider, and a
-        //face above or below cuts off the rest of the column past it. The
-        //chunk's own median sets the ceiling of every point measured here,
-        //the root's too, which carry it up into pass C's top tree.
+        //Every point of the column, its chunk roots' included, measures its
+        //native spacing against the column's raw data, which its subtrees'
+        //nodes hold together, and the halo, so the estimate's neighbors stop
+        //only kLocalSpacingHaloUnits past the column's xy faces and nowhere
+        //along z. The column's own median sets the ceiling of every point
+        //measured here, the roots' too, which carry it up into pass C's top
+        //tree.
         QElapsedTimer localSpacingTimer;
         localSpacingTimer.start();
-        NativeSpacingEstimate estimate = measureNativeSpacing(
-            subtree, context.rootMin, context.rootSize, subtree.first().cell.level);
-        QVector<QVector<float>> nativeSpacings = std::move(estimate.spacings);
+        QVector<const QVector<SampledNode>*> measured;
+        measured.reserve(subtrees.size());
+        for(const QVector<SampledNode>& subtree : std::as_const(subtrees)) {
+            measured.append(&subtree);
+        }
+        NativeSpacingEstimate estimate =
+            measureNativeSpacing(measured, halo, context.rootMin, context.rootSize);
+        halo = QVector<QVector3D>();
         result.localSpacingMilliseconds = localSpacingTimer.elapsed();
         result.localSpacingCappedPoints = estimate.cappedPoints;
         result.localSpacingCeiling = estimate.ceiling;
 
         cwDiskCacher cacher {QDir(context.cacheRootPath)};
 
-        result.nodes.reserve(subtree.size());
-        for(qsizetype i = 0; i < subtree.size(); i++) {
-            const SampledNode& node = subtree.at(i);
+        result.chunks.reserve(subtrees.size());
+        for(qsizetype chunk = 0; chunk < subtrees.size(); chunk++) {
+            QVector<SampledNode>& subtree = subtrees[chunk];
+            QVector<QVector<float>>& nativeSpacings = estimate.spacings[chunk];
+            ChunkResult chunkResult;
 
-            //The chunk root still gives points up to pass C, which measures it
-            //once they are final
-            if(i == 0) {
-                result.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()), 0.0f,
-                                                   node.children});
+            chunkResult.nodes.reserve(subtree.size());
+            for(qsizetype i = 0; i < subtree.size(); i++) {
+                const SampledNode& node = subtree.at(i);
+
+                //The chunk root still gives points up to pass C, which measures it
+                //once they are final
+                if(i == 0) {
+                    chunkResult.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
+                                                            0.0f, node.children});
+                    continue;
+                }
+
+                const QVector<quint16> codes = encodeLocalSpacings(nativeSpacings.at(i));
+                chunkResult.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
+                                                        measureNodeSpacing(node.points),
+                                                        node.children});
+
+                if(context.cancel->load(std::memory_order_relaxed)) {
+                    result.errorCode = cwPointOctreeBuilder::Cancelled;
+                    return result;
+                }
+
+                const QByteArray payload =
+                    quantizeAll(node.points, codes,
+                                cellBounds(node.cell, context.rootMin, context.rootSize));
+                const cwDiskCacher::Key key =
+                    nodeKey(context.lazPath, context.fingerprint, nodeNameForCell(node.cell));
+
+                if(!writeEntry(cacher, key, payload)) {
+                    result.errorCode = cwPointOctreeBuilder::CacheWriteFailed;
+                    result.errorMessage =
+                        QStringLiteral("Could not write the octree node %1 into the cache.")
+                            .arg(key.id);
+                    return result;
+                }
+            }
+
+            chunkResult.rootPoints = std::move(subtree.first().points);
+            chunkResult.rootSpacings = std::move(nativeSpacings.first());
+            //The chunk's points are written, so it frees them before the next
+            subtree = QVector<SampledNode>();
+            nativeSpacings = QVector<QVector<float>>();
+            context.pointsDone->fetch_add(chunkTasks.at(chunk).pointCount,
+                                          std::memory_order_relaxed);
+            result.chunks.append(std::move(chunkResult));
+        }
+
+        return result;
+    }
+
+    //Read-only, shared by value with every chunk's halo worker
+    struct HaloContext {
+        RootCube root;
+        QString tempDirPath;
+        //Column key (columnKey()) to its index among the columns
+        QHash<quint64, int> columnByKey;
+        //The levels the columns sit at, each once
+        QVector<int> columnLevels;
+        std::atomic<bool>* cancel = nullptr;
+    };
+
+    struct HaloResult {
+        int errorCode = Monad::ResultBase::NoError;
+        QString errorMessage;
+        //Column index to what this chunk lends it
+        QHash<int, ChunkPart> parts;
+    };
+
+    //! Whether @a point lies in the xy box of the column @a column widened by
+    //! kLocalSpacingHaloUnits on every side, the halo box: from its low
+    //! faces, inclusive, to its high faces, exclusive
+    bool inHaloBox(const QVector3D& point, const Cell& column, const RootCube& root)
+    {
+        const double size = std::ldexp(root.size, -column.level);
+        const std::array<quint32, 2> cell {column.x, column.y};
+        for(int axis = 0; axis < 2; axis++) {
+            const double low = double(root.minimum[axis]) + double(cell.at(size_t(axis))) * size;
+            const double value = double(point[axis]);
+            if(value < low - kLocalSpacingHaloUnits || value >= low + size + kLocalSpacingHaloUnits) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    //! Calls @a visit with the index of every column but @a ownColumn, the
+    //! column of the chunk cell @a ownCell, whose halo box holds @a point
+    template<typename Visit>
+    void forEachHaloColumn(const QVector3D& point, const Cell& ownCell, int ownColumn,
+                           const HaloContext& context, const Visit& visit)
+    {
+        for(const int level : context.columnLevels) {
+            const double size = std::ldexp(context.root.size, -level);
+            const qint64 lastCell = (qint64(1) << level) - 1;
+            std::array<qint64, 2> low = {};
+            std::array<qint64, 2> high = {};
+            for(int axis = 0; axis < 2; axis++) {
+                const double offset = double(point[axis]) - double(context.root.minimum[axis]);
+                low[size_t(axis)] = std::max(
+                    qint64(0),
+                    qint64(std::floor((offset - kLocalSpacingHaloUnits) / size - kHaloCellSlack)));
+                high[size_t(axis)] = std::min(
+                    lastCell,
+                    qint64(std::floor((offset + kLocalSpacingHaloUnits) / size + kHaloCellSlack)));
+            }
+
+            //Clear of every face of its own column: nothing to lend at this level
+            if(level == ownCell.level && low == high
+               && low == std::array<qint64, 2> {qint64(ownCell.x), qint64(ownCell.y)}) {
                 continue;
             }
 
-            const QVector<quint16> codes = encodeLocalSpacings(nativeSpacings.at(i));
-            result.nodes.append(SubtreeRecord {node.cell, quint32(node.points.size()),
-                                               measureNodeSpacing(node.points),
-                                               node.children});
+            for(qint64 y = low.at(1); y <= high.at(1); y++) {
+                for(qint64 x = low.at(0); x <= high.at(0); x++) {
+                    const Cell column {level, quint32(x), quint32(y), 0};
+                    const auto found = context.columnByKey.constFind(columnKey(column));
+                    if(found == context.columnByKey.constEnd() || found.value() == ownColumn
+                       || !inHaloBox(point, column, context.root)) {
+                        continue;
+                    }
+                    visit(found.value());
+                }
+            }
+        }
+    }
+
+    /**
+     * The halo pass on one chunk: reads its parts once, in batches, and
+     * appends every point that lies in another column's halo box to a halo
+     * file of that column's that this chunk alone writes. The parts stay for
+     * the chunk's own column to read.
+     */
+    HaloResult writeHalo(const ChunkTask& task, int ownColumn, const HaloContext& context)
+    {
+        HaloResult result;
+        if(context.cancel->load(std::memory_order_relaxed)) {
+            result.errorCode = cwPointOctreeBuilder::Cancelled;
+            return result;
+        }
+
+        const QDir tempDir(context.tempDirPath);
+        QHash<int, ChunkBuffer> buffers;
+        qint64 bufferedBytes = 0;
+
+        const auto flushAll = [&]() {
+            for(ChunkBuffer& buffer : buffers) {
+                if(!flushChunkBuffer(buffer)) {
+                    result.errorCode = cwPointOctreeBuilder::TempDirFailed;
+                    result.errorMessage =
+                        QStringLiteral("Could not write the octree chunk files in %1.")
+                            .arg(context.tempDirPath);
+                    return false;
+                }
+            }
+            bufferedBytes = 0;
+            return true;
+        };
+
+        const auto lend = [&](const QVector3D& point, int column) {
+            auto found = buffers.find(column);
+            if(found == buffers.end()) {
+                ChunkBuffer buffer;
+                buffer.path = tempDir.filePath(QStringLiteral("halo-%1-from-%2.bin")
+                                                   .arg(column)
+                                                   .arg(cellKey(task.cell)));
+                found = buffers.insert(column, buffer);
+            }
+            bufferPoint(*found, point, bufferedBytes);
+        };
+
+        const bool streamed = streamParts(task.parts, result,
+                                          [&](const QVector3D* points, qsizetype count) {
+            for(qsizetype i = 0; i < count; i++) {
+                const QVector3D& point = points[i];
+                forEachHaloColumn(point, task.cell, ownColumn, context,
+                                  [&](int column) { lend(point, column); });
+            }
+
+            if(bufferedBytes >= kDecodeWorkerBufferBytes && !flushAll()) {
+                return false;
+            }
 
             if(context.cancel->load(std::memory_order_relaxed)) {
+                result.errorCode = cwPointOctreeBuilder::Cancelled;
+                return false;
+            }
+            return true;
+        });
+
+        if(!streamed || !flushAll()) {
+            return result;
+        }
+
+        for(auto it = buffers.constBegin(); it != buffers.constEnd(); ++it) {
+            result.parts.insert(it.key(), ChunkPart {it->path, it->pointCount});
+        }
+        return result;
+    }
+
+    struct ColumnsResult {
+        int errorCode = Monad::ResultBase::NoError;
+        QString errorMessage;
+        QVector<ColumnTask> columns;
+    };
+
+    /**
+     * Groups @a tasks into their xy columns and runs the halo pass, so every
+     * column holds the halo files its neighbors lend it and what it costs
+     * pass B, the columns biggest first. The halo pass reads every chunk's
+     * parts once more than pass B does, and writes the points beside a
+     * column's xy faces once for each column they lend to. Where columns of
+     * two levels overlap (one z cell of an xy footprint split, its sibling
+     * kept) each lends the other its whole overlap, which the measurement
+     * needs and which the column's budget charge counts.
+     */
+    ColumnsResult planColumns(const QVector<ChunkTask>& tasks, const RootCube& root,
+                              const QDir& tempDir, Promise& promise, Reporter& progress,
+                              qint64 progressBase)
+    {
+        ColumnsResult result;
+
+        HaloContext context {.root = root, .tempDirPath = tempDir.path()};
+        QVector<int> columnOfTask(tasks.size(), -1);
+        for(qsizetype i = 0; i < tasks.size(); i++) {
+            const quint64 key = columnKey(tasks.at(i).cell);
+            auto found = context.columnByKey.constFind(key);
+            if(found == context.columnByKey.constEnd()) {
+                found = context.columnByKey.insert(key, int(result.columns.size()));
+                Cell column = tasks.at(i).cell;
+                column.z = 0;
+                result.columns.append(ColumnTask {column, {}, {}, 0, 0});
+                if(!context.columnLevels.contains(column.level)) {
+                    context.columnLevels.append(column.level);
+                }
+            }
+            columnOfTask[i] = found.value();
+            result.columns[found.value()].chunks.append(i);
+        }
+        std::sort(context.columnLevels.begin(), context.columnLevels.end());
+
+        //A lone column has no neighbor to lend it anything
+        if(result.columns.size() > 1) {
+            std::atomic<bool> cancel {promise.isCanceled()};
+            const std::atomic<qint64> pointsDone {0};
+            context.cancel = &cancel;
+
+            QVector<qsizetype> taskIndices(tasks.size());
+            std::iota(taskIndices.begin(), taskIndices.end(), qsizetype(0));
+            const auto worker = [&tasks, &columnOfTask, context](qsizetype task) {
+                return writeHalo(tasks.at(task), columnOfTask.at(task), context);
+            };
+            QFuture<HaloResult> mapFuture = cwConcurrent::mapped(taskIndices, worker);
+            const QList<HaloResult> halos =
+                awaitMapped(mapFuture, promise, progress, cancel, pointsDone, progressBase);
+
+            if(halos.size() != tasks.size()) {
                 result.errorCode = cwPointOctreeBuilder::Cancelled;
                 return result;
             }
 
-            const QByteArray payload =
-                quantizeAll(node.points, codes,
-                            cellBounds(node.cell, context.rootMin, context.rootSize));
-            const cwDiskCacher::Key key =
-                nodeKey(context.lazPath, context.fingerprint, nodeNameForCell(node.cell));
+            //Task order, so a column's halo reads the same whatever order the
+            //workers finished in
+            for(const HaloResult& halo : halos) {
+                if(halo.errorCode != Monad::ResultBase::NoError) {
+                    result.errorCode = halo.errorCode;
+                    result.errorMessage = halo.errorMessage;
+                    return result;
+                }
 
-            if(!writeEntry(cacher, key, payload)) {
-                result.errorCode = cwPointOctreeBuilder::CacheWriteFailed;
-                result.errorMessage = QStringLiteral("Could not write the octree node %1 into the cache.")
-                                          .arg(key.id);
-                return result;
+                QList<int> lentTo = halo.parts.keys();
+                std::sort(lentTo.begin(), lentTo.end());
+                for(const int column : std::as_const(lentTo)) {
+                    const ChunkPart& part = halo.parts.value(column);
+                    result.columns[column].halo.append(part);
+                    result.columns[column].haloPoints += part.pointCount;
+                }
             }
         }
 
-        result.rootPoints = std::move(subtree.first().points);
-        result.rootSpacings = std::move(nativeSpacings.first());
-        context.pointsDone->fetch_add(task.pointCount, std::memory_order_relaxed);
+        for(ColumnTask& column : result.columns) {
+            QVector<qint64> chunkPoints;
+            chunkPoints.reserve(column.chunks.size());
+            for(const qsizetype chunk : std::as_const(column.chunks)) {
+                chunkPoints.append(tasks.at(chunk).pointCount);
+            }
+            column.bytes = passBColumnBytes(chunkPoints, column.haloPoints);
+        }
+
+        //Biggest first, so the column the budget has the most trouble with
+        //runs while the fewest others are beside it. The column key breaks
+        //ties, so the order is the input's whatever the hash hands back.
+        std::sort(result.columns.begin(), result.columns.end(),
+                  [](const ColumnTask& left, const ColumnTask& right) {
+                      if(left.bytes != right.bytes) {
+                          return left.bytes > right.bytes;
+                      }
+                      return columnKey(left.column) < columnKey(right.column);
+                  });
         return result;
     }
 
@@ -1043,19 +1394,23 @@ namespace {
         int errorCode = Monad::ResultBase::NoError;
         QString errorMessage;
 
-        //One entry a task, in task order; nullopt where the task never ran
+        //One entry a chunk task, in task order; nullopt where its column never ran
         QVector<std::optional<ChunkResult>> chunks;
+        //One entry a column, in column order; nullopt where it never ran
+        QVector<std::optional<ColumnResult>> columns;
 
         qint64 peakBytes = 0;
     };
 
     /**
-     * Pass B: the chunks run under a memory budget rather than all at once.
-     * The tasks are admitted biggest first, a task starts only while its
-     * working set still fits beside the ones already running, and the biggest
-     * chunk of all runs on its own however small the budget is.
+     * Pass B: the columns run under a memory budget rather than all at once.
+     * The columns are admitted biggest first, a column starts only while its
+     * working set (ColumnTask::bytes) still fits beside the ones already
+     * running, and the biggest column of all runs on its own however small
+     * the budget is.
      */
     PassBResult runPassB(const QVector<ChunkTask>& tasks,
+                         const QVector<ColumnTask>& columns,
                          const ChunkContext& context,
                          qint64 budgetBytes,
                          Promise& promise,
@@ -1063,63 +1418,70 @@ namespace {
                          qint64 progressBase)
     {
         PassBResult result;
-        if(tasks.isEmpty()) {
+        if(columns.isEmpty()) {
             return result;
         }
 
         result.chunks.resize(tasks.size());
+        result.columns.resize(columns.size());
 
-        struct RunningChunk {
-            qsizetype taskIndex = 0;
+        struct RunningColumn {
+            qsizetype columnIndex = 0;
             qint64 bytes = 0;
-            QFuture<ChunkResult> future;
+            QFuture<ColumnResult> future;
         };
 
         QThreadPool* pool = cwTask::threadPool();
 
         //The orchestrator polls rather than works, so it gives its slot up to
-        //the chunks it runs, as pass A's map does
+        //the columns it runs, as pass A's map does
         pool->releaseThread();
 
         //Read after the release, so the slot the orchestrator gave up is one a
-        //chunk may run in, as it was under the map
+        //column may run in, as it was under the map
         const qsizetype maxRunning = std::max(qsizetype(1), qsizetype(pool->maxThreadCount()));
 
-        QList<RunningChunk> running;
+        QList<RunningColumn> running;
         qint64 inFlightBytes = 0;
-        qsizetype nextTask = 0;
+        qsizetype nextColumn = 0;
         bool admitting = true;
 
         //A canceled or failed pass admits nothing more, so what is running is
         //all that is left of it
-        while((admitting && nextTask < tasks.size()) || !running.isEmpty()) {
-            //The started chunks poll the shared flag per node, and the ones
+        while((admitting && nextColumn < columns.size()) || !running.isEmpty()) {
+            //The started columns poll the shared flag per node, and the ones
             //still waiting are never admitted
             if(admitting && promise.isCanceled()) {
                 admitting = false;
                 context.cancel->store(true, std::memory_order_relaxed);
             }
 
-            while(admitting && nextTask < tasks.size() && running.size() < maxRunning) {
-                const ChunkTask& task = tasks.at(nextTask);
-                const qint64 bytes = task.pointCount
-                                     * (kPassBWorkingSetBytesPerPoint
-                                        + kPassBLocalSpacingBytesPerPoint);
+            while(admitting && nextColumn < columns.size() && running.size() < maxRunning) {
+                const ColumnTask& column = columns.at(nextColumn);
+                const qint64 bytes = column.bytes;
 
-                //The first chunk of a round runs whatever it costs, so a chunk
-                //bigger than the whole budget still gets built, on its own
+                //The first column of a round runs whatever it costs, so a
+                //column bigger than the whole budget still gets built, on its own
                 if(!running.isEmpty() && inFlightBytes + bytes > budgetBytes) {
                     break;
                 }
 
-                running.append(RunningChunk {
-                    nextTask,
+                QVector<ChunkTask> chunkTasks;
+                chunkTasks.reserve(column.chunks.size());
+                for(const qsizetype chunk : column.chunks) {
+                    chunkTasks.append(tasks.at(chunk));
+                }
+
+                running.append(RunningColumn {
+                    nextColumn,
                     bytes,
-                    cwConcurrent::run([task, context]() { return buildChunk(task, context); })});
+                    cwConcurrent::run([column, chunkTasks, context]() {
+                        return buildColumn(column, chunkTasks, context);
+                    })});
 
                 inFlightBytes += bytes;
                 result.peakBytes = std::max(result.peakBytes, inFlightBytes);
-                nextTask++;
+                nextColumn++;
             }
 
             bool reaped = false;
@@ -1129,25 +1491,31 @@ namespace {
                 }
 
                 reaped = true;
-                RunningChunk finished = running.takeAt(i);
+                RunningColumn finished = running.takeAt(i);
                 inFlightBytes -= finished.bytes;
 
-                ChunkResult chunk = finished.future.takeResult();
+                ColumnResult column = finished.future.takeResult();
 
-                //A chunk that failed is the build's answer, so the running
-                //chunks stop at their next node and no more are admitted
-                if(chunk.errorCode != Monad::ResultBase::NoError) {
+                //A column that failed is the build's answer, so the running
+                //columns stop at their next node and no more are admitted
+                if(column.errorCode != Monad::ResultBase::NoError) {
                     admitting = false;
                     context.cancel->store(true, std::memory_order_relaxed);
+                } else {
+                    const QVector<qsizetype>& chunks = columns.at(finished.columnIndex).chunks;
+                    for(qsizetype c = 0; c < chunks.size(); c++) {
+                        result.chunks[chunks.at(c)] = std::move(column.chunks[c]);
+                    }
+                    column.chunks.clear();
                 }
 
-                result.chunks[finished.taskIndex] = std::move(chunk);
+                result.columns[finished.columnIndex] = std::move(column);
             }
 
             progress.report(progressBase + context.pointsDone->load(std::memory_order_relaxed));
 
-            //A slot a chunk just freed is filled on the next turn rather than
-            //after a sleep, so the pool waits only while every chunk still runs
+            //A slot a column just freed is filled on the next turn rather than
+            //after a sleep, so the pool waits only while every column still runs
             if(!reaped && !running.isEmpty()) {
                 QThread::msleep(kMapPollMs);
             }
@@ -1155,32 +1523,33 @@ namespace {
 
         pool->reserveThread();
 
-        //The chunk that failed is the build's answer, whichever came first in
-        //task order. Its siblings stop at their next node and report Cancelled,
-        //as do the tasks admission never reached, so both stand behind it.
-        bool everyChunkRan = true;
-        bool anyChunkCanceled = false;
-        for(const std::optional<ChunkResult>& chunk : std::as_const(result.chunks)) {
-            if(!chunk.has_value()) {
-                everyChunkRan = false;
+        //The column that failed is the build's answer, whichever came first in
+        //column order. Its siblings stop at their next node and report
+        //Cancelled, as do the columns admission never reached, so both stand
+        //behind it.
+        bool everyColumnRan = true;
+        bool anyColumnCanceled = false;
+        for(const std::optional<ColumnResult>& column : std::as_const(result.columns)) {
+            if(!column.has_value()) {
+                everyColumnRan = false;
                 continue;
             }
 
-            if(chunk->errorCode == Monad::ResultBase::NoError) {
+            if(column->errorCode == Monad::ResultBase::NoError) {
                 continue;
             }
 
-            if(chunk->errorCode == cwPointOctreeBuilder::Cancelled) {
-                anyChunkCanceled = true;
+            if(column->errorCode == cwPointOctreeBuilder::Cancelled) {
+                anyColumnCanceled = true;
                 continue;
             }
 
-            result.errorCode = chunk->errorCode;
-            result.errorMessage = chunk->errorMessage;
+            result.errorCode = column->errorCode;
+            result.errorMessage = column->errorMessage;
             return result;
         }
 
-        if(anyChunkCanceled || !everyChunkRan) {
+        if(anyColumnCanceled || !everyColumnRan) {
             result.errorCode = cwPointOctreeBuilder::Cancelled;
         }
 
@@ -1271,6 +1640,15 @@ namespace {
         node.measuredSpacing = measuredSpacing;
         return node;
     }
+}
+
+qint64 cw::octree::passBColumnBytes(const QVector<qint64>& chunkPointCounts, qint64 haloPoints)
+{
+    qint64 bytes = haloPoints * kPassBHaloBytesPerPoint;
+    for(const qint64 points : chunkPointCounts) {
+        bytes += points * (kPassBWorkingSetBytesPerPoint + kPassBLocalSpacingBytesPerPoint);
+    }
+    return bytes;
 }
 
 int cwPointOctreeBuilder::chunkDepthFor(qint64 npoints, qint64 chunkTargetPoints)
@@ -1500,19 +1878,38 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                                  ? request.memoryBudgetBytes
                                                  : kDefaultBuildMemoryBudgetBytes;
 
-            PassBResult passB = runPassB(tasks, context, memoryBudgetBytes,
+            ColumnsResult columns =
+                planColumns(tasks, root, tempPath, promise, progress, passA.pointCount);
+            if(columns.errorCode != Monad::ResultBase::NoError) {
+                fail(columns.errorCode == Cancelled ? cancelledMessage : columns.errorMessage,
+                     columns.errorCode);
+                return;
+            }
+
+            qint64 haloPoints = 0;
+            for(const ColumnTask& column : std::as_const(columns.columns)) {
+                haloPoints += column.haloPoints;
+            }
+            cw::profile::write(lcProfileLoad(),
+                               QStringLiteral("build halo columns=%1 haloPoints=%2 seconds=%3")
+                                   .arg(columns.columns.size())
+                                   .arg(haloPoints)
+                                   .arg(secondsSince(passTimer)));
+            passTimer.restart();
+
+            PassBResult passB = runPassB(tasks, columns.columns, context, memoryBudgetBytes,
                                          promise, progress, passA.pointCount);
 
             qint64 localSpacingMilliseconds = 0;
             qint64 localSpacingCappedPoints = 0;
             std::optional<std::pair<double, double>> ceilingRange;
-            for(const std::optional<ChunkResult>& chunk : std::as_const(passB.chunks)) {
-                if(!chunk) {
+            for(const std::optional<ColumnResult>& column : std::as_const(passB.columns)) {
+                if(!column || column->errorCode != Monad::ResultBase::NoError) {
                     continue;
                 }
-                localSpacingMilliseconds += chunk->localSpacingMilliseconds;
-                localSpacingCappedPoints += chunk->localSpacingCappedPoints;
-                const double ceiling = chunk->localSpacingCeiling;
+                localSpacingMilliseconds += column->localSpacingMilliseconds;
+                localSpacingCappedPoints += column->localSpacingCappedPoints;
+                const double ceiling = column->localSpacingCeiling;
                 if(ceilingRange) {
                     ceilingRange->first = std::min(ceilingRange->first, ceiling);
                     ceilingRange->second = std::max(ceilingRange->second, ceiling);
@@ -1526,7 +1923,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                                .arg(ceilingRange->second)
                                          : QStringLiteral("none");
             cw::profile::write(lcProfileLoad(),
-                               QStringLiteral("build passB chunks=%1 budgetBytes=%2 "
+                               QStringLiteral("build passB chunks=%1 columns=%8 budgetBytes=%2 "
                                               "inFlightPeakBytes=%3 seconds=%4 "
                                               "localSpacingChunkSeconds=%5 "
                                               "localSpacingCappedPoints=%6 "
@@ -1537,7 +1934,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                                    .arg(secondsSince(passTimer))
                                    .arg(seconds(localSpacingMilliseconds))
                                    .arg(localSpacingCappedPoints)
-                                   .arg(ceilings));
+                                   .arg(ceilings)
+                                   .arg(columns.columns.size()));
             passTimer.restart();
 
             if(passB.errorCode != Monad::ResultBase::NoError) {

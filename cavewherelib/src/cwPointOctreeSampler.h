@@ -96,11 +96,12 @@ namespace cw::octree {
                                                            int leafMaxPoints = kLeafMaxPoints,
                                                            int minSplitPoints = kMinSplitPoints);
 
-    //! What measureNativeSpacing() finds over one chunk
+    //! What measureNativeSpacing() finds over one xy column of chunks
     struct NativeSpacingEstimate {
-        //! One vector per node, one spacing per point in the node's order
-        QVector<QVector<float>> spacings;
-        //! The chunk's ceiling
+        //! One entry per subtree, then one vector per node, one spacing per
+        //! point in the node's order
+        QVector<QVector<QVector<float>>> spacings;
+        //! The column's ceiling
         double ceiling = kMaxLocalSpacingUnits;
         //! The coded points that took the ceiling
         qint64 cappedPoints = 0;
@@ -108,35 +109,34 @@ namespace cw::octree {
 
     /**
      * The native spacing (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5,
-     * WP13 and WP15) of every point of every node of @a nodes, a subtree as
-     * buildSubtree() returns it with its root at index 0: one vector per node,
-     * one spacing per point in the node's order, in the octree's units.
+     * WP13, WP15 and WP16) of every point of every node of @a subtrees, each
+     * a subtree as buildSubtree() returns it with its root at index 0, in the
+     * octree's units. @a subtrees are the pass B chunks of one xy column and
+     * @a neighbors the points of the cloud around it, its halo, which count as
+     * neighbors and are not coded themselves.
      *
      * A point's native spacing is the distance r_k, along kNativeSpacingAxes
      * (the horizontal plane), to its kLocalSpacingNeighbors-th nearest
-     * neighbor at a distinct position there among every point of every node
-     * of @a nodes, times kLocalSpacingSurfaceFactor. The octree is additive,
-     * so those nodes together are the raw data of the subtree's cell: a point
-     * measures the data around it whatever level it sits at. Points at one
-     * horizontal position count once, so a stack of duplicate returns, or of
-     * returns down one pulse, reads as one neighbor rather than a dense patch.
-     * Neighbor information stops at the subtree's own cell: a point beside
-     * one of its faces finds its k-th neighbor at most sqrt(2) farther than it
-     * would with the cell's neighbors there (half the disc), and one at a
-     * corner of two faces at most twice as far.
+     * neighbor at a distinct position there among every point of
+     * @a subtrees and @a neighbors, times kLocalSpacingSurfaceFactor. The
+     * octree is additive, so the subtrees' nodes together are the raw data of
+     * their cells: a point measures the data around it whatever level it sits
+     * at. Points at one horizontal position count once, so a stack of
+     * duplicate returns, or of returns down one pulse, reads as one neighbor
+     * rather than a dense patch. Neighbor information stops where the column
+     * and its halo end: a point measures exactly as a search over the whole
+     * cloud would whenever its k-th neighbor lies inside that.
      *
-     * The subtree is one chunk, and its ceiling is kLoneSpacingMedianRatio
-     * times the median spacing of its coded points that found k neighbors
-     * (kMaxLocalSpacingUnits where none did): a point with fewer than k
-     * distinct neighbors, or one wider than the ceiling, takes it. Every
-     * spacing is then clamped to [kMinLocalSpacingUnits, kMaxLocalSpacingUnits].
-     * Nodes shallower than @a firstCodedLevel come back empty, still count as
-     * neighbors, and stay out of the median. @a rootMin and @a rootSize are
-     * the octree root cube's.
+     * The column's ceiling is kLoneSpacingMedianRatio times the median spacing
+     * of its coded points that found k neighbors (kMaxLocalSpacingUnits where
+     * none did): a point with fewer than k distinct neighbors, or one wider
+     * than the ceiling, takes it. Every spacing is then clamped to
+     * [kMinLocalSpacingUnits, kMaxLocalSpacingUnits]. @a rootMin and
+     * @a rootSize are the octree root cube's.
      */
     CAVEWHERE_LIB_EXPORT NativeSpacingEstimate measureNativeSpacing(
-        const QVector<SampledNode>& nodes, const QVector3D& rootMin, double rootSize,
-        int firstCodedLevel = 0);
+        const QVector<const QVector<SampledNode>*>& subtrees, const QVector<QVector3D>& neighbors,
+        const QVector3D& rootMin, double rootSize);
 
     //! The codes (encodeLocalSpacing) of @a spacings
     CAVEWHERE_LIB_EXPORT QVector<quint16> encodeLocalSpacings(const QVector<float>& spacings);

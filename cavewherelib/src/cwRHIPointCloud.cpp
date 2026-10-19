@@ -511,10 +511,33 @@ void cwRHIPointCloud::restoreOwnFloorsLeavingCut(QRhiResourceUpdateBatch* batch,
 
 float cwRHIPointCloud::ownSpacing(int index) const
 {
-    const cwPointOctreeNode& node = m_source.manifest->nodes.at(index);
-    return float(cw::clod::floorSpacing(m_source.manifest->spacing(node.level),
-                                        double(node.measuredSpacing),
-                                        m_renderState.value().shading.spacingSource));
+    const cwPointOctreeManifest& manifest = *m_source.manifest;
+    const cwPointOctreeNode& node = manifest.nodes.at(index);
+
+    // A leaf under resident ancestors is, with them, every point of its cell.
+    // Resident stands in for drawn here: this floor is the one a node takes
+    // on upload and on leaving the cut, before or without a selection that
+    // says which ancestors draw. A live frame's writeNodeFloors() overwrites
+    // it from the selection on the same batch; a job with no live gather,
+    // such as an export, keeps it, so there a resident ancestor outside the
+    // cut still lets its leaf draw at native spacing alone.
+    const auto holdsRawData = [&]() {
+        if (!node.isLeaf()) {
+            return false;
+        }
+        const QVector<int>& parents = manifest.parents();
+        for (int ancestor = parents.at(index); ancestor >= 0; ancestor = parents.at(ancestor)) {
+            if (m_nodes.at(ancestor).state != NodeState::Resident) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    return float(cw::clod::ownFloorSpacing(manifest.spacing(node.level),
+                                           double(node.measuredSpacing),
+                                           m_renderState.value().shading.spacingSource,
+                                           holdsRawData()));
 }
 
 void cwRHIPointCloud::writeNodeFloor(QRhiResourceUpdateBatch* batch, int index,

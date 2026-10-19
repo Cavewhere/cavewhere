@@ -1177,5 +1177,88 @@ class ForestContactSheetTest(unittest.TestCase):
                         + report.candidate_frame_name(0, 1), text)
 
 
+# WP16: TT, the user's tree crown over the level-1 z face, settled under
+# Measured and Local at coverage 1.25 and at the default 1.5, flat and under the
+# sprite size and sprite density views, beside C-default, the way the bench
+# writes it. TT is no P2 or P3 path either, so its views earn it a sheet.
+TREE_TOPS_PATH = ("TT", "TT")
+TREE_TOPS_CONFIGS = ("C-default", "C-default-local",
+                     "C-measured-size", "C-local-size",
+                     "C-measured-density", "C-local-density",
+                     "C-measured-cover125", "C-local-cover125",
+                     "C-measured-cover125-size", "C-local-cover125-size",
+                     "C-measured-cover125-density", "C-local-cover125-density")
+
+
+def tree_tops_log():
+    path, directory = TREE_TOPS_PATH
+    lines = []
+    for index, config in enumerate(TREE_TOPS_CONFIGS):
+        lines.append("evalCsv,path,config,pose,frame,label,litFraction,holeFraction,"
+                     "pending,spacingSource,spacingCoverage,revealFrames,revealMode")
+        lines.append("evalDump,path,config,directory")
+        lines.append("evalDump,{p},{c},{d}/{c}/run-16-{i:03d}".format(
+            p=path, c=config, d=directory, i=index + 1))
+        source = "Local" if config.startswith("C-local") or config == "C-default-local" \
+            else "Measured"
+        coverage = "1.25" if "cover125" in config else "1.5"
+        for frame in (0, 1):
+            lines.append("evalCsv,{p},{c},0,{f},tree-tops,0.50000,0.01000,0,{s},{v},0,Cover"
+                         .format(p=path, c=config, f=frame, s=source, v=coverage))
+    return "\n".join(lines) + "\n"
+
+
+class TreeTopsContactSheetTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        root = Path(self.temporary.name)
+        self.frames = root / "frames"
+        self.out = root / "report" / "index.html"
+        _, path_directory = TREE_TOPS_PATH
+        for index, config in enumerate(TREE_TOPS_CONFIGS):
+            directory = self.frames / path_directory / config / "run-16-{:03d}".format(index + 1)
+            directory.mkdir(parents=True)
+            for frame in (0, 1):
+                write_rgba_png(directory / report.candidate_frame_name(0, frame), frame + index)
+            if config == report.DIFF_CANDIDATE:
+                for oracle in ("O2", "O3"):
+                    (directory / oracle).mkdir()
+                    write_rgba_png(directory / oracle / report.oracle_frame_name(0), 5)
+        log_file = root / "run.log"
+        log_file.write_text(tree_tops_log(), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.exit_code = report.main(["--log", str(log_file), "--frames", str(self.frames),
+                                          "--out", str(self.out)])
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def sheet_text(self):
+        sheet = self.out.parent / "contact-TT.html"
+        self.assertTrue(sheet.is_file(), "no contact sheet for TT")
+        return sheet.read_text(encoding="utf-8")
+
+    def test_the_tree_tops_pose_gets_a_sheet(self):
+        self.assertEqual(self.exit_code, 0)
+        self.sheet_text()
+        index = self.out.read_text(encoding="utf-8")
+        assert_contains(self, 'href="contact-TT.html"', index)
+
+    def test_the_tree_tops_sheet_shows_every_view_of_measured_and_local_at_both_coverages(self):
+        self.assertEqual(self.exit_code, 0)
+        text = self.sheet_text()
+        for config in TREE_TOPS_CONFIGS[1:]:
+            assert_contains(self, "<th>{}</th>".format(config), text)
+            self.assertNotIn("no {} frame".format(config), text)
+        # Each view's Measured and Local side by side, at both coverages
+        assert_contains(self, "<th>C-measured-size</th><th>C-local-size</th>", text)
+        assert_contains(self, "<th>C-measured-density</th><th>C-local-density</th>", text)
+        assert_contains(self, "<th>C-measured-cover125-size</th><th>C-local-cover125-size</th>",
+                        text)
+        assert_contains(self, "<th>C-measured-cover125-density</th>"
+                        "<th>C-local-cover125-density</th>", text)
+        assert_contains(self, "TT/C-local-size/run-16-004/"
+                        + report.candidate_frame_name(0, 1), text)
+
 if __name__ == "__main__":
     unittest.main()

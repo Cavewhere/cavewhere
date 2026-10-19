@@ -1233,7 +1233,7 @@ TEST_CASE("cw::octree::requestedCutSpacings: under Grow a drawn node floors at t
 
 // ---- WP15: grid floors under Local ----------------------------------------------
 
-TEST_CASE("cw::octree::finestDrawnSpacings: under Local every node floors at the grid of its finest drawn level, as under Grid",
+TEST_CASE("cw::octree::finestDrawnSpacings: under Local every node with children floors at the grid of its finest drawn level, as under Grid",
           "[PointOctree][PointOctreeSelection]")
 {
     using cw::pointcloud::SpacingSource;
@@ -1264,6 +1264,18 @@ TEST_CASE("cw::octree::finestDrawnSpacings: under Local every node floors at the
         {{grandchild, 0, refinedChild}, {missingGrandchild}},
     };
 
+    //A leaf is WP16's (its own case below), so only nodes with children
+    //compare here
+    const auto withChildren = [&](const QVector<int>& nodes, const QVector<double>& floors) {
+        QVector<double> kept;
+        for(qsizetype i = 0; i < nodes.size(); i++) {
+            if(!manifest.nodes.at(nodes.at(i)).isLeaf()) {
+                kept.append(floors.at(i));
+            }
+        }
+        return kept;
+    };
+
     for(qsizetype c = 0; c < cuts.size(); c++) {
         const Cut& cut = cuts.at(c);
         INFO("cut " << c);
@@ -1275,13 +1287,15 @@ TEST_CASE("cw::octree::finestDrawnSpacings: under Local every node floors at the
             finestDrawnSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Local);
         REQUIRE(local.size() == grid.size());
         //Bit for bit Grid's floors, with the incomplete-ancestor rule
-        CHECK(local == grid);
+        CHECK(withChildren(cut.drawn, local) == withChildren(cut.drawn, grid));
         REQUIRE(measured.size() == grid.size());
         CHECK(measured != grid);
 
         //and under Grow the requested cut floors at the grid value as well
-        CHECK(requestedCutSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Local)
-              == requestedCutSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Grid));
+        CHECK(withChildren(cut.drawn, requestedCutSpacings(manifest, cut.drawn, cut.missing,
+                                                           SpacingSource::Local))
+              == withChildren(cut.drawn, requestedCutSpacings(manifest, cut.drawn, cut.missing,
+                                                              SpacingSource::Grid)));
     }
 }
 
@@ -1309,4 +1323,153 @@ TEST_CASE("cw::octree::finestDrawnSpacings: Grid and Measured floor exactly as t
           == QVector<double>({sparse, childGrid, sparse}));
     CHECK(requestedCutSpacings(manifest, {0}, {grandchild}, SpacingSource::Measured)
           == QVector<double>({sparse}));
+}
+
+// ---- WP16 (A): leaf floors under Local ------------------------------------------
+
+namespace {
+    //! Every node of @a manifest sparser than its grid by this, so Measured
+    //! floors wider than Grid everywhere and each source's floor shows
+    constexpr float kLeafSparseFactor = 3.0f;
+
+    cwPointOctreeManifest sparseLeafManifest()
+    {
+        cwPointOctreeManifest manifest = buildManifest();
+        for(cwPointOctreeNode& node : manifest.nodes) {
+            node.measuredSpacing = kLeafSparseFactor * float(manifest.spacing(node.level));
+        }
+        return manifest;
+    }
+}
+
+TEST_CASE("cw::octree::finestDrawnSpacings: under Local a drawn leaf whose ancestors are all drawn floors at kMinLocalSpacingUnits, and its ancestors floor as under Grid",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    const cwPointOctreeManifest manifest = sparseLeafManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int coarseChild = manifest.nodes.at(0).children.at(1);
+    REQUIRE(manifest.nodes.at(grandchild).isLeaf());
+    REQUIRE(manifest.nodes.at(coarseChild).isLeaf());
+    REQUIRE_FALSE(manifest.nodes.at(refinedChild).isLeaf());
+
+    //The deep leaf alone, a shallow leaf beside it, and a shallow leaf alone
+    //under the root, each with every ancestor drawn
+    for(const QVector<int>& drawn : {QVector<int>{0, refinedChild, grandchild},
+                                     QVector<int>{0, refinedChild, grandchild, coarseChild},
+                                     QVector<int>{0, coarseChild},
+                                     QVector<int>{grandchild, coarseChild, 0, refinedChild}}) {
+        INFO("drawn " << drawn.size() << " nodes, the first " << drawn.constFirst());
+        const QVector<double> local =
+            finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Local);
+        const QVector<double> grid =
+            finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Grid);
+        REQUIRE(local.size() == drawn.size());
+        REQUIRE(grid.size() == drawn.size());
+        for(qsizetype i = 0; i < drawn.size(); i++) {
+            const int node = drawn.at(i);
+            INFO("node " << node << " at level " << manifest.nodes.at(node).level);
+            if(manifest.nodes.at(node).isLeaf()) {
+                //Its points with its ancestors' are the raw data: no gap to cover
+                CHECK(local.at(i) == kMinLocalSpacingUnits);
+            } else {
+                //An ancestor still floors at what its finest drawn level lifts
+                //into it, as WP15 floors it
+                CHECK(local.at(i) == grid.at(i));
+            }
+        }
+    }
+}
+
+TEST_CASE("cw::octree::finestDrawnSpacings: a drawn leaf floors at its grid under Grid and at the larger of its grid and its measured spacing under Measured, as before WP16",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    const cwPointOctreeManifest manifest = sparseLeafManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int coarseChild = manifest.nodes.at(0).children.at(1);
+    const double childGrid = manifest.spacing(1);
+    const double grandchildGrid = manifest.spacing(2);
+    const double sparse = std::max(grandchildGrid,
+                                   double(manifest.nodes.at(grandchild).measuredSpacing));
+    const double coarseSparse = std::max(childGrid,
+                                         double(manifest.nodes.at(coarseChild).measuredSpacing));
+    REQUIRE(sparse > grandchildGrid);
+    REQUIRE(coarseSparse > childGrid);
+
+    //Today's rules spelled out, both leaves drawn under their drawn ancestors
+    const QVector<int> drawn {0, refinedChild, grandchild, coarseChild};
+    CHECK(finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Grid)
+          == QVector<double>({grandchildGrid, grandchildGrid, grandchildGrid, childGrid}));
+    CHECK(finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Measured)
+          == QVector<double>({sparse, sparse, sparse, coarseSparse}));
+    //and the same under Grow with nothing missing
+    CHECK(requestedCutSpacings(manifest, drawn, {}, SpacingSource::Grid)
+          == finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Grid));
+    CHECK(requestedCutSpacings(manifest, drawn, {}, SpacingSource::Measured)
+          == finestDrawnSpacings(manifest, drawn, {}, SpacingSource::Measured));
+}
+
+TEST_CASE("cw::octree::finestDrawnSpacings: under Local a drawn leaf whose parent is still missing keeps its grid floor, and its incomplete ancestor its own",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    const cwPointOctreeManifest manifest = sparseLeafManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const double rootGrid = manifest.spacing(0);
+    const double grandchildGrid = manifest.spacing(2);
+
+    //The leaf landed before its parent: the parent's points are missing from
+    //its cell, so the leaf is not the raw data there and the
+    //incomplete-ancestor rule covers the hole exactly as today
+    const QVector<int> drawn {0, grandchild};
+    const QVector<int> missing {refinedChild};
+    const QVector<double> local =
+        finestDrawnSpacings(manifest, drawn, missing, SpacingSource::Local);
+    CHECK(local == QVector<double>({rootGrid, grandchildGrid}));
+    CHECK(local == finestDrawnSpacings(manifest, drawn, missing, SpacingSource::Grid));
+}
+
+TEST_CASE("cw::octree::requestedCutSpacings: under Grow and Local a leaf whose ancestors are all requested floors at kMinLocalSpacingUnits, as the drawn cut gives it",
+          "[PointOctree][PointOctreeSelection]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    const cwPointOctreeManifest manifest = sparseLeafManifest();
+    const int refinedChild = manifest.nodes.at(0).children.at(0);
+    const int grandchild = manifest.nodes.at(refinedChild).children.at(0);
+    const int missingGrandchild = manifest.nodes.at(refinedChild).children.at(1);
+
+    struct Cut {
+        QVector<int> drawn;
+        QVector<int> missing;
+    };
+    //The leaf's parent streaming, and a sibling leaf streaming beside it
+    for(const Cut& cut : {Cut {{0, grandchild}, {refinedChild}},
+                          Cut {{0, refinedChild, grandchild}, {missingGrandchild}}}) {
+        INFO("drawn " << cut.drawn.size() << ", missing " << cut.missing.constFirst());
+        const QVector<double> requested =
+            requestedCutSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Local);
+        const QVector<double> grid =
+            requestedCutSpacings(manifest, cut.drawn, cut.missing, SpacingSource::Grid);
+        REQUIRE(requested.size() == cut.drawn.size());
+        for(qsizetype i = 0; i < cut.drawn.size(); i++) {
+            const int node = cut.drawn.at(i);
+            INFO("node " << node);
+            CHECK(requested.at(i)
+                  == (manifest.nodes.at(node).isLeaf() ? kMinLocalSpacingUnits : grid.at(i)));
+        }
+
+        //The floor the settled cut gives it once everything lands
+        const QVector<int> settled = cut.drawn + cut.missing;
+        const QVector<double> landed =
+            finestDrawnSpacings(manifest, settled, {}, SpacingSource::Local);
+        CHECK(requested == landed.mid(0, cut.drawn.size()));
+    }
 }

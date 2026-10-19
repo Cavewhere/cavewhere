@@ -205,7 +205,10 @@ struct DrawnFloor {
 //! stray returns measured wide) never draws its ancestor's dense points
 //! larger than the ancestor's own spacing would. Under Grid both rules are
 //! no-ops: a deeper level's grid spacing is never wider, and one level has
-//! one grid spacing.
+//! one grid spacing. Under Local a drawn leaf whose ancestors are all drawn
+//! holds, with them, every point of its cell, so its own floor is
+//! cw::clod::ownFloorSpacing()'s for raw data; what it lifts into its
+//! ancestors stays its grid floor, so they floor as before.
 QVector<DrawnFloor> finestDrawnFloors(const cwPointOctreeManifest& manifest,
                                       const QVector<int>& drawnNodes,
                                       const QVector<int>& missingNodes,
@@ -271,11 +274,27 @@ QVector<DrawnFloor> finestDrawnFloors(const cwPointOctreeManifest& manifest,
         }
     }
 
+    const auto holdsRawData = [&](int node) {
+        if(!manifest.nodes.at(node).isLeaf()) {
+            return false;
+        }
+        for(int ancestor = parents.at(node); ancestor >= 0; ancestor = parents.at(ancestor)) {
+            if(!drawn.contains(ancestor)) {
+                return false;
+            }
+        }
+        return true;
+    };
+
     QVector<DrawnFloor> floors;
     floors.reserve(drawnNodes.size());
     for(int node : drawnNodes) {
+        const cwPointOctreeNode& entry = manifest.nodes.at(node);
+        const double own = cw::clod::ownFloorSpacing(manifest.spacing(entry.level),
+                                                     double(entry.measuredSpacing), source,
+                                                     holdsRawData(node));
         DrawnFloor floor = drawn.value(node);
-        floor.spacing = std::min(floor.spacing, ownFloor(node).spacing);
+        floor.spacing = std::min(floor.spacing, own);
         floors.append(floor);
     }
     return floors;

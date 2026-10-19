@@ -20,8 +20,9 @@ namespace cwLocalSpacingFixture {
     inline QVector<QVector<quint16>> estimateLocalSpacing(const QVector<cw::octree::SampledNode>& nodes,
                                                           const QVector3D& rootMin, double rootSize)
     {
+        //One subtree with no halo: the whole cloud is its own column
         const QVector<QVector<float>> spacings =
-            cw::octree::measureNativeSpacing(nodes, rootMin, rootSize).spacings;
+            cw::octree::measureNativeSpacing({&nodes}, {}, rootMin, rootSize).spacings.constFirst();
         QVector<QVector<quint16>> codes;
         codes.reserve(nodes.size());
         for(const QVector<float>& nodeSpacings : spacings) {

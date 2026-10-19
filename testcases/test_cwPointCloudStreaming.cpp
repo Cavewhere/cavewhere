@@ -6753,6 +6753,35 @@ namespace {
         return path;
     }
 
+    //! WP16's tree-top pose, TT: the user's tree crown on the BC tile
+    //! (lat 51.11763937 lon -121.84894398, 1994.2 m), 2 to 3.5 m over the
+    //! root's level-1 z face, in the tile's own UTM 10N coordinates, and the
+    //! ground under it in the file's own heights
+    constexpr double kTreeTopsSpotEasting = 580563.58;
+    constexpr double kTreeTopsSpotNorthing = 5663536.95;
+    constexpr double kTreeTopsGroundHeight = 1986.0;
+    //! Where TT's camera sits: this far from the ground under the spot along
+    //! its line of sight, pitched this far down onto it, from the south
+    //! looking north, as the WP16 diagnosis rendered it
+    constexpr float kTreeTopsDistanceMeters = 40.0f;
+    constexpr float kTreeTopsPitchDownDegrees = 35.0f;
+    constexpr float kTreeTopsHeadingDegrees = 270.0f;
+    constexpr int kTreeTopsPoseCount = 1;
+
+    //! TT: one pose kTreeTopsDistanceMeters from @a ground, pitched
+    //! kTreeTopsPitchDownDegrees down onto it from kTreeTopsHeadingDegrees
+    EvalPath treeTopsPath(const QVector3D& ground, QSize target)
+    {
+        EvalPath path;
+        path.name = QStringLiteral("TT");
+        const float height = kTreeTopsDistanceMeters
+                             * float(std::sin(qDegreesToRadians(double(kTreeTopsPitchDownDegrees))));
+        path.poses.append(orbitPose(ground, height, kTreeTopsHeadingDegrees,
+                                    pathProjection(target), QStringLiteral("tree-tops"), 0,
+                                    kTreeTopsPitchDownDegrees));
+        return path;
+    }
+
     //! The deepest level @a manifest holds
     int deepestLevel(const cwPointOctreeManifest& manifest)
     {
@@ -6958,9 +6987,11 @@ namespace {
         MeasuredCover125Size, //!< C-measured-cover125 under the sprite size view, for PF's sheet
         LocalCover125Size, //!< C-local-cover125 under the sprite size view, for PF's sheet
         MeasuredCover125Density, //!< C-measured-cover125 under the sprite density view
-        LocalCover125Density //!< C-local-cover125 under the sprite density view
+        LocalCover125Density, //!< C-local-cover125 under the sprite density view
+        MeasuredSize, //!< C-default under the sprite size view, for TT's sheet
+        LocalSize //!< C-default-local under the sprite size view, for TT's sheet
     };
-    constexpr int kCandidateCount = int(Candidate::LocalCover125Density) + 1;
+    constexpr int kCandidateCount = int(Candidate::LocalSize) + 1;
 
     constexpr int kStarvedGpuBudgetMb = 256;
     constexpr int kStarvedPointBudgetMillions = 4;
@@ -7076,6 +7107,16 @@ namespace {
             config = candidateConfig(Candidate::LocalCover125);
             config.name = QStringLiteral("C-local-cover125-density");
             config.debugView = cw::pointcloud::DebugView::SpriteDensity;
+            break;
+        case Candidate::MeasuredSize:
+            config.name = QStringLiteral("C-measured-size");
+            config.spacingSource = cw::pointcloud::SpacingSource::Measured;
+            config.debugView = cw::pointcloud::DebugView::SpriteSize;
+            break;
+        case Candidate::LocalSize:
+            config = candidateConfig(Candidate::DefaultLocal);
+            config.name = QStringLiteral("C-local-size");
+            config.debugView = cw::pointcloud::DebugView::SpriteSize;
             break;
         }
         return config;
@@ -15255,11 +15296,12 @@ namespace {
 
     //! The sprite sides the GPU drew over each of @a regions, in world
     //! coordinates, read pixel by pixel out of the sprite size view of the
-    //! settled frame, under @a source
+    //! settled frame, under @a source, the camera moved by @a viewOffset
     QVector<QVector<double>> drawnSpriteSides(QRhi* rhi, const OctreeCache& cache,
                                               cw::pointcloud::SpacingSource source,
                                               float orthoHeight,
-                                              const QVector<std::function<bool(QPointF)>>& regions)
+                                              const QVector<std::function<bool(QPointF)>>& regions,
+                                              const QVector3D& viewOffset = QVector3D())
     {
         return readDebugViewOverRegions(
             rhi, cache, source, cw::pointcloud::DebugView::SpriteSize, orthoHeight, regions,
@@ -15269,7 +15311,8 @@ namespace {
                 return [maxPointSizePx](QRgb pixel) {
                     return spriteSideFromRed(uchar(qRed(pixel)), maxPointSizePx);
                 };
-            });
+            },
+            viewOffset);
     }
 
     //! The hidden plane fixture: a dense plane over a sparser one
@@ -15627,7 +15670,7 @@ namespace {
     }
 }
 
-TEST_CASE("On the treetop blobs the sprite density view reads Measured's and Local's sprites over-covered alike, the root's floor wider than the blobs' native spacing",
+TEST_CASE("On the treetop blobs the sprite density view reads Measured's sprites over-covered, the root's floor wider than the blobs' native spacing, and Local's near white, the root a leaf",
           "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -15704,11 +15747,14 @@ TEST_CASE("On the treetop blobs the sprite density view reads Measured's and Loc
         return nearest > kTwinDensityToleranceOctaves;
     };
     CHECK(std::count_if(twinChecked.at(0).cbegin(), twinChecked.at(0).cend(), offTwin) == 0);
-    //and so does Local: it covers the larger of the floor and the point's
-    //native spacing, which only ever lifts a sprite, and here the floor is
-    //the larger, so the view shows the excess Local leaves in place
+    //Local does not: the root has no children, so with no ancestor to miss it
+    //is every point the file has and floors at kMinLocalSpacingUnits (WP16
+    //(A)), and each blob point covers its own native spacing. Under WP14 it
+    //floored at the root's grid and read Measured's excess.
+    REQUIRE(isLeaf(root));
     const double local = medianOctaves(SpacingSource::Local);
-    CHECK(local == Catch::Approx(measured));
+    CHECK(std::abs(local) <= kNearWhiteOctaves);
+    CHECK(local < measured);
 }
 
 TEST_CASE("On a sparse plane under a duplicate streak the sprite density view reads Measured's lifted cell under-covered and both cells near white under Local",
@@ -15812,7 +15858,9 @@ TEST_CASE("C-measured-density and C-local-density are C-default and C-default-lo
         candidateConfig(Candidate::MeasuredCover125Size).name,
         candidateConfig(Candidate::LocalCover125Size).name,
         candidateConfig(Candidate::MeasuredCover125Density).name,
-        candidateConfig(Candidate::LocalCover125Density).name};
+        candidateConfig(Candidate::LocalCover125Density).name,
+        candidateConfig(Candidate::MeasuredSize).name,
+        candidateConfig(Candidate::LocalSize).name};
     CHECK(QSet<QString>(viewCandidates.cbegin(), viewCandidates.cend())
           == QSet<QString>(expectedViewCandidates.cbegin(), expectedViewCandidates.cend()));
     CHECK(viewCandidates.size() == expectedViewCandidates.size());
@@ -16225,6 +16273,261 @@ TEST_CASE("Under Grid and Measured the streak and canopy frames are the frames o
     }
 }
 
+// ---- WP16 (A): sliver leaves under Local ----------------------------------------
+
+namespace {
+    //! The sliver fixture, the user's tree-top spot in small: a dense plane
+    //! strip just under the root's z face, which splits down to level 3, and
+    //! one patch of returns stacked over the plane's own positions just over
+    //! the face, too few to split, so the level-1 cell over the face keeps
+    //! them as a leaf whose grid is several times their native spacing
+    constexpr double kSliverPlaneLength = 32.0;
+    constexpr double kSliverPlaneWidth = 3.0;
+    constexpr double kSliverPlaneStep = 0.04;
+    //! The patch: kSliverPatchSide plane positions a side, from this plane
+    //! column and row, so it sits inside one level-1 cell away from the
+    //! root's x and y faces through the strip's middle
+    constexpr int kSliverPatchSide = 14;
+    constexpr int kSliverPatchFirstColumn = 450;
+    constexpr int kSliverPatchFirstRow = 45;
+    //! Over the plane by this, so the bounding box's middle, the root's z
+    //! face, falls between the two
+    constexpr float kSliverPatchHeight = 1.0f;
+    //! Close enough that the plane's native spacing sizes its sprites past
+    //! the threshold term, far enough that the sliver's grid floor stays
+    //! under maxPointSizePx
+    constexpr float kSliverOrthoHeight = 2.5f;
+    //! Clear of the half sprite the patch's points spill past its edge, and
+    //! of the plane's sprites spilling under it
+    constexpr double kSliverRegionMargin = 0.12;
+    //! WP16's target: the sliver within this of the plane once each covers
+    //! its own native spacing, and the several times it drew before
+    constexpr double kSliverSideRatioTolerance = 1.25;
+    constexpr double kSliverSeveralTimes = 2.5;
+    //! The sprite size view's red channel steps
+    constexpr double kSpriteSideReadTolerance = 0.05;
+
+    QVector<QVector3D> sliverPoints()
+    {
+        QVector<QVector3D> points;
+        const int columns = int(kSliverPlaneLength / kSliverPlaneStep);
+        const int rows = int(kSliverPlaneWidth / kSliverPlaneStep);
+        points.reserve(qsizetype(columns) * rows + kSliverPatchSide * kSliverPatchSide);
+        const auto at = [](int column, int row, float z) {
+            return QVector3D(float(column * kSliverPlaneStep), float(row * kSliverPlaneStep), z);
+        };
+        for (int row = 0; row < rows; row++) {
+            for (int column = 0; column < columns; column++) {
+                points.append(at(column, row, 0.0f));
+            }
+        }
+        //Stacked over plane positions, so each counts once with the plane
+        //point under it and reads the plane's own native spacing
+        for (int row = 0; row < kSliverPatchSide; row++) {
+            for (int column = 0; column < kSliverPatchSide; column++) {
+                points.append(at(kSliverPatchFirstColumn + column, kSliverPatchFirstRow + row,
+                                 kSliverPatchHeight));
+            }
+        }
+        return points;
+    }
+
+    //! The patch's xy box, in world coordinates
+    QRectF sliverPatch()
+    {
+        const double side = (kSliverPatchSide - 1) * kSliverPlaneStep;
+        return QRectF(kSliverPatchFirstColumn * kSliverPlaneStep,
+                      kSliverPatchFirstRow * kSliverPlaneStep, side, side);
+    }
+
+    const OctreeCache& sliverCache()
+    {
+        static QTemporaryDir directory {
+            QDir::temp().filePath(QStringLiteral("cwSliverLeaf-%1-XXXXXX")
+                                      .arg(QCoreApplication::applicationPid()))
+        };
+        static OctreeCache cache = [] {
+            REQUIRE(directory.isValid());
+            return buildOctreeCache(directory.path(), QStringLiteral("sliver-leaf"),
+                                    sliverPoints());
+        }();
+        return cache;
+    }
+
+    //! The leaf holding the patch: the node over the patch above the root's
+    //! z face with no children, -1 when there is none
+    int sliverLeaf(const cwPointOctreeManifest& manifest)
+    {
+        const QPointF patchCenter = sliverPatch().center();
+        const float face = manifest.rootMin.z() + float(manifest.rootSize) * 0.5f;
+        for (int i = 0; i < manifest.nodes.size(); i++) {
+            const QBox3D bounds = manifest.nodeBounds(i);
+            if (i != kRootIndex && isLeaf(manifest.nodes.at(i)) && bounds.minimum().z() >= face
+                && footprintHolds(manifest, i, QVector2D(patchCenter))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    //! The native spacing each point of @a node codes, decoded out of the
+    //! mirror the cloud has resident
+    QVector<double> nodeNativeSpacings(const PointCloudFixture& fixture, int node)
+    {
+        const QByteArray bytes = Access::nodeBytes(fixture.backend(), node);
+        const double gridSpacing = nodeSampleSpacing(fixture.manifest(), node);
+        constexpr int kCodeOffset = 3 * int(sizeof(quint16));
+
+        QVector<double> spacings;
+        for (qsizetype offset = 0; offset + cw::octree::kBytesPerPoint <= bytes.size();
+             offset += cw::octree::kBytesPerPoint) {
+            const quint16 code = qFromLittleEndian<quint16>(bytes.constData() + offset + kCodeOffset);
+            spacings.append(cw::clod::localSpacing(code, gridSpacing));
+        }
+        return spacings;
+    }
+
+    //! The camera's offset from @a cache's center onto the patch
+    QVector3D sliverViewOffset(const OctreeCache& cache)
+    {
+        const QPointF patchCenter = sliverPatch().center();
+        return QVector3D(float(patchCenter.x()) - cache.center.x(),
+                         float(patchCenter.y()) - cache.center.y(), 0.0f);
+    }
+}
+
+TEST_CASE("The sliver fixture holds a level-1 leaf of fewer than kMinSplitPoints returns over a plane that splits to level 3",
+          "[PointCloudStreaming]")
+{
+    const cwPointOctreeManifest& manifest = *sliverCache().source.manifest;
+    const int leaf = sliverLeaf(manifest);
+    REQUIRE(leaf >= 0);
+    const cwPointOctreeNode& node = manifest.nodes.at(leaf);
+    INFO("the sliver leaf is node " << leaf << " at level " << node.level << " holding "
+         << node.pointCount << " points, its grid " << manifest.spacing(node.level) << " m");
+    CHECK(node.level == 1);
+    CHECK(node.pointCount > 0);
+    CHECK(node.pointCount < quint32(cw::octree::kMinSplitPoints));
+    CHECK(deepestLevel(manifest) >= 3);
+    //Its grid several times the plane's step, the patch's spacing too
+    CHECK(manifest.spacing(node.level) >= kSliverSeveralTimes * kSliverPlaneStep);
+}
+
+TEST_CASE("Under Local a sliver leaf over a dense plane draws its sprites within 1.25 times the plane's, where it drew several times them",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    using cw::pointcloud::SpacingSource;
+
+    const cwPointOctreeManifest& manifest = *sliverCache().source.manifest;
+    REQUIRE(sliverLeaf(manifest) >= 0);
+
+    const QRectF patch = sliverPatch();
+    const QRectF inner = patch.adjusted(kSliverRegionMargin, kSliverRegionMargin,
+                                        -kSliverRegionMargin, -kSliverRegionMargin);
+    const QRectF outer = patch.adjusted(-kSliverRegionMargin, -kSliverRegionMargin,
+                                        kSliverRegionMargin, kSliverRegionMargin);
+    REQUIRE(inner.isValid());
+    const auto onSliver = [&](QPointF at) { return inner.contains(at); };
+    const auto onPlane = [&](QPointF at) { return !outer.contains(at); };
+
+    const QVector<QVector<double>> sides =
+        drawnSpriteSides(rhi.get(), sliverCache(), SpacingSource::Local, kSliverOrthoHeight,
+                         {onSliver, onPlane}, sliverViewOffset(sliverCache()));
+    REQUIRE_FALSE(sides.at(0).isEmpty());
+    REQUIRE_FALSE(sides.at(1).isEmpty());
+    const double sliver = cwMedian(sides.at(0));
+    const double plane = cwMedian(sides.at(1));
+    INFO("median side " << sliver << " px on the sliver leaf, " << plane << " px on the plane, "
+         << sliver / plane << " times it");
+    //The leaf with its drawn ancestors is the raw data there, so each of its
+    //points covers its native spacing, the plane's, rather than its grid
+    CHECK(sliver <= kSliverSideRatioTolerance * plane);
+    CHECK(plane <= kSliverSideRatioTolerance * sliver);
+
+    //The GPU draws what the twin predicts: the leaf floored at
+    //kMinLocalSpacingUnits, so each sprite covers its point's native spacing
+    const int leaf = sliverLeaf(manifest);
+    double expected = 0.0;
+    double native = 0.0;
+    const QVector<QVector<double>> read = readDebugViewOverRegions(
+        rhi.get(), sliverCache(), SpacingSource::Local, cw::pointcloud::DebugView::SpriteSize,
+        kSliverOrthoHeight, {onSliver},
+        [&](PointCloudFixture& fixture) -> std::function<double(QRgb)> {
+            const QVector<double> natives = nodeNativeSpacings(fixture, leaf);
+            REQUIRE_FALSE(natives.isEmpty());
+            native = cwMedian(natives);
+            const double spacing = cw::clod::sizeSpacing(
+                cw::clod::ownFloorSpacing(manifest.spacing(manifest.nodes.at(leaf).level),
+                                          double(manifest.nodes.at(leaf).measuredSpacing),
+                                          SpacingSource::Local, true),
+                native, SpacingSource::Local);
+            const auto& uniform = Access::liveAppearanceUniform(fixture.backend());
+            const double pixelsPerMeter = fixture.colorSize().height() / double(kSliverOrthoHeight);
+            expected = twinSpriteSidePx(uniform, spacing, spacing, pixelsPerMeter);
+            const double maxPointSizePx = uniform.maxPointSizePx;
+            return [maxPointSizePx](QRgb pixel) {
+                return spriteSideFromRed(uchar(qRed(pixel)), maxPointSizePx);
+            };
+        },
+        sliverViewOffset(sliverCache()));
+    REQUIRE_FALSE(read.at(0).isEmpty());
+    const double drawn = cwMedian(read.at(0));
+    INFO("median side " << drawn << " px on the sliver leaf against the twin's " << expected
+         << " px at its median native spacing " << native << " m");
+    CHECK(std::abs(drawn - expected) <= kSpriteSideReadTolerance * expected);
+}
+
+TEST_CASE("Under Grid and Measured a sliver leaf over a dense plane still draws at its own grid floor, several times the plane's sprites",
+          "[PointCloudStreaming]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    using cw::pointcloud::SpacingSource;
+
+    const cwPointOctreeManifest& manifest = *sliverCache().source.manifest;
+    const int leaf = sliverLeaf(manifest);
+    REQUIRE(leaf >= 0);
+    const cwPointOctreeNode& node = manifest.nodes.at(leaf);
+
+    const QRectF patch = sliverPatch();
+    const QRectF inner = patch.adjusted(kSliverRegionMargin, kSliverRegionMargin,
+                                        -kSliverRegionMargin, -kSliverRegionMargin);
+    const QRectF outer = patch.adjusted(-kSliverRegionMargin, -kSliverRegionMargin,
+                                        kSliverRegionMargin, kSliverRegionMargin);
+    const auto onSliver = [&](QPointF at) { return inner.contains(at); };
+    const auto onPlane = [&](QPointF at) { return !outer.contains(at); };
+
+    for (const SpacingSource source : {SpacingSource::Grid, SpacingSource::Measured}) {
+        INFO("source " << spacingSourceName(source).toStdString());
+        //Today's floor for the leaf, which WP16 leaves alone under these two
+        const double floor = cw::clod::drawSpacing(manifest.spacing(node.level),
+                                                   double(node.measuredSpacing), source);
+        double expected = 0.0;
+        const QVector<QVector<double>> sides = readDebugViewOverRegions(
+            rhi.get(), sliverCache(), source, cw::pointcloud::DebugView::SpriteSize,
+            kSliverOrthoHeight, {onSliver, onPlane},
+            [&](PointCloudFixture& fixture) -> std::function<double(QRgb)> {
+                const auto& uniform = Access::liveAppearanceUniform(fixture.backend());
+                const double pixelsPerMeter =
+                    fixture.colorSize().height() / double(kSliverOrthoHeight);
+                expected = twinSpriteSidePx(uniform, floor, floor, pixelsPerMeter);
+                const double maxPointSizePx = uniform.maxPointSizePx;
+                return [maxPointSizePx](QRgb pixel) {
+                    return spriteSideFromRed(uchar(qRed(pixel)), maxPointSizePx);
+                };
+            },
+            sliverViewOffset(sliverCache()));
+        REQUIRE_FALSE(sides.at(0).isEmpty());
+        REQUIRE_FALSE(sides.at(1).isEmpty());
+        const double sliver = cwMedian(sides.at(0));
+        const double plane = cwMedian(sides.at(1));
+        INFO("median side " << sliver << " px on the sliver leaf against the twin's " << expected
+             << " px at its floor " << floor << " m, " << plane << " px on the plane");
+        CHECK(std::abs(sliver - expected) <= kSpriteSideReadTolerance * expected);
+        CHECK(sliver >= kSliverSeveralTimes * plane);
+    }
+}
+
 TEST_CASE("C-measured-cover125-size, C-local-cover125-size, C-measured-cover125-density and C-local-cover125-density are the coverage 1.25 pair under the sprite size and sprite density views",
           "[PointCloudStreaming][PointCloudEval]")
 {
@@ -16331,6 +16634,150 @@ TEST_CASE("PF on a tile under Measured and Local at coverage 1.25, flat and unde
          {Candidate::Default, Candidate::MeasuredCover125, Candidate::LocalCover125,
           Candidate::MeasuredCover125Size, Candidate::LocalCover125Size,
           Candidate::MeasuredCover125Density, Candidate::LocalCover125Density}) {
+        const EvalConfig config = candidateConfig(candidate);
+        INFO(config.name.toStdString());
+        REQUIRE(config.targetSize == defaults.targetSize);
+        checkTileRecords(sweepTilePath(rhi.get(), cache, path, config, step, oracles), path,
+                         step);
+    }
+}
+
+// ---- WP16: TT, the user's tree crown over the level-1 z face -------------------
+
+namespace {
+    //! The tile's spot at @a easting, @a northing and @a height, in the
+    //! file's own CS, carried into the tile's frame and then by the tile's
+    //! shift into the manifest's recentered coordinates
+    QVector3D tileSpotInScene(double easting, double northing, double height)
+    {
+        const TileCache& tile = usgsTileCache();
+        const QString lazPath = QString::fromLocal8Bit(qgetenv(kTileLazEnvironmentVariable));
+        const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(lazPath);
+        REQUIRE(probe.valid);
+        REQUIRE_FALSE(probe.sourceCS.isEmpty());
+        REQUIRE_FALSE(tile.frameCS.isEmpty());
+        const cwCoordinateTransform toFrame(probe.sourceCS, tile.frameCS);
+        const cwGeoPoint inFrame = toFrame.transform(cwGeoPoint(easting, northing, height));
+        INFO("the spot sits at " << inFrame.x << ", " << inFrame.y << ", " << inFrame.z
+             << " in the tile's frame");
+        const QVector3D shift = tile.originalCenter;
+        return QVector3D(float(inFrame.x - double(shift.x())),
+                         float(inFrame.y - double(shift.y())),
+                         float(inFrame.z - double(shift.z())));
+    }
+
+    //! The candidates TT runs: C-default for the oracles and the O3
+    //! difference, then Measured and Local at coverage 1.25 and at the
+    //! default 1.5, flat and under the sprite size and sprite density views
+    const std::array<Candidate, 12> kTreeTopsCandidates {
+        Candidate::Default,
+        Candidate::DefaultLocal,
+        Candidate::MeasuredSize,
+        Candidate::LocalSize,
+        Candidate::MeasuredDensity,
+        Candidate::LocalDensity,
+        Candidate::MeasuredCover125,
+        Candidate::LocalCover125,
+        Candidate::MeasuredCover125Size,
+        Candidate::LocalCover125Size,
+        Candidate::MeasuredCover125Density,
+        Candidate::LocalCover125Density};
+}
+
+TEST_CASE("C-measured-size and C-local-size are C-default and C-default-local under the sprite size view",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    using cw::pointcloud::DebugView;
+
+    const auto checkAgainst = [](Candidate candidate, Candidate base, const QString& name) {
+        const EvalConfig config = candidateConfig(candidate);
+        const EvalConfig expected = candidateConfig(base);
+        INFO(name.toStdString());
+        CHECK(config.name == name);
+        CHECK(config.debugView == DebugView::SpriteSize);
+        CHECK(config.spacingSource == expected.spacingSource);
+        CHECK(config.spacingCoverage == expected.spacingCoverage);
+        CHECK(config.targetSize == expected.targetSize);
+        CHECK(config.revealFrames == expected.revealFrames);
+        CHECK(config.revealMode == expected.revealMode);
+        CHECK(config.budgets.gpuBudgetBytes == expected.budgets.gpuBudgetBytes);
+        CHECK(config.budgets.pointBudget == expected.budgets.pointBudget);
+        CHECK(config.budgets.uploadBudgetBytesPerFrame
+              == expected.budgets.uploadBudgetBytesPerFrame);
+        CHECK(config.budgets.screenSpaceErrorPx == expected.budgets.screenSpaceErrorPx);
+        CHECK(config.budgets.governorSlew == expected.budgets.governorSlew);
+    };
+    checkAgainst(Candidate::MeasuredSize, Candidate::Default, QStringLiteral("C-measured-size"));
+    checkAgainst(Candidate::LocalSize, Candidate::DefaultLocal, QStringLiteral("C-local-size"));
+    CHECK(candidateConfig(Candidate::MeasuredSize).spacingSource
+          == cw::pointcloud::SpacingSource::Measured);
+    CHECK(candidateConfig(Candidate::LocalSize).spacingSource
+          == cw::pointcloud::SpacingSource::Local);
+    CHECK(candidateConfig(Candidate::LocalSize).spacingCoverage
+          == cw::pointcloud::kDefaultSpacingCoverage);
+
+    //Every candidate keeps a name of its own
+    QSet<QString> names;
+    for (int index = 0; index < kCandidateCount; index++) {
+        names.insert(candidateConfig(Candidate(index)).name);
+    }
+    CHECK(names.size() == kCandidateCount);
+}
+
+TEST_CASE("TT is one pose kTreeTopsDistanceMeters from the ground at its spot, south of it, pitched kTreeTopsPitchDownDegrees down looking north",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    //Any ground point will do: the plane's own middle
+    const cwPointOctreeManifest& manifest = *planeCache().source.manifest;
+    const QVector2D spot = ((manifest.bboxMin + manifest.bboxMax) * 0.5f).toVector2D();
+    const QVector3D ground(spot, groundElevation(manifest, spot));
+    const EvalPath path = treeTopsPath(ground, kHalfHdTargetSize);
+
+    CHECK(path.name == QStringLiteral("TT"));
+    REQUIRE(path.poses.size() == kTreeTopsPoseCount);
+    const Pose& pose = path.poses.constFirst();
+    const QVector3D eye = eyeOf(pose);
+    const QVector3D forward = forwardOf(pose);
+    const double pitchDegrees = qRadiansToDegrees(std::asin(double(forward.z())));
+    INFO("eye " << eye.x() << ", " << eye.y() << ", " << eye.z() << "; pitch " << pitchDegrees);
+    CHECK(pose.index == 0);
+    CHECK(std::abs((eye - ground).length() - kTreeTopsDistanceMeters) <= kPoseToleranceMeters);
+    CHECK(std::abs(pitchDegrees + kTreeTopsPitchDownDegrees) <= kPoseToleranceDegrees);
+    //South of the spot, due north of the eye
+    CHECK(eye.y() < ground.y());
+    CHECK(std::abs(eye.x() - ground.x()) <= kPoseToleranceMeters);
+    CHECK(forward.y() > 0.0f);
+    //and it looks at the spot itself
+    const QVector3D toGround = (ground - eye).normalized();
+    CHECK((toGround - forward).length() <= kPoseToleranceMeters);
+    CHECK(pose.projection == pathProjection(kHalfHdTargetSize));
+}
+
+TEST_CASE("TT on a tile under Measured and Local at coverage 1.25 and 1.5, flat and under the sprite size and sprite density views, records every metric for the contact sheet",
+          "[PointCloudStreaming][PointCloudEval]")
+{
+    const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
+    const OctreeCache& cache = usgsTileCacheOrSkip();
+    const cwPointOctreeManifest& manifest = *cache.source.manifest;
+
+    //The user's crown, its ground carried with it into the recentered frame
+    const QVector3D ground =
+        tileSpotInScene(kTreeTopsSpotEasting, kTreeTopsSpotNorthing, kTreeTopsGroundHeight);
+    INFO("TT's ground sits at " << ground.x() << ", " << ground.y() << ", " << ground.z()
+         << " in the scene");
+    REQUIRE(ground.x() >= manifest.bboxMin.x());
+    REQUIRE(ground.x() <= manifest.bboxMax.x());
+    REQUIRE(ground.y() >= manifest.bboxMin.y());
+    REQUIRE(ground.y() <= manifest.bboxMax.y());
+    REQUIRE(ground.z() >= manifest.bboxMin.z());
+    REQUIRE(ground.z() <= manifest.bboxMax.z());
+
+    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalPath path = treeTopsPath(ground, defaults.targetSize);
+    REQUIRE(path.poses.size() == kTreeTopsPoseCount);
+    const EvalOracles oracles = tileOracles(rhi.get(), cache, path, defaults.targetSize);
+    const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
+    for (const Candidate candidate : kTreeTopsCandidates) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
         REQUIRE(config.targetSize == defaults.targetSize);

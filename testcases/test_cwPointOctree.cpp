@@ -668,13 +668,15 @@ TEST_CASE("A manifest round-trips each node's measured spacing", "[PointOctree]"
     }
 }
 
-TEST_CASE("The octree format is generation 7, the one whose native spacing is horizontal", "[PointOctree]") {
+TEST_CASE("The octree format is generation 8, the one whose native spacing reaches past its pass B chunk", "[PointOctree]") {
     //Generation 4 added each node's measured spacing and the builder's minimum
     //to split; generation 5 wrote a local spacing ratio into each point's
     //reserved word; generation 6 wrote the point's absolute 3D native spacing
-    //there; generation 7 writes its horizontal native spacing under the
-    //data-relative cap, so every generation 6 cache rebuilds once
-    CHECK(cw::octree::kFormatGeneration == 7);
+    //there; generation 7 wrote its horizontal native spacing under the
+    //data-relative cap; generation 8 measures it over the chunk's whole xy
+    //column and a halo of its neighbors, under a per-column cap, so every
+    //generation 7 cache rebuilds once. The xyz payload is unchanged.
+    CHECK(cw::octree::kFormatGeneration == 8);
 }
 
 TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
@@ -687,7 +689,7 @@ TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
     //The cache key names the generation too, so its entries are never even read
     const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
                                                           QStringLiteral("fingerprint"));
-    CHECK(key.id.contains(QStringLiteral("octree7")));
+    CHECK(key.id.contains(QStringLiteral("octree%1").arg(cw::octree::kFormatGeneration)));
     CHECK_FALSE(key.id.contains(QStringLiteral("octree3")));
 }
 
@@ -732,6 +734,20 @@ TEST_CASE("A generation 6 manifest is rejected", "[PointOctree]") {
     CHECK_FALSE(key.id.contains(QStringLiteral("octree6")));
 }
 
+TEST_CASE("A generation 7 manifest is rejected", "[PointOctree]") {
+    constexpr int kGenerationWithChunkBoundedNativeSpacing = 7;
+
+    CavewhereProto::PointOctreeManifest proto = parseManifest(threeLevelManifest().serialize());
+    proto.set_format_generation(kGenerationWithChunkBoundedNativeSpacing);
+    CHECK_FALSE(deserializeProto(proto).has_value());
+
+    //Its payloads hold native spacings whose neighbors stopped at the pass B
+    //chunk's faces, so the key never reaches them either
+    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
+                                                          QStringLiteral("fingerprint"));
+    CHECK_FALSE(key.id.contains(QStringLiteral("octree7")));
+}
+
 // ---- WP13: per-point local spacing codes ------------------------------------
 
 namespace {
@@ -755,6 +771,16 @@ TEST_CASE("The native spacing estimate's constants are the plan's", "[PointOctre
     CHECK(kMaxLocalSpacingUnits == 64.0);
     CHECK(kLoneSpacingMedianRatio == 4.0);
     CHECK(kUnmeasuredLocalSpacingCode == 0);
+}
+
+TEST_CASE("The halo pass B's column index reaches into its neighbors holds the k-th neighbor of the BC tile's widest uncapped point, well inside the search's widest reach", "[PointOctree]") {
+    using namespace cw::octree;
+
+    //The BC tile's chunk ceilings run 0.38 to 0.93 m
+    constexpr double kWidestTileCeiling = 0.93;
+    CHECK(kLocalSpacingHaloUnits == 2.0);
+    CHECK(kWidestTileCeiling / kLocalSpacingSurfaceFactor <= kLocalSpacingHaloUnits);
+    CHECK(kLocalSpacingHaloUnits < kMaxLocalSpacingUnits / kLocalSpacingSurfaceFactor);
 }
 
 TEST_CASE("A native spacing round-trips through its 16-bit log2 code over the absolute range", "[PointOctree]") {

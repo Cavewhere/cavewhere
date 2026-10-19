@@ -8,6 +8,7 @@
 #include <QVector3D>
 
 //Std includes
+#include <algorithm>
 #include <array>
 #include <optional>
 
@@ -34,6 +35,12 @@ struct CAVEWHERE_LIB_EXPORT cwPointOctreeNode {
 
     //Indices into cwPointOctreeManifest::nodes, -1 when the octant is empty
     std::array<int, cw::octree::kChildCount> children = {-1, -1, -1, -1, -1, -1, -1, -1};
+
+    //Whether every octant is empty
+    bool isLeaf() const
+    {
+        return std::all_of(children.cbegin(), children.cend(), [](int child) { return child < 0; });
+    }
 };
 
 /**

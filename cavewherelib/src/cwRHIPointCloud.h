@@ -416,8 +416,9 @@ private:
                                     quint64 revealClock);
 
     // @a index's own floor spacing under the shading's spacing source
-    // (cw::clod::floorSpacing), the floor a node draws with while nothing
-    // under it counts.
+    // (cw::clod::ownFloorSpacing), the floor a node draws with while nothing
+    // under it counts: a leaf whose ancestors are all resident holds the raw
+    // data of its cell with them.
     float ownSpacing(int index) const;
 
     // How a floor reaches its new value under the reveal ramp: Ramped

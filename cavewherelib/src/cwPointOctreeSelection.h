@@ -227,8 +227,11 @@ namespace cw::octree {
      * larger of that node's grid spacing and its measured spacing, and where
      * several nodes at that deepest level feed one floor, the narrowest of
      * them; Local floors exactly as Grid does, since its points' native
-     * spacings answer for the data's gaps (cw::clod::sizeSpacing). Either
-     * way a floor is at most its own node's spacing.
+     * spacings answer for the data's gaps (cw::clod::sizeSpacing), except
+     * for a leaf whose ancestors are all in @a drawnNodes: with them it is
+     * every point of its cell, so it floors at kMinLocalSpacingUnits
+     * (cw::clod::ownFloorSpacing) and each of its points covers its own
+     * native spacing. Either way a floor is at most its own node's spacing.
      */
     CAVEWHERE_LIB_EXPORT QVector<double> finestDrawnSpacings(const cwPointOctreeManifest& manifest,
                                                              const QVector<int>& drawnNodes,

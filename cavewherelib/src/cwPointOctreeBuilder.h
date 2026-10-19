@@ -4,6 +4,7 @@
 //Qt includes
 #include <QFuture>
 #include <QString>
+#include <QVector>
 
 //Std includes
 #include <optional>
@@ -31,9 +32,20 @@ namespace cw::octree {
     //Absorbs reprojection curvature before the measured-bounds retry
     constexpr double kRootPaddingFraction = 0.01;
 
-    //The working set pass B's chunks may hold together before a chunk waits
-    //for a running one to finish
+    //The working set pass B's xy columns of chunks may hold together before a
+    //column waits for a running one to finish
     constexpr qint64 kDefaultBuildMemoryBudgetBytes = 1536LL * 1024 * 1024;
+
+    /**
+     * What pass B charges its admission budget for one xy column of chunks
+     * (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP16 (B)): the
+     * subtree builds of the chunks whose point counts are @a chunkPointCounts,
+     * and the native spacing index over every point of the column and the
+     * @a haloPoints its neighbors lend it within kLocalSpacingHaloUnits of its
+     * faces. The inFlightPeakBytes the build logs is a sum of these.
+     */
+    CAVEWHERE_LIB_EXPORT qint64 passBColumnBytes(const QVector<qint64>& chunkPointCounts,
+                                                 qint64 haloPoints);
 }
 
 /**
@@ -69,8 +81,8 @@ public:
         //!< seek decodes from the start decodes on one worker whatever this asks.
         int decodeWorkerCount = 0;
 
-        //!< The working set pass B's chunks may hold together, 0 = the
-        //!< default. A chunk bigger than the whole budget runs on its own.
+        //!< The working set pass B's columns may hold together, 0 = the
+        //!< default. A column bigger than the whole budget runs on its own.
         qint64 memoryBudgetBytes = cw::octree::kDefaultBuildMemoryBudgetBytes;
     };
 

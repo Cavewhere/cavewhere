@@ -29,9 +29,10 @@ namespace cw::octree {
     //Generation 4 adds each node's measured spacing and kMinSplitPoints;
     //generation 5 wrote a local spacing ratio into each point's reserved word,
     //generation 6 wrote the point's absolute 3D native spacing code there,
-    //and generation 7 writes its horizontal native spacing under the
-    //data-relative cap.
-    constexpr int kFormatGeneration = 7;
+    //generation 7 wrote its horizontal native spacing under the
+    //data-relative cap, and generation 8 measures it over the pass B chunk's
+    //whole xy column and a halo of its neighbors, under a per-column cap.
+    constexpr int kFormatGeneration = 8;
 
     //Points per node edge; spacing = nodeSize / kSampleGridResolution
     constexpr int kSampleGridResolution = 128;
@@ -135,12 +136,37 @@ namespace cw::octree {
         std::log2(kMaxLocalSpacingUnits / kMinLocalSpacingUnits);
 
     //! The cap, in median native spacings of the points of the point's own
-    //! pass B chunk that found kLocalSpacingNeighbors neighbors, that keeps a
-    //! lone return from drawing a giant disc
-    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP15). Pass C
-    //! carries each top point's chunk spacing, so a top point is capped by the
-    //! chunk it was measured in.
+    //! pass B xy column that found kLocalSpacingNeighbors neighbors, that
+    //! keeps a lone return from drawing a giant disc
+    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP15 and WP16).
+    //! Pass C carries each top point's column spacing, so a top point is
+    //! capped by the column it was measured in.
     constexpr double kLoneSpacingMedianRatio = 4.0;
+
+    /**
+     * How far past its column's xy faces pass B's neighbor index reaches into
+     * the neighboring columns, in the octree's units
+     * (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP16 (B)). A
+     * point's k-th neighbor lies its spacing over kLocalSpacingSurfaceFactor
+     * away, so the BC tile's widest chunk ceiling (0.93 m) puts the farthest
+     * neighbor an uncapped point there needs 1.48 m out: 2 units holds every
+     * one of them with a margin, where the search's own widest reach (102
+     * units) would pull in whole columns. Neighbors stop only at the halo's
+     * outer edge, so a point whose k-th neighbor lies within this of it
+     * measures exactly as a search over the whole cloud would wherever it
+     * sits in its column, and a point farther than this from every face of
+     * its column does for every k-th neighbor out to twice it. Like the
+     * other *Units constants the bound assumes meter-scale units: a cloud in
+     * US survey feet with the same ground spacing has ceilings near 3 units
+     * and k-th neighbors out to about 4.8, so a point within 2 to 4.8 units
+     * of a face there measures against a halo that stops short of some of
+     * its neighbors, up to sqrt(2) wider at a face and 2 times at a corner.
+     * When an overlapping column sits at a different level (one z cell of an
+     * xy footprint split, its sibling kept), its whole overlap lies inside
+     * the halo box and is lent, so that halo is the overlap plus the face
+     * band rather than the band alone.
+     */
+    constexpr double kLocalSpacingHaloUnits = 2.0;
 
     //! The 16-bit code of a native @a spacing: its log2 over
     //! [kMinLocalSpacingUnits, kMaxLocalSpacingUnits] after the clamp, from 1

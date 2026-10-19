@@ -711,6 +711,82 @@ TEST_CASE("Under Local a point in a sparse leaf sizes at its native spacing, and
           == kSparseLeafMeasured);
 }
 
+// ---- WP16 (A): leaf floors under Local ------------------------------------------
+
+namespace {
+    //! The user's tree-top spot on the BC tile: the level-4 sliver leaf
+    //! L4(0,6,8), 118 crown returns just over the root's level-1 z face, its
+    //! grid, its measured median and the median native spacing of its points,
+    //! and two points in it, one at that median and one under the grid
+    constexpr double kSliverLeafGrid = 0.894;
+    constexpr double kSliverLeafMeasured = 0.526;
+    constexpr double kSliverNative = 0.229;
+    constexpr double kSliverDenseNative = 0.12;
+    //! What its 93 points in view drew at, 40 m out at coverage 1.25, and
+    //! what they draw at once each covers its own native spacing
+    constexpr double kSliverDrawnPx = 29.4;
+    constexpr double kSliverExpectedPx = 7.5;
+    constexpr double kSliverPxTolerance = 0.1;
+    //! A measured spacing this many grids wide, past the grid
+    constexpr double kSparserThanGrid = 2.0;
+}
+
+TEST_CASE("Under Local a leaf whose ancestors are all drawn floors at kMinLocalSpacingUnits, so each of its points sizes at its own native spacing",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    //With its drawn ancestors the leaf is every point the file has in its
+    //cell, so there is no thinning gap for a floor to cover
+    const double floor =
+        ownFloorSpacing(kSliverLeafGrid, kSliverLeafMeasured, SpacingSource::Local, true);
+    CHECK(floor == cw::octree::kMinLocalSpacingUnits);
+
+    //and every point covers its native spacing, the one denser than the
+    //leaf's grid too, down to the absolute floor itself
+    for (double native : {kSliverNative, kSliverDenseNative, cw::octree::kMinLocalSpacingUnits}) {
+        INFO("native " << native);
+        CHECK(sizeSpacing(floor, native, SpacingSource::Local) == native);
+    }
+
+    //The spot: 29.4 px at the leaf's grid floor becomes 7.5 px at the
+    //points' median native spacing
+    const double drawnPx = kSliverDrawnPx
+                           * sizeSpacing(floor, kSliverNative, SpacingSource::Local)
+                           / sizeSpacing(kSliverLeafGrid, kSliverNative, SpacingSource::Local);
+    CHECK(std::abs(drawnPx - kSliverExpectedPx) <= kSliverPxTolerance);
+}
+
+TEST_CASE("Under Grid and Measured a leaf floors as any node does, and under Local a node that thins, or a leaf missing an ancestor, floors at its grid",
+          "[PointCloudClod]")
+{
+    using cw::pointcloud::SpacingSource;
+
+    for (const bool holdsRawData : {false, true}) {
+        INFO("holds the raw data " << holdsRawData);
+        //Grid and Measured are floorSpacing() whatever the node holds
+        CHECK(ownFloorSpacing(kSliverLeafGrid, kSliverLeafMeasured, SpacingSource::Grid,
+                              holdsRawData)
+              == kSliverLeafGrid);
+        CHECK(ownFloorSpacing(kSliverLeafGrid, kSliverLeafMeasured, SpacingSource::Measured,
+                              holdsRawData)
+              == std::max(kSliverLeafGrid, kSliverLeafMeasured));
+        for (const SpacingSource source : {SpacingSource::Grid, SpacingSource::Measured}) {
+            for (double measured : {0.0, kSliverDenseNative, kSliverLeafMeasured,
+                                    kSparserThanGrid * kSliverLeafGrid}) {
+                CHECK(ownFloorSpacing(kSliverLeafGrid, measured, source, holdsRawData)
+                      == floorSpacing(kSliverLeafGrid, measured, source));
+            }
+        }
+    }
+
+    //Under Local a node that does not hold the raw data keeps WP15's grid floor
+    CHECK(ownFloorSpacing(kSliverLeafGrid, kSliverLeafMeasured, SpacingSource::Local, false)
+          == kSliverLeafGrid);
+    CHECK(ownFloorSpacing(kSliverLeafGrid, kSliverLeafMeasured, SpacingSource::Local, false)
+          == floorSpacing(kSliverLeafGrid, kSliverLeafMeasured, SpacingSource::Local));
+}
+
 // ---- WP14: the sprite density view -------------------------------------------
 
 TEST_CASE("DebugView gains SpriteDensity after DecimationPreview, so stored views keep their meaning",

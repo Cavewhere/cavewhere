@@ -227,6 +227,28 @@ namespace cw::clod {
     }
 
     /**
+     * The floor a node's own sprites take under @a source, given its grid
+     * spacing @a gridSpacing, its measured spacing @a measuredSpacing, and
+     * whether it @a holdsRawData: it is a leaf and every ancestor of it is
+     * drawn, so its points and theirs are every point the file has in its
+     * cell and thinning leaves no gap there to cover
+     * (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html section 14.5, WP16 (A)). Local
+     * floors such a node at kMinLocalSpacingUnits, so sizeSpacing() covers
+     * each point's native spacing alone; every other node, and every node
+     * under Grid and Measured, floors at floorSpacing(). finestDrawnSpacings(),
+     * requestedCutSpacings() and cwRHIPointCloud's own floor all take it from
+     * here.
+     */
+    inline double ownFloorSpacing(double gridSpacing, double measuredSpacing,
+                                  cw::pointcloud::SpacingSource source, bool holdsRawData)
+    {
+        if (holdsRawData && source == cw::pointcloud::SpacingSource::Local) {
+            return cw::octree::kMinLocalSpacingUnits;
+        }
+        return floorSpacing(gridSpacing, measuredSpacing, source);
+    }
+
+    /**
      * The native spacing, in meters, of a point whose reserved word holds
      * @a code (cw::octree::encodeLocalSpacing): an absolute spacing whatever
      * the grid, and @a gridSpacing, its node's, for an unmeasured code.

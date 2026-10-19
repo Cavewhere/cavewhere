@@ -381,7 +381,7 @@ namespace {
 
     //! The widest radius a search reaches: past it a spacing would code over
     //! kMaxLocalSpacingUnits, so a point with fewer than k neighbors inside it
-    //! takes the chunk's ceiling
+    //! takes its column's ceiling
     double maximumSearchRadius()
     {
         return kMaxLocalSpacingUnits / kLocalSpacingSurfaceFactor;
@@ -452,29 +452,41 @@ namespace {
     };
 
     /**
-     * Every point of a subtree along kNativeSpacingAxes, sorted by the
-     * interleaved key of the finest square it sits in, so any coarser square
-     * of the same grid is one contiguous run: the box around a point, at the
-     * coarsest level whose squares are at least as wide as the box, is at
-     * most four runs. A square holds the subtree's whole column above it.
+     * Every point of a column's subtrees and its halo along
+     * kNativeSpacingAxes, sorted by the interleaved key of the finest square
+     * it sits in, so any coarser square of the same grid is one contiguous
+     * run: the box around a point, at the coarsest level whose squares are at
+     * least as wide as the box, is at most four runs. A square holds the whole
+     * column above it.
      */
     class NativeSpacingIndex {
     public:
-        NativeSpacingIndex(const QVector<SampledNode>& nodes, const QVector3D& origin,
+        NativeSpacingIndex(const QVector<const QVector<SampledNode>*>& subtrees,
+                           const QVector<QVector3D>& neighbors, const QVector3D& origin,
                            double extent) :
             m_origin(spacingPositionOf(origin)),
             m_cellSize(extent / double(kIndexAxisCells))
         {
-            qsizetype total = 0;
-            for(const SampledNode& node : nodes) {
-                total += node.points.size();
+            qsizetype total = neighbors.size();
+            for(const QVector<SampledNode>* subtree : subtrees) {
+                for(const SampledNode& node : *subtree) {
+                    total += node.points.size();
+                }
             }
             m_entries.reserve(size_t(total));
-            for(const SampledNode& node : nodes) {
-                for(const QVector3D& point : node.points) {
-                    const SpacingPosition position = spacingPositionOf(point);
-                    m_entries.push_back(Entry {keyOf(position), position});
+            const auto add = [this](const QVector3D& point) {
+                const SpacingPosition position = spacingPositionOf(point);
+                m_entries.push_back(Entry {keyOf(position), position});
+            };
+            for(const QVector<SampledNode>* subtree : subtrees) {
+                for(const SampledNode& node : *subtree) {
+                    for(const QVector3D& point : node.points) {
+                        add(point);
+                    }
                 }
+            }
+            for(const QVector3D& point : neighbors) {
+                add(point);
             }
             std::sort(m_entries.begin(), m_entries.end(),
                       [](const Entry& left, const Entry& right) { return left.key < right.key; });
@@ -622,7 +634,7 @@ namespace {
     }
 
     //! The native spacing of each of @a points against @a index before the
-    //! chunk's ceiling, infinity for a point with fewer than k distinct
+    //! column's ceiling, infinity for a point with fewer than k distinct
     //! neighbors inside maximumSearchRadius(); walked in key order, so each
     //! search starts from its neighbor's answer and a run of points at one
     //! position searches once
@@ -659,13 +671,14 @@ namespace {
     }
 
     /**
-     * The ceiling of a chunk whose uncapped spacings are @a spacings:
-     * kLoneSpacingMedianRatio times the median of the points that found k
-     * neighbors, inside the absolute range, or kMaxLocalSpacingUnits where no
-     * point found them. The median comes from a second pass over the uncapped
-     * spacings, an nth_element over a copy of the finite ones.
+     * The ceiling of a column whose uncapped spacings are @a spacings, one
+     * vector per node of every subtree: kLoneSpacingMedianRatio times the
+     * median of the points that found k neighbors, inside the absolute range,
+     * or kMaxLocalSpacingUnits where no point found them. The median comes
+     * from a second pass over the uncapped spacings, an nth_element over a
+     * copy of the finite ones.
      */
-    double chunkCeiling(const std::vector<QVector<float>>& spacings)
+    double columnCeiling(const std::vector<QVector<float>>& spacings)
     {
         std::vector<float> found;
         for(const QVector<float>& node : spacings) {
@@ -685,30 +698,30 @@ namespace {
     }
 }
 
-NativeSpacingEstimate measureNativeSpacing(const QVector<SampledNode>& nodes,
-                                           const QVector3D& rootMin, double rootSize,
-                                           int firstCodedLevel)
+NativeSpacingEstimate measureNativeSpacing(const QVector<const QVector<SampledNode>*>& subtrees,
+                                           const QVector<QVector3D>& neighbors,
+                                           const QVector3D& rootMin, double rootSize)
 {
-    //A std::vector, so the workers write their own entries without a shared
-    //detach check
-    std::vector<QVector<float>> spacings(size_t(nodes.size()));
-    std::vector<qsizetype> coded;
-    for(qsizetype i = 0; i < nodes.size(); i++) {
-        if(nodes.at(i).cell.level >= firstCodedLevel) {
-            coded.push_back(i);
+    //Every node of every subtree in one flat list, so the workers share one
+    //queue. A std::vector, so they write their own entries without a shared
+    //detach check.
+    std::vector<const SampledNode*> nodes;
+    for(const QVector<SampledNode>* subtree : subtrees) {
+        for(const SampledNode& node : *subtree) {
+            nodes.push_back(&node);
         }
     }
+    std::vector<QVector<float>> spacings(nodes.size());
 
     NativeSpacingEstimate estimate;
-    if(!coded.empty()) {
-        const NativeSpacingIndex index(nodes, rootMin,
+    if(!nodes.empty()) {
+        const NativeSpacingIndex index(subtrees, neighbors, rootMin,
                                        rootSize > 0.0 ? rootSize : kEmptyIndexExtent);
-        forEachIndexWithIdleThreads(qsizetype(coded.size()), [&](qsizetype i) {
-            const qsizetype node = coded.at(size_t(i));
-            spacings[size_t(node)] = uncappedNativeSpacings(index, nodes.at(node).points);
+        forEachIndexWithIdleThreads(qsizetype(nodes.size()), [&](qsizetype i) {
+            spacings[size_t(i)] = uncappedNativeSpacings(index, nodes.at(size_t(i))->points);
         });
 
-        estimate.ceiling = chunkCeiling(spacings);
+        estimate.ceiling = columnCeiling(spacings);
         const float ceiling = float(estimate.ceiling);
         for(QVector<float>& node : spacings) {
             for(float& spacing : node) {
@@ -718,8 +731,17 @@ NativeSpacingEstimate measureNativeSpacing(const QVector<SampledNode>& nodes,
             }
         }
     }
-    estimate.spacings = QVector<QVector<float>>(std::make_move_iterator(spacings.begin()),
-                                                std::make_move_iterator(spacings.end()));
+
+    estimate.spacings.reserve(subtrees.size());
+    size_t next = 0;
+    for(const QVector<SampledNode>* subtree : subtrees) {
+        QVector<QVector<float>> subtreeSpacings;
+        subtreeSpacings.reserve(subtree->size());
+        for(qsizetype i = 0; i < subtree->size(); i++, next++) {
+            subtreeSpacings.append(std::move(spacings[next]));
+        }
+        estimate.spacings.append(std::move(subtreeSpacings));
+    }
     return estimate;
 }
 
