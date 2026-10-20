@@ -81,6 +81,12 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(QString station READ station WRITE setStation NOTIFY stationChanged)
     Q_PROPERTY(bool rawTubesVisible READ rawTubesVisible WRITE setRawTubesVisible NOTIFY rawTubesVisibleChanged)
     Q_PROPERTY(bool capsSlid READ capsSlid WRITE setCapsSlid NOTIFY capsSlidChanged)
+    Q_PROPERTY(double padScale READ padScale WRITE setPadScale NOTIFY padScaleChanged)
+    Q_PROPERTY(double shaftRiseRatio READ shaftRiseRatio WRITE setShaftRiseRatio NOTIFY shaftRiseRatioChanged)
+    Q_PROPERTY(double shaftThinnessRatio READ shaftThinnessRatio WRITE setShaftThinnessRatio NOTIFY shaftThinnessRatioChanged)
+    Q_PROPERTY(bool shaftRingsSquare READ shaftRingsSquare WRITE setShaftRingsSquare NOTIFY shaftRingsSquareChanged)
+    Q_PROPERTY(int shaftCapHeight READ shaftCapHeight WRITE setShaftCapHeight NOTIFY shaftCapHeightChanged)
+    Q_PROPERTY(int shaftCapShape READ shaftCapShape WRITE setShaftCapShape NOTIFY shaftCapShapeChanged)
     Q_PROPERTY(cwPassageTubeSandboxModel* sandbox READ sandbox CONSTANT)
     Q_PROPERTY(bool sandboxSelected READ sandboxSelected NOTIFY currentIndexChanged)
     Q_PROPERTY(int firstCaseRow READ firstCaseRow CONSTANT)
@@ -198,6 +204,28 @@ public:
     bool capsSlid() const;
     void setCapsSlid(bool capsSlid);
 
+    // The builder's pad and shaft knobs (cwPassageTubeBuilder::Options).
+    // Each edit rebuilds the current row and the list's issue counts.
+    double padScale() const;
+    void setPadScale(double padScale);
+
+    double shaftRiseRatio() const;
+    void setShaftRiseRatio(double shaftRiseRatio);
+
+    double shaftThinnessRatio() const;
+    void setShaftThinnessRatio(double shaftThinnessRatio);
+
+    bool shaftRingsSquare() const;
+    void setShaftRingsSquare(bool shaftRingsSquare);
+
+    // A cwPassageTubeBuilder::ShaftCapHeight.
+    int shaftCapHeight() const;
+    void setShaftCapHeight(int shaftCapHeight);
+
+    // A cwPassageTubeBuilder::ShaftCapShape.
+    int shaftCapShape() const;
+    void setShaftCapShape(int shaftCapShape);
+
     cwPassageTubeSandboxModel* sandbox() const;
     bool sandboxSelected() const;
     int firstCaseRow() const { return kSandboxRow + 1; }
@@ -269,8 +297,8 @@ public:
     Q_INVOKABLE int nearestRing(const QVector3D& position) const;
 
     // The ring's chain, index, leg, distance to its station, frame up, its
-    // leg's pads and e, radius range, kind, and its section's readings,
-    // station and largest overshoot; empty for an unknown ring.
+    // leg's pads, e and shaft ratios, radius range, kind, and its section's
+    // readings, station and largest overshoot; empty for an unknown ring.
     Q_INVOKABLE QString ringLine(int ring) const;
 
 signals:
@@ -287,6 +315,12 @@ signals:
     void stationChanged();
     void rawTubesVisibleChanged();
     void capsSlidChanged();
+    void padScaleChanged();
+    void shaftRiseRatioChanged();
+    void shaftThinnessRatioChanged();
+    void shaftRingsSquareChanged();
+    void shaftCapHeightChanged();
+    void shaftCapShapeChanged();
     void sandboxBuildChanged();
     void projectOpened(int firstRow, int rowCount);
     void projectFailed(const QString& message);
@@ -321,10 +355,13 @@ private:
 
     static Row caseRow(const cwPassageTubeCases::Case& entry);
     static Row caseRow(const cwPassageTubeCases::JunctionCase& junctionCase);
-    static Build build(const cwPassageTubeCases::Survey& survey, double sampleSpacing, bool slideCaps);
-    static Build buildRawTubes(const cwPassageTubeCases::Survey& survey, double sampleSpacing, bool slideCaps);
+    static Build build(const cwPassageTubeCases::Survey& survey, const cwPassageTubeBuilder::Options& options);
+    static Build buildRawTubes(const cwPassageTubeCases::Survey& survey, const cwPassageTubeBuilder::Options& options);
     static QString summary(const cwPassageTubeMeshCheck::Report& report);
 
+    template<typename T>
+    void setOption(T cwPassageTubeBuilder::Options::*option, T value, void (cwPassageTubeGalleryModel::*changed)());
+    cwPassageTubeBuilder::Options optionsFor(double sampleSpacing) const;
     void loadCatalog();
     Row sandboxRow() const;
     double sandboxSampleSpacing() const;
@@ -362,7 +399,8 @@ private:
     bool m_overshootVisible = false;
     QString m_station;
     bool m_rawTubesVisible = false;
-    bool m_capsSlid = cwPassageTubeBuilder::Options().slideCaps;
+    // Every build's options; the sample spacing is each row's own.
+    cwPassageTubeBuilder::Options m_options;
 
     cwPassageTubeSandboxModel* m_sandbox = nullptr;
     QTimer* m_sandboxTimer = nullptr;

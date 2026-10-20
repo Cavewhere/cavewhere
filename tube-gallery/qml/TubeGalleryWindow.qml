@@ -45,6 +45,13 @@ QC.ApplicationWindow {
     readonly property int reportHeight: 220
     readonly property int markerSize: 10
     readonly property int swatchSize: 12
+    readonly property int optionLabelWidth: 72
+    readonly property int optionSliderWidth: 120
+    readonly property int optionFieldWidth: 48
+    readonly property real optionStep: 0.1
+    readonly property real maxPadScale: 2.0
+    readonly property real maxShaftRiseRatio: 3.0
+    readonly property real maxShaftThinnessRatio: 5.0
     readonly property real ringHoverPixels: 12.0
     readonly property int badgeMinWidth: 28
     readonly property int badgePadding: 6
@@ -277,6 +284,7 @@ QC.ApplicationWindow {
         station: stationFieldId.text
         rawTubesVisible: rawTubesId.checked
         capsSlid: slideCapsId.checked
+        shaftRingsSquare: shaftRingsId.checked
 
         onCurrentChanged: rootId.inspectedRing = -1
         onProjectOpened: (firstRow, rowCount) => {
@@ -346,6 +354,50 @@ QC.ApplicationWindow {
         implicitHeight: rootId.swatchSize
         color: galleryModelId.layerColor(layerSwatchId.layerName)
         border.color: Theme.textInverse
+    }
+
+    // A builder knob: a slider and its value field, as TubeSandboxPanel's
+    // SliderRow.
+    component OptionSlider: RowLayout {
+        id: optionSliderId
+
+        required property string label
+        required property real value
+        required property real to
+
+        signal edited(real value)
+
+        QC.Label {
+            Layout.preferredWidth: rootId.optionLabelWidth
+            text: optionSliderId.label
+            elide: QQ.Text.ElideRight
+            font.pixelSize: Theme.fontSizeSmall
+        }
+
+        QC.Slider {
+            id: optionSliderControlId
+            Layout.preferredWidth: rootId.optionSliderWidth
+            from: 0.0
+            to: optionSliderId.to
+            stepSize: rootId.optionStep
+            snapMode: QC.Slider.SnapAlways
+            value: optionSliderId.value
+
+            // Rounds through the step count so 0.1 steps give clean decimals.
+            onMoved: optionSliderId.edited(Math.round(optionSliderControlId.value / rootId.optionStep) / Math.round(1.0 / rootId.optionStep))
+        }
+
+        QC.TextField {
+            id: optionFieldId
+            Layout.preferredWidth: rootId.optionFieldWidth
+            text: String(optionSliderId.value)
+            font.pixelSize: Theme.fontSizeSmall
+            validator: QQ.DoubleValidator {
+                locale: "C"
+            }
+
+            onEditingFinished: optionSliderId.edited(Number(optionFieldId.text))
+        }
     }
 
     Scene {
@@ -620,6 +672,11 @@ QC.ApplicationWindow {
                         checked: rootId.slideCaps
                     }
                     QC.CheckBox {
+                        id: shaftRingsId
+                        text: qsTr("Shaft rings")
+                        checked: true
+                    }
+                    QC.CheckBox {
                         id: issuesId
                         text: qsTr("Issues")
                         checked: true
@@ -673,6 +730,41 @@ QC.ApplicationWindow {
                         text: qsTr("Grab sheet")
                         enabled: galleryModelId.currentIndex >= 0 && rootId.grabRows.length === 0
                         onClicked: rootId.startGrab([galleryModelId.currentIndex], rootId.defaultGrabDirectory, false)
+                    }
+                }
+
+                QQ.Flow {
+                    Layout.fillWidth: true
+                    visible: !rootId.grabAll
+                    spacing: rootId.panelSpacing
+
+                    OptionSlider {
+                        label: qsTr("Pad ×")
+                        to: rootId.maxPadScale
+                        value: galleryModelId.padScale
+                        onEdited: (scale) => galleryModelId.padScale = scale
+                    }
+                    OptionSlider {
+                        label: qsTr("Shaft rise")
+                        to: rootId.maxShaftRiseRatio
+                        value: galleryModelId.shaftRiseRatio
+                        onEdited: (ratio) => galleryModelId.shaftRiseRatio = ratio
+                    }
+                    OptionSlider {
+                        label: qsTr("Shaft thin")
+                        to: rootId.maxShaftThinnessRatio
+                        value: galleryModelId.shaftThinnessRatio
+                        onEdited: (ratio) => galleryModelId.shaftThinnessRatio = ratio
+                    }
+                    QC.ComboBox {
+                        model: [qsTr("U/D reading"), qsTr("Mean L/R"), qsTr("Flat")]
+                        currentIndex: galleryModelId.shaftCapHeight
+                        onActivated: (index) => galleryModelId.shaftCapHeight = index
+                    }
+                    QC.ComboBox {
+                        model: [qsTr("Round"), qsTr("Cone")]
+                        currentIndex: galleryModelId.shaftCapShape
+                        onActivated: (index) => galleryModelId.shaftCapShape = index
                     }
                 }
 

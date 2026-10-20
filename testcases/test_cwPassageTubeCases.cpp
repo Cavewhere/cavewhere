@@ -225,19 +225,9 @@ struct AcceptedIssue {
 };
 
 const QVector<AcceptedIssue> kPhakeCaveIssues {
-    // The a6 -> a9 shaft is a box padded off both stations (T07am): its cap
-    // at a6 slides back into chunk 2's passage and folds the box's rings
-    // behind it, the union leaves slivers where the box meets the passages
-    // at a6 and a9, the box's walls crease against its cap at a9 (one crease
-    // lies nearer a10), and its padded ring leaves a6's side walls off the
-    // tube.
-    {QStringLiteral("a6"), cwPassageTubeMeshCheck::FoldBack},
-    {QStringLiteral("a6"), cwPassageTubeMeshCheck::SliverTriangle},
-    {QStringLiteral("a6"), cwPassageTubeMeshCheck::WallMissed},
-    {QStringLiteral("a9"), cwPassageTubeMeshCheck::FoldBack},
+    // The a6 -> a9 shaft is a round tube with a dome at each end (T07ao);
+    // the union leaves slivers where its lower dome meets the passage at a9.
     {QStringLiteral("a9"), cwPassageTubeMeshCheck::SliverTriangle},
-    {QStringLiteral("a9"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
 };
 
 QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
@@ -264,27 +254,22 @@ bool isAcceptedPhakeCaveIssue(const Cases::Trip& trip, const cwPassageTubeMeshCh
 }
 
 // Every case the union still leaves unclean, with its issue counts.
-// - 8, 9 and 10's plumb legs are boxes padded off their stations (T07am):
-//   their rings are a few meters tall over a 10 m or longer drop, so each
-//   box is a sheared slab whose walls crease against its caps, the padded
-//   rings leave the stations' readings off the tube, the shot runs out of
-//   the slab, and 9's caps slide back along the slab and fold its rings.
 // - 21's small arm is its own chain, whose cap slides along it into the
 //   room and folds the rings behind it (T07al).
 // - 20's tie-in turns back past 150°, and the two trips' chains end there
 //   square to their own legs, so the outside of the bend is their caps.
-// - 23 and the miter sweep's 150 and 170° bends pinch to the hairpin's
-//   sheet at their station (redesign step 1, accepted), which folds the
-//   walls against each other.
-// - 25's shaft and the pitch sweep's 90 and 80° pitches are boxes padded off
-//   their stations (T07am), whose walls crease against the caps at the
-//   bottom; 25's foot turns 120° in plan, so the leg out of it crosses the
-//   box.
-// - The sweep, 710 of its 1836 junction cases, in overlapping families:
-//   arms 2.5 times the through's size (466), arms sloping 60° (349),
-//   throughs bent 90° at J (264), arms within 20° of the through in plan
-//   (131), plumb arms, which are boxes padded off their stations, and arms
-//   as big as the through in threes. A slid cap folds the rings behind it
+// - The miter sweep's 150 and 170° bends pinch to the hairpin's sheet at
+//   their station (redesign step 1, accepted), which folds the walls
+//   against each other.
+// - The pitch sweep's 90 and 80° pitches drop less than their 10 m sections
+//   are tall, so they stay boxes padded off their stations, whose walls
+//   crease against the caps at the bottom and leave the bottom's readings
+//   off the tube.
+// - The sweep, 519 of its 1836 junction cases, in overlapping families:
+//   arms 2.5 times the through's size (357), throughs bent 90° at J (196),
+//   arms sloping 60° (192), which are domed shafts, arms within 20° of the
+//   through in plan (108), and arms as big as the through in threes (69).
+//   A slid cap folds the rings behind it
 //   (FoldBack), walls fold against each other or cross (Crease,
 //   SelfIntersection, SliverTriangle), or a cap shows past the passages it
 //   meets (CapExposed).
@@ -294,21 +279,15 @@ bool isAcceptedPhakeCaveIssue(const Cases::Trip& trip, const cwPassageTubeMeshCh
 //   (Crease), walls that touch along a line leave slivers (SliverTriangle),
 //   and 32's 78° leg runs 2.6 m in plan over 12.8 m, so the inside wall of
 //   the bend before it reaches past its vertical rings (SelfIntersection).
-// - Wild random surveys 8 and 46 leave a zero-area triangle
-//   (DegenerateTriangle) beside a leg 38° to 53° steep whose rings stand
-//   vertical (T07am).
+// - Wild random surveys 5 and 42 leave a zero-area triangle
+//   (DegenerateTriangle) in the union.
 const QStringList kUnionOpenCases {
-    QStringLiteral("8. Pit dropping into a passage"), // Crease 12, WallMissed 4, CenterlineOutside 1
-    QStringLiteral("9. Passage joining a shaft"), // Crease 17, FoldBack 9, WallMissed 6, CenterlineOutside 2, CapExposed 1
-    QStringLiteral("10. Passage turning straight down a pit, side arm at the lip"), // Crease 8, WallMissed 3, CenterlineOutside 1
     QStringLiteral("21. Small arm along the wall of a big room"), // FoldBack 1, WallMissed 2
     QStringLiteral("20. Passage surveyed over two trips with a hairpin tie-in and a re-shot leg"), // CapExposed 1
-    QStringLiteral("23. Sharp bend at a station reading zero on the outside wall"), // Crease 6, SelfIntersection 7, FoldBack 1
-    QStringLiteral("25. Zero floor reading at the foot of a shaft"), // Crease 8, SelfIntersection 26, FoldBack 10, WallBeyondReading 1, CapExposed 2
     QStringLiteral("31. Bend of 150 degrees mitered on one ring"), // Crease 4
     QStringLiteral("31. Bend of 170 degrees mitered on one ring"), // Crease 10, SelfIntersection 81, FoldBack 1
-    QStringLiteral("38. Pitch of 90 degrees below a level lead-in"), // Crease 5, SliverTriangle 5, WallMissed 3
-    QStringLiteral("38. Pitch of 80 degrees below a level lead-in"), // Crease 3
+    QStringLiteral("38. Pitch of 90 degrees below a level lead-in"), // Crease 2, WallMissed 3
+    QStringLiteral("38. Pitch of 80 degrees below a level lead-in"), // Crease 2, WallMissed 2
 
     QStringLiteral("plan 90, profile 0, ratio 1, 1 arm, bend 90, same section"), // SliverTriangle 25
     QStringLiteral("plan 90, profile 0, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 1, SliverTriangle 45, DegenerateTriangle 4, SelfIntersection 1, FoldBack 9
@@ -342,49 +321,20 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 90, profile 30, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 5, SliverTriangle 4, SelfIntersection 79, FoldBack 19
     QStringLiteral("plan 90, profile 30, ratio 2.5, 3 arms, bend 90, same section"), // Crease 3, SelfIntersection 48, FoldBack 14, WallMissed 2
     QStringLiteral("plan 90, profile 30, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 2, SelfIntersection 44, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 90, profile 60, ratio 1, 1 arm, bend 90, same section"), // Crease 3, SliverTriangle 31, DegenerateTriangle 1, WallMissed 1
-    QStringLiteral("plan 90, profile 60, ratio 1, 1 arm, bend 90, section x2 past J"), // Crease 1, WallMissed 1
-    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 19, SliverTriangle 58, DegenerateTriangle 2, SelfIntersection 65, FoldBack 10, CenterlineOutside 1, CapExposed 2
-    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // Crease 10, SliverTriangle 1, SelfIntersection 39, FoldBack 8, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 13, SliverTriangle 34, DegenerateTriangle 2, SelfIntersection 70, CenterlineOutside 1, CapExposed 1
-    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 6, SelfIntersection 30, WallMissed 1, CapExposed 1
-    QStringLiteral("plan 90, profile 60, ratio 1, 3 arms, bend 40, section x2 past J"), // FoldBack 6
-    QStringLiteral("plan 90, profile 60, ratio 1, 3 arms, bend 90, same section"), // Crease 9, SliverTriangle 36, SelfIntersection 95, FoldBack 2, CapExposed 1
-    QStringLiteral("plan 90, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 1, SelfIntersection 13, FoldBack 2, CapExposed 1
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 1 arm, bend 40, same section"), // WallMissed 1
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // WallMissed 1
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 1, SelfIntersection 13, FoldBack 8, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // FoldBack 6, WallMissed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 13, SelfIntersection 29, FoldBack 17, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 8, SelfIntersection 38, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 6, SelfIntersection 54, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 3, SelfIntersection 35, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 4, SelfIntersection 17, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 4, SelfIntersection 17, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 44, DegenerateTriangle 4, SliverTriangle 1, SelfIntersection 87, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 26, SliverTriangle 2, SelfIntersection 34, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 27, SliverTriangle 1, SelfIntersection 29, FoldBack 9
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 29, SliverTriangle 8, DegenerateTriangle 4, SelfIntersection 72, FoldBack 19
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 23, SelfIntersection 80, FoldBack 16, WallMissed 2
-    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 23, SliverTriangle 1, SelfIntersection 66, FoldBack 14, WallMissed 2
-    QStringLiteral("plan 90, profile 90, ratio 0.3, 1 arm, bend 0, same section"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 0.3, 1 arm, bend 0, section x2 past J"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 0.3, 1 arm, bend 40, same section"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 0.3, 1 arm, bend 40, section x2 past J"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 0.3, 1 arm, bend 90, same section"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 0.3, 1 arm, bend 90, section x2 past J"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 1, 1 arm, bend 0, same section"), // Crease 6, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 1, 1 arm, bend 0, section x2 past J"), // Crease 6, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 1, 1 arm, bend 40, same section"), // Crease 13, SelfIntersection 107, FoldBack 10, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 1, 1 arm, bend 40, section x2 past J"), // Crease 13, SelfIntersection 106, FoldBack 10, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 1, 1 arm, bend 90, same section"), // Crease 14, SelfIntersection 9, FoldBack 10, WallMissed 4, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 1, 1 arm, bend 90, section x2 past J"), // Crease 11, FoldBack 10, WallMissed 4, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 2.5, 1 arm, bend 0, same section"), // Crease 10, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 10, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 2.5, 1 arm, bend 40, same section"), // Crease 15, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 9, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 2.5, 1 arm, bend 90, same section"), // Crease 14, SelfIntersection 43, FoldBack 8, WallMissed 5, CenterlineOutside 1
-    QStringLiteral("plan 90, profile 90, ratio 2.5, 1 arm, bend 90, section x2 past J"), // Crease 11, SelfIntersection 9, FoldBack 6, WallMissed 5, CenterlineOutside 1
+    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms opposite, bend 0, same section"), // Crease 2
+    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms opposite, bend 0, section x2 past J"), // Crease 2
+    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms opposite, bend 40, same section"), // Crease 2
+    QStringLiteral("plan 90, profile 60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // Crease 2
+    QStringLiteral("plan 90, profile 60, ratio 1, 3 arms, bend 0, same section"), // Crease 3
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // SliverTriangle 3
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // SliverTriangle 1
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // SliverTriangle 1
+    QStringLiteral("plan 90, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // SliverTriangle 1
     QStringLiteral("plan 90, profile -30, ratio 1, 1 arm, bend 90, same section"), // Crease 2, SliverTriangle 46, DegenerateTriangle 1, WallMissed 1, CenterlineOutside 1
     QStringLiteral("plan 90, profile -30, ratio 1, 1 arm, bend 90, section x2 past J"), // WallMissed 2
     QStringLiteral("plan 90, profile -30, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 9, SliverTriangle 31, DegenerateTriangle 2, SelfIntersection 85, FoldBack 10, CenterlineOutside 1
@@ -403,54 +353,33 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 90, profile -30, ratio 2.5, 2 arms same side, bend 90, same section"), // WallMissed 1, CapExposed 1
     QStringLiteral("plan 90, profile -30, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // CapExposed 1
     QStringLiteral("plan 90, profile -30, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 1, SelfIntersection 40, FoldBack 10, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 90, profile -60, ratio 1, 1 arm, bend 90, same section"), // Crease 4, SliverTriangle 44, DegenerateTriangle 1, SelfIntersection 58, WallMissed 1, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -60, ratio 1, 1 arm, bend 90, section x2 past J"), // WallMissed 1
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 11, SliverTriangle 27, SelfIntersection 55, FoldBack 10, CenterlineOutside 1, CapExposed 1
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // Crease 8, SelfIntersection 35, FoldBack 8, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 40, section x2 past J"), // Crease 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 13, SliverTriangle 40, SelfIntersection 95, CenterlineOutside 1, CapExposed 1
-    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 9, SelfIntersection 70, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 2
-    QStringLiteral("plan 90, profile -60, ratio 1, 3 arms, bend 40, section x2 past J"), // FoldBack 6
-    QStringLiteral("plan 90, profile -60, ratio 1, 3 arms, bend 90, same section"), // Crease 14, SliverTriangle 30, SelfIntersection 45, CenterlineOutside 1, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 7, SliverTriangle 2, SelfIntersection 68, CapExposed 1
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 1 arm, bend 40, same section"), // WallMissed 1
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // WallMissed 1
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 2, SliverTriangle 1, SelfIntersection 18, FoldBack 8, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // FoldBack 6, WallMissed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 17, SelfIntersection 35, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 10, SelfIntersection 37, FoldBack 14, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 5, SelfIntersection 38, FoldBack 14, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 5, SelfIntersection 24, FoldBack 14, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 8, SelfIntersection 13, FoldBack 14, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 8, SelfIntersection 13, FoldBack 14, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 13, DegenerateTriangle 2, SelfIntersection 254, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 11, SelfIntersection 139, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 8, SelfIntersection 102, FoldBack 9
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 14, SliverTriangle 2, SelfIntersection 113, FoldBack 19
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 12, SelfIntersection 42, FoldBack 16, WallMissed 2
-    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 11, SelfIntersection 18, FoldBack 13, WallMissed 2
-    QStringLiteral("plan 90, profile -90, ratio 0.3, 1 arm, bend 0, same section"), // Crease 28, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 0.3, 1 arm, bend 0, section x2 past J"), // Crease 27, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 0.3, 1 arm, bend 40, same section"), // Crease 27, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 0.3, 1 arm, bend 40, section x2 past J"), // Crease 27, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 0.3, 1 arm, bend 90, same section"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 0.3, 1 arm, bend 90, section x2 past J"), // Crease 26, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 0, same section"), // Crease 8, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 0, section x2 past J"), // Crease 8, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 40, same section"), // Crease 13, SelfIntersection 7, FoldBack 10, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 40, section x2 past J"), // Crease 12, SliverTriangle 2, SelfIntersection 7, FoldBack 10, WallMissed 3, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 90, same section"), // Crease 14, SelfIntersection 135, FoldBack 10, WallMissed 4, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 90, section x2 past J"), // Crease 14, SliverTriangle 4, SelfIntersection 141, FoldBack 10, WallMissed 4, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 2.5, 1 arm, bend 0, same section"), // Crease 10, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 10, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 2.5, 1 arm, bend 40, same section"), // Crease 14, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 10, WallMissed 6, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 2.5, 1 arm, bend 90, same section"), // Crease 17, SelfIntersection 27, FoldBack 8, WallMissed 5, CenterlineOutside 1
-    QStringLiteral("plan 90, profile -90, ratio 2.5, 1 arm, bend 90, section x2 past J"), // Crease 12, SelfIntersection 16, FoldBack 6, WallMissed 5, CenterlineOutside 1
+    QStringLiteral("plan 90, profile -60, ratio 1, 1 arm, bend 0, same section"), // Crease 1
+    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 1
+    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 1
+    QStringLiteral("plan 90, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 2
+    QStringLiteral("plan 90, profile -60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 90, profile -60, ratio 1, 3 arms, bend 90, same section"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 90, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // SliverTriangle 4
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 4, SliverTriangle 1
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 4, SliverTriangle 1
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 4, SliverTriangle 1
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 4, SliverTriangle 1
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 4, SliverTriangle 1
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 4, SliverTriangle 1
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 9, SliverTriangle 9
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 9, SliverTriangle 9
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 8, SliverTriangle 9
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 5, SliverTriangle 9, DegenerateTriangle 1
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 9, SliverTriangle 9
+    QStringLiteral("plan 90, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 9, SliverTriangle 9
+    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 40, same section"), // Crease 1
+    QStringLiteral("plan 90, profile -90, ratio 1, 1 arm, bend 90, section x2 past J"), // Crease 2
     QStringLiteral("plan 60, profile 0, ratio 2.5, 1 arm, bend 0, same section"), // FoldBack 4, WallMissed 1
     QStringLiteral("plan 60, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"), // FoldBack 4, WallMissed 1
     QStringLiteral("plan 60, profile 0, ratio 2.5, 1 arm, bend 40, same section"), // FoldBack 4, WallMissed 1
@@ -496,50 +425,19 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 60, profile 30, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 4, SelfIntersection 12, FoldBack 16
     QStringLiteral("plan 60, profile 30, ratio 2.5, 3 arms, bend 90, same section"), // Crease 2, SelfIntersection 24, FoldBack 14, WallMissed 1
     QStringLiteral("plan 60, profile 30, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 2, SelfIntersection 16, FoldBack 12, WallMissed 1
-    QStringLiteral("plan 60, profile 60, ratio 0.3, 2 arms opposite, bend 90, section x2 past J"), // SliverTriangle 1
-    QStringLiteral("plan 60, profile 60, ratio 0.3, 2 arms same side, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 60, profile 60, ratio 0.3, 2 arms same side, bend 0, section x2 past J"), // Crease 1
-    QStringLiteral("plan 60, profile 60, ratio 0.3, 3 arms, bend 90, section x2 past J"), // SliverTriangle 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 1 arm, bend 40, section x2 past J"), // Crease 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 1 arm, bend 90, section x2 past J"), // Crease 2
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // Crease 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 1, FoldBack 2
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // Crease 2
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 1, FoldBack 2
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms same side, bend 40, section x2 past J"), // Crease 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 1, CapExposed 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 3
-    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 5
-    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 40, same section"), // Crease 28, SliverTriangle 80, SelfIntersection 304, CenterlineOutside 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 27, SliverTriangle 70, SelfIntersection 293, CenterlineOutside 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 90, same section"), // Crease 28, DegenerateTriangle 5, SliverTriangle 66, SelfIntersection 234, FoldBack 2, CapExposed 1
-    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 29, SliverTriangle 60, DegenerateTriangle 1, SelfIntersection 230, CapExposed 1
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 3, SelfIntersection 12, FoldBack 7, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 2, SelfIntersection 12, FoldBack 7, WallMissed 1
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 10, SelfIntersection 16, FoldBack 7, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 1, SelfIntersection 11, FoldBack 7, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 1 arm, bend 90, same section"), // Crease 5, SelfIntersection 9, FoldBack 7, WallMissed 1
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 1 arm, bend 90, section x2 past J"), // Crease 5, SelfIntersection 9, FoldBack 7, WallMissed 1
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 7, SelfIntersection 18, FoldBack 14, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 5, SelfIntersection 20, FoldBack 14, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 16, SelfIntersection 29, FoldBack 14, WallMissed 3, CapExposed 1
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 6, DegenerateTriangle 2, SelfIntersection 24, FoldBack 14, WallMissed 3, CapExposed 1
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 23, SliverTriangle 1, SelfIntersection 54, FoldBack 16, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 10, SliverTriangle 1, SelfIntersection 38, FoldBack 16, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 12, SelfIntersection 25, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 8, SelfIntersection 8, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 4, SelfIntersection 37, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 8, DegenerateTriangle 2, SelfIntersection 26, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 14, SliverTriangle 1, SelfIntersection 8, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 8, DegenerateTriangle 2, SliverTriangle 3, SelfIntersection 8, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 7, SelfIntersection 18, FoldBack 14
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 5, SelfIntersection 20, FoldBack 14
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 26, SelfIntersection 46, FoldBack 23, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 12, DegenerateTriangle 2, SelfIntersection 31, FoldBack 22, WallMissed 2
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 23, SliverTriangle 1, SelfIntersection 73, FoldBack 16, WallMissed 1
-    QStringLiteral("plan 60, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 10, SliverTriangle 2, SelfIntersection 36, FoldBack 16, WallMissed 1
+    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 0, same section"), // Crease 1, SliverTriangle 2
+    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 0, section x2 past J"), // SliverTriangle 1
+    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 40, same section"), // SliverTriangle 1
+    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 40, section x2 past J"), // SliverTriangle 1
+    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 90, same section"), // SliverTriangle 1
+    QStringLiteral("plan 60, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // SliverTriangle 1
+    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // SliverTriangle 2
+    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // SliverTriangle 2
+    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // SliverTriangle 2
+    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // SliverTriangle 2
+    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // SliverTriangle 2
+    QStringLiteral("plan 60, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // SliverTriangle 2
+    QStringLiteral("plan 60, profile 60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 2
     QStringLiteral("plan 60, profile -30, ratio 0.3, 2 arms opposite, bend 90, section x2 past J"), // SliverTriangle 1
     QStringLiteral("plan 60, profile -30, ratio 0.3, 3 arms, bend 90, section x2 past J"), // SliverTriangle 1
     QStringLiteral("plan 60, profile -30, ratio 1, 1 arm, bend 90, section x2 past J"), // WallMissed 1
@@ -565,43 +463,31 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 60, profile -30, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // FoldBack 5, WallMissed 1, CapExposed 1
     QStringLiteral("plan 60, profile -30, ratio 2.5, 2 arms same side, bend 90, same section"), // FoldBack 5, WallMissed 2, CapExposed 2
     QStringLiteral("plan 60, profile -30, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // FoldBack 5, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 1, 1 arm, bend 90, section x2 past J"), // Crease 1, SliverTriangle 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms opposite, bend 90, same section"), // FoldBack 2
-    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // Crease 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 4, SelfIntersection 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 4, SelfIntersection 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 2, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 2
-    QStringLiteral("plan 60, profile -60, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 3 arms, bend 40, same section"), // Crease 18, SliverTriangle 52, SelfIntersection 57, CenterlineOutside 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 16, SliverTriangle 43, SelfIntersection 60, CenterlineOutside 1
-    QStringLiteral("plan 60, profile -60, ratio 1, 3 arms, bend 90, same section"), // Crease 13, SliverTriangle 32, SelfIntersection 63, CenterlineOutside 1, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 14, SliverTriangle 32, SelfIntersection 71, CenterlineOutside 1, CapExposed 1
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 5, SelfIntersection 12, FoldBack 7, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 7, SelfIntersection 6, FoldBack 7, WallMissed 1
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 11, SelfIntersection 11, FoldBack 7, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 4, SelfIntersection 12, FoldBack 7, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 1 arm, bend 90, same section"), // Crease 6, SelfIntersection 7, FoldBack 7, WallMissed 1
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 1 arm, bend 90, section x2 past J"), // Crease 6, SelfIntersection 7, FoldBack 7, WallMissed 1
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 2, SelfIntersection 23, FoldBack 14, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 4, SliverTriangle 1, SelfIntersection 21, FoldBack 14, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 11, SelfIntersection 27, FoldBack 14, WallMissed 3, CapExposed 1
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 5, SelfIntersection 27, FoldBack 14, WallMissed 3, CapExposed 1
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 25, SelfIntersection 88, FoldBack 16, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 10, SelfIntersection 19, FoldBack 16, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 17, SliverTriangle 1, SelfIntersection 26, FoldBack 14, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 13, SelfIntersection 9, FoldBack 14, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 8, SelfIntersection 47, FoldBack 14, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 11, SelfIntersection 31, FoldBack 14, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 14, SelfIntersection 5, FoldBack 14, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 10, SelfIntersection 5, FoldBack 14, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 5, SelfIntersection 38, FoldBack 14
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 6, SelfIntersection 21, FoldBack 14, WallMissed 1
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 10, SliverTriangle 1, SelfIntersection 127, FoldBack 23, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 10, SelfIntersection 69, FoldBack 22, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 11, SliverTriangle 4, SelfIntersection 27, FoldBack 16, WallMissed 2
-    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 10, SliverTriangle 3, SelfIntersection 23, FoldBack 16, WallMissed 2
+    QStringLiteral("plan 60, profile -60, ratio 1, 1 arm, bend 0, section x2 past J"), // Crease 1
+    QStringLiteral("plan 60, profile -60, ratio 1, 1 arm, bend 90, same section"), // Crease 2
+    QStringLiteral("plan 60, profile -60, ratio 1, 1 arm, bend 90, section x2 past J"), // Crease 2
+    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms opposite, bend 0, section x2 past J"), // Crease 3
+    QStringLiteral("plan 60, profile -60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 1
+    QStringLiteral("plan 60, profile -60, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 3
+    QStringLiteral("plan 60, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 5, SliverTriangle 6, DegenerateTriangle 1
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // SliverTriangle 3
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // SliverTriangle 3
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 5, SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 5, SliverTriangle 2
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 5, SliverTriangle 12
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 5, SliverTriangle 12
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 6, SliverTriangle 6
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 8, SliverTriangle 11
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 6, SliverTriangle 11
+    QStringLiteral("plan 60, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 6, SliverTriangle 11
     QStringLiteral("plan 45, profile 0, ratio 1, 2 arms same side, bend 90, same section"), // SliverTriangle 24
     QStringLiteral("plan 45, profile 0, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 2
     QStringLiteral("plan 45, profile 0, ratio 2.5, 1 arm, bend 0, same section"), // FoldBack 7, WallMissed 1
@@ -646,37 +532,20 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 45, profile 30, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 18, SliverTriangle 9, SelfIntersection 228, FoldBack 8
     QStringLiteral("plan 45, profile 30, ratio 2.5, 3 arms, bend 90, same section"), // Crease 13, SliverTriangle 6, SelfIntersection 117, FoldBack 17
     QStringLiteral("plan 45, profile 30, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 10, DegenerateTriangle 2, SliverTriangle 6, SelfIntersection 116, FoldBack 9
-    QStringLiteral("plan 45, profile 60, ratio 1, 2 arms same side, bend 0, same section"), // CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 1, CapExposed 1
-    QStringLiteral("plan 45, profile 60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 3, SelfIntersection 13, CapExposed 1
-    QStringLiteral("plan 45, profile 60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 1, SliverTriangle 41, SelfIntersection 98, FoldBack 4, CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 1, 3 arms, bend 40, same section"), // SelfIntersection 15, CapExposed 1
-    QStringLiteral("plan 45, profile 60, ratio 1, 3 arms, bend 90, same section"), // FoldBack 6
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 7, SelfIntersection 10, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 9, SelfIntersection 6, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 8, SelfIntersection 3, FoldBack 9, WallMissed 1
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 9, SelfIntersection 3, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 1 arm, bend 90, same section"), // Crease 2, SelfIntersection 22, FoldBack 9
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 1 arm, bend 90, section x2 past J"), // WallMissed 1
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 13, SelfIntersection 10, FoldBack 18, WallMissed 4, CapExposed 1
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 16, SelfIntersection 10, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 15, SelfIntersection 11, FoldBack 18, WallMissed 1
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 16, SelfIntersection 7, FoldBack 18, WallMissed 3, CapExposed 1
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 9, SelfIntersection 33, FoldBack 18
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 7, SelfIntersection 14, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 14, SelfIntersection 39, FoldBack 17, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 13, SelfIntersection 5, FoldBack 17, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 10, SelfIntersection 5, FoldBack 17, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 12, SliverTriangle 1, SelfIntersection 42, FoldBack 17, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 6, DegenerateTriangle 2, SliverTriangle 2, SelfIntersection 13, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 4, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 36, SliverTriangle 1, SelfIntersection 152, FoldBack 23, WallMissed 4
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 32, DegenerateTriangle 2, SelfIntersection 62, FoldBack 23, WallMissed 4
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 23, SliverTriangle 1, SelfIntersection 23, FoldBack 24, WallMissed 1
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 22, SliverTriangle 6, SelfIntersection 3, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 33, SliverTriangle 2, DegenerateTriangle 2, SelfIntersection 138, FoldBack 19
-    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 22, SliverTriangle 7, SelfIntersection 125, FoldBack 10, WallMissed 1
+    QStringLiteral("plan 45, profile 60, ratio 1, 1 arm, bend 90, same section"), // Crease 1
+    QStringLiteral("plan 45, profile 60, ratio 1, 2 arms opposite, bend 40, same section"), // SliverTriangle 1
+    QStringLiteral("plan 45, profile 60, ratio 1, 2 arms same side, bend 90, same section"), // SliverTriangle 1
+    QStringLiteral("plan 45, profile 60, ratio 1, 3 arms, bend 40, same section"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 45, profile 60, ratio 1, 3 arms, bend 90, same section"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 45, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 3, SliverTriangle 2
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 7, SliverTriangle 4
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 7, SliverTriangle 4
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 5, SliverTriangle 4
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 6, SliverTriangle 4
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 5, SliverTriangle 5
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 5, SliverTriangle 5
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 2
+    QStringLiteral("plan 45, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 2
     QStringLiteral("plan 45, profile -30, ratio 1, 2 arms same side, bend 90, same section"), // Crease 2, SliverTriangle 46, DegenerateTriangle 1, CenterlineOutside 1
     QStringLiteral("plan 45, profile -30, ratio 1, 3 arms, bend 0, same section"), // WallMissed 1
     QStringLiteral("plan 45, profile -30, ratio 1, 3 arms, bend 0, section x2 past J"), // FoldBack 1
@@ -701,42 +570,30 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 45, profile -30, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // CapExposed 1
     QStringLiteral("plan 45, profile -30, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 1, SliverTriangle 1, SelfIntersection 62, FoldBack 9
     QStringLiteral("plan 45, profile -30, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 1, SelfIntersection 65, FoldBack 9
-    QStringLiteral("plan 45, profile -60, ratio 1, 1 arm, bend 40, section x2 past J"), // Crease 1
-    QStringLiteral("plan 45, profile -60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // Crease 1
+    QStringLiteral("plan 45, profile -60, ratio 0.3, 3 arms, bend 40, same section"), // Crease 1
+    QStringLiteral("plan 45, profile -60, ratio 0.3, 3 arms, bend 40, section x2 past J"), // Crease 1
     QStringLiteral("plan 45, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 45, profile -60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 1
-    QStringLiteral("plan 45, profile -60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 4, SelfIntersection 17
-    QStringLiteral("plan 45, profile -60, ratio 1, 2 arms same side, bend 40, section x2 past J"), // Crease 2
-    QStringLiteral("plan 45, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 9, SliverTriangle 47, SelfIntersection 116, FoldBack 3, CenterlineOutside 1, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 1, CapExposed 1
-    QStringLiteral("plan 45, profile -60, ratio 1, 3 arms, bend 40, same section"), // Crease 6, SelfIntersection 59, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 1, SliverTriangle 1, CapExposed 1
-    QStringLiteral("plan 45, profile -60, ratio 1, 3 arms, bend 90, same section"), // Crease 6, SelfIntersection 32, FoldBack 6
-    QStringLiteral("plan 45, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 6, SelfIntersection 32
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 8, SelfIntersection 19, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 10, SelfIntersection 21, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 11, SelfIntersection 18, FoldBack 9, WallMissed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 12, SelfIntersection 22, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 1 arm, bend 90, same section"), // Crease 11, DegenerateTriangle 2, SelfIntersection 61, FoldBack 9, WallMissed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 1 arm, bend 90, section x2 past J"), // WallMissed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 18, SelfIntersection 35, FoldBack 18, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 22, SelfIntersection 32, FoldBack 18, WallMissed 4, CapExposed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 23, SelfIntersection 29, FoldBack 18, WallMissed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 25, SelfIntersection 30, FoldBack 18, WallMissed 3, CapExposed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 23, SliverTriangle 1, SelfIntersection 172, FoldBack 18, WallMissed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 10, SelfIntersection 19, FoldBack 9, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 15, SelfIntersection 54, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 17, SelfIntersection 19, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 14, SelfIntersection 18, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 18, SelfIntersection 96, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 16, DegenerateTriangle 2, SelfIntersection 60, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 5, FoldBack 14, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 7, SliverTriangle 1, SelfIntersection 220, FoldBack 22, WallMissed 4
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 12, SliverTriangle 1, SelfIntersection 160, FoldBack 22, WallMissed 5
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 9, SelfIntersection 111, FoldBack 23, WallMissed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 14, SliverTriangle 4, SelfIntersection 337, FoldBack 17, WallMissed 4
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 16, SliverTriangle 9, SelfIntersection 105, FoldBack 10, WallMissed 1
-    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 11, SliverTriangle 8, DegenerateTriangle 2, SelfIntersection 104, FoldBack 10, WallMissed 1
+    QStringLiteral("plan 45, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 2
+    QStringLiteral("plan 45, profile -60, ratio 1, 3 arms, bend 90, same section"), // Crease 1
+    QStringLiteral("plan 45, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 1
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 4
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 4
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 4, SliverTriangle 1
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 6, SliverTriangle 1
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 9, SliverTriangle 9
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 9, SliverTriangle 9
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 11, SliverTriangle 10
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 7, SliverTriangle 9
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 9, SliverTriangle 8
+    QStringLiteral("plan 45, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 9, SliverTriangle 8
     QStringLiteral("plan 30, profile 0, ratio 1, 3 arms, bend 90, same section"), // SliverTriangle 36, FoldBack 9
     QStringLiteral("plan 30, profile 0, ratio 2.5, 1 arm, bend 0, same section"), // FoldBack 8, WallMissed 1
     QStringLiteral("plan 30, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"), // FoldBack 8, WallMissed 1
@@ -782,47 +639,16 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 30, profile 30, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 8, DegenerateTriangle 2, SliverTriangle 4, SelfIntersection 91, FoldBack 12, CapExposed 2
     QStringLiteral("plan 30, profile 30, ratio 2.5, 3 arms, bend 90, same section"), // Crease 4, SelfIntersection 18
     QStringLiteral("plan 30, profile 30, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 4, SelfIntersection 20
-    QStringLiteral("plan 30, profile 60, ratio 1, 1 arm, bend 40, same section"), // SliverTriangle 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 1 arm, bend 40, section x2 past J"), // Crease 2, SliverTriangle 4, SelfIntersection 2
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 40, same section"), // Crease 1, SliverTriangle 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // Crease 2, SliverTriangle 4, SelfIntersection 2
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 90, same section"), // FoldBack 2, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // FoldBack 2, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 1, SliverTriangle 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms same side, bend 40, section x2 past J"), // Crease 2, SliverTriangle 4, SelfIntersection 2
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 2, FoldBack 4, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 2, FoldBack 4, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 1
+    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 40, same section"), // Crease 2
+    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // Crease 2
+    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 2
+    QStringLiteral("plan 30, profile 60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // Crease 2
     QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 40, same section"), // SliverTriangle 1
-    QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 2, SliverTriangle 4
-    QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 90, same section"), // Crease 7, SliverTriangle 20, FoldBack 10
-    QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 1, FoldBack 8
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 21, SelfIntersection 62, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 19, SelfIntersection 54, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 20, SelfIntersection 37, FoldBack 9, WallMissed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 24, SliverTriangle 3, SelfIntersection 93, FoldBack 9, WallMissed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 1 arm, bend 90, same section"), // WallMissed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 1 arm, bend 90, section x2 past J"), // WallMissed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 41, SliverTriangle 6, SelfIntersection 99, FoldBack 18, WallMissed 4, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 37, SliverTriangle 6, SelfIntersection 96, FoldBack 18, WallMissed 4, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 40, SliverTriangle 5, SelfIntersection 79, FoldBack 18, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 42, SliverTriangle 7, SelfIntersection 202, FoldBack 18, WallMissed 1, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 20, SliverTriangle 3, SelfIntersection 46, FoldBack 9, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 21, SliverTriangle 1, SelfIntersection 34, FoldBack 9, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 24, SliverTriangle 1, SelfIntersection 104, FoldBack 17, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 26, SliverTriangle 1, SelfIntersection 67, FoldBack 17, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 27, SelfIntersection 41, FoldBack 17, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 28, SliverTriangle 3, SelfIntersection 95, FoldBack 17, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 5, FoldBack 16, CapExposed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 7, SelfIntersection 52, FoldBack 16, CapExposed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 43, SliverTriangle 1, SelfIntersection 95, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 25, SelfIntersection 67, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 30, SliverTriangle 1, SelfIntersection 59, FoldBack 23
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 32, SliverTriangle 2, SelfIntersection 156, FoldBack 15, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 4, WallMissed 1
-    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 4, WallMissed 1
+    QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 40, section x2 past J"), // SliverTriangle 1
+    QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 90, same section"), // SliverTriangle 1
+    QStringLiteral("plan 30, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // SliverTriangle 1
+    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // SliverTriangle 1
+    QStringLiteral("plan 30, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // SliverTriangle 1
     QStringLiteral("plan 30, profile -30, ratio 1, 1 arm, bend 0, section x2 past J"), // WallMissed 1
     QStringLiteral("plan 30, profile -30, ratio 1, 1 arm, bend 40, section x2 past J"), // Crease 1, SelfIntersection 1, WallMissed 1
     QStringLiteral("plan 30, profile -30, ratio 1, 2 arms opposite, bend 40, same section"), // CapExposed 1
@@ -851,44 +677,29 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 30, profile -30, ratio 2.5, 2 arms same side, bend 90, same section"), // CapExposed 1
     QStringLiteral("plan 30, profile -30, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // SelfIntersection 52, CapExposed 2
     QStringLiteral("plan 30, profile -30, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 2, SelfIntersection 55, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 1, 1 arm, bend 40, section x2 past J"), // Crease 1, SliverTriangle 4
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms opposite, bend 0, same section"), // Crease 1, FoldBack 2
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms opposite, bend 0, section x2 past J"), // Crease 1
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms opposite, bend 40, same section"), // Crease 1, CapExposed 1
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // Crease 2, SliverTriangle 4, FoldBack 1, CapExposed 1
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 1, FoldBack 2
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 40, section x2 past J"), // Crease 2, SliverTriangle 4, FoldBack 2
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 4, FoldBack 3, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 3, FoldBack 3, CapExposed 1
-    QStringLiteral("plan 30, profile -60, ratio 1, 3 arms, bend 40, same section"), // Crease 1
-    QStringLiteral("plan 30, profile -60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 1, SliverTriangle 4
-    QStringLiteral("plan 30, profile -60, ratio 1, 3 arms, bend 90, same section"), // Crease 8, SliverTriangle 24, FoldBack 10
-    QStringLiteral("plan 30, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 2, FoldBack 8
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 21, SelfIntersection 73, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 19, SelfIntersection 51, FoldBack 9, WallMissed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 20, SelfIntersection 79, FoldBack 9, WallMissed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 26, SliverTriangle 3, SelfIntersection 157, FoldBack 9, WallMissed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 1 arm, bend 90, same section"), // WallMissed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 1 arm, bend 90, section x2 past J"), // WallMissed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 14, SliverTriangle 3, SelfIntersection 43, FoldBack 18, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 7, SliverTriangle 3, SelfIntersection 40, FoldBack 18, WallMissed 4, CapExposed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 12, SliverTriangle 2, SelfIntersection 24, FoldBack 18, CapExposed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 16, SliverTriangle 7, SelfIntersection 83, FoldBack 18, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 12, SliverTriangle 1, SelfIntersection 37, FoldBack 9, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 9, SliverTriangle 1, SelfIntersection 22, FoldBack 9, WallMissed 2, CapExposed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 27, SelfIntersection 108, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 30, SelfIntersection 122, FoldBack 16, WallMissed 2, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 25, SelfIntersection 90, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 30, SliverTriangle 2, SelfIntersection 152, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 6, FoldBack 14, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 8, SliverTriangle 1, SelfIntersection 46, FoldBack 14, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 12, SelfIntersection 235, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 11, SelfIntersection 125, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 13, SelfIntersection 102, FoldBack 22
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 13, SliverTriangle 2, SelfIntersection 146, FoldBack 15, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 4, SelfIntersection 52, WallMissed 1
-    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 2, SelfIntersection 55
+    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 2
+    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 2
+    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 40, same section"), // SliverTriangle 1
+    QStringLiteral("plan 30, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 2
+    QStringLiteral("plan 30, profile -60, ratio 1, 3 arms, bend 40, same section"), // Crease 3, SliverTriangle 3, DegenerateTriangle 2
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 2, SliverTriangle 1
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 2, SliverTriangle 1
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 2, SliverTriangle 2
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 5, SliverTriangle 2
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 5, SliverTriangle 2
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 4, SliverTriangle 2
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 8, SliverTriangle 1
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 5
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 4
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 3, SliverTriangle 5
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 7, SliverTriangle 9
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 2, SliverTriangle 3
+    QStringLiteral("plan 30, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 2, SliverTriangle 3
     QStringLiteral("plan 20, profile 0, ratio 2.5, 1 arm, bend 0, same section"), // FoldBack 9, WallMissed 1
     QStringLiteral("plan 20, profile 0, ratio 2.5, 1 arm, bend 0, section x2 past J"), // FoldBack 9, WallMissed 1
     QStringLiteral("plan 20, profile 0, ratio 2.5, 1 arm, bend 40, same section"), // FoldBack 9
@@ -928,41 +739,25 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 20, profile 30, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 7, SliverTriangle 1, SelfIntersection 9, FoldBack 6
     QStringLiteral("plan 20, profile 30, ratio 2.5, 3 arms, bend 90, same section"), // Crease 2, SelfIntersection 9
     QStringLiteral("plan 20, profile 30, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 2, SliverTriangle 4, SelfIntersection 32, FoldBack 10
-    QStringLiteral("plan 20, profile 60, ratio 0.3, 2 arms same side, bend 0, same section"), // SliverTriangle 1
-    QStringLiteral("plan 20, profile 60, ratio 0.3, 2 arms same side, bend 0, section x2 past J"), // SliverTriangle 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 1 arm, bend 0, section x2 past J"), // CenterlineOutside 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 0, same section"), // Crease 1, FoldBack 2
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 1, FoldBack 8, CapExposed 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // Crease 1, FoldBack 8, CapExposed 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms same side, bend 0, section x2 past J"), // Crease 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms same side, bend 40, same section"), // Crease 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms same side, bend 40, section x2 past J"), // Crease 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 1, FoldBack 4, CapExposed 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 1, FoldBack 4, CapExposed 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 0, section x2 past J"), // CenterlineOutside 1
-    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 3, FoldBack 9
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 30, SelfIntersection 161, FoldBack 10, WallMissed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 26, SelfIntersection 145, FoldBack 10, WallMissed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 10, SliverTriangle 1, SelfIntersection 35, FoldBack 10
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 13, SelfIntersection 56
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 29, SelfIntersection 98, FoldBack 20, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 17, SelfIntersection 96, FoldBack 20, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 22, SliverTriangle 3, SelfIntersection 62, FoldBack 20, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 19, SliverTriangle 2, SelfIntersection 98, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 14, SliverTriangle 1, SelfIntersection 38, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 13, SliverTriangle 1, SelfIntersection 15, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 33, SliverTriangle 1, SelfIntersection 211, FoldBack 18, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 33, SelfIntersection 170, FoldBack 18, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 22, SliverTriangle 1, SelfIntersection 40, FoldBack 18, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 16, SelfIntersection 62, FoldBack 16, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 7, SelfIntersection 7, FoldBack 16, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 9, SelfIntersection 7, FoldBack 16, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 40, SelfIntersection 203, FoldBack 19, WallMissed 4
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 29, SelfIntersection 161, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 28, SliverTriangle 4, SelfIntersection 79, FoldBack 19
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 21, SliverTriangle 1, SelfIntersection 68, FoldBack 8
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 1
-    QStringLiteral("plan 20, profile 60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 6, SelfIntersection 18, FoldBack 10
+    QStringLiteral("plan 20, profile 60, ratio 1, 1 arm, bend 0, section x2 past J"), // Crease 1
+    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 0, section x2 past J"), // Crease 1
+    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 40, same section"), // SliverTriangle 2
+    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // SliverTriangle 2
+    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 90, same section"), // SliverTriangle 3
+    QStringLiteral("plan 20, profile 60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // SliverTriangle 2
+    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 0, same section"), // Crease 2, SliverTriangle 1
+    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 2
+    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 40, same section"), // Crease 3, SliverTriangle 1
+    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 1, SliverTriangle 1
+    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 90, same section"), // SliverTriangle 1
+    QStringLiteral("plan 20, profile 60, ratio 1, 3 arms, bend 90, section x2 past J"), // SliverTriangle 1
+    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 0, same section"), // SliverTriangle 3
+    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // SliverTriangle 3
+    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 1, SliverTriangle 3
+    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 1, SliverTriangle 3
+    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 1, SliverTriangle 3
+    QStringLiteral("plan 20, profile 60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 1, SliverTriangle 3
+    QStringLiteral("plan 20, profile 60, ratio 2.5, 3 arms, bend 0, same section"), // SliverTriangle 1
     QStringLiteral("plan 20, profile -30, ratio 1, 1 arm, bend 0, section x2 past J"), // WallMissed 1
     QStringLiteral("plan 20, profile -30, ratio 1, 2 arms opposite, bend 0, same section"), // FoldBack 1
     QStringLiteral("plan 20, profile -30, ratio 1, 2 arms opposite, bend 90, same section"), // CapExposed 1
@@ -988,38 +783,31 @@ const QStringList kUnionOpenCases {
     QStringLiteral("plan 20, profile -30, ratio 2.5, 2 arms same side, bend 90, same section"), // CapExposed 1
     QStringLiteral("plan 20, profile -30, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // CapExposed 1
     QStringLiteral("plan 20, profile -30, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 1, SliverTriangle 1, SelfIntersection 27, FoldBack 10, CapExposed 1
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms opposite, bend 0, same section"), // Crease 1, FoldBack 4
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms opposite, bend 0, section x2 past J"), // Crease 1
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms opposite, bend 40, same section"), // Crease 1
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms opposite, bend 40, section x2 past J"), // Crease 1, FoldBack 3
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms opposite, bend 90, same section"), // Crease 2, FoldBack 6, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms opposite, bend 90, section x2 past J"), // Crease 2, FoldBack 6, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 1
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 3, FoldBack 3, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 4, FoldBack 3, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 1, 3 arms, bend 90, section x2 past J"), // Crease 3, SliverTriangle 1, FoldBack 9
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 1 arm, bend 0, same section"), // Crease 27, SliverTriangle 2, SelfIntersection 102, FoldBack 10, WallMissed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 1 arm, bend 0, section x2 past J"), // Crease 26, SliverTriangle 2, SelfIntersection 94, FoldBack 10, WallMissed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 1 arm, bend 40, same section"), // Crease 15, SelfIntersection 101, FoldBack 10
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 1 arm, bend 40, section x2 past J"), // Crease 14, SelfIntersection 40
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // Crease 24, SelfIntersection 73, FoldBack 20, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // Crease 17, DegenerateTriangle 2, SelfIntersection 73, FoldBack 20, WallMissed 4, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 16, SelfIntersection 59, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 17, SelfIntersection 61, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 13, SliverTriangle 1, SelfIntersection 53, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 13, SelfIntersection 40, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 29, SliverTriangle 2, SelfIntersection 128, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 35, SliverTriangle 2, SelfIntersection 121, FoldBack 17, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 23, SelfIntersection 102, FoldBack 17, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 19, SelfIntersection 47, FoldBack 14, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 7, SelfIntersection 7, FoldBack 14, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 9, SliverTriangle 3, SelfIntersection 7, FoldBack 14, WallMissed 1, CapExposed 2
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 10, SelfIntersection 182, FoldBack 19, WallMissed 4
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 13, DegenerateTriangle 4, SelfIntersection 95, FoldBack 18, WallMissed 4
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 15, SliverTriangle 1, SelfIntersection 132, FoldBack 9
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 15, SliverTriangle 1, SelfIntersection 94, FoldBack 8
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 3, SelfIntersection 58
-    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 8, SelfIntersection 78, FoldBack 10
+    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms same side, bend 0, same section"), // Crease 2
+    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms same side, bend 90, same section"), // Crease 2
+    QStringLiteral("plan 20, profile -60, ratio 1, 2 arms same side, bend 90, section x2 past J"), // Crease 2, SliverTriangle 1
+    QStringLiteral("plan 20, profile -60, ratio 1, 3 arms, bend 0, same section"), // Crease 1
+    QStringLiteral("plan 20, profile -60, ratio 1, 3 arms, bend 0, section x2 past J"), // Crease 1
+    QStringLiteral("plan 20, profile -60, ratio 1, 3 arms, bend 40, same section"), // Crease 1
+    QStringLiteral("plan 20, profile -60, ratio 1, 3 arms, bend 40, section x2 past J"), // Crease 2, SliverTriangle 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 0, same section"), // SliverTriangle 4, SelfIntersection 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 0, section x2 past J"), // SliverTriangle 4, SelfIntersection 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 40, same section"), // Crease 2, SliverTriangle 4
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 40, section x2 past J"), // Crease 5, SliverTriangle 4
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 90, same section"), // Crease 2, SliverTriangle 4
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms opposite, bend 90, section x2 past J"), // Crease 2, SliverTriangle 4
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 0, same section"), // Crease 6, SliverTriangle 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 0, section x2 past J"), // Crease 6, SliverTriangle 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 40, same section"), // Crease 4
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 40, section x2 past J"), // Crease 4
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 90, same section"), // Crease 6, SliverTriangle 2
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 2 arms same side, bend 90, section x2 past J"), // Crease 6, SliverTriangle 2
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 0, same section"), // Crease 8, SliverTriangle 11
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 0, section x2 past J"), // Crease 8, SliverTriangle 11
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 40, same section"), // Crease 10, SliverTriangle 11, SelfIntersection 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 40, section x2 past J"), // Crease 8, SliverTriangle 11, DegenerateTriangle 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 90, same section"), // Crease 8, SliverTriangle 12, DegenerateTriangle 1
+    QStringLiteral("plan 20, profile -60, ratio 2.5, 3 arms, bend 90, section x2 past J"), // Crease 8, SliverTriangle 12, DegenerateTriangle 1
     QStringLiteral("random seed 1, 1 junctions"), // FoldBack 11
     QStringLiteral("random seed 4, 4 junctions"), // Crease 1, SelfIntersection 28, FoldBack 11
     QStringLiteral("random seed 5, 5 junctions"), // FoldBack 4
@@ -1034,18 +822,18 @@ const QStringList kUnionOpenCases {
     QStringLiteral("random seed 16, 4 junctions"), // Crease 12, FoldBack 7
     QStringLiteral("random seed 17, 5 junctions"), // Crease 2, WallMissed 2
     QStringLiteral("random seed 18, 6 junctions"), // Crease 7, WallMissed 2
-    QStringLiteral("random seed 20, 2 junctions"), // FoldBack 12
+    QStringLiteral("random seed 20, 2 junctions"), // FoldBack 25, WallBeyondReading 1, WallMissed 1, CapExposed 1
     QStringLiteral("random seed 22, 4 junctions"), // FoldBack 2
     QStringLiteral("random seed 24, 6 junctions"), // WallMissed 1
     QStringLiteral("random seed 27, 3 junctions"), // FoldBack 9
     QStringLiteral("random seed 28, 4 junctions"), // Crease 21, FoldBack 1
-    QStringLiteral("random seed 29, 5 junctions"), // Crease 6, SliverTriangle 11, SelfIntersection 119, FoldBack 21, WallBeyondReading 1, WallMissed 1
-    QStringLiteral("random seed 30, 6 junctions"), // Crease 2, SliverTriangle 3, SelfIntersection 35, FoldBack 14, WallMissed 1
-    QStringLiteral("random seed 32, 2 junctions"), // Crease 6, SelfIntersection 27, FoldBack 26
-    QStringLiteral("random seed 32, 0 junctions"), // Crease 6, SelfIntersection 27, FoldBack 13
-    QStringLiteral("random seed 33, 3 junctions"), // Crease 4, SliverTriangle 1, SelfIntersection 3, WallBeyondReading 1, FoldBack 7, WallMissed 1, CapExposed 2
+    QStringLiteral("random seed 29, 5 junctions"), // Crease 1, SliverTriangle 1, SelfIntersection 87, FoldBack 31, WallBeyondReading 1, WallMissed 1, CapExposed 1
+    QStringLiteral("random seed 30, 6 junctions"), // Crease 2, SliverTriangle 3, SelfIntersection 23, FoldBack 24, WallMissed 1, CapExposed 2
+    QStringLiteral("random seed 32, 2 junctions"), // SliverTriangle 1, FoldBack 25, RadiusJump 1, WallBeyondReading 1, WallMissed 1, CapExposed 3
+    QStringLiteral("random seed 32, 0 junctions"), // FoldBack 11, RadiusJump 1, WallBeyondReading 1, WallMissed 2, CapExposed 2
+    QStringLiteral("random seed 33, 3 junctions"), // FoldBack 15, WallBeyondReading 1, WallMissed 1, CapExposed 2
     QStringLiteral("random seed 34, 4 junctions"), // Crease 1, FoldBack 7, WallMissed 1
-    QStringLiteral("random seed 35, 5 junctions"), // Crease 5, SelfIntersection 1, FoldBack 9, RadiusJump 1, WallBeyondReading 2, WallMissed 1, CapExposed 5
+    QStringLiteral("random seed 35, 5 junctions"), // SelfIntersection 2, FoldBack 7, RadiusJump 1, WallBeyondReading 2, WallMissed 2, CapExposed 5
     QStringLiteral("random seed 39, 3 junctions"), // FoldBack 4
     QStringLiteral("random seed 40, 4 junctions"), // Crease 1, SelfIntersection 5, FoldBack 6, WallMissed 1
     QStringLiteral("random seed 41, 5 junctions"), // FoldBack 2, WallMissed 2
@@ -1055,8 +843,8 @@ const QStringList kUnionOpenCases {
     QStringLiteral("random seed 46, 4 junctions"), // Crease 4
     QStringLiteral("random seed 47, 5 junctions"), // FoldBack 12, WallMissed 1
     QStringLiteral("random seed 48, 6 junctions"), // Crease 1, FoldBack 4, WallMissed 3
-    QStringLiteral("wild seed 8, 2 junctions"), // DegenerateTriangle
-    QStringLiteral("wild seed 46, 4 junctions"), // DegenerateTriangle
+    QStringLiteral("wild seed 5, 5 junctions"), // DegenerateTriangle
+    QStringLiteral("wild seed 42, 6 junctions"), // DegenerateTriangle
 };
 
 cwPassageTubeBuilder::Debug buildDebug(const Cases::Survey& survey, double sampleSpacing)

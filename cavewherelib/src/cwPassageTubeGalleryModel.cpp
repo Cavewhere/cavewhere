@@ -673,18 +673,14 @@ void cwPassageTubeGalleryModel::setRawTubesVisible(bool rawTubesVisible)
     selectCurrent();
 }
 
-bool cwPassageTubeGalleryModel::capsSlid() const
+template<typename T>
+void cwPassageTubeGalleryModel::setOption(T Builder::Options::*option, T value, void (cwPassageTubeGalleryModel::*changed)())
 {
-    return m_capsSlid;
-}
-
-void cwPassageTubeGalleryModel::setCapsSlid(bool capsSlid)
-{
-    if (m_capsSlid == capsSlid) {
+    if (m_options.*option == value) {
         return;
     }
-    m_capsSlid = capsSlid;
-    emit capsSlidChanged();
+    m_options.*option = value;
+    emit(this->*changed)();
     for (const Row& row : std::as_const(m_rows)) {
         row.issueCount.reset();
         row.issueSummary.clear();
@@ -693,6 +689,87 @@ void cwPassageTubeGalleryModel::setCapsSlid(bool capsSlid)
         emit dataChanged(index(0), index(static_cast<int>(m_rows.size()) - 1), {IssueCountRole, IssueSummaryRole});
     }
     selectCurrent();
+}
+
+bool cwPassageTubeGalleryModel::capsSlid() const
+{
+    return m_options.slideCaps;
+}
+
+void cwPassageTubeGalleryModel::setCapsSlid(bool capsSlid)
+{
+    setOption(&Builder::Options::slideCaps, capsSlid, &cwPassageTubeGalleryModel::capsSlidChanged);
+}
+
+double cwPassageTubeGalleryModel::padScale() const
+{
+    return m_options.padScale;
+}
+
+void cwPassageTubeGalleryModel::setPadScale(double padScale)
+{
+    setOption(&Builder::Options::padScale, padScale, &cwPassageTubeGalleryModel::padScaleChanged);
+}
+
+double cwPassageTubeGalleryModel::shaftRiseRatio() const
+{
+    return m_options.shaftRiseRatio;
+}
+
+void cwPassageTubeGalleryModel::setShaftRiseRatio(double shaftRiseRatio)
+{
+    setOption(&Builder::Options::shaftRiseRatio, shaftRiseRatio, &cwPassageTubeGalleryModel::shaftRiseRatioChanged);
+}
+
+double cwPassageTubeGalleryModel::shaftThinnessRatio() const
+{
+    return m_options.shaftThinnessRatio;
+}
+
+void cwPassageTubeGalleryModel::setShaftThinnessRatio(double shaftThinnessRatio)
+{
+    setOption(&Builder::Options::shaftThinnessRatio, shaftThinnessRatio, &cwPassageTubeGalleryModel::shaftThinnessRatioChanged);
+}
+
+bool cwPassageTubeGalleryModel::shaftRingsSquare() const
+{
+    return m_options.shaftRingsSquare;
+}
+
+void cwPassageTubeGalleryModel::setShaftRingsSquare(bool shaftRingsSquare)
+{
+    setOption(&Builder::Options::shaftRingsSquare, shaftRingsSquare, &cwPassageTubeGalleryModel::shaftRingsSquareChanged);
+}
+
+int cwPassageTubeGalleryModel::shaftCapHeight() const
+{
+    return static_cast<int>(m_options.shaftCapHeight);
+}
+
+void cwPassageTubeGalleryModel::setShaftCapHeight(int shaftCapHeight)
+{
+    setOption(&Builder::Options::shaftCapHeight,
+              static_cast<Builder::ShaftCapHeight>(shaftCapHeight),
+              &cwPassageTubeGalleryModel::shaftCapHeightChanged);
+}
+
+int cwPassageTubeGalleryModel::shaftCapShape() const
+{
+    return static_cast<int>(m_options.shaftCapShape);
+}
+
+void cwPassageTubeGalleryModel::setShaftCapShape(int shaftCapShape)
+{
+    setOption(&Builder::Options::shaftCapShape,
+              static_cast<Builder::ShaftCapShape>(shaftCapShape),
+              &cwPassageTubeGalleryModel::shaftCapShapeChanged);
+}
+
+cwPassageTubeBuilder::Options cwPassageTubeGalleryModel::optionsFor(double sampleSpacing) const
+{
+    Builder::Options options = m_options;
+    options.sampleSpacingMeters = sampleSpacing;
+    return options;
 }
 
 cwPassageTubeSandboxModel* cwPassageTubeGalleryModel::sandbox() const
@@ -1032,7 +1109,7 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
         }
 
         const Builder::LegPad pad = chain.legPads.value(entry.chainLeg);
-        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, right %6, up %7, pad %8/%9 m, e %10, radius %11-%12 m%13")
+        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, right %6, up %7, pad %8/%9 m, e %10, rise %11, thin %12%13, radius %14-%15 m%16")
             .arg(chainIndex)
             .arg(ring)
             .arg(entry.chainLeg)
@@ -1040,6 +1117,9 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             .arg(pad.start, 0, 'f', 2)
             .arg(pad.end, 0, 'f', 2)
             .arg(pad.e, 0, 'f', 2)
+            .arg(pad.riseRatio, 0, 'f', 2)
+            .arg(pad.thinness, 0, 'f', 2)
+            .arg(pad.isShaft ? QStringLiteral(" (shaft)") : QString())
             .arg(minRadius, 0, 'f', 2)
             .arg(maxRadius, 0, 'f', 2)
             .arg(sectionText);
@@ -1059,13 +1139,10 @@ cwPassageTubeGalleryModel::Row cwPassageTubeGalleryModel::caseRow(const Cases::J
     return row;
 }
 
-cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::Survey& survey, double sampleSpacing, bool slideCaps)
+cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::Survey& survey, const Builder::Options& options)
 {
     using Check = cwPassageTubeMeshCheck;
     using Warning = cwPassageTubeMesh::Warning;
-    cwPassageTubeBuilder::Options options;
-    options.sampleSpacingMeters = sampleSpacing;
-    options.slideCaps = slideCaps;
 
     Build result;
     QElapsedTimer timer;
@@ -1077,7 +1154,7 @@ cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::S
     const QVector<cwPassageTubeBuilder::CapVertex>& slid = result.debug.slidCaps;
     const auto inside = std::count_if(slid.cbegin(), slid.cend(), [](const cwPassageTubeBuilder::CapVertex& vertex) { return vertex.isInside(); });
     QStringList lines {QStringLiteral("Union in %1 components, built in %2 ms").arg(result.report.componentCount).arg(milliseconds)};
-    lines.append(slideCaps ? QStringLiteral("Slid %1 of %2 cap vertices outside the passages they meet inside them").arg(inside).arg(slid.size())
+    lines.append(options.slideCaps ? QStringLiteral("Slid %1 of %2 cap vertices outside the passages they meet inside them").arg(inside).arg(slid.size())
                            : QStringLiteral("Cap slide off"));
     for (int c = 0; c < result.report.components.size(); ++c) {
         const Check::ComponentStats& component = result.report.components.at(c);
@@ -1096,15 +1173,13 @@ cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::S
     return result;
 }
 
-cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::buildRawTubes(const Cases::Survey& survey, double sampleSpacing, bool slideCaps)
+cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::buildRawTubes(const Cases::Survey& survey, const Builder::Options& options)
 {
     using Union = cwPassageTubeUnion;
-    cwPassageTubeBuilder::Options options;
-    options.sampleSpacingMeters = sampleSpacing;
 
     Build result;
     result.debug = cwPassageTubeBuilder::buildChainRings(survey.region, survey.positionsByCave, options);
-    if (slideCaps) {
+    if (options.slideCaps) {
         result.debug.slidCaps = Union::slideCaps(result.debug);
     }
 
@@ -1234,7 +1309,7 @@ void cwPassageTubeGalleryModel::ensureIssueCount(const Row& row) const
     if (row.issueCount) {
         return;
     }
-    cacheIssues(row, build(row.survey(), row.sampleSpacing, m_capsSlid).report);
+    cacheIssues(row, build(row.survey(), optionsFor(row.sampleSpacing)).report);
 }
 
 void cwPassageTubeGalleryModel::selectCurrent()
@@ -1251,7 +1326,8 @@ void cwPassageTubeGalleryModel::selectCurrent()
         const double sampleSpacing = row.sampleSpacing;
         QElapsedTimer buildTimer;
         buildTimer.start();
-        m_current = m_rawTubesVisible ? buildRawTubes(survey, sampleSpacing, m_capsSlid) : build(survey, sampleSpacing, m_capsSlid);
+        const Builder::Options options = optionsFor(sampleSpacing);
+        m_current = m_rawTubesVisible ? buildRawTubes(survey, options) : build(survey, options);
         const qint64 buildMilliseconds = buildTimer.elapsed();
         m_ringGeometry = ringGeometryOf(m_current.debug);
 

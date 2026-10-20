@@ -35,6 +35,7 @@
 //Std includes
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace {
 
@@ -45,9 +46,8 @@ const QString kSymmetricT = QStringLiteral("1. symmetric T");
 const QString kJunctionFreeCase = QStringLiteral("no arms, through profile 0, bend 0, same section");
 const QString kShaftFootCase = QStringLiteral("25. Zero floor reading at the foot of a shaft");
 const QString kSharpBendCase = QStringLiteral("23. Sharp bend at a station reading zero on the outside wall");
-// The shaft's foot joins a plumb section to a level one, whose union leaves
-// slivers until T07am.
-const QString kCaseWithIssues = kShaftFootCase;
+// The small arm's cap slides into the room and folds the rings behind it.
+const QString kCaseWithIssues = QStringLiteral("21. Small arm along the wall of a big room");
 constexpr float kLengthTolerance = 1e-4f;
 constexpr float kPositionTolerance = 1e-3f;
 constexpr int kProjectLoadTimeoutMs = 30000;
@@ -132,7 +132,7 @@ QString nameAt(const Model& model, int row)
 
 // The rings of every chain of the named catalog case, built as the model
 // builds it.
-QVector<cwPassageTubeBuilder::Ring> caseRings(const QString& name)
+QVector<cwPassageTubeBuilder::Ring> caseRings(const QString& name, cwPassageTubeBuilder::Options options = cwPassageTubeBuilder::Options())
 {
     const QVector<cwPassageTubeCases::Case> catalog = cwPassageTubeCases::catalog();
     const auto entry = std::find_if(catalog.cbegin(), catalog.cend(), [&](const cwPassageTubeCases::Case& candidate) {
@@ -142,7 +142,6 @@ QVector<cwPassageTubeBuilder::Ring> caseRings(const QString& name)
         return {};
     }
     const cwPassageTubeCases::Survey survey = cwPassageTubeCases::toSurvey(*entry);
-    cwPassageTubeBuilder::Options options;
     options.sampleSpacingMeters = entry->sampleSpacing;
     const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, options);
 
@@ -612,7 +611,8 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
 
 // Case 23 reads c0 and c1 and leaves c2 unread; every ring lies on its leg's
 // loft or its station's sections, so the overshoot layer, which follows the
-// checker's WallBeyondReading, is empty.
+// checker's WallBeyondReading, is empty. Both its legs climb steeply enough
+// to be shafts, whose rings carry no section, so shaft rings are off here.
 TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to", "[PassageTube][cwPassageTubeGalleryModel]")
 {
     constexpr int kReadStations = 2;
@@ -620,13 +620,16 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
     cwScene scene;
     Model model;
     model.setScene(&scene);
+    model.setShaftRingsSquare(false);
+    cwPassageTubeBuilder::Options options;
+    options.shaftRingsSquare = false;
 
     const int row = model.indexOf(kSharpBendCase);
     REQUIRE(row >= 0);
     model.setCurrentIndex(row);
 
     const Model::RingGeometry geometry = model.ringGeometry();
-    const QVector<cwPassageTubeBuilder::Ring> rings = caseRings(kSharpBendCase);
+    const QVector<cwPassageTubeBuilder::Ring> rings = caseRings(kSharpBendCase, options);
     REQUIRE_FALSE(rings.isEmpty());
     const QVector3D c0 = casePosition(kSharpBendCase, QStringLiteral("c0"));
     const QVector3D c1 = casePosition(kSharpBendCase, QStringLiteral("c1"));
@@ -682,6 +685,7 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
     SECTION("each layer shows on its own")
     {
         model.setReadingsVisible(true);
+        REQUIRE_FALSE(geometry.sectionLoops.isEmpty());
         const QVector<quint8> visibility = model.ringPlot()->visibility();
         CHECK(visibility.at(geometry.readings.start) == cwRenderLinePlot::kVisible);
         CHECK(visibility.at(geometry.sectionLoops.constFirst().start) == cwRenderLinePlot::kHidden);
@@ -705,12 +709,14 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
     }
 }
 
+// Case 23 with shaft rings off, so its rings carry sections.
 TEST_CASE("cwPassageTubeGalleryModel colors each ring plot layer on its own", "[PassageTube][cwPassageTubeGalleryModel]")
 {
     using Range = cwLinePlotGeometry::VertexRange;
     cwScene scene;
     Model model;
     model.setScene(&scene);
+    model.setShaftRingsSquare(false);
 
     const int row = model.indexOf(kSharpBendCase);
     REQUIRE(row >= 0);
@@ -854,4 +860,72 @@ TEST_CASE("cwPassageTubeGalleryModel reports a project it cannot copy", "[Passag
                       cwPassageTubeBuilder::Options().sampleSpacingMeters);
     CHECK(failedSpy.count() == 1);
     CHECK(model.rowCount() == rowsBefore);
+}
+
+// T07ao: the sandbox's leg past J stood straight up is a shaft, and each of
+// the builder's pad and shaft knobs rebuilds the current row and the list's
+// issue counts.
+TEST_CASE("cwPassageTubeGalleryModel rebuilds with the shaft knobs and reports a leg's ratios", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    constexpr double kPlumbDegrees = 90.0;
+    constexpr double kHighRatio = 5.0;
+    constexpr double kHalfPadScale = 0.5;
+    cwScene scene;
+    Model model;
+    model.setScene(&scene);
+    model.sandbox()->setThroughBendProfileDegrees(kPlumbDegrees);
+    model.setCurrentIndex(Model::kSandboxRow);
+
+    const QVector3D shaftMiddle(0.0f, 0.0f, static_cast<float>(cwPassageTubeCases::kThroughLegMeters / 2.0));
+    const auto shaftLine = [&]() {
+        return model.ringLine(model.nearestRing(shaftMiddle));
+    };
+    INFO(shaftLine().toStdString());
+    CHECK(shaftLine().contains(QStringLiteral("rise 4.00, thin inf (shaft)")));
+
+    const auto checkRebuilds = [&](const std::function<void()>& edit, auto changed) {
+        const cwPassageTubeMesh before = model.mesh();
+        QSignalSpy changedSpy(&model, changed);
+        QSignalSpy countsSpy(&model, &Model::dataChanged);
+        edit();
+        CHECK(changedSpy.count() == 1);
+        CHECK(countsSpy.count() >= 1);
+        CHECK(model.mesh().positions != before.positions);
+    };
+
+    SECTION("shaft rings off draws the leg on vertical rings")
+    {
+        checkRebuilds([&]() { model.setShaftRingsSquare(false); }, &Model::shaftRingsSquareChanged);
+        CHECK_FALSE(model.shaftRingsSquare());
+        CHECK_FALSE(shaftLine().contains(QStringLiteral("(shaft)")));
+        checkRebuilds([&]() { model.setPadScale(kHalfPadScale); }, &Model::padScaleChanged);
+        CHECK(model.padScale() == kHalfPadScale);
+    }
+
+    SECTION("a rise ratio above the leg's leaves it padded")
+    {
+        checkRebuilds([&]() { model.setShaftRiseRatio(kHighRatio); }, &Model::shaftRiseRatioChanged);
+        CHECK(model.shaftRiseRatio() == kHighRatio);
+        CHECK_FALSE(shaftLine().contains(QStringLiteral("(shaft)")));
+    }
+
+    SECTION("the cap height and shape reshape the domes")
+    {
+        checkRebuilds([&]() { model.setShaftCapShape(static_cast<int>(cwPassageTubeBuilder::ShaftCapShape::Cone)); },
+                      &Model::shaftCapShapeChanged);
+        checkRebuilds([&]() { model.setShaftCapHeight(static_cast<int>(cwPassageTubeBuilder::ShaftCapHeight::MeanWidth)); },
+                      &Model::shaftCapHeightChanged);
+        checkRebuilds([&]() { model.setShaftCapHeight(static_cast<int>(cwPassageTubeBuilder::ShaftCapHeight::Flat)); },
+                      &Model::shaftCapHeightChanged);
+        CHECK(model.shaftCapHeight() == static_cast<int>(cwPassageTubeBuilder::ShaftCapHeight::Flat));
+    }
+
+    SECTION("the thinness ratio is a knob of its own")
+    {
+        QSignalSpy changedSpy(&model, &Model::shaftThinnessRatioChanged);
+        model.setShaftThinnessRatio(kHighRatio);
+        CHECK(changedSpy.count() == 1);
+        CHECK(model.shaftThinnessRatio() == kHighRatio);
+        CHECK(shaftLine().contains(QStringLiteral("(shaft)")));
+    }
 }

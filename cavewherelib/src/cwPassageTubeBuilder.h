@@ -81,6 +81,20 @@ public:
     // Two chains' records of one side wall at a station they share that
     // differ by more than this ratio warn JunctionReadingConflict.
     static constexpr double kReadingConflictRatio = 3.0;
+    // Rings between a shaft's end section and the apex of its dome.
+    static constexpr int kDomeRings = 4;
+
+    // How tall a shaft's round cap stands past its end station.
+    enum class ShaftCapHeight {
+        Reading,    // the U or D reading the cap points along
+        MeanWidth,  // mean(L, R) of the end section, a hemisphere on a round shaft
+        Flat        // no dome, a flat fan
+    };
+
+    enum class ShaftCapShape {
+        Round,  // a quarter ellipse from the end ring to the apex
+        Cone    // straight from the end ring to the apex
+    };
 
     struct Options {
         double sampleSpacingMeters = 1.0;
@@ -89,6 +103,20 @@ public:
         // Slides each end cap's vertices into the passages it meets before
         // the union (cwPassageTubeUnion::slideCaps).
         bool slideCaps = true;
+        // Scales the pad a leg's end rings stand off its stations (LegPad).
+        double padScale = 1.0;
+        // A leg is a shaft when it rises more than shaftRiseRatio times its
+        // section height and its vertical-ring slab would be thinner along
+        // the shot than wide across it by more than shaftThinnessRatio:
+        // tan(clino) · (L+R) / (U+D) > shaftThinnessRatio. Prototype knobs.
+        double shaftRiseRatio = 1.0;
+        double shaftThinnessRatio = 1.0;
+        // A shaft stands rings square to its leg, round at mean(L, R) along
+        // the shot, as its own chain piece capped by domes; off, every leg
+        // keeps vertical rings.
+        bool shaftRingsSquare = true;
+        ShaftCapHeight shaftCapHeight = ShaftCapHeight::Reading;
+        ShaftCapShape shaftCapShape = ShaftCapShape::Round;
     };
 
     // One surveyed shot with both endpoints positioned. LRUD come from the
@@ -172,12 +200,20 @@ public:
 
     // How far a leg's end rings stand off its stations along its plan run:
     // e·start before its start and e·end past its end, where start and end
-    // are pad = mean(L, R) / 2 of each station's drawn walls and
-    // e = 1 − min(1, planRun / (start + end)).
+    // are pad = Options::padScale · (|dz| / length) · mean(L, R) of each
+    // station's drawn walls and e = 1 − min(1, planRun / (start + end)). A
+    // padded leg's plan footprint is start + end: a plumb leg stands as deep
+    // as it is wide, a level one on its stations. A shaft
+    // (Options::shaftRiseRatio, shaftThinnessRatio) stands on its stations:
+    // riseRatio is its rise over its section height, thinness is
+    // tan(clino) · (L+R) / (U+D), +∞ for a plumb leg.
     struct LegPad {
         double start = 0.0;
         double end = 0.0;
         double e = 0.0;
+        bool isShaft = false;
+        double riseRatio = 0.0;
+        double thinness = 0.0;
     };
 
     struct Chain {

@@ -45,9 +45,20 @@ BuilderInput makeInput(const SurveyInput& survey)
     return cwPassageTubeCases::toSurvey(survey);
 }
 
-Builder::Debug buildDebug(const BuilderInput& input)
+Builder::Debug buildDebug(const BuilderInput& input, const Builder::Options& options = Builder::Options())
 {
-    return Builder::buildDebug(input.region, input.positionsByCave, {}, Builder::Options());
+    return Builder::buildDebug(input.region, input.positionsByCave, {}, options);
+}
+
+// Vertical rings on every leg, a plumb leg padded mean(L, R) / 2 off its
+// stations: the builder before shafts.
+Builder::Options verticalRingOptions()
+{
+    constexpr double kHalfWidthPadScale = 0.5;
+    Builder::Options options;
+    options.shaftRingsSquare = false;
+    options.padScale = kHalfWidthPadScale;
+    return options;
 }
 
 QStringList lrud(double left, double right, double up, double down)
@@ -521,12 +532,12 @@ BuilderInput loopInput(const QStringList& dimensions = {QString(), QString(), QS
 
 } // namespace
 
-TEST_CASE("cwPassageTubeBuilder stands a vertical pit as a box padded along the incoming passage", "[PassageTube][cwPassageTubeBuilder]")
+TEST_CASE("cwPassageTubeBuilder stands a vertical pit as a box padded along the incoming passage with shaft rings off", "[PassageTube][cwPassageTubeBuilder]")
 {
     // The pit b→c has no plan run, so e = 1 and its rings stand pad =
     // mean(L, R) / 2 = 0.5 m off b and c along the incoming passage, north:
     // the chain splits at both into the two level legs and the box.
-    const Builder::Debug debug = buildDebug(verticalPitInput());
+    const Builder::Debug debug = buildDebug(verticalPitInput(), verticalRingOptions());
     REQUIRE(debug.chains.size() == 3);
     for (const Builder::Chain& chain : debug.chains) {
         checkFramesOrthonormal(chain);
@@ -569,7 +580,7 @@ TEST_CASE("cwPassageTubeBuilder keeps a pit left on a new bearing vertical", "[P
     checkVectorNear(exit.frame.right, QVector3D(0, -1, 0));
 }
 
-TEST_CASE("cwPassageTubeBuilder stands a chain that is vertical throughout on plumb rings", "[PassageTube][cwPassageTubeBuilder]")
+TEST_CASE("cwPassageTubeBuilder stands a chain that is vertical throughout as two shafts", "[PassageTube][cwPassageTubeBuilder]")
 {
     const BuilderInput input = makeInput({{{
         {QStringLiteral("a"), QVector3D(0, 0, 0)},
@@ -577,15 +588,17 @@ TEST_CASE("cwPassageTubeBuilder stands a chain that is vertical throughout on pl
         {QStringLiteral("c"), QVector3D(0, 0, -20)},
     }}});
 
-    // Both legs stand their rings off b, so the chain splits there. Each
-    // leg's rings are 1 m tall over a 10 m drop, so its box is a sheared slab
-    // whose walls crease against its caps.
+    // Each leg drops 10 m in a section 2 m tall: a shaft, its own piece of
+    // the chain, its rings square to the plumb leg and centered on it.
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 2);
     for (const Builder::Chain& chain : debug.chains) {
         checkFramesOrthonormal(chain);
+        REQUIRE(chain.legPads.size() == 1);
+        CHECK(chain.legPads.at(0).isShaft);
         for (const Builder::Ring& ring : chain.rings) {
-            checkVectorNear(ring.frame.up, QVector3D(0, 0, 1));
+            checkVectorNear(ring.frame.tangent, QVector3D(0, 0, -1));
+            checkVectorNear(QVector3D(ring.center.x(), ring.center.y(), 0), QVector3D(0, 0, 0));
         }
     }
     checkMeshClosed(debug.mesh);
@@ -657,10 +670,10 @@ TEST_CASE("cwPassageTubeBuilder takes a wall at face value across the ring", "[P
 TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a vertical shot", "[PassageTube][cwPassageTubeBuilder]")
 {
     // b's leg in chunk 2 drops straight down, so b takes q's facing (the
-    // bisector of the drop and q→r, west). The drop has no plan run, so its
-    // rings stand pad = mean(L, R) / 2 off b and q along the outgoing plan
-    // direction, west, with b's 3 m left wall to the south and its 0 m right
-    // wall to the north: the chain splits at q.
+    // bisector of the drop and q→r, west). With shaft rings off, the drop has
+    // no plan run, so its rings stand pad = mean(L, R) / 2 off b and q along
+    // the outgoing plan direction, west, with b's 3 m left wall to the south
+    // and its 0 m right wall to the north: the chain splits at q.
     constexpr double kLeftMeters = 3.0;
     constexpr double kPadMeters = (kLeftMeters + Builder::kMinRadiusMeters) / 2.0 / 2.0;
     constexpr double kUpMeters = 1.0;
@@ -678,7 +691,7 @@ TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a ver
         },
     }});
 
-    const Builder::Debug debug = buildDebug(input);
+    const Builder::Debug debug = buildDebug(input, verticalRingOptions());
     const auto drop = std::find_if(debug.legs.cbegin(), debug.legs.cend(), [](const Builder::Leg& leg) {
         return leg.from == QStringLiteral("b") && leg.to == QStringLiteral("q");
     });
@@ -828,9 +841,11 @@ TEST_CASE("cwPassageTubeBuilder uses the default radius for a chain without pass
 
 TEST_CASE("cwPassageTubeBuilder stands a lone pit on its own readings", "[PassageTube][cwPassageTubeBuilder]")
 {
-    // The top reads the drop below it and the bottom the shaft above it; the
-    // pit has no plan run, so e = 1 and its two rings stand pad = 1.5 m off
-    // the stations along north, the fallback facing: a box 3 m deep.
+    // The top reads the drop below it and the bottom the shaft above it, so
+    // the pit rises less than its section is tall and is padded, not a
+    // shaft. It has no plan run, so e = 1 and its two rings stand pad =
+    // mean(L, R) = 1.5 m off the stations along north, the fallback facing:
+    // a box 3 m deep.
     constexpr double kPitRadius = 1.5;
     constexpr double kDropMeters = 12.0;
     constexpr double kLipMeters = 1.0;
@@ -842,7 +857,7 @@ TEST_CASE("cwPassageTubeBuilder stands a lone pit on its own readings", "[Passag
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 1);
     const Builder::Chain& chain = debug.chains.at(0);
-    const float pad = static_cast<float>(kPitRadius / 2.0);
+    const float pad = static_cast<float>(kPitRadius);
     checkVectorNear(chain.rings.first().center, QVector3D(0, -pad, 0));
     checkVectorNear(chain.rings.last().center, QVector3D(0, pad, -kDropMeters));
     for (const Builder::Ring& ring : chain.rings) {
@@ -858,9 +873,10 @@ TEST_CASE("cwPassageTubeBuilder stands a lone pit on its own readings", "[Passag
 
 TEST_CASE("cwPassageTubeBuilder pads a lone plumb leg along its shot's bearing", "[PassageTube][cwPassageTubeBuilder]")
 {
-    // The chain is one plumb leg, so its plan direction is the bearing its
-    // shot reads: east by every one of these readings. Its rings stand pad =
-    // 1.5 m west of the top and east of the bottom, with right to the south.
+    // The chain is one plumb leg, rising less than its section is tall, so
+    // its plan direction is the bearing its shot reads: east by every one of
+    // these readings. Its rings stand pad = mean(L, R) = 3 m west of the top
+    // and east of the bottom, with right to the south.
     struct Reading {
         const char* name;
         std::optional<double> frontsight;
@@ -893,7 +909,7 @@ TEST_CASE("cwPassageTubeBuilder pads a lone plumb leg along its shot's bearing",
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 1);
     const Builder::Chain& chain = debug.chains.at(0);
-    const float pad = static_cast<float>(kPitRadius / 2.0);
+    const float pad = static_cast<float>(kPitRadius);
     checkVectorNear(chain.rings.first().center, QVector3D(-pad, 0, 0));
     checkVectorNear(chain.rings.last().center, QVector3D(pad, 0, -kDropMeters));
     for (const Builder::Ring& ring : chain.rings) {
@@ -1467,9 +1483,8 @@ TEST_CASE("cwPassageTubeBuilder places two rings on a shot shorter than the spac
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 1);
     REQUIRE(debug.chains.at(0).rings.size() == 2);
-    // The default radius's pad is 0.25 m at each end and the shot runs 0.3 m,
-    // so e = 1 - 0.3 / 0.5 = 0.4 and each ring stands 0.1 m off its station.
-    CHECK(debug.chains.at(0).rings.at(0).center.distanceToPoint(debug.chains.at(0).rings.at(1).center) == Catch::Approx(0.5));
+    // A level shot pads nothing, so its rings stand on its stations (I01).
+    CHECK(debug.chains.at(0).rings.at(0).center.distanceToPoint(debug.chains.at(0).rings.at(1).center) == Catch::Approx(0.3));
     checkMeshClean(debug);
 }
 
@@ -1482,10 +1497,10 @@ TEST_CASE("cwPassageTubeBuilder merges rings closer than the minimum spacing", "
         {QStringLiteral("d"), QVector3D(4, 0, 0)},
     }}});
 
-    // b → c is shorter than its pads, so its rings stand off b and c and the
-    // chain splits at both.
+    // b → c is level, so its rings stand on b and c (I01), 0.03 m apart, and
+    // c's merges into b's in the one chain.
     const Builder::Debug debug = buildDebug(input);
-    REQUIRE(debug.chains.size() == 3);
+    REQUIRE(debug.chains.size() == 1);
     for (const Builder::Chain& chain : debug.chains) {
         for (int i = 1; i < chain.rings.size(); ++i) {
             INFO("ring " << i);
@@ -1909,11 +1924,11 @@ TEST_CASE("cwPassageTubeBuilder reads one record per leg end", "[PassageTube][cw
     }
 }
 
-// Redesign step 5: a plumb leg's rings stand vertical, padded e·pad off its
-// stations along the next leg's plan direction, so the shaft is a box.
-// Phake's a6 reads L1 R5 and a9 reads L2.3 R2, both facing 230° along
-// a9 -> a10: pad(a6) = 1.5 m and pad(a9) = 1.075 m, and e = 1.
-TEST_CASE("cwPassageTubeBuilder stands a plumb leg's rings off its stations along the next leg", "[PassageTube][cwPassageTubeBuilder]")
+// Redesign step 5: with shaft rings off, a plumb leg's rings stand vertical,
+// padded e·pad off its stations along the next leg's plan direction, so the
+// shaft is a box. Phake's a6 reads L1 R5 and a9 reads L2.3 R2, both facing
+// 230° along a9 -> a10: pad(a6) = 1.5 m and pad(a9) = 1.075 m, and e = 1.
+TEST_CASE("cwPassageTubeBuilder stands a plumb leg's rings off its stations along the next leg with shaft rings off", "[PassageTube][cwPassageTubeBuilder]")
 {
     constexpr double kFacingAzimuthDegrees = 230.0;
     constexpr double kFacingToleranceDegrees = 1.0;
@@ -1925,7 +1940,7 @@ TEST_CASE("cwPassageTubeBuilder stands a plumb leg's rings off its stations alon
 
     // The rings as placed, before the cap slide moves a6's into chunk 2's tube.
     const BuilderInput input = makeInput(cwPassageTubeCases::phakeCave());
-    const Builder::Debug debug = Builder::buildChainRings(input.region, input.positionsByCave, Builder::Options());
+    const Builder::Debug debug = Builder::buildChainRings(input.region, input.positionsByCave, verticalRingOptions());
     const QString a6Name = QStringLiteral("a6");
     const QString a9Name = QStringLiteral("a9");
     const Builder::Chain& chain = chainJoining(debug, a6Name, a9Name);
@@ -2187,9 +2202,11 @@ QString ringText(int index, const Builder::Ring& ring)
 // T07am step 1, redesign step 5: every ring stands vertical, L and R level
 // along the step-1 right and U and D plumb. A leg's rings advance along its
 // plan run, padded by e·pad at each end, e = 1 − min(1, run / (pad(a) +
-// pad(b))) and pad = mean(L, R) / 2 = 1 m here: a plumb pitch is a box 2 m
-// deep along the incoming plan direction, and a pitch with a plan run of at
-// least 2 m ends its rings on its stations.
+// pad(b))) and pad = (|dz| / length) · mean(L, R) = 2·sin(alpha) m here
+// (T07ao): a plumb pitch is a box 4 m deep along the incoming plan
+// direction, as deep as it is wide, and a pitch whose plan run reaches
+// 2·pad ends its rings on its stations. The pitch drops less than its
+// section is tall, so it is no shaft.
 TEST_CASE("cwPassageTubeBuilder stands a pitch's rings vertical along its plan run", "[PassageTube][cwPassageTubeBuilder]")
 {
     const double alpha = GENERATE(90.0, 80.0, 70.0, 45.0);
@@ -2198,7 +2215,7 @@ TEST_CASE("cwPassageTubeBuilder stands a pitch's rings vertical along its plan r
     const BuilderInput input = pitchInput(alpha);
     const Builder::Debug debug = Builder::buildChainRings(input.region, input.positionsByCave, Builder::Options());
 
-    const double pad = (kPitchWallMeters + kPitchWallMeters) / 2.0 / 2.0;
+    const double pad = std::sin(alphaRadians) * (kPitchWallMeters + kPitchWallMeters) / 2.0;
     const double planRun = kPitchLegMeters * std::cos(alphaRadians);
     const double e = 1.0 - std::min(1.0, planRun / (pad + pad));
     const QVector3D expectedTop = two - kPitchNorth * static_cast<float>(e * pad);

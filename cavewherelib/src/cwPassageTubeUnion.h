@@ -190,8 +190,8 @@ public:
     // within the end leg's length, to the nearest point inside another
     // chain's tube at the station: kSlideMarginMeters inside the wall it
     // crosses, or nearer the crossing where the line leaves the tube again.
-    // The vertex's bin along that leg lerps to it. Returns the notch with
-    // where each vertex went.
+    // The vertex's bin along that leg lerps to it. A shaft's end stays put,
+    // its dome its cap. Returns the notch with where each vertex went.
     static QVector<CapVertex> slideCaps(cwPassageTubeBuilder::Debug& rings);
 };
 

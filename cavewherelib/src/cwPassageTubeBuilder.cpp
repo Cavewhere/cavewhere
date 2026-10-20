@@ -23,6 +23,7 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
+#include <numbers>
 
 namespace {
 
@@ -36,6 +37,7 @@ constexpr double kRepeatedShotToleranceMeters = 0.1;
 // before a nearer ring of another trip.
 constexpr int kSameTripBorrowLegs = 2;
 constexpr double kOnAxisMeters = 1e-6;
+constexpr double kQuarterTurn = std::numbers::pi / 2.0;
 constexpr double kHalfTurnDegrees = 180.0;
 constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
 
@@ -392,7 +394,9 @@ struct LegEnd {
     std::optional<cwStationLrud> walls;
     bool isBorrowed = false;
 
-    double pad() const { return *meanReading(walls->left, walls->right) / 2.0; }
+    // slope is |dz| / length of the leg this end belongs to: a plumb leg pads
+    // its full mean width, a level one stands on its station.
+    double pad(double slope) const { return slope * *meanReading(walls->left, walls->right); }
 };
 
 // A leg end's section around center as a ring's vertices and right, with
@@ -414,6 +418,56 @@ EndSection endSection(const LegEnd& end, const QVector3D& center, int resolution
                        end.right,
                        end.isBorrowed ? QVector<bool>(resolution, false) : measuredBins(end.record, resolution),
                        end.isBorrowed ? std::nullopt : end.walls};
+}
+
+// A shaft leg's section at one of its stations: a ring square to the leg's
+// axis around center, left and right along planRight, and mean(L, R) along
+// planRight × axis both ways, so a plumb shaft is as deep along the shot as it
+// is wide. Both ends share planRight so their bins line up; a station facing
+// against it has its readings swapped onto the side they were read on. Only
+// the side readings are measured; the ring carries no Section, since U and D
+// are the shaft's run, not its walls.
+EndSection shaftSection(const LegEnd& end, const QVector3D& center, const QVector3D& axis, const QVector3D& planRight, int resolution)
+{
+    const bool facesPlanRight = QVector3D::dotProduct(planRight, end.right) >= 0.0f;
+    const auto alongPlanRight = [facesPlanRight](const cwStationLrud& lrud) {
+        return facesPlanRight ? lrud
+                              : cwStationLrud {lrud.right, lrud.left, lrud.up, lrud.down};
+    };
+    const cwStationLrud walls = alongPlanRight(*end.walls);
+    const cwStationLrud record = alongPlanRight(end.record);
+    const QVector3D across = QVector3D::crossProduct(planRight, axis).normalized();
+    const double depth = *meanReading(walls.left, walls.right);
+    const cwStationLrud sides {record.left, record.right, std::nullopt, std::nullopt};
+    QVector<QVector3D> points;
+    points.reserve(resolution);
+    for (int bin = 0; bin < resolution; ++bin) {
+        const double t = binParameter(bin, resolution);
+        const std::optional<double> horizontal = quadrantReadings(walls, t).first;
+        points.append(center
+                      + planRight * static_cast<float>(*horizontal * std::cos(t))
+                      + across * static_cast<float>(depth * std::sin(t)));
+    }
+    return EndSection {end.station,
+                       center,
+                       points,
+                       planRight,
+                       end.isBorrowed ? QVector<bool>(resolution, false) : measuredBins(sides, resolution),
+                       std::nullopt};
+}
+
+// How far a shaft's dome stands past its end section along outward.
+double shaftCapHeight(cwPassageTubeBuilder::ShaftCapHeight height, const cwStationLrud& walls, const QVector3D& outward)
+{
+    switch (height) {
+    case cwPassageTubeBuilder::ShaftCapHeight::Reading:
+        return outward.z() >= 0.0f ? *walls.up : *walls.down;
+    case cwPassageTubeBuilder::ShaftCapHeight::MeanWidth:
+        return *meanReading(walls.left, walls.right);
+    case cwPassageTubeBuilder::ShaftCapHeight::Flat:
+        break;
+    }
+    return 0.0;
 }
 
 // A warning about the chain, reported at its first station. message takes
@@ -548,10 +602,26 @@ QVector<Chain> buildRings(const QVector<Leg>& legs, const Chain& chain, const Op
     startCenters.reserve(legCount);
     endCenters.reserve(legCount);
     for (int i = 0; i < legCount; ++i) {
-        const double padStart = ends.at(2 * i).pad();
-        const double padEnd = ends.at(2 * i + 1).pad();
-        const double e = 1.0 - std::min(1.0, plans.at(i).length() / (padStart + padEnd));
-        pads.append(LegPad {padStart, padEnd, e});
+        const QVector3D delta = walked.at(i).end - walked.at(i).start;
+        const double length = delta.length();
+        const double rise = std::abs(delta.z());
+        const double run = plans.at(i).length();
+        const double slope = length > 0.0 ? rise / length : 0.0;
+        const cwStationLrud& startWalls = *ends.at(2 * i).walls;
+        const cwStationLrud& endWalls = *ends.at(2 * i + 1).walls;
+        const double width = (*startWalls.left + *startWalls.right + *endWalls.left + *endWalls.right) / 2.0;
+        const double height = (*startWalls.up + *startWalls.down + *endWalls.up + *endWalls.down) / 2.0;
+        const double riseRatio = height > 0.0 ? rise / height : 0.0;
+        const double thinness = rise > 0.0 && height > 0.0
+                                    ? (hasPlanRun(i) ? rise / run * width / height : std::numeric_limits<double>::infinity())
+                                    : 0.0;
+        const bool isShaft = options.shaftRingsSquare
+                             && riseRatio > options.shaftRiseRatio
+                             && thinness > options.shaftThinnessRatio;
+        const double padStart = isShaft ? 0.0 : options.padScale * ends.at(2 * i).pad(slope);
+        const double padEnd = isShaft ? 0.0 : options.padScale * ends.at(2 * i + 1).pad(slope);
+        const double e = padStart + padEnd > 0.0 ? 1.0 - std::min(1.0, run / (padStart + padEnd)) : 0.0;
+        pads.append(LegPad {padStart, padEnd, e, isShaft, riseRatio, thinness});
         const QVector3D along = planDirection(i);
         startCenters.append(walked.at(i).start - along * static_cast<float>(e * padStart));
         endCenters.append(walked.at(i).end + along * static_cast<float>(e * padEnd));
@@ -565,7 +635,9 @@ QVector<Chain> buildRings(const QVector<Leg>& legs, const Chain& chain, const Op
     for (int s = loop ? 0 : 1; s < legCount; ++s) {
         const LegPad& arriving = pads.at(previousLeg(s));
         const LegPad& leaving = pads.at(s);
-        const bool isShared = arriving.e * arriving.end < kMinRingSpacingMeters && leaving.e * leaving.start < kMinRingSpacingMeters;
+        const bool isShared = !arriving.isShaft && !leaving.isShaft
+                              && arriving.e * arriving.end < kMinRingSpacingMeters
+                              && leaving.e * leaving.start < kMinRingSpacingMeters;
         if (isShared) {
             endCenters[previousLeg(s)] = walked.at(s).start;
             startCenters[s] = walked.at(s).start;
@@ -596,6 +668,7 @@ QVector<Chain> buildRings(const QVector<Leg>& legs, const Chain& chain, const Op
         const auto appendRing = [&](const QVector3D& center,
                                     const QVector<QVector3D>& points,
                                     const QVector3D& right,
+                                    const QVector3D& tangent,
                                     int chainLeg,
                                     const QVector<bool>& measured) -> Ring* {
             if (!piece.rings.isEmpty()) {
@@ -608,12 +681,12 @@ QVector<Chain> buildRings(const QVector<Leg>& legs, const Chain& chain, const Op
             ring.center = center;
             ring.chainLeg = chainLeg;
             ring.measured = measured;
-            cwPassageTubeGeometry::setRingVertices(ring, points, levelTangent(right), right);
+            cwPassageTubeGeometry::setRingVertices(ring, points, tangent, right);
             piece.rings.append(ring);
             return &piece.rings.last();
         };
-        const auto appendSection = [&](const EndSection& end, int chainLeg) {
-            Ring* ring = appendRing(end.center, end.points, end.right, chainLeg, end.measured);
+        const auto appendSection = [&](const EndSection& end, const QVector3D& tangent, int chainLeg) {
+            Ring* ring = appendRing(end.center, end.points, end.right, tangent, chainLeg, end.measured);
             if (ring != nullptr && end.readings) {
                 ring->section = Section {*end.readings, ring->radii, end.station, end.center};
             }
@@ -628,10 +701,49 @@ QVector<Chain> buildRings(const QVector<Leg>& legs, const Chain& chain, const Op
 
             const bool sharesStart = k > 0;
             const bool isSeamEnd = staysLoop && i == legCount - 1;
-            const EndSection start = endSection(sharesStart ? ends.at(2 * previousLeg(i) + 1) : ends.at(2 * i), startCenters.at(i), resolution);
-            const EndSection end = endSection(isSeamEnd ? ends.first() : ends.at(2 * i + 1), endCenters.at(i), resolution);
+            const LegEnd& startEnd = sharesStart ? ends.at(2 * previousLeg(i) + 1) : ends.at(2 * i);
+            const LegEnd& endEnd = isSeamEnd ? ends.first() : ends.at(2 * i + 1);
+            const bool isShaft = pads.at(i).isShaft;
+            const QVector3D axis = (walked.at(i).end - walked.at(i).start).normalized();
+            const QVector3D shaftRight = clockwiseOf(planDirection(i));
+            const EndSection start = isShaft ? shaftSection(startEnd, startCenters.at(i), axis, shaftRight, resolution)
+                                             : endSection(startEnd, startCenters.at(i), resolution);
+            const EndSection end = isShaft ? shaftSection(endEnd, endCenters.at(i), axis, shaftRight, resolution)
+                                           : endSection(endEnd, endCenters.at(i), resolution);
+
+            // A shaft's dome: rings shrinking from the end section toward an
+            // apex past it along outward, the apex ring closed by the fan.
+            // Appended apex first at the start, apex last at the end.
+            const auto appendDome = [&](const EndSection& section, const LegEnd& legEnd, const QVector3D& outward, bool apexFirst) {
+                const double capHeight = shaftCapHeight(options.shaftCapHeight, *legEnd.walls, outward);
+                if (capHeight <= 0.0) {
+                    return;
+                }
+                const bool isRound = options.shaftCapShape == cwPassageTubeBuilder::ShaftCapShape::Round;
+                const int domeSteps = cwPassageTubeBuilder::kDomeRings + 1;
+                for (int step = 1; step < domeSteps; ++step) {
+                    const int pastSection = apexFirst ? domeSteps - step : step;
+                    const double fraction = static_cast<double>(pastSection) / domeSteps;
+                    const double scale = isRound ? std::cos(fraction * kQuarterTurn) : 1.0 - fraction;
+                    const double offset = capHeight * (isRound ? std::sin(fraction * kQuarterTurn) : fraction);
+                    const QVector3D center = section.center + outward * static_cast<float>(offset);
+                    QVector<QVector3D> points;
+                    points.reserve(resolution);
+                    for (const QVector3D& point : section.points) {
+                        points.append(center + (point - section.center) * static_cast<float>(scale));
+                    }
+                    appendRing(center, points, section.right, axis, k, QVector<bool>(resolution, false));
+                }
+            };
+            const auto tangentOf = [&](const QVector3D& right) {
+                return isShaft ? axis : levelTangent(right);
+            };
+
             if (!sharesStart) {
-                appendSection(start, k);
+                if (isShaft) {
+                    appendDome(start, startEnd, -axis, true);
+                }
+                appendSection(start, tangentOf(start.right), k);
             }
 
             const double length = start.center.distanceToPoint(end.center);
@@ -649,15 +761,15 @@ QVector<Chain> buildRings(const QVector<Leg>& legs, const Chain& chain, const Op
                     points.append(start.points.at(bin) + (end.points.at(bin) - start.points.at(bin)) * t);
                     measured.append(start.measured.at(bin) && end.measured.at(bin));
                 }
-                const QVector3D right = start.right + (end.right - start.right) * t;
-                appendRing(start.center + (end.center - start.center) * t,
-                           points,
-                           right.length() >= kMinPlanFacingLength ? right.normalized() : start.right,
-                           k,
-                           measured);
+                const QVector3D lerpedRight = start.right + (end.right - start.right) * t;
+                const QVector3D right = lerpedRight.length() >= kMinPlanFacingLength ? lerpedRight.normalized() : start.right;
+                appendRing(start.center + (end.center - start.center) * t, points, right, tangentOf(right), k, measured);
             }
 
-            appendSection(end, k);
+            appendSection(end, tangentOf(end.right), k);
+            if (isShaft) {
+                appendDome(end, endEnd, axis, false);
+            }
         }
         pieces.append(piece);
     }

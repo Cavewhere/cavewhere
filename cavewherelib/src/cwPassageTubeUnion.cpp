@@ -1197,6 +1197,10 @@ QVector<cwPassageTubeUnion::CapVertex> cwPassageTubeUnion::slideCaps(cwPassageTu
     const QHash<StationKey, QVector<int>> chainsAt = chainsByStation(rings);
     QVector<CapVertex> notch;
     for (const ChainEnd& end : chainEnds(rings)) {
+        const Builder::Chain& endChain = rings.chains.at(end.chain);
+        if (endChain.legPads.at(endChain.rings.at(end.capRing).chainLeg).isShaft) {
+            continue;
+        }
         const QVector<const cwPassageTubeMesh*> neighbors = neighborTubes(end, chainsAt, tubes);
         if (neighbors.isEmpty()) {
             continue;

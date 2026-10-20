@@ -193,8 +193,9 @@ public:
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
     // the side walls square to the chain's direction through the station or
     // to one of the station's legs, apart from the stations of a chain
-    // without rings and wall points inside a chain tube that does not run
-    // along the leg, which open into that passage.
+    // without rings, the up and down walls of a station only shafts reach
+    // (LegPad::isShaft), and wall points inside a chain tube that does not
+    // run along the leg, which open into that passage.
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 

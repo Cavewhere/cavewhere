@@ -1493,6 +1493,25 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
     QSet<Occurrence> visited;
     QVector<Issue> issues;
 
+    // A shaft's U and D are its run, not its walls: a station's up and down
+    // walls are tested where a leg with vertical rings reaches it.
+    QSet<int> shaftLegs;
+    for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
+        for (int i = 0; i < chain.legs.size(); ++i) {
+            if (chain.legPads.value(i).isShaft) {
+                shaftLegs.insert(chain.legs.at(i).legIndex);
+            }
+        }
+    }
+    QSet<Occurrence> verticalWalls;
+    for (int i = 0; i < debug.legs.size(); ++i) {
+        if (!shaftLegs.contains(i)) {
+            const cwPassageTubeBuilder::Leg& leg = debug.legs.at(i);
+            verticalWalls.insert({leg.tripId, {leg.chunkIndex, leg.shotIndex}});
+            verticalWalls.insert({leg.tripId, {leg.chunkIndex, leg.shotIndex + 1}});
+        }
+    }
+
     const auto checkStation = [&](int legIndex,
                                   int stationIndex,
                                   const QString& station,
@@ -1536,8 +1555,10 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         };
         checkWall(lrud.left, -right, QStringLiteral("left"));
         checkWall(lrud.right, right, QStringLiteral("right"));
-        checkWall(lrud.up, kWorldUp, QStringLiteral("up"));
-        checkWall(lrud.down, -kWorldUp, QStringLiteral("down"));
+        if (verticalWalls.contains(occurrence)) {
+            checkWall(lrud.up, kWorldUp, QStringLiteral("up"));
+            checkWall(lrud.down, -kWorldUp, QStringLiteral("down"));
+        }
     };
 
     for (int i = 0; i < debug.legs.size(); ++i) {
