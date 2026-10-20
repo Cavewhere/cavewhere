@@ -48,15 +48,8 @@ namespace {
         return cwLocalProjection::plateFixedDatumsFor(latitude, longitude).value(0);
     }
 
-    struct PjDeleter {
-        void operator()(PJ* pj) const { proj_destroy(pj); }
-    };
-    using PjPtr = std::unique_ptr<PJ, PjDeleter>;
-
-    struct ContextDeleter {
-        void operator()(PJ_CONTEXT* context) const { proj_context_destroy(context); }
-    };
-    using ContextPtr = std::unique_ptr<PJ_CONTEXT, ContextDeleter>;
+    using cwProj::PjPtr;
+    using cwProj::ContextPtr;
 
     /**
      * The horizontal, two-dimensional half of \a cs. A compound CRS — what a

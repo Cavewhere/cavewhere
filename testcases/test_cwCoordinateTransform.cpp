@@ -13,11 +13,13 @@
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
 #include "cwLocalProjection.h"
+#include "LazFixtureHelper.h"
 
 //Std includes
 #include <iterator>
 
 using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
 
 TEST_CASE("cwCoordinateTransform short-circuits identical CS", "[cwCoordinateTransform][identity]")
 {
@@ -847,5 +849,161 @@ TEST_CASE("cwCoordinateTransform::geographicDatumFor names the datum a system is
         CHECK(cwCoordinateTransform::geographicDatumFor("not a coordinate system").isEmpty());
         CHECK(cwCoordinateTransform::geographicDatumFor("EPSG:999999").isEmpty());
         CHECK(cwCoordinateTransform::geographicDatumFor("COMPD_CS[\"broken").isEmpty());
+    }
+}
+
+namespace {
+    constexpr double kKentuckyHeightFeet = 1000.0;
+
+    constexpr double kVerticalScaleTolerance = 1e-9;
+    constexpr double kHorizontalMatchMeters = 1e-3;
+
+    const QString kKentuckyFtUsCompound = QStringLiteral("EPSG:3089+6360");
+    const QString kUtm16N = QStringLiteral("EPSG:32616");
+
+    //! The Kentucky spot as a point in \a cs, at kKentuckyHeightFeet
+    cwGeoPoint kentuckyPointIn(const QString& cs)
+    {
+        const auto point = cwCoordinateTransform::transformPoint(
+            cwCoordinateTransform::Wgs84, cs,
+            cwGeoPoint(kKentuckyLongitude, kKentuckyLatitude, 0.0));
+        REQUIRE(point.has_value());
+        return cwGeoPoint(point->x, point->y, kKentuckyHeightFeet);
+    }
+
+    //! The project's LDP over the Kentucky spot: a 2D projected CRS in meters
+    QString kentuckyFrame()
+    {
+        const QString frame =
+            cwLocalProjection::derive(kKentuckyLatitude, kKentuckyLongitude, kKentuckyFtUsCrs);
+        REQUIRE_FALSE(frame.isEmpty());
+        return frame;
+    }
+
+    void requireHorizontalMatchesFtUs(const cwGeoPoint& framePoint,
+                                      const cwGeoPoint& sourcePoint,
+                                      const QString& frame)
+    {
+        const cwCoordinateTransform horizontal(kKentuckyFtUsCrs, frame);
+        REQUIRE(horizontal.isValid());
+        const cwGeoPoint expected = horizontal.transform(sourcePoint);
+        CHECK_THAT(framePoint.x, WithinAbs(expected.x, kHorizontalMatchMeters));
+        CHECK_THAT(framePoint.y, WithinAbs(expected.y, kHorizontalMatchMeters));
+    }
+}
+
+TEST_CASE("cwCoordinateTransform scales a US survey foot height into a meter frame",
+          "[cwCoordinateTransform][verticalUnit]")
+{
+    const QString frame = kentuckyFrame();
+    const double expectedZ = kKentuckyHeightFeet * kMetersPerUsSurveyFoot;
+
+    SECTION("A compound spelled as two authority codes")
+    {
+        const cwGeoPoint source = kentuckyPointIn(kKentuckyFtUsCrs);
+        const cwCoordinateTransform t(kKentuckyFtUsCompound, frame);
+        REQUIRE(t.isValid());
+        REQUIRE_FALSE(t.isIdentity());
+
+        const cwGeoPoint framePoint = t.transform(source);
+        CHECK_THAT(framePoint.z, WithinRel(expectedZ, kVerticalScaleTolerance));
+        requireHorizontalMatchesFtUs(framePoint, source, frame);
+    }
+
+    SECTION("The compound WKT a lidar tile declares")
+    {
+        const QString tileCS = kentuckyFtUsCompoundWkt();
+        const cwGeoPoint source = kentuckyPointIn(kKentuckyFtUsCrs);
+        const cwCoordinateTransform t(tileCS, frame);
+        REQUIRE(t.isValid());
+
+        const cwGeoPoint framePoint = t.transform(source);
+        CHECK_THAT(framePoint.z, WithinRel(expectedZ, kVerticalScaleTolerance));
+        requireHorizontalMatchesFtUs(framePoint, source, frame);
+    }
+
+    SECTION("transformInPlace scales every height")
+    {
+        const QString tileCS = kentuckyFtUsCompoundWkt();
+        const cwGeoPoint source = kentuckyPointIn(kKentuckyFtUsCrs);
+        const cwCoordinateTransform t(tileCS, frame);
+        REQUIRE(t.isValid());
+
+        cwGeoPoint points[2] = {source, cwGeoPoint(source.x, source.y, 2.0 * kKentuckyHeightFeet)};
+        t.transformInPlace(points, std::size(points));
+        CHECK_THAT(points[0].z, WithinRel(expectedZ, kVerticalScaleTolerance));
+        CHECK_THAT(points[1].z, WithinRel(2.0 * expectedZ, kVerticalScaleTolerance));
+    }
+
+    SECTION("A 2D ftUS system with no vertical half takes its horizontal unit")
+    {
+        const cwGeoPoint source = kentuckyPointIn(kKentuckyFtUsCrs);
+        const cwCoordinateTransform t(kKentuckyFtUsCrs, frame);
+        REQUIRE(t.isValid());
+
+        const cwGeoPoint framePoint = t.transform(source);
+        CHECK_THAT(framePoint.z, WithinRel(expectedZ, kVerticalScaleTolerance));
+    }
+}
+
+TEST_CASE("cwCoordinateTransform keeps a height whose unit already matches the target",
+          "[cwCoordinateTransform][verticalUnit]")
+{
+    SECTION("Meters into a meter frame")
+    {
+        const QString frame = kentuckyFrame();
+        const cwGeoPoint source = kentuckyPointIn(kUtm16N);
+        const cwCoordinateTransform t(kUtm16N, frame);
+        REQUIRE(t.isValid());
+        REQUIRE_FALSE(t.isIdentity());
+
+        CHECK_THAT(t.transform(source).z, WithinAbs(kKentuckyHeightFeet, kVerticalScaleTolerance));
+    }
+
+    SECTION("US survey feet into a US survey foot system")
+    {
+        const cwGeoPoint source = kentuckyPointIn(kKentuckyFtUsCrs);
+        const cwCoordinateTransform t(kKentuckyFtUsCompound, kKentuckyFtUsCrs);
+        REQUIRE(t.isValid());
+        REQUIRE_FALSE(t.isIdentity());
+
+        CHECK_THAT(t.transform(source).z, WithinAbs(kKentuckyHeightFeet, kVerticalScaleTolerance));
+    }
+
+    SECTION("The same system is identity")
+    {
+        const cwGeoPoint source = kentuckyPointIn(kKentuckyFtUsCrs);
+        const cwCoordinateTransform t(kKentuckyFtUsCompound, kKentuckyFtUsCompound);
+        REQUIRE(t.isIdentity());
+
+        CHECK(t.transform(source).z == kKentuckyHeightFeet);
+    }
+}
+
+TEST_CASE("cwCoordinateTransform takes a 3D source's heights as PROJ converts them",
+          "[cwCoordinateTransform][verticalUnit]")
+{
+    // A 3D projected system whose heights are US survey feet: PROJ's own
+    // pipeline already turns them into meters, even toward a 2D destination
+    const QString threeDimensionalFtUs = QStringLiteral(
+        "+proj=tmerc +lat_0=37.5 +lon_0=-84.5 +k=1 +x_0=0 +y_0=0 "
+        "+datum=NAD83 +units=us-ft +vunits=us-ft +no_defs +type=crs");
+    const cwGeoPoint source(0.0, 0.0, kKentuckyHeightFeet);
+
+    SECTION("Into the meter frame")
+    {
+        const cwCoordinateTransform t(threeDimensionalFtUs, kentuckyFrame());
+        REQUIRE(t.isValid());
+
+        CHECK_THAT(t.transform(source).z,
+                   WithinRel(kKentuckyHeightFeet * kMetersPerUsSurveyFoot, kVerticalScaleTolerance));
+    }
+
+    SECTION("Into a 2D US survey foot system")
+    {
+        const cwCoordinateTransform t(threeDimensionalFtUs, kKentuckyFtUsCrs);
+        REQUIRE(t.isValid());
+
+        CHECK_THAT(t.transform(source).z, WithinRel(kKentuckyHeightFeet, kVerticalScaleTolerance));
     }
 }

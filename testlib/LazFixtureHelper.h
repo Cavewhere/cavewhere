@@ -25,6 +25,24 @@ class LASheader;
  */
 QString utmZoneWkt(int zone, int centralMeridian);
 
+//! Meters in one US survey foot, the unit Kentucky's state-plane lidar uses
+//! for both its eastings and its heights.
+constexpr double kMetersPerUsSurveyFoot = 0.304800609601219;
+
+//! A spot in central Kentucky, inside EPSG:3089's area of use
+constexpr double kKentuckyLatitude = 37.5;
+constexpr double kKentuckyLongitude = -84.5;
+
+//! NAD83 / Kentucky Single Zone (ftUS): a 2D state plane in US survey feet
+const QString kKentuckyFtUsCrs = QStringLiteral("EPSG:3089");
+
+/**
+ * The WKT1 compound CRS a Kentucky lidar tile declares: NAD83 / Kentucky
+ * Single Zone (ftUS, EPSG:3089) + NAVD88 height (ftUS, EPSG:6360). Both the
+ * horizontal and the vertical halves are in US survey feet.
+ */
+QString kentuckyFtUsCompoundWkt();
+
 /**
  * One synthetic point carrying the standard LAS attributes a clip must pass
  * through. Fields left at their defaults exercise the "unset" path.

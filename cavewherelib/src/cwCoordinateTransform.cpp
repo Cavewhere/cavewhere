@@ -73,6 +73,108 @@ namespace {
     {
         return kEpsgPrefix + QString::number(code);
     }
+
+    using cwProj::PjPtr;
+
+    constexpr double kMetersPerMeter = 1.0;
+    constexpr double kIdentityScale = 1.0;
+    constexpr int kFirstAxis = 0;
+    constexpr int kThreeDimensions = 3;
+    constexpr int kVerticalSubCrs = 1;
+
+    //! The single CRS that carries \a crs's axes — a bound CRS (what a TOWGS84
+    //! clause makes) wraps one — or null when \a crs is not a CRS at all.
+    PjPtr singleCrs(PJ_CONTEXT* context, PJ* crs)
+    {
+        if (!proj_is_crs(crs)) {
+            return {};
+        }
+        if (proj_get_type(crs) == PJ_TYPE_BOUND_CRS) {
+            return PjPtr(proj_get_source_crs(context, crs));
+        }
+        return PjPtr(proj_clone(context, crs));
+    }
+
+    PjPtr coordinateSystemOf(PJ_CONTEXT* context, PJ* crs)
+    {
+        const PjPtr single = singleCrs(context, crs);
+        return single ? PjPtr(proj_crs_get_coordinate_system(context, single.get())) : PjPtr();
+    }
+
+    double axisMetersPerUnit(PJ_CONTEXT* context, PJ* coordinateSystem, int axis)
+    {
+        double metersPerUnit = 0.0;
+        const bool found = proj_cs_get_axis_info(context, coordinateSystem, axis,
+                                                 nullptr, nullptr, nullptr,
+                                                 &metersPerUnit,
+                                                 nullptr, nullptr, nullptr);
+        return found && metersPerUnit > 0.0 ? metersPerUnit : kMetersPerMeter;
+    }
+
+    /**
+     * Meters per unit of the heights PROJ hands over for \a crs when the
+     * destination is 2D. A compound's vertical half reaches the destination
+     * untouched, in its own unit. A 3D single system's heights PROJ converts to
+     * meters itself. A 2D projected system has no height unit of its own, so it
+     * lends its horizontal one — a US survey foot state plane tile carries its
+     * heights in US survey feet. Anything else, a geographic 2D system
+     * included, reads as meters.
+     */
+    double metersPerVerticalUnit(PJ_CONTEXT* context, PJ* crs)
+    {
+        const PjPtr single = singleCrs(context, crs);
+        if (!single) {
+            return kMetersPerMeter;
+        }
+
+        if (proj_get_type(single.get()) == PJ_TYPE_COMPOUND_CRS) {
+            const PjPtr vertical(proj_crs_get_sub_crs(context, single.get(), kVerticalSubCrs));
+            const PjPtr verticalCs = vertical ? coordinateSystemOf(context, vertical.get()) : PjPtr();
+            return verticalCs ? axisMetersPerUnit(context, verticalCs.get(), kFirstAxis)
+                              : kMetersPerMeter;
+        }
+
+        const PjPtr coordinateSystem(proj_crs_get_coordinate_system(context, single.get()));
+        if (coordinateSystem
+            && proj_get_type(single.get()) == PJ_TYPE_PROJECTED_CRS
+            && proj_cs_get_axis_count(context, coordinateSystem.get()) < kThreeDimensions) {
+            return axisMetersPerUnit(context, coordinateSystem.get(), kFirstAxis);
+        }
+        return kMetersPerMeter;
+    }
+
+    bool hasVerticalAxis(PJ_CONTEXT* context, PJ* crs)
+    {
+        const PjPtr single = singleCrs(context, crs);
+        if (!single) {
+            return false;
+        }
+        if (proj_get_type(single.get()) == PJ_TYPE_COMPOUND_CRS) {
+            return true;
+        }
+        const PjPtr coordinateSystem(proj_crs_get_coordinate_system(context, single.get()));
+        return coordinateSystem
+            && proj_cs_get_axis_count(context, coordinateSystem.get()) >= kThreeDimensions;
+    }
+
+    /**
+     * The factor that turns a height as PROJ hands it over from \a operation's
+     * source into one in its destination's vertical unit. Toward a destination
+     * with a vertical axis PROJ owns z, so that case is 1. Toward a 2D
+     * destination — the project's LDP among them — PROJ applies no vertical
+     * unit of the destination, and this ratio is all of the vertical that
+     * reaches it: the unit, never the datum.
+     */
+    double verticalUnitScale(PJ_CONTEXT* context, PJ* operation)
+    {
+        const PjPtr source(proj_get_source_crs(context, operation));
+        const PjPtr destination(proj_get_target_crs(context, operation));
+        if (!source || !destination || hasVerticalAxis(context, destination.get())) {
+            return kIdentityScale;
+        }
+        return metersPerVerticalUnit(context, source.get())
+               / metersPerVerticalUnit(context, destination.get());
+    }
 }
 
 cwCoordinateTransformPrivate::~cwCoordinateTransformPrivate()
@@ -167,6 +269,8 @@ cwCoordinateTransform::cwCoordinateTransform(const QString& srcCS, const QString
         return;
     }
 
+    m_d->zScale = verticalUnitScale(m_d->ctx, raw);
+
     // Force x=easting/lon, y=northing/lat axis order regardless of CRS metadata.
     PJ* normalized = proj_normalize_for_visualization(m_d->ctx, raw);
     proj_destroy(raw);
@@ -212,7 +316,7 @@ cwGeoPoint cwCoordinateTransform::transform(const cwGeoPoint& src) const
     c.xyzt.z = src.z;
     c.xyzt.t = 0.0;
     const PJ_COORD r = proj_trans(m_d->pj, PJ_FWD, c);
-    return cwGeoPoint(r.xyzt.x, r.xyzt.y, r.xyzt.z);
+    return cwGeoPoint(r.xyzt.x, r.xyzt.y, r.xyzt.z * m_d->zScale);
 }
 
 void cwCoordinateTransform::transformInPlace(cwGeoPoint* pts, qsizetype n) const
@@ -230,6 +334,12 @@ void cwCoordinateTransform::transformInPlace(cwGeoPoint* pts, qsizetype n) const
                        &pts[0].y, sx, static_cast<size_t>(n),
                        &pts[0].z, sx, static_cast<size_t>(n),
                        nullptr,   0, 0);
+
+    if (m_d->zScale != kIdentityScale) {
+        for (qsizetype i = 0; i < n; ++i) {
+            pts[i].z *= m_d->zScale;
+        }
+    }
 }
 
 QStringList cwCoordinateTransform::commonProjectedCSList()

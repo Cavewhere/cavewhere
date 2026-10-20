@@ -12,7 +12,9 @@
 #include <QTemporaryDir>
 #include <QVector3D>
 
+#include "cwCoordinateTransform.h"
 #include "cwLazClipOperation.h"
+#include "cwLocalProjection.h"
 
 #include "LazFixtureHelper.h"
 
@@ -555,4 +557,104 @@ TEST_CASE("cwLazClipOperation: mixed source formats merge into the richest forma
     CHECK(plainOut.red == 0);
     CHECK(plainOut.green == 0);
     CHECK(plainOut.blue == 0);
+}
+
+namespace {
+
+constexpr double kLowHeightFeet = 1000.0;
+constexpr double kHighHeightFeet = 1100.0;
+constexpr double kPointSpreadFeet = 10.0;
+
+// Wide enough to hold every fixture point in either output, meters or feet
+constexpr double kClipHalfWidth = 100.0;
+
+// The output is encoded to the millimeter
+constexpr float kOutputHeightTolerance = 2e-3f;
+
+// Two low distortion projections in US survey feet a few dozen feet apart:
+// a real reprojection whose coordinates stay small on both sides
+const QString kFtUsSourceFrame = QStringLiteral(
+    "+proj=tmerc +lat_0=37.5 +lon_0=-84.5 +k=1 +x_0=0 +y_0=0 "
+    "+datum=NAD83 +units=us-ft +no_defs +type=crs");
+const QString kFtUsOutputFrame = QStringLiteral(
+    "+proj=tmerc +lat_0=37.5001 +lon_0=-84.5001 +k=1 +x_0=0 +y_0=0 "
+    "+datum=NAD83 +units=us-ft +no_defs +type=crs");
+
+//! Two points around (\a x, \a y), one at each fixture height
+QVector<cwGeoPoint> stackedHeights(double x, double y)
+{
+    return {
+        cwGeoPoint(x - kPointSpreadFeet, y, kLowHeightFeet),
+        cwGeoPoint(x + kPointSpreadFeet, y, kHighHeightFeet)
+    };
+}
+
+//! Clips every fixture point of the source at @a sourcePath into @a outputCS,
+//! whose origin sits within kClipHalfWidth of the points
+QVector<LazAttributePoint> clipEverything(QTemporaryDir& dir, const QString& sourcePath,
+                                          const QString& outputCS, const QString& tag)
+{
+    const QString outPath = outputPath(dir, tag);
+
+    cwLazClipOperation::Request req;
+    req.sources.append({ sourcePath, QString() });
+    req.polygonWorldXYZ = squareInWorldXY(0.0, 0.0, kClipHalfWidth);
+    req.viewMatrix = topDownView();
+    req.mode = cwLazClipOperation::Mode::Keep;
+    req.outputWktCS = outputCS;
+    req.outputPath = outPath;
+
+    auto future = cwLazClipOperation::run(req);
+    future.waitForFinished();
+    REQUIRE(future.resultCount() == 1);
+    REQUIRE_FALSE(future.result().hasError());
+    REQUIRE(future.result().value().pointsWritten == 2);
+
+    const QVector<LazAttributePoint> out = readLazFile(outPath).points;
+    REQUIRE(out.size() == 2);
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("cwLazClipOperation: US survey foot heights clip into a meter frame as meters",
+          "[cwLazClipOperation][verticalUnit]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const auto center = cwCoordinateTransform::transformPoint(
+        cwCoordinateTransform::Wgs84, kKentuckyFtUsCrs,
+        cwGeoPoint(kKentuckyLongitude, kKentuckyLatitude, 0.0));
+    REQUIRE(center.has_value());
+
+    const QString sourcePath = tempLazPath(tempDir, QStringLiteral("clip-ftus-tile"));
+    REQUIRE(writeSyntheticGeoLazFile(sourcePath, stackedHeights(center->x, center->y),
+                                     kentuckyFtUsCompoundWkt()));
+
+    const QString frame = cwLocalProjection::derive(kKentuckyLatitude, kKentuckyLongitude,
+                                                    kKentuckyFtUsCrs);
+    REQUIRE_FALSE(frame.isEmpty());
+
+    const QVector<LazAttributePoint> out =
+        clipEverything(tempDir, sourcePath, frame, QStringLiteral("clip-ftus-to-meters"));
+    CHECK_THAT(out.at(0).position.z(),
+               WithinAbs(float(kLowHeightFeet * kMetersPerUsSurveyFoot), kOutputHeightTolerance));
+    CHECK_THAT(out.at(1).position.z(),
+               WithinAbs(float(kHighHeightFeet * kMetersPerUsSurveyFoot), kOutputHeightTolerance));
+}
+
+TEST_CASE("cwLazClipOperation: US survey foot heights clip into a US survey foot output unchanged",
+          "[cwLazClipOperation][verticalUnit]")
+{
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString sourcePath = tempLazPath(tempDir, QStringLiteral("clip-ftus-local"));
+    REQUIRE(writeSyntheticGeoLazFile(sourcePath, stackedHeights(0.0, 0.0), kFtUsSourceFrame));
+
+    const QVector<LazAttributePoint> out =
+        clipEverything(tempDir, sourcePath, kFtUsOutputFrame, QStringLiteral("clip-ftus-to-ftus"));
+    CHECK_THAT(out.at(0).position.z(), WithinAbs(float(kLowHeightFeet), kOutputHeightTolerance));
+    CHECK_THAT(out.at(1).position.z(), WithinAbs(float(kHighHeightFeet), kOutputHeightTolerance));
 }

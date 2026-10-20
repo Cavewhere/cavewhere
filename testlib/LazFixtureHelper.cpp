@@ -295,6 +295,31 @@ QString tempLazPath(QTemporaryDir& dir, const QString& tag)
                             .arg(QCoreApplication::applicationPid()));
 }
 
+QString kentuckyFtUsCompoundWkt()
+{
+    return QStringLiteral(
+        "COMPD_CS[\"NAD83 / Kentucky Single Zone (ftUS) + NAVD88 height (ftUS) - Geoid12B (ftUS)\","
+        "PROJCS[\"NAD83 / Kentucky Single Zone (ftUS)\",GEOGCS[\"NAD83\","
+        "DATUM[\"North_American_Datum_1983\",SPHEROID[\"GRS 1980\",6378137,298.257222101,"
+        "AUTHORITY[\"EPSG\",\"7019\"]],TOWGS84[0,0,0,0,0,0,0],AUTHORITY[\"EPSG\",\"6269\"]],"
+        "PRIMEM[\"Greenwich\",0,AUTHORITY[\"EPSG\",\"8901\"]],"
+        "UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]],"
+        "AUTHORITY[\"EPSG\",\"4269\"]],"
+        "PROJECTION[\"Lambert_Conformal_Conic_2SP\"],"
+        "PARAMETER[\"standard_parallel_1\",37.0833333333333],"
+        "PARAMETER[\"standard_parallel_2\",38.6666666666667],"
+        "PARAMETER[\"latitude_of_origin\",36.3333333333333],"
+        "PARAMETER[\"central_meridian\",-85.75],"
+        "PARAMETER[\"false_easting\",4921250],"
+        "PARAMETER[\"false_northing\",3280833.333],"
+        "UNIT[\"US survey foot\",0.304800609601219,AUTHORITY[\"EPSG\",\"9003\"]],"
+        "AXIS[\"X\",EAST],AXIS[\"Y\",NORTH],AUTHORITY[\"EPSG\",\"3089\"]],"
+        "VERT_CS[\"NAVD88 height (ftUS)\","
+        "VERT_DATUM[\"North American Vertical Datum 1988\",2005,AUTHORITY[\"EPSG\",\"5103\"]],"
+        "UNIT[\"US survey foot\",0.304800609601219,AUTHORITY[\"EPSG\",\"9003\"]],"
+        "AXIS[\"Gravity-related height\",UP],AUTHORITY[\"EPSG\",\"6360\"]]]");
+}
+
 QString utmZoneWkt(int zone, int centralMeridian)
 {
     return QStringLiteral(
