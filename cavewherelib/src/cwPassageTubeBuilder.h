@@ -49,20 +49,20 @@ struct cwStationLrud {
  *
  * Pure compute over value snapshots: callable from any thread.
  *
- * Pipeline: survey shots → legs → chains → sections → rings → mesh. A chain
- * is a run of legs skinned as one tube; it passes through degree-2 stations,
- * and exactly one chain passes straight through each junction (Loch's rule),
- * so every other arm starts or ends there.
+ * Pipeline: survey shots → legs → chains → sections → rings → closed tubes
+ * → union. A chain is a run of legs skinned as one tube; it passes through
+ * degree-2 stations, and exactly one chain passes straight through each
+ * junction (Loch's rule), so every other arm starts or ends there.
  *
  * Each leg is the loft between its two stations' sections: its rings, at its
  * stations and evenly along it, are the point-wise lerps of the two. Two legs
  * that read the same section at a station share its ring; where they read
  * different ones, the chain holds both rings there.
  *
- * At a junction, cwPassageTubeJunction trims each arm where it meets the
- * through tube, grows the through rings to take the arm's section across to
- * the far wall, and zips the arm's mouth into a window cut in the through
- * surface, so the junction is one closed surface.
+ * Each chain's rings close into one capped tube per trip it runs through,
+ * and chains that share a station overlap there. The mesh is the boolean
+ * union of the tubes of each connected group of chains
+ * (cwPassageTubeUnion), so a junction is where the passages' walls cross.
  */
 class CAVEWHERE_LIB_EXPORT cwPassageTubeBuilder
 {
@@ -82,6 +82,9 @@ public:
         double defaultRadiusMeters = 0.5;
         double blendLowDegrees = 45.0;
         double blendHighDegrees = 75.0;
+        // Slides each end cap's vertices into the passages it meets before
+        // the union (cwPassageTubeUnion::slideCaps).
+        bool slideCaps = true;
     };
 
     // One surveyed shot with both endpoints positioned. LRUD come from the
@@ -266,6 +269,20 @@ public:
         QString station;
     };
 
+    // A vertex of a chain's end ring at a station other chains reach,
+    // outside every one of their tubes. to is where the cap slide put it,
+    // inside one of them; it equals from when no point along the leg within
+    // its length is inside.
+    struct CapVertex {
+        int chain = -1;
+        bool atStart = true;
+        int bin = 0;
+        QVector3D from;
+        QVector3D to;
+
+        bool isInside() const { return from != to; }
+    };
+
     // Diagnostics: the intermediate results of the pipeline, for inspecting
     // how the builder read the survey.
     struct Debug {
@@ -276,15 +293,17 @@ public:
         // Mesh vertices where a sharp fold is by design: the centers of fan
         // caps and trip boundaries.
         QSet<quint32> intendedCreaseVertices;
-        // One entry per mesh triangle: the chain whose rings, cap or mouth
-        // strip emitted it. A zip band's triangles belong to the through
-        // chain and are marked in triangleInZipBand. triangleCap indexes caps
-        // for the triangles of a flat cap, a fan or a trip boundary disc, and
-        // is -1 for the rest.
+        // One entry per mesh triangle: the chain whose tube the union took it
+        // from. triangleInZipBand is all false. triangleCap indexes caps for
+        // the triangles of an end fan other than a dome, or of a trip
+        // boundary disc, and is -1 for the rest.
         QVector<int> triangleChain;
         QVector<bool> triangleInZipBand;
         QVector<int> triangleCap;
         QVector<Cap> caps;
+        // Each end-ring vertex the cap slide looked at: the ones it moved
+        // inside another passage and the ones it left.
+        QVector<CapVertex> slidCaps;
     };
 
     static cwPassageTubeMesh build(const cwCavingRegionData& region,
@@ -297,9 +316,8 @@ public:
                             const QHash<QUuid, cwSplayTipsByStation>& splaysByCave,
                             const Options& options);
 
-    // The legs and each chain's placed rings as buildRings leaves them,
-    // before junctions are stitched: every chain is its own tube, and no
-    // mesh is written.
+    // The legs and each chain's placed rings as buildRings leaves them:
+    // every chain is its own tube, and no mesh is written.
     static Debug buildChainRings(const cwCavingRegionData& region,
                                  const QHash<QUuid, cwStationPositionLookup>& positionsByCave,
                                  const Options& options);

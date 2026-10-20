@@ -8,6 +8,7 @@
 //Our includes
 #include "cwPassageTubeMeshCheck.h"
 #include "cwPassageTubeGeometry.h"
+#include "cwPassageTubeUnion.h"
 
 //Qt includes
 #include <QHash>
@@ -609,6 +610,47 @@ std::optional<Issue> foldBack(const cwPassageTubeBuilder::Ring& previous,
                   QStringLiteral("%1 lies %2 m behind the previous ring").arg(detail).arg(-deepest)};
 }
 
+// The chains' closed tubes with their bounds, built on the first question: a
+// reading point inside a tube other than its own opens into that passage,
+// which the union shows as an opening.
+class ChainSolids
+{
+public:
+    using Tube = cwPassageTubeUnion::ChainTube;
+
+    explicit ChainSolids(const Debug& debug) :
+        m_debug(debug)
+    {}
+
+    template<typename IsOwn>
+    bool isInsideOther(const QVector3D& point, IsOwn isOwn)
+    {
+        if (!m_tubes) {
+            m_tubes = cwPassageTubeUnion::chainTubes(m_debug);
+            for (const Tube& tube : std::as_const(*m_tubes)) {
+                Box box {Vec(tube.mesh.positions.constFirst()), Vec(tube.mesh.positions.constFirst())};
+                for (const QVector3D& position : tube.mesh.positions) {
+                    box = Box {Vec::min(box.lo, Vec(position)), Vec::max(box.hi, Vec(position))};
+                }
+                m_bounds.append(box);
+            }
+        }
+        const Vec p(point);
+        for (int t = 0; t < m_tubes->size(); ++t) {
+            const Tube& tube = m_tubes->at(t);
+            if (!isOwn(tube) && m_bounds.at(t).contains(p) && cwPassageTubeUnion::contains(tube.mesh, point)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+private:
+    const Debug& m_debug;
+    std::optional<QVector<Tube>> m_tubes;
+    QVector<Box> m_bounds;
+};
+
 // A leg of a chain at one of its stations, with the readings the station
 // occurrence on that leg's chunk took, and those of its station at the far
 // end, length meters along direction.
@@ -1004,40 +1046,6 @@ bool isInsideByVote(WindingRay& ray, const Vec& point, Counts counts)
     return votes >= kCenterlineInsideVotes;
 }
 
-// count points spread over the triangles by area, each placed by a
-// low-discrepancy sequence inside its triangle.
-QVector<Vec> spreadPoints(const QVector<Triangle>& triangles, int count)
-{
-    constexpr double kGoldenStep = std::numbers::phi - 1.0;
-    constexpr double kSilverStep = std::numbers::sqrt2 - 1.0;
-    QVector<double> cumulativeArea;
-    cumulativeArea.reserve(triangles.size());
-    double total = 0.0;
-    for (const Triangle& triangle : triangles) {
-        total += triangle.normal().length() / 2.0;
-        cumulativeArea.append(total);
-    }
-    QVector<Vec> points;
-    if (total <= 0.0) {
-        return points;
-    }
-    points.reserve(count);
-    for (int i = 0; i < count; ++i) {
-        const double target = (i + 0.5) / count * total;
-        const auto found = std::lower_bound(cumulativeArea.cbegin(), cumulativeArea.cend(), target);
-        const Triangle& triangle = triangles.at(std::min(static_cast<int>(found - cumulativeArea.cbegin()), static_cast<int>(triangles.size()) - 1));
-        double u = std::fmod((i + 1) * kGoldenStep, 1.0);
-        double v = std::fmod((i + 1) * kSilverStep, 1.0);
-        if (u + v > 1.0) {
-            u = 1.0 - u;
-            v = 1.0 - v;
-        }
-        const Vec& a = triangle.points[0];
-        points.append(a + (triangle.points[1] - a) * u + (triangle.points[2] - a) * v);
-    }
-    return points;
-}
-
 } // namespace
 
 cwPassageTubeMeshCheck::Range cwPassageTubeMeshCheck::allTripsVisible(const cwPassageTubeMesh& mesh)
@@ -1282,7 +1290,8 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::nestedShells(cons
 QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::creases(const cwPassageTubeMesh& mesh,
                                                                        const Range& range,
                                                                        const QSet<quint32>& intendedCreaseVertices,
-                                                                       const Options& options)
+                                                                       const Options& options,
+                                                                       const QVector<int>& triangleChain)
 {
     const QVector<Triangle> triangles = trianglesOf(mesh, range);
     QHash<quint64, QVector<int>> trianglesByEdge;
@@ -1305,6 +1314,11 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::creases(const cwP
         }
         const Triangle& first = triangles.at(it.value().at(0));
         const Triangle& second = triangles.at(it.value().at(1));
+        const int firstChain = triangleChain.value(first.number, kNoChain);
+        const int secondChain = triangleChain.value(second.number, kNoChain);
+        if (firstChain != kNoChain && secondChain != kNoChain && firstChain != secondChain) {
+            continue;
+        }
         const Vec n1 = first.normal();
         const Vec n2 = second.normal();
         const double lengths = n1.length() * n2.length();
@@ -1325,6 +1339,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::creases(const cwP
 QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const cwPassageTubeBuilder::Debug& debug,
                                                                           const Options& options)
 {
+    ChainSolids solids(debug);
     QVector<Issue> issues;
     for (int c = 0; c < debug.chains.size(); ++c) {
         const cwPassageTubeBuilder::Chain& chain = debug.chains.at(c);
@@ -1333,7 +1348,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const 
         for (int r = 1; r < chain.rings.size(); ++r) {
             const cwPassageTubeBuilder::Ring& previous = chain.rings.at(r - 1);
             const cwPassageTubeBuilder::Ring& ring = chain.rings.at(r);
-            if (previous.vertices.isEmpty() || ring.vertices.isEmpty()) {
+            if (previous.vertices.isEmpty() || ring.vertices.isEmpty() || cwPassageTubeUnion::splitsBefore(debug, chain, r)) {
                 continue;
             }
 
@@ -1371,7 +1386,9 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const 
             int farthest = -1;
             for (int k = 0; k < reaches.size(); ++k) {
                 const bool isBeyond = reaches.at(k) && reaches.at(k)->beyondMeters > options.wallToleranceMeters;
-                if (isBeyond && (farthest < 0 || reaches.at(k)->beyondMeters > reaches.at(farthest)->beyondMeters)) {
+                const auto holdsRing = [&](const ChainSolids::Tube& tube) { return tube.chain == c && tube.rings.contains(r); };
+                if (isBeyond && (farthest < 0 || reaches.at(k)->beyondMeters > reaches.at(farthest)->beyondMeters)
+                    && !solids.isInsideOther(reaches.at(k)->readingPoint, holdsRing)) {
                     farthest = k;
                 }
             }
@@ -1477,7 +1494,8 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
 
     // The chain's direction through each station of its legs, keyed by the
     // leg and whether the station is its to station: the bisector of the
-    // chain legs either side, or the leg itself at a chain end.
+    // chain legs either side, or the leg itself at a chain end and where the
+    // chain's tube splits between two sections.
     QHash<std::pair<int, bool>, QVector3D> chainTangents;
     for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
         const int count = chain.legs.size();
@@ -1496,10 +1514,18 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         const QVector3D chainStart = firstLeg.reversed ? debug.legs.at(firstLeg.legIndex).toPosition : debug.legs.at(firstLeg.legIndex).fromPosition;
         const QVector3D chainEnd = lastLeg.reversed ? debug.legs.at(lastLeg.legIndex).fromPosition : debug.legs.at(lastLeg.legIndex).toPosition;
         const bool isLoop = count > 1 && isNear(chainStart, chainEnd);
+        QSet<int> splitAfterLeg;
+        for (int r = 1; r < chain.rings.size(); ++r) {
+            if (cwPassageTubeUnion::splitsBefore(debug, chain, r)) {
+                splitAfterLeg.insert(chain.rings.at(r - 1).chainLeg);
+            }
+        }
         for (int k = 0; k < count; ++k) {
             const QVector3D& direction = directions.at(k);
-            const QVector3D& before = k > 0 ? directions.at(k - 1) : (isLoop ? directions.last() : direction);
-            const QVector3D& after = k + 1 < count ? directions.at(k + 1) : (isLoop ? directions.first() : direction);
+            const QVector3D& before = k > 0 ? (splitAfterLeg.contains(k - 1) ? direction : directions.at(k - 1))
+                                            : (isLoop ? directions.last() : direction);
+            const QVector3D& after = k + 1 < count ? (splitAfterLeg.contains(k) ? direction : directions.at(k + 1))
+                                                   : (isLoop ? directions.first() : direction);
             const bool reversed = chain.legs.at(k).reversed;
             chainTangents.insert({chain.legs.at(k).legIndex, reversed}, before + direction);
             chainTangents.insert({chain.legs.at(k).legIndex, !reversed}, direction + after);
@@ -1523,17 +1549,20 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         return (facesAgainst ? -chainRight : chainRight).normalized();
     };
 
+    ChainSolids solids(debug);
+
     using Occurrence = std::pair<QUuid, std::pair<int, int>>;
     QSet<Occurrence> visited;
     QVector<Issue> issues;
 
-    const auto checkStation = [&](const cwPassageTubeBuilder::Leg& leg,
+    const auto checkStation = [&](int legIndex,
                                   int stationIndex,
                                   const QString& station,
                                   const QVector3D& position,
                                   const cwStationLrud& lrud,
                                   const cwStationLrud& passage,
                                   const QVector3D& right) {
+        const cwPassageTubeBuilder::Leg& leg = debug.legs.at(legIndex);
         const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
         if (visited.contains(occurrence) || openStations.contains(cwStation::canonicalKey(station))) {
             return;
@@ -1564,7 +1593,8 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                 const QVector3D side = QVector3D::dotProduct(legSide, direction) >= 0.0f ? legSide.normalized() : -legSide.normalized();
                 return isOnSurface(Vec(position) + Vec(side) * *passageReading);
             });
-            if (!isOnLegWall) {
+            const auto holdsLeg = [&](const ChainSolids::Tube& tube) { return tube.holdsLeg(debug, legIndex); };
+            if (!isOnLegWall && !solids.isInsideOther(wall.toQVector3D(), holdsLeg)) {
                 issues.append(Issue {WallMissed, wall.toQVector3D(),
                                      QStringLiteral("station %1's %2 wall at %3 m lies off the tube").arg(station, name).arg(*passageReading)});
             }
@@ -1577,8 +1607,8 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
 
     for (int i = 0; i < debug.legs.size(); ++i) {
         const cwPassageTubeBuilder::Leg& leg = debug.legs.at(i);
-        checkStation(leg, leg.shotIndex, leg.from, leg.fromPosition, leg.fromLrud, leg.fromPassageLrud, rightOf(i, false, leg.fromFacing));
-        checkStation(leg, leg.shotIndex + 1, leg.to, leg.toPosition, leg.toLrud, leg.toPassageLrud, rightOf(i, true, leg.toFacing));
+        checkStation(i, leg.shotIndex, leg.from, leg.fromPosition, leg.fromLrud, leg.fromPassageLrud, rightOf(i, false, leg.fromFacing));
+        checkStation(i, leg.shotIndex + 1, leg.to, leg.toPosition, leg.toLrud, leg.toPassageLrud, rightOf(i, true, leg.toFacing));
     }
     return issues;
 }
@@ -1650,72 +1680,57 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::capsExposed(const
         ++legCount[{leg.caveId, cwStation::canonicalKey(leg.to)}];
     }
 
-    const TriangleGrid grid(triangles);
-    WindingRay ray(triangles, grid, boundsOf(triangles));
-    const auto chainOf = [&](const Triangle& triangle) {
-        return debug.triangleChain.value(triangle.number, kNoChain);
-    };
-
-    // A through that ends past its junction ends the passage there, as a
-    // dead end does.
-    const auto isThroughEnd = [&](const cwPassageTubeBuilder::Cap& cap) {
-        if (cap.chain < 0 || cap.chain >= debug.chains.size()) {
-            return false;
+    // The end-ring vertices a cap slide would still move inside another
+    // passage, by chain and end station: the notch the union leaves outside
+    // it. A vertex no slide brings inside is the end of a passage bigger
+    // there than the ones it meets, a step the survey draws.
+    cwPassageTubeBuilder::Debug slid = debug;
+    QHash<std::pair<int, QString>, int> notchOfEnd;
+    for (const cwPassageTubeBuilder::CapVertex& vertex : cwPassageTubeUnion::slideCaps(slid)) {
+        if (vertex.isInside()) {
+            const cwPassageTubeBuilder::Chain& chain = debug.chains.at(vertex.chain);
+            const QString& station = vertex.atStart ? cwPassageTubeGeometry::chainStartStation(debug.legs, chain.legs.first())
+                                                    : cwPassageTubeGeometry::chainEndStation(debug.legs, chain.legs.last());
+            ++notchOfEnd[{vertex.chain, cwStation::canonicalKey(station)}];
         }
-        const cwPassageTubeBuilder::Chain& chain = debug.chains.at(cap.chain);
-        const QString station = cwStation::canonicalKey(cap.station);
-        const bool isStartHere = chain.startThroughReachMeters > 0.0
-                                 && cwStation::canonicalKey(cwPassageTubeGeometry::chainStartStation(debug.legs, chain.legs.first())) == station;
-        const bool isEndHere = chain.endThroughReachMeters > 0.0
-                               && cwStation::canonicalKey(cwPassageTubeGeometry::chainEndStation(debug.legs, chain.legs.last())) == station;
-        return isStartHere || isEndHere;
-    };
+    }
 
     QHash<QVector<quint32>, int> capByVertices;
     QVector<Issue> issues;
     for (int c = 0; c < capTriangles.size(); ++c) {
         const QVector<int>& inCap = capTriangles.at(c);
         const cwPassageTubeBuilder::Cap& cap = debug.caps.at(c);
-        if (inCap.isEmpty() || legCount.value({cap.caveId, cwStation::canonicalKey(cap.station)}) < 2 || isThroughEnd(cap)) {
+        const QString station = cwStation::canonicalKey(cap.station);
+        if (inCap.isEmpty() || legCount.value({cap.caveId, station}) < 2) {
             continue;
         }
 
-        QVector<Triangle> disc;
-        disc.reserve(inCap.size());
         QSet<quint32> vertexSet;
         for (int t : inCap) {
-            disc.append(triangles.at(t));
             for (quint32 vertex : triangles.at(t).vertices) {
                 vertexSet.insert(vertex);
             }
         }
         QVector<quint32> vertices(vertexSet.cbegin(), vertexSet.cend());
         std::sort(vertices.begin(), vertices.end());
-        const Vec center = disc.first().centroid();
+        const Triangle& first = triangles.at(inCap.first());
 
         const auto coinciding = capByVertices.constFind(vertices);
         if (coinciding != capByVertices.constEnd()) {
-            issues.append(Issue {CapExposed, center.toQVector3D(),
+            issues.append(Issue {CapExposed, first.centroid().toQVector3D(),
                                  QStringLiteral("the cap at station %1 of chain %2 coincides with cap %3")
                                      .arg(cap.station).arg(cap.chain).arg(coinciding.value()),
-                                 disc.first().number});
+                                 first.number});
             continue;
         }
         capByVertices.insert(vertices, c);
 
-        const auto isOtherChain = [&](const Triangle& triangle) {
-            return chainOf(triangle) != cap.chain;
-        };
-        const QVector<Vec> samples = spreadPoints(disc, kCapSamples);
-        const auto exposed = std::count_if(samples.cbegin(), samples.cend(), [&](const Vec& point) {
-            return !isNearSurface(triangles, grid, point, kCapSurfaceTolerance, isOtherChain)
-                   && !isInsideByVote(ray, point, isOtherChain);
-        });
-        if (exposed > 0) {
-            issues.append(Issue {CapExposed, center.toQVector3D(),
-                                 QStringLiteral("%1 of %2 points of the cap at station %3 of chain %4 lie outside the other passages")
-                                     .arg(exposed).arg(samples.size()).arg(cap.station).arg(cap.chain),
-                                 disc.first().number});
+        const int notch = notchOfEnd.value({cap.chain, station});
+        if (notch > 0) {
+            issues.append(Issue {CapExposed, first.centroid().toQVector3D(),
+                                 QStringLiteral("%1 vertices of the cap at station %2 of chain %3 lie outside the passages they could slide into")
+                                     .arg(notch).arg(cap.station).arg(cap.chain),
+                                 first.number});
         }
     }
     return issues;
@@ -1727,7 +1742,7 @@ cwPassageTubeMeshCheck::Report cwPassageTubeMeshCheck::check(const cwPassageTube
 {
     const Range visible = allTripsVisible(mesh);
     Report report = closed(mesh, visible);
-    report.issues.append(creases(mesh, visible, debug.intendedCreaseVertices, options));
+    report.issues.append(creases(mesh, visible, debug.intendedCreaseVertices, options, debug.triangleChain));
     report.issues.append(degenerateTriangles(mesh, visible, options));
 
     const QVector<Issue> crossings = selfIntersections(mesh, visible, debug);

@@ -369,7 +369,10 @@ TEST_CASE("cwPassageTubeJunction reads rings as a solid", "[PassageTube][cwPassa
     CHECK(extended.nearestRing(QVector3D(12, 0, 0)) == debug.chains.at(0).rings.size() - 1);
 }
 
-TEST_CASE("cwPassageTubeJunction merges a symmetric T without interior faces", "[PassageTube][cwPassageTubeJunction]")
+// The tests below read the stitch through cwPassageTubeBuilder::buildDebug,
+// which unites the chains' tubes instead since T07ak; they are hidden
+// ([JunctionStitch]) until T07an deletes the stitch with them.
+TEST_CASE("cwPassageTubeJunction merges a symmetric T without interior faces", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     const Trip trip {{throughAlongX(roundSection(1)), armTo(QStringLiteral("d"), QVector3D(10, -10, 0), roundSection(0.5))}};
     const Builder::Debug debug = buildDebug(makeTripsInput({trip}));
@@ -397,7 +400,7 @@ TEST_CASE("cwPassageTubeJunction merges a symmetric T without interior faces", "
 // and one mouth, and its zip band starts and runs as it did before windows
 // could hold several mouths: each triangle as "ring,column" corners, ring -1
 // for a mouth point.
-TEST_CASE("cwPassageTubeJunction zips the symmetric T's single mouth as before", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction zips the symmetric T's single mouth as before", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     const QString kExpectedZip = QStringLiteral(
         "19,0 19,1 -1,0;-1,0 19,1 -1,1;19,1 18,1 -1,1;-1,1 18,1 -1,2;-1,2 18,1 -1,3;18,1 18,2 -1,3;18,2 17,2 -1,3;"
@@ -425,7 +428,7 @@ TEST_CASE("cwPassageTubeJunction zips the symmetric T's single mouth as before",
     CHECK(triangles.join(QLatin1Char(';')).toStdString() == kExpectedZip.toStdString());
 }
 
-TEST_CASE("cwPassageTubeJunction fills a trench to the far wall", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction fills a trench to the far wall", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     constexpr double kThroughFloor = 0.05;
     constexpr double kArmFloor = 2.5;
@@ -450,7 +453,7 @@ TEST_CASE("cwPassageTubeJunction fills a trench to the far wall", "[PassageTube]
     CHECK(isClosedSurface(debug.mesh));
 }
 
-TEST_CASE("cwPassageTubeJunction chambers a through passage under a tall arm", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction chambers a through passage under a tall arm", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     constexpr double kThroughHalfWidth = 1.5;
     constexpr double kArmCeiling = 5.0;
@@ -471,7 +474,7 @@ TEST_CASE("cwPassageTubeJunction chambers a through passage under a tall arm", "
     CHECK(isClosedSurface(debug.mesh));
 }
 
-TEST_CASE("cwPassageTubeJunction lands a pit on the passage floor", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction lands a pit on the passage floor", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     constexpr float kCeiling = 1.0f;
     constexpr double kPitDepth = 10.0;
@@ -496,7 +499,7 @@ TEST_CASE("cwPassageTubeJunction lands a pit on the passage floor", "[PassageTub
     checkVolumeNear(debug.mesh, throughSection * 20.0 + pitSection * (kPitDepth - kCeiling));
 }
 
-TEST_CASE("cwPassageTubeJunction joins a passage to a shaft", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction joins a passage to a shaft", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     constexpr double kShaftRadius = 1.5;
     constexpr double kArmRadius = 0.8;
@@ -526,7 +529,7 @@ TEST_CASE("cwPassageTubeJunction joins a passage to a shaft", "[PassageTube][cwP
     }
 }
 
-TEST_CASE("cwPassageTubeJunction merges arms at a four-way junction", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction merges arms at a four-way junction", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     const Trip trip {{throughAlongX(roundSection(1)),
                       armTo(QStringLiteral("d"), QVector3D(10, -10, 0), roundSection(0.5)),
@@ -543,7 +546,7 @@ TEST_CASE("cwPassageTubeJunction merges arms at a four-way junction", "[PassageT
     checkMeshClean(debug);
 }
 
-TEST_CASE("cwPassageTubeJunction keeps a loop's junction closed", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction keeps a loop's junction closed", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     // The entrance passage runs on around the loop, turning less than a
     // hairpin at each corner, and ends where it joined it.
@@ -564,7 +567,7 @@ TEST_CASE("cwPassageTubeJunction keeps a loop's junction closed", "[PassageTube]
 // through, so their mouths cross on its surface: the second keeps the fan
 // cap, hidden inside the through without crossing its wall. Its tube still
 // runs through the first arm's mouth and zip band, as the passages do.
-TEST_CASE("cwPassageTubeJunction keeps the fallback for arms that run into each other", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction keeps the fallback for arms that run into each other", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     constexpr double kSpreadDegrees = 30.0;
     const float spread = static_cast<float>(qDegreesToRadians(kSpreadDegrees));
@@ -601,7 +604,7 @@ TEST_CASE("cwPassageTubeJunction keeps the fallback for arms that run into each 
     }
 }
 
-TEST_CASE("cwPassageTubeJunction drops an arm that lies inside the through", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction drops an arm that lies inside the through", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     const Trip trip {{throughAlongX(roundSection(2)), armTo(QStringLiteral("d"), QVector3D(10, -0.2f, 0), roundSection(0.2))}};
     const Builder::Debug debug = buildDebug(makeTripsInput({trip}));
@@ -615,7 +618,7 @@ TEST_CASE("cwPassageTubeJunction drops an arm that lies inside the through", "[P
     checkMeshClean(debug);
 }
 
-TEST_CASE("cwPassageTubeJunction samples the mouth to the through's grid", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction samples the mouth to the through's grid", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     const Builder::Debug debug = buildRandomSeedOne();
     const OnlyWindow found = onlyWindow(debug);
@@ -637,7 +640,7 @@ TEST_CASE("cwPassageTubeJunction samples the mouth to the through's grid", "[Pas
 // side of the graze or the other, so neighboring columns enter meters apart
 // and a column between them lands on either side; splitting the gap there
 // would zigzag the mouth, so it stays long.
-TEST_CASE("cwPassageTubeJunction keeps every mouth step within twice the through's spacing", "[PassageTube][cwPassageTubeJunction][!mayfail]")
+TEST_CASE("cwPassageTubeJunction keeps every mouth step within twice the through's spacing", "[cwPassageTubeJunction][JunctionStitch][.][!mayfail]")
 {
     constexpr double kMaxMouthStepSpacings = 2.0;
     const Builder::Debug debug = buildRandomSeedOne();
@@ -652,7 +655,7 @@ TEST_CASE("cwPassageTubeJunction keeps every mouth step within twice the through
     }
 }
 
-TEST_CASE("cwPassageTubeJunction meshes the mouth strip as a closed fan", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction meshes the mouth strip as a closed fan", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     const Builder::Debug debug = buildRandomSeedOne();
     const OnlyWindow found = onlyWindow(debug);
@@ -663,7 +666,7 @@ TEST_CASE("cwPassageTubeJunction meshes the mouth strip as a closed fan", "[Pass
 // Seed 1's arm leaves a station that holds a level and a plumb section,
 // stitched until T07ah3 caps them with their hull, and the zip band folds
 // against that stitch.
-TEST_CASE("cwPassageTubeJunction zips a sparse mouth", "[PassageTube][cwPassageTubeJunction][!mayfail]")
+TEST_CASE("cwPassageTubeJunction zips a sparse mouth", "[cwPassageTubeJunction][JunctionStitch][.][!mayfail]")
 {
     const Builder::Debug debug = buildRandomSeedOne();
     const Check::Report report = Check::check(debug.mesh, debug);
@@ -675,7 +678,7 @@ TEST_CASE("cwPassageTubeJunction zips a sparse mouth", "[PassageTube][cwPassageT
     }
 }
 
-TEST_CASE("cwPassageTubeJunction cuts an arm along a room's wall where its axis enters the room", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction cuts an arm along a room's wall where its axis enters the room", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     constexpr double kMaxMouthSpacings = 1.5;
     // Gallery 21's arm reads at most this far from its stations.
@@ -704,7 +707,7 @@ TEST_CASE("cwPassageTubeJunction cuts an arm along a room's wall where its axis 
     CHECK(Check::centerlineInside(debug.mesh, debug).isEmpty());
 }
 
-TEST_CASE("cwPassageTubeJunction keeps the corner of an arm bending beside the through", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction keeps the corner of an arm bending beside the through", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     const cwPassageTubeCases::Case& entry = galleryCase(QStringLiteral("22."));
     const Builder::Debug debug = buildCase(entry);
@@ -726,7 +729,7 @@ TEST_CASE("cwPassageTubeJunction keeps the corner of an arm bending beside the t
 // stations' sections at face value (T07ah1) moved case 5's mouth and Phake
 // Cave's, whose through draws a4's 23 m drop, and reading the pit's sections
 // through its left and right (T07ah2) moved the mouth of Phake Cave's chain 2.
-TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into the through", "[PassageTube][cwPassageTubeJunction]")
+TEST_CASE("cwPassageTubeJunction keeps the mouths of arms that run straight into the through", "[cwPassageTubeJunction][JunctionStitch][.]")
 {
     constexpr float kMouthShiftTolerance = 1e-3f;
     struct ExpectedMouth {

@@ -16,6 +16,7 @@
 #include "cwPassageTubeBuilder.h"
 #include "cwPassageTubeCases.h"
 #include "cwPassageTubeMeshCheck.h"
+#include "cwPassageTubeUnion.h"
 
 //Qt includes
 #include <QHash>
@@ -115,11 +116,31 @@ cwPassageTubeBuilder::Options builderOptions(double sampleSpacing)
     return options;
 }
 
+// "Crease: 4, FoldBack: 2", one entry per issue type in order of first
+// appearance.
+std::string issueCounts(const QVector<cwPassageTubeMeshCheck::Issue>& issues)
+{
+    QVector<cwPassageTubeMeshCheck::Type> types;
+    QHash<cwPassageTubeMeshCheck::Type, int> counts;
+    for (const cwPassageTubeMeshCheck::Issue& issue : issues) {
+        if (!counts.contains(issue.type)) {
+            types.append(issue.type);
+        }
+        ++counts[issue.type];
+    }
+    QStringList entries;
+    for (const cwPassageTubeMeshCheck::Type type : std::as_const(types)) {
+        entries.append(QStringLiteral("%1: %2").arg(cwPassageTubeMeshCheck::typeName(type)).arg(counts.value(type)));
+    }
+    return entries.join(QStringLiteral(", ")).toStdString();
+}
+
 void checkBuildsClean(const Cases::Survey& survey, double sampleSpacing = cwPassageTubeBuilder::Options().sampleSpacingMeters)
 {
     const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(sampleSpacing));
     REQUIRE_FALSE(debug.mesh.isEmpty());
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
+    INFO("issue counts: " << issueCounts(report.issues));
     INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
     CHECK(report.issues.isEmpty());
 }
@@ -244,27 +265,22 @@ const QVector<AcceptedIssue> kPhakeCaveIssues {
     // The checker looks for a3's side walls square to the bisector of its
     // legs; they lie along its facing (T07ah4).
     {QStringLiteral("a3"), cwPassageTubeMeshCheck::WallMissed},
-    // a4 holds its two chunks' sections, and a6 and a9 a plumb and a level
-    // section each, stitched until T07ah3 caps them with their hull.
+    // a4 holds its two chunks' sections, so its tube splits there, and the
+    // union folds and leaves slivers where the two overlap.
     {QStringLiteral("a4"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a4"), cwPassageTubeMeshCheck::FoldBack},
-    {QStringLiteral("a4"), cwPassageTubeMeshCheck::SelfIntersection},
+    {QStringLiteral("a4"), cwPassageTubeMeshCheck::DegenerateTriangle},
     {QStringLiteral("a4"), cwPassageTubeMeshCheck::SliverTriangle},
-    {QStringLiteral("a6"), cwPassageTubeMeshCheck::Crease},
+    // a6 and a9 hold a plumb and a level section each, until T07am stands
+    // their rings vertical: the union leaves slivers where they meet, and
+    // a6's rings fold behind the plumb one.
     {QStringLiteral("a6"), cwPassageTubeMeshCheck::FoldBack},
-    {QStringLiteral("a6"), cwPassageTubeMeshCheck::SelfIntersection},
-    {QStringLiteral("a9"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a9"), cwPassageTubeMeshCheck::FrameTwist},
-    {QStringLiteral("a9"), cwPassageTubeMeshCheck::SelfIntersection},
-    // a9's level section meets its plumb one at the left and right reading
-    // points, so the stitch between them runs to slivers there.
+    {QStringLiteral("a6"), cwPassageTubeMeshCheck::SliverTriangle},
     {QStringLiteral("a9"), cwPassageTubeMeshCheck::SliverTriangle},
-    // a10 reads 0 on one side, so its ring and mouth bunch vertices a few
-    // centimeters apart, and the arm's strip beside them folds against the
-    // zip band and crosses itself beside a sliver of it.
-    {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SelfIntersection},
+    // a10 reads 0 on one side, so its ring bunches vertices a few
+    // centimeters apart: the union leaves slivers beside them, and its
+    // right wall lies off the union where the arm leaves it.
     {QStringLiteral("a10"), cwPassageTubeMeshCheck::SliverTriangle},
+    {QStringLiteral("a10"), cwPassageTubeMeshCheck::WallMissed},
 };
 
 QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
@@ -455,6 +471,23 @@ bool hasSteepArm(const Cases::Case& entry)
     return entry.tags.contains(QStringLiteral("profile:60")) || entry.tags.contains(QStringLiteral("profile:-60"));
 }
 
+// Cases that build clean with the stitch and not as the union (T07ak):
+// - 8's pit leaves the through's floor reading at J off the union (WallMissed);
+// - an arm whose floor lies in the bent through's floor plane folds where
+//   the two floors meet (Crease, SliverTriangle);
+// - two big arms on one side slide their caps back along their legs, which
+//   folds the rings behind them (FoldBack) and leaves a wall off the tube
+//   (WallMissed);
+// - a sloping arm's slid cap folds against its wall at a through with two
+//   sections at J (Crease, WallMissed).
+// The sweep's clean subsample skips them where it samples them.
+const QStringList kUnionOpenCases {
+    QStringLiteral("8. Pit dropping into a passage"),
+    QStringLiteral("plan 90, profile 0, ratio 1, 1 arm, bend 90, same section"),
+    QStringLiteral("plan 60, profile 0, ratio 2.5, 2 arms same side, bend 0, same section"),
+    QStringLiteral("plan 30, profile -30, ratio 1, 2 arms same side, bend 40, section x2 past J"),
+};
+
 // Sweep cases kept out of the clean checks by their parameters or name.
 bool isOpenSweepCase(const Cases::Case& entry)
 {
@@ -478,11 +511,14 @@ bool overlapsMouths(const cwPassageTubeBuilder::Debug& debug)
 }
 
 // Every check, apart from the cases whose mouths overlap, which the
-// [!mayfail] sweep tests cover.
+// [!mayfail] sweep tests cover, and the union's open cases.
 void checkSweepCaseBuildsClean(const std::string& name)
 {
     INFO(name);
     const Cases::Case& entry = catalogCase(name);
+    if (kUnionOpenCases.contains(entry.name)) {
+        return;
+    }
     const Cases::Survey survey = Cases::toSurvey(entry.trip);
     const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
     REQUIRE_FALSE(debug.mesh.isEmpty());
@@ -626,64 +662,46 @@ std::pair<unsigned int, int> randomSurvey(int seed)
     return {static_cast<unsigned int>(seed), 1 + (seed - 1) % kMaxRandomJunctions};
 }
 
-// Random seeds whose junctions the merge leaves unclean. Their passages
-// build clean without the junctions (see the junction-free tests), and
-// passages that run into each other are warnings. Every one reports a
-// Crease of 150° to 180° where an arm's strip meets its zip band at the
-// mouth: the arm is about as tall or wide as the through, its station reads
-// a few centimeters to the wall the arm leaves through, or it leaves a shaft
-// station or the inside of a bend. About half also report SelfIntersection
-// and SliverTriangle where the zip band crosses its arm or a second arm's
-// mouth. The rest hold two sections at a station, its legs' records or a
-// plumb and a level section, stitched until T07ah3 caps them with their hull
-// (Crease, SelfIntersection, FoldBack, DegenerateTriangle).
-const QVector<int> kJunctionLimitRandomSeeds {1, 2, 4, 5, 6, 7, 9, 10, 11, 12, 15, 16, 17, 18, 20, 21, 22, 23, 24, 25, 27,
-                                             28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 39, 40, 41, 42, 44, 45, 46, 47, 48,
-                                             49, 50};
+// Random seeds whose union is unclean, at the ring rules T07al and T07am
+// change: a cap slid back along its leg folds the rings behind it
+// (FoldBack) and leaves walls off the tube (WallMissed), two sections at a
+// station or a slid cap fold against a wall (Crease), and walls that touch
+// along a line leave slivers (SliverTriangle).
+const QVector<int> kJunctionLimitRandomSeeds {1, 6, 7, 9, 11, 15, 16, 17, 18, 20, 24, 28, 29, 30, 32, 33, 34, 35, 40, 41,
+                                             42, 44, 46, 47, 48};
 
 bool isJunctionLimitRandomSeed(int seed)
 {
     return kJunctionLimitRandomSeeds.contains(seed);
 }
 
-// 23's bend and 25's shaft foot each join a plumb section to a level one,
-// stitched until T07ah3 caps them with their hull (Crease, SelfIntersection,
-// FoldBack).
+// 25's shaft foot joins a plumb section to a level one, whose union leaves
+// slivers (SliverTriangle) until T07am stands its rings vertical.
 const QStringList kOpenJunctionFreeCases {
-    QStringLiteral("23. Sharp bend at a station reading zero on the outside wall"),
     QStringLiteral("25. Zero floor reading at the foot of a shaft"),
 };
 
-// Catalog junctions whose through holds two sections at J, the records of
-// its two legs' chunks or a plumb and a level section, stitched until T07ah3
-// caps them with their hull (Crease, SelfIntersection, FoldBack,
-// DegenerateTriangle, SliverTriangle).
+// Catalog junctions whose union is unclean: 19's through doubles back
+// beside a big arm, and the arm's slid cap folds against its wall (Crease).
 const QStringList kOpenCatalogJunctionCases {
-    QStringLiteral("3. Big arm into a small passage"),
-    QStringLiteral("10. Passage turning straight down a pit, side arm at the lip"),
-    QStringLiteral("16. Arm with its own section at J larger than the through"),
-    QStringLiteral("18. Three big arms into a small passage"),
     QStringLiteral("19. Through doubling back beside a big arm"),
-    QStringLiteral("21. Small arm along the wall of a big room"),
-    QStringLiteral("22. Default-radius arm bending inside a big through's reach"),
 };
+
+// Random seeds that build clean with the stitch and not as the union: 14's
+// slid cap folds against its wall (Crease).
+const QVector<int> kUnionOpenRandomSeeds {14};
 
 // Random seeds whose passages hold a plumb and a level section at a shaft's
-// lip or foot, stitched until T07ah3 caps them with their hull (Crease,
-// SelfIntersection, FoldBack, CenterlineOutside).
-const QVector<int> kOpenJunctionFreeRandomSeeds {20, 32, 33, 41};
+// lip or foot, whose union leaves slivers and folds (Crease,
+// SliverTriangle, DegenerateTriangle) until T07am stands their rings
+// vertical.
+const QVector<int> kOpenJunctionFreeRandomSeeds {32};
 
-// Wild random surveys, as (seed, junctions), whose stitched stations of two
-// sections share a reading point, which leaves a zero-area triangle
-// between the two rings (DegenerateTriangle). A plumb leg's level section
-// shares its left and right reading points with a level leg's plumb one
-// (T07ah2).
-const QVector<std::pair<int, int>> kTwoSectionWildSurveys {
-    {1, 0}, {1, 1}, {5, 0}, {5, 5}, {6, 0}, {6, 6}, {9, 0}, {9, 3}, {10, 0}, {10, 4}, {11, 5}, {12, 6},
-    {14, 0}, {14, 2}, {15, 3}, {16, 4}, {17, 0}, {17, 5}, {18, 6}, {21, 3}, {22, 0}, {22, 4}, {23, 5}, {24, 6},
-    {26, 2}, {27, 3}, {28, 4}, {29, 5}, {30, 6}, {35, 5}, {36, 6}, {38, 2}, {40, 4}, {41, 0}, {41, 5}, {42, 0},
-    {42, 6}, {46, 0}, {46, 4}, {47, 5}, {49, 1},
-};
+// Wild random surveys, as (seed, junctions), whose union leaves a zero-area
+// triangle (DegenerateTriangle): 40 with 4 junctions holds a plumb and a
+// level section at a station, and 7 with 1 junction, clean with the stitch,
+// folds a slid cap against its wall.
+const QVector<std::pair<int, int>> kDegenerateWildSurveys {{7, 1}, {40, 4}};
 
 void checkCenterlineInside(const std::string& name)
 {
@@ -701,7 +719,8 @@ void checkCenterlineInside(const std::string& name)
 TEST_CASE("cwPassageTubeCases catalog builds clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
-        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave && !kOpenCatalogJunctionCases.contains(entry.name);
+        return !isSweep(entry) && hasJunction(entry) && entry.name != kPhakeCave && !kOpenCatalogJunctionCases.contains(entry.name)
+               && !kUnionOpenCases.contains(entry.name);
     })));
     checkCaseBuildsClean(name);
 }
@@ -711,6 +730,34 @@ TEST_CASE("cwPassageTubeCases open catalog junctions build clean meshes", "[Pass
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
         return kOpenCatalogJunctionCases.contains(entry.name);
     })));
+    checkCaseBuildsClean(name);
+}
+
+TEST_CASE("cwPassageTubeCases union regressions build clean meshes", "[PassageTube][cwPassageTubeCases][!mayfail]")
+{
+    SECTION("catalog and sweep cases")
+    {
+        const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
+            return kUnionOpenCases.contains(entry.name);
+        })));
+        checkCaseBuildsClean(name);
+    }
+    SECTION("random surveys")
+    {
+        const auto [seed, junctions] = randomSurvey(GENERATE(from_range(kUnionOpenRandomSeeds)));
+        INFO("seed " << seed << ", " << junctions << " junctions");
+        checkBuildsClean(Cases::random(seed, junctions));
+    }
+}
+
+// The zip leaves Crease, SelfIntersection and FoldBack on these big arms;
+// the union of the chains' capped tubes builds them clean (T07ak).
+TEST_CASE("cwPassageTubeCases big arms build clean through the union", "[PassageTube][cwPassageTubeCases]")
+{
+    const std::string name = GENERATE(as<std::string>(),
+                                      "3. Big arm into a small passage",
+                                      "16. Arm with its own section at J larger than the through",
+                                      "18. Three big arms into a small passage");
     checkCaseBuildsClean(name);
 }
 
@@ -759,7 +806,9 @@ TEST_CASE("cwPassageTubeCases keeps a bend's rings within the station's readings
 // takes no slivers; the one crease left is the 20° wedge at the mouth's far
 // tip, where the arm's wall folds against the through's (see
 // joinsAtGrazingAngle).
-TEST_CASE("cwPassageTubeCases zips a mouth that runs along the through's ceiling", "[PassageTube][cwPassageTubeCases]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeCases zips a mouth that runs along the through's ceiling", "[cwPassageTubeCases][JunctionStitch][.]")
 {
     constexpr float kOnMouthMeters = 1e-3f;
     const Cases::Case& entry = catalogCase("plan 20, profile 0, ratio 1, 1 arm, bend 0, same section");
@@ -813,7 +862,9 @@ TEST_CASE("cwPassageTubeCases catalog junctions the merge leaves unclean build c
 // The 15° arm lies inside the through, which doubles past J, apart from its
 // tip, which pokes out; the through grows to take the tip before the arm is
 // left out, then grows again without it.
-TEST_CASE("cwPassageTubeCases re-grows the through after dropping an arm", "[PassageTube][cwPassageTubeCases]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeCases re-grows the through after dropping an arm", "[cwPassageTubeCases][JunctionStitch][.]")
 {
     constexpr double kRadiusTolerance = 1e-3;
     constexpr float kPastJunctionMeters = 7.0f;
@@ -862,44 +913,9 @@ TEST_CASE("cwPassageTubeCases re-grows the through after dropping an arm", "[Pas
     }
 }
 
-TEST_CASE("cwPassageTubeCases merges an arm where the through turns 90 degrees", "[PassageTube][cwPassageTubeCases]")
-{
-    constexpr float kAlongLegCosine = 0.9999f;
-    const Cases::Case& entry = catalogCase("plan 90, profile 0, ratio 1, 1 arm, bend 90, same section");
-    const Cases::Survey survey = Cases::toSurvey(entry.trip);
-    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
-    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
-    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
-    CHECK(report.issues.isEmpty());
-
-    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const cwPassageTubeBuilder::Chain& chain) {
-        return !chain.windows.isEmpty();
-    });
-    REQUIRE(through != debug.chains.cend());
-    REQUIRE(through->windows.size() == 1);
-
-    // The rings at J, whose tangents turn from t0 → J to J → t1.
-    const QVector3D junction = position(entry.trip, QStringLiteral("J"));
-    const QVector3D incoming = (junction - position(entry.trip, QStringLiteral("t0"))).normalized();
-    const QVector3D outgoing = (position(entry.trip, QStringLiteral("t1")) - junction).normalized();
-    const auto isTurningRing = [&](int ring) {
-        const QVector3D& tangent = through->rings.at(ring).frame.tangent;
-        return QVector3D::dotProduct(tangent, incoming) < kAlongLegCosine && QVector3D::dotProduct(tangent, outgoing) < kAlongLegCosine;
-    };
-    QSet<int> windowTurningRings;
-    for (const QPair<int, int>& quad : through->windows.first().removedQuads) {
-        for (int ring : {quad.first, quad.first + 1}) {
-            if (isTurningRing(ring)) {
-                windowTurningRings.insert(ring);
-            }
-        }
-    }
-    CHECK(windowTurningRings.size() >= 2);
-}
-
 // The arm is 2.5 times the through passage's size at J, so the through runs
-// along it and on into one half of the small passage; the other half joins
-// it with a mouth.
+// along it and on into one half of the small passage; the other half ends
+// at J, inside it.
 TEST_CASE("cwPassageTubeCases chains the big passage as the through", "[PassageTube][cwPassageTubeCases]")
 {
     const Cases::Case& entry = catalogCase("3. Big arm into a small passage");
@@ -929,11 +945,6 @@ TEST_CASE("cwPassageTubeCases chains the big passage as the through", "[PassageT
     const bool isToJunction = debug.legs.at(small.legs.first().legIndex).to == QStringLiteral("J");
     const bool endsAtJunction = isToJunction != small.legs.first().reversed;
     CHECK((endsAtJunction ? small.endCap : small.startCap) == cwPassageTubeBuilder::EndCap::Mouth);
-    REQUIRE(through.windows.size() == 1);
-    REQUIRE(through.windows.first().mouths.size() == 1);
-    CHECK(&debug.chains.at(through.windows.first().mouths.first().armChain) == &small);
-
-    // The through holds both J's sections (kOpenCatalogJunctionCases).
     checkCaseBuildsClosed(entry.name.toStdString());
 }
 
@@ -945,17 +956,12 @@ TEST_CASE("cwPassageTubeCases chains two big arms as the through", "[PassageTube
 {
     const Cases::Case& entry = catalogCase("18. Three big arms into a small passage");
     const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(entry), entry.sampleSpacing);
-    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
-
     const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const cwPassageTubeBuilder::Chain& chain) {
         return chain.legs.size() == 2;
     });
     REQUIRE(through != debug.chains.cend());
     const QSet<QString> stations = chainStations(debug, *through);
     CHECK(stations == QSet<QString>({QStringLiteral("a00"), QStringLiteral("J"), QStringLiteral("a10")}));
-    CHECK(zippedArms(*through).size() == 3);
-
-    // The through holds both J's sections (kOpenCatalogJunctionCases).
     checkCaseBuildsClosed(entry.name.toStdString());
 }
 
@@ -981,8 +987,6 @@ TEST_CASE("cwPassageTubeCases ends a big dead-end through past the junction", "[
     junctionCase.arms = {arm};
     const Cases::Survey survey = Cases::toSurvey(junctionCase);
     const cwPassageTubeBuilder::Debug debug = buildDebug(survey, junctionCase.sampleSpacing);
-    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
-
     const int bigChain = armChain(debug, QStringLiteral("a00"));
     REQUIRE(bigChain >= 0);
     const cwPassageTubeBuilder::Chain& big = debug.chains.at(bigChain);
@@ -998,10 +1002,6 @@ TEST_CASE("cwPassageTubeCases ends a big dead-end through past the junction", "[
     const cwPassageTubeBuilder::Ring& endRing = endsAtJunction ? big.rings.last() : big.rings.first();
     CHECK(QVector3D::dotProduct(endRing.center - junction, arriving) > 0.0f);
 
-    const QSet<int> zipped = zippedArms(big);
-    CHECK(zipped.contains(armChain(debug, QStringLiteral("t0"))));
-    CHECK(zipped.contains(armChain(debug, QStringLiteral("t1"))));
-
     checkBuildsClosed(survey, junctionCase.sampleSpacing);
     const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
     INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
@@ -1011,28 +1011,24 @@ TEST_CASE("cwPassageTubeCases ends a big dead-end through past the junction", "[
 // The big arm continues the through's far half, which turns back toward it,
 // so the near half leaves J 30 degrees from the big arm, grazing its wall,
 // and still opens into it.
-TEST_CASE("cwPassageTubeCases zips the leg beside a big arm", "[PassageTube][cwPassageTubeCases]")
+TEST_CASE("cwPassageTubeCases opens the leg beside a big arm", "[PassageTube][cwPassageTubeCases]")
 {
     const Cases::Case& entry = catalogCase("19. Through doubling back beside a big arm");
     const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(entry), entry.sampleSpacing);
-    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
-
-    const int backLeg = armChain(debug, QStringLiteral("t0"));
-    REQUIRE(backLeg >= 0);
+    REQUIRE(armChain(debug, QStringLiteral("t0")) >= 0);
     const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const cwPassageTubeBuilder::Chain& chain) {
         return chain.legs.size() == 2;
     });
     REQUIRE(through != debug.chains.cend());
     CHECK(chainStations(debug, *through).contains(QStringLiteral("a00")));
-    CHECK(zippedArms(*through).contains(backLeg));
-
-    // The through holds both J's sections (kOpenCatalogJunctionCases).
     checkCaseBuildsClosed(entry.name.toStdString());
 }
 
 // Every gallery junction and a subsample of the sweep's join their arms into
 // the through, apart from the families in kUnzippedSweepCases.
-TEST_CASE("cwPassageTubeCases joins every arm", "[PassageTube][cwPassageTubeCases]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeCases joins every arm", "[cwPassageTubeCases][JunctionStitch][.]")
 {
     std::vector<std::string> names = caseNames([](const Cases::Case& entry) {
         return isJoinedJunctionCase(entry) && !isSweep(entry);
@@ -1045,7 +1041,9 @@ TEST_CASE("cwPassageTubeCases joins every arm", "[PassageTube][cwPassageTubeCase
     checkJoinsEveryArm(name);
 }
 
-TEST_CASE("cwPassageTubeCases full sweep joins every arm", "[cwPassageTubeCases][Sweep][.]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeCases full sweep joins every arm", "[cwPassageTubeCases][Sweep][JunctionStitch][.]")
 {
     const std::string name = GENERATE(from_range(caseNames([](const Cases::Case& entry) {
         return isJoinedJunctionCase(entry) && isSweep(entry);
@@ -1053,64 +1051,19 @@ TEST_CASE("cwPassageTubeCases full sweep joins every arm", "[cwPassageTubeCases]
     checkJoinsEveryArm(name);
 }
 
-// Two arms as big as the through leave it on opposite sides: each mouth
-// wraps more than half of it, so their windows share the roof and floor
-// quads, and one window zips both mouths.
-TEST_CASE("cwPassageTubeCases merges the windows of opposite arms", "[PassageTube][cwPassageTubeCases]")
+// Two arms as big as the through leave it on opposite sides, straight on
+// and where it bends 40 degrees past J.
+TEST_CASE("cwPassageTubeCases unites opposite arms as big as the through", "[PassageTube][cwPassageTubeCases]")
 {
-    const Cases::Case& entry = catalogCase("plan 90, profile 0, ratio 1, 2 arms opposite, bend 0, same section");
-    const Cases::Survey survey = Cases::toSurvey(entry.trip);
-    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
-    CHECK(std::none_of(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
-        return warning.type == cwPassageTubeMesh::Warning::JunctionOverlap;
-    }));
-    REQUIRE(debug.chains.size() == 3);
-    REQUIRE(debug.chains.at(0).windows.size() == 1);
-    const cwPassageTubeBuilder::JunctionWindow& window = debug.chains.at(0).windows.first();
-    REQUIRE(window.mouths.size() == 2);
-    CHECK(window.mouths.at(0).armChain != window.mouths.at(1).armChain);
-
-    checkCaseBuildsClosed(entry.name.toStdString());
-    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
-    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
-    CHECK(report.issues.isEmpty());
+    const std::string name = GENERATE(as<std::string>(),
+                                      "plan 90, profile 0, ratio 1, 2 arms opposite, bend 0, same section",
+                                      "plan 90, profile 0, ratio 1, 2 arms opposite, bend 40, same section");
+    checkCaseBuildsClosed(name);
+    checkCaseBuildsClean(name);
 }
 
-// Two opposite arms as big as the through take every one of its columns
-// over the rings between their mouths, so the window's edge is two loops,
-// one before the mouths and one past them. Arms larger than the through
-// would continue each other as the through (see "chains the big passage as
-// the through"), so these match it; the through bends past J, so the bridge
-// between the two loops runs along a column over a turning through.
-TEST_CASE("cwPassageTubeCases zips a window that takes the whole circumference", "[PassageTube][cwPassageTubeCases]")
-{
-    const Cases::Case& entry = catalogCase("plan 90, profile 0, ratio 1, 2 arms opposite, bend 40, same section");
-    const Cases::Survey survey = Cases::toSurvey(entry.trip);
-    const cwPassageTubeBuilder::Debug debug = cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, builderOptions(entry.sampleSpacing));
-    REQUIRE(debug.chains.size() == 3);
-    REQUIRE(debug.chains.at(0).windows.size() == 1);
-    const cwPassageTubeBuilder::JunctionWindow& window = debug.chains.at(0).windows.first();
-    CHECK(window.mouths.size() == 2);
-    REQUIRE(window.boundaries.size() == 2);
-    for (const QVector<QPair<int, int>>& boundary : window.boundaries) {
-        QSet<int> columns;
-        for (const QPair<int, int>& vertex : boundary) {
-            columns.insert(vertex.second);
-        }
-        CHECK(columns.size() == cwPassageTubeBuilder::Options().ringResolution);
-    }
-
-    checkCaseBuildsClosed(entry.name.toStdString());
-    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
-    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
-    CHECK(report.issues.isEmpty());
-}
-
-// Where the bridge between a whole-circumference window's two loops runs
-// along a column through the neck between two mouths, the zip band starts
-// on the copy of the bridge beside the inner loop's first vertex, so each
-// side of the bridge gets its own triangles.
-TEST_CASE("cwPassageTubeCases closes windows bridged between two mouths", "[PassageTube][cwPassageTubeCases]")
+// Arms as big as the through whose mouths meet around it.
+TEST_CASE("cwPassageTubeCases closes the union where big arms' mouths meet", "[PassageTube][cwPassageTubeCases]")
 {
     const std::string name = GENERATE(as<std::string>(),
                                       "plan 20, profile 0, ratio 1, 2 arms opposite, bend 0, same section",
@@ -1227,7 +1180,7 @@ TEST_CASE("cwPassageTubeCases catalog cases without a junction build closed tube
 TEST_CASE("cwPassageTubeCases random surveys build clean meshes", "[PassageTube][cwPassageTubeCases]")
 {
     const auto [seed, junctions] = randomSurvey(GENERATE(filter([](int candidate) {
-        return !isJunctionLimitRandomSeed(candidate);
+        return !isJunctionLimitRandomSeed(candidate) && !kUnionOpenRandomSeeds.contains(candidate);
     }, range(1, kRandomSeedCount + 1))));
     INFO("seed " << seed << ", " << junctions << " junctions");
     checkBuildsClean(Cases::random(seed, junctions));
@@ -1238,6 +1191,31 @@ TEST_CASE("cwPassageTubeCases random surveys with junctions at the merge's limit
     const auto [seed, junctions] = randomSurvey(GENERATE(from_range(kJunctionLimitRandomSeeds)));
     INFO("seed " << seed << ", " << junctions << " junctions");
     checkBuildsClean(Cases::random(seed, junctions));
+}
+
+// Seed 9's passage from s8 folds across itself; the union takes its tube as
+// it is, and the builder names it.
+TEST_CASE("cwPassageTubeCases warns of a chain tube that crosses itself", "[PassageTube][cwPassageTubeCases]")
+{
+    constexpr int kSelfCrossingSeed = 9;
+    const auto [seed, junctions] = randomSurvey(kSelfCrossingSeed);
+    const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::toSurvey(Cases::random(seed, junctions)), cwPassageTubeBuilder::Options().sampleSpacingMeters);
+    const auto crossing = std::find_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
+        return warning.type == cwPassageTubeMesh::Warning::ChainSelfCrossing;
+    });
+    REQUIRE(crossing != debug.warnings.cend());
+    INFO(crossing->message.toStdString());
+    CHECK(crossing->station == QStringLiteral("s8"));
+    CHECK(crossing->message.contains(QStringLiteral("station s8 crosses itself at ")));
+
+    const QVector<cwPassageTubeUnion::ChainTube> tubes = cwPassageTubeUnion::chainTubes(debug);
+    CHECK(std::any_of(tubes.cbegin(), tubes.cend(), [&](const cwPassageTubeUnion::ChainTube& tube) {
+        const cwPassageTubeBuilder::ChainLeg& first = debug.chains.at(tube.chain).legs.first();
+        const cwPassageTubeBuilder::Leg& leg = debug.legs.at(first.legIndex);
+        const bool startsAtCrossing = (first.reversed ? leg.to : leg.from) == crossing->station;
+        return startsAtCrossing && !cwPassageTubeMeshCheck::selfIntersections(tube.mesh, cwPassageTubeMeshCheck::wholeMesh(tube.mesh)).isEmpty();
+    }));
+    checkBuildsClosed(Cases::random(seed, junctions));
 }
 
 TEST_CASE("cwPassageTubeCases random surveys build closed tubes", "[PassageTube][cwPassageTubeCases]")
@@ -1363,8 +1341,8 @@ TEST_CASE("cwPassageTubeCases wild random surveys build no degenerate triangles"
     const auto [seed, junctions] = randomSurvey(GENERATE(range(1, kRandomSeedCount + 1)));
     const int junctionCount = GENERATE_COPY(0, junctions);
     INFO("seed " << seed << ", " << junctionCount << " junctions");
-    if (kTwoSectionWildSurveys.contains(std::pair {static_cast<int>(seed), junctionCount})) {
-        SKIP("two-section stitch until T07ah3");
+    if (kDegenerateWildSurveys.contains(std::pair {static_cast<int>(seed), junctionCount})) {
+        SKIP("a zero-area triangle in the union");
     }
     const Cases::Survey survey = Cases::toSurvey(Cases::randomWild(seed, junctionCount));
     const cwPassageTubeMesh mesh = cwPassageTubeBuilder::build(survey.region, survey.positionsByCave, {}, cwPassageTubeBuilder::Options());

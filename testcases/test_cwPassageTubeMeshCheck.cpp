@@ -10,8 +10,10 @@
 #include <catch2/catch_approx.hpp>
 
 //Our includes
+#include "cwPassageTubeBuilder.h"
 #include "cwPassageTubeCases.h"
 #include "cwPassageTubeMeshCheck.h"
+#include "cwPassageTubeUnion.h"
 
 //Std includes
 #include <algorithm>
@@ -575,4 +577,78 @@ TEST_CASE("cwPassageTubeMeshCheck reports centerline points outside the tube", "
         const cwPassageTubeMesh mesh = boxMesh(QVector3D(-1, -1, -1), QVector3D(7, 1, 1));
         CHECK(Check::centerlineInside(mesh, debug).isEmpty());
     }
+}
+
+namespace {
+
+int issueCount(const QVector<Check::Issue>& issues, Check::Type type)
+{
+    return static_cast<int>(std::count_if(issues.cbegin(), issues.cend(), [type](const Check::Issue& issue) {
+        return issue.type == type;
+    }));
+}
+
+cwPassageTubeBuilder::Debug buildDebug(const Cases::JunctionCase& junctionCase)
+{
+    const Cases::Survey survey = Cases::toSurvey(junctionCase);
+    return cwPassageTubeBuilder::buildDebug(survey.region, survey.positionsByCave, {}, cwPassageTubeBuilder::Options());
+}
+
+} // namespace
+
+// Where the 30 degree fork's arm leaves the through, the union folds along
+// the seam between the two passages' walls: what the survey says. The folds
+// stay under the default limit, so a stricter one shows them.
+TEST_CASE("cwPassageTubeMeshCheck leaves out the seam where two passages meet", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    constexpr double kSeamCreaseDegrees = 120.0;
+    const cwPassageTubeBuilder::Debug debug = buildDebug(Cases::wideArmFork());
+    const Check::Range visible = Check::allTripsVisible(debug.mesh);
+    Check::Options strict;
+    strict.maxCreaseDegrees = kSeamCreaseDegrees;
+
+    const QVector<Check::Issue> folds = Check::creases(debug.mesh, visible, debug.intendedCreaseVertices, strict);
+    CHECK_FALSE(folds.isEmpty());
+    for (const Check::Issue& fold : folds) {
+        CHECK(debug.triangleChain.at(fold.triangle) != debug.triangleChain.at(fold.otherTriangle));
+    }
+    CHECK(Check::creases(debug.mesh, visible, debug.intendedCreaseVertices, strict, debug.triangleChain).isEmpty());
+
+    const Check::Report report = Check::check(debug.mesh, debug);
+    INFO(Check::toText(report).toStdString());
+    CHECK(issueCount(report.issues, Check::Crease) == 0);
+}
+
+// Redesign case 5: the through reads 8 m to its left at J, which is where
+// the arm leaves it to the west. The reading point lies inside the arm's
+// tube, an opening the union draws as a bulge with the arm at its tip.
+TEST_CASE("cwPassageTubeMeshCheck takes a reading into another passage as an opening", "[PassageTube][cwPassageTubeMeshCheck]")
+{
+    constexpr double kReadingIntoArm = 8.0;
+    const Cases::Section through {2.0, 2.0, 1.0, 1.0};
+    Cases::JunctionCase junctionCase;
+    junctionCase.name = QStringLiteral("Through reading into the arm");
+    junctionCase.throughSection = through;
+    junctionCase.throughAtJunction = {kReadingIntoArm, through.right, through.up, through.down};
+    junctionCase.throughPastJunction = through;
+    Cases::ArmSpec west;
+    west.planDegrees = -90.0;
+    west.at = {1.5, 1.5, 1.0, 1.0};
+    west.atJunction = west.at;
+    junctionCase.arms = {west};
+
+    const cwPassageTubeBuilder::Debug debug = buildDebug(junctionCase);
+    const QVector3D readingPoint(-static_cast<float>(kReadingIntoArm), 0.0f, 0.0f);
+    const QVector<cwPassageTubeUnion::ChainTube> tubes = cwPassageTubeUnion::chainTubes(debug);
+    const QString armEnd = QStringLiteral("a00");
+    CHECK(std::any_of(tubes.cbegin(), tubes.cend(), [&](const cwPassageTubeUnion::ChainTube& tube) {
+        const cwPassageTubeBuilder::Leg& leg = debug.legs.at(debug.chains.at(tube.chain).legs.first().legIndex);
+        const bool isArm = leg.from == armEnd || leg.to == armEnd;
+        return isArm && cwPassageTubeUnion::contains(tube.mesh, readingPoint);
+    }));
+
+    const Check::Report report = Check::check(debug.mesh, debug);
+    INFO(Check::toText(report).toStdString());
+    CHECK(issueCount(report.issues, Check::WallMissed) == 0);
+    CHECK(issueCount(report.issues, Check::WallBeyondReading) == 0);
 }

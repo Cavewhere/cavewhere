@@ -23,8 +23,8 @@ QC.ApplicationWindow {
     property bool showSections: false
     property bool showOvershoot: false
     property bool showTranslucent: false
-    property bool showUnion: false
-    property bool slideCaps: false
+    property bool showRawTubes: false
+    property bool slideCaps: true
     property bool openFork: false
     property list<string> projectFiles: []
     property real projectSpacing: 1.0
@@ -275,7 +275,7 @@ QC.ApplicationWindow {
         sectionsVisible: sectionsId.checked
         overshootVisible: overshootId.checked
         station: stationFieldId.text
-        unionVisible: unionId.checked
+        rawTubesVisible: rawTubesId.checked
         capsSlid: slideCapsId.checked
 
         onCurrentChanged: rootId.inspectedRing = -1
@@ -610,15 +610,14 @@ QC.ApplicationWindow {
                         checked: rootId.showTranslucent
                     }
                     QC.CheckBox {
-                        id: unionId
-                        text: qsTr("Union")
-                        checked: rootId.showUnion
+                        id: rawTubesId
+                        text: qsTr("Raw tubes")
+                        checked: rootId.showRawTubes
                     }
                     QC.CheckBox {
                         id: slideCapsId
                         text: qsTr("Slide caps")
                         checked: rootId.slideCaps
-                        enabled: unionId.checked
                     }
                     QC.CheckBox {
                         id: issuesId

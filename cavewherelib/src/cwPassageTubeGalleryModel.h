@@ -79,7 +79,7 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(bool sectionsVisible READ sectionsVisible WRITE setSectionsVisible NOTIFY sectionsVisibleChanged)
     Q_PROPERTY(bool overshootVisible READ overshootVisible WRITE setOvershootVisible NOTIFY overshootVisibleChanged)
     Q_PROPERTY(QString station READ station WRITE setStation NOTIFY stationChanged)
-    Q_PROPERTY(bool unionVisible READ unionVisible WRITE setUnionVisible NOTIFY unionVisibleChanged)
+    Q_PROPERTY(bool rawTubesVisible READ rawTubesVisible WRITE setRawTubesVisible NOTIFY rawTubesVisibleChanged)
     Q_PROPERTY(bool capsSlid READ capsSlid WRITE setCapsSlid NOTIFY capsSlidChanged)
     Q_PROPERTY(cwPassageTubeSandboxModel* sandbox READ sandbox CONSTANT)
     Q_PROPERTY(bool sandboxSelected READ sandboxSelected NOTIFY currentIndexChanged)
@@ -189,15 +189,14 @@ public:
     QString station() const;
     void setStation(const QString& station);
 
-    // Draws the boolean union of each chain's closed tube, per connected
-    // component, through cwPassageTubeUnion, and checks it for a closed,
-    // manifold surface without degenerate triangles or crossings, in place
-    // of the builder's mesh. The list's issue counts stay the builder's.
-    bool unionVisible() const;
-    void setUnionVisible(bool unionVisible);
+    // Draws each chain's closed tube as it is, overlapping where chains meet,
+    // in place of the builder's union, to compare the two. The list's issue
+    // counts stay the builder's.
+    bool rawTubesVisible() const;
+    void setRawTubesVisible(bool rawTubesVisible);
 
-    // With unionVisible, slides each chain's end cap into the passages it
-    // meets first (cwPassageTubeUnion::slideCaps).
+    // Slides each chain's end cap into the passages it meets first
+    // (cwPassageTubeBuilder::Options::slideCaps).
     bool capsSlid() const;
     void setCapsSlid(bool capsSlid);
 
@@ -288,7 +287,7 @@ signals:
     void sectionsVisibleChanged();
     void overshootVisibleChanged();
     void stationChanged();
-    void unionVisibleChanged();
+    void rawTubesVisibleChanged();
     void capsSlidChanged();
     void sandboxBuildChanged();
     void projectOpened(int firstRow, int rowCount);
@@ -318,14 +317,14 @@ private:
     struct Build {
         cwPassageTubeBuilder::Debug debug;
         cwPassageTubeMeshCheck::Report report;
-        // What the union did, for the report: empty for the builder's mesh.
+        // What the union did, for the report.
         QString unionText;
     };
 
     static Row caseRow(const cwPassageTubeCases::Case& entry);
     static Row caseRow(const cwPassageTubeCases::JunctionCase& junctionCase);
-    static Build build(const cwPassageTubeCases::Survey& survey, double sampleSpacing);
-    static Build buildUnion(const cwPassageTubeCases::Survey& survey, double sampleSpacing, bool slideCaps);
+    static Build build(const cwPassageTubeCases::Survey& survey, double sampleSpacing, bool slideCaps);
+    static Build buildRawTubes(const cwPassageTubeCases::Survey& survey, double sampleSpacing, bool slideCaps);
     static QString summary(const cwPassageTubeMeshCheck::Report& report);
 
     void loadCatalog();
@@ -364,8 +363,8 @@ private:
     bool m_sectionsVisible = false;
     bool m_overshootVisible = false;
     QString m_station;
-    bool m_unionVisible = false;
-    bool m_capsSlid = false;
+    bool m_rawTubesVisible = false;
+    bool m_capsSlid = cwPassageTubeBuilder::Options().slideCaps;
 
     cwPassageTubeSandboxModel* m_sandbox = nullptr;
     QTimer* m_sandboxTimer = nullptr;

@@ -23,10 +23,11 @@
  * keyword visibility can hide one trip's tube by index range.
  *
  * Where a passage runs from one trip into another, each trip has a disc that
- * closes its tube there. The discs follow the trip ranges in indices, one
- * tripBoundaryRanges entry per pair of trips, and draw only while the
- * neighbor trip is hidden: with every trip visible the passage runs on
- * without a wall across it.
+ * closes its tube there, and where one trip's tube runs into another's, the
+ * first's wall inside the second closes the opening. These boundaries follow
+ * the trip ranges in indices, one tripBoundaryRanges entry per pair of
+ * trips, and draw only while the neighbor trip is hidden: with every trip
+ * visible the passage runs on without a wall across it.
  */
 struct cwPassageTubeMesh {
     // A contiguous span of indices, [first, first + count).
@@ -54,7 +55,14 @@ struct cwPassageTubeMesh {
             ArmInsideThrough,
             JunctionOverlap,
             JunctionUnzipped,
-            RepeatedShot
+            RepeatedShot,
+            // A chain's closed tube crosses itself; the union takes it as is.
+            ChainSelfCrossing,
+            // The union wrapped a pocket of rock in air on every side, an
+            // artifact of stacked tubes; its inside-out shell is dropped.
+            EnclosedVoid,
+            // manifold rejected a chain's tube, which the union leaves out.
+            TubeRejected
         };
 
         Type type = NoPassageData;

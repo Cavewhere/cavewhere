@@ -50,10 +50,6 @@ public:
     // A centerline point this close to the surface lies on it, which counts
     // as inside: a zero reading puts the wall on the centerline.
     static constexpr double kCenterlineTolerance = 0.01;
-    static constexpr int kCapSamples = 32;
-    // A cap point this close to another chain's surface lies on it: a hidden
-    // cone's base on its through passage's wall.
-    static constexpr double kCapSurfaceTolerance = 0.01;
 
     enum Type {
         OpenEdge,
@@ -152,19 +148,28 @@ public:
                                        const Range& range,
                                        const QVector<Issue>& selfIntersections = {});
 
+    // A fold sharper than maxCreaseDegrees between two triangles, apart from
+    // the folds at intendedCreaseVertices and those between triangles that
+    // triangleChain gives two different chains: the seam where two passages
+    // meet in their union.
     static QVector<Issue> creases(const cwPassageTubeMesh& mesh,
                                   const Range& range,
                                   const QSet<quint32>& intendedCreaseVertices,
-                                  const Options& options = Options());
+                                  const Options& options = Options(),
+                                  const QVector<int>& triangleChain = {});
 
-    // RadiusJump, FrameTwist and FoldBack over the builder's rings. Rings a
-    // junction grew follow the arm's outline and may jump.
+    // RadiusJump, FrameTwist and FoldBack over the builder's rings, apart
+    // from a station's two sections, where the chain's tube splits
+    // (cwPassageTubeUnion::splitsBefore). Rings a junction grew follow the
+    // arm's outline and may jump.
     //
     // WallBeyondReading, once per ring that is a station's section (never
     // one a junction grew), at its farthest vertex: each vertex lies within
     // wallToleranceMeters of the quadrant ellipse of the station's readings
     // anchored at the station, as the station's legs or the ring see it
-    // (wallReaches).
+    // (wallReaches). A vertex whose reading point lies inside a chain tube
+    // other than the ring's reads into that passage, an opening, and is
+    // left out.
     static QVector<Issue> ringIssues(const cwPassageTubeBuilder::Debug& debug,
                                      const Options& options = Options());
 
@@ -190,8 +195,9 @@ public:
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
     // the side walls square to the chain's direction through the station or
     // to one of the station's legs, apart from the junction stations where
-    // an arm has a mouth and the stations of an arm left inside its through
-    // passage.
+    // an arm has a mouth, the stations of an arm left inside its through
+    // passage, and wall points inside a chain tube that does not run along
+    // the leg, which open into that passage.
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 
@@ -203,11 +209,12 @@ public:
     static QVector<Issue> centerlineInside(const cwPassageTubeMesh& mesh,
                                            const cwPassageTubeBuilder::Debug& debug);
 
-    // Each disc in debug.caps drawn while every trip is visible, at a
-    // station with two or more legs, that shows: one of kCapSamples points
-    // spread over it lies outside the mesh of every other chain, or it
-    // coincides with another cap. A dead end's cap, and an arm's cone hidden
-    // inside its through passage, are what a viewer expects.
+    // Each disc in debug.caps the union leaves drawn while every trip is
+    // visible, at a station with two or more legs, that shows: it coincides
+    // with another cap, or its end ring has vertices outside the passages
+    // at the station that a cap slide (cwPassageTubeUnion::slideCaps) would
+    // still move inside, the notch. A dead end's cap, and the step where a
+    // passage bigger than the ones it meets ends, are what a viewer expects.
     static QVector<Issue> capsExposed(const cwPassageTubeMesh& mesh,
                                       const cwPassageTubeBuilder::Debug& debug);
 

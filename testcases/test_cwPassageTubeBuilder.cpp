@@ -406,8 +406,7 @@ TEST_CASE("cwPassageTubeBuilder chains the straightest pair of big legs when a t
 
 // The big leg leaves j between the two small ones, which turn 90 degrees
 // there, so neither continues it. It ends past j as the junction's through,
-// by more than the small legs' largest reading, and both small legs open
-// into its wall.
+// by more than the small legs' largest reading.
 TEST_CASE("cwPassageTubeBuilder ends the biggest leg past a junction no other leg continues", "[PassageTube][cwPassageTubeBuilder]")
 {
     constexpr double kSmallReading = 1.0;
@@ -423,7 +422,6 @@ TEST_CASE("cwPassageTubeBuilder ends the biggest leg past a junction no other le
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 3);
     checkChainsCoverLegs(debug);
-    CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
 
     const auto bigChain = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [&](const Builder::Chain& chain) {
         return chainStations(debug, chain).contains(QStringLiteral("b"));
@@ -435,14 +433,6 @@ TEST_CASE("cwPassageTubeBuilder ends the biggest leg past a junction no other le
     CHECK(bigChain->endCap == Builder::EndCap::Fan);
     const QVector3D arriving = (junction - bigFar).normalized();
     CHECK(QVector3D::dotProduct(bigChain->rings.last().center - junction, arriving) > 0.0f);
-
-    QSet<int> zipped;
-    for (const Builder::JunctionWindow& window : bigChain->windows) {
-        for (const Builder::WindowMouth& mouth : window.mouths) {
-            zipped.insert(mouth.armChain);
-        }
-    }
-    CHECK(zipped.size() == 2);
     checkMeshClosed(debug.mesh);
 }
 
@@ -795,17 +785,7 @@ TEST_CASE("cwPassageTubeBuilder takes a wall at face value across the ring", "[P
     });
     REQUIRE(leavingB != through->rings.cend());
     checkFarthestVertexNear(*leavingB, bPosition + facingLeft * kLeftWall, kToleranceMeters);
-
-    // The arm arrives along +x into that wall and stops where it meets it,
-    // on the through's triangles: between the grown rings at b they lie off
-    // the ring tube's blend.
-    constexpr double kOnMeshMeters = 1e-4;
-    REQUIRE_FALSE(arm->endMouth.isEmpty());
-    for (const QVector3D& point : mouthPositions(arm->endMouth)) {
-        INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
-        CHECK(point.x() < bPosition.x());
-        CHECK(distanceToSides(*through, point) < kOnMeshMeters);
-    }
+    checkMeshClosed(debug.mesh);
 }
 
 TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a vertical shot", "[PassageTube][cwPassageTubeBuilder]")
@@ -1137,10 +1117,10 @@ TEST_CASE("cwPassageTubeBuilder skins a straight leg into a closed tube", "[Pass
     CHECK(debug.chains.at(0).endCap == Builder::EndCap::Fan);
 
     const cwPassageTubeMesh& mesh = debug.mesh;
-    // Two rings of vertices, each closed flat across itself.
-    CHECK(mesh.positions.size() == 2 * resolution);
-    // Two side triangles per bin plus N - 2 cap triangles at each end.
-    CHECK(mesh.indices.size() == 3 * (2 * resolution + 2 * (resolution - 2)));
+    // Two rings of vertices, each closed by a fan around its center.
+    CHECK(mesh.positions.size() == 2 * resolution + 2);
+    // Two side triangles per bin plus a fan triangle per bin at each end.
+    CHECK(mesh.indices.size() == 3 * (2 * resolution + 2 * resolution));
     checkMeshClean(debug);
 
     REQUIRE(mesh.tripIndexRanges.size() == 1);
@@ -1377,8 +1357,8 @@ BuilderInput junctionInput(const QStringList& junctionLrud)
     return makeInput({{{a, b, c}, {d, armB}}});
 }
 
-// The arm walks d → b, south into the through tube, and ends at b in a
-// mouth zipped into the through tube.
+// The arm walks d → b, south into the through tube, and ends at b, where
+// the union opens it into the through.
 const Builder::Chain& junctionArm(const Builder::Debug& debug)
 {
     REQUIRE(debug.chains.size() == 2);
@@ -1386,27 +1366,17 @@ const Builder::Chain& junctionArm(const Builder::Debug& debug)
     REQUIRE(chainStations(debug, arm) == QStringList({QStringLiteral("d"), QStringLiteral("b")}));
     CHECK(arm.startCap == Builder::EndCap::Fan);
     CHECK(arm.endCap == Builder::EndCap::Mouth);
-    CHECK(arm.endMouth.size() == Builder::Options().ringResolution);
-    CHECK(debug.chains.at(0).windows.size() == 1);
     return arm;
 }
 
 } // namespace
 
-TEST_CASE("cwPassageTubeBuilder closes a junction arm with a mouth on the through passage", "[PassageTube][cwPassageTubeBuilder]")
+TEST_CASE("cwPassageTubeBuilder opens a junction arm into the through passage", "[PassageTube][cwPassageTubeBuilder]")
 {
-    const Builder::Debug debug = buildDebug(junctionInput(lrud(2, 2, 2, 2)));
-    const Builder::Chain& arm = junctionArm(debug);
-
     // b's 2 m walls make the through a 2 m cylinder about the x axis, which
-    // the arm's default-radius section meets north of b.
-    for (const QVector3D& point : mouthPositions(arm.endMouth)) {
-        CHECK(point.y() > 0.0f);
-        CHECK(std::hypot(point.y(), point.z()) == Catch::Approx(2.0).margin(0.05));
-    }
-    for (const Builder::Ring& ring : arm.rings) {
-        CHECK(ring.center.y() > 2.0f);
-    }
+    // holds the arm's default-radius cap at b: the union removes it.
+    const Builder::Debug debug = buildDebug(junctionInput(lrud(2, 2, 2, 2)));
+    junctionArm(debug);
     checkMeshClean(debug);
 }
 
@@ -1537,7 +1507,9 @@ TEST_CASE("cwPassageTubeBuilder continues a passage across a trip boundary witho
 // The passage a–b–c of the two-trip test above, with b's 2 m walls, and a
 // third trip's arm from d, north of b, joining at b: the window around b
 // removes side quads on both sides of b's ring.
-TEST_CASE("cwPassageTubeBuilder hides a trip boundary disc inside a junction window", "[PassageTube][cwPassageTubeBuilder]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeBuilder hides a trip boundary disc inside a junction window", "[cwPassageTubeBuilder][JunctionStitch][.]")
 {
     const QStringList junctionDimensions = lrud(2, 2, 2, 2);
     const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0)};
@@ -1590,6 +1562,127 @@ TEST_CASE("cwPassageTubeBuilder hides a trip boundary disc inside a junction win
     CHECK_FALSE(visibleCapStations(debug).contains(QStringLiteral("b")));
     checkNoCapExposed(debug);
     checkMeshClean(debug);
+}
+
+// a–b in the first trip, b–c and an arm from d, north of b, in the second:
+// the through crosses trips at the junction.
+TEST_CASE("cwPassageTubeBuilder keeps each trip's triangles where a passage crosses trips at a junction", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const QStringList dimensions = lrud(1, 1, 1, 1);
+    const QVector3D bPosition(10, 0, 0);
+    const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions};
+    const StationInput b {QStringLiteral("b"), bPosition, dimensions};
+    const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), dimensions};
+    const StationInput d {QStringLiteral("d"), QVector3D(10, 10, 0), dimensions};
+    const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {{{{a, b}}}, {{{b, c}, {d, b}}}});
+
+    const Builder::Debug debug = buildDebug(input);
+    REQUIRE(debug.chains.size() == 2);
+    const cwPassageTubeMesh& mesh = debug.mesh;
+    const QList<cwTripData>& trips = input.region.caves.at(0).trips;
+    REQUIRE(mesh.tripUuids == QVector<QUuid>({trips.at(0).id, trips.at(1).id}));
+    REQUIRE(mesh.tripIndexRanges.size() == 2);
+
+    const auto chainHasTrip = [&](int chain, const QUuid& tripId) {
+        const QVector<Builder::ChainLeg>& legs = debug.chains.at(chain).legs;
+        return std::any_of(legs.cbegin(), legs.cend(), [&](const Builder::ChainLeg& chainLeg) {
+            return debug.legs.at(chainLeg.legIndex).tripId == tripId;
+        });
+    };
+    const auto isThrough = [&](int chain) { return chainStations(debug, debug.chains.at(chain)).contains(QStringLiteral("a")); };
+    // The through's triangles of each trip lie on that trip's side of b's
+    // ring.
+    constexpr float kRingTolerance = 1e-3f;
+    for (int trip = 0; trip < mesh.tripIndexRanges.size(); ++trip) {
+        const cwPassageTubeMesh::VertexRange& range = mesh.tripIndexRanges.at(trip);
+        CHECK(range.count > 0);
+        for (int index = range.first; index < range.first + range.count; index += 3) {
+            const int triangle = index / 3;
+            const int chain = debug.triangleChain.at(triangle);
+            INFO("trip " << trip << " triangle " << triangle << " chain " << chain);
+            CHECK(chainHasTrip(chain, mesh.tripUuids.at(trip)));
+            if (isThrough(chain)) {
+                const QVector3D centroid = (mesh.positions.at(mesh.indices.at(index)) + mesh.positions.at(mesh.indices.at(index + 1))
+                                            + mesh.positions.at(mesh.indices.at(index + 2))) / 3.0f;
+                CHECK((trip == 0 ? bPosition.x() - centroid.x() : centroid.x() - bPosition.x()) > -kRingTolerance);
+            }
+        }
+    }
+
+    // Each trip has a disc at b that closes it while the other is hidden.
+    REQUIRE(mesh.tripBoundaryRanges.size() == 2);
+    for (const cwPassageTubeMesh::TripBoundary& boundary : mesh.tripBoundaryRanges) {
+        CHECK(boundary.trip + boundary.neighborTrip == 1);
+        REQUIRE(boundary.range.count > 0);
+        for (int index = boundary.range.first; index < boundary.range.first + boundary.range.count; index += 3) {
+            const int cap = debug.triangleCap.at(index / 3);
+            REQUIRE(cap >= 0);
+            CHECK(debug.caps.at(cap).station == QStringLiteral("b"));
+        }
+    }
+    CHECK_FALSE(visibleCapStations(debug).contains(QStringLiteral("b")));
+    for (int trip = 0; trip < mesh.tripIndexRanges.size(); ++trip) {
+        INFO("trip " << trip << " alone");
+        const cwPassageTubeMesh alone = tripAlone(mesh, trip);
+        const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::closed(alone, cwPassageTubeMeshCheck::wholeMesh(alone));
+        INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+        CHECK(report.issues.isEmpty());
+    }
+    checkMeshClean(debug);
+}
+
+namespace {
+
+// A square loop of tall passages a–b–c–d at the floor of a box, with a wide
+// flat passage across the square above it and another below, each reached
+// from a by a shaft and joining c by another: air on every side of the
+// square's middle.
+BuilderInput hollowBoxInput()
+{
+    constexpr float kSide = 10.0f;
+    constexpr float kCoverHeight = 2.5f;
+    const QStringList wall = lrud(1, 1, 2, 2);
+    const QStringList shaft = lrud(1, 1, 1, 1);
+    // Wide enough that its flat ellipse still overlaps the walls' crest at
+    // the square's corners b and d, which lie farthest from its axis.
+    const QStringList cover = lrud(12, 12, 1, 1);
+    const QVector3D a(0, 0, 0);
+    const QVector3D c(kSide, kSide, 0);
+    const auto coverChunk = [&](const QString& prefix, float height) {
+        const QVector3D up(0, 0, height);
+        return QList<StationInput> {{QStringLiteral("a"), a, shaft},
+                                    {prefix + QStringLiteral("1"), a + up, cover},
+                                    {prefix + QStringLiteral("2"), c + up, cover},
+                                    {QStringLiteral("c"), c, shaft}};
+    };
+    const QList<StationInput> loop {{QStringLiteral("a"), a, wall},
+                                    {QStringLiteral("b"), QVector3D(kSide, 0, 0), wall},
+                                    {QStringLiteral("c"), c, wall},
+                                    {QStringLiteral("d"), QVector3D(0, kSide, 0), wall},
+                                    {QStringLiteral("a"), a, wall}};
+    return cwPassageTubeCases::toSurvey(SurveyInput {{loop, coverChunk(QStringLiteral("top"), kCoverHeight),
+                                                      coverChunk(QStringLiteral("bottom"), -kCoverHeight)}});
+}
+
+} // namespace
+
+TEST_CASE("cwPassageTubeBuilder drops a void that stacked passages enclose", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const Builder::Debug debug = buildDebug(hollowBoxInput());
+    const auto voidWarning = std::find_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const cwPassageTubeMesh::Warning& warning) {
+        return warning.type == cwPassageTubeMesh::Warning::EnclosedVoid;
+    });
+    REQUIRE(voidWarning != debug.warnings.cend());
+    INFO(voidWarning->message.toStdString());
+    CHECK(voidWarning->message.contains(QStringLiteral(" m³ at (")));
+
+    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::closed(debug.mesh, cwPassageTubeMeshCheck::allTripsVisible(debug.mesh));
+    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
+    CHECK(report.issues.isEmpty());
+    REQUIRE_FALSE(report.components.isEmpty());
+    for (const cwPassageTubeMeshCheck::ComponentStats& component : report.components) {
+        CHECK(component.volume > 0.0);
+    }
 }
 
 // Trip 1 runs a→b→c east; trip 2 ties in at c and turns 150° in plan back
@@ -1663,12 +1756,10 @@ TEST_CASE("cwPassageTubeBuilder chains through a junction no walk reaches first"
         if (stations.first() == QStringLiteral("J")) {
             ++endingAtJunction;
             CHECK(chain.startCap == Builder::EndCap::Mouth);
-            CHECK_FALSE(chain.startMouth.isEmpty());
         }
         if (stations.last() == QStringLiteral("J")) {
             ++endingAtJunction;
             CHECK(chain.endCap == Builder::EndCap::Mouth);
-            CHECK_FALSE(chain.endMouth.isEmpty());
         }
     }
     CHECK(passing == 1);
@@ -1887,9 +1978,6 @@ TEST_CASE("cwPassageTubeBuilder keeps the Phake Cave a11 to a12 leg a single san
 
 TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passages", "[PassageTube][cwPassageTubeBuilder]")
 {
-    constexpr double kJunctionTolerance = 0.02;
-    constexpr double kOnMeshMeters = 1e-4;
-
     const BuilderInput input = makeInput(cwPassageTubeCases::phakeCave());
     const Builder::Debug debug = buildDebug(input);
 
@@ -1909,27 +1997,7 @@ TEST_CASE("cwPassageTubeBuilder joins the Phake Cave arms to their through passa
 
     const int through = chainWithLeg(QStringLiteral("a9"), QStringLiteral("a10"));
     CHECK(chainWithLeg(QStringLiteral("a10"), QStringLiteral("a11")) == through);
-    const int armIndex = chainWithLeg(QStringLiteral("a13"), QStringLiteral("a10"));
-    REQUIRE(armIndex != through);
-    const Builder::Chain& arm = debug.chains.at(armIndex);
-    const QVector<QVector3D> mouth = mouthPositions(arm.endMouth.isEmpty() ? arm.startMouth : arm.endMouth);
-    REQUIRE(mouth.size() >= Builder::Options().ringResolution);
-
-    // The ring tube blends between rings while the mesh lofts straight
-    // quads, which differ across a10's grown rings, so the mouth is held to
-    // the through's triangles.
-    const cwPassageTubeJunction::RingTube throughTube {&debug.chains.at(through).rings, QVector3D()};
-    for (const Builder::Ring& ring : arm.rings) {
-        for (const QVector3D& vertex : ring.vertices) {
-            INFO("arm vertex (" << vertex.x() << ", " << vertex.y() << ", " << vertex.z() << ")");
-            CHECK_FALSE(throughTube.inside(vertex, -kJunctionTolerance));
-        }
-    }
-    for (const QVector3D& point : mouth) {
-        INFO("mouth point (" << point.x() << ", " << point.y() << ", " << point.z() << ")");
-        CHECK(distanceToSides(debug.chains.at(through), point) < kOnMeshMeters);
-    }
-
+    CHECK(chainWithLeg(QStringLiteral("a13"), QStringLiteral("a10")) != through);
     checkMeshClosed(debug.mesh);
 }
 
@@ -1955,7 +2023,9 @@ QList<StationInput> armFrom(const QString& name, const QVector3D& far, const QSt
 
 } // namespace
 
-TEST_CASE("cwPassageTubeBuilder puts every mouth vertex on the through mesh", "[PassageTube][cwPassageTubeBuilder]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeBuilder puts every mouth vertex on the through mesh", "[cwPassageTubeBuilder][JunctionStitch][.]")
 {
     constexpr double kOnMeshMeters = 1e-4;
     const Builder::Debug debug = buildDebug(throughWithArms(lrud(1, 1, 1, 1),
@@ -1974,7 +2044,9 @@ TEST_CASE("cwPassageTubeBuilder puts every mouth vertex on the through mesh", "[
     checkMeshClean(debug);
 }
 
-TEST_CASE("cwPassageTubeBuilder welds the mouth vertices of a thin arm", "[PassageTube][cwPassageTubeBuilder]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeBuilder welds the mouth vertices of a thin arm", "[cwPassageTubeBuilder][JunctionStitch][.]")
 {
     // A 7 cm arm's columns meet the through under 3 cm apart, so each pair
     // welds into one mouth vertex.
@@ -2008,7 +2080,9 @@ TEST_CASE("cwPassageTubeBuilder welds the mouth vertices of a thin arm", "[Passa
     checkMeshClean(debug);
 }
 
-TEST_CASE("cwPassageTubeBuilder re-grows the through after dropping an arm", "[PassageTube][cwPassageTubeBuilder]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeBuilder re-grows the through after dropping an arm", "[cwPassageTubeBuilder][JunctionStitch][.]")
 {
     // The arm's 2.6 m ceiling pokes out of the 2 m through, which grows to
     // take it, but its sides lie inside, so the arm is left out and the
@@ -2035,7 +2109,9 @@ TEST_CASE("cwPassageTubeBuilder re-grows the through after dropping an arm", "[P
     checkMeshClean(debug);
 }
 
-TEST_CASE("cwPassageTubeBuilder hides the fallback cone inside the through", "[PassageTube][cwPassageTubeBuilder]")
+// The builder unites the chains' tubes instead of stitching junctions
+// (T07ak); T07an deletes the stitch and this test.
+TEST_CASE("cwPassageTubeBuilder hides the fallback cone inside the through", "[cwPassageTubeBuilder][JunctionStitch][.]")
 {
     // Two arms 30 degrees apart open through the same wall; the second is
     // capped with a fan whose center sits inside the through.

@@ -45,8 +45,9 @@ const QString kSymmetricT = QStringLiteral("1. symmetric T");
 const QString kJunctionFreeCase = QStringLiteral("no arms, through profile 0, bend 0, same section");
 const QString kShaftFootCase = QStringLiteral("25. Zero floor reading at the foot of a shaft");
 const QString kSharpBendCase = QStringLiteral("23. Sharp bend at a station reading zero on the outside wall");
-// c1 joins a plumb section to a level one, stitched until T07ah3.
-const QString kCaseWithIssues = kSharpBendCase;
+// The shaft's foot joins a plumb section to a level one, whose union leaves
+// slivers until T07am.
+const QString kCaseWithIssues = kShaftFootCase;
 constexpr float kLengthTolerance = 1e-4f;
 constexpr float kPositionTolerance = 1e-3f;
 constexpr int kProjectLoadTimeoutMs = 30000;
@@ -281,6 +282,32 @@ TEST_CASE("cwPassageTubeGalleryModel rebuilds the sandbox once per burst of edit
     CHECK(Union::capNotch(rings).size() < notched);
 }
 
+// The gallery draws the builder's union; Raw tubes draws each chain's
+// closed tube instead, overlapping where the chains meet.
+TEST_CASE("cwPassageTubeGalleryModel compares the raw tubes with the union", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    Model model;
+    CHECK_FALSE(model.rawTubesVisible());
+    CHECK(model.capsSlid() == cwPassageTubeBuilder::Options().slideCaps);
+    const int row = model.indexOf(kSymmetricT);
+    REQUIRE(row >= 0);
+    model.setCurrentIndex(row);
+    const cwPassageTubeMesh united = model.mesh();
+    CHECK(model.report().warnings.isEmpty());
+
+    QSignalSpy rawSpy(&model, &Model::rawTubesVisibleChanged);
+    model.setRawTubesVisible(true);
+    CHECK(rawSpy.count() == 1);
+    CHECK(model.mesh().indices != united.indices);
+    CHECK(std::any_of(model.report().warnings.cbegin(), model.report().warnings.cend(), [](const cwPassageTubeMeshCheck::Issue& issue) {
+        return issue.type == cwPassageTubeMeshCheck::PassageOverlap;
+    }));
+    CHECK(model.reportText().startsWith(QStringLiteral("Raw tubes")));
+
+    model.setRawTubesVisible(false);
+    CHECK(model.mesh().indices == united.indices);
+}
+
 TEST_CASE("cwPassageTubeGalleryModel coarsens the sandbox's sample spacing after a slow build", "[PassageTube][cwPassageTubeGalleryModel]")
 {
     constexpr double kFineSpacingMeters = 0.05;
@@ -477,7 +504,7 @@ TEST_CASE("cwPassageTubeGalleryModel builds the selected case", "[PassageTube][c
 
     CHECK(model.currentName() == nameAt(model, row));
     CHECK_FALSE(model.mesh().isEmpty());
-    CHECK(model.reportText().isEmpty() == model.report().issues.isEmpty());
+    CHECK(model.reportText().contains(QStringLiteral("Union mesh: %1 issues").arg(model.report().issues.size())));
     CHECK(model.issueTexts().size() == model.report().issues.size());
     CHECK(model.issuePositions().size() == model.report().issues.size());
     CHECK(model.data(model.index(row), Model::IssueCountRole).toInt() == model.report().issues.size());

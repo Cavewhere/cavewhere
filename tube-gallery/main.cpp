@@ -8,6 +8,7 @@
 //Qt includes
 #include <QApplication>
 #include <QCommandLineParser>
+#include <QDebug>
 #include <QDir>
 #include <QFileInfo>
 #include <QQmlApplicationEngine>
@@ -91,15 +92,20 @@ int main(int argc, char* argv[])
                                            QStringLiteral("Frame the camera on this station; the along-arm view looks down its longest leg."),
                                            QStringLiteral("name"));
     const QCommandLineOption unionOption(QStringLiteral("union"),
-                                         QStringLiteral("Draw the boolean union of each chain's closed tube, also in grabs."));
-    const QCommandLineOption slideCapsOption(QStringLiteral("slide-caps"),
-                                             QStringLiteral("With --union, slide each end cap into the passages it meets first."));
+                                         QStringLiteral("No effect: the tube is the union of the chains' closed tubes."));
+    const QCommandLineOption rawTubesOption(QStringLiteral("raw-tubes"),
+                                            QStringLiteral("Draw each chain's closed tube as it is, overlapping where chains meet, also in grabs."));
+    const QCommandLineOption noSlideCapsOption(QStringLiteral("no-slide-caps"),
+                                               QStringLiteral("Leave each end cap square to its passage instead of sliding it into the passages it meets."));
     const QCommandLineOption forkOption(QStringLiteral("fork"),
                                         QStringLiteral("Open on the 30 degree fork with a wide arm, which the catalog leaves out."));
     parser.addOptions({caseOption, seedOption, junctionsOption, wildOption, grabOption, grabAllOption, failingOption, sweepOption, ringsOption,
                        readingsOption, sectionsOption, overshootOption, translucentOption, projectOption, spacingOption, stationOption,
-                       unionOption, slideCapsOption, forkOption});
+                       unionOption, rawTubesOption, noSlideCapsOption, forkOption});
     parser.process(app);
+    if (parser.isSet(unionOption)) {
+        qInfo().noquote() << QStringLiteral("--union has no effect: the union is the default; --raw-tubes draws the tubes without it.");
+    }
 
     cwMetaTypeSystem::registerTypes();
     cwGlobals::loadFonts();
@@ -134,8 +140,8 @@ int main(int argc, char* argv[])
         {QStringLiteral("showSections"), parser.isSet(sectionsOption)},
         {QStringLiteral("showOvershoot"), parser.isSet(overshootOption)},
         {QStringLiteral("showTranslucent"), parser.isSet(translucentOption)},
-        {QStringLiteral("showUnion"), parser.isSet(unionOption)},
-        {QStringLiteral("slideCaps"), parser.isSet(slideCapsOption)},
+        {QStringLiteral("showRawTubes"), parser.isSet(rawTubesOption)},
+        {QStringLiteral("slideCaps"), !parser.isSet(noSlideCapsOption)},
         {QStringLiteral("openFork"), parser.isSet(forkOption)},
         {QStringLiteral("projectFiles"), projectFiles},
         {QStringLiteral("projectSpacing"), projectSpacing},
