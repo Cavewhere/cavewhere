@@ -30,6 +30,7 @@ qt_add_qml_module(cavewhere-tube-gallery
         cwTubeGalleryGrabber.cpp
     QML_FILES
         qml/TubeGalleryWindow.qml
+        qml/TubeSandboxPanel.qml
 )
 
 target_link_libraries(cavewhere-tube-gallery

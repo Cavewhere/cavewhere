@@ -11,8 +11,11 @@
 //Our includes
 #include "cwCave.h"
 #include "cwCavingRegion.h"
+#include "cwPassageTubeBuilder.h"
 #include "cwPassageTubeCases.h"
 #include "cwPassageTubeGalleryModel.h"
+#include "cwPassageTubeSandboxModel.h"
+#include "cwPassageTubeUnion.h"
 #include "cwProject.h"
 #include "cwRenderLinePlot.h"
 #include "cwRenderPassageTube.h"
@@ -23,6 +26,7 @@
 //Qt includes
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
@@ -35,6 +39,7 @@
 namespace {
 
 using Model = cwPassageTubeGalleryModel;
+using Sandbox = cwPassageTubeSandboxModel;
 
 const QString kSymmetricT = QStringLiteral("1. symmetric T");
 const QString kJunctionFreeCase = QStringLiteral("no arms, through profile 0, bend 0, same section");
@@ -171,9 +176,9 @@ TEST_CASE("cwPassageTubeGalleryModel lists the catalog", "[PassageTube][cwPassag
     Model model;
     CHECK(model.currentIndex() == -1);
 
-    SECTION("without the sweep, the catalog's hand-made cases in order")
+    SECTION("without the sweep, the sandbox and the catalog's hand-made cases in order")
     {
-        QStringList expected;
+        QStringList expected {Sandbox::sandboxName()};
         for (const cwPassageTubeCases::Case& entry : catalog) {
             if (!entry.tags.contains(QStringLiteral("sweep"))) {
                 expected.append(entry.name);
@@ -185,11 +190,272 @@ TEST_CASE("cwPassageTubeGalleryModel lists the catalog", "[PassageTube][cwPassag
         }
     }
 
-    SECTION("with the sweep, every catalog case")
+    SECTION("with the sweep, the sandbox and every catalog case")
     {
         model.setIncludeSweep(true);
-        REQUIRE(model.rowCount() == catalog.size());
+        REQUIRE(model.rowCount() == catalog.size() + 1);
         CHECK(nameAt(model, model.rowCount() - 1) == catalog.constLast().name);
+    }
+}
+
+TEST_CASE("cwPassageTubeGalleryModel lists the sandbox first", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    const std::string sandboxName = "Sandbox";
+    const QVector<cwPassageTubeCases::Case> catalog = cwPassageTubeCases::catalog();
+    const auto handMadeCount = std::count_if(catalog.cbegin(), catalog.cend(), [](const cwPassageTubeCases::Case& entry) {
+        return !entry.tags.contains(QStringLiteral("sweep"));
+    });
+
+    Model model;
+    CHECK(model.rowCount() == handMadeCount + 1);
+    CHECK(nameAt(model, 0).toStdString() == sandboxName);
+    CHECK(model.indexOf(QString::fromStdString(sandboxName)) == 0);
+
+    model.setCurrentIndex(0);
+    CHECK(model.currentName().toStdString() == sandboxName);
+    CHECK_FALSE(model.mesh().isEmpty());
+
+    SECTION("and keeps it first with the sweep")
+    {
+        model.setIncludeSweep(true);
+        CHECK(model.rowCount() == catalog.size() + 1);
+        CHECK(nameAt(model, 0).toStdString() == sandboxName);
+    }
+}
+
+TEST_CASE("cwPassageTubeGalleryModel loads a catalog case into the sandbox unchanged", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    Model model;
+    const int row = model.indexOf(kSymmetricT);
+    REQUIRE(row > Model::kSandboxRow);
+    model.setCurrentIndex(row);
+    const cwPassageTubeMesh catalogMesh = model.mesh();
+    REQUIRE_FALSE(catalogMesh.isEmpty());
+
+    CHECK_FALSE(model.canLoadSandbox(Model::kSandboxRow));
+    CHECK_FALSE(model.canLoadSandbox(model.indexOf(QStringLiteral("Phake Cave"))));
+    REQUIRE(model.canLoadSandbox(row));
+    REQUIRE(model.loadSandbox(row));
+
+    CHECK(model.currentIndex() == Model::kSandboxRow);
+    CHECK(model.sandboxSelected());
+    CHECK(model.sandbox()->junctionCase() == cwPassageTubeCases::galleryCases().constFirst());
+    CHECK(model.mesh().positions == catalogMesh.positions);
+    CHECK(model.mesh().indices == catalogMesh.indices);
+    CHECK_FALSE(model.sandboxBuildText().isEmpty());
+}
+
+TEST_CASE("cwPassageTubeGalleryModel rebuilds the sandbox once per burst of edits", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    Model model;
+    model.setCurrentIndex(Model::kSandboxRow);
+    const cwPassageTubeMesh before = model.mesh();
+    REQUIRE_FALSE(before.isEmpty());
+
+    QSignalSpy currentSpy(&model, &Model::currentChanged);
+    Sandbox* sandbox = model.sandbox();
+    sandbox->addArm();
+    sandbox->addArm();
+    sandbox->setPlanDegrees(1, 30.0);
+    sandbox->setWall(1, Sandbox::ArmFar, Sandbox::Left, 3.0);
+    sandbox->setWall(1, Sandbox::ArmJunction, Sandbox::Left, 3.0);
+    CHECK(currentSpy.isEmpty());
+
+    REQUIRE(currentSpy.wait());
+    CHECK(currentSpy.count() == 1);
+    CHECK(model.currentIndex() == Model::kSandboxRow);
+    CHECK(model.mesh().positions != before.positions);
+    CHECK(model.parameters().contains(QStringLiteral("a10")));
+
+    // Redesign step 3: the 30 degree arm's 3 m left wall leaves its end cap
+    // notched outside the through, and sliding the caps moves it inside.
+    using Union = cwPassageTubeUnion;
+    const cwPassageTubeCases::Survey survey = cwPassageTubeCases::toSurvey(sandbox->junctionCase());
+    cwPassageTubeBuilder::Options options;
+    options.sampleSpacingMeters = sandbox->sampleSpacing();
+    cwPassageTubeBuilder::Debug rings = cwPassageTubeBuilder::buildChainRings(survey.region, survey.positionsByCave, options);
+    const qsizetype notched = Union::capNotch(rings).size();
+    CHECK(notched > 0);
+    const QVector<Union::CapVertex> slid = Union::slideCaps(rings);
+    CHECK(std::any_of(slid.cbegin(), slid.cend(), [](const Union::CapVertex& vertex) { return vertex.isInside(); }));
+    CHECK(Union::capNotch(rings).size() < notched);
+}
+
+TEST_CASE("cwPassageTubeGalleryModel coarsens the sandbox's sample spacing after a slow build", "[PassageTube][cwPassageTubeGalleryModel]")
+{
+    constexpr double kFineSpacingMeters = 0.05;
+    constexpr double kLongArmMeters = 30.0;
+
+    Model model;
+    Sandbox* sandbox = model.sandbox();
+    sandbox->addArm();
+    sandbox->setLengthMeters(0, kLongArmMeters);
+    sandbox->setSampleSpacing(kFineSpacingMeters);
+
+    QElapsedTimer timer;
+    timer.start();
+    model.setCurrentIndex(Model::kSandboxRow);
+    if (timer.elapsed() <= Model::kSandboxBuildBudgetMilliseconds) {
+        SKIP("The fine sandbox built within the budget on this machine");
+    }
+
+    const QString slow = model.sandboxBuildText();
+    INFO(slow.toStdString());
+    CHECK(slow.contains(QStringLiteral("at 0.05 m sample spacing")));
+    CHECK_FALSE(slow.contains(QStringLiteral("coarsened")));
+    CHECK(slow.contains(QStringLiteral("next build uses 0.1 m")));
+
+    model.setCurrentIndex(model.firstCaseRow());
+    model.setCurrentIndex(Model::kSandboxRow);
+    const QString coarse = model.sandboxBuildText();
+    INFO(coarse.toStdString());
+    CHECK(coarse.contains(QStringLiteral("at 0.1 m sample spacing, coarsened from 0.05 m")));
+
+    sandbox->setSampleSpacing(1.0);
+    QSignalSpy currentSpy(&model, &Model::currentChanged);
+    REQUIRE(currentSpy.wait());
+    const QString reset = model.sandboxBuildText();
+    INFO(reset.toStdString());
+    CHECK(reset.contains(QStringLiteral("at 1 m sample spacing")));
+    CHECK_FALSE(reset.contains(QStringLiteral("coarsened")));
+}
+
+TEST_CASE("cwPassageTubeSandboxModel edits its junction case", "[PassageTube][cwPassageTubeSandboxModel]")
+{
+    Sandbox sandbox;
+    CHECK(sandbox.rowCount() == 0);
+    CHECK(sandbox.junctionCase().name == Sandbox::sandboxName());
+
+    SECTION("an arm goes to the next free quarter turn")
+    {
+        QSignalSpy changedSpy(&sandbox, &Sandbox::caseChanged);
+        sandbox.addArm();
+        sandbox.addArm();
+        CHECK(changedSpy.count() == 2);
+        REQUIRE(sandbox.rowCount() == 2);
+        CHECK(sandbox.junctionCase().arms.at(0).planDegrees == 90.0);
+        CHECK(sandbox.junctionCase().arms.at(1).planDegrees == -90.0);
+        CHECK(sandbox.selectedArm() == 1);
+
+        sandbox.removeArm(sandbox.selectedArm());
+        CHECK(sandbox.rowCount() == 1);
+        CHECK(sandbox.selectedArm() == 0);
+    }
+
+    SECTION("a slider change produces a different survey")
+    {
+        sandbox.addArm();
+        const cwPassageTubeCases::Trip before = cwPassageTubeCases::toTrip(sandbox.junctionCase());
+
+        QSignalSpy changedSpy(&sandbox, &Sandbox::caseChanged);
+        sandbox.setProfileDegrees(0, 45.0);
+        CHECK(changedSpy.count() == 1);
+        CHECK(cwPassageTubeCases::toTrip(sandbox.junctionCase()) != before);
+
+        sandbox.setProfileDegrees(0, 45.0);
+        CHECK(changedSpy.count() == 1);
+    }
+
+    SECTION("the arm's reading at J and the through's are separate records")
+    {
+        sandbox.addArm();
+        const QModelIndex arm = sandbox.index(0);
+        CHECK_FALSE(arm.data(Sandbox::JunctionConflictRole).toBool());
+
+        sandbox.setWall(0, Sandbox::ArmJunction, Sandbox::Left, 8.0);
+        CHECK(sandbox.junctionCase().arms.at(0).atJunction.left == 8.0);
+        CHECK(sandbox.junctionCase().throughAtJunction.left == 1.0);
+        CHECK(arm.data(Sandbox::JunctionConflictRole).toBool());
+        CHECK(arm.data(Sandbox::JunctionSectionRole).value<QList<double>>() == QList<double> {8.0, 1.0, 1.5, 1.0});
+
+        sandbox.setWall(0, Sandbox::ThroughJunction, Sandbox::Left, 8.0);
+        CHECK(sandbox.throughJunction() == QList<double> {8.0, 1.0, 1.5, 1.0});
+        CHECK_FALSE(arm.data(Sandbox::JunctionConflictRole).toBool());
+
+        sandbox.setHasJunctionLrud(0, false);
+        sandbox.setWall(0, Sandbox::ArmJunction, Sandbox::Up, 9.0);
+        CHECK_FALSE(arm.data(Sandbox::JunctionConflictRole).toBool());
+    }
+}
+
+TEST_CASE("cwPassageTubeSandboxModel copies a case as an initializer that parses back", "[PassageTube][cwPassageTubeSandboxModel]")
+{
+    using Cases = cwPassageTubeCases;
+    using JunctionCase = Cases::JunctionCase;
+    using ArmSpec = Cases::ArmSpec;
+
+    SECTION("every gallery case, the wide-arm fork and a sweep case")
+    {
+        QVector<JunctionCase> cases = Cases::galleryCases();
+        cases.append(Cases::wideArmFork());
+        cases.append(Cases::sweepCases().constLast());
+        for (const JunctionCase& junctionCase : std::as_const(cases)) {
+            const QString text = Sandbox::toInitializer(junctionCase);
+            const std::optional<JunctionCase> parsed = Sandbox::fromInitializer(text);
+            INFO(text.toStdString());
+            REQUIRE(parsed.has_value());
+            CHECK(*parsed == junctionCase);
+        }
+    }
+
+    SECTION("as the C++ that compiles to the same case")
+    {
+        // The literal below is the text of expectedText, compiled.
+        const JunctionCase compiled = JunctionCase {
+            .name = QStringLiteral("Sandbox \"quoted\""),
+            .tags = {QStringLiteral("gallery")},
+            .throughSection = {1, 1, 1.5, 1},
+            .throughAtJunction = {2, 1, 1.5, 0.1},
+            .throughPastJunction = {1, 1, 1.5, 1},
+            .throughBendDegrees = 40,
+            .throughProfileDegrees = -90,
+            .throughBendProfileDegrees = 0,
+            .arms = {
+                ArmSpec {
+                    .planDegrees = 30,
+                    .profileDegrees = 0,
+                    .lengthMeters = 3,
+                    .at = {1, 1, 1.5, 1},
+                    .atJunction = {1, 1, 1.5, 1},
+                    .hasJunctionLrud = false,
+                    .hasLrud = true,
+                    .legsBeyond = {{45, 0, 3.25, {3, 2, 3.5, 2}}},
+                },
+            },
+            .sampleSpacing = 0.5,
+        };
+        const QString expectedText = QStringLiteral(R"cpp(JunctionCase {
+    .name = QStringLiteral("Sandbox \"quoted\""),
+    .tags = {QStringLiteral("gallery")},
+    .throughSection = {1, 1, 1.5, 1},
+    .throughAtJunction = {2, 1, 1.5, 0.1},
+    .throughPastJunction = {1, 1, 1.5, 1},
+    .throughBendDegrees = 40,
+    .throughProfileDegrees = -90,
+    .throughBendProfileDegrees = 0,
+    .arms = {
+        ArmSpec {
+            .planDegrees = 30,
+            .profileDegrees = 0,
+            .lengthMeters = 3,
+            .at = {1, 1, 1.5, 1},
+            .atJunction = {1, 1, 1.5, 1},
+            .hasJunctionLrud = false,
+            .hasLrud = true,
+            .legsBeyond = {{45, 0, 3.25, {3, 2, 3.5, 2}}},
+        },
+    },
+    .sampleSpacing = 0.5,
+})cpp");
+        CHECK(Sandbox::toInitializer(compiled).toStdString() == expectedText.toStdString());
+        CHECK(Sandbox::fromInitializer(expectedText) == std::optional<JunctionCase>(compiled));
+    }
+
+    SECTION("text that is no initializer reads as nothing")
+    {
+        CHECK_FALSE(Sandbox::fromInitializer(QStringLiteral("JunctionCase {.name = 3}")).has_value());
+        CHECK_FALSE(Sandbox::fromInitializer(QStringLiteral("JunctionCase {")).has_value());
+        CHECK_FALSE(Sandbox::fromInitializer(QString()).has_value());
     }
 }
 

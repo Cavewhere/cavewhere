@@ -74,6 +74,8 @@ public:
         double down = 1.0;
 
         Section scaled(double factor) const;
+
+        bool operator==(const Section&) const = default;
     };
 
     // A leg past the station before it: it turns turnDegrees in plan,
@@ -84,6 +86,8 @@ public:
         double profileDegrees = 0.0;
         double lengthMeters = kArmLengthMeters;
         Section at;
+
+        bool operator==(const ArmLeg&) const = default;
     };
 
     // An arm leaves J along planDegrees, measured in plan counter-clockwise from
@@ -102,6 +106,8 @@ public:
         bool hasJunctionLrud = true;
         bool hasLrud = true;
         QVector<ArmLeg> legsBeyond;
+
+        bool operator==(const ArmSpec&) const = default;
     };
 
     // The through passage runs t0 → J → t1 heading north into J and climbing
@@ -119,6 +125,8 @@ public:
         double throughBendProfileDegrees = 0.0;
         QVector<ArmSpec> arms;
         double sampleSpacing = 1.0;
+
+        bool operator==(const JunctionCase&) const = default;
     };
 
     // One entry of the catalog, ready to build: trip, then laterTrips in

@@ -15,8 +15,9 @@
 #include <QQmlEngine>
 #include <QSortFilterProxyModel>
 
-// The gallery list as shown: rows whose name or tags contain filterText, in
-// catalog order, with the failing ones first when failingFirst is set.
+// The gallery list as shown: the sandbox, then the rows whose name or tags
+// contain filterText, in catalog order, with the failing ones first when
+// failingFirst is set.
 class cwPassageTubeGalleryFilterModel : public QSortFilterProxyModel
 {
     Q_OBJECT

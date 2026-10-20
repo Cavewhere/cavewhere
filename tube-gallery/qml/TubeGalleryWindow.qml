@@ -35,6 +35,7 @@ QC.ApplicationWindow {
     readonly property int initialHeight: 900
     readonly property int defaultSeed: 7
     readonly property int listWidth: 360
+    readonly property int sandboxPanelWidth: 380
     readonly property int panelMargin: 8
     readonly property int panelSpacing: 6
     readonly property int reportHeight: 220
@@ -138,6 +139,12 @@ QC.ApplicationWindow {
         applyPreset("three-quarter")
     }
 
+    function grabView() {
+        const fileName = TubeGalleryGrabber.fileName(galleryModelId.currentName, "view-" + Date.now())
+        const path = TubeGalleryGrabber.grab(viewAreaId, defaultGrabDirectory, fileName)
+        sandboxPanelId.statusText = path !== "" ? qsTr("Wrote %1").arg(path) : qsTr("Could not write %1").arg(fileName)
+    }
+
     function startGrab(rows: list<int>, directory: string, quitAfter: bool) {
         grabRows = rows
         grabRowCursor = 0
@@ -215,19 +222,21 @@ QC.ApplicationWindow {
                     return
                 }
             }
-            selectRow(Math.max(row, 0))
+            selectRow(row < 0 ? galleryModelId.firstCaseRow : row)
         } else {
-            selectRow(Math.max(firstProjectRow, 0))
+            selectRow(Math.max(firstProjectRow, galleryModelId.firstCaseRow))
         }
 
         if (grabAll) {
             const rows = []
             if (failingOnly) {
                 for (const row of galleryModelId.failingRows()) {
-                    rows.push(row)
+                    if (row >= galleryModelId.firstCaseRow) {
+                        rows.push(row)
+                    }
                 }
             } else {
-                for (let row = 0; row < galleryModelId.count; row++) {
+                for (let row = galleryModelId.firstCaseRow; row < galleryModelId.count; row++) {
                     rows.push(row)
                 }
             }
@@ -436,6 +445,16 @@ QC.ApplicationWindow {
                 }
             }
 
+            QC.Button {
+                text: qsTr("Load into sandbox")
+                enabled: galleryModelId.canLoadSandbox(galleryModelId.currentIndex)
+                onClicked: {
+                    if (galleryModelId.loadSandbox(galleryModelId.currentIndex)) {
+                        rootId.applyPreset("three-quarter")
+                    }
+                }
+            }
+
             QQ.ListView {
                 id: caseListId
                 Layout.fillWidth: true
@@ -507,8 +526,11 @@ QC.ApplicationWindow {
                 font.pixelSize: Theme.fontSizeMedium
             }
 
-            RowLayout {
+            // Wraps so the sandbox panel beside it keeps its width.
+            QQ.Flow {
+                Layout.fillWidth: true
                 visible: !rootId.grabAll
+                spacing: rootId.panelSpacing
 
                 QC.Button {
                     text: qsTr("Plan")
@@ -690,6 +712,16 @@ QC.ApplicationWindow {
                     wrapMode: QQ.Text.WrapAnywhere
                 }
             }
+        }
+
+        TubeSandboxPanel {
+            id: sandboxPanelId
+            Layout.preferredWidth: rootId.sandboxPanelWidth
+            Layout.fillHeight: true
+            visible: galleryModelId.sandboxSelected && !rootId.grabAll
+            galleryModel: galleryModelId
+
+            onGrabRequested: rootId.grabView()
         }
     }
 }

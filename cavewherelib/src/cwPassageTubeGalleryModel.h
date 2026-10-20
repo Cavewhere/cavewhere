@@ -14,6 +14,7 @@
 #include "cwPassageTubeCases.h"
 #include "cwPassageTubeMesh.h"
 #include "cwPassageTubeMeshCheck.h"
+#include "cwPassageTubeSandboxModel.h"
 
 //Qt includes
 #include <QAbstractListModel>
@@ -36,6 +37,7 @@ class cwProject;
 class cwRenderLinePlot;
 class cwRenderPassageTube;
 class cwScene;
+class QTimer;
 
 /**
  * The tube gallery's list of surveys: the cwPassageTubeCases catalog, seeded
@@ -47,6 +49,13 @@ class cwScene;
  * the rings were fitted to, and where a ring reaches past its section.
  *
  * Issue counts for the list are built on first read and cached.
+ *
+ * Row kSandboxRow, named "Sandbox", builds the sandbox's junction case. Its
+ * edits rebuild it, debounced to the last edit within one frame, while it is
+ * the current row; a build over kSandboxBuildBudgetMilliseconds doubles the
+ * sample spacing of the sandbox's next build, up to
+ * kSandboxMaxSampleSpacingMeters, until the sandbox loads or its spacing is
+ * set. Rows from firstCaseRow on are the catalog and added cases.
  *
  * openProject loads a copy of a project in a temporary directory, solves its
  * line plot and keeps each cave's survey and station positions as a row; the
@@ -72,6 +81,10 @@ class CAVEWHERE_LIB_EXPORT cwPassageTubeGalleryModel : public QAbstractListModel
     Q_PROPERTY(QString station READ station WRITE setStation NOTIFY stationChanged)
     Q_PROPERTY(bool unionVisible READ unionVisible WRITE setUnionVisible NOTIFY unionVisibleChanged)
     Q_PROPERTY(bool capsSlid READ capsSlid WRITE setCapsSlid NOTIFY capsSlidChanged)
+    Q_PROPERTY(cwPassageTubeSandboxModel* sandbox READ sandbox CONSTANT)
+    Q_PROPERTY(bool sandboxSelected READ sandboxSelected NOTIFY currentIndexChanged)
+    Q_PROPERTY(int firstCaseRow READ firstCaseRow CONSTANT)
+    Q_PROPERTY(QString sandboxBuildText READ sandboxBuildText NOTIFY sandboxBuildChanged)
 
     Q_PROPERTY(QString currentName READ currentName NOTIFY currentChanged)
     Q_PROPERTY(QString parameters READ parameters NOTIFY currentChanged)
@@ -97,6 +110,11 @@ public:
 
     // How far a ring's frame cross reaches from its center along right and up.
     static constexpr double kFrameAxisMeters = 0.5;
+
+    static constexpr int kSandboxRow = 0;
+    static constexpr int kSandboxDebounceMilliseconds = 16;
+    static constexpr int kSandboxBuildBudgetMilliseconds = 100;
+    static constexpr double kSandboxMaxSampleSpacingMeters = 4.0;
 
     // The rings of every chain as a line list. Each ring's loop runs through
     // its vertices back to the first; a grown ring draws every other edge.
@@ -183,6 +201,22 @@ public:
     bool capsSlid() const;
     void setCapsSlid(bool capsSlid);
 
+    cwPassageTubeSandboxModel* sandbox() const;
+    bool sandboxSelected() const;
+    int firstCaseRow() const { return kSandboxRow + 1; }
+
+    // The last sandbox build's time and sample spacing, and why the spacing
+    // is coarser than the sandbox's; empty before the first build.
+    QString sandboxBuildText() const;
+
+    // True for a row built from a cwPassageTubeCases::JunctionCase, other
+    // than the sandbox.
+    Q_INVOKABLE bool canLoadSandbox(int row) const;
+
+    // Copies the row's junction case into the sandbox and selects the
+    // sandbox; false, leaving both alone, when canLoadSandbox(row) is false.
+    Q_INVOKABLE bool loadSandbox(int row);
+
     // Adds cwPassageTubeCases::wideArmFork.
     Q_INVOKABLE void addWideArmFork();
 
@@ -256,11 +290,13 @@ signals:
     void stationChanged();
     void unionVisibleChanged();
     void capsSlidChanged();
+    void sandboxBuildChanged();
     void projectOpened(int firstRow, int rowCount);
     void projectFailed(const QString& message);
 
 private:
-    // A catalog or random case, or one cave of an opened project.
+    // A catalog or random case, or one cave of an opened project;
+    // junctionCase holds the case a junction row was made from.
     struct Row {
         QString name;
         QStringList tags;
@@ -268,6 +304,7 @@ private:
         std::variant<cwPassageTubeCases::Case, cwPassageTubeCases::Survey> source;
         mutable std::optional<int> issueCount;
         mutable QString issueSummary;
+        std::optional<cwPassageTubeCases::JunctionCase> junctionCase;
 
         cwPassageTubeCases::Survey survey() const;
     };
@@ -286,11 +323,17 @@ private:
     };
 
     static Row caseRow(const cwPassageTubeCases::Case& entry);
+    static Row caseRow(const cwPassageTubeCases::JunctionCase& junctionCase);
     static Build build(const cwPassageTubeCases::Survey& survey, double sampleSpacing);
     static Build buildUnion(const cwPassageTubeCases::Survey& survey, double sampleSpacing, bool slideCaps);
     static QString summary(const cwPassageTubeMeshCheck::Report& report);
 
     void loadCatalog();
+    Row sandboxRow() const;
+    double sandboxSampleSpacing() const;
+    void sandboxEdited();
+    void rebuildSandbox();
+    void noteSandboxBuild(qint64 milliseconds, double sampleSpacing);
     void appendRows(const QVector<Row>& rows);
     void cacheIssues(const Row& row, const cwPassageTubeMeshCheck::Report& report) const;
     void ensureIssueCount(const Row& row) const;
@@ -323,6 +366,12 @@ private:
     QString m_station;
     bool m_unionVisible = false;
     bool m_capsSlid = false;
+
+    cwPassageTubeSandboxModel* m_sandbox = nullptr;
+    QTimer* m_sandboxTimer = nullptr;
+    int m_sandboxSpacingDoublings = 0;
+    std::optional<qint64> m_sandboxBuildMilliseconds;
+    double m_sandboxBuildSpacing = 0.0;
 
     Build m_current;
     RingGeometry m_ringGeometry;

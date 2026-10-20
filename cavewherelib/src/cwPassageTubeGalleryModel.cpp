@@ -31,6 +31,7 @@
 #include <QMap>
 #include <QSet>
 #include <QTemporaryDir>
+#include <QTimer>
 #include <QVector4D>
 #include <QtMath>
 
@@ -413,8 +414,17 @@ QVector<QVector3D> positionsOf(const QVector<cwPassageTubeMeshCheck::Issue>& iss
 } // namespace
 
 cwPassageTubeGalleryModel::cwPassageTubeGalleryModel(QObject* parent) :
-    QAbstractListModel(parent)
+    QAbstractListModel(parent),
+    m_sandbox(new cwPassageTubeSandboxModel(this)),
+    m_sandboxTimer(new QTimer(this))
 {
+    m_sandboxTimer->setSingleShot(true);
+    m_sandboxTimer->setInterval(kSandboxDebounceMilliseconds);
+    connect(m_sandboxTimer, &QTimer::timeout, this, &cwPassageTubeGalleryModel::rebuildSandbox);
+
+    connect(m_sandbox, &cwPassageTubeSandboxModel::sampleSpacingChanged, this, [this]() { m_sandboxSpacingDoublings = 0; });
+    connect(m_sandbox, &cwPassageTubeSandboxModel::caseChanged, this, &cwPassageTubeGalleryModel::sandboxEdited);
+
     loadCatalog();
 }
 
@@ -686,9 +696,56 @@ void cwPassageTubeGalleryModel::setCapsSlid(bool capsSlid)
     }
 }
 
+cwPassageTubeSandboxModel* cwPassageTubeGalleryModel::sandbox() const
+{
+    return m_sandbox;
+}
+
+bool cwPassageTubeGalleryModel::sandboxSelected() const
+{
+    return m_currentIndex == kSandboxRow;
+}
+
+QString cwPassageTubeGalleryModel::sandboxBuildText() const
+{
+    if (!m_sandboxBuildMilliseconds) {
+        return QString();
+    }
+    QString text = QStringLiteral("Built in %1 ms at %2 m sample spacing").arg(*m_sandboxBuildMilliseconds).arg(m_sandboxBuildSpacing);
+    if (m_sandboxBuildSpacing > m_sandbox->sampleSpacing()) {
+        text += QStringLiteral(", coarsened from %1 m").arg(m_sandbox->sampleSpacing());
+    }
+    if (sandboxSampleSpacing() > m_sandboxBuildSpacing) {
+        text += QStringLiteral("; over %1 ms, so the next build uses %2 m")
+                    .arg(kSandboxBuildBudgetMilliseconds)
+                    .arg(sandboxSampleSpacing());
+    }
+    return text;
+}
+
+bool cwPassageTubeGalleryModel::canLoadSandbox(int row) const
+{
+    return row != kSandboxRow && row >= 0 && row < m_rows.size() && m_rows.at(row).junctionCase.has_value();
+}
+
+bool cwPassageTubeGalleryModel::loadSandbox(int row)
+{
+    if (!canLoadSandbox(row)) {
+        return false;
+    }
+    m_sandbox->load(*m_rows.at(row).junctionCase);
+    m_sandboxTimer->stop();
+    if (m_currentIndex == kSandboxRow) {
+        selectCurrent();
+    } else {
+        setCurrentIndex(kSandboxRow);
+    }
+    return true;
+}
+
 void cwPassageTubeGalleryModel::addWideArmFork()
 {
-    appendRows({caseRow(Cases::toCase(Cases::wideArmFork()))});
+    appendRows({caseRow(Cases::wideArmFork())});
 }
 
 void cwPassageTubeGalleryModel::openProject(const QString& path, double sampleSpacing)
@@ -998,6 +1055,13 @@ cwPassageTubeGalleryModel::Row cwPassageTubeGalleryModel::caseRow(const Cases::C
     return Row {entry.name, entry.tags, entry.sampleSpacing, entry};
 }
 
+cwPassageTubeGalleryModel::Row cwPassageTubeGalleryModel::caseRow(const Cases::JunctionCase& junctionCase)
+{
+    Row row = caseRow(Cases::toCase(junctionCase));
+    row.junctionCase = junctionCase;
+    return row;
+}
+
 cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::build(const Cases::Survey& survey, double sampleSpacing)
 {
     cwPassageTubeBuilder::Options options;
@@ -1085,16 +1149,70 @@ QString cwPassageTubeGalleryModel::summary(const cwPassageTubeMeshCheck::Report&
 
 void cwPassageTubeGalleryModel::loadCatalog()
 {
+    QHash<QString, Cases::JunctionCase> junctionCases;
+    for (const Cases::JunctionCase& junctionCase : Cases::galleryCases() + Cases::sweepCases()) {
+        junctionCases.insert(junctionCase.name, junctionCase);
+    }
+
     beginResetModel();
-    m_rows.clear();
+    m_rows = {sandboxRow()};
     for (const Cases::Case& entry : Cases::catalog()) {
         if (m_includeSweep || !isSweep(entry)) {
-            m_rows.append(caseRow(entry));
+            Row row = caseRow(entry);
+            const auto junctionCase = junctionCases.constFind(entry.name);
+            if (junctionCase != junctionCases.cend()) {
+                row.junctionCase = *junctionCase;
+            }
+            m_rows.append(row);
         }
     }
     m_rows.append(m_addedRows);
     endResetModel();
     emit countChanged();
+}
+
+cwPassageTubeGalleryModel::Row cwPassageTubeGalleryModel::sandboxRow() const
+{
+    const Cases::JunctionCase junctionCase = m_sandbox->junctionCase();
+    Row row = caseRow(Cases::toCase(junctionCase));
+    row.name = cwPassageTubeSandboxModel::sandboxName();
+    row.tags = {QStringLiteral("sandbox")};
+    row.sampleSpacing = sandboxSampleSpacing();
+    return row;
+}
+
+double cwPassageTubeGalleryModel::sandboxSampleSpacing() const
+{
+    return std::ldexp(m_sandbox->sampleSpacing(), m_sandboxSpacingDoublings);
+}
+
+void cwPassageTubeGalleryModel::sandboxEdited()
+{
+    m_rows.replace(kSandboxRow, sandboxRow());
+    m_sandboxTimer->start();
+}
+
+void cwPassageTubeGalleryModel::rebuildSandbox()
+{
+    if (m_currentIndex == kSandboxRow) {
+        selectCurrent();
+    } else {
+        const QModelIndex changed = index(kSandboxRow);
+        emit dataChanged(changed, changed, {IssueCountRole, IssueSummaryRole});
+    }
+}
+
+void cwPassageTubeGalleryModel::noteSandboxBuild(qint64 milliseconds, double sampleSpacing)
+{
+    m_sandboxBuildMilliseconds = milliseconds;
+    m_sandboxBuildSpacing = sampleSpacing;
+    const bool builtAtCurrentSpacing = sampleSpacing >= sandboxSampleSpacing();
+    const bool canCoarsen = std::ldexp(m_sandbox->sampleSpacing(), m_sandboxSpacingDoublings + 1) <= kSandboxMaxSampleSpacingMeters;
+    if (milliseconds > kSandboxBuildBudgetMilliseconds && builtAtCurrentSpacing && canCoarsen) {
+        ++m_sandboxSpacingDoublings;
+        m_rows.replace(kSandboxRow, sandboxRow());
+    }
+    emit sandboxBuildChanged();
 }
 
 void cwPassageTubeGalleryModel::appendRows(const QVector<Row>& rows)
@@ -1135,7 +1253,11 @@ void cwPassageTubeGalleryModel::selectCurrent()
     } else {
         const Row& row = m_rows.at(m_currentIndex);
         const Cases::Survey survey = row.survey();
-        m_current = m_unionVisible ? buildUnion(survey, row.sampleSpacing, m_capsSlid) : build(survey, row.sampleSpacing);
+        const double sampleSpacing = row.sampleSpacing;
+        QElapsedTimer buildTimer;
+        buildTimer.start();
+        m_current = m_unionVisible ? buildUnion(survey, sampleSpacing, m_capsSlid) : build(survey, sampleSpacing);
+        const qint64 buildMilliseconds = buildTimer.elapsed();
         m_ringGeometry = ringGeometryOf(m_current.debug);
 
         if (!m_unionVisible && !row.issueCount) {
@@ -1153,6 +1275,9 @@ void cwPassageTubeGalleryModel::selectCurrent()
             m_bounds.unite(leg.toPosition);
         }
         locateJunction(survey);
+        if (m_currentIndex == kSandboxRow) {
+            noteSandboxBuild(buildMilliseconds, sampleSpacing);
+        }
     }
     locateStation();
 

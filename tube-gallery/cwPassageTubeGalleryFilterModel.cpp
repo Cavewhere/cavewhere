@@ -52,7 +52,7 @@ int cwPassageTubeGalleryFilterModel::sourceRow(int proxyRow) const
 
 bool cwPassageTubeGalleryFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const
 {
-    if (m_filterText.isEmpty()) {
+    if (m_filterText.isEmpty() || sourceRow == cwPassageTubeGalleryModel::kSandboxRow) {
         return true;
     }
     const QModelIndex row = sourceModel()->index(sourceRow, 0, sourceParent);
@@ -64,6 +64,11 @@ bool cwPassageTubeGalleryFilterModel::filterAcceptsRow(int sourceRow, const QMod
 
 bool cwPassageTubeGalleryFilterModel::lessThan(const QModelIndex& left, const QModelIndex& right) const
 {
+    const bool leftIsSandbox = left.row() == cwPassageTubeGalleryModel::kSandboxRow;
+    const bool rightIsSandbox = right.row() == cwPassageTubeGalleryModel::kSandboxRow;
+    if (leftIsSandbox != rightIsSandbox) {
+        return leftIsSandbox;
+    }
     if (m_failingFirst) {
         const bool leftFails = left.data(cwPassageTubeGalleryModel::IssueCountRole).toInt() > 0;
         const bool rightFails = right.data(cwPassageTubeGalleryModel::IssueCountRole).toInt() > 0;
