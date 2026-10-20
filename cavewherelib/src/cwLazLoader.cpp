@@ -9,6 +9,7 @@
 
 //Qt includes
 #include <QByteArray>
+#include <QByteArrayView>
 
 // LAStools / LASlib
 #include <LASlib/lasreader.hpp>
@@ -24,6 +25,50 @@ constexpr quint16 kInlineTiffTagLocation = 0;
 // CRS is spelled out in other keys rather than named by an EPSG code.
 constexpr quint16 kUndefinedGeoCode = 0;
 constexpr quint16 kUserDefinedGeoCode = 32767;
+
+constexpr QByteArrayView kProjectionUserId = "LASF_Projection";
+constexpr quint16 kOgcWktRecordId = 2112;
+
+template<typename Record>
+bool isOgcWktRecord(const Record& record)
+{
+    const qsizetype userIdLength = qstrnlen(record.user_id, sizeof(record.user_id));
+    return record.record_id == kOgcWktRecordId
+           && record.data != nullptr
+           && QByteArrayView(record.user_id, userIdLength) == kProjectionUserId;
+}
+
+// The record is exactly record_length_after_header bytes, and some writers omit
+// the trailing NUL, so the text ends at the record length or the first NUL.
+QString wktFromRecord(const U8* data, qint64 length)
+{
+    const QByteArrayView payload(reinterpret_cast<const char*>(data), length);
+    const qsizetype nulIndex = payload.indexOf('\0');
+    return QString::fromLatin1(nulIndex >= 0 ? payload.first(nulIndex) : payload);
+}
+
+template<typename Record>
+const Record* lastOgcWktRecord(const Record* records, U32 count)
+{
+    for (U32 i = count; i > 0; --i) {
+        if (isOgcWktRecord(records[i - 1])) {
+            return &records[i - 1];
+        }
+    }
+    return nullptr;
+}
+
+// Matches LASlib's precedence: the last 2112 record wins, and EVLRs override VLRs.
+QString ogcWkt(const LASheader& header)
+{
+    if (const LASevlr* evlr = lastOgcWktRecord(header.evlrs, header.number_of_extended_variable_length_records)) {
+        return wktFromRecord(evlr->data, evlr->record_length_after_header);
+    }
+    if (const LASvlr* vlr = lastOgcWktRecord(header.vlrs, header.number_of_variable_length_records)) {
+        return wktFromRecord(vlr->data, vlr->record_length_after_header);
+    }
+    return QString();
+}
 
 quint16 inlineGeoKeyValue(const LASheader& header, quint16 keyId)
 {
@@ -43,9 +88,9 @@ quint16 inlineGeoKeyValue(const LASheader& header, quint16 keyId)
 
 } // namespace
 
-// LASlib stores the OGC WKT CRS in vlr_geo_ogc_wkt when the file uses the
-// modern (LAS 1.4 / OGC WKT) CRS encoding. PROJ accepts WKT strings directly,
-// so we pass it straight through. Older LAS files name their CRS with GeoTIFF
+// Files using the modern (LAS 1.4) CRS encoding carry OGC WKT in a
+// LASF_Projection/2112 (E)VLR. PROJ accepts WKT strings directly, so we pass it
+// straight through. Older LAS files name their CRS with GeoTIFF
 // GeoKeys instead (vlr_geo_keys / vlr_geo_key_entries); for those we read the
 // projected CS code, falling back to the geographic one, and hand PROJ the
 // "EPSG:<code>" form it resolves directly. A file that names its CRS neither
@@ -53,8 +98,9 @@ quint16 inlineGeoKeyValue(const LASheader& header, quint16 keyId)
 // identity; the user can supply an explicit override to handle that case.
 static QString extractEmbeddedCS(const LASheader& header)
 {
-    if (header.vlr_geo_ogc_wkt != nullptr && header.vlr_geo_ogc_wkt[0] != '\0') {
-        return QString::fromLatin1(header.vlr_geo_ogc_wkt);
+    const QString wkt = ogcWkt(header);
+    if (!wkt.isEmpty()) {
+        return wkt;
     }
 
     for (const quint16 keyId : {kProjectedCSTypeGeoKey, kGeographicTypeGeoKey}) {

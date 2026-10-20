@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace {
 
@@ -28,6 +29,8 @@ namespace {
 constexpr int kSignalWaitMs = 100;
 constexpr int kSpinSliceMs = 50;
 constexpr int kSleepSliceMs = 5;
+
+constexpr U16 kOgcWktRecordId = 2112;
 
 /**
  * Center the header's offsets on @a points.
@@ -74,23 +77,35 @@ void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get
 
 } // namespace
 
+void setUnterminatedOgcWkt(LASheader& header, const QByteArray& wkt)
+{
+    // add_vlr takes ownership of the new[] buffer; LASheader::clean frees it.
+    auto* data = new CHAR[wkt.size()];
+    std::memcpy(data, wkt.constData(), size_t(wkt.size()));
+    header.vlr_geo_ogc_wkt = data;
+    header.add_vlr("LASF_Projection", kOgcWktRecordId, U16(wkt.size()),
+                   reinterpret_cast<U8*>(data));
+}
+
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
                            const QString& wktCS,
-                           LazCompression compression)
+                           LazCompression compression,
+                           WktTermination wktTermination)
 {
     QVector<cwGeoPoint> geoPoints;
     geoPoints.reserve(points.size());
     for (const QVector3D& p : points) {
         geoPoints.append(cwGeoPoint::fromSceneLocal(p));
     }
-    return writeSyntheticGeoLazFile(outPath, geoPoints, wktCS, compression);
+    return writeSyntheticGeoLazFile(outPath, geoPoints, wktCS, compression, wktTermination);
 }
 
 bool writeSyntheticGeoLazFile(const QString& outPath,
                               const QVector<cwGeoPoint>& points,
                               const QString& wktCS,
-                              LazCompression compression)
+                              LazCompression compression,
+                              WktTermination wktTermination)
 {
     LASheader header;
     header.clean_las_header();
@@ -104,9 +119,13 @@ bool writeSyntheticGeoLazFile(const QString& outPath,
     QByteArray wktBytes;
     if (!wktCS.isEmpty()) {
         wktBytes = wktCS.toLatin1();
-        // LASheader copies the string into its own buffer; length excludes
-        // the implicit null terminator (matches set_geo_ogc_wkt's convention).
-        header.set_geo_ogc_wkt(wktBytes.size(), wktBytes.constData());
+        if (wktTermination == WktTermination::Unterminated) {
+            setUnterminatedOgcWkt(header, wktBytes);
+        } else {
+            // LASheader copies the string into its own buffer; length excludes
+            // the implicit null terminator (matches set_geo_ogc_wkt's convention).
+            header.set_geo_ogc_wkt(wktBytes.size(), wktBytes.constData());
+        }
     }
 
     LASpoint pointTemplate;
