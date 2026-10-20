@@ -255,6 +255,9 @@ QtObject {
     readonly property int treeIndent: Math.round(16 * fontScale)
     readonly property int treeCaretWidth: Math.round(16 * fontScale)
     readonly property int treeRowHeight: Math.round(26 * fontScale)
+    // The least height the wide node page gives its tree: the toolbar, the
+    // header and a handful of rows. Below it the page scrolls instead.
+    readonly property int treeMinimumHeight: Math.round(240 * fontScale)
     readonly property int treeNameColumnMinimumWidth: Math.round(180 * fontScale)
     readonly property int treeKindColumnWidth: Math.round(80 * fontScale)
     readonly property int treeCountColumnWidth: Math.round(55 * fontScale)

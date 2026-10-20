@@ -36,6 +36,19 @@ Rectangle {
         rootId.shadowEditor.enabled = false
     }
 
+    //Every item under `item` named `objectName`. A table's pooled delegates
+    //drop their names, so a name on a delegate counts only the drawn cells.
+    function collectByName(item, objectName) {
+        let found = item.objectName === objectName ? [item] : []
+        const kids = item.children
+        if (kids !== undefined) {
+            for (let i = 0; i < kids.length; i++) {
+                found = found.concat(rootId.collectByName(kids[i], objectName))
+            }
+        }
+        return found
+    }
+
     width: 1200
     height: 700
 

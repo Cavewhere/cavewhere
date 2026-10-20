@@ -103,8 +103,8 @@ StandardPage {
     }
 
     // The first child of an empty node brings the tree back, and the tree
-    // draws the new row only once it has been laid out at its new height, so
-    // the reveal is retried until the row exists.
+    // draws the new row only once it is laid out and shown, so the reveal is
+    // retried until the row exists.
     function revealPending() {
         if (nodePageArea.pendingReveal === null) {
             return
@@ -211,6 +211,26 @@ StandardPage {
     // file it comes from.
     readonly property bool isDerived: nodePageArea.isSourced && !nodePageArea.isSourceRoot
 
+    // What the wide layout's tree column shows above the tree.
+    readonly property bool showsWideSourceCard: nodePageArea.isSourceRoot && !nodePageArea.isNarrow
+    readonly property bool showsWideDerivedFileLabel: nodePageArea.isDerived && !nodePageArea.isNarrow
+
+    // The wide tree's height: the window's height below the margins and what
+    // sits above the tree in its column, floored at Theme.treeMinimumHeight.
+    // Summed from those items rather than read off the tree's laid-out y, so
+    // the layout's output never feeds its own input.
+    readonly property real wideTreeHeight: {
+        let above = actionBar.height + Theme.sectionSpacing
+        if (nodePageArea.showsWideSourceCard) {
+            above += sourceRootCardId.height + Theme.sectionSpacing
+        }
+        if (nodePageArea.showsWideDerivedFileLabel) {
+            above += derivedNodeFileLabelId.height + Theme.sectionSpacing
+        }
+        return Math.max(Theme.treeMinimumHeight,
+                        wideFlickableId.height - 2 * Theme.pageMargin - above)
+    }
+
     // The base name of the file a derived node comes from. A derived node
     // stays under the root that built it, so the root is read once per node.
     readonly property SurveyNode derivedSourceRoot: nodePageArea.isDerived
@@ -239,8 +259,8 @@ StandardPage {
                                              : qsTr("More ways to add a trip")
 
     // Brings the attached file's source line into view and pulses it. The
-    // wide page scrolls as a whole; the narrow column always shows it under
-    // the stats.
+    // wide page scrolls when its stats column is taller than the window; the
+    // narrow column always shows it under the stats.
     function showSourceLine() {
         if (!nodePageArea.isNarrow) {
             const top = sourceRootCardId.mapToItem(wideFlickableId.contentItem, 0, 0).y - Theme.pageMargin
@@ -498,16 +518,13 @@ StandardPage {
 
         removeAskBox: removeChallengeId
         rootNode: nodePageArea.currentNode
-        // The wide page scrolls as a whole, so the tree gives up its own
-        // scrolling there and takes the height every row needs. The narrow
-        // page hands it what is left of the window and lets it scroll.
-        scrollable: nodePageArea.isNarrow
-
         // Set here rather than on the proxies: a LayoutItemProxy forwards its
         // target's Layout properties, so one set of them serves both layouts.
+        // Both pages let the tree scroll itself, so it draws only the rows in
+        // view.
         Layout.fillWidth: true
         Layout.fillHeight: nodePageArea.isNarrow
-        Layout.preferredHeight: nodePageArea.isNarrow ? -1 : tripTreeId.fullHeight
+        Layout.preferredHeight: nodePageArea.isNarrow ? -1 : nodePageArea.wideTreeHeight
     }
 
     QQ.Flow {
@@ -721,12 +738,12 @@ StandardPage {
 
                 LayoutItemProxy {
                     target: sourceRootCardId
-                    visible: nodePageArea.isSourceRoot && !nodePageArea.isNarrow
+                    visible: nodePageArea.showsWideSourceCard
                 }
 
                 LayoutItemProxy {
                     target: derivedNodeFileLabelId
-                    visible: nodePageArea.isDerived && !nodePageArea.isNarrow
+                    visible: nodePageArea.showsWideDerivedFileLabel
                 }
 
                 // An empty cave has nothing to tabulate, so the tree stays

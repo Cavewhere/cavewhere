@@ -45,20 +45,6 @@ ColumnLayout {
     //the view's top-level rows — which is what the cave page shows.
     property SurveyNode rootNode: null
 
-    //Whether the view scrolls itself. A page that scrolls as a whole gives
-    //the tree its full height instead and keeps one scrollbar.
-    property bool scrollable: true
-
-    //The height every row of the tree needs, the toolbar and header included.
-    //Counted from the rows rather than read off the view's contentHeight: a
-    //view sized by what it has laid out, and laying out by the height it was
-    //given, keeps whichever height it started with. Every row is
-    //Theme.treeRowHeight tall.
-    readonly property real fullHeight: toolBarId.height
-                                       + Theme.tightSpacing
-                                       + headerId.height
-                                       + treeViewId.rows * Theme.treeRowHeight
-
     //The settings key of each column's stored width, in column order. Name
     //takes the remainder, so it stores nothing.
     readonly property list<string> columnWidthKeys: ["", "kindColumnWidth", "tripsColumnWidth",
@@ -1111,7 +1097,6 @@ ColumnLayout {
         clip: true
         keyNavigationEnabled: true
         pointerNavigationEnabled: true
-        interactive: surveyTreeId.scrollable
         selectionBehavior: QQ.TableView.SelectRows
         //TableView's own ctrl and shift clicks then pick several rows, which
         //is what a verb over more than one trip acts on.

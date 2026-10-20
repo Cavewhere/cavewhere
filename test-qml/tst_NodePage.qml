@@ -28,6 +28,16 @@ MainWindowTest {
         readonly property int wideWindowWidth: 1600
         readonly property int headerDragDistance: 40
 
+        // Enough trips that a tree drawing every row is many viewports tall.
+        readonly property int manyTrips: 300
+        readonly property int tallWindowHeight: 900
+        readonly property int shortWindowHeight: 600
+        readonly property int tinyWindowHeight: 200
+        // A partly shown row at each edge plus TableView's buffer rows.
+        readonly property int extraLiveRows: 4
+        readonly property int wheelSteps: 3
+        readonly property int wheelNotch: 120
+
         function init() {
             RootData.project.newProject()
             RootData.pageSelectionModel.currentPageAddress = "View"
@@ -132,9 +142,9 @@ MainWindowTest {
             rootId.shadowEditor.coreClickInput.commitChanges()
         }
 
-        // The wide node page scrolls as a whole, and a drag on its tree's
-        // header boundary still resizes the column rather than the page, with
-        // the rows' cells following the header.
+        // The wide node page's tree scrolls itself, and a drag on its header
+        // boundary resizes the column, with the rows' cells following the
+        // header.
         function test_aDraggedHeaderBoundaryResizesTheNodeTreeColumn() {
             rootId.width = wideWindowWidth
             const nodes = setupCaveWithSection()
@@ -142,7 +152,7 @@ MainWindowTest {
             const view = tree(page, "caveDelegate0")
             tryCompare(view, "rows", 2, 5000)
             const treeHost = findChild(page, "tripTree")
-            verify(!treeHost.scrollable, "the wide node page scrolls the tree with the page")
+            verify(view.interactive, "the wide node page's tree scrolls itself")
 
             const kindHeader = findChild(treeHost, "surveyTreeHeaderCell" + SurveyTreeModel.Kind)
             const nameHeader = findChild(treeHost, "surveyTreeHeaderCell" + SurveyTreeModel.Name)
@@ -168,6 +178,82 @@ MainWindowTest {
                               return cell !== null && cell.width === draggedWidth
                           }, 5000, "row " + row + "'s Kind cell follows its column to " + draggedWidth)
             }
+        }
+
+        function pageFlickable(page) {
+            const bar = findChild(page, "cavePageVerticalScrollBar")
+            verify(bar !== null, "the wide node page has its scrollbar")
+            return bar.parent
+        }
+
+        // A cave of many trips draws only the rows in its window, and a wheel
+        // over the tree scrolls the tree.
+        function test_aNodeWithManyTripsDrawsOnlyTheRowsInView() {
+            rootId.width = wideWindowWidth
+            rootId.height = tallWindowHeight
+            const cave = addNode(null, SurveyNodeKind.Cave, "Long Cave")
+            for (let i = 0; i < manyTrips; i++) {
+                cave.addTrip()
+            }
+            const page = gotoNodePage("Source/Data/Node=Long Cave", cave)
+            const view = tree(page, "tripDelegate0")
+            tryCompare(view, "rows", manyTrips, 5000)
+            waitForRendering(page)
+
+            const liveRows = rootId.collectByName(page, "rowContent").length
+            const rowsInView = Math.ceil(view.height / Theme.treeRowHeight) + extraLiveRows
+            verify(liveRows <= rowsInView,
+                   "the tree draws the rows its " + view.height + " px window shows (at most "
+                   + rowsInView + "), not all " + manyTrips + ": it drew " + liveRows)
+            verify(liveRows < manyTrips / 4,
+                   "the tree draws a fraction of its " + manyTrips + " rows, drew " + liveRows)
+            verify(view.contentHeight > view.height,
+                   "the tree's rows (" + view.contentHeight + " px) outgrow its window ("
+                   + view.height + " px)")
+
+            const center = view.mapToItem(page, view.width / 2, view.height / 2)
+            for (let step = 0; step < wheelSteps; step++) {
+                mouseWheel(page, center.x, center.y, 0, -wheelNotch)
+            }
+            tryVerify(() => view.contentY > 0, 5000,
+                      "a wheel over the tree scrolls the tree, contentY " + view.contentY)
+        }
+
+        // The wide tree takes what the window has left below the action bar
+        // and gives up height with the window, down to a floor at which the
+        // page scrolls instead.
+        function test_theWideNodeTreeFillsTheWindowDownToItsMinimum() {
+            rootId.width = wideWindowWidth
+            rootId.height = tallWindowHeight
+            const nodes = setupCaveWithSection()
+            const page = gotoNodePage("Source/Data/Node=Side Cave", nodes.cave)
+            const view = tree(page, "caveDelegate0")
+            tryCompare(view, "rows", 2, 5000)
+            const treeHost = findChild(page, "tripTree")
+            const flickable = pageFlickable(page)
+            waitForRendering(page)
+
+            const tallHeight = treeHost.height
+            verify(flickable.contentHeight <= flickable.height,
+                   "a tall window holds the whole page: content " + flickable.contentHeight
+                   + " px in " + flickable.height + " px")
+            const treeBottom = treeHost.mapToItem(flickable, 0, treeHost.height).y
+            verify(Math.abs(flickable.height - Theme.pageMargin - treeBottom) <= 1,
+                   "the tree reaches the window's bottom margin: its bottom sits at " + treeBottom
+                   + " in a " + flickable.height + " px window")
+
+            const shrink = tallWindowHeight - shortWindowHeight
+            rootId.height = shortWindowHeight
+            tryVerify(() => Math.abs(treeHost.height - (tallHeight - shrink)) <= 1, 5000,
+                      "the tree shrinks with the window, from " + tallHeight + " to about "
+                      + (tallHeight - shrink) + ", got " + treeHost.height)
+
+            rootId.height = tinyWindowHeight
+            tryCompare(treeHost, "height", Theme.treeMinimumHeight, 5000,
+                       "a tiny window leaves the tree at its floor")
+            tryVerify(() => flickable.contentHeight > flickable.height, 5000,
+                      "below the floor the page scrolls: content " + flickable.contentHeight
+                      + " px in " + flickable.height + " px")
         }
 
         function test_childSectionShowsTheSectionAndOpensIt() {

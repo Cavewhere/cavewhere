@@ -25,21 +25,6 @@ MainWindowTest {
             rootId.height = 700
         }
 
-        // Every item under `item` answering to `objectName`. The trip rows
-        // are delegates, so there is one of each name per row.
-        function collectByName(item, objectName, found) {
-            if (item.objectName === objectName) {
-                found.push(item)
-            }
-            const kids = item.children
-            if (kids !== undefined) {
-                for (let i = 0; i < kids.length; i++) {
-                    collectByName(kids[i], objectName, found)
-                }
-            }
-            return found
-        }
-
         function gotoCavePage(cave) {
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + cave.name
             tryVerify(() => RootData.pageView.currentPageItem !== null
@@ -92,7 +77,7 @@ MainWindowTest {
         function cellsNamed(cavePage, objectName, count) {
             let cells = []
             tryVerify(() => {
-                          cells = collectByName(cavePage, objectName, [])
+                          cells = rootId.collectByName(cavePage, objectName)
                           return cells.length === count
                       }, 5000, count + " " + objectName + " cells should be drawn")
             return cells
@@ -253,7 +238,7 @@ MainWindowTest {
             const cave = RootData.region.cave(0)
             const cavePage = gotoCavePage(cave)
 
-            const nameLinks = collectByName(cavePage, "tripLink", [])
+            const nameLinks = rootId.collectByName(cavePage, "tripLink")
             compare(nameLinks.length, 1, "the cave holds the one attached trip")
             verify(nameLinks[0].text.indexOf("📎 ") === 0,
                    "an Attached trip row is marked too: " + nameLinks[0].text)
@@ -317,7 +302,7 @@ MainWindowTest {
             tryVerify(() => cave.length.value > 0, 20000,
                       "the attached file gives the root a length")
 
-            const valueCells = collectByName(cavePage, "value", [])
+            const valueCells = rootId.collectByName(cavePage, "value")
             verify(valueCells.length >= 2, "the page shows the Length and Depth stats")
             for (let i = 0; i < valueCells.length; i++) {
                 verify(!valueCells[i].text.startsWith("-1"),
