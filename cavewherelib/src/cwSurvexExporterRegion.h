@@ -92,9 +92,11 @@ public:
      *
      * \c externalOutputSystems maps a cave or trip owner whose file fixes
      * stations with no input \c *cs, and names a \c *cs \c out of its own, to
-     * that output system as the file writes it. In a run whose project names
-     * no frame, the file's \c *cs \c out is the run's output system, so the
-     * driver reads those fixes in it (see
+     * that output system as the file writes it, while that system still
+     * reads those fixes in (cwExternalCenterlineManager::fileOutputReadsIn).
+     * In a run whose project names no frame, the file's \c *cs \c out is the
+     * run's output system; under the project's frame it is the input system
+     * at the file's \c *include alone (see
      * cwSurvexExporterCaveTask::writeIncludeSystem).
      */
     struct CAVEWHERE_LIB_EXPORT Options {

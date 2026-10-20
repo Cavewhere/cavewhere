@@ -2477,13 +2477,17 @@ MainWindowTest {
             tryCompare(waitForChild("fixStationsLink"), "text", "1")
         }
 
-        // A file fix with no *cs is read in the system the run outputs in, and
-        // its row says so, naming the file and line.
+        // A file fix with no *cs is read in the system the file's *cs out
+        // names, and its row says so, naming the file and line. The read-in
+        // holds once houping's own-system fix gives the project its frame.
         function test_aFixWithNoSystemSaysWhereItIsReadIn() {
             saveProjectAs("fix-station-read-in")
             const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
                                               "external-centerlines/survex_bare_fix_tree/north/north_cs_out.svx"))
             tryVerify(() => subtreeAttachedFixCount(cave) === 2, 20000, "the scan lists both fixes")
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 20000,
+                      "houping's fix gives the project a frame")
+            tryCompare(RootData.region.localProjection, "anchorDescription", "houping.h1 — AttachedCave")
 
             RootData.pageSelectionModel.currentPageAddress =
                 "Source/Data/Node=" + String(cave.name) + "/Fix Stations"
@@ -2496,9 +2500,9 @@ MainWindowTest {
             compare(waitForChild("stationCell.0").text, "houping.h1")
             compare(liveChild("coordinateWarning.0").message, "")
             compare(waitForChild("stationCell.1").text, "sanqiao.e1")
-            compare(waitForChild("coordinateWarning.1").message,
-                    "Read in UTM48N, the system the file's *cs out names: "
-                    + "sanqiao/fixedpts/ents.svx line 3 names no coordinate system for this fix.")
+            tryCompare(waitForChild("coordinateWarning.1"), "message",
+                       "Read in UTM48N, the system the file's *cs out names: "
+                       + "sanqiao/fixedpts/ents.svx line 3 names no coordinate system for this fix.")
         }
 
         //! Opens the Fix Stations page of \a node and returns the page.

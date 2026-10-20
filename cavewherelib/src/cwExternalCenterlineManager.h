@@ -749,7 +749,7 @@ private:
     // The system the solve reads ownerId's bare fixes in, for the row's
     // read-in note (cwSurvexExporterCaveTask::writeIncludeSystem): the one
     // chosen for the attachment while a *cs out is in force, the project's or
-    // the file's own; else, in a project with no frame, the file's own *cs
+    // the file's own; else, while fileOutputReadsIn(), the file's own *cs
     // out. Empty when nothing names one: the solve reads them raw, or cavern
     // refuses them under *cs out.
     struct ReadInSystem {
@@ -758,8 +758,14 @@ private:
     };
     ReadInSystem readInSystemFor(const QUuid& ownerId, const cwExternalCenterline& centerline) const;
 
+    // Whether a file's own *cs out reads in its bare fixes: while the project
+    // has no frame, or the frame is one the attached fixes take part in
+    // (cwLocalProjectionManager::attachedFixesTakePart) — a file whose
+    // own-system fix seeds the frame keeps reading its bare ones as it says.
+    bool fileOutputReadsIn() const;
+
     // Per owner whose file fixes stations bare and names its own *cs out,
-    // that system (solveInputs().externalOutputSystems).
+    // that system, while fileOutputReadsIn() (solveInputs().externalOutputSystems).
     QHash<QUuid, QString> bareFixOutputSystems() const;
 
     // Per owner whose file fixes stations with no input coordinate system,

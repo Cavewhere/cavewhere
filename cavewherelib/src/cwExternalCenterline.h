@@ -108,7 +108,8 @@ class CAVEWHERE_LIB_EXPORT cwAttachedFix
     //! For a fix with no coordinate system of its own, the system the solve
     //! reads it in: the one chosen for the attachment
     //! (cwExternalCenterline::fixCoordinateSystem), or, when none is chosen
-    //! and the project has no frame, the *cs out the file names itself. Empty
+    //! and the project has no frame or one the attached fixes take part in,
+    //! the *cs out the file names itself. Empty
     //! when the fix names its own system, or when nothing names one for it.
     Q_PROPERTY(QString readInSystem MEMBER readInSystem FINAL)
     //! Whether readInSystem is the *cs out the file names itself rather than

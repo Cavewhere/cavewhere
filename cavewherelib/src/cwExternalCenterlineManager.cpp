@@ -18,6 +18,7 @@
 #include "cwExternalCenterlineSync.h"
 #include "cwExternalStationHarvest.h"
 #include "cwGeoReference.h"
+#include "cwLocalProjectionManager.h"
 #include "cwSaveLoad.h"
 #include "cwSurveyChunkSignaler.h"
 #include "cwSurveyNoteModel.h"
@@ -386,6 +387,8 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
                    this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners);
         disconnect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
                    this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
+        disconnect(m_region->localProjection(), &cwLocalProjectionManager::attachedFixesTakePartChanged,
+                   this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
     }
     m_region = region;
     m_signaler->setRegion(region);
@@ -402,8 +405,11 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
         // fires only on the delete verbs, which is what the store needs.
         connect(m_region.data(), &cwCavingRegion::ownersDeleted,
                 this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners);
-        // Gaining or losing a frame changes what a bare fix is read in.
+        // Gaining or losing a frame, or attached fixes joining or leaving it,
+        // changes what a bare fix is read in.
         connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
+                this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
+        connect(m_region->localProjection(), &cwLocalProjectionManager::attachedFixesTakePartChanged,
                 this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
     }
 
@@ -1123,7 +1129,11 @@ cwExternalCenterlineManager::ReadInSystem cwExternalCenterlineManager::readInSys
 {
     const bool georeferenced =
         !m_region.isNull() && m_region->geoReference()->hasCoordinateSystem();
-    const QString fileOutput = georeferenced ? QString() : m_ownerOutputSystems.value(ownerId);
+    // Only an owner whose file names a *cs out asks fileOutputReadsIn(), which
+    // in a Frozen frame gathers every fix and layer input.
+    const QString ownOutput = m_ownerOutputSystems.value(ownerId);
+    const QString fileOutput =
+        !ownOutput.isEmpty() && fileOutputReadsIn() ? ownOutput : QString();
     // Like the driver, which names the chosen system only where some *cs out
     // is in force for it.
     if (!centerline.fixCoordinateSystem().isEmpty() && (georeferenced || !fileOutput.isEmpty())) {
@@ -1150,9 +1160,19 @@ void cwExternalCenterlineManager::refreshSenderAttachedFixes()
     }
 }
 
+bool cwExternalCenterlineManager::fileOutputReadsIn() const
+{
+    return !m_region.isNull()
+           && (!m_region->geoReference()->hasCoordinateSystem()
+               || m_region->localProjection()->attachedFixesTakePart());
+}
+
 QHash<QUuid, QString> cwExternalCenterlineManager::bareFixOutputSystems() const
 {
     QHash<QUuid, QString> systems;
+    if (!fileOutputReadsIn()) {
+        return systems;
+    }
     const QHash<QUuid, QStringList> bare = bareFixedStations();
     for (auto it = bare.constBegin(); it != bare.constEnd(); ++it) {
         const QString system = m_ownerOutputSystems.value(it.key());

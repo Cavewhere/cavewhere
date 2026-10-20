@@ -229,7 +229,9 @@ private:
     //! names no output system (\a globalCS empty), the file's own *cs out
     //! (Options::externalOutputSystems) is written ahead of the file so every
     //! one of its fixes sees it, and the chosen system, if any, follows it;
-    //! with neither, nothing is written and cavern reads the fixes raw.
+    //! with neither, nothing is written and cavern reads the fixes raw. Under
+    //! the project's output system, with nothing chosen, the file's own *cs
+    //! out is written as the input system alone.
     void writeIncludeSystem(QTextStream& stream, const QUuid& ownerId,
                             const cwExternalCenterline& centerline,
                             const QString& globalCS,

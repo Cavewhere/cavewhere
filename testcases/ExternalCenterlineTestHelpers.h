@@ -27,6 +27,7 @@
 #include "cwExternalCenterlineManager.h"
 #include "cwExternalSourceSettings.h"
 #include "cwFutureManagerModel.h"
+#include "cwGeoReference.h"
 #include "cwLinePlotGeometry.h"
 #include "cwLinePlotManager.h"
 #include "cwNote.h"
@@ -315,6 +316,24 @@ inline void drainPipelines(SavedProjectFixture* fixture)
     fixture->rootData->linePlotManager()->waitToFinish();
     fixture->rootData->futureManagerModel()->waitForFinished();
     QCoreApplication::processEvents();
+}
+
+// Waits for the project to take a frame and for the solve in it, then drains
+// the pipelines. The region writes the frame's *cs out on the driver's second
+// line, so a file's own *cs out in a frameless driver leaves the wait running.
+inline bool waitForFrameAndSolve(SavedProjectFixture* fixture)
+{
+    const cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    const cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
+    const bool solvedInFrame = tryWait(kAttachWaitMs, [geoReference, linePlot]() {
+        if (!geoReference->hasCoordinateSystem()) {
+            return false;
+        }
+        const QStringList lines = linePlot->driverSource().split(QLatin1Char('\n'));
+        return lines.size() > 1 && lines.at(1).startsWith(QStringLiteral("*cs out "));
+    });
+    drainPipelines(fixture);
+    return solvedInFrame;
 }
 
 // The "give me an attached trip" prologue for tests about something

@@ -962,7 +962,9 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
     // trip's file stations sit under the trip's scopePrefix().
     const auto addWarning = [&](QStringList& messages, const QUuid& ownerId, const QString& scope,
                                 const cwExternalCenterline& centerline) {
-        if (!centerline.fixCoordinateSystem().isEmpty()) {
+        // A file whose own *cs out reads its bare fixes in has a system for them.
+        if (!centerline.fixCoordinateSystem().isEmpty()
+                || inputs.externalOutputSystems.contains(ownerId)) {
             return;
         }
         const auto stations = inputs.bareFixedStations.constFind(ownerId);

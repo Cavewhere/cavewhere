@@ -199,23 +199,52 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherInputs() 
 
 QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherFrameInputs() const
 {
-    if (attachedFixesTakePart()) {
-        return gatherInputs();
-    }
     QList<Input> inputs = gatherFixInputs();
-    inputs.append(gatherLayerInputs());
+    const QList<Input> layerInputs = gatherLayerInputs();
+    if (attachedFixesTakePart(inputs.isEmpty() && layerInputs.isEmpty())) {
+        inputs.append(gatherAttachedFixInputs());
+    }
+    inputs.append(layerInputs);
     return inputs;
 }
 
 bool cwLocalProjectionManager::attachedFixesTakePart() const
 {
-    const cwGeoReference* geoReference = m_region->geoReference();
-    return geoReference->state() == cwGeoReference::Ungeoreferenced
-           || (geoReference->state() == cwGeoReference::Anchored
-               && geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    if (m_region->geoReference()->state() == cwGeoReference::Frozen) {
+        return attachedFixesTakePart(gatherFixInputs().isEmpty() && gatherLayerInputs().isEmpty());
+    }
+    return attachedFixesTakePart(false);
 }
 
-QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherAttachedFixInputs() const
+bool cwLocalProjectionManager::attachedFixesTakePart(bool nativeInputsEmpty) const
+{
+    const cwGeoReference* geoReference = m_region->geoReference();
+    switch (geoReference->state()) {
+    case cwGeoReference::Ungeoreferenced:
+        return true;
+    case cwGeoReference::Anchored:
+        return geoReference->anchor().kind == cwGeoReference::Anchor::Attachment;
+    case cwGeoReference::Frozen:
+        // Recentering an attachment-only project freezes it; the attached
+        // fixes are all it has, so they keep counting until a native input
+        // arrives.
+        return nativeInputsEmpty;
+    }
+    return false;
+}
+
+void cwLocalProjectionManager::updateAttachedFixesTakePart()
+{
+    const bool takePart = attachedFixesTakePart();
+    if (m_lastAttachedFixesTakePart == takePart) {
+        return;
+    }
+    m_lastAttachedFixesTakePart = takePart;
+    emit attachedFixesTakePartChanged();
+}
+
+void cwLocalProjectionManager::forEachAttachedFixInput(
+        const std::function<bool(const Input&, const QString&)>& callback) const
 {
     QHash<QUuid, QString> chosenSystems;
     const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
@@ -232,39 +261,55 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherAttachedF
         }
     }
 
-    QList<Input> inputs;
-    if (chosenSystems.isEmpty()) {
-        return inputs;
+    // False once the callback has asked to stop.
+    const auto visit = [&callback](const cwAttachedFix& fix, const QString& system) {
+        const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(system);
+        if (!placement.has_value()) {
+            return true;
+        }
+
+        // The same domain rule as a fix station and a layer.
+        if (!cwCoordinateTransform::domainCheck(placement->cs, placement->point).isValid()) {
+            return true;
+        }
+
+        const Input input{
+            cwGeoReference::Anchor{cwGeoReference::Anchor::Attachment, fix.ownerId},
+            placement->cs,
+            placement->point
+        };
+        return callback(input, fix.station);
+    };
+
+    // The bare fixes a system was chosen for lead: the choice is the user's
+    // own input, the way a native fix is.
+    for (const cwSurveyNode* node : nodes) {
+        for (const cwAttachedFix& fix : node->listedAttachedFixes()) {
+            if (fix.coordinateSystem.isEmpty()) {
+                const QString choice = chosenSystems.value(fix.ownerId);
+                if (!choice.isEmpty() && !visit(fix, choice)) {
+                    return;
+                }
+            }
+        }
     }
 
     for (const cwSurveyNode* node : nodes) {
         for (const cwAttachedFix& fix : node->listedAttachedFixes()) {
-            if (!fix.coordinateSystem.isEmpty()) {
-                continue;
+            if (!fix.coordinateSystem.isEmpty() && !visit(fix, fix.solveSystem())) {
+                return;
             }
-            const QString choice = chosenSystems.value(fix.ownerId);
-            if (choice.isEmpty()) {
-                continue;
-            }
-
-            const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(choice);
-            if (!placement.has_value()) {
-                continue;
-            }
-
-            // The same domain rule as a fix station and a layer.
-            if (!cwCoordinateTransform::domainCheck(placement->cs, placement->point).isValid()) {
-                continue;
-            }
-
-            inputs.append(Input{
-                cwGeoReference::Anchor{cwGeoReference::Anchor::Attachment, fix.ownerId},
-                placement->cs,
-                placement->point
-            });
         }
     }
+}
 
+QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherAttachedFixInputs() const
+{
+    QList<Input> inputs;
+    forEachAttachedFixInput([&inputs](const Input& input, const QString&) {
+        inputs.append(input);
+        return true;
+    });
     return inputs;
 }
 
@@ -620,6 +665,7 @@ void cwLocalProjectionManager::recordFrameMove(bool anchorSeen)
     m_lastAnchor = m_region->geoReference()->anchor();
     m_anchorSeen = anchorSeen;
     updateAnchorDescription();
+    updateAttachedFixesTakePart();
 }
 
 void cwLocalProjectionManager::evaluate()
@@ -630,6 +676,7 @@ void cwLocalProjectionManager::evaluate()
 
     evaluateFrame();
     updateAnchorDescription();
+    updateAttachedFixesTakePart();
     settleEpoch();
 }
 
@@ -675,7 +722,6 @@ QString cwLocalProjectionManager::anchorDescription() const
 QString cwLocalProjectionManager::attachmentDescription(const QUuid& ownerId) const
 {
     QString ownerName;
-    QString station;
     forEachNode([&](cwSurveyNode* node) {
         if (node->id() == ownerId) {
             ownerName = node->name();
@@ -685,18 +731,22 @@ QString cwLocalProjectionManager::attachmentDescription(const QUuid& ownerId) co
                 ownerName = trip->name();
             }
         }
-        if (station.isEmpty()) {
-            for (const cwAttachedFix& fix : node->listedAttachedFixes()) {
-                if (fix.ownerId == ownerId && fix.coordinateSystem.isEmpty()) {
-                    station = fix.station;
-                    break;
-                }
-            }
+        return ownerName.isEmpty();
+    });
+    if (ownerName.isEmpty()) {
+        return QString();
+    }
+
+    QString station;
+    forEachAttachedFixInput([&](const Input& input, const QString& fixStation) {
+        if (input.anchor.id == ownerId) {
+            station = fixStation;
+            return false;
         }
-        return ownerName.isEmpty() || station.isEmpty();
+        return true;
     });
 
-    if (ownerName.isEmpty() || station.isEmpty()) {
+    if (station.isEmpty()) {
         return QString();
     }
     return QStringLiteral("%1 — %2").arg(station, ownerName);
@@ -797,9 +847,8 @@ void cwLocalProjectionManager::evaluateFrame()
             return;
         }
 
-        // A frozen frame stops listening to attached files, so freezing on
-        // one would leave the frame with nothing it counts, and the next
-        // evaluate would clear it. A nearby attached fix takes the role over.
+        // Nothing native is nearby, so an attached fix nearby takes the role
+        // over: the frame keeps following the file that put it there.
         const auto attachedNearby =
             std::find_if(inputs.constBegin(), inputs.constEnd(),
                          [&](const Input& input) {
@@ -855,7 +904,7 @@ void cwLocalProjectionManager::syncNodeConnections()
                 &cwLocalProjectionManager::updateAnchorDescription,
                 Qt::UniqueConnection);
 
-        // An attached bare fix is an input once a system is chosen for it: the
+        // An attached fix is an input once a system places it: a bare fix's
         // choice arrives on the owner, the fix itself with the scan.
         connect(node, &cwSurveyNode::attachedFixesChanged,
                 this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);

@@ -22,6 +22,7 @@
 #include "cwFutureManagerModel.h"
 #include "cwGeoReference.h"
 #include "cwLinePlotManager.h"
+#include "cwLocalProjectionManager.h"
 #include "cwNodeWarningModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
@@ -417,16 +418,33 @@ TEST_CASE("A Compass .mak that names a UTM zone but no datum is read in North Am
     const cwStationPositionLookup& lookup = cave->scopedPositions();
     const QString a1 = QStringLiteral("compass_zone_no_datum.a1");
     REQUIRE(lookup.hasPosition(a1));
+    // A1's fix is the frozen frame's only input. It lies far from the plain
+    // UTM frame's origin, which recenters on it, and near the Boulder frame's,
+    // which stays.
+    if (localFrame) {
+        CHECK(region->geoReference()->localCoordinateSystem() == kBoulderFrameCS);
+    } else {
+        CHECK(tryWait(kAttachWaitMs, [region]() {
+            return region->geoReference()->localCoordinateSystem() != kUtm13N;
+        }));
+    }
+    const auto placedAtExpected = [&]() {
+        const cwGeoPoint expected = fixtureA1In(region->geoReference()->localCoordinateSystem());
+        const QVector3D placed = cave->scopedPositions().position(a1);
+        return std::abs(placed.x() - expected.x) <= kFixMarginMeters
+               && std::abs(placed.y() - expected.y) <= kFixMarginMeters;
+    };
+    CHECK(tryWait(kAttachWaitMs, placedAtExpected));
+    drainPipelines(fixture.get());
     const QVector3D placed = lookup.position(a1);
-    const cwGeoPoint expected = fixtureA1In(frameCS);
+    const cwGeoPoint expected = fixtureA1In(region->geoReference()->localCoordinateSystem());
     CHECK(placed.x() == Catch::Approx(expected.x).margin(kFixMarginMeters));
     CHECK(placed.y() == Catch::Approx(expected.y).margin(kFixMarginMeters));
     CHECK(placed.z() == Catch::Approx(expected.z).margin(kFixMarginMeters));
-    if (!localFrame) {
-        const double shift = std::hypot(expected.x - kFixEastingFeet * kMetersPerFoot,
-                                        expected.y - kFixNorthingFeet * kMetersPerFoot);
-        CHECK(shift > kMinimumDatumShiftMeters);
-    }
+    const cwGeoPoint inZone = fixtureA1In(kUtm13N);
+    const double shift = std::hypot(inZone.x - kFixEastingFeet * kMetersPerFoot,
+                                    inZone.y - kFixNorthingFeet * kMetersPerFoot);
+    CHECK(shift > kMinimumDatumShiftMeters);
 
     const QStringList warnings = defaultDatumWarnings(cave);
     REQUIRE(warnings.size() == 1);
@@ -547,6 +565,9 @@ QString bareFixTreeFixture(const QString& entry)
 }
 
 const QString kBareFixStation = QStringLiteral("sanqiao.e1");
+// north_cs_out.svx's houping fixes h1 under its own *cs UTM48N.
+const QString kOwnCsFixStation = QStringLiteral("houping.h1");
+const QString kUtm48NFrame = QStringLiteral("EPSG:32648");
 const QString kBareFixFile = QStringLiteral("sanqiao/fixedpts/ents.svx");
 constexpr int kBareFixLine = 3;
 constexpr double kBareFixEasting = 500100.0;
@@ -677,12 +698,32 @@ TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachme
     REQUIRE_FALSE(linePlot->hasSolveError());
     CHECK(bareFixWarnings(cave).isEmpty());
 
-    // The fix's numbers land as written in the chosen system, here the frame.
+    // The fix's numbers read in the chosen system, carried into the frame.
+    // The fix is the frozen plain-UTM frame's only input and lies far from its
+    // origin, so the frame recenters on it.
+    CHECK(tryWait(kAttachWaitMs, [region]() {
+        return region->geoReference()->localCoordinateSystem() != kUtm13N;
+    }));
     const cwStationPositionLookup& lookup = cave->scopedPositions();
+    const auto expectedInFrame = [region]() {
+        const auto point = cwCoordinateTransform::transformPoint(
+            kUtm13N, region->geoReference()->localCoordinateSystem(),
+            cwGeoPoint(kBareFixEasting, kBareFixNorthing, kBareFixElevation));
+        REQUIRE(point.has_value());
+        return *point;
+    };
+    CHECK(tryWait(kAttachWaitMs, [&]() {
+        const cwGeoPoint expected = expectedInFrame();
+        const QVector3D placed = cave->scopedPositions().position(kBareFixStation);
+        return std::abs(placed.x() - expected.x) <= kBareFixMarginMeters
+               && std::abs(placed.y() - expected.y) <= kBareFixMarginMeters;
+    }));
+    drainPipelines(fixture.get());
+    const cwGeoPoint inFrame = expectedInFrame();
     const QVector3D placed = lookup.position(kBareFixStation);
-    CHECK(placed.x() == Catch::Approx(kBareFixEasting).margin(kBareFixMarginMeters));
-    CHECK(placed.y() == Catch::Approx(kBareFixNorthing).margin(kBareFixMarginMeters));
-    CHECK(placed.z() == Catch::Approx(kBareFixElevation).margin(kBareFixMarginMeters));
+    CHECK(placed.x() == Catch::Approx(inFrame.x).margin(kBareFixMarginMeters));
+    CHECK(placed.y() == Catch::Approx(inFrame.y).margin(kBareFixMarginMeters));
+    CHECK(placed.z() == Catch::Approx(inFrame.z).margin(kBareFixMarginMeters));
     CHECK(lookup.hasPosition(QStringLiteral("houping.h2")));
 
     // The row names the system, the file, and the line that left the fix
@@ -723,18 +764,40 @@ TEST_CASE("A file's *fix with no *cs reads in the *cs out the file names itself"
     cwCave* cave = attachAndSolve(fixture.get(), bareFixTreeFixture(QStringLiteral("north_cs_out.svx")));
     drainPipelines(fixture.get());
 
-    // Without the read-in, houping's *cs out leaves sanqiao's fix with no
-    // input system, and cavern fails the whole run on it.
+    // houping's h1 names its own system, so the project takes a frame
+    // centered on it.
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    REQUIRE(waitForFrameAndSolve(fixture.get()));
+    const cwGeoReference* geoReference = region->geoReference();
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == cave->id());
+    CHECK(region->localProjection()->anchorDescription().toStdString()
+          == QStringLiteral("%1 — %2").arg(kOwnCsFixStation, cave->name()).toStdString());
+
+    // Without the read-in, the frame's *cs out leaves sanqiao's fix with no
+    // input system, and cavern fails the whole run on it. The driver reads
+    // the include in the file's own *cs out, under the frame's.
     cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
     INFO("driver:\n" << linePlot->driverSource().toStdString());
     INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
     REQUIRE_FALSE(linePlot->hasSolveError());
-    CHECK(linePlot->driverSource().contains(QStringLiteral("*cs out UTM48N\n*cs UTM48N\n*include")));
+    CHECK_FALSE(linePlot->driverSource().contains(QStringLiteral("*cs out UTM48N")));
+    CHECK(linePlot->driverSource().contains(QStringLiteral("*cs UTM48N\n*include")));
+    CHECK(bareFixWarnings(cave).isEmpty());
 
     const cwStationPositionLookup& lookup = cave->scopedPositions();
+    REQUIRE(lookup.hasPosition(kOwnCsFixStation));
+    CHECK(lookup.position(kOwnCsFixStation).x() == Catch::Approx(0.0).margin(kBareFixMarginMeters));
+    CHECK(lookup.position(kOwnCsFixStation).y() == Catch::Approx(0.0).margin(kBareFixMarginMeters));
     REQUIRE(lookup.hasPosition(kBareFixStation));
-    CHECK(lookup.position(kBareFixStation).x()
-          == Catch::Approx(kBareFixEasting).margin(kBareFixMarginMeters));
+    const auto expected = cwCoordinateTransform::transformPoint(
+        kUtm48NFrame, geoReference->localCoordinateSystem(),
+        cwGeoPoint(kBareFixEasting, kBareFixNorthing, kBareFixElevation));
+    REQUIRE(expected.has_value());
+    const QVector3D placed = lookup.position(kBareFixStation);
+    CHECK(placed.x() == Catch::Approx(expected->x).margin(kBareFixMarginMeters));
+    CHECK(placed.y() == Catch::Approx(expected->y).margin(kBareFixMarginMeters));
+    CHECK(placed.z() == Catch::Approx(expected->z).margin(kBareFixMarginMeters));
     CHECK(lookup.hasPosition(QStringLiteral("houping.h2")));
 
     // The harvest reads it the same way, so the file's stations are known.
@@ -746,7 +809,7 @@ TEST_CASE("A file's *fix with no *cs reads in the *cs out the file names itself"
                             "names no coordinate system for this fix.")
                  .arg(kBareFixFile).arg(kBareFixLine));
     // houping's fix names its own system.
-    CHECK(subtreeAttachedFixFor(cave, QStringLiteral("houping.h1")).readInWarning().isEmpty());
+    CHECK(subtreeAttachedFixFor(cave, kOwnCsFixStation).readInWarning().isEmpty());
 }
 
 TEST_CASE("A file whose every *fix names its *cs is attached as written",
@@ -768,13 +831,24 @@ TEST_CASE("A file whose every *fix names its *cs is attached as written",
     cwCave* cave = attachAndSolve(fixture.get(), source);
     drainPipelines(fixture.get());
 
+    // a1's own system gives the project a frame centered on it.
+    cwCavingRegion* region = fixture->project->cavingRegion();
+    REQUIRE(waitForFrameAndSolve(fixture.get()));
+    CHECK(region->geoReference()->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(region->geoReference()->anchor().id == cave->id());
+    CHECK(region->localProjection()->anchorDescription().toStdString()
+          == QStringLiteral("own.a1 — %1").arg(cave->name()).toStdString());
+
     cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
     INFO("driver:\n" << linePlot->driverSource().toStdString());
     REQUIRE_FALSE(linePlot->hasSolveError());
-    // The driver puts no system of its own around the file.
-    CHECK_FALSE(linePlot->driverSource().contains(QStringLiteral("*cs")));
+    // The file names a system for every fix, so nothing is read in for it.
     CHECK(managerOf(fixture.get())->solveInputs().externalOutputSystems.isEmpty());
     CHECK(subtreeAttachedFixFor(cave, QStringLiteral("own.a1")).readInWarning().isEmpty());
+    const cwStationPositionLookup& lookup = cave->scopedPositions();
+    REQUIRE(lookup.hasPosition(QStringLiteral("own.a1")));
+    CHECK(lookup.position(QStringLiteral("own.a1")).x() == Catch::Approx(0.0).margin(kBareFixMarginMeters));
+    CHECK(lookup.position(QStringLiteral("own.a1")).y() == Catch::Approx(0.0).margin(kBareFixMarginMeters));
 }
 
 namespace {

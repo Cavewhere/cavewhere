@@ -183,12 +183,14 @@ std::unique_ptr<SavedProjectFixture> makeProject(const QString& projectFileBase,
     return fixture;
 }
 
-//! A native fix on \a node at \a station, entered in the project's frame.
-void addNativeFix(cwSurveyNode* node, const QString& station, double easting)
+//! A native fix on \a node at \a station, entered in \a inputCS (the
+//! project's frame unless given).
+void addNativeFix(cwSurveyNode* node, const QString& station, double easting,
+                  const QString& inputCS = kUtm48NFrame)
 {
     cwFixStation fix;
     fix.setStationName(station);
-    fix.setInputCS(kUtm48NFrame);
+    fix.setInputCS(inputCS);
     fix.setCoordinate(easting, kFixNorthing, kFixElevation);
     node->fixStations()->appendFixStation(fix);
 }
@@ -339,10 +341,23 @@ TEST_CASE("A bare file fix reads in the system chosen for its attachment",
     CHECK(lineAtInclude == chosenLine);
     REQUIRE_FALSE(linePlot->hasSolveError());
 
+    // The fix is the frozen plain-UTM frame's only input and lies far from
+    // its origin, so the frame recenters on it.
+    const cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    CHECK(tryWait(kAttachWaitMs, [geoReference]() {
+        return geoReference->localCoordinateSystem() != kUtm48NFrame;
+    }));
     const cwStationPositionLookup& lookup = root->scopedPositions();
+    CHECK(tryWait(kAttachWaitMs, [&]() {
+        const cwGeoPoint expected = fixtureFixIn(geoReference->localCoordinateSystem());
+        const QVector3D placed = root->scopedPositions().position(kFixedStation);
+        return std::abs(placed.x() - expected.x) <= kPlacementMarginMeters
+               && std::abs(placed.y() - expected.y) <= kPlacementMarginMeters;
+    }));
+    drainPipelines(fixture.get());
     REQUIRE(lookup.hasPosition(kFixedStation));
     const QVector3D placed = lookup.position(kFixedStation);
-    const cwGeoPoint expected = fixtureFixIn(kUtm48NFrame);
+    const cwGeoPoint expected = fixtureFixIn(geoReference->localCoordinateSystem());
     CHECK(placed.x() == Catch::Approx(expected.x).margin(kPlacementMarginMeters));
     CHECK(placed.y() == Catch::Approx(expected.y).margin(kPlacementMarginMeters));
     CHECK(placed.z() == Catch::Approx(expected.z).margin(kPlacementMarginMeters));
@@ -779,10 +794,15 @@ TEST_CASE("The grid convergence readout converges at a bare file fix once its sy
           "[AttachInclude][BareFixCS][GridConvergence]")
 {
     // A frame one zone west of the fix's, so the fix sits off its meridian
-    // and the convergence there is far from zero.
+    // and the convergence there is far from zero. A native fix on that
+    // zone's meridian holds it there: a frozen frame with nothing native
+    // would recenter on the attached fix.
     auto fixture = makeProject(QStringLiteral("bare-fix-convergence"), false);
     fixture->project->cavingRegion()->geoReference()->restore(cwGeoReference::Frozen,
                                                               kUtm47NFrame, {}, QString());
+    addNativeTripWithShot(fixture->cave, QStringLiteral("West survey"), kFarFixStation,
+                          QStringLiteral("far2"));
+    addNativeFix(fixture->cave, kFarFixStation, kFixEasting, kUtm47NFrame);
     cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
     REQUIRE(waitForDriverIncludingFixture(fixture.get()));
     const cwGridConvergence* convergence = root->gridConvergence();

@@ -8,6 +8,7 @@
 // Catch
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 // Cavewhere
 #include "cwAttachedCenterlinesModel.h"
@@ -18,6 +19,7 @@
 #include "cwExternalCenterlineManager.h"
 #include "cwLength.h"
 #include "cwLinePlotManager.h"
+#include "cwLocalProjectionManager.h"
 #include "cwCavernNaming.h"
 #include "cwScopeLabels.h"
 #include "cwEquate.h"
@@ -359,8 +361,6 @@ constexpr double kCompassTapeFeet = 10.0;
 // ALPHA's six legs, BRAVO's three, and CHARLIE's two, each one tape.
 constexpr int kCompassProjectLegCount = 11;
 constexpr int kCompassAlphaLegCount = 6;
-constexpr double kCompassAlphaEasting = 500000.0;
-constexpr double kCompassCharlieEasting = 500200.0;
 constexpr double kCompassNorthing = 4000000.0;
 constexpr double kCompassElevation = 100.0;
 // PROJECT.MAK's datum and zone, and a free spot east of ALPHA for a fixed
@@ -380,14 +380,14 @@ constexpr int kWallsTwoCavesLegCount = 6;
 // EAST.SRV's two legs and WEST.SRV's two, over five stations.
 constexpr int kWallsEmptyDatumLegCount = 4;
 constexpr int kWallsEmptyDatumStationCount = 5;
+// EAST.SRV's #FIX A1 elevation.
+constexpr double kWallsEmptyDatumElevation = 219.0;
 
-constexpr double kSurvexUtmEasting = 500000.0;
-constexpr double kSurvexUtmNorthing = 4000000.0;
 constexpr double kSurvexUtmElevation = 100.0;
 constexpr double kSurvexLatLongElevation = 200.0;
-// A float32 holds a UTM northing to within a quarter meter, and the latitude
-// fix's projected northing is no round number.
-constexpr double kUtmFloatMarginMeters = 0.5;
+// The .3d stores centimeters, and positions this near the frame's origin are
+// float-exact well below that.
+constexpr double kLocalFrameMarginMeters = 0.02;
 
 //! Attaches \a fixture as a source root under the region's root in
 //! \a project and drains the pipelines; requireSolved() checks the solve.
@@ -438,25 +438,55 @@ void checkPosition(const cwStationPositionLookup& lookup, const QString& station
     CHECK(position.z() == Catch::Approx(z).margin(margin));
 }
 
+//! Checks that \a cave's fixed \a station solved where PROJ carries its
+//! fix's placement into \a solvedCS.
+void checkAtPlacement(const cwSurveyNode* cave, const QString& station, const QString& solvedCS,
+                      double margin)
+{
+    INFO("station " << station.toStdString());
+    const cwAttachedFix fix = subtreeAttachedFixFor(cave, station);
+    INFO("coordinate " << fix.coordinate.toStdString() << ", solve system "
+                       << fix.solveSystem().toStdString() << ", solved system "
+                       << solvedCS.toStdString());
+    const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(fix.solveSystem());
+    REQUIRE(placement.has_value());
+    const std::optional<cwGeoPoint> solved =
+        cwCoordinateTransform::transformPoint(placement->cs, solvedCS, placement->point);
+    REQUIRE(solved.has_value());
+    checkPosition(cave->scopedPositions(), station, solved->x, solved->y, solved->z, margin);
+}
+
 //! Checks that each walls_fix_units fixed station solved where PROJ carries
 //! its fix's placement into \a solvedCS. Each .srv is its own component with
 //! one fix, so each fixed station sits exactly on its fix's placement.
 void checkWallsFixUnitsAtPlacements(const cwSurveyNode* cave, const QString& solvedCS, double margin)
 {
-    const cwStationPositionLookup lookup = cave->scopedPositions();
     for (const QString& station : {QStringLiteral("M1"), QStringLiteral("F1"), QStringLiteral("L1")}) {
-        INFO("station " << station.toStdString());
-        const cwAttachedFix fix = subtreeAttachedFixFor(cave, station);
-        INFO("coordinate " << fix.coordinate.toStdString() << ", solve system "
-                           << fix.solveSystem().toStdString() << ", solved system "
-                           << solvedCS.toStdString());
-        const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(fix.solveSystem());
-        REQUIRE(placement.has_value());
-        const std::optional<cwGeoPoint> solved =
-            cwCoordinateTransform::transformPoint(placement->cs, solvedCS, placement->point);
-        REQUIRE(solved.has_value());
-        checkPosition(lookup, station, solved->x, solved->y, solved->z, margin);
+        checkAtPlacement(cave, station, solvedCS, margin);
     }
+}
+
+//! Checks that \a project's frame is anchored on \a owner's attachment and
+//! that the Data page names it after \a station.
+void checkAnchoredOnAttachment(SavedProjectFixture* project, const cwSurveyNode* owner,
+                               const QString& station)
+{
+    cwCavingRegion* region = project->project->cavingRegion();
+    const cwGeoReference* geoReference = region->geoReference();
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == owner->id());
+    CHECK(region->localProjection()->anchorDescription().toStdString()
+          == QStringLiteral("%1 — %2").arg(station, owner->name()).toStdString());
+}
+
+//! The horizontal distance between two solved stations of \a lookup.
+double solvedDistance(const cwStationPositionLookup& lookup, const QString& from, const QString& to)
+{
+    INFO("from " << from.toStdString() << " to " << to.toStdString());
+    REQUIRE(lookup.hasPosition(from));
+    REQUIRE(lookup.hasPosition(to));
+    return lookup.position(from).toVector2D().distanceToPoint(lookup.position(to).toVector2D());
 }
 
 } // namespace
@@ -484,26 +514,33 @@ TEST_CASE("compass_project solves as a source root",
     }
     CHECK(lookup.positions().size() == 14);
 
+    // The .mak's datum and zone give A1's fix a system of its own, so the
+    // project with no frame takes one centered on it.
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+    checkAnchoredOnAttachment(project.get(), cave, QStringLiteral("alpha.A1"));
+    const QString frame = project->project->cavingRegion()->geoReference()->localCoordinateSystem();
+    const cwStationPositionLookup framed = cave->scopedPositions();
+    checkPosition(framed, QStringLiteral("alpha.A1"), 0.0, 0.0, kCompassElevation,
+                  kLocalFrameMarginMeters);
+    checkAtPlacement(cave, QStringLiteral("charlie.C1"), frame, kLocalFrameMarginMeters);
+
+    // In the frame the driver sets the .mak's location's declination, which
+    // turns the legs; distances survive the turn. BRAVO's link station is
+    // ALPHA's A5, two tapes east and two north of A1; B3 is two tapes east and
+    // one north of it.
     const double tape = kCompassTapeFeet * kFeetToMeters;
-    checkPosition(lookup, QStringLiteral("alpha.A1"),
-                  kCompassAlphaEasting, kCompassNorthing, kCompassElevation, kUtmFloatMarginMeters);
-    checkPosition(lookup, QStringLiteral("charlie.C1"),
-                  kCompassCharlieEasting, kCompassNorthing, kCompassElevation, kUtmFloatMarginMeters);
-    // BRAVO's link station is ALPHA's A5, two tapes east and two north of A1;
-    // B3 is two tapes east and one north of it.
     for (const QString& linkStation : {QStringLiteral("alpha.A5"), QStringLiteral("bravo.A5")}) {
-        checkPosition(lookup, linkStation,
-                      kCompassAlphaEasting + 2.0 * tape, kCompassNorthing + 2.0 * tape,
-                      kCompassElevation, kUtmFloatMarginMeters);
+        CHECK(solvedDistance(framed, QStringLiteral("alpha.A1"), linkStation)
+              == Catch::Approx(std::hypot(2.0 * tape, 2.0 * tape)).margin(kSolvedLengthMarginMeters));
     }
-    checkPosition(lookup, QStringLiteral("bravo.B3"),
-                  kCompassAlphaEasting + 4.0 * tape, kCompassNorthing + 3.0 * tape,
-                  kCompassElevation, kUtmFloatMarginMeters);
+    CHECK(solvedDistance(framed, QStringLiteral("alpha.A1"), QStringLiteral("bravo.B3"))
+          == Catch::Approx(std::hypot(4.0 * tape, 3.0 * tape)).margin(kSolvedLengthMarginMeters));
 
     CHECK(cave->length()->value()
-          == Catch::Approx(kCompassProjectLegCount * tape).margin(kUtmFloatMarginMeters));
+          == Catch::Approx(kCompassProjectLegCount * tape).margin(kSolvedLengthMarginMeters));
     CHECK(childNodeNamed(cave, QStringLiteral("Alpha"))->length()->value()
-          == Catch::Approx(kCompassAlphaLegCount * tape).margin(kUtmFloatMarginMeters));
+          == Catch::Approx(kCompassAlphaLegCount * tape).margin(kSolvedLengthMarginMeters));
 }
 
 TEST_CASE("walls_project solves as a source root",
@@ -558,22 +595,24 @@ TEST_CASE("walls_empty_datum solves as a source root",
                                               QStringLiteral("walls_empty_datum/walls_empty_datum.wpj"));
     requireSolved(project.get());
 
-    // The .REF's grid convergence turns the legs off the grid axes, so compare
-    // distances, which survive the turn. The positions are floats at UTM
-    // magnitudes, so the distances carry the float margin.
+    // The .REF gives A1's fix a system of its own, so the project with no
+    // frame takes one centered on it.
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+    checkAnchoredOnAttachment(project.get(), cave, QStringLiteral("A1"));
+
+    // The frame's grid convergence turns the legs off the grid axes, so
+    // compare distances, which survive the turn.
     const cwStationPositionLookup lookup = cave->scopedPositions();
     CHECK(lookup.positions().size() == kWallsEmptyDatumStationCount);
-    for (const QString& station : {QStringLiteral("A1"), QStringLiteral("A3"), QStringLiteral("B2")}) {
-        INFO("station " << station.toStdString());
-        REQUIRE(lookup.hasPosition(station));
-    }
-    const QVector3D a1 = lookup.position(QStringLiteral("A1"));
+    checkPosition(lookup, QStringLiteral("A1"), 0.0, 0.0, kWallsEmptyDatumElevation,
+                  kLocalFrameMarginMeters);
     // EAST.SRV runs north then east to A3; WEST.SRV runs north then west back
     // over A1's easting.
-    CHECK(a1.distanceToPoint(lookup.position(QStringLiteral("A3")))
-          == Catch::Approx(std::sqrt(2.0) * kWallsTapeMeters).margin(kUtmFloatMarginMeters));
-    CHECK(a1.distanceToPoint(lookup.position(QStringLiteral("B2")))
-          == Catch::Approx(2.0 * kWallsTapeMeters).margin(kUtmFloatMarginMeters));
+    CHECK(solvedDistance(lookup, QStringLiteral("A1"), QStringLiteral("A3"))
+          == Catch::Approx(std::sqrt(2.0) * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
+    CHECK(solvedDistance(lookup, QStringLiteral("A1"), QStringLiteral("B2"))
+          == Catch::Approx(2.0 * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
     CHECK(cave->length()->value()
           == Catch::Approx(kWallsEmptyDatumLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));
 }
@@ -587,9 +626,16 @@ TEST_CASE("walls_fix_units solves its fixes where their rows place them",
                                               QStringLiteral("walls_fix_units/walls_fix_units.wpj"));
     requireSolved(project.get());
 
-    // The project keeps no frame of its own, so the positions are the .REF's
-    // NAD27 UTM zone 16N grid as floats.
-    checkWallsFixUnitsAtPlacements(cave, QStringLiteral("EPSG:26716"), kUtmFloatMarginMeters);
+    // The .REF gives every fix a system of its own, so the project with no
+    // frame takes one centered on the first, M1.
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+    checkAnchoredOnAttachment(project.get(), cave, QStringLiteral("M1"));
+    const QString frame = project->project->cavingRegion()->geoReference()->localCoordinateSystem();
+    checkWallsFixUnitsAtPlacements(cave, frame, kLocalFrameMarginMeters);
+    const QVector3D m1 = cave->scopedPositions().position(QStringLiteral("M1"));
+    CHECK(m1.x() == Catch::Approx(0.0).margin(kLocalFrameMarginMeters));
+    CHECK(m1.y() == Catch::Approx(0.0).margin(kLocalFrameMarginMeters));
 }
 
 TEST_CASE("walls_fix_units solves its fixes where their rows place them in a native fix's frame",
@@ -600,10 +646,6 @@ TEST_CASE("walls_fix_units solves its fixes where their rows place them in a nat
     constexpr double kNativeFixEasting = 521000.0;
     constexpr double kNativeFixNorthing = 4040000.0;
     constexpr double kNativeFixElevation = 100.0;
-    // The .3d stores centimeters, and positions this near the frame's origin
-    // are float-exact well below that.
-    constexpr double kLocalFrameMarginMeters = 0.02;
-
     auto project = makeSavedProject(QStringLiteral("walls-fix-units-frame"),
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
     addNativeTripWithShot(project->cave, QStringLiteral("Native survey"),
@@ -638,19 +680,25 @@ TEST_CASE("survex_two_cs solves as two source roots in one output system",
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
     cwSurveyNode* utmCave = attachSourceAndSolve(project.get(), QStringLiteral("survex_two_cs/utm.svx"));
     cwSurveyNode* latLongCave = attachSourceAndSolve(project.get(), QStringLiteral("survex_two_cs/latlong.svx"));
+    REQUIRE(waitForFrameAndSolve(project.get()));
     requireSolved(project.get());
 
+    // utm.svx is attached first, so its fix anchors the frame.
+    checkAnchoredOnAttachment(project.get(), utmCave, QStringLiteral("utm.u1"));
+    const QString frame = project->project->cavingRegion()->geoReference()->localCoordinateSystem();
     const cwStationPositionLookup utm = utmCave->scopedPositions();
-    checkPosition(utm, QStringLiteral("utm.u1"),
-                  kSurvexUtmEasting, kSurvexUtmNorthing, kSurvexUtmElevation, kUtmFloatMarginMeters);
+    checkPosition(utm, QStringLiteral("utm.u1"), 0.0, 0.0, kSurvexUtmElevation,
+                  kLocalFrameMarginMeters);
     CHECK(utm.positions().size() == 3);
 
-    // l1 sits on zone 16N's central meridian, so it lands on the false easting.
+    // l1 sits on zone 16N's central meridian, u1's too, so it lands south of
+    // u1 on the frame's meridian.
+    checkAtPlacement(latLongCave, QStringLiteral("latlong.l1"), frame, kLocalFrameMarginMeters);
     const cwStationPositionLookup latLong = latLongCave->scopedPositions();
-    REQUIRE(latLong.hasPosition(QStringLiteral("latlong.l1")));
     const QVector3D l1 = latLong.position(QStringLiteral("latlong.l1"));
-    CHECK(l1.x() == Catch::Approx(kSurvexUtmEasting).margin(kUtmFloatMarginMeters));
-    CHECK(l1.z() == Catch::Approx(kSurvexLatLongElevation).margin(kUtmFloatMarginMeters));
+    CHECK(l1.x() == Catch::Approx(0.0).margin(kLocalFrameMarginMeters));
+    CHECK(l1.y() < 0.0);
+    CHECK(l1.z() == Catch::Approx(kSurvexLatLongElevation).margin(kLocalFrameMarginMeters));
     CHECK(latLong.positions().size() == 2);
 }
 
@@ -849,4 +897,64 @@ TEST_CASE("Nested blocks count each leg once in a source root's length",
     requireSolved(project.get());
 
     CHECK(root->length()->value() == Catch::Approx(34.0).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("A Survex file whose *fix names its *cs gives a project with no frame one, centered on the fix",
+          "[LinePlotManager][Attach][SourcedFixtures][AttachedFrame]")
+{
+    // own_cs_fix.svx: *cs UTM48N, then *fix S1 500200 3000000 100 and a 10 m
+    // leg due north to S2.
+    constexpr double kOwnCsFixElevation = 100.0;
+    constexpr double kOwnCsLegMeters = 10.0;
+    const QString fixedStation = QStringLiteral("scoped.S1");
+
+    auto project = makeSavedProject(QStringLiteral("own-cs-fix-seeds-frame"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(),
+                                              QStringLiteral("survex_native_cs_scope/own_cs_fix.svx"));
+    requireSolved(project.get());
+    REQUIRE(subtreeListsAttachedFix(cave, fixedStation));
+
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+    checkAnchoredOnAttachment(project.get(), cave, fixedStation);
+
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    checkPosition(lookup, fixedStation, 0.0, 0.0, kOwnCsFixElevation, kLocalFrameMarginMeters);
+    CHECK(solvedDistance(lookup, fixedStation, QStringLiteral("scoped.S2"))
+          == Catch::Approx(kOwnCsLegMeters).margin(kSolvedLengthMarginMeters));
+}
+
+TEST_CASE("A file whose fixes name their own system leaves a native fix's frame alone",
+          "[LinePlotManager][Attach][SourcedFixtures][AttachedFrame]")
+{
+    // A native fix in WGS 84 UTM 16N, near every fixture's fixes.
+    constexpr double kNativeFixEasting = 521000.0;
+    constexpr double kNativeFixNorthing = 4040000.0;
+    constexpr double kNativeFixElevation = 100.0;
+
+    const QString fixture = GENERATE(QStringLiteral("walls_empty_datum/walls_empty_datum.wpj"),
+                                     QStringLiteral("compass_project/PROJECT.MAK"),
+                                     QStringLiteral("survex_two_cs/utm.svx"));
+    INFO("fixture: " << fixture.toStdString());
+
+    auto project = makeSavedProject(QStringLiteral("own-system-native-frame"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    addNativeTripWithShot(project->cave, QStringLiteral("Native survey"),
+                          QStringLiteral("m1"), QStringLiteral("m2"));
+    cwFixStation nativeFix;
+    nativeFix.setStationName(QStringLiteral("m1"));
+    nativeFix.setInputCS(kCompassProjectCS);
+    nativeFix.setCoordinate(kNativeFixEasting, kNativeFixNorthing, kNativeFixElevation);
+    project->cave->fixStations()->appendFixStation(nativeFix);
+    const cwGeoReference* geoReference = project->project->cavingRegion()->geoReference();
+    REQUIRE(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
+    const QString before = geoReference->localCoordinateSystem();
+
+    attachSourceAndSolve(project.get(), fixture);
+    requireSolved(project.get());
+
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
+    CHECK(geoReference->localCoordinateSystem() == before);
 }

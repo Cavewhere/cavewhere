@@ -36,8 +36,9 @@ class cwLazLayer;
  * Drives the project's local projection (LDP) through its lifecycle in
  * response to the region's georeferenced inputs — the fix stations that carry
  * a readable coordinate, the LAZ layers that declare a CRS, and, while the
- * project has no frame of its own, the attached files' bare fixes that a
- * system was chosen for.
+ * project has no frame of its own or follows an attached file, the attached
+ * files' fixes: the bare ones a system was chosen for, and the ones whose file
+ * names their system.
  *
  * The states and their invariants live on cwGeoReference; the policy for
  * moving between them lives here, because deciding them needs the region's
@@ -89,7 +90,7 @@ public:
     double anchorThresholdMeters() const { return kAnchorThresholdMeters; }
 
     //! What the frame is centered on, for a reader: "A42 — Roppel Cave" when the
-    //! anchor is a fix station or an attached file's bare fix (named by the
+    //! anchor is a fix station or an attached file's fix (named by the
     //! attachment's owner), the layer's name when it is a GIS layer, and ""
     //! when no anchor is answerable for the frame (Ungeoreferenced or Frozen).
     //!
@@ -128,9 +129,9 @@ public:
 
     //! The middle of the project — the component-wise median of every input the
     //! frame can place, in the frame's own coordinates — or an empty result when
-    //! there is no frame or nothing it can place. Attached bare fixes whose
-    //! system is chosen count in every frame state, including a frame that
-    //! keeps its origin whatever they say.
+    //! there is no frame or nothing it can place. Attached fixes that a system
+    //! places (a chosen one or the file's own) count in every frame state,
+    //! including a frame that keeps its origin whatever they say.
     std::optional<cwGeoPoint> dataCenter() const;
 
     //! Whether the frame is already frozen on the middle of the project, so
@@ -173,6 +174,14 @@ public:
     //! nothing the frame can place.
     Q_INVOKABLE bool recenterOnDataCenter();
 
+    //! Whether the attached fixes take part in the frame: while the project has
+    //! no frame, follows one of them, or is frozen with no fix station or layer
+    //! to place it (recentering an attachment-only project). A frame that
+    //! follows a native fix or a layer, or that is frozen beside one, keeps its
+    //! origin whatever an attached file says. It is also when an attached
+    //! file's own *cs out still reads in its bare fixes.
+    bool attachedFixesTakePart() const;
+
     //! Suspend evaluation while a project load replaces the region's data.
     //! Caves arriving mid-load would otherwise derive a frame that
     //! cwGeoReference::restore() overwrites moments later — a PROJ pipeline
@@ -184,6 +193,9 @@ signals:
     //! Who the frame is centered on now reads differently — either the frame
     //! moved, or whatever carries the anchor was renamed or went away.
     void anchorDescriptionChanged();
+
+    //! attachedFixesTakePart() reads differently.
+    void attachedFixesTakePartChanged();
 
 private:
     //! One candidate to anchor on: what would identify it, where it is, and the
@@ -222,6 +234,9 @@ private:
     //! only: every read still resolves against the region.
     QString m_lastAnchorDescription;
 
+    //! attachedFixesTakePart() as it last read, for the same reason.
+    bool m_lastAttachedFixesTakePart = true;
+
     //! The epoch currently being settled, if the frame is still being derived.
     //! Held only while frameFuture() has been asked for during an open epoch,
     //! so a project that never has to derive anything never mints one.
@@ -229,7 +244,8 @@ private:
 
     //! The georeferenced inputs in a fixed order — each cave's fix stations in
     //! region order, then each attachment's bare fix whose system is chosen,
-    //! then the LAZ layers in model order. Nothing records which
+    //! then each attached fix whose file names its system, then the LAZ
+    //! layers in model order. Nothing records which
     //! input truly came first, so "first" means first in this order: it only
     //! decides between inputs that appeared together, and it decides the same
     //! way every time, which is what a stored frame needs.
@@ -268,23 +284,32 @@ private:
     QList<Input> gatherFixInputs() const;
     QList<Input> gatherLayerInputs() const;
 
-    //! Each attached file's bare fix that a system was chosen for, read in that
-    //! system, in the tree's pre-order. The choice is what places the fix, so a
-    //! fix whose file names its own system is left to that file.
+    //! Each attached file's fix as an input, with the station it names, in
+    //! gathering order: the bare fixes a system was chosen for, read in that
+    //! system, then the fixes whose file names their system, read in it
+    //! (cwAttachedFix::solveSystem), each half in the tree's pre-order. A fix
+    //! that does not place, or that its system's domain cannot hold, is left
+    //! out. \a callback returns whether to keep walking.
+    void forEachAttachedFixInput(
+            const std::function<bool(const Input&, const QString&)>& callback) const;
+
+    //! The inputs forEachAttachedFixInput() walks.
     QList<Input> gatherAttachedFixInputs() const;
 
-    //! Whether the attached inputs take part in the frame: only while the
-    //! project has none, or follows one of them. A frame that already follows
-    //! a native fix or a layer, or that is frozen, keeps its origin whatever
-    //! an attached file says.
-    bool attachedFixesTakePart() const;
+    //! attachedFixesTakePart() with whether the project has no fix station or
+    //! layer input already answered by a caller that gathered them.
+    bool attachedFixesTakePart(bool nativeInputsEmpty) const;
+
+    //! Emit attachedFixesTakePartChanged() only when the answer changed.
+    void updateAttachedFixesTakePart();
 
     //! gatherInputs(), keeping the attached inputs only when
     //! attachedFixesTakePart().
     QList<Input> gatherFrameInputs() const;
 
-    //! "A — Owner" for the first bare fix of the attachment \a ownerId, or empty
-    //! when the region no longer lists one.
+    //! "A — Owner" for the attachment \a ownerId, naming its first fix in
+    //! gathering order — the one that anchors when the owner does — or empty
+    //! when the region no longer lists one that places.
     QString attachmentDescription(const QUuid& ownerId) const;
 
     //! Run the state machine against the current inputs, then settle the epoch
