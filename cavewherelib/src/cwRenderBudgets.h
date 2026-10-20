@@ -52,8 +52,11 @@ namespace cw::budgets {
 
     // The share of the gap to the governor's target inflation the frame's own
     // inflation closes each frame, in log space. 1 jumps to the target in one
-    // frame, which is the governor's own step.
-    constexpr double kDefaultGovernorSlew = 1.0;
+    // frame, which is the governor's own step; a quarter spreads a 1.25 step
+    // over about eleven frames, which halves the largest sprite-side change
+    // under a tight point budget (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html,
+    // WP9 and WP17).
+    constexpr double kDefaultGovernorSlew = 0.25;
     constexpr double kMinGovernorSlew = 0.05;
     constexpr double kMaxGovernorSlew = 1.0;
 

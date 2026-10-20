@@ -299,6 +299,8 @@ namespace {
     constexpr double kLogSumMargin = 1e-12;
     //! Rounding in a fade share whose exact value is 0
     constexpr double kZeroShareMargin = 1e-12;
+    //! A reveal ramp of no frames, whatever the shipped default is
+    constexpr int kNoRamp = 0;
 }
 
 TEST_CASE("The reveal ramp scales an arrival's weight up over revealFrames frames",
@@ -332,10 +334,10 @@ TEST_CASE("The reveal ramp scales an arrival's weight up over revealFrames frame
     SECTION("no ramp draws every arrival whole and is never in progress") {
         for (quint32 age : {0u, 1u, kLongAfter}) {
             INFO("age " << age);
-            CHECK(revealScale(age, cw::pointcloud::kDefaultRevealFrames) == 1.0);
-            CHECK_FALSE(revealing(age, cw::pointcloud::kDefaultRevealFrames));
+            CHECK(revealScale(age, kNoRamp) == 1.0);
+            CHECK_FALSE(revealing(age, kNoRamp));
         }
-        CHECK(cw::pointcloud::kDefaultRevealFrames == 0);
+        CHECK(cw::pointcloud::kMinRevealFrames == kNoRamp);
     }
 }
 
@@ -386,7 +388,7 @@ TEST_CASE("The reveal ramp moves a floor in log space over revealFrames frames, 
     }
 
     SECTION("no ramp, or no previous floor, takes the new floor at once") {
-        CHECK(revealedFloor(kParentFloor, kChildFloor, 0, cw::pointcloud::kDefaultRevealFrames)
+        CHECK(revealedFloor(kParentFloor, kChildFloor, 0, kNoRamp)
               == kChildFloor);
         CHECK(revealedFloor(0.0, kChildFloor, 0, kTestRevealFrames) == kChildFloor);
     }
@@ -446,8 +448,6 @@ namespace {
     //! How close to one pixel the arrival frame's side sits under the long
     //! ramp: sqrt(1 + 15 / 60) is about 1.118
     constexpr double kNearOnePixel = 1.2;
-    //! A reveal ramp of no frames, whatever the shipped default is
-    constexpr int kNoRamp = 0;
 }
 
 TEST_CASE("A Grow arrival's sprite grows from one pixel to its size with its area linear in the ramp",
@@ -496,7 +496,7 @@ TEST_CASE("A Grow arrival's sprite grows from one pixel to its size with its are
     SECTION("no ramp draws every arrival at its settled side") {
         for (quint32 age : {0u, 1u, kLongAfter}) {
             INFO("age " << age);
-            CHECK(grownSize(kInexactSidePx, age, cw::pointcloud::kDefaultRevealFrames)
+            CHECK(grownSize(kInexactSidePx, age, kNoRamp)
                   == kInexactSidePx);
         }
     }
@@ -608,7 +608,7 @@ TEST_CASE("A Grow departure's sprite shrinks from its size to one pixel, the arr
 
 // ---- WP13: per-point local spacing -------------------------------------------
 
-TEST_CASE("SpacingSource has a third value, Local, and the default stays Measured",
+TEST_CASE("SpacingSource has a third value, Local, and the default is Local",
           "[PointCloudClod]")
 {
     using cw::pointcloud::SpacingSource;
@@ -617,8 +617,8 @@ TEST_CASE("SpacingSource has a third value, Local, and the default stays Measure
     CHECK(int(SpacingSource::Measured) == 1);
     CHECK(int(SpacingSource::Local) == 2);
     CHECK(cw::pointcloud::kSpacingSourceCount == 3);
-    CHECK(cw::pointcloud::kDefaultSpacingSource == SpacingSource::Measured);
-    CHECK(cwPointCloudShading().spacingSource == SpacingSource::Measured);
+    CHECK(cw::pointcloud::kDefaultSpacingSource == SpacingSource::Local);
+    CHECK(cwPointCloudShading().spacingSource == SpacingSource::Local);
 }
 
 TEST_CASE("Under Local a node thins by the same spacing it thins by under Measured",

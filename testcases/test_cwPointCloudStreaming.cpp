@@ -487,6 +487,29 @@ namespace {
         using cwRenderPointCloud::createRHIObject;
     };
 
+    //! The reference shading: measured spacing with no reveal ramp, under
+    //! which these cases and the bench's candidates were written. Every
+    //! fixture's cloud starts on it, so a case that studies one mechanism
+    //! draws under the same knobs whatever the app ships, and sets any other
+    //! knob it depends on itself. Every eval candidate but C-default isolates
+    //! its knob against it; C-default alone follows the shipped defaults, so
+    //! moving those moves C-default's rows and leaves every other
+    //! candidate's where they were.
+    constexpr cw::pointcloud::SpacingSource kReferenceSpacingSource =
+        cw::pointcloud::SpacingSource::Measured;
+    constexpr int kReferenceRevealFrames = 0;
+    constexpr cw::pointcloud::RevealMode kReferenceRevealMode = cw::pointcloud::RevealMode::Cover;
+
+    //! The renderer's default shading with the reference's spacing and reveal
+    cwPointCloudShading referenceShading()
+    {
+        cwPointCloudShading shading;
+        shading.spacingSource = kReferenceSpacingSource;
+        shading.revealFrames = kReferenceRevealFrames;
+        shading.revealMode = kReferenceRevealMode;
+        return shading;
+    }
+
     // One streamed point cloud drawn into an offscreen target, driven through
     // the same call order cwRhiFrameRenderer::renderLiveFrame uses.
     class PointCloudFixture {
@@ -543,6 +566,7 @@ namespace {
         void addSecondCloud(const OctreeCache& cache)
         {
             m_secondRender = std::make_unique<RenderCloud>();
+            m_secondRender->setShading(referenceShading());
             m_secondRender->setScene(&m_scene);
             m_secondRender->setOctree(cache.source);
             m_secondBackend = static_cast<cwRHIPointCloud*>(m_secondRender->createRHIObject());
@@ -1054,6 +1078,7 @@ namespace {
             m_gpuBaseline = ledgerBytes(cwRenderMemoryLedger::Residency::Gpu);
             m_cpuBaseline = ledgerBytes(cwRenderMemoryLedger::Residency::Cpu);
 
+            m_render.setShading(referenceShading());
             m_render.setScene(&m_scene);
             m_render.setOctree(m_cache.source);
 
@@ -3167,8 +3192,11 @@ TEST_CASE("The point budget caps what a frame draws from the first frame on",
     REQUIRE(uncappedPoints > 3 * rootPoints);
     REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
 
+    //The governor's own step: the cap's semantics are under test, and the
+    //slew would hold the cut capped for the frames each step spreads over
     constexpr qint64 kBudgetShare = 3;
     cwRenderBudgets budgets = fixture.budgets();
+    budgets.governorSlew = cw::budgets::kMaxGovernorSlew;
     budgets.pointBudget = uncappedPoints / kBudgetShare;
     fixture.setBudgets(budgets);
 
@@ -3374,9 +3402,12 @@ TEST_CASE("The relaxed cut is probed on probe frames, not every frame",
     REQUIRE(cutBytes > 0);
     REQUIRE(Access::sseInflation(fixture.backend()) == 1.0);
 
-    //A share the cut cannot hold, so the governor inflates
+    //A share the cut cannot hold, so the governor inflates; the whole step at
+    //once, since the probe cadence is the governor's and the slew would spread
+    //each step over frames of its own
     const qint64 outsideBytes = totalGpuBytes() - fixture.gpuBytes();
     cwRenderBudgets budgets = fixture.budgets();
+    budgets.governorSlew = cw::budgets::kMaxGovernorSlew;
     budgets.gpuBudgetBytes = outsideBytes + cutBytes / 2;
     fixture.setBudgets(budgets);
 
@@ -5666,7 +5697,7 @@ TEST_CASE("Fixed pixel sprites take the size asked for and every sprite stops at
     constexpr float kOversizedCoverage = 8.0f;
 
     SECTION("fixed pixels ignores the coverage and the spacing") {
-        cwPointCloudShading shading;
+        cwPointCloudShading shading = referenceShading();
         shading.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
         shading.fixedPointSizePx = kFixedSidePx;
         fixture.render().setSpacingCoverage(kOversizedCoverage);
@@ -5680,7 +5711,7 @@ TEST_CASE("Fixed pixel sprites take the size asked for and every sprite stops at
         fixture.render().setSpacingCoverage(kOversizedCoverage);
         REQUIRE(spriteSidePx(kOversizedCoverage, refineThresholdPx(fixture)) > kCeilingPx);
 
-        cwPointCloudShading shading;
+        cwPointCloudShading shading = referenceShading();
         shading.maxPointSizePx = kCeilingPx;
         const double side = spriteSideUnder(shading);
         INFO("capped sprite side " << side);
@@ -5713,10 +5744,10 @@ TEST_CASE("Own spacing sizes ancestors past the floor and floor off sizes under 
         fixture.renderUntilQuiet();
         REQUIRE(fixture.drawableCount() == 1);
 
-        cwPointCloudShading floorOff;
+        cwPointCloudShading floorOff = referenceShading();
         floorOff.floorMode = cw::pointcloud::FloorMode::Off;
 
-        const qsizetype covered = litUnder(cwPointCloudShading());
+        const qsizetype covered = litUnder(referenceShading());
         const qsizetype threshold = litUnder(floorOff);
         INFO("floored " << covered << " lit, threshold alone " << threshold);
         CHECK(threshold < covered);
@@ -5726,10 +5757,10 @@ TEST_CASE("Own spacing sizes ancestors past the floor and floor off sizes under 
         fixture.renderUntilQuiet();
         REQUIRE(selectedLevelCount(fixture) > 1);
 
-        cwPointCloudShading ownSpacing;
+        cwPointCloudShading ownSpacing = referenceShading();
         ownSpacing.sizeMode = cw::pointcloud::SizeMode::OwnSpacing;
 
-        const qsizetype covered = litUnder(cwPointCloudShading());
+        const qsizetype covered = litUnder(referenceShading());
         const qsizetype own = litUnder(ownSpacing);
         INFO("floored " << covered << " lit, own spacing " << own);
         CHECK(own > covered);
@@ -5975,7 +6006,7 @@ namespace {
     //! Every sprite one pixel, so no point hides another level's behind it
     cwPointCloudShading onePixelShading()
     {
-        cwPointCloudShading shading;
+        cwPointCloudShading shading = referenceShading();
         shading.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
         shading.fixedPointSizePx = float(cw::pointcloud::kMinPointSizePx);
         return shading;
@@ -6979,13 +7010,13 @@ namespace {
         QSize targetSize;
         //! What every node sizes and thins by; sweepPath() draws with it and
         //! evalCsv records it
-        cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::kDefaultSpacingSource;
+        cw::pointcloud::SpacingSource spacingSource = kReferenceSpacingSource;
         //! The reveal ramp's length; sweepPath() draws with it and evalCsv
         //! records it
-        int revealFrames = cw::pointcloud::kDefaultRevealFrames;
+        int revealFrames = kReferenceRevealFrames;
         //! What an arrival does over the ramp; sweepPath() draws with it and
         //! evalCsv records it
-        cw::pointcloud::RevealMode revealMode = cw::pointcloud::kDefaultRevealMode;
+        cw::pointcloud::RevealMode revealMode = kReferenceRevealMode;
         //! The fraction of its spacing a sprite covers; sweepPath() draws with
         //! it, and the config's name tells a run at another coverage apart
         float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
@@ -6994,27 +7025,31 @@ namespace {
         cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;
     };
 
+    //! Every candidate but C-default draws under the reference shading
+    //! (kReferenceSpacingSource, kReferenceRevealFrames, kReferenceRevealMode)
+    //! plus its own knobs; "the reference" below is that shading at the shipped
+    //! budgets
     enum class Candidate {
-        Default,  //!< the desktop app as shipped
+        Default,  //!< the desktop app as shipped, shading and budgets alike
         Starved,  //!< a phone-class budget
         Latent,   //!< slow disk: arrival spread over many frames
         Tight,    //!< the governor binding on every pose, as section 13 saw it
         TightSlew, //!< C-tight with the inflation slewing toward the governor's target
-        DefaultGrid, //!< C-default sizing and thinning by each node's grid spacing
-        DefaultReveal, //!< C-default with arrivals fading in and floors ramping
+        DefaultGrid, //!< the reference sizing and thinning by each node's grid spacing
+        DefaultReveal, //!< the reference with arrivals fading in and floors ramping
         LatentReveal, //!< C-latent with arrivals fading in and floors ramping
         DefaultGrow, //!< C-default-reveal with arrivals growing over the requested cut's floors
         LatentGrow, //!< C-latent-reveal with arrivals growing over the requested cut's floors
-        DefaultLocal, //!< C-default sizing each sprite by its own point's local spacing
-        MeasuredCover125, //!< C-default at kZoomedCoverage, where the leaf floor sizes every sprite
+        DefaultLocal, //!< the reference sizing each sprite by its own point's local spacing
+        MeasuredCover125, //!< the reference at kZoomedCoverage, where the leaf floor sizes every sprite
         LocalCover125, //!< C-default-local at kZoomedCoverage
-        MeasuredDensity, //!< C-default under the sprite density view, for the contact sheets
+        MeasuredDensity, //!< the reference under the sprite density view, for the contact sheets
         LocalDensity, //!< C-default-local under the sprite density view, for the contact sheets
         MeasuredCover125Size, //!< C-measured-cover125 under the sprite size view, for PF's sheet
         LocalCover125Size, //!< C-local-cover125 under the sprite size view, for PF's sheet
         MeasuredCover125Density, //!< C-measured-cover125 under the sprite density view
         LocalCover125Density, //!< C-local-cover125 under the sprite density view
-        MeasuredSize, //!< C-default under the sprite size view, for TT's sheet
+        MeasuredSize, //!< the reference under the sprite size view, for TT's sheet
         LocalSize, //!< C-default-local under the sprite size view, for TT's sheet
         TightCover, //!< C-tight with arrivals fading in and floors ramping
         TightGrow, //!< C-tight-cover with arrivals growing over the requested cut's floors
@@ -7029,7 +7064,10 @@ namespace {
     constexpr qint64 kLatentUploadBudgetBytesPerFrame = 256 * 1024;
     constexpr int kTightGpuBudgetMb = 256;
     constexpr int kTightPointBudgetMillions = 1;
-    constexpr double kTightSlewGovernorSlew = 0.25;
+    //! C-tight takes the governor's whole step, the pop the slew exists for;
+    //! C-tight-slew takes the shipped default, so the pair measures the default
+    constexpr double kTightGovernorSlew = cw::budgets::kMaxGovernorSlew;
+    constexpr double kTightSlewGovernorSlew = cw::budgets::kDefaultGovernorSlew;
     //! About the frames C-latent's coarse-to-fine handoff dips over on P4
     //! (frames 8..10), so the ramp spreads a handoff without doubling the
     //! frames to quiet
@@ -7039,15 +7077,27 @@ namespace {
     //! section 14.5)
     constexpr float kZoomedCoverage = 1.25f;
 
+    //! The reference every candidate but C-default builds on: the shipped
+    //! budgets, the half HD target and the reference shading
+    EvalConfig referenceConfig()
+    {
+        EvalConfig config;
+        config.name = QStringLiteral("C-reference");
+        config.targetSize = kHalfHdTargetSize;
+        return config;
+    }
+
     EvalConfig candidateConfig(Candidate candidate)
     {
         using namespace cw::budgets;
 
-        EvalConfig config;
-        config.targetSize = kHalfHdTargetSize;
+        EvalConfig config = referenceConfig();
         switch (candidate) {
         case Candidate::Default:
             config.name = QStringLiteral("C-default");
+            config.spacingSource = cw::pointcloud::kDefaultSpacingSource;
+            config.revealFrames = cw::pointcloud::kDefaultRevealFrames;
+            config.revealMode = cw::pointcloud::kDefaultRevealMode;
             break;
         case Candidate::Starved:
             config.name = QStringLiteral("C-starved");
@@ -7065,6 +7115,7 @@ namespace {
             config.name = QStringLiteral("C-tight");
             config.budgets.gpuBudgetBytes = kTightGpuBudgetMb * kBytesPerMegabyte;
             config.budgets.pointBudget = kTightPointBudgetMillions * kPointsPerMillion;
+            config.budgets.governorSlew = kTightGovernorSlew;
             break;
         case Candidate::TightSlew:
             config = candidateConfig(Candidate::Tight);
@@ -7718,7 +7769,7 @@ namespace {
     enum class Oracle {
         O1,  //!< the eroded footprint of the densest render the octree gives
         O2,  //!< every leaf resident at the 0.5 px threshold, coverage swept
-        O3   //!< the production shader at its defaults with nothing streaming
+        O3   //!< the production shader at the reference shading with nothing streaming
     };
 
     QString oracleName(Oracle oracle)
@@ -7784,9 +7835,11 @@ namespace {
         //! which leaves its lit pixels where the flat pass puts them and tells
         //! the erosion how far each sprite spills.
         cw::pointcloud::DebugView debugView = cw::pointcloud::DebugView::Off;
-        //! The renderer's default, except where a test measures the oracles'
-        //! own mechanics under the grid
-        cw::pointcloud::SpacingSource spacingSource = cw::pointcloud::kDefaultSpacingSource;
+        //! The reference, except where a test measures the oracles' own
+        //! mechanics under the grid. The oracles draw under the reference
+        //! shading rather than the shipped one, so moving a shipped default
+        //! leaves every candidate's oracle metrics where they were.
+        cw::pointcloud::SpacingSource spacingSource = kReferenceSpacingSource;
     };
 
     //! O1: the cut refined to the minimum threshold, eroded the way the
@@ -7794,8 +7847,7 @@ namespace {
     //! sweep rather than the [HoleMetric] reference's coverage. A reference
     //! drawn inside the sweep would be one of O2's own renders, and every
     //! coverage from it up would score no holes by construction.
-    OracleConfig o1Config(cw::pointcloud::SpacingSource spacingSource =
-                              cw::pointcloud::kDefaultSpacingSource)
+    OracleConfig o1Config(cw::pointcloud::SpacingSource spacingSource = kReferenceSpacingSource)
     {
         OracleConfig config;
         config.oracle = Oracle::O1;
@@ -7808,8 +7860,7 @@ namespace {
 
     //! O2 at one coverage of the sweep
     OracleConfig o2Config(float spacingCoverage,
-                          cw::pointcloud::SpacingSource spacingSource =
-                              cw::pointcloud::kDefaultSpacingSource)
+                          cw::pointcloud::SpacingSource spacingSource = kReferenceSpacingSource)
     {
         OracleConfig config;
         config.oracle = Oracle::O2;
@@ -7819,7 +7870,7 @@ namespace {
         return config;
     }
 
-    //! O3: every default, budgets past the whole cloud
+    //! O3: the reference shading, budgets past the whole cloud
     OracleConfig o3Config()
     {
         OracleConfig config;
@@ -7838,7 +7889,7 @@ namespace {
     QString describe(const OracleConfig& config, const cwPointOctreeManifest& manifest)
     {
         const cwRenderBudgets budgets = oracleBudgets(manifest, config.screenSpaceErrorPx);
-        const cwPointCloudShading shading;
+        const cwPointCloudShading shading = referenceShading();
         const QString constants =
             QStringLiteral(",erosionSlack=%1,rasterFactor=%2,minSpritePx=%3,smallRed=%4,"
                            "largeRed=%5")
@@ -8684,7 +8735,7 @@ namespace {
         fixture.setReadbackEnabled(true);
         fixture.setBudgets(oracleBudgets(fixture.manifest(), config.screenSpaceErrorPx));
         fixture.render().setSpacingCoverage(config.spacingCoverage);
-        cwPointCloudShading shading;
+        cwPointCloudShading shading = referenceShading();
         shading.debugView = config.debugView;
         shading.spacingSource = config.spacingSource;
         fixture.render().setShading(shading);
@@ -8799,8 +8850,7 @@ namespace {
                           const QString& cacheRoot, double holeTolerance,
                           std::ostream& out = std::cout,
                           const QByteArray& shaderHash = pointCloudShaderHash(),
-                          cw::pointcloud::SpacingSource spacingSource =
-                              cw::pointcloud::kDefaultSpacingSource)
+                          cw::pointcloud::SpacingSource spacingSource = kReferenceSpacingSource)
     {
         const OracleSet o1 =
             oracleSet(fixture, path, o1Config(spacingSource), cacheRoot, shaderHash);
@@ -10428,7 +10478,7 @@ namespace {
                                             const QVector<LevelPath>& paths,
                                             std::ostream& out = std::cout,
                                             cw::pointcloud::SpacingSource spacingSource =
-                                                cw::pointcloud::kDefaultSpacingSource,
+                                                kReferenceSpacingSource,
                                             float spacingCoverage =
                                                 cw::pointcloud::kDefaultSpacingCoverage)
     {
@@ -10436,7 +10486,7 @@ namespace {
         const float savedCoverage = fixture.render().spacingCoverage();
         const cwPointCloudShading savedShading = fixture.render().shading();
 
-        cwPointCloudShading ruleShading;
+        cwPointCloudShading ruleShading = referenceShading();
         ruleShading.spacingSource = spacingSource;
         cwPointCloudShading fixedShading = ruleShading;
         fixedShading.sizeMode = cw::pointcloud::SizeMode::FixedPixels;
@@ -10528,8 +10578,7 @@ namespace {
     //! @a spacingCoverage, the coverage they were drawn at, last.
     void writeLevelMeans(const QVector<LevelPath>& paths, const QVector<LevelRecord>& records,
                          int firstLevel, int lastLevel, std::ostream& out = std::cout,
-                         cw::pointcloud::SpacingSource spacingSource =
-                             cw::pointcloud::kDefaultSpacingSource,
+                         cw::pointcloud::SpacingSource spacingSource = kReferenceSpacingSource,
                          float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage)
     {
         const QString sourceName = spacingSourceName(spacingSource)
@@ -10854,7 +10903,7 @@ TEST_CASE("Mask IoU, luminance difference, SSIM and density spread read what the
     CHECK(lopsided.cv > 0.0);
 }
 
-TEST_CASE("sweepPath fills every metric from the oracles, and a settled default frame is O3",
+TEST_CASE("sweepPath fills every metric from the oracles, and a settled reference frame is O3",
           "[PointCloudStreaming][PointCloudEval]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
@@ -10871,8 +10920,9 @@ TEST_CASE("sweepPath fills every metric from the oracles, and a settled default 
     fixture.setEdlEnabled(true);
     PathStep step;
     step.policy = StepPolicy::Quiet;
+    //O3 draws under the reference shading, so the reference's settled frame is O3
     const QVector<EvalRecord> records =
-        sweepPath(fixture, path, candidateConfig(Candidate::Default), step, output, &oracles);
+        sweepPath(fixture, path, referenceConfig(), step, output, &oracles);
     REQUIRE(records.size() == kSweptPoseCount);
 
     const QVector<QStringList> rows = csvRows(output, QStringLiteral("evalCsv,"));
@@ -11142,7 +11192,9 @@ TEST_CASE("M2: a cold start under a slow disk pops harder and settles later",
                                                  oracleOutput);
     PathStep quiet;
     quiet.policy = StepPolicy::Quiet;
-    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    //The reference picks the pose, so the pose holds still when the shipped
+    //defaults move
+    const EvalConfig defaults = referenceConfig();
     QVector<EvalRecord> orbitRecords;
     {
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
@@ -11300,15 +11352,18 @@ TEST_CASE("evalCsv records the governor's target beside the slewed inflation M6 
     CHECK(largestStepUp <= slewedStep * (1.0 + kInflationRatioTolerance));
 }
 
-TEST_CASE("Every candidate configuration takes the governor's own step",
+TEST_CASE("Every candidate configuration slews at the default but C-tight, which takes the "
+          "governor's own step",
           "[PointCloudStreaming][PointCloudEval]")
 {
-    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
-                                      Candidate::Tight}) {
+    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
         CHECK(config.budgets.governorSlew == cw::budgets::kDefaultGovernorSlew);
     }
+    CHECK(candidateConfig(Candidate::Tight).budgets.governorSlew == cw::budgets::kMaxGovernorSlew);
+    CHECK(candidateConfig(Candidate::TightSlew).budgets.governorSlew
+          == cw::budgets::kDefaultGovernorSlew);
 }
 
 TEST_CASE("M6 counts a floor the gather moved on the frame it moved",
@@ -11440,24 +11495,26 @@ TEST_CASE("M3 and M4: mixed sprite sizes raise the seam share and a floorless ca
     //recorded beside the baseline. On a settled plane it moves neither: the
     //threshold term sizes every node alike, and a coarser cut closes the
     //near band at least as well.
-    EvalConfig coarse = defaults;
+    //The three variants each move one knob off the reference, as the bench's
+    //candidates do, so their rows hold still when the shipped defaults move
+    EvalConfig coarse = referenceConfig();
     coarse.name = QStringLiteral("C-default-sse3");
     coarse.budgets.screenSpaceErrorPx = kCoarseScreenSpaceErrorPx;
-    const EvalSummary coarseSummary = run(coarse, cwPointCloudShading());
+    const EvalSummary coarseSummary = run(coarse, referenceShading());
 
     //Each node sized from its own level is the mixed-size look itself
-    EvalConfig ownSpacingConfig = defaults;
+    EvalConfig ownSpacingConfig = referenceConfig();
     ownSpacingConfig.name = QStringLiteral("C-default-ownSpacing");
-    cwPointCloudShading ownSpacing;
+    cwPointCloudShading ownSpacing = referenceShading();
     ownSpacing.sizeMode = cw::pointcloud::SizeMode::OwnSpacing;
     const EvalSummary mixed = run(ownSpacingConfig, ownSpacing);
 
     //The root alone sized by the threshold: far away its spacing is under the
     //threshold and it closes; close up the camera wants finer than it has
-    EvalConfig cappedConfig = defaults;
+    EvalConfig cappedConfig = referenceConfig();
     cappedConfig.name = QStringLiteral("C-default-rootFloorless");
     cappedConfig.budgets.maxLevel = kRootLevel;
-    cwPointCloudShading floorless;
+    cwPointCloudShading floorless = referenceShading();
     floorless.floorMode = cw::pointcloud::FloorMode::Off;
     const EvalSummary capped = run(cappedConfig, floorless);
 
@@ -11654,7 +11711,7 @@ TEST_CASE("The oblique orbit and its boundary path on a tile under C-tight-slew 
     const EvalConfig tight = candidateConfig(Candidate::Tight);
     const EvalConfig defaults = candidateConfig(Candidate::Default);
     REQUIRE(config.targetSize == tight.targetSize);
-    REQUIRE(config.budgets.governorSlew < cw::budgets::kDefaultGovernorSlew);
+    REQUIRE(config.budgets.governorSlew < tight.budgets.governorSlew);
     const PathStep step = untilQuietStep(kTileMaxFramesPerPose);
     for (const EvalPath& path : {tileOrbitPath(manifest, tight),
                                  tileBoundaryPath(rhi.get(), manifest, defaults)}) {
@@ -12616,10 +12673,10 @@ TEST_CASE("M7 reports a level the octree no longer reaches as empty instead of f
     }
 }
 
-TEST_CASE("C-default-grid is C-default sizing and thinning by grid spacing",
+TEST_CASE("C-default-grid is the reference sizing and thinning by grid spacing",
           "[PointCloudStreaming][PointCloudEval]")
 {
-    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalConfig defaults = referenceConfig();
     const EvalConfig grid = candidateConfig(Candidate::DefaultGrid);
 
     CHECK(grid.name == QStringLiteral("C-default-grid"));
@@ -12631,16 +12688,19 @@ TEST_CASE("C-default-grid is C-default sizing and thinning by grid spacing",
     CHECK(grid.budgets.screenSpaceErrorPx == defaults.budgets.screenSpaceErrorPx);
     CHECK(grid.budgets.governorSlew == defaults.budgets.governorSlew);
 
-    //Every other candidate draws by the renderer's default, measured spacing
-    CHECK(cw::pointcloud::kDefaultSpacingSource == cw::pointcloud::SpacingSource::Measured);
-    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
+    //The budget candidates draw by the reference's measured spacing, and
+    //C-default by the shipped default
+    CHECK(kReferenceSpacingSource == cw::pointcloud::SpacingSource::Measured);
+    for (const Candidate candidate : {Candidate::Starved, Candidate::Latent,
                                       Candidate::Tight, Candidate::TightSlew,
                                       Candidate::TightCover, Candidate::TightGrow,
                                       Candidate::TightSlewCover, Candidate::TightSlewGrow}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
-        CHECK(config.spacingSource == cw::pointcloud::kDefaultSpacingSource);
+        CHECK(config.spacingSource == kReferenceSpacingSource);
     }
+    CHECK(candidateConfig(Candidate::Default).spacingSource
+          == cw::pointcloud::kDefaultSpacingSource);
 }
 
 TEST_CASE("evalCsv records the spacing source each sweep draws with",
@@ -12720,7 +12780,8 @@ TEST_CASE("M7: on a tile under measured spacing, levels 6 and 7 alone close most
     //levels past its deepest are reported empty
     const int lastLevel = std::min(kM7LastLevel, leaf);
 
-    const EvalConfig config = candidateConfig(Candidate::Default);
+    //The reference, which draws by measured spacing whatever the shipped default
+    const EvalConfig config = referenceConfig();
     REQUIRE(config.spacingSource == cw::pointcloud::SpacingSource::Measured);
     const QString cacheRoot = evalCacheRoot();
 
@@ -12958,7 +13019,7 @@ TEST_CASE("The per-cloud uniform carries the reveal ramp's length",
     PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-uniform"));
     fixture.renderFrame();
     CHECK(Access::liveAppearanceUniform(fixture.backend()).revealFrames
-          == cw::pointcloud::kDefaultRevealFrames);
+          == kReferenceRevealFrames);
 
     setRevealFrames(fixture, kStreamingRevealFrames);
     fixture.renderFrame();
@@ -13055,8 +13116,8 @@ TEST_CASE("Under revealFrames 0 an arriving node draws whole on its first frame,
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     PointCloudFixture fixture(rhi.get(), thinningCache(), kTargetDimension);
-    REQUIRE(fixture.render().shading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
-    arriveRootAlone(fixture, cw::pointcloud::kDefaultRevealFrames);
+    REQUIRE(fixture.render().shading().revealFrames == kReferenceRevealFrames);
+    arriveRootAlone(fixture, kReferenceRevealFrames);
 
     const QImage arrival = fixture.frameImage();
     const RampFrame first = rampFrame(fixture);
@@ -13156,7 +13217,7 @@ TEST_CASE("An ancestor's floor ramps in log space as its children land and again
     }
 
     SECTION("revealFrames 0 moves it on the frame its target moves") {
-        setRevealFrames(fixture, cw::pointcloud::kDefaultRevealFrames);
+        setRevealFrames(fixture, kReferenceRevealFrames);
         budgets.maxLevel = kRootLevel + 1;
         fixture.setBudgets(budgets);
         const QVector<FloorFrame> frames =
@@ -13232,7 +13293,7 @@ TEST_CASE("Under the reveal ramp children leaving the cut fade out while their a
         budgets.maxLevel = kRootLevel + 1;
         fixture.setBudgets(budgets);
         fixture.renderUntilQuiet();
-        setRevealFrames(fixture, cw::pointcloud::kDefaultRevealFrames);
+        setRevealFrames(fixture, kReferenceRevealFrames);
         fixture.renderFrame();
         budgets.maxLevel = kRootLevel;
         fixture.setBudgets(budgets);
@@ -13265,7 +13326,7 @@ namespace {
     //! resident and past every ramp
     cwRenderBudgets settleRootAndChildren(PointCloudFixture& fixture, int revealFrames,
                                           cw::pointcloud::RevealMode mode
-                                          = cw::pointcloud::kDefaultRevealMode,
+                                          = kReferenceRevealMode,
                                           float coverage = kWheelCoverage)
     {
         configureCloseGrid(fixture, revealFrames, mode, coverage);
@@ -13420,7 +13481,7 @@ TEST_CASE("Under revealFrames 0 every frame of a refinement and a pull back draw
 
     PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-off-sequence"));
     cwRenderBudgets budgets =
-        settleRootAndChildren(fixture, cw::pointcloud::kDefaultRevealFrames);
+        settleRootAndChildren(fixture, kReferenceRevealFrames);
 
     //The ramp words still move under revealFrames 0 (a moved floor records
     //where it came from), so the GPU matching the twin's rules without them
@@ -13548,9 +13609,9 @@ TEST_CASE("Under the reveal ramp a pan that opens a node's missing children floo
 TEST_CASE("C-default-reveal and C-latent-reveal are their bases with the reveal ramp on",
           "[PointCloudStreaming][PointCloudEval]")
 {
-    const auto checkRevealOf = [](Candidate reveal, Candidate base, const QString& name) {
+    const auto checkRevealOf = [](Candidate reveal, const EvalConfig& baseline,
+                                  const QString& name) {
         const EvalConfig config = candidateConfig(reveal);
-        const EvalConfig baseline = candidateConfig(base);
         INFO(config.name.toStdString());
         CHECK(config.name == name);
         CHECK(config.revealFrames == kRevealCandidateFrames);
@@ -13565,18 +13626,23 @@ TEST_CASE("C-default-reveal and C-latent-reveal are their bases with the reveal 
         CHECK(config.budgets.screenSpaceErrorPx == baseline.budgets.screenSpaceErrorPx);
         CHECK(config.budgets.governorSlew == baseline.budgets.governorSlew);
     };
-    checkRevealOf(Candidate::DefaultReveal, Candidate::Default,
+    checkRevealOf(Candidate::DefaultReveal, referenceConfig(),
                   QStringLiteral("C-default-reveal"));
-    checkRevealOf(Candidate::LatentReveal, Candidate::Latent, QStringLiteral("C-latent-reveal"));
+    checkRevealOf(Candidate::LatentReveal, candidateConfig(Candidate::Latent),
+                  QStringLiteral("C-latent-reveal"));
 
-    //Every other candidate draws an arrival whole, as the renderer does by default
-    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
+    //Every other candidate but C-default draws an arrival whole, as the
+    //reference does; C-default ramps over the shipped default
+    CHECK(kReferenceRevealFrames == 0);
+    for (const Candidate candidate : {Candidate::Starved, Candidate::Latent,
                                       Candidate::Tight, Candidate::TightSlew,
                                       Candidate::DefaultGrid}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
-        CHECK(config.revealFrames == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(config.revealFrames == kReferenceRevealFrames);
     }
+    CHECK(candidateConfig(Candidate::Default).revealFrames
+          == cw::pointcloud::kDefaultRevealFrames);
 }
 
 TEST_CASE("evalCsv records the reveal frames each sweep draws with",
@@ -13590,8 +13656,9 @@ TEST_CASE("evalCsv records the reveal frames each sweep draws with",
     step.policy = StepPolicy::Frames;
     step.framesPerPose = kSweptFramesPerPose;
 
-    for (const Candidate candidate : {Candidate::Default, Candidate::DefaultReveal}) {
-        const EvalConfig config = candidateConfig(candidate);
+    //The reference draws no ramp and C-default-reveal one, so the column
+    //holds two different values
+    for (const EvalConfig& config : {referenceConfig(), candidateConfig(Candidate::DefaultReveal)}) {
         INFO(config.name.toStdString());
 
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
@@ -13732,7 +13799,9 @@ TEST_CASE("M2: the reveal ramp spreads a cold start on the plane into plateaus",
                                                  oracleOutput);
     PathStep quiet;
     quiet.policy = StepPolicy::Quiet;
-    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    //The reference picks the pose, so the pose holds still when the shipped
+    //defaults move
+    const EvalConfig defaults = referenceConfig();
     QVector<EvalRecord> orbitRecords;
     {
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
@@ -13747,11 +13816,11 @@ TEST_CASE("M2: the reveal ramp spreads a cold start on the plane into plateaus",
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
         return sweepPath(fixture, coldStart.path, config, coldStart.step, std::cout, &oracles);
     };
-    //C-default rather than C-latent: the plane has two or three nodes, and
-    //under the slow disk they land one or two frames apart at random, so
+    //The reference rather than C-latent: the plane has two or three nodes,
+    //and under the slow disk they land one or two frames apart at random, so
     //C-latent's largest step swings from 0.50 (an even split) to 1.00 (all at
-    //once) run to run and the comparison is a coin toss. Under C-default they
-    //land together, the step the ramp exists to spread.
+    //once) run to run and the comparison is a coin toss. At the default
+    //budgets they land together, the step the ramp exists to spread.
     const EvalConfig defaultReveal = candidateConfig(Candidate::DefaultReveal);
     checkRevealSpreadsArrivals(run(defaults), run(defaultReveal), coldStart.path.name, defaults,
                                defaultReveal);
@@ -13773,9 +13842,9 @@ TEST_CASE("A cold start on a tile under the reveal ramp spreads the coarse-to-fi
     const EvalOracles oracles = tileOracles(rhi.get(), cache, coldStart.path,
                                             defaults.targetSize);
 
-    for (const auto& [base, reveal] : {std::pair(Candidate::Default, Candidate::DefaultReveal),
-                                       std::pair(Candidate::Latent, Candidate::LatentReveal)}) {
-        const EvalConfig baseConfig = candidateConfig(base);
+    for (const auto& [baseConfig, reveal] :
+         {std::pair(referenceConfig(), Candidate::DefaultReveal),
+          std::pair(candidateConfig(Candidate::Latent), Candidate::LatentReveal)}) {
         const EvalConfig revealConfig = candidateConfig(reveal);
         REQUIRE(revealConfig.targetSize == defaults.targetSize);
         const QVector<EvalRecord> baseRecords =
@@ -13795,9 +13864,9 @@ TEST_CASE("The boundary path on a tile under C-default-reveal shrinks the first 
     const OctreeCache& cache = usgsTileCacheOrSkip();
     const cwPointOctreeManifest& manifest = *cache.source.manifest;
 
-    //P2z/6 on C-default's oracles, so the two compare pose for pose and the
-    //ramp is the only difference
-    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    //P2z/6 on the reference's oracles, so the two compare pose for pose and
+    //the ramp is the only difference
+    const EvalConfig defaults = referenceConfig();
     const EvalConfig reveal = candidateConfig(Candidate::DefaultReveal);
     REQUIRE(reveal.targetSize == defaults.targetSize);
     const EvalPath path = tileBoundaryPath(rhi.get(), manifest, defaults);
@@ -13891,8 +13960,8 @@ namespace {
         float childSpacing = 0.0f;
     };
 
-    //! childArrival() under @a mode, or under the shading's default when no
-    //! mode is given, with a reveal ramp of @a revealFrames
+    //! childArrival() under @a mode, or under the fixture's reference mode
+    //! when no mode is given, with a reveal ramp of @a revealFrames
     ChildArrival childArrival(QRhi* rhi, std::optional<cw::pointcloud::RevealMode> mode,
                               int revealFrames)
     {
@@ -13911,7 +13980,7 @@ namespace {
         if (mode.has_value()) {
             setRevealMode(fixture, *mode);
         }
-        REQUIRE(fixture.render().shading().revealMode == mode.value_or(cw::pointcloud::kDefaultRevealMode));
+        REQUIRE(fixture.render().shading().revealMode == mode.value_or(kReferenceRevealMode));
         fixture.setOrthoHeight(kCloseOrthoHeight);
 
         const cwPointOctreeManifest& manifest = fixture.manifest();
@@ -14114,7 +14183,7 @@ TEST_CASE("The per-cloud uniform carries the reveal mode",
     PointCloudFixture fixture(rhi.get(), QStringLiteral("reveal-mode-uniform"));
     fixture.renderFrame();
     CHECK(Access::liveAppearanceUniform(fixture.backend()).revealMode
-          == int(cw::pointcloud::kDefaultRevealMode));
+          == int(kReferenceRevealMode));
     CHECK(Access::liveAppearanceUniform(fixture.backend()).revealMode
           == int(cw::pointcloud::RevealMode::Cover));
 
@@ -14312,9 +14381,9 @@ TEST_CASE("Under Grow at revealFrames 0 a child's request floors its ancestor at
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
     const ChildArrival grow = childArrival(rhi.get(), cw::pointcloud::RevealMode::Grow,
-                                           cw::pointcloud::kDefaultRevealFrames);
+                                           kReferenceRevealFrames);
     const ChildArrival cover = childArrival(rhi.get(), cw::pointcloud::RevealMode::Cover,
-                                            cw::pointcloud::kDefaultRevealFrames);
+                                            kReferenceRevealFrames);
     REQUIRE(grow.lastArrivalFrame > grow.requestFrame);
 
     const double settledSide = grow.frames.constLast().widestSidePx;
@@ -14919,12 +14988,12 @@ TEST_CASE("Under Grow a departure holds the lit pixels its children and their an
     }
 }
 
-TEST_CASE("Under Cover, the default, the reveal ramp floors from the drawn cut and agrees with the twin at revealFrames 0 and 8",
+TEST_CASE("Under Cover, the reference, the reveal ramp floors from the drawn cut and agrees with the twin at revealFrames 0 and 8",
           "[PointCloudStreaming]")
 {
     const std::unique_ptr<QRhi> rhi = makeRhiOrSkip();
 
-    for (const int revealFrames : {cw::pointcloud::kDefaultRevealFrames, kStreamingRevealFrames}) {
+    for (const int revealFrames : {kReferenceRevealFrames, kStreamingRevealFrames}) {
         DYNAMIC_SECTION("revealFrames " << revealFrames) {
             const ChildArrival byDefault = childArrival(rhi.get(), std::nullopt, revealFrames);
             const ChildArrival cover =
@@ -14941,7 +15010,7 @@ TEST_CASE("Under Cover, the default, the reveal ramp floors from the drawn cut a
             CHECK(cover.frames.at(cover.requestFrame).rootFloor
                   == Catch::Approx(cover.rootSpacing));
 
-            //The default is Cover, so the two runs draw the same frames
+            //The reference is Cover, so the two runs draw the same frames
             //wherever the same children landed on the same frames, frame by
             //frame and not only at the request and the last arrival
             const auto sameArrivals = [&]() {
@@ -14993,16 +15062,19 @@ TEST_CASE("C-default-grow and C-latent-grow are their reveal twins with revealMo
     checkGrowOf(Candidate::DefaultGrow, Candidate::DefaultReveal, QStringLiteral("C-default-grow"));
     checkGrowOf(Candidate::LatentGrow, Candidate::LatentReveal, QStringLiteral("C-latent-grow"));
 
-    //Every other candidate keeps Cover, the renderer's default
-    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
+    //Every other candidate but C-default keeps the reference's Cover;
+    //C-default grows, as the renderer ships
+    CHECK(kReferenceRevealMode == cw::pointcloud::RevealMode::Cover);
+    for (const Candidate candidate : {Candidate::Starved, Candidate::Latent,
                                       Candidate::Tight, Candidate::TightSlew,
                                       Candidate::DefaultGrid, Candidate::DefaultReveal,
                                       Candidate::LatentReveal, Candidate::TightCover,
                                       Candidate::TightSlewCover}) {
         const EvalConfig config = candidateConfig(candidate);
         INFO(config.name.toStdString());
-        CHECK(config.revealMode == cw::pointcloud::kDefaultRevealMode);
+        CHECK(config.revealMode == kReferenceRevealMode);
     }
+    CHECK(candidateConfig(Candidate::Default).revealMode == cw::pointcloud::kDefaultRevealMode);
 }
 
 TEST_CASE("C-tight-cover, C-tight-grow, C-tight-slew-cover and C-tight-slew-grow are their tight bases with the reveal ramp on",
@@ -15018,7 +15090,7 @@ TEST_CASE("C-tight-cover, C-tight-grow, C-tight-slew-cover and C-tight-slew-grow
         CHECK(config.name == name);
         CHECK(config.revealFrames == kRevealCandidateFrames);
         CHECK(config.revealMode == mode);
-        CHECK(baseline.revealFrames == cw::pointcloud::kDefaultRevealFrames);
+        CHECK(baseline.revealFrames == kReferenceRevealFrames);
         CHECK(config.budgets.gpuBudgetBytes == kTightGpuBudgetMb * kBytesPerMegabyte);
         CHECK(config.budgets.pointBudget == kTightPointBudgetMillions * kPointsPerMillion);
         CHECK(config.budgets.uploadBudgetBytesPerFrame == kDefaultUploadBudgetBytesPerFrame);
@@ -15036,9 +15108,9 @@ TEST_CASE("C-tight-cover, C-tight-grow, C-tight-slew-cover and C-tight-slew-grow
     };
     using cw::pointcloud::RevealMode;
     checkRevealOf(Candidate::TightCover, Candidate::Tight, QStringLiteral("C-tight-cover"),
-                  RevealMode::Cover, kDefaultGovernorSlew);
+                  RevealMode::Cover, kTightGovernorSlew);
     checkRevealOf(Candidate::TightGrow, Candidate::Tight, QStringLiteral("C-tight-grow"),
-                  RevealMode::Grow, kDefaultGovernorSlew);
+                  RevealMode::Grow, kTightGovernorSlew);
     checkRevealOf(Candidate::TightSlewCover, Candidate::TightSlew,
                   QStringLiteral("C-tight-slew-cover"), RevealMode::Cover,
                   kTightSlewGovernorSlew);
@@ -15064,9 +15136,8 @@ TEST_CASE("evalCsv records the reveal mode each sweep draws with",
     step.policy = StepPolicy::Frames;
     step.framesPerPose = kSweptFramesPerPose;
 
-    for (const Candidate candidate : {Candidate::Default, Candidate::DefaultReveal,
-                                      Candidate::DefaultGrow}) {
-        const EvalConfig config = candidateConfig(candidate);
+    for (const EvalConfig& config : {referenceConfig(), candidateConfig(Candidate::DefaultReveal),
+                                     candidateConfig(Candidate::DefaultGrow)}) {
         INFO(config.name.toStdString());
 
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
@@ -15086,8 +15157,9 @@ TEST_CASE("evalCsv records the reveal mode each sweep draws with",
         CHECK(header.indexOf(QStringLiteral("revealFrames")) == header.size() - 2);
 
         const QString expected = revealModeName(config.revealMode);
-        CHECK(expected == (candidate == Candidate::DefaultGrow ? QStringLiteral("Grow")
-                                                               : QStringLiteral("Cover")));
+        CHECK(expected == (config.name == QStringLiteral("C-default-grow")
+                               ? QStringLiteral("Grow")
+                               : QStringLiteral("Cover")));
         for (int i = 1; i < rows.size(); i++) {
             const QStringList& fields = rows.at(i);
             REQUIRE(fields.size() == header.size());
@@ -15111,7 +15183,9 @@ TEST_CASE("M6: under Grow a cold start on the plane moves no drawn sprite's side
                                                  oracleOutput);
     PathStep quiet;
     quiet.policy = StepPolicy::Quiet;
-    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    //The reference picks the pose, so the pose holds still when the shipped
+    //defaults move
+    const EvalConfig defaults = referenceConfig();
     QVector<EvalRecord> orbitRecords;
     {
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
@@ -15544,19 +15618,20 @@ TEST_CASE("On two planes of twice different density meeting at a node boundary L
 TEST_CASE("Under grid and measured spacing the plane's boundary path lights what it lit before local spacing",
           "[PointCloudStreaming][PointCloudEval]")
 {
-    //The lit fractions the Quiet sweep logged under C-default (Measured) and
-    //C-default-grid at 5e8300cb, the commit before local spacing, on the
+    //The lit fractions the Quiet sweep logged under C-default (then Measured)
+    //and C-default-grid at 5e8300cb, the commit before local spacing, on the
     //Metal backend (build/eval/wp12-5e8300cb.log, plane/P2z). Neither source
-    //reads a point's code, so they come back to the logged precision.
+    //reads a point's code, so they come back to the logged precision. The
+    //measured run is the reference now that C-default ships Local.
     struct Pinned {
-        Candidate candidate;
+        EvalConfig config;
         cw::pointcloud::SpacingSource source;
         std::array<double, kSweptPoseCount> litFractions;
     };
     const std::array<Pinned, 2> pinned {
-        Pinned {Candidate::Default, cw::pointcloud::SpacingSource::Measured,
+        Pinned {referenceConfig(), cw::pointcloud::SpacingSource::Measured,
                 {0.19988, 0.20039, 0.20091, 0.20154}},
-        Pinned {Candidate::DefaultGrid, cw::pointcloud::SpacingSource::Grid,
+        Pinned {candidateConfig(Candidate::DefaultGrid), cw::pointcloud::SpacingSource::Grid,
                 {0.19978, 0.19961, 0.20000, 0.20055}}};
     constexpr double kLoggedPrecision = 0.5e-5;
 
@@ -15569,7 +15644,7 @@ TEST_CASE("Under grid and measured spacing the plane's boundary path lights what
     step.settleBeforeFirstPose = false;
 
     for (const Pinned& pin : pinned) {
-        const EvalConfig config = candidateConfig(pin.candidate);
+        const EvalConfig& config = pin.config;
         INFO(config.name.toStdString());
         REQUIRE(config.spacingSource == pin.source);
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
@@ -15585,11 +15660,11 @@ TEST_CASE("Under grid and measured spacing the plane's boundary path lights what
     }
 }
 
-TEST_CASE("C-default-local, C-measured-cover125 and C-local-cover125 are C-default by source and coverage",
+TEST_CASE("C-default-local, C-measured-cover125 and C-local-cover125 are the reference by source and coverage",
           "[PointCloudStreaming][PointCloudEval]")
 {
     using cw::pointcloud::SpacingSource;
-    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    const EvalConfig defaults = referenceConfig();
 
     const auto checkAgainstDefault = [&](Candidate candidate, const QString& name,
                                          SpacingSource source, float coverage) {
@@ -15616,8 +15691,9 @@ TEST_CASE("C-default-local, C-measured-cover125 and C-local-cover125 are C-defau
                         SpacingSource::Local, kZoomedCoverage);
     CHECK(kZoomedCoverage == 1.25f);
 
-    //Every other candidate draws at the default coverage
-    for (const Candidate candidate : {Candidate::Default, Candidate::Starved, Candidate::Latent,
+    //Every other candidate draws at the default coverage, and all but
+    //C-default, which ships Local, by a source other than Local
+    for (const Candidate candidate : {Candidate::Starved, Candidate::Latent,
                                       Candidate::Tight, Candidate::TightSlew,
                                       Candidate::DefaultGrid, Candidate::DefaultReveal,
                                       Candidate::LatentReveal, Candidate::DefaultGrow,
@@ -15629,6 +15705,9 @@ TEST_CASE("C-default-local, C-measured-cover125 and C-local-cover125 are C-defau
         CHECK(config.spacingCoverage == cw::pointcloud::kDefaultSpacingCoverage);
         CHECK(config.spacingSource != SpacingSource::Local);
     }
+    const EvalConfig shipped = candidateConfig(Candidate::Default);
+    CHECK(shipped.spacingCoverage == cw::pointcloud::kDefaultSpacingCoverage);
+    CHECK(shipped.spacingSource == cw::pointcloud::kDefaultSpacingSource);
 }
 
 TEST_CASE("evalCsv records Local, and a sweep draws with its config's coverage",
@@ -15717,7 +15796,9 @@ TEST_CASE("A cold start on the plane under C-default-local records every metric"
                                                  oracleOutput);
     PathStep quiet;
     quiet.policy = StepPolicy::Quiet;
-    const EvalConfig defaults = candidateConfig(Candidate::Default);
+    //The reference picks the pose, so the pose holds still when the shipped
+    //defaults move
+    const EvalConfig defaults = referenceConfig();
     QVector<EvalRecord> orbitRecords;
     {
         PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
@@ -15804,17 +15885,19 @@ TEST_CASE("M7: on a tile every level alone under all three sources, and at cover
                                                 cacheRoot, levelAlonePathFor);
 
     struct Run {
-        Candidate candidate;
+        QString name;
         QVector<LevelRecord> records;
     };
     QVector<Run> runs;
-    for (const Candidate candidate : {Candidate::DefaultGrid, Candidate::Default,
-                                      Candidate::DefaultLocal, Candidate::MeasuredCover125,
-                                      Candidate::LocalCover125}) {
-        const EvalConfig config = candidateConfig(candidate);
+    //The reference stands for Measured at the default coverage, which
+    //C-default no longer draws by
+    for (const EvalConfig& config : {candidateConfig(Candidate::DefaultGrid), referenceConfig(),
+                                     candidateConfig(Candidate::DefaultLocal),
+                                     candidateConfig(Candidate::MeasuredCover125),
+                                     candidateConfig(Candidate::LocalCover125)}) {
         PointCloudFixture fixture(rhi.get(), cache, config.targetSize);
-        Run run {candidate, litFractionByLevel(fixture, paths, std::cout, config.spacingSource,
-                                               config.spacingCoverage)};
+        Run run {config.name, litFractionByLevel(fixture, paths, std::cout, config.spacingSource,
+                                                 config.spacingCoverage)};
         writeLevelMeans(paths, run.records, kM7FirstLevel, kM7LastLevel, std::cout,
                         config.spacingSource, config.spacingCoverage);
         runs.append(run);
@@ -15826,7 +15909,7 @@ TEST_CASE("M7: on a tile every level alone under all three sources, and at cover
     //so those levels are reported rather than required.
     REQUIRE(lastLevel >= kTileOpenLevel);
     for (const Run& run : std::as_const(runs)) {
-        INFO(candidateConfig(run.candidate).name.toStdString());
+        INFO(run.name.toStdString());
         for (int level = kTileClosedLevel; level <= kTileOpenLevel; level++) {
             requireLevelPresent(run.records, level);
         }
@@ -16485,14 +16568,14 @@ TEST_CASE("On a sparse plane under a duplicate streak the sprite density view re
     CHECK(std::abs(local.neighbor) <= kNearWhiteOctaves);
 }
 
-TEST_CASE("C-measured-density and C-local-density are C-default and C-default-local under the sprite density view",
+TEST_CASE("C-measured-density and C-local-density are the reference and C-default-local under the sprite density view",
           "[PointCloudStreaming][PointCloudEval]")
 {
     using cw::pointcloud::DebugView;
 
-    const auto checkAgainst = [](Candidate candidate, Candidate base, const QString& name) {
+    const auto checkAgainst = [](Candidate candidate, const EvalConfig& expected,
+                                 const QString& name) {
         const EvalConfig config = candidateConfig(candidate);
-        const EvalConfig expected = candidateConfig(base);
         INFO(name.toStdString());
         CHECK(config.name == name);
         CHECK(config.debugView == DebugView::SpriteDensity);
@@ -16508,9 +16591,9 @@ TEST_CASE("C-measured-density and C-local-density are C-default and C-default-lo
         CHECK(config.budgets.screenSpaceErrorPx == expected.budgets.screenSpaceErrorPx);
         CHECK(config.budgets.governorSlew == expected.budgets.governorSlew);
     };
-    checkAgainst(Candidate::MeasuredDensity, Candidate::Default,
+    checkAgainst(Candidate::MeasuredDensity, referenceConfig(),
                  QStringLiteral("C-measured-density"));
-    checkAgainst(Candidate::LocalDensity, Candidate::DefaultLocal,
+    checkAgainst(Candidate::LocalDensity, candidateConfig(Candidate::DefaultLocal),
                  QStringLiteral("C-local-density"));
 
     //Only the view candidates draw a debug view; every other one draws flat white
@@ -16548,10 +16631,10 @@ TEST_CASE("A sweep draws with its config's debug view, and under the sprite dens
 
     struct Pair {
         Candidate density;
-        Candidate flat;
+        EvalConfig flat;
     };
-    for (const Pair& pair : {Pair {Candidate::MeasuredDensity, Candidate::Default},
-                             Pair {Candidate::LocalDensity, Candidate::DefaultLocal}}) {
+    for (const Pair& pair : {Pair {Candidate::MeasuredDensity, referenceConfig()},
+                             Pair {Candidate::LocalDensity, candidateConfig(Candidate::DefaultLocal)}}) {
         const EvalConfig config = candidateConfig(pair.density);
         INFO(config.name.toStdString());
 
@@ -16559,7 +16642,7 @@ TEST_CASE("A sweep draws with its config's debug view, and under the sprite dens
         {
             PointCloudFixture fixture(rhi.get(), planeCache(), kHalfHdTargetSize);
             std::ostringstream output;
-            flatRecords = sweepPath(fixture, path, candidateConfig(pair.flat), step, output);
+            flatRecords = sweepPath(fixture, path, pair.flat, step, output);
             CHECK(fixture.render().shading().debugView == cw::pointcloud::DebugView::Off);
         }
 
@@ -17353,14 +17436,14 @@ namespace {
         Candidate::LocalCover125Density};
 }
 
-TEST_CASE("C-measured-size and C-local-size are C-default and C-default-local under the sprite size view",
+TEST_CASE("C-measured-size and C-local-size are the reference and C-default-local under the sprite size view",
           "[PointCloudStreaming][PointCloudEval]")
 {
     using cw::pointcloud::DebugView;
 
-    const auto checkAgainst = [](Candidate candidate, Candidate base, const QString& name) {
+    const auto checkAgainst = [](Candidate candidate, const EvalConfig& expected,
+                                 const QString& name) {
         const EvalConfig config = candidateConfig(candidate);
-        const EvalConfig expected = candidateConfig(base);
         INFO(name.toStdString());
         CHECK(config.name == name);
         CHECK(config.debugView == DebugView::SpriteSize);
@@ -17376,8 +17459,9 @@ TEST_CASE("C-measured-size and C-local-size are C-default and C-default-local un
         CHECK(config.budgets.screenSpaceErrorPx == expected.budgets.screenSpaceErrorPx);
         CHECK(config.budgets.governorSlew == expected.budgets.governorSlew);
     };
-    checkAgainst(Candidate::MeasuredSize, Candidate::Default, QStringLiteral("C-measured-size"));
-    checkAgainst(Candidate::LocalSize, Candidate::DefaultLocal, QStringLiteral("C-local-size"));
+    checkAgainst(Candidate::MeasuredSize, referenceConfig(), QStringLiteral("C-measured-size"));
+    checkAgainst(Candidate::LocalSize, candidateConfig(Candidate::DefaultLocal),
+                 QStringLiteral("C-local-size"));
     CHECK(candidateConfig(Candidate::MeasuredSize).spacingSource
           == cw::pointcloud::SpacingSource::Measured);
     CHECK(candidateConfig(Candidate::LocalSize).spacingSource

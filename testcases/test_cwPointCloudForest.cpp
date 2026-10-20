@@ -529,7 +529,7 @@ TEST_CASE("cwPointCloudForest coarsens one governor for every cloud",
 TEST_CASE("A slew of one steps the inflation exactly as the governor always has",
           "[PointCloudForest][PointCloudStreaming]")
 {
-    GovernedTree governed(cw::budgets::kDefaultGovernorSlew);
+    GovernedTree governed(cw::budgets::kMaxGovernorSlew);
 
     std::vector<double> inflations;
     std::vector<double> targets;

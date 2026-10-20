@@ -126,10 +126,10 @@ namespace cw::pointcloud {
 
     constexpr bool kDefaultShowNodeBoxes = false;
 
-    //! Measured, because a node sparser than its grid otherwise draws sprites
-    //! sized for points it does not have, and deep levels lit less of the
-    //! ground (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html WP10)
-    constexpr SpacingSource kDefaultSpacingSource = SpacingSource::Measured;
+    //! Local, so each sprite follows its point's own native spacing; tested on
+    //! the desktop app together with Grow over 8 reveal frames
+    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html WP13 to WP16)
+    constexpr SpacingSource kDefaultSpacingSource = SpacingSource::Local;
 
     //! One color per octree level, cycling past the last. The first six are the
     //! level colors of plans/POINT_CLOUD_CLOD_FIGURES.html. PointCloud.vert
@@ -174,12 +174,13 @@ namespace cw::pointcloud {
     //! takes to move from its previous value to its new one, in log space
     //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html WP11). 0 shows an arrival
     //! whole and moves a floor on the frame it changes.
-    constexpr int kDefaultRevealFrames = 0;
+    constexpr int kDefaultRevealFrames = 8;
     constexpr int kMinRevealFrames = 0;
     constexpr int kMaxRevealFrames = 60;
 
-    //! Cover, the rule WP11 shipped with
-    constexpr RevealMode kDefaultRevealMode = RevealMode::Cover;
+    //! Grow, the rule tested with the reveal ramp on
+    //! (plans/POINT_CLOUD_EVAL_BENCH_PLAN.html WP12)
+    constexpr RevealMode kDefaultRevealMode = RevealMode::Grow;
 
     constexpr double kMinPointSizePx = 1.0;
     constexpr double kMaxPointSizePx = 64.0;

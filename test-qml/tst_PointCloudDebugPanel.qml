@@ -146,14 +146,15 @@ MainWindowTest {
         function test_resetReturnsEveryKnobToItsDefault() {
             rootId.renderingSettings.freezeCut = true
             rootId.renderingSettings.inflationGovernor = false
-            rootId.renderingSettings.governorSlew = 0.25
+            rootId.renderingSettings.governorSlew = 0.5
             rootId.renderingSettings.thinningMode = 1
             rootId.renderingSettings.floorMode = 1
             rootId.renderingSettings.debugView = 2
             rootId.renderingSettings.showNodeBoxes = true
             rootId.renderingSettings.minLevel = 1
-            rootId.renderingSettings.revealFrames = 8
-            rootId.renderingSettings.revealMode = 1
+            rootId.renderingSettings.spacingSource = 1
+            rootId.renderingSettings.revealFrames = 16
+            rootId.renderingSettings.revealMode = 0
             rootId.renderingSettings.screenSpaceErrorPx = 4
             rootId.lazLayersSceneNode.spacingCoverage = 3
             rootId.renderingSettings.showRenderStatsHud = true
@@ -163,14 +164,15 @@ MainWindowTest {
 
             tryCompare(rootId.renderingSettings, "freezeCut", false)
             compare(rootId.renderingSettings.inflationGovernor, true)
-            compare(rootId.renderingSettings.governorSlew, 1)
+            compare(rootId.renderingSettings.governorSlew, 0.25)
             compare(rootId.renderingSettings.thinningMode, 0)
             compare(rootId.renderingSettings.floorMode, 0)
             compare(rootId.renderingSettings.debugView, 0)
             compare(rootId.renderingSettings.showNodeBoxes, false)
             compare(rootId.renderingSettings.minLevel, 0)
-            compare(rootId.renderingSettings.revealFrames, 0)
-            compare(rootId.renderingSettings.revealMode, 0)
+            compare(rootId.renderingSettings.spacingSource, 2)
+            compare(rootId.renderingSettings.revealFrames, 8)
+            compare(rootId.renderingSettings.revealMode, 1)
             compare(rootId.renderingSettings.screenSpaceErrorPx, 1.5)
             compare(rootId.lazLayersSceneNode.spacingCoverage,
                     rootId.lazLayersSceneNode.defaultSpacingCoverage)
@@ -188,8 +190,8 @@ MainWindowTest {
 
         function test_governorSlewRowFollowsTheSetting() {
             const slew = row("governorSlewSpinBox")
-            rootId.renderingSettings.governorSlew = 0.25
-            tryCompare(slew, "value", Math.round(0.25 * slew.valueScale))
+            rootId.renderingSettings.governorSlew = 0.5
+            tryCompare(slew, "value", Math.round(0.5 * slew.valueScale))
             compare(slew.from, Math.round(rootId.renderingSettings.minimumGovernorSlew * slew.valueScale))
             compare(slew.to, Math.round(rootId.renderingSettings.maximumGovernorSlew * slew.valueScale))
         }
@@ -202,14 +204,14 @@ MainWindowTest {
             verify(!rootId.renderingSettings.isAtDefaults)
 
             mouseClick(row("pointCloudDebugResetButton"))
-            tryCompare(rootId.renderingSettings, "governorSlew", 1)
-            tryCompare(slew, "value", slew.valueScale)
+            tryCompare(rootId.renderingSettings, "governorSlew", 0.25)
+            tryCompare(slew, "value", Math.round(0.25 * slew.valueScale))
         }
 
         function test_spacingSourceRowFollowsTheSetting() {
             const source = row("spacingSourceComboBox")
             compare(source.count, rootId.renderingSettings.spacingSourceCount)
-            compare(source.currentIndex, 1)
+            compare(source.currentIndex, 2)
 
             rootId.renderingSettings.spacingSource = 0
             tryCompare(source, "currentIndex", 0)
@@ -223,8 +225,8 @@ MainWindowTest {
             verify(!rootId.renderingSettings.isAtDefaults)
 
             mouseClick(row("pointCloudDebugResetButton"))
-            tryCompare(rootId.renderingSettings, "spacingSource", 1)
-            tryCompare(source, "currentIndex", 1)
+            tryCompare(rootId.renderingSettings, "spacingSource", 2)
+            tryCompare(source, "currentIndex", 2)
         }
 
         function test_spacingSourceRowNamesEverySource() {
@@ -235,31 +237,31 @@ MainWindowTest {
             compare(source.textAt(2), "Local")
         }
 
-        function test_spacingSourceRowWritesLocal() {
+        function test_spacingSourceRowWritesMeasured() {
             const source = row("spacingSourceComboBox")
-            source.currentIndex = 2
-            source.activated(2)
-            compare(rootId.renderingSettings.spacingSource, 2)
+            source.currentIndex = 1
+            source.activated(1)
+            compare(rootId.renderingSettings.spacingSource, 1)
             verify(!rootId.renderingSettings.isAtDefaults)
 
-            rootId.renderingSettings.spacingSource = 1
-            tryCompare(source, "currentIndex", 1)
             rootId.renderingSettings.spacingSource = 2
             tryCompare(source, "currentIndex", 2)
+            rootId.renderingSettings.spacingSource = 1
+            tryCompare(source, "currentIndex", 1)
 
             mouseClick(row("pointCloudDebugResetButton"))
-            tryCompare(rootId.renderingSettings, "spacingSource", 1)
-            tryCompare(source, "currentIndex", 1)
+            tryCompare(rootId.renderingSettings, "spacingSource", 2)
+            tryCompare(source, "currentIndex", 2)
         }
 
         function test_revealFramesRowFollowsTheSetting() {
             const reveal = row("revealFramesSpinBox")
-            compare(reveal.value, 0)
+            compare(reveal.value, 8)
             compare(reveal.from, rootId.renderingSettings.minimumRevealFrames)
             compare(reveal.to, rootId.renderingSettings.maximumRevealFrames)
 
-            rootId.renderingSettings.revealFrames = 8
-            tryCompare(reveal, "value", 8)
+            rootId.renderingSettings.revealFrames = 16
+            tryCompare(reveal, "value", 16)
         }
 
         function test_revealFramesRowWritesTheSetting() {
@@ -270,8 +272,8 @@ MainWindowTest {
             verify(!rootId.renderingSettings.isAtDefaults)
 
             mouseClick(row("pointCloudDebugResetButton"))
-            tryCompare(rootId.renderingSettings, "revealFrames", 0)
-            tryCompare(reveal, "value", 0)
+            tryCompare(rootId.renderingSettings, "revealFrames", 8)
+            tryCompare(reveal, "value", 8)
         }
 
         function test_revealModeRowFollowsTheSetting() {
@@ -279,22 +281,22 @@ MainWindowTest {
             compare(mode.count, rootId.renderingSettings.revealModeCount)
             compare(mode.textAt(0), "Cover")
             compare(mode.textAt(1), "Grow")
-            compare(mode.currentIndex, 0)
+            compare(mode.currentIndex, 1)
 
-            rootId.renderingSettings.revealMode = 1
-            tryCompare(mode, "currentIndex", 1)
+            rootId.renderingSettings.revealMode = 0
+            tryCompare(mode, "currentIndex", 0)
         }
 
         function test_revealModeRowWritesTheSetting() {
             const mode = row("revealModeComboBox")
-            mode.currentIndex = 1
-            mode.activated(1)
-            compare(rootId.renderingSettings.revealMode, 1)
+            mode.currentIndex = 0
+            mode.activated(0)
+            compare(rootId.renderingSettings.revealMode, 0)
             verify(!rootId.renderingSettings.isAtDefaults)
 
             mouseClick(row("pointCloudDebugResetButton"))
-            tryCompare(rootId.renderingSettings, "revealMode", 0)
-            tryCompare(mode, "currentIndex", 0)
+            tryCompare(rootId.renderingSettings, "revealMode", 1)
+            tryCompare(mode, "currentIndex", 1)
         }
 
         function test_closeButtonClosesThePanel() {

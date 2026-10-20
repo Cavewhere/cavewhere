@@ -360,8 +360,8 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
     constexpr int kIsolatedLevel = 2;
     constexpr double kFixedPointSizePx = 5.0;
     constexpr double kMaxPointSizePx = 12.0;
-    constexpr double kGovernorSlew = 0.25;
-    constexpr int kRevealFrames = 8;
+    constexpr double kGovernorSlew = 0.5;
+    constexpr int kRevealFrames = 16;
 
     // One knob each: how to move it off its default, what QSettings holds
     // afterward, and the notify signal that has to fire once.
@@ -420,9 +420,9 @@ TEST_CASE("cwRenderingSettings point cloud knobs round-trip, persist, and flip i
          QStringLiteral("rendering/pointCloud/revealFrames"), kRevealFrames,
          &cwRenderingSettings::revealFramesChanged},
         {"revealMode",
-         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Grow)); },
+         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Cover)); },
          QStringLiteral("rendering/pointCloud/revealMode"),
-         int(cw::pointcloud::RevealMode::Grow), &cwRenderingSettings::revealModeChanged},
+         int(cw::pointcloud::RevealMode::Cover), &cwRenderingSettings::revealModeChanged},
     };
 
     SECTION("the knobs start at the renderer's own rules") {
@@ -574,13 +574,13 @@ TEST_CASE("cwRenderingSettings governorSlew defaults to the governor's own step,
     REQUIRE(settings);
     settings->resetToDefaults();
 
-    constexpr double kQuarterSlew = 0.25;
+    constexpr double kHalfSlew = 0.5;
     constexpr double kBelowRange = 0.0;
     constexpr double kAboveRange = 2.0;
     const QString key = QStringLiteral("rendering/pointCloud/governorSlew");
 
-    SECTION("the default jumps to the target in one frame") {
-        CHECK(cw::budgets::kDefaultGovernorSlew == 1.0);
+    SECTION("the default closes a quarter of the gap to the target each frame") {
+        CHECK(cw::budgets::kDefaultGovernorSlew == 0.25);
         CHECK(settings->governorSlew() == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
         CHECK(cwRenderBudgets().governorSlew == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
         CHECK(settings->budgets().governorSlew == Catch::Approx(cw::budgets::kDefaultGovernorSlew));
@@ -607,19 +607,19 @@ TEST_CASE("cwRenderingSettings governorSlew defaults to the governor's own step,
         QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
         QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
 
-        settings->setGovernorSlew(kQuarterSlew);
+        settings->setGovernorSlew(kHalfSlew);
 
         CHECK(slewSpy.count() == 1);
         CHECK(budgetsSpy.count() == 1);
         CHECK(defaultsSpy.count() == 1);
-        CHECK(settings->governorSlew() == Catch::Approx(kQuarterSlew));
-        CHECK(settings->budgets().governorSlew == Catch::Approx(kQuarterSlew));
+        CHECK(settings->governorSlew() == Catch::Approx(kHalfSlew));
+        CHECK(settings->budgets().governorSlew == Catch::Approx(kHalfSlew));
         CHECK_FALSE(settings->isAtDefaults());
 
         QSettings diskSettings;
-        CHECK(diskSettings.value(key).toDouble() == Catch::Approx(kQuarterSlew));
+        CHECK(diskSettings.value(key).toDouble() == Catch::Approx(kHalfSlew));
 
-        settings->setGovernorSlew(kQuarterSlew);
+        settings->setGovernorSlew(kHalfSlew);
         CHECK(slewSpy.count() == 1);
         CHECK(budgetsSpy.count() == 1);
 
@@ -632,7 +632,7 @@ TEST_CASE("cwRenderingSettings governorSlew defaults to the governor's own step,
     settings->resetToDefaults();
 }
 
-TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and persists",
+TEST_CASE("cwRenderingSettings spacingSource defaults to local, clamps, and persists",
           "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -643,11 +643,11 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and p
     using cw::pointcloud::SpacingSource;
     const QString key = QStringLiteral("rendering/pointCloud/spacingSource");
 
-    SECTION("the default sizes and thins by each node's measured spacing") {
-        CHECK(cw::pointcloud::kDefaultSpacingSource == SpacingSource::Measured);
-        CHECK(cwPointCloudShading().spacingSource == SpacingSource::Measured);
-        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
-        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Measured);
+    SECTION("the default sizes and thins by each point's local native spacing") {
+        CHECK(cw::pointcloud::kDefaultSpacingSource == SpacingSource::Local);
+        CHECK(cwPointCloudShading().spacingSource == SpacingSource::Local);
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Local);
         CHECK(cwRenderingSettings::spacingSourceCount() == cw::pointcloud::kSpacingSourceCount);
         CHECK(cwRenderingSettings::spacingSourceCount() == 3);
         CHECK(settings->isAtDefaults());
@@ -661,25 +661,25 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and p
         CHECK(settings->spacingSource() == int(SpacingSource::Local));
     }
 
-    SECTION("local round-trips through QSettings and reaches the shading") {
+    SECTION("measured round-trips through QSettings and reaches the shading") {
         QSignalSpy sourceSpy(settings, &cwRenderingSettings::spacingSourceChanged);
         QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
         QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
 
-        settings->setSpacingSource(int(SpacingSource::Local));
+        settings->setSpacingSource(int(SpacingSource::Measured));
 
         CHECK(sourceSpy.count() == 1);
         CHECK(shadingSpy.count() == 1);
         CHECK(budgetsSpy.count() == 0);
-        CHECK(settings->spacingSource() == int(SpacingSource::Local));
-        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Local);
+        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+        CHECK(settings->pointCloudShading().spacingSource == SpacingSource::Measured);
         CHECK_FALSE(settings->isAtDefaults());
 
         QSettings diskSettings;
-        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Local));
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Measured));
 
         settings->resetPointCloudKnobsToDefaults();
-        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
         CHECK(settings->isAtDefaults());
     }
 
@@ -706,15 +706,15 @@ TEST_CASE("cwRenderingSettings spacingSource defaults to measured, clamps, and p
         CHECK(sourceSpy.count() == 1);
 
         settings->resetPointCloudKnobsToDefaults();
-        CHECK(settings->spacingSource() == int(SpacingSource::Measured));
-        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Measured));
+        CHECK(settings->spacingSource() == int(SpacingSource::Local));
+        CHECK(diskSettings.value(key).toInt() == int(SpacingSource::Local));
         CHECK(settings->isAtDefaults());
     }
 
     settings->resetToDefaults();
 }
 
-TEST_CASE("cwRenderingSettings revealFrames defaults to off, clamps, and persists",
+TEST_CASE("cwRenderingSettings revealFrames defaults to eight frames, clamps, and persists",
           "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -724,11 +724,12 @@ TEST_CASE("cwRenderingSettings revealFrames defaults to off, clamps, and persist
 
     const QString key = QStringLiteral("rendering/pointCloud/revealFrames");
     constexpr int kEightFrames = 8;
+    constexpr int kOff = 0;
     constexpr int kBelowRange = -3;
     constexpr int kAboveRange = 1000;
 
-    SECTION("the default shows an arrival whole and moves a floor at once") {
-        CHECK(cw::pointcloud::kDefaultRevealFrames == 0);
+    SECTION("the default fades an arrival in and moves a floor over eight frames") {
+        CHECK(cw::pointcloud::kDefaultRevealFrames == kEightFrames);
         CHECK(cwPointCloudShading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
         CHECK(settings->revealFrames() == cw::pointcloud::kDefaultRevealFrames);
         CHECK(settings->pointCloudShading().revealFrames == cw::pointcloud::kDefaultRevealFrames);
@@ -749,26 +750,26 @@ TEST_CASE("cwRenderingSettings revealFrames defaults to off, clamps, and persist
         CHECK(settings->revealFrames() == cwRenderingSettings::minimumRevealFrames());
     }
 
-    SECTION("a ramp round-trips through QSettings and reaches the shading") {
+    SECTION("turning the ramp off round-trips through QSettings and reaches the shading") {
         QSignalSpy framesSpy(settings, &cwRenderingSettings::revealFramesChanged);
         QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
         QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
         QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
 
-        settings->setRevealFrames(kEightFrames);
+        settings->setRevealFrames(kOff);
 
         CHECK(framesSpy.count() == 1);
         CHECK(shadingSpy.count() == 1);
         CHECK(budgetsSpy.count() == 0);
         CHECK(defaultsSpy.count() == 1);
-        CHECK(settings->revealFrames() == kEightFrames);
-        CHECK(settings->pointCloudShading().revealFrames == kEightFrames);
+        CHECK(settings->revealFrames() == kOff);
+        CHECK(settings->pointCloudShading().revealFrames == kOff);
         CHECK_FALSE(settings->isAtDefaults());
 
         QSettings diskSettings;
-        CHECK(diskSettings.value(key).toInt() == kEightFrames);
+        CHECK(diskSettings.value(key).toInt() == kOff);
 
-        settings->setRevealFrames(kEightFrames);
+        settings->setRevealFrames(kOff);
         CHECK(framesSpy.count() == 1);
 
         settings->resetPointCloudKnobsToDefaults();
@@ -780,7 +781,7 @@ TEST_CASE("cwRenderingSettings revealFrames defaults to off, clamps, and persist
     settings->resetToDefaults();
 }
 
-TEST_CASE("cwRenderingSettings revealMode defaults to cover, clamps, and persists",
+TEST_CASE("cwRenderingSettings revealMode defaults to grow, clamps, and persists",
           "[cwRenderingSettings]")
 {
     cwRenderingSettings::initialize();
@@ -793,14 +794,14 @@ TEST_CASE("cwRenderingSettings revealMode defaults to cover, clamps, and persist
     constexpr int kBelowRange = -1;
     constexpr int kAboveRange = 100;
 
-    SECTION("the enum holds cover and grow, and the default is the rule WP11 shipped") {
+    SECTION("the enum holds cover and grow, and the default is grow") {
         CHECK(int(RevealMode::Cover) == 0);
         CHECK(int(RevealMode::Grow) == 1);
         CHECK(cw::pointcloud::kRevealModeCount == 2);
-        CHECK(cw::pointcloud::kDefaultRevealMode == RevealMode::Cover);
-        CHECK(cwPointCloudShading().revealMode == RevealMode::Cover);
-        CHECK(settings->revealMode() == int(RevealMode::Cover));
-        CHECK(settings->pointCloudShading().revealMode == RevealMode::Cover);
+        CHECK(cw::pointcloud::kDefaultRevealMode == RevealMode::Grow);
+        CHECK(cwPointCloudShading().revealMode == RevealMode::Grow);
+        CHECK(settings->revealMode() == int(RevealMode::Grow));
+        CHECK(settings->pointCloudShading().revealMode == RevealMode::Grow);
         CHECK(cwRenderingSettings::revealModeCount() == cw::pointcloud::kRevealModeCount);
         CHECK(settings->isAtDefaults());
     }
@@ -813,32 +814,32 @@ TEST_CASE("cwRenderingSettings revealMode defaults to cover, clamps, and persist
         CHECK(settings->revealMode() == int(RevealMode::Cover));
     }
 
-    SECTION("grow round-trips through QSettings and reaches the shading") {
+    SECTION("cover round-trips through QSettings and reaches the shading") {
         QSignalSpy modeSpy(settings, &cwRenderingSettings::revealModeChanged);
         QSignalSpy shadingSpy(settings, &cwRenderingSettings::pointCloudShadingChanged);
         QSignalSpy budgetsSpy(settings, &cwRenderingSettings::budgetsChanged);
         QSignalSpy defaultsSpy(settings, &cwRenderingSettings::isAtDefaultsChanged);
 
-        settings->setRevealMode(int(RevealMode::Grow));
+        settings->setRevealMode(int(RevealMode::Cover));
 
         CHECK(modeSpy.count() == 1);
         CHECK(shadingSpy.count() == 1);
         CHECK(budgetsSpy.count() == 0);
         CHECK(defaultsSpy.count() == 1);
-        CHECK(settings->revealMode() == int(RevealMode::Grow));
-        CHECK(settings->pointCloudShading().revealMode == RevealMode::Grow);
+        CHECK(settings->revealMode() == int(RevealMode::Cover));
+        CHECK(settings->pointCloudShading().revealMode == RevealMode::Cover);
         CHECK_FALSE(settings->isAtDefaults());
 
         QSettings diskSettings;
-        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Grow));
+        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Cover));
 
-        settings->setRevealMode(int(RevealMode::Grow));
+        settings->setRevealMode(int(RevealMode::Cover));
         CHECK(modeSpy.count() == 1);
 
         settings->resetPointCloudKnobsToDefaults();
         CHECK(modeSpy.count() == 2);
-        CHECK(settings->revealMode() == int(RevealMode::Cover));
-        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Cover));
+        CHECK(settings->revealMode() == int(RevealMode::Grow));
+        CHECK(diskSettings.value(key).toInt() == int(RevealMode::Grow));
         CHECK(settings->isAtDefaults());
     }
 
@@ -997,7 +998,7 @@ TEST_CASE("cwRenderingSettings announces every budget knob through budgetsChange
         {"revealFrames",
          [&] { settings->setRevealFrames(cw::pointcloud::kMaxRevealFrames); }, false},
         {"revealMode",
-         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Grow)); }, false},
+         [&] { settings->setRevealMode(int(cw::pointcloud::RevealMode::Cover)); }, false},
     };
 
     for (const Knob& knob : knobs) {
