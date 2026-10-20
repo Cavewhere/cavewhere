@@ -120,27 +120,18 @@ namespace {
         return seconds(timer.elapsed());
     }
 
-    //A top cell packs into one key: level in the high bits, then x, y, z
-    constexpr int kLevelShift = 60;
-    constexpr int kXShift = 40;
-    constexpr int kYShift = 20;
-    constexpr quint64 kCoordinateMask = (quint64(1) << kYShift) - 1;
-
     quint64 cellKey(const Cell& cell)
     {
-        return (quint64(cell.level) << kLevelShift)
-               | (quint64(cell.x) << kXShift)
-               | (quint64(cell.y) << kYShift)
-               | quint64(cell.z);
+        return cw::octree::cellKey(cell.level, cell.x, cell.y, cell.z);
     }
 
     Cell cellFromKey(quint64 key)
     {
         return Cell {
-            int(key >> kLevelShift),
-            quint32((key >> kXShift) & kCoordinateMask),
-            quint32((key >> kYShift) & kCoordinateMask),
-            quint32(key & kCoordinateMask)
+            int(key >> kCellKeyLevelShift),
+            quint32((key >> kCellKeyXShift) & kCellKeyCoordinateMask),
+            quint32((key >> kCellKeyYShift) & kCellKeyCoordinateMask),
+            quint32(key & kCellKeyCoordinateMask)
         };
     }
 

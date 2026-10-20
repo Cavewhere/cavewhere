@@ -18,6 +18,8 @@
 #include "cwDiskCacher.h"
 #include "qbox3d.h"
 
+struct cwPointOctreeNode;
+
 /**
  * Format constants and pure helpers shared by the point octree builder, the
  * loader, and the renderer. Nothing here touches state, so every function is
@@ -75,6 +77,24 @@ namespace cw::octree {
 
     //Head and tail of the source file sampled by sourceFingerprint()
     constexpr qint64 kFingerprintWindowBytes = 4 * 1024 * 1024;
+
+    //A cell packs into one key: level in the high bits, then x, y, z
+    constexpr int kCellKeyLevelShift = 60;
+    constexpr int kCellKeyXShift = 40;
+    constexpr int kCellKeyYShift = 20;
+    constexpr quint64 kCellKeyCoordinateMask = (quint64(1) << kCellKeyYShift) - 1;
+
+    //! The key of the cell at @a level, @a x, @a y, @a z, which names one node
+    constexpr quint64 cellKey(int level, quint32 x, quint32 y, quint32 z)
+    {
+        return (quint64(level) << kCellKeyLevelShift)
+               | (quint64(x) << kCellKeyXShift)
+               | (quint64(y) << kCellKeyYShift)
+               | quint64(z);
+    }
+
+    //! cellKey() of the node's own cell
+    CAVEWHERE_LIB_EXPORT quint64 cellKey(const cwPointOctreeNode& node);
 
     struct QuantizedPoint {
         quint16 x = 0;
@@ -228,6 +248,13 @@ namespace cw::octree {
     CAVEWHERE_LIB_EXPORT QString sourceFingerprint(const QString& lazPath,
                                                    const QString& sourceCS,
                                                    const QString& frameCS);
+
+    /**
+     * The pack file of the LAZ file at @a lazPath:
+     * <cacheRootPath>/.cw_cache/<LAZ dir mirrored the way cwDiskCacher mirrors
+     * a key path>/<laz file name>-octree<kFormatGeneration>.cwpack
+     */
+    CAVEWHERE_LIB_EXPORT QString packPath(const QString& cacheRootPath, const QString& lazPath);
 
     /**
      * The cache key of the manifest for lazPath. The key's path is the LAZ

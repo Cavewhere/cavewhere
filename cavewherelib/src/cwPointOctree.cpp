@@ -1,5 +1,6 @@
 // cwPointOctree.cpp
 #include "cwPointOctree.h"
+#include "cwPointOctreeManifest.h"
 #include "cwImageProvider.h"
 
 //Qt includes
@@ -226,6 +227,21 @@ QString sourceFingerprint(const QString& lazPath, const QString& sourceCS, const
     hashed += frameCS.toUtf8();
 
     return QString::number(cwImageProvider::toHash(hashed), 16);
+}
+
+quint64 cellKey(const cwPointOctreeNode& node)
+{
+    return cellKey(node.level, node.x, node.y, node.z);
+}
+
+QString packPath(const QString& cacheRootPath, const QString& lazPath)
+{
+    const QFileInfo info(lazPath);
+    const QString id = info.fileName()
+                       + QStringLiteral("-octree")
+                       + QString::number(kFormatGeneration)
+                       + QStringLiteral(".cwpack");
+    return cwDiskCacher(cacheRootPath).filePath(cwDiskCacher::Key {id, info.path(), QString()});
 }
 
 NodeKeyBase nodeKeyBase(const QString& lazPath, const QString& fingerprint)
