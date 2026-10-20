@@ -504,6 +504,8 @@ private:
     QRhiShaderResourceBindings* m_srb = nullptr;
 
     cwPointOctreeSource m_source;
+    // Derived from m_source in resetNodes(); keys nodes without QFileInfo
+    cw::octree::NodeKeyBase m_nodeKeyBase;
 
     // What picking reads. Set from the render object at construction; the
     // render thread republishes it whenever residency moves, which

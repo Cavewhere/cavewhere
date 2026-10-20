@@ -280,6 +280,7 @@ void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
     releaseStreamedResources();
 
     m_source = source;
+    m_nodeKeyBase = cw::octree::nodeKeyBase(m_source.lazPath, m_source.fingerprint);
 
     m_nodes.clear();
     m_residentIndices.clear();
@@ -357,14 +358,13 @@ void cwRHIPointCloud::requestNode(int index, quint64 priority)
 
 cwRHIPointCloud::cwPointOctreeNodeSource cwRHIPointCloud::nodeSource(int index) const
 {
-    cwPointOctreeNodeSource source;
-    source.cacheRootPath = m_source.cacheRootPath();
     // nodeName() memoizes a parent table; only the render thread ever asks a
     // published manifest for a name, so that memo has one writer.
-    source.key = cw::octree::nodeKey(m_source.lazPath, m_source.fingerprint,
-                                     m_source.manifest->nodeName(index));
-    source.byteSize = m_source.manifest->nodes.at(index).byteSize;
-    return source;
+    return cwPointOctreeNodeSource {
+        m_source.cacheRootPath(),
+        cw::octree::nodeKey(m_nodeKeyBase, m_source.manifest->nodeName(index)),
+        m_source.manifest->nodes.at(index).byteSize
+    };
 }
 
 cw::octree::SelectionInput cwRHIPointCloud::selectionInput(const RenderData& renderData,

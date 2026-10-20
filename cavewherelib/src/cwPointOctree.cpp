@@ -73,17 +73,12 @@ namespace {
         cw::octree::QuantizedPoint point;
     };
 
-    cwDiskCacher::Key cacheKey(const QString& lazPath, const QString& fingerprint, const QString& suffix)
+    cwDiskCacher::Key cacheKey(const cw::octree::NodeKeyBase& base, const QString& suffix)
     {
-        const QFileInfo info(lazPath);
         return cwDiskCacher::Key {
-            info.fileName()
-                + QStringLiteral("-octree")
-                + QString::number(cw::octree::kFormatGeneration)
-                + QStringLiteral("-")
-                + suffix,
-            info.dir(),
-            fingerprint
+            base.idPrefix + suffix,
+            base.dir,
+            base.fingerprint
         };
     }
 }
@@ -233,14 +228,37 @@ QString sourceFingerprint(const QString& lazPath, const QString& sourceCS, const
     return QString::number(cwImageProvider::toHash(hashed), 16);
 }
 
+NodeKeyBase nodeKeyBase(const QString& lazPath, const QString& fingerprint)
+{
+    const QFileInfo info(lazPath);
+    return NodeKeyBase {
+        info.fileName()
+            + QStringLiteral("-octree")
+            + QString::number(kFormatGeneration)
+            + QStringLiteral("-"),
+        info.path(),
+        fingerprint
+    };
+}
+
+cwDiskCacher::Key manifestKey(const NodeKeyBase& base)
+{
+    return cacheKey(base, QStringLiteral("manifest"));
+}
+
+cwDiskCacher::Key nodeKey(const NodeKeyBase& base, const QString& nodeName)
+{
+    return cacheKey(base, nodeName);
+}
+
 cwDiskCacher::Key manifestKey(const QString& lazPath, const QString& fingerprint)
 {
-    return cacheKey(lazPath, fingerprint, QStringLiteral("manifest"));
+    return manifestKey(nodeKeyBase(lazPath, fingerprint));
 }
 
 cwDiskCacher::Key nodeKey(const QString& lazPath, const QString& fingerprint, const QString& nodeName)
 {
-    return cacheKey(lazPath, fingerprint, nodeName);
+    return nodeKey(nodeKeyBase(lazPath, fingerprint), nodeName);
 }
 
 }

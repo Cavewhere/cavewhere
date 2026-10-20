@@ -623,8 +623,8 @@ TEST_CASE("Octree cache keys land beside the laz file", "[PointOctree]") {
     CHECK(childKey.id == QStringLiteral("cave.laz-octree") + generation + QStringLiteral("-r35"));
     CHECK(manifestKey.checksum == fingerprint);
     CHECK(rootNodeKey.checksum == fingerprint);
-    CHECK(manifestKey.path.absolutePath() == QFileInfo(lazPath).dir().absolutePath());
-    CHECK(childKey.path.absolutePath() == QFileInfo(lazPath).dir().absolutePath());
+    CHECK(manifestKey.path == QFileInfo(lazPath).path());
+    CHECK(childKey.path == QFileInfo(lazPath).path());
 
     cwDiskCacher cacher(root);
 
@@ -645,6 +645,29 @@ TEST_CASE("Octree cache keys land beside the laz file", "[PointOctree]") {
         stale.checksum = QStringLiteral("0ddba11");
         CHECK(cacher.entry(stale).isEmpty());
     }
+}
+
+TEST_CASE("A node key base yields the same keys as the path overloads", "[PointOctree]") {
+    const QString lazPath = QStringLiteral("/tmp/GIS Layers/cave.laz");
+    const QString fingerprint = QStringLiteral("deadbeef");
+    const cw::octree::NodeKeyBase base = cw::octree::nodeKeyBase(lazPath, fingerprint);
+
+    const auto checkSame = [](const cwDiskCacher::Key& fromBase, const cwDiskCacher::Key& fromPath) {
+        CHECK(fromBase.id == fromPath.id);
+        CHECK(fromBase.path == fromPath.path);
+        CHECK(fromBase.checksum == fromPath.checksum);
+    };
+
+    checkSame(cw::octree::manifestKey(base), cw::octree::manifestKey(lazPath, fingerprint));
+    for(const QString& nodeName : {QStringLiteral("r"), QStringLiteral("r35"), QStringLiteral("r0123")}) {
+        checkSame(cw::octree::nodeKey(base, nodeName),
+                  cw::octree::nodeKey(lazPath, fingerprint, nodeName));
+    }
+
+    const QString generation = QString::number(cw::octree::kFormatGeneration);
+    CHECK(cw::octree::nodeKey(base, QStringLiteral("r7")).id
+          == QStringLiteral("cave.laz-octree") + generation + QStringLiteral("-r7"));
+    CHECK(base.dir == QStringLiteral("/tmp/GIS Layers"));
 }
 
 TEST_CASE("A manifest round-trips each node's measured spacing", "[PointOctree]") {
