@@ -324,7 +324,7 @@ cwDiskCacher::Key textureKey(const QString& gltfPath, int textureIndex)
                              + QStringLiteral("-texture")
                              + QString::number(textureIndex))
             + QStringLiteral(".ktx2"),
-        gltfInfo.dir(),
+        gltfInfo.path(),
         QString()
     };
 }

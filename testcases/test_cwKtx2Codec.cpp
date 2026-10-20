@@ -225,7 +225,7 @@ namespace {
 
     cwDiskCacher::Key streamedKey(const QString& checksum) {
         cwDiskCacher::Key key;
-        key.path = QDir(QStringLiteral("streamed-textures"));
+        key.path = QStringLiteral("streamed-textures");
         key.id = QStringLiteral("gradient-64x48");
         key.checksum = checksum;
         return key;

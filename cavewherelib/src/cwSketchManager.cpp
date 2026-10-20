@@ -258,7 +258,7 @@ cwDiskCacher::Key cwSketchManager::cacheKey(const cwSketch* sketch)
     if (sketch == nullptr) {
         return key;
     }
-    key.path = QDir(QStringLiteral("sketch-icons"));
+    key.path = QStringLiteral("sketch-icons");
     key.id = sketch->id().toString(QUuid::WithoutBraces);
     return key;
 }

@@ -1081,7 +1081,7 @@ namespace {
         result.localSpacingCappedPoints = estimate.cappedPoints;
         result.localSpacingCeiling = estimate.ceiling;
 
-        cwDiskCacher cacher {QDir(context.cacheRootPath)};
+        cwDiskCacher cacher {context.cacheRootPath};
 
         result.chunks.reserve(subtrees.size());
         for(qsizetype chunk = 0; chunk < subtrees.size(); chunk++) {
@@ -1687,7 +1687,7 @@ std::optional<cwPointOctreeManifest> cwPointOctreeBuilder::cachedManifest(const 
         return std::nullopt;
     }
 
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const cwDiskCacher cacher {request.cacheRootPath};
 
     const std::optional<cwPointOctreeManifest> manifest =
         cwPointOctreeManifest::deserialize(cacher.entry(manifestKey(request.path, fingerprint)));
@@ -1946,7 +1946,7 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
 
             QVector<std::optional<ChunkResult>> chunkResults = std::move(passB.chunks);
 
-            cwDiskCacher cacher {QDir(request.cacheRootPath)};
+            cwDiskCacher cacher {request.cacheRootPath};
 
             QHash<quint64, qsizetype> chunkIndexByCell;
             chunkIndexByCell.reserve(tasks.size());

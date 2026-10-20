@@ -172,7 +172,7 @@ TEST_CASE("A streamed texture swap rebuilds the shader resource bindings when th
 
     cwDiskCacher::Key cacheKey;
     cacheKey.id = QStringLiteral("streamed-srb-swap-%1").arg(QCoreApplication::applicationPid());
-    cacheKey.path = QDir(QStringLiteral("streamed-textures"));
+    cacheKey.path = QStringLiteral("streamed-textures");
     cacheKey.checksum = QStringLiteral("checksum");
 
     cwDiskCacher cacher{QDir(cacheDirectory.path())};

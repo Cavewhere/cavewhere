@@ -55,7 +55,7 @@ QDir cwCacheImageProvider::cacheBaseDir() const
 
 QString cwCacheImageProvider::encodeKey(const cwDiskCacher::Key& key)
 {
-    const QString encodedPath = encodeComponent(key.path.path());
+    const QString encodedPath = encodeComponent(key.path);
     const QString encodedId = encodeComponent(key.id);
     const QString encodedChecksum = encodeComponent(key.checksum);
     return encodedPath + QStringLiteral("|") + encodedId + QStringLiteral("|") + encodedChecksum;
@@ -75,7 +75,7 @@ bool cwCacheImageProvider::decodeKey(const QString& encodedKey, cwDiskCacher::Ke
         return false;
     }
 
-    key->path = QDir(decodeComponent(parts.at(0)));
+    key->path = decodeComponent(parts.at(0));
     key->id = decodeComponent(parts.at(1));
     key->checksum = decodeComponent(parts.at(2));
     return true;
@@ -114,7 +114,7 @@ QImage cwCacheImageProvider::requestImage(const QString& id, QSize* size, const 
     const QByteArray data = cacher.entry(key);
     if (data.isEmpty()) {
         qWarning() << "cwCacheImageProvider: empty cache entry for key"
-                   << key.path.path() << "/" << key.id
+                   << key.path << "/" << key.id
                    << "under baseDir:" << baseDir.absolutePath();
         return {};
     }

@@ -111,13 +111,13 @@ cwStreamedTexture cwGltfBaseColorTexture::streamedSource(const cw::gltf::SceneCP
                                  + QStringLiteral("-texture")
                                  + QString::number(textureIndex))
                 + QStringLiteral(".ktx2"),
-            gltfInfo.dir(),
+            gltfInfo.path(),
             m_fileChecksum
         },
         size
     };
 
-    cwDiskCacher cacher{QDir(m_dataRootPath)};
+    cwDiskCacher cacher{m_dataRootPath};
 
     const auto ensured = cw::ktx2::ensureEncodedEntry(cacher, streamed.key, [&texture]() {
         return texture.toImage();

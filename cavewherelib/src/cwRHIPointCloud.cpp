@@ -2174,7 +2174,7 @@ Monad::Result<cwPointOctreeNodePayload> cwRHIPointCloud::loadNode(
         timer.start();
     }
 
-    const cwDiskCacher cacher{QDir(source.cacheRootPath)};
+    const cwDiskCacher cacher{source.cacheRootPath};
     const QByteArray bytes = cacher.entry(source.key);
 
     if (profiling) {

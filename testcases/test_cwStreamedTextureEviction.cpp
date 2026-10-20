@@ -143,7 +143,7 @@ namespace {
             // from sharing a cache entry.
             cwDiskCacher::Key cacheKey;
             cacheKey.id = QStringLiteral("%1-%2").arg(cacheId).arg(QCoreApplication::applicationPid());
-            cacheKey.path = QDir(QStringLiteral("streamed-textures"));
+            cacheKey.path = QStringLiteral("streamed-textures");
             cacheKey.checksum = QStringLiteral("checksum");
 
             cwDiskCacher cacher{QDir(m_cacheDirectory.path())};

@@ -61,14 +61,14 @@ cwDiskCacher::Key iconCacheKey(const cwProject* project, const cwNoteLiDAR* note
     QString path = (project && note) ? project->absolutePath(note, note->filename()) : QString();
     if (!path.isEmpty()) {
         QFileInfo fi(path);
-        key.path = QDir(fi.path());
+        key.path = fi.path();
         QString baseName = fi.fileName();
         if (baseName.isEmpty()) {
             baseName = fi.completeBaseName();
         }
     key.id = baseName + QStringLiteral(".icon.png");
     } else {
-        key.path = QDir(QStringLiteral("lidar-icons"));
+        key.path = QStringLiteral("lidar-icons");
         QString name = note ? note->name() : QString();
         if (name.isEmpty()) {
             name = QStringLiteral("note-%1").arg(reinterpret_cast<quintptr>(note), 0, 16);

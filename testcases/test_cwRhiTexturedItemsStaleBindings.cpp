@@ -123,7 +123,7 @@ QImage patternImage(int seed)
 cwStreamedTexture encodeStreamedTexture(const QDir& dataRoot, const QString& id, int seed)
 {
     cwDiskCacher cacher(dataRoot);
-    const cwDiskCacher::Key key {id, QDir(QStringLiteral("textures")), QStringLiteral("checksum-") + id};
+    const cwDiskCacher::Key key {id, QStringLiteral("textures"), QStringLiteral("checksum-") + id};
     const auto ensured = cw::ktx2::ensureEncodedEntry(cacher, key, [seed]() {
         return patternImage(seed);
     });

@@ -2075,7 +2075,7 @@ namespace {
         return cwDiskCacher::Key {
             info.fileName() + QStringLiteral("-octree") + QString::number(generation)
                 + QStringLiteral("-") + suffix,
-            info.dir(),
+            info.path(),
             fingerprint
         };
     }
