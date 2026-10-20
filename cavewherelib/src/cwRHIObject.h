@@ -380,11 +380,16 @@ protected:
 // scene begins the pass against the output target (typically the swap-chain),
 // invokes each effect's apply(), and ends the pass after the rest of the
 // scene-level draws. This keeps the pass count to one for the swap-chain.
+//
+// Each frame splits into two calls. prepare() runs outside any pass and does
+// all CPU-side work, enqueueing buffer writes on the batch it is given. apply()
+// only records commands into the open pass. QRhi accepts resource updates only
+// between passes, so apply() must leave cb->resourceUpdate() and every resource
+// update batch alone.
 class cwRhiPostProcessEffect {
 public:
     // Frame-level state that effects may need to precompute their own uniforms.
-    // Provided by cwRhiScene once per frame before apply(). Effects that don't
-    // care leave the default updateFrameUniforms() no-op.
+    // Provided once per frame to prepare().
     struct FrameUniformContext {
         QMatrix4x4 projectionMatrix;  // already pre-multiplied by clipSpaceCorrMatrix
         QSize viewportSize;
@@ -416,10 +421,11 @@ public:
     // the effect can rebuild SRBs that reference it.
     virtual void resize(QSize outputSize) { Q_UNUSED(outputSize); }
 
-    // Push per-frame CPU-side state. Called from cwRhiScene before apply() so
+    // Push per-frame CPU-side state and enqueue the effect's uniform writes on
+    // `batch`. Called once per frame outside any render pass, before apply(), so
     // the effect can derive UBO contents (e.g. projection-dependent constants)
     // without re-reading them from the global UBO (which lives in GPU memory).
-    virtual void updateFrameUniforms(const FrameUniformContext&) {}
+    virtual void prepare(const FrameUniformContext& ctx, QRhiResourceUpdateBatch* batch) = 0;
 
     // Emit pipeline+SRB+draw into `cb` (which must be inside an open beginPass
     // against the output target, typically the swap chain). The effect is the

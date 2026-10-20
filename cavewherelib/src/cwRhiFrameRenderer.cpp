@@ -813,11 +813,18 @@ void cwRhiFrameRenderer::drawScene(QRhiCommandBuffer* cb,
         // cloud and paint the whole scene with the (black) cloud-clear colour.
         const QColor edlClear = QColor::fromRgbF(0.0, 0.0, 0.0, 0.0);
 
+        // The composite's uniform writes ride the frame batch so they land
+        // before any pass opens. A caller without a batch gets a fresh one.
+        QRhiResourceUpdateBatch* frameBatch = resources
+                                                  ? resources
+                                                  : cb->rhi()->nextResourceUpdateBatch();
+        edl->effect->prepare(frameContext, frameBatch);
+
         // Pass A — scene offscreen: Background + Opaque into sceneColor with
-        // sceneDepth. Consumes the caller's resource-update batch.
+        // sceneDepth. Consumes the frame batch.
         {
             QRhiGraphicsPipeline* bound = nullptr;
-            cb->beginPass(edl->sceneTarget.get(), edlClear, { 1.0f, 0 }, resources);
+            cb->beginPass(edl->sceneTarget.get(), edlClear, { 1.0f, 0 }, frameBatch);
             cb->setViewport(offscreenViewport);
             drainBatches(cb, passBatchFor(RP::Background), bound, passDataFor(RP::Background), cameraUniformOffset);
             drainBatches(cb, passBatchFor(RP::Opaque), bound, passDataFor(RP::Opaque), cameraUniformOffset);
@@ -841,7 +848,6 @@ void cwRhiFrameRenderer::drawScene(QRhiCommandBuffer* cb,
         cb->beginPass(finalTarget, clearColor, { 1.0f, 0 }, nullptr);
         cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
 
-        edl->effect->updateFrameUniforms(frameContext);
         edl->effect->apply(cb, edl->sceneColor.get(), edl->cloudColor.get(), edl->depth.get(),
                            outputSize, cameraUniformOffset);
 
