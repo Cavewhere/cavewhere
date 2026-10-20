@@ -98,6 +98,35 @@ QQ.Item {
                         value: RootData.updateCoordinator.automaticUpdate
                     }
                 }
+
+                SyncMenu {
+                    objectName: "hamburgerSyncMenu"
+                    title: qsTr("Sync")
+                    icon.source: syncButtonId.icon.source
+                    enabled: syncButtonId.enabled
+                    hasRemote: syncButtonId.hasRemote
+                    syncInProgress: syncButtonId.syncInProgress
+                    needsInstallation: syncButtonId.needsInstallation
+                    usesTokenAuth: syncButtonId.usesTokenAuth
+                    loggedIn: syncButtonId.loggedIn
+
+                    onSyncRequested: syncButtonId.syncRequested()
+                    onRemoteSettingsRequested: syncButtonId.remoteSettingsRequested()
+                    onHistoryRequested: syncButtonId.historyRequested()
+                    onSetupRemoteRequested: syncButtonId.setupRemoteRequested()
+                    onLoginRequested: syncButtonId.loginRequested()
+                    onLogoutRequested: syncButtonId.logoutRequested()
+                    onInstallRequested: syncButtonId.installRequested()
+                }
+
+                QC.MenuSeparator {}
+
+                QC.MenuItem {
+                    objectName: "hamburgerSettingsMenuItem"
+                    text: qsTr("Settings")
+                    icon.source: "qrc:/twbs-icons/icons/gear.svg"
+                    onTriggered: RootData.pageSelectionModel.gotoPageByName(null, "Settings")
+                }
             }
         }
 
@@ -232,6 +261,8 @@ QQ.Item {
         SyncButton {
             id: syncButtonId
             objectName: "syncButton"
+            // At Narrow the hamburger menu's Sync submenu stands in for this.
+            visible: linkBarId.layoutSize !== Theme.LayoutSize.Narrow
             implicitWidth: sizeItemId.height
             implicitHeight: implicitWidth
             syncHealth: RootData.project.syncHealth
@@ -243,9 +274,11 @@ QQ.Item {
             usesTokenAuth: RootData.project.syncHealth.status.usesTokenAuth
             needsInstallation: RootData.remote.gitHubIntegration.needsInstallation
 
-            // Right-aligned popup positioning anchored below this button
+            // Right-aligned popup positioning, anchored below whichever button
+            // opened it: this one, or the hamburger at Narrow where this is hidden.
+            readonly property QQ.Item _popupAnchor: syncButtonId.visible ? syncButtonId : hamburgerButtonId
             readonly property int _popupRightEdge: syncButtonId.QQ.Window.width - 5
-            readonly property int _popupY: syncButtonId.mapToItem(null, 0, syncButtonId.height + 4).y
+            readonly property int _popupY: _popupAnchor.mapToItem(null, 0, _popupAnchor.height + 4).y
 
             onSyncRequested: {
                 RootData.project.sync()

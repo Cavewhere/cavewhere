@@ -143,71 +143,20 @@ RoundButton {
         }
     }
 
-    QC.Menu {
+    SyncMenu {
         id: syncMenu
+        hasRemote: syncButtonId.hasRemote
+        syncInProgress: syncButtonId.syncInProgress
+        needsInstallation: syncButtonId.needsInstallation
+        usesTokenAuth: syncButtonId.usesTokenAuth
+        loggedIn: syncButtonId.loggedIn
 
-        QC.MenuItem {
-            text: "Set up remote…"
-            visible: !hasRemote
-            height: visible ? implicitHeight : 0
-            onTriggered: {
-                setupRemoteRequested()
-            }
-        }
-
-        QC.MenuItem {
-            objectName: "syncNowMenuItem"
-            text: "Sync now"
-            visible: hasRemote
-            height: visible ? implicitHeight : 0
-            enabled: !syncInProgress
-            onTriggered: {
-                syncRequested()
-            }
-        }
-
-        QC.MenuItem {
-            objectName: "installAppMenuItem"
-            text: qsTr("Install CaveWhere on GitHub")
-            visible: hasRemote && needsInstallation
-            height: visible ? implicitHeight : 0
-            onTriggered: {
-                installRequested()
-            }
-        }
-
-        QC.MenuItem {
-            text: "Remote settings…"
-            onTriggered: {
-                remoteSettingsRequested()
-            }
-        }
-
-        QC.MenuItem {
-            text: "History…"
-            onTriggered: {
-                historyRequested()
-            }
-        }
-
-        QC.MenuSeparator {
-            objectName: "loginSeparator"
-            visible: hasRemote && usesTokenAuth
-            height: visible ? implicitHeight : 0
-        }
-
-        QC.MenuItem {
-            objectName: "loginMenuItem"
-            text: loggedIn ? qsTr("Log out") : qsTr("Log in")
-            visible: hasRemote && usesTokenAuth
-            height: visible ? implicitHeight : 0
-            onTriggered: {
-                if (loggedIn) {
-                    logoutRequested()
-                } else {
-                    loginRequested()
-                }
-            }
-        }
+        onSyncRequested: syncButtonId.syncRequested()
+        onRemoteSettingsRequested: syncButtonId.remoteSettingsRequested()
+        onHistoryRequested: syncButtonId.historyRequested()
+        onSetupRemoteRequested: syncButtonId.setupRemoteRequested()
+        onLoginRequested: syncButtonId.loginRequested()
+        onLogoutRequested: syncButtonId.logoutRequested()
+        onInstallRequested: syncButtonId.installRequested()
     }
 }
