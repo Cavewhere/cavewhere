@@ -47,6 +47,10 @@ QString missingCSReason(const WallsReferenceCS& referenceCS)
     return QStringLiteral("the project names no UTM zone they belong to");
 }
 
+// Walls .STATUS bit for an entry processed on its own, never as part of its
+// parent (cavern's WALLS_WPJ_STATUS_DETACHED).
+constexpr int kWallsDetachedStatusBit = 0x2;
+
 }
 
 WallsImporterVisitor::WallsImporterVisitor(WallsSurveyParser* parser, cwWallsImporter* importer, QString tripNamePrefix,
@@ -619,6 +623,11 @@ cwTreeImportDataNode* cwWallsImporter::convertBook(WpjBookPtr book) {
     try {
         result->setName(book->Title);
         foreach (WpjEntryPtr child, book->Children) {
+            // The root book carries the detached bit too; cavern processes
+            // it, and it is never a child here.
+            if (child.isNull() || (child->Status & kWallsDetachedStatusBit)) {
+                continue;
+            }
             cwTreeImportDataNode* childBlock = convertEntry(child);
             if (childBlock) {
                 result->addChildNode(childBlock);

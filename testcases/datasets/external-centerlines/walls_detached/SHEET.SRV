@@ -1,0 +1,4 @@
+; A map-sheet corner ten kilometers west of the cave, detached in Walls.
+#UNITS D=Meters A=Degrees V=Degrees DECL=0
+#FIX S1 510000 4040000 200
+S1	S2	10.0	0	0

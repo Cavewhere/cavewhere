@@ -638,6 +638,27 @@ TEST_CASE("walls_fix_units solves its fixes where their rows place them",
     CHECK(m1.y() == Catch::Approx(0.0).margin(kLocalFrameMarginMeters));
 }
 
+TEST_CASE("walls_detached anchors the frame on the attached survey's fix",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    auto project = makeSavedProject(QStringLiteral("walls-detached-solve"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(),
+                                              QStringLiteral("walls_detached/walls_detached.wpj"));
+    requireSolved(project.get());
+
+    // SHEETS' S1, ten kilometers west, comes before CAVE's E1 in the tree, but
+    // its book is detached, so cavern places only E1..E3 and E1 anchors the frame.
+    REQUIRE(waitForFrameAndSolve(project.get()));
+    requireSolved(project.get());
+    checkAnchoredOnAttachment(project.get(), cave, QStringLiteral("E1"));
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    CHECK(lookup.positions().size() == 3);
+    const QVector3D e1 = lookup.position(QStringLiteral("E1"));
+    CHECK(e1.x() == Catch::Approx(0.0).margin(kLocalFrameMarginMeters));
+    CHECK(e1.y() == Catch::Approx(0.0).margin(kLocalFrameMarginMeters));
+}
+
 TEST_CASE("walls_fix_units solves its fixes where their rows place them in a native fix's frame",
           "[LinePlotManager][Attach][SourcedFixtures]")
 {

@@ -2430,6 +2430,33 @@ TEST_CASE("walls_two_caves' tree holds one unit under East and two under West",
     CHECK(rowAt(scan, QStringLiteral("WEST/W2")).date == QDate(2010, 6, 3));
 }
 
+TEST_CASE("walls_detached scans only the attached survey, as cavern does",
+          "[Scanner][Walls][SourcedFixtures]")
+{
+    // The root book and SHEETS and FLOAT carry .STATUS bit 0x2 (detached).
+    // Cavern processes the root anyway and skips the other two, so it places
+    // E1..E3 only.
+    const ScanResult scan = scanFixture(QStringLiteral("walls_detached/walls_detached.wpj"));
+
+    CHECK(describe(scan.rows) == QStringList({
+        QStringLiteral("0 WallsBook '' 'walls_detached' '' node 3"),
+        QStringLiteral("1 WallsBook 'CAVE' 'Main Cave' '' node 3"),
+        QStringLiteral("2 WallsBook 'CAVE/ENTRANCE' 'Entrance Survey' '' unit 3"),
+    }));
+    CHECK(rowAt(scan, QStringLiteral("CAVE/ENTRANCE")).stations
+          == QStringList({QStringLiteral("E1"), QStringLiteral("E2"), QStringLiteral("E3")}));
+
+    CHECK(withoutLocation(scan.fixes)
+          == QList<ScannedFix>{placedFix(QStringLiteral("E1"), QStringLiteral("520000 4040000 200"),
+                                         QStringLiteral("NAD27 CONUS, UTM zone 16N"),
+                                         QStringLiteral("EPSG:26716"))});
+    CHECK(dependenciesUnder(scan, QStringLiteral("walls_detached"))
+          == QStringList({QStringLiteral("walls_detached.wpj"), QStringLiteral("ENTRANCE.SRV")}));
+    CHECK(scan.warnings.isEmpty());
+    CHECK(scan.blocks.isEmpty());
+    CHECK(scan.rootStationCount == 3);
+}
+
 TEST_CASE("A lone Walls .srv is a book root holding the file's unit",
           "[Scanner][Walls]")
 {

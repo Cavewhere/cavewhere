@@ -522,7 +522,9 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryF
  *  - .srv -> just the file itself
  *  - .wpj -> the .wpj plus every leaf .srv reachable through the
  *           WpjBook tree (dewalls' WallsProjectParser is the
- *           authoritative parser here)
+ *           authoritative parser here). A detached entry, and
+ *           everything under a detached book, is skipped, as cavern
+ *           skips it.
  * Missing referenced .srv files emit warnings; an unreadable entry
  * file, a parser failure, or a .PATH / .NAME written as an absolute
  * path returns Monad::Result error.

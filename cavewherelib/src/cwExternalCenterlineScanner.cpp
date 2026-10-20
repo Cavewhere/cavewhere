@@ -40,6 +40,9 @@ constexpr const char* kSurvexExtension = ".svx";
 constexpr const char* kCompassDatExtension = ".dat";
 constexpr const char* kWallsWpjExtension = ".wpj";
 constexpr const char* kWallsSrvExtension = ".srv";
+// Walls .STATUS bit for an entry processed on its own, never as part of its
+// parent (cavern's WALLS_WPJ_STATUS_DETACHED).
+constexpr int kWallsDetachedStatusBit = 0x2;
 constexpr int kCompassYearPivot = 1900;
 // Both Survex date spellings - yyyy.mm.dd and yyyy-mm-dd - are this long.
 constexpr int kSurvexDateLength = 10;
@@ -1894,6 +1897,11 @@ void collectWallsSurveys(const dewalls::WpjBookPtr& book,
         }
         const auto& child = book->Children.at(childIndex);
         if (child.isNull()) {
+            continue;
+        }
+        // The root book carries the detached bit too; cavern processes it,
+        // and it is never a child here.
+        if (child->Status & kWallsDetachedStatusBit) {
             continue;
         }
         // Only children are checked: the parser stamps the root book's

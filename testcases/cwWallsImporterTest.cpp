@@ -264,3 +264,35 @@ TEST_CASE("A Walls .REF naming a datum CaveWhere can't map says which datum it w
     CHECK(namesTheDatum(QStringLiteral("A1")));
     CHECK(namesTheDatum(QStringLiteral("A3")));
 }
+
+TEST_CASE("A Walls import skips detached .wpj entries, as cavern does",
+          "[cwWallsImporter]") {
+    //The root book carries .STATUS bit 0x2 and is imported anyway; the
+    //detached Sheet Layout book and Floating Survey are skipped, and with
+    //them S1's fix ten kilometers west.
+    const std::unique_ptr<cwWallsImporter> importer =
+        importWalls("external-centerlines/walls_detached/walls_detached.wpj");
+
+    const QStringList errors = importer->importErrors();
+    const auto namesDetachedFile = [&errors](const QString& fileName) {
+        return std::any_of(errors.begin(), errors.end(), [&](const QString& error) {
+            return error.contains(fileName, Qt::CaseInsensitive);
+        });
+    };
+    CHECK_FALSE(namesDetachedFile(QStringLiteral("SHEET")));
+    CHECK_FALSE(namesDetachedFile(QStringLiteral("FLOAT")));
+
+    const QList<cwFixStation> fixes = importer->capturedFixStations();
+    REQUIRE(fixes.size() == 1);
+    CHECK(fixes.at(0).stationName() == "E1");
+    CHECK(fixes.at(0).inputCS() == QStringLiteral("EPSG:26716"));
+
+    cwTreeImportData* data = importer->data();
+    REQUIRE(data->nodes().size() == 1);
+    cwTreeImportDataNode* root = data->nodes().first();
+    REQUIRE(root->childNodeCount() == 1);
+    cwTreeImportDataNode* cave = root->childNode(0);
+    CHECK(cave->name() == QStringLiteral("Main Cave"));
+    REQUIRE(cave->childNodeCount() == 1);
+    CHECK(cave->childNode(0)->name() == QStringLiteral("Entrance Survey"));
+}
