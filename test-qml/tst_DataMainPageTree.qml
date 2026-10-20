@@ -1180,6 +1180,32 @@ MainWindowTest {
                       "the Name column stops at its minimum, got " + nameHeader.width)
         }
 
+        // The Data page's tree carries a vertical bar once its expanded rows
+        // outgrow it, and the bar covers none of the last column.
+        function test_anExpandedLongTreeShowsItsScrollBar() {
+            const tripCount = 300
+            addCave("Long Cave", tripCount)
+            const page = gotoDataMainPage()
+            const tree = surveyTree(page)
+            tryCompare(tree, "rows", 1, 5000)
+
+            const bar = findChild(page, "surveyTreeVerticalScrollBar")
+            verify(bar !== null, "the Data page's tree has its own vertical scrollbar")
+            tryCompare(bar, "size", 1, 5000, "one collapsed cave leaves the bar no handle")
+
+            tree.expand(0)
+            tryCompare(tree, "rows", tripCount + 1, 5000)
+            waitForRendering(page)
+            tryVerify(() => bar.size < 1, 5000,
+                      "the bar's handle shows part of the rows, size " + bar.size)
+            const declRight = () => {
+                const cell = tree.itemAtCell(Qt.point(SurveyTreeModel.Decl, 0))
+                return cell !== null ? cell.mapToItem(tree, cell.width, 0).x : Number.NaN
+            }
+            tryVerify(() => declRight() <= bar.x + 1, 5000,
+                      "the Decl column ends at " + declRight() + ", left of the bar at " + bar.x)
+        }
+
         //The names of the view's rows in the order they stand in. surveyTree()
         //hands back the TreeView itself, which reaches the SurveyTreeView
         //around it the way its own delegates do.

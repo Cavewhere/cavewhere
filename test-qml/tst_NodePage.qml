@@ -219,6 +219,74 @@ MainWindowTest {
                       "a wheel over the tree scrolls the tree, contentY " + view.contentY)
         }
 
+        // The survey tree's own vertical bar, beside the rows rather than the
+        // page's.
+        function treeScrollBar(page) {
+            const bar = findChild(page, "surveyTreeVerticalScrollBar")
+            verify(bar !== null, "the node page's tree has its own vertical scrollbar")
+            return bar
+        }
+
+        // The right edge of row 0's last cell, in the view's coordinates.
+        function declCellRight(view) {
+            const cell = view.itemAtCell(Qt.point(SurveyTreeModel.Decl, 0))
+            verify(cell !== null, "row 0 draws its Decl cell")
+            return cell.mapToItem(view, cell.width, 0).x
+        }
+
+        // A long trip list on the wide node page scrolls inside the tree, so
+        // the tree carries the bar that shows where the rows stand, and the
+        // bar covers none of the last column.
+        function test_theWideNodeTreeShowsItsScrollBar() {
+            rootId.width = wideWindowWidth
+            rootId.height = tallWindowHeight
+            const cave = addNode(null, SurveyNodeKind.Cave, "Long Cave")
+            for (let i = 0; i < manyTrips; i++) {
+                cave.addTrip()
+            }
+            const page = gotoNodePage("Source/Data/Node=Long Cave", cave)
+            const view = tree(page, "tripDelegate0")
+            tryCompare(view, "rows", manyTrips, 5000)
+            waitForRendering(page)
+
+            const bar = treeScrollBar(page)
+            tryVerify(() => bar.size < 1, 5000,
+                      "the bar's handle shows part of the rows, size " + bar.size)
+            tryVerify(() => declCellRight(view) <= bar.x + 1, 5000,
+                      "the Decl column ends at " + declCellRight(view)
+                      + ", left of the bar at " + bar.x)
+
+            const startPosition = bar.position
+            const center = view.mapToItem(page, view.width / 2, view.height / 2)
+            for (let step = 0; step < wheelSteps; step++) {
+                mouseWheel(page, center.x, center.y, 0, -wheelNotch)
+            }
+            tryVerify(() => bar.position > startPosition, 5000,
+                      "scrolling the tree moves the bar from " + startPosition
+                      + ", got " + bar.position)
+        }
+
+        // A cave whose trips fit the tree has nothing to scroll, so the bar
+        // shows no handle and the Name column keeps the whole remainder.
+        function test_aShortNodeTreeShowsNoScrollBarHandle() {
+            rootId.width = wideWindowWidth
+            rootId.height = tallWindowHeight
+            const cave = addNode(null, SurveyNodeKind.Cave, "Short Cave")
+            addTrip(cave, "Only survey", new Date(2024, 1, 1))
+            const page = gotoNodePage("Source/Data/Node=Short Cave", cave)
+            const view = tree(page, "tripDelegate0")
+            tryCompare(view, "rows", 1, 5000)
+            waitForRendering(page)
+
+            const bar = treeScrollBar(page)
+            tryCompare(bar, "size", 1, 5000, "rows that fit leave the bar no handle")
+            tryVerify(() => {
+                          const cell = view.itemAtCell(Qt.point(SurveyTreeModel.Name, 0))
+                          return cell !== null
+                              && Math.abs(cell.width - (view.width - view.fixedColumnsWidth)) <= 1
+                      }, 5000, "the Name column takes all the room the fixed columns leave")
+        }
+
         // The wide tree takes what the window has left below the action bar
         // and gives up height with the window, down to a floor at which the
         // page scrolls instead.

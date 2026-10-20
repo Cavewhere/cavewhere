@@ -1093,6 +1093,9 @@ ColumnLayout {
             }
             return total;
         }
+        //The bar overlays the last column while the rows can scroll, so the
+        //Name column gives up the bar's width then.
+        readonly property int scrollBarGutter: verticalScrollBarId.size < 1 ? verticalScrollBarId.width : 0
 
         clip: true
         keyNavigationEnabled: true
@@ -1124,13 +1127,14 @@ ColumnLayout {
         columnWidthProvider: function(column) {
             if (column === SurveyTreeModel.Name) {
                 return Math.max(Theme.treeNameColumnMinimumWidth,
-                                treeViewId.width - treeViewId.fixedColumnsWidth);
+                                treeViewId.width - treeViewId.fixedColumnsWidth - treeViewId.scrollBarGutter);
             }
             const stored = columnWidthsId[surveyTreeId.columnWidthKeys[column]];
             return stored > 0 ? stored : surveyTreeId.defaultColumnWidth(column);
         }
 
         onWidthChanged: treeViewId.forceLayout()
+        onScrollBarGutterChanged: treeViewId.forceLayout()
         onRowsChanged: surveyTreeId.updateExpansionStateLater()
         onExpanded: surveyTreeId.updateExpansionStateLater()
         onCollapsed: surveyTreeId.updateExpansionStateLater()
@@ -1138,6 +1142,12 @@ ColumnLayout {
         //Handled before TableView sees the key, and accepted only for the keys
         //the tree owns, so ↑ ↓ Home End stay TableView's.
         QQ.Keys.onPressed: (event) => surveyTreeId.handleKey(event)
+
+        QC.ScrollBar.vertical: QC.ScrollBar {
+            id: verticalScrollBarId
+            objectName: "surveyTreeVerticalScrollBar"
+            policy: QC.ScrollBar.AsNeeded
+        }
 
         LinkGenerator {
             id: linkGeneratorId
