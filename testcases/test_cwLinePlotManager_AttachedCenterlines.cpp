@@ -25,6 +25,7 @@
 #include "cwError.h"
 #include "cwFixStation.h"
 #include "cwFixStationModel.h"
+#include "cwGeoReference.h"
 #include "cwErrorModel.h"
 #include "cwStationHandle.h"
 #include "cwShot.h"
@@ -437,6 +438,27 @@ void checkPosition(const cwStationPositionLookup& lookup, const QString& station
     CHECK(position.z() == Catch::Approx(z).margin(margin));
 }
 
+//! Checks that each walls_fix_units fixed station solved where PROJ carries
+//! its fix's placement into \a solvedCS. Each .srv is its own component with
+//! one fix, so each fixed station sits exactly on its fix's placement.
+void checkWallsFixUnitsAtPlacements(const cwSurveyNode* cave, const QString& solvedCS, double margin)
+{
+    const cwStationPositionLookup lookup = cave->scopedPositions();
+    for (const QString& station : {QStringLiteral("M1"), QStringLiteral("F1"), QStringLiteral("L1")}) {
+        INFO("station " << station.toStdString());
+        const cwAttachedFix fix = subtreeAttachedFixFor(cave, station);
+        INFO("coordinate " << fix.coordinate.toStdString() << ", solve system "
+                           << fix.solveSystem().toStdString() << ", solved system "
+                           << solvedCS.toStdString());
+        const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(fix.solveSystem());
+        REQUIRE(placement.has_value());
+        const std::optional<cwGeoPoint> solved =
+            cwCoordinateTransform::transformPoint(placement->cs, solvedCS, placement->point);
+        REQUIRE(solved.has_value());
+        checkPosition(lookup, station, solved->x, solved->y, solved->z, margin);
+    }
+}
+
 } // namespace
 
 TEST_CASE("compass_project solves as a source root",
@@ -566,22 +588,47 @@ TEST_CASE("walls_fix_units solves its fixes where their rows place them",
     requireSolved(project.get());
 
     // The project keeps no frame of its own, so the positions are the .REF's
-    // NAD27 UTM zone 16N grid as floats. Each .srv is its own component with
-    // one fix, so its fixed station sits exactly where the fix places it.
-    const QString solvedCS = QStringLiteral("EPSG:26716");
-    const cwStationPositionLookup lookup = cave->scopedPositions();
-    for (const QString& station : {QStringLiteral("M1"), QStringLiteral("F1"), QStringLiteral("L1")}) {
-        INFO("station " << station.toStdString());
-        const cwAttachedFix fix = subtreeAttachedFixFor(cave, station);
-        INFO("coordinate " << fix.coordinate.toStdString() << ", solve system "
-                           << fix.solveSystem().toStdString());
-        const std::optional<cwAttachedFix::Placement> placement = fix.placementIn(fix.solveSystem());
-        REQUIRE(placement.has_value());
-        const std::optional<cwGeoPoint> solved =
-            cwCoordinateTransform::transformPoint(placement->cs, solvedCS, placement->point);
-        REQUIRE(solved.has_value());
-        checkPosition(lookup, station, solved->x, solved->y, solved->z, kUtmFloatMarginMeters);
-    }
+    // NAD27 UTM zone 16N grid as floats.
+    checkWallsFixUnitsAtPlacements(cave, QStringLiteral("EPSG:26716"), kUtmFloatMarginMeters);
+}
+
+TEST_CASE("walls_fix_units solves its fixes where their rows place them in a native fix's frame",
+          "[LinePlotManager][Attach][SourcedFixtures]")
+{
+    // A native fix in WGS 84 UTM 16N, within a few kilometers of every
+    // walls_fix_units fix, so the project's frame centers near them.
+    constexpr double kNativeFixEasting = 521000.0;
+    constexpr double kNativeFixNorthing = 4040000.0;
+    constexpr double kNativeFixElevation = 100.0;
+    // The .3d stores centimeters, and positions this near the frame's origin
+    // are float-exact well below that.
+    constexpr double kLocalFrameMarginMeters = 0.02;
+
+    auto project = makeSavedProject(QStringLiteral("walls-fix-units-frame"),
+                                    QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
+    addNativeTripWithShot(project->cave, QStringLiteral("Native survey"),
+                          QStringLiteral("m1"), QStringLiteral("m2"));
+    cwFixStation nativeFix;
+    nativeFix.setStationName(QStringLiteral("m1"));
+    nativeFix.setInputCS(kCompassProjectCS);
+    nativeFix.setCoordinate(kNativeFixEasting, kNativeFixNorthing, kNativeFixElevation);
+    project->cave->fixStations()->appendFixStation(nativeFix);
+
+    cwSurveyNode* cave = attachSourceAndSolve(project.get(),
+                                              QStringLiteral("walls_fix_units/walls_fix_units.wpj"));
+    const cwGeoReference* geoReference = project->project->cavingRegion()->geoReference();
+    const cwLinePlotManager* linePlot = project->rootData->linePlotManager();
+    REQUIRE(tryWait(kAttachWaitMs, [geoReference, linePlot]() {
+        return geoReference->hasCoordinateSystem()
+               && linePlot->driverSource().contains(QStringLiteral("*cs out"));
+    }));
+    drainPipelines(project.get());
+    requireSolved(project.get());
+
+    // M1 and F1 are grid fixes and L1 a lat/long fix, so the frame carries
+    // both kinds of Walls #FIX.
+    checkWallsFixUnitsAtPlacements(cave, geoReference->localCoordinateSystem(),
+                                   kLocalFrameMarginMeters);
 }
 
 TEST_CASE("survex_two_cs solves as two source roots in one output system",
