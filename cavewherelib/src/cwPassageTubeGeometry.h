@@ -24,14 +24,13 @@
 #include <numbers>
 #include <optional>
 
-// Ring, chain and wall helpers shared by cwPassageTubeBuilder,
-// cwPassageTubeJunction and cwPassageTubeMeshCheck.
+// Ring, chain and wall helpers shared by cwPassageTubeBuilder and
+// cwPassageTubeMeshCheck.
 namespace cwPassageTubeGeometry {
 
 constexpr double kTwoPi = 2.0 * std::numbers::pi;
 constexpr double kMinRingSpacingMeters = 0.05;
 constexpr float kMinAxisLengthSquared = 0.25f;
-constexpr int kMinLoopRings = 3;
 constexpr float kMinInPlaneLength = 1e-6f;
 
 inline QVector3D binDirection(const cwPassageTubeBuilder::Ring& ring, int bin)
@@ -105,52 +104,17 @@ inline void setRingVertices(cwPassageTubeBuilder::Ring& ring,
     }
 }
 
-// Places the ring's vertices where its radii, angles and offsets put them.
-// A vertex that would land behind the same bin's vertex of the previous ring,
-// along that ring's tangent, folds the tube inside out where a junction grew
-// a column; it slides along its own ray until it lies level with that vertex.
-// Two rings at one station, the sections its legs read there, keep their
-// vertices where the sections put them.
-inline void placeRingVertices(cwPassageTubeBuilder::Ring& ring, const cwPassageTubeBuilder::Ring* previous)
-{
-    const int resolution = ring.radii.size();
-    ring.vertices.resize(resolution);
-    const bool isApartFromPrevious = previous != nullptr && previous->center.distanceToPoint(ring.center) >= kMinRingSpacingMeters;
-    for (int bin = 0; bin < resolution; ++bin) {
-        QVector3D vertex = ringPoint(ring, bin);
-        if (isApartFromPrevious && bin < previous->vertices.size()) {
-            const QVector3D& planeNormal = previous->frame.tangent;
-            const QVector3D& previousVertex = previous->vertices.at(bin);
-            if (QVector3D::dotProduct(vertex - previousVertex, planeNormal) < 0.0f) {
-                const QVector3D direction = binDirection(ring, bin);
-                const float approach = QVector3D::dotProduct(direction, planeNormal);
-                const QVector3D offAxis = vertex - direction * static_cast<float>(ring.radii.at(bin));
-                const double toPlane = approach < 0.0f
-                                           ? QVector3D::dotProduct(previousVertex - offAxis, planeNormal) / approach
-                                           : 0.0;
-                vertex = offAxis + direction * static_cast<float>(std::max(toPlane, cwPassageTubeBuilder::kMinRadiusMeters));
-            }
-        }
-        ring.vertices[bin] = vertex;
-    }
-}
-
-// Places every ring's vertices. A loop's last ring repeats its first, so the
-// first ring folds against the ring before that one.
+// Places every ring's vertices where its radii, angles and offsets put them;
+// a ring whose frame could not be built has none.
 inline void placeChainVertices(cwPassageTubeBuilder::Chain& chain)
 {
-    const bool isLoop = chain.startCap == cwPassageTubeBuilder::EndCap::None && chain.rings.size() >= kMinLoopRings;
-    const cwPassageTubeBuilder::Ring* previous = nullptr;
-    if (isLoop) {
-        const cwPassageTubeBuilder::Ring& closing = chain.rings.at(chain.rings.size() - 2);
-        if (hasValidFrame(closing)) {
-            previous = &closing;
-        }
-    }
     for (cwPassageTubeBuilder::Ring& ring : chain.rings) {
         if (hasValidFrame(ring)) {
-            placeRingVertices(ring, previous);
-            previous = &ring;
+            const int resolution = ring.radii.size();
+            ring.vertices.resize(resolution);
+            for (int bin = 0; bin < resolution; ++bin) {
+                ring.vertices[bin] = ringPoint(ring, bin);
+            }
         } else {
             ring.vertices.clear();
         }

@@ -821,7 +821,6 @@ public:
             m_mesh.indices.append(trip.triangles);
             for (const Source& source : trip.sources) {
                 m_debug.triangleChain.append(source.chain);
-                m_debug.triangleInZipBand.append(false);
                 m_debug.triangleCap.append(source.cap);
             }
             return range;

@@ -153,12 +153,9 @@ public:
 
     // A closed, outward-wound tube through rings, each a loop of vertices
     // with the same count: consecutive rings lofted, each end ring closed by
-    // a fan around its fan center, its centroid when unset. With isLoop, the
-    // last ring joins the first and nothing is capped.
-    static cwPassageTubeMesh loft(const QVector<QVector<QVector3D>>& rings,
-                                  bool isLoop = false,
-                                  const std::optional<QVector3D>& startFanCenter = std::nullopt,
-                                  const std::optional<QVector3D>& endFanCenter = std::nullopt);
+    // a fan around its centroid. With isLoop, the last ring joins the first
+    // and nothing is capped.
+    static cwPassageTubeMesh loft(const QVector<QVector<QVector3D>>& rings, bool isLoop = false);
 
     // One tube per run of consecutive rings with vertices and per trip, for
     // every chain of buildChainRings. A chain that runs on from one trip

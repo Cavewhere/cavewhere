@@ -1182,10 +1182,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::selfIntersections
     const TriangleGrid grid(triangles);
 
     const auto passageChainOf = [&](int triangle) {
-        const bool isPassage = triangle < debug.triangleChain.size()
-                               && triangle < debug.triangleInZipBand.size()
-                               && !debug.triangleInZipBand.at(triangle);
-        return isPassage ? debug.triangleChain.at(triangle) : kNoChain;
+        return triangle < debug.triangleChain.size() ? debug.triangleChain.at(triangle) : kNoChain;
     };
     const auto firstStation = [&](int chain) {
         const cwPassageTubeBuilder::ChainLeg& chainLeg = debug.chains.at(chain).legs.first();
@@ -1364,11 +1361,8 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::ringIssues(const 
                 issues.append(*folded);
             }
 
-            // A ring grown at a junction follows the arm's outline, which may
-            // drop sharply at the arm's walls.
             const bool isBetweenStations = !isStationRing(debug, chain, previous) && !isStationRing(debug, chain, ring);
-            const bool isGrown = previous.isGrown || ring.isGrown;
-            if (isBetweenStations && !isGrown && previous.radii.size() == ring.radii.size()) {
+            if (isBetweenStations && previous.radii.size() == ring.radii.size()) {
                 for (int bin = 0; bin < ring.radii.size(); ++bin) {
                     const double smaller = std::min(ring.radii.at(bin), previous.radii.at(bin));
                     const double larger = std::max(ring.radii.at(bin), previous.radii.at(bin));
@@ -1422,7 +1416,7 @@ QVector<std::optional<cwPassageTubeMeshCheck::WallReach>> cwPassageTubeMeshCheck
                                                                                                 const cwPassageTubeBuilder::Chain& chain,
                                                                                                 const cwPassageTubeBuilder::Ring& ring)
 {
-    if (!ring.section || ring.isGrown) {
+    if (!ring.section) {
         return {};
     }
     const QVector<StationLeg> legs = stationLegs(debug, chain, ring.section->station);
@@ -1471,9 +1465,7 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         legDirections[{leg.caveId, leg.to}].append(-direction);
     }
 
-    // Where an arm joins a through passage, the walls of the junction station
-    // open into the other passage, and an arm left inside the through passage
-    // has its walls inside it.
+    // A chain without rings draws no walls at its stations.
     QSet<QString> openStations;
     const auto stationOf = [&](const cwPassageTubeBuilder::ChainLeg& chainLeg, bool atEnd) {
         const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
@@ -1485,13 +1477,6 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                 openStations.insert(stationOf(chainLeg, false));
                 openStations.insert(stationOf(chainLeg, true));
             }
-            continue;
-        }
-        if (!chain.startMouth.isEmpty()) {
-            openStations.insert(stationOf(chain.legs.first(), false));
-        }
-        if (!chain.endMouth.isEmpty()) {
-            openStations.insert(stationOf(chain.legs.last(), true));
         }
     }
 

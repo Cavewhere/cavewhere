@@ -299,8 +299,7 @@ cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& deb
         for (const Builder::Ring& ring : chain.rings) {
             const QVector<QVector3D>& vertices = ring.vertices;
             const int start = static_cast<int>(points.size());
-            const int edgeStep = ring.isGrown ? 2 : 1;
-            for (int k = 0; k < vertices.size(); k += edgeStep) {
+            for (int k = 0; k < vertices.size(); ++k) {
                 points << vertices.at(k) << vertices.at((k + 1) % vertices.size());
             }
             geometry.loops.append(Range {start, static_cast<int>(points.size()) - start});
@@ -1032,13 +1031,8 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             }
         }
 
-        QStringList kinds;
-        if (entry.isGrown) {
-            kinds.append(QStringLiteral("grown"));
-        }
-
         const Builder::LegPad pad = chain.legPads.value(entry.chainLeg);
-        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, right %6, up %7, pad %8/%9 m, e %10, radius %11-%12 m%13%14")
+        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, right %6, up %7, pad %8/%9 m, e %10, radius %11-%12 m%13")
             .arg(chainIndex)
             .arg(ring)
             .arg(entry.chainLeg)
@@ -1048,7 +1042,7 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             .arg(pad.e, 0, 'f', 2)
             .arg(minRadius, 0, 'f', 2)
             .arg(maxRadius, 0, 'f', 2)
-            .arg(kinds.isEmpty() ? QString() : QStringLiteral(", ") + kinds.join(QStringLiteral(", ")), sectionText);
+            .arg(sectionText);
     }
     return QString();
 }
@@ -1121,7 +1115,6 @@ cwPassageTubeGalleryModel::Build cwPassageTubeGalleryModel::buildRawTubes(const 
         const int triangles = static_cast<int>(tube.mesh.indices.size() / 3);
         for (int t = 0; t < triangles; ++t) {
             result.debug.triangleChain.append(tube.chain);
-            result.debug.triangleInZipBand.append(false);
             result.debug.triangleCap.append(-1);
         }
     }

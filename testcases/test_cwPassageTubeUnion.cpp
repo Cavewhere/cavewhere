@@ -113,7 +113,6 @@ Overlap overlapOf(const QVector<cwPassageTubeMesh>& tubes)
         const int triangles = static_cast<int>(tubes.at(t).indices.size() / 3);
         for (int i = 0; i < triangles; ++i) {
             overlap.debug.triangleChain.append(t);
-            overlap.debug.triangleInZipBand.append(false);
             overlap.debug.triangleCap.append(-1);
         }
     }

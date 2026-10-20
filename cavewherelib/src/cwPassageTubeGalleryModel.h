@@ -117,7 +117,7 @@ public:
     static constexpr double kSandboxMaxSampleSpacingMeters = 4.0;
 
     // The rings of every chain as a line list. Each ring's loop runs through
-    // its vertices back to the first; a grown ring draws every other edge.
+    // its vertices back to the first.
     // rights and ups hold one segment per ring, in loop order, from its center
     // along frame.right and frame.up.
     //

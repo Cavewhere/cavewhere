@@ -133,10 +133,9 @@ public:
                                               const Range& range,
                                               const Options& options = Options());
 
-    // Each crossing between two triangles. One between triangles of two
-    // chains, neither of them in a zip band, is a PassageOverlap; the rest
-    // are SelfIntersection, including every crossing of a triangle that
-    // debug.triangleChain leaves out.
+    // Each crossing between two triangles. One between triangles that
+    // debug.triangleChain gives two different chains is a PassageOverlap;
+    // the rest are SelfIntersection.
     static QVector<Issue> selfIntersections(const cwPassageTubeMesh& mesh,
                                             const Range& range,
                                             const cwPassageTubeBuilder::Debug& debug = cwPassageTubeBuilder::Debug());
@@ -160,11 +159,10 @@ public:
 
     // RadiusJump, FrameTwist and FoldBack over the builder's rings, apart
     // from a station's two sections, where the chain's tube splits
-    // (cwPassageTubeUnion::splitsBefore). Rings a junction grew follow the
-    // arm's outline and may jump.
+    // (cwPassageTubeUnion::splitsBefore).
     //
-    // WallBeyondReading, once per ring that is a station's section (never
-    // one a junction grew), at its farthest vertex: each vertex lies within
+    // WallBeyondReading, once per ring that is a station's section, at its
+    // farthest vertex: each vertex lies within
     // wallToleranceMeters of the quadrant ellipse of the station's readings
     // anchored at the station, as the station's legs or the ring see it
     // (wallReaches). A vertex whose reading point lies inside a chain tube
@@ -194,18 +192,16 @@ public:
 
     // Each passage LRUD wall point of every leg endpoint lies on debug.mesh,
     // the side walls square to the chain's direction through the station or
-    // to one of the station's legs, apart from the junction stations where
-    // an arm has a mouth, the stations of an arm left inside its through
-    // passage, and wall points inside a chain tube that does not run along
-    // the leg, which open into that passage.
+    // to one of the station's legs, apart from the stations of a chain
+    // without rings and wall points inside a chain tube that does not run
+    // along the leg, which open into that passage.
     static QVector<Issue> wallsOnSurface(const cwPassageTubeBuilder::Debug& debug,
                                          const Options& options = Options());
 
     // Both stations of every leg of a chain with rings, and points every
     // kCenterlineSampleMeters along it, lie inside the triangles drawn while
     // every trip is visible by a winding number vote of three skewed rays, or
-    // within kCenterlineTolerance of one of them. The legs of an arm left
-    // inside its through passage have no rings.
+    // within kCenterlineTolerance of one of them.
     static QVector<Issue> centerlineInside(const cwPassageTubeMesh& mesh,
                                            const cwPassageTubeBuilder::Debug& debug);
 

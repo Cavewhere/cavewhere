@@ -881,10 +881,7 @@ QString cwPassageTubeUnion::statusName(Status status)
     return QString();
 }
 
-cwPassageTubeMesh cwPassageTubeUnion::loft(const QVector<QVector<QVector3D>>& rings,
-                                            bool isLoop,
-                                            const std::optional<QVector3D>& startFanCenter,
-                                            const std::optional<QVector3D>& endFanCenter)
+cwPassageTubeMesh cwPassageTubeUnion::loft(const QVector<QVector<QVector3D>>& rings, bool isLoop)
 {
     cwPassageTubeMesh mesh;
     if (rings.size() < 2) {
@@ -918,8 +915,7 @@ cwPassageTubeMesh cwPassageTubeUnion::loft(const QVector<QVector<QVector3D>>& ri
     if (!closesLoop && resolution >= kMinFanVertices) {
         const auto addFan = [&](int ring, bool atEnd) {
             const quint32 center = static_cast<quint32>(mesh.positions.size());
-            const std::optional<QVector3D>& fanCenter = atEnd ? endFanCenter : startFanCenter;
-            mesh.positions.append(fanCenter.value_or(centroid(rings.at(ring))));
+            mesh.positions.append(centroid(rings.at(ring)));
             for (int k = 0; k < resolution; ++k) {
                 if (atEnd) {
                     addTriangle(center, vertex(ring, k), vertex(ring, k + 1));

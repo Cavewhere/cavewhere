@@ -273,7 +273,6 @@ TEST_CASE("cwPassageTubeMeshCheck classifies a crossing between two passages as 
         appendBox(mesh, QVector3D(0.5f, 0.5f, 0.5f), QVector3D(1.5f, 1.5f, 1.5f));
         cwPassageTubeBuilder::Debug debug;
         debug.triangleChain = QVector<int>(kBoxTriangleCount, 0) + QVector<int>(kBoxTriangleCount, 1);
-        debug.triangleInZipBand = QVector<bool>(2 * kBoxTriangleCount, false);
         debug.legs = {cwPassageTubeBuilder::Leg {}};
         cwPassageTubeBuilder::Chain chain;
         chain.legs = {{0, false}};
@@ -283,15 +282,6 @@ TEST_CASE("cwPassageTubeMeshCheck classifies a crossing between two passages as 
         const QVector<Check::Issue> overlaps = Check::selfIntersections(mesh, whole, debug);
         CHECK_FALSE(overlaps.isEmpty());
         CHECK(allOfType(overlaps, Check::PassageOverlap));
-
-        // A triangle of the first cube's +x face, which the second cube crosses.
-        constexpr int kZipTriangle = 10;
-        debug.triangleInZipBand[kZipTriangle] = true;
-        const QVector<Check::Issue> withZip = Check::selfIntersections(mesh, whole, debug);
-        CHECK(anyOfType(withZip, Check::SelfIntersection));
-        for (const Check::Issue& issue : withZip) {
-            CHECK((issue.type == Check::SelfIntersection) == (issue.triangle == kZipTriangle));
-        }
 
         debug.triangleChain = QVector<int>(2 * kBoxTriangleCount, 0);
         CHECK(allOfType(Check::selfIntersections(mesh, whole, debug), Check::SelfIntersection));
@@ -473,9 +463,9 @@ TEST_CASE("cwPassageTubeMeshCheck reports ring walls beyond the station's readin
         CHECK(issues.first().detail.contains(QStringLiteral("0.25 m past station b")));
     }
 
-    SECTION("Grown rings and rings without a section are left out") {
+    SECTION("Rings without a section are left out") {
         debug.chains[0].rings[0].vertices[0] = a + QVector3D(0, -3, 0);
-        debug.chains[0].rings[0].isGrown = true;
+        debug.chains[0].rings[0].section.reset();
         debug.chains[0].rings[1].vertices[0] = b + QVector3D(0, -3, 0);
         debug.chains[0].rings[1].section.reset();
         CHECK(Check::ringIssues(debug).isEmpty());

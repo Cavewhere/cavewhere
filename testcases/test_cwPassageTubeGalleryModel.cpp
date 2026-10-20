@@ -578,13 +578,9 @@ TEST_CASE("cwPassageTubeGalleryModel draws the builder's rings", "[PassageTube][
         const cwLinePlotGeometry::VertexRange& loop = geometry.loops.at(i);
         const int vertexCount = static_cast<int>(ring.vertices.size());
         REQUIRE(vertexCount > 0);
-        if (ring.isGrown) {
-            CHECK(loop.count == 2 * ((vertexCount + 1) / 2));
-        } else {
-            REQUIRE(loop.count == 2 * vertexCount);
-            CHECK(geometry.points.at(loop.start) == ring.vertices.constFirst());
-            CHECK(geometry.points.at(loop.start + loop.count - 1) == ring.vertices.constFirst());
-        }
+        REQUIRE(loop.count == 2 * vertexCount);
+        CHECK(geometry.points.at(loop.start) == ring.vertices.constFirst());
+        CHECK(geometry.points.at(loop.start + loop.count - 1) == ring.vertices.constFirst());
 
         const double reach = Model::kFrameAxisMeters;
         const QVector3D rightStart = geometry.points.at(geometry.rights.start + 2 * i);
