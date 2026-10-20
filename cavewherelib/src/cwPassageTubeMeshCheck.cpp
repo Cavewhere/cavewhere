@@ -667,20 +667,23 @@ struct StationLeg {
 
 QVector<StationLeg> stationLegs(const Debug& debug, const cwPassageTubeBuilder::Chain& chain, const QVector3D& station)
 {
+    const QVector<QVector3D> facings = cwPassageTubeGeometry::chainFacings(debug.legs, chain);
     QVector<StationLeg> found;
-    for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
+    for (int i = 0; i < chain.legs.size(); ++i) {
+        const cwPassageTubeBuilder::ChainLeg& chainLeg = chain.legs.at(i);
         const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+        const auto [fromFacing, toFacing] = cwPassageTubeGeometry::chainLegFacings(chain, facings, i);
         const QVector3D along = leg.toPosition - leg.fromPosition;
         const double length = along.length();
         if (length < cwPassageTubeBuilder::kMinLegLength) {
             continue;
         }
         if (isNear(leg.fromPosition, station)) {
-            found.append({station, along / static_cast<float>(length), leg.from, leg.fromPassageLrud, leg.fromFacing,
-                          length, leg.toPassageLrud, leg.toFacing});
+            found.append({station, along / static_cast<float>(length), leg.from, leg.fromLrud, fromFacing,
+                          length, leg.toLrud, toFacing});
         } else if (isNear(leg.toPosition, station)) {
-            found.append({station, -along / static_cast<float>(length), leg.to, leg.toPassageLrud, leg.toFacing,
-                          length, leg.fromPassageLrud, leg.fromFacing});
+            found.append({station, -along / static_cast<float>(length), leg.to, leg.toLrud, toFacing,
+                          length, leg.fromLrud, fromFacing});
         }
     }
     return found;
@@ -1492,61 +1495,11 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
         }
     }
 
-    // The chain's direction through each station of its legs, keyed by the
-    // leg and whether the station is its to station: the bisector of the
-    // chain legs either side, or the leg itself at a chain end and where the
-    // chain's tube splits between two sections.
-    QHash<std::pair<int, bool>, QVector3D> chainTangents;
-    for (const cwPassageTubeBuilder::Chain& chain : debug.chains) {
-        const int count = chain.legs.size();
-        if (count == 0) {
-            continue;
-        }
-        QVector<QVector3D> directions;
-        directions.reserve(count);
-        for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
-            const cwPassageTubeBuilder::Leg& leg = debug.legs.at(chainLeg.legIndex);
-            const QVector3D along = (leg.toPosition - leg.fromPosition).normalized();
-            directions.append(chainLeg.reversed ? -along : along);
-        }
-        const cwPassageTubeBuilder::ChainLeg& firstLeg = chain.legs.first();
-        const cwPassageTubeBuilder::ChainLeg& lastLeg = chain.legs.last();
-        const QVector3D chainStart = firstLeg.reversed ? debug.legs.at(firstLeg.legIndex).toPosition : debug.legs.at(firstLeg.legIndex).fromPosition;
-        const QVector3D chainEnd = lastLeg.reversed ? debug.legs.at(lastLeg.legIndex).fromPosition : debug.legs.at(lastLeg.legIndex).toPosition;
-        const bool isLoop = count > 1 && isNear(chainStart, chainEnd);
-        QSet<int> splitAfterLeg;
-        for (int r = 1; r < chain.rings.size(); ++r) {
-            if (cwPassageTubeUnion::splitsBefore(debug, chain, r)) {
-                splitAfterLeg.insert(chain.rings.at(r - 1).chainLeg);
-            }
-        }
-        for (int k = 0; k < count; ++k) {
-            const QVector3D& direction = directions.at(k);
-            const QVector3D& before = k > 0 ? (splitAfterLeg.contains(k - 1) ? direction : directions.at(k - 1))
-                                            : (isLoop ? directions.last() : direction);
-            const QVector3D& after = k + 1 < count ? (splitAfterLeg.contains(k) ? direction : directions.at(k + 1))
-                                                   : (isLoop ? directions.first() : direction);
-            const bool reversed = chain.legs.at(k).reversed;
-            chainTangents.insert({chain.legs.at(k).legIndex, reversed}, before + direction);
-            chainTangents.insert({chain.legs.at(k).legIndex, !reversed}, direction + after);
-        }
-    }
-
-    // The record's right as the builder takes it: square to the chain's
-    // direction through the station, on the side the record faces. A station
-    // off every chain, or where the chain runs plumb, keeps its facing.
-    const auto rightOf = [&](int legIndex, bool isTo, const QVector3D& facing) {
-        const QVector3D facingRight(facing.y(), -facing.x(), 0.0f);
-        const auto it = chainTangents.constFind({legIndex, isTo});
-        if (it == chainTangents.cend()) {
-            return facingRight;
-        }
-        const QVector3D chainRight = QVector3D(it->y(), -it->x(), 0.0f);
-        if (chainRight.length() < kMinFacingComponent) {
-            return facingRight;
-        }
-        const bool facesAgainst = QVector3D::dotProduct(facing, *it) < 0.0f;
-        return (facesAgainst ? -chainRight : chainRight).normalized();
+    // The record's right as the builder takes it: its station's facing
+    // turned clockwise.
+    const QVector<std::array<QVector3D, 2>> facings = cwPassageTubeGeometry::legEndFacings(debug.legs, debug.chains);
+    const auto rightOf = [&](int legIndex, bool isTo) {
+        return cwPassageTubeGeometry::clockwiseOf(facings.at(legIndex).at(isTo ? 1 : 0));
     };
 
     ChainSolids solids(debug);
@@ -1560,7 +1513,6 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                                   const QString& station,
                                   const QVector3D& position,
                                   const cwStationLrud& lrud,
-                                  const cwStationLrud& passage,
                                   const QVector3D& right) {
         const cwPassageTubeBuilder::Leg& leg = debug.legs.at(legIndex);
         const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
@@ -1571,15 +1523,13 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
 
         const QVector<QVector3D> directions = legDirections.value({leg.caveId, station});
         const auto checkWall = [&](const std::optional<double>& reading,
-                                   const std::optional<double>& passageReading,
                                    const QVector3D& direction,
                                    const QString& name) {
-            const bool isReplaced = reading != passageReading;
             const bool isDroppedAlongLeg = direction.z() != 0.0f && isAlongLeg(direction, directions);
-            if (!passageReading || isReplaced || isDroppedAlongLeg) {
+            if (!reading || isDroppedAlongLeg) {
                 return;
             }
-            const Vec wall = Vec(position) + Vec(direction) * *passageReading;
+            const Vec wall = Vec(position) + Vec(direction) * *reading;
             if (isOnSurface(wall)) {
                 return;
             }
@@ -1591,24 +1541,24 @@ QVector<cwPassageTubeMeshCheck::Issue> cwPassageTubeMeshCheck::wallsOnSurface(co
                     return false;
                 }
                 const QVector3D side = QVector3D::dotProduct(legSide, direction) >= 0.0f ? legSide.normalized() : -legSide.normalized();
-                return isOnSurface(Vec(position) + Vec(side) * *passageReading);
+                return isOnSurface(Vec(position) + Vec(side) * *reading);
             });
             const auto holdsLeg = [&](const ChainSolids::Tube& tube) { return tube.holdsLeg(debug, legIndex); };
             if (!isOnLegWall && !solids.isInsideOther(wall.toQVector3D(), holdsLeg)) {
                 issues.append(Issue {WallMissed, wall.toQVector3D(),
-                                     QStringLiteral("station %1's %2 wall at %3 m lies off the tube").arg(station, name).arg(*passageReading)});
+                                     QStringLiteral("station %1's %2 wall at %3 m lies off the tube").arg(station, name).arg(*reading)});
             }
         };
-        checkWall(lrud.left, passage.left, -right, QStringLiteral("left"));
-        checkWall(lrud.right, passage.right, right, QStringLiteral("right"));
-        checkWall(lrud.up, passage.up, kWorldUp, QStringLiteral("up"));
-        checkWall(lrud.down, passage.down, -kWorldUp, QStringLiteral("down"));
+        checkWall(lrud.left, -right, QStringLiteral("left"));
+        checkWall(lrud.right, right, QStringLiteral("right"));
+        checkWall(lrud.up, kWorldUp, QStringLiteral("up"));
+        checkWall(lrud.down, -kWorldUp, QStringLiteral("down"));
     };
 
     for (int i = 0; i < debug.legs.size(); ++i) {
         const cwPassageTubeBuilder::Leg& leg = debug.legs.at(i);
-        checkStation(i, leg.shotIndex, leg.from, leg.fromPosition, leg.fromLrud, leg.fromPassageLrud, rightOf(i, false, leg.fromFacing));
-        checkStation(i, leg.shotIndex + 1, leg.to, leg.toPosition, leg.toLrud, leg.toPassageLrud, rightOf(i, true, leg.toFacing));
+        checkStation(i, leg.shotIndex, leg.from, leg.fromPosition, leg.fromLrud, rightOf(i, false));
+        checkStation(i, leg.shotIndex + 1, leg.to, leg.toPosition, leg.toLrud, rightOf(i, true));
     }
     return issues;
 }

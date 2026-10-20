@@ -50,6 +50,29 @@ constexpr int kLoopSides = 8;
 constexpr double kLoopLegMeters = 10.0;
 const Section kLoopSection {1.0, 1.0, 1.5, 1.0};
 
+// The miter sweep (redesign step 1): two level 10 m legs, the second
+// turning each of these from the first, every station reading L2 R1 U2 D1.
+constexpr std::array<double, 5> kMiterBendDegrees = {0.0, 60.0, 120.0, 150.0, 170.0};
+constexpr float kMiterLegMeters = 10.0f;
+const Section kMiterSection {2.0, 1.0, 2.0, 1.0};
+
+// The junctions of redesign step 2: a through reading L2 R1 and an arm
+// reading L1.5 R1.5, a chamber and the crawl off it, and a hub of six legs
+// reading L3 R3 at J.
+const Section kUnionThroughSection {2.0, 1.0, 1.5, 1.0};
+const Section kUnionArmSection {1.5, 1.5, 1.5, 1.0};
+const Section kUnionNarrowArmSection {1.0, 1.0, 1.5, 1.0};
+const Section kChamberSection {4.0, 4.0, 3.0, 1.0};
+const Section kCrawlSection {0.5, 0.5, 0.4, 0.2};
+const Section kHubJunctionSection {3.0, 3.0, 1.5, 1.0};
+const Section kHubFarSection {1.0, 1.0, 1.5, 1.0};
+constexpr double kForkDegrees = 30.0;
+constexpr double kNearlyAlongDegrees = 4.0;
+constexpr double kNearlyAlongArmMeters = 6.0;
+constexpr double kIntoArmLeftMeters = 8.0;
+constexpr double kHubSpreadDegrees = 60.0;
+constexpr int kHubArmCount = 4;
+
 // Random survey parameters.
 constexpr double kRandomMinLegMeters = 3.0;
 constexpr double kRandomMaxLegMeters = 15.0;
@@ -351,6 +374,56 @@ double angleBetweenDegrees(const QVector3D& a, const QVector3D& b)
 {
     const double cosine = QVector3D::dotProduct(a.normalized(), b.normalized());
     return qRadiansToDegrees(std::acos(std::clamp(cosine, -1.0, 1.0)));
+}
+
+// One bend of the miter sweep.
+cwPassageTubeCases::Case miterBendCase(double bendDegrees)
+{
+    const QVector3D m1(0.0f, 0.0f, 0.0f);
+    const QVector3D m2 = m1 + kMiterLegMeters * direction(0.0, 0.0);
+    const QVector3D m3 = m2 + kMiterLegMeters * direction(bendDegrees, 0.0);
+    cwPassageTubeCases::Case miter = bendCase(QStringLiteral("31. Bend of %1 degrees mitered on one ring").arg(bendDegrees),
+                                              {{QStringLiteral("m1"), m1, lrudStrings(kMiterSection)},
+                                               {QStringLiteral("m2"), m2, lrudStrings(kMiterSection)},
+                                               {QStringLiteral("m3"), m3, lrudStrings(kMiterSection)}});
+    miter.tags.append(QStringLiteral("miter"));
+    return miter;
+}
+
+// The junctions of redesign step 2 that the gallery's own lacks; its T is
+// case 1.
+QVector<JunctionCase> unionCases()
+{
+    QVector<JunctionCase> cases;
+    cases.append(galleryCase(QStringLiteral("32. Fork 30 degrees off the through"), kUnionThroughSection,
+                             {arm(kHalfTurnDegrees - kForkDegrees, kUnionArmSection)}));
+    cases.append(galleryCase(QStringLiteral("33. Arm 4 degrees off the through"), kUnionThroughSection,
+                             {arm(kHalfTurnDegrees - kNearlyAlongDegrees, kUnionNarrowArmSection, 0.0, kNearlyAlongArmMeters)}));
+
+    QVector<ArmSpec> hubArms;
+    for (int i = 0; i < kHubArmCount; ++i) {
+        const double planDegrees = kHubSpreadDegrees * (i < kHubArmCount / 2 ? i + 1 : i + 2);
+        ArmSpec hubArm = arm(planDegrees, kHubFarSection);
+        hubArm.atJunction = kHubJunctionSection;
+        hubArms.append(hubArm);
+    }
+    JunctionCase hub = galleryCase(QStringLiteral("34. Hub of six legs reading L3 R3 at J"), kHubFarSection, hubArms);
+    hub.throughAtJunction = kHubJunctionSection;
+    cases.append(hub);
+
+    Section intoArm = kUnionThroughSection;
+    intoArm.left = kIntoArmLeftMeters;
+    JunctionCase conflict = galleryCase(QStringLiteral("35. Through reads L8 into the arm"), kUnionThroughSection,
+                                        {arm(kHalfTurnDegrees + kVerticalDegrees, kUnionArmSection)});
+    conflict.throughAtJunction = intoArm;
+    cases.append(conflict);
+
+    cases.append(galleryCase(QStringLiteral("36. Crawl off a chamber"), kChamberSection, {arm(kVerticalDegrees, kCrawlSection)}));
+
+    ArmSpec blank = arm(kVerticalDegrees, kUnionArmSection);
+    blank.hasJunctionLrud = false;
+    cases.append(galleryCase(QStringLiteral("37. Arm with a blank record at the tie-in"), kUnionThroughSection, {blank}));
+    return cases;
 }
 
 // Trip 1 runs north h0 → h1 → h2. Trip 2 shoots h1 → h2 again with readings
@@ -719,6 +792,12 @@ QVector<cwPassageTubeCases::Case> cwPassageTubeCases::catalog()
     cases.append(unreadSharpBendCase());
     cases.append(shaftFootCase());
     cases.append(sBendCase());
+    for (double bendDegrees : kMiterBendDegrees) {
+        cases.append(miterBendCase(bendDegrees));
+    }
+    for (const JunctionCase& junctionCase : unionCases()) {
+        cases.append(toCase(junctionCase));
+    }
     cases.append({QStringLiteral("Phake Cave"), {QStringLiteral("phake")}, phakeCave()});
     cases.append(loopCase());
     for (const JunctionCase& junctionCase : sweepCases()) {

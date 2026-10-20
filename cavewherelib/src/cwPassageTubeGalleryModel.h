@@ -123,8 +123,7 @@ public:
     //
     // readings hold a spoke per read wall of each station occurrence, from
     // the station as long as the reading: left and right square to its
-    // facing, up and down along world z. passageReadings hold the passage
-    // LRUD's spokes where they differ from the reading.
+    // facing, up and down along world z.
     //
     // sectionLoops hold, per ring with a section, the loop of its
     // stationRadii around the section's station in the ring's frame.
@@ -139,7 +138,6 @@ public:
         cwLinePlotGeometry::VertexRange rights;
         cwLinePlotGeometry::VertexRange ups;
         cwLinePlotGeometry::VertexRange readings;
-        cwLinePlotGeometry::VertexRange passageReadings;
         QVector<cwLinePlotGeometry::VertexRange> sectionLoops;
         cwLinePlotGeometry::VertexRange overshoots;
     };

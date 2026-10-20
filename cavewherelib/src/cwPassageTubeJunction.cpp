@@ -314,12 +314,6 @@ QVector<Junction> findJunctions(const QVector<Leg>& legs, QVector<Chain>& chains
         for (int i = 1; i < chainLegs.size(); ++i) {
             addThrough(c, chainLegs.at(i), chainStartStation(legs, chainLegs.at(i)));
         }
-        if (chain.startThroughReachMeters > 0.0) {
-            addThrough(c, chainLegs.first(), chainStartStation(legs, chainLegs.first()));
-        }
-        if (chain.endThroughReachMeters > 0.0) {
-            addThrough(c, chainLegs.last(), chainEndStation(legs, chainLegs.last()));
-        }
     }
 
     QVector<Junction> junctions;
@@ -343,10 +337,10 @@ QVector<Junction> findJunctions(const QVector<Leg>& legs, QVector<Chain>& chains
     };
 
     for (int c = 0; c < chains.size(); ++c) {
-        if (chains.at(c).startCap == EndCap::Mouth) {
+        if (chains.at(c).startCap == EndCap::Fan) {
             addArm(c, true);
         }
-        if (chains.at(c).endCap == EndCap::Mouth) {
+        if (chains.at(c).endCap == EndCap::Fan) {
             addArm(c, false);
         }
     }

@@ -51,11 +51,13 @@ struct cwPassageTubeMesh {
             LrudOutOfRange,
             ScrapOpening,
             SourceChange,
-            ShaftReading,
             ArmInsideThrough,
             JunctionOverlap,
             JunctionUnzipped,
             RepeatedShot,
+            // Two chains read one side wall of a station they share more
+            // than cwPassageTubeBuilder::kReadingConflictRatio apart.
+            JunctionReadingConflict,
             // A chain's closed tube crosses itself; the union takes it as is.
             ChainSelfCrossing,
             // The union wrapped a pocket of rock in air on every side, an

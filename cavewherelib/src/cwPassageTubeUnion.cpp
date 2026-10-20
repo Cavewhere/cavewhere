@@ -700,16 +700,12 @@ QVector<ChainEnd> chainEnds(const Builder::Debug& rings)
         const Builder::Leg& firstLeg = rings.legs.at(chain.legs.first().legIndex);
         const Builder::Leg& lastLeg = rings.legs.at(chain.legs.last().legIndex);
         const int lastRing = static_cast<int>(chain.rings.size()) - 1;
-        if (chain.startCap != Builder::EndCap::Dome && chain.startThroughReachMeters == 0.0) {
-            ends.append({c, true,
-                         stationKey(firstLeg, cwPassageTubeGeometry::chainStartStation(rings.legs, chain.legs.first())),
-                         0, farRingOf(0, 1), -chain.rings.first().frame.tangent});
-        }
-        if (chain.endCap != Builder::EndCap::Dome && chain.endThroughReachMeters == 0.0) {
-            ends.append({c, false,
-                         stationKey(lastLeg, cwPassageTubeGeometry::chainEndStation(rings.legs, chain.legs.last())),
-                         lastRing, farRingOf(lastRing, -1), chain.rings.last().frame.tangent});
-        }
+        ends.append({c, true,
+                     stationKey(firstLeg, cwPassageTubeGeometry::chainStartStation(rings.legs, chain.legs.first())),
+                     0, farRingOf(0, 1), -chain.rings.first().frame.tangent});
+        ends.append({c, false,
+                     stationKey(lastLeg, cwPassageTubeGeometry::chainEndStation(rings.legs, chain.legs.last())),
+                     lastRing, farRingOf(lastRing, -1), chain.rings.last().frame.tangent});
     }
     return ends;
 }
@@ -727,50 +723,6 @@ QVector<const cwPassageTubeMesh*> neighborTubes(const ChainEnd& end,
         }
     }
     return neighbors;
-}
-
-// What closes a chain past its end ring, outermost ring last: a dome, which
-// rises through a ring of half the end's radii at this fraction of its depth
-// to a point at its full depth, the profile of a sphere; or a steep end's
-// strip on to its floor or ceiling.
-constexpr float kDomeHalfRingScale = 0.5f;
-constexpr float kDomeHalfRingDepth = static_cast<float>(std::numbers::sqrt3 / 2.0);
-
-struct EndClosure {
-    QVector<QVector<QVector3D>> rings;
-    std::optional<QVector3D> fanCenter;
-};
-
-EndClosure endClosure(const Builder::Chain& chain, bool atStart)
-{
-    const Builder::Ring& ring = atStart ? chain.rings.first() : chain.rings.last();
-    const QVector3D outward = atStart ? -ring.frame.tangent : ring.frame.tangent;
-    const Builder::EndCap cap = atStart ? chain.startCap : chain.endCap;
-    EndClosure closure;
-    if (cap == Builder::EndCap::Dome) {
-        const double radiusSum = std::accumulate(ring.vertices.cbegin(), ring.vertices.cend(), 0.0, [&](double sum, const QVector3D& vertex) {
-            return sum + vertex.distanceToPoint(ring.center);
-        });
-        const float depth = static_cast<float>(radiusSum / ring.vertices.size());
-        QVector<QVector3D> halfRing;
-        halfRing.reserve(ring.vertices.size());
-        for (const QVector3D& vertex : ring.vertices) {
-            halfRing.append(ring.center + (vertex - ring.center) * kDomeHalfRingScale + outward * (depth * kDomeHalfRingDepth));
-        }
-        closure.rings = {halfRing};
-        closure.fanCenter = ring.center + outward * depth;
-        return closure;
-    }
-    const float offset = static_cast<float>(atStart ? chain.startCapOffsetMeters : chain.endCapOffsetMeters);
-    if (cap == Builder::EndCap::Fan && offset > 0.0f) {
-        QVector<QVector3D> pitEnd;
-        pitEnd.reserve(ring.vertices.size());
-        for (const QVector3D& vertex : ring.vertices) {
-            pitEnd.append(vertex + outward * offset);
-        }
-        closure.rings = {pitEnd};
-    }
-    return closure;
 }
 
 const QUuid& tripOfRing(const Builder::Debug& rings, const Builder::Chain& chain, int ring)
@@ -1083,21 +1035,7 @@ QVector<cwPassageTubeUnion::ChainTube> cwPassageTubeUnion::chainTubes(const cwPa
                 for (int i = start; i <= end; ++i) {
                     pieceRings.append(chain.rings.at(run.at(i)).vertices);
                 }
-                std::optional<QVector3D> startFanCenter;
-                std::optional<QVector3D> endFanCenter;
-                if (!isLoop && run.at(start) == 0) {
-                    const EndClosure closure = endClosure(chain, true);
-                    for (const QVector<QVector3D>& ring : closure.rings) {
-                        pieceRings.prepend(ring);
-                    }
-                    startFanCenter = closure.fanCenter;
-                }
-                if (!isLoop && run.at(end) == chain.rings.size() - 1) {
-                    const EndClosure closure = endClosure(chain, false);
-                    pieceRings.append(closure.rings);
-                    endFanCenter = closure.fanCenter;
-                }
-                ChainTube tube {c, trip, loft(pieceRings, false, startFanCenter, endFanCenter), run.mid(start, end - start + 1), false};
+                ChainTube tube {c, trip, loft(pieceRings, false), run.mid(start, end - start + 1), false};
                 const int resolution = static_cast<int>(pieceRings.first().size());
                 const int triangleCount = static_cast<int>(tube.mesh.indices.size() / 3);
                 tube.firstCapTriangle = resolution >= kMinFanVertices ? triangleCount - 2 * resolution : triangleCount;
@@ -1113,6 +1051,49 @@ QVector<cwPassageTubeUnion::ChainTube> cwPassageTubeUnion::chainTubes(const cwPa
                 pieces.last().endNeighborTrip = pieces.first().tripId;
             }
             tubes.append(pieces);
+        }
+    }
+
+    // A chain's end ring that another trip's chain ends on too runs on into
+    // that trip there, as a chain cut between trips does.
+    QHash<StationKey, QVector<std::pair<int, bool>>> tubeEndsAt;
+    for (int t = 0; t < tubes.size(); ++t) {
+        const ChainTube& tube = tubes.at(t);
+        const Builder::Chain& chain = rings.chains.at(tube.chain);
+        if (tube.isLoop) {
+            continue;
+        }
+        if (tube.rings.first() == 0) {
+            const Builder::ChainLeg& first = chain.legs.first();
+            tubeEndsAt[stationKey(rings.legs.at(first.legIndex), cwPassageTubeGeometry::chainStartStation(rings.legs, first))].append({t, true});
+        }
+        if (tube.rings.last() == chain.rings.size() - 1) {
+            const Builder::ChainLeg& last = chain.legs.last();
+            tubeEndsAt[stationKey(rings.legs.at(last.legIndex), cwPassageTubeGeometry::chainEndStation(rings.legs, last))].append({t, false});
+        }
+    }
+    const auto endRing = [&](int tubeIndex, bool atStart) -> const QVector<QVector3D>& {
+        const ChainTube& end = tubes.at(tubeIndex);
+        return rings.chains.at(end.chain).rings.at(atStart ? end.rings.first() : end.rings.last()).vertices;
+    };
+    const auto isSameRing = [](const QVector<QVector3D>& a, const QVector<QVector3D>& b) {
+        return std::all_of(a.cbegin(), a.cend(), [&](const QVector3D& vertex) {
+            return std::any_of(b.cbegin(), b.cend(), [&](const QVector3D& other) {
+                return other.distanceToPoint(vertex) <= kMergeToleranceMeters;
+            });
+        });
+    };
+    for (const QVector<std::pair<int, bool>>& ends : std::as_const(tubeEndsAt)) {
+        for (const auto& [t, isStart] : ends) {
+            const auto otherTrip = std::find_if(ends.cbegin(), ends.cend(), [&](const std::pair<int, bool>& other) {
+                return tubes.at(other.first).tripId != tubes.at(t).tripId
+                       && isSameRing(endRing(t, isStart), endRing(other.first, other.second));
+            });
+            ChainTube& tube = tubes[t];
+            std::optional<QUuid>& neighborTrip = isStart ? tube.startNeighborTrip : tube.endNeighborTrip;
+            if (!neighborTrip && otherTrip != ends.cend()) {
+                neighborTrip = tubes.at(otherTrip->first).tripId;
+            }
         }
     }
     return tubes;

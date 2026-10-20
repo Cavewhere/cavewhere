@@ -101,8 +101,8 @@ public:
     // chain's rings in order, the last repeating the first on a loop. A loop
     // that stays in one trip is one tube without caps (isLoop). Otherwise the
     // tube's triangles from firstCapTriangle on are its two end fans, the
-    // start's first, each around its fan center: a dome's tip, otherwise the
-    // centroid of the outermost ring. A neighbor trip names
+    // start's first, each around the centroid of its end ring. A neighbor
+    // trip names
     // the trip of the chain's tube that shares that end ring, where the
     // passage runs on.
     struct ChainTube {
@@ -164,8 +164,7 @@ public:
     // every chain of buildChainRings. A chain that runs on from one trip
     // into another is cut at the ring they share, which closes both tubes;
     // one that reads two sections at a station is split between them
-    // (splitsBefore). A chain's dome end rises past its end ring, and a
-    // steep dead end runs on by its cap offset to its floor or ceiling.
+    // (splitsBefore).
     static QVector<ChainTube> chainTubes(const cwPassageTubeBuilder::Debug& rings);
 
     // True when chain's ring is the second of a station's two sections, read

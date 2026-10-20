@@ -23,7 +23,6 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
-#include <numbers>
 
 namespace {
 
@@ -31,30 +30,16 @@ using namespace cwPassageTubeGeometry;
 
 // A leg within this angle of plumb reads level sections.
 constexpr double kSteepLegDegrees = 45.0;
-constexpr double kShaftRatio = 3.0;
 constexpr double kMinSampleSpacingMeters = 0.01;
-constexpr double kMaxChainTurnDegrees = 100.0;
-// An arm this close to a bigger arm at the same junction opens into it,
-// which the stitch cannot join, so a through pair that keeps every arm at
-// least this far from a bigger arm wins over a straighter one.
-constexpr double kMinArmSpreadDegrees = 60.0;
-// A through that ends at a junction carries its end ring past it by each
-// arm's largest reading over the sine of its angle to the through, floored
-// at this angle as the stitch's reach is, plus the margin.
-constexpr double kMinThroughReachDegrees = 10.0;
-constexpr double kThroughReachMarginMeters = 0.5;
 // Two shots between the same stations whose ends lie this close are one
 // passage surveyed twice.
 constexpr double kRepeatedShotToleranceMeters = 0.1;
 // A ring without readings borrows from its own trip within this many legs
 // before a nearer ring of another trip.
 constexpr int kSameTripBorrowLegs = 2;
-constexpr int kMinLoopStations = 3;
 constexpr double kOnAxisMeters = 1e-6;
-constexpr float kMinHorizontalLength = 0.01f;
 constexpr float kDegenerateLengthSquared = 1e-12f;
 constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
-constexpr QVector3D kWorldNorth(0.0f, 1.0f, 0.0f);
 
 using Leg = cwPassageTubeBuilder::Leg;
 using Chain = cwPassageTubeBuilder::Chain;
@@ -119,67 +104,6 @@ bool isPositioned(const cwStation& station, const cwStationPositionLookup& posit
     return station.isValid() && positions.hasPosition(station.name());
 }
 
-// Each chunk station's facing: the horizontal chord between its nearest
-// positioned neighbors in the chunk. A chunk that closes a loop by ending at
-// its first station wraps around, so that station faces along the chord
-// between its neighbors on both sides of the loop. A station on a vertical
-// chord takes the facing of the nearest station that has one; a chunk
-// without any faces north.
-QVector<QVector3D> chunkFacings(const cwSurveyChunkData& chunk,
-                                const cwStationPositionLookup& positions)
-{
-    QVector<int> positioned;
-    for (int i = 0; i < chunk.stations.size(); ++i) {
-        if (isPositioned(chunk.stations.at(i), positions)) {
-            positioned.append(i);
-        }
-    }
-
-    const auto position = [&](int index) {
-        return positions.position(chunk.stations.at(index).name());
-    };
-
-    const int last = positioned.size() - 1;
-    const bool closesLoop = last >= kMinLoopStations
-                            && cwStation::canonicalKey(chunk.stations.at(positioned.first()).name())
-                                   == cwStation::canonicalKey(chunk.stations.at(positioned.last()).name());
-
-    QVector<std::optional<QVector3D>> chordFacings(chunk.stations.size());
-    for (int p = 0; p < positioned.size(); ++p) {
-        int previous = positioned.at(std::max(p - 1, 0));
-        int next = positioned.at(std::min(p + 1, last));
-        if (closesLoop && p == 0) {
-            previous = positioned.at(last - 1);
-        } else if (closesLoop && p == last) {
-            next = positioned.at(1);
-        }
-        QVector3D chord = position(next) - position(previous);
-        chord.setZ(0.0f);
-        if (chord.length() >= kMinHorizontalLength) {
-            chordFacings[positioned.at(p)] = chord.normalized();
-        }
-    }
-
-    const int count = chordFacings.size();
-    const auto nearestFacing = [&](int index) {
-        for (int offset = 0; offset < count; ++offset) {
-            for (int candidate : {index - offset, index + offset}) {
-                if (candidate >= 0 && candidate < count && chordFacings.at(candidate)) {
-                    return *chordFacings.at(candidate);
-                }
-            }
-        }
-        return kWorldNorth;
-    };
-
-    QVector<QVector3D> facings;
-    facings.reserve(count);
-    for (int i = 0; i < count; ++i) {
-        facings.append(nearestFacing(i));
-    }
-    return facings;
-}
-
 // The mean of two readings of one wall, or the one that was read.
 std::optional<double> meanReading(const std::optional<double>& a, const std::optional<double>& b)
 {
@@ -195,7 +119,7 @@ cwStationLrud meanLrud(const cwStationLrud& a, const cwStationLrud& b)
 }
 
 // Legs between the same two stations, surveyed again on a later trip or
-// chunk, collapse into the first: it keeps its trip and facing, and each of
+// chunk, collapse into the first: it keeps its trip, and each of
 // its stations takes the mean of the readings both surveys made there.
 QVector<Leg> mergeRepeatedShots(const QVector<Leg>& legs, const QHash<QUuid, QString>& tripNames, QVector<Warning>& warnings)
 {
@@ -237,12 +161,22 @@ QVector<Leg> mergeRepeatedShots(const QVector<Leg>& legs, const QHash<QUuid, QSt
     return merged;
 }
 
+QHash<QUuid, QString> tripNamesOf(const cwCavingRegionData& region)
+{
+    QHash<QUuid, QString> tripNames;
+    for (const cwCaveData& cave : region.caves) {
+        for (const cwTripData& trip : cave.trips) {
+            tripNames.insert(trip.id, trip.name);
+        }
+    }
+    return tripNames;
+}
+
 QVector<Leg> extractLegs(const cwCavingRegionData& region,
                          const QHash<QUuid, cwStationPositionLookup>& positionsByCave,
                          QVector<Warning>& warnings)
 {
     QVector<Leg> legs;
-    QHash<QUuid, QString> tripNames;
     for (const cwCaveData& cave : region.caves) {
         const auto positionsIt = positionsByCave.constFind(cave.id);
         if (positionsIt == positionsByCave.constEnd()) {
@@ -251,7 +185,6 @@ QVector<Leg> extractLegs(const cwCavingRegionData& region,
         const cwStationPositionLookup& positions = positionsIt.value();
 
         for (const cwTripData& trip : cave.trips) {
-            tripNames.insert(trip.id, trip.name);
             const cwUnits::LengthUnit unit = trip.calibrations.distanceUnit();
             for (int chunkIndex = 0; chunkIndex < trip.chunks.size(); ++chunkIndex) {
                 const cwSurveyChunkData& chunk = trip.chunks.at(chunkIndex);
@@ -261,7 +194,6 @@ QVector<Leg> extractLegs(const cwCavingRegionData& region,
                 for (const cwStation& station : chunk.stations) {
                     lruds.append(stationLrud(station, unit, trip.id, warnings));
                 }
-                const QVector<QVector3D> facings = chunkFacings(chunk, positions);
 
                 const int shotCount = std::min<int>(chunk.shots.size(), chunk.stations.size() - 1);
                 for (int shotIndex = 0; shotIndex < shotCount; ++shotIndex) {
@@ -287,459 +219,36 @@ QVector<Leg> extractLegs(const cwCavingRegionData& region,
                         fromPosition,
                         toPosition,
                         lruds.at(shotIndex),
-                        lruds.at(shotIndex + 1),
-                        lruds.at(shotIndex),
-                        lruds.at(shotIndex + 1),
-                        facings.at(shotIndex),
-                        facings.at(shotIndex + 1)
+                        lruds.at(shotIndex + 1)
                     });
                 }
             }
         }
     }
-    return mergeRepeatedShots(legs, tripNames, warnings);
-}
-
-std::optional<double> median(QVector<double> values)
-{
-    if (values.isEmpty()) {
-        return std::nullopt;
-    }
-    std::sort(values.begin(), values.end());
-    const int middle = values.size() / 2;
-    if (values.size() % 2 == 1) {
-        return values.at(middle);
-    }
-    return (values.at(middle - 1) + values.at(middle)) / 2.0;
+    return mergeRepeatedShots(legs, tripNamesOf(region), warnings);
 }
 
 using StationKey = QPair<QUuid, QString>;
 
-// The ups and downs at the far end of every leg at a station.
-struct NeighborReadings {
-    QVector<double> ups;
-    QVector<double> downs;
-};
-
-QHash<StationKey, NeighborReadings> neighborReadings(const QVector<Leg>& legs)
+// One chain per maximal run of consecutive shots of one chunk, in chunk
+// order.
+QVector<Chain> buildChains(const QVector<Leg>& legs)
 {
-    QHash<StationKey, NeighborReadings> readings;
-    const auto add = [&](const StationKey& station, const cwStationLrud& farEnd) {
-        NeighborReadings& neighbors = readings[station];
-        if (farEnd.up) {
-            neighbors.ups.append(*farEnd.up);
-        }
-        if (farEnd.down) {
-            neighbors.downs.append(*farEnd.down);
-        }
-    };
-    for (const Leg& leg : legs) {
-        add({leg.caveId, leg.from}, leg.toLrud);
-        add({leg.caveId, leg.to}, leg.fromLrud);
-    }
-    return readings;
-}
-
-// An up or down far beyond both the passage's width and the same reading at
-// the neighboring stations is a pit depth or aven height. The passage LRUD
-// take the neighbors' reading in its place, or half the width when they have
-// none, so the shaft sizes no leg when chains are chosen.
-std::optional<double> shaftReplacement(const std::optional<double>& reading,
-                                       const std::optional<double>& width,
-                                       const std::optional<double>& neighbor)
-{
-    const bool hasReference = width || neighbor;
-    if (reading && hasReference) {
-        const double reference = std::max(width.value_or(0.0), neighbor.value_or(0.0));
-        if (*reading > kShaftRatio * reference) {
-            return neighbor ? *neighbor : *width / 2.0;
-        }
-    }
-    return std::nullopt;
-}
-
-void replaceShaftReadings(QVector<Leg>& legs, QVector<Warning>& warnings)
-{
-    const QHash<StationKey, NeighborReadings> neighbors = neighborReadings(legs);
-
-    // A station occurrence ends two legs of its chunk; it warns once.
-    using Occurrence = std::pair<QUuid, std::pair<int, int>>;
-    QSet<Occurrence> visited;
-
-    const auto passageLrud = [&](const Leg& leg, const QString& station, const cwStationLrud& lrud, int stationIndex) {
-        const Occurrence occurrence {leg.tripId, {leg.chunkIndex, stationIndex}};
-        const bool isFirstVisit = !visited.contains(occurrence);
-        visited.insert(occurrence);
-
-        const std::optional<double> width = lrud.left || lrud.right
-            ? std::optional<double>(lrud.left.value_or(0.0) + lrud.right.value_or(0.0))
-            : std::nullopt;
-        const NeighborReadings near = neighbors.value({leg.caveId, station});
-
-        cwStationLrud passage = lrud;
-        const auto replaceShaft = [&](std::optional<double>& reading,
-                                      const QVector<double>& neighborValues,
-                                      const QString& readingName,
-                                      const QString& shaftName) {
-            const std::optional<double> replacement = shaftReplacement(reading, width, median(neighborValues));
-            if (!replacement) {
-                return;
-            }
-            if (isFirstVisit) {
-                warnings.append(Warning {
-                    Warning::ShaftReading,
-                    leg.tripId,
-                    station,
-                    QStringLiteral("Station %1's %2 of %3 m reads as %4, which the tube draws from the station at face value.")
-                        .arg(station, readingName)
-                        .arg(*reading)
-                        .arg(shaftName)
-                });
-            }
-            reading = replacement;
-        };
-        replaceShaft(passage.up, near.ups, QStringLiteral("up"), QStringLiteral("an aven"));
-        replaceShaft(passage.down, near.downs, QStringLiteral("down"), QStringLiteral("a pit"));
-        return passage;
-    };
-
-    for (Leg& leg : legs) {
-        leg.fromPassageLrud = passageLrud(leg, leg.from, leg.fromLrud, leg.shotIndex);
-        leg.toPassageLrud = passageLrud(leg, leg.to, leg.toLrud, leg.shotIndex + 1);
-    }
-}
-
-// A leg's cross-section where it meets a station, from its passage LRUD
-// there, a missing reading taking the default radius.
-struct LegSection {
-    double halfWidth = 0.0;
-    double halfHeight = 0.0;
-    double largestReading = 0.0;
-
-    LegSection(const cwStationLrud& lrud, double defaultRadius) :
-        halfWidth((lrud.left.value_or(defaultRadius) + lrud.right.value_or(defaultRadius)) / 2.0),
-        halfHeight((lrud.up.value_or(defaultRadius) + lrud.down.value_or(defaultRadius)) / 2.0),
-        largestReading(std::max({lrud.left.value_or(defaultRadius), lrud.right.value_or(defaultRadius),
-                          lrud.up.value_or(defaultRadius), lrud.down.value_or(defaultRadius)}))
-    {}
-
-    double area() const { return std::numbers::pi * halfWidth * halfHeight; }
-
-    bool isWiderAndTallerThan(const LegSection& other) const
-    {
-        return halfWidth > other.halfWidth && halfHeight > other.halfHeight;
-    }
-
-    bool isAtLeastAsWideAndTallAs(const LegSection& other) const
-    {
-        return halfWidth >= other.halfWidth && halfHeight >= other.halfHeight;
-    }
-};
-
-ChainLeg reversedLeg(const ChainLeg& chainLeg)
-{
-    return ChainLeg {chainLeg.legIndex, !chainLeg.reversed};
-}
-
-// Chains run like Loch's: from each dead end the walk continues along the
-// straightest unused leg turning less than kMaxChainTurnDegrees. At a
-// junction it continues along the unused leg turning that little whose
-// section there is closest to the arriving leg's, ties by straightness. A
-// sharper turn, a hairpin, ends the chain: both legs close with domes that
-// overlap around the station. At a junction where two legs are bigger than
-// the rest, the two of them turning least into each other are its through,
-// and a walk arriving on any other leg ends there. Where no two are but one
-// leg is, that leg is the through and ends past the junction.
-QVector<Chain> buildChains(const QVector<Leg>& legs, double defaultRadius)
-{
-    // Stations are nodes, keyed per cave: two caves may reuse a station name.
-    QHash<std::pair<QUuid, QString>, int> nodeIndexByStation;
-    QVector<QVector<int>> legsByNode;
-    const auto nodeIndex = [&](const QUuid& caveId, const QString& station) {
-        const std::pair<QUuid, QString> key {caveId, cwStation::canonicalKey(station)};
-        const auto it = nodeIndexByStation.constFind(key);
-        if (it != nodeIndexByStation.constEnd()) {
-            return it.value();
-        }
-        const int index = legsByNode.size();
-        nodeIndexByStation.insert(key, index);
-        legsByNode.append(QVector<int>());
-        return index;
-    };
-
-    QVector<int> fromNode(legs.size());
-    QVector<int> toNode(legs.size());
-    for (int legIndex = 0; legIndex < legs.size(); ++legIndex) {
-        const Leg& leg = legs.at(legIndex);
-        fromNode[legIndex] = nodeIndex(leg.caveId, leg.from);
-        toNode[legIndex] = nodeIndex(leg.caveId, leg.to);
-        legsByNode[fromNode.at(legIndex)].append(legIndex);
-        legsByNode[toNode.at(legIndex)].append(legIndex);
-    }
-
-    QVector<bool> legUsed(legs.size(), false);
-    QVector<bool> junctionPassed(legsByNode.size(), false);
-
-    const auto degree = [&](int node) {
-        return legsByNode.at(node).size();
-    };
-
-    const auto direction = [&](const ChainLeg& chainLeg) {
-        const Leg& leg = legs.at(chainLeg.legIndex);
-        const QVector3D delta = leg.toPosition - leg.fromPosition;
-        return (chainLeg.reversed ? -delta : delta).normalized();
-    };
-
-    const auto leaving = [&](int legIndex, int node) {
-        return ChainLeg {legIndex, toNode.at(legIndex) == node};
-    };
-
-    const auto endNode = [&](const ChainLeg& chainLeg) {
-        return chainLeg.reversed ? fromNode.at(chainLeg.legIndex) : toNode.at(chainLeg.legIndex);
-    };
-
-    const auto sectionAt = [&](int legIndex, int node) {
-        const Leg& leg = legs.at(legIndex);
-        return LegSection(toNode.at(legIndex) == node ? leg.toPassageLrud : leg.fromPassageLrud, defaultRadius);
-    };
-
-    // The leg the walk continues along from arriving at node, among those
-    // isCandidate accepts, or -1 when none is.
-    const float minTurnCosine = static_cast<float>(std::cos(qDegreesToRadians(kMaxChainTurnDegrees)));
-    const auto continuation = [&](int node, const ChainLeg& arriving, const auto& isCandidate) {
-        const QVector3D incoming = direction(arriving);
-        const double arrivingArea = sectionAt(arriving.legIndex, node).area();
-        const auto straightness = [&](int legIndex) {
-            return QVector3D::dotProduct(incoming, direction(leaving(legIndex, node)));
-        };
-        const auto areaGap = [&](int legIndex) {
-            return std::abs(sectionAt(legIndex, node).area() - arrivingArea);
-        };
-
-        const bool isJunction = degree(node) > 2;
-        int next = -1;
-        for (int legIndex : legsByNode.at(node)) {
-            if (legIndex == arriving.legIndex || !isCandidate(legIndex) || straightness(legIndex) <= minTurnCosine) {
-                continue;
-            }
-            const bool isStraighter = next < 0 || straightness(legIndex) > straightness(next);
-            const bool isBetter = isJunction
-                                      ? next < 0 || areaGap(legIndex) < areaGap(next) || (areaGap(legIndex) == areaGap(next) && isStraighter)
-                                      : isStraighter;
-            if (isBetter) {
-                next = legIndex;
-            }
-        }
-        return next;
-    };
-
-    const auto anyLeg = [](int) { return true; };
-
-    // The through pair of each junction, or -1 where none is: the two legs
-    // turning least into each other, within kMaxChainTurnDegrees, among the
-    // pairs whose legs are each at least as wide and tall as every other leg
-    // there, one of them wider and taller than one of those. A pair that
-    // leaves an arm beside a bigger arm is taken only when no other pair is.
-    QVector<std::pair<int, int>> throughPairs(legsByNode.size(), {-1, -1});
-    QVector<double> throughReach(legsByNode.size(), 0.0);
-    const float minArmSpreadCosine = static_cast<float>(std::cos(qDegreesToRadians(kMinArmSpreadDegrees)));
-    const double minThroughReachSine = std::sin(qDegreesToRadians(kMinThroughReachDegrees));
-    for (int node = 0; node < legsByNode.size(); ++node) {
-        if (degree(node) <= 2) {
-            continue;
-        }
-        const QVector<int>& nodeLegs = legsByNode.at(node);
-        const auto isBigPair = [&](int a, int b) {
-            const LegSection sectionA = sectionAt(a, node);
-            const LegSection sectionB = sectionAt(b, node);
-            bool isBiggerThanAny = false;
-            for (int other : nodeLegs) {
-                if (other == a || other == b) {
-                    continue;
-                }
-                const LegSection otherSection = sectionAt(other, node);
-                if (!sectionA.isAtLeastAsWideAndTallAs(otherSection) || !sectionB.isAtLeastAsWideAndTallAs(otherSection)) {
-                    return false;
-                }
-                isBiggerThanAny = isBiggerThanAny || sectionA.isWiderAndTallerThan(otherSection) || sectionB.isWiderAndTallerThan(otherSection);
-            }
-            return isBiggerThanAny;
-        };
-        const auto leavesArmBesideBiggerArm = [&](int a, int b) {
-            for (int arm : nodeLegs) {
-                for (int bigger : nodeLegs) {
-                    const bool isArmPair = arm != a && arm != b && bigger != a && bigger != b && arm != bigger;
-                    if (isArmPair
-                        && sectionAt(bigger, node).isWiderAndTallerThan(sectionAt(arm, node))
-                        && QVector3D::dotProduct(direction(leaving(arm, node)), direction(leaving(bigger, node))) > minArmSpreadCosine) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        };
-
-        std::optional<std::pair<bool, float>> bestRank;
-        for (int i = 0; i < nodeLegs.size(); ++i) {
-            const int a = nodeLegs.at(i);
-            const QVector3D incoming = direction(reversedLeg(leaving(a, node)));
-            for (int k = i + 1; k < nodeLegs.size(); ++k) {
-                const int b = nodeLegs.at(k);
-                const float straightness = QVector3D::dotProduct(incoming, direction(leaving(b, node)));
-                if (straightness <= minTurnCosine || !isBigPair(a, b)) {
-                    continue;
-                }
-                const bool isUncrowded = !leavesArmBesideBiggerArm(a, b);
-                const std::pair<bool, float> rank {isUncrowded, straightness};
-                if (!bestRank || rank > *bestRank) {
-                    bestRank = rank;
-                    throughPairs[node] = {a, b};
-                }
-            }
-        }
-        if (bestRank) {
-            continue;
-        }
-
-        // Without a pair, a leg wider and taller than every other still
-        // claims the through and ends past the junction, far enough that
-        // every other leg's mouth lands on its wall.
-        const auto isBiggest = [&](int leg) {
-            return std::all_of(nodeLegs.cbegin(), nodeLegs.cend(), [&](int other) {
-                return other == leg || sectionAt(leg, node).isWiderAndTallerThan(sectionAt(other, node));
-            });
-        };
-        const auto biggest = std::find_if(nodeLegs.cbegin(), nodeLegs.cend(), isBiggest);
-        if (biggest == nodeLegs.cend()) {
-            continue;
-        }
-        throughPairs[node] = {*biggest, -1};
-        const QVector3D throughDirection = direction(leaving(*biggest, node));
-        double reach = kThroughReachMarginMeters;
-        for (int leg : nodeLegs) {
-            if (leg != *biggest) {
-                const double sine = QVector3D::crossProduct(throughDirection, direction(leaving(leg, node))).length();
-                reach += sectionAt(leg, node).largestReading / std::max(sine, minThroughReachSine);
-            }
-        }
-        throughReach[node] = reach;
-    }
-
-    // The other leg of the node's through pair, or -1 when legIndex is not in
-    // it.
-    const auto throughPartner = [&](int node, int legIndex) {
-        const auto [first, second] = throughPairs.at(node);
-        if (legIndex == first) {
-            return second;
-        }
-        return legIndex == second ? first : -1;
-    };
-    const auto isUnused = [&](int legIndex) {
-        return !legUsed.at(legIndex);
-    };
-
-    const auto walkChain = [&](int startNode, int firstLeg) {
-        Chain chain;
-        ChainLeg current = leaving(firstLeg, startNode);
-        while (true) {
-            legUsed[current.legIndex] = true;
-            chain.legs.append(current);
-
-            const int node = endNode(current);
-            const bool isJunction = degree(node) > 2;
-            if (isJunction && junctionPassed.at(node)) {
-                break;
-            }
-            const bool hasThroughPair = throughPairs.at(node).first >= 0;
-            const int nextLeg = hasThroughPair ? throughPartner(node, current.legIndex) : continuation(node, current, isUnused);
-            if (nextLeg < 0 || legUsed.at(nextLeg)) {
-                break;
-            }
-            if (isJunction) {
-                junctionPassed[node] = true;
-            }
-            current = leaving(nextLeg, node);
-        }
-        return chain;
-    };
-
-    // A chain starting at a junction runs back first along the other leg of
-    // its big passage's through pair, or else along its straightest unused
-    // continuation, so a chain passes the junction even when no walk reached
-    // it first.
-    const auto backwardLeg = [&](int startNode, int firstLeg) {
-        if (throughPairs.at(startNode).first >= 0) {
-            return throughPartner(startNode, firstLeg);
-        }
-        const bool isJunction = degree(startNode) > 2;
-        return isJunction ? continuation(startNode, reversedLeg(leaving(firstLeg, startNode)), isUnused) : -1;
-    };
-    const auto walkFrom = [&](int startNode, int firstLeg) {
-        const int partner = backwardLeg(startNode, firstLeg);
-        if (partner < 0 || legUsed.at(partner) || junctionPassed.at(startNode)) {
-            return walkChain(startNode, firstLeg);
-        }
-        junctionPassed[startNode] = true;
-        const Chain backward = walkChain(startNode, partner);
-        if (legUsed.at(firstLeg)) {
-            return backward;
-        }
-        Chain chain;
-        for (auto it = backward.legs.crbegin(); it != backward.legs.crend(); ++it) {
-            chain.legs.append(reversedLeg(*it));
-        }
-        chain.legs.append(walkChain(startNode, firstLeg).legs);
-        return chain;
-    };
-
-    const auto isHairpin = [&](int node) {
-        const QVector<int>& nodeLegs = legsByNode.at(node);
-        return continuation(node, reversedLeg(leaving(nodeLegs.first(), node)), anyLeg) < 0;
-    };
-
-    // Dead ends and hairpins first, then odd junctions, then even junctions,
-    // so through chains run end to end before arms claim the junctions.
-    QVector<int> seeds;
-    for (int node = 0; node < legsByNode.size(); ++node) {
-        if (degree(node) != 2 || isHairpin(node)) {
-            seeds.append(node);
-        }
-    }
-    const auto seedRank = [&](int node) {
-        if (degree(node) <= 2) {
-            return 0;
-        }
-        return degree(node) % 2 == 1 ? 1 : 2;
-    };
-    std::stable_sort(seeds.begin(), seeds.end(), [&](int a, int b) {
-        return seedRank(a) < seedRank(b);
-    });
     QVector<Chain> chains;
-    for (int node : std::as_const(seeds)) {
-        for (int legIndex : legsByNode.at(node)) {
-            if (!legUsed.at(legIndex)) {
-                chains.append(walkFrom(node, legIndex));
-            }
-        }
-    }
-
-    // What remains are loops made only of degree-2 stations without a hairpin.
     for (int legIndex = 0; legIndex < legs.size(); ++legIndex) {
-        if (!legUsed.at(legIndex)) {
-            chains.append(walkChain(fromNode.at(legIndex), legIndex));
+        const Leg& leg = legs.at(legIndex);
+        const auto continuesRun = [&]() {
+            if (chains.isEmpty()) {
+                return false;
+            }
+            const Leg& previous = legs.at(chains.constLast().legs.constLast().legIndex);
+            return previous.tripId == leg.tripId && previous.chunkIndex == leg.chunkIndex && previous.shotIndex + 1 == leg.shotIndex;
+        };
+        if (!continuesRun()) {
+            chains.append(Chain());
         }
+        chains.last().legs.append(ChainLeg {legIndex, false});
     }
-
-    const auto reachAt = [&](int node, int legIndex) {
-        return throughPairs.at(node) == std::pair<int, int> {legIndex, -1} ? throughReach.at(node) : 0.0;
-    };
-    for (Chain& chain : chains) {
-        const ChainLeg& first = chain.legs.first();
-        const ChainLeg& last = chain.legs.last();
-        chain.startThroughReachMeters = reachAt(endNode(reversedLeg(first)), first.legIndex);
-        chain.endThroughReachMeters = reachAt(endNode(last), last.legIndex);
-    }
-
     return chains;
 }
 
@@ -759,21 +268,13 @@ QVector3D inPlan(const QVector3D& v)
     return QVector3D(v.x(), v.y(), 0.0f);
 }
 
-// The level direction a quarter turn clockwise of direction, seen from above.
-QVector3D clockwiseOf(const QVector3D& direction)
-{
-    return QVector3D(direction.y(), -direction.x(), 0.0f).normalized();
-}
-
 // A chain leg as walked: start and end in travel order, with the record the
-// leg's own chunk took at each and the facing it was read along.
+// leg's own chunk took at each.
 struct WalkedLeg {
     QVector3D start;
     QVector3D end;
     cwStationLrud startLrud;
     cwStationLrud endLrud;
-    QVector3D startFacing;
-    QVector3D endFacing;
     QUuid tripId;
 
     QVector3D direction() const { return (end - start).normalized(); }
@@ -784,14 +285,9 @@ WalkedLeg walkedLeg(const QVector<Leg>& legs, const ChainLeg& chainLeg)
 {
     const Leg& leg = legs.at(chainLeg.legIndex);
     if (chainLeg.reversed) {
-        return {leg.toPosition, leg.fromPosition, leg.toLrud, leg.fromLrud, leg.toFacing, leg.fromFacing, leg.tripId};
+        return {leg.toPosition, leg.fromPosition, leg.toLrud, leg.fromLrud, leg.tripId};
     }
-    return {leg.fromPosition, leg.toPosition, leg.fromLrud, leg.toLrud, leg.fromFacing, leg.toFacing, leg.tripId};
-}
-
-bool isLoop(const QVector<WalkedLeg>& walked)
-{
-    return walked.size() > 1 && walked.first().start == walked.last().end;
+    return {leg.fromPosition, leg.toPosition, leg.fromLrud, leg.toLrud, leg.tripId};
 }
 
 double smoothstep(double edge0, double edge1, double x)
@@ -859,21 +355,21 @@ struct SectionAxes {
     QVector3D tangent() const { return QVector3D::crossProduct(up, right); }
 };
 
-// How a leg walked along direction reads a record taken looking along
-// facing (T07ah rule 1). A gentle leg's section stands plumb: right is the
-// facing turned clockwise, reversed with the walls it reads when the record
-// faces against the leg, or the leg's own right when the facing lies more
-// than kMaxFacingDegrees off the leg. A steep leg's section lies level
-// (T07ah rule 2): left and right across the facing, front and back along it
-// at the mean of left and right. Its right turns with the walls it reads to
-// agree with previousRight, the right of the section before it along the
-// chain, so the loft between them joins each bin to its match.
+// How a leg walked along direction reads a station's record, facing along
+// facing in plan. A gentle leg's section stands plumb with its left and
+// right at face value along the facing turned clockwise. A steep leg's
+// section lies level (T07ah rule 2): left and right across the facing, front
+// and back along it at the mean of left and right. Its right turns with the
+// walls it reads to agree with previousRight, the right of the section
+// before it along the chain, so the loft between them joins each bin to its
+// match.
 SectionAxes sectionAxes(const cwStationLrud& record,
                         const QVector3D& facing,
                         const QVector3D& direction,
-                        const std::optional<QVector3D>& previousRight)
+                        const std::optional<QVector3D>& previousRight,
+                        bool steep)
 {
-    if (isSteep(direction)) {
+    if (steep) {
         const QVector3D facingRight = clockwiseOf(facing);
         const bool turnsAgainst = previousRight && QVector3D::dotProduct(inPlan(*previousRight), facingRight) < 0.0f;
         const QVector3D right = turnsAgainst ? -facingRight : facingRight;
@@ -884,15 +380,7 @@ SectionAxes sectionAxes(const cwStationLrud& record,
         return SectionAxes {right, QVector3D::crossProduct(right, walkUp), {leftWall, rightWall, halfDepth, halfDepth}};
     }
 
-    const QVector3D squareRight = clockwiseOf(direction);
-    const QVector3D facingRight = clockwiseOf(facing);
-    const float component = QVector3D::dotProduct(facingRight, squareRight);
-    const bool facesAgainst = component < 0.0f;
-    const bool readsAlongFacing = std::abs(component) >= std::cos(qDegreesToRadians(cwPassageTubeBuilder::kMaxFacingDegrees));
-    const QVector3D right = readsAlongFacing ? facingRight * (facesAgainst ? -1.0f : 1.0f) : squareRight;
-    return SectionAxes {right,
-                        kWorldUp,
-                        {facesAgainst ? record.right : record.left, facesAgainst ? record.left : record.right, record.up, record.down}};
+    return SectionAxes {clockwiseOf(facing), kWorldUp, record};
 }
 
 // The walls a section draws, a missing one filled from those beside it, or
@@ -922,16 +410,6 @@ QVector<QVector3D> sectionPoints(const QVector3D& station, const SectionAxes& ax
     return points;
 }
 
-bool isSameSection(const QVector<QVector3D>& a, const QVector<QVector3D>& b)
-{
-    for (int bin = 0; bin < a.size(); ++bin) {
-        if (a.at(bin).distanceToPoint(b.at(bin)) >= kMinRingSpacingMeters) {
-            return false;
-        }
-    }
-    return true;
-}
-
 // One end of a chain leg: the station, how its record reads across the leg,
 // and the walls the section draws, borrowed when it reads too little.
 struct LegEnd {
@@ -955,13 +433,6 @@ struct EndSection {
     QVector<bool> measured;
     std::optional<cwStationLrud> readings;
 };
-
-// Level dead ends sit flush with the end station; pits extend by up or down.
-double capOffset(const cwStationLrud& lrud, const QVector3D& outward, const Options& options)
-{
-    const std::optional<double> offset = outward.z() >= 0.0f ? lrud.up : lrud.down;
-    return inclinationWeight(outward, options) * offset.value_or(0.0);
-}
 
 // A warning about the chain, reported at its first station. message takes
 // the station name as %1.
@@ -1057,22 +528,13 @@ std::optional<QVector3D> facingOf(const QVector<QVector3D>& points, const QVecto
     return normal.normalized();
 }
 
-QVector<QVector3D> translated(const QVector<QVector3D>& points, const QVector3D& offset)
-{
-    QVector<QVector3D> moved;
-    moved.reserve(points.size());
-    for (const QVector3D& point : points) {
-        moved.append(point + offset);
-    }
-    return moved;
-}
-
-// Lofts each leg between its two stations' sections (T07ah rule 1): the
-// rings are the sections at the stations and their point-wise lerps evenly
-// along the leg. Legs that read the same section at a station share its
-// ring; where they read different ones, the chain holds both rings there. A
-// dome's end ring sits past its station by the station's half-width, and a
-// through's past its junction by the arms' reach.
+// Lofts each leg between its two stations' rings (T07ah rule 1): the rings
+// are the sections at the stations and their point-wise lerps evenly along
+// the leg. A station's section stands square to its facing (chainFacings),
+// from the record of the leg arriving there, or of the first leg at the
+// chain's first station and a loop's seam; both legs at the station share
+// its ring. A steep leg reads level sections, so where a steep leg meets a
+// gentle one the station holds each leg's own section.
 void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, QVector<Warning>& warnings)
 {
     QVector<WalkedLeg> walked;
@@ -1080,10 +542,26 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
     for (const ChainLeg& chainLeg : std::as_const(chain.legs)) {
         walked.append(walkedLeg(legs, chainLeg));
     }
-    const bool loop = isLoop(walked);
+    const bool loop = chain.startCap == EndCap::None;
+    if (loop) {
+        walked.last().endLrud = walked.first().startLrud;
+    }
     const int resolution = std::max(options.ringResolution, 1);
     const double spacing = std::max(options.sampleSpacingMeters, kMinSampleSpacingMeters);
     const int legCount = walked.size();
+    const QVector<QVector3D> facings = chainFacings(legs, chain);
+
+    QVector<bool> steepLegs;
+    steepLegs.reserve(legCount);
+    for (const WalkedLeg& leg : std::as_const(walked)) {
+        steepLegs.append(isSteep(leg.direction()));
+    }
+    // Whether the legs either side of the station leg i starts at share its
+    // ring.
+    const auto sharesStart = [&](int i) {
+        return i > 0 && steepLegs.at(i - 1) == steepLegs.at(i);
+    };
+    const bool sharesSeam = loop && steepLegs.constLast() == steepLegs.constFirst();
 
     QVector<LegEnd> ends;
     ends.reserve(2 * legCount);
@@ -1092,9 +570,9 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
     for (int i = 0; i < legCount; ++i) {
         const WalkedLeg& leg = walked.at(i);
         const QVector3D direction = leg.direction();
-        const bool steep = isSteep(direction);
-        const SectionAxes startAxes = sectionAxes(leg.startLrud, leg.startFacing, direction, previousRight);
-        const SectionAxes endAxes = sectionAxes(leg.endLrud, leg.endFacing, direction, startAxes.right);
+        const bool steep = steepLegs.at(i);
+        const SectionAxes startAxes = sectionAxes(leg.startLrud, facings.at(i), direction, previousRight, steep);
+        const SectionAxes endAxes = sectionAxes(leg.endLrud, facings.at(i + 1), direction, startAxes.right, steep);
         ends.append(LegEnd {leg.start, distance, i, leg.tripId, startAxes, drawnWalls(startAxes.walls), false, steep});
         distance += leg.length();
         ends.append(LegEnd {leg.end, distance, i, leg.tripId, endAxes, drawnWalls(endAxes.walls), false, steep});
@@ -1102,8 +580,16 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
     }
     borrowWalls(ends, legs, chain, options, warnings);
 
+    const auto startSection = [&](int i) {
+        return endSection(sharesStart(i) ? ends.at(2 * i - 1) : ends.at(2 * i), resolution);
+    };
+    const auto finalSection = [&](int i) {
+        const bool isSeam = sharesSeam && i == legCount - 1;
+        return endSection(isSeam ? ends.first() : ends.at(2 * i + 1), resolution);
+    };
+
     // A ring closer than kMinRingSpacingMeters to the one before merges into
-    // it, unless both are sections of one station.
+    // it.
     chain.rings.clear();
     const auto appendRing = [&](const QVector3D& center,
                                 const QVector<QVector3D>& points,
@@ -1131,31 +617,12 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
             ring->section = Section {*end.readings, ring->radii, end.station};
         }
     };
-    const auto appendOffset = [&](const EndSection& end, int chainLeg, const QVector3D& offset) {
-        appendRing(end.station + offset, translated(end.points, offset), end.tangent, end.right, chainLeg, QVector<bool>(resolution, false));
-    };
 
-    const auto endOffset = [&](EndCap cap, const LegEnd& end, double throughReach) {
-        if (cap != EndCap::Dome) {
-            return throughReach;
-        }
-        const cwStationLrud& walls = *end.walls;
-        return (*walls.left + *walls.right) / 2.0;
-    };
-
-    std::optional<EndSection> previousEnd;
     for (int i = 0; i < legCount; ++i) {
         const WalkedLeg& leg = walked.at(i);
-        const EndSection start = endSection(ends.at(2 * i), resolution);
-        const EndSection end = endSection(ends.at(2 * i + 1), resolution);
-
-        if (i == 0 && !loop) {
-            const double offset = endOffset(chain.startCap, ends.first(), chain.startThroughReachMeters);
-            if (offset >= kMinRingSpacingMeters) {
-                appendOffset(start, i, -leg.direction() * static_cast<float>(offset));
-            }
-        }
-        if (!previousEnd || !isSameSection(previousEnd->points, start.points)) {
+        const EndSection start = startSection(i);
+        const EndSection end = finalSection(i);
+        if (!sharesStart(i)) {
             appendSection(start, i);
         }
 
@@ -1184,25 +651,7 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
         }
 
         appendSection(end, i);
-        previousEnd = end;
     }
-
-    if (loop) {
-        const EndSection seam = endSection(ends.first(), resolution);
-        if (!isSameSection(previousEnd->points, seam.points)) {
-            appendSection(seam, legCount - 1);
-        }
-        chain.startCapOffsetMeters = 0.0;
-        chain.endCapOffsetMeters = 0.0;
-        return;
-    }
-
-    const double offset = endOffset(chain.endCap, ends.last(), chain.endThroughReachMeters);
-    if (offset >= kMinRingSpacingMeters) {
-        appendOffset(*previousEnd, legCount - 1, walked.last().direction() * static_cast<float>(offset));
-    }
-    chain.startCapOffsetMeters = capOffset(walked.first().startLrud, -walked.first().direction(), options);
-    chain.endCapOffsetMeters = capOffset(walked.last().endLrud, walked.last().direction(), options);
 }
 
 StationKey canonicalStation(const QUuid& caveId, const QString& station)
@@ -1210,56 +659,95 @@ StationKey canonicalStation(const QUuid& caveId, const QString& station)
     return {caveId, cwStation::canonicalKey(station)};
 }
 
-// A chain end at a junction that another chain passes through, or ends past
-// as its through, is an arm and gets a mouth; an end at a station with one
-// other leg is a hairpin break and gets a dome; every other open end gets a
-// fan, and loops get no caps.
+// A chain that ends at the station it starts from is a loop and has no
+// caps; every other chain end is a fan.
 void classifyChainEnds(const QVector<Leg>& legs, QVector<Chain>& chains)
 {
-    const auto key = [&](const ChainLeg& chainLeg, const QString& station) {
-        return canonicalStation(legs.at(chainLeg.legIndex).caveId, station);
-    };
-
-    QHash<StationKey, int> degree;
-    for (const Leg& leg : legs) {
-        degree[canonicalStation(leg.caveId, leg.from)]++;
-        degree[canonicalStation(leg.caveId, leg.to)]++;
-    }
-
-    QSet<StationKey> passedThrough;
-    for (const Chain& chain : std::as_const(chains)) {
-        for (int i = 1; i < chain.legs.size(); ++i) {
-            passedThrough.insert(key(chain.legs.at(i), chainStartStation(legs, chain.legs.at(i))));
-        }
-        if (chain.startThroughReachMeters > 0.0) {
-            passedThrough.insert(key(chain.legs.first(), chainStartStation(legs, chain.legs.first())));
-        }
-        if (chain.endThroughReachMeters > 0.0) {
-            passedThrough.insert(key(chain.legs.last(), chainEndStation(legs, chain.legs.last())));
-        }
-    }
-
-    const auto endCap = [&](const StationKey& station) {
-        const int stationDegree = degree.value(station);
-        if (stationDegree == 2) {
-            return EndCap::Dome;
-        }
-        const bool isArm = stationDegree > 2 && passedThrough.contains(station);
-        return isArm ? EndCap::Mouth : EndCap::Fan;
-    };
-
     for (Chain& chain : chains) {
         const ChainLeg& first = chain.legs.first();
         const ChainLeg& last = chain.legs.last();
-        const StationKey start = key(first, chainStartStation(legs, first));
-        const StationKey end = key(last, chainEndStation(legs, last));
-        if (chain.legs.size() > 1 && start == end) {
-            chain.startCap = EndCap::None;
-            chain.endCap = EndCap::None;
-        } else {
-            chain.startCap = chain.startThroughReachMeters > 0.0 ? EndCap::Fan : endCap(start);
-            chain.endCap = chain.endThroughReachMeters > 0.0 ? EndCap::Fan : endCap(end);
+        const bool isLoop = chain.legs.size() > 1
+                            && cwStation::canonicalKey(chainStartStation(legs, first)) == cwStation::canonicalKey(chainEndStation(legs, last));
+        chain.startCap = isLoop ? EndCap::None : EndCap::Fan;
+        chain.endCap = chain.startCap;
+    }
+}
+
+// Warns once per station that two chains reach, where their records read
+// the same side wall, the side whose right points the same way in plan, more
+// than kReadingConflictRatio apart.
+void warnReadingConflicts(const cwCavingRegionData& region, const QVector<Leg>& legs, const QVector<Chain>& chains, QVector<Warning>& warnings)
+{
+    const QHash<QUuid, QString> tripNames = tripNamesOf(region);
+
+    struct ChainRecord {
+        int chain = -1;
+        QUuid tripId;
+        QString station;
+        cwStationLrud lrud;
+        QVector3D right;
+    };
+    QHash<StationKey, QVector<ChainRecord>> recordsByStation;
+    QVector<StationKey> stationOrder;
+    for (int c = 0; c < chains.size(); ++c) {
+        const Chain& chain = chains.at(c);
+        const QVector<QVector3D> facings = chainFacings(legs, chain);
+        for (int s = 0; s <= chain.legs.size(); ++s) {
+            const bool isEnd = s == chain.legs.size();
+            const ChainLeg& chainLeg = chain.legs.at(isEnd ? s - 1 : s);
+            const WalkedLeg leg = walkedLeg(legs, chainLeg);
+            const QString& station = isEnd ? chainEndStation(legs, chainLeg) : chainStartStation(legs, chainLeg);
+            const StationKey key = canonicalStation(legs.at(chainLeg.legIndex).caveId, station);
+            QVector<ChainRecord>& records = recordsByStation[key];
+            const bool hasChainRecord = std::any_of(records.cbegin(), records.cend(), [&](const ChainRecord& record) {
+                return record.chain == c;
+            });
+            if (hasChainRecord) {
+                continue;
+            }
+            if (records.isEmpty()) {
+                stationOrder.append(key);
+            }
+            records.append({c, leg.tripId, station, isEnd ? leg.endLrud : leg.startLrud, clockwiseOf(facings.at(s))});
         }
+    }
+
+    const auto conflict = [](const std::optional<double>& a, const std::optional<double>& b) {
+        constexpr double ratio = cwPassageTubeBuilder::kReadingConflictRatio;
+        return a && b && (*a > ratio * *b || *b > ratio * *a);
+    };
+    for (const StationKey& key : std::as_const(stationOrder)) {
+        const QVector<ChainRecord>& records = recordsByStation.value(key);
+        const auto warnFirstConflict = [&]() {
+            for (int i = 0; i < records.size(); ++i) {
+                for (int k = i + 1; k < records.size(); ++k) {
+                    const ChainRecord& a = records.at(i);
+                    const ChainRecord& b = records.at(k);
+                    const bool isSameWay = QVector3D::dotProduct(a.right, b.right) >= 0.0f;
+                    const std::array<std::pair<std::optional<double>, std::optional<double>>, 2> sides {{
+                        {a.lrud.left, isSameWay ? b.lrud.left : b.lrud.right},
+                        {a.lrud.right, isSameWay ? b.lrud.right : b.lrud.left},
+                    }};
+                    for (const auto& [readingA, readingB] : sides) {
+                        if (conflict(readingA, readingB)) {
+                            warnings.append(Warning {
+                                Warning::JunctionReadingConflict,
+                                b.tripId,
+                                a.station,
+                                QStringLiteral("Station %1 reads a side wall at %2 m in trip %3 and %4 m in trip %5; the tube draws both.")
+                                    .arg(a.station)
+                                    .arg(*readingA)
+                                    .arg(tripNames.value(a.tripId))
+                                    .arg(*readingB)
+                                    .arg(tripNames.value(b.tripId))
+                            });
+                            return;
+                        }
+                    }
+                }
+            }
+        };
+        warnFirstConflict();
     }
 }
 
@@ -1686,22 +1174,20 @@ void writeUnion(cwPassageTubeBuilder::Debug& debug)
     const QVector<Union::ChainTube> tubes = Union::chainTubes(debug);
     warnSelfCrossingTubes(debug, tubes, debug.warnings);
 
-    // Each tube's end fans are caps, apart from a dome, which rounds the
-    // passage's end: one entry per tube and end, -1 for none.
+    // Each tube's end fans are caps: one entry per tube and end, -1 for a
+    // loop's.
     QVector<std::array<int, 2>> capOfEnd;
     capOfEnd.reserve(tubes.size());
     for (const Union::ChainTube& tube : tubes) {
         const Chain& chain = debug.chains.at(tube.chain);
-        const auto addCap = [&](int ring, bool isDome) {
-            if (tube.isLoop || isDome) {
+        const auto addCap = [&](int ring) {
+            if (tube.isLoop) {
                 return -1;
             }
             debug.caps.append({tube.chain, caveOf(debug.legs, chain), stationOfRing(debug.legs, chain, ring)});
             return static_cast<int>(debug.caps.size()) - 1;
         };
-        const int lastRing = static_cast<int>(chain.rings.size()) - 1;
-        capOfEnd.append({addCap(tube.rings.first(), tube.rings.first() == 0 && chain.startCap == EndCap::Dome),
-                         addCap(tube.rings.last(), tube.rings.last() == lastRing && chain.endCap == EndCap::Dome)});
+        capOfEnd.append({addCap(tube.rings.first()), addCap(tube.rings.last())});
     }
 
     MeshWriter writer(debug);
@@ -1816,9 +1302,9 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildChainRings(const cwCaving
 {
     Debug debug;
     debug.legs = extractLegs(region, positionsByCave, debug.warnings);
-    replaceShaftReadings(debug.legs, debug.warnings);
-    debug.chains = buildChains(debug.legs, options.defaultRadiusMeters);
+    debug.chains = buildChains(debug.legs);
     classifyChainEnds(debug.legs, debug.chains);
+    warnReadingConflicts(region, debug.legs, debug.chains, debug.warnings);
     for (Chain& chain : debug.chains) {
         buildRings(debug.legs, chain, options, debug.warnings);
         placeChainVertices(chain);

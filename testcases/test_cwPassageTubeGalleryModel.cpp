@@ -646,7 +646,6 @@ TEST_CASE("cwPassageTubeGalleryModel draws the readings each ring was fitted to"
             CHECK(std::any_of(stations.cbegin(), stations.cend(), [&](const QVector3D& station) { return isNear(start, station); }));
             CHECK(start.distanceToPoint(end) > 0.0f);
         }
-        CHECK(geometry.passageReadings.start == geometry.readings.start + geometry.readings.count);
     }
 
     SECTION("a loop per sectioned ring")
@@ -740,7 +739,6 @@ TEST_CASE("cwPassageTubeGalleryModel colors each ring plot layer on its own", "[
     checkType(geometry.ups, cwRenderLinePlot::kFrameSegment);
     REQUIRE(geometry.readings.count > 0);
     checkType(geometry.readings, cwRenderLinePlot::kReadingSegment);
-    checkType(geometry.passageReadings, cwRenderLinePlot::kReadingSegment);
     REQUIRE_FALSE(geometry.sectionLoops.isEmpty());
     for (const Range& loop : geometry.sectionLoops) {
         checkType(loop, cwRenderLinePlot::kSectionSegment);

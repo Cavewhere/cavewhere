@@ -405,10 +405,8 @@ TEST_CASE("cwPassageTubeMeshCheck reports ring walls beyond the station's readin
     leg.to = QStringLiteral("b");
     leg.fromPosition = QVector3D(0, 0, 0);
     leg.toPosition = QVector3D(10, 0, 0);
-    leg.fromPassageLrud = lrud;
-    leg.toPassageLrud = lrud;
-    leg.fromFacing = QVector3D(1, 0, 0);
-    leg.toFacing = QVector3D(1, 0, 0);
+    leg.fromLrud = lrud;
+    leg.toLrud = lrud;
 
     // A ring around center whose vertices reach right, up, left and down by
     // the given walls, fitted to the readings of the station at station.
@@ -496,10 +494,6 @@ TEST_CASE("cwPassageTubeMeshCheck reports LRUD walls off the tube surface", "[Pa
     leg.toPosition = QVector3D(10, 0, 0);
     leg.fromLrud = lrud;
     leg.toLrud = lrud;
-    leg.fromPassageLrud = lrud;
-    leg.toPassageLrud = lrud;
-    leg.fromFacing = QVector3D(1, 0, 0);
-    leg.toFacing = QVector3D(1, 0, 0);
 
     cwPassageTubeBuilder::Debug debug;
     debug.legs = {leg};
@@ -514,13 +508,6 @@ TEST_CASE("cwPassageTubeMeshCheck reports LRUD walls off the tube surface", "[Pa
         CHECK(issues.at(0).type == Check::WallMissed);
         CHECK(issues.at(0).position == QVector3D(0, 0, 1));
         CHECK(issues.at(1).position == QVector3D(10, 0, 1));
-    }
-
-    SECTION("A shaft reading the builder replaced is left out") {
-        debug.mesh = boxMesh(QVector3D(0, -1, -1), QVector3D(10, 1, 0.3f));
-        debug.legs[0].fromPassageLrud.up = 0.5;
-        debug.legs[0].toPassageLrud.up = 0.5;
-        CHECK(Check::wallsOnSurface(debug).isEmpty());
     }
 }
 

@@ -50,14 +50,12 @@ struct cwStationLrud {
  * Pure compute over value snapshots: callable from any thread.
  *
  * Pipeline: survey shots → legs → chains → sections → rings → closed tubes
- * → union. A chain is a run of legs skinned as one tube; it passes through
- * degree-2 stations, and exactly one chain passes straight through each
- * junction (Loch's rule), so every other arm starts or ends there.
+ * → union. A chain is a run of consecutive shots of one chunk skinned as one
+ * tube, so every station on it has one record and holds one ring: the
+ * section of that record square to the plan bisector of the station's legs.
  *
- * Each leg is the loft between its two stations' sections: its rings, at its
- * stations and evenly along it, are the point-wise lerps of the two. Two legs
- * that read the same section at a station share its ring; where they read
- * different ones, the chain holds both rings there.
+ * Each leg is the loft between its two stations' rings: its rings, at its
+ * stations and evenly along it, are the point-wise lerps of the two.
  *
  * Each chain's rings close into one capped tube per trip it runs through,
  * and chains that share a station overlap there. The mesh is the boolean
@@ -72,9 +70,9 @@ public:
     static constexpr double kMinLegLength = 0.01;
     static constexpr double kMinRadiusMeters = 0.05;
     static constexpr double kMaxRadiusMeters = 100.0;
-    // A station whose facing lies more than this off a leg reads its side
-    // walls square to that leg.
-    static constexpr double kMaxFacingDegrees = 60.0;
+    // Two chains' records of one side wall at a station they share that
+    // differ by more than this ratio warn JunctionReadingConflict.
+    static constexpr double kReadingConflictRatio = 3.0;
 
     struct Options {
         double sampleSpacingMeters = 1.0;
@@ -89,11 +87,7 @@ public:
 
     // One surveyed shot with both endpoints positioned. LRUD come from the
     // station occurrences on the chunk that owns the shot and give the leg's
-    // sections at face value; the passage LRUD are the same readings with
-    // shaft depths replaced, and size the legs when chains are chosen.
-    // A facing is the unit horizontal direction its station's LRUD were read
-    // looking along: the chord between the station's chunk neighbors. The
-    // reading's right wall lies clockwise of it.
+    // sections at face value.
     struct Leg {
         QUuid caveId;
         QUuid tripId;
@@ -105,10 +99,6 @@ public:
         QVector3D toPosition;
         cwStationLrud fromLrud;
         cwStationLrud toLrud;
-        cwStationLrud fromPassageLrud;
-        cwStationLrud toPassageLrud;
-        QVector3D fromFacing;
-        QVector3D toFacing;
     };
 
     // A leg as a chain walks it; reversed means it is walked to → from.
@@ -168,17 +158,11 @@ public:
         std::optional<Section> section;
     };
 
-    // How a chain end is closed: a fan at a dead end, a mouth on an arm ending
-    // at a junction that another chain passes through, nothing on a loop. An
-    // arm whose mouth could not be zipped into the through tube closes with a
-    // fan over its mouth instead. A dome closes each of the two chains a
-    // hairpin breaks: their end rings sit past the station along their legs,
-    // so the two tubes overlap around it and neither shows a disc.
+    // How a chain end is closed: a fan across its end ring, or nothing on a
+    // loop.
     enum class EndCap {
         Fan,
-        Mouth,
-        None,
-        Dome
+        None
     };
 
     // A point of an arm's mouth on the through surface. column is the arm bin
@@ -230,22 +214,8 @@ public:
 
     struct Chain {
         QVector<ChainLeg> legs;
-        // In chain order: one ring per station and per sample along each leg;
-        // two at a station whose legs read different sections there.
+        // In chain order: one ring per station and per sample along each leg.
         QVector<Ring> rings;
-        // How far a pit dead-end cap sits past the end station: the station's
-        // up when the chain ends climbing, its down when it ends descending,
-        // scaled by the end leg's inclination weight so level ends sit flush.
-        // Only a steep end extends; a gentle end closes on its plumb ring.
-        double startCapOffsetMeters = 0.0;
-        double endCapOffsetMeters = 0.0;
-        // How far past its end station a chain carries its end ring when it
-        // ends at a junction as that junction's through: the biggest passage
-        // there, which no other leg continues. Every other leg is an arm
-        // whose mouth lands on the wall it carries past the station. Zero at
-        // other ends.
-        double startThroughReachMeters = 0.0;
-        double endThroughReachMeters = 0.0;
         // Where an arm meets its through tube: points on the through surface
         // past the arm's first or last ring, in column order, with at least
         // one at each whole column. Empty when the end is not a mouth.
@@ -295,8 +265,8 @@ public:
         QSet<quint32> intendedCreaseVertices;
         // One entry per mesh triangle: the chain whose tube the union took it
         // from. triangleInZipBand is all false. triangleCap indexes caps for
-        // the triangles of an end fan other than a dome, or of a trip
-        // boundary disc, and is -1 for the rest.
+        // the triangles of an end fan or of a trip boundary disc, and is -1
+        // for the rest.
         QVector<int> triangleChain;
         QVector<bool> triangleInZipBand;
         QVector<int> triangleCap;

@@ -19,6 +19,7 @@
 
 //Std includes
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <numbers>
 #include <optional>
@@ -171,6 +172,112 @@ inline const QString& chainEndStation(const QVector<cwPassageTubeBuilder::Leg>& 
     return chainLeg.reversed ? leg.from : leg.to;
 }
 
+constexpr float kMinPlanFacingLength = 0.01f;
+constexpr QVector3D kFallbackFacing(0.0f, 1.0f, 0.0f);
+
+// The level direction a quarter turn clockwise of direction, seen from above.
+inline QVector3D clockwiseOf(const QVector3D& direction)
+{
+    return QVector3D(direction.y(), -direction.x(), 0.0f).normalized();
+}
+
+// The plan part of the leg's unit direction from → to.
+inline QVector3D planDirectionOf(const cwPassageTubeBuilder::Leg& leg)
+{
+    const QVector3D along = (leg.toPosition - leg.fromPosition).normalized();
+    return QVector3D(along.x(), along.y(), 0.0f);
+}
+
+// The plan direction each station of the chain faces, in walk order, one per
+// station: the bisector of the plan directions of the unit legs either side,
+// square to the arriving leg where the two double back, or the one leg's plan
+// direction at a chain end. A loop's first and last stations are one
+// station. A station whose legs run plumb takes the facing of the nearest
+// station along the chain that has one, or north.
+inline QVector<QVector3D> chainFacings(const QVector<cwPassageTubeBuilder::Leg>& legs,
+                                       const cwPassageTubeBuilder::Chain& chain)
+{
+    const int legCount = static_cast<int>(chain.legs.size());
+    const bool isLoop = chain.startCap == cwPassageTubeBuilder::EndCap::None;
+    QVector<QVector3D> directions;
+    directions.reserve(legCount);
+    for (const cwPassageTubeBuilder::ChainLeg& chainLeg : chain.legs) {
+        const QVector3D plan = planDirectionOf(legs.at(chainLeg.legIndex));
+        directions.append(chainLeg.reversed ? -plan : plan);
+    }
+
+    QVector<std::optional<QVector3D>> planFacings(legCount + 1);
+    for (int s = 0; s <= legCount; ++s) {
+        const bool hasIn = s > 0 || isLoop;
+        const bool hasOut = s < legCount || isLoop;
+        const QVector3D in = hasIn ? directions.at(s > 0 ? s - 1 : legCount - 1) : QVector3D();
+        const QVector3D out = hasOut ? directions.at(s < legCount ? s : 0) : QVector3D();
+        const QVector3D sum = in + out;
+        if (sum.length() >= kMinPlanFacingLength) {
+            planFacings[s] = sum.normalized();
+        } else if (hasIn && hasOut && in.length() >= kMinPlanFacingLength) {
+            planFacings[s] = clockwiseOf(in);
+        }
+    }
+
+    QVector<QVector3D> facings;
+    facings.reserve(legCount + 1);
+    for (int s = 0; s <= legCount; ++s) {
+        QVector3D facing = kFallbackFacing;
+        for (int offset = 0; offset <= legCount; ++offset) {
+            const int before = s - offset;
+            const int after = s + offset;
+            if (before >= 0 && planFacings.at(before)) {
+                facing = *planFacings.at(before);
+                break;
+            }
+            if (after <= legCount && planFacings.at(after)) {
+                facing = *planFacings.at(after);
+                break;
+            }
+        }
+        facings.append(facing);
+    }
+    return facings;
+}
+
+// The facing at the from and to station of the chain's leg i, given the
+// chain's stationFacings: turned around where the chain walks it backward.
+inline std::array<QVector3D, 2> chainLegFacings(const cwPassageTubeBuilder::Chain& chain,
+                                                const QVector<QVector3D>& stationFacings,
+                                                int i)
+{
+    const QVector3D& start = stationFacings.at(i);
+    const QVector3D& end = stationFacings.at(i + 1);
+    if (chain.legs.at(i).reversed) {
+        return {-end, -start};
+    }
+    return {start, end};
+}
+
+// The facing at each leg's from and to station as its own chunk walks it,
+// indexed by leg: chainFacings of the chain that holds it, turned around
+// where the chain walks the leg backward. A leg on no chain faces along
+// itself in plan, or north when it runs plumb.
+inline QVector<std::array<QVector3D, 2>> legEndFacings(const QVector<cwPassageTubeBuilder::Leg>& legs,
+                                                        const QVector<cwPassageTubeBuilder::Chain>& chains)
+{
+    QVector<std::array<QVector3D, 2>> facings;
+    facings.reserve(legs.size());
+    for (const cwPassageTubeBuilder::Leg& leg : legs) {
+        const QVector3D plan = planDirectionOf(leg);
+        const QVector3D facing = plan.length() >= kMinPlanFacingLength ? plan.normalized() : kFallbackFacing;
+        facings.append({facing, facing});
+    }
+    for (const cwPassageTubeBuilder::Chain& chain : chains) {
+        const QVector<QVector3D> stationFacings = chainFacings(legs, chain);
+        for (int i = 0; i < chain.legs.size(); ++i) {
+            facings[chain.legs.at(i).legIndex] = chainLegFacings(chain, stationFacings, i);
+        }
+    }
+    return facings;
+}
+
 // A side reading as a point on the wall, by its fraction along a leg and its
 // half-width square to the leg.
 struct WallPoint {
@@ -186,21 +293,18 @@ struct SideWallPoints {
 
 // A record's side readings as points on the wall: the station, at
 // stationFraction along a leg one unit of towardFar long, plus each reading
-// along the record's right (its horizontal facing turned clockwise) or
-// against it for the left. A record facing more than kMaxFacingDegrees off
-// the leg, such as a hairpin's chord, would put its points near the
-// centerline, so it reads along squareRight, the leg's own right, instead.
+// along the record's right (its horizontal facing turned clockwise, turned
+// around with the walls it reads when the record faces against the leg) or
+// against it for the left.
 inline SideWallPoints sideWallPoints(const cwStationLrud& lrud,
                                      const QVector3D& facing,
                                      double stationFraction,
                                      const QVector3D& towardFar,
                                      const QVector3D& squareRight)
 {
-    const QVector3D facingRight = QVector3D(facing.y(), -facing.x(), 0.0f).normalized();
-    const double component = QVector3D::dotProduct(facingRight, squareRight);
-    const bool facesAgainst = component < 0.0;
-    const bool readsAlongFacing = std::abs(component) >= std::cos(qDegreesToRadians(cwPassageTubeBuilder::kMaxFacingDegrees));
-    const QVector3D recordRight = readsAlongFacing ? facingRight * (facesAgainst ? -1.0f : 1.0f) : squareRight;
+    const QVector3D facingRight = clockwiseOf(facing);
+    const bool facesAgainst = QVector3D::dotProduct(facingRight, squareRight) < 0.0f;
+    const QVector3D recordRight = facesAgainst ? -facingRight : facingRight;
     const auto point = [&](const std::optional<double>& reading, float side) -> std::optional<WallPoint> {
         if (!reading) {
             return std::nullopt;

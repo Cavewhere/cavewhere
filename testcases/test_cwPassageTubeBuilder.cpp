@@ -13,6 +13,7 @@
 //Our includes
 #include "cwPassageTubeBuilder.h"
 #include "cwPassageTubeCases.h"
+#include "cwPassageTubeGeometry.h"
 #include "cwPassageTubeJunction.h"
 #include "cwPassageTubeMeshCheck.h"
 
@@ -149,6 +150,13 @@ void checkNoVertexPulled(const Builder::Debug& debug)
             }
         }
     }
+}
+
+// The facings the builder reads the leg's records along, at its from and to
+// stations.
+std::array<QVector3D, 2> legFacings(const Builder::Debug& debug, int legIndex)
+{
+    return cwPassageTubeGeometry::legEndFacings(debug.legs, debug.chains).at(legIndex);
 }
 
 void checkVectorNear(const QVector3D& actual, const QVector3D& expected)
@@ -322,29 +330,33 @@ TEST_CASE("cwPassageTubeBuilder chains a straight line as one chain", "[PassageT
     checkChainsCoverLegs(debug);
 }
 
-TEST_CASE("cwPassageTubeBuilder runs one chain straight through a T-junction", "[PassageTube][cwPassageTubeBuilder]")
+TEST_CASE("cwPassageTubeBuilder builds one chain per run of a chunk's shots", "[PassageTube][cwPassageTubeBuilder]")
 {
-    // The arm b-d is listed at the junction before b-c, so picking b-c
-    // depends on the straightest-continuation rule rather than survey order.
+    // The arm b-d is surveyed between the two halves of the passage a-b-c,
+    // so each of the three chunks is its own chain, walked in chunk order.
     const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0)};
     const StationInput b {QStringLiteral("b"), QVector3D(10, 0, 0)};
     const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0)};
     const StationInput d {QStringLiteral("d"), QVector3D(10, 10, 0)};
-    const BuilderInput input = makeInput({{{a, b}, {b, d}, {b, c}}});
+    const StationInput unpositioned {QStringLiteral("x")};
+    const StationInput e {QStringLiteral("e"), QVector3D(30, 0, 0)};
+    const StationInput f {QStringLiteral("f"), QVector3D(40, 0, 0)};
+    const BuilderInput input = makeInput({{{a, b}, {b, d}, {b, c, unpositioned, e, f}}});
 
     const Builder::Debug debug = buildDebug(input);
 
-    REQUIRE(debug.legs.size() == 3);
-    REQUIRE(debug.chains.size() == 2);
+    REQUIRE(debug.legs.size() == 4);
+    REQUIRE(debug.chains.size() == 4);
     checkChainsCoverLegs(debug);
-
-    const Builder::Chain& through = debug.chains.at(0);
-    CHECK(chainStations(debug, through) == QStringList({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
-
-    const Builder::Chain& arm = debug.chains.at(1);
-    REQUIRE(arm.legs.size() == 1);
-    CHECK(arm.legs.at(0).reversed);
-    CHECK(chainStations(debug, arm) == QStringList({QStringLiteral("d"), QStringLiteral("b")}));
+    CHECK(chainStations(debug, debug.chains.at(0)) == QStringList({QStringLiteral("a"), QStringLiteral("b")}));
+    CHECK(chainStations(debug, debug.chains.at(1)) == QStringList({QStringLiteral("b"), QStringLiteral("d")}));
+    CHECK(chainStations(debug, debug.chains.at(2)) == QStringList({QStringLiteral("b"), QStringLiteral("c")}));
+    CHECK(chainStations(debug, debug.chains.at(3)) == QStringList({QStringLiteral("e"), QStringLiteral("f")}));
+    for (const Builder::Chain& chain : debug.chains) {
+        CHECK_FALSE(chain.legs.first().reversed);
+        CHECK(chain.startCap == Builder::EndCap::Fan);
+        CHECK(chain.endCap == Builder::EndCap::Fan);
+    }
 }
 
 TEST_CASE("cwPassageTubeBuilder runs one chain through a 4-way junction and ends the other arms there", "[PassageTube][cwPassageTubeBuilder]")
@@ -374,66 +386,6 @@ TEST_CASE("cwPassageTubeBuilder runs one chain through a 4-way junction and ends
     }
     CHECK(throughChains == 1);
     CHECK(armChains == 2);
-}
-
-// Three legs as big as each other meet a small one at j. The small leg is
-// walked first, and the straightest leg as big as itself is n; but w and e
-// are bigger than s and turn least into each other, so they are the through
-// although n ties them.
-TEST_CASE("cwPassageTubeBuilder chains the straightest pair of big legs when a third ties them", "[PassageTube][cwPassageTubeBuilder]")
-{
-    const QStringList big = lrud(2, 2, 2, 2);
-    const QStringList small = lrud(0.5, 0.5, 0.5, 0.5);
-    const StationInput south {QStringLiteral("s"), QVector3D(0, -10, 0), small};
-    const StationInput junctionSmall {QStringLiteral("j"), QVector3D(0, 0, 0), small};
-    const StationInput junctionBig {QStringLiteral("j"), QVector3D(0, 0, 0), big};
-    const StationInput west {QStringLiteral("w"), QVector3D(-10, 0, 0), big};
-    const StationInput east {QStringLiteral("e"), QVector3D(10, 0, 0), big};
-    const StationInput north {QStringLiteral("n"), QVector3D(0, 10, 0), big};
-    const BuilderInput input = makeInput({{{south, junctionSmall}, {west, junctionBig, east}, {junctionBig, north}}});
-
-    const Builder::Debug debug = buildDebug(input);
-    REQUIRE(debug.chains.size() == 3);
-    checkChainsCoverLegs(debug);
-    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [](const Builder::Chain& chain) {
-        return chain.legs.size() == 2;
-    });
-    REQUIRE(through != debug.chains.cend());
-    const QStringList stations = chainStations(debug, *through);
-    CHECK((stations == QStringList({QStringLiteral("w"), QStringLiteral("j"), QStringLiteral("e")})
-           || stations == QStringList({QStringLiteral("e"), QStringLiteral("j"), QStringLiteral("w")})));
-}
-
-// The big leg leaves j between the two small ones, which turn 90 degrees
-// there, so neither continues it. It ends past j as the junction's through,
-// by more than the small legs' largest reading.
-TEST_CASE("cwPassageTubeBuilder ends the biggest leg past a junction no other leg continues", "[PassageTube][cwPassageTubeBuilder]")
-{
-    constexpr double kSmallReading = 1.0;
-    const QStringList small = lrud(kSmallReading, kSmallReading, kSmallReading, kSmallReading);
-    const QStringList big = lrud(3, 3, 3, 3);
-    const QVector3D junction(0, 0, 0);
-    const QVector3D bigFar(-7.0f, -7.0f, 0.0f);
-    const BuilderInput input = makeInput({{
-        {{QStringLiteral("s"), QVector3D(0, -10, 0), small}, {QStringLiteral("j"), junction, small}, {QStringLiteral("w"), QVector3D(-10, 0, 0), small}},
-        {{QStringLiteral("b"), bigFar, big}, {QStringLiteral("j"), junction, big}},
-    }});
-
-    const Builder::Debug debug = buildDebug(input);
-    REQUIRE(debug.chains.size() == 3);
-    checkChainsCoverLegs(debug);
-
-    const auto bigChain = std::find_if(debug.chains.cbegin(), debug.chains.cend(), [&](const Builder::Chain& chain) {
-        return chainStations(debug, chain).contains(QStringLiteral("b"));
-    });
-    REQUIRE(bigChain != debug.chains.cend());
-    REQUIRE(chainStations(debug, *bigChain) == QStringList({QStringLiteral("b"), QStringLiteral("j")}));
-    CHECK(bigChain->endThroughReachMeters > kSmallReading);
-    CHECK(bigChain->startThroughReachMeters == 0.0);
-    CHECK(bigChain->endCap == Builder::EndCap::Fan);
-    const QVector3D arriving = (junction - bigFar).normalized();
-    CHECK(QVector3D::dotProduct(bigChain->rings.last().center - junction, arriving) > 0.0f);
-    checkMeshClosed(debug.mesh);
 }
 
 TEST_CASE("cwPassageTubeBuilder walks a loop once and closes it", "[PassageTube][cwPassageTubeBuilder]")
@@ -560,10 +512,6 @@ TEST_CASE("cwPassageTubeBuilder fits a horizontal LRUD ring to the quadrant elli
         CHECK(start.binAngles.at(bin) > start.binAngles.at(bin - 1));
     }
     CHECK(debug.warnings.isEmpty());
-
-    // Level dead ends sit flush with their stations.
-    CHECK(chain.startCapOffsetMeters == Catch::Approx(0.0));
-    CHECK(chain.endCapOffsetMeters == Catch::Approx(0.0));
 }
 
 TEST_CASE("cwPassageTubeBuilder fits a circle to equal LRUD", "[PassageTube][cwPassageTubeBuilder]")
@@ -720,9 +668,8 @@ TEST_CASE("cwPassageTubeBuilder keeps a chain that is vertical throughout finite
 TEST_CASE("cwPassageTubeBuilder keeps a ring's world shape whichever way the chunk is entered", "[PassageTube][cwPassageTubeBuilder]")
 {
     // The same passage surveyed both ways; stored LRUD follow the chunk's
-    // station order, so left and right trade places. The backward survey
-    // splits into b→a and c→b, so its chain walks a→b→c against both
-    // chunks while b's record faces west.
+    // station order, so left and right trade places. The backward survey's
+    // chunk b→a reads b facing west.
     const QStringList ends = lrud(1, 1, 1, 1);
     const StationInput a {QStringLiteral("a"), QVector3D(0, 0, 0), ends};
     const StationInput c {QStringLiteral("c"), QVector3D(20, 0, 0), ends};
@@ -734,10 +681,9 @@ TEST_CASE("cwPassageTubeBuilder keeps a ring's world shape whichever way the chu
     const Builder::Debug forward = buildDebug(makeInput({{{a, forwardB, c}}}));
     const Builder::Debug backward = buildDebug(makeInput({{{backwardB, a}, {c, bWithoutLrud}}}));
     REQUIRE(forward.chains.size() == 1);
-    REQUIRE(backward.chains.size() == 1);
-    const QStringList walk {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")};
-    CHECK(chainStations(forward, forward.chains.at(0)) == walk);
-    CHECK(chainStations(backward, backward.chains.at(0)) == walk);
+    REQUIRE(backward.chains.size() == 2);
+    CHECK(chainStations(forward, forward.chains.at(0)) == QStringList({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
+    CHECK(chainStations(backward, backward.chains.at(0)) == QStringList({QStringLiteral("b"), QStringLiteral("a")}));
 
     const Builder::Ring& forwardRing = ringAt(forward.chains.at(0), bPosition);
     const Builder::Ring& backwardRing = ringAt(backward.chains.at(0), bPosition);
@@ -752,12 +698,9 @@ TEST_CASE("cwPassageTubeBuilder keeps a ring's world shape whichever way the chu
 
 TEST_CASE("cwPassageTubeBuilder takes a wall at face value across the ring", "[PassageTube][cwPassageTubeBuilder]")
 {
-    // b faces the chord a→c, (1, 1, 0)/√2, within 45° of the through's leg
-    // b→c, so that leg's section at b lays b's 5 m left wall its full length
-    // along the facing's left (T07ah rule 1). b reads
-    // taller on the chunk b→d than on a→b→c, so a→b→c, though wider, is no
-    // big passage there; the chunk b→d comes first, and the walk from d
-    // runs on along b→c, as big as a→b at b and straighter.
+    // b faces the bisector of a→b and b→c, (1, 1, 0)/√2, so its one ring
+    // lays b's 5 m left wall its full length along the facing's left (T07ah
+    // rule 1). The chunk b→d reads b on its own.
     constexpr float kLeftWall = 5.0f;
     constexpr float kToleranceMeters = 0.2f;
     const QStringList ends = lrud(1, 1, 1, 1);
@@ -770,28 +713,25 @@ TEST_CASE("cwPassageTubeBuilder takes a wall at face value across the ring", "[P
 
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 2);
-    const auto passesThroughB = [&](const Builder::Chain& chain) { return chain.legs.size() == 2; };
-    const auto through = std::find_if(debug.chains.cbegin(), debug.chains.cend(), passesThroughB);
-    const auto arm = std::find_if_not(debug.chains.cbegin(), debug.chains.cend(), passesThroughB);
-    REQUIRE(through != debug.chains.cend());
-    REQUIRE(arm != debug.chains.cend());
-    CHECK(chainStations(debug, *through) == QStringList({QStringLiteral("d"), QStringLiteral("b"), QStringLiteral("c")}));
-    CHECK(chainStations(debug, *arm) == QStringList({QStringLiteral("a"), QStringLiteral("b")}));
+    const Builder::Chain& passage = debug.chains.at(1);
+    CHECK(chainStations(debug, passage) == QStringList({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
 
     const QVector3D bPosition = b.position.value();
     const QVector3D facingLeft = QVector3D(-1, 1, 0).normalized();
-    const auto leavingB = std::find_if(through->rings.cbegin(), through->rings.cend(), [&](const Builder::Ring& ring) {
-        return ring.chainLeg == 1 && ring.center == bPosition;
-    });
-    REQUIRE(leavingB != through->rings.cend());
-    checkFarthestVertexNear(*leavingB, bPosition + facingLeft * kLeftWall, kToleranceMeters);
+    const auto atB = [&](const Builder::Ring& ring) {
+        return ring.center == bPosition;
+    };
+    CHECK(std::count_if(passage.rings.cbegin(), passage.rings.cend(), atB) == 1);
+    const auto ringAtB = std::find_if(passage.rings.cbegin(), passage.rings.cend(), atB);
+    REQUIRE(ringAtB != passage.rings.cend());
+    checkFarthestVertexNear(*ringAtB, bPosition + facingLeft * kLeftWall, kToleranceMeters);
     checkMeshClosed(debug.mesh);
 }
 
 TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a vertical shot", "[PassageTube][cwPassageTubeBuilder]")
 {
-    // b's chord in chunk 2 drops straight down, so b takes q's facing (the
-    // chord b→r, west). The drop b→q is steep, so its section at b is level:
+    // b's leg in chunk 2 drops straight down, so b takes q's facing (the
+    // bisector of the drop and q→r, west). The drop b→q is steep, so its section at b is level:
     // b's 3 m left wall to the south, its 0 m right wall to the north, and
     // front and back along the facing at the mean of them.
     constexpr double kLeftMeters = 3.0;
@@ -815,11 +755,12 @@ TEST_CASE("cwPassageTubeBuilder falls back to the next station's facing on a ver
         return leg.from == QStringLiteral("b") && leg.to == QStringLiteral("q");
     });
     REQUIRE(drop != debug.legs.cend());
-    checkVectorNear(drop->fromFacing, QVector3D(-1, 0, 0));
-    checkVectorNear(drop->toFacing, QVector3D(-1, 0, 0));
+    const auto [fromFacing, toFacing] = legFacings(debug, static_cast<int>(drop - debug.legs.cbegin()));
+    checkVectorNear(fromFacing, QVector3D(-1, 0, 0));
+    checkVectorNear(toFacing, QVector3D(-1, 0, 0));
 
-    REQUIRE(debug.chains.size() == 1);
-    const Builder::Chain& chain = debug.chains.at(0);
+    REQUIRE(debug.chains.size() == 2);
+    const Builder::Chain& chain = debug.chains.at(1);
     const auto shaftTop = std::find_if(chain.rings.cbegin(), chain.rings.cend(), [&](const Builder::Ring& ring) {
         return ring.center == bPosition && ring.frame.tangent.z() < -1.0f + kToleranceMeters;
     });
@@ -997,34 +938,6 @@ void checkFlatCapAtHeight(const cwPassageTubeMesh& mesh, float z, float outward)
 
 } // namespace
 
-TEST_CASE("cwPassageTubeBuilder places pit dead-end caps by up and down", "[PassageTube][cwPassageTubeBuilder]")
-{
-    const BuilderInput input = makeInput({{{
-        {QStringLiteral("top"), QVector3D(0, 0, 0), lrud(1, 1, 2, 5)},
-        {QStringLiteral("bottom"), QVector3D(0, 0, -10), lrud(1, 1, 4, 3)},
-    }}});
-
-    const Builder::Debug debug = buildDebug(input);
-    REQUIRE(debug.chains.size() == 1);
-    const Builder::Chain& chain = debug.chains.at(0);
-    REQUIRE(chain.rings.size() == 11);
-
-    // The chain starts climbing out of the top and ends descending past the bottom.
-    CHECK(chain.startCapOffsetMeters == Catch::Approx(2.0));
-    CHECK(chain.endCapOffsetMeters == Catch::Approx(3.0));
-
-    // Pit rings are round at their stations' left and right.
-    CHECK_FALSE(chain.rings.at(5).measured.contains(false));
-    for (double radius : chain.rings.at(5).radii) {
-        CHECK(radius == Catch::Approx(1.0));
-    }
-
-    // Each end runs on to a flat ceiling or floor at the offset.
-    checkFlatCapAtHeight(debug.mesh, 2.0f, 1.0f);
-    checkFlatCapAtHeight(debug.mesh, -13.0f, -1.0f);
-    checkMeshClean(debug);
-}
-
 TEST_CASE("cwPassageTubeBuilder fits a pit from its own left and right", "[PassageTube][cwPassageTubeBuilder]")
 {
     constexpr double kPitRadius = 1.5;
@@ -1187,23 +1100,9 @@ namespace {
 
 constexpr float kSameStationMeters = 1e-4f;
 
-// The record a leg holds for its station at position, as the leg's chunk
-// read it.
-std::optional<std::pair<cwStationLrud, QVector3D>> legRecordAt(const Builder::Leg& leg, const QVector3D& position)
-{
-    if (leg.fromPosition.distanceToPoint(position) < kSameStationMeters) {
-        return std::pair {leg.fromPassageLrud, leg.fromFacing};
-    }
-    if (leg.toPosition.distanceToPoint(position) < kSameStationMeters) {
-        return std::pair {leg.toPassageLrud, leg.toFacing};
-    }
-    return std::nullopt;
-}
-
 // A station's left and right reading points as a leg walked along direction
 // sees them: the station plus each side reading along its record's right
-// direction, the facing turned clockwise. A record facing more than
-// Builder::kMaxFacingDegrees off the leg reads square to the leg instead.
+// direction, the facing turned clockwise.
 struct ReadingPoints {
     std::optional<QVector3D> left;
     std::optional<QVector3D> right;
@@ -1212,17 +1111,12 @@ struct ReadingPoints {
 ReadingPoints readingPoints(const cwStationLrud& lrud, const QVector3D& facing, const QVector3D& station, const QVector3D& direction)
 {
     const QVector3D worldUp(0.0f, 0.0f, 1.0f);
-    QVector3D horizontal = direction;
-    horizontal.setZ(0.0f);
-    horizontal.normalize();
     QVector3D horizontalFacing = facing;
     horizontalFacing.setZ(0.0f);
     horizontalFacing.normalize();
 
     const bool facesAgainst = QVector3D::dotProduct(facing, direction) < 0.0f;
-    const bool facesAlongLeg = std::abs(QVector3D::dotProduct(horizontalFacing, horizontal)) >= std::cos(qDegreesToRadians(Builder::kMaxFacingDegrees));
-    const QVector3D recordRight = QVector3D::crossProduct(horizontalFacing, worldUp) * (facesAgainst ? -1.0f : 1.0f);
-    const QVector3D right = facesAlongLeg ? recordRight : QVector3D::crossProduct(horizontal, worldUp);
+    const QVector3D right = QVector3D::crossProduct(horizontalFacing, worldUp) * (facesAgainst ? -1.0f : 1.0f);
     const auto point = [&](const std::optional<double>& reading, float sign) -> std::optional<QVector3D> {
         if (reading) {
             return station + right * (sign * static_cast<float>(*reading));
@@ -1232,61 +1126,10 @@ ReadingPoints readingPoints(const cwStationLrud& lrud, const QVector3D& facing, 
     return {point(facesAgainst ? lrud.right : lrud.left, -1.0f), point(facesAgainst ? lrud.left : lrud.right, 1.0f)};
 }
 
-// The reading points of a leg walked from start to end, at each end.
-std::pair<ReadingPoints, ReadingPoints> legReadingPoints(const Builder::Leg& leg, const QVector3D& start, const QVector3D& end)
-{
-    const QVector3D direction = (end - start).normalized();
-    const auto startRecord = legRecordAt(leg, start);
-    const auto endRecord = legRecordAt(leg, end);
-    REQUIRE(startRecord);
-    REQUIRE(endRecord);
-    return {readingPoints(startRecord->first, startRecord->second, start, direction),
-            readingPoints(endRecord->first, endRecord->second, end, direction)};
-}
-
 } // namespace
 
-namespace {
-
-// The walked start and end of a chain leg and each one's reading points.
-struct LegWallLines {
-    QString startName;
-    QString endName;
-    QVector3D start;
-    QVector3D end;
-    ReadingPoints startPoints;
-    ReadingPoints endPoints;
-};
-
-LegWallLines legWallLines(const Builder::Debug& debug, const Builder::Chain& chain, int chainLegIndex)
-{
-    const Builder::ChainLeg& chainLeg = chain.legs.at(chainLegIndex);
-    const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
-    LegWallLines lines;
-    lines.startName = chainLeg.reversed ? leg.to : leg.from;
-    lines.endName = chainLeg.reversed ? leg.from : leg.to;
-    lines.start = chainLeg.reversed ? leg.toPosition : leg.fromPosition;
-    lines.end = chainLeg.reversed ? leg.fromPosition : leg.toPosition;
-    std::tie(lines.startPoints, lines.endPoints) = legReadingPoints(leg, lines.start, lines.end);
-    return lines;
-}
-
-int chainLegIndex(const Builder::Debug& debug, const Builder::Chain& chain, const QString& from, const QString& to)
-{
-    for (int i = 0; i < chain.legs.size(); ++i) {
-        const LegWallLines lines = legWallLines(debug, chain, i);
-        if (lines.startName == from && lines.endName == to) {
-            return i;
-        }
-    }
-    FAIL("no chain leg " << from.toStdString() << " -> " << to.toStdString());
-    return -1;
-}
-
-} // namespace
-
-// b–c and c–d belong to the second trip, read only at d; b's ring, read in
-// the first trip, lies nearer the rings on b–c but they borrow d's.
+// b–c and c–d are the second trip's chain, read only at d; b's ring, read
+// in the first trip, lies nearer the rings on b–c but they borrow d's.
 TEST_CASE("cwPassageTubeBuilder borrows a ring from its own trip before a nearer one across a trip boundary", "[PassageTube][cwPassageTubeBuilder]")
 {
     constexpr double kNarrow = 0.2;
@@ -1299,49 +1142,12 @@ TEST_CASE("cwPassageTubeBuilder borrows a ring from its own trip before a nearer
     const SurveyInput first {{{a, b}}};
     const SurveyInput second {{{bUnread, c, d}}};
     const Builder::Debug debug = buildDebug(cwPassageTubeCases::toSurvey(QList<SurveyInput> {first, second}));
-    REQUIRE(debug.chains.size() == 1);
+    REQUIRE(debug.chains.size() == 2);
 
-    const Builder::Ring& ring = ringAt(debug.chains.at(0), QVector3D(12, 0, 0));
+    const Builder::Ring& ring = ringAt(debug.chains.at(1), QVector3D(12, 0, 0));
     for (double radius : ring.radii) {
         CHECK(radius == Catch::Approx(kWide));
     }
-}
-
-TEST_CASE("cwPassageTubeBuilder breaks a chain at a hairpin", "[PassageTube][cwPassageTubeBuilder]")
-{
-    constexpr double kHairpinDegrees = 170.0;
-    constexpr float kLegMeters = 10.0f;
-    const QVector3D back(static_cast<float>(std::cos(qDegreesToRadians(kHairpinDegrees))),
-                         static_cast<float>(std::sin(qDegreesToRadians(kHairpinDegrees))),
-                         0.0f);
-    const QStringList dimensions = lrud(0.5, 0.5, 0.5, 0.5);
-    const QVector3D hairpin(kLegMeters, 0, 0);
-    const QVector3D turned = hairpin + back * kLegMeters;
-    const BuilderInput input = makeInput({{{
-        {QStringLiteral("a"), QVector3D(0, 0, 0), dimensions},
-        {QStringLiteral("b"), hairpin, dimensions},
-        {QStringLiteral("c"), turned, dimensions},
-        {QStringLiteral("d"), turned + QVector3D(-kLegMeters, 0, 0), dimensions},
-    }}});
-    const Builder::Debug debug = buildDebug(input);
-
-    REQUIRE(debug.chains.size() == 2);
-    checkChainsCoverLegs(debug);
-    for (const Builder::Chain& chain : debug.chains) {
-        const QStringList stations = chainStations(debug, chain);
-        INFO(stations.join(QStringLiteral(" ")).toStdString());
-        const bool startsAtHairpin = stations.first() == QStringLiteral("b");
-        CHECK((startsAtHairpin || stations.last() == QStringLiteral("b")));
-        CHECK(chain.startCap == (startsAtHairpin ? Builder::EndCap::Dome : Builder::EndCap::Fan));
-        CHECK(chain.endCap == (startsAtHairpin ? Builder::EndCap::Fan : Builder::EndCap::Dome));
-    }
-
-    const cwPassageTubeMeshCheck::Report report = cwPassageTubeMeshCheck::check(debug.mesh, debug);
-    INFO(cwPassageTubeMeshCheck::toText(report).toStdString());
-    CHECK(std::none_of(report.issues.cbegin(), report.issues.cend(), [](const cwPassageTubeMeshCheck::Issue& issue) {
-        return issue.type == cwPassageTubeMeshCheck::Crease;
-    }));
-    checkMeshClosed(debug.mesh);
 }
 
 namespace {
@@ -1365,7 +1171,7 @@ const Builder::Chain& junctionArm(const Builder::Debug& debug)
     const Builder::Chain& arm = debug.chains.at(1);
     REQUIRE(chainStations(debug, arm) == QStringList({QStringLiteral("d"), QStringLiteral("b")}));
     CHECK(arm.startCap == Builder::EndCap::Fan);
-    CHECK(arm.endCap == Builder::EndCap::Mouth);
+    CHECK(arm.endCap == Builder::EndCap::Fan);
     return arm;
 }
 
@@ -1449,8 +1255,9 @@ QVector3D planDirection(double degrees)
 
 } // namespace
 
-// a–b–c along +x, a→b in the first trip and b→c in the second. The second
-// trip reads b as wide as the first, or twice as wide.
+// a–b–c along +x, a→b in the first trip and b→c in the second: two chains
+// that end on b. The second trip reads b as wide as the first, or twice as
+// wide.
 TEST_CASE("cwPassageTubeBuilder continues a passage across a trip boundary without a cap", "[PassageTube][cwPassageTubeBuilder]")
 {
     const double secondTripScale = GENERATE(1.0, 2.0);
@@ -1464,7 +1271,7 @@ TEST_CASE("cwPassageTubeBuilder continues a passage across a trip boundary witho
     const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {{{{a, b}}}, {{{bSecond, c}}}});
 
     const Builder::Debug debug = buildDebug(input);
-    REQUIRE(debug.chains.size() == 1);
+    REQUIRE(debug.chains.size() == 2);
 
     const cwPassageTubeMesh& mesh = debug.mesh;
     const QList<cwTripData>& trips = input.region.caves.at(0).trips;
@@ -1488,7 +1295,10 @@ TEST_CASE("cwPassageTubeBuilder continues a passage across a trip boundary witho
     }
     CHECK(next == mesh.indices.size());
 
-    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("c")}));
+    // Each trip's chain reads its own record at b, so where the second
+    // reads b wider its cap at b is the step between the two.
+    const QStringList steppedCaps {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")};
+    CHECK(visibleCapStations(debug) == (secondTripScale == 1.0 ? QStringList({QStringLiteral("a"), QStringLiteral("c")}) : steppedCaps));
     checkNoCapExposed(debug);
     checkCenterlineInside(debug);
     checkMeshClosed(mesh);
@@ -1522,7 +1332,7 @@ TEST_CASE("cwPassageTubeBuilder hides a trip boundary disc inside a junction win
     const Builder::Debug debug = buildDebug(input);
     REQUIRE(debug.chains.size() == 2);
     REQUIRE(debug.chains.at(0).windows.size() == 1);
-    CHECK(debug.chains.at(1).endCap == Builder::EndCap::Mouth);
+    CHECK(debug.chains.at(1).endCap == Builder::EndCap::Fan);
     REQUIRE(debug.mesh.tripBoundaryRanges.size() == 2);
 
     constexpr float kPositionTolerance = 1e-4f;
@@ -1577,7 +1387,7 @@ TEST_CASE("cwPassageTubeBuilder keeps each trip's triangles where a passage cros
     const BuilderInput input = cwPassageTubeCases::toSurvey(QList<SurveyInput> {{{{a, b}}}, {{{b, c}, {d, b}}}});
 
     const Builder::Debug debug = buildDebug(input);
-    REQUIRE(debug.chains.size() == 2);
+    REQUIRE(debug.chains.size() == 3);
     const cwPassageTubeMesh& mesh = debug.mesh;
     const QList<cwTripData>& trips = input.region.caves.at(0).trips;
     REQUIRE(mesh.tripUuids == QVector<QUuid>({trips.at(0).id, trips.at(1).id}));
@@ -1706,67 +1516,15 @@ TEST_CASE("cwPassageTubeBuilder covers a hairpin tie-in", "[PassageTube][cwPassa
         INFO(stations.join(QStringLiteral(" ")).toStdString());
         const bool endsAtTieIn = stations.last() == QStringLiteral("c");
         REQUIRE((endsAtTieIn || stations.first() == QStringLiteral("c")));
-        CHECK((endsAtTieIn ? chain.endCap : chain.startCap) == Builder::EndCap::Dome);
-
-        // The ring that closes the dome lies past c along the leg reaching c.
-        const Builder::Ring& endRing = endsAtTieIn ? chain.rings.last() : chain.rings.first();
-        const QVector3D towardTieIn = endsAtTieIn ? endRing.frame.tangent : -endRing.frame.tangent;
-        CHECK(QVector3D::dotProduct(endRing.center - tieIn, towardTieIn) > 0.5f);
+        CHECK((endsAtTieIn ? chain.endCap : chain.startCap) == Builder::EndCap::Fan);
     }
 
-    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("d")}));
+    // Each chain's cap at c closes the outside of the bend, where neither
+    // tube reaches.
+    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("c"), QStringLiteral("d")}));
     checkNoCapExposed(debug);
     checkCenterlineInside(debug);
     checkMeshClean(debug);
-}
-
-// A Y at J whose three 12 m arms end at K0, K1 and K2. A straight passage
-// crosses each K between two dead ends, so the walks from those dead ends
-// pass every K before J's own seed. The arms come first in the survey, so J
-// seeds before the Ks.
-TEST_CASE("cwPassageTubeBuilder chains through a junction no walk reaches first", "[PassageTube][cwPassageTubeBuilder]")
-{
-    constexpr float kArmMeters = 12.0f;
-    constexpr float kCrossingMeters = 6.0f;
-    constexpr double kArmDegrees[] = {90.0, 210.0, 330.0};
-    constexpr double kRightAngleDegrees = 90.0;
-    const QStringList dimensions = lrud(1, 1, 1, 1);
-    const StationInput junction {QStringLiteral("J"), QVector3D(0, 0, 0), dimensions};
-
-    QList<QList<StationInput>> arms;
-    QList<QList<StationInput>> crossings;
-    for (int i = 0; i < 3; ++i) {
-        const QVector3D far = planDirection(kArmDegrees[i]) * kArmMeters;
-        const QVector3D across = planDirection(kArmDegrees[i] + kRightAngleDegrees) * kCrossingMeters;
-        const StationInput k {QStringLiteral("K%1").arg(i), far, dimensions};
-        arms.append({junction, k});
-        crossings.append({{QStringLiteral("L%1").arg(i), far - across, dimensions}, k, {QStringLiteral("R%1").arg(i), far + across, dimensions}});
-    }
-    const Builder::Debug debug = buildDebug(makeInput({arms + crossings}));
-
-    checkChainsCoverLegs(debug);
-    int passing = 0;
-    int endingAtJunction = 0;
-    for (const Builder::Chain& chain : debug.chains) {
-        const QStringList stations = chainStations(debug, chain);
-        INFO(stations.join(QStringLiteral(" ")).toStdString());
-        if (stations.mid(1, stations.size() - 2).contains(QStringLiteral("J"))) {
-            ++passing;
-        }
-        if (stations.first() == QStringLiteral("J")) {
-            ++endingAtJunction;
-            CHECK(chain.startCap == Builder::EndCap::Mouth);
-        }
-        if (stations.last() == QStringLiteral("J")) {
-            ++endingAtJunction;
-            CHECK(chain.endCap == Builder::EndCap::Mouth);
-        }
-    }
-    CHECK(passing == 1);
-    CHECK(endingAtJunction == 1);
-    CHECK_FALSE(visibleCapStations(debug).contains(QStringLiteral("J")));
-    checkNoCapExposed(debug);
-    checkCenterlineInside(debug);
 }
 
 // Trip 1 runs a→b→c and trip 2 b→c→d along +x, reading b and c 5 % wider.
@@ -1785,8 +1543,8 @@ TEST_CASE("cwPassageTubeBuilder treats a re-shot tie-in as one leg", "[PassageTu
     const Builder::Debug debug = buildDebug(input);
 
     CHECK(debug.legs.size() == 3);
-    REQUIRE(debug.chains.size() == 1);
-    CHECK(debug.chains.at(0).legs.size() == 3);
+    REQUIRE(debug.chains.size() == 2);
+    CHECK(debug.chains.at(0).legs.size() == 2);
     checkChainsCoverLegs(debug);
     CHECK(debug.chains.at(0).windows.isEmpty());
     CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
@@ -1800,7 +1558,9 @@ TEST_CASE("cwPassageTubeBuilder treats a re-shot tie-in as one leg", "[PassageTu
     CHECK(resurveyedLeg->tripId == input.region.caves.at(0).trips.at(0).id);
     CHECK(*resurveyedLeg->fromLrud.left == Catch::Approx((1.0 + kResurveyScale) / 2.0));
 
-    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("d")}));
+    // The first trip's chain ends on the mean of the two readings at c and
+    // the second starts on its own, 5 % wider: the step is c's cap.
+    CHECK(visibleCapStations(debug) == QStringList({QStringLiteral("a"), QStringLiteral("c"), QStringLiteral("d")}));
     checkNoCapExposed(debug);
     checkMeshClean(debug);
 }
@@ -2032,7 +1792,7 @@ TEST_CASE("cwPassageTubeBuilder puts every mouth vertex on the through mesh", "[
                                                             {armFrom(QStringLiteral("d"), QVector3D(10, -10, 0), lrud(0.5, 0.5, 0.5, 0.5))}));
     REQUIRE(debug.chains.size() == 2);
     const Builder::Chain& arm = debug.chains.at(1);
-    REQUIRE(arm.endCap == Builder::EndCap::Mouth);
+    REQUIRE(arm.endCap == Builder::EndCap::Fan);
     REQUIRE(arm.endMouth.size() == Builder::Options().ringResolution);
     CHECK(debug.chains.at(0).windows.size() == 1);
     CHECK(warningCount(debug, cwPassageTubeMesh::Warning::JunctionUnzipped) == 0);
@@ -2188,8 +1948,7 @@ using SectionPoints = QVector<QVector3D>;
 
 // The section of station's record as a gentle leg walked along walk reads it
 // (T07ah rule 1): left and right along the record's facing turned clockwise,
-// or square to the leg when the facing lies more than kMaxFacingDegrees off
-// it, up and down plumb, every reading at face value.
+// up and down plumb, every reading at face value.
 SectionPoints sectionThrough(const QVector3D& station, const cwStationLrud& record, const QVector3D& facing, const QVector3D& walk)
 {
     REQUIRE(record.up);
@@ -2289,8 +2048,9 @@ Loft loftOf(const Builder::Debug& debug, const Builder::Chain& chain, const QStr
         loft.start = chainLeg.reversed ? leg.toPosition : leg.fromPosition;
         loft.end = chainLeg.reversed ? leg.fromPosition : leg.toPosition;
         const QVector3D walk = loft.end - loft.start;
-        loft.startSection = sectionThrough(loft.start, chainLeg.reversed ? leg.toLrud : leg.fromLrud, chainLeg.reversed ? leg.toFacing : leg.fromFacing, walk);
-        loft.endSection = sectionThrough(loft.end, chainLeg.reversed ? leg.fromLrud : leg.toLrud, chainLeg.reversed ? leg.fromFacing : leg.toFacing, walk);
+        const auto [fromFacing, toFacing] = legFacings(debug, chainLeg.legIndex);
+        loft.startSection = sectionThrough(loft.start, chainLeg.reversed ? leg.toLrud : leg.fromLrud, chainLeg.reversed ? toFacing : fromFacing, walk);
+        loft.endSection = sectionThrough(loft.end, chainLeg.reversed ? leg.fromLrud : leg.toLrud, chainLeg.reversed ? fromFacing : toFacing, walk);
         return loft;
     }
     FAIL("no chain leg between " << a.toStdString() << " and " << b.toStdString());
@@ -2360,7 +2120,8 @@ void checkLoftEndsOn(const Builder::Debug& debug, const QString& a, const QStrin
     const Builder::ChainLeg& chainLeg = chain.legs.at(loft.chainLeg);
     const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
     const bool stationIsFrom = leg.from == station;
-    const SectionPoints section = sectionThrough(position, expected, stationIsFrom ? leg.fromFacing : leg.toFacing, loft.end - loft.start);
+    const auto [fromFacing, toFacing] = legFacings(debug, chainLeg.legIndex);
+    const SectionPoints section = sectionThrough(position, expected, stationIsFrom ? fromFacing : toFacing, loft.end - loft.start);
     const auto [ringIndex, miss] = loftEndRing(chain, loft, position, section);
     REQUIRE(ringIndex >= 0);
     const Builder::Ring& ring = chain.rings.at(ringIndex);
@@ -2464,8 +2225,9 @@ TEST_CASE("cwPassageTubeBuilder lofts a plumb leg between its horizontal section
     const bool a6IsFrom = leg.from == a6Name;
     const QVector3D a6 = a6IsFrom ? leg.fromPosition : leg.toPosition;
     const QVector3D a9 = a6IsFrom ? leg.toPosition : leg.fromPosition;
-    const QVector3D a6Facing = a6IsFrom ? leg.fromFacing : leg.toFacing;
-    const QVector3D a9Facing = a6IsFrom ? leg.toFacing : leg.fromFacing;
+    const auto [fromFacing, toFacing] = legFacings(debug, chain.legs.at(loft.chainLeg).legIndex);
+    const QVector3D a6Facing = a6IsFrom ? fromFacing : toFacing;
+    const QVector3D a9Facing = a6IsFrom ? toFacing : fromFacing;
 
     const auto azimuthOf = [](const QVector3D& direction) {
         const double degrees = qRadiansToDegrees(std::atan2(direction.x(), direction.y()));
@@ -2503,4 +2265,142 @@ TEST_CASE("cwPassageTubeBuilder lofts a plumb leg between its horizontal section
         CHECK(extremeVertex(ring, -facing).distanceToPoint(onShot - facing * halfDepth) <= cwPassageTubeMeshCheck::kWallTolerance);
     }
     CHECK(checkedRings > 0);
+}
+
+namespace {
+
+constexpr float kBisectorRightTolerance = 1e-4f;
+constexpr float kReadingPointTolerance = 1e-3f;
+constexpr double kBendLegMeters = 10.0;
+constexpr double kBendLeftMeters = 2.0;
+constexpr double kBendRightMeters = 1.0;
+constexpr float kFlatRingNormalSquared = 1e-12f;
+constexpr double kNorthDegrees = 90.0;
+
+// The normal of the plane that best fits a ring's vertices (Newell's
+// method), signed so the bins run from right toward up around it.
+std::optional<QVector3D> ringFacing(const Builder::Ring& ring)
+{
+    QVector3D normal;
+    const int count = ring.vertices.size();
+    for (int k = 0; k < count; ++k) {
+        normal += QVector3D::crossProduct(ring.vertices.at((k + 1) % count) - ring.center, ring.vertices.at(k) - ring.center);
+    }
+    if (normal.lengthSquared() < kFlatRingNormalSquared) {
+        return std::nullopt;
+    }
+    return normal.normalized();
+}
+
+QString vectorText(const QVector3D& v)
+{
+    return QStringLiteral("(%1, %2, %3)").arg(v.x(), 0, 'f', 4).arg(v.y(), 0, 'f', 4).arg(v.z(), 0, 'f', 4);
+}
+
+} // namespace
+
+// T07al step 1: every bend of a chain, 0 through 180°, is mitered. Station
+// 2 holds one ring whose right is the plan bisector of its two legs turned
+// clockwise, with L and R at face value along it, and each leg lofts from
+// its end rings without folding.
+TEST_CASE("cwPassageTubeBuilder miters every bend with one ring per station", "[PassageTube][cwPassageTubeBuilder]")
+{
+    const double theta = GENERATE(0.0, 60.0, 120.0, 150.0, 170.0);
+    const QStringList dimensions = lrud(kBendLeftMeters, kBendRightMeters, 2, 1);
+    const QVector3D dIn = planDirection(kNorthDegrees);
+    const QVector3D dOut = planDirection(kNorthDegrees - theta);
+    const QVector3D one(0, 0, 0);
+    const QVector3D two = one + dIn * static_cast<float>(kBendLegMeters);
+    const QVector3D three = two + dOut * static_cast<float>(kBendLegMeters);
+    const BuilderInput input = makeInput({{{
+        {QStringLiteral("1"), one, dimensions},
+        {QStringLiteral("2"), two, dimensions},
+        {QStringLiteral("3"), three, dimensions},
+    }}});
+    const Builder::Debug debug = Builder::buildChainRings(input.region, input.positionsByCave, Builder::Options());
+
+    INFO("bend " << theta << "°: " << debug.chains.size() << " chains");
+    CHECK(debug.chains.size() == 1);
+
+    const QVector3D bisectorRight = QVector3D(dIn + dOut).normalized();
+    const QVector3D expectedRight(bisectorRight.y(), -bisectorRight.x(), 0.0f);
+
+    QVector<const Builder::Ring*> stationTwoRings;
+    QStringList stationTwoRights;
+    for (int c = 0; c < debug.chains.size(); ++c) {
+        const Builder::Chain& chain = debug.chains.at(c);
+        for (int i = 0; i < chain.rings.size(); ++i) {
+            const Builder::Ring& ring = chain.rings.at(i);
+            if (ring.center.distanceToPoint(two) < kSameStationMeters) {
+                stationTwoRings.append(&ring);
+                stationTwoRights.append(QStringLiteral("chain %1 ring %2 right %3").arg(c).arg(i).arg(vectorText(ring.frame.right)));
+            }
+        }
+    }
+    INFO(stationTwoRings.size() << " rings at station 2, expected right " << vectorText(expectedRight).toStdString() << "\n"
+                                << stationTwoRights.join(QStringLiteral("\n")).toStdString());
+    REQUIRE(stationTwoRings.size() == 1);
+
+    const Builder::Ring& ring = *stationTwoRings.first();
+    CHECK(ring.frame.right.distanceToPoint(expectedRight) <= kBisectorRightTolerance);
+    REQUIRE_FALSE(ring.vertices.isEmpty());
+    const auto extremeVertex = [&](const QVector3D& direction) {
+        return *std::max_element(ring.vertices.cbegin(), ring.vertices.cend(), [&](const QVector3D& p, const QVector3D& q) {
+            return QVector3D::dotProduct(p, direction) < QVector3D::dotProduct(q, direction);
+        });
+    };
+    const QVector3D rightVertex = extremeVertex(expectedRight);
+    const QVector3D leftVertex = extremeVertex(-expectedRight);
+    const QVector3D expectedRightVertex = two + expectedRight * static_cast<float>(kBendRightMeters);
+    const QVector3D expectedLeftVertex = two - expectedRight * static_cast<float>(kBendLeftMeters);
+    INFO("right vertex " << vectorText(rightVertex).toStdString() << ", expected " << vectorText(expectedRightVertex).toStdString()
+                         << "; left vertex " << vectorText(leftVertex).toStdString() << ", expected "
+                         << vectorText(expectedLeftVertex).toStdString());
+    CHECK(rightVertex.distanceToPoint(expectedRightVertex) <= kReadingPointTolerance);
+    CHECK(leftVertex.distanceToPoint(expectedLeftVertex) <= kReadingPointTolerance);
+
+    QStringList folds;
+    const Builder::Chain& chain = debug.chains.at(0);
+    for (int i = 0; i < chain.rings.size(); ++i) {
+        const Builder::Ring& sample = chain.rings.at(i);
+        const bool atStation = sample.center.distanceToPoint(one) < kSameStationMeters || sample.center.distanceToPoint(two) < kSameStationMeters
+                               || sample.center.distanceToPoint(three) < kSameStationMeters;
+        if (atStation) {
+            continue;
+        }
+        const Builder::ChainLeg& chainLeg = chain.legs.at(sample.chainLeg);
+        const Builder::Leg& leg = debug.legs.at(chainLeg.legIndex);
+        const QVector3D walk = (chainLeg.reversed ? leg.fromPosition - leg.toPosition : leg.toPosition - leg.fromPosition).normalized();
+        const std::optional<QVector3D> facing = ringFacing(sample);
+        if (!facing || QVector3D::dotProduct(*facing, walk) <= 0.0f) {
+            folds.append(QStringLiteral("ring %1 on chain leg %2 faces %3 against walk %4")
+                             .arg(i)
+                             .arg(sample.chainLeg)
+                             .arg(facing ? vectorText(*facing) : QStringLiteral("nothing"))
+                             .arg(vectorText(walk)));
+        }
+    }
+    INFO(folds.size() << " folded sample rings\n" << folds.join(QStringLiteral("\n")).toStdString());
+    CHECK(folds.isEmpty());
+}
+
+// Redesign step 2, case 5: the through reads L8 at J, into the arm, where
+// the arm's own record reads 1.5 m; the builder names the station once. The
+// symmetric T reads J alike on both chains and stays quiet.
+TEST_CASE("cwPassageTubeBuilder warns of chains reading one station's wall far apart", "[PassageTube][cwPassageTubeBuilder]")
+{
+    using Warning = cwPassageTubeMesh::Warning;
+    const cwPassageTubeCases::Case& conflict = catalogCase(QStringLiteral("35. Through reads L8 into the arm"));
+    const Builder::Debug debug = buildCase(conflict);
+    REQUIRE(warningCount(debug, Warning::JunctionReadingConflict) == 1);
+    const auto warning = std::find_if(debug.warnings.cbegin(), debug.warnings.cend(), [](const Warning& candidate) {
+        return candidate.type == Warning::JunctionReadingConflict;
+    });
+    INFO(warning->message.toStdString());
+    CHECK(warning->station == QStringLiteral("J"));
+    CHECK(warning->message.contains(QStringLiteral(" 8 m ")));
+    CHECK(warning->message.contains(QStringLiteral(" 1.5 m ")));
+
+    const Builder::Debug equal = buildCase(catalogCase(QStringLiteral("1. Symmetric T, equal sections")));
+    CHECK(warningCount(equal, Warning::JunctionReadingConflict) == 0);
 }

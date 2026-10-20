@@ -300,7 +300,7 @@ const Builder::Chain& requireArm(const Builder::Debug& debug, int chainIndex)
 {
     REQUIRE(debug.chains.size() > chainIndex);
     const Builder::Chain& arm = debug.chains.at(chainIndex);
-    CHECK(arm.endCap == Builder::EndCap::Mouth);
+    CHECK(arm.endCap == Builder::EndCap::Fan);
     return arm;
 }
 
@@ -466,7 +466,6 @@ TEST_CASE("cwPassageTubeJunction chambers a through passage under a tall arm", "
                       armTo(QStringLiteral("d"), QVector3D(10, -10, 0), lrud(1, 1, kArmCeiling, 1))}};
     const Builder::Debug debug = buildDebug(makeTripsInput({trip}));
     requireArm(debug, 1);
-    CHECK(warningCount(debug, Warning::ShaftReading) == 0);
 
     const Builder::Ring& junction = ringNearest(debug.chains.at(0), QVector3D(10, 0, 0));
     CHECK(junction.radii.at(upBin) == Catch::Approx(kArmCeiling).margin(kGrownRadiusTolerance));

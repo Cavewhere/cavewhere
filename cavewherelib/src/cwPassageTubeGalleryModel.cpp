@@ -246,7 +246,6 @@ QString lrudValuesText(const cwStationLrud& lrud)
 struct StationReadings {
     QVector3D position;
     cwStationLrud lrud;
-    cwStationLrud passageLrud;
     QVector3D facing;
 };
 
@@ -262,9 +261,11 @@ QVector<StationReadings> stationReadings(const Builder::Debug& debug)
             readings.append(entry);
         }
     };
-    for (const Builder::Leg& leg : debug.legs) {
-        add(leg, leg.from, {leg.fromPosition, leg.fromLrud, leg.fromPassageLrud, leg.fromFacing});
-        add(leg, leg.to, {leg.toPosition, leg.toLrud, leg.toPassageLrud, leg.toFacing});
+    const QVector<std::array<QVector3D, 2>> facings = cwPassageTubeGeometry::legEndFacings(debug.legs, debug.chains);
+    for (int i = 0; i < debug.legs.size(); ++i) {
+        const Builder::Leg& leg = debug.legs.at(i);
+        add(leg, leg.from, {leg.fromPosition, leg.fromLrud, facings.at(i).at(0)});
+        add(leg, leg.to, {leg.toPosition, leg.toLrud, facings.at(i).at(1)});
     }
     return readings;
 }
@@ -345,12 +346,6 @@ cwPassageTubeGalleryModel::RingGeometry ringGeometryOf(const Builder::Debug& deb
     geometry.readings = appended([&]() {
         appendSpokes([](const StationReadings& entry, Wall wall) { return entry.lrud.*wall; });
     });
-    geometry.passageReadings = appended([&]() {
-        appendSpokes([](const StationReadings& entry, Wall wall) {
-            const std::optional<double>& passage = entry.passageLrud.*wall;
-            return passage == entry.lrud.*wall ? std::optional<double>() : passage;
-        });
-    });
 
     const auto forEachSectionedRing = [&](const auto& visit) {
         for (const Builder::Chain& chain : debug.chains) {
@@ -395,7 +390,7 @@ QVector<cwRenderLinePlot::TypedRange> typedRanges(const cwPassageTubeGalleryMode
     };
     appendAll(geometry.loops, cwRenderLinePlot::kRingSegment);
     appendAll({geometry.rights, geometry.ups}, cwRenderLinePlot::kFrameSegment);
-    appendAll({geometry.readings, geometry.passageReadings}, cwRenderLinePlot::kReadingSegment);
+    appendAll({geometry.readings}, cwRenderLinePlot::kReadingSegment);
     appendAll(geometry.sectionLoops, cwRenderLinePlot::kSectionSegment);
     appendAll({geometry.overshoots}, cwRenderLinePlot::kOvershootSegment);
     return ranges;
@@ -1042,11 +1037,11 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             kinds.append(QStringLiteral("grown"));
         }
 
-        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, up %6, inclination weight %7, radius %8-%9 m%10%11")
+        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, right %6, up %7, inclination weight %8, radius %9-%10 m%11%12")
             .arg(chainIndex)
             .arg(ring)
             .arg(entry.chainLeg)
-            .arg(legText, stationText, vectorText(entry.frame.up))
+            .arg(legText, stationText, vectorText(entry.frame.right), vectorText(entry.frame.up))
             .arg(entry.frame.inclinationWeight, 0, 'f', 2)
             .arg(minRadius, 0, 'f', 2)
             .arg(maxRadius, 0, 'f', 2)
@@ -1473,7 +1468,7 @@ void cwPassageTubeGalleryModel::applyRingVisibility()
         const RingGeometry& geometry = m_ringGeometry;
         const int frameStart = geometry.rights.start;
         const int readingStart = geometry.readings.start;
-        const int sectionStart = geometry.passageReadings.start + geometry.passageReadings.count;
+        const int sectionStart = geometry.readings.start + geometry.readings.count;
         const int overshootStart = geometry.overshoots.start;
         m_ringPlot->setRangeVisible(0, frameStart, m_ringsVisible);
         m_ringPlot->setRangeVisible(frameStart, readingStart - frameStart, m_framesVisible);
