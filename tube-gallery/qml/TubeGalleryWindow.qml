@@ -1,3 +1,4 @@
+import QtCore as QCore
 import QtQuick as QQ
 import QtQuick.Controls as QC
 import QtQuick.Dialogs as QD
@@ -36,6 +37,9 @@ QC.ApplicationWindow {
     readonly property int defaultSeed: 7
     readonly property int listWidth: 360
     readonly property int sandboxPanelWidth: 380
+    readonly property int listMinimumWidth: 200
+    readonly property int centerMinimumWidth: 400
+    readonly property int sandboxMinimumWidth: 280
     readonly property int panelMargin: 8
     readonly property int panelSpacing: 6
     readonly property int reportHeight: 220
@@ -57,6 +61,7 @@ QC.ApplicationWindow {
     readonly property int startupDelayMilliseconds: 200
     readonly property int maxSeed: 1000000
     readonly property int maxJunctions: 50
+    readonly property bool grabbing: rootId.grabDirectory !== ""
 
     // Screenshot queue: every preset of each row in grabRows.
     property list<int> grabRows: []
@@ -387,128 +392,159 @@ QC.ApplicationWindow {
         value: centerlineId.checked
     }
 
-    RowLayout {
+    QCore.Settings {
+        id: paneSettingsId
+
+        property real listPaneWidth: rootId.listWidth
+        property real sandboxPaneWidth: rootId.sandboxPanelWidth
+
+        category: "TubeGallery"
+    }
+
+    QC.SplitView {
+        id: splitViewId
         anchors.fill: parent
         anchors.margins: rootId.panelMargin
-        spacing: rootId.panelMargin
 
-        ColumnLayout {
-            Layout.preferredWidth: rootId.listWidth
-            Layout.fillHeight: true
+        handle: QQ.Rectangle {
+            implicitWidth: rootId.panelMargin
+            color: QC.SplitHandle.pressed ? Theme.accent
+                                          : QC.SplitHandle.hovered ? Theme.divider : Theme.transparent
+        }
+
+        onResizingChanged: {
+            if (!splitViewId.resizing) {
+                paneSettingsId.listPaneWidth = listPaneId.width
+                if (sandboxPanelId.visible) {
+                    paneSettingsId.sandboxPaneWidth = sandboxPanelId.width
+                }
+            }
+        }
+
+        QQ.Item {
+            id: listPaneId
+            QC.SplitView.preferredWidth: rootId.grabbing ? rootId.listWidth : paneSettingsId.listPaneWidth
+            QC.SplitView.minimumWidth: rootId.listMinimumWidth
             visible: !rootId.grabAll
-            spacing: rootId.panelSpacing
+            clip: true
 
-            QC.TextField {
-                id: filterFieldId
-                Layout.fillWidth: true
-                placeholderText: qsTr("Filter by name or tag")
-            }
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: rootId.panelSpacing
 
-            QC.CheckBox {
-                id: failingFirstId
-                text: qsTr("Failing first")
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-
-                QC.SpinBox {
-                    id: seedId
-                    from: 0
-                    to: rootId.maxSeed
-                    value: rootId.defaultSeed
-                    editable: true
+                QC.TextField {
+                    id: filterFieldId
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("Filter by name or tag")
                 }
 
-                QC.SpinBox {
-                    id: junctionsId
-                    from: 1
-                    to: rootId.maxJunctions
-                    value: rootId.randomJunctions
-                    editable: true
+                QC.CheckBox {
+                    id: failingFirstId
+                    text: qsTr("Failing first")
                 }
 
-                QC.Button {
-                    text: qsTr("Add random")
-                    onClicked: {
-                        galleryModelId.addRandom(seedId.value, junctionsId.value)
-                        rootId.selectRow(galleryModelId.count - 1)
+                QQ.Flow {
+                    Layout.fillWidth: true
+                    spacing: rootId.panelSpacing
+
+                    QC.SpinBox {
+                        id: seedId
+                        from: 0
+                        to: rootId.maxSeed
+                        value: rootId.defaultSeed
+                        editable: true
+                    }
+
+                    QC.SpinBox {
+                        id: junctionsId
+                        from: 1
+                        to: rootId.maxJunctions
+                        value: rootId.randomJunctions
+                        editable: true
+                    }
+
+                    QC.Button {
+                        text: qsTr("Add random")
+                        onClicked: {
+                            galleryModelId.addRandom(seedId.value, junctionsId.value)
+                            rootId.selectRow(galleryModelId.count - 1)
+                        }
+                    }
+
+                    QC.Button {
+                        text: qsTr("Add fork")
+                        onClicked: {
+                            galleryModelId.addWideArmFork()
+                            rootId.selectRow(galleryModelId.count - 1)
+                        }
                     }
                 }
 
                 QC.Button {
-                    text: qsTr("Add fork")
+                    text: qsTr("Load into sandbox")
+                    enabled: galleryModelId.canLoadSandbox(galleryModelId.currentIndex)
                     onClicked: {
-                        galleryModelId.addWideArmFork()
-                        rootId.selectRow(galleryModelId.count - 1)
+                        if (galleryModelId.loadSandbox(galleryModelId.currentIndex)) {
+                            rootId.applyPreset("three-quarter")
+                        }
                     }
                 }
-            }
 
-            QC.Button {
-                text: qsTr("Load into sandbox")
-                enabled: galleryModelId.canLoadSandbox(galleryModelId.currentIndex)
-                onClicked: {
-                    if (galleryModelId.loadSandbox(galleryModelId.currentIndex)) {
-                        rootId.applyPreset("three-quarter")
-                    }
-                }
-            }
+                QQ.ListView {
+                    id: caseListId
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    model: filterModelId
 
-            QQ.ListView {
-                id: caseListId
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                model: filterModelId
+                    delegate: QQ.Rectangle {
+                        id: caseRowId
 
-                delegate: QQ.Rectangle {
-                    id: caseRowId
+                        required property int index
+                        required property string name
+                        required property string tags
+                        required property int issueCount
+                        required property string issueSummary
 
-                    required property int index
-                    required property string name
-                    required property string tags
-                    required property int issueCount
-                    required property string issueSummary
+                        width: caseListId.width
+                        height: rowLayoutId.implicitHeight + 2 * rootId.rowPadding
+                        color: filterModelId.sourceRow(caseRowId.index) === galleryModelId.currentIndex ? Theme.highlight : "transparent"
 
-                    width: QQ.ListView.view.width
-                    height: rowLayoutId.implicitHeight + 2 * rootId.rowPadding
-                    color: filterModelId.sourceRow(caseRowId.index) === galleryModelId.currentIndex ? Theme.highlight : "transparent"
-
-                    QQ.TapHandler {
-                        onTapped: rootId.selectRow(filterModelId.sourceRow(caseRowId.index))
-                    }
-
-                    RowLayout {
-                        id: rowLayoutId
-                        anchors.fill: parent
-                        anchors.margins: rootId.rowPadding
-
-                        QC.Label {
-                            Layout.fillWidth: true
-                            text: caseRowId.name
-                            elide: QQ.Text.ElideRight
-                            font.pixelSize: Theme.fontSizeSmall
-                            QC.ToolTip.visible: hoverId.hovered
-                            QC.ToolTip.text: caseRowId.issueSummary !== "" ? caseRowId.issueSummary : caseRowId.tags
-
-                            QQ.HoverHandler {
-                                id: hoverId
-                            }
+                        QQ.TapHandler {
+                            onTapped: rootId.selectRow(filterModelId.sourceRow(caseRowId.index))
                         }
 
-                        QQ.Rectangle {
-                            Layout.preferredWidth: Math.max(rootId.badgeMinWidth, badgeLabelId.implicitWidth + 2 * rootId.badgePadding)
-                            Layout.preferredHeight: badgeLabelId.implicitHeight
-                            radius: height / 2
-                            color: caseRowId.issueCount === 0 ? Theme.success : Theme.errorText
+                        RowLayout {
+                            id: rowLayoutId
+                            anchors.fill: parent
+                            anchors.margins: rootId.rowPadding
 
                             QC.Label {
-                                id: badgeLabelId
-                                anchors.centerIn: parent
-                                text: caseRowId.issueCount
-                                color: Theme.textInverse
-                                font.pixelSize: Theme.fontSizeCaption
+                                Layout.fillWidth: true
+                                text: caseRowId.name
+                                elide: QQ.Text.ElideRight
+                                font.pixelSize: Theme.fontSizeSmall
+                                QC.ToolTip.visible: hoverId.hovered
+                                QC.ToolTip.text: caseRowId.issueSummary !== "" ? caseRowId.issueSummary : caseRowId.tags
+
+                                QQ.HoverHandler {
+                                    id: hoverId
+                                }
+                            }
+
+                            QQ.Rectangle {
+                                Layout.preferredWidth: Math.max(rootId.badgeMinWidth, badgeLabelId.implicitWidth + 2 * rootId.badgePadding)
+                                Layout.preferredHeight: badgeLabelId.implicitHeight
+                                radius: height / 2
+                                color: caseRowId.issueCount === 0 ? Theme.success : Theme.errorText
+
+                                QC.Label {
+                                    id: badgeLabelId
+                                    anchors.centerIn: parent
+                                    text: caseRowId.issueCount
+                                    color: Theme.textInverse
+                                    font.pixelSize: Theme.fontSizeCaption
+                                }
                             }
                         }
                     }
@@ -516,209 +552,216 @@ QC.ApplicationWindow {
             }
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: rootId.panelSpacing
+        QQ.Item {
+            QC.SplitView.fillWidth: true
+            QC.SplitView.minimumWidth: rootId.centerMinimumWidth
+            clip: true
 
-            QC.Label {
-                text: galleryModelId.currentName
-                font.pixelSize: Theme.fontSizeMedium
-            }
-
-            // Wraps so the sandbox panel beside it keeps its width.
-            QQ.Flow {
-                Layout.fillWidth: true
-                visible: !rootId.grabAll
+            ColumnLayout {
+                anchors.fill: parent
                 spacing: rootId.panelSpacing
 
-                QC.Button {
-                    text: qsTr("Plan")
-                    onClicked: rootId.applyPreset("plan")
-                }
-                QC.Button {
-                    text: qsTr("Profile")
-                    onClicked: rootId.applyPreset("profile")
-                }
-                QC.Button {
-                    text: qsTr("Along arm")
-                    onClicked: rootId.applyPreset("along-arm")
-                }
-                QC.Button {
-                    text: qsTr("3/4")
-                    onClicked: rootId.applyPreset("three-quarter")
-                }
-                QC.TextField {
-                    id: stationFieldId
-                    placeholderText: qsTr("Station")
-                    text: rootId.focusStation
-
-                    onEditingFinished: rootId.applyPreset("three-quarter")
-                }
-                QC.CheckBox {
-                    id: wireframeId
-                    text: qsTr("Wireframe")
-                }
-                QC.CheckBox {
-                    id: cutId
-                    text: qsTr("Cut")
-                }
-                QC.CheckBox {
-                    id: translucentId
-                    text: qsTr("Translucent")
-                    checked: rootId.showTranslucent
-                }
-                QC.CheckBox {
-                    id: unionId
-                    text: qsTr("Union")
-                    checked: rootId.showUnion
-                }
-                QC.CheckBox {
-                    id: slideCapsId
-                    text: qsTr("Slide caps")
-                    checked: rootId.slideCaps
-                    enabled: unionId.checked
-                }
-                QC.CheckBox {
-                    id: issuesId
-                    text: qsTr("Issues")
-                    checked: true
-                }
-                QC.CheckBox {
-                    id: ringsId
-                    text: qsTr("Rings")
-                    checked: rootId.showRings
-                }
-                LayerSwatch {
-                    layerName: "rings"
-                }
-                QC.CheckBox {
-                    id: framesId
-                    text: qsTr("Frames")
-                    checked: rootId.showRings
-                }
-                LayerSwatch {
-                    layerName: "frames"
-                }
-                QC.CheckBox {
-                    id: readingsId
-                    text: qsTr("Readings")
-                    checked: rootId.showReadings
-                }
-                LayerSwatch {
-                    layerName: "readings"
-                }
-                QC.CheckBox {
-                    id: sectionsId
-                    text: qsTr("Sections")
-                    checked: rootId.showSections
-                }
-                LayerSwatch {
-                    layerName: "sections"
-                }
-                QC.CheckBox {
-                    id: overshootId
-                    text: qsTr("Overshoot")
-                    checked: rootId.showOvershoot
-                }
-                LayerSwatch {
-                    layerName: "overshoot"
-                }
-                QC.CheckBox {
-                    id: centerlineId
-                    text: qsTr("Centerline")
-                    checked: true
-                }
-                QC.Button {
-                    text: qsTr("Grab sheet")
-                    enabled: galleryModelId.currentIndex >= 0 && rootId.grabRows.length === 0
-                    onClicked: rootId.startGrab([galleryModelId.currentIndex], rootId.defaultGrabDirectory, false)
-                }
-            }
-
-            QQ.Item {
-                id: viewAreaId
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-
-                RegionViewer {
-                    id: viewerId
-                    anchors.fill: parent
-                    scene: sceneId
+                QC.Label {
+                    Layout.fillWidth: true
+                    text: galleryModelId.currentName
+                    elide: QQ.Text.ElideRight
+                    font.pixelSize: Theme.fontSizeMedium
                 }
 
-                TurnTableInteraction {
-                    id: turnTableId
-                    anchors.fill: parent
-                    camera: viewerId.camera
-                    scene: sceneId
+                QQ.Flow {
+                    Layout.fillWidth: true
+                    visible: !rootId.grabAll
+                    spacing: rootId.panelSpacing
+
+                    QC.Button {
+                        text: qsTr("Plan")
+                        onClicked: rootId.applyPreset("plan")
+                    }
+                    QC.Button {
+                        text: qsTr("Profile")
+                        onClicked: rootId.applyPreset("profile")
+                    }
+                    QC.Button {
+                        text: qsTr("Along arm")
+                        onClicked: rootId.applyPreset("along-arm")
+                    }
+                    QC.Button {
+                        text: qsTr("3/4")
+                        onClicked: rootId.applyPreset("three-quarter")
+                    }
+                    QC.TextField {
+                        id: stationFieldId
+                        placeholderText: qsTr("Station")
+                        text: rootId.focusStation
+
+                        onEditingFinished: rootId.applyPreset("three-quarter")
+                    }
+                    QC.CheckBox {
+                        id: wireframeId
+                        text: qsTr("Wireframe")
+                    }
+                    QC.CheckBox {
+                        id: cutId
+                        text: qsTr("Cut")
+                    }
+                    QC.CheckBox {
+                        id: translucentId
+                        text: qsTr("Translucent")
+                        checked: rootId.showTranslucent
+                    }
+                    QC.CheckBox {
+                        id: unionId
+                        text: qsTr("Union")
+                        checked: rootId.showUnion
+                    }
+                    QC.CheckBox {
+                        id: slideCapsId
+                        text: qsTr("Slide caps")
+                        checked: rootId.slideCaps
+                        enabled: unionId.checked
+                    }
+                    QC.CheckBox {
+                        id: issuesId
+                        text: qsTr("Issues")
+                        checked: true
+                    }
+                    QC.CheckBox {
+                        id: ringsId
+                        text: qsTr("Rings")
+                        checked: rootId.showRings
+                    }
+                    LayerSwatch {
+                        layerName: "rings"
+                    }
+                    QC.CheckBox {
+                        id: framesId
+                        text: qsTr("Frames")
+                        checked: rootId.showRings
+                    }
+                    LayerSwatch {
+                        layerName: "frames"
+                    }
+                    QC.CheckBox {
+                        id: readingsId
+                        text: qsTr("Readings")
+                        checked: rootId.showReadings
+                    }
+                    LayerSwatch {
+                        layerName: "readings"
+                    }
+                    QC.CheckBox {
+                        id: sectionsId
+                        text: qsTr("Sections")
+                        checked: rootId.showSections
+                    }
+                    LayerSwatch {
+                        layerName: "sections"
+                    }
+                    QC.CheckBox {
+                        id: overshootId
+                        text: qsTr("Overshoot")
+                        checked: rootId.showOvershoot
+                    }
+                    LayerSwatch {
+                        layerName: "overshoot"
+                    }
+                    QC.CheckBox {
+                        id: centerlineId
+                        text: qsTr("Centerline")
+                        checked: true
+                    }
+                    QC.Button {
+                        text: qsTr("Grab sheet")
+                        enabled: galleryModelId.currentIndex >= 0 && rootId.grabRows.length === 0
+                        onClicked: rootId.startGrab([galleryModelId.currentIndex], rootId.defaultGrabDirectory, false)
+                    }
                 }
 
-                QQ.HoverHandler {
-                    id: ringHoverId
-                    enabled: ringsId.checked || framesId.checked || sectionsId.checked || overshootId.checked
+                QQ.Item {
+                    id: viewAreaId
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
 
-                    onPointChanged: {
-                        const ring = galleryModelId.ringAt(ringHoverId.point.position, transformUpdaterId.matrix, rootId.ringHoverPixels)
-                        if (ring >= 0) {
-                            rootId.inspectedRing = ring
+                    RegionViewer {
+                        id: viewerId
+                        anchors.fill: parent
+                        scene: sceneId
+                    }
+
+                    TurnTableInteraction {
+                        id: turnTableId
+                        anchors.fill: parent
+                        camera: viewerId.camera
+                        scene: sceneId
+                    }
+
+                    QQ.HoverHandler {
+                        id: ringHoverId
+                        enabled: ringsId.checked || framesId.checked || sectionsId.checked || overshootId.checked
+
+                        onPointChanged: {
+                            const ring = galleryModelId.ringAt(ringHoverId.point.position, transformUpdaterId.matrix, rootId.ringHoverPixels)
+                            if (ring >= 0) {
+                                rootId.inspectedRing = ring
+                            }
+                        }
+                    }
+
+                    QQ.Repeater {
+                        model: issuesId.checked ? galleryModelId.warningPositions : []
+
+                        delegate: IssueMarker {
+                            id: warningMarkerId
+                            transformUpdater: transformUpdaterId
+                            width: rootId.markerSize
+                            height: rootId.markerSize
+                            color: Theme.warning
+
+                            onTapped: rootId.inspectNearestRing(warningMarkerId.modelData)
+                        }
+                    }
+
+                    QQ.Repeater {
+                        model: issuesId.checked ? galleryModelId.issuePositions : []
+
+                        delegate: IssueMarker {
+                            id: errorMarkerId
+                            transformUpdater: transformUpdaterId
+                            width: rootId.markerSize
+                            height: rootId.markerSize
+                            color: Theme.errorText
+
+                            onTapped: rootId.inspectNearestRing(errorMarkerId.modelData)
                         }
                     }
                 }
 
-                QQ.Repeater {
-                    model: issuesId.checked ? galleryModelId.warningPositions : []
+                QC.ScrollView {
+                    id: reportScrollId
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: rootId.reportHeight
+                    visible: !rootId.grabAll
 
-                    delegate: IssueMarker {
-                        id: warningMarkerId
-                        transformUpdater: transformUpdaterId
-                        width: rootId.markerSize
-                        height: rootId.markerSize
-                        color: Theme.warning
-
-                        onTapped: rootId.inspectNearestRing(warningMarkerId.modelData)
+                    QC.Label {
+                        width: reportScrollId.availableWidth
+                        text: (rootId.inspectedRing >= 0 ? galleryModelId.ringLine(rootId.inspectedRing) + "\n\n" : "")
+                              + galleryModelId.reportText + "\n\n" + galleryModelId.issueTexts.join("\n")
+                              + "\n\n" + galleryModelId.parameters
+                        font.family: Theme.fontFamilyMono
+                        font.pixelSize: Theme.fontSizeCaption
+                        wrapMode: QQ.Text.WrapAnywhere
                     }
-                }
-
-                QQ.Repeater {
-                    model: issuesId.checked ? galleryModelId.issuePositions : []
-
-                    delegate: IssueMarker {
-                        id: errorMarkerId
-                        transformUpdater: transformUpdaterId
-                        width: rootId.markerSize
-                        height: rootId.markerSize
-                        color: Theme.errorText
-
-                        onTapped: rootId.inspectNearestRing(errorMarkerId.modelData)
-                    }
-                }
-            }
-
-            QC.ScrollView {
-                id: reportScrollId
-                Layout.fillWidth: true
-                Layout.preferredHeight: rootId.reportHeight
-                visible: !rootId.grabAll
-
-                QC.Label {
-                    width: reportScrollId.availableWidth
-                    text: (rootId.inspectedRing >= 0 ? galleryModelId.ringLine(rootId.inspectedRing) + "\n\n" : "")
-                          + galleryModelId.reportText + "\n\n" + galleryModelId.issueTexts.join("\n")
-                          + "\n\n" + galleryModelId.parameters
-                    font.family: Theme.fontFamilyMono
-                    font.pixelSize: Theme.fontSizeCaption
-                    wrapMode: QQ.Text.WrapAnywhere
                 }
             }
         }
 
         TubeSandboxPanel {
             id: sandboxPanelId
-            Layout.preferredWidth: rootId.sandboxPanelWidth
-            Layout.fillHeight: true
+            QC.SplitView.preferredWidth: rootId.grabbing ? rootId.sandboxPanelWidth : paneSettingsId.sandboxPaneWidth
+            QC.SplitView.minimumWidth: rootId.sandboxMinimumWidth
             visible: galleryModelId.sandboxSelected && !rootId.grabAll
+            clip: true
             galleryModel: galleryModelId
 
             onGrabRequested: rootId.grabView()
