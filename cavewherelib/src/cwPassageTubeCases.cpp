@@ -56,6 +56,16 @@ constexpr std::array<double, 5> kMiterBendDegrees = {0.0, 60.0, 120.0, 150.0, 17
 constexpr float kMiterLegMeters = 10.0f;
 const Section kMiterSection {2.0, 1.0, 2.0, 1.0};
 
+// The pitch sweep (redesign step 5): a level 10 m lead-in north, then a 20 m
+// leg pitched down each of these, the lip reading the drop below it and the
+// bottom the shaft above it.
+constexpr std::array<double, 4> kPitchDegrees = {90.0, 80.0, 70.0, 45.0};
+constexpr float kPitchLeadInMeters = 10.0f;
+constexpr float kPitchMeters = 20.0f;
+const Section kPitchLeadInSection {2.0, 2.0, 2.0, 1.0};
+const Section kPitchLipSection {2.0, 2.0, 2.0, 19.0};
+const Section kPitchBottomSection {2.0, 2.0, 19.0, 1.0};
+
 // The junctions of redesign step 2: a through reading L2 R1 and an arm
 // reading L1.5 R1.5, a chamber and the crawl off it, and a hub of six legs
 // reading L3 R3 at J.
@@ -388,6 +398,20 @@ cwPassageTubeCases::Case miterBendCase(double bendDegrees)
                                                {QStringLiteral("m3"), m3, lrudStrings(kMiterSection)}});
     miter.tags.append(QStringLiteral("miter"));
     return miter;
+}
+
+// One pitch of the pitch sweep.
+cwPassageTubeCases::Case pitchCase(double pitchDegrees)
+{
+    const QVector3D p1(0.0f, 0.0f, 0.0f);
+    const QVector3D p2 = p1 + kPitchLeadInMeters * direction(0.0, 0.0);
+    const QVector3D p3 = p2 + kPitchMeters * direction(0.0, -pitchDegrees);
+    cwPassageTubeCases::Case pitch = bendCase(QStringLiteral("38. Pitch of %1 degrees below a level lead-in").arg(pitchDegrees),
+                                              {{QStringLiteral("p1"), p1, lrudStrings(kPitchLeadInSection)},
+                                               {QStringLiteral("p2"), p2, lrudStrings(kPitchLipSection)},
+                                               {QStringLiteral("p3"), p3, lrudStrings(kPitchBottomSection)}});
+    pitch.tags.append(QStringLiteral("pitch"));
+    return pitch;
 }
 
 // The junctions of redesign step 2 that the gallery's own lacks; its T is
@@ -797,6 +821,9 @@ QVector<cwPassageTubeCases::Case> cwPassageTubeCases::catalog()
     }
     for (const JunctionCase& junctionCase : unionCases()) {
         cases.append(toCase(junctionCase));
+    }
+    for (double pitchDegrees : kPitchDegrees) {
+        cases.append(pitchCase(pitchDegrees));
     }
     cases.append({QStringLiteral("Phake Cave"), {QStringLiteral("phake")}, phakeCave()});
     cases.append(loopCase());

@@ -459,8 +459,7 @@ Ring lerpRing(const Ring& a, const Ring& b, double fraction)
     ring.chainLeg = b.chainLeg;
     const QVector3D tangent = slerp(a.frame.tangent, b.frame.tangent, fraction);
     const QVector3D rightHint = a.frame.right + (b.frame.right - a.frame.right) * f;
-    const double weight = a.frame.inclinationWeight + (b.frame.inclinationWeight - a.frame.inclinationWeight) * fraction;
-    setRingVertices(ring, points, tangent, rightHint, weight);
+    setRingVertices(ring, points, tangent, rightHint);
     return ring;
 }
 

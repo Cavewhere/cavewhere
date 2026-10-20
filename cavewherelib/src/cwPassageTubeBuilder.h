@@ -51,11 +51,15 @@ struct cwStationLrud {
  *
  * Pipeline: survey shots → legs → chains → sections → rings → closed tubes
  * → union. A chain is a run of consecutive shots of one chunk skinned as one
- * tube, so every station on it has one record and holds one ring: the
- * section of that record square to the plan bisector of the station's legs.
+ * tube, so every station on it has one record. Every ring stands vertical:
+ * the record's left and right level along the clockwise turn of the plan
+ * bisector of the station's legs, its up and down plumb.
  *
- * Each leg is the loft between its two stations' rings: its rings, at its
- * stations and evenly along it, are the point-wise lerps of the two.
+ * Each leg is the loft between its two end rings, which advance along its
+ * plan run padded at each end (Chain::legPads), so a plumb leg is a box with
+ * thickness; its rings are the point-wise lerps of the two. Legs that both
+ * place their ring on the station between them share it; elsewhere the chain
+ * splits there into pieces that meet by union.
  *
  * Each chain's rings close into one capped tube per trip it runs through,
  * and chains that share a station overlap there. The mesh is the boolean
@@ -78,8 +82,6 @@ public:
         double sampleSpacingMeters = 1.0;
         int ringResolution = 16;
         double defaultRadiusMeters = 0.5;
-        double blendLowDegrees = 45.0;
-        double blendHighDegrees = 75.0;
         // Slides each end cap's vertices into the passages it meets before
         // the union (cwPassageTubeUnion::slideCaps).
         bool slideCaps = true;
@@ -99,6 +101,9 @@ public:
         QVector3D toPosition;
         cwStationLrud fromLrud;
         cwStationLrud toLrud;
+        // The plan direction from → to that the shot's compass reads, for a
+        // leg whose stations hold no plan direction between them.
+        std::optional<QVector3D> shotFacing;
     };
 
     // A leg as a chain walks it; reversed means it is walked to → from.
@@ -107,27 +112,26 @@ public:
         bool reversed = false;
     };
 
-    // A ring's frame: tangent along the chain, square to the ring's plane,
-    // and right = tangent × up. inclinationWeight is 0 for a leg gentler than
-    // Options::blendLowDegrees and 1 for one steeper than
-    // Options::blendHighDegrees.
+    // A ring's frame: tangent level and square to the ring's plane, up
+    // plumb, and right = tangent × up, level.
     struct Frame {
         QVector3D tangent;
         QVector3D up;
         QVector3D right;
-        double inclinationWeight = 0.0;
     };
 
-    // A gentle leg's section at one of its stations, which a ring centered on
-    // the station is: the quadrant ellipse through the reading points of the
-    // record the leg's own chunk took there, at face value. readings are the
+    // A leg's section at one of its stations, which its end ring there is:
+    // the quadrant ellipse through the reading points of the record the leg's
+    // own chunk took there, at face value. readings are the
     // walls along -right, right, up and -up of the ring's frame, a missing one
     // filled from those beside it; stationRadii are the ellipse's radii
-    // around station at the ring's binAngles.
+    // around center at the ring's binAngles. center is the ring's center:
+    // station, or station padded along the leg's plan run.
     struct Section {
         cwStationLrud readings;
         QVector<double> stationRadii;
         QVector3D station;
+        QVector3D center;
     };
 
     // A cross-section ring around center with N = Options::ringResolution
@@ -143,8 +147,8 @@ public:
     // filled from the walls beside it or borrowed. chainLeg is the index into
     // Chain::legs of the leg the ring lies on or ends. isGrown is true when a
     // junction grew the ring to take an arm's section across to the far wall.
-    // section is set on the rings that are a gentle leg's section from its
-    // own record.
+    // section is set on the rings that are a leg's section from its own
+    // record.
     struct Ring {
         QVector3D center;
         QVector<double> radii;
@@ -212,8 +216,24 @@ public:
         QUuid tripId;
     };
 
+    // How far a leg's end rings stand off its stations along its plan run:
+    // e·start before its start and e·end past its end, where start and end
+    // are pad = mean(L, R) / 2 of each station's drawn walls and
+    // e = 1 − min(1, planRun / (start + end)).
+    struct LegPad {
+        double start = 0.0;
+        double end = 0.0;
+        double e = 0.0;
+    };
+
     struct Chain {
         QVector<ChainLeg> legs;
+        // One per leg.
+        QVector<LegPad> legPads;
+        // The plan direction each station faces, in walk order, as the run of
+        // shots the chain was cut from faces it (cwPassageTubeGeometry::
+        // chainFacings); empty for a chain the builder did not cut.
+        QVector<QVector3D> facings;
         // In chain order: one ring per station and per sample along each leg.
         QVector<Ring> rings;
         // Where an arm meets its through tube: points on the through surface

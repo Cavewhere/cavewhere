@@ -72,8 +72,7 @@ inline bool hasValidFrame(const cwPassageTubeBuilder::Ring& ring)
 inline void setRingVertices(cwPassageTubeBuilder::Ring& ring,
                             const QVector<QVector3D>& vertices,
                             const QVector3D& tangent,
-                            const QVector3D& rightHint,
-                            double inclinationWeight)
+                            const QVector3D& rightHint)
 {
     const QVector3D unitTangent = tangent.normalized();
     const auto inPlane = [&](const QVector3D& v) {
@@ -85,7 +84,7 @@ inline void setRingVertices(cwPassageTubeBuilder::Ring& ring,
     }
     right.normalize();
     const QVector3D up = QVector3D::crossProduct(right, unitTangent);
-    ring.frame = cwPassageTubeBuilder::Frame {unitTangent, up, right, inclinationWeight};
+    ring.frame = cwPassageTubeBuilder::Frame {unitTangent, up, right};
 
     const int resolution = vertices.size();
     ring.vertices = vertices;
@@ -193,11 +192,16 @@ inline QVector3D planDirectionOf(const cwPassageTubeBuilder::Leg& leg)
 // square to the arriving leg where the two double back, or the one leg's plan
 // direction at a chain end. A loop's first and last stations are one
 // station. A station whose legs run plumb takes the facing of the nearest
-// station along the chain that has one, or north.
+// station along the chain that has one, else the first leg's shot facing as
+// walked, else north. A chain cut from a longer run keeps the run's facings
+// (Chain::facings).
 inline QVector<QVector3D> chainFacings(const QVector<cwPassageTubeBuilder::Leg>& legs,
                                        const cwPassageTubeBuilder::Chain& chain)
 {
     const int legCount = static_cast<int>(chain.legs.size());
+    if (chain.facings.size() == legCount + 1) {
+        return chain.facings;
+    }
     const bool isLoop = chain.startCap == cwPassageTubeBuilder::EndCap::None;
     QVector<QVector3D> directions;
     directions.reserve(legCount);
@@ -220,10 +224,17 @@ inline QVector<QVector3D> chainFacings(const QVector<cwPassageTubeBuilder::Leg>&
         }
     }
 
+    QVector3D fallback = kFallbackFacing;
+    if (!chain.legs.isEmpty()) {
+        const cwPassageTubeBuilder::ChainLeg& firstLeg = chain.legs.constFirst();
+        if (const std::optional<QVector3D>& shotFacing = legs.at(firstLeg.legIndex).shotFacing) {
+            fallback = firstLeg.reversed ? -*shotFacing : *shotFacing;
+        }
+    }
     QVector<QVector3D> facings;
     facings.reserve(legCount + 1);
     for (int s = 0; s <= legCount; ++s) {
-        QVector3D facing = kFallbackFacing;
+        QVector3D facing = fallback;
         for (int offset = 0; offset <= legCount; ++offset) {
             const int before = s - offset;
             const int after = s + offset;

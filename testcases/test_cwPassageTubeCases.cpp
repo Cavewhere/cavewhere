@@ -276,25 +276,19 @@ struct AcceptedIssue {
 };
 
 const QVector<AcceptedIssue> kPhakeCaveIssues {
-    // The checker looks for a3's side walls square to the bisector of its
-    // legs; they lie along its facing (T07ah4).
-    {QStringLiteral("a3"), cwPassageTubeMeshCheck::WallMissed},
-    // a4 holds its two chunks' sections, so its tube splits there, and the
-    // union folds and leaves slivers where the two overlap.
-    {QStringLiteral("a4"), cwPassageTubeMeshCheck::Crease},
-    {QStringLiteral("a4"), cwPassageTubeMeshCheck::DegenerateTriangle},
-    {QStringLiteral("a4"), cwPassageTubeMeshCheck::SliverTriangle},
-    // a6 and a9 hold a plumb and a level section each, until T07am stands
-    // their rings vertical: the union leaves slivers where they meet, and
-    // a6's rings fold behind the plumb one.
+    // The a6 -> a9 shaft is a box padded off both stations (T07am): its cap
+    // at a6 slides back into chunk 2's passage and folds the box's rings
+    // behind it, the union leaves slivers where the box meets the passages
+    // at a6 and a9, the box's walls crease against its cap at a9 (one crease
+    // lies nearer a10), and its padded ring leaves a6's side walls off the
+    // tube.
     {QStringLiteral("a6"), cwPassageTubeMeshCheck::FoldBack},
     {QStringLiteral("a6"), cwPassageTubeMeshCheck::SliverTriangle},
+    {QStringLiteral("a6"), cwPassageTubeMeshCheck::WallMissed},
+    {QStringLiteral("a9"), cwPassageTubeMeshCheck::FoldBack},
     {QStringLiteral("a9"), cwPassageTubeMeshCheck::SliverTriangle},
-    // a10 reads 0 on one side, so its ring bunches vertices a few
-    // centimeters apart: the union leaves slivers beside them, and its
-    // right wall lies off the union where the arm leaves it.
-    {QStringLiteral("a10"), cwPassageTubeMeshCheck::SliverTriangle},
-    {QStringLiteral("a10"), cwPassageTubeMeshCheck::WallMissed},
+    {QStringLiteral("a9"), cwPassageTubeMeshCheck::Crease},
+    {QStringLiteral("a10"), cwPassageTubeMeshCheck::Crease},
 };
 
 QString nearestStation(const Cases::Trip& trip, const QVector3D& point)
@@ -486,7 +480,6 @@ bool hasSteepArm(const Cases::Case& entry)
 }
 
 // Cases that build clean with the stitch and not as the union (T07ak):
-// - 8's pit leaves the through's floor reading at J off the union (WallMissed);
 // - an arm whose floor lies in the bent through's floor plane folds where
 //   the two floors meet (Crease, SliverTriangle);
 // - two big arms on one side slide their caps back along their legs, which
@@ -494,10 +487,14 @@ bool hasSteepArm(const Cases::Case& entry)
 //   (WallMissed);
 // - a sloping arm's slid cap folds against its wall at a through with two
 //   sections at J (Crease, WallMissed).
+// Cases whose plumb leg is a box padded off its stations (T07am): 8 and the
+// plumb arm's pit, 9 and 10's shafts. Their rings are a few meters tall
+// over a 10 m or longer drop, so each box is a sheared slab whose walls
+// crease against its caps (Crease), the padded rings leave the stations'
+// readings off the tube (WallMissed), the shot runs out of the slab
+// (CenterlineOutside), and 9's caps slide back along the slab and fold its
+// rings (FoldBack).
 // Cases that build unclean with one ring per station (T07al):
-// - 9 and 10's shafts and the plumb arm's pit close flush on their end
-//   rings now that no cap runs on by the end's up or down, which leaves
-//   that reading off the tube (WallMissed) until T07am pads plumb legs;
 // - 21's small arm is its own chain, whose cap slides along it into the
 //   room and folds the rings behind it (FoldBack, WallMissed).
 // The sweep's clean subsample skips them where it samples them.
@@ -636,19 +633,30 @@ bool isJunctionLimitRandomSeed(int seed)
 // The miter sweep's 150 and 170° bends pinch to the hairpin's sheet at
 // their station (redesign step 1, accepted), which folds the walls against
 // each other (Crease, SelfIntersection) and pulls 170°'s rings off the
-// one before.
+// one before. 23's second leg climbs 51° with vertical rings (T07am), 0.31
+// m apart in plan, so the inside wall of its bend reaches past them and
+// pulls them back.
 const QStringList kPinchedBendCases {
     QStringLiteral("31. Bend of 150 degrees mitered on one ring"),
     QStringLiteral("31. Bend of 170 degrees mitered on one ring"),
+    QStringLiteral("23. Sharp bend at a station reading zero on the outside wall"),
 };
 
-// 25's shaft foot joins a plumb section to a level one, whose union leaves
-// slivers (SliverTriangle) until T07am stands its rings vertical. 20's
-// tie-in turns back past 150°, and the two trips' chains end there square
-// to their own legs, so the outside of the bend is their caps, which no
-// passage holds (CapExposed).
+// 25's shaft is a box padded off its stations (T07am), whose foot turns
+// 120° in plan onto a leg dipping 8°: the box's caps slide back along the
+// slab and fold its rings, and the leg out of the foot crosses the box
+// (Crease, SelfIntersection, FoldBack). The pitch sweep's 90 and 80° pitches
+// crease where the box's walls or the pitch's floor meet the cap at the
+// bottom (Crease), and the 90° box's top ring reaches the lead-in's ceiling,
+// whose coincident walls leave slivers at the mouth (SliverTriangle) and
+// its padded rings leave the stations' readings off the tube (WallMissed).
+// 20's tie-in turns back past 150°, and the two trips' chains end there
+// square to their own legs, so the outside of the bend is their caps, which
+// no passage holds (CapExposed).
 const QStringList kOpenJunctionFreeCases = QStringList {
     QStringLiteral("25. Zero floor reading at the foot of a shaft"),
+    QStringLiteral("38. Pitch of 90 degrees below a level lead-in"),
+    QStringLiteral("38. Pitch of 80 degrees below a level lead-in"),
     QStringLiteral("20. Passage surveyed over two trips with a hairpin tie-in and a re-shot leg"),
 } + kPinchedBendCases;
 
@@ -658,26 +666,26 @@ const QStringList kOpenCatalogJunctionCases {
     QStringLiteral("19. Through doubling back beside a big arm"),
 };
 
-// Random seeds that build clean with the stitch and not as the union: 14's
-// slid cap folds against its wall (Crease). Seeds that build unclean once
-// every junction arm is a chain of its own (T07al): the arm's cap slides
-// along its leg into the passage it meets and folds the rings behind it
-// (FoldBack; with SelfIntersection and Crease in 4), and in 10 and 23 two
-// walls touch along a line (SliverTriangle).
-const QVector<int> kUnionOpenRandomSeeds {4, 5, 8, 10, 12, 13, 14, 22, 23, 27, 39, 45};
+// Random seeds that build unclean once every junction arm is a chain of its
+// own (T07al): the arm's cap slides along its leg into the passage it meets
+// and folds the rings behind it (FoldBack; with SelfIntersection and Crease
+// in 4).
+const QVector<int> kUnionOpenRandomSeeds {4, 5, 8, 12, 13, 22, 27, 39, 45};
 
-// Random seeds whose passages hold a plumb and a level section at a shaft's
-// lip or foot, whose union leaves slivers and folds (Crease,
-// SliverTriangle, DegenerateTriangle) until T07am stands their rings
-// vertical.
-const QVector<int> kOpenJunctionFreeRandomSeeds {20, 32};
+// Random seeds with a steep leg off a bend (T07am): 32's 78° leg runs 2.6 m
+// in plan over 12.8 m, so its vertical rings advance 0.2 m in plan apart and
+// the inside wall of the bend before it reaches past them (FoldBack,
+// SelfIntersection, Crease).
+const QVector<int> kOpenJunctionFreeRandomSeeds {32};
 
 // Wild random surveys, as (seed, junctions), whose union leaves a zero-area
 // triangle (DegenerateTriangle): 40 with 4 junctions holds a plumb and a
 // level section at a station, and 7 with 1 junction, clean with the stitch,
 // folds a slid cap against its wall, as 39 with 3 junctions does once its
-// arms are chains of their own (T07al).
-const QVector<std::pair<int, int>> kDegenerateWildSurveys {{7, 1}, {39, 3}, {40, 4}};
+// arms are chains of their own (T07al). 8 with 2 junctions, 11 with 5 and 46
+// with 4 leave one beside a leg 38° to 53° steep whose rings stand vertical
+// (T07am).
+const QVector<std::pair<int, int>> kDegenerateWildSurveys {{7, 1}, {39, 3}, {40, 4}, {8, 2}, {11, 5}, {46, 4}};
 
 void checkCenterlineInside(const std::string& name)
 {
@@ -1266,7 +1274,8 @@ TEST_CASE("cwPassageTubeCases a case survey round-trips its parameters", "[Passa
             CHECK(tags.contains(QString::fromLatin1(tag)));
         }
         CHECK(Cases::galleryCases().size() == 21);
-        CHECK(caseNames([](const Cases::Case& entry) { return entry.tags.contains(QStringLiteral("bend")); }).size() == 9);
+        CHECK(caseNames([](const Cases::Case& entry) { return entry.tags.contains(QStringLiteral("bend")); }).size() == 13);
         CHECK(caseNames([](const Cases::Case& entry) { return entry.tags.contains(QStringLiteral("miter")); }).size() == 5);
+        CHECK(caseNames([](const Cases::Case& entry) { return entry.tags.contains(QStringLiteral("pitch")); }).size() == 4);
     }
 }

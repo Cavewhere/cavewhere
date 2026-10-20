@@ -126,7 +126,7 @@ public:
     // facing, up and down along world z.
     //
     // sectionLoops hold, per ring with a section, the loop of its
-    // stationRadii around the section's station in the ring's frame.
+    // stationRadii around the section's center in the ring's frame.
     // overshoots hold a whisker from the station's readings to each ring
     // vertex that cwPassageTubeMeshCheck reports as WallBeyondReading: more
     // than kWallTolerance past them.
@@ -268,8 +268,8 @@ public:
     Q_INVOKABLE int ringAt(QPointF point, const QMatrix4x4& modelToViewport, double maxPixels) const;
     Q_INVOKABLE int nearestRing(const QVector3D& position) const;
 
-    // The ring's chain, index, leg, distance to its station, frame up,
-    // inclination weight, radius range, kind, and its section's readings,
+    // The ring's chain, index, leg, distance to its station, frame up, its
+    // leg's pads and e, radius range, kind, and its section's readings,
     // station and largest overshoot; empty for an unknown ring.
     Q_INVOKABLE QString ringLine(int ring) const;
 

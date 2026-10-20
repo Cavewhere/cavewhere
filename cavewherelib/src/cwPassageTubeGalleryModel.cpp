@@ -200,10 +200,10 @@ int nearestRingIndex(const Builder::Debug& debug, double maxDistance, DistanceTo
 }
 
 // The point of bin's section loop: its station radius from the section's
-// station along the bin's angle in the ring's frame.
+// center along the bin's angle in the ring's frame.
 QVector3D sectionPoint(const Builder::Ring& ring, int bin)
 {
-    return ring.section->station + cwPassageTubeGeometry::binDirection(ring, bin) * static_cast<float>(ring.section->stationRadii.at(bin));
+    return ring.section->center + cwPassageTubeGeometry::binDirection(ring, bin) * static_cast<float>(ring.section->stationRadii.at(bin));
 }
 
 struct Overshoot {
@@ -1037,12 +1037,15 @@ QString cwPassageTubeGalleryModel::ringLine(int ring) const
             kinds.append(QStringLiteral("grown"));
         }
 
-        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, right %6, up %7, inclination weight %8, radius %9-%10 m%11%12")
+        const Builder::LegPad pad = chain.legPads.value(entry.chainLeg);
+        return QStringLiteral("chain %1 ring %2: leg %3 (%4), %5, right %6, up %7, pad %8/%9 m, e %10, radius %11-%12 m%13%14")
             .arg(chainIndex)
             .arg(ring)
             .arg(entry.chainLeg)
             .arg(legText, stationText, vectorText(entry.frame.right), vectorText(entry.frame.up))
-            .arg(entry.frame.inclinationWeight, 0, 'f', 2)
+            .arg(pad.start, 0, 'f', 2)
+            .arg(pad.end, 0, 'f', 2)
+            .arg(pad.e, 0, 'f', 2)
             .arg(minRadius, 0, 'f', 2)
             .arg(maxRadius, 0, 'f', 2)
             .arg(kinds.isEmpty() ? QString() : QStringLiteral(", ") + kinds.join(QStringLiteral(", ")), sectionText);

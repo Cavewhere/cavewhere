@@ -28,8 +28,6 @@ namespace {
 
 using namespace cwPassageTubeGeometry;
 
-// A leg within this angle of plumb reads level sections.
-constexpr double kSteepLegDegrees = 45.0;
 constexpr double kMinSampleSpacingMeters = 0.01;
 // Two shots between the same stations whose ends lie this close are one
 // passage surveyed twice.
@@ -38,7 +36,7 @@ constexpr double kRepeatedShotToleranceMeters = 0.1;
 // before a nearer ring of another trip.
 constexpr int kSameTripBorrowLegs = 2;
 constexpr double kOnAxisMeters = 1e-6;
-constexpr float kDegenerateLengthSquared = 1e-12f;
+constexpr double kHalfTurnDegrees = 180.0;
 constexpr QVector3D kWorldUp(0.0f, 0.0f, 1.0f);
 
 using Leg = cwPassageTubeBuilder::Leg;
@@ -97,6 +95,30 @@ cwStationLrud stationLrud(const cwStation& station,
         return lrud;
     }
     return {};
+}
+
+// The plan direction the shot's compass reads, calibrated and turned by the
+// trip's manual declination: the frontsight, else the backsight. A
+// corrected frontsight or an uncorrected backsight reads the reverse way.
+std::optional<QVector3D> shotFacing(const cwShot& shot, const cwTripCalibrationData& calibrations)
+{
+    const auto bearing = [&]() -> std::optional<double> {
+        if (shot.compass().state() == cwCompassReading::State::Valid) {
+            const double turn = calibrations.hasCorrectedCompassFrontsight() ? kHalfTurnDegrees : 0.0;
+            return shot.compass().toDouble() + calibrations.frontCompassCalibration() + turn;
+        }
+        if (shot.backCompass().state() == cwCompassReading::State::Valid) {
+            const double turn = calibrations.hasCorrectedCompassBacksight() ? 0.0 : kHalfTurnDegrees;
+            return shot.backCompass().toDouble() + calibrations.backCompassCalibration() + turn;
+        }
+        return std::nullopt;
+    }();
+    if (bearing) {
+        const double declination = calibrations.autoDeclination() ? 0.0 : calibrations.declinationManual();
+        const double radians = qDegreesToRadians(*bearing + declination);
+        return QVector3D(static_cast<float>(std::sin(radians)), static_cast<float>(std::cos(radians)), 0.0f);
+    }
+    return std::nullopt;
 }
 
 bool isPositioned(const cwStation& station, const cwStationPositionLookup& positions)
@@ -219,7 +241,8 @@ QVector<Leg> extractLegs(const cwCavingRegionData& region,
                         fromPosition,
                         toPosition,
                         lruds.at(shotIndex),
-                        lruds.at(shotIndex + 1)
+                        lruds.at(shotIndex + 1),
+                        shotFacing(chunk.shots.at(shotIndex), trip.calibrations)
                     });
                 }
             }
@@ -252,20 +275,22 @@ QVector<Chain> buildChains(const QVector<Leg>& legs)
     return chains;
 }
 
-using Frame = cwPassageTubeBuilder::Frame;
 using Ring = cwPassageTubeBuilder::Ring;
 using Section = cwPassageTubeBuilder::Section;
 using Options = cwPassageTubeBuilder::Options;
 using EndCap = cwPassageTubeBuilder::EndCap;
-
-bool isSteep(const QVector3D& direction)
-{
-    return std::abs(direction.normalized().z()) > std::cos(qDegreesToRadians(kSteepLegDegrees));
-}
+using LegPad = cwPassageTubeBuilder::LegPad;
 
 QVector3D inPlan(const QVector3D& v)
 {
     return QVector3D(v.x(), v.y(), 0.0f);
+}
+
+// The level direction square to a vertical ring whose right is right, so
+// that right × tangent is plumb up.
+QVector3D levelTangent(const QVector3D& right)
+{
+    return QVector3D::crossProduct(kWorldUp, right).normalized();
 }
 
 // A chain leg as walked: start and end in travel order, with the record the
@@ -276,9 +301,6 @@ struct WalkedLeg {
     cwStationLrud startLrud;
     cwStationLrud endLrud;
     QUuid tripId;
-
-    QVector3D direction() const { return (end - start).normalized(); }
-    double length() const { return start.distanceToPoint(end); }
 };
 
 WalkedLeg walkedLeg(const QVector<Leg>& legs, const ChainLeg& chainLeg)
@@ -288,20 +310,6 @@ WalkedLeg walkedLeg(const QVector<Leg>& legs, const ChainLeg& chainLeg)
         return {leg.toPosition, leg.fromPosition, leg.toLrud, leg.fromLrud, leg.tripId};
     }
     return {leg.fromPosition, leg.toPosition, leg.fromLrud, leg.toLrud, leg.tripId};
-}
-
-double smoothstep(double edge0, double edge1, double x)
-{
-    const double t = std::clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
-    return t * t * (3.0 - 2.0 * t);
-}
-
-double inclinationWeight(const QVector3D& tangent, const Options& options)
-{
-    const double inclination = std::asin(std::min(1.0, static_cast<double>(std::abs(tangent.z()))));
-    return smoothstep(qDegreesToRadians(options.blendLowDegrees),
-                      qDegreesToRadians(options.blendHighDegrees),
-                      inclination);
 }
 
 // A missing wall takes the mean of the walls beside it around the section: a
@@ -344,45 +352,6 @@ QVector<bool> measuredBins(const cwStationLrud& read, int resolution)
     return measured;
 }
 
-// The axes a section lies on as a leg reads a station's record, and the
-// record's walls along them: left and right along -right and right, up and
-// down along up and -up. Either way up × right runs along the walk.
-struct SectionAxes {
-    QVector3D right;
-    QVector3D up;
-    cwStationLrud walls;
-
-    QVector3D tangent() const { return QVector3D::crossProduct(up, right); }
-};
-
-// How a leg walked along direction reads a station's record, facing along
-// facing in plan. A gentle leg's section stands plumb with its left and
-// right at face value along the facing turned clockwise. A steep leg's
-// section lies level (T07ah rule 2): left and right across the facing, front
-// and back along it at the mean of left and right. Its right turns with the
-// walls it reads to agree with previousRight, the right of the section
-// before it along the chain, so the loft between them joins each bin to its
-// match.
-SectionAxes sectionAxes(const cwStationLrud& record,
-                        const QVector3D& facing,
-                        const QVector3D& direction,
-                        const std::optional<QVector3D>& previousRight,
-                        bool steep)
-{
-    if (steep) {
-        const QVector3D facingRight = clockwiseOf(facing);
-        const bool turnsAgainst = previousRight && QVector3D::dotProduct(inPlan(*previousRight), facingRight) < 0.0f;
-        const QVector3D right = turnsAgainst ? -facingRight : facingRight;
-        const QVector3D walkUp = direction.z() < 0.0f ? -kWorldUp : kWorldUp;
-        const std::optional<double> halfDepth = meanReading(record.left, record.right);
-        const std::optional<double>& leftWall = turnsAgainst ? record.right : record.left;
-        const std::optional<double>& rightWall = turnsAgainst ? record.left : record.right;
-        return SectionAxes {right, QVector3D::crossProduct(right, walkUp), {leftWall, rightWall, halfDepth, halfDepth}};
-    }
-
-    return SectionAxes {clockwiseOf(facing), kWorldUp, record};
-}
-
 // The walls a section draws, a missing one filled from those beside it, or
 // nullopt when the record reads too little for a section: no side wall, or
 // neither ceiling nor floor.
@@ -394,45 +363,58 @@ std::optional<cwStationLrud> drawnWalls(const cwStationLrud& walls)
     return std::nullopt;
 }
 
-// The section's points: the quadrant ellipse of walls around station at
-// each bin's eccentric anomaly.
-QVector<QVector3D> sectionPoints(const QVector3D& station, const SectionAxes& axes, const cwStationLrud& walls, int resolution)
+// The section's points: the quadrant ellipse of walls around center at each
+// bin's eccentric anomaly, left and right along right, up and down plumb.
+QVector<QVector3D> sectionPoints(const QVector3D& center, const QVector3D& right, const cwStationLrud& walls, int resolution)
 {
     QVector<QVector3D> points;
     points.reserve(resolution);
     for (int bin = 0; bin < resolution; ++bin) {
         const double t = binParameter(bin, resolution);
         const auto [horizontal, vertical] = quadrantReadings(walls, t);
-        points.append(station
-                      + axes.right * static_cast<float>(*horizontal * std::cos(t))
-                      + axes.up * static_cast<float>(*vertical * std::sin(t)));
+        points.append(center
+                      + right * static_cast<float>(*horizontal * std::cos(t))
+                      + kWorldUp * static_cast<float>(*vertical * std::sin(t)));
     }
     return points;
 }
 
-// One end of a chain leg: the station, how its record reads across the leg,
-// and the walls the section draws, borrowed when it reads too little.
+// One end of a chain leg: the station, its right (clockwise of its facing),
+// the record the leg's chunk took there, and the walls the section draws,
+// borrowed when the record reads too little.
 struct LegEnd {
     QVector3D station;
     double distanceAlongChain = 0.0;
     int chainLeg = 0;
     QUuid tripId;
-    SectionAxes axes;
+    QVector3D right;
+    cwStationLrud record;
     std::optional<cwStationLrud> walls;
     bool isBorrowed = false;
-    bool isSteep = false;
+
+    double pad() const { return *meanReading(walls->left, walls->right) / 2.0; }
 };
 
-// A leg end's section as a ring's vertices and frame, with the bins its
-// readings measured.
+// A leg end's section around center as a ring's vertices and right, with
+// the bins its readings measured.
 struct EndSection {
     QVector3D station;
+    QVector3D center;
     QVector<QVector3D> points;
     QVector3D right;
-    QVector3D tangent;
     QVector<bool> measured;
     std::optional<cwStationLrud> readings;
 };
+
+EndSection endSection(const LegEnd& end, const QVector3D& center, int resolution)
+{
+    return EndSection {end.station,
+                       center,
+                       sectionPoints(center, end.right, *end.walls, resolution),
+                       end.right,
+                       end.isBorrowed ? QVector<bool>(resolution, false) : measuredBins(end.record, resolution),
+                       end.isBorrowed ? std::nullopt : end.walls};
+}
 
 // A warning about the chain, reported at its first station. message takes
 // the station name as %1.
@@ -445,10 +427,9 @@ Warning chainWarning(const QVector<Leg>& legs, const Chain& chain, Warning::Type
 
 // Each leg end's walls, as its own record reads them or, when it reads too
 // little, borrowed from the nearest leg end of the chain that reads enough,
-// first from its own trip within kSameTripBorrowLegs legs; a steep leg's end
-// keeps their left and right and reads front and back at the mean of them.
-// ends run in chain order, each leg's start before its end. Without any, the
-// sections are round at the default radius and the chain warns.
+// first from its own trip within kSameTripBorrowLegs legs. ends run in chain
+// order, each leg's start before its end. Without any, the sections are
+// round at the default radius and the chain warns.
 void borrowWalls(QVector<LegEnd>& ends, const QVector<Leg>& legs, const Chain& chain, const Options& options, QVector<Warning>& warnings)
 {
     QVector<int> read;
@@ -493,53 +474,25 @@ void borrowWalls(QVector<LegEnd>& ends, const QVector<Leg>& legs, const Chain& c
         });
         end.walls = lent.at(nearest).walls;
     }
-
-    for (LegEnd& end : ends) {
-        if (end.isBorrowed && end.isSteep) {
-            const std::optional<double> halfDepth = meanReading(end.walls->left, end.walls->right);
-            end.walls = cwStationLrud {end.walls->left, end.walls->right, halfDepth, halfDepth};
-        }
-    }
 }
 
-EndSection endSection(const LegEnd& end, int resolution)
-{
-    const bool hasOwnSection = !end.isBorrowed && !end.isSteep;
-    return EndSection {end.station,
-                       sectionPoints(end.station, end.axes, *end.walls, resolution),
-                       end.axes.right,
-                       end.axes.tangent(),
-                       end.isBorrowed ? QVector<bool>(resolution, false) : measuredBins(end.axes.walls, resolution),
-                       hasOwnSection ? end.walls : std::nullopt};
-}
-
-// The normal of the plane that best fits a ring's points (Newell's method),
-// signed as a section's tangent, so its bins run from right toward up around
-// it. nullopt for points without area.
-std::optional<QVector3D> facingOf(const QVector<QVector3D>& points, const QVector3D& center)
-{
-    QVector3D normal;
-    for (int k = 0; k < points.size(); ++k) {
-        normal += QVector3D::crossProduct(points.at((k + 1) % points.size()) - center, points.at(k) - center);
-    }
-    if (normal.lengthSquared() < kDegenerateLengthSquared) {
-        return std::nullopt;
-    }
-    return normal.normalized();
-}
-
-// Lofts each leg between its two stations' rings (T07ah rule 1): the rings
-// are the sections at the stations and their point-wise lerps evenly along
-// the leg. A station's section stands square to its facing (chainFacings),
-// from the record of the leg arriving there, or of the first leg at the
-// chain's first station and a loop's seam; both legs at the station share
-// its ring. A steep leg reads level sections, so where a steep leg meets a
-// gentle one the station holds each leg's own section.
-void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, QVector<Warning>& warnings)
+// Lofts each leg between its two end rings (redesign step 5). An end ring is
+// its station's section: the quadrant ellipse of the walls, left and right
+// level along the station's right (clockwise of its facing, chainFacings),
+// up and down plumb, standing e·pad off the station along the leg's plan
+// run (LegPad). A leg's plan direction is its own, else the chain's incoming
+// one, else the outgoing one, else the station's facing. The rings between
+// are the point-wise lerps of the two, evenly between their centers.
+//
+// Two legs whose rings both stand on the station between them share its
+// ring, from the record of the leg arriving there; elsewhere the chain
+// splits there into pieces, each its own chain closed by fans, and a loop
+// opens at its first split.
+QVector<Chain> buildRings(const QVector<Leg>& legs, const Chain& chain, const Options& options, QVector<Warning>& warnings)
 {
     QVector<WalkedLeg> walked;
     walked.reserve(chain.legs.size());
-    for (const ChainLeg& chainLeg : std::as_const(chain.legs)) {
+    for (const ChainLeg& chainLeg : chain.legs) {
         walked.append(walkedLeg(legs, chainLeg));
     }
     const bool loop = chain.startCap == EndCap::None;
@@ -551,107 +504,164 @@ void buildRings(const QVector<Leg>& legs, Chain& chain, const Options& options, 
     const int legCount = walked.size();
     const QVector<QVector3D> facings = chainFacings(legs, chain);
 
-    QVector<bool> steepLegs;
-    steepLegs.reserve(legCount);
-    for (const WalkedLeg& leg : std::as_const(walked)) {
-        steepLegs.append(isSteep(leg.direction()));
-    }
-    // Whether the legs either side of the station leg i starts at share its
-    // ring.
-    const auto sharesStart = [&](int i) {
-        return i > 0 && steepLegs.at(i - 1) == steepLegs.at(i);
-    };
-    const bool sharesSeam = loop && steepLegs.constLast() == steepLegs.constFirst();
-
     QVector<LegEnd> ends;
     ends.reserve(2 * legCount);
     double distance = 0.0;
-    std::optional<QVector3D> previousRight;
     for (int i = 0; i < legCount; ++i) {
         const WalkedLeg& leg = walked.at(i);
-        const QVector3D direction = leg.direction();
-        const bool steep = steepLegs.at(i);
-        const SectionAxes startAxes = sectionAxes(leg.startLrud, facings.at(i), direction, previousRight, steep);
-        const SectionAxes endAxes = sectionAxes(leg.endLrud, facings.at(i + 1), direction, startAxes.right, steep);
-        ends.append(LegEnd {leg.start, distance, i, leg.tripId, startAxes, drawnWalls(startAxes.walls), false, steep});
-        distance += leg.length();
-        ends.append(LegEnd {leg.end, distance, i, leg.tripId, endAxes, drawnWalls(endAxes.walls), false, steep});
-        previousRight = endAxes.right;
+        ends.append(LegEnd {leg.start, distance, i, leg.tripId, clockwiseOf(facings.at(i)), leg.startLrud, drawnWalls(leg.startLrud)});
+        distance += leg.start.distanceToPoint(leg.end);
+        ends.append(LegEnd {leg.end, distance, i, leg.tripId, clockwiseOf(facings.at(i + 1)), leg.endLrud, drawnWalls(leg.endLrud)});
     }
     borrowWalls(ends, legs, chain, options, warnings);
 
-    const auto startSection = [&](int i) {
-        return endSection(sharesStart(i) ? ends.at(2 * i - 1) : ends.at(2 * i), resolution);
-    };
-    const auto finalSection = [&](int i) {
-        const bool isSeam = sharesSeam && i == legCount - 1;
-        return endSection(isSeam ? ends.first() : ends.at(2 * i + 1), resolution);
-    };
-
-    // A ring closer than kMinRingSpacingMeters to the one before merges into
-    // it.
-    chain.rings.clear();
-    const auto appendRing = [&](const QVector3D& center,
-                                const QVector<QVector3D>& points,
-                                const QVector3D& tangent,
-                                const QVector3D& rightHint,
-                                int chainLeg,
-                                const QVector<bool>& measured) -> Ring* {
-        if (!chain.rings.isEmpty()) {
-            const QVector3D& previous = chain.rings.constLast().center;
-            if (previous != center && previous.distanceToPoint(center) < kMinRingSpacingMeters) {
-                return nullptr;
-            }
-        }
-        Ring ring;
-        ring.center = center;
-        ring.chainLeg = chainLeg;
-        ring.measured = measured;
-        cwPassageTubeGeometry::setRingVertices(ring, points, tangent, rightHint, inclinationWeight(walked.at(chainLeg).direction(), options));
-        chain.rings.append(ring);
-        return &chain.rings.last();
-    };
-    const auto appendSection = [&](const EndSection& end, int chainLeg) {
-        Ring* ring = appendRing(end.station, end.points, end.tangent, end.right, chainLeg, end.measured);
-        if (ring != nullptr && end.readings) {
-            ring->section = Section {*end.readings, ring->radii, end.station};
-        }
-    };
-
-    for (int i = 0; i < legCount; ++i) {
-        const WalkedLeg& leg = walked.at(i);
-        const EndSection start = startSection(i);
-        const EndSection end = finalSection(i);
-        if (!sharesStart(i)) {
-            appendSection(start, i);
-        }
-
-        const int intervals = std::max(1, static_cast<int>(std::lround(leg.length() / spacing)));
-        for (int j = 1; j < intervals; ++j) {
-            const float t = static_cast<float>(j) / static_cast<float>(intervals);
-            if ((1.0 - t) * leg.length() < kMinRingSpacingMeters) {
-                continue;
-            }
-            QVector<QVector3D> points;
-            QVector<bool> measured;
-            points.reserve(resolution);
-            measured.reserve(resolution);
-            for (int bin = 0; bin < resolution; ++bin) {
-                points.append(start.points.at(bin) + (end.points.at(bin) - start.points.at(bin)) * t);
-                measured.append(start.measured.at(bin) && end.measured.at(bin));
-            }
-            const QVector3D center = leg.start + (leg.end - leg.start) * t;
-            const QVector3D lerpedTangent = start.tangent + (end.tangent - start.tangent) * t;
-            appendRing(center,
-                       points,
-                       facingOf(points, center).value_or(lerpedTangent.lengthSquared() < kDegenerateLengthSquared ? leg.direction() : lerpedTangent),
-                       start.right + (end.right - start.right) * t,
-                       i,
-                       measured);
-        }
-
-        appendSection(end, i);
+    QVector<QVector3D> plans;
+    plans.reserve(legCount);
+    for (const WalkedLeg& leg : std::as_const(walked)) {
+        plans.append(inPlan(leg.end - leg.start));
     }
+    const auto hasPlanRun = [&](int i) {
+        return plans.at(i).length() >= kMinPlanFacingLength;
+    };
+    const auto planDirection = [&](int i) {
+        if (hasPlanRun(i)) {
+            return plans.at(i).normalized();
+        }
+        for (int k = 1; k < legCount; ++k) {
+            const int before = loop ? (i - k + legCount) % legCount : i - k;
+            if (before >= 0 && hasPlanRun(before)) {
+                return plans.at(before).normalized();
+            }
+        }
+        for (int after = i + 1; after < legCount; ++after) {
+            if (hasPlanRun(after)) {
+                return plans.at(after).normalized();
+            }
+        }
+        return facings.at(i);
+    };
+
+    QVector<LegPad> pads;
+    QVector<QVector3D> startCenters;
+    QVector<QVector3D> endCenters;
+    pads.reserve(legCount);
+    startCenters.reserve(legCount);
+    endCenters.reserve(legCount);
+    for (int i = 0; i < legCount; ++i) {
+        const double padStart = ends.at(2 * i).pad();
+        const double padEnd = ends.at(2 * i + 1).pad();
+        const double e = 1.0 - std::min(1.0, plans.at(i).length() / (padStart + padEnd));
+        pads.append(LegPad {padStart, padEnd, e});
+        const QVector3D along = planDirection(i);
+        startCenters.append(walked.at(i).start - along * static_cast<float>(e * padStart));
+        endCenters.append(walked.at(i).end + along * static_cast<float>(e * padEnd));
+    }
+
+    // Station s starts leg s; a loop's station 0 is its seam.
+    const auto previousLeg = [&](int s) {
+        return s > 0 ? s - 1 : legCount - 1;
+    };
+    QVector<int> splitStations;
+    for (int s = loop ? 0 : 1; s < legCount; ++s) {
+        const LegPad& arriving = pads.at(previousLeg(s));
+        const LegPad& leaving = pads.at(s);
+        const bool isShared = arriving.e * arriving.end < kMinRingSpacingMeters && leaving.e * leaving.start < kMinRingSpacingMeters;
+        if (isShared) {
+            endCenters[previousLeg(s)] = walked.at(s).start;
+            startCenters[s] = walked.at(s).start;
+        } else {
+            splitStations.append(s);
+        }
+    }
+    const bool staysLoop = loop && splitStations.isEmpty();
+    const int firstLeg = loop && !splitStations.isEmpty() ? splitStations.first() : 0;
+
+    QVector<QVector<int>> pieceLegs(1);
+    for (int k = 0; k < legCount; ++k) {
+        const int i = (firstLeg + k) % legCount;
+        if (k > 0 && splitStations.contains(i)) {
+            pieceLegs.append(QVector<int>());
+        }
+        pieceLegs.last().append(i);
+    }
+
+    QVector<Chain> pieces;
+    for (const QVector<int>& order : std::as_const(pieceLegs)) {
+        Chain piece;
+        piece.startCap = staysLoop ? EndCap::None : EndCap::Fan;
+        piece.endCap = piece.startCap;
+
+        // A ring closer than kMinRingSpacingMeters to the one before merges
+        // into it.
+        const auto appendRing = [&](const QVector3D& center,
+                                    const QVector<QVector3D>& points,
+                                    const QVector3D& right,
+                                    int chainLeg,
+                                    const QVector<bool>& measured) -> Ring* {
+            if (!piece.rings.isEmpty()) {
+                const QVector3D& previous = piece.rings.constLast().center;
+                if (previous != center && previous.distanceToPoint(center) < kMinRingSpacingMeters) {
+                    return nullptr;
+                }
+            }
+            Ring ring;
+            ring.center = center;
+            ring.chainLeg = chainLeg;
+            ring.measured = measured;
+            cwPassageTubeGeometry::setRingVertices(ring, points, levelTangent(right), right);
+            piece.rings.append(ring);
+            return &piece.rings.last();
+        };
+        const auto appendSection = [&](const EndSection& end, int chainLeg) {
+            Ring* ring = appendRing(end.center, end.points, end.right, chainLeg, end.measured);
+            if (ring != nullptr && end.readings) {
+                ring->section = Section {*end.readings, ring->radii, end.station, end.center};
+            }
+        };
+
+        piece.facings.append(facings.at(order.constFirst()));
+        for (int k = 0; k < order.size(); ++k) {
+            const int i = order.at(k);
+            piece.legs.append(chain.legs.at(i));
+            piece.legPads.append(pads.at(i));
+            piece.facings.append(facings.at(i + 1));
+
+            const bool sharesStart = k > 0;
+            const bool isSeamEnd = staysLoop && i == legCount - 1;
+            const EndSection start = endSection(sharesStart ? ends.at(2 * previousLeg(i) + 1) : ends.at(2 * i), startCenters.at(i), resolution);
+            const EndSection end = endSection(isSeamEnd ? ends.first() : ends.at(2 * i + 1), endCenters.at(i), resolution);
+            if (!sharesStart) {
+                appendSection(start, k);
+            }
+
+            const double length = start.center.distanceToPoint(end.center);
+            const int intervals = std::max(1, static_cast<int>(std::lround(length / spacing)));
+            for (int j = 1; j < intervals; ++j) {
+                const float t = static_cast<float>(j) / static_cast<float>(intervals);
+                if ((1.0 - t) * length < kMinRingSpacingMeters) {
+                    continue;
+                }
+                QVector<QVector3D> points;
+                QVector<bool> measured;
+                points.reserve(resolution);
+                measured.reserve(resolution);
+                for (int bin = 0; bin < resolution; ++bin) {
+                    points.append(start.points.at(bin) + (end.points.at(bin) - start.points.at(bin)) * t);
+                    measured.append(start.measured.at(bin) && end.measured.at(bin));
+                }
+                const QVector3D right = start.right + (end.right - start.right) * t;
+                appendRing(start.center + (end.center - start.center) * t,
+                           points,
+                           right.length() >= kMinPlanFacingLength ? right.normalized() : start.right,
+                           k,
+                           measured);
+            }
+
+            appendSection(end, k);
+        }
+        pieces.append(piece);
+    }
+    return pieces;
 }
 
 StationKey canonicalStation(const QUuid& caveId, const QString& station)
@@ -1302,12 +1312,14 @@ cwPassageTubeBuilder::Debug cwPassageTubeBuilder::buildChainRings(const cwCaving
 {
     Debug debug;
     debug.legs = extractLegs(region, positionsByCave, debug.warnings);
-    debug.chains = buildChains(debug.legs);
-    classifyChainEnds(debug.legs, debug.chains);
-    warnReadingConflicts(region, debug.legs, debug.chains, debug.warnings);
-    for (Chain& chain : debug.chains) {
-        buildRings(debug.legs, chain, options, debug.warnings);
-        placeChainVertices(chain);
+    QVector<Chain> runs = buildChains(debug.legs);
+    classifyChainEnds(debug.legs, runs);
+    warnReadingConflicts(region, debug.legs, runs, debug.warnings);
+    for (const Chain& run : std::as_const(runs)) {
+        for (Chain& piece : buildRings(debug.legs, run, options, debug.warnings)) {
+            placeChainVertices(piece);
+            debug.chains.append(piece);
+        }
     }
     return debug;
 }

@@ -346,7 +346,7 @@ TEST_CASE("cwPassageTubeMeshCheck reports twisted, folded and jumping rings", "[
     const auto ringAt = [](float x, double radius) {
         cwPassageTubeBuilder::Ring ring;
         ring.center = QVector3D(x, 0, 0);
-        ring.frame = {QVector3D(1, 0, 0), QVector3D(0, 0, 1), QVector3D(0, -1, 0), 0.0};
+        ring.frame = {QVector3D(1, 0, 0), QVector3D(0, 0, 1), QVector3D(0, -1, 0)};
         ring.radii = QVector<double>(kResolution, radius);
         ring.measured = QVector<bool>(kResolution, true);
         for (int bin = 0; bin < kResolution; ++bin) {
@@ -413,7 +413,7 @@ TEST_CASE("cwPassageTubeMeshCheck reports ring walls beyond the station's readin
     const auto ringAt = [&](const QVector3D& center, const QVector3D& station, const std::array<float, kResolution>& walls) {
         cwPassageTubeBuilder::Ring ring;
         ring.center = center;
-        ring.frame = {QVector3D(1, 0, 0), QVector3D(0, 0, 1), QVector3D(0, -1, 0), 0.0};
+        ring.frame = {QVector3D(1, 0, 0), QVector3D(0, 0, 1), QVector3D(0, -1, 0)};
         ring.radii = QVector<double>(kResolution, 1.0);
         ring.measured = QVector<bool>(kResolution, true);
         ring.section = cwPassageTubeBuilder::Section {lrud, ring.radii, station};
