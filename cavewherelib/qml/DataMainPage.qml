@@ -297,7 +297,7 @@ StandardPage {
                             helpArea: projectionHelpArea
                         }
 
-                        QC.Label {
+                        SelectableText {
                             objectName: "projectionOriginValue"
                             // The coordinate takes the whole rest of the row and
                             // wraps inside it. Sharing the row with the Recenter…
@@ -345,14 +345,10 @@ StandardPage {
                             text: qsTr("Centered on:")
                         }
 
-                        QC.Label {
+                        SelectableText {
                             objectName: "projectionAnchorValue"
                             Layout.fillWidth: true
                             Layout.maximumWidth: Math.ceil(implicitWidth)
-                            // Wrap, not WordWrap: a station name is one token
-                            // with nowhere to break, and WordWrap paints it
-                            // past the frame instead of folding it.
-                            wrapMode: QQ.Text.Wrap
                             text: RootData.region.localProjection.anchorDescription
                         }
 
@@ -372,7 +368,7 @@ StandardPage {
                             text: qsTr("Datum:")
                         }
 
-                        QC.Label {
+                        SelectableText {
                             id: datumValueId
                             objectName: "projectionDatumValue"
 
@@ -380,7 +376,6 @@ StandardPage {
 
                             Layout.fillWidth: true
                             Layout.maximumWidth: Math.ceil(implicitWidth)
-                            wrapMode: QQ.Text.Wrap
 
                             text: datumValueId.unnamed
                                   ? qsTr("Unknown")

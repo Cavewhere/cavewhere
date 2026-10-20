@@ -91,6 +91,9 @@ MainWindowTest {
             const button = label("recenterButton")
             tryVerify(() => button.visible, 5000,
                       "the frame must be derived before it can be moved")
+            // The rows above lay out on the next frame and push the button
+            // down; clicking first lands on the copyable Location value.
+            waitForRendering(dataPage())
             mouseClick(button)
 
             const dialog = findChild(dataPage(), "projectionCenterDialog")

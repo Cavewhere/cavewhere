@@ -337,7 +337,7 @@ StandardPage {
             text: qsTr("Trips:")
         }
 
-        QC.Label {
+        SelectableValue {
             objectName: "tripCountValue"
             text: nodePageModelId.tripCount
         }
@@ -351,7 +351,7 @@ StandardPage {
             text: qsTr("Last survey:")
         }
 
-        QC.Label {
+        SelectableValue {
             objectName: "lastSurveyValue"
             text: nodePageArea.lastSurveyText
         }
@@ -451,7 +451,7 @@ StandardPage {
                 helpArea: gridConvergenceHelpArea
             }
 
-            QC.Label {
+            SelectableValue {
                 objectName: "gridConvergenceValue"
                 text: nodePageArea.currentNode ? nodePageArea.currentNode.gridConvergence.text : ""
 
@@ -805,7 +805,7 @@ StandardPage {
                     spacing: Theme.delegatePadding
 
                     QC.Label { text: qsTr("Trips:") }
-                    QC.Label { text: nodePageModelId.tripCount }
+                    SelectableValue { text: nodePageModelId.tripCount }
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
@@ -829,7 +829,7 @@ StandardPage {
                     spacing: Theme.delegatePadding
 
                     QC.Label { text: qsTr("Last survey:") }
-                    QC.Label { text: nodePageArea.lastSurveyText }
+                    SelectableValue { text: nodePageArea.lastSurveyText }
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
