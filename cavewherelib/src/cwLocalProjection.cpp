@@ -452,6 +452,14 @@ QString cwLocalProjection::translated(const QString& frameCS, const cwGeoPoint& 
         return {};
     }
 
+    // Both axes of a projected CRS share one unit, so axis 0 names it.
+    double axisToSi = 0.0;
+    if (!proj_cs_get_axis_info(context, cartesian.get(), 0, nullptr, nullptr, nullptr,
+                               &axisToSi, nullptr, nullptr, nullptr)
+        || axisToSi <= 0.0) {
+        return {};
+    }
+
     const char* methodName = nullptr;
     const char* methodAuthority = nullptr;
     const char* methodCode = nullptr;
@@ -486,10 +494,10 @@ QString cwLocalProjection::translated(const QString& frameCS, const cwGeoPoint& 
 
         const QLatin1StringView code(parameter.code != nullptr ? parameter.code : "");
         if (unitToSi > 0.0 && isFalseEastingCode(code)) {
-            parameter.value += origin.x / unitToSi;
+            parameter.value += origin.x * axisToSi / unitToSi;
             movedEasting = true;
         } else if (unitToSi > 0.0 && isFalseNorthingCode(code)) {
-            parameter.value += origin.y / unitToSi;
+            parameter.value += origin.y * axisToSi / unitToSi;
             movedNorthing = true;
         }
         parameters.push_back(parameter);

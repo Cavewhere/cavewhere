@@ -660,3 +660,198 @@ TEST_CASE("Every plate-fixed datum is one the coordinate system picker can name"
         }
     }
 }
+
+namespace {
+    // A first bare fix, in a frame's own units, x-first.
+    constexpr double kBareOriginEasting = 812000.0;
+    constexpr double kBareOriginNorthing = 4123000.0;
+
+    // A point in UTM zone 12N, inside the zone's own numbers.
+    constexpr const char* kWgs84Utm12N = "EPSG:32612";
+    constexpr double kUtm12NOriginEasting = 450000.0;
+    constexpr double kUtm12NOriginNorthing = 4000000.0;
+
+    // NAD83 Colorado Central, whose axes are US survey feet.
+    constexpr const char* kNad83ColoradoCentralFtUS = "EPSG:2232";
+    constexpr double kColoradoOriginEasting = 3100000.0;
+    constexpr double kColoradoOriginNorthing = 1700000.0;
+
+    // Swiss LV95, a Hotine oblique Mercator (variant B) whose false origin is
+    // the easting and northing at the projection center.
+    constexpr const char* kSwissLv95 = "EPSG:2056";
+    constexpr double kSwissOriginEasting = 2600000.0;
+    constexpr double kSwissOriginNorthing = 1200000.0;
+
+    // A second point's offset from the origin, in the frame's own units.
+    constexpr double kOffsetEasting = 250.0;
+    constexpr double kOffsetNorthing = -75.0;
+
+    constexpr double kOriginElevation = 123.4;
+    constexpr double kOffsetElevation = 9.0;
+
+    // A millimeter, in a frame of meters; a third of one in a frame of feet.
+    constexpr double kTranslationTolerance = 0.001;
+    constexpr double kDegreeTolerance = 1e-9;
+
+    // A transverse Mercator that names no false easting or northing at all:
+    // PROJ reads it as a projected CRS, and nothing in it can be moved.
+    constexpr const char* kNoFalseOriginWkt =
+        "PROJCRS[\"No false origin\","
+        "BASEGEOGCRS[\"WGS 84\",DATUM[\"World Geodetic System 1984\","
+        "ELLIPSOID[\"WGS 84\",6378137,298.257223563,LENGTHUNIT[\"metre\",1]]],"
+        "PRIMEM[\"Greenwich\",0,ANGLEUNIT[\"degree\",0.0174532925199433]]],"
+        "CONVERSION[\"tm\",METHOD[\"Transverse Mercator\",ID[\"EPSG\",9807]],"
+        "PARAMETER[\"Latitude of natural origin\",0,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8801]],"
+        "PARAMETER[\"Longitude of natural origin\",0,ANGLEUNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",8802]],"
+        "PARAMETER[\"Scale factor at natural origin\",1,SCALEUNIT[\"unity\",1],ID[\"EPSG\",8805]]],"
+        "CS[Cartesian,2],"
+        "AXIS[\"easting\",east,ORDER[1],LENGTHUNIT[\"metre\",1]],"
+        "AXIS[\"northing\",north,ORDER[2],LENGTHUNIT[\"metre\",1]]]";
+
+    /**
+     * Checks that translated(\a frame, \a origin) is \a frame moved by
+     * \a origin and nothing else: \a origin read in the result lands on
+     * \a frame's (0, 0), a point offset from it lands on the offset, z passes
+     * through, and both are on one datum. Returns the translated system.
+     */
+    QString checkPureTranslation(const QString& frame, const cwGeoPoint& origin)
+    {
+        const QString moved = cwLocalProjection::translated(frame, origin);
+        REQUIRE_FALSE(moved.isEmpty());
+        CHECK(cwCoordinateTransform::isValidCS(moved));
+        CHECK_FALSE(cwCoordinateTransform::isGeographic(moved));
+
+        const std::string frameDatum = datumNameOf(frame);
+        CHECK_FALSE(frameDatum.empty());
+        CHECK(datumNameOf(moved) == frameDatum);
+
+        const cwCoordinateTransform toFrame(moved, frame);
+        REQUIRE(toFrame.isValid());
+
+        const cwGeoPoint atOrigin = toFrame.transform(
+            cwGeoPoint(origin.x, origin.y, kOriginElevation));
+        CHECK_THAT(atOrigin.x, WithinAbs(0.0, kTranslationTolerance));
+        CHECK_THAT(atOrigin.y, WithinAbs(0.0, kTranslationTolerance));
+        CHECK_THAT(atOrigin.z, WithinAbs(kOriginElevation, kTranslationTolerance));
+
+        const cwGeoPoint atOffset = toFrame.transform(
+            cwGeoPoint(origin.x + kOffsetEasting, origin.y + kOffsetNorthing, kOffsetElevation));
+        CHECK_THAT(atOffset.x, WithinAbs(kOffsetEasting, kTranslationTolerance));
+        CHECK_THAT(atOffset.y, WithinAbs(kOffsetNorthing, kTranslationTolerance));
+        CHECK_THAT(atOffset.z, WithinAbs(kOffsetElevation, kTranslationTolerance));
+
+        return moved;
+    }
+}
+
+TEST_CASE("cwLocalProjection::translated moves a frame's false origin and nothing else",
+          "[cwLocalProjection][Translated]")
+{
+    const cwGeoPoint bareOrigin(kBareOriginEasting, kBareOriginNorthing, 0.0);
+
+    SECTION("an LDP spelled as a proj string stays one")
+    {
+        // The open ocean keeps WGS84, which PROJ spells with +datum.
+        const QString frame = cwLocalProjection::deriveFrom(
+            cwCoordinateTransform::Wgs84,
+            cwGeoPoint(kOpenOceanLongitude, kOpenOceanLatitude, 0.0));
+        REQUIRE(frame.startsWith(QStringLiteral("+proj=tmerc")));
+
+        const QString moved = checkPureTranslation(frame, bareOrigin);
+        CHECK(moved.startsWith(QStringLiteral("+proj=tmerc")));
+        CHECK_THAT(datumNameOf(moved), ContainsSubstring(kWgs84DatumName));
+    }
+
+    SECTION("an LDP spelled as WKT keeps its plate-fixed datum")
+    {
+        // A Kentucky anchor lands on NAD83(2011), which only WKT can name.
+        const QString frame = cwLocalProjection::deriveFrom(
+            cwCoordinateTransform::Wgs84,
+            cwGeoPoint(kAnchorLongitude, kAnchorLatitude, 0.0));
+        REQUIRE(frame.startsWith(QStringLiteral("PROJCRS")));
+
+        const QString moved = checkPureTranslation(frame, bareOrigin);
+        CHECK(moved.startsWith(QStringLiteral("PROJCRS")));
+        CHECK_THAT(datumNameOf(moved), ContainsSubstring(kNad83_2011DatumName));
+    }
+
+    SECTION("a raw UTM zone moves its own false origin")
+    {
+        const QString moved = checkPureTranslation(
+            QString::fromLatin1(kWgs84Utm12N),
+            cwGeoPoint(kUtm12NOriginEasting, kUtm12NOriginNorthing, 0.0));
+        CHECK(moved.startsWith(QStringLiteral("+proj=tmerc")));
+    }
+
+    SECTION("a frame in feet takes its origin in feet")
+    {
+        // Lambert conic conformal 2SP: its false origin is EPSG parameters 8826/8827.
+        checkPureTranslation(QString::fromLatin1(kNad83ColoradoCentralFtUS),
+                             cwGeoPoint(kColoradoOriginEasting, kColoradoOriginNorthing, 0.0));
+    }
+
+    SECTION("an oblique Mercator moves its projection center")
+    {
+        // Its false origin is EPSG parameters 8816/8817.
+        checkPureTranslation(QString::fromLatin1(kSwissLv95),
+                             cwGeoPoint(kSwissOriginEasting, kSwissOriginNorthing, 0.0));
+    }
+}
+
+TEST_CASE("cwLocalProjection::translated refuses what has no false origin to move",
+          "[cwLocalProjection][Translated]")
+{
+    const cwGeoPoint bareOrigin(kBareOriginEasting, kBareOriginNorthing, 0.0);
+
+    SECTION("a geographic system")
+    {
+        CHECK(cwLocalProjection::translated(cwCoordinateTransform::Wgs84, bareOrigin).isEmpty());
+    }
+
+    SECTION("text that is no coordinate system")
+    {
+        CHECK(cwLocalProjection::translated(QString(), bareOrigin).isEmpty());
+        CHECK(cwLocalProjection::translated(QStringLiteral("not a coordinate system"),
+                                            bareOrigin).isEmpty());
+    }
+
+    SECTION("an origin that is no number")
+    {
+        const QString frame = cwLocalProjection::deriveFrom(
+            cwCoordinateTransform::Wgs84,
+            cwGeoPoint(kOpenOceanLongitude, kOpenOceanLatitude, 0.0));
+        REQUIRE_FALSE(frame.isEmpty());
+
+        const double notANumber = std::numeric_limits<double>::quiet_NaN();
+        CHECK(cwLocalProjection::translated(frame, cwGeoPoint(notANumber, kBareOriginNorthing, 0.0))
+                  .isEmpty());
+        CHECK(cwLocalProjection::translated(frame, cwGeoPoint(kBareOriginEasting, notANumber, 0.0))
+                  .isEmpty());
+    }
+
+    SECTION("a projected system that names no false origin")
+    {
+        const QString frame = QString::fromLatin1(kNoFalseOriginWkt);
+        REQUIRE(cwCoordinateTransform::isValidCS(frame));
+        REQUIRE_FALSE(cwCoordinateTransform::isGeographic(frame));
+
+        CHECK(cwLocalProjection::translated(frame, bareOrigin).isEmpty());
+    }
+}
+
+TEST_CASE("cwLocalProjection::localGridSystem is a carrier at latitude 0, longitude 0",
+          "[cwLocalProjection][Translated]")
+{
+    const QString grid = cwLocalProjection::localGridSystem();
+    REQUIRE_FALSE(grid.isEmpty());
+    CHECK(cwCoordinateTransform::isValidCS(grid));
+    CHECK_FALSE(cwCoordinateTransform::isGeographic(grid));
+    CHECK_THAT(datumNameOf(grid), ContainsSubstring(kWgs84DatumName));
+
+    const std::optional<cwGeoPoint> origin = cwLocalProjection::origin(grid);
+    REQUIRE(origin.has_value());
+    CHECK_THAT(origin->x, WithinAbs(0.0, kDegreeTolerance));
+    CHECK_THAT(origin->y, WithinAbs(0.0, kDegreeTolerance));
+
+    checkPureTranslation(grid, cwGeoPoint(kBareOriginEasting, kBareOriginNorthing, 0.0));
+}

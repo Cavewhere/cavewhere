@@ -132,10 +132,10 @@ public:
      * \a frameCS's (0, 0). The same projection on the same datum, so relating
      * the two is a pure translation and z passes through. The solve reads an
      * attached file whose fixes name no system in it, with \a origin its first
-     * bare fix.
+     * bare fix. \a origin is x-first and in \a frameCS's own axis unit.
      *
-     * Empty when \a frameCS is no projected CRS PROJ reads, or names no false
-     * origin to move.
+     * Empty when \a frameCS is no projected CRS PROJ reads, names no false
+     * origin to move, or has an axis unit PROJ cannot read.
      */
     static QString translated(const QString& frameCS, const cwGeoPoint& origin);
 
