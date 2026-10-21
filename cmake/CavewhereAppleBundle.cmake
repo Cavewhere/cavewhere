@@ -242,6 +242,19 @@ function(cavewhere_setup_apple_bundle target)
             )
         endforeach()
 
+        # iOS bundles are flat, so applicationDirPath() is the .app itself and
+        # cwGlobals::projDataPath() finds <app>/proj/proj.db. No VERBATIM: under
+        # Xcode the bundle dir contains ${EFFECTIVE_PLATFORM_NAME}, which
+        # VERBATIM would escape into a literal directory name.
+        if(CW_PROJ_DATA_DIR)
+            add_custom_command(TARGET CaveWhere POST_BUILD
+                COMMAND ${CMAKE_COMMAND}
+                    -DSRC=${CW_PROJ_DATA_DIR}
+                    -DDST=$<TARGET_BUNDLE_CONTENT_DIR:CaveWhere>/proj
+                    -P ${CW_BUNDLE_PROJ_DATA_SCRIPT}
+                COMMENT "Bundling PROJ data into CaveWhere.app/proj")
+        endif()
+
         add_dependencies(CaveWhere messageFiles)
     endif()
 endfunction()

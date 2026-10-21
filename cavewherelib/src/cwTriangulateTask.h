@@ -275,7 +275,7 @@ private:
 
     static cwTriangulatedData triangulateGeometry(const cwTriangulateInData& scrap,
                                                   const cwCropImageTask::Result& croppedResult,
-                                                  const cwTextureUploadTask::UploadResult &imageData,
+                                                  const cwItemTexture& texture,
                                                   const cwProgressNodePtr& scrapNode = {});
 
     static PointGrid createPointGrid(QRectF bounds, const cwTriangulateInData& scrapData);

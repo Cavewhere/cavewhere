@@ -4,26 +4,32 @@
 #include <QByteArray>
 #include <QColor>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFile>
+#include <QFileInfo>
 #include <QFuture>
 #include <QImage>
 #include <QSemaphore>
 #include <QString>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QThreadPool>
 
 #include <ktx.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <thread>
 
 #include "cwConcurrent.h"
 #include "cwDiskCacher.h"
 #include "cwKtx2Codec.h"
 #include "cwStreamedTexture.h"
+#include "cwMipMath.h"
 #include "cwTask.h"
-#include "cwTextureResidency.h"
 
 namespace {
     constexpr ktx_uint32_t kSmokeWidth = 4;
@@ -124,8 +130,14 @@ TEST_CASE("cwKtx2Codec round trips a gradient to a block compressed format", "[K
     CHECK(texture.format == target);
     CHECK(texture.size == QSize(kGradientWidth, kGradientHeight));
     CHECK(texture.mipLevels.size() == kGradientMipCount);
+    CHECK(texture.mipLevels.size() == cw::mip::mipLevelCount(texture.size));
     CHECK(texture.mipLevels.at(0).size()
           == blocksFor(kGradientWidth) * blocksFor(kGradientHeight) * kBytesPerBlock);
+
+    for(int level = 0; level < texture.mipLevels.size(); level++) {
+        CHECK(texture.mipLevels.at(level).size()
+              == cw::mip::mipLevelBytes(target, cw::mip::mipLevelSize(texture.size, level)));
+    }
 }
 
 TEST_CASE("cwKtx2Codec handles a size that isn't a multiple of the block size", "[Ktx2]") {
@@ -139,6 +151,15 @@ TEST_CASE("cwKtx2Codec handles a size that isn't a multiple of the block size", 
     CHECK(texture.size == QSize(kOddWidth, kOddHeight));
     CHECK(texture.mipLevels.at(0).size()
           == blocksFor(kOddWidth) * blocksFor(kOddHeight) * kBytesPerBlock);
+
+    // The encoded chain and cw::mip must agree on shape, level for level, or
+    // residency and the ledger will budget for a chain the codec never wrote.
+    CHECK(texture.mipLevels.size() == cw::mip::mipLevelCount(texture.size));
+    for(int level = 0; level < texture.mipLevels.size(); level++) {
+        CHECK(texture.mipLevels.at(level).size()
+              == cw::mip::mipLevelBytes(QRhiTexture::BC7,
+                                        cw::mip::mipLevelSize(texture.size, level)));
+    }
 }
 
 TEST_CASE("cwKtx2Codec encodes the same image at the fastest and default UASTC levels", "[Ktx2]") {
@@ -204,7 +225,7 @@ namespace {
 
     cwDiskCacher::Key streamedKey(const QString& checksum) {
         cwDiskCacher::Key key;
-        key.path = QDir(QStringLiteral("streamed-textures"));
+        key.path = QStringLiteral("streamed-textures");
         key.id = QStringLiteral("gradient-64x48");
         key.checksum = checksum;
         return key;
@@ -212,7 +233,7 @@ namespace {
 
     cwStreamedTexture streamedTexture(const QString& dataRootPath, const cwDiskCacher::Key& key) {
         cwStreamedTexture texture;
-        texture.dataRootPath = dataRootPath;
+        texture.setDataRootPath(dataRootPath);
         texture.key = key;
         texture.size = QSize(kGradientWidth, kGradientHeight);
         return texture;
@@ -228,7 +249,7 @@ TEST_CASE("cwStreamedTexture reports null descriptors and compares by value", "[
     CHECK(cwStreamedTexture().isNull());
 
     cwStreamedTexture noRoot = texture;
-    noRoot.dataRootPath.clear();
+    noRoot.setDataRootPath(QString());
     CHECK(noRoot.isNull());
     CHECK_FALSE(noRoot == texture);
 
@@ -258,9 +279,9 @@ TEST_CASE("cwKtx2Codec slices a block compressed mip chain from a first level", 
     REQUIRE(texture.mipLevels.size() == kGradientMipCount - kSliceLevel);
 
     for(qsizetype level = 0; level < texture.mipLevels.size(); level++) {
-        const QSize levelSize = cw::residency::mipLevelSize(texture.size, static_cast<int>(level));
+        const QSize levelSize = cw::mip::mipLevelSize(texture.size, static_cast<int>(level));
         CHECK(texture.mipLevels.at(level).size()
-              == cw::residency::mipLevelBytes(QRhiTexture::BC7, levelSize));
+              == cw::mip::mipLevelBytes(QRhiTexture::BC7, levelSize));
     }
 }
 
@@ -346,7 +367,7 @@ TEST_CASE("cwKtx2Codec slices an RGBA8 chain for devices without block compressi
     REQUIRE(texture.mipLevels.size() == kGradientMipCount - kSliceLevel);
 
     for(qsizetype level = 0; level < texture.mipLevels.size(); level++) {
-        const QSize levelSize = cw::residency::mipLevelSize(texture.size, static_cast<int>(level));
+        const QSize levelSize = cw::mip::mipLevelSize(texture.size, static_cast<int>(level));
         const QByteArray& levelBytes = texture.mipLevels.at(level);
         REQUIRE(levelBytes.size() == levelSize.width() * levelSize.height() * kBytesPerPixel);
 
@@ -357,6 +378,163 @@ TEST_CASE("cwKtx2Codec slices an RGBA8 chain for devices without block compressi
         CHECK(std::abs(center.green() - kSolidGreen) <= kChannelTolerance);
         CHECK(std::abs(center.blue() - kSolidBlue) <= kChannelTolerance);
     }
+}
+
+TEST_CASE("cwKtx2Codec keys every encode with the generation", "[Ktx2Codec]") {
+    const QString suffix = QStringLiteral("-uastc") + QString::number(cw::ktx2::kEncodeGeneration);
+    CHECK(cw::ktx2::cacheKeyId(QStringLiteral("note-crop"))
+          == QStringLiteral("note-crop") + suffix);
+    CHECK(cw::ktx2::cacheKeyId(QString()) == suffix);
+}
+
+TEST_CASE("cwKtx2Codec ensures one readable encode per cache key", "[Ktx2Codec]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const cwDiskCacher::Key key = streamedKey(QStringLiteral("gradient-checksum"));
+    cwDiskCacher cacher{QDir(tempDir.path())};
+
+    int sourceCalls = 0;
+    const auto source = [&sourceCalls]() {
+        sourceCalls++;
+        return gradientImage(kGradientWidth, kGradientHeight);
+    };
+
+    REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+    CHECK(sourceCalls == 1);
+
+    const QString cachePath = cacher.filePath(key);
+    REQUIRE(QFileInfo::exists(cachePath));
+    const QByteArray firstBytes = cacher.entry(key);
+    REQUIRE_FALSE(firstBytes.isEmpty());
+
+    SECTION("a readable entry is left alone and the source stays unread") {
+        const QDateTime firstWrite = QFileInfo(cachePath).lastModified();
+
+        REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+        CHECK(sourceCalls == 1);
+        CHECK(cacher.entry(key) == firstBytes);
+        CHECK(QFileInfo(cachePath).lastModified() == firstWrite);
+    }
+
+    SECTION("a damaged entry is repaired") {
+        QFile file(cachePath);
+        REQUIRE(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(firstBytes.left(firstBytes.size() / 2));
+        file.close();
+
+        REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+        CHECK(sourceCalls == 2);
+        CHECK(cacher.entry(key) == firstBytes);
+
+        const auto transcoded = cw::ktx2::transcode(cacher.entry(key), QRhiTexture::RGBA8);
+        REQUIRE_FALSE(transcoded.hasError());
+        CHECK(transcoded.value().size == QSize(kGradientWidth, kGradientHeight));
+    }
+
+    SECTION("an entry that is no KTX2 file at all is replaced") {
+        cacher.insert(key, QByteArray("never a valid ktx2 file"));
+
+        REQUIRE_FALSE(cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError());
+        CHECK(sourceCalls == 2);
+        CHECK(cacher.entry(key) == firstBytes);
+    }
+
+    SECTION("an entry the cache can't write is an error") {
+        QTemporaryDir readOnlyDir;
+        REQUIRE(readOnlyDir.isValid());
+
+        const QFile::Permissions writable = QFile::permissions(readOnlyDir.path());
+        REQUIRE(QFile::setPermissions(readOnlyDir.path(), QFile::ReadOwner | QFile::ExeOwner));
+
+        //A process that can write anyway (root) has nothing to prove here
+        if(QFile(QDir(readOnlyDir.path()).filePath(QStringLiteral("probe"))).open(QIODevice::WriteOnly)) {
+            QFile::setPermissions(readOnlyDir.path(), writable);
+        } else {
+            cwDiskCacher readOnlyCacher{QDir(readOnlyDir.path())};
+            const auto ensured = cw::ktx2::ensureEncodedEntry(readOnlyCacher, key, source);
+
+            CHECK(ensured.hasError());
+            CHECK_FALSE(ensured.errorMessage().isEmpty());
+            CHECK(readOnlyCacher.entry(key).isEmpty());
+
+            REQUIRE(QFile::setPermissions(readOnlyDir.path(), writable));
+        }
+    }
+
+    SECTION("an encode that fails is an error and writes nothing") {
+        cwDiskCacher::Key nullImageKey = streamedKey(QStringLiteral("null-image-checksum"));
+        nullImageKey.id = QStringLiteral("null-image");
+        const auto ensured = cw::ktx2::ensureEncodedEntry(cacher, nullImageKey, []() {
+            return QImage();
+        });
+
+        CHECK(ensured.hasError());
+        CHECK_FALSE(ensured.errorMessage().isEmpty());
+        CHECK_FALSE(QFileInfo::exists(cacher.filePath(nullImageKey)));
+    }
+}
+
+namespace {
+    //Long enough for the second caller to reach the claim before the first encode goes on
+    constexpr int kSecondCallerHeadStartMs = 250;
+    constexpr int kSourceWaitTimeoutMs = 30000;
+}
+
+TEST_CASE("cwKtx2Codec runs one source per cache file across concurrent ensures", "[Ktx2Codec]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const cwDiskCacher::Key key = streamedKey(QStringLiteral("concurrent-checksum"));
+
+    std::atomic<int> sourceCalls {0};
+    QSemaphore firstSourceEntered;
+    QSemaphore firstSourceReleased;
+
+    //Each thread owns a cacher on the same directory, as separate jobs do
+    const auto ensureOnThread = [&](const std::function<QImage()>& source,
+                                    std::atomic<bool>& succeeded,
+                                    std::atomic<bool>& finished) {
+        return std::thread([&, source]() {
+            cwDiskCacher cacher{QDir(tempDir.path())};
+            succeeded = !cw::ktx2::ensureEncodedEntry(cacher, key, source).hasError();
+            finished = true;
+        });
+    };
+
+    std::atomic<bool> firstSucceeded {false};
+    std::atomic<bool> firstFinished {false};
+    std::thread first = ensureOnThread([&]() {
+        sourceCalls++;
+        firstSourceEntered.release();
+        //Bounded, so a broken claim fails the checks below rather than hanging
+        firstSourceReleased.tryAcquire(1, kSourceWaitTimeoutMs);
+        return gradientImage(kGradientWidth, kGradientHeight);
+    }, firstSucceeded, firstFinished);
+
+    const bool firstEntered = firstSourceEntered.tryAcquire(1, kSourceWaitTimeoutMs);
+
+    std::atomic<bool> secondSucceeded {false};
+    std::atomic<bool> secondFinished {false};
+    std::thread second = ensureOnThread([&]() {
+        sourceCalls++;
+        return gradientImage(kGradientWidth, kGradientHeight);
+    }, secondSucceeded, secondFinished);
+
+    //The second caller blocks inside the claim, so the only proof of overlap is
+    //that it is still running while the first source holds the claim.
+    QThread::msleep(kSecondCallerHeadStartMs);
+    const bool secondWaitedOnFirst = !secondFinished;
+
+    firstSourceReleased.release();
+    first.join();
+    second.join();
+
+    CHECK(firstEntered);
+    CHECK(secondWaitedOnFirst);
+    CHECK(sourceCalls == 1);
+    CHECK(firstSucceeded);
+    CHECK(secondSucceeded);
 }
 
 namespace {

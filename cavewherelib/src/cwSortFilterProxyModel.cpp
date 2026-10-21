@@ -42,6 +42,7 @@
 #include "cwSortFilterProxyModel.h"
 
 //Qt includes
+#include <QDateTime>
 #include <QtDebug>
 #include <QtQml>
 
@@ -197,4 +198,22 @@ bool cwSortFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &
         return true;
     QString key = model->data(sourceIndex, roleKey(filterRole())).toString();
     return key.contains(rx);
+}
+
+bool cwSortFilterProxyModel::lessThan(const QModelIndex &sourceLeft, const QModelIndex &sourceRight) const
+{
+    const QVariant left = sourceLeft.data(sortRole());
+    const QVariant right = sourceRight.data(sortRole());
+    const bool bothDates = left.metaType() == QMetaType::fromType<QDateTime>()
+                           && right.metaType() == QMetaType::fromType<QDateTime>();
+    if (bothDates) {
+        const bool leftValid = left.toDateTime().isValid();
+        const bool rightValid = right.toDateTime().isValid();
+        // Undated rows sort last in both directions, so flip the answer for descending.
+        if (leftValid != rightValid) {
+            const bool ascending = sortOrder() == Qt::AscendingOrder;
+            return ascending ? leftValid : rightValid;
+        }
+    }
+    return QSortFilterProxyModel::lessThan(sourceLeft, sourceRight);
 }

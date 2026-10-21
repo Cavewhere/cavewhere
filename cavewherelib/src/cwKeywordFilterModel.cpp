@@ -83,15 +83,15 @@ void cwKeywordFilterModel::insert(const QModelIndex& sourceIndex)
         return;
     }
 
-    int row = static_cast<int>(std::distance(mRows.begin(), iter));
-    beginInsertRows(QModelIndex(), row, row);
-    mRows.insert(iter, Row{object, QPersistentModelIndex(sourceIndex)});
-    endInsertRows();
-
     // Remove automatically if the object goes away
-    connect(object, &QObject::destroyed, this, [this](QObject* destroyed) {
+    const auto destroyedConnection = connect(object, &QObject::destroyed, this, [this](QObject* destroyed) {
         removeByObject(destroyed);
     });
+
+    int row = static_cast<int>(std::distance(mRows.begin(), iter));
+    beginInsertRows(QModelIndex(), row, row);
+    mRows.insert(iter, Row{object, QPersistentModelIndex(sourceIndex), destroyedConnection});
+    endInsertRows();
 }
 
 void cwKeywordFilterModel::remove(const QModelIndex& sourceIndex)
@@ -111,9 +111,21 @@ void cwKeywordFilterModel::clear()
 {
     if(!mRows.isEmpty()) {
         beginRemoveRows(QModelIndex(), 0, mRows.size() - 1);
+        for(const Row& row : std::as_const(mRows)) {
+            disconnect(row.destroyedConnection);
+        }
         mRows.clear();
         endRemoveRows();
     }
+}
+
+void cwKeywordFilterModel::eraseRow(QVector<Row>::iterator iter)
+{
+    int row = static_cast<int>(std::distance(mRows.begin(), iter));
+    disconnect(iter->destroyedConnection);
+    beginRemoveRows(QModelIndex(), row, row);
+    mRows.erase(iter);
+    endRemoveRows();
 }
 
 void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
@@ -123,11 +135,7 @@ void cwKeywordFilterModel::setSourceModel(QAbstractItemModel *sourceModel)
     }
 
     disconnectSource();
-    if(!mRows.isEmpty()) {
-        beginRemoveRows(QModelIndex(), 0, mRows.size() - 1);
-        mRows.clear();
-        endRemoveRows();
-    }
+    clear();
 
     QAbstractProxyModel::setSourceModel(sourceModel);
 
@@ -182,10 +190,7 @@ void cwKeywordFilterModel::removeByObject(QObject *object)
         return;
     }
 
-    int row = static_cast<int>(std::distance(mRows.begin(), iter));
-    beginRemoveRows(QModelIndex(), row, row);
-    mRows.erase(iter);
-    endRemoveRows();
+    eraseRow(iter);
 }
 
 void cwKeywordFilterModel::removeBySourceIndex(const QModelIndex &sourceIndex)
@@ -198,10 +203,7 @@ void cwKeywordFilterModel::removeBySourceIndex(const QModelIndex &sourceIndex)
         return;
     }
 
-    int row = static_cast<int>(std::distance(mRows.begin(), iter));
-    beginRemoveRows(QModelIndex(), row, row);
-    mRows.erase(iter);
-    endRemoveRows();
+    eraseRow(iter);
 }
 
 void cwKeywordFilterModel::disconnectSource()

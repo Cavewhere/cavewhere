@@ -26,6 +26,10 @@
  * This base owns everything but that difference; subclasses keep only their target
  * pointer + id(s) and override applyVisible() to push the resolved state into their
  * render object.
+ *
+ * The same target also carries the color-by value (cwKeywordColorBy assigns each
+ * one its categorical slot). Targets that draw nothing colorable keep the default
+ * applyColorValue(), which ignores it.
  */
 class CAVEWHERE_LIB_EXPORT cwVisibilityProxy : public QObject
 {
@@ -36,9 +40,11 @@ public:
     explicit cwVisibilityProxy(QObject* parent = nullptr);
 
     bool isVisible() const { return m_visible; }
+    float colorValue() const { return m_colorValue; }
 
 public slots:
     void setVisible(bool visible);
+    void setColorValue(float value);
 
 signals:
     void visibleChanged();
@@ -48,8 +54,13 @@ protected:
     // only when the value actually changed; subclasses null-check their target.
     virtual void applyVisible(bool visible) = 0;
 
+    // Push the per-element color-by value into the render object. Called by
+    // setColorValue() only when the value actually changed.
+    virtual void applyColorValue(float value) { Q_UNUSED(value); }
+
 private:
     bool m_visible = true;
+    float m_colorValue = 0.0f;
 };
 
 #endif // CWVISIBILITYPROXY_H

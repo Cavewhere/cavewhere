@@ -56,23 +56,23 @@ public:
 
     // Render the first visible point cloud, framed to its own bounds with the
     // export chrome hidden over a transparent clear, so the opaque region is
-    // exactly the cloud. @a worldRadiusOverride > 0 attaches a per-job appearance
-    // override (cwPointCloudAppearance) for this cloud so it draws at that radius
-    // while the live view is untouched; <= 0 renders at the live radius (no
-    // override on the job). The cloud is framed (not the live camera) so the
+    // exactly the cloud. @a coverageOverride > 0 attaches a per-job appearance
+    // override (cwPointCloudAppearance) for this cloud so it draws at that spacing
+    // coverage while the live view is untouched; <= 0 renders at the live coverage
+    // (no override on the job). The cloud is framed (not the live camera) so the
     // assertion never depends on where the on-screen view happens to look.
     Q_INVOKABLE void renderPointCloudFramed(QQuickItem* viewer, QObject* sceneManager,
                                             const QString& filePath, QSize size,
-                                            double worldRadiusOverride);
+                                            double coverageOverride);
 
     // Issue TWO framed point-cloud renders before the render thread drains, so they
     // batch through the atlas path with their override slots live at once — the
-    // concurrent-override case. Each path gets its own world-radius override (> 0)
-    // or the live radius (<= 0). Saves both and returns the number written. Proves
+    // concurrent-override case. Each path gets its own coverage override (> 0)
+    // or the live coverage (<= 0). Saves both and returns the number written. Proves
     // two jobs overriding the same cloud in one batch don't read each other's slot.
     Q_INVOKABLE int renderPointCloudFramedPair(QQuickItem* viewer, QObject* sceneManager,
-                                               const QString& filePathA, double worldRadiusA,
-                                               const QString& filePathB, double worldRadiusB,
+                                               const QString& filePathA, double coverageA,
+                                               const QString& filePathB, double coverageB,
                                                QSize size);
 
     // True when the item's window has a live QRhi device. False under the
@@ -173,11 +173,11 @@ public:
 private:
     // Build the framed-cloud render parameters shared by renderPointCloudFramed and
     // its batched pair: the first visible cloud's head-on framing, transparent clear,
-    // and export chrome hidden. @a worldRadiusOverride > 0 attaches a per-job
+    // and export chrome hidden. @a coverageOverride > 0 attaches a per-job
     // cwPointCloudAppearance override for that cloud. Returns false (with a warning)
     // when the inputs are bad or no cloud is visible.
     bool buildFramedCloudParameters(QQuickItem* viewer, QObject* sceneManager, QSize size,
-                                    double worldRadiusOverride, cwScene*& sceneOut,
+                                    double coverageOverride, cwScene*& sceneOut,
                                     cwOffscreenRenderParameters& parametersOut);
 
     // Shared tail of the single-image render-to-PNG helpers: queue the offscreen

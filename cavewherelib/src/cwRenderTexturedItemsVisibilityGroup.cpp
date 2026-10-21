@@ -21,3 +21,14 @@ void cwRenderTexturedItemsVisibilityGroup::applyVisible(bool visible)
         m_items->setItemVisible(id, visible);
     }
 }
+
+void cwRenderTexturedItemsVisibilityGroup::applyColorValue(float value)
+{
+    if(!m_items) {
+        return;
+    }
+
+    for(auto id : m_ids) {
+        m_items->setItemColorValue(id, value);
+    }
+}

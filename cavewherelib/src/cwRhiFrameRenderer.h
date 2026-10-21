@@ -10,6 +10,7 @@ class QRhiCommandBuffer;
 #include "cwRHIObject.h"
 #include "cwRhiPipelineTypes.h"
 #include "cwEdlParametersData.h"
+#include "cwPointCloudForest.h"
 #include "cwRenderObjectId.h"
 #include "cwSceneVisibility.h"
 #include <QHash>
@@ -37,6 +38,14 @@ struct cwSceneGatherOptions {
     // (the renderer needed the cwAppearanceSlotted to acquire), so the gather loop
     // does a cheap pointer lookup rather than re-hashing ids.
     QHash<const cwRHIObject*, int> appearanceSlotForObject;
+    // True for the live frame, which publishes its culled-versus-total tally
+    // into cwRenderFrameStats. Offscreen export jobs pass false so their
+    // momentary counts leave the HUD's live frame alone.
+    bool liveFrame = true;
+    // The batch drawScene() hands this job's first pass, stamped into every
+    // GatherContext so an object can write what its gather worked out in time
+    // for the draws it gathers (cwRHIPointCloud's node floors).
+    QRhiResourceUpdateBatch* resourceUpdateBatch = nullptr;
 };
 
 /**
@@ -213,8 +222,8 @@ public:
     quint64 frameCounter() const { return m_frameCounter; }
 
     // True when the last live frame left streaming work behind — levels waiting
-    // on the next frame's upload budget, or loads still running. cwRhiScene
-    // re-arms another frame while it holds.
+    // on the next frame's upload budget, loads still running, or a point cloud
+    // governor still settling. cwRhiScene re-arms another frame while it holds.
     bool hasPendingStreamingWork() const { return m_hasPendingStreamingWork; }
 
     // The frame's visibility truth: one immutable snapshot of the scene's
@@ -235,6 +244,13 @@ public:
     void registerRenderObject(cwRenderObjectId id, cwRHIObject* rhiObject);
     void destroyRenderObject(cwRenderObjectId id);
     void markForResourceUpdate(cwRHIObject* rhiObject) { m_rhiNeedResourceUpdate.append(rhiObject); }
+
+    // The one cut every point cloud of the live view draws from, and the
+    // governor that sizes it. Clouds register their trees with it as their
+    // sources change; the frame steps it once at the top of renderLiveFrame and
+    // selects once in gatherScene.
+    cwPointCloudForest& pointCloudForest() { return m_pointCloudForest; }
+    const cwPointCloudForest& pointCloudForest() const { return m_pointCloudForest; }
 
     // The live render objects, in gather order. The offscreen renderer iterates these
     // for per-frame appearance-slot recycling and id resolution.
@@ -360,6 +376,16 @@ public:
     // Driven by cwRhiScene::render, which sequences the offscreen drain after it.
     void renderLiveFrame(QRhiCommandBuffer* cb, cwRhiItemRenderer* renderer);
 
+    // Settles hasPendingStreamingWork() for the live frame just gathered:
+    // @a streamedWorkLeft is what its streamResources() calls reported, joined
+    // by the loads gatherScene() asked for and a point cloud governor still
+    // settling.
+    void recordPendingStreamingWork(bool streamedWorkLeft);
+
+    // Ask every render object to release what it streamed onto the GPU (see
+    // cwRHIObject::releaseStreamedResources). Render thread only, outside a frame.
+    void releaseStreamedResources();
+
 private:
     // Delete an RHI object and purge it from every tracking list, so neither the
     // delete loop nor the issue #512 address-reuse cleanup can leave a dangling
@@ -388,6 +414,9 @@ private:
     //cwRenderObject::renderObjectId() (stable, never reused) rather than the raw
     //pointer, whose address can be recycled by the allocator (issue #512).
     QHash<cwRenderObjectId, cwRHIObject*> m_rhiObjectLookup;
+
+    //Point clouds only; see pointCloudForest()
+    cwPointCloudForest m_pointCloudForest;
 
     cwSceneUpdate::Flag m_updateFlags = cwSceneUpdate::Flag::None;
     cwVisibilitySnapshot m_visibility;

@@ -2,6 +2,8 @@
 
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -10,8 +12,63 @@
 #include "cwFutureManagerToken.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
+#include "cwPointOctreeBuilder.h"
+#include "cwPointOctreeManifest.h"
 
 #include "LazFixtureHelper.h"
+#include "ProfileLogCapture.h"
+
+namespace {
+QString octreeJobName(const QString& lazPath)
+{
+    return QStringLiteral("Building point cloud octree: %1").arg(QFileInfo(lazPath).baseName());
+}
+
+// The build memory budget the profiling runner asks the layer for, and what a
+// megabyte of it is worth
+constexpr const char* kBuildMemoryBudgetVariable = "CW_BUILD_MEMORY_BUDGET_MB";
+constexpr int kOverrideBudgetMegabytes = 64;
+constexpr qint64 kBytesPerMebibyte = 1024 * 1024;
+
+// Sets the override for as long as it lives, so a failing check still leaves
+// the environment the way the rest of the suite found it.
+class BuildBudgetOverride
+{
+public:
+    explicit BuildBudgetOverride(int megabytes)
+    {
+        qputenv(kBuildMemoryBudgetVariable, QByteArray::number(megabytes));
+    }
+
+    ~BuildBudgetOverride()
+    {
+        qunsetenv(kBuildMemoryBudgetVariable);
+    }
+
+    BuildBudgetOverride(const BuildBudgetOverride&) = delete;
+    BuildBudgetOverride& operator=(const BuildBudgetOverride&) = delete;
+};
+
+// True where the build the layer ran logged @a budgetBytes as its pass B budget
+bool builtWithBudget(const QString& lazPath, QTemporaryDir& cacheDir, qint64 budgetBytes)
+{
+    const ProfileLogCapture capture(QStringLiteral("cw.profile.load.debug=true"));
+
+    cwLazLayer layer;
+    layer.setCacheRootPath(cacheDir.path());
+    layer.setSourcePath(lazPath);
+
+    REQUIRE(waitForLazLayerLoaded(&layer));
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    const QStringList passB =
+        ProfileLogCapture::linesStartingWith(QStringLiteral("build passB"));
+    REQUIRE(passB.size() == 1);
+
+    //The trailing space keeps a longer number from matching this one's start
+    return passB.constFirst().contains(QStringLiteral("budgetBytes=%1 ").arg(budgetBytes));
+}
+}
 
 TEST_CASE("cwLazLayer: status transitions Idle → Loading → Loaded",
           "[cwLazLayer]") {
@@ -30,6 +87,7 @@ TEST_CASE("cwLazLayer: status transitions Idle → Loading → Loaded",
 
     QSignalSpy statusSpy(&layer, &cwLazLayer::loadStatusChanged);
     QSignalSpy pointCountSpy(&layer, &cwLazLayer::pointCountChanged);
+    QSignalSpy octreeSpy(&layer, &cwLazLayer::octreeChanged);
 
     layer.setSourcePath(path);
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loading);
@@ -41,9 +99,34 @@ TEST_CASE("cwLazLayer: status transitions Idle → Loading → Loaded",
 
     REQUIRE(statusSpy.size() >= 2); // Idle→Loading and Loading→Loaded
     REQUIRE(pointCountSpy.size() >= 1);
+    REQUIRE(octreeSpy.size() >= 1); // the renderer is told what to draw
+
+    // What the layer publishes is the octree, and every number it reports is
+    // the manifest's.
+    const cwPointOctreeSource& source = layer.octree();
+    REQUIRE_FALSE(source.isNull());
+    REQUIRE(source.lazPath == path);
+    REQUIRE(source.manifest->pointCount == points.size());
+    REQUIRE(source.manifest->fingerprint == source.fingerprint);
+    REQUIRE(layer.bboxMin() == source.manifest->bboxMin);
+    REQUIRE(layer.bboxMax() == source.manifest->bboxMax);
+    REQUIRE(layer.meanSpacingXY() == source.manifest->meanSpacingXY);
+    REQUIRE(layer.meanSpacingXY() > 0.0f);
+
+    // The build put the octree in the cache the layer named, so the manifest
+    // reads back from there.
+    REQUIRE(source.cacheRootPath() == QDir(tempDir.path()).absolutePath());
+
+    // What it publishes is the pack the build wrote there, and the manifest
+    // is that pack's own.
+    REQUIRE(source.pack != nullptr);
+    REQUIRE(QFileInfo(source.pack->path()).canonicalFilePath()
+            == QFileInfo(cw::octree::packPath(tempDir.path(), path)).canonicalFilePath());
+    REQUIRE(source.manifest.get() == &source.pack->manifest());
+    REQUIRE(source.pack->nodeCount() == source.manifest->nodes.size());
 }
 
-TEST_CASE("cwLazLayer: load future is registered with cwFutureManagerModel",
+TEST_CASE("cwLazLayer: the octree build is registered as a named job",
           "[cwLazLayer]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -61,14 +144,279 @@ TEST_CASE("cwLazLayer: load future is registered with cwFutureManagerModel",
 
     cwLazLayer layer;
     layer.setFutureManagerToken(token);
+    layer.setCacheRootPath(tempDir.path());
 
-    QSignalSpy rowsInsertedSpy(&manager, &QAbstractItemModel::rowsInserted);
+    LazJobRecorder jobs(&manager);
     layer.setSourcePath(path);
 
-    REQUIRE(rowsInsertedSpy.size() >= 1);
+    REQUIRE(jobs.waitForName(octreeJobName(path)));
 
     REQUIRE(waitForLazLayerLoaded(&layer));
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+}
+
+TEST_CASE("cwLazLayer: a reload asked for as the build registers still loads",
+          "[cwLazLayer]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QVector<QVector3D> points;
+    for (int i = 0; i < 200; ++i) {
+        points.append(QVector3D(float(i), float(i) * 0.5f, float(i) * 0.25f));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("reload-in-window"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken token(&manager);
+
+    cwLazLayer layer;
+    layer.setFutureManagerToken(token);
+    layer.setCacheRootPath(tempDir.path());
+
+    // The job row is inserted from inside the restart that is queueing the
+    // build, so a reload asked for here lands in the one window where the run
+    // has a future but has not started against it yet — where an out-of-band
+    // cancel used to strand the layer at Loading forever.
+    int reloads = 0;
+    QObject::connect(&manager, &QAbstractItemModel::rowsInserted, &layer,
+                     [&layer, &reloads]() {
+                         if (reloads == 0) {
+                             ++reloads;
+                             layer.reload();
+                         }
+                     });
+
+    layer.setSourcePath(path);
+
+    REQUIRE(waitForLazLayerLoaded(&layer));
+    CHECK(reloads == 1);
+    CHECK(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    CHECK(layer.pointCount() == points.size());
+}
+
+TEST_CASE("cwLazLayer: a second layer on a built file publishes without a job",
+          "[cwLazLayer]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QVector<QVector3D> points;
+    for (int i = 0; i < 200; ++i) {
+        points.append(QVector3D(float(i), float(i) * 0.5f, float(i) * 0.25f));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("cache-hit"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken token(&manager);
+
+    cwLazLayer first;
+    first.setFutureManagerToken(token);
+    first.setCacheRootPath(tempDir.path());
+    first.setSourcePath(path);
+    REQUIRE(waitForLazLayerLoaded(&first));
+    REQUIRE(first.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    // The cache now holds this file's octree, so the second layer reads the
+    // manifest and publishes it — no build, and so nothing to report.
+    LazJobRecorder jobs(&manager);
+
+    cwLazLayer second;
+    second.setFutureManagerToken(token);
+    second.setCacheRootPath(tempDir.path());
+    second.setSourcePath(path);
+
+    REQUIRE(waitForLazLayerLoaded(&second));
+    REQUIRE(second.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    REQUIRE(jobs.names().isEmpty());
+    REQUIRE(manager.count() == 0);
+
+    REQUIRE(second.octree() == first.octree());
+    REQUIRE(second.octree().manifest->pointCount == first.octree().manifest->pointCount);
+    REQUIRE(second.pointCount() == points.size());
+}
+
+TEST_CASE("cwLazLayer: a layer destroyed mid-build writes no manifest",
+          "[cwLazLayer]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    // Big enough that the build is still running when the layer goes away.
+    QVector<QVector3D> points;
+    constexpr int kPointCount = 200000;
+    points.reserve(kPointCount);
+    for (int i = 0; i < kPointCount; ++i) {
+        points.append(QVector3D(float(i % 997), float(i % 991), float(i % 983)));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("cancel-mid-build"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken token(&manager);
+
+    auto* layer = new cwLazLayer();
+    layer->setFutureManagerToken(token);
+    layer->setCacheRootPath(tempDir.path());
+
+    LazJobRecorder jobs(&manager);
+    layer->setSourcePath(path);
+
+    REQUIRE(jobs.waitForName(octreeJobName(path)));
+    REQUIRE(manager.count() == 1);
+
+    delete layer;
+
+    // Give the cancelled build every chance to finish writing: it must not.
+    constexpr int kSettleMs = 2000;
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < kSettleMs) {
+        spinEventLoopSlice();
+    }
+
+    // A cancelled build takes its job row with it, which is what tells this
+    // assertion apart from a build that simply failed.
+    REQUIRE(manager.count() == 0);
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .sourceCSOverride = QString(),
+        .frameCS = QString(),
+        .cacheRootPath = tempDir.path()
+    };
+    REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+}
+
+TEST_CASE("cwLazLayer: a build superseded by a cache hit never publishes its octree",
+          "[cwLazLayer]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString embeddedCS = utmZoneWkt(13, -105);
+    const QString overrideCS = utmZoneWkt(14, -99);
+
+    // Big enough that the build outlasts the cache probe that supersedes it.
+    QVector<QVector3D> points;
+    constexpr int kPointCount = 600000;
+    points.reserve(kPointCount);
+    for (int i = 0; i < kPointCount; ++i) {
+        points.append(QVector3D(500000.0f + float(i % 997),
+                                4000000.0f + float(i % 991),
+                                float(i % 983)));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("superseded-by-hit"));
+    REQUIRE(writeSyntheticLazFile(path, points, embeddedCS));
+
+    constexpr int kBuildTimeoutMs = 60000;
+    const QString cacheRoot = QDir(tempDir.path()).absolutePath();
+
+    // Put the overridden CS's octree in the cache, so the reload the override
+    // triggers below hits it and publishes without a build of its own.
+    {
+        cwLazLayer warm;
+        warm.setCacheRootPath(cacheRoot);
+        warm.setSourceCSOverride(overrideCS);
+        warm.setSourcePath(path);
+        REQUIRE(waitForLazLayerLoaded(&warm, kBuildTimeoutMs));
+        REQUIRE(warm.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    }
+
+    const cwPointOctreeBuilder::Request overridden {
+        .path = path,
+        .sourceCSOverride = overrideCS,
+        .frameCS = QString(),
+        .cacheRootPath = cacheRoot
+    };
+    const QString overriddenFingerprint = cwPointOctreeBuilder::fingerprintFor(overridden);
+    REQUIRE_FALSE(overriddenFingerprint.isEmpty());
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken token(&manager);
+
+    cwLazLayer layer;
+    layer.setFutureManagerToken(token);
+    layer.setCacheRootPath(cacheRoot);
+
+    LazJobRecorder jobs(&manager);
+    layer.setSourcePath(path);
+    REQUIRE(jobs.waitForName(octreeJobName(path)));
+
+    // The build of the file's own CS is now running. Overriding the CS asks for
+    // a different octree, and the cache already has it — so the layer reaches
+    // Loaded while the superseded build is still going.
+    layer.setSourceCSOverride(overrideCS);
+    REQUIRE(waitForLazLayerLoaded(&layer, kBuildTimeoutMs));
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    REQUIRE(layer.octree().fingerprint == overriddenFingerprint);
+
+    // Let the superseded build run to completion. Publishing it now would swap
+    // the octree under a status that never changes, so the renderer — which
+    // hears only loadStatusChanged — would keep drawing the wrong one.
+    constexpr int kSettleMs = 6000;
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < kSettleMs) {
+        spinEventLoopSlice();
+    }
+
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+    REQUIRE(layer.octree().fingerprint == overriddenFingerprint);
+}
+
+TEST_CASE("cwLazLayer: setCacheRootPath mid-build rebuilds under the new root",
+          "[cwLazLayer]") {
+    QTemporaryDir firstRoot;
+    QTemporaryDir secondRoot;
+    REQUIRE(firstRoot.isValid());
+    REQUIRE(secondRoot.isValid());
+
+    // Big enough that the build is still running when the root moves.
+    QVector<QVector3D> points;
+    constexpr int kPointCount = 200000;
+    points.reserve(kPointCount);
+    for (int i = 0; i < kPointCount; ++i) {
+        points.append(QVector3D(float(i % 997), float(i % 991), float(i % 983)));
+    }
+    const QString path = tempLazPath(firstRoot, QStringLiteral("root-move"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    cwFutureManagerModel manager;
+    cwFutureManagerToken token(&manager);
+
+    cwLazLayer layer;
+    layer.setFutureManagerToken(token);
+    layer.setCacheRootPath(firstRoot.path());
+
+    LazJobRecorder jobs(&manager);
+    layer.setSourcePath(path);
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loading);
+
+    // Wait for the job so the root really does move under a running build,
+    // rather than under a probe that has not asked for one yet.
+    REQUIRE(jobs.waitForName(octreeJobName(path)));
+    layer.setCacheRootPath(secondRoot.path());
+
+    // Two builds of 200 k points can run back to back here, so the wait is
+    // longer than the default.
+    constexpr int kBuildTimeoutMs = 30000;
+    REQUIRE(waitForLazLayerLoaded(&layer, kBuildTimeoutMs));
+    REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Loaded);
+
+    // The octree the layer publishes is the one the newest request asked for,
+    // and it really is in the new root.
+    const QString secondProjectRoot = QDir(secondRoot.path()).absolutePath();
+    REQUIRE(layer.octree().cacheRootPath() == secondProjectRoot);
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .sourceCSOverride = QString(),
+        .frameCS = QString(),
+        .cacheRootPath = secondProjectRoot
+    };
+    const std::optional<cwPointOctreeManifest> cached =
+            cwPointOctreeBuilder::cachedManifest(request);
+    REQUIRE(cached.has_value());
+    REQUIRE(cached->fingerprint == layer.octree().fingerprint);
 }
 
 // cwLazLayerModel::rescan uses the (sourceSize, sourceMtime) fingerprint to
@@ -118,4 +466,34 @@ TEST_CASE("cwLazLayer: missing file transitions to Error", "[cwLazLayer]") {
     REQUIRE(layer.loadStatus() == cwLazLayer::LoadStatus::Error);
     REQUIRE(!layer.errorMessage().isEmpty());
     REQUIRE(layer.pointCount() == 0);
+}
+
+TEST_CASE("cwLazLayer: CW_BUILD_MEMORY_BUDGET_MB is the build's memory budget",
+          "[cwLazLayer]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    QVector<QVector3D> points;
+    for (int i = 0; i < 200; ++i) {
+        points.append(QVector3D(float(i), float(i) * 0.5f, float(i) * 0.25f));
+    }
+    const QString path = tempLazPath(tempDir, QStringLiteral("build-budget"));
+    REQUIRE(writeSyntheticLazFile(path, points));
+
+    SECTION("unset, the builder's own default") {
+        QTemporaryDir cacheDir;
+        REQUIRE(cacheDir.isValid());
+
+        REQUIRE(builtWithBudget(path, cacheDir, cw::octree::kDefaultBuildMemoryBudgetBytes));
+    }
+
+    SECTION("set, the megabytes it names") {
+        QTemporaryDir cacheDir;
+        REQUIRE(cacheDir.isValid());
+
+        const BuildBudgetOverride override(kOverrideBudgetMegabytes);
+
+        REQUIRE(builtWithBudget(path, cacheDir,
+                                qint64(kOverrideBudgetMegabytes) * kBytesPerMebibyte));
+    }
 }

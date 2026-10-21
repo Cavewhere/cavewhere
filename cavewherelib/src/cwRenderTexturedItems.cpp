@@ -1,4 +1,5 @@
 #include "cwRenderTexturedItems.h"
+#include "cwGeometryBounds.h"
 #include "cwGeometryItersecter.h"
 #include "cwPickingLog.h"
 #include "cwRhiTexturedItems.h"
@@ -7,7 +8,15 @@
 
 #include <QtGlobal>
 
+#include <cstring>
+
 namespace {
+
+// Binding 1 is the scrap texture, so the per-draw block sits at 2.
+constexpr int kScrapPerDrawBinding = 2;
+// std140 vec4 item: x = color-by value, yzw reserved.
+constexpr int kItemBlockFloats = 4;
+constexpr qsizetype kColorValueBytes = sizeof(float);
 
 Monad::Result<cwGeometry> geometryMatchesLayout(const cwGeometry& geometry,
                                                 const QVector<cwGeometry::AttributeDesc>& layout)
@@ -126,7 +135,6 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
     if (type == CommandType::Add) {
         // Ids are unique and monotonic, so an Add never collides with pending
         // state for the same id — overwrite outright with the full payload.
-        Q_ASSERT(hasOneTextureRepresentation(payload));
         PendingItemState state;
         state.lifecycle = Lifecycle::Add;
         state.payload = payload;
@@ -158,16 +166,11 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
     switch (type) {
     case CommandType::UpdateGeometry:
         state.payload.geometry = payload.geometry;
+        state.payload.localBounds = payload.localBounds;
         state.geometryDirty = true;
         break;
     case CommandType::UpdateTexture:
         state.payload.texture = payload.texture;
-        state.payload.streamedTexture = {};
-        state.textureDirty = true;
-        break;
-    case CommandType::UpdateStreamedTexture:
-        state.payload.streamedTexture = payload.streamedTexture;
-        state.payload.texture = QImage();
         state.textureDirty = true;
         break;
     case CommandType::UpdateMaterial:
@@ -187,17 +190,7 @@ void cwRenderTexturedItems::addCommand(CommandType type, uint32_t id, const Item
         break; // handled above
     }
 
-    // Exactly one texture representation is ever pending for an id.
-    Q_ASSERT(hasOneTextureRepresentation(state.payload));
-
     update(); // schedule a render sync just like cwRenderScraps
-}
-
-bool cwRenderTexturedItems::hasOneTextureRepresentation(const ItemPayload& payload)
-{
-    const int set = (payload.texture.isNull() ? 0 : 1)
-                    + (payload.streamedTexture.isNull() ? 0 : 1);
-    return set <= 1;
 }
 
 uint32_t cwRenderTexturedItems::addItem(const Item& item)
@@ -205,29 +198,30 @@ uint32_t cwRenderTexturedItems::addItem(const Item& item)
     const uint32_t id = m_nextId++;
     ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(item.geometry));
-    // One representation travels to the render thread; the streamed descriptor
-    // wins over the image.
-    payload.streamedTexture = item.streamedTexture;
-    if (payload.streamedTexture.isNull()) {
-        payload.texture = item.texture;
-    }
+    payload.texture = item.texture;
     payload.material = item.material;
     payload.uniformBlock = item.uniformBlock;
     payload.modelMatrix = item.modelMatrix;
+    // Measured here, on the GUI thread that already walks the mesh for
+    // registerPickable, so the render thread never walks it at the sync barrier.
+    // From payload.geometry, the layout-converted copy, so the box and the
+    // uploaded vertices always agree.
+    payload.localBounds = item.localBounds ? item.localBounds
+                                           : cw::geometry::positionBounds(payload.geometry);
 
     addCommand(CommandType::Add, id, payload);
 
     Item storedItem = item;
+    storedItem.localBounds = payload.localBounds;
     if (!storedItem.storeGeometry) {
         storedItem.geometry = cwGeometry();
     }
-    storedItem.texture = payload.texture;
-    if (!storedItem.storeTexture) {
-        storedItem.texture = QImage();
+    // A streamed descriptor is kept whatever storeTexture says:
+    // updateStreamedTexture compares against it to drop a repeated ask. Only
+    // the pixels answer to storeTexture.
+    if (!storedItem.storeTexture && storedItem.texture.isImage()) {
+        storedItem.texture = cwItemTexture();
     }
-    // The streamed source is a descriptor, not pixels, so it is always kept:
-    // updateStreamedTexture compares against it to drop a repeated ask.
-    storedItem.streamedTexture = payload.streamedTexture;
     m_frontState.insert(id, storedItem);
 
     if (!payload.geometry.isEmpty()) {
@@ -257,14 +251,30 @@ void cwRenderTexturedItems::updateItem(uint32_t id, const Item& item)
     // re-registers picking, model matrix updates the intersecter). Coalescing
     // collapses the five commands onto this id's pending entry.
     updateGeometry(id, item.geometry);
-    if (!item.streamedTexture.isNull()) {
-        updateStreamedTexture(id, item.streamedTexture);
+    if (item.texture.isStreamed()) {
+        updateStreamedTexture(id, item.texture.streamed());
     } else {
-        updateTexture(id, item.texture);
+        updateTexture(id, item.texture.image());
     }
     setMaterial(id, item.material);
-    setUniformBlock(id, item.uniformBlock);
+    setUniformBlock(id, withColorValueOf(id, item.uniformBlock));
     setModelMatrix(id, item.modelMatrix);
+}
+
+QByteArray cwRenderTexturedItems::withColorValueOf(uint32_t id, const QByteArray& uniformBlock) const
+{
+    // The color-by value belongs to the item's visibility proxy, which pushes
+    // it only when it changes; a re-triangulated item must keep it.
+    const auto entry = m_frontState.constFind(id);
+    if (entry == m_frontState.cend()
+        || entry->uniformBlock.size() < kColorValueBytes
+        || uniformBlock.size() < kColorValueBytes) {
+        return uniformBlock;
+    }
+
+    QByteArray block = uniformBlock;
+    std::memcpy(block.data(), entry->uniformBlock.constData(), kColorValueBytes);
+    return block;
 }
 
 void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geometry)
@@ -280,9 +290,11 @@ void cwRenderTexturedItems::updateGeometry(uint32_t id, const cwGeometry& geomet
 
     ItemPayload payload;
     payload.geometry = handleGeometryError(geometryForRender(geometry));
+    payload.localBounds = cw::geometry::positionBounds(payload.geometry);
     addCommand(CommandType::UpdateGeometry, id, payload);
 
     const QMatrix4x4 modelMatrix = entry->modelMatrix;
+    entry->localBounds = payload.localBounds;
     if (entry->storeGeometry) {
         entry->geometry = payload.geometry;
     } else {
@@ -332,12 +344,7 @@ void cwRenderTexturedItems::updateTexture(uint32_t id, const QImage& image)
     payload.texture = image; // geometry left default
     addCommand(CommandType::UpdateTexture, id, payload);
 
-    entry->streamedTexture = {};
-    if (entry->storeTexture) {
-        entry->texture = image;
-    } else {
-        entry->texture = QImage();
-    }
+    entry->texture = entry->storeTexture ? cwItemTexture(image) : cwItemTexture();
 }
 
 void cwRenderTexturedItems::updateStreamedTexture(uint32_t id, const cwStreamedTexture& streamedTexture)
@@ -350,16 +357,15 @@ void cwRenderTexturedItems::updateStreamedTexture(uint32_t id, const cwStreamedT
     // The producer re-publishes the same descriptor whenever it re-runs. Sending
     // it again would cancel the item's residency and restart the load from the
     // pinned base, so an unchanged descriptor stops here.
-    if (entry->streamedTexture == streamedTexture) {
+    if (entry->texture.streamed() == streamedTexture) {
         return;
     }
 
     ItemPayload payload;
-    payload.streamedTexture = streamedTexture;
-    addCommand(CommandType::UpdateStreamedTexture, id, payload);
+    payload.texture = streamedTexture;
+    addCommand(CommandType::UpdateTexture, id, payload);
 
-    entry->texture = QImage();
-    entry->streamedTexture = streamedTexture;
+    entry->texture = streamedTexture;
 }
 
 void cwRenderTexturedItems::setItemVisible(uint32_t id, bool visible)
@@ -440,6 +446,40 @@ void cwRenderTexturedItems::setModelMatrix(uint32_t id, const QMatrix4x4& modelM
     if (auto* intersector = geometryItersecter()) {
         intersector->setModelMatrix({renderObjectId(), id}, modelMatrix);
     }
+}
+
+void cwRenderTexturedItems::setSharedUniformBlock(const QByteArray& block)
+{
+    m_sharedUniformBlock.setValue(block);
+    update();
+}
+
+cwRenderMaterialState cwRenderTexturedItems::scrapMaterial()
+{
+    cwRenderMaterialState material;
+    material.perDrawUniformBinding = kScrapPerDrawBinding;
+    material.perDrawUniformStages = cwRenderMaterialState::ShaderStage::Fragment;
+    return material;
+}
+
+QByteArray cwRenderTexturedItems::emptyItemBlock()
+{
+    return QByteArray(sizeof(float) * kItemBlockFloats, '\0');
+}
+
+void cwRenderTexturedItems::setItemColorValue(uint32_t id, float value)
+{
+    auto entry = m_frontState.find(id);
+    if (entry == m_frontState.end()) {
+        return;
+    }
+
+    QByteArray block = entry->uniformBlock;
+    if (block.size() < kColorValueBytes) {
+        block = emptyItemBlock();
+    }
+    std::memcpy(block.data(), &value, kColorValueBytes);
+    setUniformBlock(id, block);
 }
 
 void cwRenderTexturedItems::removeItem(uint32_t id)

@@ -229,7 +229,17 @@ void cwEDLEffect::resize(QSize outputSize)
     m_lastDepth = nullptr;
 }
 
-void cwEDLEffect::updateFrameUniforms(const FrameUniformContext& ctx)
+void cwEDLEffect::prepare(const FrameUniformContext& ctx, QRhiResourceUpdateBatch* batch)
+{
+    updateUniformData(ctx);
+
+    if (m_uniformsDirty && m_edlUBO) {
+        batch->updateDynamicBuffer(m_edlUBO, 0, sizeof(EdlUniform), &m_uniformData);
+        m_uniformsDirty = false;
+    }
+}
+
+void cwEDLEffect::updateUniformData(const FrameUniformContext& ctx)
 {
     // Recompute only the terms whose inputs changed: the normalizer on a
     // projection change, the effective slope on a projection or parameter change,
@@ -323,13 +333,6 @@ void cwEDLEffect::apply(QRhiCommandBuffer* cb,
         return;
     }
 
-    if (m_uniformsDirty) {
-        auto* batch = m_rhi->nextResourceUpdateBatch();
-        batch->updateDynamicBuffer(m_edlUBO, 0, sizeof(EdlUniform), &m_uniformData);
-        cb->resourceUpdate(batch);
-        m_uniformsDirty = false;
-    }
-
     cb->setGraphicsPipeline(m_pipeline);
     // Binding 0 (the global camera block) is dynamic-offset so the composite
     // linearizes depth with the same camera slot the depth buffer was rendered
@@ -342,7 +345,7 @@ void cwEDLEffect::apply(QRhiCommandBuffer* cb,
 
 void cwEDLEffect::setParameters(const EdlParametersData& parameters)
 {
-    // Stage only — cwTracked flags the change; updateFrameUniforms() re-derives
+    // Stage only — cwTracked flags the change; prepare() re-derives
     // the UBO values (which also depend on the projection/viewport) next frame.
     m_parameters.setValue(parameters);
 }

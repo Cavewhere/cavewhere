@@ -80,16 +80,39 @@ Item {
     // LinePlotLabelView fill this item and carry tap-away handlers, so anything
     // clickable left below them never sees a press.
     readonly property int zOverlay: 3
+    // Gap between the view's edges and the floating chrome
+    readonly property int chromeMargin: 20
 
     clip: true
 
     // Keys handlers fire only when this item has active focus.
     focus: true
 
+    // One-key A/B switches for the point cloud knobs (PointCloudDebugPanel),
+    // so a comparison happens while the camera holds still. P is the coverage
+    // gesture.
+    function handlePointCloudDebugKey(key) {
+        const settings = RootData.settings.renderingSettings
+        switch (key) {
+        case Qt.Key_T:
+            settings.thinningMode = (settings.thinningMode + 1) % settings.thinningModeCount
+            return true
+        case Qt.Key_V:
+            settings.debugView = (settings.debugView + 1) % settings.debugViewCount
+            return true
+        case Qt.Key_F:
+            settings.freezeCut = !settings.freezeCut
+            return true
+        }
+        return false
+    }
+
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_P && !event.isAutoRepeat) {
             turnTableInteractionId.pKeyHeld = true
             event.accepted = true
+        } else if (event.modifiers === Qt.NoModifier && !event.isAutoRepeat) {
+            event.accepted = rootId.handlePointCloudDebugKey(event.key)
         }
     }
 
@@ -143,7 +166,7 @@ Item {
         camera: rendererId.camera
         scene: rendererId.scene
         gridPlane: RootData.regionSceneManager.gridPlane.plane
-        pointCloudWorldRadiusTarget: RootData.regionSceneManager.lazLayersSceneNode
+        pointCloudSizeTarget: RootData.regionSceneManager.lazLayersSceneNode
     }
 
     ProjectionTransition {
@@ -252,7 +275,7 @@ Item {
         id: fixStationOutlierBox
         objectName: "fixStationOutlierBox"
         anchors.top: parent.top
-        anchors.topMargin: 20
+        anchors.topMargin: rootId.chromeMargin
         anchors.bottom: undefined
         // The banner carries a link, so it needs the chrome layer, not just a
         // spot above the scene: LeadView's tap-away handler fills this item at
@@ -275,10 +298,12 @@ Item {
     }
 
     Row {
+        id: bottomRightChromeId
+
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 20
+        anchors.bottomMargin: rootId.chromeMargin
         anchors.right: parent.right
-        anchors.rightMargin: 20
+        anchors.rightMargin: rootId.chromeMargin
         z: rootId.zOverlay
         spacing: 10
 
@@ -301,9 +326,36 @@ Item {
         }
     }
 
+    // Color-by sits above the scale bar and compass: a chip when off, the
+    // colorbar when on. At zOverlay so its tap never reaches LeadView's or
+    // LinePlotLabelView's tap-away handlers or the turntable camera.
+    ColorByLegend {
+        id: colorByLegendId
+        anchors.right: parent.right
+        anchors.bottom: bottomRightChromeId.top
+        anchors.rightMargin: rootId.chromeMargin
+        anchors.bottomMargin: Theme.flowSpacing
+        z: rootId.zOverlay
+        popupOpen: colorByPopupId.opened
+        onClicked: colorByPopupId.opened ? colorByPopupId.close() : colorByPopupId.open()
+    }
+
+    ColorByPopup {
+        id: colorByPopupId
+        // Parented to the legend so a press on the Edit/Done pill counts as
+        // inside the parent: the popup stays open through that press and the
+        // pill's tap then toggles it. A press elsewhere in the view closes it.
+        parent: colorByLegendId
+        closePolicy: QC.Popup.CloseOnEscape | QC.Popup.CloseOnPressOutsideParent
+        // Right-aligned with the legend, above it, kept inside the view
+        x: Math.max(-colorByLegendId.x, colorByLegendId.width - width)
+        y: Math.max(-colorByLegendId.y, -height - Theme.linkBarButtonSpacing)
+    }
+
     // Built only while the setting is on, so a hidden HUD costs nothing — not
     // even the model's polling timer.
     Loader {
+        id: renderStatsHudLoaderId
         objectName: "renderStatsHudLoader"
         active: RootData.settings.renderingSettings.showRenderStatsHud
         anchors.top: parent.top
@@ -311,7 +363,18 @@ Item {
         anchors.margins: Theme.pageMargin
         z: rootId.zOverlay
 
-        sourceComponent: RenderStatsHud { }
+        sourceComponent: RenderStatsHud {
+            onDebugPanelRequested: pointCloudDebugPanelId.open()
+        }
+    }
+
+    // Opened from the HUD, and right-aligned under it inside the view.
+    PointCloudDebugPanel {
+        id: pointCloudDebugPanelId
+        parent: rootId
+        x: rootId.width - width - Theme.pageMargin
+        y: renderStatsHudLoaderId.y + renderStatsHudLoaderId.height + Theme.linkBarButtonSpacing
+        lazLayersSceneNode: RootData.regionSceneManager.lazLayersSceneNode
     }
 
     // The tools are armed from the main sidebar's tool rail (see MainSideBar),
@@ -337,8 +400,8 @@ Item {
         interaction: measurementInteractionId
         visible: interactionManagerId.activeInteraction === measurementInteractionId
                  && measurementInteractionId.hasMeasurement
-        x: Math.max(0, parent.width - width - 20)
-        y: 20
+        x: Math.max(0, parent.width - width - rootId.chromeMargin)
+        y: rootId.chromeMargin
     }
 }
 

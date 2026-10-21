@@ -9,7 +9,9 @@
 #define CWRENDERPOINTCLOUD_H
 
 // Our includes
-#include "cwGeometry.h"
+#include "cwPointCloudShading.h"
+#include "cwPointOctreePickSet.h"
+#include "cwPointOctreeSource.h"
 #include "cwRenderObject.h"
 #include "cwTracked.h"
 
@@ -17,6 +19,39 @@
 #include <QHash>
 #include <QQmlEngine>
 #include <QVector3D>
+
+// Std includes
+#include <memory>
+
+namespace cw::pointcloud {
+    //! Sprite side as a fraction of the sample spacing the cut refines to.
+    //!
+    //! Grid sampling leaves at most one point per occupied cell of side
+    //! `spacing`, and gl_PointSize is a side length, so 1.5 covers a cell and
+    //! half of each neighbor's. PointCloud.vert works the spacing out per
+    //! vertex from the vertex's own clip depth and the view's refine
+    //! threshold, so a far tile drawn at a coarse level covers its own
+    //! cell just as a near tile covers its finer one. The cut is additive — a
+    //! refined region draws its coarse ancestors too — and depth is what tells
+    //! those ancestors apart: an ancestor point sitting among refined ones is
+    //! at the same small depth they are, so it gets their small spacing rather
+    //! than its node's own coarse one. Where the point budget or a node still
+    //! streaming holds the cloud coarser than the threshold describes, the
+    //! coverage applies to the finest spacing actually drawn instead.
+    //!
+    //! The density under a sprite is continuous: each node's points thin
+    //! against the same threshold (cw::clod), fading out over the octave that
+    //! leads to their level leaving the cut, so the points a sprite of this
+    //! coverage has to cover sit about one target spacing apart at every
+    //! scale.
+    //!
+    //! This is the only point-size knob: coverage is what predicts whether the
+    //! surface reads solid or shows holes, so the shader has no separate tuned
+    //! world radius competing with it. Above 1 the sprites of neighboring
+    //! cells overlap, which is what closes the holes an irregular cloud leaves
+    //! at exactly one cell per sprite.
+    constexpr float kDefaultSpacingCoverage = 1.5f;
+}
 
 class cwRenderPointCloud : public cwRenderObject
 {
@@ -27,24 +62,14 @@ class cwRenderPointCloud : public cwRenderObject
     friend struct CwRenderPointCloudTestAccess;
 
 public:
-    // Bundle of fields handed across the model→render boundary in one shot.
-    // Mirrors cwLazLoadResult / cwLazLayer's load-time outputs that the
-    // renderer consumes together.
-    struct GeometryData {
-        cwGeometry geometry;
-        QVector3D bboxMin;
-        QVector3D bboxMax;
-        float meanSpacingXY = 0.0f;
-    };
-
     //! Pick sphere radius, as a multiple of meanSpacingXY.
     //!
     //! Must stay above 1/sqrt(2) ~= 0.707: on a grid of spacing s the worst
     //! case ray passes through a cell centre, s*sqrt(2)/2 from the nearest
     //! point, so anything smaller leaves a gap the ray slips through — and it
     //! then hits some unoccluded point far down the ray instead. The splats
-    //! are drawn from worldRadius and overlap into a solid-looking wall, so
-    //! that gap is invisible: the surface reads as watertight and picks
+    //! are drawn from the spacing rule and overlap into a solid-looking wall,
+    //! so that gap is invisible: the surface reads as watertight and picks
     //! through. Above the threshold the near wall yields an exact hit.
     //!
     //! Nothing catches a miss any more: the near-miss fallback that used to
@@ -53,12 +78,12 @@ public:
     //! cwLeadView::isOccluded). This constant is the only thing keeping a
     //! cloud pickable where it is drawn.
     //!
-    //! Deliberately NOT tied to worldRadius, which would match the drawn
-    //! footprint exactly but is tuned live (P + mouse wheel, see
+    //! Deliberately NOT tied to spacingCoverage, which describes the drawn
+    //! footprint but is tuned live (P + mouse wheel, see
     //! PointCloud.vert) while this is baked into the BVH box padding at
     //! addObject time — tracking it would rebuild the whole BVH per wheel
     //! tick. Staying above the threshold keeps picks watertight at every
-    //! worldRadius instead.
+    //! coverage instead.
     //! 1.0 rather than the bare 0.707 threshold: meanSpacingXY is a mean over
     //! an irregular cloud, so local spacing runs above it, and a wall met at a
     //! grazing angle stretches the effective gap further still. The margin
@@ -76,94 +101,69 @@ public:
 
     explicit cwRenderPointCloud(QObject* parent = nullptr);
 
-    void setGeometry(GeometryData data);
+    // The octree the renderer streams nodes out of. Re-publishing an equal
+    // source is a no-op, so the render side keeps every resident node.
+    void setOctree(const cwPointOctreeSource& source);
 
     void clear();
 
-    qsizetype pointCount() const;
+    const cwPointOctreeSource& octree() const;
+    qint64 pointCount() const;
     QVector3D bboxMin() const;
     QVector3D bboxMax() const;
-    float pointSize() const;
-    void setPointSize(float pointSize);
     float meanSpacingXY() const;
-    float worldRadius() const;
-    void setWorldRadius(float worldRadius);
+    float spacingCoverage() const;
+    void setSpacingCoverage(float spacingCoverage);
+    const cwPointCloudShading& shading() const;
+    void setShading(const cwPointCloudShading& shading);
 
 protected:
     cwRHIObject* createRHIObject() override;
 
 private:
-    // Geometry and its derived bounds, tracked separately from the cheap
-    // render knobs below. Re-staging the (potentially multi-GB) vertex
-    // buffer is gated on THIS tracker changing, so tuning a uniform —
-    // world radius, point size — never re-uploads geometry. setGeometry() and
-    // clear() are the only callers that touch it.
-    struct GeometryState {
-        cwGeometry geometry;
-        QVector3D bboxMin;
-        QVector3D bboxMax;
-        // Mean planar inter-point spacing in meters (sqrt(area / N)). Drives
-        // per-cloud point radius in PointCloud.vert. 0 until first load.
-        float meanSpacingXY = 0.0f;
-
-        // Coarse "always changed": setGeometry runs per LAZ load (rare), so
-        // a real compare would be a pointless multi-GB memcmp. cwTracked
-        // re-stages only when this tracker is setValue'd, which is exactly
-        // the geometry-changed edge.
-        bool operator!=(const GeometryState& /*other*/) const { return true; }
-    };
-
     // Cheap per-cloud knobs uploaded as a small uniform, never as vertex
-    // data. A change here re-uploads the UBO but leaves the vertex buffer
+    // data. A change here re-uploads the UBO but leaves the node buffers
     // untouched. Real field compare so a no-op set is a no-op.
     struct RenderState {
-        float pointSize = 2.0f;
+        // Sprite side as a fraction of the sample spacing the cut refines to
+        // at each vertex's depth — the whole sizing rule, and the only
+        // point-size knob. Tuned at runtime by P+wheel in the 3D view (clamped
+        // on the scene-node). This is appearance slot 0 — the live view and a
+        // plain capture both render with it.
+        float spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 
-        // World-space sprite radius in meters. A fixed default produces
-        // consistent sprite sizes across clouds; tuned at runtime by P+wheel
-        // in the 3D view (clamped on the scene-node) and by sink_repatcher
-        // --point-radius for offline renders. This is appearance slot 0 — the
-        // live view and a plain capture both render with it.
-        float worldRadius = 1.29f;
+        // The thinning and sizing rules the shader applies, from
+        // cwRenderingSettings by way of the scene node.
+        cwPointCloudShading shading;
 
         bool operator!=(const RenderState& other) const {
-            return pointSize != other.pointSize
-                || worldRadius != other.worldRadius;
+            return spacingCoverage != other.spacingCoverage || shading != other.shading;
         }
     };
 
-    cwTracked<GeometryState> m_geometry;
+    cwTracked<cwPointOctreeSource> m_source;
     cwTracked<RenderState> m_renderState;
+
+    // What the cloud is picked against: the nodes the render thread has
+    // resident. Shared with the cwRHIPointCloud that publishes into it, so a
+    // publish after this object is gone lands on a set nothing reads.
+    std::shared_ptr<cwPointOctreePickSet> m_pickSet =
+        std::make_shared<cwPointOctreePickSet>();
 };
 
-inline qsizetype cwRenderPointCloud::pointCount() const
+inline const cwPointOctreeSource& cwRenderPointCloud::octree() const
 {
-    return m_geometry.value().geometry.vertexCount();
+    return m_source.value();
 }
 
-inline QVector3D cwRenderPointCloud::bboxMin() const
+inline float cwRenderPointCloud::spacingCoverage() const
 {
-    return m_geometry.value().bboxMin;
+    return m_renderState.value().spacingCoverage;
 }
 
-inline QVector3D cwRenderPointCloud::bboxMax() const
+inline const cwPointCloudShading& cwRenderPointCloud::shading() const
 {
-    return m_geometry.value().bboxMax;
-}
-
-inline float cwRenderPointCloud::pointSize() const
-{
-    return m_renderState.value().pointSize;
-}
-
-inline float cwRenderPointCloud::meanSpacingXY() const
-{
-    return m_geometry.value().meanSpacingXY;
-}
-
-inline float cwRenderPointCloud::worldRadius() const
-{
-    return m_renderState.value().worldRadius;
+    return m_renderState.value().shading;
 }
 
 #endif // CWRENDERPOINTCLOUD_H

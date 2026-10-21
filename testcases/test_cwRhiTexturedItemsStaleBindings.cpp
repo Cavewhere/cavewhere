@@ -12,11 +12,11 @@
 #include "cwKtx2Codec.h"
 #include "cwOffscreenRenderParameters.h"
 #include "cwProjection.h"
+#include "cwRenderFrameStats.h"
 #include "cwRenderTexturedItems.h"
 #include "cwRhiViewer.h"
 #include "cwScene.h"
 #include "cwStreamedTexture.h"
-#include "cwTextureStreamingStats.h"
 
 //Qt includes
 #include <QColor>
@@ -123,10 +123,11 @@ QImage patternImage(int seed)
 cwStreamedTexture encodeStreamedTexture(const QDir& dataRoot, const QString& id, int seed)
 {
     cwDiskCacher cacher(dataRoot);
-    const cwDiskCacher::Key key {id, QDir(QStringLiteral("textures")), QStringLiteral("checksum-") + id};
-    const auto encoded = cw::ktx2::cachedCompressedTexture(cacher, key, patternImage(seed),
-                                                           QRhiTexture::RGBA8);
-    REQUIRE_FALSE(encoded.hasError());
+    const cwDiskCacher::Key key {id, QStringLiteral("textures"), QStringLiteral("checksum-") + id};
+    const auto ensured = cw::ktx2::ensureEncodedEntry(cacher, key, [seed]() {
+        return patternImage(seed);
+    });
+    REQUIRE_FALSE(ensured.hasError());
     return cwStreamedTexture {dataRoot.absolutePath(), key, QSize(kTextureDimension, kTextureDimension)};
 }
 
@@ -152,9 +153,9 @@ void setLiveCamera(cwCamera* camera, float distance)
     camera->setViewMatrix(lookingAt(kItemBCenter, distance));
 }
 
-cwTextureStreamingStats::Counts streamingCounts()
+cwRenderFrameStats::StreamingFrame streamingFrame()
 {
-    return cwTextureStreamingStats::instance()->counts();
+    return cwRenderFrameStats::instance()->streamingFrame();
 }
 
 } // namespace
@@ -199,19 +200,21 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     auto* render = new cwRenderTexturedItems();
     render->setScene(&scene);
 
-    cwRenderMaterialState material;
+    cwRenderMaterialState material = cwRenderTexturedItems::scrapMaterial();
     material.cullMode = cwRenderMaterialState::CullMode::None;
 
     cwRenderTexturedItems::Item itemA;
     itemA.geometry = quadAt(kItemACenter);
-    itemA.streamedTexture = textureA;
+    itemA.texture = textureA;
     itemA.material = material;
+    itemA.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
     render->addItem(itemA);
 
     cwRenderTexturedItems::Item itemB;
     itemB.geometry = quadAt(kItemBCenter);
-    itemB.streamedTexture = textureB;
+    itemB.texture = textureB;
     itemB.material = material;
+    itemB.uniformBlock = cwRenderTexturedItems::emptyItemBlock();
     render->addItem(itemB);
 
     const auto framesFrom = [&](int count) {
@@ -226,7 +229,7 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
     // the SRB it replaces only ever sampled the shared loading texture.
     REQUIRE(waitFor([&]() {
         viewer->update();
-        const auto counts = streamingCounts();
+        const auto counts = streamingFrame().counts;
         return counts.streamedItems == 2 && counts.loadsInFlight == 0;
     }));
     REQUIRE(framesFrom(kSettleFrames));
@@ -257,13 +260,24 @@ TEST_CASE("a streamed swap after an offscreen target rebuild keeps the live fram
 
     // Now the live camera moves in on B. Its refinement loads off-thread and lands
     // in some live frame's streamResources, which always follows an evicting tile.
+    // At the far distance B already reads as settled, so only frames published
+    // after the move count, and B must first be seen wanting more detail.
+    const quint64 revisionBeforeMove = streamingFrame().revision;
     setLiveCamera(viewer->camera(), kLiveNearDistance);
 
+    bool sawBelowDesired = false;
     const bool refined = waitFor([&]() {
         keepTilesFlowing();
         viewer->update();
-        const auto counts = streamingCounts();
-        return counts.loadsInFlight == 0 && counts.itemsBelowDesired == 0;
+        const auto frame = streamingFrame();
+        if (frame.revision <= revisionBeforeMove) {
+            return false;
+        }
+        if (frame.counts.itemsBelowDesired > 0) {
+            sawBelowDesired = true;
+            return false;
+        }
+        return sawBelowDesired && frame.counts.loadsInFlight == 0;
     });
 
     // The live frames that draw B after its swap are where a stale SRB binds a

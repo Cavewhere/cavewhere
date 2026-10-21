@@ -10,9 +10,8 @@
 
 //Our includes
 #include "cwGeometry.h"
-#include "cwDiskCacher.h"
+#include "cwItemTexture.h"
 #include "cwTrackedImage.h"
-#include "cwTextureUploadTask.h"
 #include "CaveWhereLibExport.h"
 
 //Qt includes
@@ -31,14 +30,10 @@ public:
     cwTrackedImagePtr croppedImagePtr() const;
     void setCroppedImage(cwTrackedImagePtr croppedImage);
 
-    cwTextureUploadTask::UploadResult croppedImageData() const;
-    void setCroppedImageData(const cwTextureUploadTask::UploadResult& imageData);
-
-    cwDiskCacher::Key compressedTextureKey() const;
-    void setCompressedTextureKey(const cwDiskCacher::Key& key);
-
-    QSize croppedImageSize() const;
-    void setCroppedImageSize(QSize size);
+    //The crop's one texture: the streamed KTX2 descriptor when the encode
+    //succeeded, the decoded RGBA8 crop when it didn't
+    cwItemTexture texture() const;
+    void setTexture(const cwItemTexture& texture);
 
     void setScrapGeometry(cwGeometry scrapGeometry) { Data->scrapGeometry = scrapGeometry; }
     const cwGeometry& scrapGeometry() const { return Data->scrapGeometry; }
@@ -69,15 +64,7 @@ private:
 
         //Keeps the PNG crop's cache entry alive. It carries no pixels.
         cwTrackedImagePtr croppedImage = cwTrackedImagePtr::create();
-        //The decoded RGBA8 crop, populated only when the UASTC encode failed
-        //and the QImage is the scrap's only texture
-        cwTextureUploadTask::UploadResult croppedImageData;
-        //Where the cropped image's UASTC .ktx2 lives in the disk cache. Empty
-        //when the crop wasn't compressed and the QImage is the only texture.
-        cwDiskCacher::Key compressedTextureKey;
-        //The crop's pixel size, so a streamed descriptor can be built without
-        //decoding anything.
-        QSize croppedImageSize;
+        cwItemTexture texture;
         cwGeometry scrapGeometry;
 
         // QVector<QVector3D> points;
@@ -109,34 +96,14 @@ inline void cwTriangulatedData::setCroppedImage(cwTrackedImagePtr croppedImage) 
     Data->croppedImage = croppedImage;
 }
 
-inline cwTextureUploadTask::UploadResult cwTriangulatedData::croppedImageData() const
+inline cwItemTexture cwTriangulatedData::texture() const
 {
-    return Data->croppedImageData;
+    return Data->texture;
 }
 
-inline void cwTriangulatedData::setCroppedImageData(const cwTextureUploadTask::UploadResult &imageData)
+inline void cwTriangulatedData::setTexture(const cwItemTexture& texture)
 {
-    Data->croppedImageData = imageData;
-}
-
-inline cwDiskCacher::Key cwTriangulatedData::compressedTextureKey() const
-{
-    return Data->compressedTextureKey;
-}
-
-inline void cwTriangulatedData::setCompressedTextureKey(const cwDiskCacher::Key &key)
-{
-    Data->compressedTextureKey = key;
-}
-
-inline QSize cwTriangulatedData::croppedImageSize() const
-{
-    return Data->croppedImageSize;
-}
-
-inline void cwTriangulatedData::setCroppedImageSize(QSize size)
-{
-    Data->croppedImageSize = size;
+    Data->texture = texture;
 }
 
 // /**

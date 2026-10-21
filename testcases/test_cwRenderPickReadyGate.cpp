@@ -6,7 +6,6 @@
 #include "cwSceneVisibility.h"
 #include "cwGeometryItersecter.h"
 #include "cwRenderLinePlot.h"
-#include "cwRenderPointCloud.h"
 #include "cwRenderTexturedItems.h"
 #include "cwGeometry.h"
 
@@ -73,32 +72,6 @@ cwGeometry triangle()
     return geometry;
 }
 
-cwRenderPointCloud::GeometryData smallCloud()
-{
-    cwGeometry geometry({
-        { cwGeometry::Semantic::Position, cwGeometry::AttributeFormat::Vec3 }
-    });
-    geometry.resizeVertices(4);
-    const auto* positionAttribute = geometry.attribute(cwGeometry::Semantic::Position);
-    const QVector<QVector3D> positions = {
-        QVector3D(0.0f, 0.0f, 0.0f),
-        QVector3D(1.0f, 0.0f, 0.0f),
-        QVector3D(0.0f, 1.0f, 0.0f),
-        QVector3D(1.0f, 1.0f, 0.0f),
-    };
-    for (int i = 0; i < positions.size(); ++i) {
-        geometry.set(positionAttribute, i, positions.at(i));
-    }
-    geometry.setType(cwGeometry::Type::Points);
-
-    cwRenderPointCloud::GeometryData data;
-    data.geometry = geometry;
-    data.bboxMin = QVector3D(0.0f, 0.0f, 0.0f);
-    data.bboxMax = QVector3D(1.0f, 1.0f, 0.0f);
-    data.meanSpacingXY = 1.0f;
-    return data;
-}
-
 } // namespace
 
 TEST_CASE("A line plot is hidden until its sub-BVH publishes",
@@ -149,46 +122,10 @@ TEST_CASE("A geometry edit on a ready object never re-hides it",
     REQUIRE(scene.visibility()->snapshot().objectVisible(linePlot.renderObjectId()));
 }
 
-TEST_CASE("A point cloud is hidden until its sub-BVH publishes",
-          "[cwRenderObject][pickReadyGate]")
-{
-    cwScene scene;
-    cwRenderPointCloud cloud;
-    cloud.setScene(&scene);
-
-    cloud.setGeometry(smallCloud());
-    REQUIRE_FALSE(scene.visibility()->snapshot().objectVisible(cloud.renderObjectId()));
-
-    scene.geometryItersecter()->waitForFinish();
-    REQUIRE(scene.geometryItersecter()->isObjectPickReady({cloud.renderObjectId(), 0}));
-    REQUIRE(scene.visibility()->snapshot().objectVisible(cloud.renderObjectId()));
-}
-
-TEST_CASE("A point cloud re-arms its gate after clear and re-set",
-          "[cwRenderObject][pickReadyGate]")
-{
-    cwScene scene;
-    cwRenderPointCloud cloud;
-    cloud.setScene(&scene);
-
-    // Clear while the first build is still in flight (gate armed): dropping the
-    // geometry cancels the intersecter's readiness promise for key 0, and the
-    // cloud must republish visible rather than stay wedged hidden.
-    cloud.setGeometry(smallCloud());
-    REQUIRE_FALSE(scene.visibility()->snapshot().objectVisible(cloud.renderObjectId()));
-    cloud.clear();
-    REQUIRE(scene.visibility()->snapshot().objectVisible(cloud.renderObjectId()));
-
-    // Re-setting the SAME key arms a fresh gate — hidden until the new build
-    // publishes — proving the cancelled promise didn't leave the gate stuck.
-    cloud.setGeometry(smallCloud());
-    REQUIRE_FALSE(scene.visibility()->snapshot().objectVisible(cloud.renderObjectId()));
-
-    scene.geometryItersecter()->waitForFinish();
-    REQUIRE(scene.geometryItersecter()->isObjectPickReady({cloud.renderObjectId(), 0}));
-    REQUIRE(scene.visibility()->snapshot().objectVisible(cloud.renderObjectId()));
-}
-
+// The point-cloud variants of these two cases lived here. A streamed cloud
+// registers nothing with the intersecter between Q2 and Q4 of the point octree
+// plan, so there is no gate on it to watch; Q4 brings them back with the pick
+// provider.
 TEST_CASE("A textured sub-item is hidden until its sub-BVH publishes",
           "[cwRenderObject][pickReadyGate]")
 {

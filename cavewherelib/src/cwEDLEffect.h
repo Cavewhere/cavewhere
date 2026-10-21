@@ -51,7 +51,7 @@ public:
     // could compare new texture pointers against freed ones that the allocator
     // reused at the same address and wrongly skip the rebuild.
     void resize(QSize outputSize) override;
-    void updateFrameUniforms(const FrameUniformContext& ctx) override;
+    void prepare(const FrameUniformContext& ctx, QRhiResourceUpdateBatch* batch) override;
     void apply(QRhiCommandBuffer* cb,
                QRhiTexture* sceneColor,
                QRhiTexture* cloudColor,
@@ -60,7 +60,7 @@ public:
                quint32 cameraUniformOffset) override;
 
     // Live tuning, fed each synchroize() from cwScene::edl(). Staged on a
-    // cwTracked; the derived UBO values are recomputed in updateFrameUniforms()
+    // cwTracked; the derived UBO values are recomputed in prepare()
     // only when it reports a change, mirroring how cwRHIPointCloud consumes its
     // tracked inputs.
     void setParameters(const EdlParametersData& parameters);
@@ -78,6 +78,10 @@ private:
 
     bool createPipeline(QRhiRenderPassDescriptor* outputRPDesc);
     bool ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth);
+
+    // Re-derive m_uniformData from the frame state and staged parameters,
+    // marking the UBO dirty when anything changed.
+    void updateUniformData(const FrameUniformContext& ctx);
 
     // Recompute sampleOffset from m_radiusPx and the last-seen viewport/DPR.
     // No-op until a valid frame state has been seen.
@@ -98,7 +102,7 @@ private:
     // response from the same baseline (perspective's neighbor depth-ratios are
     // inherently larger, so it needs less gain). maxDarken is the darkening
     // ceiling; radiusPx is the neighbor sample spread. Fed via setParameters();
-    // updateFrameUniforms() re-derives the UBO values when it reports a change.
+    // prepare() re-derives the UBO values when it reports a change.
     cwTracked<EdlParametersData> m_parameters;
 
     QMatrix4x4 m_lastProjectionMatrix;

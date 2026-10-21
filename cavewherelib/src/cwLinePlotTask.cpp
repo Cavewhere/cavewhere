@@ -193,6 +193,8 @@ struct cwLinePlotTask::LinePlotWorker {
         const QHash<QUuid, cwSplayTipsByStation> nodeSplayTips =
             splitSplayTipsByNode(parsed.splayTips);
         updateSplayTipsForNodes(nodeSplayTips, result);
+        const QHash<QUuid, cwLegErrorsByShot> nodeLegErrors =
+            splitLegErrorsByNode(parsed.legErrors);
         result.setRegionNetwork(parsed.network);
         markNetworkChanges(parsed.network, result);
 
@@ -214,12 +216,13 @@ struct cwLinePlotTask::LinePlotWorker {
         // which have no cwSurveyChunk of their own. cwSurveyNetwork is
         // implicitly shared, so this is a refcount bump, not a deep copy.
         cwLinePlotGeometry::Result geometry =
-            generateGeometry(parsed.network, stationPositions, nodeSplayTips);
+            generateGeometry(parsed.network, stationPositions, nodeSplayTips, nodeLegErrors);
         result.setPositions(geometry.points);
         result.setTripVertexRanges(geometry.tripVertexRanges);
         result.setTripSplayVertexRanges(geometry.tripSplayVertexRanges);
         result.setTripUuids(geometry.tripUuids);
         result.setTripLengths(geometry.tripLengths);
+        result.setSegmentErrors(geometry.segmentErrors);
 
         updateDepthLength(geometry.nodeLengthAndDepths, result);
 
@@ -350,13 +353,15 @@ private:
     cwLinePlotGeometry::Result generateGeometry(
         const cwSurveyNetwork& network,
         const cwStationPositionLookup& stationPositions,
-        const QHash<QUuid, cwSplayTipsByStation>& nodeSplayTips)
+        const QHash<QUuid, cwSplayTipsByStation>& nodeSplayTips,
+        const QHash<QUuid, cwLegErrorsByShot>& nodeLegErrors)
     {
         const Monad::Result<cwLinePlotGeometry::Result> result =
             // The input snapshot rather than Region.data(): the worker's
             // region is rebuilt through setData, which leaves out the derived
             // fields (unit sets, cavernLabels) a sourced subtree draws from.
-            cwLinePlotGeometry::generate(InputData.regionData, stationPositions, network, nodeSplayTips);
+            cwLinePlotGeometry::generate(InputData.regionData, stationPositions, network,
+                                         nodeSplayTips, nodeLegErrors);
         if (result.hasError()) {
             return cwLinePlotGeometry::Result();
         }
@@ -695,6 +700,28 @@ private:
         }
 
         return nodeSplayTips;
+    }
+
+    // The same owning-node split for the leg errors. A leg is kept only when
+    // both ends belong to the same node; its key is rebuilt from the node-local
+    // names so it matches the geometry's lookup.
+    QHash<QUuid, cwLegErrorsByShot> splitLegErrorsByNode(const cwLegErrorsByShot& legErrors) const
+    {
+        QHash<QUuid, cwLegErrorsByShot> nodeLegErrors;
+        for (auto iter = legErrors.constBegin(); iter != legErrors.constEnd(); ++iter) {
+            const cwSurveyNode* owner = owningNode(iter.key().first);
+            if (owner == nullptr || owner != owningNode(iter.key().second)) {
+                continue;
+            }
+
+            const int prefixSize = ScopeLabels.prefix(owner->id()).size();
+            nodeLegErrors[owner->id()].insert(
+                cwSurvex3DFileReader::legKey(iter.key().first.sliced(prefixSize),
+                                             iter.key().second.sliced(prefixSize)),
+                iter.value());
+        }
+
+        return nodeLegErrors;
     }
 
     // Splays move exactly when the station they hang off does, so they ride out

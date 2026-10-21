@@ -15,6 +15,10 @@
 #include <QSet>
 #include <QFuture>
 #include <QMatrix4x4>
+
+//Std includes
+#include <memory>
+
 class QOpenGLShaderProgram;
 
 //Our includes
@@ -28,6 +32,7 @@ class cwRhiItemRenderer;
 class cwSceneVisibility;
 class cwGeometryItersecter;
 class cwGeometry;
+class cwPickProvider;
 #include "cwScene.h"
 #include "cwRenderObjectId.h"
 #include "CaveWhereLibExport.h"
@@ -110,6 +115,11 @@ protected:
     void registerPickable(uint64_t subId, cwGeometry geometry,
                           const QMatrix4x4& modelMatrix = QMatrix4x4(),
                           float pickRadius = 0.0f);
+
+    // Registers a pick provider under subId instead of geometry (see
+    // cwGeometryItersecter::addProvider). A provider is pickable the moment it
+    // is registered, so the gate resolves immediately and nothing is hidden.
+    void registerPickable(uint64_t subId, std::shared_ptr<const cwPickProvider> provider);
     void unregisterPickable(uint64_t subId);
     bool subPickGateOpen(uint64_t subId) const { return !m_armedPickGates.contains(subId); }
     void setPickGateHidesObject(bool hides) { m_pickGateHidesObject = hides; }

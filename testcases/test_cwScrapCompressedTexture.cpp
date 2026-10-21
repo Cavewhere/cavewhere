@@ -79,6 +79,16 @@ namespace {
         return QColor(pixel[0], pixel[1], pixel[2], pixel[3]);
     }
 
+    //The generation suffix every producer's cache key id carries
+    const QString kGenerationSuffix = cw::ktx2::cacheKeyId(QString());
+
+    //What the render side gets from a cache entry: the stored bytes, transcoded
+    Monad::Result<cwCompressedTexture> transcodedEntry(const cwDiskCacher& cacher,
+                                                       const cwDiskCacher::Key& key)
+    {
+        return cw::ktx2::transcode(cacher.entry(key), QRhiTexture::RGBA8);
+    }
+
     cwCropImageTask::Result runCrop(const QDir& dataRootDir, const cwImage& original)
     {
         cwCropImageTask task;
@@ -112,13 +122,10 @@ TEST_CASE("The compressed scrap texture is flipped like the uncompressed one", "
     REQUIRE(!result.compressedKey.id.isEmpty());
 
     //The bumped suffix leaves the pre-flip cache generation behind
-    CHECK(result.compressedKey.id.contains(QStringLiteral("-uastc1")));
+    CHECK(result.compressedKey.id.contains(kGenerationSuffix));
 
     cwDiskCacher cacher(dataRootDir);
-    const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher,
-                                                              result.compressedKey,
-                                                              QImage(),
-                                                              QRhiTexture::RGBA8);
+    const auto transcoded = transcodedEntry(cacher, result.compressedKey);
     REQUIRE_FALSE(transcoded.hasError());
 
     const cwCompressedTexture texture = transcoded.value();
@@ -137,7 +144,7 @@ TEST_CASE("The compressed scrap texture is flipped like the uncompressed one", "
 
     SECTION("a stale entry from the previous cache generation is ignored") {
         cwDiskCacher::Key staleKey = result.compressedKey;
-        staleKey.id.replace(QStringLiteral("-uastc1"), QStringLiteral("-uastc"));
+        staleKey.id.replace(kGenerationSuffix, QStringLiteral("-uastc"));
         REQUIRE(staleKey.id != result.compressedKey.id);
 
         cacher.insert(staleKey, QByteArray("stale, never a valid ktx2 file"));
@@ -145,10 +152,7 @@ TEST_CASE("The compressed scrap texture is flipped like the uncompressed one", "
         const cwCropImageTask::Result secondResult = runCrop(dataRootDir, original);
         CHECK(secondResult.compressedKey.id == result.compressedKey.id);
 
-        const auto reread = cw::ktx2::cachedCompressedTexture(cacher,
-                                                              secondResult.compressedKey,
-                                                              QImage(),
-                                                              QRhiTexture::RGBA8);
+        const auto reread = transcodedEntry(cacher, secondResult.compressedKey);
         REQUIRE_FALSE(reread.hasError());
         CHECK(cwOpenGLUtils::fuzzyCompareColors(decodedPixel(reread.value(), middleColumn, quarterHeight),
                                                 kBottomHalfColor) < kMaxSquaredColorDifference);
@@ -180,25 +184,26 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
 
     const QString cachedPath = cacher.filePath(result.compressedKey);
     CHECK(cachedPath.contains(QStringLiteral("/.cw_cache/")));
-    CHECK(cachedPath.contains(QStringLiteral("-uastc1")));
+    CHECK(cachedPath.contains(kGenerationSuffix));
 
     //The PNG crop is still the fallback source and must survive alongside it
     CHECK(QFileInfo::exists(result.image->path()));
 
-    const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher,
-                                                              result.compressedKey,
-                                                              QImage(),
-                                                              cw::ktx2::targetCompressedFormat());
+    const auto transcoded = transcodedEntry(cacher, result.compressedKey);
     REQUIRE_FALSE(transcoded.hasError());
 
     const cwCompressedTexture texture = transcoded.value();
     CHECK_FALSE(texture.isNull());
     CHECK(texture.size == result.image->originalSize());
-    CHECK(texture.format == cw::ktx2::targetCompressedFormat());
+    CHECK(texture.format == QRhiTexture::RGBA8);
 
     SECTION("a second crop reuses the cached encode") {
-        //A re-encode overwrites the sentinel, a cache hit leaves it alone
-        const QByteArray sentinel("sentinel, never a valid ktx2 file");
+        //A readable encode of another image: a re-encode overwrites the
+        //sentinel, a cache hit leaves it alone
+        const auto sentinelEncode = cw::ktx2::encodeRgba(halvesImage());
+        REQUIRE_FALSE(sentinelEncode.hasError());
+        const QByteArray sentinel = sentinelEncode.value();
+
         cwDiskCacher writableCacher(dataRootDir);
         writableCacher.insert(result.compressedKey, sentinel);
 
@@ -221,10 +226,7 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
         const cwCropImageTask::Result secondResult = runCrop(dataRootDir, original);
         REQUIRE_FALSE(secondResult.compressedKey.id.isEmpty());
 
-        const auto reencoded = cw::ktx2::cachedCompressedTexture(cacher,
-                                                                 secondResult.compressedKey,
-                                                                 QImage(),
-                                                                 cw::ktx2::targetCompressedFormat());
+        const auto reencoded = transcodedEntry(cacher, secondResult.compressedKey);
         CHECK_FALSE(reencoded.hasError());
     }
 
@@ -242,10 +244,10 @@ TEST_CASE("Cropping a scrap caches a compressed texture", "[ScrapCompressedTextu
         };
         items.updateStreamedTexture(id, streamed);
 
-        const cwStreamedTexture stored = items.item(id).streamedTexture;
+        const cwStreamedTexture stored = items.item(id).texture.streamed();
         CHECK_FALSE(stored.isNull());
         CHECK(stored == streamed);
-        CHECK(items.item(id).texture.isNull());
+        CHECK(items.item(id).texture.image().isNull());
     }
 }
 
@@ -258,8 +260,8 @@ namespace {
     {
         QList<cwStreamedTexture> textures;
         for(uint32_t id = 1; id <= kMaxScannedRenderItemId; id++) {
-            if(items->hasItem(id) && !items->item(id).streamedTexture.isNull()) {
-                textures.append(items->item(id).streamedTexture);
+            if(items->hasItem(id) && !items->item(id).texture.streamed().isNull()) {
+                textures.append(items->item(id).texture.streamed());
             }
         }
         return textures;
@@ -291,16 +293,13 @@ TEST_CASE("Triangulated scraps reach the renderer as streamed descriptors",
 
     for(const cwStreamedTexture& texture : textures) {
         INFO("Streamed key: " << texture.key.id.toStdString());
-        CHECK(texture.dataRootPath == dataRootPath);
-        CHECK(texture.key.id.contains(QStringLiteral("-uastc1")));
+        CHECK(texture.dataRootPath() == dataRootPath);
+        CHECK(texture.key.id.contains(kGenerationSuffix));
         REQUIRE(cacher.hasEntry(texture.key));
 
         //The descriptor's size is the crop's, built without decoding: it must
         //agree with the level 0 the render side will actually load
-        const auto transcoded = cw::ktx2::cachedCompressedTexture(cacher,
-                                                                  texture.key,
-                                                                  QImage(),
-                                                                  QRhiTexture::RGBA8);
+        const auto transcoded = transcodedEntry(cacher, texture.key);
         REQUIRE_FALSE(transcoded.hasError());
         CHECK(transcoded.value().size == texture.size);
     }
@@ -328,34 +327,24 @@ TEST_CASE("A crop's descriptor streams and a failed encode keeps the image",
     CHECK(result.croppedSize == QSize(kSourceWidth, kSourceHeight));
 
     cwTriangulatedData data;
-    data.setCompressedTextureKey(result.compressedKey);
-    data.setCroppedImageSize(result.croppedSize);
+    data.setTexture(cwStreamedTexture {
+        dataRootDir.absolutePath(),
+        result.compressedKey,
+        result.croppedSize
+    });
 
-    //The descriptor cwScrapManager builds from the triangulated data
-    const auto descriptor = [&dataRootDir](const cwTriangulatedData& data) {
-        return cwStreamedTexture {
-            dataRootDir.absolutePath(),
-            data.compressedTextureKey(),
-            data.croppedImageSize()
-        };
-    };
-
-    const cwStreamedTexture streamed = descriptor(data);
+    //The descriptor cwScrapManager reads off the triangulated data
+    const cwStreamedTexture streamed = data.texture().streamed();
     REQUIRE_FALSE(streamed.isNull());
     CHECK(streamed.key.id == result.compressedKey.id);
     CHECK(streamed.size == result.croppedSize);
 
-    SECTION("a failed encode leaves a null descriptor, so the image is sent") {
+    SECTION("a failed encode carries the image instead, so the image is sent") {
         //Without a compressed key the triangulation keeps the decoded crop,
         //and that image is what the renderer gets
-        cwTextureUploadTask::UploadResult uploaded;
-        uploaded.image = gradientImage();
-
         cwTriangulatedData failedEncode;
-        failedEncode.setCroppedImageSize(result.croppedSize);
-        failedEncode.setCroppedImageData(uploaded);
-        REQUIRE(descriptor(failedEncode).isNull());
-        REQUIRE_FALSE(failedEncode.croppedImageData().isNull());
+        failedEncode.setTexture(gradientImage());
+        REQUIRE(failedEncode.texture().isImage());
 
         cwRenderTexturedItems items;
 
@@ -363,9 +352,9 @@ TEST_CASE("A crop's descriptor streams and a failed encode keeps the image",
         item.storeTexture = true;
         const uint32_t id = items.addItem(item);
 
-        items.updateTexture(id, failedEncode.croppedImageData().image);
+        items.updateTexture(id, failedEncode.texture().image());
 
-        CHECK(items.item(id).streamedTexture.isNull());
-        CHECK(items.item(id).texture.size() == QSize(kSourceWidth, kSourceHeight));
+        CHECK(items.item(id).texture.streamed().isNull());
+        CHECK(items.item(id).texture.image().size() == QSize(kSourceWidth, kSourceHeight));
     }
 }

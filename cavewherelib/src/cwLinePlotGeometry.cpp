@@ -159,12 +159,21 @@ QHash<QString, int> splayOwnerByStation(const cwCaveData& node,
 // depth.
 void appendSplaySegments(const QVector3D& stationPoint,
                          const QList<QVector3D>& tips,
-                         QVector<QVector3D>& points)
+                         cwLinePlotGeometry::Result& result)
 {
     for (const QVector3D& tip : tips) {
-        points.append(stationPoint);
-        points.append(tip);
+        result.points.append(stationPoint);
+        result.points.append(tip);
+        result.segmentErrors.append(cwLinePlotGeometry::kNoErrorValue);
     }
+}
+
+// The closure error of the leg between two node-local station names, or
+// kNoErrorValue when the leg sits in no loop.
+float segmentErrorFor(const cwLegErrorsByShot& legErrors, const QString& from, const QString& to)
+{
+    const auto it = legErrors.constFind(cwSurvex3DFileReader::legKey(from, to));
+    return it == legErrors.constEnd() ? cwLinePlotGeometry::kNoErrorValue : it->e;
 }
 
 // Emit line segments for an external-centerline scope, whose shot topology
@@ -179,7 +188,8 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
                                      const QString& nodePrefix,
                                      const QStringList& ownedStations,
                                      const QHash<QString, QVector3D>& stationPositions,
-                                     QVector<QVector3D>& points,
+                                     const cwLegErrorsByShot& legErrors,
+                                     cwLinePlotGeometry::Result& result,
                                      QSet<QString>& emitted)
 {
     ScopeExtent extent;
@@ -220,8 +230,11 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
             // which honors shot.isDistanceIncluded()).
             extent.length += QVector3D(to - from).length();
 
-            points.append(from);
-            points.append(to);
+            result.points.append(from);
+            result.points.append(to);
+            result.segmentErrors.append(segmentErrorFor(legErrors,
+                                                        nodeLocalKey(station, nodePrefix),
+                                                        nodeLocalKey(neighbor, nodePrefix)));
         }
     }
 
@@ -233,7 +246,8 @@ ScopeExtent emitNetworkScopeGeometry(const cwSurveyNetwork& network,
 // has no position is skipped, and the next resolved station bridges back.
 template <typename Resolve>
 ScopeExtent emitChunkGeometry(const cwTripData& trip, const Resolve& resolve,
-                              QVector<QVector3D>& points)
+                              const cwLegErrorsByShot& legErrors,
+                              cwLinePlotGeometry::Result& result)
 {
     ScopeExtent extent;
     for (const cwSurveyChunkData& chunk : trip.chunks) {
@@ -245,9 +259,11 @@ ScopeExtent emitChunkGeometry(const cwTripData& trip, const Resolve& resolve,
         // bootstrap from the first station that has a solved position.
         int startIndex = 0;
         QVector3D previousPoint;
+        QString previousName;
         bool havePrevious = false;
         while (startIndex < chunk.stations.size()) {
-            if (resolve(chunk.stations.at(startIndex).name(), &previousPoint)) {
+            previousName = chunk.stations.at(startIndex).name();
+            if (resolve(previousName, &previousPoint)) {
                 havePrevious = true;
                 break;
             }
@@ -265,7 +281,8 @@ ScopeExtent emitChunkGeometry(const cwTripData& trip, const Resolve& resolve,
             const cwShot& shot = chunk.shots.at(stationIndex - 1);
 
             QVector3D currentPoint;
-            if (!resolve(chunk.stations.at(stationIndex).name(), &currentPoint)) {
+            const QString currentName = chunk.stations.at(stationIndex).name();
+            if (!resolve(currentName, &currentPoint)) {
                 continue;
             }
 
@@ -277,10 +294,12 @@ ScopeExtent emitChunkGeometry(const cwTripData& trip, const Resolve& resolve,
             // Per-shot de-share: emit both endpoints as this shot's own
             // vertices (a station shared with the prior shot is duplicated),
             // so the pair [2i, 2i+1] is one segment.
-            points.append(previousPoint);
-            points.append(currentPoint);
+            result.points.append(previousPoint);
+            result.points.append(currentPoint);
+            result.segmentErrors.append(segmentErrorFor(legErrors, previousName, currentName));
 
             previousPoint = currentPoint;
+            previousName = currentName;
         }
     }
     return extent;
@@ -293,6 +312,7 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
                          const cwStationPositionLookup& regionPositions,
                          const cwSurveyNetwork& network,
                          const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode,
+                         const QHash<QUuid, cwLegErrorsByShot>& legErrorsByNode,
                          cwLinePlotGeometry::Result& result)
 {
     // Network keys are region-wide ("fisher_ridge.topo1.<tail>"); the node's
@@ -321,6 +341,7 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
     QSet<QString> emittedNodeLegs;
 
     const cwSplayTipsByStation nodeSplayTips = splayTipsByNode.value(node.id);
+    const cwLegErrorsByShot nodeLegErrors = legErrorsByNode.value(node.id);
     const QHash<QString, int> splayOwners =
         splayOwnerByStation(node, nodeSplayTips, tripScopePrefixes, result.tripUuids.size());
     QSet<QString> splaysEmitted;
@@ -363,7 +384,7 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
                 scopeOwnedStations(network, scopePrefix, tripScopePrefixes);
             const ScopeExtent scopeExtent = emitNetworkScopeGeometry(
                 network, nodePrefix, ownedStations,
-                stationPositions, result.points, emittedNodeLegs);
+                stationPositions, nodeLegErrors, result, emittedNodeLegs);
             result.tripLengths.append(scopeExtent.length);
             nodeExtent.absorb(scopeExtent);
 
@@ -380,14 +401,14 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
                         continue;
                     }
                     splaysEmitted.insert(key);
-                    appendSplaySegments(positionIt.value(), tipsIt.value(), result.points);
+                    appendSplaySegments(positionIt.value(), tipsIt.value(), result);
                 }
             }
             appendTripRanges(splayStart);
             continue;
         }
 
-        const ScopeExtent chunkExtent = emitChunkGeometry(trip, resolve, result.points);
+        const ScopeExtent chunkExtent = emitChunkGeometry(trip, resolve, nodeLegErrors, result);
         result.tripLengths.append(chunkExtent.length);
         nodeExtent.absorb(chunkExtent);
 
@@ -408,7 +429,7 @@ ScopeExtent emitOwnTrips(const cwCaveData& node,
                     if (!resolve(station.name(), &stationPoint)) {
                         continue;
                     }
-                    appendSplaySegments(stationPoint, nodeSplayTips.value(key), result.points);
+                    appendSplaySegments(stationPoint, nodeSplayTips.value(key), result);
                 }
             }
         }
@@ -425,6 +446,7 @@ struct SourcedLeg {
     QVector3D from;
     QVector3D to;
     bool countsLength = true;
+    float error = cwLinePlotGeometry::kNoErrorValue;
 };
 
 //! A solved position as a hash key: coincident stations share one. Two distinct
@@ -459,9 +481,11 @@ public:
                            const cwScopeLabels& scopeLabels,
                            const cwStationPositionLookup& regionPositions,
                            const cwSurveyNetwork& network,
-                           const cwSplayTipsByStation& splayTips) :
+                           const cwSplayTipsByStation& splayTips,
+                           const cwLegErrorsByShot& legErrors) :
         m_labels(scopeLabels),
-        m_splayTips(splayTips)
+        m_splayTips(splayTips),
+        m_legErrors(legErrors)
     {
         // The root's view, canonical and keyed below the root's label path,
         // as every member set names it.
@@ -543,6 +567,7 @@ public:
 private:
     const cwScopeLabels& m_labels;
     const cwSplayTipsByStation m_splayTips;
+    const cwLegErrorsByShot m_legErrors;
     QHash<QString, QVector3D> m_positions;
     QHash<QString, QStringList> m_neighbors;
     QStringList m_stations;
@@ -569,7 +594,8 @@ private:
         if (fromIt == m_positions.constEnd() || toIt == m_positions.constEnd()) {
             return false;
         }
-        legs.append({undirectedLegKey(from, to), fromIt.value(), toIt.value(), true});
+        legs.append({undirectedLegKey(from, to), fromIt.value(), toIt.value(), true,
+                     segmentErrorFor(m_legErrors, from, to)});
         return true;
     }
 
@@ -689,6 +715,7 @@ ScopeExtent emitSourcedNode(const cwCaveData& node,
         for (const SourcedLeg& leg : tripGeometry.legs) {
             result.points.append(leg.from);
             result.points.append(leg.to);
+            result.segmentErrors.append(leg.error);
         }
 
         const int splayStart = result.points.size();
@@ -698,7 +725,7 @@ ScopeExtent emitSourcedNode(const cwCaveData& node,
                 continue;
             }
             splaysEmitted.insert(station);
-            appendSplaySegments(geometry.positions().value(station), tips.value(), result.points);
+            appendSplaySegments(geometry.positions().value(station), tips.value(), result);
         }
 
         result.tripSplayVertexRanges.append(
@@ -737,21 +764,25 @@ ScopeExtent emitSubtree(const cwCaveData& node,
                         const cwStationPositionLookup& regionPositions,
                         const cwSurveyNetwork& network,
                         const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode,
+                        const QHash<QUuid, cwLegErrorsByShot>& legErrorsByNode,
                         cwLinePlotGeometry::Result& result)
 {
     if (isSourceRoot(node) && !node.externalCenterline.isEmpty()) {
         const SourcedSubtreeGeometry geometry(node, scopeLabels, regionPositions, network,
-                                              splayTipsByNode.value(node.id));
+                                              splayTipsByNode.value(node.id),
+                                              legErrorsByNode.value(node.id));
         QSet<QString> splaysEmitted;
         QList<QList<SourcedLeg>> subtreeLegs;
         return emitSourcedNode(node, geometry, splaysEmitted, subtreeLegs, result);
     }
 
     ScopeExtent subtreeExtent =
-        emitOwnTrips(node, scopeLabels, regionPositions, network, splayTipsByNode, result);
+        emitOwnTrips(node, scopeLabels, regionPositions, network, splayTipsByNode,
+                     legErrorsByNode, result);
     for (const cwCaveData& child : node.nodes) {
         subtreeExtent.absorb(
-            emitSubtree(child, scopeLabels, regionPositions, network, splayTipsByNode, result));
+            emitSubtree(child, scopeLabels, regionPositions, network, splayTipsByNode,
+                        legErrorsByNode, result));
     }
 
     // Always a real measurement: a node that resolved no centerline is length
@@ -773,7 +804,8 @@ Monad::Result<cwLinePlotGeometry::Result>
 cwLinePlotGeometry::generate(const cwCavingRegionData& region,
                              const cwStationPositionLookup& stationPositions,
                              const cwSurveyNetwork& network,
-                             const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode)
+                             const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode,
+                             const QHash<QUuid, cwLegErrorsByShot>& legErrorsByNode)
 {
     Result result;
 
@@ -782,7 +814,8 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
     const cwScopeLabels scopeLabels(region);
 
     for (const cwCaveData& cave : region.caves) {
-        emitSubtree(cave, scopeLabels, stationPositions, network, splayTipsByNode, result);
+        emitSubtree(cave, scopeLabels, stationPositions, network, splayTipsByNode,
+                    legErrorsByNode, result);
     }
 
     result.points.squeeze();
@@ -790,6 +823,7 @@ cwLinePlotGeometry::generate(const cwCavingRegionData& region,
     result.tripSplayVertexRanges.squeeze();
     result.tripUuids.squeeze();
     result.tripLengths.squeeze();
+    result.segmentErrors.squeeze();
 
     return Monad::Result<Result>(std::move(result));
 }

@@ -3,155 +3,64 @@
 
 //Our includes
 #include "cwGeometryItersecter.h"
-#include "TestGeometryBuilders.h"
-#include "cwGeometry.h"
-#include "cwLazLayer.h"
-#include "cwLazLayerModel.h"
-#include "cwLazLayersSceneNode.h"
-#include "cwPickQuery.h"
-#include "cwRayHit.h"
-#include "cwRenderPointCloud.h"
+#include "cwRenderLinePlot.h"
 #include "cwScene.h"
 
 //Qt includes
-#include <QCoreApplication>
-#include <QDir>
-#include <QPointer>
-#include <QTemporaryDir>
 #include <QVector3D>
 #include <QVector>
 
-//QMath3d
-#include <qray3d.h>
-
-#include "LazFixtureHelper.h"
-
 namespace {
 
-// A 3x3 grid in the z = 0 plane, one unit apart, centred on the origin. Small
-// enough to build instantly, spread enough that meanSpacingXY is meaningful.
-constexpr float kGridSpacing = 1.0f;
-constexpr int kGridSide = 3;
-
-QVector<QVector3D> gridPoints()
-{
-    QVector<QVector3D> points;
-    for (int x = 0; x < kGridSide; ++x) {
-        for (int y = 0; y < kGridSide; ++y) {
-            points.append(QVector3D((x - 1) * kGridSpacing, (y - 1) * kGridSpacing, 0.0f));
-        }
-    }
-    return points;
-}
-
-cwRenderPointCloud::GeometryData gridGeometry()
+// Two shots in the z = 0 plane, enough for the intersecter to build a sub-BVH.
+QVector<QVector3D> twoShots()
 {
     return {
-        .geometry = cwTestGeometry::points(gridPoints()),
-        .bboxMin = QVector3D(-kGridSpacing, -kGridSpacing, 0.0f),
-        .bboxMax = QVector3D(kGridSpacing, kGridSpacing, 0.0f),
-        .meanSpacingXY = kGridSpacing,
+        QVector3D(-10.0f, 0.0f, 0.0f),
+        QVector3D( 10.0f, 0.0f, 0.0f),
+        QVector3D(-10.0f, 100.0f, 0.0f),
+        QVector3D( 10.0f, 100.0f, 0.0f),
     };
-}
-
-// Straight down -Z through the grid's centre point at the origin.
-QRay3D rayThroughOrigin()
-{
-    return QRay3D(QVector3D(0.0f, 0.0f, 50.0f), QVector3D(0.0f, 0.0f, -1.0f));
-}
-
-cwPickQuery pointPickQuery()
-{
-    cwPickQuery query;
-    query.kinds = cwPickQuery::Kind::Points;
-    return query;
-}
-
-QDir prepareGisLayersDir(const QTemporaryDir& tempDir)
-{
-    const QString path = QDir(tempDir.path()).filePath(cwLazLayerModel::folderName());
-    QDir().mkpath(path);
-    return QDir(path);
 }
 
 } // namespace
 
 // A Node that outlives its render object keeps serving picks for deleted
 // geometry — still a use-after-free, since a hit fills cwRayHit::object()
-// from the Object's raw attribution pointer. These pin the purge in
+// from the Object's raw attribution pointer. This pins the purge in
 // cwScene::removeItem() that prevents it; see that function for why it lives
-// there. Both cases below delete a registered render object.
+// there.
 //
-// Each test REQUIREs the purge *before* it picks, so a regression reports as a
-// readable Catch2 failure instead of a stale hit downstream.
+// A point cloud used to stand in for the heavy registrant here. Between Q2 and
+// Q4 of the point octree plan a streamed cloud registers nothing with the
+// intersecter, so the line plot carries the case; Q4 restores the point-cloud
+// variant, along with the LAZ-layer one that lived beside it.
 TEST_CASE("cwGeometryItersecter forgets a deleted render object",
-          "[cwGeometryItersecter][cwRenderPointCloud]")
+          "[cwGeometryItersecter][cwRenderLinePlot]")
 {
     cwScene scene;
     auto* intersecter = scene.geometryItersecter();
 
-    auto* cloud = new cwRenderPointCloud();
-    cloud->setScene(&scene);
-    cloud->setGeometry(gridGeometry());
+    auto* linePlot = new cwRenderLinePlot();
+    linePlot->setScene(&scene);
+    linePlot->setGeometry(twoShots());
 
-    // Captured while the cloud is alive; the id-based Key stays a usable
-    // probe after the delete below — ids are never recycled (issue #512).
-    const cwGeometryItersecter::Key key{cloud->renderObjectId(), 0};
-
-    intersecter->waitForFinish();
-    REQUIRE_FALSE(intersecter->boundingBox(key).isNull());
-    REQUIRE(intersecter->intersectsDetailed(rayThroughOrigin(), pointPickQuery()).hit());
-
-    // Exactly what cwLazLayersSceneNode::dematerialize() does when a LAZ layer
-    // is removed or disabled. Note setScene(nullptr) runs first, which nulls
-    // m_scene — so geometryItersecter() returns nullptr from here on, and a
-    // purge written in ~cwRenderObject() would silently do nothing.
-    cloud->setScene(nullptr);
-    delete cloud;
-
-    REQUIRE(intersecter->boundingBox(key).isNull());
-    CHECK(intersecter->visibleBoundingBox().isNull());
-    CHECK_FALSE(intersecter->intersectsDetailed(rayThroughOrigin(), pointPickQuery()).hit());
-}
-
-TEST_CASE("cwGeometryItersecter forgets a removed LAZ layer's point cloud",
-          "[cwGeometryItersecter][cwLazLayersSceneNode]")
-{
-    QTemporaryDir tempDir;
-    REQUIRE(tempDir.isValid());
-
-    cwScene scene;
-    auto* intersecter = scene.geometryItersecter();
-
-    cwLazLayersSceneNode node;
-    node.setScene(&scene);
-
-    cwLazLayerModel model;
-    node.setLazLayerModel(&model);
-
-    const QDir gisLayersDir = prepareGisLayersDir(tempDir);
-    const QString filePath = gisLayersDir.filePath(QStringLiteral("lifetime-%1.laz")
-                                                       .arg(QCoreApplication::applicationPid()));
-    REQUIRE(writeSyntheticLazFile(filePath, gridPoints()));
-    model.setGisLayersDir(gisLayersDir);
-    model.rescan();
-
-    cwLazLayer* layer = model.layerAt(model.count() - 1);
-    REQUIRE(layer != nullptr);
-    REQUIRE(waitForLazLayerLoaded(layer));
-
-    cwRenderPointCloud* cloud = node.pointCloudForLayer(layer);
-    REQUIRE(cloud != nullptr);
-    const cwGeometryItersecter::Key key{cloud->renderObjectId(), 0};
+    // Captured while the plot is alive; the id-based Key stays a usable probe
+    // after the delete below — ids are never recycled (issue #512).
+    const cwGeometryItersecter::Key key{linePlot->renderObjectId(),
+                                        cwRenderLinePlot::kSubId};
 
     intersecter->waitForFinish();
     REQUIRE_FALSE(intersecter->boundingBox(key).isNull());
+    REQUIRE_FALSE(intersecter->visibleBoundingBox().isNull());
 
-    QPointer<cwRenderPointCloud> guard(cloud);
-    model.removeAt(0);
-    REQUIRE(guard.isNull());
+    // Exactly what a scene node does when its layer is removed or disabled.
+    // Note setScene(nullptr) runs first, which nulls m_scene — so
+    // geometryItersecter() returns nullptr from here on, and a purge written in
+    // ~cwRenderObject() would silently do nothing.
+    linePlot->setScene(nullptr);
+    delete linePlot;
 
     REQUIRE(intersecter->boundingBox(key).isNull());
     CHECK(intersecter->visibleBoundingBox().isNull());
-    CHECK_FALSE(intersecter->intersectsDetailed(rayThroughOrigin(), pointPickQuery()).hit());
 }

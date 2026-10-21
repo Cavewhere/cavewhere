@@ -17,8 +17,9 @@
 #include "cwGeometry.h"
 
 /**
- * Mip residency math for streamed textures. Every function is pure and safe to
- * call from any thread — no Qt GUI state, no RHI objects, no globals.
+ * Mip residency selection and eviction for streamed textures. Chain shape and
+ * byte math lives in cwMipMath.h. Every function here is pure and safe to call
+ * from any thread — no Qt GUI state, no RHI objects, no globals.
  */
 namespace cw::residency {
 
@@ -34,32 +35,6 @@ namespace cw::residency {
      * buffer.
      */
     constexpr int kDensitySampleTriangles = 64;
-
-    /**
-     * The number of mip levels in the chain for level0, halving each axis down
-     * to 1x1. Matches the chain cw::ktx2::encodeRgba() writes. An empty size
-     * has no levels.
-     */
-    CAVEWHERE_LIB_EXPORT int mipLevelCount(QSize level0);
-
-    /**
-     * The dimensions of level in a chain that starts at level0: successive
-     * halving with each axis floored at 1.
-     */
-    CAVEWHERE_LIB_EXPORT QSize mipLevelSize(QSize level0, int level);
-
-    /**
-     * The exact byte count of one mip level of the given format. Block formats
-     * round the level dimensions up to whole blocks. Formats other than BC7,
-     * ASTC_4x4, and RGBA8 return 0.
-     */
-    CAVEWHERE_LIB_EXPORT qint64 mipLevelBytes(QRhiTexture::Format format, QSize levelSize);
-
-    /**
-     * The bytes held by levels topLevel through the 1x1 tail — the cost of a
-     * texture whose most detailed resident level is topLevel.
-     */
-    CAVEWHERE_LIB_EXPORT qint64 chainBytes(QRhiTexture::Format format, QSize level0, int topLevel);
 
     /**
      * The coarsest-but-one level that stays pinned: the smallest level whose
@@ -129,7 +104,11 @@ namespace cw::residency {
 
     /**
      * Picks items to demote to their pinned base until overshootBytes is
-     * covered. Invisible items go first, oldest lastVisibleFrame first, then
+     * covered. The bytes the demotions already in flight will give back are
+     * credited against overshootBytes first, so a caller passes the raw
+     * overshoot and a fleet still converging is left to converge.
+     *
+     * Invisible items go first, oldest lastVisibleFrame first, then
      * visible items in the same order. Items already at or below their base and
      * items with a demotion in flight are left alone, as is a visible item
      * whose desiredTopLevel is finer than its base — selection would ask for

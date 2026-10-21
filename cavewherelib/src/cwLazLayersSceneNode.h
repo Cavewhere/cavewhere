@@ -19,11 +19,11 @@
 //Our includes
 #include "cwGlobals.h"
 #include "cwKeywordItemRegistry.h"
+#include "cwRenderPointCloud.h"
 
 class cwKeywordItemModel;
 class cwLazLayer;
 class cwLazLayerModel;
-class cwRenderPointCloud;
 class cwScene;
 
 /**
@@ -41,7 +41,10 @@ class CAVEWHERE_LIB_EXPORT cwLazLayersSceneNode : public QObject
     QML_NAMED_ELEMENT(LazLayersSceneNode)
     QML_UNCREATABLE("Access via RegionSceneManager.lazLayersSceneNode")
 
-    Q_PROPERTY(float worldRadius READ worldRadius WRITE setWorldRadius NOTIFY worldRadiusChanged)
+    Q_PROPERTY(float spacingCoverage READ spacingCoverage WRITE setSpacingCoverage NOTIFY spacingCoverageChanged)
+    Q_PROPERTY(float defaultSpacingCoverage READ defaultSpacingCoverage CONSTANT)
+    Q_PROPERTY(float minimumSpacingCoverage READ minimumSpacingCoverage CONSTANT)
+    Q_PROPERTY(float maximumSpacingCoverage READ maximumSpacingCoverage CONSTANT)
 
 public:
     explicit cwLazLayersSceneNode(QObject* parent = nullptr);
@@ -58,7 +61,10 @@ public:
     /// Test accessor: render object backing @a layer, or nullptr.
     cwRenderPointCloud* pointCloudForLayer(cwLazLayer* layer) const;
 
-    float worldRadius() const { return m_worldRadius; }
+    float spacingCoverage() const { return m_spacingCoverage; }
+    static float defaultSpacingCoverage();
+    static float minimumSpacingCoverage();
+    static float maximumSpacingCoverage();
 
     /// Subset of the bound model's layers whose render object is currently
     /// visible (keyword-filter pipeline gates this). Returns layers in the
@@ -66,10 +72,10 @@ public:
     QList<cwLazLayer*> visibleLayers() const;
 
 public slots:
-    void setWorldRadius(float worldRadius);
+    void setSpacingCoverage(float spacingCoverage);
 
 signals:
-    void worldRadiusChanged(float worldRadius);
+    void spacingCoverageChanged(float spacingCoverage);
 
 private slots:
     /// Resolves the originating cwLazLayer through QObject::sender() so the
@@ -79,6 +85,11 @@ private slots:
     void onEnabledChanged();
 
 private:
+    // The thinning and sizing knobs every owned cloud draws with, read off
+    // cwRenderingSettings and fanned out whenever one of them moves.
+    cwPointCloudShading shading() const;
+    void applyShading();
+
     void connectModel();
     void disconnectModel();
     void rebuild();
@@ -87,7 +98,7 @@ private:
     void removeLayer(cwLazLayer* layer);
     void materialize(cwLazLayer* layer);
     void dematerialize(cwLazLayer* layer);
-    void syncLayerGeometry(cwLazLayer* layer);
+    void syncLayerOctree(cwLazLayer* layer);
     void addKeywordItemForLayer(cwLazLayer* layer);
     void removeKeywordItemForLayer(cwLazLayer* layer);
 
@@ -99,13 +110,12 @@ private:
     // the point clouds via setObject(), so they must die before the clouds do.
     cwKeywordItemRegistry<QUuid> m_keywordRegistry;
 
-    // Mirrors cwRenderPointCloud::RenderState::worldRadius default.
-    // setWorldRadius fans out to every owned cwRenderPointCloud, is bound to
-    // the P+wheel gesture in the 3D view, and is the entry point used by
-    // sink_repatcher --point-radius. Kept here (rather than only on
-    // cwRenderPointCloud) so the value survives layers added later in the
-    // session.
-    float m_worldRadius = 1.29f;
+    // Mirrors cwRenderPointCloud::RenderState::spacingCoverage default — the
+    // only point-size knob. setSpacingCoverage clamps it, fans it out to every
+    // owned cwRenderPointCloud, and is bound to the P+wheel gesture in the 3D
+    // view. Kept here (rather than only on cwRenderPointCloud) so the value
+    // survives layers added later in the session.
+    float m_spacingCoverage = cw::pointcloud::kDefaultSpacingCoverage;
 };
 
 #endif // CWLAZLAYERSSCENENODE_H

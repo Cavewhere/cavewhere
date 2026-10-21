@@ -703,20 +703,21 @@ MainWindowTest {
         }
 
         // §16 B2b: the file owns an externally-backed trip's team, so the
-        // panel's team table drops the "+". A native TeamTable keeps it.
+        // panel's team table drops its Add Team Member button. A native
+        // TeamTable keeps it.
         function test_externalTeamTableOffersNoAddButton() {
             const externalTeam = findChild(tripMetadataId, "tripMetadataTeam")
             verify(externalTeam !== null, "tripMetadataTeam must exist")
 
-            const externalAdd = findChild(externalTeam, "sectionHeaderAddButton")
-            verify(externalAdd !== null, "the Team header's add button must exist")
+            const externalAdd = findChild(externalTeam, "addTeamMember")
+            verify(externalAdd !== null, "the Team table's add button must exist")
             tryVerify(() => !externalAdd.visible, 1000,
-                      "an externally-backed team offers no +")
+                      "an externally-backed team offers no add button")
 
-            const nativeAdd = findChild(nativeTeamTableId, "sectionHeaderAddButton")
-            verify(nativeAdd !== null, "the native Team header's add button must exist")
+            const nativeAdd = findChild(nativeTeamTableId, "addTeamMember")
+            verify(nativeAdd !== null, "the native Team table's add button must exist")
             tryVerify(() => nativeAdd.visible, 1000,
-                      "a native team keeps its +")
+                      "a native team keeps its add button")
         }
 
         // Every descendant of item carrying objectName, in declaration order.

@@ -14,6 +14,7 @@
 #include "cwLazLayerModel.h"
 #include "cwRenderObject.h"
 #include "cwRenderPointCloud.h"
+#include "cwRenderingSettings.h"
 #include "cwScene.h"
 
 #include <QDebug>
@@ -25,12 +26,14 @@
 Q_LOGGING_CATEGORY(lcLazSceneNode, "cw.laz.scenenode")
 
 namespace {
-    // World-space sprite radius bounds in meters. Lower bound covers
-    // sub-decimeter sprites for high-density scans; upper bound prevents
-    // a runaway multiplicative P+wheel from turning the render into one
-    // fat blob. sink_repatcher --point-radius clamps to the same range.
-    constexpr float kMinWorldRadius = 0.01f;
-    constexpr float kMaxWorldRadius = 50.0f;
+    // Spacing-coverage bounds — the whole point-size range, since coverage is
+    // the only sizing knob. A quarter of a cell is the smallest size that
+    // still shows structure rather than dust; eight cells is well past the
+    // point where a coarse cut's sprites smear the surface into a blur, and it
+    // keeps a runaway multiplicative P+wheel from turning the render into one
+    // fat blob. Zero is excluded: it would size every sprite to the 1px floor.
+    constexpr float kMinSpacingCoverage = 0.25f;
+    constexpr float kMaxSpacingCoverage = 8.0f;
 
 QString shortId(const cwLazLayer* layer) {
     return layer == nullptr
@@ -49,6 +52,42 @@ constexpr float kMaxGapFudge = 10.0f;
 cwLazLayersSceneNode::cwLazLayersSceneNode(QObject* parent) :
     QObject(parent)
 {
+    // Without the singleton (tests, tools) every cloud keeps the default rules.
+    if (auto* settings = cwRenderingSettings::instance()) {
+        connect(settings, &cwRenderingSettings::pointCloudShadingChanged,
+                this, &cwLazLayersSceneNode::applyShading);
+    }
+}
+
+cwPointCloudShading cwLazLayersSceneNode::shading() const
+{
+    const auto* settings = cwRenderingSettings::instance();
+    return settings ? settings->pointCloudShading() : cwPointCloudShading();
+}
+
+void cwLazLayersSceneNode::applyShading()
+{
+    const cwPointCloudShading current = shading();
+    for (const auto& renderObject : std::as_const(m_pointClouds)) {
+        if (renderObject) {
+            renderObject->setShading(current);
+        }
+    }
+}
+
+float cwLazLayersSceneNode::defaultSpacingCoverage()
+{
+    return cw::pointcloud::kDefaultSpacingCoverage;
+}
+
+float cwLazLayersSceneNode::minimumSpacingCoverage()
+{
+    return kMinSpacingCoverage;
+}
+
+float cwLazLayersSceneNode::maximumSpacingCoverage()
+{
+    return kMaxSpacingCoverage;
 }
 
 cwLazLayersSceneNode::~cwLazLayersSceneNode()
@@ -260,7 +299,8 @@ void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
     qCDebug(lcLazSceneNode) << "materialize:" << shortId(layer) << fileName(layer);
 
     auto* renderObject = new cwRenderPointCloud();
-    renderObject->setWorldRadius(m_worldRadius);
+    renderObject->setSpacingCoverage(m_spacingCoverage);
+    renderObject->setShading(shading());
     renderObject->setScene(m_scene);
     m_pointClouds.insert(layer->id(), renderObject);
 
@@ -269,13 +309,13 @@ void cwLazLayersSceneNode::materialize(cwLazLayer* layer)
                                   << "layer=" << QFileInfo(layer->sourcePath()).fileName();
     }
 
-    // bboxChanged also fires during applyResult, immediately before
-    // loadStatusChanged(Loaded). Connecting both would push the geometry
-    // twice and rebuild the immutable vertex buffer twice per load.
+    // octreeChanged also fires during publishOctree, immediately before
+    // loadStatusChanged(Loaded). Connecting both would push the same source
+    // twice and reset the render side's node table twice per load.
     connect(layer, &cwLazLayer::loadStatusChanged,
-            this, [this, layer]() { syncLayerGeometry(layer); });
+            this, [this, layer]() { syncLayerOctree(layer); });
 
-    syncLayerGeometry(layer);
+    syncLayerOctree(layer);
     addKeywordItemForLayer(layer);
 }
 
@@ -293,7 +333,7 @@ void cwLazLayersSceneNode::dematerialize(cwLazLayer* layer)
     // Drop the loadStatusChanged hook-up before tearing down the render object
     // so a late-arriving signal can't look up a destroyed pointer. The
     // enabledChanged hook-up must survive — disconnecting per-signal preserves
-    // it while clearing the geometry sync.
+    // it while clearing the octree sync.
     disconnect(layer, &cwLazLayer::loadStatusChanged, this, nullptr);
     cwRenderPointCloud* renderObject = it.value();
     renderObject->setScene(nullptr);
@@ -316,14 +356,14 @@ void cwLazLayersSceneNode::onEnabledChanged()
     }
 }
 
-void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
+void cwLazLayersSceneNode::syncLayerOctree(cwLazLayer* layer)
 {
     if (!layer) {
         return;
     }
     auto it = m_pointClouds.find(layer->id());
     if (it == m_pointClouds.end()) {
-        qCWarning(lcLazSceneNode) << "syncLayerGeometry: no render object for layer"
+        qCWarning(lcLazSceneNode) << "syncLayerOctree: no render object for layer"
                                   << QFileInfo(layer->sourcePath()).fileName()
                                   << "— addLayer was never called for this layer.";
         return;
@@ -334,12 +374,7 @@ void cwLazLayersSceneNode::syncLayerGeometry(cwLazLayer* layer)
     }
 
     if (layer->loadStatus() == cwLazLayer::LoadStatus::Loaded) {
-        renderObject->setGeometry({
-            .geometry = layer->geometry(),
-            .bboxMin = layer->bboxMin(),
-            .bboxMax = layer->bboxMax(),
-            .meanSpacingXY = layer->meanSpacingXY(),
-        });
+        renderObject->setOctree(layer->octree());
     } else {
         renderObject->clear();
     }
@@ -381,19 +416,19 @@ void cwLazLayersSceneNode::removeKeywordItemForLayer(cwLazLayer* layer)
     m_keywordRegistry.drop(layer->id());
 }
 
-void cwLazLayersSceneNode::setWorldRadius(float worldRadius)
+void cwLazLayersSceneNode::setSpacingCoverage(float spacingCoverage)
 {
-    const float clamped = std::clamp(worldRadius, kMinWorldRadius, kMaxWorldRadius);
-    if (qFuzzyCompare(m_worldRadius, clamped)) {
+    const float clamped = std::clamp(spacingCoverage, kMinSpacingCoverage, kMaxSpacingCoverage);
+    if (qFuzzyCompare(m_spacingCoverage, clamped)) {
         return;
     }
-    m_worldRadius = clamped;
+    m_spacingCoverage = clamped;
 
     for (const auto& renderObject : std::as_const(m_pointClouds)) {
         if (renderObject) {
-            renderObject->setWorldRadius(clamped);
+            renderObject->setSpacingCoverage(clamped);
         }
     }
 
-    emit worldRadiusChanged(clamped);
+    emit spacingCoverageChanged(clamped);
 }

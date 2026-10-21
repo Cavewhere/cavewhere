@@ -48,12 +48,13 @@ public:
     void setTarget(cwRenderLinePlot* linePlot,
                    cwLinePlotGeometry::VertexRange range);
 
-    // Re-applies the current keyword state to the render object; used after a
-    // solve resets the visibility mask.
-    void pushToTarget() { applyVisible(isVisible()); }
+    // Re-applies the current keyword state and color-by value to the render
+    // object; used after a solve resets the visibility mask and color values.
+    void pushToTarget();
 
 protected:
     void applyVisible(bool visible) override;
+    void applyColorValue(float value) override;
 
 private:
     QPointer<cwRenderLinePlot> m_linePlot;

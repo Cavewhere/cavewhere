@@ -905,6 +905,7 @@ QQ.Rectangle {
 
     transitions: [
         QQ.Transition {
+            objectName: "toSelectTransition"
             from: NoteToolMode.none
             to: NoteToolMode.select
 

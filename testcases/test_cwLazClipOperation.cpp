@@ -13,7 +13,6 @@
 #include <QVector3D>
 
 #include "cwLazClipOperation.h"
-#include "cwLazLoader.h"
 
 #include "LazFixtureHelper.h"
 
@@ -108,10 +107,7 @@ TEST_CASE("cwLazClipOperation: keep mode retains points inside polygon", "[cwLaz
     REQUIRE(result.value().pointsWritten == 2);
     REQUIRE(result.value().outputPath == outPath);
 
-    auto loadFuture = cwLazLoader::load({.path = outPath});
-    loadFuture.waitForFinished();
-    REQUIRE(loadFuture.resultCount() == 1);
-    REQUIRE(loadFuture.result().geometry.vertexCount() == 2);
+    REQUIRE(readLazFile(outPath).points.size() == 2);
 }
 
 TEST_CASE("cwLazClipOperation: remove mode retains points outside polygon", "[cwLazClipOperation]") {
@@ -239,14 +235,11 @@ TEST_CASE("cwLazClipOperation: output round-trips the coordinates it was given",
     REQUIRE_FALSE(future.result().hasError());
     REQUIRE(future.result().value().pointsWritten == 2);
 
-    auto loadFuture = cwLazLoader::load({.path = outPath});
-    loadFuture.waitForFinished();
-    const auto out = loadFuture.result().geometry.values<QVector3D>(
-        cwGeometry::Semantic::Position);
+    const QVector<LazAttributePoint> out = readLazFile(outPath).points;
     REQUIRE(out.size() == 2);
-    CHECK_THAT(out[0].x(), WithinAbs(0.0f, 1e-3f));
-    CHECK_THAT(out[1].x(), WithinAbs(5.0f, 1e-3f));
-    CHECK_THAT(out[1].y(), WithinAbs(5.0f, 1e-3f));
+    CHECK_THAT(out.at(0).position.x(), WithinAbs(0.0f, 1e-3f));
+    CHECK_THAT(out.at(1).position.x(), WithinAbs(5.0f, 1e-3f));
+    CHECK_THAT(out.at(1).position.y(), WithinAbs(5.0f, 1e-3f));
 }
 
 // Stacked-along-Z points spread along eye Y under a profile view;
@@ -446,8 +439,8 @@ TEST_CASE("cwLazClipOperation: kept points preserve their source attributes",
 
 // Point formats 6–10 are LAS 1.4 only. The output header must be stamped 1.4
 // so the 64-bit extended point count is written — a 1.2 header drops it, and
-// every reader (cwLazLoader, CloudCompare) then sees an empty cloud even though
-// the point records are on disk.
+// every reader (the octree builder, CloudCompare) then sees an empty cloud
+// even though the point records are on disk.
 TEST_CASE("cwLazClipOperation: extended (1.4) format output records its point count",
           "[cwLazClipOperation]")
 {
@@ -491,12 +484,10 @@ TEST_CASE("cwLazClipOperation: extended (1.4) format output records its point co
     CHECK(out.pointDataFormat == 6);
     CHECK(out.points.size() == 2);
 
-    // The real regression: cwLazLoader reads the header point count. A 1.2
-    // header would report 0 here despite the records existing on disk.
-    auto loadFuture = cwLazLoader::load({.path = outPath});
-    loadFuture.waitForFinished();
-    REQUIRE(loadFuture.resultCount() == 1);
-    CHECK(loadFuture.result().geometry.vertexCount() == 2);
+    // The real regression: readers that trust the header point count, as the
+    // octree builder does. A 1.2 header would report 0 here despite the
+    // records existing on disk.
+    CHECK(out.headerPointCount == 2);
 }
 
 // Mixed source formats merge into the richest format (here 3): the format-0

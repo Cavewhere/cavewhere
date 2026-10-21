@@ -75,7 +75,7 @@ cwDiskCacher::Key lidarIconKey(const cwProject* project, const cwNoteLiDAR* note
     cwDiskCacher::Key key;
     const QString absolutePath = project ? project->absolutePath(note, note->filename()) : QString();
     QFileInfo info(absolutePath);
-    key.path = QDir(info.path());
+    key.path = info.path();
     QString baseName = info.fileName();
     if (baseName.isEmpty()) {
         baseName = info.completeBaseName();

@@ -1,5 +1,6 @@
 #include "LazFixtureHelper.h"
 
+#include <QAbstractItemModel>
 #include <QByteArray>
 #include <QCoreApplication>
 #include <QElapsedTimer>
@@ -16,6 +17,7 @@
 
 #include <LASlib/lasreader.hpp>
 #include <LASlib/laswriter.hpp>
+#include <LASlib/laswriter_las.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -46,10 +48,10 @@ void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get
     double maxX = 0.0, maxY = 0.0, maxZ = 0.0;
     bool first = true;
     for (const auto& point : points) {
-        const QVector3D position = get(point);
-        const double x = double(position.x());
-        const double y = double(position.y());
-        const double z = double(position.z());
+        const cwGeoPoint position = get(point);
+        const double x = position.x;
+        const double y = position.y;
+        const double z = position.z;
         if (first) {
             minX = maxX = x;
             minY = maxY = y;
@@ -74,7 +76,21 @@ void centerHeaderOffsets(LASheader* header, const PointRange& points, Getter get
 
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
-                           const QString& wktCS)
+                           const QString& wktCS,
+                           LazCompression compression)
+{
+    QVector<cwGeoPoint> geoPoints;
+    geoPoints.reserve(points.size());
+    for (const QVector3D& p : points) {
+        geoPoints.append(cwGeoPoint::fromSceneLocal(p));
+    }
+    return writeSyntheticGeoLazFile(outPath, geoPoints, wktCS, compression);
+}
+
+bool writeSyntheticGeoLazFile(const QString& outPath,
+                              const QVector<cwGeoPoint>& points,
+                              const QString& wktCS,
+                              LazCompression compression)
 {
     LASheader header;
     header.clean_las_header();
@@ -83,7 +99,7 @@ bool writeSyntheticLazFile(const QString& outPath,
     header.z_scale_factor = 0.001;
     header.point_data_format = 0;
     header.point_data_record_length = 20;
-    centerHeaderOffsets(&header, points, [](const QVector3D& p) { return p; });
+    centerHeaderOffsets(&header, points, [](const cwGeoPoint& p) { return p; });
 
     QByteArray wktBytes;
     if (!wktCS.isEmpty()) {
@@ -98,17 +114,31 @@ bool writeSyntheticLazFile(const QString& outPath,
                        header.point_data_record_length, &header);
 
     const QByteArray pathBytes = outPath.toUtf8();
-    LASwriteOpener opener;
-    opener.set_file_name(pathBytes.constData());
-    LASwriter* writer = opener.open(&header);
+
+    // LASwriteOpener has no compressor argument, so the point-wise fixture
+    // opens the LAS writer itself.
+    LASwriter* writer = nullptr;
+    if (compression == LazCompression::PointWise) {
+        auto* lasWriter = new LASwriterLAS();
+        if (lasWriter->open(pathBytes.constData(), &header, LASZIP_COMPRESSOR_POINTWISE)) {
+            writer = lasWriter;
+        } else {
+            delete lasWriter;
+        }
+    } else {
+        LASwriteOpener opener;
+        opener.set_file_name(pathBytes.constData());
+        writer = opener.open(&header);
+    }
+
     if (writer == nullptr) {
         return false;
     }
 
-    for (const QVector3D& p : points) {
-        pointTemplate.set_x(double(p.x()));
-        pointTemplate.set_y(double(p.y()));
-        pointTemplate.set_z(double(p.z()));
+    for (const cwGeoPoint& p : points) {
+        pointTemplate.set_x(p.x);
+        pointTemplate.set_y(p.y);
+        pointTemplate.set_z(p.z);
         writer->write_point(&pointTemplate);
         writer->update_inventory(&pointTemplate);
     }
@@ -143,7 +173,9 @@ bool writeAttributedLazFile(const QString& outPath,
     header.point_data_format = pointDataFormat;
     header.point_data_record_length = recordLength;
     centerHeaderOffsets(&header, points,
-                        [](const LazAttributePoint& p) { return p.position; });
+                        [](const LazAttributePoint& p) {
+                            return cwGeoPoint::fromSceneLocal(p.position);
+                        });
     // Formats 6+ are LAS 1.4 only; a 1.2 header can't store their point count.
     if (pointDataFormat >= 6) {
         header.version_minor = 4;
@@ -210,6 +242,7 @@ LazFileContents readLazFile(const QString& path)
     }
 
     contents.pointDataFormat = reader->header.point_data_format;
+    contents.headerPointCount = qint64(reader->npoints);
     contents.headerBboxMin = QVector3D(float(reader->header.min_x),
                                        float(reader->header.min_y),
                                        float(reader->header.min_z));
@@ -326,6 +359,36 @@ bool waitForLazLayerModelSettled(cwLazLayerModel* layers, int timeoutMs)
         spinEventLoopSlice();
     }
     return !settling();
+}
+
+LazJobRecorder::LazJobRecorder(cwFutureManagerModel* manager)
+{
+    m_connection = QObject::connect(manager, &QAbstractItemModel::rowsInserted, manager,
+        [this, manager](const QModelIndex&, int first, int last) {
+            for (int row = first; row <= last; ++row) {
+                m_names.append(manager->index(row, 0)
+                                   .data(cwFutureManagerModel::NameRole)
+                                   .toString());
+            }
+        });
+}
+
+LazJobRecorder::~LazJobRecorder()
+{
+    QObject::disconnect(m_connection);
+}
+
+bool LazJobRecorder::waitForName(const QString& name, int timeoutMs)
+{
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < timeoutMs) {
+        if (m_names.contains(name)) {
+            return true;
+        }
+        spinEventLoopSlice();
+    }
+    return m_names.contains(name);
 }
 
 bool addLazAndWait(cwRootData* root, const QStringList& externalPaths)

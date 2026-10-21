@@ -1,13 +1,17 @@
 // Our includes
 #include "cwKtx2Codec.h"
+#include "cwMipMath.h"
 #include "cwTask.h"
-#include "cwTextureResidency.h"
 
 // Qt includes
 #include <QDebug>
 #include <QDir>
+#include <QMutex>
 #include <QSemaphore>
+#include <QSet>
 #include <QThread>
+#include <QThreadPool>
+#include <QWaitCondition>
 
 // libktx includes
 #include <ktx.h>
@@ -28,7 +32,6 @@ namespace {
     constexpr ktx_uint32_t kVkFormatR8G8B8A8Unorm = 37;
 
     constexpr int kBytesPerRgbaPixel = 4;
-    constexpr int kSmallestMipSize = 1;
     constexpr int kSmallestThreadCount = 1;
     constexpr int kEncodeLaneThreads = 1;
 
@@ -46,13 +49,14 @@ namespace {
      */
     QVector<QImage> buildMipChain(const QImage& image)
     {
+        const int levelCount = cw::mip::mipLevelCount(image.size());
+
         QVector<QImage> levels;
+        levels.reserve(levelCount);
         levels.append(image);
 
-        QSize size = image.size();
-        while(size.width() > kSmallestMipSize || size.height() > kSmallestMipSize) {
-            size = QSize(std::max(kSmallestMipSize, size.width() / 2),
-                         std::max(kSmallestMipSize, size.height() / 2));
+        for(int level = 1; level < levelCount; level++) {
+            const QSize size = cw::mip::mipLevelSize(image.size(), level);
             levels.append(levels.last().scaled(size, Qt::IgnoreAspectRatio, Qt::SmoothTransformation));
         }
 
@@ -100,6 +104,27 @@ namespace {
     using KtxTexturePtr = std::unique_ptr<ktxTexture2, KtxTextureDeleter>;
 
     /**
+     * True when ktx2Bytes parse as a KTX2 file whose level data is all there.
+     * Loading the image data is what catches a truncated or half-written entry;
+     * it stays far cheaper than the transcode, let alone the encode.
+     */
+    bool isReadableKtx2(const QByteArray& ktx2Bytes)
+    {
+        if(ktx2Bytes.isEmpty()) {
+            return false;
+        }
+
+        ktxTexture2* rawTexture = nullptr;
+        const KTX_error_code createError =
+            ktxTexture2_CreateFromMemory(reinterpret_cast<const ktx_uint8_t*>(ktx2Bytes.constData()),
+                                         static_cast<ktx_size_t>(ktx2Bytes.size()),
+                                         KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+                                         &rawTexture);
+        const KtxTexturePtr texture(rawTexture);
+        return createError == KTX_SUCCESS;
+    }
+
+    /**
      * Runs the compress on the encode lane and waits for it. A cwConcurrent
      * worker releases its pool slot while it waits, so queued encodes leave the
      * pool's threads free for other work; the release/reserve pair is the same
@@ -130,6 +155,65 @@ namespace {
 
         return compressError;
     }
+
+    /**
+     * One claim per cache entry while its encode runs; a second claimant waits,
+     * then reads the finished entry instead of queuing a duplicate encode.
+     */
+    class EncodeClaim
+    {
+    public:
+        explicit EncodeClaim(const QString& entryPath) :
+            m_entryPath(entryPath)
+        {
+            QMutexLocker locker(&mutex());
+            if(inFlight().contains(m_entryPath)) {
+                //Waiting frees this worker's pool slot, as compressOnLane does.
+                QThreadPool* pool = cwTask::threadPool();
+                if(pool != nullptr) {
+                    pool->releaseThread();
+                }
+                while(inFlight().contains(m_entryPath)) {
+                    finished().wait(&mutex());
+                }
+                if(pool != nullptr) {
+                    pool->reserveThread();
+                }
+            }
+            inFlight().insert(m_entryPath);
+        }
+
+        ~EncodeClaim()
+        {
+            QMutexLocker locker(&mutex());
+            inFlight().remove(m_entryPath);
+            finished().wakeAll();
+        }
+
+        EncodeClaim(const EncodeClaim&) = delete;
+        EncodeClaim& operator=(const EncodeClaim&) = delete;
+
+    private:
+        static QMutex& mutex()
+        {
+            static QMutex instance;
+            return instance;
+        }
+
+        static QWaitCondition& finished()
+        {
+            static QWaitCondition instance;
+            return instance;
+        }
+
+        static QSet<QString>& inFlight()
+        {
+            static QSet<QString> instance;
+            return instance;
+        }
+
+        const QString m_entryPath;
+    };
 }
 
 namespace cw::ktx2 {
@@ -283,7 +367,7 @@ Monad::Result<cwCompressedTexture> transcodeLevels(const QByteArray& ktx2Bytes,
 
     cwCompressedTexture compressed;
     compressed.format = target;
-    compressed.size = cw::residency::mipLevelSize(baseSize, firstLevel);
+    compressed.size = cw::mip::mipLevelSize(baseSize, firstLevel);
     compressed.mipLevels.reserve(static_cast<qsizetype>(texture->numLevels) - firstLevel);
 
     for(ktx_uint32_t level = static_cast<ktx_uint32_t>(firstLevel); level < texture->numLevels; level++) {
@@ -321,15 +405,6 @@ QRhiTexture::Format preferredCompressedFormat(QRhi* rhi)
     return QRhiTexture::UnknownFormat;
 }
 
-QRhiTexture::Format targetCompressedFormat()
-{
-#if defined(Q_OS_IOS) || defined(Q_OS_ANDROID)
-    return QRhiTexture::ASTC_4x4;
-#else
-    return QRhiTexture::BC7;
-#endif
-}
-
 QRhiTexture::Format supportedCompressedFormat()
 {
     return supportedFormat.load(std::memory_order_relaxed);
@@ -340,44 +415,65 @@ void setSupportedCompressedFormat(QRhiTexture::Format format)
     supportedFormat.store(format, std::memory_order_relaxed);
 }
 
-Monad::Result<cwCompressedTexture> cachedCompressedTexture(cwDiskCacher& cacher,
-                                                           const cwDiskCacher::Key& key,
-                                                           const QImage& sourceImage,
-                                                           QRhiTexture::Format target)
+QString cacheKeyId(const QString& baseKey)
 {
+    return baseKey + QStringLiteral("-uastc") + QString::number(kEncodeGeneration);
+}
+
+Monad::ResultBase ensureEncodedEntry(cwDiskCacher& cacher,
+                                     const cwDiskCacher::Key& key,
+                                     const std::function<QImage()>& source,
+                                     const cwProgressNodePtr& progressParent)
+{
+    //Claimed before the lookup, so a request that waited on another's encode
+    //finds that encode's entry here.
+    const EncodeClaim claim(cacher.filePath(key));
+
+    //entry() rather than hasEntry(): an edited source lands on the same cache
+    //file path with a new checksum, and only a read tells a current encode from
+    //a stale one
     const QByteArray cachedBytes = cacher.entry(key);
+    if(isReadableKtx2(cachedBytes)) {
+        return Monad::ResultBase();
+    }
+
     if(!cachedBytes.isEmpty()) {
-        auto transcoded = transcode(cachedBytes, target);
-        if(!transcoded.hasError()) {
-            return transcoded;
-        }
-
         //A damaged entry is worth replacing, so fall through to the encode
-        //rather than reporting the read's error.
-        qWarning() << "Re-encoding the damaged KTX2 cache entry at" << cacher.filePath(key)
-                   << ":" << transcoded.errorMessage();
+        qWarning() << "Re-encoding the damaged KTX2 cache entry at" << cacher.filePath(key);
     }
 
-    if(sourceImage.isNull()) {
-        return Monad::Result<cwCompressedTexture>(
-            QStringLiteral("No KTX2 cache entry at ") + cacher.filePath(key));
-    }
+    //Only a miss has anything to compress, so a hit grows no node at all. The
+    //encode can't say how far along it is, so the node stays opaque.
+    const cwProgressScope compressing(progressParent, QStringLiteral("Compressing texture"));
 
-    const auto encoded = encodeRgba(sourceImage);
+    const auto encoded = encodeRgba(source());
     if(encoded.hasError()) {
-        return Monad::Result<cwCompressedTexture>(encoded.errorMessage());
+        qWarning() << "Can't encode the KTX2 cache entry at" << cacher.filePath(key)
+                   << ":" << encoded.errorMessage();
+        return Monad::ResultBase(encoded.errorMessage());
     }
 
     cacher.insert(key, encoded.value());
 
-    return transcode(encoded.value(), target);
+    //insert() reports write failures (a full or unwritable .cw_cache) by doing
+    //nothing, and a descriptor pointing at a missing entry leaves the render
+    //thread retrying a load that can never succeed. Read the entry back so a
+    //failed write falls back to the uncompressed image instead.
+    if(!isReadableKtx2(cacher.entry(key))) {
+        const QString message = QStringLiteral("Can't cache the encoded KTX2 texture at ")
+                                + cacher.filePath(key);
+        qWarning().noquote() << message;
+        return Monad::ResultBase(message);
+    }
+
+    return Monad::ResultBase();
 }
 
 Monad::Result<cwCompressedTexture> loadStreamedLevels(const cwStreamedTexture& texture,
                                                       QRhiTexture::Format target,
                                                       int firstLevel)
 {
-    const cwDiskCacher cacher{QDir(texture.dataRootPath)};
+    const cwDiskCacher cacher{texture.dataRootPath()};
 
     const QByteArray ktx2Bytes = cacher.entry(texture.key);
     if(ktx2Bytes.isEmpty()) {

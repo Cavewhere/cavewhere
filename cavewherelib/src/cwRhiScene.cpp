@@ -66,13 +66,7 @@ void cwRhiScene::synchroize(cwScene *scene, cwRhiItemRenderer* renderer)
     // snapshot is taken here. Without the singleton (tests, tools) the frame
     // keeps cwRenderBudgets' defaults.
     if(auto* settings = cwRenderingSettings::instance()) {
-        cwRenderBudgets budgets;
-        budgets.gpuBudgetBytes = qint64(settings->gpuMemoryBudgetMb()) * cw::budgets::kBytesPerMegabyte;
-        budgets.cpuBudgetBytes = qint64(settings->cpuCacheBudgetMb()) * cw::budgets::kBytesPerMegabyte;
-        budgets.uploadBudgetBytesPerFrame =
-            qint64(settings->uploadBudgetMbPerFrame()) * cw::budgets::kBytesPerMegabyte;
-        budgets.screenSpaceErrorPx = settings->screenSpaceErrorPx();
-        m_frame.setBudgets(budgets);
+        m_frame.setBudgets(settings->budgets());
     }
 
     // One visibility snapshot per sync: the GUI thread is blocked at this
@@ -134,6 +128,11 @@ void cwRhiScene::syncRenderObject(cwRenderObject* object, cwRhiItemRenderer* ren
         rhiObject->synchronize({object, renderer});
         m_frame.markForResourceUpdate(rhiObject);
     }
+}
+
+void cwRhiScene::releaseStreamedResources()
+{
+    m_frame.releaseStreamedResources();
 }
 
 void cwRhiScene::render(QRhiCommandBuffer *cb, cwRhiItemRenderer *renderer)

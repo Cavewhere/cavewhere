@@ -25,9 +25,26 @@ Q_LOGGING_CATEGORY(lcLazLayer, "cw.laz.layer")
 namespace {
 constexpr const char* kLazLayerType = "LAZ Layer";
 
+// The profiling runner's only way into the octree build's memory budget
+constexpr const char* kBuildMemoryBudgetVariable = "CW_BUILD_MEMORY_BUDGET_MB";
+constexpr qint64 kBytesPerMebibyte = 1024 * 1024;
+
 cwGeoPoint midpoint(const cwGeoPoint& a, const cwGeoPoint& b)
 {
     return cwGeoPoint((a.x + b.x) * 0.5, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5);
+}
+
+qint64 buildMemoryBudgetBytes()
+{
+    const int megabytes = qEnvironmentVariableIntValue(kBuildMemoryBudgetVariable);
+    return megabytes > 0 ? qint64(megabytes) * kBytesPerMebibyte
+                         : cw::octree::kDefaultBuildMemoryBudgetBytes;
+}
+
+QFuture<std::shared_ptr<const cwPointOctreePack>> openCachedPack(
+    const cwPointOctreeBuilder::Request& request)
+{
+    return cwConcurrent::run([request]() { return cwPointOctreeBuilder::cachedPack(request); });
 }
 }
 
@@ -41,30 +58,33 @@ cwLazLayer::cwLazLayer(QObject* parent) :
     updateTypeKeyword();
     updateIdKeyword();
 
-    // Each restart() begins a new load run; register that run with the global
+    // Each restart() begins a new build run; register that run with the global
     // future manager and chain the result delivery onto it. Restarter cancels
     // the previous future and waits for it to settle before this fires again,
-    // so we can never have two applyResult chains racing each other.
-    // Register each load run with the global future manager. onResult() below
-    // handles result delivery; the two compose (both fire when a fresh future
-    // is installed).
+    // so we can never have two applyResult chains racing each other. Only a
+    // real build is registered: a cache hit never reaches the restarter, so
+    // reopening a project shows no job at all.
     cwTrackRestarter(m_futureManagerToken, m_loadRestarter,
-        [this]() { return QStringLiteral("Loading %1.laz").arg(m_name); });
+        [this]() { return QStringLiteral("Building point cloud octree: %1").arg(m_name); });
 
-    // Fires once per load run, only for a completed (non-cancelled, non-empty)
-    // future. cwLazLoader always addResult()s except on cancellation — a header
-    // open failure still yields an empty-geometry result — so applyResult()
-    // owns all error reporting (its vertexCount() == 0 branch). The by-value
-    // parameter is a shallow refcount bump: cwGeometry's vertex data is a CoW
-    // QByteArray, not a deep copy.
-    m_loadRestarter.onResult(this, [this](cwLazLoadResult result) {
-        // The user may have disabled the layer between the load start and its
-        // delivery. Drop the result — setEnabled(false) already cleared
-        // geometry and reset status to Idle.
+    // Fires once per build run, only for a completed (non-cancelled, non-empty)
+    // future. cwPointOctreeBuilder always addResult()s except on cancellation —
+    // a header open failure still yields an error Result — so applyResult()
+    // owns all error reporting (its hasError() branch).
+    m_loadRestarter.onResult(this, [this](cwPointOctreeBuilder::Result result) {
+        // The user may have disabled the layer between the build start and its
+        // delivery. Drop the result — setEnabled(false) already cleared the
+        // octree and reset status to Idle.
         if (!m_enabled) {
             return;
         }
-        applyResult(std::move(result));
+        if (m_buildGeneration != m_reloadGeneration) {
+            // A later reload() superseded this build, so its octree is in a
+            // frame or a CS the layer has moved on from. The newer run is the
+            // one that publishes.
+            return;
+        }
+        applyResult(result);
     });
 
     // Deliberately not registered with the future manager: a header open is
@@ -180,27 +200,19 @@ void cwLazLayer::setEnabled(bool enabled)
     emit enabledChanged();
 
     if (!m_enabled) {
-        // Cancel any in-flight load. asyncfuture's Restarter propagates the
-        // outer cancel down to the inner worker, where cwLazLoader's
-        // QPromise::isCanceled() check between point chunks short-circuits.
-        // The observer chain below still receives the canceled future; the
-        // m_enabled guard there drops the result.
+        // Cancel any in-flight build. asyncfuture's Restarter propagates the
+        // outer cancel down to the inner worker, where cwPointOctreeBuilder
+        // polls cancellation per chunk of points and per node, deletes its
+        // temp directory, and writes no manifest. The observer chain below
+        // still receives the canceled future; the m_enabled guard there drops
+        // the result.
         m_loadRestarter.future().cancel();
-        const bool hadGeometry = (m_geometry.vertexCount() > 0);
-        m_geometry = cwGeometry{};
-        m_bboxMin = QVector3D{};
-        m_bboxMax = QVector3D{};
-        m_meanSpacingXY = 0.0f;
+        clearOctree();
         setErrorMessage(QString());
         // Only the points go: the file's CRS and bounding box are still known,
         // and a disabled layer that stopped being a georeferenced input would
         // read as one that was deleted.
         setPointState(PointState::Idle);
-        if (hadGeometry) {
-            emit pointCountChanged();
-            emit bboxChanged();
-            emit meanSpacingXYChanged();
-        }
     } else {
         reload();
     }
@@ -235,9 +247,9 @@ void cwLazLayer::setSourceCSOverride(const QString& cs)
     m_sourceCSOverride = cs;
     if (sourceCS() != previousCS) {
         emit sourceCSChanged();
-        // Only an effective-CS move puts the decoded points in the wrong
-        // place; an override edit that resolves to the same CS changes
-        // nothing the decode reads.
+        // Only an effective-CS move puts the points in the wrong place; an
+        // override edit that resolves to the same CS changes nothing the
+        // build reads.
         reload();
     }
 }
@@ -255,6 +267,21 @@ cwGeoPoint cwLazLayer::sourceBboxMax() const
 cwGeoPoint cwLazLayer::sourceBboxCenter() const
 {
     return midpoint(sourceBboxMin(), sourceBboxMax());
+}
+
+void cwLazLayer::setCacheRootPath(const QString& path)
+{
+    if (m_cacheRootPath == path) {
+        return;
+    }
+    m_cacheRootPath = path;
+
+    // The cache root is part of where the octree lives, so an octree published
+    // under the old root no longer names this layer's octree — and a build
+    // still running would write its nodes into the root the layer just left.
+    if (!m_octree.isNull() || m_pointState == PointState::Loading) {
+        reload();
+    }
 }
 
 void cwLazLayer::setFutureManagerToken(const cwFutureManagerToken& token)
@@ -286,56 +313,98 @@ void cwLazLayer::reload()
     // Points are only in the right place if the frame they were transformed
     // into is the one the project keeps, so the frame comes from the one place
     // that knows when it is final. On a project that already has a frame the
-    // future is finished and the decode starts here; on one still deriving its
+    // future is finished and the build starts here; on one still deriving its
     // frame from headers that are still arriving, waiting is what keeps every
     // cloud in the same frame — and keeps that frame from depending on which
     // header the disk returned first.
-    ++m_frameWaitGeneration;
+    ++m_reloadGeneration;
     const QFuture<QString> frame = m_localProjectionToken.frameFuture();
     if (frame.isFinished()) {
-        startDecode(frame.result());
+        startBuild(frame.result());
         return;
     }
 
     qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
                         << "reload() waiting on the frame";
 
-    const quint64 generation = m_frameWaitGeneration;
+    const quint64 generation = m_reloadGeneration;
     AsyncFuture::observe(frame).context(this,
         [this, generation](const QString& frameCS) {
-            if (generation != m_frameWaitGeneration) {
-                // A later reload() replaced this wait, and decoded against the
+            if (generation != m_reloadGeneration) {
+                // A later reload() replaced this wait, and built against the
                 // frame it was given.
                 return;
             }
             if (!m_enabled || m_sourcePath.isEmpty()) {
                 return;
             }
-            startDecode(frameCS);
+            startBuild(frameCS);
         },
         [this, generation]() {
             // The frame was abandoned with the project it belonged to. Give the
             // points up rather than report a load that will never run; the
             // header still stands, so the layer stays a georeferenced input.
-            if (generation != m_frameWaitGeneration) {
+            if (generation != m_reloadGeneration) {
                 return;
             }
             setPointState(PointState::Idle);
         });
 }
 
-void cwLazLayer::startDecode(const QString& frameCS)
+void cwLazLayer::startBuild(const QString& frameCS)
 {
     qCDebug(lcLazLayer) << QFileInfo(m_sourcePath).fileName()
                         << "reload() frameCSSet=" << !frameCS.isEmpty();
 
-    m_loadRestarter.restart([this, frameCS]() {
-        return cwLazLoader::load({
-            .path = m_sourcePath,
-            .sourceCSOverride = m_sourceCSOverride,
-            .frameCS = frameCS
+    // A standalone layer has no project behind it, so its octree is cached
+    // beside the file it was built from.
+    const cwPointOctreeBuilder::Request request {
+        .path = m_sourcePath,
+        .sourceCSOverride = m_sourceCSOverride,
+        .frameCS = frameCS,
+        .cacheRootPath = m_cacheRootPath.isEmpty()
+                ? QFileInfo(m_sourcePath).absolutePath()
+                : m_cacheRootPath,
+        .memoryBudgetBytes = buildMemoryBudgetBytes()
+    };
+    m_buildRequest = request;
+    const quint64 generation = m_reloadGeneration;
+
+    // A build left over from an earlier reload() is building against a frame or
+    // a CS this layer has moved on from, and it is m_buildGeneration that keeps
+    // its result from publishing. Cancelling the restarter's future from here
+    // would be the wrong tool: Restarter queues the first start of a burst on
+    // the event loop, so an out-of-band cancel that lands in that window
+    // settles the outer future the queued run is about to be tracked by, and
+    // that run then delivers nothing — the layer would sit at Loading forever.
+    // The stale run is cancelled by the restart() below instead.
+
+    // The probe fingerprints the LAZ file and opens and checksums its pack —
+    // file I/O that never runs on the GUI thread. It is deliberately outside
+    // the restarter: a hit publishes the cached octree and registers no job,
+    // which is what makes reopening a project instant.
+    const QFuture<std::shared_ptr<const cwPointOctreePack>> cached = openCachedPack(request);
+
+    AsyncFuture::observe(cached).context(this,
+        [this, generation, request](std::shared_ptr<const cwPointOctreePack> pack) {
+            if (generation != m_reloadGeneration) {
+                // A later reload() replaced this probe and asked its own.
+                return;
+            }
+            if (!m_enabled || m_sourcePath.isEmpty()) {
+                return;
+            }
+
+            if (pack != nullptr) {
+                publishOctree(std::move(pack));
+                return;
+            }
+
+            m_buildGeneration = generation;
+            m_loadRestarter.restart([request]() {
+                return cwPointOctreeBuilder::build(request);
+            });
         });
-    });
 }
 
 void cwLazLayer::startHeaderProbe()
@@ -392,43 +461,79 @@ void cwLazLayer::finishProbe(const cwLazLoader::ProbeResult& probe)
     setHeaderProbeInFlight(false);
 }
 
-void cwLazLayer::applyResult(cwLazLoadResult&& result)
+void cwLazLayer::applyResult(const cwPointOctreeBuilder::Result& result)
 {
-    const QString previousCS = sourceCS();
-
-    m_geometry = std::move(result.geometry);
-    m_bboxMin = result.bboxMin;
-    m_bboxMax = result.bboxMax;
-    m_meanSpacingXY = result.meanSpacingXY;
-
-    if (!m_header.has_value() && result.headerRead) {
-        // A decode that read the header on its way lets a layer whose probe
-        // hasn't landed yet still know where it is. Recorded as what the file
-        // declares — not the override-resolved CS the decode used — matching
-        // what the probe publishes when it arrives.
-        m_header = cwLazLoader::ProbeResult{
-            .valid = true,
-            .sourceCS = result.embeddedCS,
-            .bboxMin = result.sourceBboxMin,
-            .bboxMax = result.sourceBboxMax
-        };
-    }
-
-    if (sourceCS() != previousCS) {
-        emit sourceCSChanged();
-    }
-
-    emit pointCountChanged();
-    emit bboxChanged();
-    emit meanSpacingXYChanged();
-
-    if (m_geometry.vertexCount() == 0) {
-        setErrorMessage(QStringLiteral("Could not read points from %1").arg(m_sourcePath));
+    if (result.hasError()) {
+        clearOctree();
+        setErrorMessage(result.errorMessage());
         setPointState(PointState::Error);
         return;
     }
 
+    // The build wrote its pack; opening it is the same probe a reopened
+    // project runs, so there is one publish path and the open stays off the
+    // GUI thread.
+    const quint64 generation = m_reloadGeneration;
+    const cwPointOctreeBuilder::Request request = m_buildRequest;
+    const QFuture<std::shared_ptr<const cwPointOctreePack>> built = openCachedPack(request);
+
+    AsyncFuture::observe(built).context(this,
+        [this, generation, request](std::shared_ptr<const cwPointOctreePack> pack) {
+            if (generation != m_reloadGeneration || !m_enabled) {
+                return;
+            }
+
+            if (pack == nullptr) {
+                clearOctree();
+                setErrorMessage(QStringLiteral("Could not open the built octree of %1.")
+                                        .arg(request.path));
+                setPointState(PointState::Error);
+                return;
+            }
+
+            publishOctree(std::move(pack));
+        });
+}
+
+void cwLazLayer::clearOctree()
+{
+    if (m_octree.isNull()) {
+        return;
+    }
+
+    m_octree = cwPointOctreeSource{};
+    m_pointCount = 0;
+    m_bboxMin = QVector3D{};
+    m_bboxMax = QVector3D{};
+    m_meanSpacingXY = 0.0f;
+
+    emit octreeChanged();
+    emit pointCountChanged();
+    emit bboxChanged();
+    emit meanSpacingXYChanged();
+}
+
+void cwLazLayer::publishOctree(std::shared_ptr<const cwPointOctreePack> pack)
+{
+    const cwPointOctreeManifest& manifest = pack->manifest();
+    m_pointCount = manifest.pointCount;
+    m_bboxMin = manifest.bboxMin;
+    m_bboxMax = manifest.bboxMax;
+    m_meanSpacingXY = manifest.meanSpacingXY;
+
+    m_octree = cwPointOctreeSource(m_buildRequest.cacheRootPath,
+                                   m_sourcePath,
+                                   manifest.fingerprint,
+                                   std::move(pack));
+
+    emit octreeChanged();
+    emit pointCountChanged();
+    emit bboxChanged();
+    emit meanSpacingXYChanged();
+
     setErrorMessage(QString());
+    // Last, so anything that reacts to Loaded reads the octree that is already
+    // published rather than the one it replaced.
     setPointState(PointState::Loaded);
 }
 

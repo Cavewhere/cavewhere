@@ -396,8 +396,8 @@ void cwLinePlotManager::reconcileTripKeywordItems(
     Q_ASSERT(tripSplayVertexRanges.size() == tripUuids.size());
 
     // Re-binds an item's proxy to its current vertex span (they shift each
-    // solve) and re-hides a keyword-hidden span. setGeometry just reset every
-    // vertex to visible, so a visible proxy has nothing to publish.
+    // solve), then re-hides a keyword-hidden span and re-colors it. setGeometry
+    // just reset every vertex to visible with color value 0.
     const auto retarget = [this](cwKeywordItem* item,
                                  cwLinePlotGeometry::VertexRange range) {
         if (item == nullptr) {
@@ -406,9 +406,7 @@ void cwLinePlotManager::reconcileTripKeywordItems(
         auto* visibility = qobject_cast<cwLinePlotTripVisibility*>(item->object());
         if (visibility) {
             visibility->setTarget(m_linePlot, range);
-            if (!visibility->isVisible()) {
-                visibility->pushToTarget();
-            }
+            visibility->pushToTarget();
         }
     };
 
@@ -1082,6 +1080,7 @@ void cwLinePlotManager::updateLinePlot(cwLinePlotTask::LinePlotResultData result
     if(m_linePlot != nullptr) {
         m_linePlot->setGeometry(results.stationPositions(),
                                 results.tripSplayVertexRanges());
+        m_linePlot->setSegmentErrors(results.segmentErrors());
     }
 
     // Resolve UUIDs to live trips by identity (never by list position).

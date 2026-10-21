@@ -4,12 +4,16 @@
 #include "cwRenderMaterialState.h"
 #include "cwRenderObject.h"
 #include "cwGeometry.h"
+#include "cwItemTexture.h"
 #include "cwStreamedTexture.h"
+#include "cwTracked.h"
 #include "CaveWhereLibExport.h"
 #include <QHash>
 #include <QByteArray>
 #include <QtGui/qimage.h>
 #include <QMatrix4x4>
+#include <QBox3D>
+#include <optional>
 
 class CAVEWHERE_LIB_EXPORT cwRenderTexturedItems : public cwRenderObject
 {
@@ -24,14 +28,14 @@ public:
 
     struct Item {
         cwGeometry geometry;
-        // A texture travels in exactly one of two representations: a QImage, or
-        // a cwStreamedTexture descriptor the render thread streams mip levels
-        // from. When both are set the streamed descriptor wins.
-        QImage texture;
-        cwStreamedTexture streamedTexture;
+        cwItemTexture texture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
+        // The bounds of geometry's positions in the item's local space, or
+        // nullopt when they are unknown. A producer that already has the mesh on
+        // a worker thread fills this in there; addItem computes it otherwise.
+        std::optional<QBox3D> localBounds;
         bool visible = true;
         bool storeGeometry = false; // Keep CPU-side geometry when tests need it
         bool storeTexture = false;  // Keep CPU-side texture when tests need it
@@ -42,6 +46,7 @@ public:
     // partner of addItem. Keeps add/update field-complete by construction: a
     // field added to Item is wired into both here and addItem, side by side,
     // instead of being easy to forget in a caller's hand-rolled setter loop.
+    // The item keeps its color-by value (see setItemColorValue).
     void updateItem(uint32_t id, const Item& item);
     void updateGeometry(uint32_t id, const cwGeometry& geometry);
     void updateTexture(uint32_t id, const QImage& image);
@@ -59,6 +64,20 @@ public:
     void setModelMatrix(uint32_t id, const QMatrix4x4& modelMatrix);
     void removeItem(uint32_t id);
 
+    // The color-by block shared by every scrap draw (pushed by cwColorBy).
+    void setSharedUniformBlock(const QByteArray& block);
+    QByteArray sharedUniformBlock() const { return m_sharedUniformBlock.value(); }
+
+    // Material for items drawn with the default scrap shaders: their per-draw
+    // block (model matrix, shared color-by block, item tail) at binding 2 in
+    // the fragment stage.
+    static cwRenderMaterialState scrapMaterial();
+
+    // The per-item tail of the scrap per-draw block: vec4 item (x = color-by value).
+    // Items always carry it so the GPU buffer is never shorter than the GLSL block.
+    static QByteArray emptyItemBlock();
+    void setItemColorValue(uint32_t id, float value);
+
     //For testing
     Item item(uint32_t id) const;
     bool hasItem(uint32_t id) const;
@@ -69,17 +88,22 @@ protected:
     void updateVisibility() override;
 
 private:
+    QByteArray withColorValueOf(uint32_t id, const QByteArray& uniformBlock) const;
+
     // What travels to the render thread. Item additionally carries
     // visible/storeGeometry/storeTexture, which are authoring state only —
     // visibility publishes through the scene visibility store, never on a
     // command — so payloads carry just the render data.
     struct ItemPayload {
         cwGeometry geometry;
-        QImage texture;
-        cwStreamedTexture streamedTexture;
+        cwItemTexture texture;
         cwRenderMaterialState material;
         QByteArray uniformBlock;
         QMatrix4x4 modelMatrix;
+        // The bounds of geometry's positions in the item's local space, or
+        // nullopt when the geometry has none. Measured on the GUI thread so the
+        // render thread never walks the vertices at the sync barrier.
+        std::optional<QBox3D> localBounds;
     };
 
     // Which field a caller-facing edit touches; addCommand() folds it into the
@@ -89,7 +113,6 @@ private:
         Remove,
         UpdateGeometry,
         UpdateTexture,
-        UpdateStreamedTexture,
         UpdateMaterial,
         UpdateUniformBlock,
         UpdateModelMatrix
@@ -112,7 +135,6 @@ private:
         // Which payload fields an Update touched since the last sync. Ignored for
         // Add (which uses the whole payload) and Remove (which uses none).
         bool geometryDirty = false;
-        // Covers both texture representations — whichever one the payload holds.
         bool textureDirty = false;
         bool materialDirty = false;
         bool uniformBlockDirty = false;
@@ -123,15 +145,13 @@ private:
 
     QHash<uint32_t, PendingItemState> m_pendingChanges;
 
+    cwTracked<QByteArray> m_sharedUniformBlock;
+
     // Simple ID generator for items
     uint32_t m_nextId = 1;
     QHash<uint32_t, Item> m_frontState;
 
     void addCommand(CommandType type, uint32_t id, const ItemPayload& payload);
-
-    // The payload invariant every command must keep: at most one of the two
-    // texture representations is set.
-    static bool hasOneTextureRepresentation(const ItemPayload& payload);
 
     // Publish one item's effective sub-item visibility: authored visibility
     // ANDed with its pick-ready gate, so an item stays hidden until its

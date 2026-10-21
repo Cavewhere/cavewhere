@@ -279,9 +279,9 @@ public:
         return &m_vertexBuffers[bindingIndex];
     }
 
-    // Power-user write accessor for bulk producers (e.g. cwLazLoader's
-    // parallel chunk writer). The templated set<T> is too slow per-vertex
-    // for those hot paths. Returns null if bindingIndex is out of range.
+    // Power-user write accessor for bulk producers: the templated set<T> is
+    // too slow per-vertex for those hot paths. Returns null if bindingIndex is
+    // out of range.
     QByteArray* mutableVertexBuffer(int bindingIndex) {
         if (bindingIndex < 0 || bindingIndex >= m_vertexBuffers.size()) {
             return nullptr;

@@ -455,3 +455,52 @@ TEST_CASE("cwLinePlotGeometry draws a native trip inside a sourced subtree from 
     CHECK(geometry.nodeLengthAndDepths.value(root->id()).length() == Catch::Approx(10.0));
     CHECK(tripLengthOf(geometry, native) == Catch::Approx(10.0));
 }
+
+TEST_CASE("cwLinePlotGeometry gives each segment its leg's closure error", "[cwLinePlotGeometry]")
+{
+    cwCavingRegion region;
+
+    cwCave* cave = new cwCave();
+    cave->setName(QStringLiteral("Cave 1"));
+    region.addCave(cave);
+
+    cwTrip* trip = new cwTrip();
+    cwSurveyChunk* chunk = new cwSurveyChunk();
+    trip->addChunk(chunk);
+    chunk->appendShot(cwStation("a1"), cwStation("a2"), makeShot("10.0", "0.0", "0.0"));
+    chunk->appendShot(cwStation("a2"), cwStation("a3"), makeShot("10.0", "90.0", "0.0"));
+    cave->addTrip(trip);
+
+    cwStationPositionLookup lookup;
+    lookup.setPosition("a1", QVector3D(0.0f, 0.0f, 0.0f));
+    lookup.setPosition("a2", QVector3D(0.0f, 10.0f, 0.0f));
+    lookup.setPosition("a3", QVector3D(10.0f, 10.0f, 0.0f));
+    SurveyTreeTestHelper::setScopedPositions(cave, lookup);
+
+    constexpr float kLegError = 1.5f;
+    cwLegErrorsByShot legErrors;
+    // Stored in the opposite direction and case from the survey data.
+    legErrors.insert(cwSurvex3DFileReader::legKey(QStringLiteral("A2"), QStringLiteral("a1")),
+                     cwLegError{kLegError, 0.0f, 0.0f});
+
+    cwSplayTipsByStation splayTips;
+    splayTips.insert(QStringLiteral("a2"), {QVector3D(5.0f, 10.0f, 0.0f)});
+
+    const auto result = cwLinePlotGeometry::generate(region.data(), region.stationPositions(),
+                                                     cwSurveyNetwork(),
+                                                     {{cave->id(), splayTips}},
+                                                     {{cave->id(), legErrors}});
+    REQUIRE_FALSE(result.hasError());
+    const cwLinePlotGeometry::Result geometry = result.value();
+
+    // Two shots plus one splay segment.
+    REQUIRE(geometry.points.size() == 6);
+    REQUIRE(geometry.segmentErrors.size() == geometry.points.size() / 2);
+    CHECK(geometry.segmentErrors.at(0) == kLegError);
+    CHECK(geometry.segmentErrors.at(1) == cwLinePlotGeometry::kNoErrorValue);
+
+    REQUIRE(geometry.tripSplayVertexRanges.size() == 1);
+    const cwLinePlotGeometry::VertexRange splays = geometry.tripSplayVertexRanges.at(0);
+    REQUIRE(splays.count == 2);
+    CHECK(geometry.segmentErrors.at(splays.start / 2) == cwLinePlotGeometry::kNoErrorValue);
+}

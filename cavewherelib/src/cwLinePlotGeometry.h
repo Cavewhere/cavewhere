@@ -13,6 +13,7 @@
 #include "cwCavingRegionData.h"
 #include "cwStationPositionLookup.h"
 #include "cwSurveyNetwork.h"
+#include "cwSurvex3DFileReader.h"
 
 #include <QHash>
 #include <QVector>
@@ -80,6 +81,13 @@
  * each trip's length counts every leg it draws, so a leg two units share counts
  * in both trips and once in their node.
  *
+ * segmentErrors runs parallel to points: segmentErrors[i] belongs to the
+ * segment at points[2i], points[2i+1]. It holds the leg's survex closure error
+ * e (in σ) when the cave's legErrorsByCave map has the leg, and kNoErrorValue
+ * for every other centerline segment and every splay segment.
+ * legErrorsByNode is keyed like splayTipsByNode: by the owning node's id, with
+ * node-local canonical station names in each cwSurvex3DFileReader::legKey().
+ *
  * Pure compute — no file I/O, no Qt object machinery. Caller invokes from
  * any thread; only reads the const region snapshot.
  */
@@ -87,6 +95,10 @@ class CAVEWHERE_LIB_EXPORT cwLinePlotGeometry
 {
 public:
     cwLinePlotGeometry() = delete;
+
+    // A segment with no closure error. The render object and the shader read
+    // any value below zero as "no loop".
+    static constexpr float kNoErrorValue = -1.0f;
 
     class LengthAndDepth {
     public:
@@ -116,13 +128,15 @@ public:
         QVector<QUuid> tripUuids;               // running trip id -> stable cwTripData::id
         QVector<double> tripLengths;            // running trip id -> length of the legs it draws, meters
         QHash<QUuid, LengthAndDepth> nodeLengthAndDepths; // every node, keyed by cwCaveData::id
+        QVector<float> segmentErrors;           // 1 per segment, parallel to points / 2
     };
 
     static Monad::Result<Result> generate(
         const cwCavingRegionData& region,
         const cwStationPositionLookup& stationPositions,
         const cwSurveyNetwork& network = cwSurveyNetwork(),
-        const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode = {});
+        const QHash<QUuid, cwSplayTipsByStation>& splayTipsByNode = {},
+        const QHash<QUuid, cwLegErrorsByShot>& legErrorsByNode = {});
 };
 
 #endif // CWLINEPLOTGEOMETRY_H

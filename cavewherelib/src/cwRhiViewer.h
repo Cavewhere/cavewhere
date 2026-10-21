@@ -18,9 +18,11 @@
 #include <QOpenGLFramebufferObject>
 #include <QQuickRhiItem>
 #include <QPointer>
+#include <memory>
 
 //Our includes
 #include "cwCamera.h"
+class cwRhiRendererHandle;
 // class cwMouseEventTransition;
 class cwGLShader;
 class cwShaderDebugger;
@@ -49,6 +51,10 @@ public:
     cwScene* scene() const;
     void setScene(cwScene* scene);
 
+    //! The rendezvous a cwRhiItemRenderer attaches itself to at its first
+    //! synchronize, so this item can reach the render thread while it is hidden
+    std::shared_ptr<cwRhiRendererHandle> rendererHandle() const { return m_rendererHandle; }
+
 protected:
 
 signals:
@@ -74,6 +80,10 @@ private slots:
     // QQuickRhiItem interface
 protected:
     QQuickRhiItemRenderer *createRenderer() override;
+    void itemChange(ItemChange change, const ItemChangeData& value) override;
+
+private:
+    std::shared_ptr<cwRhiRendererHandle> m_rendererHandle;
 };
 
 inline cwCamera* cwRhiViewer::camera() const { return Camera; }

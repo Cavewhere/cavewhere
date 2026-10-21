@@ -5,6 +5,7 @@
 // Std
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 // Qt
 #include <QMatrix4x4>
@@ -19,6 +20,8 @@
 #include "cwGeometryItersecter.h"
 #include "TestGeometryBuilders.h"
 #include "cwPickQuery.h"
+#include "cwPointOctree.h"
+#include "cwPointOctreePickSet.h"
 #include "cwRayHit.h"
 #include "cwRenderPointCloud.h"
 #include "cwScene.h"
@@ -110,6 +113,40 @@ void addScrapTriangle(cwScene& scene, float offsetX, float z, uint64_t id = 1)
     scene.geometryItersecter()->waitForFinish();
 }
 
+// The cube a node's points are quantized into. Points on one plane give a
+// degenerate box, so the cube is grown to at least the pick radius on every
+// axis.
+QBox3D nodeCube(const QVector<QVector3D>& points, float padding)
+{
+    QBox3D box;
+    for (const QVector3D& point : points) {
+        box.unite(point);
+    }
+    const QVector3D extent = box.size();
+    const float half = std::max({extent.x(), extent.y(), extent.z()}) * 0.5f + padding;
+    const QVector3D corner(half, half, half);
+    return QBox3D(box.center() - corner, box.center() + corner);
+}
+
+// A point cloud registered the way cwRenderPointCloud does it: a pick set of
+// resident octree nodes published behind a pick provider, not vertices in the
+// BVH. One node is enough — what these tests exercise is the pick rule, not
+// the cut.
+void addCloudProvider(cwScene& scene, const QVector<QVector3D>& points,
+                      float pickRadius, uint64_t id)
+{
+    const QBox3D bounds = nodeCube(points, pickRadius);
+
+    const cwPointOctreePickSet::Node node{bounds, cw::octree::quantizeAll(points, bounds)};
+
+    auto set = std::make_shared<cwPointOctreePickSet>();
+    set->publish({node}, bounds, pickRadius);
+
+    // The intersecter holds the provider by shared_ptr for as long as it is
+    // registered, so nothing else needs to keep it alive.
+    scene.geometryItersecter()->addProvider(nullptr, id, std::move(set));
+}
+
 // One cloud point sitting exactly on the screen-center ray. Dead-centre, so it
 // is always an EXACT sphere hit whatever the radius — which is the rung that
 // short-circuited the whole ladder before this fix. The 0.5f radius is picked
@@ -118,11 +155,7 @@ void addScrapTriangle(cwScene& scene, float offsetX, float z, uint64_t id = 1)
 // here depends on it doing so.
 void addCloudPointOnRay(cwScene& scene, float z, uint64_t id = 2)
 {
-    scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object(nullptr, id,
-                                     cwTestGeometry::points({QVector3D(0.0f, 0.0f, z)}),
-                                     QMatrix4x4(), 0.5f));
-    scene.geometryItersecter()->waitForFinish();
+    addCloudProvider(scene, {QVector3D(0.0f, 0.0f, z)}, 0.5f, id);
 }
 
 // Guards the sign convention every depth claim in this file rests on.
@@ -176,10 +209,7 @@ void addPointWall(cwScene& scene, float z, float pickRadius, uint64_t id = 3)
         }
     }
 
-    scene.geometryItersecter()->addObject(
-        cwGeometryItersecter::Object(nullptr, id, cwTestGeometry::points(points),
-                                     QMatrix4x4(), pickRadius));
-    scene.geometryItersecter()->waitForFinish();
+    addCloudProvider(scene, points, pickRadius, id);
 }
 
 } // namespace
