@@ -37,6 +37,7 @@ namespace {
     static_assert(kFooterBytes == 56, "The plan fixes the footer at 56 bytes");
 
     constexpr QLatin1StringView kTempSuffix(".tmp");
+    constexpr QLatin1StringView kStaleSuffix(".stale");
 
     void appendU64(QByteArray& bytes, quint64 value)
     {
@@ -66,6 +67,27 @@ namespace {
         hash.addData(manifest);
         hash.addData(index);
         return hash.result().left(kChecksumBytes);
+    }
+
+    QString unusedStalePath(const QString& packPath)
+    {
+        const QString base = packPath + kStaleSuffix;
+        int n = 0;
+        while(QFileInfo::exists(base + QString::number(n))) {
+            ++n;
+        }
+        return base + QString::number(n);
+    }
+
+    void removeStaleCopies(const QString& packPath)
+    {
+        const QFileInfo packInfo(packPath);
+        const QDir packDir = packInfo.absoluteDir();
+        const QStringList stale = packDir.entryList({packInfo.fileName() + kStaleSuffix + QLatin1Char('*')},
+                                                    QDir::Files);
+        for(const QString& name : stale) {
+            QFile::remove(packDir.filePath(name));
+        }
     }
 }
 
@@ -314,15 +336,32 @@ bool cwPointOctreePack::Writer::finish(const cwPointOctreeManifest& manifest)
             return fail(QStringLiteral("Couldn't close %1: %2").arg(m_file.fileName(), m_file.errorString()));
         }
 
+        //Windows refuses to delete or overwrite a mapped file, and readers on
+        //other threads may still map the old pack, so it is set aside under a
+        //unique name and swept by a later finish()
+        QFile live(m_packPath);
+        const bool setAside = live.exists();
+        if(setAside) {
+            const QString stalePath = unusedStalePath(m_packPath);
+            if(!live.rename(stalePath)) {
+                return fail(QStringLiteral("Couldn't rename %1 to %2: %3")
+                                .arg(m_packPath, stalePath, live.errorString()));
+            }
+        }
+
         //Through QFile, not std::filesystem, so iOS's security-scoped file
         //engine grants access to a project picked from Files; m_file stays
         //alive past the rename because the engine releases its scope in its
         //destructor
-        QFile::remove(m_packPath);
         if(!m_file.rename(m_packPath)) {
+            if(setAside) {
+                live.rename(m_packPath);
+            }
             return fail(QStringLiteral("Couldn't rename %1 to %2: %3")
                             .arg(m_file.fileName(), m_packPath, m_file.errorString()));
         }
+
+        removeStaleCopies(m_packPath);
         return true;
     };
 

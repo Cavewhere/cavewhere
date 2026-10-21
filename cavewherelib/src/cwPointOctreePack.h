@@ -68,9 +68,11 @@ private:
 };
 
 /**
- * Writes a pack to a temp file next to packPath and renames it over packPath
- * on finish(). A writer destroyed before a successful finish() removes the
- * temp file, so a failed or canceled build leaves no pack behind.
+ * Writes a pack to a temp file next to packPath and renames it onto packPath
+ * on finish(). An existing pack is first renamed aside to packPath + ".staleN"
+ * so a reader can keep it mapped, and finish() removes every stale copy it
+ * can afterward. A writer destroyed before a successful finish() removes the
+ * temp file, so a failed or canceled build leaves no new pack behind.
  */
 class CAVEWHERE_LIB_EXPORT cwPointOctreePack::Writer
 {
@@ -93,10 +95,13 @@ public:
     bool append(quint64 cellKey, const QByteArray& payload);
 
     //! Writes the manifest, the index in manifest node order, and the footer,
-    //! flushes, closes, and renames the temp file over packPath. Fails, and
-    //! leaves no pack behind, when any manifest node has no appended payload,
-    //! when a payload has no manifest node, when the same cell was appended
-    //! twice, or when a write fails. errorMessage() says which.
+    //! flushes, closes, renames any existing pack to a unique packPath +
+    //! ".staleN", renames the temp file onto packPath, and removes every stale
+    //! copy it can; on Windows a copy a reader still maps waits for a later
+    //! finish(). Fails, and leaves no new pack behind, when any manifest node
+    //! has no appended payload, when a payload has no manifest node, when the
+    //! same cell was appended twice, or when a write fails; a failed rename
+    //! onto packPath puts the previous pack back. errorMessage() says which.
     bool finish(const cwPointOctreeManifest& manifest);
     QString errorMessage() const;
 

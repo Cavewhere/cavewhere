@@ -293,6 +293,75 @@ TEST_CASE("cwPointOctreePack round trips every node", "[PointOctree][PointOctree
     }
 }
 
+TEST_CASE("cwPointOctreePack::Writer sets a replaced pack aside", "[PointOctree][PointOctreePack]")
+{
+    QTemporaryDir dir;
+    REQUIRE(dir.isValid());
+    const QString packName = QStringLiteral("tile.cwpack");
+    const QString path = dir.filePath(packName);
+    const QString stalePrefix = packName + QStringLiteral(".stale");
+    const cwPointOctreeManifest manifest = makeManifest();
+    cwPointOctreeManifest changed = manifest;
+    changed.fingerprint = QStringLiteral("cafe");
+
+    SECTION("a second write replaces a pack a reader still holds")
+    {
+        writePack(path, manifest);
+        std::shared_ptr<const cwPointOctreePack> held = cwPointOctreePack::open(path);
+        REQUIRE(held);
+
+        writePack(path, changed);
+        CHECK(held->manifest().fingerprint == manifest.fingerprint);
+        CHECK(held->node(0) == payloadFor(manifest, 0));
+
+        const std::shared_ptr<const cwPointOctreePack> reopened = cwPointOctreePack::open(path);
+        REQUIRE(reopened);
+        CHECK(reopened->manifest().fingerprint == changed.fingerprint);
+
+        //On Windows the stale copy survives while held maps it
+        for(const QString& name : filesIn(dir.path())) {
+            INFO(name.toStdString());
+            CHECK((name == packName || name.startsWith(stalePrefix)));
+        }
+
+        held.reset();
+        writePack(path, manifest);
+        CHECK(filesIn(dir.path()) == QStringList {packName});
+    }
+
+    SECTION("finish sweeps stale copies of this pack and leaves other files alone")
+    {
+        const QString other = QStringLiteral("other.cwpack.stale0");
+        writePack(path, manifest);
+        writeAll(dir.filePath(stalePrefix + QStringLiteral("0")), QByteArray());
+        writeAll(dir.filePath(stalePrefix + QStringLiteral("1")), QByteArray());
+        writeAll(dir.filePath(other), QByteArray());
+
+        writePack(path, changed);
+        CHECK(filesIn(dir.path()) == QStringList {other, packName});
+    }
+
+    SECTION("the stale name skips a name that is taken")
+    {
+        //A directory can be neither renamed over nor removed as a file, so it
+        //stands in for a stale copy Windows still holds mapped
+        const QString taken = dir.filePath(stalePrefix + QStringLiteral("0"));
+        REQUIRE(QDir().mkpath(taken));
+        const QString inside = QDir(taken).filePath(QStringLiteral("kept"));
+        writeAll(inside, QByteArray());
+
+        writePack(path, manifest);
+        writePack(path, changed);
+
+        const std::shared_ptr<const cwPointOctreePack> reopened = cwPointOctreePack::open(path);
+        REQUIRE(reopened);
+        CHECK(reopened->manifest().fingerprint == changed.fingerprint);
+        CHECK(QFileInfo(taken).isDir());
+        CHECK(QFileInfo::exists(inside));
+        CHECK(filesIn(dir.path()) == QStringList {packName});
+    }
+}
+
 TEST_CASE("cwPointOctreePack::Writer takes concurrent appends", "[PointOctree][PointOctreePack]")
 {
     QTemporaryDir dir;

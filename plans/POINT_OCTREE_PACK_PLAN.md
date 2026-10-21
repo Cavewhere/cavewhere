@@ -365,10 +365,9 @@ test commands run, no Co-Authored-By line, never amend, never push.
   `QFile::open` goes through the handler once per tile and the mapping reads
   afterward. Profile the worker thread again; `QFile::open` should be gone
   from the per-node path.
-- Windows: `QFile::remove` of a pack the renderer has mapped fails there. A
-  rebuild of a tile whose content changed while it is displayed would fail
-  with `CacheWriteFailed`; today's loose layout would have overwritten the
-  files. Decide later whether the layer should clear the octree before a
+- Windows: `finish()` renames the old pack to a unique `.staleN` name and
+  sweeps stale copies on each finish, so a rebuild of a displayed tile
+  succeeds on Windows and a still-mapped stale copy is removed by a later
   rebuild.
 - Old-generation and old-layout files are left behind in `.cw_cache`, as
   before. A sweep is a separate task.
