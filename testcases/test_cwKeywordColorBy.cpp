@@ -105,12 +105,6 @@ private:
     QString m_previousApplicationName;
 };
 
-// cwKeywordColorBy coalesces model signals onto the next event-loop turn.
-void settle()
-{
-    QCoreApplication::processEvents();
-}
-
 } // namespace
 
 TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy]")
@@ -122,9 +116,10 @@ TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy
     RecordingProxy* noCave = fixture.add(QString());
 
     cwKeywordColorBy colorBy;
+    QSignalSpy slotsSpy(&colorBy, &cwKeywordColorBy::slotsChanged);
     colorBy.setItemModel(&fixture.model);
     colorBy.setKey(cwKeywordModel::CaveKey);
-    settle();
+    REQUIRE(slotsSpy.wait());
 
     CHECK(firstA->colorValue() == 0.0f);
     CHECK(b->colorValue() == 1.0f);
@@ -138,7 +133,7 @@ TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy
 
     SECTION("A value that sorts in between shifts the later slots") {
         RecordingProxy* between = fixture.add(QStringLiteral("AB"));
-        settle();
+        REQUIRE(slotsSpy.wait());
         CHECK(between->colorValue() == 1.0f);
         CHECK(b->colorValue() == 2.0f);
         CHECK(firstA->colorValue() == 0.0f);
@@ -148,7 +143,7 @@ TEST_CASE("cwKeywordColorBy gives each keyword value its sorted slot", "[ColorBy
 
     SECTION("An empty key assigns nothing and clears the legend") {
         colorBy.setKey(QString());
-        settle();
+        REQUIRE(slotsSpy.wait());
         CHECK(colorBy.slotCount() == 0);
         CHECK(colorBy.values().isEmpty());
         CHECK(b->colorValue() == 1.0f);
@@ -169,8 +164,11 @@ TEST_CASE("cwColorBy keyword mode builds a categorical per-element block", "[Col
     CHECK(colorBy.uniform().params[kParamMode] == static_cast<float>(cwColorByUniform::Off));
     CHECK(colorBy.legendValues().isEmpty());
 
+    // setSource() emits legendChanged() itself; the wait is for the one
+    // the queued slot assignment emits.
+    QSignalSpy legendSpy(&colorBy, &cwColorBy::legendChanged);
     colorBy.setSource(cwColorBy::Source::Keyword);
-    settle();
+    REQUIRE(legendSpy.wait());
     const cwColorByUniform uniform = colorBy.uniform();
     CHECK(uniform.params[kParamMode] == static_cast<float>(cwColorByUniform::Categorical));
     CHECK(uniform.params[kParamSlotCount] == 2.0f);
@@ -185,7 +183,7 @@ TEST_CASE("cwColorBy keyword mode builds a categorical per-element block", "[Col
     CHECK(QColor::fromRgbF(uniform.ramp[0][0], uniform.ramp[0][1], uniform.ramp[0][2]) == colorBy.slotColor(0));
 
     colorBy.setSource(cwColorBy::Source::None);
-    settle();
+    REQUIRE(legendSpy.wait());
     CHECK(colorBy.uniform().params[kParamMode] == static_cast<float>(cwColorByUniform::Off));
     CHECK(colorBy.legendValues().isEmpty());
 }
@@ -198,9 +196,10 @@ TEST_CASE("cwKeywordColorBy puts an item with two values for the key in Others",
     RecordingProxy* b = fixture.add(QStringLiteral("B"));
 
     cwKeywordColorBy colorBy;
+    QSignalSpy slotsSpy(&colorBy, &cwKeywordColorBy::slotsChanged);
     colorBy.setItemModel(&fixture.model);
     colorBy.setKey(cwKeywordModel::CaveKey);
-    settle();
+    REQUIRE(slotsSpy.wait());
 
     CHECK(a->colorValue() == 0.0f);
     CHECK(b->colorValue() == 1.0f);
@@ -216,11 +215,10 @@ TEST_CASE("cwKeywordColorBy assigns a burst of inserts in one pass", "[ColorBy]"
 {
     Fixture fixture;
     cwKeywordColorBy colorBy;
+    QSignalSpy slotsSpy(&colorBy, &cwKeywordColorBy::slotsChanged);
     colorBy.setItemModel(&fixture.model);
     colorBy.setKey(cwKeywordModel::CaveKey);
-    settle();
 
-    QSignalSpy slotsSpy(&colorBy, &cwKeywordColorBy::slotsChanged);
     RecordingProxy* c = fixture.add(QStringLiteral("C"));
     RecordingProxy* b = fixture.add(QStringLiteral("B"));
     RecordingProxy* a = fixture.add(QStringLiteral("A"));
@@ -230,7 +228,7 @@ TEST_CASE("cwKeywordColorBy assigns a burst of inserts in one pass", "[ColorBy]"
     CHECK(c->lastApplied == kNothingApplied);
     CHECK(slotsSpy.isEmpty());
 
-    settle();
+    REQUIRE(slotsSpy.wait());
     CHECK(slotsSpy.size() == 1);
     CHECK(a->colorValue() == 0.0f);
     CHECK(b->lastApplied == 1.0f);
@@ -251,9 +249,10 @@ TEST_CASE("cwKeywordColorBy slots follow the visible items", "[ColorBy]")
     visible.insert(itemIndex(fixture.model, b));
 
     cwKeywordColorBy colorBy;
+    QSignalSpy slotsSpy(&colorBy, &cwKeywordColorBy::slotsChanged);
     colorBy.setItemModel(&visible);
     colorBy.setKey(cwKeywordModel::CaveKey);
-    settle();
+    REQUIRE(slotsSpy.wait());
 
     CHECK(a->colorValue() == 0.0f);
     CHECK(b->colorValue() == 1.0f);
@@ -262,7 +261,7 @@ TEST_CASE("cwKeywordColorBy slots follow the visible items", "[ColorBy]")
     CHECK(colorBy.values() == QStringList({QStringLiteral("A"), QStringLiteral("B")}));
 
     visible.insert(itemIndex(fixture.model, c));
-    settle();
+    REQUIRE(slotsSpy.wait());
     CHECK(a->colorValue() == 0.0f);
     CHECK(b->colorValue() == 1.0f);
     CHECK(c->colorValue() == 2.0f);
@@ -270,7 +269,7 @@ TEST_CASE("cwKeywordColorBy slots follow the visible items", "[ColorBy]")
     CHECK(colorBy.values() == QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
 
     visible.remove(itemIndex(fixture.model, a));
-    settle();
+    REQUIRE(slotsSpy.wait());
     CHECK(b->colorValue() == 0.0f);
     CHECK(c->colorValue() == 1.0f);
     // A hidden item keeps its last slot.
@@ -296,14 +295,15 @@ TEST_CASE("cwColorBy keyword mode groups the visible keyword model", "[ColorBy]"
     colorBy.setKeywordItemModel(&fixture.model);
     colorBy.setVisibleKeywordModel(&visible);
     colorBy.setKeywordKey(cwKeywordModel::CaveKey);
+    QSignalSpy legendSpy(&colorBy, &cwColorBy::legendChanged);
     colorBy.setSource(cwColorBy::Source::Keyword);
-    settle();
+    REQUIRE(legendSpy.wait());
 
     CHECK(colorBy.uniform().params[kParamSlotCount] == 2.0f);
     CHECK(colorBy.legendValues() == QStringList({QStringLiteral("A"), QStringLiteral("B")}));
 
     visible.insert(itemIndex(fixture.model, c));
-    settle();
+    REQUIRE(legendSpy.wait());
     CHECK(colorBy.uniform().params[kParamSlotCount] == 3.0f);
     CHECK(colorBy.legendValues() == QStringList({QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")}));
 }
@@ -326,21 +326,22 @@ TEST_CASE("cwColorBy keyword mode follows keyword edits on visible items", "[Col
     colorBy.setKeywordItemModel(&fixture.model);
     colorBy.setVisibleKeywordModel(&visible);
     colorBy.setKeywordKey(cwKeywordModel::CaveKey);
+    QSignalSpy legendSpy(&colorBy, &cwColorBy::legendChanged);
     colorBy.setSource(cwColorBy::Source::Keyword);
-    settle();
+    REQUIRE(legendSpy.wait());
     CHECK(colorBy.legendValues() == QStringList({QStringLiteral("A"), QStringLiteral("B")}));
 
     // Rename A to Z in place.
     cwKeywordModel* aKeywords = fixture.items.at(0)->keywordModel();
     aKeywords->setData(aKeywords->index(0), QStringLiteral("Z"), cwKeywordModel::ValueRole);
-    settle();
+    REQUIRE(legendSpy.wait());
     CHECK(colorBy.legendValues() == QStringList({QStringLiteral("B"), QStringLiteral("Z")}));
     CHECK(b->colorValue() == 0.0f);
     CHECK(a->colorValue() == 1.0f);
 
     // Replace B's keyword, which removes and inserts a keyword row.
     fixture.items.at(1)->keywordModel()->replace(cwKeyword(cwKeywordModel::CaveKey, QStringLiteral("Y")));
-    settle();
+    REQUIRE(legendSpy.wait());
     CHECK(colorBy.legendValues() == QStringList({QStringLiteral("Y"), QStringLiteral("Z")}));
     CHECK(b->colorValue() == 0.0f);
     CHECK(a->colorValue() == 1.0f);

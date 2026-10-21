@@ -12,20 +12,23 @@
 
 // Qt includes
 #include <QHash>
-#include <QTimer>
 
 cwKeywordColorBy::cwKeywordColorBy(QObject* parent) :
     QObject(parent),
-    m_groups(new cwKeywordGroupByKeyModel(this)),
-    m_assignTimer(new QTimer(this))
+    m_groups(new cwKeywordGroupByKeyModel(this))
 {
-    m_assignTimer->setSingleShot(true);
-    m_assignTimer->setInterval(0);
-    connect(m_assignTimer, &QTimer::timeout, this, &cwKeywordColorBy::assignSlots);
-
     // A value appearing or disappearing shifts every later slot, so each
     // change re-walks all rows.
-    const auto scheduleAssign = [this]() { m_assignTimer->start(); };
+    const auto scheduleAssign = [this]() {
+        if (m_assignPending) {
+            return;
+        }
+        m_assignPending = true;
+        QMetaObject::invokeMethod(this, [this]() {
+            m_assignPending = false;
+            assignSlots();
+        }, Qt::QueuedConnection);
+    };
     connect(m_groups, &QAbstractItemModel::rowsInserted, this, scheduleAssign);
     connect(m_groups, &QAbstractItemModel::rowsRemoved, this, scheduleAssign);
     connect(m_groups, &QAbstractItemModel::modelReset, this, scheduleAssign);
