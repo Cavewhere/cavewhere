@@ -370,6 +370,10 @@ public:
                                  QRhiRenderPassDescriptor* outputRpDesc,
                                  int outputSampleCount);
 
+    // Whether the EDL composite may take the pass routing: the offscreen targets
+    // exist and the effect's pipeline built for this backend.
+    static bool edlReady(const EdlOffscreen& edl);
+
     // Render the live on-screen frame into the renderer's swap-chain target: detect
     // the viewport size, engage the EDL composite when a cloud is visible, initialize
     // / update every render object, gather the scene, and draw it from camera slot 0.

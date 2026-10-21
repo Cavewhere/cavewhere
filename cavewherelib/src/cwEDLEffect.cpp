@@ -8,6 +8,8 @@
 // Our includes
 #include "cwEDLEffect.h"
 
+#include <QDebug>
+
 #include <algorithm>
 #include <cmath>
 
@@ -128,6 +130,7 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
         m_inputSampleCount > 1 ? QStringLiteral(":/shaders/EDL_MSAA.frag.qsb")
                                : QStringLiteral(":/shaders/EDL.frag.qsb"));
     if (!vs.isValid() || !fs.isValid()) {
+        qWarning() << "EDL shaders failed to load (input sample count" << m_inputSampleCount << ")";
         return false;
     }
 
@@ -177,7 +180,13 @@ bool cwEDLEffect::createPipeline(QRhiRenderPassDescriptor* outputRPDesc)
 
     m_pipeline->setShaderResourceBindings(m_layout);
     m_pipeline->setRenderPassDescriptor(outputRPDesc);
-    return m_pipeline->create();
+    if (!m_pipeline->create()) {
+        qWarning() << "EDL composite pipeline failed to build (input sample count"
+                   << m_inputSampleCount << "output sample count" << m_outputSampleCount
+                   << "); point clouds draw without eye-dome lighting";
+        return false;
+    }
+    return true;
 }
 
 bool cwEDLEffect::ensureBindings(QRhiTexture* sceneColor, QRhiTexture* cloudColor, QRhiTexture* depth)

@@ -398,6 +398,11 @@ public:
 
     virtual ~cwRhiPostProcessEffect() = default;
 
+    // True once initialize() built a pipeline apply() can draw with. A renderer
+    // must not route the scene through the effect's offscreen inputs while this
+    // is false: the composite would be skipped and the final target left empty.
+    virtual bool isReady() const = 0;
+
     // outputRPDesc is the render-pass descriptor the effect writes to
     // (typically the swap-chain's, for the last effect in a chain).
     // outputSampleCount must match the destination render target's sample

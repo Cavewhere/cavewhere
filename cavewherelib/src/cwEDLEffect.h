@@ -45,6 +45,7 @@ public:
                     QRhiBuffer* globalUBO,
                     quint32 globalUBOStride,
                     int inputSampleCount) override;
+    bool isReady() const override { return m_pipeline != nullptr; }
     // Drop the cached SRB and texture-pointer identities so the next apply()
     // rebuilds bindings. cwRhiScene calls this when the offscreen textures are
     // recreated (resize) while the effect is preserved — otherwise ensureBindings
