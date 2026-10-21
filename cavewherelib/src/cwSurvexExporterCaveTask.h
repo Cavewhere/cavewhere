@@ -231,7 +231,9 @@ private:
     //! one of its fixes sees it, and the chosen system, if any, follows it;
     //! with neither, nothing is written and cavern reads the fixes raw. Under
     //! the project's output system, with nothing chosen, the file's own *cs
-    //! out is written as the input system alone.
+    //! out is written as the input system alone, and with no *cs out of the
+    //! file's own either, the output system translated so the file's first
+    //! bare fix (Options::externalBareFixOrigins) lands on the origin.
     void writeIncludeSystem(QTextStream& stream, const QUuid& ownerId,
                             const cwExternalCenterline& centerline,
                             const QString& globalCS,

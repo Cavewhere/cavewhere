@@ -573,6 +573,8 @@ constexpr int kBareFixLine = 3;
 constexpr double kBareFixEasting = 500100.0;
 constexpr double kBareFixNorthing = 3000100.0;
 constexpr double kBareFixElevation = 300.0;
+// How far from the origin a bare fix placed there may solve.
+constexpr double kOriginMarginMeters = 1.0;
 // Placement is exact up to the float the solved lookup stores.
 constexpr double kBareFixMarginMeters = 0.1;
 
@@ -658,7 +660,7 @@ TEST_CASE("An attachment on a Section lists its file's fixes",
 }
 
 TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachment and says so",
-          "[Attach][CS][ExternalCenterline][LinePlotManager]")
+          "[Attach][CS][ExternalCenterline][LinePlotManager][BareFixOrigin]")
 {
     auto fixture = makeProject(QStringLiteral("source-bare-fix-tree"));
     cwCavingRegion* region = fixture->project->cavingRegion();
@@ -670,17 +672,26 @@ TEST_CASE("A file's *fix with no *cs reads in the system chosen for its attachme
     cwLinePlotManager* linePlot = fixture->rootData->linePlotManager();
 
     {
-        // With no system chosen the driver names none, and cavern refuses the
-        // fix under the project's *cs out.
+        // With no system chosen the file is placed with its first bare fix
+        // at the project origin until one is.
+        const bool atOrigin = tryWait(kAttachWaitMs, [cave]() {
+            const cwStationPositionLookup& lookup = cave->scopedPositions();
+            return lookup.hasPosition(kBareFixStation)
+                   && std::abs(lookup.position(kBareFixStation).x()) <= kOriginMarginMeters
+                   && std::abs(lookup.position(kBareFixStation).y()) <= kOriginMarginMeters;
+        });
+        drainPipelines(fixture.get());
         INFO("driver:\n" << linePlot->driverSource().toStdString());
         INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
-        REQUIRE(tryWait(kAttachWaitMs, [linePlot]() { return linePlot->hasSolveError(); }));
-        CHECK(linePlot->solveErrorSummary().contains(QStringLiteral("input projection isn't")));
+        INFO("solve error: " << linePlot->solveErrorSummary().toStdString());
+        CHECK(atOrigin);
+        CHECK_FALSE(linePlot->hasSolveError());
         const QStringList warnings = bareFixWarnings(cave);
         REQUIRE(warnings.size() == 1);
         CHECK(warnings.first().contains(
-            QStringLiteral("fixes %1 without a coordinate system; choose one on the Fix Stations "
-                           "page or add *cs to the file.").arg(kBareFixStation)));
+            QStringLiteral("fixes %1 without a coordinate system, so it is placed at the project "
+                           "origin until a coordinate system is chosen; choose one on the Fix "
+                           "Stations page or add *cs to the file.").arg(kBareFixStation)));
         CHECK(subtreeAttachedFixFor(cave, kBareFixStation).readInSystem.isEmpty());
         CHECK(readInWarningInTable(cave, kBareFixStation).isEmpty());
     }

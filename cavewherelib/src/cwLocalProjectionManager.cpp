@@ -112,6 +112,12 @@ cwLocalProjectionManager::cwLocalProjectionManager(cwCavingRegion* region) :
         }
     });
 
+    // A frame written from outside this class, such as a reset, is measured
+    // against the inputs again. Queued, so a move this class makes has
+    // recorded itself before the frame is read back.
+    connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
+            this, &cwLocalProjectionManager::evaluate, Qt::QueuedConnection);
+
     syncNodeConnections();
     evaluate();
 }
@@ -141,7 +147,7 @@ QFuture<QString> cwLocalProjectionManager::frameFuture()
 
 bool cwLocalProjectionManager::epochOpen() const
 {
-    return m_region->geoReference()->state() == cwGeoReference::Ungeoreferenced
+    return !m_region->geoReference()->hasCoordinateSystem()
             && m_region->lazLayers()->anyHeaderProbeInFlight();
 }
 
@@ -208,19 +214,12 @@ QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherFrameInpu
     return inputs;
 }
 
-bool cwLocalProjectionManager::attachedFixesTakePart() const
-{
-    if (m_region->geoReference()->state() == cwGeoReference::Frozen) {
-        return attachedFixesTakePart(gatherFixInputs().isEmpty() && gatherLayerInputs().isEmpty());
-    }
-    return attachedFixesTakePart(false);
-}
-
 bool cwLocalProjectionManager::attachedFixesTakePart(bool nativeInputsEmpty) const
 {
     const cwGeoReference* geoReference = m_region->geoReference();
     switch (geoReference->state()) {
     case cwGeoReference::Ungeoreferenced:
+    case cwGeoReference::LocalGrid:
         return true;
     case cwGeoReference::Anchored:
         return geoReference->anchor().kind == cwGeoReference::Anchor::Attachment;
@@ -233,33 +232,11 @@ bool cwLocalProjectionManager::attachedFixesTakePart(bool nativeInputsEmpty) con
     return false;
 }
 
-void cwLocalProjectionManager::updateAttachedFixesTakePart()
-{
-    const bool takePart = attachedFixesTakePart();
-    if (m_lastAttachedFixesTakePart == takePart) {
-        return;
-    }
-    m_lastAttachedFixesTakePart = takePart;
-    emit attachedFixesTakePartChanged();
-}
-
 void cwLocalProjectionManager::forEachAttachedFixInput(
         const std::function<bool(const Input&, const QString&)>& callback) const
 {
-    QHash<QUuid, QString> chosenSystems;
     const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
-    for (const cwSurveyNode* node : nodes) {
-        const QString nodeChoice = node->externalCenterline().fixCoordinateSystem().trimmed();
-        if (!nodeChoice.isEmpty()) {
-            chosenSystems.insert(node->id(), nodeChoice);
-        }
-        for (const cwTrip* trip : node->trips()) {
-            const QString tripChoice = trip->externalCenterline().fixCoordinateSystem().trimmed();
-            if (!tripChoice.isEmpty()) {
-                chosenSystems.insert(trip->id(), tripChoice);
-            }
-        }
-    }
+    const QHash<QUuid, QString> chosenSystems = chosenFixSystems(nodes);
 
     // False once the callback has asked to stop.
     const auto visit = [&callback](const cwAttachedFix& fix, const QString& system) {
@@ -301,6 +278,52 @@ void cwLocalProjectionManager::forEachAttachedFixInput(
             }
         }
     }
+
+    // Then the bare fixes the file's own *cs out reads in, which say less
+    // than a system on the fix itself.
+    for (const cwSurveyNode* node : nodes) {
+        for (const cwAttachedFix& fix : node->listedAttachedFixes()) {
+            if (fix.coordinateSystem.isEmpty() && fix.readInFileOutput
+                    && !chosenSystems.contains(fix.ownerId)
+                    && !visit(fix, fix.readInSystem)) {
+                return;
+            }
+        }
+    }
+}
+
+QHash<QUuid, QString> cwLocalProjectionManager::chosenFixSystems(const QList<cwSurveyNode*>& nodes)
+{
+    QHash<QUuid, QString> chosenSystems;
+    for (const cwSurveyNode* node : nodes) {
+        const QString nodeChoice = node->externalCenterline().fixCoordinateSystem().trimmed();
+        if (!nodeChoice.isEmpty()) {
+            chosenSystems.insert(node->id(), nodeChoice);
+        }
+        for (const cwTrip* trip : node->trips()) {
+            const QString tripChoice = trip->externalCenterline().fixCoordinateSystem().trimmed();
+            if (!tripChoice.isEmpty()) {
+                chosenSystems.insert(trip->id(), tripChoice);
+            }
+        }
+    }
+    return chosenSystems;
+}
+
+bool cwLocalProjectionManager::hasLocalGridCandidate() const
+{
+    const QList<cwSurveyNode*> nodes = m_region->rootNode()->allNodes();
+    const QHash<QUuid, QString> chosenSystems = chosenFixSystems(nodes);
+    for (const cwSurveyNode* node : nodes) {
+        for (const cwAttachedFix& fix : node->listedAttachedFixes()) {
+            if (fix.coordinateSystem.isEmpty() && !fix.readInFileOutput
+                    && !chosenSystems.contains(fix.ownerId)
+                    && cwAttachedFix::positionOf(fix.coordinate).has_value()) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherAttachedFixInputs() const
@@ -635,13 +658,14 @@ bool cwLocalProjectionManager::anchorTo(const Input& input)
     return true;
 }
 
-void cwLocalProjectionManager::anchorToFirstUsable(const QList<Input>& inputs)
+bool cwLocalProjectionManager::anchorToFirstUsable(const QList<Input>& inputs)
 {
     for (const Input& input : inputs) {
         if (anchorTo(input)) {
-            return;
+            return true;
         }
     }
+    return false;
 }
 
 // freezeFrame and clearFrame exist so that every move of the frame records what
@@ -660,12 +684,24 @@ void cwLocalProjectionManager::clearFrame()
     m_sawAnyInput = false;
 }
 
+void cwLocalProjectionManager::leaveFrame()
+{
+    if (hasLocalGridCandidate()) {
+        m_region->geoReference()->useLocalGrid();
+        recordFrameMove(false);
+        m_sawAnyInput = true;
+        return;
+    }
+    if (m_sawAnyInput) {
+        clearFrame();
+    }
+}
+
 void cwLocalProjectionManager::recordFrameMove(bool anchorSeen)
 {
     m_lastAnchor = m_region->geoReference()->anchor();
     m_anchorSeen = anchorSeen;
     updateAnchorDescription();
-    updateAttachedFixesTakePart();
 }
 
 void cwLocalProjectionManager::evaluate()
@@ -676,7 +712,6 @@ void cwLocalProjectionManager::evaluate()
 
     evaluateFrame();
     updateAnchorDescription();
-    updateAttachedFixesTakePart();
     settleEpoch();
 }
 
@@ -770,8 +805,8 @@ void cwLocalProjectionManager::evaluateFrame()
         // frame that depends on disk timing. A fix station is the user's own
         // input and the model orders it, so it may anchor immediately: it leads
         // the list gatherInputs() builds, so anchoring on one now picks the same
-        // input the closed batch would have. An open epoch implies
-        // Ungeoreferenced, so attached fixes take part here.
+        // input the closed batch would have. An open epoch implies no frame,
+        // so attached fixes take part here.
         QList<Input> settledInputs = gatherFixInputs();
         settledInputs.append(gatherAttachedFixInputs());
         anchorToFirstUsable(settledInputs);
@@ -822,7 +857,7 @@ void cwLocalProjectionManager::evaluateFrame()
 
         if (inputs.isEmpty()) {
             // The anchor was the last georeferenced thing in the project.
-            clearFrame();
+            leaveFrame();
             return;
         }
         m_sawAnyInput = true;
@@ -861,15 +896,22 @@ void cwLocalProjectionManager::evaluateFrame()
     }
 
     if (inputs.isEmpty()) {
-        if (m_sawAnyInput) {
-            clearFrame();
+        // A stored frozen frame waits for its own inputs to load before a bare
+        // file may trade it for the local grid.
+        if (geoReference->hasCoordinateSystem() && !m_sawAnyInput) {
+            return;
         }
+        leaveFrame();
         return;
     }
     m_sawAnyInput = true;
 
-    if (geoReference->state() == cwGeoReference::Ungeoreferenced) {
-        anchorToFirstUsable(inputs);
+    if (!geoReference->hasCoordinateSystem()) {
+        // A real input takes a local grid over; the bare files keep being
+        // translated, onto the new frame.
+        if (!anchorToFirstUsable(inputs)) {
+            leaveFrame();
+        }
         return;
     }
 

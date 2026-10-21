@@ -2337,7 +2337,8 @@ MainWindowTest {
             // The qualified name: the file writes d1 inside *begin doghill.
             const attachedStation = waitForChild("stationCell.1")
             compare(attachedStation.text, "doghill.d1")
-            compare(waitForChild("inputCSText.1").text, "none")
+            // The file names no system for d1, so it is placed at the origin.
+            compare(waitForChild("noCoordinateSystemBadge.1").text, "none \u2192 origin")
             const attachedCoordinate = waitForChild("coordinateCell.1")
             compare(attachedCoordinate.text, "0 0 0")
             verify(waitForChild("readOnlyLock.1") !== null, "the row carries the lock")
@@ -2408,7 +2409,7 @@ MainWindowTest {
                                      && String(child.text).indexOf("survex_blocks.svx") >= 0)
             compare(wordedSource.length, 0, "the narrow row names the file only in the lock's tooltip")
             compare(liveChild("inputCSComboBox.0"), null)
-            compare(waitForChild("inputCSText.0").text, "none")
+            compare(waitForChild("noCoordinateSystemBadge.0").text, "none \u2192 origin")
             compare(liveChild("pickFromViewButton.0"), null)
             rootId.width = wideWidth
         }
@@ -2569,6 +2570,23 @@ MainWindowTest {
                       "the choice lands on the attachment")
             tryVerify(() => badge.text.indexOf("UTM48N") >= 0, 5000,
                       "the badge names the chosen system")
+        }
+
+        // In a project with no frame, a file fix with no coordinate system is
+        // placed at the project origin, and its row says so.
+        function test_aBareFixWithNoFrameSaysItIsPlacedAtTheOrigin() {
+            saveProjectAs("fix-station-bare-fix-origin")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_bare_fix/bare_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+            tryCompare(RootData.region.geoReference, "state", GeoReference.LocalGrid, 10000)
+
+            const page = openFixStationsOf(cave)
+            tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
+            tryVerify(() => {
+                const badge = liveChild("noCoordinateSystemBadge.0")
+                return badge !== null && badge.visible && badge.text.indexOf("origin") >= 0
+            }, 10000, "the badge says the fix is placed at the origin")
         }
 
         // In a project with no frame, the system chosen for a file's bare fix

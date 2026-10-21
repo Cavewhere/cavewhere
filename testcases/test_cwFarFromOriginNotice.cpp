@@ -37,7 +37,6 @@ const QString kBareFixFixture = QStringLiteral("survex_bare_fix/bare_fix.svx");
 const QString kBareFixFileName = QStringLiteral("bare_fix.svx");
 const QString kUtm48NFrame = QStringLiteral("EPSG:32648");
 const QString kUtm48N = QStringLiteral("UTM48N");
-const QString kOutputSystemPrefix = QStringLiteral("*cs out");
 
 // bare_fix.svx: *fix A 500000 3000000 100, then A-B 10 m east and B-C 10 m
 // north, so its solved stations span 10 m on each horizontal axis.
@@ -109,19 +108,6 @@ bool waitForDriverIncludingFixture(SavedProjectFixture* fixture)
     });
     drainPipelines(fixture);
     return included;
-}
-
-bool waitForSeededFrame(SavedProjectFixture* fixture)
-{
-    cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
-    const bool seeded = tryWait(kAttachWaitMs, [geoReference]() {
-        return geoReference->hasCoordinateSystem();
-    });
-    const bool solvedInFrame = seeded && tryWait(kAttachWaitMs, [fixture]() {
-        return linePlotOf(fixture)->driverSource().contains(kOutputSystemPrefix);
-    });
-    drainPipelines(fixture);
-    return solvedInFrame;
 }
 
 } // namespace
@@ -203,8 +189,8 @@ TEST_CASE("A native survey with no fix sits at the origin and shows no notice",
     CHECK_FALSE(notice->isShown());
 }
 
-TEST_CASE("An attached bare fix in a project with no frame shows the notice until a system is chosen",
-          "[FarFromOrigin][BareFixCS]")
+TEST_CASE("An attached bare fix in a project with no frame sits at the origin and shows no notice",
+          "[FarFromOrigin][BareFixCS][BareFixOrigin]")
 {
     auto fixture = makeSavedProject(QStringLiteral("far-from-origin-bare-fix"),
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
@@ -214,37 +200,21 @@ TEST_CASE("An attached bare fix in a project with no frame shows the notice unti
     cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
     REQUIRE(waitForDriverIncludingFixture(fixture.get()));
 
+    // The file is a local grid placed with its fix at the origin, so the
+    // survey sits in plain view though nothing locates it.
+    CHECK(tryWait(kAttachWaitMs, [geoReference]() {
+        return geoReference->state() == cwGeoReference::LocalGrid;
+    }));
+    CHECK(tryWait(kAttachWaitMs, [root]() {
+        return root->scopedPositions().hasPosition(QStringLiteral("bare.A"))
+               && std::abs(root->scopedPositions().position(QStringLiteral("bare.A")).x())
+                      < kNearOriginMeters;
+    }));
+    drainPipelines(fixture.get());
+
     const cwFarFromOriginNotice* notice = region->farFromOriginNotice();
-    CHECK(tryWait(kAttachWaitMs, [notice]() { return notice->isShown(); }));
-    CHECK(notice->distanceFromOrigin()
-          == Catch::Approx(kBareFixCenterDistance).margin(kDistanceMarginMeters));
-
-    SECTION("Choosing a system clears it as soon as the frame lands")
-    {
-        QSignalSpy shownSpy(notice, &cwFarFromOriginNotice::shownChanged);
-
-        chooseFixSystem(root, kUtm48N);
-        REQUIRE(tryWait(kAttachWaitMs, [notice]() { return !notice->isShown(); }));
-        CHECK(geoReference->hasCoordinateSystem());
-        REQUIRE(waitForSeededFrame(fixture.get()));
-
-        CHECK_FALSE(notice->isShown());
-        CHECK(shownSpy.count() == 1);
-        CHECK(notice->distanceFromOrigin() < kNearOriginMeters);
-
-        SECTION("Unsetting the system shows it again once the survey solves far out")
-        {
-            chooseFixSystem(root, QString());
-            REQUIRE(tryWait(kAttachWaitMs, [geoReference]() {
-                return !geoReference->hasCoordinateSystem();
-            }));
-            CHECK(tryWait(kAttachWaitMs, [notice]() { return notice->isShown(); }));
-            drainPipelines(fixture.get());
-            CHECK(notice->isShown());
-            CHECK(notice->distanceFromOrigin()
-                  == Catch::Approx(kBareFixCenterDistance).margin(kDistanceMarginMeters));
-        }
-    }
+    CHECK(notice->distanceFromOrigin() < kNearOriginMeters);
+    CHECK_FALSE(notice->isShown());
 }
 
 TEST_CASE("The data center counts an attached bare fix whose system is chosen in a frozen project",

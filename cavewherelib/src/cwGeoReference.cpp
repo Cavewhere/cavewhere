@@ -52,6 +52,11 @@ void cwGeoReference::clear()
     setLocalProjection(LocalProjectionState{});
 }
 
+void cwGeoReference::useLocalGrid()
+{
+    setLocalProjection({LocalGrid, QString(), Anchor{}});
+}
+
 void cwGeoReference::restore(State state, const QString& localCS, const Anchor& anchor,
                              const QString& verticalDatum)
 {
@@ -62,7 +67,9 @@ void cwGeoReference::restore(State state, const QString& localCS, const Anchor& 
     // Repair to the reading that keeps the invariants rather than refusing to
     // load: a project with no frame still opens, it just isn't georeferenced.
     if (restored.coordinateSystem.isEmpty()) {
-        restored = LocalProjectionState{};
+        // A local grid is the one state with no string of its own.
+        restored = LocalProjectionState{
+            restored.state == LocalGrid ? LocalGrid : Ungeoreferenced, QString(), Anchor{}};
     } else if (restored.state != Anchored || !restored.anchor.isValid()) {
         // A frame with nothing left to follow is frozen, whatever the file
         // called it — and a state that isn't following an anchor has no use for

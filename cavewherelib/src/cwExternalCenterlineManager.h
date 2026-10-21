@@ -742,31 +742,25 @@ private:
     // whose file they come from; empty for an owner that is no source root.
     static QSet<QString> derivedNodePaths(const cwSurveyNode* owner);
 
-    // refreshAttachedFixes() for every node in the region: what a fix with
-    // no *cs of its own is read in follows the project's frame.
-    void refreshAllAttachedFixes();
-
     // The system the solve reads ownerId's bare fixes in, for the row's
     // read-in note (cwSurvexExporterCaveTask::writeIncludeSystem): the one
-    // chosen for the attachment while a *cs out is in force, the project's or
-    // the file's own; else, while fileOutputReadsIn(), the file's own *cs
-    // out. Empty when nothing names one: the solve reads them raw, or cavern
-    // refuses them under *cs out.
+    // chosen for the attachment, else the file's own *cs out. Empty when
+    // nothing names one: the solve places the file with its first bare fix
+    // at the origin.
     struct ReadInSystem {
         QString system;
         bool fileOutput = false;
     };
     ReadInSystem readInSystemFor(const QUuid& ownerId, const cwExternalCenterline& centerline) const;
 
-    // Whether a file's own *cs out reads in its bare fixes: while the project
-    // has no frame, or the frame is one the attached fixes take part in
-    // (cwLocalProjectionManager::attachedFixesTakePart) — a file whose
-    // own-system fix seeds the frame keeps reading its bare ones as it says.
-    bool fileOutputReadsIn() const;
-
     // Per owner whose file fixes stations bare and names its own *cs out,
-    // that system, while fileOutputReadsIn() (solveInputs().externalOutputSystems).
+    // that system (solveInputs().externalOutputSystems): a file that says
+    // what its bare numbers are in reads them in it, under any frame.
     QHash<QUuid, QString> bareFixOutputSystems() const;
+
+    // Per owner whose file fixes stations bare, the first of those fixes in
+    // the scan's order whose numbers parse (solveInputs().externalBareFixOrigins).
+    QHash<QUuid, cwGeoPoint> bareFixOrigins() const;
 
     // Per owner whose file fixes stations with no input coordinate system,
     // those stations as the file writes them (from m_ownerFixes).

@@ -10,6 +10,8 @@
 
 //Qt includes
 #include <QFuture>
+#include <QHash>
+#include <QList>
 #include <QObject>
 #include <QString>
 #include <QUuid>
@@ -37,8 +39,10 @@ class cwLazLayer;
  * response to the region's georeferenced inputs — the fix stations that carry
  * a readable coordinate, the LAZ layers that declare a CRS, and, while the
  * project has no frame of its own or follows an attached file, the attached
- * files' fixes: the bare ones a system was chosen for, and the ones whose file
- * names their system.
+ * files' fixes: the bare ones a system was chosen for, the ones whose file
+ * names their system, and the bare ones the file's own *cs out reads in. With
+ * none of these, an attached file whose bare fixes nothing places puts the
+ * project on cwGeoReference::LocalGrid.
  *
  * The states and their invariants live on cwGeoReference; the policy for
  * moving between them lives here, because deciding them needs the region's
@@ -174,14 +178,6 @@ public:
     //! nothing the frame can place.
     Q_INVOKABLE bool recenterOnDataCenter();
 
-    //! Whether the attached fixes take part in the frame: while the project has
-    //! no frame, follows one of them, or is frozen with no fix station or layer
-    //! to place it (recentering an attachment-only project). A frame that
-    //! follows a native fix or a layer, or that is frozen beside one, keeps its
-    //! origin whatever an attached file says. It is also when an attached
-    //! file's own *cs out still reads in its bare fixes.
-    bool attachedFixesTakePart() const;
-
     //! Suspend evaluation while a project load replaces the region's data.
     //! Caves arriving mid-load would otherwise derive a frame that
     //! cwGeoReference::restore() overwrites moments later — a PROJ pipeline
@@ -193,9 +189,6 @@ signals:
     //! Who the frame is centered on now reads differently — either the frame
     //! moved, or whatever carries the anchor was renamed or went away.
     void anchorDescriptionChanged();
-
-    //! attachedFixesTakePart() reads differently.
-    void attachedFixesTakePartChanged();
 
 private:
     //! One candidate to anchor on: what would identify it, where it is, and the
@@ -234,9 +227,6 @@ private:
     //! only: every read still resolves against the region.
     QString m_lastAnchorDescription;
 
-    //! attachedFixesTakePart() as it last read, for the same reason.
-    bool m_lastAttachedFixesTakePart = true;
-
     //! The epoch currently being settled, if the frame is still being derived.
     //! Held only while frameFuture() has been asked for during an open epoch,
     //! so a project that never has to derive anything never mints one.
@@ -244,8 +234,8 @@ private:
 
     //! The georeferenced inputs in a fixed order — each cave's fix stations in
     //! region order, then each attachment's bare fix whose system is chosen,
-    //! then each attached fix whose file names its system, then the LAZ
-    //! layers in model order. Nothing records which
+    //! then each attached fix whose file names its system, then each bare fix
+    //! its file's *cs out reads in, then the LAZ layers in model order. Nothing records which
     //! input truly came first, so "first" means first in this order: it only
     //! decides between inputs that appeared together, and it decides the same
     //! way every time, which is what a stored frame needs.
@@ -287,7 +277,9 @@ private:
     //! Each attached file's fix as an input, with the station it names, in
     //! gathering order: the bare fixes a system was chosen for, read in that
     //! system, then the fixes whose file names their system, read in it
-    //! (cwAttachedFix::solveSystem), each half in the tree's pre-order. A fix
+    //! (cwAttachedFix::solveSystem), then the bare fixes the file's own *cs
+    //! out reads in (cwAttachedFix::readInFileOutput), each in the tree's
+    //! pre-order. A fix
     //! that does not place, or that its system's domain cannot hold, is left
     //! out. \a callback returns whether to keep walking.
     void forEachAttachedFixInput(
@@ -296,12 +288,22 @@ private:
     //! The inputs forEachAttachedFixInput() walks.
     QList<Input> gatherAttachedFixInputs() const;
 
-    //! attachedFixesTakePart() with whether the project has no fix station or
-    //! layer input already answered by a caller that gathered them.
+    //! Per cave or trip owner under \a nodes, the system chosen for its
+    //! attachment's bare fixes (cwExternalCenterline::fixCoordinateSystem).
+    static QHash<QUuid, QString> chosenFixSystems(const QList<cwSurveyNode*>& nodes);
+
+    //! Whether the attached fixes take part in the frame: while the project has
+    //! no frame, follows one of them, or is frozen with no fix station or layer
+    //! to place it (\a nativeInputsEmpty; recentering an attachment-only
+    //! project). A frame that follows a native fix or a layer, or that is
+    //! frozen beside one, keeps its origin whatever an attached file says.
     bool attachedFixesTakePart(bool nativeInputsEmpty) const;
 
-    //! Emit attachedFixesTakePartChanged() only when the answer changed.
-    void updateAttachedFixesTakePart();
+    //! Whether some attached file fixes a station bare, with no system chosen
+    //! for it and no *cs out of the file's own to read it in, at numbers that
+    //! parse: the file the solve places at the origin, which puts a project
+    //! with no frame on the local grid.
+    bool hasLocalGridCandidate() const;
 
     //! gatherInputs(), keeping the attached inputs only when
     //! attachedFixesTakePart().
@@ -327,8 +329,8 @@ private:
     //! of it — including the early returns — goes through the settle.
     void evaluateFrame();
 
-    //! Whether the frame is still being derived: it is Ungeoreferenced and at
-    //! least one layer is still reading its header. Which layers hold a header
+    //! Whether the frame is still being derived: it has no frame and at least
+    //! one layer is still reading its header. Which layers hold a header
     //! at any instant during that is decided by disk timing, and the frame is
     //! stored, so the anchor waits for the whole set rather than racing it.
     bool epochOpen() const;
@@ -364,6 +366,11 @@ private:
     bool anchorTo(const Input& input);
     void freezeFrame();
     void clearFrame();
+
+    //! The project has no georeferenced input left: the local grid while an
+    //! attached file's bare fixes still place it (hasLocalGridCandidate()),
+    //! else Ungeoreferenced once any input has been seen.
+    void leaveFrame();
     bool freezeAt(const cwGeoPoint& center);
 
     //! What a move of the frame has to record: the anchor this class just wrote,
@@ -379,7 +386,8 @@ private:
     //! A coordinate PROJ can't place — a UTM easting typed into a row that says
     //! lat/long, say — yields no projection, and stopping there would leave the
     //! whole project unplaced while a perfectly good fix sat behind it.
-    void anchorToFirstUsable(const QList<Input>& inputs);
+    //! Returns whether one anchored.
+    bool anchorToFirstUsable(const QList<Input>& inputs);
 
     void syncNodeConnections();
 };

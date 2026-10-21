@@ -28,6 +28,7 @@ message GeoReference {
         UNGEOREFERENCED = 0; // no LDP; nothing georeferenced has been entered
         ANCHORED = 1;        // derived from an input that still exists
         FROZEN = 2;          // no anchor left; moves only when asked
+        LOCAL_GRID = 3;      // no LDP; attached bare fixes each placed at the origin
     }
 
     enum AnchorKind {

@@ -957,14 +957,21 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
     }
 
     const bool georeferenced = Region->geoReference()->hasCoordinateSystem();
+    // Any output system, a local grid's included, places a file whose fixes
+    // name no system at the origin.
+    const bool placesAtOrigin =
+        Region->geoReference()->state() != cwGeoReference::Ungeoreferenced;
 
     // Names each station the way the node's Fix Stations table lists it: a
     // trip's file stations sit under the trip's scopePrefix().
     const auto addWarning = [&](QStringList& messages, const QUuid& ownerId, const QString& scope,
                                 const cwExternalCenterline& centerline) {
-        // A file whose own *cs out reads its bare fixes in has a system for them.
+        // A file whose own *cs out reads its bare fixes in has a system for
+        // them; only a file the driver translates (one in
+        // externalBareFixOrigins) is warned about.
         if (!centerline.fixCoordinateSystem().isEmpty()
-                || inputs.externalOutputSystems.contains(ownerId)) {
+                || inputs.externalOutputSystems.contains(ownerId)
+                || !inputs.externalBareFixOrigins.contains(ownerId)) {
             return;
         }
         const auto stations = inputs.bareFixedStations.constFind(ownerId);
@@ -976,8 +983,10 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
         for (const QString& station : stations.value()) {
             scoped.append(scope + station);
         }
-        messages.append(QStringLiteral("%1 fixes %2 without a coordinate system; choose one on "
-                                       "the Fix Stations page or add *cs to the file.")
+        messages.append(QStringLiteral("%1 fixes %2 without a coordinate system, so it is placed "
+                                       "at the project origin until a coordinate system is "
+                                       "chosen; choose one on the Fix Stations page or add *cs "
+                                       "to the file.")
                             .arg(entryFileName(centerline), scoped.join(QStringLiteral(", "))));
     };
 
@@ -1001,7 +1010,7 @@ void cwLinePlotManager::publishAttachedFixWarnings(const cwLinePlotTask::Externa
 
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         QStringList messages;
-        if (georeferenced) {
+        if (placesAtOrigin) {
             addWarning(messages, node->id(), QString(), node->externalCenterline());
             for (const cwTrip* trip : node->trips()) {
                 addWarning(messages, trip->id(), trip->scopePrefix(), trip->externalCenterline());

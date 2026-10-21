@@ -19,6 +19,7 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -294,6 +295,92 @@ namespace {
     }
 }
 
+namespace {
+
+    //! The name a translated conversion carries; nothing reads it back.
+    constexpr const char* kTranslatedConversionName = "CaveWhere local grid translation";
+
+    //! EPSG's parameter codes for a projection's false origin, in each of the
+    //! forms its methods name it.
+    constexpr QLatin1StringView kEpsgFalseEasting("8806");
+    constexpr QLatin1StringView kEpsgEastingAtProjectionCentre("8816");
+    constexpr QLatin1StringView kEpsgEastingAtFalseOrigin("8826");
+    constexpr QLatin1StringView kEpsgFalseNorthing("8807");
+    constexpr QLatin1StringView kEpsgNorthingAtProjectionCentre("8817");
+    constexpr QLatin1StringView kEpsgNorthingAtFalseOrigin("8827");
+
+    bool isFalseEastingCode(QLatin1StringView code)
+    {
+        return code == kEpsgFalseEasting
+            || code == kEpsgEastingAtProjectionCentre
+            || code == kEpsgEastingAtFalseOrigin;
+    }
+
+    bool isFalseNorthingCode(QLatin1StringView code)
+    {
+        return code == kEpsgFalseNorthing
+            || code == kEpsgNorthingAtProjectionCentre
+            || code == kEpsgNorthingAtFalseOrigin;
+    }
+
+    //! PROJ's unit category, as the unit type proj_create_conversion takes.
+    PJ_UNIT_TYPE unitTypeOf(const char* category)
+    {
+        const QLatin1StringView name(category != nullptr ? category : "");
+        if (name == QLatin1StringView("linear")) {
+            return PJ_UT_LINEAR;
+        }
+        if (name == QLatin1StringView("angular")) {
+            return PJ_UT_ANGULAR;
+        }
+        if (name == QLatin1StringView("scale")) {
+            return PJ_UT_SCALE;
+        }
+        if (name == QLatin1StringView("time")) {
+            return PJ_UT_TIME;
+        }
+        return PJ_UT_PARAMETRIC;
+    }
+
+    /**
+     * The projected CRS \a conversion builds on \a base in \a cartesian, as
+     * text PROJ reads back: a PROJ string when the datum survives one, else
+     * WKT. Empty when PROJ can't build or spell it.
+     */
+    QString spellProjected(PJ_CONTEXT* context, PJ* base, PJ* conversion, PJ* cartesian)
+    {
+        PjPtr projected(proj_create_projected_crs(context, kProjectionName, base,
+                                                  conversion, cartesian));
+        if (!projected) {
+            return {};
+        }
+
+        // Preferred for how short and how readable it is, but only when the
+        // datum survives it. proj_as_proj_string has keywords for a handful of
+        // datums and drops the rest rather than refusing, so all that comes
+        // back of NAD83(2011) is "+ellps=GRS80" — a frame that names no datum
+        // at all, stored for good.
+        const QString frameDatum = forcedDatumName(context, base);
+        const char* projString = proj_as_proj_string(context, projected.get(), PJ_PROJ_5, nullptr);
+        if (projString != nullptr && *projString != '\0') {
+            const QString spelling = QString::fromUtf8(projString);
+            if (cwLocalProjection::datumName(spelling) == frameDatum) {
+                return spelling;
+            }
+        }
+
+        // A datum with no proj-string spelling (a datum ensemble, a national
+        // realization, or one that needs a transformation grid) still has a
+        // WKT form, and PROJ reads either back.
+        const char* wkt = proj_as_wkt(context, projected.get(), PJ_WKT2_2019, nullptr);
+        if (wkt != nullptr && *wkt != '\0') {
+            return QString::fromUtf8(wkt);
+        }
+
+        return {};
+    }
+}
+
 QString cwLocalProjection::derive(double latitude, double longitude, const QString& datumSourceCS,
                                   DatumSource datumSource)
 {
@@ -344,34 +431,90 @@ QString cwLocalProjection::derive(double latitude, double longitude, const QStri
         return {};
     }
 
-    PjPtr projected(proj_create_projected_crs(context.get(), kProjectionName, base.get(),
-                                              conversion.get(), cartesian.get()));
-    if (!projected) {
+    return spellProjected(context.get(), base.get(), conversion.get(), cartesian.get());
+}
+
+QString cwLocalProjection::translated(const QString& frameCS, const cwGeoPoint& origin)
+{
+    if (!std::isfinite(origin.x) || !std::isfinite(origin.y)) {
         return {};
     }
 
-    // Preferred for how short and how readable it is, but only when the datum
-    // survives it. proj_as_proj_string has keywords for a handful of datums and
-    // drops the rest rather than refusing, so all that comes back of NAD83(2011)
-    // is "+ellps=GRS80" — a frame that names no datum at all, stored for good.
-    const QString frameDatum = forcedDatumName(context.get(), base.get());
-    const char* projString = proj_as_proj_string(context.get(), projected.get(), PJ_PROJ_5, nullptr);
-    if (projString != nullptr && *projString != '\0') {
-        const QString spelling = QString::fromUtf8(projString);
-        if (cwLocalProjection::datumName(spelling) == frameDatum) {
-            return spelling;
+    std::optional<GeodeticFrame> frame = resolveGeodeticFrame(frameCS);
+    if (!frame || proj_get_type(frame->horizontal.get()) != PJ_TYPE_PROJECTED_CRS) {
+        return {};
+    }
+    PJ_CONTEXT* context = frame->context.get();
+
+    PjPtr conversion(proj_crs_get_coordoperation(context, frame->horizontal.get()));
+    PjPtr cartesian(proj_crs_get_coordinate_system(context, frame->horizontal.get()));
+    if (!conversion || !cartesian) {
+        return {};
+    }
+
+    const char* methodName = nullptr;
+    const char* methodAuthority = nullptr;
+    const char* methodCode = nullptr;
+    if (!proj_coordoperation_get_method_info(context, conversion.get(), &methodName,
+                                             &methodAuthority, &methodCode)) {
+        return {};
+    }
+
+    // The frame's own parameters, with its false origin moved by \a origin.
+    // The strings the descriptions point at belong to the conversion, which
+    // outlives them.
+    const int parameterCount = proj_coordoperation_get_param_count(context, conversion.get());
+    std::vector<PJ_PARAM_DESCRIPTION> parameters;
+    parameters.reserve(static_cast<size_t>(std::max(parameterCount, 0)));
+    bool movedEasting = false;
+    bool movedNorthing = false;
+    for (int index = 0; index < parameterCount; ++index) {
+        PJ_PARAM_DESCRIPTION parameter{};
+        const char* unitAuthority = nullptr;
+        const char* unitCode = nullptr;
+        const char* unitCategory = nullptr;
+        double unitToSi = 0.0;
+        if (!proj_coordoperation_get_param(context, conversion.get(), index, &parameter.name,
+                                           &parameter.auth_name, &parameter.code,
+                                           &parameter.value, nullptr, &unitToSi,
+                                           &parameter.unit_name, &unitAuthority, &unitCode,
+                                           &unitCategory)) {
+            return {};
         }
+        parameter.unit_conv_factor = unitToSi;
+        parameter.unit_type = unitTypeOf(unitCategory);
+
+        const QLatin1StringView code(parameter.code != nullptr ? parameter.code : "");
+        if (unitToSi > 0.0 && isFalseEastingCode(code)) {
+            parameter.value += origin.x / unitToSi;
+            movedEasting = true;
+        } else if (unitToSi > 0.0 && isFalseNorthingCode(code)) {
+            parameter.value += origin.y / unitToSi;
+            movedNorthing = true;
+        }
+        parameters.push_back(parameter);
+    }
+    if (!movedEasting || !movedNorthing) {
+        return {};
     }
 
-    // A datum with no proj-string spelling (a datum ensemble, a national
-    // realization, or one that needs a transformation grid) still has a WKT
-    // form, and PROJ reads either back.
-    const char* wkt = proj_as_wkt(context.get(), projected.get(), PJ_WKT2_2019, nullptr);
-    if (wkt != nullptr && *wkt != '\0') {
-        return QString::fromUtf8(wkt);
+    PjPtr moved(proj_create_conversion(context, kTranslatedConversionName, nullptr, nullptr,
+                                       methodName, methodAuthority, methodCode,
+                                       parameterCount, parameters.data()));
+    if (!moved) {
+        return {};
     }
 
-    return {};
+    return spellProjected(context, frame->base.get(), moved.get(), cartesian.get());
+}
+
+QString cwLocalProjection::localGridSystem()
+{
+    // The system never reaches the user, so the WGS84 ensemble it stands on is
+    // no datum anyone is placed on.
+    static const QString system =
+        derive(0.0, 0.0, cwCoordinateTransform::Wgs84, DatumSource::StoredFrame);
+    return system;
 }
 
 QString cwLocalProjection::deriveFrom(const QString& anchorCS, const cwGeoPoint& anchorPoint,

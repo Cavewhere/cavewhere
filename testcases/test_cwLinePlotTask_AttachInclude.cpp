@@ -1293,8 +1293,8 @@ QString lineBeforeInclude(const QString& driver, const QString& includePath)
 
 } // namespace
 
-TEST_CASE("An attached file's bare *fix fails the solve in a georeferenced project until a system is chosen",
-          "[Attach][Cave][CS]")
+TEST_CASE("An attached file's bare *fix is placed at the origin in a georeferenced project until a system is chosen",
+          "[Attach][Cave][CS][BareFixOrigin]")
 {
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
@@ -1308,22 +1308,29 @@ TEST_CASE("An attached file's bare *fix fails the solve in a georeferenced proje
     INFO("driver:\n" << manager.driverSource().toStdString());
     INFO("solve error: " << manager.solveErrorMessage().toStdString());
 
-    // The include opens under the project's *cs out and no input *cs, so
-    // cavern refuses the file's bare *fix d1 0 0 0.
+    // The include opens under the project's *cs out and an input *cs of
+    // CaveWhere's own that places the file's first bare *fix, d1 0 0 0, at
+    // the project origin.
     CHECK(manager.driverSource().contains(QStringLiteral("*cs out ")));
     const QString beforeInclude = lineBeforeInclude(manager.driverSource(), project.includePath);
-    CHECK_FALSE(beforeInclude.startsWith(QStringLiteral("*cs ")));
-    REQUIRE(manager.hasSolveError());
-    CHECK(manager.solveErrorSummary().contains(QStringLiteral("input projection isn't")));
+    CHECK(beforeInclude.startsWith(QStringLiteral("*cs ")));
+    REQUIRE_FALSE(manager.hasSolveError());
+    {
+        const cwStationPositionLookup& lookup = project.attached->scopedPositions();
+        REQUIRE(lookup.hasPosition(QStringLiteral("doghill.d1")));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).x() == Catch::Approx(0.0).margin(0.01));
+        CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
+    }
 
     const QStringList warnings = attachedFixWarnings(project.attached);
     REQUIRE(warnings.size() == 1);
     CHECK(warnings.first().contains(QStringLiteral("survex_blocks.svx")));
     CHECK(attachedFixWarnings(project.beside).isEmpty());
 
-    CHECK(warnings.first().contains(QStringLiteral("fixes doghill.d1 without a coordinate system; "
-                                                   "choose one on the Fix Stations page or add "
-                                                   "*cs to the file.")));
+    CHECK(warnings.first().contains(QStringLiteral("fixes doghill.d1 without a coordinate system, "
+                                                   "so it is placed at the project origin until a "
+                                                   "coordinate system is chosen; choose one on the "
+                                                   "Fix Stations page or add *cs to the file.")));
 
     // A click on the warning opens the node's Fix Stations page on the file's
     // bare fix, the first attached row after the node's own fixes.
@@ -1357,19 +1364,21 @@ TEST_CASE("An attached file's bare *fix fails the solve in a georeferenced proje
         CHECK(lookup.position(QStringLiteral("doghill.d1")).y() == Catch::Approx(0.0).margin(0.01));
     }
 
-    SECTION("the warning clears when the project loses its frame")
+    SECTION("the project keeps the file on the local grid, and the warning, when it loses its frame")
     {
         project.beside->fixStations()->removeAt(0);
-        region.geoReference()->clear();
         manager.waitToFinish();
 
         REQUIRE_FALSE(region.geoReference()->hasCoordinateSystem());
-        CHECK(attachedFixWarnings(project.attached).isEmpty());
+        CHECK(region.geoReference()->state() == cwGeoReference::LocalGrid);
+        INFO("driver after the frame is gone:\n" << manager.driverSource().toStdString());
+        CHECK_FALSE(manager.hasSolveError());
+        CHECK(attachedFixWarnings(project.attached).size() == 1);
     }
 }
 
-TEST_CASE("An attached file's bare *fix warns nothing in an ungeoreferenced project",
-          "[Attach][Cave][CS]")
+TEST_CASE("An attached file's bare *fix puts an ungeoreferenced project on the local grid and warns",
+          "[Attach][Cave][CS][BareFixOrigin]")
 {
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
@@ -1382,8 +1391,13 @@ TEST_CASE("An attached file's bare *fix warns nothing in an ungeoreferenced proj
 
     INFO("driver:\n" << manager.driverSource().toStdString());
     REQUIRE_FALSE(manager.hasSolveError());
-    CHECK_FALSE(manager.driverSource().contains(QStringLiteral("*cs")));
-    CHECK(attachedFixWarnings(project.attached).isEmpty());
+    CHECK(region.geoReference()->state() == cwGeoReference::LocalGrid);
+    // The local grid solves in a system of its own, and the include reads
+    // the file's bare fix in a translation onto the origin.
+    CHECK(manager.driverSource().contains(QStringLiteral("*cs out ")));
+    CHECK(lineBeforeInclude(manager.driverSource(), project.includePath)
+              .startsWith(QStringLiteral("*cs ")));
+    CHECK(attachedFixWarnings(project.attached).size() == 1);
 }
 
 TEST_CASE("An attached file whose fixes carry their own *cs warns nothing",
@@ -1408,8 +1422,15 @@ TEST_CASE("An attached file whose fixes carry their own *cs warns nothing",
     }
 }
 
+namespace {
+
+// Defined with the placement tests below.
+void checkAtOrigin(const cwStationPositionLookup& lookup, const QString& station);
+
+} // namespace
+
 TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around it",
-          "[Attach][Trip][CS]")
+          "[Attach][Trip][CS][BareFixOrigin]")
 {
     QTemporaryDir tempRoot;
     REQUIRE(tempRoot.isValid());
@@ -1445,12 +1466,15 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         manager.waitToFinish();
 
         {
-            // Nothing chosen: no input system at the include, and cavern
-            // refuses the bare fix under the project's *cs out.
+            // Nothing chosen: the include reads the bare fix in CaveWhere's
+            // translation onto the project origin, and the file solves.
             const QString driver = manager.driverSource();
             INFO("driver:\n" << driver.toStdString());
-            CHECK_FALSE(lineBeforeInclude(driver, includePath).startsWith(QStringLiteral("*cs ")));
-            CHECK(manager.hasSolveError());
+            INFO("solve error: " << manager.solveErrorMessage().toStdString());
+            CHECK(lineBeforeInclude(driver, includePath).startsWith(QStringLiteral("*cs ")));
+            REQUIRE_FALSE(manager.hasSolveError());
+            checkAtOrigin(host->scopedPositions(),
+                          attached->scopePrefix() + QStringLiteral("doghill.d1"));
         }
 
         cwExternalCenterline centerline = attached->externalCenterline();
@@ -1505,7 +1529,7 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         CHECK(renamedWarnings.first().contains(QStringLiteral("fixes %1 without").arg(scopedD1())));
     }
 
-    SECTION("under a cave whose fix names a system, the trip reads its bare fix in none")
+    SECTION("under a cave whose fix names a system, the trip reads its bare fix in a translation of its own")
     {
         cwTrip* attached = addEmptyTrip(beside, QStringLiteral("Attached"));
         attached->calibrations()->setAutoDeclination(false);
@@ -1517,10 +1541,10 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         const QString driver = manager.driverSource();
         INFO("driver:\n" << driver.toStdString());
         INFO("solve error: " << manager.solveErrorMessage().toStdString());
-        // The cave's fix ends its system before the trip's block, so nothing
-        // chosen means cavern refuses the bare fix, as the warning says.
-        CHECK(manager.hasSolveError());
-        CHECK(manager.solveErrorSummary().contains(QStringLiteral("input projection isn't")));
+        // The cave's fix ends its system before the trip's block; with
+        // nothing chosen the include reads the bare fix in CaveWhere's
+        // translation onto the project origin, and the file solves.
+        CHECK_FALSE(manager.hasSolveError());
 
         const qsizetype tripBegin =
             driver.indexOf(QStringLiteral("*begin %1 ").arg(tripScopeLabel(attached)));
@@ -1528,7 +1552,9 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
             driver.indexOf(QStringLiteral("*include \"%1\"").arg(includePath));
         REQUIRE(tripBegin >= 0);
         REQUIRE(include > tripBegin);
-        CHECK_FALSE(driver.mid(tripBegin, include - tripBegin).contains(QStringLiteral("*cs")));
+        CHECK(lineBeforeInclude(driver, includePath).startsWith(QStringLiteral("*cs ")));
+        checkAtOrigin(beside->scopedPositions(),
+                      attached->scopePrefix() + QStringLiteral("doghill.d1"));
 
         const QStringList warnings = attachedFixWarnings(beside);
         REQUIRE(warnings.size() == 1);
@@ -1872,7 +1898,7 @@ void checkAtOrigin(const cwStationPositionLookup& lookup, const QString& station
 {
     INFO("station " << station.toStdString());
     REQUIRE(lookup.hasPosition(station));
-    const QVector3D position = lookup.position(station);
+    const auto position = lookup.position(station);
     CHECK(position.x() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
     CHECK(position.y() == Catch::Approx(0.0).margin(kPlacedMarginMeters));
     CHECK(position.z() == Catch::Approx(0.0).margin(kPlacedMarginMeters));

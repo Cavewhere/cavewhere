@@ -197,3 +197,27 @@ TEST_CASE("A local projection change reaches disk without an explicit save",
         CHECK(reloaded->verticalDatum() == QStringLiteral("NGVD29"));
     }
 }
+
+TEST_CASE("A local grid survives save/load with no frame",
+          "[cwGeoReference][LocalGrid][SaveLoad]")
+{
+    // A local grid has no string to save, so the state alone has to reach the
+    // file; a reload that read it as ungeoreferenced would lose the grid.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    auto root = std::make_unique<cwRootData>();
+    auto* geoReference = root->project()->cavingRegion()->geoReference();
+    geoReference->restore(cwGeoReference::LocalGrid, QString(), cwGeoReference::Anchor{},
+                          QString());
+    REQUIRE(geoReference->state() == cwGeoReference::LocalGrid);
+
+    const QString path = saveProject(root.get(), tempDir, QStringLiteral("ldp-local-grid"));
+
+    auto reloadedRoot = reload(path);
+    auto* reloaded = reloadedRoot->project()->cavingRegion()->geoReference();
+    CHECK(reloaded->state() == cwGeoReference::LocalGrid);
+    CHECK(reloaded->localCoordinateSystem().isEmpty());
+    CHECK_FALSE(reloaded->anchor().isValid());
+    CHECK_FALSE(reloaded->hasCoordinateSystem());
+}

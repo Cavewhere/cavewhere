@@ -11,6 +11,7 @@
 #include "cwCompassMakTranslator.h"
 #include "cwExternalCenterlineScanner.h"
 #include "cwFixStationDiagnostics.h"
+#include "cwLocalProjection.h"
 #include "cwSurvexExporterTripTask.h"
 #include "cwSurvexExporter.h"
 #include "cwSurvexExporterUtils.h"
@@ -323,7 +324,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         // A system the node's own fixes name would stay in force at the
         // *include and read the file's bare fixes in it. With no system
         // chosen for those, an anonymous block ends it after the fixes, so
-        // cavern refuses them as it would without the node's fixes.
+        // only the system writeIncludeSystem names reads them.
         const bool fixesLeaveSystem = fixesScope.system() != includeScope.system()
                                       && node.externalCenterline.fixCoordinateSystem().isEmpty();
         if (fixesLeaveSystem) {
@@ -363,7 +364,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     // A system this block leaves in force would read the bare fixes of an
     // *include below it whose file has none chosen. Such a block writes its
     // fixes, and each auto declination's *cs, in anonymous blocks that end
-    // them; cavern then refuses those fixes as it would with no native fix.
+    // them, so only the system writeIncludeSystem names reads those fixes.
     const bool shielded = scopeReachesInheritingInclude(node, tree);
 
     Inherited here = inherited;
@@ -772,11 +773,22 @@ void cwSurvexExporterCaveTask::writeIncludeSystem(QTextStream& stream, const QUu
     }
 
     // The file's own *cs still wins inside its blocks; this only reaches the
-    // fixes that name none. Under the project's *cs out, a file whose own
-    // *cs out still reads in its bare fixes has that system as their input.
-    // With neither, cavern refuses them.
+    // fixes that name none: the system chosen for them, else the file's own
+    // *cs out, else the output system moved so the first of them lands on the
+    // origin.
     const QString chosen = centerline.fixCoordinateSystem();
-    scope.ensure(stream, chosen.isEmpty() ? fileOutput : chosen);
+    if (!chosen.isEmpty()) {
+        scope.ensure(stream, chosen);
+        return;
+    }
+    if (!fileOutput.isEmpty()) {
+        scope.ensure(stream, fileOutput);
+        return;
+    }
+    const auto origin = ExportOptions.externalBareFixOrigins.constFind(ownerId);
+    if (origin != ExportOptions.externalBareFixOrigins.constEnd()) {
+        scope.ensure(stream, cwLocalProjection::translated(globalCS, origin.value()));
+    }
 }
 
 bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,

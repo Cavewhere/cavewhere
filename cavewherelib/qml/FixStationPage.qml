@@ -49,9 +49,11 @@ StandardPage {
     // The QSettings keys of the dragged column widths, in column order.
     readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
 
-    // Cavern refuses a fix that names no system once the project has a frame,
-    // so only then does a bare attached row with no system chosen warn.
-    readonly property bool projectHasFrame: RootData.region.geoReference.hasCoordinateSystem
+    // Under any output system, a local grid's included, a file whose fix names
+    // no system is placed at the project origin, so only then does a bare
+    // attached row with no system chosen warn.
+    readonly property bool placesBareFixesAtOrigin: RootData.region.geoReference.state
+                                                    !== GeoReference.Ungeoreferenced
 
     // The node and its trips that carry an attachment, the node first, then
     // the trips in order. Each holds the system its file's bare fixes read in.
@@ -603,7 +605,7 @@ StandardPage {
     }
 
     // An attached fix its file names no system for: the system the solve reads
-    // it in, or "unset" while cavern refuses it.
+    // it in, or "origin" while the file is placed at the project origin.
     component BareFixBadge : QC.Label {
         id: bareFixBadge
         property string readInSystem: ""
@@ -612,10 +614,10 @@ StandardPage {
         property string sourceFile: ""
         readonly property bool unset: bareFixBadge.readInSystem === ""
 
-        text: "none \u2192 " + (bareFixBadge.unset ? "unset" : bareFixBadge.readInSystem)
+        text: "none \u2192 " + (bareFixBadge.unset ? "origin" : bareFixBadge.readInSystem)
         textFormat: QC.Label.PlainText
         elide: QC.Label.ElideRight
-        color: bareFixBadge.unset ? Theme.errorText : Theme.warningText
+        color: Theme.warningText
         font.pixelSize: Theme.fontSizeSmall
         leftPadding: Theme.chipPadding
         rightPadding: Theme.chipPadding
@@ -633,7 +635,7 @@ StandardPage {
         QC.ToolTip {
             visible: bareFixHover.hovered
             text: bareFixBadge.unset
-                  ? "Cavern rejects this fix until a coordinate system is chosen for "
+                  ? "Placed at the project origin until a coordinate system is chosen for "
                     + bareFixBadge.sourceFile + "."
                   : bareFixBadge.readInWarning
             delay: Theme.toolTipDelay
@@ -641,7 +643,8 @@ StandardPage {
     }
 
     // A read-only row's system: the badge when the file names none and either
-    // a system reads it or cavern refuses it, else ReadOnlyCSLabel.
+    // a system reads it or the file is placed at the origin, else
+    // ReadOnlyCSLabel.
     component ReadOnlyCSCell : QQ.Item {
         id: readOnlyCSCell
         property string value: ""
@@ -651,7 +654,7 @@ StandardPage {
         property string sourceFile: ""
         readonly property bool showsBadge: readOnlyCSCell.value === ""
                                            && (readOnlyCSCell.readInSystem !== ""
-                                               || fixStationPage.projectHasFrame)
+                                               || fixStationPage.placesBareFixesAtOrigin)
 
         implicitWidth: readOnlyCSCell.showsBadge ? badgeLoader.implicitWidth
                                                  : readOnlyLabel.implicitWidth
@@ -854,15 +857,15 @@ StandardPage {
         }
     }
 
-    // The fixes under a row that cavern refuses until a system is chosen for
-    // them.
+    // The fixes under a row placed at the project origin until a system is
+    // chosen for them.
     component UnsetFixesBadge : QC.Label {
         id: unsetFixesBadge
         property int count: 0
 
-        visible: fixStationPage.projectHasFrame && unsetFixesBadge.count > 0
+        visible: fixStationPage.placesBareFixesAtOrigin && unsetFixesBadge.count > 0
         text: "\u26A0 " + unsetFixesBadge.count + " without coordinate system"
-        color: Theme.errorText
+        color: Theme.warningText
         font.pixelSize: Theme.fontSizeSmall
         leftPadding: Theme.chipPadding
         rightPadding: Theme.chipPadding

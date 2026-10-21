@@ -368,8 +368,6 @@ constexpr double kCompassElevation = 100.0;
 const QString kCompassProjectCS = QStringLiteral("EPSG:32616");
 constexpr double kCompassBravoDigEasting = 500100.0;
 
-constexpr double kWallsProjectFixEasting = 1000.0;
-constexpr double kWallsProjectFixNorthing = 2000.0;
 constexpr double kWallsFixElevation = 100.0;
 constexpr double kWallsTapeMeters = 10.0;
 // D01 and D02's four legs and N01's three.
@@ -544,23 +542,25 @@ TEST_CASE("compass_project solves as a source root",
 }
 
 TEST_CASE("walls_project solves as a source root",
-          "[LinePlotManager][Attach][SourcedFixtures]")
+          "[LinePlotManager][Attach][SourcedFixtures][BareFixOrigin]")
 {
     auto project = makeSavedProject(QStringLiteral("walls-project-solve"),
                                     QStringLiteral("NativeCave"), QStringLiteral("NativeTrip"));
     cwSurveyNode* cave = attachSourceAndSolve(project.get(), QStringLiteral("walls_project/KAUA.WPJ"));
     requireSolved(project.get());
 
+    // K1's #FIX names no system and the project has no frame, so the file
+    // is a local grid placed with K1 at the origin; z passes through.
+    CHECK(project->project->cavingRegion()->geoReference()->state()
+          == cwGeoReference::LocalGrid);
+
     // Books and files make no level; #PREFIX N does.
     const cwStationPositionLookup lookup = cave->scopedPositions();
-    checkPosition(lookup, QStringLiteral("K1"),
-                  kWallsProjectFixEasting, kWallsProjectFixNorthing, kWallsFixElevation);
+    checkPosition(lookup, QStringLiteral("K1"), 0.0, 0.0, kWallsFixElevation);
     checkPosition(lookup, QStringLiteral("D4"),
-                  kWallsProjectFixEasting + 2.0 * kWallsTapeMeters,
-                  kWallsProjectFixNorthing + 2.0 * kWallsTapeMeters, kWallsFixElevation);
+                  2.0 * kWallsTapeMeters, 2.0 * kWallsTapeMeters, kWallsFixElevation);
     checkPosition(lookup, QStringLiteral("N.3"),
-                  kWallsProjectFixEasting + 3.0 * kWallsTapeMeters,
-                  kWallsProjectFixNorthing, kWallsFixElevation);
+                  3.0 * kWallsTapeMeters, 0.0, kWallsFixElevation);
     CHECK(lookup.positions().size() == 8);
     CHECK(cave->length()->value()
           == Catch::Approx(kWallsProjectLegCount * kWallsTapeMeters).margin(kSolvedLengthMarginMeters));

@@ -36,7 +36,7 @@ enum class cwErrorTypeId : int {
     UnconnectedStations = 600,  //!< a trip's or attached file's stations that the solve could not tie to the cave
     AttachedFileUnfixed = 601,  //!< an attached file that fixes no station, placed at the origin in a georeferenced project
     AttachedFileDefaultDatum = 602, //!< an attached Compass .mak that names a UTM zone but no datum, read in North American 1927
-    AttachedFileFixWithoutCS = 603, //!< an attachment with fixes that name no coordinate system and no system chosen for them, in a georeferenced project
+    AttachedFileFixWithoutCS = 603, //!< an attachment with fixes that name no coordinate system and no system chosen for them, placed with its first such fix at the project origin
     AttachedFileReadWarnings = 604, //!< advisories the scan of an attached file raised: a missing *include, a case-fallback match, an encoding fallback, a value it could not parse
 };
 

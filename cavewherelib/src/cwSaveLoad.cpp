@@ -216,6 +216,8 @@ static_assert(static_cast<int>(cwGeoReference::Anchored)
               == CavewhereProto::GeoReference_State_ANCHORED);
 static_assert(static_cast<int>(cwGeoReference::Frozen)
               == CavewhereProto::GeoReference_State_FROZEN);
+static_assert(static_cast<int>(cwGeoReference::LocalGrid)
+              == CavewhereProto::GeoReference_State_LOCAL_GRID);
 static_assert(static_cast<int>(cwGeoReference::Anchor::None)
               == CavewhereProto::GeoReference_AnchorKind_NO_ANCHOR);
 static_assert(static_cast<int>(cwGeoReference::Anchor::FixStation)
@@ -2191,6 +2193,7 @@ std::unique_ptr<CavewhereProto::Project> cwSaveLoad::toProtoProject(const cwCavi
         // its own.
         const auto* geoReference = region->geoReference();
         if (!geoReference->localCoordinateSystem().isEmpty()
+            || geoReference->state() == cwGeoReference::LocalGrid
             || !geoReference->verticalDatum().isEmpty()) {
             auto protoGeoReference = protoMetadata->mutable_georeference();
             protoGeoReference->set_state(

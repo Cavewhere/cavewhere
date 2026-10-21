@@ -16,6 +16,8 @@
 #include "cwCave.h"
 #include "cwCavingRegion.h"
 #include "cwCoordinateTransform.h"
+#include "cwEquate.h"
+#include "cwEquateModel.h"
 #include "cwError.h"
 #include "cwErrorListModel.h"
 #include "cwErrorModel.h"
@@ -31,7 +33,9 @@
 #include "cwNodeWarningModel.h"
 #include "cwProject.h"
 #include "cwRootData.h"
+#include "cwStationHandle.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurvexCS.h"
 #include "cwTrip.h"
 #include "cwTripCalibration.h"
 #include "ExternalCenterlineTestHelpers.h"
@@ -46,11 +50,13 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QVector3D>
+#include <QtMath>
 
 // Std
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
 
 namespace {
 
@@ -69,6 +75,7 @@ const QString kFixedStation = QStringLiteral("bare.A");
 constexpr double kFixEasting = 500000.0;
 constexpr double kFixNorthing = 3000000.0;
 constexpr double kFixElevation = 100.0;
+const cwGeoPoint kBareFix(kFixEasting, kFixNorthing, kFixElevation);
 constexpr double kPlacementMarginMeters = 1.0;
 // The fixture's leg A-B: 10 m at azimuth 90, so B sits that far east of A.
 const QString kEastStation = QStringLiteral("bare.B");
@@ -83,6 +90,46 @@ const QString kInputProjectionError = QStringLiteral("input projection isn't");
 // A file whose one fix carries its own *cs, so it solves with no choice made.
 const QString kOwnCsFixture = QStringLiteral("survex_native_cs_scope/own_cs_fix.svx");
 const QString kOwnCsFileName = QStringLiteral("own_cs_fix.svx");
+
+// survex_bare_fix_origin/origin.svx: a local grid of two bare fixes. Its
+// first, p1, is the one FX.24 places at the project origin.
+const QString kOriginFixture = QStringLiteral("survex_bare_fix_origin/origin.svx");
+const QString kOriginFileName = QStringLiteral("origin.svx");
+const QString kOriginFixStation = QStringLiteral("grid.p1");
+const cwGeoPoint kOriginFix(812345.25, 4123456.75, 210.0);
+const QString kSecondFixStation = QStringLiteral("grid.p9");
+const cwGeoPoint kSecondFix(812400.0, 4123400.0, 200.0);
+// The leg p1-p2: 25 m at azimuth 45 and clino -5.
+const QString kLegStation = QStringLiteral("grid.p2");
+constexpr double kLegMeters = 25.0;
+constexpr double kLegAzimuthDegrees = 45.0;
+constexpr double kLegClinoDegrees = -5.0;
+// The station origin.svx ties to the native survey in the equate test.
+const QString kTiedStation = QStringLiteral("grid.p3");
+// The .3d file stores positions to the centimeter.
+constexpr double kShapeMarginMeters = 0.02;
+constexpr double kAzimuthMarginDegrees = 0.1;
+// What the include's input system may leave of the origin fix's offset.
+constexpr double kTranslationMarginMeters = 0.001;
+// survex_bare_fix_origin/second.svx: another local grid, centered apart.
+const QString kSecondFileFixture = QStringLiteral("survex_bare_fix_origin/second.svx");
+const QString kSecondFileName = QStringLiteral("second.svx");
+const QString kSecondFileFixStation = QStringLiteral("other.q1");
+constexpr double kSecondFileFixElevation = 50.0;
+// A native fix in UTM zone 48N near origin.svx's fixes, and the station its
+// trip runs to, so its frame is centered beside the file's real place.
+const QString kNearFixStation = QStringLiteral("n1");
+const QString kNearLegStation = QStringLiteral("n2");
+const cwGeoPoint kNearFix(812000.0, 4123000.0, 150.0);
+
+//! Warning 603 for \a fileName's bare fixes \a stations.
+QString placedAtOriginWarning(const QString& fileName, const QString& stations)
+{
+    return QStringLiteral("%1 fixes %2 without a coordinate system, so it is placed at the "
+                          "project origin until a coordinate system is chosen; choose one on "
+                          "the Fix Stations page or add *cs to the file.")
+        .arg(fileName, stations);
+}
 
 // Native fixes in the project's frame, clear of the files' fixes.
 const QString kMainFixStation = QStringLiteral("m1");
@@ -166,8 +213,7 @@ QStringList blockLines(const QString& driver, const QString& label)
 //! Where the fixture's fix lands in \a frameCS, read in UTM zone 48N.
 cwGeoPoint fixtureFixIn(const QString& frameCS)
 {
-    const auto point = cwCoordinateTransform::transformPoint(
-        kUtm48NFrame, frameCS, cwGeoPoint(kFixEasting, kFixNorthing, kFixElevation));
+    const auto point = cwCoordinateTransform::transformPoint(kUtm48NFrame, frameCS, kBareFix);
     REQUIRE(point.has_value());
     return *point;
 }
@@ -293,10 +339,130 @@ bool waitForValidConvergence(const cwSurveyNode* node)
     });
 }
 
+//! The PROJ text of the system \a line names after its "*cs" or "*cs out"
+//! keyword; empty when the line names none cavern and PROJ both read.
+QString systemOfLine(const QString& line)
+{
+    const QString keyword = line.startsWith(kOutputSystemPrefix) ? kOutputSystemPrefix
+                                                                  : QStringLiteral("*cs");
+    if (!line.startsWith(keyword)) {
+        return QString();
+    }
+    const auto parsed = cwSurvexCS::fromSurvexCS(line.mid(keyword.size()).trimmed());
+    return parsed.has_value() ? parsed->projCS : QString();
+}
+
+//! The PROJ text of the driver's first *cs out, the one cavern solves in.
+QString outputSystemOf(const QString& driver)
+{
+    const QStringList lines = driver.split(QLatin1Char('\n'));
+    for (const QString& line : lines) {
+        if (line.trimmed().startsWith(kOutputSystemPrefix)) {
+            return systemOfLine(line.trimmed());
+        }
+    }
+    return QString();
+}
+
+//! Where the input system in force at the driver's include of \a fileName
+//! carries \a point in the driver's output system. Nothing when no input
+//! system is in force there, or either names no CRS.
+std::optional<cwGeoPoint> placedByIncludeSystem(const QString& driver, const QString& fileName,
+                                                const cwGeoPoint& point)
+{
+    const QString inputSystem = systemOfLine(inputSystemLineAtInclude(driver, fileName));
+    const QString outputSystem = outputSystemOf(driver);
+    if (inputSystem.isEmpty() || outputSystem.isEmpty()) {
+        return std::nullopt;
+    }
+    return cwCoordinateTransform::transformPoint(inputSystem, outputSystem, point);
+}
+
+//! Checks that the input system at the driver's include of \a fileName
+//! carries \a fix onto the output system's origin, its elevation unchanged.
+void checkIncludePlacesOnOrigin(const QString& driver, const QString& fileName,
+                                const cwGeoPoint& fix)
+{
+    const auto placed = placedByIncludeSystem(driver, fileName, fix);
+    REQUIRE(placed.has_value());
+    CHECK(placed->x == Catch::Approx(0.0).margin(kTranslationMarginMeters));
+    CHECK(placed->y == Catch::Approx(0.0).margin(kTranslationMarginMeters));
+    CHECK(placed->z == Catch::Approx(fix.z).margin(kTranslationMarginMeters));
+}
+
+//! Checks origin.svx solved as a pure translation that puts p1 at the
+//! origin: p1 at (0, 0, its own elevation), p9 at its offset from p1, and
+//! the leg p1-p2 at its tape, azimuth and clino.
+void checkPlacedAtOrigin(const cwStationPositionLookup& lookup, const QString& scope = QString())
+{
+    REQUIRE(lookup.hasPosition(scope + kOriginFixStation));
+    REQUIRE(lookup.hasPosition(scope + kSecondFixStation));
+    REQUIRE(lookup.hasPosition(scope + kLegStation));
+    const QVector3D origin = lookup.position(scope + kOriginFixStation);
+    CHECK(origin.x() == Catch::Approx(0.0).margin(kShapeMarginMeters));
+    CHECK(origin.y() == Catch::Approx(0.0).margin(kShapeMarginMeters));
+    CHECK(origin.z() == Catch::Approx(kOriginFix.z).margin(kShapeMarginMeters));
+
+    const QVector3D second = lookup.position(scope + kSecondFixStation) - origin;
+    CHECK(second.x() == Catch::Approx(kSecondFix.x - kOriginFix.x).margin(kShapeMarginMeters));
+    CHECK(second.y() == Catch::Approx(kSecondFix.y - kOriginFix.y).margin(kShapeMarginMeters));
+    CHECK(second.z() == Catch::Approx(kSecondFix.z - kOriginFix.z).margin(kShapeMarginMeters));
+
+    const QVector3D leg = lookup.position(scope + kLegStation) - origin;
+    CHECK(leg.length() == Catch::Approx(kLegMeters).margin(kShapeMarginMeters));
+    const double azimuth = qRadiansToDegrees(std::atan2(leg.x(), leg.y()));
+    CHECK(azimuth == Catch::Approx(kLegAzimuthDegrees).margin(kAzimuthMarginDegrees));
+    CHECK(leg.z() == Catch::Approx(kLegMeters * std::sin(qDegreesToRadians(kLegClinoDegrees)))
+                         .margin(kShapeMarginMeters));
+}
+
+//! Waits until \a owner's view holds \a station at the origin, the way a
+//! solve that placed origin.svx at the origin leaves it.
+bool waitForStationAtOrigin(SavedProjectFixture* fixture, const cwSurveyNode* owner,
+                            const QString& station)
+{
+    const bool atOrigin = tryWait(kAttachWaitMs, [owner, &station]() {
+        const cwStationPositionLookup& lookup = owner->scopedPositions();
+        if (!lookup.hasPosition(station)) {
+            return false;
+        }
+        const QVector3D position = lookup.position(station);
+        return std::abs(position.x()) <= kShapeMarginMeters
+               && std::abs(position.y()) <= kShapeMarginMeters;
+    });
+    drainPipelines(fixture);
+    return atOrigin;
+}
+
+//! The project's one cave, "Main": a native trip n1-n2 and a native fix on
+//! n1 in UTM zone 48N at \a fix, which gives a project with no frame one.
+//! Auto declination is off, so nothing turns the attached file's legs.
+cwCave* setUpNativeFrameAt(SavedProjectFixture* fixture, const cwGeoPoint& fix)
+{
+    cwCave* main = fixture->cave;
+    main->setName(QStringLiteral("Main"));
+    cwTrip* survey = addNativeTripWithShot(main, QStringLiteral("Main survey"), kNearFixStation,
+                                           kNearLegStation);
+    survey->calibrations()->setAutoDeclination(false);
+    cwFixStation nativeFix;
+    nativeFix.setStationName(kNearFixStation);
+    nativeFix.setInputCS(kUtm48NFrame);
+    nativeFix.setCoordinate(fix.x, fix.y, fix.z);
+    main->fixStations()->appendFixStation(nativeFix);
+
+    const cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    REQUIRE(tryWait(kAttachWaitMs, [geoReference]() {
+        return geoReference->state() == cwGeoReference::Anchored;
+    }));
+    REQUIRE(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
+    drainPipelines(fixture);
+    return main;
+}
+
 } // namespace
 
-TEST_CASE("A bare file fix in a georeferenced project with no system chosen fails the solve and warns",
-          "[AttachInclude][BareFixCS]")
+TEST_CASE("A bare file fix in a georeferenced project with no system chosen is placed at the origin and warns",
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
 {
     auto fixture = makeProject(QStringLiteral("bare-fix-unset"), true);
     cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
@@ -305,13 +471,22 @@ TEST_CASE("A bare file fix in a georeferenced project with no system chosen fail
     cwLinePlotManager* linePlot = linePlotOf(fixture.get());
     INFO("driver:\n" << linePlot->driverSource().toStdString());
     INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    INFO("solve error: " << linePlot->solveErrorSummary().toStdString());
 
-    // CaveWhere puts no system of its own around the file's bare fix.
-    CHECK(inputSystemLineAtInclude(linePlot->driverSource()).isEmpty());
-    CHECK(linePlot->hasSolveError());
-    CHECK(linePlot->solveErrorSummary().contains(kInputProjectionError));
+    // CaveWhere's own input system at the include carries the file's first
+    // bare fix onto the frame's origin.
+    checkIncludePlacesOnOrigin(linePlot->driverSource(), kBareFixFileName, kBareFix);
+    REQUIRE_FALSE(linePlot->hasSolveError());
 
-    CHECK(bareFixWarnings(root).size() == 1);
+    const cwStationPositionLookup& lookup = root->scopedPositions();
+    REQUIRE(lookup.hasPosition(kFixedStation));
+    CHECK(lookup.position(kFixedStation).x() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(lookup.position(kFixedStation).y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(lookup.position(kFixedStation).z()
+          == Catch::Approx(kFixElevation).margin(kPlacementMarginMeters));
+
+    CHECK(bareFixWarnings(root)
+          == QStringList({placedAtOriginWarning(kBareFixFileName, kFixedStation)}));
     const QString readInSystem = subtreeAttachedFixFor(root, kFixedStation).readInSystem;
     INFO("readInSystem: " << readInSystem.toStdString());
     CHECK(readInSystem.isEmpty());
@@ -414,28 +589,40 @@ TEST_CASE("Reloading an attachment from its source keeps the system chosen for i
     CHECK(bareFixWarnings(root).isEmpty());
 }
 
-TEST_CASE("A bare file fix in a project with no frame solves as written, with no warning",
-          "[AttachInclude][BareFixCS]")
+TEST_CASE("A bare file fix in a project with no frame puts the project on a local grid at that fix",
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
 {
     auto fixture = makeProject(QStringLiteral("bare-fix-no-frame"), false);
-    REQUIRE_FALSE(fixture->project->cavingRegion()->geoReference()->hasCoordinateSystem());
+    cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    REQUIRE_FALSE(geoReference->hasCoordinateSystem());
     cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kBareFixFixture));
     REQUIRE(waitForDriverIncludingFixture(fixture.get()));
+    CHECK(waitForStationAtOrigin(fixture.get(), root, kFixedStation));
 
     cwLinePlotManager* linePlot = linePlotOf(fixture.get());
     INFO("driver:\n" << linePlot->driverSource().toStdString());
     INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
     REQUIRE_FALSE(linePlot->hasSolveError());
 
+    CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+    CHECK_FALSE(geoReference->hasCoordinateSystem());
+    CHECK(geoReference->localCoordinateSystem().isEmpty());
+
     const cwStationPositionLookup& lookup = root->scopedPositions();
     REQUIRE(lookup.hasPosition(kFixedStation));
-    CHECK(lookup.position(kFixedStation).x()
-          == Catch::Approx(kFixEasting).margin(kPlacementMarginMeters));
-    CHECK(bareFixWarnings(root).isEmpty());
+    REQUIRE(lookup.hasPosition(kEastStation));
+    const QVector3D fixed = lookup.position(kFixedStation);
+    CHECK(fixed.x() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(fixed.y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(fixed.z() == Catch::Approx(kFixElevation).margin(kPlacementMarginMeters));
+    CHECK(lookup.position(kEastStation).x()
+          == Catch::Approx(kEastLegMeters).margin(kPlacementMarginMeters));
+    CHECK(bareFixWarnings(root)
+          == QStringList({placedAtOriginWarning(kBareFixFileName, kFixedStation)}));
 }
 
 TEST_CASE("A trip's attachment carries its own system for its bare fixes",
-          "[AttachInclude][BareFixCS]")
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
 {
     auto fixture = makeProject(QStringLiteral("bare-fix-trip"), true);
     cwCave* cave = fixture->cave;
@@ -446,7 +633,11 @@ TEST_CASE("A trip's attachment carries its own system for its bare fixes",
     cwLinePlotManager* linePlot = linePlotOf(fixture.get());
     {
         INFO("driver:\n" << linePlot->driverSource().toStdString());
-        CHECK(inputSystemLineAtInclude(linePlot->driverSource()).isEmpty());
+        INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+        // Nothing chosen: the include carries a system of CaveWhere's own
+        // that places the file's fix at the frame's origin.
+        checkIncludePlacesOnOrigin(linePlot->driverSource(), kBareFixFileName, kBareFix);
+        CHECK_FALSE(linePlot->hasSolveError());
         // The trip's node carries the warning for it.
         CHECK(bareFixWarnings(cave).size() == 1);
     }
@@ -474,8 +665,8 @@ TEST_CASE("A trip's attachment carries its own system for its bare fixes",
     CHECK(readInSystem == kUtm48N);
 }
 
-TEST_CASE("A native fix on the parent node leaves no system in force at a child source root's include",
-          "[AttachInclude][BareFixCS][NativeCSScope]")
+TEST_CASE("A native fix on the parent node leaves its system out of a child source root's include",
+          "[AttachInclude][BareFixCS][NativeCSScope][BareFixOrigin]")
 {
     const bool autoDeclination = GENERATE(true, false);
     INFO("auto declination: " << autoDeclination);
@@ -493,9 +684,10 @@ TEST_CASE("A native fix on the parent node leaves no system in force at a child 
     REQUIRE(driver.contains(QStringLiteral("*fix ") + kMainFixStation));
     CHECK(root->externalCenterline().fixCoordinateSystem().isEmpty());
 
-    CHECK(inputSystemLineAtInclude(driver).isEmpty());
-    CHECK(linePlot->hasSolveError());
-    CHECK(linePlot->solveErrorSummary().contains(kInputProjectionError));
+    // The system at the include is CaveWhere's translation onto the frame's
+    // origin, not the native fix's.
+    checkIncludePlacesOnOrigin(driver, kBareFixFileName, kBareFix);
+    CHECK_FALSE(linePlot->hasSolveError());
     CHECK(bareFixWarnings(root).size() == 1);
 }
 
@@ -535,8 +727,8 @@ TEST_CASE("A bare file fix under a cave shows on the region root's warnings and 
     CHECK(regionRoot->errorModel()->warningCount() >= 1);
 }
 
-TEST_CASE("A native fix on the node leaves no system in force at its trip attachment's include",
-          "[AttachInclude][BareFixCS][NativeCSScope]")
+TEST_CASE("A native fix on the node leaves its system out of its trip attachment's include",
+          "[AttachInclude][BareFixCS][NativeCSScope][BareFixOrigin]")
 {
     const bool autoDeclination = GENERATE(true, false);
     INFO("auto declination: " << autoDeclination);
@@ -553,9 +745,8 @@ TEST_CASE("A native fix on the node leaves no system in force at its trip attach
     REQUIRE(driver.contains(QStringLiteral("*fix ") + kMainFixStation));
     CHECK(fixture->trip->externalCenterline().fixCoordinateSystem().isEmpty());
 
-    CHECK(inputSystemLineAtInclude(driver).isEmpty());
-    CHECK(linePlot->hasSolveError());
-    CHECK(linePlot->solveErrorSummary().contains(kInputProjectionError));
+    checkIncludePlacesOnOrigin(driver, kBareFixFileName, kBareFix);
+    CHECK_FALSE(linePlot->hasSolveError());
     CHECK(bareFixWarnings(main).size() == 1);
 }
 
@@ -674,8 +865,8 @@ TEST_CASE("A bare file fix with standard errors gives a project with no frame on
     CHECK(fixed.z() == Catch::Approx(kFixElevation).margin(kPlacementMarginMeters));
 }
 
-TEST_CASE("Unsetting the system that gave the project its frame clears the frame",
-          "[AttachInclude][BareFixCS][BareFixFrame]")
+TEST_CASE("Unsetting the system that gave the project its frame returns it to the local grid",
+          "[AttachInclude][BareFixCS][BareFixFrame][BareFixOrigin]")
 {
     auto fixture = makeProject(QStringLiteral("bare-fix-unset-frame"), false);
     cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
@@ -684,25 +875,26 @@ TEST_CASE("Unsetting the system that gave the project its frame clears the frame
 
     chooseFixSystem(root, kUtm48N);
     REQUIRE(waitForSeededFrame(fixture.get()));
+    REQUIRE(bareFixWarnings(root).isEmpty());
 
     chooseFixSystem(root, QString());
-    REQUIRE(tryWait(kAttachWaitMs, [geoReference]() {
-        return !geoReference->hasCoordinateSystem();
+    CHECK(tryWait(kAttachWaitMs, [geoReference]() {
+        return geoReference->state() == cwGeoReference::LocalGrid;
     }));
-    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
-    CHECK(tryWait(kAttachWaitMs, [linePlot]() {
-        return !linePlot->driverSource().contains(kOutputSystemPrefix);
-    }));
-    drainPipelines(fixture.get());
+    CHECK(waitForStationAtOrigin(fixture.get(), root, kFixedStation));
 
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
     INFO("driver:\n" << linePlot->driverSource().toStdString());
-    CHECK(geoReference->state() == cwGeoReference::Ungeoreferenced);
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+    CHECK(geoReference->localCoordinateSystem().isEmpty());
     REQUIRE_FALSE(linePlot->hasSolveError());
     const cwStationPositionLookup& lookup = root->scopedPositions();
     REQUIRE(lookup.hasPosition(kFixedStation));
-    CHECK(lookup.position(kFixedStation).x()
-          == Catch::Approx(kFixEasting).margin(kPlacementMarginMeters));
-    CHECK(bareFixWarnings(root).isEmpty());
+    CHECK(lookup.position(kFixedStation).x() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(lookup.position(kFixedStation).y() == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(bareFixWarnings(root)
+          == QStringList({placedAtOriginWarning(kBareFixFileName, kFixedStation)}));
 }
 
 TEST_CASE("A frame a bare file fix's system gave the project survives save and reload",
@@ -896,4 +1088,255 @@ TEST_CASE("An attachment owner converges at a file fix that names its own system
     INFO("readout: " << convergence->text().toStdString());
     CHECK(valid);
     CHECK(convergence->text().contains(kTreeOwnCsFixStation));
+}
+
+TEST_CASE("A bare-fix file in a native fix's frame solves with its first fix at the origin and its shape intact",
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-origin-native-frame"), false);
+    setUpNativeFrameAt(fixture.get(), kNearFix);
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kOriginFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kOriginFileName));
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    const QString driver = linePlot->driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    INFO("solve error: " << linePlot->solveErrorSummary().toStdString());
+    CHECK_FALSE(linePlot->solveErrorSummary().contains(kInputProjectionError));
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    // The include's input system is the frame's own projection moved so the
+    // first bare fix's numbers land on the origin: a pure translation.
+    checkIncludePlacesOnOrigin(driver, kOriginFileName, kOriginFix);
+    const auto placedSecond = placedByIncludeSystem(driver, kOriginFileName, kSecondFix);
+    REQUIRE(placedSecond.has_value());
+    CHECK(placedSecond->x == Catch::Approx(kSecondFix.x - kOriginFix.x).margin(kTranslationMarginMeters));
+    CHECK(placedSecond->y == Catch::Approx(kSecondFix.y - kOriginFix.y).margin(kTranslationMarginMeters));
+    CHECK(placedSecond->z == Catch::Approx(kSecondFix.z).margin(kTranslationMarginMeters));
+
+    checkPlacedAtOrigin(root->scopedPositions());
+
+    CHECK(bareFixWarnings(root)
+          == QStringList({placedAtOriginWarning(
+              kOriginFileName, QStringList({kOriginFixStation, kSecondFixStation})
+                                   .join(QStringLiteral(", ")))}));
+    CHECK(subtreeAttachedFixFor(root, kOriginFixStation).readInSystem.isEmpty());
+}
+
+TEST_CASE("Choosing a system for a file placed at the origin moves it to its real place, and unsetting moves it back",
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-origin-choose"), false);
+    setUpNativeFrameAt(fixture.get(), kNearFix);
+    const cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    const QString frame = geoReference->localCoordinateSystem();
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kOriginFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kOriginFileName));
+
+    chooseFixSystem(root, kUtm48N);
+    const auto realPlace =
+        cwCoordinateTransform::transformPoint(kUtm48NFrame, frame, kOriginFix);
+    REQUIRE(realPlace.has_value());
+    CHECK(tryWait(kAttachWaitMs, [&]() {
+        const cwStationPositionLookup& lookup = root->scopedPositions();
+        return lookup.hasPosition(kOriginFixStation)
+               && std::abs(lookup.position(kOriginFixStation).x() - realPlace->x)
+                      <= kPlacementMarginMeters;
+    }));
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    {
+        INFO("driver after the choice:\n" << linePlot->driverSource().toStdString());
+        REQUIRE_FALSE(linePlot->hasSolveError());
+        const QVector3D placed = root->scopedPositions().position(kOriginFixStation);
+        CHECK(placed.x() == Catch::Approx(realPlace->x).margin(kPlacementMarginMeters));
+        CHECK(placed.y() == Catch::Approx(realPlace->y).margin(kPlacementMarginMeters));
+        CHECK(bareFixWarnings(root).isEmpty());
+        CHECK(geoReference->localCoordinateSystem() == frame);
+    }
+
+    chooseFixSystem(root, QString());
+    CHECK(waitForStationAtOrigin(fixture.get(), root, kOriginFixStation));
+
+    INFO("driver after unsetting:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log after unsetting:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    checkPlacedAtOrigin(root->scopedPositions());
+    CHECK(bareFixWarnings(root).size() == 1);
+    CHECK(geoReference->localCoordinateSystem() == frame);
+}
+
+TEST_CASE("A bare-fix file in a project with no frame puts the project on a local grid centered on its first fix",
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-origin-no-frame"), false);
+    cwGeoReference* geoReference = fixture->project->cavingRegion()->geoReference();
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kOriginFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kOriginFileName));
+    CHECK(waitForStationAtOrigin(fixture.get(), root, kOriginFixStation));
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    const QString driver = linePlot->driverSource();
+    INFO("driver:\n" << driver.toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+    CHECK_FALSE(geoReference->hasCoordinateSystem());
+    CHECK(geoReference->localCoordinateSystem().isEmpty());
+    CHECK_FALSE(geoReference->anchor().isValid());
+
+    // The driver solves in a system with no geography the user sees, and the
+    // include's input system translates the file onto its origin.
+    CHECK_FALSE(outputSystemOf(driver).isEmpty());
+    checkIncludePlacesOnOrigin(driver, kOriginFileName, kOriginFix);
+
+    checkPlacedAtOrigin(root->scopedPositions());
+    CHECK(bareFixWarnings(root).size() == 1);
+}
+
+TEST_CASE("A project on the local grid is stored and reloaded on the local grid",
+          "[AttachInclude][BareFixCS][BareFixOrigin][SaveLoad]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-origin-round-trip"), false);
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kOriginFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kOriginFileName));
+    const QUuid rootId = root->id();
+    REQUIRE(tryWait(kAttachWaitMs, [&fixture]() {
+        return fixture->project->cavingRegion()->geoReference()->state()
+               == cwGeoReference::LocalGrid;
+    }));
+    drainPipelines(fixture.get());
+
+    QTemporaryDir destinationDir;
+    auto freshRoot = saveAndReopen(fixture, destinationDir,
+                                   QStringLiteral("bare-origin-reopened.cwproj"));
+
+    const cwGeoReference* reopenedGeoReference = freshRoot->region()->geoReference();
+    CHECK(reopenedGeoReference->state() == cwGeoReference::LocalGrid);
+    CHECK(reopenedGeoReference->localCoordinateSystem().isEmpty());
+    CHECK_FALSE(reopenedGeoReference->hasCoordinateSystem());
+
+    cwSurveyNode* reopened = nodeWithId(freshRoot.get(), rootId);
+    REQUIRE(reopened != nullptr);
+    CHECK(tryWait(kAttachWaitMs, [reopened]() {
+        const cwStationPositionLookup& lookup = reopened->scopedPositions();
+        return lookup.hasPosition(kOriginFixStation)
+               && std::abs(lookup.position(kOriginFixStation).x()) <= kShapeMarginMeters;
+    }));
+    drainRoot(freshRoot.get());
+    INFO("driver after reload:\n"
+         << freshRoot->linePlotManager()->driverSource().toStdString());
+    CHECK_FALSE(freshRoot->linePlotManager()->hasSolveError());
+    CHECK(reopenedGeoReference->state() == cwGeoReference::LocalGrid);
+    checkPlacedAtOrigin(reopened->scopedPositions());
+}
+
+TEST_CASE("Two bare-fix files each center their own first fix on the origin",
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-origin-two-files"), false);
+    cwCave* first = attachSourceUnderRegion(fixture.get(), fixturePath(kOriginFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kOriginFileName));
+    cwCave* second = attachSourceUnderRegion(fixture.get(), fixturePath(kSecondFileFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kSecondFileName));
+    CHECK(waitForStationAtOrigin(fixture.get(), first, kOriginFixStation));
+    CHECK(waitForStationAtOrigin(fixture.get(), second, kSecondFileFixStation));
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    checkPlacedAtOrigin(first->scopedPositions());
+    const cwStationPositionLookup& secondLookup = second->scopedPositions();
+    REQUIRE(secondLookup.hasPosition(kSecondFileFixStation));
+    const QVector3D secondOrigin = secondLookup.position(kSecondFileFixStation);
+    CHECK(secondOrigin.x() == Catch::Approx(0.0).margin(kShapeMarginMeters));
+    CHECK(secondOrigin.y() == Catch::Approx(0.0).margin(kShapeMarginMeters));
+    CHECK(secondOrigin.z() == Catch::Approx(kSecondFileFixElevation).margin(kShapeMarginMeters));
+
+    CHECK(bareFixWarnings(first).size() == 1);
+    CHECK(bareFixWarnings(second).size() == 1);
+}
+
+TEST_CASE("A bare-fix file tied to the native survey is placed at the origin and keeps its fix",
+          "[AttachInclude][BareFixCS][BareFixOrigin][Equate]")
+{
+    auto fixture = makeProject(QStringLiteral("bare-origin-tied"), false);
+    cwCave* main = setUpNativeFrameAt(fixture.get(), kNearFix);
+    cwCave* root = attachSourceUnderRegion(fixture.get(), fixturePath(kOriginFixture));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), kOriginFileName));
+
+    fixture->project->cavingRegion()->equates()->appendEquate(cwEquate({
+        cwStationHandle(cwStationHandle::NativeCave, root->id(), kTiedStation),
+        cwStationHandle(cwStationHandle::NativeCave, main->id(), kNearLegStation)}));
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    CHECK(tryWait(kAttachWaitMs, [linePlot]() {
+        return linePlot->driverSource().contains(QStringLiteral("*equate"));
+    }));
+    drainPipelines(fixture.get());
+
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    INFO("solve error: " << linePlot->solveErrorSummary().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+
+    // Both fixes hold; cavern spreads the misclosure over the legs between.
+    const cwStationPositionLookup& lookup = root->scopedPositions();
+    REQUIRE(lookup.hasPosition(kOriginFixStation));
+    const QVector3D origin = lookup.position(kOriginFixStation);
+    CHECK(origin.x() == Catch::Approx(0.0).margin(kShapeMarginMeters));
+    CHECK(origin.y() == Catch::Approx(0.0).margin(kShapeMarginMeters));
+    CHECK(origin.z() == Catch::Approx(kOriginFix.z).margin(kShapeMarginMeters));
+    const cwStationPositionLookup& nativeLookup = main->scopedPositions();
+    REQUIRE(nativeLookup.hasPosition(kNearFixStation));
+    CHECK(nativeLookup.position(kNearFixStation).x()
+          == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(nativeLookup.position(kNearFixStation).y()
+          == Catch::Approx(0.0).margin(kPlacementMarginMeters));
+    CHECK(bareFixWarnings(root).size() == 1);
+}
+
+TEST_CASE("A file whose own *cs out names a system reads its bare fix in it in a native fix's frame",
+          "[AttachInclude][BareFixCS][BareFixOrigin]")
+{
+    // north_cs_out.svx: houping fixes h1 under its own *cs UTM48N, and
+    // sanqiao's e1 names none, so the file's *cs out is what e1 is in.
+    const cwGeoPoint northFix(500100.0, 3000100.0, 300.0);
+    const QString northFileName = QStringLiteral("north_cs_out.svx");
+    auto fixture = makeProject(QStringLiteral("bare-origin-read-in"), false);
+    setUpNativeFrameAt(fixture.get(), kBareFix);
+    const QString frame = fixture->project->cavingRegion()->geoReference()->localCoordinateSystem();
+    cwCave* root = attachSourceUnderRegion(fixture.get(),
+                                           bareFixTreeFixture(QStringLiteral("north_cs_out.svx")));
+    REQUIRE(waitForDriverIncludingFixture(fixture.get(), northFileName));
+
+    const auto realPlace = cwCoordinateTransform::transformPoint(kUtm48NFrame, frame, northFix);
+    REQUIRE(realPlace.has_value());
+    CHECK(tryWait(kAttachWaitMs, [&]() {
+        const cwStationPositionLookup& lookup = root->scopedPositions();
+        return lookup.hasPosition(kTreeBareFixStation)
+               && std::abs(lookup.position(kTreeBareFixStation).x() - realPlace->x)
+                      <= kPlacementMarginMeters;
+    }));
+    drainPipelines(fixture.get());
+
+    cwLinePlotManager* linePlot = linePlotOf(fixture.get());
+    INFO("driver:\n" << linePlot->driverSource().toStdString());
+    INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
+    INFO("solve error: " << linePlot->solveErrorSummary().toStdString());
+    REQUIRE_FALSE(linePlot->hasSolveError());
+    CHECK(inputSystemLineAtInclude(linePlot->driverSource(), northFileName)
+          == QStringLiteral("*cs %1").arg(kUtm48N));
+    const QVector3D placed = root->scopedPositions().position(kTreeBareFixStation);
+    CHECK(placed.x() == Catch::Approx(realPlace->x).margin(kPlacementMarginMeters));
+    CHECK(placed.y() == Catch::Approx(realPlace->y).margin(kPlacementMarginMeters));
+
+    const cwAttachedFix row = subtreeAttachedFixFor(root, kTreeBareFixStation);
+    CHECK(row.readInSystem == kUtm48N);
+    CHECK(row.readInFileOutput);
+    CHECK(bareFixWarnings(root).isEmpty());
 }

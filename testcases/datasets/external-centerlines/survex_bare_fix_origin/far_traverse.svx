@@ -1,0 +1,6 @@
+; No fix at all, and one 120 km leg east: cavern starts the survey at the
+; origin, so its bounding box centers 60 km out.
+*begin far
+*data normal from to tape compass clino
+a b 120000 90 0
+*end far

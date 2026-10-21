@@ -596,8 +596,8 @@ TEST_CASE("The region root's fix station tree counts every fix in the project",
           == nativeFixes + kFixtureFixCount);
 }
 
-TEST_CASE("A native fix on the owner leaves no system in force at its file's include",
-          "[FixStationTreeModel][BareFixCS]")
+TEST_CASE("A native fix on the owner leaves its system out of its file's include",
+          "[FixStationTreeModel][BareFixCS][BareFixOrigin]")
 {
     auto fixture = makeProject(QStringLiteral("fix-tree-native-cs-scope"));
     georeference(fixture.get());
@@ -617,8 +617,10 @@ TEST_CASE("A native fix on the owner leaves no system in force at its file's inc
     INFO("driver:\n" << linePlot->driverSource().toStdString());
     INFO("cavern log:\n" << linePlot->cavernLog().toStdString());
     CHECK(root->externalCenterline().fixCoordinateSystem().isEmpty());
-    CHECK(linePlot->hasSolveError());
-    CHECK(linePlot->solveErrorSummary().contains(kInputProjectionError));
+    // The file's bare fix reads in CaveWhere's translation onto the project
+    // origin rather than the native fix's system, and the project solves.
+    CHECK_FALSE(linePlot->hasSolveError());
+    CHECK_FALSE(linePlot->solveErrorSummary().contains(kInputProjectionError));
     CHECK(bareFixWarnings(root).size() == 1);
 }
 

@@ -15,6 +15,7 @@ class cwCavingRegion;
 #include "cwFindFloatingSurveys.h"
 #include "cwFindUnconnectedSurveyChunks.h"
 #include "cwCavingRegionData.h"
+#include "cwGeoPoint.h"
 #include "cwLinePlotGeometry.h"
 #include "cwExternalCenterlineScanner.h"
 class cwScrap;
@@ -99,6 +100,11 @@ public:
         // and names its own *cs out, that output system as the file writes
         // it (see cwSurvexExporterRegion::Options::externalOutputSystems).
         QHash<QUuid, QString> externalOutputSystems;
+
+        // Per cave or trip owner whose file fixes stations with no input *cs,
+        // the first such fix (see
+        // cwSurvexExporterRegion::Options::externalBareFixOrigins).
+        QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
 
         // The previous solve's region lookup and network
         // (cwCavingRegion::stationPositions / network). The worker diffs its
@@ -296,6 +302,10 @@ public:
         // Owners whose Compass .mak names a zone and no datum, and those
         // files. Read on the main thread when the solve starts, to say so.
         QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> defaultedDatums;
+        // Owners whose file fixes stations bare, and the first of those fixes
+        // (see Input::externalBareFixOrigins). Also read on the main thread,
+        // to warn about the owners it places at the origin.
+        QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
     };
 
     static Input buildInput(const cwCavingRegion* region,

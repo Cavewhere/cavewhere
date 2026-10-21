@@ -7,6 +7,7 @@
 
 #include "cwSurvexExporterRegion.h"
 #include "cwLinePlotErrorCodes.h"
+#include "cwLocalProjection.h"
 #include "cwSurvexExporterCaveTask.h"
 #include "cwSurvexExporterUtils.h"
 #include "cwSurvexCS.h"
@@ -44,10 +45,13 @@ cwSurvexExporterRegion::exportRegion(const cwCavingRegionData& region,
             : cwSurvexCS::SidecarPolicy::OfficialSyntax;
     cwSurvexCS::SidecarWriter sidecars(outputPath, sidecarPolicy);
 
+    // A local grid has no frame of its own to name, so its solve runs in the
+    // carrier its attached files are translated onto.
+    const QString frameCS = region.geoReference.state == cwGeoReference::LocalGrid
+        ? cwLocalProjection::localGridSystem()
+        : region.geoReference.localCoordinateSystem;
     const QString outputCS =
-        cwSurvexExporterUtils::resolveOutputCS(region,
-                                               region.geoReference.localCoordinateSystem,
-                                               options.outputCSPolicy);
+        cwSurvexExporterUtils::resolveOutputCS(region, frameCS, options.outputCSPolicy);
     if (!outputCS.isEmpty()) {
         cwSurvexCS::writeCsLine(stream, sidecars, outputCS, true);
     }

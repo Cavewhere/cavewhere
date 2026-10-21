@@ -11,6 +11,7 @@
 #include "CaveWhereLibExport.h"
 #include "Monad/Result.h"
 #include "cwCavingRegionData.h"
+#include "cwGeoPoint.h"
 #include "cwSurvexExporterUtils.h"
 
 #include <QHash>
@@ -92,12 +93,17 @@ public:
      *
      * \c externalOutputSystems maps a cave or trip owner whose file fixes
      * stations with no input \c *cs, and names a \c *cs \c out of its own, to
-     * that output system as the file writes it, while that system still
-     * reads those fixes in (cwExternalCenterlineManager::fileOutputReadsIn).
-     * In a run whose project names no frame, the file's \c *cs \c out is the
+     * that output system as the file writes it. In a run whose project names no frame, the file's \c *cs \c out is the
      * run's output system; under the project's frame it is the input system
      * at the file's \c *include alone (see
      * cwSurvexExporterCaveTask::writeIncludeSystem).
+     *
+     * \c externalBareFixOrigins maps a cave or trip owner whose file fixes
+     * stations with no input \c *cs to the first of those fixes, as the file
+     * writes its numbers. Under an output system, an owner with no system
+     * chosen and none of its file's own is read in the output system
+     * translated so that fix lands on the origin
+     * (cwLocalProjection::translated). Only the working-frame solve passes it.
      */
     struct CAVEWHERE_LIB_EXPORT Options {
         QHash<QUuid, QString> caveAttachmentDirs;
@@ -106,6 +112,7 @@ public:
         QSet<QUuid> excludedExternalOwners;
         QHash<QUuid, QStringList> externalFixedStations;
         QHash<QUuid, QString> externalOutputSystems;
+        QHash<QUuid, cwGeoPoint> externalBareFixOrigins;
         OutputCSPolicy outputCSPolicy = OutputCSPolicy::Shareable;
     };
 

@@ -18,7 +18,6 @@
 #include "cwExternalCenterlineSync.h"
 #include "cwExternalStationHarvest.h"
 #include "cwGeoReference.h"
-#include "cwLocalProjectionManager.h"
 #include "cwSaveLoad.h"
 #include "cwSurveyChunkSignaler.h"
 #include "cwSurveyNoteModel.h"
@@ -385,10 +384,6 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
                    this, &cwExternalCenterlineManager::recomputeWatchSet);
         disconnect(m_region.data(), &cwCavingRegion::ownersDeleted,
                    this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners);
-        disconnect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
-                   this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
-        disconnect(m_region->localProjection(), &cwLocalProjectionManager::attachedFixesTakePartChanged,
-                   this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
     }
     m_region = region;
     m_signaler->setRegion(region);
@@ -405,12 +400,6 @@ void cwExternalCenterlineManager::setRegion(cwCavingRegion* region)
         // fires only on the delete verbs, which is what the store needs.
         connect(m_region.data(), &cwCavingRegion::ownersDeleted,
                 this, &cwExternalCenterlineManager::clearBreadcrumbsForDeletedOwners);
-        // Gaining or losing a frame, or attached fixes joining or leaving it,
-        // changes what a bare fix is read in.
-        connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
-                this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
-        connect(m_region->localProjection(), &cwLocalProjectionManager::attachedFixesTakePartChanged,
-                this, &cwExternalCenterlineManager::refreshAllAttachedFixes);
     }
 
     if (m_region.isNull()) {
@@ -464,7 +453,8 @@ cwLinePlotTask::ExternalCenterlineInputs cwExternalCenterlineManager::solveInput
              bareFixedStations(),
              m_ownerFixedStations,
              bareFixOutputSystems(),
-             m_ownerDefaultedDatums };
+             m_ownerDefaultedDatums,
+             bareFixOrigins() };
 }
 
 void cwExternalCenterlineManager::setExternalSourceSettings(cwExternalSourceSettings* settings)
@@ -1114,31 +1104,16 @@ QSet<QString> cwExternalCenterlineManager::derivedNodePaths(const cwSurveyNode* 
     return paths;
 }
 
-void cwExternalCenterlineManager::refreshAllAttachedFixes()
-{
-    if (m_region.isNull()) {
-        return;
-    }
-    for (cwSurveyNode* node : m_region->rootNode()->allNodes()) {
-        refreshAttachedFixes(node);
-    }
-}
-
 cwExternalCenterlineManager::ReadInSystem cwExternalCenterlineManager::readInSystemFor(
     const QUuid& ownerId, const cwExternalCenterline& centerline) const
 {
-    const bool georeferenced =
-        !m_region.isNull() && m_region->geoReference()->hasCoordinateSystem();
-    // Only an owner whose file names a *cs out asks fileOutputReadsIn(), which
-    // in a Frozen frame gathers every fix and layer input.
-    const QString ownOutput = m_ownerOutputSystems.value(ownerId);
-    const QString fileOutput =
-        !ownOutput.isEmpty() && fileOutputReadsIn() ? ownOutput : QString();
-    // Like the driver, which names the chosen system only where some *cs out
-    // is in force for it.
-    if (!centerline.fixCoordinateSystem().isEmpty() && (georeferenced || !fileOutput.isEmpty())) {
+    // Independent of the frame: a frame follows the attached fixes, so rows
+    // that followed the frame would feed back into it. A bare fix with a
+    // system chosen always gives the project an output system to read it in.
+    if (!centerline.fixCoordinateSystem().isEmpty()) {
         return {centerline.fixCoordinateSystem(), false};
     }
+    const QString fileOutput = m_ownerOutputSystems.value(ownerId);
     return {fileOutput, !fileOutput.isEmpty()};
 }
 
@@ -1160,17 +1135,10 @@ void cwExternalCenterlineManager::refreshSenderAttachedFixes()
     }
 }
 
-bool cwExternalCenterlineManager::fileOutputReadsIn() const
-{
-    return !m_region.isNull()
-           && (!m_region->geoReference()->hasCoordinateSystem()
-               || m_region->localProjection()->attachedFixesTakePart());
-}
-
 QHash<QUuid, QString> cwExternalCenterlineManager::bareFixOutputSystems() const
 {
     QHash<QUuid, QString> systems;
-    if (!fileOutputReadsIn()) {
+    if (m_region.isNull()) {
         return systems;
     }
     const QHash<QUuid, QStringList> bare = bareFixedStations();
@@ -1181,6 +1149,24 @@ QHash<QUuid, QString> cwExternalCenterlineManager::bareFixOutputSystems() const
         }
     }
     return systems;
+}
+
+QHash<QUuid, cwGeoPoint> cwExternalCenterlineManager::bareFixOrigins() const
+{
+    QHash<QUuid, cwGeoPoint> origins;
+    for (auto it = m_ownerFixes.constBegin(); it != m_ownerFixes.constEnd(); ++it) {
+        for (const cwExternalCenterlineScanner::ScannedFix& fix : it.value()) {
+            if (fix.hasCoordinateSystem()) {
+                continue;
+            }
+            const std::optional<cwGeoPoint> position = cwAttachedFix::positionOf(fix.coordinate);
+            if (position.has_value()) {
+                origins.insert(it.key(), *position);
+                break;
+            }
+        }
+    }
+    return origins;
 }
 
 QHash<QUuid, QStringList> cwExternalCenterlineManager::bareFixedStations() const

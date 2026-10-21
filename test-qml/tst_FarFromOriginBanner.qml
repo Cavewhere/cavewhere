@@ -7,8 +7,8 @@ import QmlTestRecorder
 // MP.4 of plans/SURVEY_TREE_PLAN.html: a project with no geographic
 // coordinate system whose survey solves far from the origin raises a banner
 // in the window's banner strip. "Show it" frames the survey in the 3D view,
-// "Fix Stations…" opens the page where a system is chosen, and the banner
-// clears once one is.
+// and "Fix Stations…" opens the page where a system is chosen. A file of
+// bare fixes is placed at the origin (FX.24), so it raises none.
 MainWindowTest {
     id: rootId
 
@@ -16,13 +16,15 @@ MainWindowTest {
         name: "FarFromOriginBanner"
         when: windowShown
 
-        // bare_fix.svx fixes A at 500000 3000000 and runs 10 m east, then
-        // 10 m north, so the framed survey's center is 5 m in from A on each
-        // axis. Solved positions are float32 (a quarter meter per step out
-        // there), and the camera's center lands on the framed box's center.
-        readonly property real surveyCenterX: 500005
-        readonly property real surveyCenterY: 3000005
+        // far_traverse.svx fixes nothing and runs one 120 km leg east from
+        // the origin, so the framed survey's center is 60 km east of it. The
+        // camera's center lands on the framed box's center.
+        readonly property real surveyCenterX: 60000
+        readonly property real surveyCenterY: 0
         readonly property real centerMarginMeters: 50
+        // A survey whose framed center sits this close to the origin is in
+        // plain view.
+        readonly property real nearOriginMeters: 100
         readonly property int attachWaitMs: 15000
 
         LinkGenerator {
@@ -59,19 +61,13 @@ MainWindowTest {
             return item
         }
 
-        function attachBareFix(projectBaseName) {
+        function attachFarTraverse(projectBaseName) {
             const sourceRoot = makeSavedCaveAttach(
                                  projectBaseName,
-                                 "external-centerlines/survex_bare_fix/bare_fix.svx")
+                                 "external-centerlines/survex_bare_fix_origin/far_traverse.svx")
             verify(!RootData.region.geoReference.hasCoordinateSystem,
                    "the project has no geographic coordinate system")
             return sourceRoot
-        }
-
-        function chooseFixSystem(owner, cs) {
-            const centerline = owner.externalCenterline
-            centerline.fixCoordinateSystem = cs
-            owner.externalCenterline = centerline
         }
 
         function turnTableInteraction() {
@@ -83,19 +79,19 @@ MainWindowTest {
         }
 
         function test_bannerShowsForAFarSurveyWithNoSystem() {
-            attachBareFix("far-from-origin-shows")
+            attachFarTraverse("far-from-origin-shows")
 
             tryVerify(() => banner().visible, attachWaitMs,
-                      "the banner shows for a survey 3,000 km out with no system")
+                      "the banner shows for a survey 60 km out with no system")
             const message = findInBanner("farFromOriginMessage")
             verify(message.text.indexOf("No geographic coordinate system") >= 0,
                    "the message names the problem; got: " + message.text)
-            verify(/3\D?041\s*km/.test(message.text),
+            verify(/60\s*km/.test(message.text),
                    "the message says how far out the survey sits; got: " + message.text)
         }
 
         function test_showItFramesTheSurvey() {
-            attachBareFix("far-from-origin-show-it")
+            attachFarTraverse("far-from-origin-show-it")
             tryVerify(() => banner().visible, attachWaitMs, "the banner is up")
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data"
@@ -112,7 +108,7 @@ MainWindowTest {
         }
 
         function test_fixStationsOpensTheProjectsFixStations() {
-            attachBareFix("far-from-origin-fix-stations")
+            attachFarTraverse("far-from-origin-fix-stations")
             tryVerify(() => banner().visible, attachWaitMs, "the banner is up")
             waitForRendering(rootId)
 
@@ -122,20 +118,25 @@ MainWindowTest {
                        linkGeneratorId.fixStationsLink(RootData.region.rootNode))
         }
 
-        function test_choosingASystemClearsTheBanner() {
-            const sourceRoot = attachBareFix("far-from-origin-choose")
-            tryVerify(() => banner().visible, attachWaitMs, "the banner is up")
+        function test_aBareFixFileSitsAtTheOriginWithNoBanner() {
+            makeSavedCaveAttach("far-from-origin-bare-fix",
+                                "external-centerlines/survex_bare_fix/bare_fix.svx")
 
-            chooseFixSystem(sourceRoot, "UTM48N")
-
-            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, attachWaitMs,
-                      "choosing a system gives the project a frame")
-            tryVerify(() => !banner().visible, attachWaitMs,
-                      "the banner clears once a system is chosen")
+            // bare_fix.svx fixes A at 500000 3000000 with no system: the
+            // project goes on the local grid, with A at the origin.
+            tryCompare(RootData.region.geoReference, "state", GeoReference.LocalGrid, attachWaitMs)
+            RootData.futureManagerModel.waitForFinished()
+            verify(!RootData.region.geoReference.hasCoordinateSystem,
+                   "the local grid has no geographic coordinate system")
+            verify(RootData.region.farFromOriginNotice.distanceFromOrigin < nearOriginMeters,
+                   "the survey sits at the origin; it is "
+                   + RootData.region.farFromOriginNotice.distanceFromOrigin + " m out")
+            verify(!RootData.region.farFromOriginNotice.shown, "nothing sits far out")
+            verify(!banner().visible, "no banner for a survey at the origin")
         }
 
         function test_dismissHidesTheBannerUntilTheSurveyMovesAgain() {
-            attachBareFix("far-from-origin-dismiss")
+            attachFarTraverse("far-from-origin-dismiss")
             tryVerify(() => banner().visible, attachWaitMs, "the banner is up")
             waitForRendering(rootId)
 
@@ -149,7 +150,7 @@ MainWindowTest {
             tryVerify(() => !RootData.region.farFromOriginNotice.shown, attachWaitMs,
                       "a new project has nothing far out")
 
-            attachBareFix("far-from-origin-dismiss-again")
+            attachFarTraverse("far-from-origin-dismiss-again")
             tryVerify(() => banner().visible, attachWaitMs,
                       "the banner comes back when the survey lands far out again")
         }

@@ -327,3 +327,28 @@ TEST_CASE("cwGeoReference describes the frame it is holding", "[cwGeoReference]"
         CHECK(reference.originLatitude() == Catch::Approx(37.1832));
     }
 }
+
+TEST_CASE("cwGeoReference holds a local grid with no frame and no geography",
+          "[cwGeoReference][LocalGrid]")
+{
+    cwGeoReference reference;
+
+    SECTION("a local grid with no frame is kept, and is not georeferenced")
+    {
+        reference.restore(cwGeoReference::LocalGrid, QString(), fixAnchor(), QString());
+        CHECK(reference.state() == cwGeoReference::LocalGrid);
+        CHECK_FALSE(reference.hasCoordinateSystem());
+        CHECK(reference.localCoordinateSystem().isEmpty());
+        CHECK_FALSE(reference.anchor().isValid());
+        CHECK_FALSE(reference.hasOrigin());
+        CHECK(reference.datumName().isEmpty());
+    }
+
+    SECTION("a local grid that names a frame is that frame, frozen")
+    {
+        reference.restore(cwGeoReference::LocalGrid, kLocalCS, fixAnchor(), QString());
+        CHECK(reference.state() == cwGeoReference::Frozen);
+        CHECK(reference.localCoordinateSystem() == kLocalCS);
+        CHECK_FALSE(reference.anchor().isValid());
+    }
+}

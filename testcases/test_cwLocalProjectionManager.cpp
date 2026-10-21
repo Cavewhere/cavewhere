@@ -1420,3 +1420,110 @@ TEST_CASE("Recentering an attachment-only project on the data's middle stays rec
                         kAnchorEasting, kDistantNorthing);
     }
 }
+
+TEST_CASE("A bare attached fix with no system chosen puts a project with no frame on the local grid",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwCave* attached = addAttachedCave(&region, QStringLiteral("Grid Cave"));
+    attached->setAttachedFixes({makeAttachedFix(QStringLiteral("g1"), attached->id(),
+                                                kAnchorEasting, kAnchorNorthing)});
+
+    cwGeoReference* geoReference = region.geoReference();
+    CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+    CHECK_FALSE(geoReference->hasCoordinateSystem());
+    CHECK(geoReference->localCoordinateSystem().isEmpty());
+    CHECK_FALSE(geoReference->anchor().isValid());
+    CHECK(region.localProjection()->anchorDescription().isEmpty());
+
+    SECTION("a native fix takes the project over, and losing it returns the local grid")
+    {
+        cwCave* native = addCaveWithFixes(&region, {
+            makeFix(QStringLiteral("A1"), kUtm12N, kAnchorEasting, kAnchorNorthing, kElevation)});
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
+        checkCenteredOn(geoReference->localCoordinateSystem(), kUtm12N,
+                        kAnchorEasting, kAnchorNorthing);
+
+        native->fixStations()->removeAt(0);
+        CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+        CHECK(geoReference->localCoordinateSystem().isEmpty());
+    }
+
+    SECTION("choosing a system anchors the project on the fix, and unsetting it returns the local grid")
+    {
+        cwExternalCenterline centerline = attached->externalCenterline();
+        centerline.setFixCoordinateSystem(kUtm12N);
+        attached->setExternalCenterline(centerline);
+        CHECK(geoReference->state() == cwGeoReference::Anchored);
+        CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+
+        centerline.setFixCoordinateSystem(QString());
+        attached->setExternalCenterline(centerline);
+        CHECK(geoReference->state() == cwGeoReference::LocalGrid);
+        CHECK(geoReference->localCoordinateSystem().isEmpty());
+    }
+
+    SECTION("losing the last bare fix returns the project to ungeoreferenced")
+    {
+        attached->setAttachedFixes({});
+        CHECK(geoReference->state() == cwGeoReference::Ungeoreferenced);
+    }
+}
+
+TEST_CASE("A restored local grid is kept while the scan has listed nothing yet",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwLocalProjectionManager* projection = region.localProjection();
+    projection->setLoading(true);
+    region.geoReference()->restore(cwGeoReference::LocalGrid, QString(),
+                                   cwGeoReference::Anchor{}, QString());
+    addAttachedCave(&region, QStringLiteral("Grid Cave"));
+    projection->setLoading(false);
+
+    CHECK(region.geoReference()->state() == cwGeoReference::LocalGrid);
+    CHECK(region.geoReference()->localCoordinateSystem().isEmpty());
+}
+
+TEST_CASE("A restored frozen frame is kept when a bare attached fix lists before its inputs",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwLocalProjectionManager* projection = region.localProjection();
+    cwCave* cave = addAttachedCave(&region, QStringLiteral("Grid Cave"));
+    const cwAttachedFix bare =
+        makeAttachedFix(QStringLiteral("g1"), cave->id(), kAnchorEasting, kAnchorNorthing);
+    cwAttachedFix located = bare;
+    located.readInSystem = kUtm12N;
+    const QString stored = frameAt(located);
+
+    projection->setLoading(true);
+    region.geoReference()->restore(cwGeoReference::Frozen, stored,
+                                   cwGeoReference::Anchor{}, QString());
+    projection->setLoading(false);
+    cave->setAttachedFixes({bare});
+
+    CHECK(region.geoReference()->state() == cwGeoReference::Frozen);
+    CHECK(region.geoReference()->localCoordinateSystem() == stored);
+}
+
+TEST_CASE("A bare attached fix read in its file's own *cs out gives a project with no frame one",
+          "[cwLocalProjectionManager][AttachedFrame][LocalGrid]")
+{
+    cwCavingRegion region;
+    cwCave* cave = addAttachedCave(&region, QStringLiteral("Read In Cave"));
+    cwAttachedFix readIn = makeAttachedFix(QStringLiteral("sanqiao.e1"), cave->id(),
+                                           kAnchorEasting, kAnchorNorthing);
+    readIn.readInSystem = kUtm12N;
+    readIn.readInFileOutput = true;
+    cave->setAttachedFixes({readIn});
+
+    cwGeoReference* geoReference = region.geoReference();
+    CHECK(geoReference->state() == cwGeoReference::Anchored);
+    CHECK(geoReference->anchor().kind == cwGeoReference::Anchor::Attachment);
+    CHECK(geoReference->anchor().id == cave->id());
+    CHECK(geoReference->localCoordinateSystem() == frameAt(readIn));
+    CHECK(region.localProjection()->anchorDescription()
+          == QStringLiteral("sanqiao.e1 — Read In Cave"));
+}

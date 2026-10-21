@@ -263,13 +263,14 @@ private:
                              int warningCount);
     void publishPerCaveErrors(const cwLinePlotTask::LinePlotResultData& results);
 
-    //! Decided with the same fact as *cs out — whether the project has a
-    //! frame — so it is set as each solve starts. Each node gets one
-    //! AttachedFileFixWithoutCS warning naming the attached files (its own or
-    //! its trips') that fix a station with no input coordinate system and have
-    //! no system chosen for those fixes (cwExternalCenterline::
-    //! fixCoordinateSystem), with those stations; cavern refuses such a fix
-    //! under *cs out. Every other node has it cleared.
+    //! Decided with the same fact as *cs out — whether the project has an
+    //! output system, a local grid's included — so it is set as each solve
+    //! starts. Each node gets one AttachedFileFixWithoutCS warning naming the
+    //! attached files (its own or its trips') that fix a station with no input
+    //! coordinate system, have no system chosen for those fixes
+    //! (cwExternalCenterline::fixCoordinateSystem) and no *cs out of their
+    //! own, with those stations; the driver places such a file with its first
+    //! bare fix at the project origin. Every other node has it cleared.
     //!
     //! Beside it, an AttachedFileUnfixed warning names each attached file the
     //! driver fixes at the origin because the file fixes no station of its

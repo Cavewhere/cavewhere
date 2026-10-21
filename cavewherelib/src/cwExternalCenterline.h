@@ -107,10 +107,10 @@ class CAVEWHERE_LIB_EXPORT cwAttachedFix
     Q_PROPERTY(int line MEMBER line FINAL)
     //! For a fix with no coordinate system of its own, the system the solve
     //! reads it in: the one chosen for the attachment
-    //! (cwExternalCenterline::fixCoordinateSystem), or, when none is chosen
-    //! and the project has no frame or one the attached fixes take part in,
-    //! the *cs out the file names itself. Empty
-    //! when the fix names its own system, or when nothing names one for it.
+    //! (cwExternalCenterline::fixCoordinateSystem), or, when none is chosen,
+    //! the *cs out the file names itself. Empty when the fix names its own
+    //! system, or when nothing names one for it: the solve then places the
+    //! file with its first such fix at the project origin.
     Q_PROPERTY(QString readInSystem MEMBER readInSystem FINAL)
     //! Whether readInSystem is the *cs out the file names itself rather than
     //! the system chosen for the attachment.
@@ -159,6 +159,10 @@ public:
     //! writes it after *cs (a Survex name, or else PROJ text). Empty when the
     //! system names no valid CRS or the coordinate does not parse.
     std::optional<Placement> placementIn(const QString& system) const;
+
+    //! The first three numbers of \a coordinate (a fix's coordinate text) in
+    //! the order the file writes them, in meters. Empty when they do not parse.
+    static std::optional<cwGeoPoint> positionOf(const QString& coordinate);
 
     bool operator==(const cwAttachedFix& other) const = default;
 };

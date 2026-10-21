@@ -71,6 +71,19 @@ std::optional<cwAttachedFix::Placement> cwAttachedFix::placementIn(const QString
         return std::nullopt;
     }
 
+    const std::optional<cwGeoPoint> read = positionOf(coordinate);
+    if (!read.has_value()) {
+        return std::nullopt;
+    }
+    const bool latitudeFirst = parsed.has_value() && parsed->latitudeFirst;
+    const cwGeoPoint point(latitudeFirst ? read->y : read->x,
+                           latitudeFirst ? read->x : read->y,
+                           read->z);
+    return Placement{cs, point};
+}
+
+std::optional<cwGeoPoint> cwAttachedFix::positionOf(const QString& coordinate)
+{
     const QString position =
         coordinate.split(QRegularExpression(QStringLiteral("\\s+")), Qt::SkipEmptyParts)
             .mid(0, kFixCoordinateComponents)
@@ -81,9 +94,5 @@ std::optional<cwAttachedFix::Placement> cwAttachedFix::placementIn(const QString
         return std::nullopt;
     }
     const cwCoordinateText::Coordinate read = parsedCoordinate.value();
-    const bool latitudeFirst = parsed.has_value() && parsed->latitudeFirst;
-    const cwGeoPoint point(latitudeFirst ? read.northing : read.easting,
-                           latitudeFirst ? read.easting : read.northing,
-                           read.elevation);
-    return Placement{cs, point};
+    return cwGeoPoint(read.easting, read.northing, read.elevation);
 }
