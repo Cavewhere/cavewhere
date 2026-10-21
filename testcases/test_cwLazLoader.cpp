@@ -159,3 +159,27 @@ TEST_CASE("cwLazLoader: GeoTIFF GeoKeys name the source CS when the WKT VLR is a
                 == QStringLiteral("EPSG:26910"));
     }
 }
+
+TEST_CASE("cwLazLoader: the probe reads a WKT VLR that carries no trailing NUL",
+          "[cwLazLoader]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString wkt = utmZoneWkt(16, -87);
+    const QVector<QVector3D> input = { { 500000.0f, 4000000.0f, 100.0f } };
+    const QString path = tempLazPath(tempDir, QStringLiteral("probe-unterminated-wkt"));
+    REQUIRE(writeSyntheticLazFile(path, input, wkt, LazCompression::ByExtension,
+                                  WktTermination::Unterminated));
+
+    const cwLazLoader::ProbeResult probe = cwLazLoader::probeHeader(path);
+    REQUIRE(probe.valid);
+    CHECK(probe.sourceCS == wkt);
+}
+
+TEST_CASE("cwLazLoader: resolveSourceCS reads a WKT VLR sized exactly to its text",
+          "[cwLazLoader]") {
+    LASheader header;
+    setUnterminatedOgcWkt(header, kSampleWkt);
+
+    CHECK(cwLazLoader::resolveSourceCS(QString(), header) == QString::fromLatin1(kSampleWkt));
+}

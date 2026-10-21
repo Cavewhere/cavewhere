@@ -93,7 +93,8 @@ Monad::Result<double> compute(const cwGeoPoint& location,
 
     const double lonRad = qDegreesToRadians(wgs84Point.x);
     const double latRad = qDegreesToRadians(wgs84Point.y);
-    const double elevMeters = wgs84Point.z;
+    // The elevation is meters whatever sourceCS's unit, so it skips the transform
+    const double elevMeters = location.z;
     const double decYear = decimalYear(date);
 
     const double declRadians = thgeomag(latRad, lonRad, elevMeters, decYear);

@@ -44,10 +44,11 @@
  * that decides when a new string is derived lives on cwGeoReference.
  *
  * The datum is pinned from the anchor's coordinate system rather than chosen:
- * a compound CRS (what lidar declares) contributes its horizontal half only —
- * the vertical is recorded elsewhere and never applied, because converting
- * heights between the geoid and the ellipsoid would shift the whole project by
- * the geoid separation.
+ * a compound CRS (what lidar declares) contributes its horizontal half only.
+ * Its vertical datum is recorded elsewhere and never applied, because
+ * converting heights between the geoid and the ellipsoid would shift the whole
+ * project by the geoid separation; its vertical unit is applied, by
+ * cwCoordinateTransform, so heights in US survey feet arrive in meters.
  *
  * The one datum CaveWhere does choose is the one nobody claimed. A coordinate
  * on the bare WGS84 ensemble says only "somewhere on Earth as GPS reads it

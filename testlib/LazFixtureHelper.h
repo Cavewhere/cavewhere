@@ -1,6 +1,7 @@
 #ifndef LAZFIXTUREHELPER_H
 #define LAZFIXTUREHELPER_H
 
+#include <QByteArray>
 #include <QMetaObject>
 #include <QString>
 #include <QStringList>
@@ -15,6 +16,7 @@ class cwFutureManagerModel;
 class cwLazLayer;
 class cwLazLayerModel;
 class cwRootData;
+class LASheader;
 
 /**
  * The OGC WKT for a WGS 84 / UTM zone — the minimal form PROJ accepts, which is
@@ -22,6 +24,24 @@ class cwRootData;
  * single frame could have come from.
  */
 QString utmZoneWkt(int zone, int centralMeridian);
+
+//! Meters in one US survey foot, the unit Kentucky's state-plane lidar uses
+//! for both its eastings and its heights.
+constexpr double kMetersPerUsSurveyFoot = 0.304800609601219;
+
+//! A spot in central Kentucky, inside EPSG:3089's area of use
+constexpr double kKentuckyLatitude = 37.5;
+constexpr double kKentuckyLongitude = -84.5;
+
+//! NAD83 / Kentucky Single Zone (ftUS): a 2D state plane in US survey feet
+const QString kKentuckyFtUsCrs = QStringLiteral("EPSG:3089");
+
+/**
+ * The WKT1 compound CRS a Kentucky lidar tile declares: NAD83 / Kentucky
+ * Single Zone (ftUS, EPSG:3089) + NAVD88 height (ftUS, EPSG:6360). Both the
+ * horizontal and the vertical halves are in US survey feet.
+ */
+QString kentuckyFtUsCompoundWkt();
 
 /**
  * One synthetic point carrying the standard LAS attributes a clip must pass
@@ -77,6 +97,23 @@ enum class LazCompression {
 };
 
 /**
+ * Whether a fixture's OGC WKT VLR (LASF_Projection 2112) ends in a NUL. The
+ * spec asks for one, but some writers omit it, leaving a record exactly
+ * strlen(wkt) bytes long.
+ */
+enum class WktTermination {
+    NulTerminated,
+    Unterminated
+};
+
+/**
+ * Store @a wkt in @a header as an OGC WKT VLR whose record is exactly
+ * wkt.size() bytes with no trailing NUL, the way such writers leave it.
+ * LASheader::set_geo_ogc_wkt always appends a NUL, so it can't build one.
+ */
+void setUnterminatedOgcWkt(LASheader& header, const QByteArray& wkt);
+
+/**
  * Test helper: writes a small synthetic point cloud to a .laz file.
  *
  * Path must end in .laz or .las — LASlib picks compression by extension. All
@@ -89,7 +126,8 @@ enum class LazCompression {
 bool writeSyntheticLazFile(const QString& outPath,
                            const QVector<QVector3D>& points,
                            const QString& wktCS = QString(),
-                           LazCompression compression = LazCompression::ByExtension);
+                           LazCompression compression = LazCompression::ByExtension,
+                           WktTermination wktTermination = WktTermination::NulTerminated);
 
 /**
  * writeSyntheticLazFile for points in double precision, for a fixture whose
@@ -98,7 +136,8 @@ bool writeSyntheticLazFile(const QString& outPath,
 bool writeSyntheticGeoLazFile(const QString& outPath,
                               const QVector<cwGeoPoint>& points,
                               const QString& wktCS = QString(),
-                              LazCompression compression = LazCompression::ByExtension);
+                              LazCompression compression = LazCompression::ByExtension,
+                              WktTermination wktTermination = WktTermination::NulTerminated);
 
 /**
  * Build a PID-tagged .laz path inside @a dir. Including

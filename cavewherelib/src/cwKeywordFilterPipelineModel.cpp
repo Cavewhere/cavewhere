@@ -13,13 +13,8 @@ cwKeywordFilterPipelineModel::cwKeywordFilterPipelineModel(QObject *parent) :
     QAbstractListModel(parent),
     mAcceptedModel(new QConcatenateTablesProxyModel(this)),
     mUniqueAcceptedModel(new cwUniqueValueFilterModel(this)),
-    mRejectedModel(new cwKeywordFilterModel(this)),
-    mUpdatePossibleKeysTimer(new QTimer(this))
+    mRejectedModel(new cwKeywordFilterModel(this))
 {
-    mUpdatePossibleKeysTimer->setSingleShot(true);
-    mUpdatePossibleKeysTimer->setInterval(0);
-    connect(mUpdatePossibleKeysTimer, &QTimer::timeout, this, &cwKeywordFilterPipelineModel::doUpdatePossibleKeys);
-
     mUniqueAcceptedModel->setSourceModel(mAcceptedModel);
     mUniqueAcceptedModel->setUniqueRole(cwKeywordItemModel::ObjectRole);
     mUniqueAcceptedModel->setLessThan([](const QVariant& left, const QVariant& right) {
@@ -398,13 +393,20 @@ void cwKeywordFilterPipelineModel::linkFirst(int i)
 
 void cwKeywordFilterPipelineModel::updatePossibleKeys()
 {
-    mUpdatePossibleKeysTimer->start();
+    if (mUpdatePossibleKeysPending) {
+        return;
+    }
+    mUpdatePossibleKeysPending = true;
+    // flushPossibleKeys() may have already run the update and cleared the flag.
+    QMetaObject::invokeMethod(this, [this]() {
+        flushPossibleKeys();
+    }, Qt::QueuedConnection);
 }
 
 void cwKeywordFilterPipelineModel::flushPossibleKeys()
 {
-    if (mUpdatePossibleKeysTimer->isActive()) {
-        mUpdatePossibleKeysTimer->stop();
+    if (mUpdatePossibleKeysPending) {
+        mUpdatePossibleKeysPending = false;
         doUpdatePossibleKeys();
     }
 }

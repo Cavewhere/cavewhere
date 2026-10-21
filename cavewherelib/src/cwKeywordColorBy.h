@@ -18,7 +18,6 @@
 
 class cwKeywordGroupByKeyModel;
 class QAbstractItemModel;
-class QTimer;
 
 // Categorical color-by: groups the keyword items by one key and hands each
 // item's cwVisibilityProxy the slot of its value. Slot i is the i-th value in
@@ -67,7 +66,7 @@ private:
     cwKeywordGroupByKeyModel* m_groups;
     // Collapses a burst of group-model signals (a project load inserts items
     // one by one) into one walk on the next event-loop turn.
-    QTimer* m_assignTimer;
+    bool m_assignPending = false;
     QStringList m_values;
     int m_slotCount = 0;
 };

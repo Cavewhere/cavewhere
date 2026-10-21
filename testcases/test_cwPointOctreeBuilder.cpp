@@ -1,6 +1,7 @@
 //Catch includes
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 //Qt includes
 #include <QCoreApplication>
@@ -35,6 +36,7 @@
 //Our includes
 #include "cwCoordinateTransform.h"
 #include "cwGeoPoint.h"
+#include "cwLocalProjection.h"
 #include "cwFutureManagerModel.h"
 #include "cwFutureManagerToken.h"
 #include "cwMath.h"
@@ -3119,4 +3121,100 @@ TEST_CASE("cwPointOctreeBuilder: where one z cell of an xy footprint splits and 
          << " and peaked at " << built.inFlightPeakBytes << " bytes against " << expectedPeak);
     CHECK(built.haloPoints == expectedHalo);
     CHECK(built.inFlightPeakBytes == expectedPeak);
+}
+
+namespace {
+    // A small tile of ground: kTileSide points a side, kTileSpacing source
+    // units apart, its heights running from kTileLowHeight up by kTileRise
+    constexpr int kTileSide = 32;
+    constexpr double kTileSpacing = 3.0;
+    constexpr double kTileLowHeight = 900.0;
+    constexpr double kTileRise = 200.0;
+
+    // Frame heights are a few hundred meters, which float32 holds to well
+    // under a millimeter
+    constexpr float kFrameHeightTolerance = 1e-3f;
+
+    //! A grid of points centered on the Kentucky spot in \a cs's own units
+    QVector<cwGeoPoint> kentuckyTile(const QString& cs)
+    {
+        const auto center = cwCoordinateTransform::transformPoint(
+            cwCoordinateTransform::Wgs84, cs,
+            cwGeoPoint(kKentuckyLongitude, kKentuckyLatitude, 0.0));
+        REQUIRE(center.has_value());
+
+        QVector<cwGeoPoint> points;
+        points.reserve(kTileSide * kTileSide);
+        const double lastIndex = double(kTileSide - 1);
+        for(int row = 0; row < kTileSide; row++) {
+            for(int column = 0; column < kTileSide; column++) {
+                const double x = center->x + (column - lastIndex / 2.0) * kTileSpacing;
+                const double y = center->y + (row - lastIndex / 2.0) * kTileSpacing;
+                const double z = kTileLowHeight + kTileRise * (row * kTileSide + column)
+                                                  / (lastIndex * kTileSide + lastIndex);
+                points.append(cwGeoPoint(x, y, z));
+            }
+        }
+        return points;
+    }
+
+    //! Builds an octree of a Kentucky tile written in \a tileCS (embedded in
+    //! the file, with \a horizontalCS naming its horizontal half) into the
+    //! project LDP over the spot
+    cwPointOctreeManifest buildKentuckyTile(QTemporaryDir& tempDir,
+                                            const QString& tag,
+                                            const QString& tileCS,
+                                            const QString& horizontalCS)
+    {
+        const QString path = tempLazPath(tempDir, tag);
+        REQUIRE(writeSyntheticGeoLazFile(path, kentuckyTile(horizontalCS), tileCS));
+
+        const QString frame =
+            cwLocalProjection::derive(kKentuckyLatitude, kKentuckyLongitude, horizontalCS);
+        REQUIRE_FALSE(frame.isEmpty());
+
+        const cwPointOctreeBuilder::Request request {
+            .path = path,
+            .frameCS = frame,
+            .cacheRootPath = tempDir.path()
+        };
+
+        const cwPointOctreeBuilder::Result result =
+            waitForBuild(cwPointOctreeBuilder::build(request));
+        REQUIRE_FALSE(result.hasError());
+        REQUIRE(result.value().pointCount == kTileSide * kTileSide);
+        return result.value();
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: a tile with US survey foot heights builds in frame meters",
+          "[PointOctree][PointOctreeBuilder][verticalUnit]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const cwPointOctreeManifest manifest =
+        buildKentuckyTile(tempDir, QStringLiteral("octree-ftus-compound"),
+                          kentuckyFtUsCompoundWkt(), kKentuckyFtUsCrs);
+
+    CHECK_THAT(manifest.bboxMin.z(),
+               Catch::Matchers::WithinAbs(kTileLowHeight * kMetersPerUsSurveyFoot,
+                                          kFrameHeightTolerance));
+    CHECK_THAT(manifest.bboxMax.z(),
+               Catch::Matchers::WithinAbs((kTileLowHeight + kTileRise) * kMetersPerUsSurveyFoot,
+                                          kFrameHeightTolerance));
+}
+
+TEST_CASE("cwPointOctreeBuilder: a tile with meter heights keeps them in frame meters",
+          "[PointOctree][PointOctreeBuilder][verticalUnit]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString utm16N = QStringLiteral("EPSG:32616");
+    const cwPointOctreeManifest manifest =
+        buildKentuckyTile(tempDir, QStringLiteral("octree-meter"), utm16N, utm16N);
+
+    CHECK_THAT(manifest.bboxMin.z(),
+               Catch::Matchers::WithinAbs(kTileLowHeight, kFrameHeightTolerance));
+    CHECK_THAT(manifest.bboxMax.z(),
+               Catch::Matchers::WithinAbs(kTileLowHeight + kTileRise, kFrameHeightTolerance));
 }

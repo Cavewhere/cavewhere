@@ -26,7 +26,8 @@
  * (location, sourceCS, date) → degrees east-positive. Caller is
  * responsible for choosing a representative location (e.g. a cave's
  * first fix station) and threading a sensible date (e.g. the trip's
- * survey date).
+ * survey date). location.z is the elevation in meters whatever sourceCS's
+ * unit, the way a fix station stores it.
  *
  * Grid convergence is NOT subtracted here. That's a property of the
  * projection alone (no date dependency) and lives in cwGridConvergence.

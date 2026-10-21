@@ -9,7 +9,6 @@
 #include <QSet>
 #include <QMap>
 #include <QQmlEngine>
-#include <QTimer>
 
 //Our includes
 #include "cwKeywordItemModel.h"
@@ -87,7 +86,7 @@ private:
 //    QSet<QObject*> mAccepted;
 
     cwKeywordFilterModel* mRejectedModel;
-    QTimer* mUpdatePossibleKeysTimer;
+    bool mUpdatePossibleKeysPending = false;
 
     void link(int i);
     void linkPipelineAt(int i);

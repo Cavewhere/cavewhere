@@ -25,6 +25,21 @@
 //Qt includes
 #include <QString>
 
+//Std includes
+#include <memory>
+
+namespace cwProj {
+    struct PjDeleter {
+        void operator()(PJ* pj) const { proj_destroy(pj); }
+    };
+    using PjPtr = std::unique_ptr<PJ, PjDeleter>;
+
+    struct ContextDeleter {
+        void operator()(PJ_CONTEXT* context) const { proj_context_destroy(context); }
+    };
+    using ContextPtr = std::unique_ptr<PJ_CONTEXT, ContextDeleter>;
+}
+
 class cwCoordinateTransformPrivate
 {
 public:
@@ -32,6 +47,10 @@ public:
     PJ*         pj  = nullptr;
     bool        identity = false;
     QString     error;
+
+    //! Multiplies z after proj_trans: the source's vertical unit over the
+    //! destination's, applied only where PROJ's pipeline leaves z alone.
+    double      zScale = 1.0;
 
     ~cwCoordinateTransformPrivate();
 
