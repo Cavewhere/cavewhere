@@ -155,6 +155,63 @@ TEST_CASE("cwCavingRegion setData should reset caves", "[cwCavingRegion]") {
     }
 }
 
+TEST_CASE("clearCaves empties the root's own fix stations", "[cwCavingRegion]") {
+    // A fix added on the region's Fix Stations page lands on the root node.
+    // Emptying the region drops it with the caves and keeps the root object.
+    cwCavingRegion region;
+    QUndoStack undoStack;
+
+    SECTION("With undo") {
+        region.setUndoStack(&undoStack);
+    }
+
+    SECTION("Without undo") {
+    }
+
+    region.addCave();
+    const QPointer<cwSurveyNode> root(region.rootNode());
+    root->fixStations()->addFixStation(QStringLiteral("r1"));
+    REQUIRE(region.caveCount() == 1);
+    REQUIRE(root->fixStations()->count() == 1);
+    const int commandsBefore = undoStack.count();
+
+    region.clearCaves();
+
+    CHECK(region.caveCount() == 0);
+    CHECK(region.rootNode() == root.data());
+    CHECK(region.rootNode()->fixStations()->count() == 0);
+
+    // Removing the child nodes is the only undoable step; the fix clear pushes nothing.
+    const int expectedCommands = region.undoStack() != nullptr ? commandsBefore + 1 : commandsBefore;
+    CHECK(undoStack.count() == expectedCommands);
+}
+
+TEST_CASE("setData with empty region data empties the root's own fix stations",
+          "[cwCavingRegion]") {
+    // A replacing load leaves the root as a freshly built region has it.
+    cwCavingRegion region;
+    QUndoStack undoStack;
+
+    SECTION("With undo") {
+        region.setUndoStack(&undoStack);
+    }
+
+    SECTION("Without undo") {
+    }
+
+    region.addCave();
+    const QPointer<cwSurveyNode> root(region.rootNode());
+    root->fixStations()->addFixStation(QStringLiteral("r1"));
+    REQUIRE(region.caveCount() == 1);
+    REQUIRE(root->fixStations()->count() == 1);
+
+    region.setData(cwCavingRegionData{});
+
+    CHECK(region.caveCount() == 0);
+    CHECK(region.rootNode() == root.data());
+    CHECK(region.rootNode()->fixStations()->count() == 0);
+}
+
 TEST_CASE("A node under a cave is reachable through allNodes and hidden from caves()",
           "[cwCavingRegion]") {
     // The region lists the root's direct children only. A node deeper in the

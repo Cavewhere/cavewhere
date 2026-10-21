@@ -11,6 +11,7 @@
 #include "cwCoordinateTransform.h"
 #include "cwDebug.h"
 #include "cwEquateModel.h"
+#include "cwFixStationModel.h"
 #include "cwFixStationValidator.h"
 #include "cwLazLayer.h"
 #include "cwLazLayerModel.h"
@@ -417,10 +418,12 @@ void cwCavingRegion::removeCave(int index) {
 }
 
 /**
-  \brief Removes all the caves from the region
+  \brief Empties the root node: its child nodes, its trips and its own fix stations
   */
 void cwCavingRegion::clearCaves() {
     m_root->clearNodes();
+    m_root->clearTrips();
+    m_root->fixStations()->setFixStations({});
 }
 
 /**
