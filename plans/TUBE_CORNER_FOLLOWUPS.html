@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Corner follow-ups</title>
+<style>
+  body { font: 15px/1.45 -apple-system, Helvetica, Arial, sans-serif; color: #222; background: #fff; margin: 0; padding: 24px 32px; max-width: 1200px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 36px 0 6px; }
+  p { margin: 6px 0 10px; }
+  figure { margin: 12px 0 0; }
+  figcaption { font-size: 13px; color: #555; margin-top: 6px; }
+  svg { display: block; background: #fafafa; border: 1px solid #e5e5e5; }
+  .legend span { display: inline-block; margin-right: 18px; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  code { background: #f0f0f0; padding: 0 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>What T07ad and T07ae would change</h1>
+<p>Plan views, north up, drawn from the numbers in <code>tmp/probe-after-T07ac.log</code>. Red is the wall the tube has today, green is the wall after the task. Yellow spokes are the station's L/R readings.</p>
+<p class="legend"><span><i style="border-color:#d33"></i>wall now</span><span><i style="border-color:#2a8a2a"></i>wall after</span><span><i style="border-color:#c9a800"></i>station reading</span><span><i style="border-color:#999; border-top-style: dashed"></i>centerline / ring centers</span></p>
+
+<h2>T07ad — a corner's rings sample the two legs' walls</h2>
+<p>Case 30 at s1: a 60° turn, the passage 2.5 m wide each side at the inset ring before the corner, 3 m at s1, 2.7 m at the inset ring after. Today the corner ring puts the 3 m reading on the <em>bisector</em> at face value (1), which is only 3·cos 30° = 2.6 m from either leg's centerline, and the two elbow rings beside it lerp <em>radii</em> between rings whose centers are 0.5 m apart (2): the outside wall bulges 0.3 m, the inside wall gets a 0.1 m shelf. After: each leg's wall runs at its interpolated width right up to the bisector plane, and every elbow ring (the middle one included) reaches from its own center to that envelope. The outside corner then sits where the two leg walls meet, 3.46 m from s1, the inside corner where they cross.</p>
+<figure><svg id="fig1" width="1100" height="560"></svg>
+<figcaption>Fig. 1 — s1 in plan. Gray dots are the ring centers (the three elbow rings sit on the arc). The inset labels are perpendicular wall distances from the leg centerline.</figcaption></figure>
+
+<p>The same at Phake a2, as a graph along the passage: the inside wall's distance from the centerline, from the a1→a2 inset ring through the elbow to the a2→a3 inset ring. The legs interpolate toward 2.5 at a2; the corner delivers 2.5·cos 28.5° = 2.2, so the wall dips where you expect its peak. That dip is the notch you saw; the 2.5 m section spoke beside it is why the section looks wider than the rings.</p>
+<figure><svg id="fig2" width="1100" height="300"></svg>
+<figcaption>Fig. 2 — a2, inside (chain-left) wall distance from the centerline against distance along the chain. Dots are rings; the station is the tall tick.</figcaption></figure>
+
+<h2>T07ae — a leg and its end station use the same reading</h2>
+<p>Phake a4 is read in two chunks: <code>L0 R2 U2 D1.7</code> in a1–a5 (facing on toward a5) and <code>L5 R0 U3 D23</code> in a4–a6 (facing a6). Today the leg a3→a4 interpolates toward the first record, so its left wall runs 1.5 → 0, while the a4 station ring takes the widest of both records (L = 5) and, because the biggest reading sets the elbow's inset, that 5 m starts 3.5 m before a4: fat, skinny, fat. After: a chain leg and its end ring use the record whose facing lies along that leg; the other record belongs to the a4→a6 passage and its mouth. The a3→a4 left wall then runs 1.5 → 0 all the way, and the 5 m wall shows up only on a4→a6.</p>
+<figure><svg id="fig3" width="1100" height="300"></svg>
+<figcaption>Fig. 3 — a3→a4 left wall distance from the centerline against distance along the chain. The elbow at a4 starts at 29.2 m.</figcaption></figure>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (svg, tag, attrs, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text !== undefined) n.textContent = text;
+    svg.appendChild(n);
+    return n;
+  };
+  const poly = (svg, pts, stroke, width, dash) =>
+    el(svg, 'polyline', { points: pts.map(p => p.join(',')).join(' '), fill: 'none', stroke, 'stroke-width': width, 'stroke-dasharray': dash || 'none', 'stroke-linejoin': 'round' });
+  const label = (svg, x, y, text, color, anchor) =>
+    el(svg, 'text', { x, y, fill: color || '#333', 'font-size': 12, 'text-anchor': anchor || 'start' }, text);
+
+  // ---------- Fig. 1: s1 in plan ----------
+  {
+    const svg = document.getElementById('fig1');
+    const S = 40, ox = 620, oy = 740;              // px per meter, origin at s0 (below the view)
+    const P = (x, y) => [ox + x * S, oy - y * S];   // world (east, north) -> px
+    const s1 = [0, 10];
+    const d2 = [Math.sin(Math.PI / 3), Math.cos(Math.PI / 3)];  // leg 2 direction, bearing 60°
+    const n2 = [-d2[1], d2[0]];                                   // leg 2 left normal
+    const w1 = y => 0.5 + 0.25 * Math.min(y, 10);                 // leg 1 half-width, 0.5 -> 3
+    const w2 = d => 3 - 0.15 * Math.max(d, 0);                    // leg 2 half-width, 3 -> 1.5
+    const on2 = (d, side) => [s1[0] + d2[0] * d + side * n2[0] * w2(d), s1[1] + d2[1] * d + side * n2[1] * w2(d)];
+
+    // centerline
+    poly(svg, [P(0, 5), P(...s1), P(s1[0] + d2[0] * 8, s1[1] + d2[1] * 8)], '#999', 1.5, '6 4');
+    // station reading spokes (face value, bisector plane)
+    const bis = [-Math.cos(Math.PI / 6), Math.sin(Math.PI / 6)]; // left of the bisector (bearing 30°)
+    poly(svg, [P(s1[0] - bis[0] * 3, s1[1] - bis[1] * 3), P(...s1), P(s1[0] + bis[0] * 3, s1[1] + bis[1] * 3)], '#c9a800', 2.5);
+    // arc and ring centers
+    const C = [3.30, 8.09], R = 3.30;
+    const arc = [];
+    for (let a = 0; a <= 60; a += 2) { const t = a * Math.PI / 180; arc.push(P(C[0] - R * Math.cos(t), C[1] + R * Math.sin(t))); }
+    poly(svg, arc, '#999', 1.5, '6 4');
+    for (const c of [[0, 8.09], [0.05, 8.67], [0.44, 9.74], [1.18, 10.62], [1.65, 10.95]]) {
+      const [x, y] = P(...c); el(svg, 'circle', { cx: x, cy: y, r: 3.5, fill: '#777' });
+    }
+    // wall now (probe): outside = left, inside = right
+    const nowOut = [[-w1(5), 5], [-2.52, 8.09], [-2.82, 9.18], [-2.60, 11.49], [-0.77, 12.94], on2(1.9, 1), on2(8, 1)];
+    const nowIn = [[w1(5), 5], [2.52, 8.09], [2.52, 8.23], [2.60, 8.50], [2.87, 8.61], on2(1.9, -1), on2(8, -1)];
+    poly(svg, nowOut.map(p => P(...p)), '#d33', 3);
+    poly(svg, nowIn.map(p => P(...p)), '#d33', 3);
+    // wall after: leg walls to the miter plane
+    // outside: leg 1's wall reaches 3 m at s1 and holds it to the miter apex; inside: the two
+    // interpolated walls cross at (2.49, 7.97)
+    const outApex = [-3, 11.73], inApex = [2.49, 7.97];
+    poly(svg, [P(-w1(5), 5), P(-3, 10), P(...outApex), P(...on2(0, 1)), P(...on2(8, 1))], '#2a8a2a', 3, '7 4');
+    poly(svg, [P(w1(5), 5), P(...inApex), P(...on2(1.9, -1)), P(...on2(8, -1))], '#2a8a2a', 3, '7 4');
+
+    // labels
+    label(svg, ...P(-3.4, 9.3), '① now: 3 m along the bisector = 2.6 m from each leg', '#d33', 'end');
+    label(svg, ...P(-3.4, 8.8), '② radius lerp across offset centers: 0.3 m bulge', '#d33', 'end');
+    label(svg, ...P(-3.4, 12.2), 'after: the leg walls meet 3.46 m from s1', '#2a8a2a', 'end');
+    label(svg, ...P(3.4, 8.0), 'inside: 0.1 m shelf now', '#d33');
+    label(svg, ...P(3.4, 8.7), 'after: the leg walls cross', '#2a8a2a');
+    label(svg, ...P(0.25, 9.6), 's1  L3 R3', '#333');
+    label(svg, ...P(-2.8, 5.4), '2.5 m each side at the inset ring', '#666', 'end');
+    label(svg, ...P(6.6, 14.0), '2.7 m at the inset ring', '#666');
+    label(svg, ...P(0.3, 5.2), 'from s0', '#666');
+  }
+
+  // ---------- Fig. 2 / Fig. 3: wall distance along the chain ----------
+  const graph = (id, now, after, station, xRange, yRange, notes) => {
+    const svg = document.getElementById(id);
+    const W = 1100, H = 300, L = 60, Rm = 30, T = 20, B = 40;
+    const X = x => L + (x - xRange[0]) / (xRange[1] - xRange[0]) * (W - L - Rm);
+    const Y = y => H - B - (y - yRange[0]) / (yRange[1] - yRange[0]) * (H - T - B);
+    for (let y = yRange[0]; y <= yRange[1] + 1e-9; y += yRange[2]) {
+      poly(svg, [[L, Y(y)], [W - Rm, Y(y)]], '#e5e5e5', 1);
+      label(svg, L - 8, Y(y) + 4, y.toFixed(1) + ' m', '#666', 'end');
+    }
+    for (let x = Math.ceil(xRange[0]); x <= xRange[1]; x += 1) {
+      label(svg, X(x), H - B + 16, x + '', '#666', 'middle');
+    }
+    label(svg, W - Rm, H - 6, 'distance along the chain (m)', '#666', 'end');
+    for (const s of station) {
+      poly(svg, [[X(s.x), T], [X(s.x), H - B]], '#c9a800', 2);
+      label(svg, X(s.x) + 5, T + 12, s.name, '#8a7400');
+    }
+    poly(svg, after.map(p => [X(p[0]), Y(p[1])]), '#2a8a2a', 3, '7 4');
+    poly(svg, now.map(p => [X(p[0]), Y(p[1])]), '#d33', 3);
+    for (const p of now) el(svg, 'circle', { cx: X(p[0]), cy: Y(p[1]), r: 3.5, fill: '#d33' });
+    for (const n of notes) label(svg, X(n[0]), Y(n[1]), n[2], n[3]);
+  };
+
+  graph('fig2',
+    [[11.62, 2.01], [12.58, 2.17], [13.01, 2.24], [13.47, 2.20], [14.39, 2.20], [15.30, 2.26], [15.76, 2.33], [16.28, 2.28], [17.29, 2.17], [18.31, 2.06]],
+    [[11.62, 2.01], [14.52, 2.50], [18.31, 2.08]],
+    [{ x: 14.52, name: 'a2  L2.5' }],
+    [11.5, 18.5], [1.8, 2.7, 0.2],
+    [[13.6, 2.08, '0.1–0.2 m notch now', '#d33'], [14.7, 2.56, 'after: peaks at the 2.5 m reading', '#2a8a2a']]);
+
+  graph('fig3',
+    [[22.50, 1.06], [26.45, 0.87], [27.64, 0.71], [28.65, 0.58], [29.15, 0.51], [29.67, 1.58], [30.19, 2.61], [30.71, 3.14], [31.23, 3.60], [31.74, 3.96], [32.26, 4.21]],
+    [[22.50, 1.5], [32.26, 0.05]],
+    [{ x: 22.50, name: 'a3  L1.5' }, { x: 32.26, name: 'a4  L0 (a1–a5)  /  L5 (a4–a6)' }],
+    [22, 33], [0, 4.5, 0.5],
+    [[29.6, 2.9, 'now: elbow lerps toward the merged L5', '#d33'], [26.8, 1.35, 'after: 1.5 → 0 along the whole leg', '#2a8a2a']]);
+})();
+</script>
+</body>
+</html>

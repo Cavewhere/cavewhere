@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="560" font-family="Helvetica, Arial" font-size="12">
+<rect width="1180" height="560" fill="white"/>
+<text x="10" y="25" font-size="14" font-weight="bold">Today: both end rings vertical, padded along u (pad = mean(L,R))</text>
+<text x="10" y="451.59999999999997" fill="#777">profile view, u → (plan direction of t0→J), z ↑ · sections L=R=1, U=1.5, D=1 everywhere</text>
+<rect x="28" y="348.0" width="224" height="70.0" fill="#cfe3f7" stroke="#3a78b5" stroke-width="1.5"/>
+<text x="112" y="381.59999999999997" fill="#3a78b5" text-anchor="middle">passage t0 → J (rings vertical)</text>
+<polygon points="224,418.0 224,348.0 280,68.0 280,138.0" fill="#f6dcdc" stroke="#b03030" stroke-width="1.5"/>
+<line x1="224" y1="418.0" x2="224" y2="348.0" stroke="#b03030" stroke-width="3"/>
+<text x="134.4" y="331.2" fill="#b03030">ring at J − 1·u</text>
+<line x1="280" y1="138.0" x2="280" y2="68.0" stroke="#b03030" stroke-width="3"/>
+<text x="288.40000000000003" y="76.40000000000002" fill="#b03030">ring at t1 + 1·u</text>
+<text x="288.40000000000003" y="222.0" fill="#b03030">loft between the two rings = slanted slab;</text>
+<text x="288.40000000000003" y="236.0" fill="#b03030">at x = 0 it covers only z ∈ [4, 6.5]</text>
+<line x1="28" y1="390.0" x2="252" y2="390.0" stroke="#222" stroke-width="2"/>
+<line x1="252" y1="390.0" x2="252" y2="348.0" stroke="#222" stroke-width="2"/>
+<line x1="252" y1="348.0" x2="252" y2="278.0" stroke="#e02020" stroke-width="3"/>
+<line x1="252" y1="278.0" x2="252" y2="208.0" stroke="#222" stroke-width="2"/>
+<line x1="252" y1="208.0" x2="252" y2="110.0" stroke="#e02020" stroke-width="3"/>
+<text x="151.20000000000002" y="180.0" fill="#e02020">centerline outside the tube</text>
+<circle cx="28" cy="390.0" r="4" fill="#222"/>
+<text x="10" y="394.0" font-weight="bold">t0</text>
+<circle cx="252" cy="390.0" r="4" fill="#222"/>
+<text x="234" y="394.0" font-weight="bold">J</text>
+<circle cx="252" cy="110.0" r="4" fill="#222"/>
+<text x="234" y="114.0" font-weight="bold">t1</text>
+<text x="450" y="25" font-size="14" font-weight="bold">Proposed: steep leg gets rings square to the leg and round caps</text>
+<text x="450" y="451.59999999999997" fill="#777">profile view, u → (plan direction of t0→J), z ↑ · sections L=R=1, U=1.5, D=1 everywhere</text>
+<rect x="468" y="348.0" width="224" height="70.0" fill="#cfe3f7" stroke="#3a78b5" stroke-width="1.5"/>
+<text x="552" y="381.59999999999997" fill="#3a78b5" text-anchor="middle">passage t0 → J (rings vertical)</text>
+<rect x="664" y="110.0" width="56" height="280.0" fill="#d9f2d9" stroke="#2f8f2f" stroke-width="1.5"/>
+<rect x="664" y="348.0" width="56" height="70.0" fill="none" stroke="#2f8f2f" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="664" y1="390.0" x2="720" y2="390.0" stroke="#2f8f2f" stroke-width="2"/>
+<line x1="664" y1="362.0" x2="720" y2="362.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="334.0" x2="720" y2="334.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="306.0" x2="720" y2="306.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="278.0" x2="720" y2="278.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="250.0" x2="720" y2="250.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="222.0" x2="720" y2="222.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="194.0" x2="720" y2="194.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="166.0" x2="720" y2="166.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="138.0" x2="720" y2="138.0" stroke="#2f8f2f" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="664" y1="110.0" x2="720" y2="110.0" stroke="#2f8f2f" stroke-width="2"/>
+<path d="M 664 110.0 A 28 42.0 0 0 1 720 110.0" fill="#d9f2d9" stroke="#2f8f2f" stroke-width="2"/>
+<path d="M 664 390.0 A 28 28 0 0 0 720 390.0" fill="none" stroke="#2f8f2f" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="728.4000000000001" y="82.0" fill="#2f8f2f">round cap, height U(t1) = 1.5</text>
+<text x="728.4000000000001" y="110.0" fill="#2f8f2f">ring at t1, square to the leg</text>
+<text x="728.4000000000001" y="250.0" fill="#2f8f2f">rings every 1 m, radius</text>
+<text x="728.4000000000001" y="264.0" fill="#2f8f2f">L, R across · mean(L,R) along u</text>
+<text x="728.4000000000001" y="390.0" fill="#2f8f2f">ring at J</text>
+<text x="728.4000000000001" y="409.59999999999997" fill="#2f8f2f">round cap, height D(J) = 1;</text>
+<text x="728.4000000000001" y="423.59999999999997" fill="#2f8f2f">dashed = inside the passage, union removes it</text>
+<line x1="468" y1="390.0" x2="692" y2="390.0" stroke="#222" stroke-width="2"/>
+<line x1="692" y1="390.0" x2="692" y2="110.0" stroke="#222" stroke-width="2"/>
+<circle cx="468" cy="390.0" r="4" fill="#222"/>
+<text x="450" y="394.0" font-weight="bold">t0</text>
+<circle cx="692" cy="390.0" r="4" fill="#222"/>
+<text x="674" y="394.0" font-weight="bold">J</text>
+<circle cx="692" cy="110.0" r="4" fill="#222"/>
+<text x="674" y="114.0" font-weight="bold">t1</text>
+<text x="900" y="25" font-size="14" font-weight="bold">Proposed, plan view at J</text>
+<rect x="806" y="172" width="224" height="56" fill="#cfe3f7" stroke="#3a78b5" stroke-width="1.5"/>
+<circle cx="1030" cy="200" r="28" fill="#d9f2d9" stroke="#2f8f2f" stroke-width="2"/>
+<line x1="806" y1="200" x2="1030" y2="200" stroke="#222" stroke-width="2"/>
+<circle cx="1030" cy="200" r="4" fill="#222"/>
+<text x="1038" y="194" font-weight="bold">J (t1 above)</text>
+<text x="812" y="166" fill="#3a78b5">passage, L+R = 2 wide</text>
+<text x="900" y="268" fill="#2f8f2f">shaft footprint: L and R across the</text>
+<text x="900" y="284" fill="#2f8f2f">facing, mean(L,R) = 1 along u, so the</text>
+<text x="900" y="300" fill="#2f8f2f">plumb shaft is round: 2 × 2 m, centered</text>
+<text x="900" y="316" fill="#2f8f2f">on the station instead of leaning off it.</text>
+<text x="900" y="348" fill="#555">Open question: the cutover from vertical</text>
+<text x="900" y="364" fill="#555">rings to leg-square rings. Threshold</text>
+<text x="900" y="380" fill="#555">(~75–80°, where you saw it go bad) or a</text>
+<text x="900" y="396" fill="#555">tilt that follows the slope.</text>
+</svg>

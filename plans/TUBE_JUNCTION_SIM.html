@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Junction at a10 — 2D simulation</title>
+<style>
+  :root { --bg: #fafafa; --fg: #222; --muted: #777; --panel: #fff; --line: #ccc;
+          --through: #4a78b8; --arm: #9a6b1f; --hidden: #999; --visible: #d33; --proposed: #2a8a3a; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.4 -apple-system, Helvetica, Arial, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 10px 0 14px; }
+  .controls label { display: inline-flex; gap: 6px; align-items: center; }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  .panel h2 { font-size: 14px; margin: 0 0 6px; }
+  canvas { width: 100%; height: auto; display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 0; border-top: 3px solid; margin-right: 6px; vertical-align: middle; }
+  .legend .l-through::before { border-color: var(--through); }
+  .legend .l-arm::before { border-color: var(--arm); }
+  .legend .l-visible::before { border-color: var(--visible); }
+  .legend .l-hidden::before { border-color: var(--hidden); border-top-style: dashed; }
+  .legend .l-proposed::before { border-color: var(--proposed); }
+  .notes { color: var(--muted); font-size: 13px; margin-top: 12px; max-width: 900px; }
+  .notes li { margin-bottom: 4px; }
+  output { font-variant-numeric: tabular-nums; min-width: 4.5em; display: inline-block; }
+</style>
+</head>
+<body>
+<h1>Junction at a10 (Phake Cave): a13→a10 arm meeting the a9→a10→a11 passage</h1>
+
+<div class="controls">
+  <label><input type="radio" name="mode" value="before"> Before T07c (push ½ρ, flat cap)</label>
+  <label><input type="radio" name="mode" value="t07c"> T07c as committed (dome to far wall)</label>
+  <label><input type="radio" name="mode" value="proposed" checked> Proposed (ramp to the mouth, trim, hidden fan)</label>
+  <label>Ramp length <input id="blend" type="range" min="0" max="4" step="0.05" value="1.65"> <output id="blendOut">1.65 m</output></label>
+  <label>Through-tube test
+    <select id="region">
+      <option value="prism" selected>a10 section extruded along the through tangent (what the code would use)</option>
+      <option value="walls">actual walls a9→a10→a11 (for comparison)</option>
+    </select>
+  </label>
+</div>
+
+<div class="panels">
+  <div class="panel"><h2>Plan view (x east, y north; a10 at the origin)</h2><canvas id="plan" width="760" height="560"></canvas></div>
+  <div class="panel"><h2>Elevation along the arm (s from a13 toward a10, z relative to a10)</h2><canvas id="elev" width="760" height="420"></canvas></div>
+  <div class="panel"><h2>Arm cross-section at the mouth, looking toward a10</h2><canvas id="sect" width="760" height="420"></canvas></div>
+</div>
+
+<div class="legend">
+  <span class="l-through">through passage (a9→a10→a11) and its a10 section</span>
+  <span class="l-arm">arm passage walls (own LRUD)</span>
+  <span class="l-visible">arm surface OUTSIDE the through tube (what you see)</span>
+  <span class="l-hidden">arm surface inside the through tube (hidden by depth test)</span>
+  <span class="l-proposed">proposed ramp / clamped mouth</span>
+</div>
+
+<ul class="notes">
+  <li>Through section at a10 from chunk 2: L 2.3, R 2.0, U 24 → 3.0 by the shaft rule (median of the neighbors' ups), D 0 → 0.05 (kMinRadius).</li>
+  <li>Arm: a13 L 1.8, R 0, U 1.8, D 1.7; a14 L 0, R 2, U 2, D 1.9. a10 in chunk 3 has no LRUD, so the arm's last ring borrows a13's shape.</li>
+  <li>The elevation treats the through tube as a box between its floor and ceiling over the stretch where the arm's axis is inside it; the real test is 3D against the a10 section, this is the same idea in two cuts.</li>
+</ul>
+
+<script>
+(() => {
+const DEG = Math.PI / 180;
+const K_MIN = 0.05;
+const CLINO_DOWN = -90;
+const shots = [
+  ['a1','a2',14.52,49.0,-3.0], ['a2','a3',9.13,352.0,-17.3], ['a3','a4',11.05,82.0,-4.5],
+  ['a4','a5',6.97,41.0,11.2], ['a4','a6',16.54,147.5,-7.5], ['a6','a7',9.81,43.0,26.0],
+  ['a7','a8',10.23,74.0,17.4], ['a6','a9',23.44,0.0,CLINO_DOWN], ['a9','a10',5.85,230.0,-8.4],
+  ['a10','a11',10.56,172.0,-21.7], ['a11','a12',9.17,200.0,-5.3], ['a10','a13',18.28,116.0,-4.1],
+  ['a13','a14',6.99,91.0,-1.2],
+];
+const P = { a1: [0, 0, 0] };
+for (const [from, to, d, az, cl] of shots) {
+  const h = cl === CLINO_DOWN ? 0 : d * Math.cos(cl * DEG);
+  const f = P[from];
+  P[to] = [f[0] + h * Math.sin(az * DEG), f[1] + h * Math.cos(az * DEG), f[2] + d * Math.sin(cl * DEG)];
+}
+const J = P.a10;
+for (const k in P) P[k] = [P[k][0] - J[0], P[k][1] - J[1], P[k][2] - J[2]];
+
+const sub = (a, b) => a.map((v, i) => v - b[i]);
+const add = (a, b) => a.map((v, i) => v + b[i]);
+const mul = (a, s) => a.map(v => v * s);
+const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+const len = a => Math.hypot(...a);
+const unit = a => mul(a, 1 / len(a));
+const horizontal = a => [a[0], a[1], 0];
+const rightOf = f => [f[1], -f[0], 0];
+const leftOf = f => [-f[1], f[0], 0];
+
+// Facing of a station occurrence: horizontal chord between its chunk neighbors.
+function facings(chunk) {
+  const out = chunk.map((_, i) => {
+    const prev = P[chunk[Math.max(i - 1, 0)]], next = P[chunk[Math.min(i + 1, chunk.length - 1)]];
+    const f = horizontal(sub(next, prev));
+    return len(f) < 0.01 ? null : unit(f);
+  });
+  return out.map((f, i) => f || out.find((g, j) => g && Math.abs(j - i) === 1) || [0, 1, 0]);
+}
+const chunk2 = ['a6', 'a9', 'a10', 'a11', 'a12'], chunk3 = ['a10', 'a13', 'a14'];
+const face2 = facings(chunk2), face3 = facings(chunk3);
+const lrud2 = { a9: [2.3, 2, 3.0, 0], a10: [2.3, 2, 3.0, 0], a11: [1, 0.2, 3, 0.5] };
+const lrud3 = { a13: [1.8, 0, 1.8, 1.7], a14: [0, 2, 2, 1.9] };
+
+// Through tube: walls a9→a10→a11, and the a10 section extruded along the through tangent.
+const tThrough = unit(add(unit(horizontal(sub(P.a10, P.a9))), unit(horizontal(sub(P.a11, P.a10)))));
+const rightJ = rightOf(tThrough);
+const J_L = 2.3, J_R = 2.0, J_U = 3.0, J_D = K_MIN;
+const throughLeft = [], throughRight = [];
+for (const s of ['a9', 'a10', 'a11']) {
+  const f = face2[chunk2.indexOf(s)], [l, r] = lrud2[s];
+  throughLeft.push(add(P[s], mul(leftOf(f), Math.max(l, K_MIN))));
+  throughRight.push(add(P[s], mul(rightOf(f), Math.max(r, K_MIN))));
+}
+const throughPoly = throughLeft.concat(throughRight.slice().reverse());
+function inPoly(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+let region = 'prism';
+function insidePlan(p) {
+  if (region === 'walls') return inPoly(p, throughPoly);
+  const u = dot(p, rightJ);
+  return u >= -J_L && u <= J_R;
+}
+
+// Arm: chain walked a14→a13→a10; frame right = right of the plan tangent.
+const a = unit(sub(P.a10, P.a13));
+const L = len(sub(P.a10, P.a13));
+const armTangent = { a14: unit(horizontal(sub(P.a13, P.a14))), a13: unit(add(unit(horizontal(sub(P.a13, P.a14))), unit(horizontal(a)))), a10: unit(horizontal(a)) };
+// lrudAcross: a wall's component across the ring; sides swap when the facing points the other way.
+function across(lrud, facing, frameRight) {
+  let [l, r] = lrud, c = dot(rightOf(facing), frameRight);
+  if (c < 0) { [l, r] = [r, l]; c = -c; }
+  return { left: Math.max(l * c, K_MIN), right: Math.max(r * c, K_MIN) };
+}
+const armRing = {};
+for (const s of ['a14', 'a13']) {
+  const w = across(lrud3[s], face3[chunk3.indexOf(s)], rightOf(armTangent[s]));
+  armRing[s] = { ...w, up: lrud3[s][2], down: lrud3[s][3] };
+}
+armRing.a10 = { ...armRing.a13 }; // borrowed: a10 has no LRUD in chunk 3
+
+// Along the arm axis: where it enters and leaves the through tube (plan).
+let sNear = null, sFar = null;
+for (let s = 0; s <= L + 4; s += 0.01) {
+  const p = add(P.a13, mul(a, s));
+  if (insidePlan(p)) { if (sNear === null) sNear = s; sFar = s; }
+}
+
+const canvases = { plan: document.getElementById('plan'), elev: document.getElementById('elev'), sect: document.getElementById('sect') };
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// Draw a polyline, red where `visible` says so and dashed gray where hidden.
+function drawRuns(ctx, pts, toPx, visible, colorVisible) {
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const vis = visible(pts[i]) || visible(pts[i + 1]);
+    ctx.beginPath();
+    ctx.setLineDash(vis ? [] : [5, 4]);
+    ctx.strokeStyle = vis ? colorVisible : css('--hidden');
+    ctx.lineWidth = vis ? 3 : 1.5;
+    const [x0, y0] = toPx(pts[i]), [x1, y1] = toPx(pts[i + 1]);
+    ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+function densify(pts, step = 0.05) {
+  const out = [];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const n = Math.max(1, Math.ceil(len(sub(pts[i + 1], pts[i])) / step));
+    for (let k = 0; k < n; k++) out.push(add(pts[i], mul(sub(pts[i + 1], pts[i]), k / n)));
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+function trimAtEntry(pts, inside) {
+  const out = [];
+  for (const p of pts) { out.push(p); if (inside(p)) break; }
+  return out;
+}
+
+const PUSH = 0.5;            // kArmInsetFactor · mean ρ of the a13 ring, before T07c
+const DOME = 1.94;           // T07c dome height: a10's far wall along the arm
+const DOME_RINGS = 3;
+
+function label(ctx, text, x, y, color = css('--muted')) { ctx.fillStyle = color; ctx.font = '12px sans-serif'; ctx.fillText(text, x, y); }
+
+function drawPlan(mode, blend) {
+  const c = canvases.plan, ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const xmin = -7, xmax = 25, ymin = -13.5, ymax = 9.5;
+  const sc = Math.min(c.width / (xmax - xmin), c.height / (ymax - ymin));
+  const toPx = p => [(p[0] - xmin) * sc, (ymax - p[1]) * sc];
+
+  // Grid
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+  for (let x = Math.ceil(xmin); x <= xmax; x += 5) { ctx.beginPath(); ctx.moveTo(...toPx([x, ymin])); ctx.lineTo(...toPx([x, ymax])); ctx.stroke(); }
+  for (let y = Math.ceil(ymin / 5) * 5; y <= ymax; y += 5) { ctx.beginPath(); ctx.moveTo(...toPx([xmin, y])); ctx.lineTo(...toPx([xmax, y])); ctx.stroke(); }
+
+  // Through tube region used for the inside test
+  ctx.fillStyle = 'rgba(74,120,184,0.12)';
+  if (region === 'prism') {
+    const far = 40, pts = [add(mul(leftOf(tThrough), J_L), mul(tThrough, -far)), add(mul(leftOf(tThrough), J_L), mul(tThrough, far)),
+                           add(mul(rightJ, J_R), mul(tThrough, far)), add(mul(rightJ, J_R), mul(tThrough, -far))];
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(...toPx(p)) : ctx.moveTo(...toPx(p))); ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath(); throughPoly.forEach((p, i) => i ? ctx.lineTo(...toPx(p)) : ctx.moveTo(...toPx(p))); ctx.closePath(); ctx.fill();
+  }
+  // Actual through walls
+  ctx.strokeStyle = css('--through'); ctx.lineWidth = 2;
+  for (const wall of [throughLeft, throughRight]) { ctx.beginPath(); wall.forEach((p, i) => i ? ctx.lineTo(...toPx(p)) : ctx.moveTo(...toPx(p))); ctx.stroke(); }
+  ctx.strokeStyle = css('--through'); ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+  ctx.beginPath(); [P.a9, P.a10, P.a11].forEach((p, i) => i ? ctx.lineTo(...toPx(p)) : ctx.moveTo(...toPx(p))); ctx.stroke();
+  ctx.beginPath(); [P.a14, P.a13, P.a10].forEach((p, i) => i ? ctx.lineTo(...toPx(p)) : ctx.moveTo(...toPx(p))); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Arm walls in the arm's own frames up to a10
+  const wallPts = side => ['a14', 'a13', 'a10'].map(s => add(P[s], mul(side === 'left' ? leftOf(armTangent[s]) : rightOf(armTangent[s]), armRing[s][side])));
+  const left = wallPts('left'), right = wallPts('right');
+  const visible = p => !insidePlan(p);
+  const armColor = css('--visible');
+
+  if (mode === 'before') {
+    const end = add(P.a10, mul(a, PUSH));
+    const lEnd = add(end, mul(leftOf(armTangent.a10), armRing.a10.left)), rEnd = add(end, mul(rightOf(armTangent.a10), armRing.a10.right));
+    drawRuns(ctx, densify(left.concat([lEnd])), toPx, visible, armColor);
+    drawRuns(ctx, densify(right.concat([rEnd])), toPx, visible, armColor);
+    drawRuns(ctx, densify([lEnd, rEnd]), toPx, visible, armColor);
+    label(ctx, 'ring pushed 0.5 m past a10, flat cap', ...toPx([-6.5, -11.5]));
+  } else if (mode === 't07c') {
+    const lDome = [left[2]], rDome = [right[2]];
+    for (let i = 1; i <= DOME_RINGS; i++) {
+      const ang = Math.PI / 2 * i / (DOME_RINGS + 1), ctr = add(P.a10, mul(a, DOME * Math.sin(ang))), k = Math.cos(ang);
+      lDome.push(add(ctr, mul(leftOf(armTangent.a10), armRing.a10.left * k)));
+      rDome.push(add(ctr, mul(rightOf(armTangent.a10), armRing.a10.right * k)));
+    }
+    const apex = add(P.a10, mul(a, DOME));
+    lDome.push(apex); rDome.push(apex);
+    drawRuns(ctx, densify(left), toPx, visible, armColor);
+    drawRuns(ctx, densify(right), toPx, visible, armColor);
+    drawRuns(ctx, densify(lDome), toPx, visible, armColor);
+    drawRuns(ctx, densify(rDome), toPx, visible, armColor);
+    label(ctx, `ring at a10, dome ${DOME} m to the far wall`, ...toPx([-6.5, -11.5]));
+  } else {
+    const lTrim = trimAtEntry(densify(left), insidePlan), rTrim = trimAtEntry(densify(right), insidePlan);
+    drawRuns(ctx, lTrim, toPx, visible, armColor);
+    drawRuns(ctx, rTrim, toPx, visible, armColor);
+    // Fan from the trimmed mouth to the station, inside the through tube
+    drawRuns(ctx, [lTrim[lTrim.length - 1], P.a10, rTrim[rTrim.length - 1]], toPx, () => false, armColor);
+    ctx.fillStyle = css('--proposed');
+    for (const p of [lTrim[lTrim.length - 1], rTrim[rTrim.length - 1]]) { ctx.beginPath(); ctx.arc(...toPx(p), 4, 0, 7); ctx.fill(); }
+    label(ctx, 'each wall ends where it enters the through tube; fan to a10 is hidden', ...toPx([-6.5, -11.5]));
+  }
+
+  // Stations
+  for (const s of ['a9', 'a10', 'a11', 'a13', 'a14']) {
+    const [x, y] = toPx(P[s]);
+    ctx.fillStyle = css('--fg'); ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
+    label(ctx, s, x + 6, y - 6, css('--fg'));
+  }
+  // Scale and north
+  const [sx, sy] = toPx([xmax - 7, ymin + 1]);
+  ctx.strokeStyle = css('--fg'); ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + 5 * sc, sy); ctx.stroke();
+  label(ctx, '5 m', sx + 5 * sc / 2 - 10, sy - 6, css('--fg'));
+  label(ctx, 'N ↑', c.width - 40, 18, css('--fg'));
+}
+
+// Elevation: s along the arm (0 at a13), z relative to a10.
+function armZ(s) { return P.a13[2] + (0 - P.a13[2]) * (s / L); }
+function armUpDown(s) {
+  const t = Math.min(Math.max(s / L, 0), 1);
+  return { up: armRing.a13.up + (armRing.a10.up - armRing.a13.up) * t, down: armRing.a13.down + (armRing.a10.down - armRing.a13.down) * t };
+}
+const insideElev = p => p[0] >= sNear && p[0] <= sFar && p[1] >= -J_D && p[1] <= J_U;
+
+function drawElev(mode, blend) {
+  const c = canvases.elev, ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const smin = 8, smax = L + 4, zmin = -4.5, zmax = 4;
+  const sc = Math.min(c.width / (smax - smin), c.height / (zmax - zmin));
+  const toPx = p => [(p[0] - smin) * sc, (zmax - p[1]) * sc];
+
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+  for (let z = -4; z <= 4; z++) { ctx.beginPath(); ctx.moveTo(...toPx([smin, z])); ctx.lineTo(...toPx([smax, z])); ctx.stroke(); }
+  for (let s = Math.ceil(smin); s <= smax; s += 2) { ctx.beginPath(); ctx.moveTo(...toPx([s, zmin])); ctx.lineTo(...toPx([s, zmax])); ctx.stroke(); }
+
+  // Through tube band
+  ctx.fillStyle = 'rgba(74,120,184,0.12)';
+  const [bx0, by0] = toPx([sNear, J_U]), [bx1, by1] = toPx([sFar, -J_D]);
+  ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+  ctx.strokeStyle = css('--through'); ctx.lineWidth = 2; ctx.strokeRect(bx0, by0, bx1 - bx0, by1 - by0);
+  label(ctx, `through passage: floor −${J_D}, ceiling +${J_U} (U 24 → 3.0, shaft rule)`, bx0 + 4, by0 - 6, css('--through'));
+  label(ctx, 'near wall', bx0 - 60, by1 + 14, css('--through'));
+  label(ctx, 'far wall', bx1 - 20, by1 + 14, css('--through'));
+
+  const axis = [];
+  for (let s = 0; s <= L; s += 0.1) axis.push([s, armZ(s)]);
+  ctx.strokeStyle = css('--arm'); ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+  ctx.beginPath(); axis.forEach((p, i) => i ? ctx.lineTo(...toPx(p)) : ctx.moveTo(...toPx(p))); ctx.stroke(); ctx.setLineDash([]);
+
+  const visible = p => !insideElev(p);
+  const armColor = css('--visible');
+  const ceil = [], floor = [];
+  for (let s = 0; s <= L; s += 0.05) { const ud = armUpDown(s); ceil.push([s, armZ(s) + ud.up]); floor.push([s, armZ(s) - ud.down]); }
+
+  if (mode === 'before') {
+    const ud = armRing.a10;
+    ceil.push([L + PUSH, ud.up]); floor.push([L + PUSH, -ud.down]);
+    drawRuns(ctx, ceil, toPx, visible, armColor); drawRuns(ctx, floor, toPx, visible, armColor);
+    drawRuns(ctx, densify([[L + PUSH, ud.up], [L + PUSH, -ud.down]]), toPx, visible, armColor);
+  } else if (mode === 't07c') {
+    const ud = armRing.a10;
+    for (let i = 1; i <= DOME_RINGS; i++) {
+      const ang = Math.PI / 2 * i / (DOME_RINGS + 1), s = L + DOME * Math.sin(ang), k = Math.cos(ang);
+      ceil.push([s, ud.up * k]); floor.push([s, -ud.down * k]);
+    }
+    ceil.push([L + DOME, 0]); floor.push([L + DOME, 0]);
+    drawRuns(ctx, densify(ceil), toPx, visible, armColor); drawRuns(ctx, densify(floor), toPx, visible, armColor);
+  } else {
+    // Mouth clamp: a column wider than the through tube's extent from a10 ramps down to that
+    // extent over `blend` before the arm's axis enters the through tube; then each column is
+    // trimmed where it enters.
+    const clampDown = Math.min(armRing.a10.down, J_D), clampUp = Math.min(armRing.a10.up, J_U);
+    const ramp = (s, own, clamp) => {
+      if (s <= sNear - blend) return own;
+      if (s >= sNear || blend === 0) return clamp;
+      return own + (clamp - own) * (s - (sNear - blend)) / blend;
+    };
+    const ceilP = [], floorP = [];
+    for (let s = 0; s <= L; s += 0.02) {
+      const ud = armUpDown(s);
+      ceilP.push([s, armZ(s) + ramp(s, ud.up, clampUp)]);
+      floorP.push([s, armZ(s) - ramp(s, ud.down, clampDown)]);
+    }
+    const cT = trimAtEntry(ceilP, insideElev), fT = trimAtEntry(floorP, insideElev);
+    // The ramp itself in green, the rest of the arm in red/gray
+    drawRuns(ctx, cT, toPx, visible, armColor);
+    drawRuns(ctx, fT.filter(p => p[0] <= sNear - blend + 1e-9), toPx, visible, armColor);
+    const rampPts = fT.filter(p => p[0] >= sNear - blend - 1e-9);
+    if (rampPts.length > 1) drawRuns(ctx, rampPts, toPx, visible, css('--proposed'));
+    // Fan to the station, hidden
+    drawRuns(ctx, [cT[cT.length - 1], [L, 0], fT[fT.length - 1]], toPx, () => false, armColor);
+    ctx.fillStyle = css('--proposed');
+    for (const p of [cT[cT.length - 1], fT[fT.length - 1]]) { ctx.beginPath(); ctx.arc(...toPx(p), 4, 0, 7); ctx.fill(); }
+    label(ctx, `floor ramps from −${armRing.a10.down} to the through floor over ${blend.toFixed(2)} m, ending at the near wall`, ...toPx([smin + 0.3, zmin + 0.5]), css('--proposed'));
+  }
+
+  for (const [s, name] of [[0, 'a13'], [L, 'a10']]) {
+    const [x, y] = toPx([s, armZ(s)]);
+    ctx.fillStyle = css('--fg'); ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fill();
+    label(ctx, name, x + 6, y - 6, css('--fg'));
+  }
+  label(ctx, '1 m grid', 6, 14);
+}
+
+// Cross-section at the mouth: the arm's borrowed ring against the through tube's floor and ceiling.
+function drawSect(mode) {
+  const c = canvases.sect, ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const xmin = -3.2, xmax = 3.2, zmin = -2.4, zmax = 3.4;
+  const sc = Math.min(c.width / (xmax - xmin), c.height / (zmax - zmin));
+  const toPx = p => [(p[0] - xmin) * sc + (c.width - (xmax - xmin) * sc) / 2, (zmax - p[1]) * sc];
+  ctx.strokeStyle = '#eee';
+  for (let z = -2; z <= 3; z++) { ctx.beginPath(); ctx.moveTo(...toPx([xmin, z])); ctx.lineTo(...toPx([xmax, z])); ctx.stroke(); }
+  for (let x = -3; x <= 3; x++) { ctx.beginPath(); ctx.moveTo(...toPx([x, zmin])); ctx.lineTo(...toPx([x, zmax])); ctx.stroke(); }
+
+  ctx.fillStyle = 'rgba(74,120,184,0.12)';
+  const [fx0, fy0] = toPx([xmin, J_U]), [fx1, fy1] = toPx([xmax, -J_D]);
+  ctx.fillRect(fx0, fy0, fx1 - fx0, fy1 - fy0);
+  ctx.strokeStyle = css('--through'); ctx.lineWidth = 2;
+  for (const z of [J_U, -J_D]) { ctx.beginPath(); ctx.moveTo(...toPx([xmin, z])); ctx.lineTo(...toPx([xmax, z])); ctx.stroke(); }
+  label(ctx, 'through ceiling (+3.0)', fx0 + 6, fy0 - 6, css('--through'));
+  label(ctx, 'through floor (−0.05); its walls run almost along the arm here, off to the sides', fx0 + 6, fy1 + 16, css('--through'));
+
+  const ring = (r, color, width, dash) => {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    for (let i = 0; i <= 64; i++) {
+      const th = i / 64 * 2 * Math.PI, ct = Math.cos(th), st = Math.sin(th);
+      const ax = ct >= 0 ? r.right : r.left, bz = st >= 0 ? r.up : r.down;
+      const rho = ax * bz / Math.hypot(bz * ct, ax * st);
+      const p = toPx([rho * ct, rho * st]);
+      i ? ctx.lineTo(...p) : ctx.moveTo(...p);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  };
+  const own = armRing.a10;
+  ring(own, css('--visible'), 2, [6, 4]);
+  label(ctx, `arm ring at a10 (borrowed from a13): right ${own.right.toFixed(2)}, left ${own.left.toFixed(2)}, up ${own.up}, down ${own.down}`, 10, c.height - 30, css('--visible'));
+  if (mode === 'proposed') {
+    ring({ ...own, down: Math.min(own.down, J_D), up: Math.min(own.up, J_U) }, css('--proposed'), 3);
+    label(ctx, 'clamped mouth: down → 0.05 (the through floor); up 1.8 stays (under the 3.0 ceiling)', 10, c.height - 12, css('--proposed'));
+  } else {
+    label(ctx, `${mode === 'before' ? 'before T07c' : 'T07c'}: this ring is used as is, 1.7 m below the through floor`, 10, c.height - 12, css('--visible'));
+  }
+  ctx.fillStyle = css('--fg'); ctx.beginPath(); ctx.arc(...toPx([0, 0]), 3, 0, 7); ctx.fill();
+  label(ctx, 'a10', toPx([0, 0])[0] + 6, toPx([0, 0])[1] - 6, css('--fg'));
+}
+
+function redraw() {
+  const mode = document.querySelector('input[name=mode]:checked').value;
+  const blend = parseFloat(document.getElementById('blend').value);
+  region = document.getElementById('region').value;
+  sNear = null; sFar = null;
+  for (let s = 0; s <= L + 4; s += 0.01) {
+    const p = add(P.a13, mul(a, s));
+    if (insidePlan(p)) { if (sNear === null) sNear = s; sFar = s; }
+  }
+  document.getElementById('blendOut').textContent = blend.toFixed(2) + ' m';
+  drawPlan(mode, blend); drawElev(mode, blend); drawSect(mode);
+}
+document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', redraw));
+const hashMode = document.querySelector(`input[name=mode][value="${location.hash.slice(1)}"]`);
+if (hashMode) hashMode.checked = true;
+redraw();
+})();
+</script>
+</body>
+</html>

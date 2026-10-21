@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passage Tube Rendering</title>
+<style>
+/* Layout: single reading column with full-width figure bands. */
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --fg: #1f2328;
+  --muted: #5d6570;
+  --line: #d9d6cc;
+  --accent: #b5541c;      /* survey-flag orange */
+  --accent-2: #2f6f8f;    /* cave-water blue */
+  --accent-3: #4d8a3a;    /* moss green */
+  --accent-4: #8a4d9a;    /* purple, splays */
+  --warn: #c2a31b;
+  --code-bg: #eeece6;
+  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-ui: "IBM Plex Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15171a; --surface: #1d2024; --fg: #e6e4de; --muted: #a2a8b0; --line: #353a40;
+    --accent: #e08650; --accent-2: #6fb0d2; --accent-3: #8cc472; --accent-4: #c08ad0; --warn: #e2c550;
+    --code-bg: #23272c;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 17px; line-height: 1.55;
+  padding-block: 2rem 5rem; padding-inline: 16px;
+}
+main { max-width: 860px; margin: 0 auto; }
+h1, h2, h3, h4 { font-family: var(--font-ui); line-height: 1.2; text-wrap: balance; margin: 2.2em 0 0.6em; }
+h1 { font-size: 2.3rem; margin-top: 0; letter-spacing: -0.01em; }
+h2 { font-size: 1.55rem; border-bottom: 1px solid var(--line); padding-bottom: 0.3em; }
+h3 { font-size: 1.2rem; }
+h4 { font-size: 1.02rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+p, li { max-width: 68ch; }
+.lede { font-size: 1.1rem; color: var(--muted); max-width: 66ch; }
+blockquote { margin: 1.2em 0; padding: 0.8em 1.2em; border-left: 3px solid var(--accent); background: var(--surface); color: var(--fg); font-style: italic; }
+blockquote p { margin: 0; }
+code, pre { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 1em 1.2em; border-radius: 6px; overflow-x: auto; line-height: 1.45; max-width: 100%; }
+pre code { background: none; padding: 0; }
+a { color: var(--accent-2); }
+table { border-collapse: collapse; width: 100%; font-family: var(--font-ui); font-size: 0.86rem; margin: 1.2em 0; }
+.table-wrap { overflow-x: auto; }
+th, td { text-align: left; vertical-align: top; padding: 0.5em 0.7em; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+tbody tr:nth-child(odd) td { background: var(--surface); }
+figure { margin: 2em 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1.2em 1.2em 0.8em; overflow-x: auto; }
+figure svg { display: block; max-width: 100%; height: auto; margin: 0 auto; font-family: var(--font-ui); }
+figcaption { font-family: var(--font-ui); font-size: 0.86rem; color: var(--muted); margin-top: 0.8em; line-height: 1.45; max-width: 76ch; }
+figcaption b { color: var(--fg); }
+.toc { font-family: var(--font-ui); font-size: 0.92rem; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1em 1.4em; }
+.toc ol { margin: 0.4em 0 0; padding-left: 1.2em; columns: 2; column-gap: 2em; }
+.toc li { margin: 0.2em 0; break-inside: avoid; }
+.callout { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent-2); border-radius: 6px; padding: 0.9em 1.2em; margin: 1.4em 0; font-family: var(--font-ui); font-size: 0.95rem; }
+.callout.key { border-left-color: var(--accent); }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1em; margin: 1.4em 0; }
+.summary-grid > div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 1em 1.1em; min-width: 0; font-family: var(--font-ui); font-size: 0.93rem; }
+.summary-grid b { display: block; margin-bottom: 0.3em; color: var(--accent); }
+.legend { display: flex; flex-wrap: wrap; gap: 0.6em 1.4em; font-family: var(--font-ui); font-size: 0.82rem; color: var(--muted); margin-top: 0.6em; }
+.legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 0.4em; vertical-align: -2px; background: var(--c); }
+.phases { list-style: none; padding: 0; margin: 1.4em 0; font-family: var(--font-ui); }
+.phases li { display: grid; grid-template-columns: 5.5em 1fr; gap: 1em; padding: 0.8em 0; border-bottom: 1px solid var(--line); }
+.phases li b { color: var(--accent); }
+.phases li p { margin: 0; max-width: none; }
+.src-list li { max-width: none; overflow-wrap: anywhere; font-size: 0.92rem; }
+small.ref { font-family: var(--font-mono); font-size: 0.78em; color: var(--muted); }
+/* SVG theme hooks */
+svg text { fill: var(--fg); font-size: 12px; }
+svg .muted { fill: var(--muted); }
+svg .stroke-fg { stroke: var(--fg); }
+svg .stroke-muted { stroke: var(--muted); }
+svg .fill-surface { fill: var(--surface); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Passage Tube Rendering</h1>
+<p class="lede">Research for drawing cave passages as a continuous 3D tube that follows the survey centerline: what CaveWhere already has, how other cave tools and the graphics literature solve each sub-problem, and a recommended design with phases. Companion to <code>plans/TUBE_RENDERING_RESEARCH.md</code>; line references are from the <code>tube_render</code> branch, October 2026.</p>
+
+<blockquote><p>Create a continuous tube rendering that follows centerline data. It should generate cross-sections, then cross-sections are joined at passage junctions. Investigate whether the cross-sections should be z-aligned, or have pitch (a vertical pit would be an x-y plane). The cross-section is modified by scrap geometry to get the extent: plan scraps add to the width, profile scraps define the height. Splays should also change the cross-section geometry. If no scraps or splays exist, use LRUD data.</p></blockquote>
+
+<nav class="toc">
+<b>Contents</b>
+<ol>
+<li><a href="#summary">Summary</a></li>
+<li><a href="#today">What CaveWhere has today</a></li>
+<li><a href="#others">How other tools do it</a></li>
+<li><a href="#frame">Cross-section frame</a></li>
+<li><a href="#sources">Cross-section sources</a></li>
+<li><a href="#joining">Joining rings into a tube</a></li>
+<li><a href="#arch">Architecture</a></li>
+<li><a href="#questions">Decisions and open questions</a></li>
+<li><a href="#phases">Phases</a></li>
+<li><a href="#sources-list">Sources</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="summary">0. Summary</h2>
+
+<div class="summary-grid">
+<div><b>Inputs already exist</b>LRUD per station occurrence, splays per station occurrence, solved positions from cavern, and every scrap's outline, note stations, transform and view matrix are all in the snapshot the line-plot worker receives. Missing: the builder, a lit mesh render object, and a home for splay tips.</div>
+<div><b>Frame: hybrid, blended</b>Walking passage uses a section plane perpendicular to the bisected shot direction with world-up as its in-plane up reference. As inclination steepens the reference blends into a rotation-minimizing frame, so a pit gets a horizontal ring with no singularity. Every shipping tool uses a hard threshold here.</div>
+<div><b>One radial-sample model</b>LRUD, splays, plan scraps and profile scraps all become radial samples in the section plane; one star-shaped ring is fitted per cross-section. Plan scraps fill horizontal directions, profile scraps fill vertical ones, and a plan scrap over a pit yields the full footprint automatically.</div>
+<div><b>Chains first, hulls later</b>Chain the network into traverses (Loch), place rings in bisector planes, subdivide sharp bends, and end side arms with a dome cap pushed into the through tube. Manifold junction patches or an SDF watertight mode come later and only matter for translucency and cutaways.</div>
+</div>
+
+<figure>
+<svg viewBox="0 0 820 300" role="img" aria-label="Pipeline overview">
+<defs>
+<marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+</defs>
+<g font-size="12">
+<!-- sources column -->
+<rect x="20" y="20" width="170" height="44" rx="6" fill="var(--code-bg)" stroke="var(--line)"/><text x="105" y="38" text-anchor="middle" font-weight="600">LRUD</text><text x="105" y="54" text-anchor="middle" class="muted">cwStation, per occurrence</text>
+<rect x="20" y="78" width="170" height="44" rx="6" fill="var(--code-bg)" stroke="var(--line)"/><text x="105" y="96" text-anchor="middle" font-weight="600">Splay tips</text><text x="105" y="112" text-anchor="middle" class="muted">solved by cavern (.3d)</text>
+<rect x="20" y="136" width="170" height="44" rx="6" fill="var(--code-bg)" stroke="var(--line)"/><text x="105" y="154" text-anchor="middle" font-weight="600">Scrap outlines</text><text x="105" y="170" text-anchor="middle" class="muted">plan / running / projected</text>
+<rect x="20" y="194" width="170" height="44" rx="6" fill="var(--code-bg)" stroke="var(--line)"/><text x="105" y="212" text-anchor="middle" font-weight="600">Station positions</text><text x="105" y="228" text-anchor="middle" class="muted">cwStationPositionLookup</text>
+<!-- builder -->
+<rect x="250" y="20" width="200" height="218" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+<text x="350" y="42" text-anchor="middle" font-weight="700" fill="var(--accent)">cwPassageTubeBuilder</text>
+<text x="350" y="58" text-anchor="middle" class="muted">pure, worker thread</text>
+<g class="muted">
+<text x="268" y="88">1  edges from chunk shots</text>
+<text x="268" y="110">2  chains (straightest through)</text>
+<text x="268" y="132">3  frames (blended RMF)</text>
+<text x="268" y="154">4  radial samples</text>
+<text x="268" y="176">5  ring fit per sample point</text>
+<text x="268" y="198">6  zip rings, caps, domes</text>
+<text x="268" y="220">→ cwPassageTubeMesh</text>
+</g>
+<!-- manager -->
+<rect x="500" y="80" width="130" height="96" rx="6" fill="var(--code-bg)" stroke="var(--line)"/>
+<text x="565" y="102" text-anchor="middle" font-weight="600">cwPassageTube</text><text x="565" y="118" text-anchor="middle" font-weight="600">Manager</text>
+<text x="565" y="140" text-anchor="middle" class="muted">cwUpdatable</text><text x="565" y="156" text-anchor="middle" class="muted">depends on LinePlot</text>
+<!-- render -->
+<rect x="670" y="40" width="130" height="64" rx="6" fill="var(--code-bg)" stroke="var(--line)"/>
+<text x="735" y="62" text-anchor="middle" font-weight="600">cwRenderPassageTube</text><text x="735" y="80" text-anchor="middle" class="muted">GUI thread, cwScene</text>
+<rect x="670" y="150" width="130" height="64" rx="6" fill="var(--code-bg)" stroke="var(--line)"/>
+<text x="735" y="172" text-anchor="middle" font-weight="600">cwRHIPassageTube</text><text x="735" y="190" text-anchor="middle" class="muted">render thread, lit shader</text>
+<!-- arrows -->
+<g stroke="var(--muted)" stroke-width="1.3" fill="none" marker-end="url(#arr)">
+<path d="M190,42 L250,60"/><path d="M190,100 L250,100"/><path d="M190,158 L250,140"/><path d="M190,216 L250,190"/>
+<path d="M450,128 L500,128"/>
+<path d="M630,110 L670,80"/><path d="M735,104 L735,150"/>
+</g>
+<text x="475" y="118" text-anchor="middle" class="muted" font-size="10">mesh</text>
+<text x="755" y="132" text-anchor="start" class="muted" font-size="10">sync barrier</text>
+<!-- triggers -->
+<g class="muted" font-size="11">
+<text x="565" y="206" text-anchor="middle">rebuild triggers:</text>
+<text x="565" y="222" text-anchor="middle">line-plot solve finished,</text>
+<text x="565" y="238" text-anchor="middle">scrap outline / station edits</text>
+</g>
+<g class="muted" font-size="11">
+<text x="105" y="268" text-anchor="middle">all four already live in the</text>
+<text x="105" y="284" text-anchor="middle">cwCavingRegionData snapshot (+ lookups)</text>
+</g>
+</g>
+</svg>
+<figcaption><b>Figure 1. Proposed pipeline.</b> The builder is a pure function over value snapshots so it can be unit-tested without a GPU. The manager mirrors <code>cwScrapManager</code>'s relationship to the line plot: it reruns on a finished solve and on scrap edits, without re-running cavern for an outline drag.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="today">1. What CaveWhere has today</h2>
+
+<h3>1.1 LRUD</h3>
+<ul>
+<li>Stored <b>per station occurrence</b> on <code>cwStation</code> as four <code>cwDistanceReading</code>s <small class="ref">cwStation.h:41-51, :86-89</small>. A name used in two chunks is two <code>cwStation</code> values with possibly different LRUD; identity compares the canonical name only <small class="ref">cwStation.h:97-112</small>.</li>
+<li>Raw strings in the trip's distance unit <small class="ref">cwTripCalibration.h:200</small>; convert with <code>cwReading::toDouble()</code> and <code>cwUnits::convert</code> <small class="ref">cwUnits.h:76</small>.</li>
+<li>Left/right follow chunk order. The Survex importer swaps them when a <code>*data passage</code> block runs against the chunk <small class="ref">cwSurvexImporter.cpp:1438-1470</small>.</li>
+<li>Compass, Survex, Walls and CSV importers all fill LRUD.</li>
+<li><b>LRUD already goes to cavern.</b> <code>cwSurvexExporter::writeLRUDData</code> <small class="ref">cwSurvexExporter.cpp:280-309</small> writes one <code>*data passage</code> block per chunk and the line-plot solve uses this exporter <small class="ref">cwLinePlotTask.cpp:295-309</small>. The <code>.3d</code> therefore carries <code>img_XSECT</code> records <small class="ref">survex/src/img.h:63-64, :145</small> that <code>cwSurvex3DFileReader</code> drops; it reads only <code>img_LABEL</code>, <code>img_MOVE</code>, <code>img_LINE</code> <small class="ref">cwSurvex3DFileReader.cpp:81-139</small>. Reading them would only matter for externally included <code>.svx</code> files later.</li>
+</ul>
+
+<h3>1.2 Splays</h3>
+<ul>
+<li><code>QList&lt;cwShotMeasurement&gt; m_splays</code> per station occurrence <small class="ref">cwStation.h:53-59, :91</small>; chunk API <small class="ref">cwSurveyChunk.h:110-122</small>.</li>
+<li>Exported as <code>*flags splay</code> legs to the anonymous station <code>..</code> <small class="ref">cwSurvexExporter.cpp:193-276</small>; tips come back from the <code>.3d</code> <small class="ref">cwSurvex3DFileReader.cpp:133-139</small> as <code>cwSplayTipsByStation</code> <small class="ref">cwStationPositionLookup.h:29</small>, split per cave into <code>LinePlotCaveData::setSplayTips</code> <small class="ref">cwLinePlotTask.cpp:511-540</small>.</li>
+<li><b>Nothing on the main thread reads <code>splayTips()</code></b>; they survive only as baked line-plot vertices. One small addition on <code>cwCave</code> fixes that.</li>
+</ul>
+
+<h3>1.3 Positions, network, topology</h3>
+<ul>
+<li>In-process cavern via <code>cwCavernRunner</code>; worker steps <small class="ref">cwLinePlotTask.cpp:151-242</small> under <code>cwConcurrent::run</code> with a cancellable <code>QPromise</code>. Meters, local projection, Z up.</li>
+<li><code>cwStationPositionLookup</code> is <code>QMap&lt;QString, QVector3D&gt;</code> by canonical name, one per <code>cwCave</code> <small class="ref">cwCave.h:128-135</small>.</li>
+<li><code>cwSurveyNetwork</code> has <code>neighbors(name)</code> but <b>no edge identity</b>, so the builder derives its edge list from <code>cwSurveyChunkData { id; stations; shots; }</code>, which also gives per-leg LRUD attribution.</li>
+<li><code>cwLinePlotGeometry::Result</code> exposes per-trip vertex ranges <small class="ref">cwLinePlotGeometry.h:81-87</small>; the tube mesh should expose the same kind of per-trip index ranges.</li>
+</ul>
+
+<h3>1.4 Scraps</h3>
+<ul>
+<li>The snapshot includes them: <code>cwTripData::noteModel</code> → <code>cwNoteData { imageResolution; scraps; image; }</code> → <code>cwScrapData { outlinePoints; stations; leads; noteTransformation; viewMatrix; }</code> <small class="ref">cwTripData.h:17-29, cwScrapData.h:66-72</small>.</li>
+<li>Outline points and note stations are in <b>normalized note-image coordinates</b> in [0,1]. Normalized → pixels → paper meters (<code>cwImageResolution</code>) → cave meters via <code>cwNoteTranformation::matrix(scale, northUp) = rotate(northUp, z) · scale(1/scale)</code> <small class="ref">cwNoteTranformation.cpp:167-178</small>. <code>cwTriangulateTask</code> composes exactly this chain.</li>
+<li>View matrices: Plan = identity; ProjectedProfile = <code>fromAxisAndAngle(1,0,0,-90) · fromAxisAndAngle(0,0,1, absoluteAzimuth())</code> <small class="ref">cwProjectedProfileScrapViewMatrix.cpp:85-100</small>; RunningProfile = <code>Data(from, to)</code> per shot <small class="ref">cwRunningProfileScrapViewMatrix.h:13-36</small>.</li>
+<li>Morphing <small class="ref">cwTriangulateTask.cpp:790-1104</small> anchors each note station to its world position and blends offsets with inverse-distance-squared weights; between two stations of one shot it is close to linear, which §4 relies on.</li>
+<li>The CPU copy of the triangulated scrap mesh is released after upload <small class="ref">cwRenderTexturedItems.h:36, .cpp:286-290</small>; the builder works from the outline polygon instead, which is simpler and more precise.</li>
+</ul>
+
+<h3>1.5 Rendering</h3>
+<ul>
+<li>Render objects come in pairs: <code>cwRenderObject</code> (GUI thread, <code>createRHIObject()</code>) and <code>cwRHIObject</code> (render thread: <code>initialize</code>, <code>synchronize</code>, <code>updateResources</code>, <code>gather</code>, optional <code>worldBounds</code>) <small class="ref">cwRHIObject.h:235-331</small>. <code>cwScene</code> queues changes by id; <code>cwRhiScene::synchroize</code> drains them at the sync barrier <small class="ref">cwRhiScene.cpp:50-128</small>.</li>
+<li>Templates to copy: <code>cwRenderPointCloud</code>/<code>cwRHIPointCloud</code> (immutable buffers, bounds, geometry/render-state split) and <code>cwRenderLinePlot</code>/<code>cwRHILinePlot</code> (per-vertex visibility mask, <code>buildPipelineKey</code> with <code>QStringLiteral</code> paths <small class="ref">cwRHILinePlot.cpp:218-348</small>).</li>
+<li><b>No shader does normal-based lighting.</b> <code>scrap.*</code>, <code>unlit.*</code>, <code>LinePlot.*</code> are texture-only or flat color. <code>cwGeometry</code> has a <code>Normal</code> semantic. New shaders go in <code>qt_add_shaders</code> <small class="ref">cavewherelib/CMakeLists.txt:418-450</small>.</li>
+<li>EDL applies only to point clouds; an Opaque-pass tube occludes them correctly. The Transparent pass has no depth sorting <small class="ref">cwRhiFrameRenderer.cpp:652-658</small>.</li>
+<li>Picking: a pickable tube would steal front-most hits from station snapping <small class="ref">cwScenePick.cpp:45</small> and hide leads <small class="ref">cwLeadView.cpp:618</small>. Recommendation: do not register.</li>
+<li>Visibility: per-trip line-plot filtering runs through <code>reconcileTripKeywordItems</code> → <code>cwLinePlotTripVisibility</code> → <code>setRangeVisible</code> <small class="ref">cwLinePlotManager.cpp:280-376</small>. <code>cwRenderingSettings</code> has no content toggles.</li>
+<li>Export reuses <code>gatherScene</code>/<code>drawScene</code>; map export hides objects via <code>captureHiddenObjectIds()</code> <small class="ref">cwRegionSceneManager.cpp:89-99</small>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="others">2. How other tools do it</h2>
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Tool</th><th>Section frame</th><th>Pits</th><th>Bends</th><th>Junctions</th><th>Sources</th></tr></thead>
+<tbody>
+<tr><td><b>Survex aven</b><br><small class="ref">gfxcore.cc:3903-4106</small></td><td>Vertical plane; <code>right = n(hperp(in)) + n(hperp(out))</code>, up always (0,0,1)</td><td>Both rings of a vertical leg share one vertical plane → a flat sheet</td><td>4 quads between rectangles, no miter</td><td>None; every <code>*data passage</code> block is its own capped tube; overlap</td><td>LRUD; missing drawn as 1 unit</td></tr>
+<tr><td><b>Therion core</b><br><small class="ref">thdb1d.cxx</small></td><td>Per leg; X ⟂ bearing; Y = world Z below <code>vthreshold</code> 67.5°, else ⟂ to leg in its vertical plane</td><td>U/D rotate with the leg; exactly vertical → U/D read as N/S</td><td>None (prism per leg, both ends capped)</td><td>Overlap</td><td>LRUD; rectangle / diamond / octagon / tunnel</td></tr>
+<tr><td><b>Therion Loch</b><br><small class="ref">lxLRUD.cxx</small></td><td>As core, 60°</td><td>As core</td><td><b>Miter</b> in bisecting plane; fold-back test demotes to capped ends</td><td>Chains by straightest continuation; through-chain mitered, side arms end in a <b>dome</b> inside the through tube</td><td>LRUD octagon; <code>// TODO - more sophisticated LRUD modelling :)</code></td></tr>
+<tr><td><b>Therion scraps</b><br><small class="ref">thscrap.cxx</small></td><td colspan="3">Extrudes the plan outline; height from <code>passage-height</code>/<code>dimensions</code> symbols and centerline U/D, inverse-square interpolated to every outline vertex; vertical wall bands</td><td>n/a</td><td>Plan outline only; elevation scraps unused for shape</td></tr>
+<tr><td><b>CaveView.js</b><br><small class="ref">buildCrossSections.js</small></td><td>Horizontal ⟂ bisector of in/out legs; U/D vertical</td><td><code>|leg·up| &gt; 0.97</code> → reuse previous cross, U/D along <code>cross × up</code> → horizontal box</td><td>Fixed-topology quads</td><td><code>fixup_xsects</code>: side tube extended one station into the junction using that station's LRUD, then overlap</td><td>LRUD from .3d XSECTs; diamond / square / oval</td></tr>
+<tr><td><b>Compass</b><br><small class="ref">pasmodel.doc</small></td><td>Horizontal ⟂ shot, vertical U/D</td><td>Above 45–75° LRUD → W/E/N/S prism</td><td><b>Corner rounding</b>: truncate legs, insert 1 or 3 artificial shots with lerped LRUD</td><td>"Merge Passages" joins end-to-start only</td><td>LRUD; "Expand Passages" borrows nearest LRUD</td></tr>
+<tr><td><b>TopoDroid / Cave3D</b></td><td>Hull: vertical plane at bisector bearing (<code>normal.z = 0</code>); Tube: smallest eigenvector of splay scatter</td><td>Hull: none; Bubble / Powercrust: degree-agnostic</td><td>Per-leg hulls</td><td>Overlap; splays assigned to legs by bisector sectors; Bubble clips neighboring station hulls</td><td><b>Splays</b>: convex / convex-concave hull, power crust, bubbles</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout key">
+<b>Takeaways.</b> Every LRUD tool keeps L/R horizontal and U/D vertical for walking passage, because that is how the numbers were measured, and all switch frame at a hard inclination threshold. Nobody joins junctions properly; Loch's chain + miter + dome is the best looking and cheapest. Only Therion derives 3D from scraps, and only plan outline + height symbols. Combining plan width with profile height from drawn outlines has no precedent to copy. Survex's roadmap is to "treat each LRUD cross section as 4 splays", which is the unified-sample model in §4.
+</div>
+
+<figure>
+<svg id="fig-aven" viewBox="0 0 820 290" role="img" aria-label="Aven tube versus recommended frame on a pitch"></svg>
+<figcaption><b>Figure 2. Why a fixed vertical section fails on a pitch.</b> Elevation view of the same centerline (horizontal → 35° → 70° → vertical pit → horizontal). Left: aven and CaveView-style sections are always vertical lines in this view, so the two rings of the vertical leg are coplanar and the pitch collapses to a sheet. Right: the recommended section is perpendicular to the bisected path, so the pit ring is horizontal and the transition is smooth.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="frame">3. Cross-section frame: z-aligned or pitched?</h2>
+
+<p><b>Both, blended by inclination.</b> LRUD, plan-scrap widths and profile-scrap heights are all measured in a vertical section through the station, so for passage under about 45° a section plane perpendicular to the path with world-up as its in-plane up vector reproduces the measurement. In a vertical pit that section is meaningless; the useful one is horizontal, and the useful data are the plan footprint. A hard threshold leaves a visible kink where a passage steepens past it; a rotation-minimizing frame transported along the chain has no singularity at vertical, and blending toward it only when steep keeps the horizontal case exact.</p>
+
+<pre><code>t_in  = n(P_i − P_{i−1}),  t_out = n(P_{i+1} − P_i)        // one of them at chain ends
+t_i   = n(t_in + t_out)                                     // bisector tangent; ring lies in the plane ⟂ t_i
+incl  = asin(|t_i.z|)
+
+up_h   = n(Z − (Z·t_i) t_i)                                 // world up projected into the section plane
+up_rmf = doubleReflection(up_{i−1}, t_{i−1}, P_{i−1}, P_i, t_i)   // Wang et al. 2008
+w      = smoothstep(θ_lo, θ_hi, incl)                       // e.g. 45° → 75°
+up_i   = rotateAbout(t_i, up_h, w · signedAngle(up_h → up_rmf))   // pure RMF above θ_hi
+right_i = t_i × up_i                                        // east for a northbound horizontal leg</code></pre>
+
+<p>Double-reflection step (<code>r</code> = up reference, <code>t</code> = tangent), exact for straight polyline segments:</p>
+<pre><code>v1 = P_i − P_{i−1};  c1 = v1·v1
+rL = r_{i−1} − (2/c1)(v1·r_{i−1}) v1;   tL = t_{i−1} − (2/c1)(v1·t_{i−1}) v1
+v2 = t_i − tL;       c2 = v2·v2
+r_i = rL − (2/c2)(v2·rL) v2</code></pre>
+
+<figure>
+<svg id="fig-blend" viewBox="0 0 820 300" role="img" aria-label="Blend weight and frame transition"></svg>
+<figcaption><b>Figure 3. The frame blend.</b> Left: the weight <code>w = smoothstep(45°, 75°)</code> against inclination, with the hard thresholds other tools use marked for comparison. Right: a passage steepening into a pit, seen along the path; the ring's up reference rotates from world-up (orange) toward the transported RMF reference (blue) as <code>w</code> grows, and arrives horizontal in the pit without a jump.</figcaption>
+</figure>
+
+<ul>
+<li>Seed the chain's RMF from <code>up_h</code> at the first station with <code>incl &lt; θ_hi</code>; if the chain starts vertical, seed at the first non-vertical station and transport backwards. A fully vertical chain seeds from world +Y (Loch's convention).</li>
+<li>Sample angles are always measured in the local <code>(right, up)</code> basis: L at 180°, R at 0°, U at 90°, D at 270°. For horizontal passage that is the measured meaning. <b>In a pit, LRUD gives no ring samples</b> (decision in §7): L/R have no usable direction on a vertical shot and U/D are distances along the pit axis, so the ring comes from splays, a plan scrap, or the fallback chain (§4.4). U/D are still used at a pit <b>dead end</b>: the cap is placed <code>D</code> below the bottom station (or <code>U</code> above a top station) instead of flush with it. LRUD samples fade out with the same weight <code>w</code> that rolls the frame, so there is no second threshold.</li>
+<li>Raw <code>u</code>/<code>d</code> are used as in-plane distances even on inclined passage, as every tool does; projecting by <code>cos(incl)</code> is only ~13% different at 30°.</li>
+<li>Zero-length legs and unresolved stations break a chain; skip them rather than inventing a frame.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="sources">4. Cross-section sources: one radial-sample model</h2>
+
+<p>Every source contributes <b>radial samples</b> <code>(angle θ, radius ρ, weight)</code> in the section plane at a sample point <code>S</code> with frame <code>(t, right, up)</code>. One star-shaped ring is then fitted from the samples. This is what makes "plan adds width, profile defines height, splays modify, LRUD fallback" a single mechanism.</p>
+
+<figure>
+<svg id="fig-ring" viewBox="0 0 820 300" role="img" aria-label="Radial samples from each source and the fitted ring"></svg>
+<div class="legend"><span style="--c: var(--accent)">LRUD quadrant ellipse</span><span style="--c: var(--accent-4)">splay tips projected</span><span style="--c: var(--accent-3)">plan scrap rays</span><span style="--c: var(--accent-2)">profile scrap rays</span><span style="--c: var(--fg)">fitted ring (16 bins)</span></div>
+<figcaption><b>Figure 4. Building one cross-section.</b> All four panels look along the passage at the same station (right = east-ish, up = world up). <b>(a)</b> LRUD alone is a quadrant ellipse with semi-axes <code>l, r, u, d</code>. <b>(b)</b> Splay tips within half a leg of the station are projected into the plane. <b>(c)</b> A plan scrap casts rays in directions with a horizontal component (weight = how much of the direction the page sees), a profile scrap in directions with a vertical component. <b>(d)</b> Per angular bin the maximum radius is kept and empty bins are interpolated, giving one star-shaped ring with a fixed vertex count so consecutive rings zip with fixed topology.</figcaption>
+</figure>
+
+<h3>4.1 LRUD → quadrant ellipse</h3>
+<p>For bin angle <code>θ</code>: <code>a = cosθ ≥ 0 ? r : l</code>, <code>b = sinθ ≥ 0 ? u : d</code>, <code>ρ(θ) = a·b / |(b cosθ, a sinθ)|</code> (the polar radius of the quadrant ellipse at angle <code>θ</code>; the parameter form <code>|(a cosθ, b sinθ)|</code> is the distance to the point at parameter <code>θ</code>, which lies at a different angle and bulges the diagonal bins when <code>a ≠ b</code>). Eight points of this are CaveView's oval and Loch's octagon; evaluating it at every bin works for any ring resolution. A missing dimension produces <b>no sample</b> for that quadrant pair rather than aven's <code>fabs(-1) = 1</code>. Use the LRUD occurrence from the chunk that owns the leg being skinned; a junction station has one per arm. The ellipse samples carry weight <code>1 − w</code> (§3), so they vanish in a pit where L/R are meaningless and U/D run along the axis.</p>
+<p><b>Facing (added after Phake Cave 3000).</b> A station occurrence's left and right were measured facing one way: along its chunk, as aven draws a <code>*data passage</code> block, perpendicular to the horizontal chord between the station's chunk neighbors (the single shot at a chunk end; a vertical shot borrows the nearest facing in the chunk, else north). The record's right direction <code>R</code> is that facing turned clockwise, and a ring takes each wall's component across itself: with <code>c = R · right</code> of the ring frame, the ring's right axis reading is <code>r·c</code> and its left <code>l·c</code>, swapping when <code>c &lt; 0</code>. A leg walked backwards needs no left/right swap, and a leg leaving a junction at an angle to the chunk sees the wall foreshortened instead of drawn full-size across itself (at a6, chunk 1's 5 m left wall was a 5 m fin on the arm a4→a6 and a second 5 m fin, 75° away, on the through chain a7→a6).</p>
+<p><b>Shaft readings (added after Phake Cave 3000).</b> Surveyors record a pit's depth as the down, or an aven's height as the up, of the stations next to it — including a dead end with no leg into the pit (a12: L 0, R 2, U 8, D 35) and the station one leg before the pit (a4: D 23). An up/down reading more than <code>kShaftRatio = 3</code> times the larger of the station's width (<code>l + r</code>) and the median of the same reading at its neighboring stations is a shaft, not a wall: the ring uses the neighbor median (or half the width), the raw value still places a steep dead-end cap, and a <code>ShaftReading</code> warning names the station. An up/down reading that runs along a leg leaving the station (the lip and bottom of a surveyed pit) is dropped from the ring for the same reason and, on a gentle leg, refilled from the leg's other end.</p>
+
+<h3>4.2 Splays → projected tips</h3>
+<pre><code>v = T − S;  along = v·t;  q = v − along·t
+keep if |along| ≤ max(½ · min(adjacent leg lengths), kMinAlongTolerance)
+     and |q| &gt; kSplayParallelFactor · |along|       // drop splays shot down the passage (TopoDroid rule)
+θ = atan2(q·up, q·right);  ρ = |q|;  weight = 1</code></pre>
+<p>Tips come from <code>LinePlotCaveData::splayTips()</code>; the manager must start keeping them. Mid-shot samples take tips from both end stations whose <code>along</code> lands near the sample.</p>
+
+<h3>4.3 Scraps → page-space ray casts</h3>
+<p>For each scrap whose note stations include the sample's station (both stations of the shot for mid-shot samples), work in <b>page space</b>: the paper-meter frame in which the outline is a plain 2D polygon and the morph is locally linear.</p>
+<pre><code>pageOf(noteNormalized) = metersPerDot · pixels(noteNormalized)         // paper meters
+toCave  = noteTransform.matrix(scale, northUp)                         // paper m → cave m
+V       = scrap view matrix (Plan: I; ProjectedProfile: fixed; RunningProfile: Data(from,to))
+S_page  = pageOf(noteStation(S))                                        // or lerp of two note stations at s
+
+for each ring direction d_k (world unit vector in the section plane):
+    d_view = (V · d_k).xy                                               // how much of d_k the page can see
+    c = |d_view|;  skip if c &lt; kMinPageComponent (≈ 0.5, within 60° of the page)
+    d_page = n(toCave⁻¹ rotation · d_view)
+    hit    = nearest intersection of ray (S_page, d_page) with the outline polygon
+    if hit:  ρ_k = distance(S_page, hit) · scaleToCave / c;  weight = c</code></pre>
+
+<figure>
+<svg id="fig-page" viewBox="0 0 820 320" role="img" aria-label="Page-space ray casting into scrap outlines"></svg>
+<figcaption><b>Figure 5. Ray casts in page space.</b> <b>Left:</b> a plan scrap with a shot A→B sampled at the two stations and three mid-shot points (orange). Rays are cast along each ring direction's projection onto the page; for a horizontal passage the left/right directions project fully, the shoulders project onto the same page line with <code>c &lt; 1</code> and are scaled back by <code>1/c</code>, and up/down vanish. Sampling along the shot is what makes the tube follow the drawn wall instead of running straight between stations. <b>Middle:</b> a running or projected profile of the same shot fills the vertical directions. <b>Right:</b> a vertical pit: its section plane is horizontal, so every ring direction projects fully onto the plan page and the ray fan returns the whole footprint. Nothing is special-cased.</figcaption>
+</figure>
+
+<ul>
+<li><b>Mid-shot samples:</b> <code>S_page = lerp(page(A), page(B), s)</code> with <code>S_world = lerp(P_A, P_B, s)</code> matches how <code>morphPoints</code> densifies shots. Sampling every <code>kSampleSpacing</code> (the 1 m default setting) is what makes the tube follow curved drawn walls. Only sample where both stations are in the scrap and <code>S_page</code> lies inside the outline.</li>
+<li>Several scraps over one station: keep every sample; the fit takes the max per bin. A plan scrap and its profile fill different bins, so they never compete.</li>
+<li>Projected profiles read the ceiling and floor at the station's <em>projected</em> location, which is exact where the passage runs along the profile plane and approximate as it turns. Running profiles have no such issue.</li>
+</ul>
+
+<h3>4.4 Priority and fallback</h3>
+<p>Build the sample set from everything available, then fit. If fewer than about four bins are filled after scrap and splay samples, add the LRUD ellipse. If still too sparse (no LRUD, or a pit where LRUD contributes nothing): borrow the nearest ring along the chain that had real samples (Compass "Expand Passages"), then <code>kDefaultRadius</code>, flagged so the UI can show "no passage data" differently. This is the requested "if no scraps or splays exist, use LRUD" with one more rung so chains never tear. A LRUD-only pit therefore renders at its lip ring's width, which is the honest answer to "nobody measured it."</p>
+
+<h3>4.5 Ring fit</h3>
+<ul>
+<li><code>N</code> bins (16 default; 8 suffices for LRUD-only, 24–32 for dense splays), centers <code>θ_k = 2πk/N</code> in <code>(right, up)</code>.</li>
+<li>Per bin <code>ρ_k = max(ρ)</code>, optionally a trimmed max when three or more splays share a bin.</li>
+<li>Empty bins interpolate angularly from the nearest filled bins. Optional concavity clamp against single-splay spikes; its outward mirror, <code>kOpeningRatio</code>, catches scrap openings (§5.6).</li>
+<li>Emit <code>N</code> vertices <code>S + ρ_k (cosθ_k right + sinθ_k up)</code>. Same <code>N</code> and <code>θ_0</code> everywhere → fixed zipping topology.</li>
+</ul>
+
+<h3>4.6 Units and conventions</h3>
+<p>LRUD → <code>cwUnits::convert(toDouble(), trip.calibrations.distanceUnit(), Meters)</code>. Splay tips and positions are already meters. Scrap distances are paper meters × note-transform scale. L/R follow chunk order; when a chain traverses a chunk backwards, swap them for that leg.</p>
+
+<!-- ============================================================ -->
+<h2 id="joining">5. Joining rings into a tube</h2>
+
+<h3>5.1 Chains</h3>
+<p>Build an edge list from every chunk's shots (from, to, chunk id, shot index; positions from the cave's lookup). Then chain like Loch:</p>
+<ol>
+<li>Compute degree per station. Seed chains from odd-degree stations first (dead ends, then 3-way junctions), then even-degree.</li>
+<li>From the current edge end, continue along the unused edge with the <b>largest dot product</b> with the current direction. Stop at a dead end (<em>Flat</em> end) or when the node has no unused edges but other edges exist (<em>Round</em> end at a junction). Remaining edges at a junction seed new chains starting there.</li>
+<li>Loops: a chain whose last node is its first closes on itself.</li>
+</ol>
+
+<figure>
+<svg id="fig-chain" viewBox="0 0 820 340" role="img" aria-label="Chaining and junction handling in plan"></svg>
+<div class="legend"><span style="--c: var(--accent)">chain 1 (through)</span><span style="--c: var(--accent-2)">chain 2</span><span style="--c: var(--accent-3)">chain 3</span><span style="--c: var(--muted)">dome cap, inset into the through tube</span></div>
+<figcaption><b>Figure 6. Chains and junctions in plan.</b> The straightest continuation runs through each junction as one chain with mitered rings; every other arm ends at the junction. Each arm's last ring is pushed half a radius past the junction station and closed with a dome, so when drawn opaque the depth test hides the seam from any angle. Dead ends get a flat fan cap.</figcaption>
+</figure>
+
+<h3>5.2 Along a chain</h3>
+<ul>
+<li>Rings at stations use the bisector frame, which <b>is</b> the miter: the ring lies in the bisecting plane of the two legs, so side quads between consecutive rings meet with no gap and no fold.</li>
+<li>A ring in the bisecting plane is stretched by <code>1/cos(φ/2)</code> for turn angle <code>φ</code>. Above about 60°, use Compass corner rounding instead: truncate both legs <code>ε</code> before the corner, insert one or two interpolated sample points with lerped rings, frame them by RMF. This also removes Loch's fold-back failure.</li>
+<li>Mid-shot samples are just extra rings with <code>t</code> = leg direction and transported <code>up</code>.</li>
+<li>Side quads → two triangles each, outward winding. <b>Phase 0 shades flat</b> from screen-space derivatives in the fragment shader, so the vertex layout is position only and every generated quad is visible as built (decision in §7). A <code>Normal</code> attribute with averaged vertex normals is a later "smooth" option; the builder owns the geometry, so computing them is a small addition.</li>
+</ul>
+
+<figure>
+<svg id="fig-bend" viewBox="0 0 820 270" role="img" aria-label="Miter stretch at a sharp bend and subdivision"></svg>
+<figcaption><b>Figure 7. Sharp bends.</b> Left: a single ring in the bisecting plane of a 90° turn is stretched by <code>1/cos(45°) ≈ 1.41</code> and the outer wall pinches. Right: inset both legs and insert two interpolated rings; the frame transports smoothly and the outer wall stays rounded. Compass does the same with "corner rounding".</figcaption>
+</figure>
+
+<h3>5.3 Junctions: the clean merge</h3>
+<p>Phase 0 and 1 closed each arm with a dome inside the through tube and let the depth test hide the overlap. That fails translucent and cut-away rendering (the interior faces show) and fly-throughs (the dome is a bump on the wall), and on Phake Cave 3000 the dome itself read wrong: an arm whose last ring is borrowed from a neighbor pushed a deep box across the through passage. The junction is now a separate <b>stitch pass</b> between ring fitting and meshing. It works on ring columns only, so LRUD, splay and scrap rings go through the same code; it was reviewed in 2D on 18 cases in <code>plans/TUBE_JUNCTION_GALLERY.html</code> (local file).</p>
+<ol>
+<li><b>Fill.</b> The arm's section is carried from the through's near wall to its far wall: <code>fill = armTube ∩ extrude(through, n)</code>, with <code>n = t_through × t_arm</code>. The arm tube is the arm's own rings read as a solid, its last ring continued past the junction; the extrusion sweeps each through ring's polygon along <code>±n</code>. For a side passage <code>n</code> is vertical, so the fill is the arm's section limited to the through's plan width; for a pit dropping into a passage <code>n</code> is horizontal across the passage, so the fill is the pit's section between ceiling and floor; for a passage entering a shaft it is the passage's section between the shaft's near and far walls.</li>
+<li><b>Grow.</b> Every through ring near the junction extends each column as far as its ray stays inside a fill. A trench floor dips across the full width to the far wall; a tall arm makes a chamber across the junction; an arm smaller than the through changes nothing. Growth tapers with the arm's outline, so there is no blend constant.</li>
+<li><b>Trim.</b> Each arm column is cut where it first enters the union of the through tube and the fills. The cut points form the <b>mouth loop</b>, which lies on the through surface by construction.</li>
+<li><b>Cut and zip.</b> The through quads inside the mouth loop (in ring × column parameter space) are removed and the window's boundary is zipped to the mouth loop. The result is one closed, consistently wound surface with no faces inside either tube.</li>
+</ol>
+<p>Known limits: two arms whose windows share through quads fall back to a fan-capped overlap with a warning; a shaft's far wall is flattened across an entering passage's width; grazing joins give a long mouth. A fillet at the mouth crease is cosmetic and can come later. Figure 8 shows the geometry before this pass: the dashed pit extension is what the trim now removes, and the passage ceiling inside the pit's footprint is what the window cuts out.</p>
+
+<figure>
+<svg id="fig-pit" viewBox="0 0 820 310" role="img" aria-label="A pit meeting a horizontal passage"></svg>
+<figcaption><b>Figure 8. A pit dropping into a passage, in elevation.</b> The pit's chain ends at the junction with a horizontal ring (its section plane is horizontal) pushed slightly into the passage tube and closed with a dome; the passage's own rings are vertical. The dashed geometry is inside the other tube and hidden by the depth test when drawn opaque. Translucency would expose it, which is why junction hulls are a later phase.</figcaption>
+</figure>
+
+<h3>5.4 Junctions, phase 2 options</h3>
+<ul>
+<li><b>Hull patch</b> (B-Mesh / Blender Skin / SQM): at each junction take the nearest ring of every incident chain, compute the 3D convex hull of their vertices, delete faces inside an incident ring's disc, stitch the openings to the tubes. Manifold, and literally "cross-sections joined at junctions". Needs a QuickHull (~300 lines, no new dependency) and concave-junction cleanup.</li>
+<li><b>SDF union + marching cubes / dual contouring:</b> per leg a distance to the swept ring, <code>min</code> across legs, optional smooth-min at nodes, on a sparse voxel grid; isosurface and decimate. Watertight and degree-agnostic; dense output, loses ring correspondence. The ring pipeline is reused as the shape definition, so this is an additive mode.</li>
+</ul>
+
+<h3>5.5 Mesh output</h3>
+<pre><code>struct cwPassageTubeMesh {
+    QVector&lt;QVector3D&gt; positions;
+    QVector&lt;QVector3D&gt; normals;           // omit if flat shading via derivatives
+    QVector&lt;quint32&gt;   indices;           // triangle list
+    QVector&lt;VertexRange&gt; tripIndexRanges; // running trip id -> [first index, count]
+    QVector&lt;QUuid&gt;     tripUuids;
+    QVector&lt;Warning&gt;   warnings;          // stations with no passage data, torn chains
+};</code></pre>
+<p>Size: 16-vertex rings, about three rings per shot → ~48 vertices and ~96 triangles per shot. A 10,000-shot cave is ~0.5 M vertices / 1 M triangles / ~12 MB with normals, fine for one immutable buffer pair. Rebuilding is a per-solve cost in a worker.</p>
+
+<h3 id="lobes">5.6 Concave outlines and un-surveyed side passages</h3>
+<p>Every real scrap outline is concave: walls wiggle, passages neck down, and sketchers draw alcoves, side leads and whole side passages that have no survey station in them. The question is what the ring model does at those concavities, and especially at a <em>split</em>: a lobe of the outline that is really a passage with no centerline.</p>
+
+<h4>What the scrap pipeline does today</h4>
+<ul>
+<li>The outline is one <code>QPolygonF</code> (<code>cwScrapData::outlinePoints</code>) and <code>cwScrap</code> enforces no convexity or simplicity on it. Concave is the normal case; self-intersecting outlines are accepted too.</li>
+<li>The <b>mesh</b> handles concavity completely. <code>cwTriangulateTask::createQuads</code> classifies grid quads with <code>containsPoint(Qt::OddEvenFill)</code> at the four corners (full quads) or an outline-edge crossing (partial quads). Partial quads go through <code>QPolygonF::intersected</code>, <code>addPointsOnOverlapingEdges</code>, <code>createSimplePolygons</code> and <code>cwTriangulate::Process</code>, an ear-clipping triangulator that takes any simple polygon. A failed clip is ignored (<code>Q_UNUSED(couldTrianglate)</code>), and a self-intersecting outline fills odd-even. <small class="ref">cwTriangulateTask.cpp:387-574, 1379</small></li>
+<li>The <b>morph</b> treats a lobe as texture, not as a passage. Each grid point is positioned by an inverse-square-distance blend (<code>morphPoint</code>) of the ten nearest pseudo-stations (<code>maxClosestStations</code>), with every shot densified every 0.5 m (<code>buildStationsWithInterpolatedShots</code>). The outline-visibility test <code>stationsVisibleToPoint</code> exists but its call is commented out, so a lobe with no station inside is pulled by whichever main-passage pseudo-stations are nearest: a side passage in a plan scrap renders as a flat sheet hanging off the main passage at its neighbors' interpolated Z (then <code>smoothZ</code>, 2 m radius); in a running profile a lobe lies in the bracketing shot's profile plane. Nothing knows the lobe is a passage. <small class="ref">cwTriangulateTask.cpp:928-963, 1230-1262 · cwTriangulateWarpingData.h:15</small></li>
+</ul>
+<p>So concave scraps are a solved problem for the sheet and an unsolved one for the tube: the tube has to decide where the passage <em>is</em>, which the sheet never had to.</p>
+
+<h4>What the ray-cast ring does at a concavity</h4>
+<p>The ring is star-shaped around the sample (nearest hit per direction, §4.3), so:</p>
+<ol>
+<li><b>Neck or pinch:</b> the nearest hit reads the neck. Correct.</li>
+<li><b>Pillar</b> drawn by looping the outline inward: rays hit the pillar wall, the ring narrows on that side. Acceptable.</li>
+<li><b>Sample outside the outline</b> (the sketched wall misses the station): <code>containsPoint</code> is false, the scrap is silent there and splays/LRUD take over. Keep it, plus a warning so the user can see which scraps miss their own stations.</li>
+<li><b>Opening:</b> a lobe, alcove or side passage whose mouth faces the sample. The ray through the mouth hits the lobe's far wall instead of the main wall. In a plan scrap every ring direction with a right component projects onto that same page ray (§4.3: <code>d_page</code> is the page-side direction for L, both shoulders and everything between, each scaled by <code>1/c</code>), so the whole side of the ring is pushed out together and the angular neighbors cannot catch it. Sweeping the mid-shot samples past the mouth gives a run of such rings: a slab-shaped <b>fin</b> where the side passage should be (Figure 9a). This is the failure case of the model.</li>
+<li><b>Profile lobes</b> are vertical openings, a dome in the ceiling or a pit in the floor drawn as a lobe. Same spike, in the up or down bins.</li>
+</ol>
+
+<figure>
+<svg id="fig-lobe" viewBox="0 0 820 330" role="img" aria-label="A plan scrap with a side lobe: fin, clamp, and walked synthetic chain"></svg>
+<figcaption><b>Figure 9. A plan scrap with an un-surveyed side lobe, in page space.</b> <b>(a)</b> Rays from the mid-shot samples that pass through the mouth hit the lobe's far wall, so the tube footprint (orange) grows a fin where the side passage is. <b>(b)</b> Option A: a bin more than <code>kOpeningRatio</code> times its neighbors is replaced by their interpolation and recorded as a <code>ScrapOpening</code> warning; the lobe stays visible only in the scrap layer. <b>(c)</b> Option B: the warnings mark the mouth; from its center the builder walks into the lobe, recentering on the midpoint of two perpendicular ray hits at every step, and emits a synthetic chain (blue) that joins the through tube like any junction arm and ends in a cap at the dead end. Width is measured; height is inherited from the junction ring.</figcaption>
+</figure>
+
+<h4>Options</h4>
+<p><b>A. Clamp the opening (phase 2, day one).</b> A scrap contributes at most two page rays per sample (plan: ±right; profile: ±up), so compare each ray's hit distance with the median of the <em>same</em> ray over the <code>±kOpeningWindow</code> (3) neighboring samples along the shot. A hit above <code>kOpeningRatio</code> (≈1.8) times that median "sees through an opening": replace it by the interpolation between the nearest unflagged samples on either side, and let the ring bins that share the ray follow. This is the along-the-chain mirror of the angular concavity clamp in §4.5. The lobe vanishes from the tube and still shows in the scrap layer. Record each clamp as <code>Warning{ScrapOpening, scrapId, station, s, direction}</code>; those warnings are the detector for option B.</p>
+
+<p><b>B. Walk the lobe: a synthetic chain (recommended, phase 2.5).</b> Treat an opening as a junction whose third arm is a chain with no survey shots, and let the ring machinery sample it.</p>
+<ul>
+<li><b>Detect.</b> Along each shot, for each page-space side direction (plan: ±right; profile: ±up), look at <code>ρ(s)</code> over the mid-shot samples. A mouth is an interval <code>[s₀, s₁]</code> where ρ jumps by at least <code>kOpeningRatio</code> and comes back, whose page width is at least <code>kMinMouthWidth</code> (≈ max(2 × sample spacing, 0.75 m)) and whose depth through the mouth is at least <code>kMinLobeDepth × mouthWidth</code> (1.0; a bay shallower than its mouth is a wide spot and keeps the clamp). The mouth center <code>M_page</code> is the midpoint on the wall line; the start direction is the side direction.</li>
+<li><b>Walk.</b> From <code>M_page</code> step <code>kSampleSpacing</code>. At each step cast the two rays perpendicular to the current direction, move the center to the midpoint of the hits (the local medial point), turn toward that drift with the turn clamped to <code>kMaxTurnPerStep</code> (≈30°), and record <code>(center_page, halfwidth_page)</code>. Stop when the forward ray hits within one step (dead end → cap), when the center leaves the outline, when the walk comes within <code>kRejoinDistance</code> of a surveyed shot of the same scrap (a bypass loop: finish at that second mouth and join there too), when the width exceeds <code>kMaxLobeWidthRatio ×</code> the mouth (a chamber: stop and cap), or after <code>kMaxLobeSteps</code>. Openings seen while walking recurse once.</li>
+<li>This is the medial axis of the outline computed on demand along one branch, with the ray caster the design already has. A general medial axis or straight skeleton (CGAL, Boost.Polygon Voronoi) would give the same branches plus a pruning problem, and none of those libraries are in <code>conanfile.py</code>. A raster distance transform via the existing <code>cwSketchScrapRasterizer</code> is the fallback if the walk ever proves insufficient.</li>
+<li><b>Place in world.</b> Map page points through the same morph the scrap uses (<code>cwTriangulateTask::morphPoint</code> with <code>buildStationsWithInterpolatedShots</code>), so the synthetic centerline lands exactly where the scrap texture lands. Width comes from the two page hits. A plan lobe has no height, so inherit the junction sample's up/down bins (profile, splays or LRUD) and hold them constant along the lobe, optionally tapering toward a dead end. Profile lobes mirror this: height from the hits, width inherited from the mouth ring. Where a plan lobe and a projected-profile lobe describe the same side passage, match them by <code>s</code> along the shot within <code>kMouthMatchTolerance</code> and combine width with height.</li>
+<li><b>Join.</b> The synthetic chain is an ordinary junction arm in §5.3 terms: first ring at the mouth, pushed ½ρ into the through tube and dome-capped inside it; the phase-4 hull or SDF applies unchanged. Output is the same <code>cwPassageTubeMesh</code>, with the vertex range tagged <code>synthetic = true</code> so the shader can tint it and the UI can toggle it, since its height is inherited rather than measured.</li>
+<li><b>Splays</b> that point into the lobe already land in the spiking bin; inside the mouth sector they become samples for the synthetic chain's first rings, otherwise they stay ring samples at their station.</li>
+<li><b>Tests.</b> Rectangular outline with a rectangular side bay → one synthetic chain with the expected ring count and inherited height; bay shallower than its mouth → clamp only, one warning; U-shaped bypass → chain ends at the second mouth; self-intersecting outline → no crash, warnings only.</li>
+</ul>
+
+<p><b>C. Implicit footprint extrusion (phase 4 alternative).</b> The plan footprint times the height profile is a 2.5D solid: rasterize the outline's signed distance in page space, extrude between floor and ceiling heights taken from the rings, union with the tube SDF, marching cubes. Lobes come for free with no detection and no synthetic centerline, at the cost of ring correspondence and a dense mesh. It gives the phase-4 SDF option a second justification but is heavier than B for the common case.</p>
+
+<div class="callout key"><b>Decided (§7):</b> A in phase 2 (one guard in the ring fit plus a warning), B as phase 2.5 behind a <code>followScrapLobes</code> tube setting, C stays optional.</div>
+
+<h3 id="artifacts">5.7 Artifact checklist</h3>
+<p>Things that produce visible glitches in tube renderers and where this design catches each one. Items marked <em>added</em> were missing from the sections above and are now part of the phase they name.</p>
+<table>
+<thead><tr><th>Artifact</th><th>Cause</th><th>Handling</th><th>Phase</th></tr></thead>
+<tbody>
+<tr><td><b>Twisted segment</b> (bow-tie quads; a ring rotates almost a full turn between two samples)</td><td>The blend <code>up_i = rotate(up_h → up_rmf, w)</code> uses a signed angle; when it crosses ±180° between samples, or the RMF has accumulated twist down a pit and the blend hands back to <code>up_h</code> on the way out, consecutive rings are zipped index-to-index across a big rotation</td><td><em>Added.</em> Unwrap the blend angle along the chain (take the branch closest to the previous sample's angle) and, after a pit, distribute the residual twist between <code>up_rmf</code> and <code>up_h</code> over the transition samples instead of letting <code>w</code> absorb it; assert <code>right_i · right_{i−1} &gt; 0</code> in the builder tests</td><td>0</td></tr>
+<tr><td><b>Inner-bend fold</b> (quads flip inside out on the inside of a bend: dark facets or holes)</td><td>Ring radius on the inside of the bend exceeds the bend's radius of curvature, so vertex <code>k</code> of ring <code>i+1</code> lands behind ring <code>i</code>'s plane</td><td><em>Added.</em> Per vertex, if <code>(v_{i+1,k} − c_i) · t_i &lt; 0</code>, pull <code>v_{i+1,k}</code> onto ring <code>i</code>'s plane along its own ring direction (Loch's fold-back test, per vertex instead of per ring); bend subdivision (§5.2) reduces how often it triggers</td><td>0</td></tr>
+<tr><td><b>Open tube ends when a trip is hidden</b></td><td><code>tripIndexRanges</code> split the mesh by trip; hiding a trip removes its quads and leaves the neighboring trip's last ring open, showing the interior</td><td><em>Added.</em> Emit a fan cap at every trip boundary, owned by the trip it closes; it sits inside the neighboring tube and is hidden by depth while both are visible. The same caps serve keyword/date filtering, which is per trip</td><td>0</td></tr>
+<tr><td><b>Pinched ring from <code>0 0 0 0</code> LRUD</b></td><td>Many surveys write zeros for "unmeasured"; a radius-0 ring makes degenerate triangles and a visible pinch</td><td><em>Added.</em> All four zero → treat as absent (fallback chain, §4.4); a single zero (station against a wall) is a sample at <code>kMinRadius</code> (0.05 m). Values above <code>kMaxRadius</code> (say 100 m, a unit mix-up) are dropped with a warning</td><td>0</td></tr>
+<tr><td><b>Degenerate quads between coincident rings</b></td><td>1 m spacing on a 0.3 m shot, or bend subdivision near a very short leg, places two rings within ε of each other</td><td><em>Added.</em> Merge rings closer than <code>kMinRingSpacing</code> (0.05 m) along a chain; never emit two rings at one position</td><td>0</td></tr>
+<tr><td><b>Inside-out lighting / see-through walls from inside the cave</b></td><td>Backface culling discards the far wall when the camera is inside the tube; one-sided lighting leaves the inner wall unlit</td><td><em>Added.</em> No culling; the flat shader flips the derivative normal with <code>gl_FrontFacing</code> so both sides light correctly. Viewing from inside is a normal use (fly-through)</td><td>0</td></tr>
+<tr><td><b>Junction stubs visible from inside</b></td><td>A dome-capped arm overlapping the through tube is hidden by depth from outside; from inside, under translucency or in a cutaway it is a bump or a wall through a wall</td><td><em>Replaced.</em> The stitch pass (§5.3) trims the arm at the mouth, cuts the through surface and zips, so the junction has no interior faces; the mesh checks (self-intersection, nested shells) guard it in every builder test and the junction sweep</td><td>1</td></tr>
+<tr><td><b>Zig-zag facet pattern along the tube</b></td><td>Side quads are non-planar whenever consecutive rings differ; their two triangles get different flat normals, so a fixed diagonal reads as a herringbone</td><td><em>Added.</em> Split each quad along its shorter diagonal (or alternate by <code>k</code>); cosmetic under flat shading, gone with smooth normals</td><td>0</td></tr>
+<tr><td><b>Pinch at a scrap's end</b></td><td>A scrap outline closes across the passage at its ends; rays from samples near that end hit the closing edge instead of the wall and the ring collapses toward the centerline</td><td><em>Added.</em> Ignore hits on outline edges that run across the passage: keep a hit only if the edge direction satisfies <code>|ê · t_page| &gt; cos(kMaxWallEdgeAngle)</code> (60°) or the hit is farther than <code>kScrapEndMargin</code> from the sample's projection on the closing edge; samples with no valid wall hit are silent and fall back</td><td>2</td></tr>
+<tr><td><b>Step where sources change</b></td><td>A scrap ends mid-passage, or splays exist at one station and not the next; the ring jumps from one width to another at a single sample</td><td><em>Added.</em> Cross-fade radii over <code>kSourceBlendDistance</code> (2 samples) when the dominant source changes along a chain; record a <code>SourceChange</code> warning so the user can see where their data ends</td><td>2</td></tr>
+<tr><td><b>Spike from one splay or one lobe</b></td><td>Covered: inward splay spikes by the concavity clamp (§4.5), outward lobe spikes by the opening clamp (§5.6)</td><td>—</td><td>1, 2</td></tr>
+<tr><td><b>Outer-bend stretch</b></td><td>Covered: miter in bisector planes, subdivision above <code>kSubdivideBendAngle</code> (§5.2)</td><td>—</td><td>0</td></tr>
+<tr><td><b>Zero-length legs, unresolved stations, splays shot along the passage</b></td><td>Covered: §3 last bullet, §4.2</td><td>—</td><td>0, 1</td></tr>
+<tr><td><b>Interpenetrating tubes</b> (parallel passages, loops, overgenerous LRUD)</td><td>Data: the tubes intersect and the seam shows as a wall passing through a wall</td><td>Accept; opaque drawing hides most of it. A per-station warning when a ring vertex lies inside another chain's tube is possible in phase 3 if it proves common</td><td>3</td></tr>
+<tr><td><b>Line plot and stations hidden inside the opaque tube</b></td><td>The centerline lies on the tube axis, so an opaque tube covers it from outside</td><td>Expected under decisions 2 (opaque) and 3 (independent layers): toggle the tube off, or view from inside. A depth-biased "centerline on top" mode is a later option under phase 4</td><td>4</td></tr>
+<tr><td><b>Z-fighting with scraps</b></td><td>The plan sheet is horizontal and the tube wall vertical where they meet, so they cross along a line rather than share a plane</td><td>None expected; verify on the first scrap-driven build</td><td>2</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="arch">6. Architecture</h2>
+
+<h3>6.1 Builder and manager</h3>
+<ul>
+<li><b><code>cwPassageTubeBuilder</code></b>: static <code>build(const cwCavingRegionData&amp;, const QHash&lt;QUuid, cwStationPositionLookup&gt;&amp;, const QHash&lt;QUuid, cwSplayTipsByStation&gt;&amp;, const Options&amp;) → cwPassageTubeMesh</code>. Edge list → chains → frames → samples → rings → mesh, every step a free function over value types. Follows the worker rules (<code>.at()</code>, value snapshots, no <code>shared_ptr&lt;QList&gt;</code>).</li>
+<li><b><code>cwPassageTubeManager</code></b> (<code>cwUpdatable</code>), registered with <code>UpdateCoordinator-&gt;add(PassageTubeManager, {LinePlotManager})</code> <small class="ref">cwRootData.cpp:202-207</small>. Runs the builder through an <code>AsyncFuture::Restarter</code> under <code>cwConcurrent::run</code>, delivers via <code>observe(...).context(this, …)</code>. Triggers: <code>stationPositionInCavesChanged</code> and the scrap signals <code>cwScrapManager</code> already listens to <small class="ref">cwScrapManager.cpp:618-645</small>, debounced, so an outline drag updates the tube without re-running cavern.</li>
+<li><b>Splay tips:</b> add <code>cwCave::setSplayTips</code> / <code>splayTips()</code> next to the position lookup and populate it in <code>cwLinePlotManager::updateLinePlot</code>.</li>
+</ul>
+<p>A separate manager rather than building inside <code>cwLinePlotTask</code>: the line-plot worker has every input, but it only runs on survey edits, and re-running cavern on every scrap outline drag would be wasteful. The scrap manager has the same relationship to the line plot and is the model to copy.</p>
+
+<h3>6.2 Render object</h3>
+<ul>
+<li><b><code>cwRenderPassageTube</code></b>: <code>setMesh</code> into <code>cwTracked&lt;GeometryState&gt;</code>; color/opacity in <code>cwTracked&lt;RenderState&gt;</code>; <code>setRangeVisible</code> over index ranges with a published mask (copy <code>cwRenderLinePlot::setRangeVisible</code>); no <code>registerPickable</code>. Created in <code>cwRegionSceneManager</code> after the line plot.</li>
+<li><b><code>cwRHIPassageTube</code></b>: Position + Normal layout, immutable vertex/index buffers, small std140 uniform block (color, opacity, light), mask gated on <code>entryVersion</code>, <code>cwLedgeredBytes</code> under a new category, Opaque pass, pipeline keyed on <code>context.renderData</code>, <code>globalCameraBinding = 0</code>, <code>worldBounds()</code> = mesh AABB.</li>
+<li><b><code>PassageTube.vert/.frag</code></b>: <code>GlobalBlock</code> at binding 0 copied from <code>LinePlot.vert</code>, tube block at binding 1, view-space headlight with an ambient floor (aven uses <code>0.7 + 0.3·dot</code>). Phase 0 computes the normal in the fragment shader as <code>normalize(cross(dFdx(viewPos), dFdy(viewPos)))</code> (flat shading, needs the <code>"150,300es"</code> shader block), flipped by <code>gl_FrontFacing</code> so the inside of the tube lights correctly, and the pipeline sets <code>CullMode::None</code> because the camera is routinely inside the cave (§5.7); a Normal attribute path is added with the smooth option. For inspecting the generated mesh, a second pipeline with <code>QRhiGraphicsPipeline::PolygonMode::Line</code> gives a wireframe overlay on the desktop backends (gate on <code>QRhi::isFeatureSupported(QRhi::NonFillPolygonMode)</code>; GLES lacks it).</li>
+</ul>
+
+<h3>6.3 Visibility and settings</h3>
+<ul>
+<li>Per-trip keyword item <code>Type="Passage"</code>, created the way <code>"Splays"</code> is <small class="ref">cwLinePlotManager.cpp:378-397, cwTrip.cpp:540-548</small>, with a <code>cwVisibilityProxy</code> subclass calling <code>setRangeVisible</code>. Tubes then filter by cave/trip/date alongside the line plot, and this is how tubes and scraps coexist: independent layers the user toggles (decision in §7), with no special-casing in the builder.</li>
+<li>A whole-object "Passage Tubes" toggle in the View menu next to "Scraps Visible" <small class="ref">qml/FileMenu.qml:157-165</small>.</li>
+<li><b>Tube settings</b> (decision in §7): a persisted settings object under <code>cwSettings</code> <small class="ref">cwSettings.h:27-33</small>, either new properties on <code>cwRenderingSettings</code> or a sibling <code>cwPassageTubeSettings</code> with the same <code>kDefault*</code> + QSettings pattern <small class="ref">cwRenderingSettings.cpp:22-30</small>, exposed on <code>qml/RenderingSettingsItem.qml</code>. Properties: sample spacing along shots (meters), ring resolution (bins), and later the blend angles, default radius and subdivide-bend angle. A change triggers a tube rebuild only, never a cavern run.</li>
+<li>Export (decision in §7): the tube is an ordinary keyword layer, so map export shows exactly what the keyword visibility shows. The user hides the tube from an export by hiding it in the layering, the same as any trip or scrap; <code>captureHiddenObjectIds()</code> stays untouched.</li>
+</ul>
+
+<h3>6.4 Tests</h3>
+<ul>
+<li><code>test_cwPassageTubeBuilder.cpp</code>: straight leg with LRUD → ring at <code>P ± r·right ± u·up</code>; 90° bend → bisector frame and subdivision; vertical shot between horizontal legs → continuous <code>up</code>, horizontal pit ring, no NaN; chain assignment at 3-way and 4-way junctions; L/R swap on reversed chunk traversal; plan-scrap ray cast on a rectangle returns the drawn half-widths; profile-scrap ray cast returns the drawn height; splay binning with an outlier; missing LRUD falls back to neighbor ring then default radius. From the artifact checklist (§5.7): a pit entered and left on different bearings keeps <code>right_i · right_{i−1} &gt; 0</code> at every sample (no twist); a tight bend with a wide ring produces no vertex behind the previous ring's plane (no fold); hiding one trip of a two-trip chain leaves a capped end; <code>0 0 0 0</code> LRUD falls back and a single zero gives <code>kMinRadius</code>; a 0.3 m shot with 1 m spacing emits two distinct rings; a scrap that closes across the passage gives no pinched ring at its end; a scrap ending mid-chain produces a cross-faded transition and a <code>SourceChange</code> warning.</li>
+<li><code>test_cwPassageTubeManager.cpp</code>: load a small region, wait for line plot and tube; edit a scrap outline point → tube rebuilds without a new cavern run; keyword visibility hides a trip's index range.</li>
+<li>Front-end render tests like <code>test_cwRenderPointCloud.cpp</code>, registry sync through <code>CwRhiSceneTestAccess</code>, a manual screenshot once the look is settled.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="questions">7. Decisions and open questions</h2>
+<h4>Decided (October 2026)</h4>
+<ol>
+<li><b>Pit LRUD: U/D only.</b> On a near-vertical shot L/R have no usable direction and U/D are distances along the pit axis. LRUD therefore gives no ring samples in the pit regime (weight <code>1 − w</code>); the ring comes from splays, a plan scrap, or the fallback chain, and U/D set the cap offset at a pit dead end (§3, §4.1, §4.4).</li>
+<li><b>Opaque.</b> CaveWhere draws nothing translucent, and the tube keeps to that. Translucency is dropped from phase 4; junction hulls remain only as a cutaway/export quality option.</li>
+<li><b>Scraps and tubes are independent layers.</b> A plan scrap is a sheet at station height inside the passage, so an opaque tube hides it from outside. Rather than skipping tubes where scraps exist (Therion's <code>walls auto</code>), both are keyword-filtered layers the user toggles (§6.3). Skipping can be added later as an option.</li>
+<li><b>Faceted first.</b> Phase 0 flat-shades from derivatives with a position-only vertex layout so the generated geometry is visible as built; a wireframe overlay is the debugging aid; smooth normals come later as an option (§5.2, §6.2).</li>
+<li><b>Sampling is a setting.</b> Sample spacing along shots and ring resolution live in persisted CaveWhere settings on the rendering settings page; a change rebuilds the tube without a solve (§6.3). Defaults: <code>kDefaultSampleSpacing = 1.0</code> m and <code>kDefaultRingResolution = 16</code>.</li>
+<li><b>Map export follows the keywords.</b> Tubes carry keywords (per-trip <code>Type="Passage"</code> items, §6.3) and are shown or hidden through the layering like everything else; export renders whatever the keyword visibility shows, with no tube-specific entry in <code>captureHiddenObjectIds()</code>.</li>
+<li><b>Scrap lobes: clamp, then walk.</b> Option A (clamp + <code>ScrapOpening</code> warning) lands with scraps in phase 2; option B (walk each opening into a synthetic chain joined at a synthetic junction) follows in phase 2.5 (§5.6).</li>
+</ol>
+<h4>Open</h4>
+<ul>
+<li><b>Synthetic chain appearance.</b> Whether a walked lobe's inherited height is tinted or drawn like measured passage, and the <code>kMinMouthWidth</code> / <code>kMinLobeDepth</code> thresholds that separate "side passage" from "wide spot". Pick in phase 2.5 and tune by eye.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="phases">8. Phases</h2>
+<ul class="phases">
+<li><b>Phase 0</b><p><b>LRUD tubes, aven-parity and better.</b> Builder (edges, chains, blended frames, LRUD ellipse rings, bisector joins, bend subdivision, dome caps at arms, fan caps at dead ends with U/D offsets in pits and at trip boundaries, angle unwrap and twist distribution, per-vertex fold-back fix, ring merge below <code>kMinRingSpacing</code>, <code>0 0 0 0</code> LRUD as absent with <code>kMinRadius</code>/<code>kMaxRadius</code> guards, shorter-diagonal quad split), manager, render pair, flat-shaded two-sided shader without culling, wireframe overlay, View-menu toggle, tube settings with sample spacing and ring resolution, builder unit tests. Visible on every project with LRUD.</p></li>
+<li><b>Phase 1</b><p><b>Splays.</b> Keep splay tips on <code>cwCave</code>; projected-tip samples; binning and outlier guard; synthetic-splay tests.</p></li>
+<li><b>Phase 2</b><p><b>Scraps.</b> Page-space ray casts for plan, running-profile and projected-profile scraps; mid-shot sampling; opening clamp with <code>ScrapOpening</code> warnings (§5.6); closing-edge rejection and source cross-fade (§5.7); rebuild on scrap edits without a cavern run; rectangle-outline tests.</p></li>
+<li><b>Phase 2.5</b><p><b>Scrap lobes.</b> Walk detected openings into synthetic chains (§5.6) behind a <code>followScrapLobes</code> setting; inherited height, tinted as synthetic; bay / bypass / self-intersection tests.</p></li>
+<li><b>Phase 3</b><p><b>Integration polish.</b> Per-trip <code>"Passage"</code> keyword visibility, memory ledger category, culling bounds, export check (keyword-hidden tubes stay out of exports), warnings surfaced, manual screenshot.</p></li>
+<li><b>Phase 4</b><p><b>Junction geometry (optional).</b> Convex-hull junction patches or SDF + marching cubes watertight mode, for cutaways and solid export; smooth normals as a shading option.</p></li>
+<li><b>Later</b><p>Read <code>img_XSECT</code> from the <code>.3d</code> so externally included <code>.svx</code> passage data renders too; splay-based scrap morphing can reuse the same per-station samples.</p></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="sources-list">Sources</h2>
+<h4>Local</h4>
+<ul class="src-list">
+<li>Survex aven tube skinning: <code>survex/src/gfxcore.cc:3903-4106</code> (<code>SkinPassage</code>), <code>survex/src/model.cc:244-305, 465-650</code>, <code>survex/src/img.h:63-91, 145</code>, <code>survex/doc/datafile.rst:912-965</code>.</li>
+</ul>
+<h4>Cave software</h4>
+<ul class="src-list">
+<li>Therion core walls: <a href="https://github.com/therion/therion/blob/master/src/therion-core/thdb1d.cxx">thdb1d.cxx</a>; <code>vthreshold</code>: <a href="https://github.com/therion/therion/blob/master/src/therion-core/thdata.cxx">thdata.cxx</a>; Therion Book: <a href="https://github.com/therion/therion/blob/master/thbook/ch02.tex">ch02.tex</a>; <a href="https://therion.speleo.sk/3D.php">therion.speleo.sk/3D.php</a></li>
+<li>Loch tubes: <a href="https://github.com/therion/therion/blob/master/loch/lxLRUD.cxx">lxLRUD.cxx</a>, <a href="https://github.com/therion/therion/blob/master/loch/lxLRUD.h">lxLRUD.h</a></li>
+<li>Therion 3D from scraps: <a href="https://github.com/therion/therion/blob/master/src/therion-core/thscrap.cxx">thscrap.cxx</a>, <a href="https://github.com/therion/therion/blob/master/src/therion-core/thscrapis.cxx">thscrapis.cxx</a></li>
+<li>Survex manual: <a href="https://survex.com/docs/manual/datafile.htm">datafile.htm</a>; mailing list: <a href="https://lists.survex.com/pipermail/survex/2022q1/002353.html">2022q1/002353</a>, <a href="https://lists.survex.com/pipermail/survex/2025q1/002480.html">2025q1/002480</a></li>
+<li>CaveView.js: <a href="https://github.com/aardgoose/CaveView.js/blob/dev/src/js/viewer/walls/buildCrossSections.js">buildCrossSections.js</a></li>
+<li>Compass: <a href="https://www.fountainware.com/compass/Documents/pasmodel.doc">pasmodel.doc</a>, <a href="https://fountainware.com/compass/HTML_Help/Compass_Viewer/3dmodelingpage.htm">3D Modeling</a>, <a href="https://fountainware.com/compass/HTML_Help/Compass_Viewer/modelpitfalls.htm">Modeling Pitfalls</a>, <a href="https://fountainware.com/compass/HTML_Help/Compass_Viewer/modelexpand.htm">Expand Passages</a></li>
+<li>TopoDroid / Cave3D: <a href="https://github.com/marcocorvi/topodroid/blob/master/assets/man/page_3d_walls.htm">3D walls</a>, <a href="https://github.com/marcocorvi/topodroid/blob/master/assets/man/page_walls.htm">auto walls</a></li>
+<li>CaveConverter LRUD from splays: <a href="https://manpages.debian.org/jessie/caveconverter/caveconverter.1.en.html">man page</a></li>
+</ul>
+<h4>Geometry</h4>
+<ul class="src-list">
+<li>Wang, Jüttler, Zheng, Liu, "Computation of rotation minimizing frames," ACM TOG 27(1), 2008: <a href="https://dl.acm.org/doi/10.1145/1330511.1330513">doi:10.1145/1330511.1330513</a>, <a href="https://i.cs.hku.hk/GraphicsGroup/publications/pdf/Computation%20of%20rotation%20minimizing%20frames.pdf">preprint</a></li>
+<li>Hanson &amp; Ma, "Parallel Transport Approach to Curve Framing," 1995: <a href="https://scholarworks.iu.edu/dspace/items/39fbe931-c2c8-43a1-9c9d-a207b92d551e/full">IU ScholarWorks</a></li>
+<li>Blender Skin modifier: <a href="https://github.com/blender/blender/blob/main/source/blender/modifiers/intern/MOD_skin.cc">MOD_skin.cc</a>, <a href="https://docs.blender.org/manual/en/2.93/modeling/modifiers/generate/skin.html">manual</a></li>
+<li>Ji, Liu, Wang, "B-Mesh," CGF 29(7), 2010: <a href="https://diglib.eg.org/handle/10.2312/CGF.v29i7pp2169-2177">diglib.eg.org</a></li>
+<li>Bærentzen, Misztal, Welnicka, SQM, 2012: <a href="https://people.compute.dtu.dk/janba/Research_in_Graphics/SQM.html">project page</a></li>
+<li>Bloomenthal, "Bulge elimination in convolution surfaces," CGF 1997: <a href="https://unchainedgeometry.com/JBloom/pdf/bulge-elim.pdf">pdf</a></li>
+<li>Zanni et al., SCALIS, CGF 32(8), 2013: <a href="https://hal.archives-ouvertes.fr/hal-00863523">HAL</a></li>
+<li>Vessel reconstruction via SDF union + marching cubes: <a href="https://arxiv.org/abs/2402.12797">arXiv:2402.12797</a></li>
+</ul>
+
+</main>
+
+<script>
+(function () {
+  const NS = 'http://www.w3.org/2000/svg';
+  const C = {
+    fg: 'var(--fg)', muted: 'var(--muted)', line: 'var(--line)', surface: 'var(--surface)',
+    a1: 'var(--accent)', a2: 'var(--accent-2)', a3: 'var(--accent-3)', a4: 'var(--accent-4)', warn: 'var(--warn)'
+  };
+  function el(parent, tag, attrs, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text !== undefined) e.textContent = text;
+    parent.appendChild(e);
+    return e;
+  }
+  function poly(parent, pts, attrs) {
+    return el(parent, 'polyline', Object.assign({ points: pts.map(p => p.join(',')).join(' '), fill: 'none' }, attrs));
+  }
+  function polygon(parent, pts, attrs) {
+    return el(parent, 'polygon', Object.assign({ points: pts.map(p => p.join(',')).join(' ') }, attrs));
+  }
+  function label(parent, x, y, text, attrs) {
+    return el(parent, 'text', Object.assign({ x, y, 'font-size': 12 }, attrs || {}), text);
+  }
+  const deg = d => d * Math.PI / 180;
+  const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const norm = v => { const l = Math.hypot(...v); return v.map(c => c / l); };
+  const add = (a, b) => a.map((c, i) => c + b[i]);
+  const sub = (a, b) => a.map((c, i) => c - b[i]);
+  const mul = (a, s) => a.map(c => c * s);
+
+  // Centerline used by Figures 2, 3 and 8: elevation (x = horizontal distance, y = depth, up positive)
+  const path = [[0, 0], [60, 0], [120, -42], [150, -124], [150, -168], [150, -210], [230, -210], [300, -210]];
+  const PIT_TOP = 3, PIT_BOTTOM = 5; // indices of the vertical leg's end stations in `path`
+
+  // ---------------- Figure 2: aven vs recommended ----------------
+  (function fig2() {
+    const svg = document.getElementById('fig-aven'); if (!svg) return;
+    const half = 24, len = 28;
+    function panel(ox, oy, title, perpendicular) {
+      const g = el(svg, 'g', { transform: `translate(${ox},${oy})` });
+      label(g, 0, -36, title, { 'font-weight': 600 });
+      const pts = path.map(p => [p[0] * 1.0, -p[1] * 0.78]);
+      poly(g, pts, { stroke: C.muted, 'stroke-width': 2 });
+      pts.forEach(p => el(g, 'circle', { cx: p[0], cy: p[1], r: 3, fill: C.fg }));
+      // sections
+      for (let i = 0; i < pts.length; i++) {
+        let dir;
+        if (perpendicular) {
+          const tin = i > 0 ? norm(sub(pts[i], pts[i - 1])) : null;
+          const tout = i < pts.length - 1 ? norm(sub(pts[i + 1], pts[i])) : null;
+          const t = tin && tout ? norm(add(tin, tout)) : (tin || tout);
+          dir = [-t[1], t[0]];
+        } else {
+          dir = [0, 1];
+        }
+        const a = add(pts[i], mul(dir, len)), b = sub(pts[i], mul(dir, len));
+        poly(g, [a, b], { stroke: perpendicular ? C.a2 : C.a1, 'stroke-width': 3, 'stroke-linecap': 'round' });
+      }
+      // highlight the vertical leg
+      const top = pts[PIT_TOP], bottom = pts[PIT_BOTTOM], midY = (top[1] + bottom[1]) / 2;
+      if (!perpendicular) {
+        el(g, 'rect', { x: top[0] - 8, y: top[1] - len, width: 16, height: bottom[1] - top[1] + 2 * len, fill: C.a1, 'fill-opacity': 0.12, stroke: C.a1, 'stroke-dasharray': '3 3' });
+        label(g, top[0] + 22, midY, '← three coplanar rings', { fill: C.a1, 'font-size': 11 });
+        label(g, top[0] + 22, midY + 14, 'the pit is a flat sheet', { fill: C.a1, 'font-size': 11 });
+      } else {
+        label(g, top[0] + 36, midY, '← horizontal ring', { fill: C.a2, 'font-size': 11 });
+        label(g, top[0] + 36, midY + 14, 'in the pit', { fill: C.a2, 'font-size': 11 });
+      }
+      label(g, 0, 212, 'elevation view · sections drawn edge-on', { class: 'muted', 'font-size': 11 });
+    }
+    panel(40, 60, 'aven / CaveView: section always vertical', false);
+    panel(450, 60, 'recommended: section ⟂ bisected path', true);
+  })();
+
+  // ---------------- Figure 3: blend weight + ring rotation ----------------
+  (function fig3() {
+    const svg = document.getElementById('fig-blend'); if (!svg) return;
+    // left: curve
+    const ox = 50, oy = 240, w = 320, h = 180;
+    const g = el(svg, 'g');
+    poly(g, [[ox, oy - h], [ox, oy], [ox + w, oy]], { stroke: C.muted, 'stroke-width': 1 });
+    const X = a => ox + a / 90 * w, Y = v => oy - v * h;
+    [0, 30, 45, 60, 75, 90].forEach(a => { poly(g, [[X(a), oy], [X(a), oy + 4]], { stroke: C.muted }); label(g, X(a), oy + 18, a + '°', { 'text-anchor': 'middle', class: 'muted', 'font-size': 11 }); });
+    [0, 0.5, 1].forEach(v => { poly(g, [[ox - 4, Y(v)], [ox, Y(v)]], { stroke: C.muted }); label(g, ox - 8, Y(v) + 4, v.toString(), { 'text-anchor': 'end', class: 'muted', 'font-size': 11 }); });
+    label(g, ox + w / 2, oy + 36, 'inclination of the bisected tangent', { 'text-anchor': 'middle', class: 'muted', 'font-size': 11 });
+    label(g, ox - 36, oy - h - 10, 'w  (0 = world-up reference, 1 = transported RMF)', { class: 'muted', 'font-size': 11 });
+    const curve = []; for (let a = 0; a <= 90; a += 1) curve.push([X(a), Y(smoothstep(45, 75, a))]);
+    poly(g, curve, { stroke: C.a2, 'stroke-width': 3 });
+    // thresholds of other tools
+    const thr = [[60, 'Loch 60°', C.a3], [67.5, 'Therion 67.5°', C.a1], [76, 'CaveView 76°', C.a4]];
+    thr.forEach(([a, t, col], i) => {
+      poly(g, [[X(a), oy], [X(a), oy - h]], { stroke: col, 'stroke-dasharray': '4 4', 'stroke-width': 1.2 });
+      // legend swatches, stacked clear of the curve
+      const ly = oy - h + 40 + i * 15;
+      poly(g, [[ox + 8, ly - 4], [ox + 22, ly - 4]], { stroke: col, 'stroke-dasharray': '4 4', 'stroke-width': 1.5 });
+      label(g, ox + 27, ly, t + ' hard switch', { fill: col, 'font-size': 10 });
+    });
+    label(g, X(2), Y(0.09), 'w = smoothstep(45°, 75°)', { fill: C.a2, 'font-size': 11 });
+    // right: rings seen along the path at increasing inclination
+    const rg = el(svg, 'g', { transform: 'translate(430,40)' });
+    label(rg, 0, 0, 'ring up-reference as the passage steepens (view along the path)', { 'font-weight': 600, 'font-size': 12 });
+    const incls = [0, 30, 50, 65, 80, 90];
+    incls.forEach((a, i) => {
+      const cx = 30 + i * 62, cy = 110, r = 24;
+      const w = smoothstep(45, 75, a);
+      // ring: ellipse with l=r=1.2, u=0.8, d=0.5 drawn as polygon in local frame rotated by w*theta where theta = 90deg drift of RMF reference (illustrative)
+      const rot = w * deg(90);
+      const pts = [];
+      for (let k = 0; k < 32; k++) {
+        const th = k / 32 * 2 * Math.PI;
+        const A = Math.cos(th) >= 0 ? 1.2 : 1.2, B = Math.sin(th) >= 0 ? 0.8 : 0.5;
+        const lx = A * Math.cos(th) * r, ly = B * Math.sin(th) * r;
+        pts.push([cx + lx * Math.cos(rot) - ly * Math.sin(rot), cy - (lx * Math.sin(rot) + ly * Math.cos(rot))]);
+      }
+      polygon(rg, pts, { fill: C.a2, 'fill-opacity': 0.12, stroke: C.fg, 'stroke-width': 1.5 });
+      // world up (orange) and chosen up (blue)
+      poly(rg, [[cx, cy], [cx, cy - 34]], { stroke: C.a1, 'stroke-width': 2, 'marker-end': 'url(#arr)' });
+      poly(rg, [[cx, cy], [cx - 34 * Math.sin(rot), cy - 34 * Math.cos(rot)]], { stroke: C.a2, 'stroke-width': 2.5 });
+      el(rg, 'circle', { cx, cy, r: 2.5, fill: C.fg });
+      label(rg, cx, cy + 52, a + '°', { 'text-anchor': 'middle', 'font-size': 11 });
+      label(rg, cx, cy + 66, 'w=' + w.toFixed(2), { 'text-anchor': 'middle', class: 'muted', 'font-size': 10 });
+    });
+    label(rg, 0, 205, 'orange = world up projected into the section plane (vanishes at 90°)', { fill: C.a1, 'font-size': 11 });
+    label(rg, 0, 220, 'blue = chosen up reference; follows the RMF transport once steep', { fill: C.a2, 'font-size': 11 });
+    label(rg, 0, 235, 'same LRUD ellipse throughout; its drawn tilt is the roll of the frame', { class: 'muted', 'font-size': 11 });
+  })();
+
+  // ---------------- Figure 4: radial sample model ----------------
+  (function fig4() {
+    const svg = document.getElementById('fig-ring'); if (!svg) return;
+    const l = 2.2, r = 1.6, u = 1.3, d = 0.7, S = 36; // meters, px per meter
+    const N = 16;
+    const ellipse = th => { const a = Math.cos(th) >= 0 ? r : l, b = Math.sin(th) >= 0 ? u : d; return a * b / Math.hypot(b * Math.cos(th), a * Math.sin(th)); };
+    // splays (angle deg, radius m)
+    const splays = [[10, 1.9], [35, 2.0], [70, 1.5], [110, 1.6], [150, 2.3], [175, 2.6], [200, 2.4], [250, 0.8], [300, 0.9], [330, 1.5]];
+    // plan scrap: wall at left 2.9 m, right 1.8 m (only directions with |cos|>0.5 see the page)
+    // Drawn walls curve away from the station, so shoulder rays stay bounded (a real outline, unlike an infinite straight wall).
+    const kMaxDrawRadius = 2.6;
+    const planWall = th => { const c = Math.cos(th); if (Math.abs(c) < 0.5) return null; const wall = c > 0 ? 1.8 : 2.4; return { rho: Math.min(wall / Math.abs(c), kMaxDrawRadius), w: Math.abs(c) }; };
+    const profWall = th => { const s = Math.sin(th); if (Math.abs(s) < 0.5) return null; const wall = s > 0 ? 1.55 : 0.75; return { rho: Math.min(wall / Math.abs(s), kMaxDrawRadius), w: Math.abs(s) }; };
+    function axes(g, cx, cy) {
+      poly(g, [[cx - 95, cy], [cx + 72, cy]], { stroke: C.line });
+      poly(g, [[cx, cy + 50], [cx, cy - 70]], { stroke: C.line });
+      label(g, cx + 75, cy + 4, 'right', { class: 'muted', 'font-size': 10 });
+      label(g, cx + 4, cy - 72, 'up', { class: 'muted', 'font-size': 10 });
+      el(g, 'circle', { cx, cy, r: 3, fill: C.fg });
+    }
+    function panel(idx, title, draw) {
+      const cx = 105 + idx * 205, cy = 150;
+      const g = el(svg, 'g');
+      label(g, cx - 95, 22, title, { 'font-weight': 600 });
+      axes(g, cx, cy);
+      draw(g, cx, cy);
+    }
+    const toXY = (cx, cy, th, rho) => [cx + rho * S * Math.cos(th), cy - rho * S * Math.sin(th)];
+    const ellipsePts = (cx, cy) => { const p = []; for (let k = 0; k < 64; k++) { const th = k / 64 * 2 * Math.PI; p.push(toXY(cx, cy, th, ellipse(th))); } return p; };
+    panel(0, '(a) LRUD ellipse', (g, cx, cy) => {
+      polygon(g, ellipsePts(cx, cy), { fill: C.a1, 'fill-opacity': 0.15, stroke: C.a1, 'stroke-width': 2 });
+      [[0, r, 'R'], [Math.PI, l, 'L'], [Math.PI / 2, u, 'U'], [-Math.PI / 2, d, 'D']].forEach(([th, rho, t]) => {
+        const p = toXY(cx, cy, th, rho);
+        poly(g, [[cx, cy], p], { stroke: C.a1, 'stroke-dasharray': '3 3' });
+        label(g, p[0] + (Math.cos(th) * 10), p[1] - (Math.sin(th) * 10) + 4, t, { fill: C.a1, 'font-size': 11, 'text-anchor': 'middle' });
+      });
+      label(g, cx - 95, cy + 92, 'ρ(θ) = |(a cosθ, b sinθ)|', { class: 'muted', 'font-size': 11 });
+      label(g, cx - 95, cy + 106, 'a = cosθ≥0 ? r : l,  b = sinθ≥0 ? u : d', { class: 'muted', 'font-size': 10 });
+    });
+    panel(1, '(b) + splay tips', (g, cx, cy) => {
+      polygon(g, ellipsePts(cx, cy), { fill: 'none', stroke: C.a1, 'stroke-width': 1, 'stroke-dasharray': '3 3' });
+      splays.forEach(([a, rho]) => { const p = toXY(cx, cy, deg(a), rho); poly(g, [[cx, cy], p], { stroke: C.a4, 'stroke-opacity': 0.5 }); el(g, 'circle', { cx: p[0], cy: p[1], r: 3.5, fill: C.a4 }); });
+      label(g, cx - 95, cy + 92, 'q = v − (v·t)t', { class: 'muted', 'font-size': 10 });
+      label(g, cx - 95, cy + 106, 'θ = atan2(q·up, q·right), ρ = |q|', { class: 'muted', 'font-size': 10 });
+    });
+    panel(2, '(c) + scrap rays', (g, cx, cy) => {
+      polygon(g, ellipsePts(cx, cy), { fill: 'none', stroke: C.a1, 'stroke-width': 1, 'stroke-dasharray': '3 3' });
+      for (let k = 0; k < N; k++) {
+        const th = k / N * 2 * Math.PI;
+        const pw = planWall(th); if (pw) { const p = toXY(cx, cy, th, pw.rho); poly(g, [[cx, cy], p], { stroke: C.a3, 'stroke-width': 1 + 2 * pw.w, 'stroke-opacity': 0.35 + 0.65 * pw.w }); el(g, 'circle', { cx: p[0], cy: p[1], r: 3, fill: C.a3 }); }
+        const fw = profWall(th); if (fw) { const p = toXY(cx, cy, th, fw.rho); poly(g, [[cx, cy], p], { stroke: C.a2, 'stroke-width': 1 + 2 * fw.w, 'stroke-opacity': 0.35 + 0.65 * fw.w }); el(g, 'circle', { cx: p[0], cy: p[1], r: 3, fill: C.a2 }); }
+      }
+      label(g, cx - 95, cy + 92, 'c = |(V·d_k).xy|,  ρ = hit / c', { class: 'muted', 'font-size': 10 });
+      label(g, cx - 95, cy + 106, 'thick = c near 1, thin = c near 0.5', { class: 'muted', 'font-size': 10 });
+    });
+    panel(3, '(d) fitted ring', (g, cx, cy) => {
+      // bins: max over sources
+      const bins = new Array(N).fill(null);
+      const put = (th, rho) => { let k = Math.round(th / (2 * Math.PI) * N) % N; if (k < 0) k += N; bins[k] = Math.max(bins[k] ?? 0, rho); };
+      splays.forEach(([a, rho]) => put(deg(a), rho));
+      for (let k = 0; k < N; k++) { const th = k / N * 2 * Math.PI; const pw = planWall(th); if (pw) put(th, pw.rho); const fw = profWall(th); if (fw) put(th, fw.rho); }
+      // fill empties from LRUD ellipse where fewer than threshold? here: interpolate
+      const filled = bins.map(b => b !== null);
+      for (let k = 0; k < N; k++) if (!filled[k]) {
+        let a = k, b = k; while (!filled[((a % N) + N) % N]) a--; while (!filled[b % N]) b++;
+        const ra = bins[((a % N) + N) % N], rb = bins[b % N]; const t = (k - a) / (b - a); bins[k] = ra + (rb - ra) * t;
+      }
+      // bin wedges
+      for (let k = 0; k < N; k++) { const th = (k + 0.5) / N * 2 * Math.PI; poly(g, [[cx, cy], toXY(cx, cy, th, 3.1)], { stroke: C.line, 'stroke-width': 0.6 }); }
+      const ring = bins.map((rho, k) => toXY(cx, cy, k / N * 2 * Math.PI, rho));
+      polygon(g, ring, { fill: C.fg, 'fill-opacity': 0.08, stroke: C.fg, 'stroke-width': 2.2, 'stroke-linejoin': 'round' });
+      ring.forEach((p, k) => el(g, 'circle', { cx: p[0], cy: p[1], r: 2.6, fill: filled[k] ? C.fg : C.surface, stroke: C.fg }));
+      polygon(g, ellipsePts(cx, cy), { fill: 'none', stroke: C.a1, 'stroke-width': 1, 'stroke-dasharray': '3 3' });
+      label(g, cx - 95, cy + 92, 'ρ_k = max of samples in bin k', { class: 'muted', 'font-size': 10 });
+      label(g, cx - 95, cy + 106, 'hollow vertex = interpolated bin', { class: 'muted', 'font-size': 10 });
+    });
+  })();
+
+  // ---------------- Figure 5: page-space ray casts ----------------
+  (function fig5() {
+    const svg = document.getElementById('fig-page'); if (!svg) return;
+    function rayHit(origin, dir, polyPts) {
+      let best = null;
+      for (let i = 0; i < polyPts.length; i++) {
+        const a = polyPts[i], b = polyPts[(i + 1) % polyPts.length];
+        const e = sub(b, a); const den = dir[0] * e[1] - dir[1] * e[0]; if (Math.abs(den) < 1e-9) continue;
+        const ao = sub(a, origin); const t = (ao[0] * e[1] - ao[1] * e[0]) / den; const s = (ao[0] * dir[1] - ao[1] * dir[0]) / den;
+        if (t > 0 && s >= 0 && s <= 1 && (best === null || t < best)) best = t;
+      }
+      return best;
+    }
+    function castBoth(g, origin, dir, outline, col, strong) {
+      [dir, mul(dir, -1)].forEach(d => {
+        const t = rayHit(origin, d, outline); if (t === null) return;
+        const hit = add(origin, mul(d, t));
+        poly(g, [origin, hit], { stroke: col, 'stroke-width': strong ? 2.2 : 1.4, 'stroke-opacity': strong ? 0.95 : 0.6 });
+        el(g, 'circle', { cx: hit[0], cy: hit[1], r: strong ? 3.2 : 2.4, fill: col });
+      });
+    }
+    const samples = 5; // sample points per shot, including the stations
+    // Left: plan scrap, horizontal passage, shot A->B along page x
+    (function () {
+      const g = el(svg, 'g', { transform: 'translate(16,30)' });
+      label(g, 0, 0, 'plan scrap · horizontal passage', { 'font-weight': 600 });
+      const outline = [[10, 70], [60, 55], [110, 62], [160, 48], [210, 58], [250, 70], [255, 150], [205, 170], [150, 158], [100, 172], [50, 160], [12, 140]];
+      polygon(g, outline, { fill: C.a3, 'fill-opacity': 0.1, stroke: C.a3, 'stroke-width': 1.8 });
+      const A = [40, 112], B = [230, 112];
+      poly(g, [A, B], { stroke: C.fg, 'stroke-width': 1.5 });
+      for (let i = 0; i < samples; i++) {
+        const s = i / (samples - 1); const Sp = add(A, mul(sub(B, A), s));
+        const isStation = i === 0 || i === samples - 1;
+        castBoth(g, Sp, [0, 1], outline, C.a3, isStation);
+        el(g, 'circle', { cx: Sp[0], cy: Sp[1], r: isStation ? 4 : 3, fill: isStation ? C.fg : C.a1 });
+      }
+      label(g, A[0] - 4, A[1] + 22, 'A', { 'font-size': 12 }); label(g, B[0] - 4, B[1] + 22, 'B', { 'font-size': 12 });
+      label(g, 0, 198, 'L and R directions project fully (c = 1) onto the', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 212, 'page; U and D project to nothing. Mid-shot', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 226, 'samples (orange) follow the drawn wall.', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 240, 'S_page = lerp(page(A), page(B), s)', { class: 'muted', 'font-size': 10 });
+    })();
+    // Middle: profile scrap
+    (function () {
+      const g = el(svg, 'g', { transform: 'translate(296,30)' });
+      label(g, 0, 0, 'profile scrap · same shot', { 'font-weight': 600 });
+      const outline = [[10, 40], [60, 30], [120, 44], [180, 36], [230, 50], [232, 150], [180, 165], [120, 150], [60, 170], [12, 150]];
+      polygon(g, outline, { fill: C.a2, 'fill-opacity': 0.1, stroke: C.a2, 'stroke-width': 1.8 });
+      const A = [40, 100], B = [205, 110];
+      poly(g, [A, B], { stroke: C.fg, 'stroke-width': 1.5 });
+      for (let i = 0; i < samples; i++) {
+        const s = i / (samples - 1); const Sp = add(A, mul(sub(B, A), s));
+        const isStation = i === 0 || i === samples - 1;
+        castBoth(g, Sp, [0, 1], outline, C.a2, isStation);
+        el(g, 'circle', { cx: Sp[0], cy: Sp[1], r: isStation ? 4 : 3, fill: isStation ? C.fg : C.a1 });
+      }
+      label(g, A[0] - 4, A[1] + 22, 'A', { 'font-size': 12 }); label(g, B[0] - 4, B[1] + 22, 'B', { 'font-size': 12 });
+      label(g, 0, 198, 'V maps world Z to page Y: U and D project', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 212, 'fully, L and R project to nothing, so the', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 226, 'profile gives height only.', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 240, 'running profile: V = Data(from, to) per shot', { class: 'muted', 'font-size': 10 });
+    })();
+    // Right: pit footprint
+    (function () {
+      const g = el(svg, 'g', { transform: 'translate(576,30)' });
+      label(g, 0, 0, 'plan scrap · vertical pit', { 'font-weight': 600 });
+      const outline = [[60, 40], [120, 30], [175, 55], [195, 100], [170, 150], [115, 175], [60, 160], [30, 115], [35, 70]];
+      polygon(g, outline, { fill: C.a3, 'fill-opacity': 0.1, stroke: C.a3, 'stroke-width': 1.8 });
+      const Sp = [112, 102];
+      for (let k = 0; k < 16; k++) {
+        const th = k / 16 * 2 * Math.PI; const dir = [Math.cos(th), -Math.sin(th)];
+        const t = rayHit(Sp, dir, outline); if (t === null) continue;
+        const hit = add(Sp, mul(dir, t));
+        poly(g, [Sp, hit], { stroke: C.a3, 'stroke-width': 1.8, 'stroke-opacity': 0.8 });
+        el(g, 'circle', { cx: hit[0], cy: hit[1], r: 3, fill: C.a3 });
+      }
+      el(g, 'circle', { cx: Sp[0], cy: Sp[1], r: 5, fill: C.fg });
+      label(g, Sp[0] + 10, Sp[1] - 10, 'pit station', { 'font-size': 11, class: 'fill-surface' });
+      label(g, Sp[0] + 10, Sp[1] - 10, 'pit station', { 'font-size': 11 });
+      label(g, 0, 198, 'The section plane is horizontal, so every', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 212, 'ring direction has c = 1 on the plan page:', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 226, 'the 16-ray fan is the whole footprint ring.', { class: 'muted', 'font-size': 10 });
+    })();
+  })();
+
+  // ---------------- Figure 6: chains and junctions (plan) ----------------
+  (function fig6() {
+    const svg = document.getElementById('fig-chain'); if (!svg) return;
+    const g = el(svg, 'g', { transform: 'translate(20,16)' });
+    const P = { a: [20, 170], b: [120, 160], J1: [230, 150], c: [340, 170], J2: [470, 180], d: [600, 170], e: [740, 160],
+                s1: [280, 70], s2: [330, 45], n1: [470, 90], n2: [480, 44], m1: [460, 260], m2: [440, 296] };
+    const tube = (pts, col, wpx) => { poly(g, pts, { stroke: col, 'stroke-width': wpx, 'stroke-opacity': 0.18, 'stroke-linejoin': 'round', 'stroke-linecap': 'butt' }); poly(g, pts, { stroke: col, 'stroke-width': 2, 'stroke-linejoin': 'round' }); };
+    const W = 44;
+    tube([P.a, P.b, P.J1, P.c, P.J2, P.d, P.e], C.a1, W);
+    function arm(pts, col, w) {
+      const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+      const t = norm(sub(last, prev)); const ext = add(last, mul(t, w / 4));
+      tube(pts.slice(0, -1).concat([ext]), col, w);
+      const r = w / 2; const ang = Math.atan2(t[1], t[0]);
+      const dome = []; for (let k = 0; k <= 16; k++) { const th = ang - Math.PI / 2 + k / 16 * Math.PI; dome.push([ext[0] + r * Math.cos(th), ext[1] + r * Math.sin(th)]); }
+      polygon(g, dome, { fill: C.muted, 'fill-opacity': 0.25, stroke: C.muted, 'stroke-dasharray': '3 3' });
+    }
+    arm([P.s2, P.s1, P.J1], C.a2, 32);
+    tube([P.n2, P.n1, P.J2, P.m1, P.m2], C.a3, 30);
+    Object.values(P).forEach(p => el(g, 'circle', { cx: p[0], cy: p[1], r: 3.5, fill: C.fg }));
+    label(g, P.J1[0] - 10, P.J1[1] + 38, 'J1 (3-way)', { 'font-size': 11 });
+    label(g, P.J2[0] + 16, P.J2[1] + 36, 'J2 (4-way)', { 'font-size': 11 });
+    label(g, P.a[0], P.a[1] - 34, 'chain 1 runs straight through J1 and J2; its rings at J1 and J2 are mitered', { fill: C.a1, 'font-size': 11 });
+    label(g, P.s2[0] - 190, P.s2[1] - 24, 'chain 2 ends at J1: last ring', { fill: C.a2, 'font-size': 11 });
+    label(g, P.s2[0] - 190, P.s2[1] - 10, 'pushed ½ρ past J1, dome cap (gray)', { fill: C.a2, 'font-size': 11 });
+    label(g, P.n2[0] + 18, P.n2[1] + 18, 'chain 3 crosses J2 as one mitered chain', { fill: C.a3, 'font-size': 11 });
+    label(g, P.n2[0] + 18, P.n2[1] + 32, '(both of its J2 edges were still unused)', { fill: C.a3, 'font-size': 11 });
+    label(g, P.m2[0] + 18, P.m2[1] - 2, 'degree-1 stations get flat fan caps', { class: 'muted', 'font-size': 11 });
+    label(g, 0, 312, 'plan view · tube widths exaggerated', { class: 'muted', 'font-size': 11 });
+  })();
+
+  // ---------------- Figure 7: bends ----------------
+  (function fig7() {
+    const svg = document.getElementById('fig-bend'); if (!svg) return;
+    const h = 30; // tube half width in px
+    const A = [20, 160], B = [180, 160], Cc = [180, 20]; // +x leg into a corner, then straight up the page
+    function panel(ox, oy, title, subdiv) {
+      const g = el(svg, 'g', { transform: `translate(${ox},${oy})` });
+      label(g, 0, 0, title, { 'font-weight': 600 });
+      poly(g, [A, B, Cc], { stroke: C.muted, 'stroke-width': 1.5 });
+      [A, B, Cc].forEach(p => el(g, 'circle', { cx: p[0], cy: p[1], r: 3.5, fill: C.fg }));
+      label(g, A[0] - 4, A[1] + 20, 'A', { 'font-size': 12 }); label(g, B[0] + 8, B[1] + 20, 'B', { 'font-size': 12 }); label(g, Cc[0] + 8, Cc[1] + 4, 'C', { 'font-size': 12 });
+      // station rings at A and C, edge-on (perpendicular to their single leg)
+      poly(g, [[A[0], A[1] - h], [A[0], A[1] + h]], { stroke: C.fg, 'stroke-width': 2.5, 'stroke-dasharray': '5 3' });
+      poly(g, [[Cc[0] - h, Cc[1]], [Cc[0] + h, Cc[1]]], { stroke: C.fg, 'stroke-width': 2.5, 'stroke-dasharray': '5 3' });
+      if (!subdiv) {
+        const outer = [B[0] + h, B[1] + h], inner = [B[0] - h, B[1] - h];
+        poly(g, [[A[0], A[1] + h], outer, [Cc[0] + h, Cc[1]]], { stroke: C.a1, 'stroke-width': 2.5 });
+        poly(g, [[A[0], A[1] - h], inner, [Cc[0] - h, Cc[1]]], { stroke: C.a1, 'stroke-width': 2.5 });
+        poly(g, [inner, outer], { stroke: C.fg, 'stroke-width': 2.5, 'stroke-dasharray': '5 3' });
+        label(g, outer[0] + 10, outer[1] - 6, 'ring in the bisecting plane', { 'font-size': 11 });
+        label(g, outer[0] + 10, outer[1] + 8, 'length 2ρ / cos(45°) ≈ 2.83ρ', { class: 'muted', 'font-size': 10 });
+        label(g, 0, 222, 'outer wall is a sharp corner; the single ring is stretched 1.41×', { class: 'muted', 'font-size': 10 });
+      } else {
+        const eps = 50, center = [B[0] - eps, B[1] - eps];
+        const arcPt = (radius, phi) => [center[0] + radius * Math.cos(phi), center[1] + radius * Math.sin(phi)];
+        const arc = radius => { const pts = []; for (let k = 0; k <= 16; k++) pts.push(arcPt(radius, deg(90 - k * 90 / 16))); return pts; };
+        poly(g, [[A[0], A[1] + h]].concat(arc(eps + h)).concat([[Cc[0] + h, Cc[1]]]), { stroke: C.a2, 'stroke-width': 2.5 });
+        poly(g, [[A[0], A[1] - h]].concat(arc(eps - h)).concat([[Cc[0] - h, Cc[1]]]), { stroke: C.a2, 'stroke-width': 2.5 });
+        poly(g, arc(eps), { stroke: C.a2, 'stroke-width': 1.5, 'stroke-dasharray': '4 3' });
+        [90, 60, 30, 0].forEach(phi => {
+          const p = arcPt(eps, deg(phi));
+          poly(g, [arcPt(eps - h, deg(phi)), arcPt(eps + h, deg(phi))], { stroke: C.fg, 'stroke-width': 2.5, 'stroke-dasharray': '5 3' });
+          el(g, 'circle', { cx: p[0], cy: p[1], r: 3, fill: C.a2 });
+        });
+        label(g, B[0] + h + 10, B[1] - 6, 'inset ε: rings at both inset', { 'font-size': 11 });
+        label(g, B[0] + h + 10, B[1] + 8, 'points and two in between,', { 'font-size': 11 });
+        label(g, B[0] + h + 10, B[1] + 22, 'radii lerped, frame by RMF', { class: 'muted', 'font-size': 10 });
+        label(g, 0, 222, 'outer wall stays rounded; no stretched ring, no fold-back', { class: 'muted', 'font-size': 10 });
+      }
+    }
+    panel(30, 30, 'single mitered ring at a 90° turn', false);
+    panel(440, 30, 'corner rounding (turns above ~60°)', true);
+  })();
+
+  // ---------------- Figure 8: pit into passage ----------------
+  (function fig8() {
+    const svg = document.getElementById('fig-pit'); if (!svg) return;
+    const g = el(svg, 'g', { transform: 'translate(40,20)' });
+    label(g, 0, 0, 'elevation: vertical pit chain ending at a horizontal passage', { 'font-weight': 600 });
+    const J = [360, 180];
+    // passage tube: horizontal, height 70, from x=120..620
+    const ph = 34;
+    el(g, 'rect', { x: 120, y: J[1] - ph, width: 520, height: 2 * ph, fill: C.a1, 'fill-opacity': 0.12, stroke: C.a1, 'stroke-width': 2 });
+    poly(g, [[120, J[1]], [640, J[1]]], { stroke: C.fg, 'stroke-width': 1.5 });
+    [[180, J[1]], J, [540, J[1]]].forEach(p => { el(g, 'circle', { cx: p[0], cy: p[1], r: 3.5, fill: C.fg }); poly(g, [[p[0], p[1] - ph], [p[0], p[1] + ph]], { stroke: C.fg, 'stroke-width': 2, 'stroke-dasharray': '5 3' }); });
+    label(g, 180 - 30, J[1] + ph + 16, 'vertical rings of the passage chain', { fill: C.a1, 'font-size': 11 });
+    // pit tube: vertical from y=20 down to J, half width 26, extended past J by 13 with dome
+    const pw = 26, ext = 13;
+    el(g, 'rect', { x: J[0] - pw, y: 24, width: 2 * pw, height: J[1] - 24, fill: C.a2, 'fill-opacity': 0.12, stroke: C.a2, 'stroke-width': 2 });
+    poly(g, [[J[0], 24], J], { stroke: C.fg, 'stroke-width': 1.5 });
+    [[J[0], 60], [J[0], 120]].forEach(p => { el(g, 'circle', { cx: p[0], cy: p[1], r: 3.5, fill: C.fg }); poly(g, [[p[0] - pw, p[1]], [p[0] + pw, p[1]]], { stroke: C.fg, 'stroke-width': 2, 'stroke-dasharray': '5 3' }); });
+    label(g, J[0] + pw + 8, 64, 'horizontal rings of the pit chain', { fill: C.a2, 'font-size': 11 });
+    // hidden part: extension + dome inside the passage
+    poly(g, [[J[0] - pw, J[1]], [J[0] - pw, J[1] + ext]], { stroke: C.a2, 'stroke-width': 2, 'stroke-dasharray': '3 3' });
+    poly(g, [[J[0] + pw, J[1]], [J[0] + pw, J[1] + ext]], { stroke: C.a2, 'stroke-width': 2, 'stroke-dasharray': '3 3' });
+    poly(g, [[J[0] - pw, J[1] + ext], [J[0] + pw, J[1] + ext]], { stroke: C.fg, 'stroke-width': 2, 'stroke-dasharray': '3 3' });
+    const dome = []; for (let k = 0; k <= 16; k++) { const th = Math.PI + k / 16 * Math.PI; dome.push([J[0] + pw * Math.cos(th), J[1] + ext - pw * 0.7 * Math.sin(th)]); }
+    poly(g, dome, { stroke: C.muted, 'stroke-width': 1.5, 'stroke-dasharray': '3 3' });
+    poly(g, [[J[0] + pw + 2, J[1] + ext + 4], [J[0] + pw + 40, J[1] + ph + 12]], { stroke: C.muted, 'stroke-width': 1 });
+    label(g, J[0] + pw + 44, J[1] + ph + 16, 'last ring pushed ½ρ past J, then a dome cap', { class: 'muted', 'font-size': 11 });
+    label(g, J[0] + pw + 44, J[1] + ph + 30, 'dashed = inside the passage tube, hidden by the depth test', { class: 'muted', 'font-size': 11 });
+    label(g, J[0] - 8, J[1] - ph - 8, 'J', { 'font-size': 12 });
+    label(g, 0, 268, 'The pit ring is horizontal because its blended frame reached w = 1; the passage rings are vertical.', { class: 'muted', 'font-size': 10 });
+    label(g, 0, 282, 'Both come from the same LRUD / splay / scrap sample pipeline.', { class: 'muted', 'font-size': 10 });
+  })();
+
+  // ---------------- Figure 9: concave scrap with an un-surveyed side lobe ----------------
+  (function fig9() {
+    const svg = document.getElementById('fig-lobe'); if (!svg) return;
+    function rayHit(origin, dir, polyPts) {
+      let best = null;
+      for (let i = 0; i < polyPts.length; i++) {
+        const a = polyPts[i], b = polyPts[(i + 1) % polyPts.length];
+        const e = sub(b, a); const den = dir[0] * e[1] - dir[1] * e[0]; if (Math.abs(den) < 1e-9) continue;
+        const ao = sub(a, origin); const t = (ao[0] * e[1] - ao[1] * e[0]) / den; const s = (ao[0] * dir[1] - ao[1] * dir[0]) / den;
+        if (t > 0 && s >= 0 && s <= 1 && (best === null || t < best)) best = t;
+      }
+      return best;
+    }
+    function inside(p, polyPts) { // even-odd rule, like QPolygonF::containsPoint(Qt::OddEvenFill)
+      let c = false;
+      for (let i = 0, j = polyPts.length - 1; i < polyPts.length; j = i++) {
+        const a = polyPts[i], b = polyPts[j];
+        if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c;
+      }
+      return c;
+    }
+    const rot = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a)];
+    // Plan outline: a horizontal passage with a side lobe leaving the top wall between x = 118 and x = 164
+    const outline = [[10, 72], [60, 66], [118, 70], [122, 40], [132, 14], [160, 8], [178, 22], [172, 46], [164, 70], [210, 64], [250, 70], [252, 132], [200, 138], [150, 130], [100, 136], [50, 130], [12, 134]];
+    const A = [35, 102], B = [235, 102];
+    const nSamples = 11, K_OPEN = 1.8, WINDOW = 3;
+    const samples = [];
+    for (let i = 0; i < nSamples; i++) {
+      const S = [A[0] + (B[0] - A[0]) * i / (nSamples - 1), A[1]];
+      samples.push({ S, up: rayHit(S, [0, -1], outline), dn: rayHit(S, [0, 1], outline) });
+    }
+    // Option A: compare each side ray with the median of the same ray over ±WINDOW samples along the shot
+    const median = arr => { const s = arr.slice().sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+    const flagged = samples.map((h, i) => {
+      const win = []; for (let k = -WINDOW; k <= WINDOW; k++) if (k !== 0 && samples[i + k]) win.push(samples[i + k].up);
+      return h.up > K_OPEN * median(win);
+    });
+    const clampedUp = samples.map(h => h.up);
+    for (let i = 0; i < nSamples; i++) if (flagged[i]) {
+      let a = i, b = i; while (a >= 0 && flagged[a]) a--; while (b < nSamples && flagged[b]) b++;
+      clampedUp[i] = samples[a].up + (samples[b].up - samples[a].up) * (i - a) / (b - a);
+    }
+    const upPt = (h, d) => [h.S[0], h.S[1] - d], dnPt = h => [h.S[0], h.S[1] + h.dn];
+    function footprint(g, ups) {
+      const pts = samples.map((h, i) => upPt(h, ups[i])).concat(samples.map(dnPt).reverse());
+      polygon(g, pts, { fill: C.a1, 'fill-opacity': 0.15, stroke: C.a1, 'stroke-width': 2, 'stroke-linejoin': 'round' });
+    }
+    function base(idx, title) {
+      const g = el(svg, 'g', { transform: `translate(${16 + idx * 270},30)` });
+      label(g, 0, 0, title, { 'font-weight': 600 });
+      polygon(g, outline, { fill: C.a3, 'fill-opacity': 0.1, stroke: C.a3, 'stroke-width': 1.8 });
+      poly(g, [A, B], { stroke: C.fg, 'stroke-width': 1.5 });
+      [A, B].forEach(p => el(g, 'circle', { cx: p[0], cy: p[1], r: 3.5, fill: C.fg }));
+      label(g, A[0] - 4, A[1] + 16, 'A', { 'font-size': 11 }); label(g, B[0] - 4, B[1] + 16, 'B', { 'font-size': 11 });
+      return g;
+    }
+    // (a) fin
+    (function () {
+      const g = base(0, '(a) nearest hit per ray: a fin');
+      samples.forEach(h => {
+        [upPt(h, h.up), dnPt(h)].forEach(p => { poly(g, [h.S, p], { stroke: C.a3, 'stroke-width': 1.2, 'stroke-opacity': 0.6 }); el(g, 'circle', { cx: p[0], cy: p[1], r: 2.2, fill: C.a3 }); });
+        el(g, 'circle', { cx: h.S[0], cy: h.S[1], r: 2, fill: C.a1 });
+      });
+      footprint(g, samples.map(h => h.up));
+      label(g, 10, 20, 'fin: the whole side', { fill: C.a1, 'font-size': 10 });
+      label(g, 10, 32, 'of the ring is pushed', { fill: C.a1, 'font-size': 10 });
+      label(g, 10, 44, 'through the mouth', { fill: C.a1, 'font-size': 10 });
+      label(g, 0, 165, 'every ring direction with a page-side component', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 178, 'shares one page ray, so they spike together', { class: 'muted', 'font-size': 10 });
+    })();
+    // (b) clamp
+    (function () {
+      const g = base(1, '(b) option A: clamp and warn');
+      samples.forEach((h, i) => {
+        const p = upPt(h, clampedUp[i]);
+        poly(g, [h.S, p], { stroke: C.a3, 'stroke-width': 1.2, 'stroke-opacity': 0.6, 'stroke-dasharray': flagged[i] ? '3 3' : null });
+        el(g, 'circle', { cx: p[0], cy: p[1], r: flagged[i] ? 3.4 : 2.2, fill: flagged[i] ? C.warn : C.a3, stroke: flagged[i] ? C.fg : 'none', 'stroke-width': 0.8 });
+      });
+      footprint(g, clampedUp);
+      const fx = samples.filter((h, i) => flagged[i]).map(h => h.S[0]);
+      const s0 = Math.min(...fx), s1 = Math.max(...fx);
+      poly(g, [[s0, 58], [s0, 52], [s1, 52], [s1, 58]], { stroke: C.warn, 'stroke-width': 1.3 });
+      label(g, (s0 + s1) / 2, 48, 'ScrapOpening ×' + fx.length, { fill: C.warn, 'font-size': 10, 'text-anchor': 'middle' });
+      label(g, 0, 165, 'ρ > kOpeningRatio · median(±3 samples)', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 178, '→ interpolate; lobe stays in the scrap layer only', { class: 'muted', 'font-size': 10 });
+    })();
+    // (c) walk
+    (function () {
+      const g = base(2, '(c) option B: walk a synthetic chain');
+      footprint(g, clampedUp);
+      const fx = samples.filter((h, i) => flagged[i]).map(h => h.S[0]);
+      const mx = fx.reduce((a, b) => a + b, 0) / fx.length;
+      const M = [mx, A[1] - rayHit([mx, A[1]], [0, -1], outline.filter((p, i) => true)) ];
+      // the mouth sits on the main wall line, which the clamp interpolated; use that line
+      const iM = samples.findIndex(h => h.S[0] > mx) ; const hA = samples[iM - 1], hB = samples[iM];
+      M[1] = A[1] - (clampedUp[iM - 1] + (clampedUp[iM] - clampedUp[iM - 1]) * (mx - hA.S[0]) / (hB.S[0] - hA.S[0]));
+      const step = 12, maxTurn = deg(30);
+      let pos = M.slice(), dir = [0, -1];
+      const rings = [];
+      for (let i = 0; i < 40; i++) {
+        const fwd = rayHit(pos, dir, outline); if (fwd !== null && fwd < step) break;
+        const cand = add(pos, mul(dir, step)); if (!inside(cand, outline)) break;
+        const fwdC = rayHit(cand, dir, outline); if (fwdC !== null && fwdC < step) break; // dead end within a step: cap here
+        const perp = [-dir[1], dir[0]];
+        const tl = rayHit(cand, perp, outline), tr = rayHit(cand, mul(perp, -1), outline); if (tl === null || tr === null) break;
+        const mid = mul(add(add(cand, mul(perp, tl)), add(cand, mul(perp, -tr))), 0.5);
+        let nd = norm(sub(mid, pos));
+        let ang = Math.atan2(nd[1], nd[0]) - Math.atan2(dir[1], dir[0]); while (ang > Math.PI) ang -= 2 * Math.PI; while (ang < -Math.PI) ang += 2 * Math.PI;
+        if (Math.abs(ang) > maxTurn) nd = rot(dir, Math.sign(ang) * maxTurn);
+        dir = nd; pos = add(pos, mul(dir, step));
+        const p2 = [-dir[1], dir[0]]; const l2 = rayHit(pos, p2, outline), r2 = rayHit(pos, mul(p2, -1), outline); if (l2 === null || r2 === null) break;
+        rings.push({ c: pos, l: add(pos, mul(p2, l2)), r: add(pos, mul(p2, -r2)), dir });
+      }
+      // lobe tube: left hits, cap, right hits
+      const last = rings[rings.length - 1];
+      const halfW = Math.hypot(...sub(last.l, last.r)) / 2, capH = Math.min(halfW * 0.7, rayHit(last.c, last.dir, outline) || halfW);
+      const cap = []; for (let k = 0; k <= 12; k++) { const th = k / 12 * Math.PI; cap.push(add(add(last.c, mul(sub(last.l, last.c), Math.cos(th))), mul(last.dir, capH * Math.sin(th)))); }
+      // the mouth ring: perpendicular hits at M itself, along the wall line
+      const mouth = { c: M, l: add(M, mul([-1, 0], rayHit(M, [-1, 0], outline))), r: add(M, mul([1, 0], rayHit(M, [1, 0], outline))) };
+      const tube = [mouth.l].concat(rings.map(r => r.l), cap, rings.map(r => r.r).reverse(), [mouth.r]);
+      // the mouth ring is pushed into the through tube and dome-capped there, hidden by the depth test
+      poly(g, [mouth.l, [mouth.l[0], M[1] + 8], [mouth.r[0], M[1] + 8], mouth.r], { stroke: C.a2, 'stroke-width': 1.5, 'stroke-dasharray': '3 3' });
+      polygon(g, tube, { fill: C.a2, 'fill-opacity': 0.14, stroke: C.a2, 'stroke-width': 2, 'stroke-linejoin': 'round' });
+      poly(g, [M].concat(rings.map(r => r.c)), { stroke: C.fg, 'stroke-width': 1.5 });
+      [mouth].concat(rings).forEach(r => { poly(g, [r.l, r.r], { stroke: C.fg, 'stroke-width': 1.6, 'stroke-dasharray': '4 3' }); el(g, 'circle', { cx: r.c[0], cy: r.c[1], r: 2.4, fill: C.a2 }); });
+      el(g, 'circle', { cx: M[0], cy: M[1], r: 4, fill: C.surface, stroke: C.a2, 'stroke-width': 2 });
+      label(g, M[0] - 8, A[1] - 6, 'J′ synthetic junction', { fill: C.a2, 'font-size': 10, 'text-anchor': 'end' });
+      label(g, 10, 30, 'recenter on the', { fill: C.a2, 'font-size': 10 });
+      label(g, 10, 42, 'midpoint of two', { fill: C.a2, 'font-size': 10 });
+      label(g, 10, 54, 'perpendicular hits', { fill: C.a2, 'font-size': 10 });
+      label(g, 0, 165, 'stop: dead end (cap), rejoin, chamber, or', { class: 'muted', 'font-size': 10 });
+      label(g, 0, 178, 'kMaxLobeSteps; height inherited from J′', { class: 'muted', 'font-size': 10 });
+    })();
+    const g = el(svg, 'g', { transform: 'translate(16,268)' });
+    label(g, 0, 0, 'Page space of one plan scrap. Green = outline, orange = tube footprint seen from above (each sample is a ring edge-on), blue = synthetic chain.', { class: 'muted', 'font-size': 10 });
+    label(g, 0, 14, 'The same detector runs on the up/down page rays of a running or projected profile, where a lobe is a dome or a floor pit.', { class: 'muted', 'font-size': 10 });
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passage junction gallery</title>
+<style>
+  :root { --bg: #fafafa; --fg: #222; --muted: #777; --panel: #fff; --line: #ccc;
+          --through: #4a78b8; --visible: #d33; --hidden: #999; --ramp: #2a8a3a; --cap: #c48a1a; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.4 -apple-system, Helvetica, Arial, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: center; margin: 10px 0 6px; }
+  .controls label { display: inline-flex; gap: 6px; align-items: center; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 6px 0 14px; color: var(--muted); font-size: 13px; }
+  .legend span::before { content: ""; display: inline-block; width: 22px; height: 0; border-top: 3px solid; margin-right: 6px; vertical-align: middle; }
+  .legend .l-through::before { border-color: var(--through); }
+  .legend .l-visible::before { border-color: var(--visible); }
+  .legend .l-hidden::before { border-color: var(--hidden); border-top-style: dashed; }
+  .legend .l-ramp::before { border-color: var(--ramp); }
+  .legend .l-cap::before { border-color: var(--cap); }
+  .rules { color: var(--muted); font-size: 13px; max-width: 1000px; margin: 0 0 14px; }
+  .rules b { color: var(--fg); }
+  .case { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 12px; }
+  .case h2 { font-size: 15px; margin: 0 0 2px; }
+  .case p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+  .cuts { display: flex; flex-wrap: wrap; gap: 12px; }
+  .cut { flex: 1 1 380px; max-width: 560px; }
+  .cut h3 { font-size: 12px; font-weight: normal; color: var(--muted); margin: 0 0 2px; }
+  canvas { width: 100%; height: auto; display: block; border: 1px solid #eee; }
+  output { font-variant-numeric: tabular-nums; min-width: 4.5em; display: inline-block; }
+</style>
+</head>
+<body>
+<h1>Passage junction gallery — plan and profile projections of each join rule</h1>
+
+<div class="controls">
+  <label><input type="radio" name="variant" value="merge" checked> Clean merge (grow the through rings to the arm's mouth, trim the arm at the wall, cut the hole, zip)</label>
+  <label><input type="radio" name="variant" value="fill"> Overlap: fill to the far wall</label>
+  <label><input type="radio" name="variant" value="chop"> Overlap: chop at the near wall, with ramp</label>
+  <label><input type="radio" name="variant" value="t07c"> Current code (T07c: ring at J, dome to far wall)</label>
+  <label>Ramp length (overlap chop only) <input id="ramp" type="range" min="0" max="4" step="0.05" value="1.5"> <output id="rampOut">1.50 m</output></label>
+</div>
+<div class="legend">
+  <span class="l-through">through passage silhouette; dashed: its section at J; shaded: the through tube in the cut (clean merge: after growing, i.e. the union)</span>
+  <span class="l-visible">arm surface</span>
+  <span class="l-hidden">overlap variants only: arm surface inside the through tube, hidden by depth</span>
+  <span class="l-ramp">arm column shrunk by the ramp (overlap chop)</span>
+  <span class="l-cap">mouth: the arm's last ring, shared with the hole cut in the through tube (overlap variants: cap outline)</span>
+</div>
+<div class="rules">
+  Every rule works on <b>ring columns</b> only (vertex k of each ring along the arm), never on readings, so splay rings and scrap-outline rings go through the same code.
+  <b>Clean merge:</b> (1) every through ring grows, per column, to the union of the two tubes: as far as the ray from the ring's center stays inside the arm's tube (its own rings, the last one carried on past J) clipped to the through's width (the through rings extruded across the arm, so a floor below the through floor still reaches the far wall's position). This carries the arm's section from the near wall to the far wall and tapers with the arm's own outline; rings outside the arm's footprint are untouched. (2) Trim every arm column where it first enters the grown through tube: the trimmed ring is the <b>mouth</b> and lies on the through surface. (3) Cut the through tube's quads inside the mouth loop (in its ring-index × column-index space) and zip the mouth loop to the boundary of the cut window. One closed manifold surface: no faces inside either tube, so transparency and fly-throughs work. The zip patch is not visible in a 2D cut; the cuts show the union outline.
+  <b>Overlap variants</b> leave the arm's end inside the through tube and rely on the depth test; kept for comparison.
+  Overlap variants and T07c test against J's section extruded along the through tangent; the clean merge tests against the through rings themselves, as the builder would.
+</div>
+
+<div id="gallery"></div>
+
+<script>
+(() => {
+const N = 32;
+const SPACING = 0.25;
+const EXTEND_BEYOND = 14;
+const CAP_INSET = 0.05;
+const TOL = 0.02;
+const DOME_RINGS = 3;
+const MIN_R = 0.05;
+const DEG = Math.PI / 180;
+
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const len = a => Math.hypot(a[0], a[1], a[2]);
+const unit = a => mul(a, 1 / len(a));
+const lerp = (a, b, f) => add(a, mul(sub(b, a), f));
+const horizontal = a => [a[0], a[1], 0];
+
+function frameAt(t) {
+  let right = [t[1], -t[0], 0];
+  const h = Math.hypot(right[0], right[1]);
+  right = h < 1e-3 ? [1, 0, 0] : [right[0] / h, right[1] / h, 0];
+  return { t, right, up: cross(right, t) };
+}
+function sectionRadii(sec) {
+  const out = [];
+  for (let k = 0; k < N; k++) {
+    const th = 2 * Math.PI * k / N, ct = Math.cos(th), st = Math.sin(th);
+    if (sec.radii) {
+      const M = sec.radii.length, f = k * M / N, i0 = Math.floor(f) % M, i1 = (i0 + 1) % M, fr = f - Math.floor(f);
+      out.push(Math.max(sec.radii[i0] * (1 - fr) + sec.radii[i1] * fr, MIN_R));
+    } else {
+      const ax = Math.max(ct >= 0 ? sec.r : sec.l, MIN_R), bz = Math.max(st >= 0 ? sec.u : sec.d, MIN_R);
+      out.push(ax * bz / Math.hypot(bz * ct, ax * st));
+    }
+  }
+  return out;
+}
+const columnDir = (frame, k) => { const th = 2 * Math.PI * k / N; return add(mul(frame.right, Math.cos(th)), mul(frame.up, Math.sin(th))); };
+const vertexAt = (sample, k, radius) => add(sample.c, mul(columnDir(sample.frame, k), radius));
+
+// Samples along a chain of stations. Tangents are the bisector at interior stations and turn
+// smoothly along each segment (as the builder's frames do); the last station's tangent
+// continues past the end.
+function sampleChain(stations, extendBeyond) {
+  const dirs = [];
+  for (let i = 0; i + 1 < stations.length; i++) dirs.push(unit(sub(stations[i + 1].p, stations[i].p)));
+  const tangents = stations.map((_, i) => {
+    if (i === 0) return dirs[0];
+    if (i === stations.length - 1) return dirs[dirs.length - 1];
+    return unit(add(dirs[i - 1], dirs[i]));
+  });
+  const samples = [];
+  let s = 0;
+  for (let i = 0; i + 1 < stations.length; i++) {
+    const a = stations[i].p, b = stations[i + 1].p, L = len(sub(b, a));
+    const ra = sectionRadii(stations[i].sec), rb = sectionRadii(stations[i + 1].sec);
+    const n = Math.max(1, Math.ceil(L / SPACING));
+    for (let j = 0; j < n; j++) {
+      const f = j / n;
+      const t = unit(lerp(tangents[i], tangents[i + 1], f));
+      samples.push({ s: s + f * L, c: lerp(a, b, f), frame: frameAt(t), radii: ra.map((r, k) => r * (1 - f) + rb[k] * f), isStation: j === 0 });
+    }
+    s += L;
+    if (i + 2 === stations.length) {
+      const t = tangents[i + 1], frame = frameAt(t);
+      samples.push({ s, c: b, frame, radii: rb.slice(), isStation: true });
+      for (let j = 1; j <= Math.ceil(extendBeyond / SPACING); j++) {
+        samples.push({ s: s + j * SPACING, c: add(b, mul(t, j * SPACING)), frame, radii: rb.slice(), beyond: true });
+      }
+    }
+  }
+  return { samples, length: s };
+}
+
+// J's through section extruded along the through tangent; radiiOverride swaps in a grown section.
+function prismAt(through, jIndex, radiiOverride) {
+  const pj = through[jIndex].p;
+  const tin = jIndex > 0 ? unit(sub(pj, through[jIndex - 1].p)) : null;
+  const tout = jIndex + 1 < through.length ? unit(sub(through[jIndex + 1].p, pj)) : null;
+  const t = unit(add(tin || tout, tout || tin));
+  const frame = frameAt(t);
+  const radii = radiiOverride || sectionRadii(through[jIndex].sec);
+  const radiusAt = (a, b) => {
+    let th = Math.atan2(b, a); if (th < 0) th += 2 * Math.PI;
+    const f = th / (2 * Math.PI) * N, i0 = Math.floor(f) % N, i1 = (i0 + 1) % N, fr = f - Math.floor(f);
+    return radii[i0] * (1 - fr) + radii[i1] * fr;
+  };
+  const inside = (p, tol = TOL) => {
+    const q = sub(p, pj), perp = sub(q, mul(t, dot(q, t)));
+    const a = dot(perp, frame.right), b = dot(perp, frame.up);
+    return Math.hypot(a, b) <= radiusAt(a, b) + tol;
+  };
+  const extent = d => {
+    const far = 80;
+    if (inside(add(pj, mul(d, far)), 0)) return Infinity;
+    let lo = 0, hi = far;
+    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (inside(add(pj, mul(d, mid)), 0)) lo = mid; else hi = mid; }
+    return lo;
+  };
+  return { pj, t, frame, radii, inside, extent, meanRadius: radii.reduce((a, b) => a + b, 0) / N };
+}
+function polarRadiusFn(radii) {
+  return (a, b) => {
+    let th = Math.atan2(b, a); if (th < 0) th += 2 * Math.PI;
+    const f = th / (2 * Math.PI) * N, i0 = Math.floor(f) % N, i1 = (i0 + 1) % N, fr = f - Math.floor(f);
+    return radii[i0] * (1 - fr) + radii[i1] * fr;
+  };
+}
+
+// A tube from its ring samples: the ring whose plane the point is nearest to decides.
+function ringTube(samples) {
+  const fns = samples.map(sm => polarRadiusFn(sm.radii));
+  const nearest = p => {
+    let best = 0, bestAlong = Infinity;
+    for (let i = 0; i < samples.length; i++) {
+      const along = Math.abs(dot(sub(p, samples[i].c), samples[i].frame.t));
+      if (along < bestAlong) { bestAlong = along; best = i; }
+    }
+    return best;
+  };
+  const local = (p, i) => {
+    const f = samples[i].frame, q = sub(p, samples[i].c), perp = sub(q, mul(f.t, dot(q, f.t)));
+    return [dot(perp, f.right), dot(perp, f.up)];
+  };
+  const inside = (p, tol = 0) => { const i = nearest(p), [a, b] = local(p, i); return Math.hypot(a, b) <= fns[i](a, b) + tol; };
+  return { samples, nearest, local, inside, maxRadius: Math.max(...samples.map(sm => Math.max(...sm.radii))) };
+}
+
+// The arm as a tube, its last ring carried on past J so it can reach the far wall.
+function armTubeOf(armStations) {
+  const { samples } = sampleChain(armStations, EXTEND_BEYOND);
+  const tube = ringTube(samples);
+  tube.t = samples[samples.length - 1].frame.t;
+  return tube;
+}
+
+function rayHitsPolygon(o, d, poly) {
+  for (let k = 0; k < poly.length; k++) {
+    const a = poly[k], b = poly[(k + 1) % poly.length], e = [b[0] - a[0], b[1] - a[1]];
+    const den = d[0] * e[1] - d[1] * e[0];
+    if (Math.abs(den) < 1e-12) continue;
+    const ao = [a[0] - o[0], a[1] - o[1]];
+    const r = (ao[0] * e[1] - ao[1] * e[0]) / den;
+    const u = (ao[0] * d[1] - ao[1] * d[0]) / den;
+    if (r >= 0 && u >= 0 && u <= 1) return true;
+  }
+  return false;
+}
+
+// The through tube extruded along n (across both tubes: t × arm axis), ring by ring, so a
+// trench floor below the through floor still meets the far wall's plan position.
+function extrudedInside(throughTube, n) {
+  const polys = throughTube.samples.map(sm => sm.radii.map((r, j) => { const th = 2 * Math.PI * j / N; return [r * Math.cos(th), r * Math.sin(th)]; }));
+  return p => {
+    const i = throughTube.nearest(p), f = throughTube.samples[i].frame;
+    const o = throughTube.local(p, i);
+    const m2 = [dot(n, f.right), dot(n, f.up)], ml = Math.hypot(m2[0], m2[1]);
+    if (Math.hypot(o[0], o[1]) <= polarRadiusFn(throughTube.samples[i].radii)(o[0], o[1])) return true;
+    if (ml < 1e-3) return false;
+    const m = [m2[0] / ml, m2[1] / ml];
+    return rayHitsPolygon(o, m, polys[i]) || rayHitsPolygon(o, [-m[0], -m[1]], polys[i]);
+  };
+}
+
+// A fill is the arm tube clipped to the through's width: the arm's section carried from its
+// near wall to the far wall.
+function fillsFor(throughTube, prism, armTubes) {
+  return armTubes.map(at => {
+    const n = cross(prism.t, at.t), nl = len(n);
+    const ext = nl > 1e-3 ? extrudedInside(throughTube, mul(n, 1 / nl)) : (p => throughTube.inside(p, 0));
+    return { inside: (p, tol = 0) => at.inside(p, tol) && ext(p), reach: at.maxRadius / Math.max(nl, 0.2) + 0.5 };
+  });
+}
+
+// Clean merge, step 1: every through ring grows, per column, as far as the ray from its center
+// stays inside a fill. Rings outside the arm's footprint are untouched, so the growth tapers
+// with the arm's own outline.
+function grownThroughRings(throughTube, jIndex, through, fills) {
+  let sJ = 0;
+  for (let i = 0; i < jIndex; i++) sJ += len(sub(through[i + 1].p, through[i].p));
+  const maxReach = Math.max(...fills.map(f => f.reach));
+  const step = 0.05, searchLimit = 12;
+  return throughTube.samples.map(sm => {
+    const near = Math.abs(sm.s - sJ) <= maxReach;
+    const radii = sm.radii.map((own, k) => {
+      if (!near) return own;
+      const d = columnDir(sm.frame, k);
+      const inFill = r => { const p = add(sm.c, mul(d, r)); return fills.some(f => f.inside(p)); };
+      let last = -1;
+      for (let r = own; r <= searchLimit; r += step) if (inFill(r)) last = r;
+      if (last < 0) return own;
+      let lo = last, hi = last + step;
+      for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (inFill(mid)) lo = mid; else hi = mid; }
+      return Math.max(own, lo);
+    });
+    return { sample: sm, radii, vertices: radii.map((r, k) => vertexAt(sm, k, r)) };
+  });
+}
+
+// The union tube: the through tube or any fill. Exact, so the mouth is where an arm column
+// crosses the through wall (or, for a column wider than the through, the near-wall plane).
+function unionTube(throughTube, prism, fills, grown) {
+  const inside = (p, tol = TOL) => throughTube.inside(p, tol) || fills.some(f => f.inside(p, tol));
+  const jRing = grown.reduce((bestRing, rg) => len(sub(rg.sample.c, prism.pj)) < len(sub(bestRing.sample.c, prism.pj)) ? rg : bestRing, grown[0]);
+  return { inside, extent: prism.extent, pj: prism.pj, t: prism.t, frame: prism.frame, radii: jRing.radii, meanRadius: prism.meanRadius };
+}
+
+function crossing(pOut, pIn, inside) {
+  let a = pOut, b = pIn;
+  for (let i = 0; i < 24; i++) { const m = lerp(a, b, 0.5); if (inside(m)) b = m; else a = m; }
+  return lerp(a, b, 0.5);
+}
+
+// Runs one join rule on an arm: returns rings (per sample, vertex per column or null once ended),
+// each column's end point, the cap center, and which columns were ramped.
+function buildArm(armStations, prism, variant, ramp) {
+  const { samples, length: L } = sampleChain(armStations, variant === 't07c' ? 0 : EXTEND_BEYOND);
+  const jIndex = samples.findIndex(sm => Math.abs(sm.s - L) < 1e-9);
+  const last = samples[jIndex];
+
+  // Where the arm's axis enters and leaves the through tube.
+  let iNear = samples.findIndex(sm => prism.inside(sm.c));
+  if (iNear < 0) iNear = jIndex;
+  let sNear = samples[iNear].s;
+  if (iNear > 0) { const p = crossing(samples[iNear - 1].c, samples[iNear].c, prism.inside); sNear = samples[iNear - 1].s + len(sub(p, samples[iNear - 1].c)); }
+  let sFar = samples[samples.length - 1].s;
+  for (let i = iNear; i < samples.length; i++) {
+    if (!prism.inside(samples[i].c)) { const p = crossing(samples[i].c, samples[i - 1].c, prism.inside); sFar = samples[i - 1].s + len(sub(p, samples[i - 1].c)); break; }
+  }
+  const axisAt = s => add(last.c, mul(last.frame.t, s - L));
+
+  // Ramp: a column wider than the through extent shrinks to it before the near wall.
+  const ramped = new Array(N).fill(false);
+  const radii = samples.map(sm => sm.radii.slice());
+  if (variant === 'fillRamp' || variant === 'chop') {
+    for (let k = 0; k < N; k++) {
+      const ext = prism.extent(columnDir(last.frame, k));
+      if (!isFinite(ext) || last.radii[k] <= ext + TOL) continue;
+      ramped[k] = true;
+      for (let i = 0; i < samples.length; i++) {
+        const s = samples[i].s;
+        const f = ramp > 0 ? Math.min(Math.max((s - (sNear - ramp)) / ramp, 0), 1) : (s >= sNear ? 1 : 0);
+        radii[i][k] = samples[i].radii[k] * (1 - f) + ext * f;
+      }
+    }
+  }
+
+  const rings = samples.map((sm, i) => sm.radii.map((_, k) => vertexAt(sm, k, radii[i][k])));
+  const centers = samples.map(sm => sm.c);
+  const ends = new Array(N);
+  let capCenter;
+
+  if (variant === 't07c') {
+    const far = prism.extent(last.frame.t);
+    const height = isFinite(far) ? Math.max(far, MIN_R) : prism.meanRadius;
+    const base = rings[jIndex];
+    for (let d = 1; d <= DOME_RINGS; d++) {
+      const ang = Math.PI / 2 * d / (DOME_RINGS + 1), ctr = add(last.c, mul(last.frame.t, height * Math.sin(ang))), k = Math.cos(ang);
+      rings.push(base.map(v => add(ctr, mul(sub(v, last.c), k))));
+      centers.push(ctr);
+    }
+    capCenter = add(last.c, mul(last.frame.t, height));
+    for (let k = 0; k < N; k++) ends[k] = capCenter;
+    return { rings, centers, ends, capCenter, ramped, samples, sNear, sFar, L, dome: true };
+  }
+
+  for (let k = 0; k < N; k++) {
+    let entered = false, end = null;
+    for (let i = 0; i < samples.length; i++) {
+      const v = rings[i][k], s = samples[i].s, isIn = prism.inside(v);
+      if (variant === 'chop' || variant === 'merge') {
+        if (isIn) { end = i > 0 ? crossing(rings[i - 1][k], v, prism.inside) : v; }
+        else if (s >= L) { end = rings[jIndex][k]; }
+      } else {
+        if (s > sFar) {
+          const f = (sFar - samples[i - 1].s) / (s - samples[i - 1].s);
+          end = lerp(rings[i - 1][k], v, f);
+        } else if (entered && !isIn) {
+          end = crossing(v, rings[i - 1][k], prism.inside);
+        } else if (isIn) entered = true;
+      }
+      if (end) { for (let j = i; j < samples.length; j++) rings[j][k] = null; break; }
+    }
+    ends[k] = end || rings[samples.length - 1][k];
+  }
+  capCenter = variant === 'merge' ? null : variant === 'chop' ? last.c : axisAt(sFar - CAP_INSET);
+  return { rings, centers, ends, capCenter, ramped, samples, sNear, sFar, L, dome: false };
+}
+
+// ---------- drawing ----------
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function makeView(canvas, proj, points) {
+  let umin = Infinity, umax = -Infinity, vmin = Infinity, vmax = -Infinity;
+  for (const p of points) { const [u, v] = proj(p); umin = Math.min(umin, u); umax = Math.max(umax, u); vmin = Math.min(vmin, v); vmax = Math.max(vmax, v); }
+  const pad = 1.0;
+  umin -= pad; umax += pad; vmin -= pad; vmax += pad;
+  const sc = Math.min(canvas.width / (umax - umin), canvas.height / (vmax - vmin));
+  const ox = (canvas.width - (umax - umin) * sc) / 2, oy = (canvas.height - (vmax - vmin) * sc) / 2;
+  const toPx = p => { const [u, v] = proj(p); return [ox + (u - umin) * sc, oy + (vmax - v) * sc]; };
+  const fromPx = (x, y) => [umin + (x - ox) / sc, vmax - (y - oy) / sc];
+  return { toPx, fromPx, sc, umin, umax, vmin, vmax };
+}
+
+function strokeSegments(ctx, segments) {
+  // segments: [{a:[x,y], b:[x,y], color, dash, width}]
+  for (const sg of segments) {
+    ctx.beginPath(); ctx.setLineDash(sg.dash || []); ctx.strokeStyle = sg.color; ctx.lineWidth = sg.width;
+    ctx.moveTo(sg.a[0], sg.a[1]); ctx.lineTo(sg.b[0], sg.b[1]); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+}
+
+// Silhouette of a tube in the projection: per ring, the extreme vertices across the projected
+// tangent of the ring centers. rings: [{vertices (null once a column ended), center}].
+function silhouette(rings, proj) {
+  const hi = [], lo = [];
+  for (let i = 0; i < rings.length; i++) {
+    const existing = rings[i].vertices.filter(Boolean);
+    if (existing.length < 3) { hi.push(null); lo.push(null); continue; }
+    const a = rings[Math.max(i - 1, 0)].center, b = rings[Math.min(i + 1, rings.length - 1)].center;
+    const [tu, tv] = [proj(b)[0] - proj(a)[0], proj(b)[1] - proj(a)[1]];
+    const tl = Math.hypot(tu, tv);
+    if (tl < 1e-6) { hi.push(null); lo.push(null); continue; }
+    const w = [-tv / tl, tu / tl];
+    let best = null, worst = null, bd = -Infinity, wd = Infinity;
+    for (const v of existing) {
+      const [u, vv] = proj(v), d = u * w[0] + vv * w[1];
+      if (d > bd) { bd = d; best = v; }
+      if (d < wd) { wd = d; worst = v; }
+    }
+    hi.push(best); lo.push(worst);
+  }
+  return [hi, lo];
+}
+
+function drawTube(ctx, view, rings, proj, isHidden, colorVisible) {
+  const segs = [];
+  for (const line of silhouette(rings, proj)) {
+    for (let i = 0; i + 1 < line.length; i++) {
+      if (!line[i] || !line[i + 1]) continue;
+      const hidden = isHidden(line[i]) && isHidden(line[i + 1]);
+      segs.push({ a: view.toPx(line[i]), b: view.toPx(line[i + 1]), color: hidden ? css('--hidden') : colorVisible, dash: hidden ? [4, 4] : [], width: hidden ? 1.2 : 2.5 });
+    }
+  }
+  strokeSegments(ctx, segs);
+}
+
+function drawArmEnd(ctx, view, arm, isHidden) {
+  const segs = [];
+  for (let k = 0; k < N; k++) {
+    const a = arm.ends[k], b = arm.ends[(k + 1) % N];
+    const hidden = isHidden(a) && isHidden(b);
+    segs.push({ a: view.toPx(a), b: view.toPx(b), color: hidden ? css('--hidden') : css('--cap'), dash: hidden ? [3, 3] : [], width: hidden ? 1 : 2 });
+  }
+  if (!arm.dome && arm.capCenter) {
+    for (let k = 0; k < N; k += 4) {
+      const hidden = isHidden(arm.ends[k]) && isHidden(arm.capCenter);
+      segs.push({ a: view.toPx(arm.ends[k]), b: view.toPx(arm.capCenter), color: hidden ? css('--hidden') : css('--cap'), dash: [2, 3], width: 1 });
+    }
+  }
+  strokeSegments(ctx, segs);
+}
+
+function drawRampedColumns(ctx, view, arm, ramp) {
+  // Columns the ramp changed: draw the column's path through the ramp zone in green.
+  const segs = [];
+  for (let k = 0; k < N; k++) {
+    if (!arm.ramped[k]) continue;
+    for (let i = 0; i + 1 < arm.samples.length; i++) {
+      const a = arm.rings[i][k], b = arm.rings[i + 1][k];
+      if (!a || !b || arm.samples[i].s < arm.sNear - ramp - SPACING) continue;
+      segs.push({ a: view.toPx(a), b: view.toPx(b), color: css('--ramp'), dash: [], width: 1.5 });
+    }
+  }
+  strokeSegments(ctx, segs);
+}
+
+function shadePrism(ctx, canvas, view, prism, planePoint) {
+  ctx.fillStyle = 'rgba(74,120,184,0.12)';
+  const step = 4;
+  for (let y = 0; y < canvas.height; y += step) {
+    let runStart = -1;
+    for (let x = 0; x <= canvas.width; x += step) {
+      const [u, v] = view.fromPx(x, y);
+      const inside = x < canvas.width && prism.inside(planePoint(u, v), 0);
+      if (inside && runStart < 0) runStart = x;
+      if (!inside && runStart >= 0) { ctx.fillRect(runStart, y, x - runStart, step); runStart = -1; }
+    }
+  }
+}
+
+function label(ctx, text, x, y, color = css('--muted')) { ctx.fillStyle = color; ctx.font = '11px sans-serif'; ctx.fillText(text, x, y); }
+
+function drawCut(canvas, cut, data) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const { through, prism, arms, variant, throughRings } = data;
+  const points = [];
+  for (const r of throughRings) points.push(...r.vertices);
+  for (const arm of arms) for (const r of arm.rings) for (const v of r) if (v) points.push(v);
+  for (const arm of arms) if (arm.capCenter) points.push(arm.capCenter);
+  const z = data.zoom;
+  const view = makeView(canvas, cut.proj, z ? [add(data.prism.pj, [-z, -z, -z]), add(data.prism.pj, [z, z, z])] : points);
+
+  shadePrism(ctx, canvas, view, prism, cut.planePoint);
+  // 1 m grid
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+  for (let u = Math.ceil(view.umin); u <= view.umax; u++) { const [x] = view.toPx(cut.planePoint(u, 0)); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+  for (let v = Math.ceil(view.vmin); v <= view.vmax; v++) { const [, y] = view.toPx(cut.planePoint(0, v)); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
+  drawTube(ctx, view, throughRings, cut.proj, () => false, css('--through'));
+  // J's section outline, so a through passage perpendicular to the cut still shows its shape.
+  ctx.strokeStyle = css('--through'); ctx.lineWidth = 1; ctx.setLineDash([2, 3]); ctx.beginPath();
+  for (let k = 0; k <= N; k++) {
+    const p = view.toPx(add(prism.pj, mul(columnDir(prism.frame, k % N), prism.radii[k % N])));
+    k ? ctx.lineTo(...p) : ctx.moveTo(...p);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+  const isHidden = variant === 'merge' ? () => false : p => prism.inside(p);
+  for (const arm of arms) {
+    drawTube(ctx, view, arm.rings.map((r, i) => ({ vertices: r, center: arm.centers[i] })), cut.proj, isHidden, css('--visible'));
+    drawRampedColumns(ctx, view, arm, data.ramp);
+    drawArmEnd(ctx, view, arm, isHidden);
+  }
+  // Stations
+  ctx.fillStyle = css('--fg');
+  for (const st of through) { const [x, y] = view.toPx(st.p); ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 7); ctx.fill(); if (st.name) label(ctx, st.name, x + 5, y - 5, css('--fg')); }
+  for (const arm of data.armStations) for (const st of arm) { const [x, y] = view.toPx(st.p); ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 7); ctx.fill(); if (st.name) label(ctx, st.name, x + 5, y - 5, css('--fg')); }
+  label(ctx, cut.title, 6, 13);
+  label(ctx, '1 m grid', canvas.width - 50, canvas.height - 6);
+}
+
+// ---------- cases ----------
+const sec = (l, r, u, d) => ({ l, r, u, d });
+const S = (p, s, name) => ({ p, sec: s, name });
+const polar = (az, dist, dz = 0) => [dist * Math.sin(az * DEG), dist * Math.cos(az * DEG), dz];
+
+function straightThrough(secs, dir = 0, halfLength = 10) {
+  // three stations along azimuth dir through the origin
+  const [sa, sj, sb] = secs;
+  return [S(polar(dir + 180, halfLength), sa, 'A'), S([0, 0, 0], sj, 'J'), S(polar(dir, halfLength), sb, 'B')];
+}
+const same = s => [s, s, s];
+
+const cases = [
+  {
+    title: '1. Symmetric T, equal sections',
+    note: 'Arm from the east into a north–south passage. Fill: the arm ends on the west wall, all of it hidden. Nothing should be visible past the near wall in any rule.',
+    through: straightThrough(same(sec(1, 1, 1.5, 1))), arms: [[S(polar(90, 10), sec(1, 1, 1.5, 1), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+  {
+    title: '2. Small arm into a big passage',
+    note: 'Arm 1 m wide, 0.8 m tall into a 6 m wide, 2 m tall passage. The arm should vanish into the wall.',
+    through: straightThrough(same(sec(3, 3, 2, 0.05))), arms: [[S(polar(90, 10), sec(0.5, 0.5, 0.8, 0.5), 'E'), S([0, 0, 0], sec(0.5, 0.5, 0.8, 0.5))]],
+  },
+  {
+    title: '3. Big arm into a small passage',
+    note: 'Arm 4 m wide, 5 m tall into a 1.6 m wide, 1.5 m tall crawl. Fill carries the big section across to the far wall (a chamber at the junction); chop shrinks it to the crawl before the wall. Which do you want?',
+    through: straightThrough(same(sec(0.8, 0.8, 1, 0.5))), arms: [[S(polar(90, 10), sec(2, 2, 4, 1), 'E'), S([0, 0, 0], sec(2, 2, 4, 1))]],
+  },
+  {
+    title: '4. Oblique Y, arm 60° off the through axis',
+    note: 'Arm from the south-east. The mouth is slanted: the acute-side column crosses the wall earlier than the obtuse side. Fill ends each column on the far wall where it leaves the tube.',
+    through: straightThrough(same(sec(1.2, 1.2, 1.5, 1))), arms: [[S(polar(120, 10), sec(1, 1, 1.5, 1), 'SE'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+  {
+    title: '5. Grazing Y, arm 20° off the through axis',
+    note: 'Nearly parallel passages joining. The far wall along the arm axis is far away (extent ≈ r / sin 20°), so fill runs the arm a long way inside the through tube — hidden, but a lot of triangles. Chop ends it at the near wall.',
+    through: straightThrough(same(sec(1.2, 1.2, 1.5, 1))), arms: [[S(polar(160, 12), sec(1, 1, 1.5, 1), 'S'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+  {
+    title: '6. Arm floor 2.5 m below the through floor (a10-like trench)',
+    note: 'Through floor at the station (D 0). Fill: the deep floor runs under the main passage to the far wall and is visible as a trench. Fill+ramp / chop: the floor rises to the through floor before the mouth (green).',
+    through: straightThrough(same(sec(1.5, 1.5, 2, 0.05))), arms: [[S(polar(90, 10), sec(1, 1, 1.5, 2.5), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 2.5))]],
+  },
+  {
+    title: '7. Arm ceiling 5 m above the through ceiling',
+    note: 'A tall canyon joining a low passage. Fill: the high ceiling continues to the far wall and a wall rises above the far wall (profile). Chop: the canyon drops to the low ceiling before the mouth.',
+    through: straightThrough(same(sec(1.5, 1.5, 2, 1))), arms: [[S(polar(90, 10), sec(0.8, 0.8, 7, 1), 'E'), S([0, 0, 0], sec(0.8, 0.8, 7, 1))]],
+  },
+  {
+    title: '8. Pit dropping into a passage',
+    note: 'Vertical arm from 12 m above J (rings horizontal, 1.5 m radius) into a 3 m wide, 2 m tall passage. Fill: the pit goes down to the floor (far wall along the axis = D). Profile is the plane of the through passage.',
+    through: straightThrough(same(sec(1.5, 1.5, 2, 0.05))), arms: [[S([0, 0, 12], { radii: [1.5] }, 'top'), S([0, 0, 0], { radii: [1.5] })]],
+  },
+  {
+    title: '9. Passage joining a shaft',
+    note: 'Through chain vertical (2 m radius shaft); horizontal arm from the east. The arm should end on the shaft\'s far wall with nothing poking out of the shaft.',
+    through: [S([0, 0, 12], { radii: [2] }, 'top'), S([0, 0, 0], { radii: [2] }, 'J'), S([0, 0, -12], { radii: [2] }, 'bottom')],
+    arms: [[S(polar(90, 10), sec(1, 1, 1.5, 1), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+  {
+    title: '10. Passage turning straight down a pit, side arm at the lip (a6-like)',
+    note: 'The through chain comes from the north and turns vertical at J, so its tangent at J is 45° down and the J section is tilted. Arm from the east. Look for the arm poking out under the lip.',
+    through: [S([0, 10, 0], sec(1.5, 1.5, 2, 1), 'N'), S([0, 0, 0], sec(1.5, 1.5, 2, 1), 'J'), S([0, 0, -12], sec(1.5, 1.5, 2, 1), 'bottom')],
+    arms: [[S(polar(90, 10), sec(1, 1, 1.5, 1), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+  {
+    title: '11. Off-center section: arm enters on the station\'s wall side (a6-like L 5 / R 0)',
+    note: 'The through passage is 5 m to the west of its station and 0.05 m to the east. The arm comes from the east, so the near wall is at the station itself and the far wall 5 m away.',
+    through: straightThrough(same(sec(5, 0, 3, 1))), arms: [[S(polar(90, 10), sec(2, 2, 1.5, 1), 'E'), S([0, 0, 0], sec(2, 2, 1.5, 1))]],
+  },
+  {
+    title: '12. Through passage bends 40° at the junction',
+    note: 'The through chain comes from the south-west and leaves north. The extruded J section (shaded) is the bisector prism; the actual walls (blue) diverge from it. Check whether the arm end pokes out where the prism and the real tube differ.',
+    through: [S(polar(220, 10), sec(1.5, 1.5, 2, 1), 'SW'), S([0, 0, 0], sec(1.5, 1.5, 2, 1), 'J'), S(polar(0, 10), sec(1.5, 1.5, 2, 1), 'N')],
+    arms: [[S(polar(100, 10), sec(1, 1, 1.5, 1), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+  {
+    title: '13. Four-way crossing',
+    note: 'Arms from the east and west. Each arm fills to its own far wall; the two caps meet inside the through tube.',
+    through: straightThrough(same(sec(1.2, 1.2, 1.5, 1))), arms: [
+      [S(polar(90, 10), sec(1, 1, 1.5, 1), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 1))],
+      [S(polar(270, 10), sec(1.5, 1.5, 1.2, 0.8), 'W'), S([0, 0, 0], sec(1.5, 1.5, 1.2, 0.8))]],
+  },
+  {
+    title: '14. Arm sloping down 30° into the passage',
+    note: 'Arm descends from the east. Profile is the vertical plane of the arm; the through passage shows as a box. The arm should end on the far wall / floor without a step.',
+    through: straightThrough(same(sec(1.5, 1.5, 2, 1))), arms: [[S(polar(90, 8.66, 5), sec(1, 1, 1.5, 1), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+  {
+    title: '15. Splay-shaped sections (irregular rings) on both tubes',
+    note: 'Sections are 12-bin radius lists instead of LRUD, the shape splays or a scrap outline would give. Same code path.',
+    through: straightThrough(same({ radii: [2.2, 1.6, 1.1, 0.9, 1.4, 2.4, 2.8, 2.0, 1.2, 0.8, 1.0, 1.7] })),
+    arms: [[S(polar(90, 10), { radii: [1.0, 1.5, 1.9, 1.2, 0.7, 0.9, 1.3, 1.8, 1.1, 0.6, 0.8, 1.2] }, 'E'), S([0, 0, 0], { radii: [1.0, 1.5, 1.9, 1.2, 0.7, 0.9, 1.3, 1.8, 1.1, 0.6, 0.8, 1.2] })]],
+  },
+  {
+    title: '16. Arm with its own section at J larger than the through (measured, not borrowed)',
+    note: 'The arm narrows toward J from 3 m to 2 m half-width but is still wider than the 1 m through passage, and its station at J reads U 4. Compare fill against chop.',
+    through: straightThrough(same(sec(1, 1, 1.5, 0.5))), arms: [[S(polar(90, 10), sec(3, 3, 3, 1), 'E'), S([0, 0, 0], sec(2, 2, 4, 1))]],
+  },
+  {
+    title: '17. Arm joins where the through passage changes section',
+    note: 'Through section 1 m wide before J and 3 m wide after. The extruded J section cannot show both; see which side the arm pokes out of.',
+    through: straightThrough([sec(0.5, 0.5, 1, 0.5), sec(1, 1, 1.5, 0.5), sec(3, 3, 2, 1)]), arms: [[S(polar(90, 10), sec(1, 1, 1.5, 1), 'E'), S([0, 0, 0], sec(1, 1, 1.5, 1))]],
+  },
+];
+
+// Phake Cave a10 from the survey (sections as the builder fits them, in the direction each chain is walked).
+(() => {
+  const CLINO_DOWN = -90;
+  const shots = [
+    ['a1','a2',14.52,49.0,-3.0], ['a2','a3',9.13,352.0,-17.3], ['a3','a4',11.05,82.0,-4.5],
+    ['a4','a5',6.97,41.0,11.2], ['a4','a6',16.54,147.5,-7.5], ['a6','a7',9.81,43.0,26.0],
+    ['a7','a8',10.23,74.0,17.4], ['a6','a9',23.44,0.0,CLINO_DOWN], ['a9','a10',5.85,230.0,-8.4],
+    ['a10','a11',10.56,172.0,-21.7], ['a11','a12',9.17,200.0,-5.3], ['a10','a13',18.28,116.0,-4.1],
+    ['a13','a14',6.99,91.0,-1.2],
+  ];
+  const P = { a1: [0, 0, 0] };
+  for (const [from, to, d, az, cl] of shots) {
+    const h = cl === CLINO_DOWN ? 0 : d * Math.cos(cl * DEG), f = P[from];
+    P[to] = [f[0] + h * Math.sin(az * DEG), f[1] + h * Math.cos(az * DEG), f[2] + d * Math.sin(cl * DEG)];
+  }
+  for (const k in P) P[k] = sub(P[k], P.a10);
+  cases.push({
+    title: '18. Phake Cave a10 (from the survey), 6 m around a10',
+    zoom: 6,
+    note: 'Through a9→a10→a11 with chunk 2 sections (U 24 → 3.0 by the shaft rule, D 0 → 0.05). Arm a14→a13→a10; a10 has no LRUD in chunk 3 so its ring is a13\'s (1.8 m to the NNE, floor 1.7 m down). This is what the app shows.',
+    through: [S(P.a9, sec(2.3, 2, 3, 0.05), 'a9'), S(P.a10, sec(2.3, 2, 3, 0.05), 'a10'), S(P.a11, sec(1, 0.2, 3, 0.5), 'a11')],
+    arms: [[S(P.a14, sec(2, 0.05, 2, 1.9), 'a14'), S(P.a13, sec(0.05, 1.8, 1.8, 1.7), 'a13'), S(P.a10, sec(0.05, 1.8, 1.8, 1.7))]],
+  });
+})();
+
+// ---------- page ----------
+const gallery = document.getElementById('gallery');
+const caseViews = cases.map(c => {
+  const div = document.createElement('div'); div.className = 'case';
+  div.innerHTML = `<h2>${c.title}</h2><p>${c.note}</p><div class="cuts"><div class="cut"><h3>Plan (north up)</h3><canvas width="560" height="400"></canvas></div><div class="cut"><h3>Profile (vertical plane of the arm; the through passage projected onto it)</h3><canvas width="560" height="400"></canvas></div></div>`;
+  gallery.appendChild(div);
+  const [plan, profile] = div.querySelectorAll('canvas');
+  return { c, plan, profile };
+});
+
+function render() {
+  const variant = document.querySelector('input[name=variant]:checked').value;
+  const ramp = parseFloat(document.getElementById('ramp').value);
+  document.getElementById('rampOut').textContent = ramp.toFixed(2) + ' m';
+  for (const { c, plan, profile } of caseViews) {
+    const jIndex = c.through.findIndex(st => st.p[0] === 0 && st.p[1] === 0 && st.p[2] === 0);
+    let tube = prismAt(c.through, jIndex);
+    let throughRings;
+    if (variant === 'merge') {
+      const throughTube = ringTube(sampleChain(c.through, 0).samples);
+      const fills = fillsFor(throughTube, tube, c.arms.map(armTubeOf));
+      const grown = grownThroughRings(throughTube, jIndex, c.through, fills);
+      throughRings = grown.map(g => ({ vertices: g.vertices, center: g.sample.c }));
+      tube = unionTube(throughTube, tube, fills, grown);
+    } else {
+      throughRings = sampleChain(c.through, 0).samples.map(sm => ({ vertices: sm.radii.map((r, k) => vertexAt(sm, k, r)), center: sm.c }));
+    }
+    const arms = c.arms.map(a => buildArm(a, tube, variant, ramp));
+    const pj = tube.pj;
+    // Profile plane: vertical plane of the first arm's last tangent; a vertical arm uses the through tangent.
+    const armT = arms[0].samples[arms[0].samples.length - 1].frame.t;
+    let h = horizontal(armT);
+    if (len(h) < 0.01) h = horizontal(tube.t);
+    if (len(h) < 0.01) h = [1, 0, 0];
+    h = unit(h);
+    const cuts = [
+      { canvas: plan, title: 'plan', proj: p => [p[0], p[1]], planePoint: (u, v) => [u, v, pj[2]] },
+      { canvas: profile, title: 'profile', proj: p => [dot(sub(p, pj), h), p[2] - pj[2]], planePoint: (u, v) => add(pj, add(mul(h, u), [0, 0, v])) },
+    ];
+    for (const cut of cuts) drawCut(cut.canvas, cut, { through: c.through, prism: tube, arms, armStations: c.arms, variant, ramp, throughRings, zoom: c.zoom });
+  }
+}
+document.querySelectorAll('input').forEach(el => el.addEventListener('input', render));
+const hashVariant = document.querySelector(`input[name=variant][value="${location.hash.slice(1)}"]`);
+if (hashVariant) hashVariant.checked = true;
+render();
+})();
+</script>
+</body>
+</html>
