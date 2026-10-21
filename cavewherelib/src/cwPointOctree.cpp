@@ -1,10 +1,10 @@
 // cwPointOctree.cpp
 #include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
+#include "cwDiskCacher.h"
 #include "cwImageProvider.h"
 
 //Qt includes
-#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QtEndian>
@@ -73,15 +73,6 @@ namespace {
         quint64 key = 0;
         cw::octree::QuantizedPoint point;
     };
-
-    cwDiskCacher::Key cacheKey(const cw::octree::NodeKeyBase& base, const QString& suffix)
-    {
-        return cwDiskCacher::Key {
-            base.idPrefix + suffix,
-            base.dir,
-            base.fingerprint
-        };
-    }
 }
 
 namespace cw::octree {
@@ -242,39 +233,6 @@ QString packPath(const QString& cacheRootPath, const QString& lazPath)
                        + QString::number(kFormatGeneration)
                        + QStringLiteral(".cwpack");
     return cwDiskCacher(cacheRootPath).filePath(cwDiskCacher::Key {id, info.path(), QString()});
-}
-
-NodeKeyBase nodeKeyBase(const QString& lazPath, const QString& fingerprint)
-{
-    const QFileInfo info(lazPath);
-    return NodeKeyBase {
-        info.fileName()
-            + QStringLiteral("-octree")
-            + QString::number(kFormatGeneration)
-            + QStringLiteral("-"),
-        info.path(),
-        fingerprint
-    };
-}
-
-cwDiskCacher::Key manifestKey(const NodeKeyBase& base)
-{
-    return cacheKey(base, QStringLiteral("manifest"));
-}
-
-cwDiskCacher::Key nodeKey(const NodeKeyBase& base, const QString& nodeName)
-{
-    return cacheKey(base, nodeName);
-}
-
-cwDiskCacher::Key manifestKey(const QString& lazPath, const QString& fingerprint)
-{
-    return manifestKey(nodeKeyBase(lazPath, fingerprint));
-}
-
-cwDiskCacher::Key nodeKey(const QString& lazPath, const QString& fingerprint, const QString& nodeName)
-{
-    return nodeKey(nodeKeyBase(lazPath, fingerprint), nodeName);
 }
 
 }

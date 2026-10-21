@@ -15,7 +15,6 @@
 
 //Our includes
 #include "CaveWhereLibExport.h"
-#include "cwDiskCacher.h"
 #include "qbox3d.h"
 
 struct cwPointOctreeNode;
@@ -255,41 +254,4 @@ namespace cw::octree {
      * a key path>/<laz file name>-octree<kFormatGeneration>.cwpack
      */
     CAVEWHERE_LIB_EXPORT QString packPath(const QString& cacheRootPath, const QString& lazPath);
-
-    /**
-     * The cache key of the manifest for lazPath. The key's path is the LAZ
-     * file's own directory, which the caller's cacher resolves against its
-     * root.
-     */
-    CAVEWHERE_LIB_EXPORT cwDiskCacher::Key manifestKey(const QString& lazPath,
-                                                       const QString& fingerprint);
-
-    //The cache key of one node's payload, named by nodeName()
-    CAVEWHERE_LIB_EXPORT cwDiskCacher::Key nodeKey(const QString& lazPath,
-                                                   const QString& fingerprint,
-                                                   const QString& nodeName);
-
-    /**
-     * The per-cloud part of every cache key: the LAZ file name and format
-     * generation the ids start with, the LAZ directory the keys live in, and
-     * the fingerprint they carry. Deriving it runs QFileInfo on the LAZ path,
-     * which on iOS calls into the security-scoped file engine, so the renderer
-     * derives it once per source and keys nodes by string concatenation.
-     */
-    struct CAVEWHERE_LIB_EXPORT NodeKeyBase {
-        QString idPrefix;
-        QString dir;
-        QString fingerprint;
-    };
-
-    CAVEWHERE_LIB_EXPORT NodeKeyBase nodeKeyBase(const QString& lazPath,
-                                                 const QString& fingerprint);
-
-    //Same key as manifestKey(lazPath, fingerprint) for the base's cloud
-    CAVEWHERE_LIB_EXPORT cwDiskCacher::Key manifestKey(const NodeKeyBase& base);
-
-    //Same key as nodeKey(lazPath, fingerprint, nodeName) for the base's cloud,
-    //without touching the file system
-    CAVEWHERE_LIB_EXPORT cwDiskCacher::Key nodeKey(const NodeKeyBase& base,
-                                                   const QString& nodeName);
 }

@@ -19,10 +19,10 @@
 
 //Our includes
 #include "cavewhere.pb.h"
-#include "cwDiskCacher.h"
 #include "cwImageProvider.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
+#include "cwPointOctreePack.h"
 
 namespace {
     constexpr double kNodeSize = 16.0;
@@ -152,6 +152,17 @@ namespace {
     {
         const std::string bytes = proto.SerializeAsString();
         return cwPointOctreeManifest::deserialize(QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())));
+    }
+
+    //The pack path names the generation, so an older generation's pack is never even opened
+    QString tilePackPath()
+    {
+        return cw::octree::packPath(QStringLiteral("/tmp"), QStringLiteral("/tmp/tile.laz"));
+    }
+
+    bool tilePackPathNamesGeneration(int generation)
+    {
+        return tilePackPath().contains(QStringLiteral("octree%1").arg(generation));
     }
 
     //An extra node that nothing points at, so only its own fields decide the outcome
@@ -603,7 +614,7 @@ TEST_CASE("A small file hashes size, contents, and both CRS strings", "[PointOct
     CHECK(cw::octree::sourceFingerprint(path, sourceCS, frameCS) == expected);
 }
 
-TEST_CASE("Octree cache keys land beside the laz file", "[PointOctree]") {
+TEST_CASE("A point octree pack lands beside the laz file in the cache", "[PointOctree]") {
     QTemporaryDir directory;
     REQUIRE(directory.isValid());
 
@@ -611,63 +622,38 @@ TEST_CASE("Octree cache keys land beside the laz file", "[PointOctree]") {
     REQUIRE(root.mkpath(QStringLiteral("GIS Layers")));
 
     const QString lazPath = root.filePath(QStringLiteral("GIS Layers/cave.laz"));
-    const QString fingerprint = QStringLiteral("deadbeef");
-
-    const cwDiskCacher::Key manifestKey = cw::octree::manifestKey(lazPath, fingerprint);
-    const cwDiskCacher::Key rootNodeKey = cw::octree::nodeKey(lazPath, fingerprint, QStringLiteral("r"));
-    const cwDiskCacher::Key childKey = cw::octree::nodeKey(lazPath, fingerprint, QStringLiteral("r35"));
-
     const QString generation = QString::number(cw::octree::kFormatGeneration);
-    CHECK(manifestKey.id == QStringLiteral("cave.laz-octree") + generation + QStringLiteral("-manifest"));
-    CHECK(rootNodeKey.id == QStringLiteral("cave.laz-octree") + generation + QStringLiteral("-r"));
-    CHECK(childKey.id == QStringLiteral("cave.laz-octree") + generation + QStringLiteral("-r35"));
-    CHECK(manifestKey.checksum == fingerprint);
-    CHECK(rootNodeKey.checksum == fingerprint);
-    CHECK(manifestKey.path == QFileInfo(lazPath).path());
-    CHECK(childKey.path == QFileInfo(lazPath).path());
+    const QString expectedPath = root.filePath(QStringLiteral(".cw_cache/GIS Layers/cave.laz-octree")
+                                               + generation + QStringLiteral(".cwpack"));
 
-    cwDiskCacher cacher(root);
+    const QString path = cw::octree::packPath(root.path(), lazPath);
+    CHECK(path == expectedPath);
 
-    const QByteArray manifestBytes = threeLevelManifest().serialize();
-    cacher.insert(manifestKey, manifestBytes);
-    cacher.insert(rootNodeKey, QByteArrayLiteral("node bytes"));
-
-    const QString expectedManifestPath =
-        root.filePath(QStringLiteral(".cw_cache/GIS Layers/") + manifestKey.id);
-    CHECK(QFileInfo::exists(expectedManifestPath));
-    CHECK(QFileInfo::exists(root.filePath(QStringLiteral(".cw_cache/GIS Layers/") + rootNodeKey.id)));
-
-    CHECK(cacher.entry(manifestKey) == manifestBytes);
-    CHECK(cacher.entry(rootNodeKey) == QByteArrayLiteral("node bytes"));
-
-    SECTION("A different fingerprint fails the checksum") {
-        cwDiskCacher::Key stale = manifestKey;
-        stale.checksum = QStringLiteral("0ddba11");
-        CHECK(cacher.entry(stale).isEmpty());
+    const cwPointOctreeManifest manifest = threeLevelManifest();
+    {
+        cwPointOctreePack::Writer writer(path);
+        REQUIRE(writer.isOpen());
+        for(const cwPointOctreeNode& node : manifest.nodes) {
+            REQUIRE(writer.append(cw::octree::cellKey(node), QByteArray(node.byteSize, '\0')));
+        }
+        REQUIRE(writer.finish(manifest));
     }
+
+    const std::shared_ptr<const cwPointOctreePack> pack = cwPointOctreePack::open(expectedPath);
+    REQUIRE(pack != nullptr);
+    CHECK(pack->manifest().fingerprint == manifest.fingerprint);
+    CHECK(pack->nodeCount() == manifest.nodes.size());
 }
 
-TEST_CASE("A node key base yields the same keys as the path overloads", "[PointOctree]") {
-    const QString lazPath = QStringLiteral("/tmp/GIS Layers/cave.laz");
-    const QString fingerprint = QStringLiteral("deadbeef");
-    const cw::octree::NodeKeyBase base = cw::octree::nodeKeyBase(lazPath, fingerprint);
+TEST_CASE("Every laz file in one directory gets a pack of its own", "[PointOctree]") {
+    const QString cacheRoot = QStringLiteral("/tmp/project");
+    const QString cave = cw::octree::packPath(cacheRoot, QStringLiteral("/tmp/project/GIS Layers/cave.laz"));
+    const QString surface = cw::octree::packPath(cacheRoot, QStringLiteral("/tmp/project/GIS Layers/surface.laz"));
 
-    const auto checkSame = [](const cwDiskCacher::Key& fromBase, const cwDiskCacher::Key& fromPath) {
-        CHECK(fromBase.id == fromPath.id);
-        CHECK(fromBase.path == fromPath.path);
-        CHECK(fromBase.checksum == fromPath.checksum);
-    };
-
-    checkSame(cw::octree::manifestKey(base), cw::octree::manifestKey(lazPath, fingerprint));
-    for(const QString& nodeName : {QStringLiteral("r"), QStringLiteral("r35"), QStringLiteral("r0123")}) {
-        checkSame(cw::octree::nodeKey(base, nodeName),
-                  cw::octree::nodeKey(lazPath, fingerprint, nodeName));
-    }
-
-    const QString generation = QString::number(cw::octree::kFormatGeneration);
-    CHECK(cw::octree::nodeKey(base, QStringLiteral("r7")).id
-          == QStringLiteral("cave.laz-octree") + generation + QStringLiteral("-r7"));
-    CHECK(base.dir == QStringLiteral("/tmp/GIS Layers"));
+    CHECK(cave != surface);
+    CHECK(QFileInfo(cave).path() == QFileInfo(surface).path());
+    CHECK(QFileInfo(cave).fileName().startsWith(QStringLiteral("cave.laz-")));
+    CHECK(QFileInfo(surface).fileName().startsWith(QStringLiteral("surface.laz-")));
 }
 
 TEST_CASE("A manifest round-trips each node's measured spacing", "[PointOctree]") {
@@ -709,11 +695,9 @@ TEST_CASE("A generation 3 manifest is rejected", "[PointOctree]") {
     proto.set_format_generation(kGenerationWithoutMeasuredSpacing);
     CHECK_FALSE(deserializeProto(proto).has_value());
 
-    //The cache key names the generation too, so its entries are never even read
-    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
-                                                          QStringLiteral("fingerprint"));
-    CHECK(key.id.contains(QStringLiteral("octree%1").arg(cw::octree::kFormatGeneration)));
-    CHECK_FALSE(key.id.contains(QStringLiteral("octree3")));
+    CHECK(QFileInfo(tilePackPath()).fileName()
+          == QStringLiteral("tile.laz-octree%1.cwpack").arg(cw::octree::kFormatGeneration));
+    CHECK_FALSE(tilePackPathNamesGeneration(kGenerationWithoutMeasuredSpacing));
 }
 
 TEST_CASE("A generation 4 manifest is rejected", "[PointOctree]") {
@@ -723,10 +707,7 @@ TEST_CASE("A generation 4 manifest is rejected", "[PointOctree]") {
     proto.set_format_generation(kGenerationWithoutLocalSpacing);
     CHECK_FALSE(deserializeProto(proto).has_value());
 
-    //Its payloads hold no local spacing, so the key never reaches them either
-    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
-                                                          QStringLiteral("fingerprint"));
-    CHECK_FALSE(key.id.contains(QStringLiteral("octree4")));
+    CHECK_FALSE(tilePackPathNamesGeneration(kGenerationWithoutLocalSpacing));
 }
 
 TEST_CASE("A generation 5 manifest is rejected", "[PointOctree]") {
@@ -736,11 +717,7 @@ TEST_CASE("A generation 5 manifest is rejected", "[PointOctree]") {
     proto.set_format_generation(kGenerationWithLocalSpacingRatios);
     CHECK_FALSE(deserializeProto(proto).has_value());
 
-    //Its payloads hold ratios to the grid rather than native spacings, so the
-    //key never reaches them either
-    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
-                                                          QStringLiteral("fingerprint"));
-    CHECK_FALSE(key.id.contains(QStringLiteral("octree5")));
+    CHECK_FALSE(tilePackPathNamesGeneration(kGenerationWithLocalSpacingRatios));
 }
 
 TEST_CASE("A generation 6 manifest is rejected", "[PointOctree]") {
@@ -750,11 +727,7 @@ TEST_CASE("A generation 6 manifest is rejected", "[PointOctree]") {
     proto.set_format_generation(kGenerationWithSpatialNativeSpacing);
     CHECK_FALSE(deserializeProto(proto).has_value());
 
-    //Its payloads hold 3D native spacings under the grid-ratio cap, so the
-    //key never reaches them either
-    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
-                                                          QStringLiteral("fingerprint"));
-    CHECK_FALSE(key.id.contains(QStringLiteral("octree6")));
+    CHECK_FALSE(tilePackPathNamesGeneration(kGenerationWithSpatialNativeSpacing));
 }
 
 TEST_CASE("A generation 7 manifest is rejected", "[PointOctree]") {
@@ -764,11 +737,7 @@ TEST_CASE("A generation 7 manifest is rejected", "[PointOctree]") {
     proto.set_format_generation(kGenerationWithChunkBoundedNativeSpacing);
     CHECK_FALSE(deserializeProto(proto).has_value());
 
-    //Its payloads hold native spacings whose neighbors stopped at the pass B
-    //chunk's faces, so the key never reaches them either
-    const cwDiskCacher::Key key = cw::octree::manifestKey(QStringLiteral("/tmp/tile.laz"),
-                                                          QStringLiteral("fingerprint"));
-    CHECK_FALSE(key.id.contains(QStringLiteral("octree7")));
+    CHECK_FALSE(tilePackPathNamesGeneration(kGenerationWithChunkBoundedNativeSpacing));
 }
 
 // ---- WP13: per-point local spacing codes ------------------------------------
