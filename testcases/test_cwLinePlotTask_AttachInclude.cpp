@@ -56,6 +56,7 @@
 // Qt
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -87,6 +88,22 @@ QString tripScopeLabel(const cwTrip* trip)
 QString fixturePath(const QString& name)
 {
     return testcasesDatasetSourcePath(QStringLiteral("external-centerlines/%1").arg(name));
+}
+
+// Pumps the event loop until the manager has solved the project in the
+// LocalGrid state: the attachment's scan lands after the first solve, and
+// the bare fix it finds moves the project onto the local grid and re-solves.
+void waitForLocalGridSolve(cwCavingRegion& region, cwLinePlotManager& manager)
+{
+    constexpr int kLocalGridWaitMs = 10000;
+    QElapsedTimer timer;
+    timer.start();
+    while (region.geoReference()->state() != cwGeoReference::LocalGrid
+           && timer.elapsed() < kLocalGridWaitMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+    REQUIRE(region.geoReference()->state() == cwGeoReference::LocalGrid);
+    manager.waitToFinish();
 }
 
 QString tempSubdir(const QTemporaryDir& root, const QString& name)
@@ -308,6 +325,7 @@ TEST_CASE("A bare external file cannot collide with the cave's native stations",
     manager.externalCenterlineManager()->setTripAttachmentDirs(tripDirs);
     manager.setRegion(&region);
     manager.waitToFinish();
+    waitForLocalGridSolve(region, manager);
 
     // Cavern names both colliding sites, so surface its text on failure.
     INFO("solve error: " << manager.solveErrorMessage().toStdString());
@@ -325,14 +343,15 @@ TEST_CASE("A bare external file cannot collide with the cave's native stations",
     REQUIRE(lookup.hasPosition(externalA2));
 
     // Separate keys alone would not prove separate stations — cavern could
-    // still have merged them onto one point. The geometry is what settles it:
-    // the external component sits at its own fix 100 m east, the native
-    // component at the origin, and each keeps its own leg length (5 m vs 15 m
-    // north) rather than being pulled toward the other.
+    // still have merged them onto one point. The leg lengths settle it: a
+    // merge of a1 with a1 and a2 with a2 would average the two legs, while
+    // separate components each keep their own (5 m vs 15 m north). Both sit
+    // at the origin: the native component through its origin fix, the
+    // external one because its bare fix is translated onto the local grid.
     CHECK(lookup.position(QStringLiteral("a1")).x() == Catch::Approx(0.0).margin(0.01));
     CHECK(lookup.position(QStringLiteral("a2")).x() == Catch::Approx(0.0).margin(0.01));
-    CHECK(lookup.position(externalA1).x() == Catch::Approx(100.0).margin(0.01));
-    CHECK(lookup.position(externalA2).x() == Catch::Approx(100.0).margin(0.01));
+    CHECK(lookup.position(externalA1).x() == Catch::Approx(0.0).margin(0.01));
+    CHECK(lookup.position(externalA2).x() == Catch::Approx(0.0).margin(0.01));
 
     const float nativeLeg = lookup.position(QStringLiteral("a2")).y()
                             - lookup.position(QStringLiteral("a1")).y();

@@ -111,14 +111,21 @@ MainWindowTest {
             verify(!badge.hasError, "the file solves cleanly; reason: " + badge.reason)
             verify(!badge.visible, "a file read with warnings shows no solve badge")
 
-            tryVerify(() => cave.errorModel.warningCount === 1, 10000,
-                      "the cave's error model counts the read warnings once; got: "
-                      + cave.errorModel.warningCount)
+            // Two warnings: the declination-units read warning, and 603 for the
+            // bare *fix the solve places at the project origin.
+            tryVerify(() => cave.errorModel.warningCount === 2, 10000,
+                      "the cave's error model counts the read warning once beside"
+                      + " the bare-fix warning; got: " + cave.errorModel.warningCount)
+            const messages = cave.errorModel.errors.warningMessages
+            compare(messages.filter(m => m.indexOf("read with 1 warning") >= 0).length, 1,
+                    "the read warning is counted once: " + messages)
+            compare(messages.filter(m => m.indexOf("project origin") >= 0).length, 1,
+                    "the bare fix is warned about once: " + messages)
 
             const row = badge.parent
             const iconBar = findChild(row, "errorIconBar")
             verify(iconBar !== null, "the cave's row must carry an ErrorIconBar")
-            compare(iconBar.warningCount, 1, "ErrorIconBar counts the read warnings")
+            compare(iconBar.warningCount, 2, "ErrorIconBar counts both warnings")
             const warningBadge = findChild(iconBar, "warningBadge")
             verify(warningBadge !== null && warningBadge.visible,
                    "ErrorIconBar shows its warning glyph")
