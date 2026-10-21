@@ -188,3 +188,83 @@ TEST_CASE("Harvest of an entry with a missing *include target is deterministic",
     CHECK(first.errorMessage().contains(QStringLiteral("not_on_disk.svx")));
     CHECK_FALSE(first.errorMessage().contains(QStringLiteral("harvest.svx")));
 }
+
+TEST_CASE("Harvest reads a file whose fix names a projected *cs and no *cs out",
+          "[ExternalStationHarvest][OwnCsHarvest]")
+{
+    // The file names no *cs out, so the harvest finds the output system on
+    // its own.
+    const auto result = cwExternalStationHarvest::harvestWithFixes(
+        externalCenterlinePath(QStringLiteral("survex_own_cs_no_out/own_cs_no_out.svx")));
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(result.value().names
+          == QStringList({QStringLiteral("ridge.e1"),
+                          QStringLiteral("ridge.e2"),
+                          QStringLiteral("ridge.e3")}));
+    CHECK(result.value().fixedNames == QStringList({QStringLiteral("ridge.e1")}));
+}
+
+TEST_CASE("Harvest reads a file whose fix names a geographic *cs and no *cs out",
+          "[ExternalStationHarvest][OwnCsHarvest]")
+{
+    // cavern refuses a geographic *cs out, so the file's own system cannot
+    // simply be repeated as the output.
+    const auto result = cwExternalStationHarvest::harvestWithFixes(
+        externalCenterlinePath(QStringLiteral("survex_own_cs_no_out/latlong_no_out.svx")));
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(result.value().names
+          == QStringList({QStringLiteral("plateau.l1"), QStringLiteral("plateau.l2")}));
+    CHECK(result.value().fixedNames == QStringList({QStringLiteral("plateau.l1")}));
+}
+
+TEST_CASE("Harvest reads a tree that mixes bare fixes with a fix under its own *cs",
+          "[ExternalStationHarvest][OwnCsHarvest]")
+{
+    // The entry's bare fix comes first, before any *cs, so the output system
+    // has to be in force before the file starts.
+    const auto result = cwExternalStationHarvest::harvestWithFixes(
+        externalCenterlinePath(QStringLiteral("survex_subtree_fixes/ridge.svx")));
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(result.value().fixedNames.contains(QStringLiteral("r0")));
+    CHECK(result.value().fixedNames.contains(QStringLiteral("lower.l1")));
+    CHECK(result.value().names.contains(QStringLiteral("empty.x2")));
+}
+
+TEST_CASE("Component harvest reads a file whose fix names its own *cs",
+          "[ExternalStationHarvest][OwnCsHarvest]")
+{
+    const auto result = cwExternalStationHarvest::harvestComponents(
+        externalCenterlinePath(QStringLiteral("survex_own_cs_no_out/own_cs_no_out.svx")),
+        {QStringLiteral("ridge.e3")});
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(result.value()
+          == QStringList({QStringLiteral("ridge.e1"),
+                          QStringLiteral("ridge.e2"),
+                          QStringLiteral("ridge.e3")}));
+}
+
+TEST_CASE("Harvest still reads a file with only bare fixes and no *cs out",
+          "[ExternalStationHarvest][OwnCsHarvest]")
+{
+    const auto result = cwExternalStationHarvest::harvestWithFixes(
+        externalCenterlinePath(QStringLiteral("survex_bare_fix/bare_fix.svx")));
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(result.value().fixedNames == QStringList({QStringLiteral("bare.a")}));
+}
+
+TEST_CASE("Harvest reads a block whose fix names its own *cs",
+          "[ExternalStationHarvest][OwnCsHarvest]")
+{
+    const auto result = cwExternalStationHarvest::harvestWithFixes(
+        externalCenterlinePath(QStringLiteral("survex_native_cs_scope/own_cs_fix.svx")));
+    INFO(result.errorMessage().toStdString());
+    REQUIRE_FALSE(result.hasError());
+    CHECK(result.value().names
+          == QStringList({QStringLiteral("scoped.s1"), QStringLiteral("scoped.s2")}));
+    CHECK(result.value().fixedNames == QStringList({QStringLiteral("scoped.s1")}));
+}

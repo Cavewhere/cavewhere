@@ -756,12 +756,8 @@ void cwExternalCenterlineManager::scanOwners(QPromise<ExternalScanResult>& promi
                     // survey nothing fixes. A cave attachment's names are what its
                     // node's own fix stations are checked against. One cavern run
                     // per owner, cave or trip.
-                    const QString bareFixSystem =
-                        !scan.hasError() && scan.value().hasFixWithoutCoordinateSystem()
-                            ? scan.value().outputCoordinateSystem
-                            : QString();
                     const auto harvest =
-                        cwExternalStationHarvest::harvestWithFixes(projectEntry, bareFixSystem);
+                        cwExternalStationHarvest::harvestWithFixes(projectEntry);
                     if (harvest.hasError()) {
                         const QString harvestError =
                             withProjectRelativePaths(harvest.errorMessage(), owner.dataRootDir);

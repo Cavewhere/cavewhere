@@ -1,0 +1,10 @@
+; A block whose one fix names its own projected coordinate system, and no
+; *cs out anywhere. A region solve under a frame reads it fine; cavern run
+; over this file alone needs an output system to convert the fix into.
+*begin ridge
+*cs UTM48N
+*fix e1 500200 3000000 100
+*data normal from to tape compass clino
+e1 e2 10 0 0
+e2 e3 12 90 -5
+*end ridge

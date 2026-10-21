@@ -24,7 +24,6 @@
 #include <QtQml/qqmlregistration.h>
 
 //Std includes
-#include <algorithm>
 #include <optional>
 
 /**
@@ -438,13 +437,6 @@ struct ScanResult {
      * "*cs out", so this is the system a run of the closure outputs in.
      */
     QString outputCoordinateSystem;
-
-    bool hasFixWithoutCoordinateSystem() const
-    {
-        return std::any_of(fixes.cbegin(), fixes.cend(), [](const ScannedFix& fix) {
-            return !fix.hasCoordinateSystem();
-        });
-    }
 
     bool operator==(const ScanResult& other) const
     {
