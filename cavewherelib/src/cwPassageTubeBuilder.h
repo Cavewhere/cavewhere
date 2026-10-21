@@ -110,7 +110,7 @@ public:
         // the shot than wide across it by more than shaftThinnessRatio:
         // tan(clino) · (L+R) / (U+D) > shaftThinnessRatio. Prototype knobs.
         double shaftRiseRatio = 1.0;
-        double shaftThinnessRatio = 1.0;
+        double shaftThinnessRatio = 5.0;
         // A shaft stands rings square to its leg, round at mean(L, R) along
         // the shot, as its own chain piece capped by domes; off, every leg
         // keeps vertical rings.
