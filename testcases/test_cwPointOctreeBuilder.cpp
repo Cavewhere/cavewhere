@@ -5,6 +5,7 @@
 //Qt includes
 #include <QCoreApplication>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -33,15 +34,14 @@
 
 //Our includes
 #include "cwCoordinateTransform.h"
-#include "cwDiskCacher.h"
 #include "cwGeoPoint.h"
 #include "cwFutureManagerModel.h"
 #include "cwFutureManagerToken.h"
-#include "cavewhere.pb.h"
 #include "cwMath.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeBuilder.h"
 #include "cwPointOctreeManifest.h"
+#include "cwPointOctreePack.h"
 #include "cwPointOctreeSampler.h"
 #include "cwPointOctreeSelection.h"
 #include "cwTask.h"
@@ -369,6 +369,21 @@ namespace {
         QtMessageHandler m_previous = nullptr;
     };
 
+    //The pack at currentPack renamed to what the generation's build called it
+    QString generationPackPath(const QString& currentPack, int generation)
+    {
+        const QString current = QStringLiteral("-octree%1.cwpack").arg(kFormatGeneration);
+        REQUIRE(currentPack.endsWith(current));
+        return currentPack.chopped(current.size())
+               + QStringLiteral("-octree%1.cwpack").arg(generation);
+    }
+
+    //The pack request's build wrote, opened; nullptr when there is none
+    std::shared_ptr<const cwPointOctreePack> openPack(const cwPointOctreeBuilder::Request& request)
+    {
+        return cwPointOctreePack::open(packPath(request.cacheRootPath, request.path));
+    }
+
     //Two builds of the same file agree byte for byte: same manifest, same nodes
     void requireSameCache(const cwPointOctreeBuilder::Request& leftRequest,
                           const cwPointOctreeManifest& left,
@@ -377,23 +392,19 @@ namespace {
     {
         REQUIRE(left.serialize() == right.serialize());
 
-        const cwDiskCacher leftCacher {QDir(leftRequest.cacheRootPath)};
-        const cwDiskCacher rightCacher {QDir(rightRequest.cacheRootPath)};
+        //A node a parent's sample drained holds no points, so both packs
+        //opening with every node is what says each payload was read rather
+        //than missed
+        const std::shared_ptr<const cwPointOctreePack> leftPack = openPack(leftRequest);
+        const std::shared_ptr<const cwPointOctreePack> rightPack = openPack(rightRequest);
+        REQUIRE(leftPack != nullptr);
+        REQUIRE(rightPack != nullptr);
+        REQUIRE(leftPack->nodeCount() == left.nodes.size());
+        REQUIRE(rightPack->nodeCount() == right.nodes.size());
 
         for(int i = 0; i < left.nodes.size(); i++) {
-            const cwDiskCacher::Key leftKey =
-                nodeKey(leftRequest.path, left.fingerprint, left.nodeName(i));
-            const cwDiskCacher::Key rightKey =
-                nodeKey(rightRequest.path, right.fingerprint, right.nodeName(i));
-
-            //A node a parent's sample drained holds no points, so the entry
-            //being there on both sides is what says each payload was read
-            //rather than missed
-            REQUIRE(leftCacher.hasEntry(leftKey));
-            REQUIRE(rightCacher.hasEntry(rightKey));
-
-            const QByteArray leftPayload = leftCacher.entry(leftKey);
-            const QByteArray rightPayload = rightCacher.entry(rightKey);
+            const QByteArray leftPayload = leftPack->node(i);
+            const QByteArray rightPayload = rightPack->node(i);
 
             if(leftPayload != rightPayload) {
                 FAIL("Node " << left.nodeName(i).toStdString()
@@ -672,7 +683,9 @@ namespace {
         const float expectedSpacing = float(std::sqrt(dx * dy / double(manifest.pointCount)));
         REQUIRE(std::abs(manifest.meanSpacingXY - expectedSpacing) < kSpacingTolerance * expectedSpacing);
 
-        const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+        const std::shared_ptr<const cwPointOctreePack> pack = openPack(request);
+        REQUIRE(pack != nullptr);
+        REQUIRE(pack->nodeCount() == manifest.nodes.size());
         const PointGrid grid(sourcePoints);
 
         qint64 totalPoints = 0;
@@ -680,11 +693,7 @@ namespace {
             const cwPointOctreeNode& node = manifest.nodes.at(i);
             totalPoints += node.pointCount;
 
-            const cwDiskCacher::Key key =
-                nodeKey(request.path, manifest.fingerprint, manifest.nodeName(i));
-            REQUIRE(cacher.hasEntry(key));
-
-            const QByteArray payload = cacher.entry(key);
+            const QByteArray payload = pack->node(i);
             REQUIRE(payload.size() == qsizetype(node.pointCount) * kBytesPerPoint);
             REQUIRE(node.byteSize == qint64(node.pointCount) * kBytesPerPoint);
 
@@ -870,14 +879,15 @@ TEST_CASE("cwPointOctreeBuilder: every cached node is written in Morton order",
     const cwPointOctreeManifest manifest = result.value();
     REQUIRE(manifest.nodes.size() > 1);
 
-    //The generation is part of every id, so an older cache is never read back
-    CHECK(manifestKey(path, manifest.fingerprint)
-              .id.contains(QStringLiteral("octree%1").arg(cw::octree::kFormatGeneration)));
+    //The generation is part of the pack's name, so an older cache is never read back
+    CHECK(QFileInfo(packPath(request.cacheRootPath, path))
+              .fileName()
+              .contains(QStringLiteral("octree%1").arg(cw::octree::kFormatGeneration)));
 
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const std::shared_ptr<const cwPointOctreePack> pack = openPack(request);
+    REQUIRE(pack != nullptr);
     for(int i = 0; i < manifest.nodes.size(); i++) {
-        const QByteArray payload =
-            cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(i)));
+        const QByteArray payload = pack->node(i);
         REQUIRE(payload.size() == manifest.nodes.at(i).byteSize);
 
         quint64 previous = 0;
@@ -908,34 +918,15 @@ TEST_CASE("cwPointOctreeBuilder: a cache from an older format generation rebuild
     REQUIRE_FALSE(result.hasError());
     REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
 
-    const cwPointOctreeManifest manifest = result.value();
-    cwDiskCacher cacher {QDir(request.cacheRootPath)};
-
-    //Move the whole cache back a generation: the same bytes under the ids the
-    //previous format wrote them with
-    const QString current = QStringLiteral("-octree")
-                            + QString::number(kFormatGeneration)
-                            + QStringLiteral("-");
-    const QString previous = QStringLiteral("-octree")
-                             + QString::number(kFormatGeneration - 1)
-                             + QStringLiteral("-");
-
-    const auto moveBack = [&](const cwDiskCacher::Key& key) {
-        cwDiskCacher::Key older = key;
-        older.id = QString(key.id).replace(current, previous);
-        cacher.insert(older, cacher.entry(key));
-        REQUIRE(QFile::remove(cacher.filePath(key)));
-    };
-
-    for(int i = 0; i < manifest.nodes.size(); i++) {
-        moveBack(nodeKey(path, manifest.fingerprint, manifest.nodeName(i)));
-    }
-    moveBack(manifestKey(path, manifest.fingerprint));
+    //Move the pack back a generation: the same bytes under the name the
+    //previous format wrote it with
+    const QString pack = packPath(request.cacheRootPath, path);
+    REQUIRE(QFile::rename(pack, generationPackPath(pack, kFormatGeneration - 1)));
 
     REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
 }
 
-TEST_CASE("cwPointOctreeBuilder: a missing node makes the cached manifest a rebuild",
+TEST_CASE("cwPointOctreeBuilder: a missing or truncated pack makes the cached manifest a rebuild",
           "[PointOctree][PointOctreeBuilder]") {
     QTemporaryDir tempDir;
     REQUIRE(tempDir.isValid());
@@ -957,12 +948,61 @@ TEST_CASE("cwPointOctreeBuilder: a missing node makes the cached manifest a rebu
     const cwPointOctreeManifest manifest = result.value();
     REQUIRE(manifest.nodes.size() > 1);
 
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
-    const int lastNode = manifest.nodes.size() - 1;
-    REQUIRE(QFile::remove(cacher.filePath(
-        nodeKey(path, manifest.fingerprint, manifest.nodeName(lastNode)))));
+    const QString pack = packPath(request.cacheRootPath, path);
 
-    REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+    SECTION("a deleted pack") {
+        REQUIRE(QFile::remove(pack));
+        REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+        CHECK(cwPointOctreeBuilder::cachedPack(request) == nullptr);
+    }
+
+    SECTION("a pack truncated by a kilobyte") {
+        constexpr qint64 kTruncatedBytes = 1024;
+        QFile file(pack);
+        REQUIRE(file.size() > kTruncatedBytes);
+        REQUIRE(file.resize(file.size() - kTruncatedBytes));
+        REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
+        CHECK(cwPointOctreeBuilder::cachedPack(request) == nullptr);
+    }
+}
+
+TEST_CASE("cwPointOctreeBuilder: a build writes its whole octree into one pack",
+          "[PointOctree][PointOctreeBuilder]") {
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+
+    const QString path = tempLazPath(tempDir, QStringLiteral("octree-one-pack"));
+    REQUIRE(writeSyntheticLazFile(path, passagePoints(kPassagePointCount)));
+
+    const cwPointOctreeBuilder::Request request {
+        .path = path,
+        .cacheRootPath = tempDir.path(),
+        .chunkTargetPoints = kTwoLevelChunkTarget
+    };
+
+    const cwPointOctreeBuilder::Result result =
+        waitForBuild(cwPointOctreeBuilder::build(request));
+    REQUIRE_FALSE(result.hasError());
+    const cwPointOctreeManifest manifest = result.value();
+    REQUIRE(manifest.nodes.size() > 1);
+
+    //Every node lives in the pack, so the cache holds that one file and no
+    //temp file beside it
+    QStringList cacheFiles;
+    QDirIterator it(QDir(tempDir.path()).filePath(QStringLiteral(".cw_cache")),
+                    QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+    while(it.hasNext()) {
+        cacheFiles.append(QFileInfo(it.next()).absoluteFilePath());
+    }
+    REQUIRE(cacheFiles == QStringList {QFileInfo(packPath(request.cacheRootPath, path)).absoluteFilePath()});
+
+    const std::shared_ptr<const cwPointOctreePack> pack = cwPointOctreeBuilder::cachedPack(request);
+    REQUIRE(pack != nullptr);
+    CHECK(pack->nodeCount() == manifest.nodes.size());
+    CHECK(pack->manifest().serialize() == manifest.serialize());
+    for(int i = 0; i < manifest.nodes.size(); i++) {
+        CHECK(pack->node(i).size() == manifest.nodes.at(i).byteSize);
+    }
 }
 
 TEST_CASE("cwPointOctreeBuilder: the frame CS is part of the fingerprint",
@@ -1610,6 +1650,11 @@ TEST_CASE("cwPointOctreeBuilder: a cancel under admission leaves no manifest and
 
     REQUIRE_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
     REQUIRE(octreeTempDirCount() == 0);
+
+    //The writer's destructor takes its temp file with it
+    const QString pack = packPath(request.cacheRootPath, request.path);
+    CHECK_FALSE(QFileInfo::exists(pack));
+    CHECK_FALSE(QFileInfo::exists(pack + QStringLiteral(".tmp")));
 }
 
 TEST_CASE("cwPointOctreeBuilder: the temp chunks are gone before the manifest is written",
@@ -1630,9 +1675,8 @@ TEST_CASE("cwPointOctreeBuilder: the temp chunks are gone before the manifest is
 
     REQUIRE(octreeTempBytes() == 0);
 
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
-    const cwDiskCacher::Key manifestEntry =
-        manifestKey(request.path, cwPointOctreeBuilder::fingerprintFor(request));
+    //The pack lands by rename once its manifest is written
+    const QString pack = packPath(request.cacheRootPath, request.path);
 
     QFuture<cwPointOctreeBuilder::Result> future = cwPointOctreeBuilder::build(request);
 
@@ -1644,7 +1688,7 @@ TEST_CASE("cwPointOctreeBuilder: the temp chunks are gone before the manifest is
     qint64 bytesWhenManifestAppeared = -1;
 
     while(!future.isFinished()) {
-        if(cacher.hasEntry(manifestEntry)) {
+        if(QFileInfo::exists(pack)) {
             bytesWhenManifestAppeared = octreeTempBytes();
             break;
         }
@@ -1961,11 +2005,10 @@ namespace {
     }
 
     //! The points of @a index's cached payload, dequantized inside its cube
-    QVector<QVector3D> cachedNodePoints(const cwDiskCacher& cacher, const QString& path,
+    QVector<QVector3D> cachedNodePoints(const cwPointOctreePack& pack,
                                         const cwPointOctreeManifest& manifest, int index)
     {
-        const QByteArray payload =
-            cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(index)));
+        const QByteArray payload = pack.node(index);
         const QBox3D bounds = manifest.nodeBounds(index);
 
         QVector<QVector3D> points;
@@ -2034,11 +2077,12 @@ TEST_CASE("cwPointOctreeBuilder: every node through pass B and pass C carries it
     const cwPointOctreeManifest manifest = result.value();
     REQUIRE(manifest.nodes.size() > 1);
 
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const std::shared_ptr<const cwPointOctreePack> pack = openPack(request);
+    REQUIRE(pack != nullptr);
     int measuredNodes = 0;
     for(int i = 0; i < manifest.nodes.size(); i++) {
         const cwPointOctreeNode& node = manifest.nodes.at(i);
-        const QVector<QVector3D> points = cachedNodePoints(cacher, path, manifest, i);
+        const QVector<QVector3D> points = cachedNodePoints(*pack, manifest, i);
         REQUIRE(points.size() == qsizetype(node.pointCount));
 
         //What the builder recorded is what the estimator says of the node's
@@ -2067,25 +2111,10 @@ namespace {
     constexpr double kMinRepeatedCodeShare = 0.95;
     constexpr double kRoundTripTolerance = 0.01;
 
-    //! The id the generation @a generation builder spelled @a suffix's entry with
-    cwDiskCacher::Key generationKey(int generation, const QString& lazPath,
-                                    const QString& fingerprint, const QString& suffix)
-    {
-        const QFileInfo info(lazPath);
-        return cwDiskCacher::Key {
-            info.fileName() + QStringLiteral("-octree") + QString::number(generation)
-                + QStringLiteral("-") + suffix,
-            info.path(),
-            fingerprint
-        };
-    }
-
     //! Every point of @a index's cached payload, quantized as written
-    QVector<QuantizedPoint> cachedQuantizedPoints(const cwDiskCacher& cacher, const QString& path,
-                                                  const cwPointOctreeManifest& manifest, int index)
+    QVector<QuantizedPoint> cachedQuantizedPoints(const cwPointOctreePack& pack, int index)
     {
-        const QByteArray payload =
-            cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(index)));
+        const QByteArray payload = pack.node(index);
         QVector<QuantizedPoint> points;
         const qsizetype count = payload.size() / kBytesPerPoint;
         points.reserve(count);
@@ -2096,33 +2125,12 @@ namespace {
     }
 
     //! Leaves on disk only what the @a generation builder would have written
-    //! for @a manifest: its manifest, stamped @a generation, and its payloads,
-    //! under that generation's own keys
-    void restampAsGeneration(cwDiskCacher& cacher, const QString& path,
-                             const cwPointOctreeManifest& manifest, int generation)
+    //! for @a request: its pack, under that generation's name
+    void restampAsGeneration(const cwPointOctreeBuilder::Request& request, int generation)
     {
-        const QByteArray manifestBytes = cacher.entry(manifestKey(path, manifest.fingerprint));
-        REQUIRE_FALSE(manifestBytes.isEmpty());
-        CavewhereProto::PointOctreeManifest proto;
-        REQUIRE(proto.ParseFromArray(manifestBytes.constData(), int(manifestBytes.size())));
-        proto.set_format_generation(generation);
-        const std::string oldBytes = proto.SerializeAsString();
-
-        QVector<QByteArray> payloads;
-        for(int i = 0; i < manifest.nodes.size(); i++) {
-            payloads.append(cacher.entry(nodeKey(path, manifest.fingerprint, manifest.nodeName(i))));
-            REQUIRE(QFile::remove(cacher.filePath(nodeKey(path, manifest.fingerprint,
-                                                          manifest.nodeName(i)))));
-        }
-        REQUIRE(QFile::remove(cacher.filePath(manifestKey(path, manifest.fingerprint))));
-        REQUIRE(cacher.insert(generationKey(generation, path, manifest.fingerprint,
-                                            QStringLiteral("manifest")),
-                              QByteArray(oldBytes.data(), qsizetype(oldBytes.size()))));
-        for(int i = 0; i < manifest.nodes.size(); i++) {
-            REQUIRE(cacher.insert(generationKey(generation, path, manifest.fingerprint,
-                                                manifest.nodeName(i)),
-                                  payloads.at(i)));
-        }
+        const QString pack = packPath(request.cacheRootPath, request.path);
+        REQUIRE(QFile::rename(pack, generationPackPath(pack, generation)));
+        REQUIRE_FALSE(QFileInfo::exists(pack));
     }
 
     //! How many of @a written, the root node's payload of @a manifest, carry
@@ -2206,12 +2214,13 @@ TEST_CASE("cwPointOctreeBuilder: every point through pass B and pass C carries a
     const cwPointOctreeManifest manifest = result.value();
     REQUIRE(manifest.nodes.size() > 1);
 
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const std::shared_ptr<const cwPointOctreePack> pack = openPack(request);
+    REQUIRE(pack != nullptr);
     qint64 unmeasured = 0;
     qint64 outOfRange = 0;
     qint64 points = 0;
     for(int i = 0; i < manifest.nodes.size(); i++) {
-        const QVector<QuantizedPoint> node = cachedQuantizedPoints(cacher, path, manifest, i);
+        const QVector<QuantizedPoint> node = cachedQuantizedPoints(*pack, i);
         REQUIRE(node.size() == qsizetype(manifest.nodes.at(i).pointCount));
 
         //The absolute range; the data-relative cap sits inside it
@@ -2258,8 +2267,9 @@ TEST_CASE("cwPointOctreeBuilder: a node's payload codes are the estimator's code
     const cwPointOctreeManifest manifest = result.value();
     REQUIRE(manifest.nodes.size() == 1);
 
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
-    const QVector<QuantizedPoint> written = cachedQuantizedPoints(cacher, path, manifest, 0);
+    const std::shared_ptr<const cwPointOctreePack> pack = openPack(request);
+    REQUIRE(pack != nullptr);
+    const QVector<QuantizedPoint> written = cachedQuantizedPoints(*pack, 0);
     REQUIRE_FALSE(written.isEmpty());
 
     const qsizetype repeated = repeatedRootCodes(manifest, written);
@@ -2292,8 +2302,7 @@ TEST_CASE("cwPointOctreeBuilder: a cache written at generation 5 is rejected and
     const cwPointOctreeManifest manifest = first.value();
 
     //Leave on disk only what the generation 5 builder would have
-    cwDiskCacher cacher {QDir(request.cacheRootPath)};
-    restampAsGeneration(cacher, path, manifest, kGenerationWithLocalSpacingRatios);
+    restampAsGeneration(request, kGenerationWithLocalSpacingRatios);
 
     //Never read back
     CHECK_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
@@ -2303,8 +2312,9 @@ TEST_CASE("cwPointOctreeBuilder: a cache written at generation 5 is rejected and
         waitForBuild(cwPointOctreeBuilder::build(request));
     REQUIRE_FALSE(rebuilt.hasError());
     REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
-    const QVector<QuantizedPoint> points =
-        cachedQuantizedPoints(cacher, path, rebuilt.value(), 0);
+    const std::shared_ptr<const cwPointOctreePack> rebuiltPack = openPack(request);
+    REQUIRE(rebuiltPack != nullptr);
+    const QVector<QuantizedPoint> points = cachedQuantizedPoints(*rebuiltPack, 0);
     REQUIRE_FALSE(points.isEmpty());
     CHECK(std::none_of(points.cbegin(), points.cend(), [](const QuantizedPoint& point) {
         return point.reserved == kUnmeasuredLocalSpacingCode;
@@ -2331,8 +2341,7 @@ TEST_CASE("cwPointOctreeBuilder: a cache written at generation 6 is rejected and
     const cwPointOctreeManifest manifest = first.value();
 
     //Leave on disk only what the generation 6 builder would have
-    cwDiskCacher cacher {QDir(request.cacheRootPath)};
-    restampAsGeneration(cacher, path, manifest, kGenerationWithSpatialNativeSpacing);
+    restampAsGeneration(request, kGenerationWithSpatialNativeSpacing);
 
     //Never read back
     CHECK_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
@@ -2344,16 +2353,17 @@ TEST_CASE("cwPointOctreeBuilder: a cache written at generation 6 is rejected and
         waitForBuild(cwPointOctreeBuilder::build(request));
     REQUIRE_FALSE(rebuilt.hasError());
     REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
-    const QVector<QuantizedPoint> points =
-        cachedQuantizedPoints(cacher, path, rebuilt.value(), 0);
+    const std::shared_ptr<const cwPointOctreePack> rebuiltPack = openPack(request);
+    REQUIRE(rebuiltPack != nullptr);
+    const QVector<QuantizedPoint> points = cachedQuantizedPoints(*rebuiltPack, 0);
     REQUIRE_FALSE(points.isEmpty());
     CHECK(std::none_of(points.cbegin(), points.cend(), [](const QuantizedPoint& point) {
         return point.reserved == kUnmeasuredLocalSpacingCode;
     }));
-    CHECK(cacher.hasEntry(manifestKey(path, rebuilt.value().fingerprint)));
-    CHECK(manifestKey(path, rebuilt.value().fingerprint).id
-          != generationKey(kGenerationWithSpatialNativeSpacing, path, manifest.fingerprint,
-                           QStringLiteral("manifest")).id);
+    const QString rebuiltPackPath = packPath(request.cacheRootPath, path);
+    CHECK(QFileInfo::exists(rebuiltPackPath));
+    CHECK(rebuiltPackPath
+          != generationPackPath(rebuiltPackPath, kGenerationWithSpatialNativeSpacing));
 
     const qsizetype repeated = repeatedRootCodes(rebuilt.value(), points);
     INFO(repeated << " of " << points.size() << " codes repeat");
@@ -2406,12 +2416,13 @@ TEST_CASE("cwPointOctreeBuilder: every level of a chunked plane carries the plan
     QVector<Coded> coded;
     QHash<int, QVector<double>> byLevel;
     QVector<double> interior;
-    const cwDiskCacher cacher {QDir(request.cacheRootPath)};
+    const std::shared_ptr<const cwPointOctreePack> pack = openPack(request);
+    REQUIRE(pack != nullptr);
     for(int i = 0; i < manifest.nodes.size(); i++) {
         const cwPointOctreeNode& node = manifest.nodes.at(i);
         const QBox3D bounds = manifest.nodeBounds(i);
         const double grid = manifest.spacing(node.level);
-        for(const QuantizedPoint& point : cachedQuantizedPoints(cacher, path, manifest, i)) {
+        for(const QuantizedPoint& point : cachedQuantizedPoints(*pack, i)) {
             const QVector3D position = dequantize(point, bounds);
             if(!inside(position)) {
                 continue;
@@ -2541,14 +2552,16 @@ namespace {
 
     //! Every point of every node of @a manifest, dequantized, with its
     //! decoded native spacing
-    QVector<CodedPosition> codedPositions(const cwDiskCacher& cacher, const QString& path,
+    QVector<CodedPosition> codedPositions(const cwPointOctreeBuilder::Request& request,
                                           const cwPointOctreeManifest& manifest)
     {
+        const std::shared_ptr<const cwPointOctreePack> pack = openPack(request);
+        REQUIRE(pack != nullptr);
         QVector<CodedPosition> coded;
         for(int i = 0; i < manifest.nodes.size(); i++) {
             const QBox3D bounds = manifest.nodeBounds(i);
             const double grid = manifest.spacing(manifest.nodes.at(i).level);
-            for(const QuantizedPoint& point : cachedQuantizedPoints(cacher, path, manifest, i)) {
+            for(const QuantizedPoint& point : cachedQuantizedPoints(*pack, i)) {
                 coded.append(CodedPosition {dequantize(point, bounds),
                                             decodeLocalSpacing(point.reserved, grid)});
             }
@@ -2741,8 +2754,7 @@ TEST_CASE("cwPointOctreeBuilder: crowns just over a pass B chunk's z face code t
     //Clear of the vertical chunk faces, so the z face alone is under test
     QVector<double> crowns;
     QVector<double> ground;
-    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
-    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+    for(const CodedPosition& point : codedPositions(built.request, manifest)) {
         if(!insideStraddle(point.position)
            || toVerticalChunkFace(point.position, manifest, kStraddleChunkDepth)
                   <= kLocalSpacingHaloUnits) {
@@ -2784,8 +2796,7 @@ TEST_CASE("cwPointOctreeBuilder: a chunked plane's point within one spacing of a
 
     QVector<double> interior;
     QVector<double> beside;
-    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
-    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+    for(const CodedPosition& point : codedPositions(built.request, manifest)) {
         if(!inside(point.position)) {
             continue;
         }
@@ -2825,8 +2836,7 @@ TEST_CASE("cwPointOctreeBuilder: a chunked plane's point farther than the halo f
     constexpr qsizetype kSampledPoints = 64;
     constexpr double kOracleTolerance = 0.01;
     QVector<CodedPosition> far;
-    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
-    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+    for(const CodedPosition& point : codedPositions(built.request, manifest)) {
         const double low = kChunkedPlaneEdgeMargin + kLocalSpacingHaloUnits;
         const double high = kChunkedPlaneSide - low;
         const bool clearOfEdge = point.position.x() >= low && point.position.x() <= high
@@ -2912,8 +2922,7 @@ TEST_CASE("cwPointOctreeBuilder: a lone return takes kLoneSpacingMedianRatio tim
     //The lone return, and every other point of its column, either chunk
     std::optional<double> lone;
     QVector<double> others;
-    const cwDiskCacher cacher {QDir(built.request.cacheRootPath)};
-    for(const CodedPosition& point : codedPositions(cacher, built.path, manifest)) {
+    for(const CodedPosition& point : codedPositions(built.request, manifest)) {
         if(chunkColumn(point.position, manifest, chunkDepth) != column) {
             continue;
         }
@@ -2952,8 +2961,7 @@ TEST_CASE("cwPointOctreeBuilder: a cache written at generation 7 is rejected and
     const cwPointOctreeManifest manifest = first.value();
 
     //Leave on disk only what the generation 7 builder would have
-    cwDiskCacher cacher {QDir(request.cacheRootPath)};
-    restampAsGeneration(cacher, path, manifest, kGenerationWithChunkBoundedNativeSpacing);
+    restampAsGeneration(request, kGenerationWithChunkBoundedNativeSpacing);
 
     //Never read back
     CHECK_FALSE(cwPointOctreeBuilder::cachedManifest(request).has_value());
@@ -2965,15 +2973,17 @@ TEST_CASE("cwPointOctreeBuilder: a cache written at generation 7 is rejected and
         waitForBuild(cwPointOctreeBuilder::build(request));
     REQUIRE_FALSE(rebuilt.hasError());
     REQUIRE(cwPointOctreeBuilder::cachedManifest(request).has_value());
-    const QVector<QuantizedPoint> points =
-        cachedQuantizedPoints(cacher, path, rebuilt.value(), 0);
+    const std::shared_ptr<const cwPointOctreePack> rebuiltPack = openPack(request);
+    REQUIRE(rebuiltPack != nullptr);
+    const QVector<QuantizedPoint> points = cachedQuantizedPoints(*rebuiltPack, 0);
     REQUIRE_FALSE(points.isEmpty());
     CHECK(std::none_of(points.cbegin(), points.cend(), [](const QuantizedPoint& point) {
         return point.reserved == kUnmeasuredLocalSpacingCode;
     }));
-    CHECK(manifestKey(path, rebuilt.value().fingerprint).id
-          != generationKey(kGenerationWithChunkBoundedNativeSpacing, path, manifest.fingerprint,
-                           QStringLiteral("manifest")).id);
+    const QString rebuiltPackPath = packPath(request.cacheRootPath, path);
+    CHECK(QFileInfo::exists(rebuiltPackPath));
+    CHECK(rebuiltPackPath
+          != generationPackPath(rebuiltPackPath, kGenerationWithChunkBoundedNativeSpacing));
 
     const qsizetype repeated = repeatedRootCodes(rebuilt.value(), points);
     INFO(repeated << " of " << points.size() << " codes repeat");

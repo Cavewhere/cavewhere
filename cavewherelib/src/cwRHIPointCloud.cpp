@@ -280,7 +280,6 @@ void cwRHIPointCloud::resetNodes(const cwPointOctreeSource& source)
     releaseStreamedResources();
 
     m_source = source;
-    m_nodeKeyBase = cw::octree::nodeKeyBase(m_source.lazPath, m_source.fingerprint);
 
     m_nodes.clear();
     m_residentIndices.clear();
@@ -358,11 +357,9 @@ void cwRHIPointCloud::requestNode(int index, quint64 priority)
 
 cwRHIPointCloud::cwPointOctreeNodeSource cwRHIPointCloud::nodeSource(int index) const
 {
-    // nodeName() memoizes a parent table; only the render thread ever asks a
-    // published manifest for a name, so that memo has one writer.
     return cwPointOctreeNodeSource {
-        m_source.cacheRootPath(),
-        cw::octree::nodeKey(m_nodeKeyBase, m_source.manifest->nodeName(index)),
+        m_source.pack,
+        index,
         m_source.manifest->nodes.at(index).byteSize
     };
 }
@@ -2174,8 +2171,7 @@ Monad::Result<cwPointOctreeNodePayload> cwRHIPointCloud::loadNode(
         timer.start();
     }
 
-    const cwDiskCacher cacher{source.cacheRootPath};
-    const QByteArray bytes = cacher.entry(source.key);
+    const QByteArray bytes = source.pack->node(source.index);
 
     if (profiling) {
         cw::profile::write(lcProfileLoad(), QStringLiteral("load us=%1 bytes=%2")

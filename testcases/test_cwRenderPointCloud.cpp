@@ -3,11 +3,15 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <QDir>
+#include <QTemporaryDir>
 #include <QVector3D>
 
 #include <memory>
 
+#include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
+#include "cwPointOctreePack.h"
 #include "cwPointOctreeSource.h"
 #include "cwRHIPointCloud.h"
 #include "cwRenderPointCloud.h"
@@ -50,10 +54,26 @@ namespace {
         manifest->fingerprint = fingerprint;
         manifest->nodes.append(cwPointOctreeNode());
 
-        return cwPointOctreeSource(QStringLiteral("/tmp"),
-                                   QStringLiteral("cloud.laz"),
-                                   fingerprint,
-                                   manifest);
+        // One directory and one LAZ path for every source, so two sources of
+        // one fingerprint share a cache root and compare equal. Each call
+        // writes a pack of its own, so none is rewritten while an earlier
+        // source still maps it.
+        static const QTemporaryDir cacheRoot;
+        static int packCount = 0;
+        REQUIRE(cacheRoot.isValid());
+        const QString lazPath = QDir(cacheRoot.path()).filePath(QStringLiteral("cloud.laz"));
+        const QString packPath = cw::octree::packPath(cacheRoot.path(), lazPath)
+                                 + QString::number(packCount++);
+
+        // The root node is empty, which is all a front-end test reads of it
+        cwPointOctreePack::Writer writer(packPath);
+        REQUIRE(writer.isOpen());
+        REQUIRE(writer.append(cw::octree::cellKey(manifest->nodes.constFirst()), QByteArray()));
+        REQUIRE(writer.finish(*manifest));
+
+        std::shared_ptr<const cwPointOctreePack> pack = cwPointOctreePack::open(packPath);
+        REQUIRE(pack != nullptr);
+        return cwPointOctreeSource(cacheRoot.path(), lazPath, fingerprint, std::move(pack));
     }
 
 } // namespace

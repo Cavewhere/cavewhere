@@ -40,6 +40,12 @@ qint64 buildMemoryBudgetBytes()
     return megabytes > 0 ? qint64(megabytes) * kBytesPerMebibyte
                          : cw::octree::kDefaultBuildMemoryBudgetBytes;
 }
+
+QFuture<std::shared_ptr<const cwPointOctreePack>> openCachedPack(
+    const cwPointOctreeBuilder::Request& request)
+{
+    return cwConcurrent::run([request]() { return cwPointOctreeBuilder::cachedPack(request); });
+}
 }
 
 cwLazLayer::cwLazLayer(QObject* parent) :
@@ -361,7 +367,7 @@ void cwLazLayer::startBuild(const QString& frameCS)
                 : m_cacheRootPath,
         .memoryBudgetBytes = buildMemoryBudgetBytes()
     };
-    m_buildCacheRootPath = request.cacheRootPath;
+    m_buildRequest = request;
     const quint64 generation = m_reloadGeneration;
 
     // A build left over from an earlier reload() is building against a frame or
@@ -373,15 +379,14 @@ void cwLazLayer::startBuild(const QString& frameCS)
     // that run then delivers nothing — the layer would sit at Loading forever.
     // The stale run is cancelled by the restart() below instead.
 
-    // The probe reads one manifest and then stats one cache entry per node, so
-    // a big octree is thousands of file hits — never on the GUI thread. It is
-    // deliberately outside the restarter: a hit publishes the cached octree and
-    // registers no job, which is what makes reopening a project instant.
-    const QFuture<std::optional<cwPointOctreeManifest>> cached =
-            cwConcurrent::run([request]() { return cwPointOctreeBuilder::cachedManifest(request); });
+    // The probe fingerprints the LAZ file and opens and checksums its pack —
+    // file I/O that never runs on the GUI thread. It is deliberately outside
+    // the restarter: a hit publishes the cached octree and registers no job,
+    // which is what makes reopening a project instant.
+    const QFuture<std::shared_ptr<const cwPointOctreePack>> cached = openCachedPack(request);
 
     AsyncFuture::observe(cached).context(this,
-        [this, generation, request](std::optional<cwPointOctreeManifest> manifest) {
+        [this, generation, request](std::shared_ptr<const cwPointOctreePack> pack) {
             if (generation != m_reloadGeneration) {
                 // A later reload() replaced this probe and asked its own.
                 return;
@@ -390,8 +395,8 @@ void cwLazLayer::startBuild(const QString& frameCS)
                 return;
             }
 
-            if (manifest.has_value()) {
-                publishOctree(std::move(manifest.value()));
+            if (pack != nullptr) {
+                publishOctree(std::move(pack));
                 return;
             }
 
@@ -465,7 +470,29 @@ void cwLazLayer::applyResult(const cwPointOctreeBuilder::Result& result)
         return;
     }
 
-    publishOctree(result.value());
+    // The build wrote its pack; opening it is the same probe a reopened
+    // project runs, so there is one publish path and the open stays off the
+    // GUI thread.
+    const quint64 generation = m_reloadGeneration;
+    const cwPointOctreeBuilder::Request request = m_buildRequest;
+    const QFuture<std::shared_ptr<const cwPointOctreePack>> built = openCachedPack(request);
+
+    AsyncFuture::observe(built).context(this,
+        [this, generation, request](std::shared_ptr<const cwPointOctreePack> pack) {
+            if (generation != m_reloadGeneration || !m_enabled) {
+                return;
+            }
+
+            if (pack == nullptr) {
+                clearOctree();
+                setErrorMessage(QStringLiteral("Could not open the built octree of %1.")
+                                        .arg(request.path));
+                setPointState(PointState::Error);
+                return;
+            }
+
+            publishOctree(std::move(pack));
+        });
 }
 
 void cwLazLayer::clearOctree()
@@ -486,18 +513,18 @@ void cwLazLayer::clearOctree()
     emit meanSpacingXYChanged();
 }
 
-void cwLazLayer::publishOctree(cwPointOctreeManifest&& manifest)
+void cwLazLayer::publishOctree(std::shared_ptr<const cwPointOctreePack> pack)
 {
+    const cwPointOctreeManifest& manifest = pack->manifest();
     m_pointCount = manifest.pointCount;
     m_bboxMin = manifest.bboxMin;
     m_bboxMax = manifest.bboxMax;
     m_meanSpacingXY = manifest.meanSpacingXY;
 
-    const auto shared = std::make_shared<const cwPointOctreeManifest>(std::move(manifest));
-    m_octree = cwPointOctreeSource(m_buildCacheRootPath,
+    m_octree = cwPointOctreeSource(m_buildRequest.cacheRootPath,
                                    m_sourcePath,
-                                   shared->fingerprint,
-                                   shared);
+                                   manifest.fingerprint,
+                                   std::move(pack));
 
     emit octreeChanged();
     emit pointCountChanged();

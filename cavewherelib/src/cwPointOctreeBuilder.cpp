@@ -28,9 +28,9 @@
 //Our includes
 #include "cwConcurrent.h"
 #include "cwCoordinateTransform.h"
-#include "cwDiskCacher.h"
 #include "cwGeoPoint.h"
 #include "cwLazLoader.h"
+#include "cwPointOctreePack.h"
 #include "cwPointOctreeSampler.h"
 #include "cwProfileLog.h"
 #include "cwProgressReporter.h"
@@ -144,30 +144,6 @@ namespace {
     int octantInParent(const Cell& cell)
     {
         return int(cell.x & 1) | int((cell.y & 1) << 1) | int((cell.z & 1) << 2);
-    }
-
-    //The Potree name of a cell: one octant digit per level, root first
-    QString nodeNameForCell(const Cell& cell)
-    {
-        QVector<int> octantPath;
-        octantPath.reserve(cell.level);
-
-        for(int level = cell.level; level >= 1; level--) {
-            const int shift = level - 1;
-            const int octant = int((cell.x >> shift) & 1)
-                               | int(((cell.y >> shift) & 1) << 1)
-                               | int(((cell.z >> shift) & 1) << 2);
-            octantPath.append(octant);
-        }
-
-        return nodeName(octantPath);
-    }
-
-    //! Inserts data and reports whether the whole entry landed, so a full or
-    //! read-only cache fails the build rather than leaving a truncated node
-    bool writeEntry(cwDiskCacher& cacher, const cwDiskCacher::Key& key, const QByteArray& data)
-    {
-        return cacher.insert(key, data);
     }
 
     struct BoundsTracker {
@@ -938,9 +914,8 @@ namespace {
     };
 
     struct ChunkContext {
-        QString lazPath;
-        QString fingerprint;
-        QString cacheRootPath;
+        //Owned by build(), which outlives every column
+        cwPointOctreePack::Writer* writer = nullptr;
         QVector3D rootMin;
         double rootSize = 0.0;
         std::atomic<bool>* cancel = nullptr;
@@ -1072,8 +1047,6 @@ namespace {
         result.localSpacingCappedPoints = estimate.cappedPoints;
         result.localSpacingCeiling = estimate.ceiling;
 
-        cwDiskCacher cacher {context.cacheRootPath};
-
         result.chunks.reserve(subtrees.size());
         for(qsizetype chunk = 0; chunk < subtrees.size(); chunk++) {
             QVector<SampledNode>& subtree = subtrees[chunk];
@@ -1105,14 +1078,10 @@ namespace {
                 const QByteArray payload =
                     quantizeAll(node.points, codes,
                                 cellBounds(node.cell, context.rootMin, context.rootSize));
-                const cwDiskCacher::Key key =
-                    nodeKey(context.lazPath, context.fingerprint, nodeNameForCell(node.cell));
 
-                if(!writeEntry(cacher, key, payload)) {
+                if(!context.writer->append(cellKey(node.cell), payload)) {
                     result.errorCode = cwPointOctreeBuilder::CacheWriteFailed;
-                    result.errorMessage =
-                        QStringLiteral("Could not write the octree node %1 into the cache.")
-                            .arg(key.id);
+                    result.errorMessage = context.writer->errorMessage();
                     return result;
                 }
             }
@@ -1671,28 +1640,30 @@ QString cwPointOctreeBuilder::fingerprintFor(const Request& request)
     return sourceFingerprint(request.path, sourceCS, request.frameCS);
 }
 
-std::optional<cwPointOctreeManifest> cwPointOctreeBuilder::cachedManifest(const Request& request)
+std::shared_ptr<const cwPointOctreePack> cwPointOctreeBuilder::cachedPack(const Request& request)
 {
     const QString fingerprint = fingerprintFor(request);
     if(fingerprint.isEmpty()) {
+        return nullptr;
+    }
+
+    std::shared_ptr<const cwPointOctreePack> pack =
+        cwPointOctreePack::open(packPath(request.cacheRootPath, request.path));
+    if(pack == nullptr || pack->manifest().fingerprint != fingerprint) {
+        return nullptr;
+    }
+
+    return pack;
+}
+
+std::optional<cwPointOctreeManifest> cwPointOctreeBuilder::cachedManifest(const Request& request)
+{
+    const std::shared_ptr<const cwPointOctreePack> pack = cachedPack(request);
+    if(pack == nullptr) {
         return std::nullopt;
     }
 
-    const cwDiskCacher cacher {request.cacheRootPath};
-
-    const std::optional<cwPointOctreeManifest> manifest =
-        cwPointOctreeManifest::deserialize(cacher.entry(manifestKey(request.path, fingerprint)));
-    if(!manifest.has_value() || manifest->fingerprint != fingerprint) {
-        return std::nullopt;
-    }
-
-    for(int i = 0; i < manifest->nodes.size(); i++) {
-        if(!cacher.hasEntry(nodeKey(request.path, fingerprint, manifest->nodeName(i)))) {
-            return std::nullopt;
-        }
-    }
-
-    return manifest;
+    return pack->manifest();
 }
 
 QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request& request)
@@ -1855,16 +1826,6 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
             std::atomic<bool> cancelFlag {false};
             std::atomic<qint64> chunkPointsDone {0};
 
-            const ChunkContext context {
-                .lazPath = request.path,
-                .fingerprint = fingerprint,
-                .cacheRootPath = request.cacheRootPath,
-                .rootMin = root.minimum,
-                .rootSize = root.size,
-                .cancel = &cancelFlag,
-                .pointsDone = &chunkPointsDone
-            };
-
             const qint64 memoryBudgetBytes = request.memoryBudgetBytes > 0
                                                  ? request.memoryBudgetBytes
                                                  : kDefaultBuildMemoryBudgetBytes;
@@ -1876,6 +1837,22 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                      columns.errorCode);
                 return;
             }
+
+            //A canceled or failed build destroys the writer before finish(),
+            //which removes its temp file
+            cwPointOctreePack::Writer writer(packPath(request.cacheRootPath, request.path));
+            if(!writer.isOpen()) {
+                fail(writer.errorMessage(), CacheWriteFailed);
+                return;
+            }
+
+            const ChunkContext context {
+                .writer = &writer,
+                .rootMin = root.minimum,
+                .rootSize = root.size,
+                .cancel = &cancelFlag,
+                .pointsDone = &chunkPointsDone
+            };
 
             qint64 haloPoints = 0;
             for(const ColumnTask& column : std::as_const(columns.columns)) {
@@ -1937,8 +1914,6 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
 
             QVector<std::optional<ChunkResult>> chunkResults = std::move(passB.chunks);
 
-            cwDiskCacher cacher {request.cacheRootPath};
-
             QHash<quint64, qsizetype> chunkIndexByCell;
             chunkIndexByCell.reserve(tasks.size());
 
@@ -1978,12 +1953,9 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 const QVector<quint16> codes = encodeLocalSpacings(node.spacings);
                 const QByteArray payload =
                     quantizeAll(node.points, codes, cellBounds(node.cell, root.minimum, root.size));
-                const cwDiskCacher::Key key =
-                    nodeKey(request.path, fingerprint, nodeNameForCell(node.cell));
 
-                if(!writeEntry(cacher, key, payload)) {
-                    fail(QStringLiteral("Could not write the octree node %1 into the cache.").arg(key.id),
-                         CacheWriteFailed);
+                if(!writer.append(cellKey(node.cell), payload)) {
+                    fail(writer.errorMessage(), CacheWriteFailed);
                     return false;
                 }
 
@@ -2134,9 +2106,8 @@ QFuture<cwPointOctreeBuilder::Result> cwPointOctreeBuilder::build(const Request&
                 manifest.meanSpacingXY = float(std::sqrt(dx * dy / double(manifest.pointCount)));
             }
 
-            if(!writeEntry(cacher, manifestKey(request.path, fingerprint), manifest.serialize())) {
-                fail(QStringLiteral("Could not write the octree manifest of %1 into the cache.").arg(request.path),
-                     CacheWriteFailed);
+            if(!writer.finish(manifest)) {
+                fail(writer.errorMessage(), CacheWriteFailed);
                 return;
             }
 

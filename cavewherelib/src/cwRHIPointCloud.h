@@ -10,7 +10,6 @@
 
 // Our includes
 #include "cwAppearanceSlotted.h"
-#include "cwDiskCacher.h"
 #include "cwPointOctreePickIndex.h"
 #include "cwPointOctreePickSet.h"
 #include "cwPointOctreeSelection.h"
@@ -167,28 +166,25 @@ private:
         int node = -1;
     };
 
-    // What the streamer loads for one node. The cache root travels with it so
-    // the loader lambda captures nothing and stays safe on a worker.
+    // What the streamer loads for one node. The pack travels with it so the
+    // loader lambda captures nothing and stays safe on a worker, and a load
+    // still in flight after resetNodes() reads a live mapping.
     struct cwPointOctreeNodeSource {
-        QString cacheRootPath;
-        cwDiskCacher::Key key;
+        std::shared_ptr<const cwPointOctreePack> pack;
+        int index = -1;
         qint64 byteSize = 0;
 
         bool operator==(const cwPointOctreeNodeSource& other) const
         {
-            return byteSize == other.byteSize
-                   && cacheRootPath == other.cacheRootPath
-                   && key.id == other.key.id
-                   && key.path == other.key.path
-                   && key.checksum == other.key.checksum;
+            return pack == other.pack && index == other.index && byteSize == other.byteSize;
         }
     };
 
     using NodeStreamer = cwTileStreamer<cwPointOctreeNodeSource, cwPointOctreeNodePayload>;
 
     // The streamer's loader, on a cwConcurrent worker. Static and capturing
-    // nothing: everything it touches travels on the source, and cwDiskCacher
-    // is thread-safe.
+    // nothing: everything it touches travels on the source, and a pack is
+    // immutable after it opens.
     static Monad::Result<cwPointOctreeNodePayload> loadNode(const cwPointOctreeNodeSource& source,
                                                             int level);
 
@@ -504,8 +500,6 @@ private:
     QRhiShaderResourceBindings* m_srb = nullptr;
 
     cwPointOctreeSource m_source;
-    // Derived from m_source in resetNodes(); keys nodes without QFileInfo
-    cw::octree::NodeKeyBase m_nodeKeyBase;
 
     // What picking reads. Set from the render object at construction; the
     // render thread republishes it whenever residency moves, which

@@ -7,6 +7,7 @@
 #include <QVector>
 
 //Std includes
+#include <memory>
 #include <optional>
 
 //Our includes
@@ -14,6 +15,8 @@
 #include "Monad/Result.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
+
+class cwPointOctreePack;
 
 namespace cw::octree {
 
@@ -51,12 +54,12 @@ namespace cw::octree {
 /**
  * Builds the point octree of a LAZ file without ever holding the cloud: the
  * file is read once, chunked into temporary files, turned into subtrees by a
- * fleet of workers, and written into the project's .cw_cache as one manifest
- * entry plus one entry per node.
+ * fleet of workers, and written into the project's .cw_cache as one pack file
+ * (cw::octree::packPath) holding every node and the manifest.
  *
  * Threading: build() runs entirely on cwConcurrent workers. The request is
- * captured by value; the only shared state is cwDiskCacher, which mutexes per
- * file. Cancellation is polled per chunk of points, per chunk, and per node.
+ * captured by value; the only shared state is the pack writer, which mutexes
+ * its appends. Cancellation is polled per chunk of points, per chunk, and per node.
  */
 class CAVEWHERE_LIB_EXPORT cwPointOctreeBuilder
 {
@@ -65,7 +68,7 @@ public:
         QString path;              //!< absolute filesystem path to a .laz / .las file
         QString sourceCSOverride;  //!< empty → use the LAZ embedded CS (or identity)
         QString frameCS;           //!< destination CS: the project's local projection
-        QString cacheRootPath;     //!< the cwDiskCacher root, the project root
+        QString cacheRootPath;     //!< the project root, where .cw_cache lives
 
         //!< Points per chunk file, which sets the chunk depth
         qint64 chunkTargetPoints = cw::octree::kChunkTargetPoints;
@@ -111,9 +114,13 @@ public:
     static QString fingerprintFor(const Request& request);
 
     /**
-     * The already-built octree of request, or nullopt when it has to be built:
-     * the manifest entry is missing or stale, or one of its nodes is gone.
+     * The opened pack of request's already-built octree, or nullptr when it
+     * has to be built: the pack is missing, fails to open, or carries another
+     * fingerprint.
      */
+    static std::shared_ptr<const cwPointOctreePack> cachedPack(const Request& request);
+
+    //! cachedPack()'s manifest, or nullopt when there is no usable pack
     static std::optional<cwPointOctreeManifest> cachedManifest(const Request& request);
 
     //Builds the octree and writes it into the cache. Never reads the cache.

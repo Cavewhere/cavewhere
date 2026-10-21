@@ -1,8 +1,8 @@
 // Tests for the streamed point cloud renderer: the cut a camera asks for, the
 // nodes that stream in behind it, the budgets that bound them, and the release
 // a hidden view triggers. Nothing here needs a LAZ file — the octree is built
-// straight out of the sampler and written into an ordinary cwDiskCacher, which
-// is exactly what the builder leaves behind.
+// straight out of the sampler and written into an ordinary point octree pack,
+// which is exactly what the builder leaves behind.
 
 //Catch includes
 #include <catch2/catch_approx.hpp>
@@ -64,7 +64,6 @@
 //Our includes
 #include "cwAppearanceOverride.h"
 #include "cwCoordinateTransform.h"
-#include "cwDiskCacher.h"
 #include "cwFrustum.h"
 #include "cwLazClipOperation.h"
 #include "cwLazLoader.h"
@@ -75,6 +74,7 @@
 #include "cwPointCloudForest.h"
 #include "cwPointOctree.h"
 #include "cwPointOctreeManifest.h"
+#include "cwPointOctreePack.h"
 #include "cwProfileLog.h"
 #include "cwPointOctreeBuilder.h"
 #include "cwPointOctreeSampler.h"
@@ -249,10 +249,10 @@ namespace {
     //! The corruptNode that names no node, so every payload is whole
     constexpr int kNoCorruptNode = -1;
 
-    // Builds the octree of a synthetic passage and writes its nodes into the
-    // cacher under @a cacheRoot, exactly where cwRHIPointCloud's loader looks
-    // for them. @a corruptNode, when it names a node, gets a payload one point
-    // short of what the manifest promises.
+    // Builds the octree of a synthetic passage and writes its nodes into a
+    // pack under @a cacheRoot, exactly where the builder would leave it.
+    // @a corruptNode, when it names a node, gets a payload one point short of
+    // what the manifest promises.
     OctreeCache buildOctreeCache(const QString& cacheRoot, const QString& tag,
                                  const QVector<QVector3D>& points, int corruptNode = kNoCorruptNode,
                                  int leafMaxPoints = kLeafMaxPoints)
@@ -283,16 +283,16 @@ namespace {
         const QString lazPath = QDir(cacheRoot).filePath(
             QStringLiteral("GIS Layers/%1.laz").arg(fingerprint));
 
-        auto manifest = std::make_shared<cwPointOctreeManifest>();
-        manifest->rootMin = rootMin;
-        manifest->rootSize = rootSize;
-        manifest->pointCount = points.size();
-        manifest->bboxMin = box.minimum();
-        manifest->bboxMax = box.maximum();
-        manifest->meanSpacingXY = float(rootSize / cw::octree::kSampleGridResolution);
-        manifest->fingerprint = fingerprint;
+        cwPointOctreeManifest manifest;
+        manifest.rootMin = rootMin;
+        manifest.rootSize = rootSize;
+        manifest.pointCount = points.size();
+        manifest.bboxMin = box.minimum();
+        manifest.bboxMax = box.maximum();
+        manifest.meanSpacingXY = float(rootSize / cw::octree::kSampleGridResolution);
+        manifest.fingerprint = fingerprint;
 
-        manifest->nodes.reserve(sampled.size());
+        manifest.nodes.reserve(sampled.size());
         for (qsizetype i = 0; i < sampled.size(); i++) {
             const cw::octree::SampledNode& node = sampled.at(i);
             cwPointOctreeNode entry;
@@ -304,28 +304,32 @@ namespace {
             entry.byteSize = qint64(node.points.size()) * cw::octree::kBytesPerPoint;
             entry.measuredSpacing = cw::octree::measureNodeSpacing(node.points);
             entry.children = node.children;
-            manifest->nodes.append(entry);
+            manifest.nodes.append(entry);
         }
 
         OctreeCache built;
         built.center = box.center();
 
-        cwDiskCacher cacher{QDir(cacheRoot)};
-        for (int i = 0; i < manifest->nodes.size(); i++) {
+        const QString packPath = cw::octree::packPath(cacheRoot, lazPath);
+        cwPointOctreePack::Writer writer(packPath);
+        REQUIRE(writer.isOpen());
+        for (int i = 0; i < manifest.nodes.size(); i++) {
             QByteArray bytes = cw::octree::quantizeAll(sampled.at(i).points,
                                                        localSpacingCodes.at(i),
-                                                       manifest->nodeBounds(i));
+                                                       manifest.nodeBounds(i));
             built.largestNodeBytes = std::max(built.largestNodeBytes, qint64(bytes.size()));
 
             if (i == corruptNode) {
                 bytes.chop(cw::octree::kBytesPerPoint);
             }
 
-            cacher.insert(cw::octree::nodeKey(lazPath, fingerprint, manifest->nodeName(i)),
-                          bytes);
+            REQUIRE(writer.append(cw::octree::cellKey(manifest.nodes.at(i)), bytes));
         }
+        REQUIRE(writer.finish(manifest));
 
-        built.source = cwPointOctreeSource(cacheRoot, lazPath, fingerprint, manifest);
+        std::shared_ptr<const cwPointOctreePack> pack = cwPointOctreePack::open(packPath);
+        REQUIRE(pack != nullptr);
+        built.source = cwPointOctreeSource(cacheRoot, lazPath, fingerprint, std::move(pack));
         return built;
     }
 
@@ -1913,10 +1917,11 @@ namespace {
     //! rootMin, so sliding rootMin slides the whole cloud onto the origin
     //! without touching a single cached byte.
     ShiftedOctree shiftedOctree(const QString& cacheRoot, const QString& lazPath,
-                                const cwPointOctreeManifest& built,
+                                std::shared_ptr<const cwPointOctreePack> pack,
                                 std::optional<QVector3D> shift)
     {
-        auto manifest = std::make_shared<cwPointOctreeManifest>(built);
+        REQUIRE(pack != nullptr);
+        auto manifest = std::make_shared<cwPointOctreeManifest>(pack->manifest());
 
         ShiftedOctree shifted;
         shifted.shift = shift.value_or((manifest->bboxMin + manifest->bboxMax) * 0.5f);
@@ -1929,8 +1934,11 @@ namespace {
                                                       node.byteSize);
         }
         shifted.cache.center = QVector3D();
+        // The nodes are read out of the pack as they are; only the manifest
+        // the renderer places them with slides.
         shifted.cache.source = cwPointOctreeSource(cacheRoot, lazPath,
-                                                   manifest->fingerprint, manifest);
+                                                   manifest->fingerprint, std::move(pack));
+        shifted.cache.source.manifest = manifest;
         return shifted;
     }
 
@@ -1984,7 +1992,9 @@ namespace {
         const cwPointOctreeBuilder::Result result = future.result();
         REQUIRE_FALSE(result.hasError());
 
-        return shiftedOctree(request.cacheRootPath, request.path, result.value(), shift);
+        std::shared_ptr<const cwPointOctreePack> pack = cwPointOctreeBuilder::cachedPack(request);
+        REQUIRE(pack != nullptr);
+        return shiftedOctree(request.cacheRootPath, request.path, std::move(pack), shift);
     }
 
     //! A tile octree and how it came to be.
@@ -1998,22 +2008,21 @@ namespace {
     };
 
     //! The octree of @a lazPath under @a cacheRoot, recentered onto its own
-    //! bounding-box center. A manifest a previous build left there is reused
-    //! when the builder's fingerprint of the LAZ still matches it and every node
-    //! it lists is still on disk; anything else is built. The fingerprint is
-    //! the one the manifest records: the file's size, the first and last 4 MB
-    //! of its bytes, and its CS, so an edited or replaced file rebuilds. The
+    //! bounding-box center. A pack a previous build left there is reused when it
+    //! opens whole and the builder's fingerprint of the LAZ still matches its
+    //! manifest; anything else is built. The fingerprint is the one the
+    //! manifest records: the file's size, the first and last 4 MB of its
+    //! bytes, and its CS, so an edited or replaced file rebuilds. The
     //! manifest also carries cw::octree::kFormatGeneration, the only thing that
     //! invalidates a cache built with different builder parameters: a change to
     //! the per-node point target or leaf sizing needs a generation bump, or the
     //! persistent directory keeps serving the old layout.
     //!
-    //! The root node is read back and its checksum verified before the cache
-    //! counts; the other nodes are checked for presence only, since reading
-    //! every one costs as much as a tile pass. A node truncated by a crash
-    //! after the manifest landed loads with warnings at draw time, and the cure
-    //! is deleting the cache directory by hand. Two processes sharing one
-    //! directory race the same way.
+    //! The pack's size and its manifest and index checksum are verified on
+    //! open, and the root node is read back before the cache counts; node bytes
+    //! carry no checksum, since reading every one costs as much as a tile pass.
+    //! Two processes sharing one directory each rename a whole pack into place,
+    //! so the later one wins.
     LoadedTileOctree loadOrBuildTileOctree(const QString& cacheRoot, const QString& lazPath)
     {
         LoadedTileOctree loaded;
@@ -2021,16 +2030,9 @@ namespace {
         const cwPointOctreeBuilder::Request request =
             tileBuildRequest(cacheRoot, lazPath, loaded.frameCS);
 
-        const std::optional<cwPointOctreeManifest> cached =
-            cwPointOctreeBuilder::cachedManifest(request);
-        const auto rootReadsBack = [&]() {
-            const cwDiskCacher cacher {QDir(cacheRoot)};
-            return !cacher.entry(cw::octree::nodeKey(lazPath, cached->fingerprint,
-                                                     cached->nodeName(kRootIndex)))
-                        .isEmpty();
-        };
-        if (cached.has_value() && rootReadsBack()) {
-            loaded.shifted = shiftedOctree(cacheRoot, lazPath, *cached, std::nullopt);
+        std::shared_ptr<const cwPointOctreePack> cached = cwPointOctreeBuilder::cachedPack(request);
+        if (cached != nullptr && !cached->node(kRootIndex).isEmpty()) {
+            loaded.shifted = shiftedOctree(cacheRoot, lazPath, std::move(cached), std::nullopt);
             loaded.reused = true;
             return loaded;
         }
@@ -2279,9 +2281,9 @@ namespace {
             node.measuredSpacing = factor * float(manifest->spacing(node.level));
         }
 
+        // Same pack, so the payloads are the very bytes @a cache draws
         OctreeCache measured = cache;
-        measured.source = cwPointOctreeSource(cache.source.cacheRootPath(), cache.source.lazPath,
-                                              cache.source.fingerprint, manifest);
+        measured.source.manifest = manifest;
         return measured;
     }
 
@@ -4543,9 +4545,15 @@ TEST_CASE("A node keeps its own spacing until the children the cut asked for lan
     fixture.setBudgets(budgets);
     //The grid's floor rule, which expectedFloorSpacing() spells out
     setSpacingSource(fixture, cw::pointcloud::SpacingSource::Grid);
-    fixture.setOrthoHeight(kCloseOrthoHeight);
+
+    // The root lands alone under the far camera's cut before the close one
+    // asks for its children. Loads finish close together, so a cut that asked
+    // for everything at once could upload the root after its children, and
+    // the window this test watches would never open.
+    fixture.setOrthoHeight(kFarOrthoHeight);
     fixture.synchronize();
     fixture.renderUntilResident(kRootIndex);
+    fixture.setOrthoHeight(kCloseOrthoHeight);
 
     const cwPointOctreeManifest& manifest = fixture.manifest();
     const float rootSpacing = float(manifest.spacing(kRootLevel));
@@ -6362,8 +6370,10 @@ TEST_CASE("A tile octree built into a cache directory is reused until the LAZ ch
     REQUIRE(built.nodes.size() > 1);
 
     const QHash<QString, QDateTime> builtFiles = fileTimesUnder(cacheDirectory.path());
-    //One entry per node and the manifest
-    CHECK(builtFiles.size() == built.nodes.size() + 1);
+    //One pack holds every node and the manifest
+    const QString packFile =
+        QFileInfo(cw::octree::packPath(cacheDirectory.path(), lazPath)).absoluteFilePath();
+    CHECK(builtFiles.keys() == QList<QString> {packFile});
 
     SECTION("a second load reads the same octree back without writing a byte") {
         const LoadedTileOctree second = loadOrBuildTileOctree(cacheDirectory.path(), lazPath);
@@ -6398,11 +6408,6 @@ TEST_CASE("A tile octree built into a cache directory is reused until the LAZ ch
         CHECK(rebuilt.shifted.cache.source.manifest->fingerprint != built.fingerprint);
     }
 
-    const cwDiskCacher cacher {QDir(cacheDirectory.path())};
-    const auto nodeFilePath = [&](int index) {
-        return cacher.filePath(cw::octree::nodeKey(lazPath, built.fingerprint,
-                                                   built.nodeName(index)));
-    };
     const auto checkRebuiltComplete = [&]() {
         const LoadedTileOctree rebuilt = loadOrBuildTileOctree(cacheDirectory.path(), lazPath);
         CHECK_FALSE(rebuilt.reused);
@@ -6411,22 +6416,20 @@ TEST_CASE("A tile octree built into a cache directory is reused until the LAZ ch
         CHECK(loadOrBuildTileOctree(cacheDirectory.path(), lazPath).reused);
     };
 
-    SECTION("a node missing from disk rebuilds the octree") {
-        const QString leafPath = nodeFilePath(built.nodes.size() - 1);
-        REQUIRE(builtFiles.contains(QFileInfo(leafPath).absoluteFilePath()));
-        REQUIRE(QFile::remove(leafPath));
+    SECTION("a pack missing from disk rebuilds the octree") {
+        REQUIRE(QFile::remove(packFile));
 
         checkRebuiltComplete();
-        CHECK(QFileInfo::exists(leafPath));
+        CHECK(QFileInfo::exists(packFile));
     }
 
-    SECTION("a root node truncated after the manifest landed rebuilds the octree") {
-        QFile root(nodeFilePath(kRootIndex));
-        REQUIRE(root.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        root.close();
+    SECTION("a truncated pack rebuilds the octree") {
+        const qint64 builtSize = QFileInfo(packFile).size();
+        QFile pack(packFile);
+        REQUIRE(pack.resize(builtSize / 2));
 
         checkRebuiltComplete();
-        CHECK(QFileInfo(root).size() > 0);
+        CHECK(QFileInfo(packFile).size() == builtSize);
     }
 }
 
@@ -15317,29 +15320,30 @@ namespace {
             QStringLiteral("%1-code%2").arg(cache.source.fingerprint).arg(code);
         const QString lazPath = QDir(recoded.directory->path())
                                     .filePath(QStringLiteral("GIS Layers/%1.laz").arg(fingerprint));
-        auto manifest = std::make_shared<cwPointOctreeManifest>(*cache.source.manifest);
-        manifest->fingerprint = fingerprint;
+        cwPointOctreeManifest manifest = *cache.source.manifest;
+        manifest.fingerprint = fingerprint;
 
-        const cwDiskCacher from {QDir(cache.source.cacheRootPath())};
-        cwDiskCacher to {QDir(recoded.directory->path())};
+        const QString packPath = cw::octree::packPath(recoded.directory->path(), lazPath);
+        cwPointOctreePack::Writer writer(packPath);
+        REQUIRE(writer.isOpen());
         constexpr qsizetype kReservedOffset = 3 * qsizetype(sizeof(quint16));
-        for (int i = 0; i < manifest->nodes.size(); i++) {
-            QByteArray bytes = from.entry(cw::octree::nodeKey(cache.source.lazPath,
-                                                              cache.source.fingerprint,
-                                                              manifest->nodeName(i)));
-            REQUIRE(bytes.size() == qsizetype(manifest->nodes.at(i).pointCount)
+        for (int i = 0; i < manifest.nodes.size(); i++) {
+            QByteArray bytes = cache.source.pack->node(i);
+            REQUIRE(bytes.size() == qsizetype(manifest.nodes.at(i).pointCount)
                                         * cw::octree::kBytesPerPoint);
             for (qsizetype offset = 0; offset < bytes.size();
                  offset += cw::octree::kBytesPerPoint) {
                 qToLittleEndian<quint16>(code, bytes.data() + offset + kReservedOffset);
             }
-            REQUIRE(to.insert(cw::octree::nodeKey(lazPath, fingerprint, manifest->nodeName(i)),
-                              bytes));
+            REQUIRE(writer.append(cw::octree::cellKey(manifest.nodes.at(i)), bytes));
         }
+        REQUIRE(writer.finish(manifest));
 
+        std::shared_ptr<const cwPointOctreePack> pack = cwPointOctreePack::open(packPath);
+        REQUIRE(pack != nullptr);
         recoded.cache = cache;
         recoded.cache.source = cwPointOctreeSource(recoded.directory->path(), lazPath, fingerprint,
-                                                   manifest);
+                                                   std::move(pack));
         return recoded;
     }
 
@@ -16758,13 +16762,11 @@ namespace {
         const cwPointOctreeSource& source = shifted.cache.source;
         const cwPointOctreeManifest& manifest = *source.manifest;
         const cwCoordinateTransform toSource(frameCS, sourceCS);
-        const cwDiskCacher cacher {QDir(source.cacheRootPath())};
 
         LatticeDecode result;
         QSet<QPair<qint64, qint64>> latticePoints;
         for (int i = 0; i < manifest.nodes.size(); i++) {
-            const QByteArray bytes = cacher.entry(
-                cw::octree::nodeKey(source.lazPath, source.fingerprint, manifest.nodeName(i)));
+            const QByteArray bytes = source.pack->node(i);
             REQUIRE(bytes.size() == qsizetype(manifest.nodes.at(i).pointCount)
                                         * cw::octree::kBytesPerPoint);
             const QBox3D bounds = manifest.nodeBounds(i);

@@ -116,6 +116,14 @@ TEST_CASE("cwLazLayer: status transitions Idle → Loading → Loaded",
     // The build put the octree in the cache the layer named, so the manifest
     // reads back from there.
     REQUIRE(source.cacheRootPath() == QDir(tempDir.path()).absolutePath());
+
+    // What it publishes is the pack the build wrote there, and the manifest
+    // is that pack's own.
+    REQUIRE(source.pack != nullptr);
+    REQUIRE(QFileInfo(source.pack->path()).canonicalFilePath()
+            == QFileInfo(cw::octree::packPath(tempDir.path(), path)).canonicalFilePath());
+    REQUIRE(source.manifest.get() == &source.pack->manifest());
+    REQUIRE(source.pack->nodeCount() == source.manifest->nodes.size());
 }
 
 TEST_CASE("cwLazLayer: the octree build is registered as a named job",

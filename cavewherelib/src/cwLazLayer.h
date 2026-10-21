@@ -158,7 +158,7 @@ public:
     /// file it was built from, and its manifest. Null until the build lands.
     const cwPointOctreeSource& octree() const { return m_octree; }
 
-    /// Where the octree's cwDiskCacher root is — the project root. Empty on a
+    /// Where the octree's .cw_cache lives — the project root. Empty on a
     /// standalone layer, which then caches beside the LAZ file itself.
     QString cacheRootPath() const { return m_cacheRootPath; }
     void setCacheRootPath(const QString& path);
@@ -216,7 +216,7 @@ private:
     void updateIdKeyword();
     void updateTypeKeyword();
     void applyResult(const cwPointOctreeBuilder::Result& result);
-    void publishOctree(cwPointOctreeManifest&& manifest);
+    void publishOctree(std::shared_ptr<const cwPointOctreePack> pack);
     //! Drop the published octree and everything read off its manifest.
     void clearOctree();
     void startHeaderProbe();
@@ -266,9 +266,9 @@ private:
     // so it is dropped rather than published.
     quint64 m_buildGeneration = 0;
 
-    // The cache root the in-flight build was asked for — its result carries
-    // the manifest, not the request.
-    QString m_buildCacheRootPath;
+    // The request the in-flight build was asked for — its result carries the
+    // manifest, not the request, and the pack it wrote is opened with it.
+    cwPointOctreeBuilder::Request m_buildRequest;
 
     // Coalesces rapid reload() calls and serializes cancel-then-restart so a
     // new load only begins once the previous one has actually stopped.
