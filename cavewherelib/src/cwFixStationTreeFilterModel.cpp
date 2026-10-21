@@ -106,8 +106,8 @@ Coordinate coordinateOf(const QModelIndex& index)
 }
 
 // Rows with every component come first by (easting, northing, elevation);
-// rows without them (an attached fix keeps its coordinate as text) follow,
-// ordered by that text.
+// rows without them (a file fix whose text does not parse, or a lat/long one)
+// follow, ordered by that text.
 bool coordinateLessThan(const QModelIndex& left, const QModelIndex& right)
 {
     const Coordinate leftCoordinate = coordinateOf(left);

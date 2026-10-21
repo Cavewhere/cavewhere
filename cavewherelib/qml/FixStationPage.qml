@@ -1515,9 +1515,11 @@ StandardPage {
                     // three zeros, and rendering those would hide the very text
                     // that is wrong with it behind a coordinate at the origin.
                     // So it shows what was written, which is all such a row has.
-                    // So does a read-only row: the scan keeps its coordinate
-                    // as text (a Compass .mak fix in meters), not components.
-                    value: wideDelegateId.coordinateError !== "" || wideDelegateId.readOnly
+                    // A read-only row renders through the formatter when the
+                    // scan's text reads as a grid coordinate, and
+                    // otherwise (lat/long, unreadable text) keeps its text.
+                    value: wideDelegateId.coordinateError !== ""
+                           || (wideDelegateId.readOnly && isNaN(wideDelegateId.easting))
                            ? wideDelegateId.coordinateText
                            : CoordinateText.format(wideDelegateId.easting,
                                                    wideDelegateId.northing,
@@ -1720,7 +1722,8 @@ StandardPage {
                     objectName: "coordinateCell." + narrowDelegateId.fixRow
                     //! The text itself when there are no numbers to render —
                     //! see the wide delegate.
-                    value: narrowDelegateId.coordinateError !== "" || narrowDelegateId.readOnly
+                    value: narrowDelegateId.coordinateError !== ""
+                           || (narrowDelegateId.readOnly && isNaN(narrowDelegateId.easting))
                            ? narrowDelegateId.coordinateText
                            : CoordinateText.format(narrowDelegateId.easting,
                                                    narrowDelegateId.northing,

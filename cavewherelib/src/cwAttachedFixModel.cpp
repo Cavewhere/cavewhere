@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <utility>
 
 cwAttachedFixModel::cwAttachedFixModel(QObject* parent) :
     QAbstractListModel(parent)
@@ -44,11 +45,13 @@ QVariant cwAttachedFixModel::data(const QModelIndex& index, int role) const
         return fix.systemLabel();
     case cwFixStationModel::CoordinateTextRole:
         return fix.coordinate;
-    // The scan keeps the coordinate as text, as cavern reads it, and reads
-    // no components out of it, so those roles say "no value".
     case cwFixStationModel::EastingRole:
+        return m_gridPositions.at(index.row()).x;
     case cwFixStationModel::NorthingRole:
+        return m_gridPositions.at(index.row()).y;
     case cwFixStationModel::ElevationRole:
+        return m_gridPositions.at(index.row()).z;
+    // The file's standard errors stay in its text; the row has no variance.
     case cwFixStationModel::HorizontalVarianceRole:
     case cwFixStationModel::VerticalVarianceRole:
         return std::numeric_limits<double>::quiet_NaN();
@@ -124,6 +127,7 @@ void cwAttachedFixModel::setAttachedFixes(const QList<cwAttachedFix>& fixes)
     };
     if (std::equal(m_fixes.cbegin(), m_fixes.cend(), fixes.cbegin(), fixes.cend(), sameStation)) {
         m_fixes = fixes;
+        readGridPositions();
         emit dataChanged(index(0), index(count() - 1));
         return;
     }
@@ -131,6 +135,7 @@ void cwAttachedFixModel::setAttachedFixes(const QList<cwAttachedFix>& fixes)
     const int oldCount = count();
     beginResetModel();
     m_fixes = fixes;
+    readGridPositions();
     endResetModel();
     if (count() != oldCount) {
         emit countChanged();
@@ -151,4 +156,15 @@ int cwAttachedFixModel::firstFixWithoutReadInSystem() const
         return fix.coordinateSystem.isEmpty() && fix.readInSystem.isEmpty();
     });
     return bare == m_fixes.cend() ? -1 : static_cast<int>(std::distance(m_fixes.cbegin(), bare));
+}
+
+void cwAttachedFixModel::readGridPositions()
+{
+    constexpr double kNoValue = std::numeric_limits<double>::quiet_NaN();
+    const cwGeoPoint noPosition(kNoValue, kNoValue, kNoValue);
+    m_gridPositions.clear();
+    m_gridPositions.reserve(m_fixes.size());
+    for (const cwAttachedFix& fix : std::as_const(m_fixes)) {
+        m_gridPositions.append(fix.gridPosition().value_or(noPosition));
+    }
 }

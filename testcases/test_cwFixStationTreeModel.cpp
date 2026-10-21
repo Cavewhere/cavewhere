@@ -109,6 +109,9 @@ const QString kSt1 = QStringLiteral("st1");
 const QString kSt2 = QStringLiteral("st2");
 const QString kSt3 = QStringLiteral("st3");
 const QString kSt10 = QStringLiteral("st10");
+constexpr double kSt10Easting = 100.0;
+constexpr double kSt10Northing = 10.0;
+constexpr double kSt10Elevation = 1.0;
 const QString kNorthN9 = QStringLiteral("north.n9");
 const QString kNorthN10 = QStringLiteral("north.n10");
 constexpr int kSortFilterFixCount = 5;
@@ -654,7 +657,7 @@ TEST_CASE("A descending sort keeps node rows after their sibling fixes",
           == QStringList({kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
 }
 
-TEST_CASE("A coordinate sort orders numbered rows first, then attached rows by their text",
+TEST_CASE("A coordinate sort orders file and native fixes by their numbers",
           "[FixStationTreeModel][FixStationTreeFilterModel]")
 {
     SortFilterFixture fixture(QStringLiteral("fix-tree-sort-coordinate"));
@@ -664,11 +667,26 @@ TEST_CASE("A coordinate sort orders numbered rows first, then attached rows by t
     CHECK(childLabels(fixture.proxy, fixture.rootRow())
           == QStringList({kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
 
+    // st3's easting (500010) is past every file fix's, so it sorts after them.
     addNativeFix(fixture.root, kSt3, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
                  kNativeFixElevation);
     drainPipelines(fixture.project.get());
     CHECK(childLabels(fixture.proxy, fixture.rootRow())
-          == QStringList({kSt3, kSt10, kSt2, kSt1, kNodeLabel.arg(kSortFilterNorthName)}));
+          == QStringList({kSt10, kSt2, kSt1, kSt3, kNodeLabel.arg(kSortFilterNorthName)}));
+}
+
+TEST_CASE("A file fix row reads its coordinate's numbers through the tree",
+          "[FixStationTreeModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-attached-components"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    const QModelIndex st10 = fixRow(fixture.treeModel, fixture.treeModel.index(0, 0), kSt10);
+    REQUIRE(st10.isValid());
+    CHECK(st10.data(cwFixStationModel::CoordinateTextRole).toString() == QStringLiteral("100 10 1"));
+    CHECK(st10.data(cwFixStationModel::EastingRole).toDouble() == kSt10Easting);
+    CHECK(st10.data(cwFixStationModel::NorthingRole).toDouble() == kSt10Northing);
+    CHECK(st10.data(cwFixStationModel::ElevationRole).toDouble() == kSt10Elevation);
 }
 
 TEST_CASE("A fix added while sorted takes its place by name",

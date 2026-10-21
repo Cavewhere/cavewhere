@@ -2340,7 +2340,7 @@ MainWindowTest {
             // The file names no system for d1, so it is placed at the origin.
             compare(waitForChild("noCoordinateSystemBadge.1").text, "none \u2192 origin")
             const attachedCoordinate = waitForChild("coordinateCell.1")
-            compare(attachedCoordinate.text, "0 0 0")
+            compare(attachedCoordinate.text, "0, 0, 0.000m")
             verify(waitForChild("readOnlyLock.1") !== null, "the row carries the lock")
             compare(liveChild("readOnlyLock.0"), null, "the node's own row does not")
             compare(liveChild("inputCSComboBox.1"), null, "nor a system to pick")
@@ -2467,8 +2467,8 @@ MainWindowTest {
             // The System column names the system and the code cavern places it in.
             compare(waitForChild("inputCSText.0").text, "North American 1927, UTM zone 13N (EPSG:26713)")
             // The .mak writes [f,1568241.5,14534120.7,5429.8]; the row shows
-            // the meters cavern solves with, and no unit letter.
-            compare(waitForChild("coordinateCell.0").text, "478000.0092 4429999.98936 1655.00304")
+            // the meters cavern solves with, in the project's units.
+            compare(waitForChild("coordinateCell.0").text, "478000.0092, 4429999.98936, 1655.003m")
             verify(waitForChild("readOnlyLock.0") !== null, "the row is the file's")
 
             RootData.pageSelectionModel.currentPageAddress = "Source/Data/Node=" + String(cave.name)
@@ -2528,10 +2528,36 @@ MainWindowTest {
             tryCompare(findChild(page, "fixStationTreeView"), "count", 2)
             compare(waitForChild("stationCell.0").text, "ref.A")
             verify(waitForChild("referenceChip.0") !== null, "the reference fix carries the chip")
-            compare(waitForChild("coordinateCell.0").text, "10 20 30")
+            compare(waitForChild("coordinateCell.0").text, "10, 20, 30.000m")
 
             compare(waitForChild("stationCell.1").text, "ref.B")
             compare(liveChild("referenceChip.1"), null, "the plain fix carries none")
+        }
+
+        // A file fix in a grid shows its coordinate in the project's units,
+        // the way a native row does, and its editor offers the text as the
+        // file writes it.
+        function test_anAttachedRowShowsItsCoordinateInTheProjectUnits() {
+            saveProjectAs("fix-station-attached-units")
+            const cave = makeAttachedCave("AttachedCave", TestHelper.testcasesDatasetSourcePath(
+                                              "external-centerlines/survex_native_cs_scope/own_cs_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) === 1, 20000, "the scan lists the file's fix")
+
+            const page = openFixStationsOf(cave)
+            tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
+            compare(waitForChild("stationCell.0").text, "scoped.S1")
+            const coordinateCell = waitForChild("coordinateCell.0")
+            const previousUnits = RootData.region.unitSystem
+            RootData.region.unitSystem = Units.Metric
+            tryCompare(coordinateCell, "text", "500200, 3000000, 100.000m", 5000,
+                       "the file's meters read with the project's unit")
+
+            RootData.region.unitSystem = Units.Imperial
+            tryCompare(coordinateCell, "text", "500200, 3000000, 328.08ft", 5000,
+                       "the elevation follows the project's unit system, suffix and all")
+            compare(coordinateCell.editValue, "500200 3000000 100")
+
+            RootData.region.unitSystem = previousUnits
         }
 
         // In a georeferenced project, a file fix with no coordinate system

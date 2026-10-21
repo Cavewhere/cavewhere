@@ -19,6 +19,23 @@ namespace {
 //! takes standard errors after them, which play no part in the position.
 constexpr qsizetype kFixCoordinateComponents = 3;
 
+//! \a system read the way the driver passes it after *cs: a Survex name maps
+//! through cavern's own reading of it, and anything else is taken as PROJ text.
+struct ResolvedSystem
+{
+    QString cs;
+    bool latitudeFirst = false;
+};
+
+ResolvedSystem resolveSystem(const QString& system)
+{
+    const std::optional<cwSurvexCS::Parsed> parsed = cwSurvexCS::fromSurvexCS(system);
+    if (parsed.has_value()) {
+        return {parsed->projCS, parsed->latitudeFirst};
+    }
+    return {system, false};
+}
+
 } // namespace
 
 cwExternalCenterline::cwExternalCenterline(QString entryFile)
@@ -63,11 +80,8 @@ QString cwAttachedFix::systemLabel() const
 
 std::optional<cwAttachedFix::Placement> cwAttachedFix::placementIn(const QString& system) const
 {
-    // A Survex name maps through cavern's own reading of it; anything that
-    // isn't one is taken as PROJ text, as the driver passes it on.
-    const std::optional<cwSurvexCS::Parsed> parsed = cwSurvexCS::fromSurvexCS(system);
-    const QString cs = parsed.has_value() ? parsed->projCS : system;
-    if (!cwCoordinateTransform::isValidCS(cs)) {
+    const ResolvedSystem resolved = resolveSystem(system);
+    if (!cwCoordinateTransform::isValidCS(resolved.cs)) {
         return std::nullopt;
     }
 
@@ -75,11 +89,18 @@ std::optional<cwAttachedFix::Placement> cwAttachedFix::placementIn(const QString
     if (!read.has_value()) {
         return std::nullopt;
     }
-    const bool latitudeFirst = parsed.has_value() && parsed->latitudeFirst;
-    const cwGeoPoint point(latitudeFirst ? read->y : read->x,
-                           latitudeFirst ? read->x : read->y,
+    const cwGeoPoint point(resolved.latitudeFirst ? read->y : read->x,
+                           resolved.latitudeFirst ? read->x : read->y,
                            read->z);
-    return Placement{cs, point};
+    return Placement{resolved.cs, point};
+}
+
+std::optional<cwGeoPoint> cwAttachedFix::gridPosition() const
+{
+    if (cwCoordinateTransform::isGeographic(resolveSystem(solveSystem()).cs)) {
+        return std::nullopt;
+    }
+    return positionOf(coordinate);
 }
 
 std::optional<cwGeoPoint> cwAttachedFix::positionOf(const QString& coordinate)

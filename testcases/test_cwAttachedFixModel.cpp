@@ -8,6 +8,7 @@
 //Our includes
 #include "cwAttachedFixModel.h"
 #include "cwCave.h"
+#include "cwCoordinateText.h"
 #include "cwFixStation.h"
 #include "cwFixStationDiagnosticsModel.h"
 #include "cwFixStationModel.h"
@@ -20,6 +21,9 @@
 //Qt includes
 #include <QConcatenateTablesProxyModel>
 #include <QSignalSpy>
+
+//Std includes
+#include <cmath>
 
 namespace {
 
@@ -41,6 +45,25 @@ cwFixStation nodeFix(const QString& station)
     fix.setInputCS(QStringLiteral("EPSG:32613"));
     fix.setCoordinate(478000.0, 4430000.0, 1655.0);
     return fix;
+}
+
+constexpr double kGridEasting = 500200.0;
+constexpr double kGridNorthing = 3000000.0;
+constexpr double kGridElevation = 100.0;
+
+struct Components
+{
+    double easting;
+    double northing;
+    double elevation;
+};
+
+Components componentsOf(const cwAttachedFixModel& model, int row)
+{
+    const QModelIndex index = model.index(row);
+    return {model.data(index, cwFixStationModel::EastingRole).toDouble(),
+            model.data(index, cwFixStationModel::NorthingRole).toDouble(),
+            model.data(index, cwFixStationModel::ElevationRole).toDouble()};
 }
 
 } // namespace
@@ -229,4 +252,74 @@ TEST_CASE("An attached file's reference fix reads back through the reference rol
     // The page binds the node's concatenated table, which carries the role by name.
     CHECK(root->fixStationTable()->roleNames().value(cwAttachedFixModel::ReferenceRole)
           == QByteArrayLiteral("reference"));
+}
+
+TEST_CASE("An attached grid fix exposes its coordinate's numbers in meters",
+          "[AttachedFixModel][cwAttachedFixModel]")
+{
+    cwAttachedFix withStandardErrors{QStringLiteral("S2"), QStringLiteral("500200 3000000 100 0.05 0.1"),
+                                     QStringLiteral("UTM48N"), QStringLiteral("own_cs_fix.svx")};
+
+    cwAttachedFixModel model;
+    model.setAttachedFixes({{QStringLiteral("S1"), QStringLiteral("500200 3000000 100"),
+                             QStringLiteral("UTM48N"), QStringLiteral("own_cs_fix.svx")},
+                            bareFix(QStringLiteral("doghill.d1")),
+                            withStandardErrors});
+    REQUIRE(model.rowCount() == 3);
+
+    const Components grid = componentsOf(model, 0);
+    CHECK(grid.easting == kGridEasting);
+    CHECK(grid.northing == kGridNorthing);
+    CHECK(grid.elevation == kGridElevation);
+
+    // The page formats those numbers the way it does a native row's.
+    CHECK(cwCoordinateText::format(grid.easting, grid.northing, grid.elevation, cwUnits::Imperial,
+                                   cwCoordinateText::EastingNorthing).toStdString()
+          == "500200, 3000000, 328.08ft");
+    CHECK(cwCoordinateText::format(grid.easting, grid.northing, grid.elevation, cwUnits::Metric,
+                                   cwCoordinateText::EastingNorthing).toStdString()
+          == "500200, 3000000, 100.000m");
+
+    // A bare fix sits in the local grid.
+    const Components bare = componentsOf(model, 1);
+    CHECK(bare.easting == 0.0);
+    CHECK(bare.northing == 0.0);
+    CHECK(bare.elevation == 0.0);
+
+    // Survex's standard errors after the three numbers are no part of the position.
+    const Components spread = componentsOf(model, 2);
+    CHECK(spread.easting == kGridEasting);
+    CHECK(spread.northing == kGridNorthing);
+    CHECK(spread.elevation == kGridElevation);
+
+    // The text stays as the file writes it.
+    CHECK(model.data(model.index(2), cwFixStationModel::CoordinateTextRole).toString()
+          == QStringLiteral("500200 3000000 100 0.05 0.1"));
+}
+
+TEST_CASE("An attached fix in degrees or in unreadable text exposes no numbers",
+          "[AttachedFixModel][cwAttachedFixModel]")
+{
+    cwAttachedFix wallsLatLong{QStringLiteral("L1"), QStringLiteral("-97.5 31.2 100"),
+                               QStringLiteral("NAD27 CONUS, latitude/longitude"),
+                               QStringLiteral("LATLONG.SRV")};
+    wallsLatLong.placementSystem = QStringLiteral("EPSG:4267");
+
+    cwAttachedFixModel model;
+    model.setAttachedFixes({wallsLatLong,
+                            {QStringLiteral("L2"), QStringLiteral("-97.5 31.2 100"),
+                             QStringLiteral("LONG-LAT"), QStringLiteral("long_lat.svx")},
+                            {QStringLiteral("C1"), QStringLiteral("f,1,2,3"), QString(),
+                             QStringLiteral("cave.mak")}});
+    REQUIRE(model.rowCount() == 3);
+
+    for (int row = 0; row < model.rowCount(); ++row) {
+        INFO("row " << row << ": "
+                    << model.data(model.index(row), cwFixStationModel::CoordinateTextRole)
+                           .toString().toStdString());
+        const Components components = componentsOf(model, row);
+        CHECK(std::isnan(components.easting));
+        CHECK(std::isnan(components.northing));
+        CHECK(std::isnan(components.elevation));
+    }
 }
