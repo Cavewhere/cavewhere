@@ -477,6 +477,9 @@ TEST_CASE("cwPointCloudForest coarsens one governor for every cloud",
     budgets.gpuBudgetBytes = 0;
 
     SECTION("a cut that outruns the budget steps the inflation up") {
+        //This checks the target's step; the slew has its own test cases below
+        budgets.governorSlew = cw::budgets::kMaxGovernorSlew;
+
         forest.select(renderData, frustum, drawsEverything);
         REQUIRE(forest.bytes() > 0);
 
