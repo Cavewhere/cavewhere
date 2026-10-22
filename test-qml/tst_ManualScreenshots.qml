@@ -1986,8 +1986,8 @@ MainWindowTest {
 
             // No highlight ring here: the row is a single populated line and the
             // ring would occlude the easting. The columns are the point.
-            let csCombo = findVisibleByName(fixPage, "inputCSComboBox.0");
-            verify(csCombo, "found the row's Input CS picker (page rendered)");
+            let csLabel = findVisibleByName(fixPage, "inputCSLabel.0");
+            verify(csLabel, "found the row's Input CS text at rest (page rendered)");
             highlightOverlayId.target = null;
             settle();
 

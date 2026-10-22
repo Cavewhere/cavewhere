@@ -108,7 +108,7 @@ MainWindowTest {
         category: "FixStationPage"
     }
 
-    TestCase {
+    CWTestCase {
         name: "FixStationPage"
         when: windowShown
 
@@ -251,13 +251,24 @@ MainWindowTest {
 
         //! Row \a rowIndex's coordinate-system picker, once the delegate
         //! carrying it exists — the row is added to the model before the view
-        //! has built it.
+        //! has built it. At rest the row shows its system as text, and a
+        //! double-click on that text opens the picker.
         function waitForPicker(rowIndex) {
+            const fixPage = RootData.pageView.currentPageItem
             let picker = null
+            let label = null
             tryVerify(() => {
                 picker = findPicker(rowIndex)
-                return picker !== null
-            }, 5000, "row " + rowIndex + " inputCSComboBox should be reachable")
+                label = findChild(fixPage, "inputCSLabel." + rowIndex)
+                return picker !== null || (label !== null && label.visible)
+            }, 5000, "row " + rowIndex + " should show its coordinate system")
+            if (picker === null) {
+                doubleTap(label)
+                tryVerify(() => {
+                    picker = findPicker(rowIndex)
+                    return picker !== null
+                }, 5000, "double-clicking row " + rowIndex + "'s system should open its picker")
+            }
             return picker
         }
 
@@ -352,12 +363,7 @@ MainWindowTest {
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
 
-            // Wait for the row delegate (and its CSComboBox) to instantiate.
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
+            const picker = waitForPicker(0)
 
             // The picker emits committed(newCS) from any of its modes. Driving
             // the signal exercises the same handler that mouse interaction
@@ -375,16 +381,139 @@ MainWindowTest {
             tryVerify(() => m.data(idx, FixStationModel.InputCSRole) === "")
         }
 
+        //! Row \a rowIndex's at-rest system text, once the row shows it.
+        function waitForCSLabel(rowIndex) {
+            const fixPage = RootData.pageView.currentPageItem
+            let label = null
+            tryVerify(() => {
+                label = findChild(fixPage, "inputCSLabel." + rowIndex)
+                return label !== null && label.visible
+            }, 5000, "row " + rowIndex + " shows its coordinate system as text")
+            return label
+        }
+
+        //! Waits until row \a rowIndex's station cell exists, so the row is built.
+        function waitForRow(rowIndex) {
+            tryVerify(() => findChild(RootData.pageView.currentPageItem,
+                                      "stationCell." + rowIndex) !== null,
+                      5000, "row " + rowIndex + " is on the page")
+        }
+
+        // At rest an editable row names its system in plain text; the picker
+        // loads only once a double-click on that text opens it.
+        function test_anEditableRowShowsItsSystemAsTextUntilDoubleClicked() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "EPSG:32612", FixStationModel.InputCSRole)
+            waitForRow(0)
+
+            compare(findPicker(0), null, "an editable row builds no picker at rest")
+
+            const label = waitForCSLabel(0)
+            compare(label.text, CSFormat.displayName("EPSG:32612"),
+                    "the row names its system the way the picker does")
+            verify(Qt.colorEqual(label.color, Theme.text),
+                   "the system reads in the ordinary text color, " + label.color
+                   + ", Theme " + Theme.text)
+
+            const tip = rootId.toolTipOf(label) ?? rootId.toolTipOf(label.parent)
+            verify(tip !== null, "the system text carries a tooltip")
+            waitForRendering(rootId)
+            mouseMove(label, label.width / 2, label.height / 2)
+            tryVerify(() => tip.visible, 5000, "hovering the system text shows its tooltip")
+            verify(tip.text.indexOf(CSFormat.displayName("EPSG:32612")) >= 0,
+                   "the tooltip names the full system: \"" + tip.text + "\"")
+            mouseMove(rootId, 0, 0)
+
+            const picker = waitForPicker(0)
+            tryCompare(picker, "currentMode", CoordinateSystem.UTM)
+
+            picker.committed("EPSG:4326")
+            tryVerify(() => model.data(model.index(0), FixStationModel.InputCSRole) === "EPSG:4326",
+                      5000, "the opened picker commits onto the row")
+        }
+
+        // A blank system reads "none"; a single click selects the row and
+        // leaves the picker closed.
+        function test_aBlankEditableSystemReadsNoneAndASingleClickSelectsTheRow() {
+            const cave = gotoFixStations()
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "", FixStationModel.InputCSRole)
+            waitForRow(0)
+            const page = RootData.pageView.currentPageItem
+            const treeView = findChild(page, "fixStationTreeView")
+
+            compare(findPicker(0), null, "a blank editable row builds no picker at rest")
+            const label = waitForCSLabel(0)
+            compare(label.text, "none")
+
+            treeView.currentIndex = -1
+            waitForRendering(rootId)
+            mouseClick(label)
+            tryCompare(treeView, "currentIndex", 0, 5000, "a single click selects the row")
+            compare(findPicker(0), null, "and leaves the picker closed")
+        }
+
+        // Rows renumber when one is added, so the open picker closes rather
+        // than land on another fix; Escape closes it too.
+        function test_thePickerClosesOnEscapeAndWhenRowsShift() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "EPSG:32612", FixStationModel.InputCSRole)
+            waitForRow(0)
+
+            waitForPicker(0)
+            compare(page.editingCSRow, 0)
+            model.addFixStation()
+            tryCompare(page, "editingCSRow", -1, 5000, "a row added closes the picker")
+            tryVerify(() => findPicker(0) === null, 5000, "and unloads it")
+
+            // A second double-tap this soon would count as taps three and four.
+            page.editingCSRow = 0
+            tryVerify(() => findPicker(0) !== null, 5000, "the picker reopens")
+            keyClick(Qt.Key_Escape)
+            tryCompare(page, "editingCSRow", -1, 5000, "Escape closes the picker")
+            tryVerify(() => findPicker(0) === null, 5000, "and the row shows its text again")
+        }
+
+        // The narrow layout's row shares the at-rest text and opens the same
+        // picker on a double-click.
+        function test_theNarrowLayoutOpensThePickerOnADoubleClick() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            const model = cave.fixStations
+            model.addFixStation()
+            model.setData(model.index(0), "EPSG:32612", FixStationModel.InputCSRole)
+
+            rootId.width = Theme.breakpointPanelCollapse - 100
+            tryVerify(() => page.isNarrow, 5000, "the page should be in its narrow layout")
+            tryVerify(() => findChild(page, "narrowFixRow.0") !== null, 5000,
+                      "the row takes its narrow delegate")
+
+            compare(findPicker(0), null, "the narrow row builds no picker at rest")
+            const label = waitForCSLabel(0)
+            compare(label.text, CSFormat.displayName("EPSG:32612"))
+
+            waitForRendering(rootId)
+            const picker = waitForPicker(0)
+            picker.committed("EPSG:4326")
+            tryVerify(() => model.data(model.index(0), FixStationModel.InputCSRole) === "EPSG:4326",
+                      5000, "the narrow picker commits onto the row")
+
+            rootId.width = defaultWindowWidth
+            tryVerify(() => !page.isNarrow, 5000, "and the layout goes back")
+        }
+
         function test_inputCSPickerModes() {
             const cave = gotoFixStations()
             cave.fixStations.addFixStation()
             tryCompare(cave.fixStations, "count", 1)
 
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
+            const picker = waitForPicker(0)
 
             // A fix station always has a coordinate system of its own, so
             // there is no "Local" here — that is what a blank input CS used to
@@ -407,11 +536,7 @@ MainWindowTest {
             addProjectedFixStation(cave)
             tryCompare(cave.fixStations, "count", 1)
 
-            let picker = null
-            tryVerify(() => {
-                picker = findPicker(0)
-                return picker !== null
-            }, 5000, "row 0 inputCSComboBox should be reachable")
+            const picker = waitForPicker(0)
 
             tryCompare(picker, "currentMode", CoordinateSystem.UTM)
 
@@ -2232,6 +2357,29 @@ MainWindowTest {
                        "one closed node turns the button to expand all")
         }
 
+        // Deleting the only collapsed node leaves nothing to expand, so the
+        // page drops its id and the toggle offers collapse again.
+        function test_deletingTheOnlyCollapsedNodeClearsTheExpandAllState() {
+            const caves = makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const page = RootData.pageView.currentPageItem
+            const button = expandToggle()
+
+            mouseClick(shownChevron(view, "B"))
+            tryCompare(view, "rows", initialRowCount - 4, 5000, "collapsing B hides its fixes")
+            tryCompare(page, "hasCollapsedNodes", true, 5000, "B is the one closed node")
+            tryCompare(button, "text", "Expand all")
+
+            const root = RootData.region.rootNode
+            root.removeNode(root.indexOfNode(caves.b))
+            tryCompare(view, "rows", initialRowCount - 5, 5000, "B's row leaves the tree")
+
+            tryCompare(page, "hasCollapsedNodes", false, 5000,
+                       "with B gone no node is closed")
+            tryCompare(expandToggle(), "text", "Collapse all", 5000,
+                       "the toggle offers collapse all again")
+        }
+
         // The page's toggle is the shared ExpandCollapseButton the survey
         // tree uses: it carries the collapsed-rows flag and the two requests.
         function test_theToggleIsTheSharedExpandCollapseButton() {
@@ -2432,6 +2580,7 @@ MainWindowTest {
             verify(waitForChild("readOnlyLock.1") !== null, "the row carries the lock")
             compare(liveChild("readOnlyLock.0"), null, "the node's own row does not")
             compare(liveChild("inputCSComboBox.1"), null, "nor a system to pick")
+            compare(liveChild("inputCSLabel.1"), null, "nor a system to double-click")
             compare(liveChild("pickFromViewButton.1"), null, "nor a pick button")
             verify(waitForChild("pickFromViewButton.0") !== null)
 

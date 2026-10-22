@@ -95,6 +95,10 @@ StandardPage {
     // rows.
     property bool rowsShifted: false
 
+    // The page row whose input-CS picker is open, -1 when every row shows its
+    // system as text. One picker is open at a time.
+    property int editingCSRow: -1
+
     PageView.defaultSelectionProperties: ({ "currentFixRow": -1 })
 
     function addFix() {
@@ -195,6 +199,9 @@ StandardPage {
     // currentIndex changes (a row removed above the current one) would
     // race a link that is opening the page on another row.
     function pickRow(row: int): void {
+        if (row !== fixStationPage.editingCSRow) {
+            fixStationPage.closeCSPicker()
+        }
         treeViewId.currentIndex = row
         if (fixStationPage.PageView.page !== null) {
             fixStationPage.PageView.page.selectionProperties = { "currentFixRow": row }
@@ -254,6 +261,43 @@ StandardPage {
         }
     }
 
+    function closeCSPicker(): void {
+        fixStationPage.editingCSRow = -1
+    }
+
+    // The tree's rows renumber, so an open picker would land on another row.
+    function rowsShift(): void {
+        fixStationPage.rowsShifted = true
+        fixStationPage.closeCSPicker()
+        Qt.callLater(fixStationPage.applyExpansion)
+    }
+
+    // Forgets the closed node and trip rows that left the tree. Walks the
+    // unfiltered model, since a filter hides rows that are still there.
+    function pruneCollapsedIds(): void {
+        if (fixStationPage.collapsedNodeIds.length === 0) {
+            return
+        }
+        const liveIds = new Set()
+        const collect = (index) => {
+            liveIds.add(String(treeModelId.data(index, FixStationTreeModel.NodeIdRole)))
+            for (let i = 0; i < treeModelId.rowCount(index); ++i) {
+                const child = treeModelId.index(i, 0, index)
+                const kind = treeModelId.data(child, FixStationTreeModel.RowKindRole)
+                if (kind === FixStationTreeModel.NodeRow || kind === FixStationTreeModel.TripRow) {
+                    collect(child)
+                }
+            }
+        }
+        if (treeModelId.rowCount() > 0) {
+            collect(treeModelId.index(0, 0))
+        }
+        const kept = fixStationPage.collapsedNodeIds.filter(id => liveIds.has(id))
+        if (kept.length !== fixStationPage.collapsedNodeIds.length) {
+            fixStationPage.collapsedNodeIds = kept
+        }
+    }
+
     function isCollapsedId(id: string): bool {
         return fixStationPage.collapsedNodeIds.indexOf(id) >= 0
     }
@@ -264,6 +308,7 @@ StandardPage {
     // root and always open. Walks the model rather than the view's rows,
     // which the view only recounts at its next layout.
     function applyExpansion(): void {
+        fixStationPage.pruneCollapsedIds()
         const open = (index, isRoot) => {
             const row = treeViewId.rowAtIndex(index)
             if (row < 0) {
@@ -384,8 +429,14 @@ StandardPage {
     onVisibleChanged: {
         if (visible) {
             fixStationPage.readColumnWidths()
+        } else {
+            fixStationPage.closeCSPicker()
         }
     }
+
+    // The picker is wider and may be taller than the text it replaces, and the
+    // view reads row heights only when it lays rows out.
+    onEditingCSRowChanged: Qt.callLater(treeViewId.forceLayout)
 
     QQ.Component.onCompleted: fixStationPage.readColumnWidths()
 
@@ -401,18 +452,9 @@ StandardPage {
     // and going count as a shift.
     QQ.Connections {
         target: treeFilterId
-        function onRowsInserted() {
-            fixStationPage.rowsShifted = true
-            Qt.callLater(fixStationPage.applyExpansion)
-        }
-        function onRowsRemoved() {
-            fixStationPage.rowsShifted = true
-            Qt.callLater(fixStationPage.applyExpansion)
-        }
-        function onModelReset() {
-            fixStationPage.rowsShifted = true
-            Qt.callLater(fixStationPage.applyExpansion)
-        }
+        function onRowsInserted() { fixStationPage.rowsShift() }
+        function onRowsRemoved() { fixStationPage.rowsShift() }
+        function onModelReset() { fixStationPage.rowsShift() }
     }
 
     // A reused row delegate misses the page-row and diagnostics updates sent
@@ -694,6 +736,77 @@ StandardPage {
         }
     }
 
+    // An editable row's system: its name as text at rest, and the picker in
+    // its place once a double-click opens it.
+    component InputCSField : QQ.Item {
+        id: inputCSField
+        property string value
+        property int rowIndex
+        //! See CSCell.
+        property string coordinateText: ""
+        property bool orderUnknown: false
+        property list<string> availableDatums: []
+        property bool datumEnabled: false
+        readonly property bool editing: fixStationPage.editingCSRow === inputCSField.rowIndex
+
+        implicitWidth: inputCSField.editing ? pickerLoader.implicitWidth : csNameLabel.implicitWidth
+        implicitHeight: Math.max(Theme.controlHeight,
+                                 inputCSField.editing ? pickerLoader.implicitHeight
+                                                      : csNameLabel.implicitHeight)
+
+        QC.Label {
+            id: csNameLabel
+            objectName: "inputCSLabel." + inputCSField.rowIndex
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !inputCSField.editing
+            text: inputCSField.value !== "" ? CSFormat.displayName(inputCSField.value) : "none"
+            textFormat: QC.Label.PlainText
+            elide: QC.Label.ElideRight
+            color: Theme.text
+
+            // The default grab is passive, so a single click still reaches
+            // the row and selects it.
+            QQ.TapHandler {
+                onDoubleTapped: fixStationPage.editingCSRow = inputCSField.rowIndex
+            }
+
+            QQ.HoverHandler {
+                id: csNameHover
+            }
+        }
+
+        QC.ToolTip {
+            visible: csNameHover.hovered && csNameLabel.visible && inputCSField.value !== ""
+            text: CSFormat.inlineDescription(inputCSField.value)
+            delay: Theme.toolTipDelay
+        }
+
+        QQ.Loader {
+            id: pickerLoader
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            active: inputCSField.editing
+
+            // Focus moves into the picker as it opens, so Escape puts the
+            // text back.
+            onLoaded: pickerLoader.forceActiveFocus()
+            QQ.Keys.onEscapePressed: fixStationPage.closeCSPicker()
+
+            sourceComponent: CSComboBox {
+                objectName: "inputCSComboBox." + inputCSField.rowIndex
+                value: inputCSField.value
+                availableDatums: inputCSField.availableDatums
+                datumEnabled: inputCSField.datumEnabled
+                onCommitted: (newCS) => fixStationPage.commitCS(
+                    inputCSField.rowIndex, newCS, inputCSField.orderUnknown,
+                    inputCSField.coordinateText)
+            }
+        }
+    }
+
     component CSCell : QQ.Item {
         id: csCell
         property int columnWidth: 0
@@ -724,19 +837,19 @@ StandardPage {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            sourceComponent: csCell.readOnly ? readOnlyCSComponent : comboComponent
+            sourceComponent: csCell.readOnly ? readOnlyCSComponent : inputCSComponent
         }
 
         QQ.Component {
-            id: comboComponent
+            id: inputCSComponent
 
-            CSComboBox {
-                objectName: "inputCSComboBox." + csCell.rowIndex
+            InputCSField {
                 value: csCell.value
+                rowIndex: csCell.rowIndex
+                coordinateText: csCell.coordinateText
+                orderUnknown: csCell.orderUnknown
                 availableDatums: csCell.availableDatums
                 datumEnabled: csCell.datumEnabled
-                onCommitted: (newCS) => fixStationPage.commitCS(
-                    csCell.rowIndex, newCS, csCell.orderUnknown, csCell.coordinateText)
             }
         }
 
@@ -1446,7 +1559,12 @@ StandardPage {
             implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
             implicitWidth: rowLayoutId.implicitWidth
 
-            QQ.TableView.onPooled: fixStationPage.closeEditorIn(wideDelegateId)
+            QQ.TableView.onPooled: {
+                fixStationPage.closeEditorIn(wideDelegateId)
+                if (wideDelegateId.fixRow === fixStationPage.editingCSRow) {
+                    fixStationPage.closeCSPicker()
+                }
+            }
 
             TableRowBackground {
                 isSelected: treeViewId.currentIndex === wideDelegateId.fixRow
@@ -1639,7 +1757,12 @@ StandardPage {
 
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
 
-            QQ.TableView.onPooled: fixStationPage.closeEditorIn(narrowDelegateId)
+            QQ.TableView.onPooled: {
+                fixStationPage.closeEditorIn(narrowDelegateId)
+                if (narrowDelegateId.fixRow === fixStationPage.editingCSRow) {
+                    fixStationPage.closeCSPicker()
+                }
+            }
 
             TableRowBackground {
                 isSelected: treeViewId.currentIndex === narrowDelegateId.fixRow
@@ -1707,21 +1830,19 @@ StandardPage {
 
                 QQ.Loader {
                     sourceComponent: narrowDelegateId.readOnly ? narrowReadOnlyCSComponent
-                                                               : narrowComboComponent
+                                                               : narrowInputCSComponent
                 }
 
                 QQ.Component {
-                    id: narrowComboComponent
+                    id: narrowInputCSComponent
 
-                    CSComboBox {
-                        objectName: "inputCSComboBox." + narrowDelegateId.fixRow
+                    InputCSField {
                         value: narrowDelegateId.inputCS
+                        rowIndex: narrowDelegateId.fixRow
+                        coordinateText: narrowDelegateId.coordinateText
+                        orderUnknown: narrowDelegateId.coordinateOrderUnknown
                         availableDatums: narrowDelegateId.availableDatums
                         datumEnabled: narrowDelegateId.datumEnabled
-                        onCommitted: (newCS) => fixStationPage.commitCS(
-                            narrowDelegateId.fixRow, newCS,
-                            narrowDelegateId.coordinateOrderUnknown,
-                            narrowDelegateId.coordinateText)
                     }
                 }
 

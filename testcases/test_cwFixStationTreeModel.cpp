@@ -1079,3 +1079,127 @@ TEST_CASE("Warning 603 opens the bare fix a derived trip holds, at its page row"
     CHECK(target.data(roleId(model, QByteArrayLiteral("stationName"))).toString() == kOrderBareFix);
     CHECK(rowKind(target.parent()) == cwFixStationTreeModel::TripRow);
 }
+
+namespace {
+
+const QString kAheadNodeName = QStringLiteral("Ahead");
+const QString kBehindNodeName = QStringLiteral("Behind");
+const QString kAheadFirstFix = QStringLiteral("a0");
+const QString kAheadSecondFix = QStringLiteral("a1");
+const QString kBehindFirstFix = QStringLiteral("b0");
+const QString kBehindSecondFix = QStringLiteral("b1");
+constexpr int kLeavingFixRow = -1;
+
+//! Each fix row a FixRowRole dataChanged named, by station, with the page row
+//! it read while the announcement was being emitted, in emission order.
+struct FixRowAnnouncements
+{
+    QList<std::pair<QString, int>> rows;
+    QObject context;
+
+    explicit FixRowAnnouncements(const QAbstractItemModel& model)
+    {
+        const int stationRole = roleId(model, QByteArrayLiteral("stationName"));
+        QObject::connect(&model, &QAbstractItemModel::dataChanged, &context,
+                         [this, stationRole](const QModelIndex& topLeft,
+                                             const QModelIndex& bottomRight,
+                                             const QList<int>& roles) {
+            if (!roles.contains(cwFixStationTreeModel::FixRowRole)) {
+                return;
+            }
+            for (int row = topLeft.row(); row <= bottomRight.row(); ++row) {
+                const QModelIndex index = topLeft.siblingAtRow(row);
+                rows.append({index.data(stationRole).toString(),
+                             index.data(cwFixStationTreeModel::FixRowRole).toInt()});
+            }
+        });
+    }
+
+    //! The page rows \a station was announced with, in emission order.
+    QList<int> announcedRows(const QString& station) const
+    {
+        QList<int> announced;
+        for (const auto& [name, fixRow] : rows) {
+            if (name == station) {
+                announced.append(fixRow);
+            }
+        }
+        return announced;
+    }
+};
+
+//! Two sibling nodes under the region's root: Ahead fixes a0, Behind fixes
+//! b0 and b1, so Behind's fix rows follow Ahead's on the page.
+struct TwoNodeFixes
+{
+    std::unique_ptr<SavedProjectFixture> project;
+    cwSurveyNode* regionRoot = nullptr;
+    cwCave* ahead = nullptr;
+    cwCave* behind = nullptr;
+    cwFixStationTreeModel model;
+
+    explicit TwoNodeFixes(const QString& projectFileBase, const QStringList& behindFixes) :
+        project(makeProject(projectFileBase))
+    {
+        regionRoot = project->project->cavingRegion()->rootNode();
+        ahead = addChildNode(regionRoot, kAheadNodeName, cwSurveyNode::Kind::Cave);
+        behind = addChildNode(regionRoot, kBehindNodeName, cwSurveyNode::Kind::Cave);
+        REQUIRE(ahead->fixStations()->addFixStation(kAheadFirstFix) >= 0);
+        for (const QString& station : behindFixes) {
+            REQUIRE(behind->fixStations()->addFixStation(station) >= 0);
+        }
+        model.setRootNode(regionRoot);
+    }
+
+    int pageRowOf(const QString& nodeName, const QString& station) const
+    {
+        return fixRow(model, nodeRow(model, nodeName), station)
+            .data(cwFixStationTreeModel::FixRowRole)
+            .toInt();
+    }
+};
+
+} // namespace
+
+TEST_CASE("A fix added ahead of other nodes' fixes announces their new page rows",
+          "[FixStationTreeModel]")
+{
+    TwoNodeFixes fixes(QStringLiteral("fix-tree-row-added"), {kBehindFirstFix, kBehindSecondFix});
+    REQUIRE(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 1);
+    REQUIRE(fixes.pageRowOf(kBehindNodeName, kBehindSecondFix) == 2);
+
+    FixRowAnnouncements announcements(fixes.model);
+    REQUIRE(fixes.ahead->fixStations()->addFixStation(kAheadSecondFix) >= 0);
+
+    CHECK(announcements.announcedRows(kBehindFirstFix) == QList<int>({2}));
+    CHECK(announcements.announcedRows(kBehindSecondFix) == QList<int>({3}));
+    CHECK(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 2);
+    CHECK(fixes.pageRowOf(kBehindNodeName, kBehindSecondFix) == 3);
+}
+
+TEST_CASE("A fix row on its way out reads page row -1 while its removal is announced",
+          "[FixStationTreeModel]")
+{
+    TwoNodeFixes fixes(QStringLiteral("fix-tree-row-leaving"), {kBehindFirstFix, kBehindSecondFix});
+
+    FixRowAnnouncements announcements(fixes.model);
+    fixes.ahead->fixStations()->removeAt(0);
+
+    CHECK(announcements.announcedRows(kAheadFirstFix) == QList<int>({kLeavingFixRow}));
+    CHECK(announcements.announcedRows(kBehindFirstFix) == QList<int>({0}));
+    CHECK(announcements.announcedRows(kBehindSecondFix) == QList<int>({1}));
+}
+
+TEST_CASE("Removing a node announces the page rows of the fixes after it",
+          "[FixStationTreeModel]")
+{
+    TwoNodeFixes fixes(QStringLiteral("fix-tree-node-removed"), {kBehindFirstFix});
+    REQUIRE(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 1);
+
+    FixRowAnnouncements announcements(fixes.model);
+    fixes.regionRoot->removeNode(fixes.regionRoot->indexOfNode(fixes.ahead));
+
+    CHECK_FALSE(nodeRow(fixes.model, kAheadNodeName).isValid());
+    CHECK(announcements.announcedRows(kBehindFirstFix) == QList<int>({0}));
+    CHECK(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 0);
+}
