@@ -327,9 +327,9 @@ class FootprintTests(unittest.TestCase):
         events = [memory_event(2 * MS, 100 * MB), memory_event(4 * MS, 150 * MB)]
         memory = tasks.memory_events(events)
 
-        self.assertIsNone(tasks.footprint_at(memory, 1 * MS))
-        self.assertEqual(tasks.footprint_at(memory, 2 * MS), 100 * MB)
-        self.assertEqual(tasks.footprint_at(memory, 9 * MS), 150 * MB)
+        self.assertIsNone(tasks.sample_at(memory, 1 * MS, "footprint"))
+        self.assertEqual(tasks.sample_at(memory, 2 * MS, "footprint"), 100 * MB)
+        self.assertEqual(tasks.sample_at(memory, 9 * MS, "footprint"), 150 * MB)
 
 
 class AnalyzeTimingTests(unittest.TestCase):
@@ -515,6 +515,79 @@ class CompareTests(unittest.TestCase):
         self.assertIn("time_to_idle_s", output.getvalue())
         self.assertNotIn("peak_footprint_mb", output.getvalue())
         self.assertNotIn("cpu_s", output.getvalue())
+
+
+class GpuTests(unittest.TestCase):
+    """The sampler's mem event carries gpu= on Apple platforms and leaves it out elsewhere."""
+
+    def gpu_events(self):
+        return [
+            memory_event(1 * MS, 100 * MB, gpu=10 * MB),
+            memory_event(5 * MS, 300 * MB, gpu=50 * MB),
+            memory_event(7 * MS, 200 * MB, gpu=60 * MB),
+        ]
+
+    def plain_events(self):
+        return [memory_event(1 * MS, 100 * MB), memory_event(5 * MS, 300 * MB)]
+
+    def intervals(self):
+        return [task("lidar", 2 * MS, 6 * MS, 11)]
+
+    def report(self, timing, memory):
+        return tasks.project_report([("Project", "marble.cwproj")], tasks.collect([timing]), [],
+                                    tasks.collect([memory]), [], [], [])
+
+    def test_reads_gpu_argument(self):
+        self.assertEqual(
+            tasks.parse_arguments("mem footprint=10 resident=20 gpu=30"),
+            {"footprint": "10", "resident": "20", "gpu": "30"},
+        )
+
+    def test_peak_reports_largest_gpu_and_gpu_at_footprint_peak(self):
+        metrics, _ = tasks.footprint_metrics(self.gpu_events(), [])
+
+        self.assertEqual(metrics["peak_footprint_mb"], 300)
+        self.assertEqual(metrics["peak_gpu_mb"], 60)
+        self.assertEqual(metrics["gpu_at_peak_mb"], 50)
+
+    def test_peak_without_gpu_leaves_gpu_out(self):
+        metrics, _ = tasks.footprint_metrics(self.plain_events(), [])
+
+        self.assertNotIn("peak_gpu_mb", metrics)
+        self.assertNotIn("gpu_at_peak_mb", metrics)
+
+    def test_context_reports_gpu_growth(self):
+        metrics, _ = tasks.analyze_timing(self.intervals(), self.gpu_events(), [], [], 8)
+
+        self.assertAlmostEqual(metrics["lidar/footprint_growth_mb"], 200)
+        self.assertAlmostEqual(metrics["lidar/gpu_growth_mb"], 40)
+
+    def test_context_without_gpu_leaves_gpu_growth_out(self):
+        metrics, _ = tasks.analyze_timing(self.intervals(), self.plain_events(), [], [], 8)
+
+        self.assertAlmostEqual(metrics["lidar/footprint_growth_mb"], 200)
+        self.assertNotIn("lidar/gpu_growth_mb", metrics)
+
+    def test_report_shows_gpu_rows_and_column(self):
+        timing, _ = tasks.analyze_timing(self.intervals(), self.gpu_events(), [], [], 8)
+        memory, _ = tasks.footprint_metrics(self.gpu_events(), self.intervals())
+
+        report = self.report(timing, memory)
+
+        self.assertIn("| Peak GPU MB | 60 |", report)
+        self.assertIn("| GPU at footprint peak MB | 50 |", report)
+        self.assertIn("GPU growth MB", report)
+        lidar_row = next(line for line in report.splitlines() if line.startswith("| lidar |"))
+        self.assertTrue(lidar_row.rstrip().endswith("| 40 |"), lidar_row)
+
+    def test_report_without_gpu_leaves_gpu_out(self):
+        timing, _ = tasks.analyze_timing(self.intervals(), self.plain_events(), [], [], 8)
+        memory, _ = tasks.footprint_metrics(self.plain_events(), self.intervals())
+
+        report = self.report(timing, memory)
+
+        self.assertNotIn("GPU", report)
+        self.assertIn("Footprint growth MB", report)
 
 
 if __name__ == "__main__":

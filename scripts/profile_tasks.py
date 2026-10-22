@@ -509,12 +509,14 @@ def memory_events(events):
     return sorted((event for event in events if event.name == "mem"), key=lambda event: event.time_ns)
 
 
-def footprint_at(memory, time_ns):
-    """The footprint of the latest sample at or before time_ns, or None before
-    the first sample."""
+def sample_at(memory, time_ns, key):
+    """The key's value in the latest sample at or before time_ns, or None before
+    the first sample or when that sample lacks the key."""
     times = [event.time_ns for event in memory]
     index = bisect.bisect_right(times, time_ns) - 1
-    return int(memory[index].args.get("footprint", 0)) if index >= 0 else None
+    if index >= 0 and key in memory[index].args:
+        return int(memory[index].args[key])
+    return None
 
 
 def footprint_metrics(events, intervals):
@@ -533,6 +535,11 @@ def footprint_metrics(events, intervals):
                "peak_time_s": peak.time_ns / NS_PER_S}
     if "available" in peak.args:
         metrics["available_at_peak_mb"] = int(peak.args["available"]) / BYTES_PER_MB
+    gpu = [int(event.args["gpu"]) for event in memory if "gpu" in event.args]
+    if gpu:
+        metrics["peak_gpu_mb"] = max(gpu) / BYTES_PER_MB
+    if "gpu" in peak.args:
+        metrics["gpu_at_peak_mb"] = int(peak.args["gpu"]) / BYTES_PER_MB
     running = sorted({interval.context for interval in intervals
                       if interval.kind == TASK_KIND
                       and interval.start_ns <= peak.time_ns < interval.end_ns})
@@ -603,9 +610,10 @@ def analyze_timing(intervals, events, states, samples, cores):
             "waiting_s": sum(times.get(state, 0) for state in WAITING_STATES) / NS_PER_S,
         }
         # A context that starts before the sampler's first tick has no baseline
-        before, after = footprint_at(memory, first), footprint_at(memory, last)
-        if before is not None:
-            values["footprint_growth_mb"] = (after - before) / BYTES_PER_MB
+        for key in ("footprint", "gpu"):
+            before, after = sample_at(memory, first, key), sample_at(memory, last, key)
+            if before is not None and after is not None:
+                values["{}_growth_mb".format(key)] = (after - before) / BYTES_PER_MB
         for name, value in values.items():
             metrics["{}/{}".format(context, name)] = value
         details["top_stacks"][context] = stacks_by_context[context].most_common(TOP_STACKS)
@@ -838,13 +846,14 @@ CONTEXT_COLUMNS = [
     ("peak_running", "Peak running"), ("peak_queued", "Peak queued"),
     ("wait_p50_us", "Wait p50 µs"), ("wait_p95_us", "Wait p95 µs"),
     ("running_s", "Running s"), ("waiting_s", "Runnable + Preempted s"),
-    ("footprint_growth_mb", "Footprint growth MB"),
+    ("footprint_growth_mb", "Footprint growth MB"), ("gpu_growth_mb", "GPU growth MB"),
 ]
 
 WHOLE_RUN_ROWS = [
     ("time_to_idle_s", "Time to idle s"), ("first_scraps_s", "First scraps task done s"),
     ("first_lidar_s", "First LiDAR task done s"), ("peak_footprint_mb", "Peak footprint MB"),
     ("peak_time_s", "Peak at s"), ("available_at_peak_mb", "Budget left at peak MB"),
+    ("peak_gpu_mb", "Peak GPU MB"), ("gpu_at_peak_mb", "GPU at footprint peak MB"),
     ("peak_threads_wanting_core", "Peak runnable threads"), ("cores", "Cores"),
     ("cpu_s", "Total CPU s"), ("dropped_cpu_s", "CPU inside dropped generations s"),
 ]
@@ -871,10 +880,14 @@ def project_report(head, timing, timing_details, memory, memory_details, allocat
 
     contexts = sorted({name.split("/")[0] for name in timing
                        if "/" in name and not name.startswith("overlap/")})
+    # gpu= appears only on Apple platforms, so its column shows only when some context has it
+    columns = [(key, label) for key, label in CONTEXT_COLUMNS
+               if key != "gpu_growth_mb"
+               or any("{}/{}".format(context, key) in timing for context in contexts)]
     parts.append("### Per context (A)\n")
-    parts.append(markdown(["Context"] + [label for _, label in CONTEXT_COLUMNS],
+    parts.append(markdown(["Context"] + [label for _, label in columns],
                           [[context] + [summary(timing.get("{}/{}".format(context, key), []))
-                                        for key, _ in CONTEXT_COLUMNS] for context in contexts]))
+                                        for key, _ in columns] for context in contexts]))
     parts.append(BATCH_NOTE)
     if timing_details:
         parts.append("Top leaf frames by CPU, last run:\n")

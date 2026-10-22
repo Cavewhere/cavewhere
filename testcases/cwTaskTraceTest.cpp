@@ -16,6 +16,7 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
+#include <optional>
 #include <thread>
 
 namespace {
@@ -24,6 +25,10 @@ constexpr int kWaitTimeoutMs = 10000;
 constexpr int kPollSliceMs = 1;
 constexpr qint64 kStartMs = 1000;
 constexpr qint64 kJustBeforeWindowMs = kTaskTraceQuietWindowMs - 1;
+constexpr quint64 kFootprintBytes = 1048576;
+constexpr quint64 kResidentBytes = 2097152;
+constexpr quint64 kGpuBytes = 3145728;
+constexpr quint64 kAvailableBytes = 4194304;
 
 //! Restores the shared worker pool's thread count on every path out of a test
 struct ThreadCountRestorer {
@@ -286,4 +291,53 @@ TEST_CASE("Idle holds only after the quiet window", "[cwTaskTrace]")
         CHECK_FALSE(window.update(quietState(), quietAgainMs + kJustBeforeWindowMs));
         CHECK(window.update(quietState(), quietAgainMs + kTaskTraceQuietWindowMs));
     }
+}
+
+TEST_CASE("Memory event message lists gpu only when the sample has it", "[cwTaskTrace]")
+{
+    cwTaskMemorySample sample;
+    sample.footprint = kFootprintBytes;
+    sample.resident = kResidentBytes;
+
+    CHECK(sample.message() == QStringLiteral("mem footprint=%1 resident=%2")
+                                  .arg(kFootprintBytes)
+                                  .arg(kResidentBytes));
+
+    SECTION("With a GPU reading") {
+        sample.gpu = kGpuBytes;
+        CHECK(sample.message() == QStringLiteral("mem footprint=%1 resident=%2 gpu=%3")
+                                      .arg(kFootprintBytes)
+                                      .arg(kResidentBytes)
+                                      .arg(kGpuBytes));
+    }
+
+    SECTION("With a GPU reading and the iOS budget") {
+        sample.gpu = kGpuBytes;
+        sample.available = kAvailableBytes;
+        CHECK(sample.message() == QStringLiteral("mem footprint=%1 resident=%2 gpu=%3 available=%4")
+                                      .arg(kFootprintBytes)
+                                      .arg(kResidentBytes)
+                                      .arg(kGpuBytes)
+                                      .arg(kAvailableBytes));
+    }
+}
+
+TEST_CASE("Memory sample carries the GPU reading the sampler reports", "[cwTaskTrace]")
+{
+    const std::optional<cwTaskMemorySample> sample = cwTaskTrace::memorySample();
+
+#ifdef Q_OS_APPLE
+    REQUIRE(sample.has_value());
+    CHECK(sample->footprint > 0);
+    CHECK(sample->resident > 0);
+    // A host without a Metal device (a bare VM) reports no GPU reading, which the sampler tolerates
+    if (sample->gpu.has_value()) {
+        CHECK(sample->message().contains(QStringLiteral(" gpu=%1").arg(*sample->gpu)));
+    } else {
+        CHECK_FALSE(sample->message().contains(QStringLiteral(" gpu=")));
+        SUCCEED("No Metal device on this host, so the sample carries no GPU reading");
+    }
+#else
+    CHECK_FALSE(sample.has_value());
+#endif
 }

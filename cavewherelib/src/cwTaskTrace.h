@@ -8,6 +8,7 @@
 
 //Std includes
 #include <chrono>
+#include <optional>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -113,6 +114,18 @@ private:
     bool m_traced;
 };
 
+//! One reading of the process's memory, as the sampler's "mem" event reports it
+struct CAVEWHERE_LIB_EXPORT cwTaskMemorySample
+{
+    quint64 footprint = 0;
+    quint64 resident = 0;
+    std::optional<quint64> gpu;        // -[MTLDevice currentAllocatedSize], Apple only
+    std::optional<quint64> available;  // os_proc_available_memory, iOS only
+
+    //! "mem footprint=%1 resident=%2" then " gpu=%3" and " available=%4" only when present, in that order
+    QString message() const;
+};
+
 class CAVEWHERE_LIB_EXPORT cwTaskTrace
 {
 public:
@@ -127,6 +140,9 @@ public:
 
     //! Per-context queued/running counts kept by cwConcurrent::run. The sampler reads the same call.
     static QList<ContextCounts> contextCounts();
+
+    //! The reading the sampler's mem event reports; std::nullopt where the platform has no reader
+    static std::optional<cwTaskMemorySample> memorySample();
 
     //! Marks a pipeline's results for a generation as dropped by the generation check
     static void dropped(const QString& context, quint64 generation);

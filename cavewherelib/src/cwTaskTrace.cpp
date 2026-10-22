@@ -27,6 +27,7 @@
 #include <vector>
 
 #ifdef Q_OS_APPLE
+#include "cwTaskTraceApple.h"
 #include <mach/mach.h>
 #endif
 #ifdef Q_OS_IOS
@@ -129,21 +130,9 @@ QList<PoolSample> pools()
 
 void emitMemorySample()
 {
-#ifdef Q_OS_APPLE
-    task_vm_info_data_t info;
-    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
-    if (task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
-        return;
+    if (const std::optional<cwTaskMemorySample> sample = cwTaskTrace::memorySample()) {
+        profiler().event(sample->message());
     }
-
-    QString message = QStringLiteral("mem footprint=%1 resident=%2")
-                          .arg(info.phys_footprint)
-                          .arg(info.resident_size);
-#ifdef Q_OS_IOS
-    message += QStringLiteral(" available=%1").arg(os_proc_available_memory());
-#endif
-    profiler().event(message);
-#endif
 }
 
 void emitSample()
@@ -385,6 +374,40 @@ cwTaskInterval::~cwTaskInterval()
     if (m_traced) {
         profiler().stop(m_token);
     }
+}
+
+QString cwTaskMemorySample::message() const
+{
+    QString message = QStringLiteral("mem footprint=%1 resident=%2").arg(footprint).arg(resident);
+    if (gpu) {
+        message += QStringLiteral(" gpu=%1").arg(*gpu);
+    }
+    if (available) {
+        message += QStringLiteral(" available=%1").arg(*available);
+    }
+    return message;
+}
+
+std::optional<cwTaskMemorySample> cwTaskTrace::memorySample()
+{
+#ifdef Q_OS_APPLE
+    task_vm_info_data_t info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, reinterpret_cast<task_info_t>(&info), &count) != KERN_SUCCESS) {
+        return std::nullopt;
+    }
+
+    cwTaskMemorySample sample;
+    sample.footprint = info.phys_footprint;
+    sample.resident = info.resident_size;
+    sample.gpu = cwMetalAllocatedBytes();
+#ifdef Q_OS_IOS
+    sample.available = os_proc_available_memory();
+#endif
+    return sample;
+#else
+    return std::nullopt;
+#endif
 }
 
 QList<cwTaskTrace::ContextCounts> cwTaskTrace::contextCounts()

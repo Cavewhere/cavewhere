@@ -306,6 +306,11 @@ if(IOS)
     list(APPEND cavewherelib_CPP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cwClipboard_ios.mm")
 endif()
 
+if(APPLE)
+    list(APPEND cavewherelib_CPP_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/cwTaskTraceApple.mm")
+    target_link_libraries(cavewherelib PRIVATE "-framework Metal")
+endif()
+
 # file(GLOB cavewhere_QML_FILES "qml/*.qml" "qml/*.js")
 # target_sources(CaveWhere PRIVATE ${cavewhere_QML_FILES})
 

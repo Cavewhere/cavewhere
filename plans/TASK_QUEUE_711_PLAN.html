@@ -310,7 +310,10 @@ as <code>untagged</code>, which also shows which entry points still need a scope
       number iOS kills apps on, and the same call works on macOS. On iOS it also carries
       <code>os_proc_available_memory()</code>, the budget left before the kill, so the report can state the margin
       instead of guessing the device limit. macOS has no limit, so Mac runs show the shape of the curve and the
-      phone is the only place the crash itself reproduces.</li>
+      phone is the only place the crash itself reproduces. On Apple platforms it also carries <code>gpu</code>, the
+      bytes the system default Metal device (the one Qt's RHI uses) has allocated for the process, from
+      <code>-[MTLDevice currentAllocatedSize]</code>; it attributes the graphics share of the footprint, such as the
+      1.3&nbsp;GB that appeared before the first scrap task in the smoke run. Other platforms omit it.</li>
   <li><code>queue</code>: queued and running counts per context, kept by the wrapper as atomics. <code>QThreadPool</code>
       doesn't expose its queue length, so the wrapper is the only source.</li>
   <li><code>pool</code>: <code>activeThreadCount()</code> and <code>maxThreadCount()</code> for each pool.</li>
@@ -386,10 +389,11 @@ It writes <code>&lt;out&gt;/report.md</code>:</p>
   <tr><td>Header</td><td>Commit hash, device model and OS version, core count, the thread count and automatic-update
       settings, build directory, project, cold or warm, run count. Without these a number can't be compared later.</td></tr>
   <tr><td>Whole run</td><td>Time to idle; time to first scrap and first LiDAR mesh delivered; peak footprint, when it
-      happened and (iOS) the budget left at that moment; the contexts running at the peak;
+      happened and (iOS) the budget left at that moment; peak GPU bytes and the GPU bytes at the footprint peak, when
+      the trace carries <code>gpu</code>; the contexts running at the peak;
       peak runnable threads against the core count; total CPU time; CPU time inside <code>dropped</code>.</td></tr>
   <tr><td>Per context</td><td>Task count; CPU time; wall span; peak running and peak queued; queue wait p50 and p95;
-      time Running against Runnable or Preempted; footprint growth while it ran; top stacks by CPU samples;
+      time Running against Runnable or Preempted; footprint growth while it ran, and GPU growth beside it when the trace carries <code>gpu</code>; top stacks by CPU samples;
       admission latency (gap from one task's end to the next task's start when the context has work queued), p50 and p95.</td></tr>
   <tr><td>Overlap</td><td>A context × context matrix of overlapping running seconds.</td></tr>
   <tr><td>Memory (run B)</td><td>Transient and persistent bytes by size class; with B′, the largest live allocations at the peak and their callers.
