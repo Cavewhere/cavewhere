@@ -8,10 +8,13 @@ QQ.Item {
     property RemoveAskBox removeChallenge
     required property int row
     required property string name
+    //! Built by the first right-click or long-press; null until then.
+    readonly property QC.Menu menu: menuLoader.item as QC.Menu
 
     function showMenu(x, y) {
         clickPos = Qt.point(x, y)
-        rightClickMenu.popup()
+        menuLoader.active = true
+        root.menu.popup(root, x, y)
     }
 
     QQ.TapHandler {
@@ -27,21 +30,25 @@ QQ.Item {
         onLongPressed: root.showMenu(point.position.x, point.position.y)
     }
 
-    QC.Menu {
-        id: rightClickMenu
-        QC.MenuItem {
-            text: "Remove " + root.name
+    QQ.Loader {
+        id: menuLoader
+        active: false
 
-            onTriggered: {
-                var pos = root.mapToItem(root.removeChallenge.parent,
-                                         root.clickPos.x,
-                                         root.clickPos.y)
-                root.removeChallenge.x = pos.x
-                root.removeChallenge.y = pos.y
+        sourceComponent: QC.Menu {
+            QC.MenuItem {
+                text: "Remove " + root.name
 
-                root.removeChallenge.indexToRemove = root.row
-                root.removeChallenge.removeName = root.name
-                root.removeChallenge.show()
+                onTriggered: {
+                    var pos = root.mapToItem(root.removeChallenge.parent,
+                                             root.clickPos.x,
+                                             root.clickPos.y)
+                    root.removeChallenge.x = pos.x
+                    root.removeChallenge.y = pos.y
+
+                    root.removeChallenge.indexToRemove = root.row
+                    root.removeChallenge.removeName = root.name
+                    root.removeChallenge.show()
+                }
             }
         }
     }

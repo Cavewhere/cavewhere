@@ -11,6 +11,7 @@ import QtQuick as QQ
 import QtQml
 import QtCore as QtCore
 import QtQuick.Controls as QC
+import QtQuick.Controls.impl as QCImpl
 import QtQuick.Layouts
 import QtQml.Models
 import cavewherelib
@@ -609,6 +610,10 @@ StandardPage {
         implicitWidth: visible ? Theme.iconSizeButton : 0
         implicitHeight: Theme.iconSizeButton
 
+        QC.ToolTip.visible: warningHover.hovered && inlineWarning.message !== ""
+        QC.ToolTip.text: inlineWarning.message
+        QC.ToolTip.delay: Theme.toolTipDelay
+
         QQ.Image {
             anchors.centerIn: parent
             source: "qrc:icons/svg/warning.svg"
@@ -617,12 +622,6 @@ StandardPage {
 
         QQ.HoverHandler {
             id: warningHover
-        }
-
-        QC.ToolTip {
-            visible: warningHover.hovered && inlineWarning.message !== ""
-            text: inlineWarning.message
-            delay: Theme.toolTipDelay
         }
     }
 
@@ -635,21 +634,21 @@ StandardPage {
         implicitWidth: Theme.iconSizeButton
         implicitHeight: Theme.iconSizeButton
 
-        Icon {
+        QC.ToolTip.visible: lockHover.hovered
+        QC.ToolTip.text: "Fixed by " + readOnlyLock.sourceFile + ". Edit that file to change this fix."
+        QC.ToolTip.delay: Theme.toolTipDelay
+
+        // ColorImage tints the pixmap itself, where Icon's MultiEffect would
+        // give every read-only row an offscreen layer.
+        QCImpl.ColorImage {
             anchors.centerIn: parent
             source: "qrc:/twbs-icons/icons/lock.svg"
             sourceSize: Qt.size(Theme.iconSizeButton, Theme.iconSizeButton)
-            colorizationColor: Theme.textSubtle
+            color: Theme.textSubtle
         }
 
         QQ.HoverHandler {
             id: lockHover
-        }
-
-        QC.ToolTip {
-            visible: lockHover.hovered
-            text: "Fixed by " + readOnlyLock.sourceFile + ". Edit that file to change this fix."
-            delay: Theme.toolTipDelay
         }
     }
 
@@ -708,6 +707,13 @@ StandardPage {
         leftPadding: Theme.chipPadding
         rightPadding: Theme.chipPadding
 
+        QC.ToolTip.visible: bareFixHover.hovered
+        QC.ToolTip.text: bareFixBadge.unset
+                         ? "Placed at the project origin until a coordinate system is chosen for "
+                           + bareFixBadge.sourceFile + "."
+                         : bareFixBadge.readInWarning
+        QC.ToolTip.delay: Theme.toolTipDelay
+
         background: QQ.Rectangle {
             radius: Theme.chipRadius
             color: Theme.warningSurface
@@ -716,15 +722,6 @@ StandardPage {
 
         QQ.HoverHandler {
             id: bareFixHover
-        }
-
-        QC.ToolTip {
-            visible: bareFixHover.hovered
-            text: bareFixBadge.unset
-                  ? "Placed at the project origin until a coordinate system is chosen for "
-                    + bareFixBadge.sourceFile + "."
-                  : bareFixBadge.readInWarning
-            delay: Theme.toolTipDelay
         }
     }
 
@@ -805,6 +802,14 @@ StandardPage {
             elide: QC.Label.ElideRight
             color: Theme.text
 
+            // The text is read only while hovered, so a reused delegate skips
+            // the lookup; the tip shows once that text is in.
+            QC.ToolTip.visible: csNameHover.hovered && csNameLabel.visible
+                                && inputCSField.value !== ""
+                                && csNameLabel.QC.ToolTip.text !== ""
+            QC.ToolTip.text: csNameHover.hovered ? CSFormat.inlineDescription(inputCSField.value) : ""
+            QC.ToolTip.delay: Theme.toolTipDelay
+
             // The default grab is passive, so a single click still reaches
             // the row and selects it.
             QQ.TapHandler {
@@ -814,12 +819,6 @@ StandardPage {
             QQ.HoverHandler {
                 id: csNameHover
             }
-        }
-
-        QC.ToolTip {
-            visible: csNameHover.hovered && csNameLabel.visible && inputCSField.value !== ""
-            text: CSFormat.inlineDescription(inputCSField.value)
-            delay: Theme.toolTipDelay
         }
 
         QQ.Loader {
@@ -942,6 +941,12 @@ StandardPage {
             elide: QC.Label.ElideRight
             color: Theme.text
 
+            QC.ToolTip.visible: ownerSystemHover.hovered && ownerSystemLabel.visible
+                                && ownerSystemControl.value !== ""
+                                && ownerSystemLabel.QC.ToolTip.text !== ""
+            QC.ToolTip.text: ownerSystemHover.hovered ? CSFormat.inlineDescription(ownerSystemControl.value) : ""
+            QC.ToolTip.delay: Theme.toolTipDelay
+
             // An exclusive grab keeps the double-click from reaching the
             // view, which would toggle the node row open or closed.
             QQ.TapHandler {
@@ -951,13 +956,6 @@ StandardPage {
 
             QQ.HoverHandler {
                 id: ownerSystemHover
-            }
-
-            QC.ToolTip {
-                visible: ownerSystemHover.hovered && ownerSystemLabel.visible
-                         && ownerSystemControl.value !== ""
-                text: CSFormat.inlineDescription(ownerSystemControl.value)
-                delay: Theme.toolTipDelay
             }
         }
 

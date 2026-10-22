@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls as QC
+import QtQuick.Templates as T
 import QtCore as QtCore
 import QtTest
 import cavewherelib
@@ -8,15 +9,34 @@ import cw.TestLib
 MainWindowTest {
     id: rootId
 
-    //! The tooltip \a host declares as its own child, null when it has none.
-    function toolTipOf(host) {
-        const data = host.data
-        for (let i = 0; i < data.length; ++i) {
-            if (data[i] instanceof QC.ToolTip) {
-                return data[i]
-            }
-        }
-        return null
+    //! Hovers \a host through \a testCase and returns the window's shared
+    //! tooltip once it shows on \a host.
+    function hoverSharedToolTip(testCase, host) {
+        testCase.waitForRendering(rootId)
+        testCase.mouseMove(host, host.width / 2, host.height / 2)
+        const shared = host.QC.ToolTip.toolTip
+        testCase.tryVerify(() => shared.visible && shared.parent === host, 5000,
+                           "hovering " + host.objectName + " shows the window's shared tooltip")
+        return shared
+    }
+
+    //! Hovers \a host through \a testCase past the tooltip delay and checks
+    //! that the window's shared tooltip stays off it. Waits a fixed time,
+    //! since the point is that nothing shows.
+    function verifyNoSharedToolTip(testCase, host) {
+        testCase.waitForRendering(rootId)
+        testCase.mouseMove(host, host.width / 2, host.height / 2)
+        const shared = host.QC.ToolTip.toolTip
+        testCase.wait(Theme.toolTipDelay * 2)
+        testCase.verify(!(shared.visible && shared.parent === host),
+                        "hovering " + host.objectName + " shows no tooltip; it reads \"" + shared.text + "\"")
+        testCase.mouseMove(rootId, 0, 0)
+    }
+
+    //! Moves the pointer off the page through \a testCase and waits for \a tip to hide.
+    function leaveToolTip(testCase, tip) {
+        testCase.mouseMove(rootId, 0, 0)
+        testCase.tryVerify(() => !tip.visible, 5000, "leaving hides the tooltip")
     }
 
     //! Switches to the light scheme, hovers \a host through \a testCase, and
@@ -26,20 +46,14 @@ MainWindowTest {
         RootData.settings.appearanceSettings.colorScheme = AppearanceSettings.Light
         testCase.tryVerify(() => !Theme.dark, 5000, "the scheme is light")
 
-        const tip = rootId.toolTipOf(host)
-        testCase.verify(tip !== null, host.objectName + " declares a tooltip")
-        testCase.waitForRendering(rootId)
-        testCase.mouseMove(host, host.width / 2, host.height / 2)
-        testCase.tryVerify(() => tip.visible, 5000, "hovering " + host.objectName + " shows its tooltip")
-
+        const tip = rootId.hoverSharedToolTip(testCase, host)
         testCase.verify(tip.contentItem.text.indexOf(text) >= 0,
                         "the tooltip reads \"" + tip.contentItem.text + "\"")
         testCase.verify(Qt.colorEqual(tip.background.color, Theme.toolTipSurface),
                         "tooltip surface " + tip.background.color + ", Theme " + Theme.toolTipSurface)
         testCase.verify(Qt.colorEqual(tip.contentItem.color, Theme.toolTipText),
                         "tooltip text " + tip.contentItem.color + ", Theme " + Theme.toolTipText)
-        testCase.mouseMove(rootId, 0, 0)
-        testCase.tryVerify(() => !tip.visible, 5000, "leaving " + host.objectName + " hides its tooltip")
+        rootId.leaveToolTip(testCase, tip)
     }
 
     //! The first item under \a item whose objectName starts with \a prefix.
@@ -450,14 +464,10 @@ MainWindowTest {
                    "the system reads in the ordinary text color, " + label.color
                    + ", Theme " + Theme.text)
 
-            const tip = rootId.toolTipOf(label) ?? rootId.toolTipOf(label.parent)
-            verify(tip !== null, "the system text carries a tooltip")
-            waitForRendering(rootId)
-            mouseMove(label, label.width / 2, label.height / 2)
-            tryVerify(() => tip.visible, 5000, "hovering the system text shows its tooltip")
+            const tip = rootId.hoverSharedToolTip(this, label)
             verify(tip.text.indexOf(CSFormat.displayName("EPSG:32612")) >= 0,
                    "the tooltip names the full system: \"" + tip.text + "\"")
-            mouseMove(rootId, 0, 0)
+            rootId.leaveToolTip(this, tip)
 
             const picker = waitForPicker(0)
             tryCompare(picker, "currentMode", CoordinateSystem.UTM)
@@ -2815,9 +2825,10 @@ MainWindowTest {
             rootId.width = Theme.breakpointPanelCollapse / 2
             const narrowRow = waitForChild("narrowFixRow.0")
             const narrowLock = waitForChild("readOnlyLock.0")
-            const narrowTip = rootId.toolTipOf(narrowLock)
-            verify(narrowTip !== null && narrowTip.text.indexOf("survex_blocks.svx") >= 0,
-                   "the narrow lock's tooltip names the file")
+            const narrowTip = rootId.hoverSharedToolTip(this, narrowLock)
+            verify(narrowTip.text.indexOf("survex_blocks.svx") >= 0,
+                   "the narrow lock's tooltip names the file: \"" + narrowTip.text + "\"")
+            rootId.leaveToolTip(this, narrowTip)
             const wordedSource = Array.from(narrowRow.children).filter(
                                      child => child instanceof QC.Label
                                      && String(child.text).indexOf("survex_blocks.svx") >= 0)
@@ -3659,6 +3670,312 @@ MainWindowTest {
                     "the toggles and the scroll build no picker")
             compare(rootId.countWithPrefix(waitForChild("nodeRow.Big"), "bareFixSystemValue."), 2,
                     "Big's row still names its two owners' systems")
+        }
+
+        readonly property string popupCaveName: "Popups"
+        readonly property string popupTripName: "t0"
+        readonly property string popupUtmCS: "EPSG:32612"
+        readonly property string popupOwnerCS: "UTM48N"
+        //! An easting past UTM's domain, so the row's coordinate warns.
+        readonly property double popupOutOfDomainEasting: 1478000.0
+        readonly property double popupNorthing: 4430000.0
+
+        //! \a root and every object under it reachable through an item's data,
+        //! a popup's contentData and a Loader's item, each once.
+        function objectsUnder(root) {
+            const seen = new Set()
+            const pending = [root]
+            while (pending.length > 0) {
+                const obj = pending.pop()
+                if (obj === null || obj === undefined || seen.has(obj)) {
+                    continue
+                }
+                seen.add(obj)
+                const data = obj.data !== undefined ? obj.data
+                                                    : (obj.contentData !== undefined ? obj.contentData : [])
+                for (let i = 0; i < data.length; ++i) {
+                    pending.push(data[i])
+                }
+                if (obj instanceof Loader && obj.item !== null) {
+                    pending.push(obj.item)
+                }
+            }
+            return Array.from(seen)
+        }
+
+        function popupsUnder(root) {
+            return objectsUnder(root).filter(obj => obj instanceof T.Popup)
+        }
+
+        function layersUnder(root) {
+            return objectsUnder(root).filter(obj => obj.layer !== undefined && obj.layer !== null
+                                                    && obj.layer.enabled)
+        }
+
+        function namesOf(objects) {
+            return objects.map(obj => String(obj)).join(" ")
+        }
+
+        //! How many of \a objects there are and which, read now: the layout
+        //! switch destroys the wide rows' objects.
+        function tally(what, objects) {
+            return { what: what, count: objects.length, names: namesOf(objects) }
+        }
+
+        //! Logs \a row's object, item, popup and layer counts tagged \a what.
+        function logRowCost(what, row) {
+            console.info("SP3", what, row.objectName,
+                         "objects", objectsUnder(row).length,
+                         "items", rootId.countDescendants(row, () => true),
+                         "popups", popupsUnder(row).length,
+                         "layers", layersUnder(row).length)
+        }
+
+        //! Saves the project and builds popupCaveName with three fixes of its
+        //! own and one trip that attaches bare_fix.svx: own0 names popupUtmCS,
+        //! own1's coordinate leaves its system's domain, and the third has
+        //! neither a name nor a system. Opens the cave's Fix Stations tree and returns it.
+        function makePopupFixture(projectBaseName) {
+            saveProjectAs(projectBaseName)
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, popupCaveName)
+            cave.addTrip()
+            cave.trip(0).name = popupTripName
+            const model = cave.fixStations
+            const utmRow = model.addFixStation("own0")
+            model.setData(model.index(utmRow), popupUtmCS, FixStationModel.InputCSRole)
+            const outOfDomainRow = model.addFixStation("own1")
+            model.setData(model.index(outOfDomainRow), "EPSG:32613", FixStationModel.InputCSRole)
+            model.setData(model.index(outOfDomainRow), popupOutOfDomainEasting, FixStationModel.EastingRole)
+            model.setData(model.index(outOfDomainRow), popupNorthing, FixStationModel.NorthingRole)
+            model.addFixStation()
+            model.setData(model.index(model.rowCount() - 1), "", FixStationModel.InputCSRole)
+            attachSourceToTrip(cave.trip(0), TestHelper.testcasesDatasetPath(
+                                   "external-centerlines/survex_bare_fix/bare_fix.svx"))
+            tryVerify(() => subtreeAttachedFixCount(cave) > 0, 20000, "the scan lists the file's fix")
+
+            const view = openFixStationTree("Source/Data/Node=" + popupCaveName + "/Fix Stations")
+            tryVerify(() => liveChild("fixRow.own0") !== null && readOnlyFixRow(view) !== null,
+                      10000, "the tree shows an editable and a read-only fix row")
+            waitForRendering(rootId)
+            return view
+        }
+
+        //! The first shown fix row that carries the read-only lock.
+        function readOnlyFixRow(view) {
+            for (let row = 0; row < view.rows; ++row) {
+                const item = view.itemAtCell(Qt.point(0, row))
+                if (item !== null && String(item.objectName).startsWith("fixRow.")
+                        && rootId.countWithPrefix(item, "readOnlyLock.") > 0) {
+                    return item
+                }
+            }
+            return null
+        }
+
+        // A fix row at rest builds no tooltip, menu or offscreen layer: each
+        // waits for the hover or right-click that shows it, in both layouts.
+        // The per-row counts and the toggle and layout timings are logged
+        // for comparison; only the counts are asserted.
+        function test_aFixRowAtRestBuildsNoPopupOrLayer() {
+            const view = makePopupFixture("fix-station-popups-at-rest")
+            const wideEditable = liveChild("fixRow.own0")
+            const wideReadOnly = readOnlyFixRow(view)
+            const editableRow = wideEditable.fixRow
+            logRowCost("wide editable", wideEditable)
+            logRowCost("wide read-only", wideReadOnly)
+            const counts = [
+                tally("a wide editable row's popups", popupsUnder(wideEditable)),
+                tally("a wide read-only row's popups", popupsUnder(wideReadOnly)),
+                tally("a wide read-only row's layers", layersUnder(wideReadOnly)),
+            ]
+
+            timeRootToggles(view, "SP3")
+
+            const wideWidth = rootId.width
+            try {
+                const start = Date.now()
+                rootId.width = Theme.breakpointPanelCollapse / 2
+                tryVerify(() => liveChild("narrowFixRow." + editableRow) !== null, 5000,
+                          "the narrow layout shows the rows")
+                console.info("SP3 first narrow layout build ms", Date.now() - start)
+                waitForRendering(rootId)
+                const narrowEditable = liveChild("fixRow.own0")
+                // The narrow rows are taller, so the read-only one sits below the fold.
+                view.contentY = Math.max(0, view.contentHeight - view.height)
+                view.forceLayout()
+                tryVerify(() => readOnlyFixRow(view) !== null, 5000, "the narrow layout shows the read-only row")
+                const narrowReadOnly = readOnlyFixRow(view)
+                logRowCost("narrow editable", narrowEditable)
+                logRowCost("narrow read-only", narrowReadOnly)
+                counts.push(tally("a narrow editable row's popups", popupsUnder(narrowEditable)))
+                counts.push(tally("a narrow read-only row's popups", popupsUnder(narrowReadOnly)))
+                counts.push(tally("a narrow read-only row's layers", layersUnder(narrowReadOnly)))
+            } finally {
+                rootId.width = wideWidth
+            }
+            tryVerify(() => liveChild("narrowFixRow." + editableRow) === null, 5000,
+                      "the wide layout is back")
+
+            for (const count of counts) {
+                compare(count.count, 0, count.what + " at rest: " + count.names)
+            }
+
+            // The lock is tinted without an offscreen layer, in the subtle
+            // text color it showed in before.
+            const lock = waitForChild("readOnlyLock." + readOnlyFixRow(view).fixRow)
+            const lockImage = objectsUnder(lock).find(obj => obj.source !== undefined
+                                                         && String(obj.source).indexOf("lock.svg") >= 0)
+            verify(lockImage !== undefined, "the lock shows lock.svg")
+            verify(lockImage.color !== undefined, "the lock image " + lockImage + " carries its own color")
+            verify(Qt.colorEqual(lockImage.color, Theme.textSubtle),
+                   "the lock reads " + lockImage.color + ", Theme " + Theme.textSubtle)
+        }
+
+        // Hovering a fix row's system, warnings, lock and badge, and the
+        // node row's bare-fix system, shows the window's one shared tooltip
+        // with the text each showed before.
+        function test_aFixRowsHoverShowsTheSharedToolTip() {
+            const view = makePopupFixture("fix-station-popups-hover")
+            const editable = liveChild("fixRow.own0")
+
+            const csLabel = waitForChild("inputCSLabel." + editable.fixRow)
+            let tip = rootId.hoverSharedToolTip(this, csLabel)
+            verify(tip.text.indexOf(CSFormat.displayName(popupUtmCS)) >= 0,
+                   "the tooltip names the full system: \"" + tip.text + "\"")
+            rootId.leaveToolTip(this, tip)
+
+            const outOfDomain = liveChild("fixRow.own1")
+            const coordinateWarning = waitForChild("coordinateWarning." + outOfDomain.fixRow)
+            tip = rootId.hoverSharedToolTip(this, coordinateWarning)
+            compare(tip.text, coordinateWarning.message, "the coordinate warning says what is wrong")
+            rootId.leaveToolTip(this, tip)
+
+            const unnamed = liveChild("fixRow.")
+            const noSystemLabel = waitForChild("inputCSLabel." + unnamed.fixRow)
+            compare(noSystemLabel.text, "none")
+            rootId.verifyNoSharedToolTip(this, noSystemLabel)
+
+            const stationWarning = waitForChild("stationWarning." + unnamed.fixRow)
+            tip = rootId.hoverSharedToolTip(this, stationWarning)
+            compare(tip.text, stationWarning.message, "the station warning says what is wrong")
+            rootId.leaveToolTip(this, tip)
+
+            const readOnly = readOnlyFixRow(view)
+            tip = rootId.hoverSharedToolTip(this, waitForChild("readOnlyLock." + readOnly.fixRow))
+            verify(tip.text.indexOf("bare_fix.svx") >= 0, "the lock names the file: \"" + tip.text + "\"")
+            rootId.leaveToolTip(this, tip)
+
+            const badge = waitForChild("noCoordinateSystemBadge." + readOnly.fixRow)
+            tip = rootId.hoverSharedToolTip(this, badge)
+            verify(tip.text.indexOf(badge.unset ? "bare_fix.svx" : badge.readInWarning) >= 0,
+                   "the badge says where the fix is placed: \"" + tip.text + "\"")
+            rootId.leaveToolTip(this, tip)
+
+            const ownerRow = waitForChild("nodeRow." + popupCaveName)
+            compare(popupsUnder(ownerRow).length, 0,
+                    "the owner's row builds no tooltip at rest: " + namesOf(popupsUnder(ownerRow)))
+            const ownerLabel = waitForChild("bareFixSystemValue." + popupTripName)
+            compare(ownerLabel.text, "unset")
+            rootId.verifyNoSharedToolTip(this, ownerLabel)
+
+            const combo = openOwnerPicker(popupTripName)
+            combo.committed(popupOwnerCS)
+            keyClick(Qt.Key_Escape)
+            tryCompare(ownerLabel, "text", CSFormat.displayName(popupOwnerCS))
+            tip = rootId.hoverSharedToolTip(this, ownerLabel)
+            compare(tip.text, CSFormat.inlineDescription(popupOwnerCS),
+                    "the owner's system names the full system")
+            rootId.leaveToolTip(this, tip)
+        }
+
+        //! Right-clicks \a stationCell and checks that its row's menu, which
+        //! nothing builds before, opens offering to remove \a stationName and
+        //! hands that row to the remove question. Opens it a second time and
+        //! checks that it opens where the first click opened it.
+        function verifyRightClickMenu(stationCell, rowMenu, stationName) {
+            compare(rowMenu.menu, null, "the row builds no menu before a right-click")
+            waitForRendering(rootId)
+            const clickX = stationCell.width / 2
+            const clickY = stationCell.height / 2
+            mouseClick(stationCell, clickX, clickY, Qt.RightButton)
+            const menu = rowMenu.menu
+            verify(menu !== null, "the first right-click builds the menu")
+            tryVerify(() => menu.opened, 5000, "and opens it")
+            const menuAt = menu.parent.mapToItem(stationCell, menu.x, menu.y)
+            fuzzyCompare(menuAt.x, clickX, 1, "the menu opens at the pointer")
+            fuzzyCompare(menuAt.y, clickY, 1)
+            compare(menu.count, 1, "the menu holds one item")
+            compare(menu.itemAt(0).text, "Remove " + stationName)
+            const firstX = menu.x
+            const firstY = menu.y
+
+            const removeAskBox = findChild(RootData.pageView.currentPageItem, "removeChallange")
+            mouseClick(menu.itemAt(0))
+            tryVerify(() => !menu.visible, 5000, "choosing Remove closes the menu")
+            tryVerify(() => removeAskBox.visible, 5000, "and asks whether to remove the fix")
+            compare(removeAskBox.removeName, stationName)
+            compare(removeAskBox.indexToRemove, rowMenu.row)
+            mouseClick(findChild(removeAskBox, "cancelButton"))
+            tryVerify(() => !removeAskBox.visible)
+
+            mouseClick(stationCell, clickX, clickY, Qt.RightButton)
+            compare(rowMenu.menu, menu, "the row keeps the menu it built")
+            tryVerify(() => menu.opened, 5000, "a second right-click opens it again")
+            compare(menu.x, firstX, "where the first click opened it")
+            compare(menu.y, firstY)
+            menu.close()
+            tryVerify(() => !menu.visible)
+        }
+
+        // A fix row's right-click menu is built by the first right-click, and
+        // that click opens it, in both layouts.
+        function test_aFixRowsFirstRightClickBuildsAndOpensItsMenu() {
+            makePopupFixture("fix-station-popups-menu")
+            const fixRow = liveChild("fixRow.own0").fixRow
+            verifyRightClickMenu(waitForChild("stationCell." + fixRow),
+                                 liveChild("fixRowMenu." + fixRow), "own0")
+
+            const wideWidth = rootId.width
+            try {
+                rootId.width = Theme.breakpointPanelCollapse / 2
+                tryVerify(() => liveChild("narrowFixRow." + fixRow) !== null, 5000,
+                          "the narrow layout shows the rows")
+                const narrowRow = liveChild("fixRow.own0")
+                verifyRightClickMenu(waitForChild("stationCell." + narrowRow.fixRow),
+                                     liveChild("fixRowMenu." + narrowRow.fixRow), "own0")
+            } finally {
+                rootId.width = wideWidth
+            }
+        }
+
+        // The pick button builds its own width-capped tooltip on the first
+        // hover, and that tooltip still waits out its delay.
+        function test_thePickButtonBuildsItsToolTipOnHover() {
+            makePopupFixture("fix-station-popups-pick")
+            const row = liveChild("fixRow.own0")
+            const button = waitForChild("pickFromViewButton." + row.fixRow)
+            verify(!button.canPick, "the project has no frame, so the tooltip holds the long sentence")
+            compare(popupsUnder(button).length, 0,
+                    "the pick button builds no tooltip before a hover: " + namesOf(popupsUnder(button)))
+
+            waitForRendering(rootId)
+            const hoverStart = Date.now()
+            mouseMove(button, button.width / 2, button.height / 2)
+            const tip = objectsUnder(button).find(obj => obj.objectName === "pickFromViewToolTip")
+            verify(tip !== undefined, "hovering builds the button's tooltip: " + namesOf(popupsUnder(button)))
+            verify(!tip.visible, "the tooltip waits for its delay")
+            tryVerify(() => tip.visible, 5000, "then shows")
+            const shownAfter = Date.now() - hoverStart
+            console.info("SP3 pick tooltip shown after ms", shownAfter, "delay", button.tooltipDelay)
+            verify(shownAfter >= button.tooltipDelay - 50,
+                   "the tooltip showed after " + shownAfter + " ms, its delay is " + button.tooltipDelay)
+            compare(tip.text, button.helpText)
+            verify(tip.implicitWidth > button.tooltipWidth,
+                   "the sentence is " + tip.implicitWidth + " wide, past the cap")
+            compare(tip.width, button.tooltipWidth, "the cap wraps it")
+            rootId.leaveToolTip(this, tip)
+            compare(objectsUnder(button).find(obj => obj.objectName === "pickFromViewToolTip"), tip,
+                    "the button keeps the tooltip it built, so it fades out like the others")
         }
     }
 }
