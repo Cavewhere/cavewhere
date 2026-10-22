@@ -8,6 +8,8 @@
 #include "cwExternalCenterlineScanner.h"
 #include "cwCompassMakFile.h"
 #include "cwCoordinateText.h"
+#include "cwPocketTopoFile.h"
+#include "cwPocketTopoTranslator.h"
 #include "cwWallsReferenceCS.h"
 
 //Walls
@@ -40,6 +42,7 @@ constexpr const char* kSurvexExtension = ".svx";
 constexpr const char* kCompassDatExtension = ".dat";
 constexpr const char* kWallsWpjExtension = ".wpj";
 constexpr const char* kWallsSrvExtension = ".srv";
+constexpr const char* kPocketTopoExtension = ".top";
 // Walls .STATUS bit for an entry processed on its own, never as part of its
 // parent (cavern's WALLS_WPJ_STATUS_DETACHED).
 constexpr int kWallsDetachedStatusBit = 0x2;
@@ -2061,6 +2064,182 @@ void scanWallsFile(const QString& filePath, ScanState& state)
     state.visited.insert(canonical);
 }
 
+//! "1 \a singular" or "\a count \a plural".
+QString countText(int count, const QString& singular, const QString& plural)
+{
+    return QStringLiteral("%1 %2").arg(count).arg(count == 1 ? singular : plural);
+}
+
+//! The row PocketTopo writes before any trip: a zero-length splay off the
+//! start station, in no trip. An attach drops it without a word.
+bool isLeadingStartRow(const cwPocketTopoFile::Document& document, qsizetype index)
+{
+    const cwPocketTopoFile::Shot& shot = document.shots.at(index);
+    return index == 0 && shot.tripIndex == cwPocketTopoFile::Shot::kNoTrip && shot.isSplay()
+        && shot.distanceMeters() == std::optional<double>(0.0);
+}
+
+/**
+ * The one warning that lists what a .top holds and an attach leaves out:
+ * shots in no trip (past the leading start row), shot comments, flipped
+ * flags, and the drawings' elements. Empty when it leaves out nothing.
+ */
+QString pocketTopoDroppedWarning(const QString& fileName,
+                                 const cwPocketTopoFile::Document& document)
+{
+    int untripped = 0;
+    int comments = 0;
+    int flipped = 0;
+    for (qsizetype i = 0; i < document.shots.size(); ++i) {
+        const cwPocketTopoFile::Shot& shot = document.shots.at(i);
+        const bool inTrip = shot.tripIndex >= 0 && shot.tripIndex < document.trips.size();
+        if (inTrip) {
+            comments += shot.hasComment() ? 1 : 0;
+            flipped += shot.isFlipped() ? 1 : 0;
+        } else if (!isLeadingStartRow(document, i)) {
+            ++untripped;
+        }
+    }
+
+    QStringList dropped;
+    if (untripped > 0) {
+        dropped.append(countText(untripped, QStringLiteral("shot with no trip"),
+                                 QStringLiteral("shots with no trip")));
+    }
+    if (comments > 0) {
+        dropped.append(countText(comments, QStringLiteral("shot comment"),
+                                 QStringLiteral("shot comments")));
+    }
+    if (flipped > 0) {
+        dropped.append(countText(flipped, QStringLiteral("flipped shot"),
+                                 QStringLiteral("flipped shots")));
+    }
+    if (document.planElementCount > 0) {
+        dropped.append(countText(document.planElementCount,
+                                 QStringLiteral("plan drawing element"),
+                                 QStringLiteral("plan drawing elements")));
+    }
+    if (document.sideElementCount > 0) {
+        dropped.append(countText(document.sideElementCount,
+                                 QStringLiteral("side drawing element"),
+                                 QStringLiteral("side drawing elements")));
+    }
+    if (dropped.isEmpty()) {
+        return QString();
+    }
+    return QStringLiteral("%1: CaveWhere leaves out %2.")
+        .arg(fileName, dropped.join(QStringLiteral(", ")));
+}
+
+/**
+ * The warning naming each plain station the translation renames because a
+ * dotted station shares its number ("0 is 0_"), or empty when it renames none.
+ */
+QString pocketTopoRenameWarning(const QString& fileName, const QHash<quint32, QString>& names)
+{
+    QList<quint32> renamed;
+    for (auto it = names.cbegin(); it != names.cend(); ++it) {
+        if (it.value() != cwPocketTopoFile::StationId::fromRaw(it.key()).name()) {
+            renamed.append(it.key());
+        }
+    }
+    if (renamed.isEmpty()) {
+        return QString();
+    }
+    std::sort(renamed.begin(), renamed.end());
+
+    QStringList renames;
+    for (const quint32 raw : std::as_const(renamed)) {
+        renames.append(QStringLiteral("%1 is %2").arg(cwPocketTopoFile::StationId::fromRaw(raw).name(),
+                                                      names.value(raw)));
+    }
+    return QStringLiteral("%1: Survex can't hold a station N next to a series N.x, so CaveWhere "
+                          "renames %2.")
+        .arg(fileName, renames.join(QStringLiteral(", ")));
+}
+
+/**
+ * Reads a .top into the tree: a unit per trip under the root, '#' and the
+ * trip's position as its segment, holding every station the translation
+ * writes for the trip's shots, and a fix per reference with a coordinate.
+ * An unreadable file is a hard error, since nothing else can stand in for it.
+ */
+void scanPocketTopoFile(const QString& filePath, ScanState& state)
+{
+    const QString canonical = canonicalize(filePath);
+    const Monad::Result<cwPocketTopoFile::Document> read = cwPocketTopoFile::readFile(canonical);
+    if (canonical.isEmpty() || read.hasError()) {
+        state.error = QStringLiteral("cannot read PocketTopo file %1: %2")
+                          .arg(filePath, read.errorMessage());
+        return;
+    }
+    state.dependencies.append(canonical);
+
+    const cwPocketTopoFile::Document& document = read.value();
+    const QHash<quint32, QString> names = cwPocketTopoTranslator::stationNames(document);
+
+    for (qsizetype tripIndex = 0; tripIndex < document.trips.size(); ++tripIndex) {
+        const cwPocketTopoFile::Trip& trip = document.trips.at(tripIndex);
+        const int row = childRow(state, kRootRow, positionalSegment(tripIndex),
+                                 cwSurveyNodeKind::Kind::PocketTopoFile,
+                                 cwPocketTopoTranslator::tripName(trip), QString());
+        stampRowDate(state, row, trip.date());
+        if (!state.rootDate.isValid()) {
+            state.rootDate = trip.date();
+        }
+        if (trip.isAutoDeclination()) {
+            stampRowDeclination(state, row, {cwFileDeclination::Kind::Auto});
+        } else {
+            stampRowDeclination(state, row, {cwFileDeclination::Kind::Value,
+                                             trip.declinationDegrees()});
+        }
+
+        const auto recordTripStation = [&](const QString& station) {
+            recordUnitStation(state, row, station);
+            state.rootStations.insert(station);
+        };
+        for (const cwPocketTopoFile::Shot& shot : document.shots) {
+            if (shot.tripIndex != tripIndex || !shot.distanceMeters().has_value()) {
+                continue;
+            }
+            const QString from = names.value(shot.from.raw());
+            if (from.isEmpty()) {
+                continue;
+            }
+            state.entryHasOwnShots = true;
+            recordTripStation(from);
+            if (shot.to.isDefined()) {
+                const QString to = names.value(shot.to.raw());
+                if (!to.isEmpty()) {
+                    recordTripStation(to);
+                }
+            }
+        }
+    }
+
+    for (const cwPocketTopoFile::Reference& reference : document.references) {
+        const QString name = names.value(reference.station.raw());
+        const std::optional<double> east = reference.eastMeters();
+        const std::optional<double> north = reference.northMeters();
+        const std::optional<double> altitude = reference.altitudeMeters();
+        if (name.isEmpty() || !east.has_value() || !north.has_value() || !altitude.has_value()) {
+            continue;
+        }
+        recordFix(state, kRootRow, QString(), name,
+                  cwCoordinateText::componentText({*east, *north, *altitude},
+                                                  cwCoordinateText::kMeterTextScale),
+                  QString(), QString(), canonical, 0);
+    }
+
+    const QString fileName = QFileInfo(canonical).fileName();
+    for (const QString& warning : {pocketTopoDroppedWarning(fileName, document),
+                                   pocketTopoRenameWarning(fileName, names)}) {
+        if (!warning.isEmpty()) {
+            recordWarning(state, warning);
+        }
+    }
+}
+
 void scanByFormat(const QString& filePath, ScanState& state)
 {
     // An absolute include aborts the whole walk, so descend no further.
@@ -2079,6 +2258,11 @@ void scanByFormat(const QString& filePath, ScanState& state)
         return;
     case Format::Walls:
         scanWallsFile(filePath, state);
+        return;
+    case Format::PocketTopo:
+        recordWarning(state,
+                      QStringLiteral("cavern cannot include a PocketTopo file; attach it on its "
+                                     "own instead: %1").arg(filePath));
         return;
     case Format::Unknown:
         recordWarning(state,
@@ -2104,6 +2288,9 @@ Format formatFor(const QString& entryFile)
         || hasExtension(entryFile, kWallsSrvExtension)) {
         return Format::Walls;
     }
+    if (hasExtension(entryFile, kPocketTopoExtension)) {
+        return Format::PocketTopo;
+    }
     return Format::Unknown;
 }
 
@@ -2116,6 +2303,8 @@ QString formatName(Format format)
         return QStringLiteral("Compass");
     case Format::Walls:
         return QStringLiteral("Walls");
+    case Format::PocketTopo:
+        return QStringLiteral("PocketTopo");
     case Format::Unknown:
         break;
     }
@@ -2132,6 +2321,8 @@ Monad::Result<ScanResult> scan(const QString& entryFile)
         return scanCompass(entryFile);
     case Format::Walls:
         return scanWalls(entryFile);
+    case Format::PocketTopo:
+        return scanPocketTopo(entryFile);
     case Format::Unknown:
         return Monad::Result<ScanResult>(
             QStringLiteral("scanner: cannot determine format from extension: %1")
@@ -2352,6 +2543,22 @@ void parseWallsMetadata(const QStringList& lines,
     }
 }
 
+//! A .top's first trip: its date, its manual declination (an Auto one is
+//! the driver's to supply), and the rest of its comment as the team.
+void parsePocketTopoMetadata(const QString& path, SeededTripMetadata& metadata)
+{
+    const Monad::Result<cwPocketTopoFile::Document> read = cwPocketTopoFile::readFile(path);
+    if (read.hasError() || read.value().trips.isEmpty()) {
+        return;
+    }
+    const cwPocketTopoFile::Trip& first = read.value().trips.constFirst();
+    metadata.date = first.date();
+    if (!first.isAutoDeclination()) {
+        metadata.declination = first.declinationDegrees();
+    }
+    metadata.team = cwPocketTopoTranslator::tripTeam(first);
+}
+
 /**
  * Fills result.seededMetadata from the entry file only (entry =
  * dependencies.first()). Two container-format special cases: a
@@ -2386,6 +2593,9 @@ void parseSeededMetadata(ScanResult& result)
             metadataFile.clear();
         }
         break;
+    case Format::PocketTopo:
+        parsePocketTopoMetadata(entry, result.seededMetadata);
+        return;
     case Format::Unknown:
         metadataFile.clear();
         break;
@@ -2410,6 +2620,7 @@ void parseSeededMetadata(ScanResult& result)
     case Format::Walls:
         parseWallsMetadata(lines, result.seededMetadata, result.warnings);
         break;
+    case Format::PocketTopo:
     case Format::Unknown:
         break;
     }
@@ -2429,6 +2640,9 @@ TreeRow rootRow(const QString& entryFile)
         break;
     case cwExternalCenterlineScanner::Format::Walls:
         root.row.kind = Kind::WallsBook;
+        break;
+    case cwExternalCenterlineScanner::Format::PocketTopo:
+        root.row.kind = Kind::PocketTopoFile;
         break;
     case cwExternalCenterlineScanner::Format::Survex:
     case cwExternalCenterlineScanner::Format::Unknown:
@@ -2530,6 +2744,11 @@ Monad::Result<ScanResult> scanCompass(const QString& entryFile)
 Monad::Result<ScanResult> scanWalls(const QString& entryFile)
 {
     return scanWithEntry(entryFile, &scanWallsFile, "scanWalls");
+}
+
+Monad::Result<ScanResult> scanPocketTopo(const QString& entryFile)
+{
+    return scanWithEntry(entryFile, &scanPocketTopoFile, "scanPocketTopo");
 }
 
 cwFileDeclination attachmentDeclination(const ScanResult& scan)

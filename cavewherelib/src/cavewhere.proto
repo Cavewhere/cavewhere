@@ -171,6 +171,7 @@ enum SurveyNodeKind {
     NODE_WALLS_BOOK = 4;
     NODE_SURVEX_FILE = 5;
     NODE_SURVEX_BLOCK = 6;
+    NODE_POCKETTOPO_FILE = 7;
 }
 
 message Cave {

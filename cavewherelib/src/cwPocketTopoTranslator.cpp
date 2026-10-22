@@ -173,14 +173,9 @@ void writeTripHead(QTextStream& stream,
                    cwSurvexExporterUtils::CsScope& scope)
 {
     const QDate date = trip.date();
-    const QStringList lines = commentLines(trip.comment);
-    const QString& firstLine = lines.first();
 
-    stream << Qt::endl << "; trip #" << (index + 1) << " : " << date.toString(Qt::ISODate);
-    if (!firstLine.isEmpty()) {
-        stream << ' ' << firstLine;
-    }
-    stream << Qt::endl;
+    stream << Qt::endl << "; trip #" << (index + 1) << " : " << cwPocketTopoTranslator::tripName(trip)
+           << Qt::endl;
     stream << "*date " << date.toString(QStringLiteral("yyyy.MM.dd")) << Qt::endl;
 
     if (trip.isAutoDeclination() && input.autoDeclinationLocation.has_value()) {
@@ -191,12 +186,9 @@ void writeTripHead(QTextStream& stream,
         stream << "*declination " << fixed(degrees, kAngleDecimals) << " degrees" << Qt::endl;
     }
 
-    for (qsizetype i = 1; i < lines.size(); ++i) {
-        const QString& line = lines.at(i);
-        if (!line.isEmpty()) {
-            stream << "*team \"" << QString(line).replace(QLatin1Char('"'), QLatin1Char('\''))
-                   << '"' << Qt::endl;
-        }
+    for (const QString& person : cwPocketTopoTranslator::tripTeam(trip)) {
+        stream << "*team \"" << QString(person).replace(QLatin1Char('"'), QLatin1Char('\''))
+               << '"' << Qt::endl;
     }
 }
 
@@ -252,6 +244,20 @@ std::optional<QString> translate(const Input& input, const cwSurvexExporterUtils
 
     stream.flush();
     return text;
+}
+
+QString tripName(const Trip& trip)
+{
+    const QString date = trip.date().toString(Qt::ISODate);
+    const QString firstLine = commentLines(trip.comment).constFirst();
+    return firstLine.isEmpty() ? date : date + QLatin1Char(' ') + firstLine;
+}
+
+QStringList tripTeam(const Trip& trip)
+{
+    QStringList team = commentLines(trip.comment).mid(1);
+    team.removeAll(QString());
+    return team;
 }
 
 QHash<quint32, QString> stationNames(const Document& document)

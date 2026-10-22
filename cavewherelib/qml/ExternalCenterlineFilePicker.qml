@@ -151,7 +151,7 @@ ColumnLayout {
         objectName: "entryFileDialog"
         title: root.fileDialogTitle
         nameFilters: [
-            qsTr("Survey files (*.svx *.dat *.mak *.srv *.wpj)"),
+            qsTr("Survey files (*.svx *.dat *.mak *.srv *.wpj *.top)"),
             qsTr("All files (*)")
         ]
         currentFolder: root.initialFolder.toString().length > 0

@@ -199,6 +199,7 @@ enum class Format {
     Survex,    // .svx
     Compass,   // .dat, .mak
     Walls,     // .wpj, .srv
+    PocketTopo, // .top
     Unknown    // no extension or unrecognised
 };
 
@@ -385,6 +386,9 @@ struct ScanResult {
      *             node, and a unit too when it has shots of its own. A block
      *             with no shots stays a node. A file included from two scopes
      *             is read in each.
+     *   PocketTopo - a .top is a PocketTopoFile root holding one unit per
+     *             trip ('#' and its 1-based position), named by its date and
+     *             the first line of its comment.
      */
     QList<cwScanRow> rows;
 
@@ -473,7 +477,7 @@ struct ScanResult {
 CAVEWHERE_LIB_EXPORT Format formatFor(const QString& entryFile);
 
 /**
- * User-facing name for a format: "Survex", "Compass", or "Walls";
+ * User-facing name for a format: "Survex", "Compass", "Walls", or "PocketTopo";
  * empty for Format::Unknown. The picker's "Format:" line reads it
  * via cwExternalCenterlineScanPreview. Proper nouns, so untranslated.
  */
@@ -530,6 +534,19 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanCompass(const QString& entryF
  * path returns Monad::Result error.
  */
 CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanWalls(const QString& entryFile);
+
+/**
+ * Reads a PocketTopo .top entry file, whose closure is the file itself. The
+ * root is a PocketTopoFile row holding one unit per trip, in file order: '#'
+ * and the trip's 1-based position as its segment, the trip's date and the
+ * first line of its comment as its name, and every station the trip's shots
+ * name, spelled as the translation writes them (cwPocketTopoTranslator). The
+ * references are fixes with no coordinate system. One warning counts what an
+ * attach leaves out (shots in no trip past the leading start row, shot
+ * comments, flipped flags, drawing elements) and another names each renamed
+ * plain station. An unreadable file returns Monad::Result error.
+ */
+CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanPocketTopo(const QString& entryFile);
 
 /**
  * The declination the driver leaves an attached trip's file to apply: the one

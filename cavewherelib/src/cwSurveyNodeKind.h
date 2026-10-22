@@ -37,7 +37,8 @@ enum class Kind {
     CompassFile,
     WallsBook,
     SurvexFile,
-    SurvexBlock
+    SurvexBlock,
+    PocketTopoFile
 };
 Q_ENUM_NS(Kind)
 

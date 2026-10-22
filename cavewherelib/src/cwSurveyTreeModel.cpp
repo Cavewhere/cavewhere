@@ -115,6 +115,8 @@ QString cwSurveyTreeModel::kindLabel(cwSurveyNode::Kind kind)
         return QStringLiteral("Survex file");
     case cwSurveyNode::Kind::SurvexBlock:
         return QStringLiteral("Survex block");
+    case cwSurveyNode::Kind::PocketTopoFile:
+        return QStringLiteral("PocketTopo file");
     }
     return QString();
 }

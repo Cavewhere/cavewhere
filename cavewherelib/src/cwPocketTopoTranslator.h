@@ -16,6 +16,7 @@
 //Qt includes
 #include <QHash>
 #include <QString>
+#include <QStringList>
 
 //Std includes
 #include <optional>
@@ -64,6 +65,18 @@ struct Input {
  */
 CAVEWHERE_LIB_EXPORT std::optional<QString> translate(const Input& input,
                                                       const cwSurvexExporterUtils::CsScope& scope);
+
+/**
+ * The name a trip goes by, in the translation's trip comment and as a derived
+ * trip: its ISO date, then the first line of its comment when there is one.
+ */
+CAVEWHERE_LIB_EXPORT QString tripName(const cwPocketTopoFile::Trip& trip);
+
+/**
+ * The people the translation writes as `*team`: each non-empty line of the
+ * trip's comment after the first, trimmed.
+ */
+CAVEWHERE_LIB_EXPORT QStringList tripTeam(const cwPocketTopoFile::Trip& trip);
 
 /**
  * The name the translation writes for each station \a document uses, keyed by
