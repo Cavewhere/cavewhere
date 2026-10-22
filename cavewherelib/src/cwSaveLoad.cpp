@@ -1407,7 +1407,8 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
     auto oldJobs = saveFlushImpl();
 
-    QFuture<ResultBase> future = oldJobs.then(this, [this, filename, loadGeneration, canceledResult](ResultBase flushResult) {
+    //The continuations run after traceScope closes, so each reinstalls the load context
+    QFuture<ResultBase> future = oldJobs.then(this, cwTaskContextScope::wrap([this, filename, loadGeneration, canceledResult](ResultBase flushResult) {
         if (flushResult.hasError()) {
             return AsyncFuture::completed(flushResult);
         }
@@ -1426,7 +1427,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
             d->futureToken.addJob(projectDataFuture, QStringLiteral("Loading"));
 
             return AsyncFuture::observe(projectDataFuture)
-                    .context(this, [this, projectDataFuture, filename, loadGeneration, canceledResult]() {
+                    .context(this, cwTaskContextScope::wrap([this, projectDataFuture, filename, loadGeneration, canceledResult]() {
                 return mbind(projectDataFuture, [this, projectDataFuture, filename, loadGeneration, canceledResult](const ResultBase&) {
                     if (d->operationGeneration != loadGeneration
                             || d->retiring
@@ -1469,7 +1470,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
 
                     return ResultBase();
                 });
-            }).future();
+            })).future();
         };
 
         // LFS hydration is not attempted during load — it would
@@ -1477,7 +1478,7 @@ QFuture<ResultBase> cwSaveLoad::loadImpl(const QString &filename)
         // Missing files are detected post-load and surfaced via
         // cwProject::lfsFilesNeedSync; the user syncs explicitly.
         return continueLoad();
-    }).unwrap();
+    })).unwrap();
     return future;
 }
 

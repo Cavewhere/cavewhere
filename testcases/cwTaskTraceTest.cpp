@@ -5,12 +5,18 @@
 #include "cwTaskTrace.h"
 #include "cwConcurrent.h"
 #include "cwTask.h"
+#include "cwGeometryItersecter.h"
+#include "TestGeometryBuilders.h"
+#include "cwSaveLoad.h"
 
 //Qt includes
+#include <QCoreApplication>
 #include <QFuture>
 #include <QSemaphore>
 #include <QString>
+#include <QTemporaryDir>
 #include <QThreadPool>
+#include <QVector3D>
 
 //Std includes
 #include <atomic>
@@ -29,6 +35,11 @@ constexpr quint64 kFootprintBytes = 1048576;
 constexpr quint64 kResidentBytes = 2097152;
 constexpr quint64 kGpuBytes = 3145728;
 constexpr quint64 kAvailableBytes = 4194304;
+constexpr int kWrappedArgument = 7;
+constexpr int kWrappedIncrement = 1;
+constexpr int kSecondCall = 2;
+constexpr uint64_t kTriangleObjectId = 1;
+constexpr float kTriangleEdge = 1.0f;
 
 //! Restores the shared worker pool's thread count on every path out of a test
 struct ThreadCountRestorer {
@@ -78,6 +89,19 @@ bool countsEqual(const QString& context, int queued, int running)
 {
     const cwTaskTrace::ContextCounts counts = countsFor(context);
     return counts.queued == queued && counts.running == running;
+}
+
+//! Like waitUntil, but pumps the event loop so main-thread continuations and restarters run
+bool waitUntilProcessingEvents(const std::function<bool()>& condition)
+{
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kWaitTimeoutMs);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (condition()) {
+            return true;
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, kPollSliceMs);
+    }
+    return condition();
 }
 
 cwTaskQuietState quietState()
@@ -340,4 +364,188 @@ TEST_CASE("Memory sample carries the GPU reading the sampler reports", "[cwTaskT
 #else
     CHECK_FALSE(sample.has_value());
 #endif
+}
+
+TEST_CASE("A wrapped callable reinstalls its context after the scope ends", "[cwTaskTrace]")
+{
+    const QString context = QStringLiteral("trace-wrap");
+
+    std::function<QString()> wrapped;
+    {
+        cwTaskContextScope scope(context);
+        wrapped = cwTaskContextScope::wrap([]() {
+            return cwTaskContextScope::current();
+        });
+    }
+
+    CHECK(cwTaskContextScope::current() == QStringLiteral("untagged"));
+    CHECK(wrapped() == context);
+    CHECK(cwTaskContextScope::current() == QStringLiteral("untagged"));
+
+    SECTION("Arguments and the result pass through") {
+        std::function<int(int)> increment;
+        {
+            cwTaskContextScope scope(context);
+            increment = cwTaskContextScope::wrap([](int value) {
+                return value + kWrappedIncrement;
+            });
+        }
+        CHECK(increment(kWrappedArgument) == kWrappedArgument + kWrappedIncrement);
+    }
+
+    SECTION("Work submitted from the wrapped callable carries the context") {
+        QFuture<QString> submitted;
+        const auto submit = [&]() {
+            submitted = cwConcurrent::run([]() {
+                return cwTaskContextScope::current();
+            });
+        };
+
+        std::function<void()> wrappedSubmit;
+        {
+            cwTaskContextScope scope(context);
+            wrappedSubmit = cwTaskContextScope::wrap(submit);
+        }
+        wrappedSubmit();
+
+        REQUIRE(waitUntil([&]() { return submitted.isFinished(); }));
+        CHECK(submitted.result() == context);
+    }
+
+    SECTION("A mutable lambda keeps its state between calls") {
+        std::function<int()> counter;
+        {
+            cwTaskContextScope scope(context);
+            counter = cwTaskContextScope::wrap([calls = 0]() mutable {
+                return ++calls;
+            });
+        }
+        counter();
+        CHECK(counter() == kSecondCall);
+    }
+
+    SECTION("The context reaches another thread") {
+        QString seen;
+        std::thread worker([&]() { seen = wrapped(); });
+        worker.join();
+        CHECK(seen == context);
+    }
+}
+
+TEST_CASE("Nested wraps keep the inner context", "[cwTaskTrace]")
+{
+    const QString outerContext = QStringLiteral("trace-wrap-outer");
+    const QString innerContext = QStringLiteral("trace-wrap-inner");
+
+    std::function<QString()> inner;
+    {
+        cwTaskContextScope scope(innerContext);
+        inner = cwTaskContextScope::wrap([]() {
+            return cwTaskContextScope::current();
+        });
+    }
+
+    std::function<QString()> outer;
+    {
+        cwTaskContextScope scope(outerContext);
+        outer = cwTaskContextScope::wrap([inner]() {
+            return inner();
+        });
+    }
+
+    CHECK(outer() == innerContext);
+
+    SECTION("A wrap made inside a wrapped call captures the outer context") {
+        std::function<std::function<QString()>()> makeInner;
+        {
+            cwTaskContextScope scope(outerContext);
+            makeInner = cwTaskContextScope::wrap([]() {
+                return std::function<QString()>(cwTaskContextScope::wrap([]() {
+                    return cwTaskContextScope::current();
+                }));
+            });
+        }
+
+        const std::function<QString()> madeInside = makeInner();
+        CHECK(cwTaskContextScope::current() == QStringLiteral("untagged"));
+        CHECK(madeInside() == outerContext);
+    }
+
+    SECTION("The outer context returns after the inner call") {
+        std::function<QStringList()> both;
+        {
+            cwTaskContextScope scope(outerContext);
+            both = cwTaskContextScope::wrap([inner]() {
+                const QString during = inner();
+                return QStringList{during, cwTaskContextScope::current()};
+            });
+        }
+        CHECK(both() == QStringList{innerContext, outerContext});
+    }
+}
+
+TEST_CASE("Geometry intersecter builds count as intersect work", "[cwTaskTrace]")
+{
+    REQUIRE(waitUntil([]() { return cwTask::threadPool()->activeThreadCount() == 0; }));
+    ThreadCountRestorer restorer(kSingleThread);
+
+    const QString intersect = QStringLiteral("intersect");
+    CHECK(countsEqual(intersect, 0, 0));
+
+    // Holding the only worker keeps the build queued long enough to read its tag
+    QSemaphore releaseBlocker;
+    QFuture<void> blocker;
+    {
+        cwTaskContextScope scope(QStringLiteral("trace-intersect-blocker"));
+        blocker = cwConcurrent::run([&releaseBlocker]() { releaseBlocker.acquire(); });
+    }
+
+    cwGeometryItersecter intersecter;
+    const cwGeometryItersecter::Object triangle(nullptr, kTriangleObjectId,
+                                                cwTestGeometry::triangles({QVector3D(),
+                                                                           QVector3D(kTriangleEdge, 0.0f, 0.0f),
+                                                                           QVector3D(0.0f, kTriangleEdge, 0.0f)},
+                                                                          {0, 1, 2}));
+    const QFuture<void> ready = intersecter.addObject(triangle);
+
+    CHECK(waitUntilProcessingEvents([&]() { return countsFor(intersect).queued >= 1; }));
+    CHECK(countsFor(QStringLiteral("untagged")).queued == 0);
+
+    releaseBlocker.release();
+    CHECK(waitUntil([&]() { return blocker.isFinished(); }));
+    CHECK(waitUntilProcessingEvents([&]() { return ready.isFinished(); }));
+    intersecter.waitForFinish();
+
+    CHECK(intersecter.isObjectPickReady(triangle.key()));
+    CHECK(waitUntil([&]() { return countsEqual(intersect, 0, 0); }));
+}
+
+TEST_CASE("Loading a project counts its worker tasks as load work", "[cwTaskTrace]")
+{
+    REQUIRE(waitUntil([]() { return cwTask::threadPool()->activeThreadCount() == 0; }));
+    ThreadCountRestorer restorer(kSingleThread);
+
+    const QString load = QStringLiteral("load");
+    CHECK(countsEqual(load, 0, 0));
+
+    // Holding the only worker keeps the load's tasks queued long enough to read their tag
+    QSemaphore releaseBlocker;
+    QFuture<void> blocker;
+    {
+        cwTaskContextScope scope(QStringLiteral("trace-load-blocker"));
+        blocker = cwConcurrent::run([&releaseBlocker]() { releaseBlocker.acquire(); });
+    }
+
+    // The project reads run in continuations after load() returns, so their tag shows the wraps held
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    cwSaveLoad saveLoad;
+    const QFuture<Monad::ResultBase> loaded = saveLoad.load(tempDir.filePath(QStringLiteral("trace-load.cwproj")));
+
+    CHECK(waitUntilProcessingEvents([&]() { return countsFor(load).queued >= 1; }));
+
+    releaseBlocker.release();
+    CHECK(waitUntil([&]() { return blocker.isFinished(); }));
+    CHECK(waitUntilProcessingEvents([&]() { return loaded.isFinished(); }));
+    CHECK(waitUntil([&]() { return countsEqual(load, 0, 0); }));
 }

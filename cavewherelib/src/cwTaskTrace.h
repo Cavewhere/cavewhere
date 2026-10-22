@@ -9,6 +9,8 @@
 //Std includes
 #include <chrono>
 #include <optional>
+#include <type_traits>
+#include <utility>
 
 //Our includes
 #include "CaveWhereLibExport.h"
@@ -46,8 +48,37 @@ public:
     //! The current thread's full context, for reinstalling in a continuation that runs on another thread
     static cwTaskContext currentContext();
 
+    //! Wraps the lambda f so each call reinstalls the context current at wrap time. The wrapper keeps
+    //! f's exact call signature, so AsyncFuture and QFuture::then still deduce its argument types.
+    //! f needs exactly one non-template operator(), so plain and mutable lambdas and std::function
+    //! work, while generic (auto) lambdas, overloaded functors, and function pointers fail to compile.
+    template <typename Function>
+    static auto wrap(Function&& f)
+    {
+        using Callable = std::decay_t<Function>;
+        return wrapWithSignature(Callable(std::forward<Function>(f)), currentContext(), &Callable::operator());
+    }
+
 private:
     cwTaskContext m_previous;
+
+    template <typename Callable, typename Class, typename Result, typename... Args>
+    static auto wrapWithSignature(Callable&& f, const cwTaskContext& context, Result (Class::*)(Args...) const)
+    {
+        return [f = std::forward<Callable>(f), context](Args... args) -> Result {
+            cwTaskContextScope scope(context);
+            return f(std::forward<Args>(args)...);
+        };
+    }
+
+    template <typename Callable, typename Class, typename Result, typename... Args>
+    static auto wrapWithSignature(Callable&& f, const cwTaskContext& context, Result (Class::*)(Args...))
+    {
+        return [f = std::forward<Callable>(f), context](Args... args) mutable -> Result {
+            cwTaskContextScope scope(context);
+            return f(std::forward<Args>(args)...);
+        };
+    }
 };
 
 //! A task interval for work that bypasses cwConcurrent::run, such as cwTask and direct pool->start() calls

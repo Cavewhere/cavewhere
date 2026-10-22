@@ -282,7 +282,7 @@ subsystem <code>com.cavewhere.tasks</code>.</p>
 
 <p><b>Context tags.</b> Every task is attributed to a short context name: <code>scraps</code>,
 <code>lidar</code>, <code>lineplot</code>, <code>octree</code>, <code>ktx2</code>, <code>tiles</code>,
-<code>textures</code>, <code>load</code>, <code>git</code>, <code>sketch</code>. An RAII scope sets a thread-local
+<code>textures</code>, <code>load</code>, <code>git</code>, <code>sketch</code>, <code>intersect</code>. An RAII scope sets a thread-local
 current context on the submitting thread:</p>
 <pre><code>{
     cwTaskContextScope scope(QStringLiteral("lidar"));
@@ -291,7 +291,9 @@ current context on the submitting thread:</p>
 <p><code>cwConcurrent::run</code> captures the context and the submit time, then on the worker reinstalls the
 context and opens a <code>task</code> interval whose arguments carry the context and the queue wait. Work submitted
 from inside a task inherits the tag, so only the top-level entry points need a scope: the three pipeline
-<code>doRun()</code>s, the octree build, the streamers, project load and the git operations. Untagged work shows up
+<code>doRun()</code>s, the octree build, the streamers, project load, the pick-BVH build and the git operations. A continuation that runs after its scope has closed
+(an AsyncFuture or <code>QFuture::then</code> callback) is wrapped with <code>cwTaskContextScope::wrap</code>, which
+reinstalls the context captured at wrap time. Untagged work shows up
 as <code>untagged</code>, which also shows which entry points still need a scope.</p>
 
 <table>

@@ -83,15 +83,11 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
         auto cropFuture = cropScrap(scrap, DataRootDir, format, scrapNode);
         auto dataRootDir = DataRootDir;
 
-        //Continuations run on the main thread after the caller's scope has closed
-        const cwTaskContext traceContext = cwTaskContextScope::currentContext();
-
         return AsyncFuture::observe(cropFuture)
             //DONT use "this" in .subscribe lambda capture, this object will be destroyed before the lambda is called
             //USING this will cause UB!
-            .subscribe([dataRootDir, cropFuture, scrap, scrapNode, traceContext]()
+            .subscribe(cwTaskContextScope::wrap([dataRootDir, cropFuture, scrap, scrapNode]()
                      {
-                         cwTaskContextScope traceScope(traceContext);
                          const auto croppedResult = cropFuture.result();
 
                          if(!croppedResult.image) {
@@ -128,8 +124,7 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 
                          return AsyncFuture::observe(uploadFuture)
                              .subscribe(
-                                 [scrap, cropFuture, uploadFuture, scrapNode, traceContext]() {
-                                     cwTaskContextScope traceScope(traceContext);
+                                 cwTaskContextScope::wrap([scrap, cropFuture, uploadFuture, scrapNode]() {
                                      return cwConcurrent::run([scrap, cropFuture, uploadFuture, scrapNode]()
                                                               {
                                                                   cwProgressScope scope(scrapNode);
@@ -138,9 +133,9 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
                                                                                              uploadFuture.result().image,
                                                                                              scrapNode);
                                                               });
-                                 }).future();
+                                 })).future();
 
-                     }).future();
+                     })).future();
     };
 
     QList<QFuture<cwTriangulatedData>> futures;
