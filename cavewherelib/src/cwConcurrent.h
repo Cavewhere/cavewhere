@@ -7,16 +7,42 @@
 #include <QThreadPool>
 #include "CaveWhereLibExport.h"
 #include "cwTask.h"
+#include "cwTaskTrace.h"
+
+//Std includes
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <type_traits>
 
 class CAVEWHERE_LIB_EXPORT cwConcurrent
 {
 public:
     cwConcurrent() = delete;
 
+    //! Tags the task with the submitting thread's cwTaskContextScope and marks it on the worker
     template <class Function, class ...Args>
     static auto run(Function &&f, Args &&...args)
     {
-        return QtConcurrent::run(cwTask::threadPool(), std::forward<Function>(f), std::forward<Args>(args)...);
+        using Callable = std::decay_t<Function>;
+        if constexpr (std::is_invocable_v<Callable, std::decay_t<Args>...>) {
+            return QtConcurrent::run(cwTask::threadPool(),
+                                     [submission = cwTaskSubmission(), f = Callable(std::forward<Function>(f))]
+                                     (std::decay_t<Args>... arguments) mutable {
+                                         cwTaskSubmission::Run run(submission);
+                                         return std::invoke(f, std::move(arguments)...);
+                                     },
+                                     std::forward<Args>(args)...);
+        } else {
+            using PromiseType = typename QtPrivate::ArgResolver<Callable>::PromiseType;
+            return QtConcurrent::run(cwTask::threadPool(),
+                                     [submission = cwTaskSubmission(), f = Callable(std::forward<Function>(f))]
+                                     (QPromise<PromiseType>& promise, std::decay_t<Args>... arguments) mutable {
+                                         cwTaskSubmission::Run run(submission);
+                                         std::invoke(f, promise, std::move(arguments)...);
+                                     },
+                                     std::forward<Args>(args)...);
+        }
     }
 
     template <typename Sequence, typename MapFunctor>
@@ -24,7 +50,7 @@ public:
         Sequence &&sequence,
         MapFunctor &&map)
     {
-        return QtConcurrent::mapped(cwTask::threadPool(), sequence, map);
+        return QtConcurrent::mapped(cwTask::threadPool(), sequence, batchFunctor(QStringLiteral("mapped"), sequence, map));
     }
 
     // Fire-and-forget parallel iteration: like mapped() but the functor
@@ -36,9 +62,20 @@ public:
         Sequence &&sequence,
         MapFunctor &&map)
     {
-        return QtConcurrent::map(cwTask::threadPool(), sequence, map);
+        return QtConcurrent::map(cwTask::threadPool(), sequence, batchFunctor(QStringLiteral("map"), sequence, map));
     }
 
+private:
+    //! The kernel holds the functor until the batch finishes, so its copy of the batch closes the interval then
+    template <typename Sequence, typename MapFunctor>
+    static auto batchFunctor(const QString& name, const Sequence& sequence, MapFunctor &&map)
+    {
+        auto batch = std::make_shared<const cwTaskBatch>(name, static_cast<qsizetype>(std::size(sequence)));
+        return [batch, context = cwTaskContextScope::currentContext(), map = std::decay_t<MapFunctor>(std::forward<MapFunctor>(map))](auto&& item) mutable -> decltype(auto) {
+            cwTaskContextScope scope(context);
+            return std::invoke(map, std::forward<decltype(item)>(item));
+        };
+    }
 
     // static void startThreadPool() {
     //     //I'm not sure if these ratios are the best

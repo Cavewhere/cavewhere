@@ -37,6 +37,7 @@
 #include "cwFontSettings.h"
 #include "cwProfileLog.h"
 #include "cwRenderingSettings.h"
+#include "cwTaskTrace.h"
 
 //std includes
 #include <memory>
@@ -148,10 +149,13 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
                                                 "millions");
     QCommandLineOption profileLogOption("profile-log",
                                         "Write the cw.profile.* lines to stderr.");
+    QCommandLineOption profileTasksQuitOption("profile-tasks-quit",
+                                              "Quit once the task trace reports the app idle.");
     parser.addOption(profileGpuBudgetOption);
     parser.addOption(profileSseOption);
     parser.addOption(profilePointBudgetOption);
     parser.addOption(profileLogOption);
+    parser.addOption(profileTasksQuitOption);
 
     // Adding optional filename argument
     parser.addPositionalArgument("filename", "The optional file to open.");
@@ -162,6 +166,8 @@ void handleCommandline(QCoreApplication& a, cwRootData* rootData) {
     if (parser.isSet(profileLogOption)) {
         enableProfileLogging();
     }
+
+    cwTaskTrace::start(rootData, parser.isSet(profileTasksQuitOption));
 
     // Before the project loads, so the first frame it draws already renders
     // under the overrides.

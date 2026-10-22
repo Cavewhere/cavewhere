@@ -175,6 +175,7 @@ private:
 
     const Loader m_loader;
     const ByteEstimator m_estimator;
+    const QString m_traceContext;
 
     mutable QMutex m_mutex;
     QWaitCondition m_inFlightFinished;
@@ -201,6 +202,9 @@ cwTileStreamer<Source, Payload>::cwTileStreamer(Loader loader,
                                                 cwRenderMemoryLedger::Category category) :
     m_loader(std::move(loader)),
     m_estimator(std::move(estimator)),
+    m_traceContext(category == cwRenderMemoryLedger::Category::TexturedItemTexture
+                       ? QStringLiteral("textures")
+                       : QStringLiteral("tiles")),
     m_cpuBytes(category, cwRenderMemoryLedger::Residency::Cpu)
 {
 }
@@ -356,6 +360,7 @@ void cwTileStreamer<Source, Payload>::enqueue(const Request& request)
 template <typename Source, typename Payload>
 void cwTileStreamer<Source, Payload>::launchReadyJobs()
 {
+    cwTaskContextScope traceScope(m_traceContext);
     while (!m_pending.isEmpty() && m_inFlight.size() < kMaxConcurrentLoads) {
         const Request request = m_pending.constFirst();
         const qint64 outstandingBytes = m_inFlightBytes + m_readyBytes;

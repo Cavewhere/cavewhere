@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Queueing — Benchmark and Plan (#711)</title>
+<style>
+  :root {
+    --bg: #1a1d21; --panel: #23272e; --panel2: #2b3038; --ink: #e6e9ee;
+    --muted: #9aa4b2; --accent: #5aa9e6; --accent2: #7ddc8f; --warn: #e6b35a;
+    --bad: #e66a6a; --line: #3a414b; --code-bg: #15181c; --violet: #b48ae6;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 48px 28px 120px; }
+  h1 { font-size: 30px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  h2 { font-size: 22px; margin: 52px 0 14px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--line); letter-spacing: -0.2px; }
+  h3 { font-size: 17px; margin: 28px 0 8px; color: var(--accent); }
+  .sub { color: var(--muted); margin: 0 0 8px; }
+  p { margin: 10px 0; }
+  code { font-family: var(--mono); font-size: 13.5px; background: var(--code-bg);
+    padding: 1.5px 6px; border-radius: 4px; color: #d8e0ea; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 13px; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0; }
+  .fig { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px; margin: 22px 0; text-align: center; }
+  .fig svg { max-width: 100%; height: auto; }
+  .figcap { color: var(--muted); font-size: 13.5px; margin-top: 12px; text-align: center; }
+  .figcap b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px;
+    border-radius: 999px; vertical-align: middle; }
+  .pill.ok { background: rgba(125,220,143,.16); color: var(--accent2); }
+  .pill.new { background: rgba(90,169,230,.16); color: var(--accent); }
+  .pill.edit { background: rgba(230,179,90,.16); color: var(--warn); }
+  .pill.todo { background: rgba(154,164,178,.16); color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: var(--panel2); font-weight: 600; }
+  td code { font-size: 12.5px; }
+  ul, ol { margin: 10px 0; padding-left: 24px; }
+  li { margin: 5px 0; }
+  .callout { border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 12px 16px; margin: 16px 0; border-radius: 0 8px 8px 0; }
+  .callout.warn { border-color: var(--warn); }
+  .callout.bad { border-color: var(--bad); }
+  .callout.ok { border-color: var(--accent2); }
+  .toc { columns: 2; column-gap: 32px; font-size: 14px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .cp { display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700;
+    padding:3px 10px; border-radius:6px; background:rgba(90,169,230,.16); color:var(--accent);
+    border:1px solid rgba(90,169,230,.35); margin-right: 6px; }
+  .cp.fix { background:rgba(125,220,143,.16); color:var(--accent2); border-color:rgba(125,220,143,.35); }
+  .blank { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Task Queueing — Benchmark and Plan</h1>
+<p class="sub">Issue <a style="color:var(--accent)" href="https://github.com/Cavewhere/cavewhere/issues/711">#711 “One task at a time”</a> · branch <code>dev_codex1</code> · 2026-10-21</p>
+
+<div class="callout">
+  <b>Goal.</b> Opening a big project, especially a fresh clone like the Marble range, starts work from many
+  places at once. All of it lands on the same thread pool, so tasks thrash each other's caches, and on mobile the
+  combined working sets go past the memory limit and the OS kills CaveWhere.
+  <br><br>
+  <b>Order of work.</b> Measure first. Phase&nbsp;0 builds a task-utilization benchmark on Apple signposts and
+  Instruments. Philip clears the cache and picks a set of common projects; Claude records them with
+  <code>xctrace</code>, exports the data and writes the analysis. The fixes in Phase&nbsp;1 come after that, in the
+  order the numbers support, and each one is re-measured with the same benchmark.
+</div>
+
+<div class="panel toc">
+  <a href="#today">1. How work is queued today</a><br>
+  <a href="#hypotheses">2. What the benchmark must answer</a><br>
+  <a href="#bench">3. Phase 0 — Benchmark</a><br>
+  &nbsp;&nbsp;<a href="#verified">What a test recording showed</a><br>
+  &nbsp;&nbsp;<a href="#cp1">B1 MarkScope fixes + signed build</a><br>
+  &nbsp;&nbsp;<a href="#cp2">B2 Task tags + sampler</a><br>
+  &nbsp;&nbsp;<a href="#cp3">B3 Runner + analysis</a><br>
+  <a href="#baseline">4. Baseline runs</a><br>
+  <a href="#fixes">5. Phase 1 — Fixes (after the baseline)</a><br>
+  <a href="#risks">6. Risks and open questions</a><br>
+  <a href="#status">7. Status</a>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="today">1. How work is queued today</h2>
+
+<h3>The pools</h3>
+<table>
+  <tr><th>Pool</th><th>Size</th><th>Used by</th></tr>
+  <tr><td><code>cwTask::threadPool()</code><br><code>cwTask.cpp:419</code></td><td><code>idealThreadCount</code></td>
+      <td><code>cwConcurrent::run/map/mapped</code>, every <code>cwTask</code>, QQuickGit (<code>main.cpp:289</code>)</td></tr>
+  <tr><td><code>QThreadPool::globalInstance()</code></td><td><code>idealThreadCount</code></td>
+      <td>Plain <code>QtConcurrent::run</code> without a pool, e.g. the git pull snapshots at <code>cwSaveLoad.cpp:4999</code>, <code>5049</code>, <code>5180</code>, <code>5215</code></td></tr>
+  <tr><td><code>m_saveThreadPool</code><br><code>cwSaveLoadPrivate.cpp:620</code></td><td>1</td><td>Save jobs, already serialized</td></tr>
+  <tr><td><code>cw::ktx2::encodeLane()</code><br><code>cwKtx2Codec.cpp:221</code></td><td><code>kEncodeLaneThreads</code></td><td>Basis compression</td></tr>
+</table>
+<p><code>cwJobSettings::setThreadCountPrivate</code> sets the user's thread count on the first two pools, so up to twice as
+many threads as cores can be runnable at once. Three places call <code>releaseThread()</code> while
+they block or orchestrate (<code>cwKtx2Codec.cpp:147</code>, <code>:172</code>, <code>cwPointOctreeBuilder.cpp:1399</code>),
+which lets the pool start a worker past its maximum.</p>
+
+<h3>How work enters</h3>
+<ol>
+  <li><b>The coordinator orders pipelines and admits all of their work at once.</b> <code>cwRootData.cpp:212-214</code>
+      registers the line plot, then scraps and LiDAR, both depending on the line plot. The cascade makes those two
+      wait for the solve. Because scraps and LiDAR are siblings, both start in the same turn once it finishes.</li>
+  <li><b>Each pipeline fans out every item immediately.</b>
+    <ul>
+      <li>Scraps: <code>cwTriangulateTask::triangulate()</code> (<code>cwTriangulateTask.cpp:70</code>) starts one
+          crop → mipmap/upload → <code>triangulateGeometry</code> chain per dirty scrap, and
+          <code>cwScrapManager.cpp:1269</code> combines all of them.</li>
+      <li>LiDAR: <code>cwTriangulateLiDARTask.cpp:126</code> submits one <code>cwConcurrent::run</code> per note. Each
+          run decodes a whole glTF, morphs its vertices and prepares textures. This is the largest per-task working
+          set in the app.</li>
+      <li>LAZ octree builds, tile and texture streamers, KTX2 encodes, project load and git all submit on their own
+          schedules to the same pool.</li>
+    </ul></li>
+  <li><b>A restart keeps the superseded run's work going.</b> <code>cwScrapManager.cpp:1250</code> and
+      <code>cwNoteLiDARManager.cpp:671</code>: “A restart cancels the combine, leaving these futures running, so the
+      generation check drops their results.” A re-dirty during load runs a second generation alongside the
+      first, and the first generation's output is discarded.</li>
+  <li><b>Queued closures hold memory too.</b> Each one keeps its captured inputs (<code>cwTriangulateInData</code>,
+      <code>cwTriangulateLiDARInData</code>) from the moment it's submitted.</li>
+</ol>
+
+<div class="fig">
+<svg viewBox="0 0 900 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, Segoe UI, sans-serif" font-size="13">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9aa4b2"/>
+    </marker>
+  </defs>
+  <!-- producers -->
+  <text x="20" y="24" fill="#9aa4b2" font-weight="600">Producers (all start on project open)</text>
+  <g>
+    <rect x="20" y="40" width="230" height="34" rx="6" fill="#2b3038" stroke="#3a414b"/>
+    <text x="32" y="62" fill="#e6e9ee">Scraps — N chains, all at once</text>
+    <rect x="20" y="82" width="230" height="34" rx="6" fill="#2b3038" stroke="#e66a6a"/>
+    <text x="32" y="104" fill="#e6e9ee">LiDAR — M glTF decodes</text>
+    <rect x="20" y="124" width="230" height="34" rx="6" fill="#2b3038" stroke="#3a414b"/>
+    <text x="32" y="146" fill="#e6e9ee">LAZ octree builds</text>
+    <rect x="20" y="166" width="230" height="34" rx="6" fill="#2b3038" stroke="#3a414b"/>
+    <text x="32" y="188" fill="#e6e9ee">Tile / texture streamers</text>
+    <rect x="20" y="208" width="230" height="34" rx="6" fill="#2b3038" stroke="#3a414b"/>
+    <text x="32" y="230" fill="#e6e9ee">Project load, git (QQuickGit)</text>
+    <rect x="20" y="250" width="230" height="34" rx="6" fill="#2b3038" stroke="#e6b35a" stroke-dasharray="4 3"/>
+    <text x="32" y="272" fill="#e6e9ee">Superseded generations</text>
+    <rect x="20" y="292" width="230" height="34" rx="6" fill="#2b3038" stroke="#3a414b"/>
+    <text x="32" y="314" fill="#e6e9ee">Plain QtConcurrent::run</text>
+  </g>
+  <!-- arrows -->
+  <g stroke="#9aa4b2" stroke-width="1.4" fill="none" marker-end="url(#ar)">
+    <path d="M250,57 C380,57 420,120 500,130"/>
+    <path d="M250,99 C380,99 420,130 500,138"/>
+    <path d="M250,141 L500,146"/>
+    <path d="M250,183 C380,183 420,160 500,154"/>
+    <path d="M250,225 C380,225 420,170 500,162"/>
+    <path d="M250,267 C380,267 420,178 500,170"/>
+    <path d="M250,309 C380,309 420,300 500,292"/>
+  </g>
+  <!-- pools -->
+  <rect x="500" y="100" width="370" height="96" rx="8" fill="#23272e" stroke="#5aa9e6"/>
+  <text x="516" y="124" fill="#5aa9e6" font-weight="600">cwTask::threadPool()</text>
+  <text x="516" y="146" fill="#9aa4b2">max = idealThreadCount, unbounded FIFO queue</text>
+  <text x="516" y="168" fill="#9aa4b2">+ releaseThread() lets it go past max</text>
+  <text x="516" y="186" fill="#9aa4b2" font-size="12">no admission control · no per-context limit</text>
+  <rect x="500" y="262" width="370" height="60" rx="8" fill="#23272e" stroke="#5aa9e6" stroke-opacity=".6"/>
+  <text x="516" y="286" fill="#5aa9e6" font-weight="600">QThreadPool::globalInstance()</text>
+  <text x="516" y="308" fill="#9aa4b2">max = idealThreadCount, the same user setting</text>
+  <rect x="500" y="20" width="175" height="54" rx="8" fill="#23272e" stroke="#3a414b"/>
+  <text x="512" y="42" fill="#e6e9ee">ktx2 encodeLane</text>
+  <text x="512" y="62" fill="#9aa4b2" font-size="12">kEncodeLaneThreads</text>
+  <rect x="695" y="20" width="175" height="54" rx="8" fill="#23272e" stroke="#3a414b"/>
+  <text x="707" y="42" fill="#e6e9ee">m_saveThreadPool</text>
+  <text x="707" y="62" fill="#9aa4b2" font-size="12">1 thread</text>
+</svg>
+<div class="figcap"><b>Today:</b> every producer submits its full batch to a shared pool on its own schedule. The
+pool caps running threads, and the queue behind it accepts everything.</div>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="hypotheses">2. What the benchmark must answer</h2>
+<p>Each fix in Phase&nbsp;1 rests on one of these. The benchmark has to confirm or rule out each one, so the
+recordings and the analysis are designed around them.</p>
+<table>
+  <tr><th>#</th><th>Hypothesis</th><th>Signal in the recordings</th><th>Fix it motivates</th></tr>
+  <tr><td>H1</td><td>LiDAR fan-out is the largest contributor to peak memory.</td>
+      <td>The footprint curve against the per-context intervals; the contexts running at the peak; allocations live at the peak by responsible caller.</td><td>F2</td></tr>
+  <tr><td>H2</td><td>Superseded generations duplicate a significant share of work during load.</td>
+      <td>CPU time inside <code>dropped</code> events.</td><td>F1</td></tr>
+  <tr><td>H3</td><td>Unrelated jobs overlap: scraps, LiDAR, octree builds and KTX2 encodes run together.</td>
+      <td>Per-context intervals; the overlap matrix.</td><td>F3</td></tr>
+  <tr><td>H4</td><td>Workers are oversubscribed: more runnable threads than cores (two pools plus <code>releaseThread()</code>).</td>
+      <td>Thread state: peak runnable threads against the core count, and time spent Runnable or Preempted, per context. This is the measured quantity. The cache thrash the issue describes is a consequence of oversubscription; it shows up as longer per-task durations and is read from them, not counted.</td><td>F4</td></tr>
+  <tr><td>H5</td><td>Deep queues are the norm, so the order of submission decides the order of completion.</td>
+      <td>The queued count per context from the sampler; queue wait per task.</td><td>F2, F3</td></tr>
+</table>
+
+<!-- ================================================================== -->
+<h2 id="bench">3. Phase 0 — Benchmark</h2>
+
+<div class="callout ok">
+  <b>Design.</b> CaveWhere marks its work with Apple signposts through MarkScope. Instruments records them
+  alongside the CPU samples, thread states and allocations the OS already collects. A runner script records each
+  project with <code>xctrace</code>, exports the tables to XML and writes the analysis. Philip clears the cache and
+  picks the projects; Claude records, exports and analyzes. This covers the Mac and the iPhone. Windows and
+  Android are out of scope for the benchmark.
+</div>
+
+<h3 id="verified">What a test recording showed (2026-10-21)</h3>
+<p>A small test program (four threads, each with a signpost interval and a 50&nbsp;MB allocation) was recorded and
+exported with <code>xctrace</code>&nbsp;16.0 to see what can be read without opening the Instruments app.</p>
+<table>
+  <tr><th>Data</th><th>Export</th><th>Result</th></tr>
+  <tr><td>Signpost intervals</td><td><code>table[@schema="os-signpost-interval"]</code></td>
+      <td>Start, duration, thread and the formatted arguments (<code>ctx= lidar n= 1</code>, written with <code>%{public}s</code>).</td></tr>
+  <tr><td>Thread state</td><td><code>table[@schema="thread-state"]</code></td>
+      <td>Running, Runnable, Preempted, Blocked, Idle per thread over time. 14k rows for one second of five threads.</td></tr>
+  <tr><td>CPU samples</td><td><code>table[@schema="time-profile"]</code></td><td>Symbolicated stacks per sample.</td></tr>
+  <tr><td>Also available</td><td><code>context-switch</code>, <code>virtual-memory</code>, <code>cpu-state</code></td><td>Context switches and page faults.</td></tr>
+  <tr><td>Allocation statistics</td><td><code>track[@name="Allocations"]/details/detail[@name="Statistics"]</code></td>
+      <td>Per size class: transient (allocated then freed) and persistent bytes and counts. The four freed 50&nbsp;MB buffers appeared as transient.</td></tr>
+  <tr><td>Allocation list</td><td><code>…/detail[@name="Allocations List"]</code></td>
+      <td>Address, size, timestamp, thread and responsible caller, for allocations <b>still live when the recording stops</b>. Freed allocations are absent, so this list gives no memory-over-time curve.</td></tr>
+</table>
+<p>Two requirements surfaced:</p>
+<ul>
+  <li><b>Instruments can only attach to a binary signed with <code>com.apple.security.get-task-allow</code>.</b>
+      Recording an unsigned binary fails with “Failed to attach to target process.” The Release
+      <code>CaveWhere.app</code> in <code>build/</code> is currently unsigned. <code>entitlements.plist</code> already
+      grants the entitlement, so an ad-hoc <code>codesign -f -s - --entitlements entitlements.plist</code> is enough.</li>
+  <li><b>The first recording on a machine shows a Developer Tools permission prompt.</b> Until it's approved, the
+      launched process stays suspended and the recording hangs.</li>
+</ul>
+<p>Because the allocation list only holds what is live at the end, the memory curve comes from CaveWhere's own
+sampler (B2), which writes the footprint as signpost events. One trick follows from the same fact: a memory
+recording stopped at the moment of the peak lists what is live <i>at the peak</i>, with responsible callers. That
+part is untested.</p>
+
+<h3 id="cp1"><span class="cp">B1</span>MarkScope fixes and a signed build <span class="pill edit">edit</span></h3>
+<p><b>Per-interval ids.</b> <code>MarkScope::Profiler</code> generates one <code>os_signpost_id_t</code> in its
+constructor and reuses it for every interval. Instruments pairs a begin with its end by id, so overlapping
+intervals from different pool threads on one <code>Profiler</code> get matched to the wrong partner. Change
+<code>start()</code> to generate an id and return it as a small token that <code>stop()</code> takes back.
+<code>ScopedProfiler</code> holds the token, so its callers stay the same. <code>FrameProfiler</code> runs one
+interval at a time on the render thread and is unaffected.</p>
+
+<p><b>Public arguments.</b> The current format <code>"task: %s"</code> risks showing the name as
+<code>&lt;private&gt;</code>. Use <code>%{public}s</code>, as the test recording did.</p>
+
+<p><b>Fixed names, variable arguments.</b> <code>os_signpost</code> requires the interval name to be a string
+literal. Use a small fixed set of names (<code>task</code>, <code>batch</code>) and pass everything variable as
+arguments (<code>ctx=%{public}s name=%{public}s wait_us=%llu</code>). That matters for the export: the analysis
+groups by name and parses the arguments.</p>
+
+<p><b>Events.</b> Add <code>Profiler::event()</code> over <code>os_signpost_event_emit</code> for the sampler's
+values and the <code>dropped</code> marks. It is unpaired, so it needs no id.</p>
+
+<p><b>Signing.</b> The runner script signs the bundle ad hoc with <code>entitlements.plist</code> before each
+recording. That keeps the profiling step out of CMake. Check that signing the outer bundle is enough while Qt's
+frameworks load from the Qt install through rpath; <code>--deep</code> is the fallback. iOS development builds
+from Xcode already carry the entitlement.</p>
+
+<p><b>ITT backend.</b> Add the same token API to the ITT path, using <code>__itt_task_begin</code> and
+<code>__itt_task_end</code>, so MarkScope's interface stays the same on both backends.</p>
+
+<h3 id="cp2"><span class="cp">B2</span>Task tags and the sampler <span class="pill new">new</span></h3>
+<p><b>New files:</b> <code>cwTaskTrace.h/.cpp</code> in <code>cavewherelib/src</code>, built on MarkScope with
+subsystem <code>com.cavewhere.tasks</code>.</p>
+
+<p><b>Context tags.</b> Every task is attributed to a short context name: <code>scraps</code>,
+<code>lidar</code>, <code>lineplot</code>, <code>octree</code>, <code>ktx2</code>, <code>tiles</code>,
+<code>textures</code>, <code>load</code>, <code>git</code>, <code>sketch</code>. An RAII scope sets a thread-local
+current context on the submitting thread:</p>
+<pre><code>{
+    cwTaskContextScope scope(QStringLiteral("lidar"));
+    const auto futures = cwTriangulateLiDARTask::triangulate(inputs, progressRoot);
+}</code></pre>
+<p><code>cwConcurrent::run</code> captures the context and the submit time, then on the worker reinstalls the
+context and opens a <code>task</code> interval whose arguments carry the context and the queue wait. Work submitted
+from inside a task inherits the tag, so only the top-level entry points need a scope: the three pipeline
+<code>doRun()</code>s, the octree build, the streamers, project load and the git operations. Untagged work shows up
+as <code>untagged</code>, which also shows which entry points still need a scope.</p>
+
+<table>
+  <tr><th>Source</th><th>Marked as</th></tr>
+  <tr><td><code>cwConcurrent::run</code></td><td>A <code>task</code> interval on the worker thread, with <code>ctx</code> and <code>wait_us</code>.</td></tr>
+  <tr><td><code>cwConcurrent::map/mapped</code></td><td>A <code>batch</code> interval from submit until the future finishes, with the item count. Items aren't marked one by one: the octree maps produce hundreds of thousands.</td></tr>
+  <tr><td><code>cwTask::start()</code></td><td>A <code>task</code> interval named by <code>cwTask::name()</code>.</td></tr>
+  <tr><td>Direct <code>pool-&gt;start()</code> (ktx2 lane, octree columns)</td><td>A <code>task</code> interval at each of the few call sites.</td></tr>
+  <tr><td>QQuickGit, plain <code>QtConcurrent::run</code></td><td>Covered by thread state and CPU samples, plus a coarse interval around each git operation in <code>cwSaveLoad</code>. The submodule stays untouched.</td></tr>
+  <tr><td>Generation-check drops in scraps and LiDAR</td><td>The pipeline's <code>task</code> intervals carry <code>gen=N</code>, and the generation check emits a <code>dropped</code> event naming the same generation. The analysis sums the CPU time of the task intervals whose generation was dropped. The check runs on the main thread after the future settles, so it has no CPU time of its own to report; matching by generation keeps that out of the result types and adds no member data to the managers.</td></tr>
+</table>
+
+<p><b>Sampler.</b> A dedicated thread emits one event per <code>kTaskTraceSampleIntervalMs</code> (50&nbsp;ms):</p>
+<ul>
+  <li><code>mem</code>: physical footprint and resident size, from <code>TASK_VM_INFO</code>. Footprint is the
+      number iOS kills apps on, and the same call works on macOS. On iOS it also carries
+      <code>os_proc_available_memory()</code>, the budget left before the kill, so the report can state the margin
+      instead of guessing the device limit. macOS has no limit, so Mac runs show the shape of the curve and the
+      phone is the only place the crash itself reproduces.</li>
+  <li><code>queue</code>: queued and running counts per context, kept by the wrapper as atomics. <code>QThreadPool</code>
+      doesn't expose its queue length, so the wrapper is the only source.</li>
+  <li><code>pool</code>: <code>activeThreadCount()</code> and <code>maxThreadCount()</code> for each pool.</li>
+</ul>
+<p>The sampler runs only while a recording is on. It checks <code>os_signpost_enabled()</code> once a second
+when idle and switches to 50&nbsp;ms sampling as soon as Instruments starts recording. That works the same on the
+iPhone, where there is no command line to turn it on.</p>
+
+<p><b>Idle mark.</b> For scripted runs, the app emits an <code>idle</code> event once all of these hold
+continuously for <code>kTaskTraceQuietWindowMs</code> (2&nbsp;s):</p>
+<ul>
+  <li>the project has loaded;</li>
+  <li><code>cwUpdateCoordinator::running</code> is false, and <code>needsUpdate</code> is false when automatic update is on;</li>
+  <li><code>cwFutureManagerModel::count</code> is 0;</li>
+  <li>every pool reports zero active threads and every context reports zero queued.</li>
+</ul>
+<p>With <code>--profile-tasks-quit</code> it then quits, which ends an <code>xctrace --launch</code> recording.
+The quiet window catches work that starts a turn after the previous job ends, such as scraps starting after the
+solve.</p>
+
+<p><b>Off cost.</b> When nothing is recording, a submission costs one thread-local read and one clock read, and
+<code>os_signpost</code> calls return early.</p>
+
+<p><b>Tests</b> (<code>[cwTaskTrace]</code>): the context carries across a nested <code>cwConcurrent::run</code>;
+queued and running counts are correct with a saturated pool (pool of 1, two tasks); an untagged submission reports
+<code>untagged</code>. The counters are the sampler's real input, so the tests read them through the same API.</p>
+
+<h3 id="cp3"><span class="cp">B3</span>Runner and analysis <span class="pill new">new</span></h3>
+<p><code>scripts/profile_tasks.py</code>, modeled on <code>profile_pointcloud.py</code> (Python standard library only,
+streaming XML parsing with <code>iterparse</code>):</p>
+<pre><code>scripts/profile_tasks.py \
+    --build build/Qt_6_11_2_for_macOS-Release \
+    --project ~/caves/marble.cwproj --project ~/caves/foo.cw \
+    --cold --out build/profile/tasks/baseline
+# iPhone, connected by cable, with an Xcode development build installed:
+scripts/profile_tasks.py --device "Philip's iPhone" --project … --out …</code></pre>
+
+<p><b>Recordings per project.</b> Allocation tracking slows the app enough to distort timing, so each project gets
+separate runs:</p>
+<table>
+  <tr><th>Run</th><th>xctrace</th><th>Answers</th></tr>
+  <tr><td>A: timing</td><td><code>--template "Time Profiler" --instrument os_signpost --instrument "Thread State Trace"</code></td><td>H2–H5, time to idle, where CPU time goes</td></tr>
+  <tr><td>B: memory</td><td><code>--template Allocations --instrument os_signpost</code></td><td>H1 totals, the footprint curve, transient bytes per size class</td></tr>
+  <tr><td>B′: memory at the peak (optional)</td><td>Run B with <code>--time-limit</code> set to the peak time from A</td><td>H1 attribution: allocations live at the peak, by responsible caller</td></tr>
+</table>
+
+<p><b>Cold starts.</b> <code>--cold</code> deletes the project's <code>.cw_cache</code> before each recording. It
+removes cache files only. Clearing it by hand gives the same cold start. On the iPhone there is no shell and the
+cache sits inside the project directory, so a cold run there means deleting the project from the Files app and
+copying it over again; the runner prints that step and waits. An in-app “clear cache” action would make this
+repeatable, and is a candidate for later.</p>
+
+<p><b>Protocol.</b> The same steps for every row in §4:</p>
+<ol>
+  <li>Clone or copy the project first. The recording measures the open, and the clone is network time. If the clone
+      itself is wanted, record it separately with git as the only context.</li>
+  <li>Clear the cache (<code>--cold</code>) or leave it (warm).</li>
+  <li>Launch with the project as the positional argument and <code>--page</code> set to the 3D view, so tile and
+      texture streaming starts the same way in every run instead of depending on which page the app opened on.
+      Also pass <code>--profile-log</code>, so the existing <code>lcProfileLoad</code> numbers land in the same
+      output folder as a cross-check.</li>
+  <li>Three runs per row. One multi-minute recording is a single sample; the report prints the median and the
+      spread, and <code>--compare</code> reports a difference only when it clears the spread.</li>
+  <li>Automatic update stays on and the thread count stays at the default. Both persist in <code>QSettings</code>,
+      so a lowered thread count on one machine would silently change H4.</li>
+</ol>
+
+<p><b>Analysis.</b> The script exports the tables listed in the test above and joins them on thread and time:
+a CPU sample or thread-state row belongs to the context whose <code>task</code> interval covers it on that thread.
+It writes <code>&lt;out&gt;/report.md</code>:</p>
+<table>
+  <tr><th>Scope</th><th>Metrics</th></tr>
+  <tr><td>Header</td><td>Commit hash, device model and OS version, core count, the thread count and automatic-update
+      settings, build directory, project, cold or warm, run count. Without these a number can't be compared later.</td></tr>
+  <tr><td>Whole run</td><td>Time to idle; time to first scrap and first LiDAR mesh delivered; peak footprint, when it
+      happened and (iOS) the budget left at that moment; the contexts running at the peak;
+      peak runnable threads against the core count; total CPU time; CPU time inside <code>dropped</code>.</td></tr>
+  <tr><td>Per context</td><td>Task count; CPU time; wall span; peak running and peak queued; queue wait p50 and p95;
+      time Running against Runnable or Preempted; footprint growth while it ran; top stacks by CPU samples.</td></tr>
+  <tr><td>Overlap</td><td>A context × context matrix of overlapping running seconds.</td></tr>
+  <tr><td>Memory (run B)</td><td>Transient and persistent bytes by size class; with B′, the largest live allocations at the peak and their callers.
+      Two things to look for there: queued closures still holding their inputs, and finished results waiting for the
+      combine. F2 bounds the first; the second only shrinks if the combine applies results as they arrive.</td></tr>
+</table>
+<p><code>--compare baseline after-F1</code> prints the differences between two output folders. Claude reads the
+reports, checks anything surprising against the raw tables, and writes the findings into §4.</p>
+
+<p><b>Release builds only.</b> Address Sanitizer in Debug inflates memory and changes timing too much for the
+numbers to mean anything.</p>
+
+<!-- ================================================================== -->
+<h2 id="baseline">4. Baseline runs</h2>
+<p>Once B1–B3 are in: Philip clears the cache and picks the projects, Claude records runs A and B for each one and
+fills in this table and the H1–H5 verdicts. Pick projects that cover each producer: one dominated by scraps, one
+dominated by LiDAR, one with LAZ layers, and the Marble clone as the everything-at-once case.</p>
+
+<table>
+  <tr><th>Project</th><th>Device</th><th>Mode</th><th>Time to idle</th><th>Peak footprint</th><th>Budget at peak</th><th>Running at peak</th><th>Runnable at peak / cores</th><th>Dropped CPU</th><th>Notes</th></tr>
+  <tr><td>Marble range (fresh clone)</td><td>Mac</td><td>cold</td><td class="blank">—</td><td class="blank">—</td><td>n/a</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td></td></tr>
+  <tr><td>Marble range</td><td>Mac</td><td>warm</td><td class="blank">—</td><td class="blank">—</td><td>n/a</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td></td></tr>
+  <tr><td>Marble range (fresh clone)</td><td>iPhone</td><td>cold</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td></td></tr>
+  <tr><td class="blank">scrap-heavy project</td><td>Mac</td><td>cold</td><td class="blank">—</td><td class="blank">—</td><td>n/a</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td></td></tr>
+  <tr><td class="blank">LiDAR-heavy project</td><td>Mac</td><td>cold</td><td class="blank">—</td><td class="blank">—</td><td>n/a</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td></td></tr>
+  <tr><td class="blank">LAZ project</td><td>Mac</td><td>cold</td><td class="blank">—</td><td class="blank">—</td><td>n/a</td><td class="blank">—</td><td class="blank">—</td><td class="blank">—</td><td></td></tr>
+</table>
+<p>Each cell is the median of three runs, with the spread in the notes when it matters. “Budget at peak” is
+<code>os_proc_available_memory()</code> at the moment of the peak; a negative or near-zero value is the crash.</p>
+
+<table>
+  <tr><th>Hypothesis</th><th>Verdict</th><th>Evidence</th></tr>
+  <tr><td>H1 LiDAR dominates peak memory</td><td class="blank">—</td><td></td></tr>
+  <tr><td>H2 superseded generations duplicate work</td><td class="blank">—</td><td></td></tr>
+  <tr><td>H3 unrelated jobs overlap</td><td class="blank">—</td><td></td></tr>
+  <tr><td>H4 workers oversubscribed</td><td class="blank">—</td><td></td></tr>
+  <tr><td>H5 deep queues</td><td class="blank">—</td><td></td></tr>
+</table>
+
+<div class="callout warn">
+  <b>Decision gate.</b> Phase&nbsp;1 starts after the verdicts are in. They decide the order of F1–F4 below. The
+  order listed there is the expected one, before any data.
+</div>
+
+<!-- ================================================================== -->
+<h2 id="fixes">5. Phase 1 — Fixes (after the baseline)</h2>
+<p>Each fix is a separate commit. Each one is re-measured with <code>profile_tasks.py --compare</code> against the
+baseline, and the numbers go in the commit body. Each fix has a pass line below; a fix that misses its line is
+reworked before the next one starts. Across all four, time to idle on the Mac stays within 10% of the baseline, and
+time to first scrap delivered stays within 2&nbsp;s of it.</p>
+
+<h3><span class="cp fix">F1</span>Cancel superseded runs <span class="pill edit">edit</span> <span class="pill todo">H2</span></h3>
+<p>When a restart bumps the generation in <code>cwScrapManager</code> and <code>cwNoteLiDARManager</code>, cancel
+each in-flight future as well as the combine. Have <code>triangulateOne</code> and
+<code>triangulateGeometry</code> check for cancellation between meshes and between stages, so a canceled task
+stops early instead of running to the end. The smallest and most contained change.</p>
+<p><b>Pass:</b> dropped CPU time under 1% of total CPU time on the Marble cold open.</p>
+
+<h3><span class="cp fix">F2</span>Bounded fan-out inside a pipeline <span class="pill new">new</span> <span class="pill todo">H1 H5</span></h3>
+<p>Replace “submit all N, then combine” with a windowed launcher: start <i>K</i> items, then start the next as
+each finishes. Generalize the admission loop the octree already has (<code>cwPointOctreeBuilder.cpp:1394-1410</code>,
+<code>maxRunning</code> plus <code>inFlightBytes</code>) into a <code>cwConcurrent</code> helper instead of
+writing a second copy. Apply it to LiDAR first, then scraps. Admit by an estimated byte budget, not just a count,
+so mobile can admit one or two meshes while desktop admits a core's worth. Queued inputs are only built when
+admitted, which also covers item 4 in §1.</p>
+<p><b>Pass:</b> on the iPhone the Marble cold open finishes with the budget at peak above 25% of the device's
+starting budget; on the Mac peak footprint drops by at least the LiDAR share H1 attributed, within the spread.</p>
+
+<h3><span class="cp fix">F3</span>One top-level job at a time <span class="pill new">new</span> <span class="pill todo">H3</span></h3>
+<p>This is what #711 asks for. A <code>cwJobQueue</code> takes jobs as <code>QFuture</code>-returning callables
+and starts the next one only after the current one settles. A job may still use the whole pool, with F2 bounding
+it. Scraps, LiDAR, octree builds and project load go through the queue. Interactive work keeps its own lane:
+tile and texture streaming, saves (already on a single-thread pool) and git. Rules to keep:</p>
+<ul>
+  <li>A queued job never waits on a job behind it in the queue, or the queue deadlocks.</li>
+  <li>Cancellation and coordinator supersede still reach a job that's queued but not started.</li>
+  <li>Queued jobs report through <code>cwFutureManagerModel</code>, so the task flyout shows them as waiting.</li>
+  <li>Closing the project or quitting cancels every queued job and lets the running one settle, in the same place
+      <code>shutdownBlocking</code> drains today. A queued job never starts after its project is gone.</li>
+</ul>
+<p><b>Pass:</b> the overlap matrix shows zero running seconds between any two queued contexts; time to first scrap
+within the limit above.</p>
+
+<h3><span class="cp fix">F4</span>One pool, sized once <span class="pill edit">edit</span> <span class="pill todo">H4</span></h3>
+<p>Move the plain <code>QtConcurrent::run</code> calls onto <code>cwConcurrent::run</code> so all CPU work shares
+one pool. Then review the <code>releaseThread()</code> sites: a thread blocked in a KTX2 encode makes room for
+another worker, which is the oversubscription H4 measures. Only do this if the baseline shows workers above the
+core count.</p>
+<p><b>Pass:</b> peak runnable threads at or below the core count, and Runnable-or-Preempted time per context under
+5% of its Running time.</p>
+
+<!-- ================================================================== -->
+<h2 id="risks">6. Risks and open questions</h2>
+<ul>
+  <li><b>Export size on long runs.</b> Thread state produced 14k rows for one second of five threads. A
+      multi-minute Marble open with dozens of threads could produce millions of rows and gigabytes of XML. The
+      script parses with <code>iterparse</code> and exports one table at a time. If that's still too slow, drop
+      Thread State Trace from run A and use <code>context-switch</code> instead.</li>
+  <li><b>Signpost category.</b> The test used <code>OS_LOG_CATEGORY_POINTS_OF_INTEREST</code>. Thousands of task
+      intervals would bury the Points of Interest track in the Instruments app, so B2 uses its own category. Check
+      that the os_signpost instrument records a custom category without extra configuration.</li>
+  <li><b>iPhone launch.</b> Check that <code>xctrace record --device … --launch</code> passes arguments such as
+      <code>--profile-tasks-quit</code> to an iOS app. If it doesn't, stop the recording on the <code>idle</code> event
+      with <code>--attach</code> and a manual stop.</li>
+  <li><b>Cache location for bundled <code>.cw</code> files.</b> A bundle is extracted to a temporary directory
+      before it loads. Confirm where its <code>.cw_cache</code> ends up, and whether a bundle open always starts cold,
+      before <code>--cold</code> relies on it.</li>
+  <li><b>Allocation overhead.</b> Malloc stack logging on a large project slows the app, which can change the
+      overlap seen in run B. Run A's timing is the reference; run B is for memory only.</li>
+  <li><b>Peak attribution is shared.</b> Several contexts running at the peak share the blame. Footprint growth per
+      context, measured while it ran alone, separates them. If no context ever runs alone, a temporary
+      <code>--profile-tasks-serial</code> option that forces one context at a time would give per-context working sets,
+      and would also preview F3.</li>
+  <li><b>Windows and Android aren't covered.</b> MarkScope's ITT backend gives VTune on Intel Windows machines.
+      Android would need an ATrace backend; add it only if the crash shows up there.</li>
+  <li><b>F3 and responsiveness.</b> One job at a time can make the first scrap appear later than today. The report
+      includes time to first delivery as well as time to idle, and the pass lines in §5 bound it.</li>
+  <li><b>MarkScope has no build switch.</b> <code>Profiler.h</code> selects the signpost backend with
+      <code>#ifdef __APPLE__</code>, so every Release build on Apple platforms already emits signposts and nothing
+      in CMake needs to change. The calls are cheap while nothing records.</li>
+  <li><b>Counting cache misses directly.</b> Instruments' CPU Counters template can count L2 misses on Apple Silicon.
+      H4 is settled by thread state, so this is only worth a fourth run if the oversubscription numbers come back
+      small and the slowdown is still there.</li>
+</ul>
+
+<!-- ================================================================== -->
+<h2 id="status">7. Status</h2>
+<table>
+  <tr><th>Step</th><th>State</th></tr>
+  <tr><td>Instruments export check</td><td><span class="pill ok">done 2026-10-21</span> signposts, thread state, CPU samples and allocation tables all export (§3)</td></tr>
+  <tr><td><span class="cp">B1</span>MarkScope fixes and a signed build</td><td><span class="pill todo">planned</span></td></tr>
+  <tr><td><span class="cp">B2</span>Task tags and the sampler</td><td><span class="pill todo">planned</span></td></tr>
+  <tr><td><span class="cp">B3</span>Runner and analysis</td><td><span class="pill todo">planned</span></td></tr>
+  <tr><td>Baseline runs</td><td><span class="pill todo">waiting on B1–B3</span></td></tr>
+  <tr><td><span class="cp fix">F1</span>–<span class="cp fix">F4</span></td><td><span class="pill todo">after the decision gate</span></td></tr>
+</table>
+
+</div>
+</body>
+</html>

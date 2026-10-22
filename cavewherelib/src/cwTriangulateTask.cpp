@@ -12,6 +12,7 @@
 #include "utils/cwTriangulate.h"
 #include "cwRunningProfileScrapViewMatrix.h"
 #include "cwConcurrent.h"
+#include "cwTaskTrace.h"
 
 //Utils includes
 #include "utils/Forsyth.h"
@@ -82,11 +83,15 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
         auto cropFuture = cropScrap(scrap, DataRootDir, format, scrapNode);
         auto dataRootDir = DataRootDir;
 
+        //Continuations run on the main thread after the caller's scope has closed
+        const cwTaskContext traceContext = cwTaskContextScope::currentContext();
+
         return AsyncFuture::observe(cropFuture)
             //DONT use "this" in .subscribe lambda capture, this object will be destroyed before the lambda is called
             //USING this will cause UB!
-            .subscribe([dataRootDir, cropFuture, scrap, scrapNode]()
+            .subscribe([dataRootDir, cropFuture, scrap, scrapNode, traceContext]()
                      {
+                         cwTaskContextScope traceScope(traceContext);
                          const auto croppedResult = cropFuture.result();
 
                          if(!croppedResult.image) {
@@ -123,8 +128,8 @@ QList<QFuture<cwTriangulatedData>> cwTriangulateTask::triangulate() const
 
                          return AsyncFuture::observe(uploadFuture)
                              .subscribe(
-                                 [scrap, cropFuture, uploadFuture, scrapNode]() {
-
+                                 [scrap, cropFuture, uploadFuture, scrapNode, traceContext]() {
+                                     cwTaskContextScope traceScope(traceContext);
                                      return cwConcurrent::run([scrap, cropFuture, uploadFuture, scrapNode]()
                                                               {
                                                                   cwProgressScope scope(scrapNode);

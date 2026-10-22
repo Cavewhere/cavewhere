@@ -8,6 +8,7 @@
 //Our includes
 #include "cwLinePlotManager.h"
 #include "cwRestarterTracking.h"
+#include "cwTaskTrace.h"
 #include "cwCavingRegion.h"
 #include "cwGeoReference.h"
 #include "cwCave.h"
@@ -573,6 +574,7 @@ QFuture<void> cwLinePlotManager::doRun() {
             auto input = cwLinePlotTask::buildInput(Region.data(),
                                                     m_caveAttachmentDirs,
                                                     m_tripAttachmentDirs);
+            cwTaskContextScope traceScope(QStringLiteral("lineplot"));
             auto future = cwLinePlotTask::run(std::move(input));
 
             // Receive the worker's result by parameter rather than capturing

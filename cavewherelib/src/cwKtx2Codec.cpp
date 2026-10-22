@@ -2,6 +2,7 @@
 #include "cwKtx2Codec.h"
 #include "cwMipMath.h"
 #include "cwTask.h"
+#include "cwTaskTrace.h"
 
 // Qt includes
 #include <QDebug>
@@ -140,6 +141,8 @@ namespace {
         QSemaphore compressed;
 
         cw::ktx2::encodeLane()->start([texture, params, &compressError, &compressed]() {
+            cwTaskContextScope traceScope(QStringLiteral("ktx2"));
+            cwTaskInterval interval(QStringLiteral("encode"));
             compressError = ktxTexture2_CompressBasisEx(texture, params);
             compressed.release();
         });

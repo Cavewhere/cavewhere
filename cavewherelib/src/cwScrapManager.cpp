@@ -32,6 +32,7 @@
 #include "asyncfuture.h"
 #include "cwAbstractScrapViewMatrix.h"
 #include "cwConcurrent.h"
+#include "cwTaskTrace.h"
 #include "cwTriangulateWarping.h"
 #include "cwTriangulateWarpingSettings.h"
 #include "cwSaveLoad.h"
@@ -1206,6 +1207,8 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
     }
 
     auto startTask = [this]() {
+        //Tagged with the generation this run takes below
+        cwTaskContextScope traceScope(QStringLiteral("scraps"), m_runGeneration + 1);
 
         //Running
         auto dirtyScrapsRange =
@@ -1257,6 +1260,7 @@ QFuture<void> cwScrapManager::updateScrapGeometryHelper(QList<cwScrap *> scraps)
             AsyncFuture::observe(result.data).context(this, [this, scrap, generation, future = result.data]()
             {
                 if(generation != m_runGeneration) {
+                    cwTaskTrace::dropped(QStringLiteral("scraps"), generation);
                     return;
                 }
 
