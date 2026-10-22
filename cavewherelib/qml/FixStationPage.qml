@@ -50,6 +50,11 @@ StandardPage {
     // The QSettings keys of the dragged column widths, in column order.
     readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
 
+    // Whether any column holds a dragged width rather than its default.
+    readonly property bool hasCustomColumnWidths: columnWidthsId.stationColumnWidth > 0
+                                                  || columnWidthsId.inputCSColumnWidth > 0
+                                                  || columnWidthsId.coordinateColumnWidth > 0
+
     // Under any output system, a local grid's included, a file whose fix names
     // no system is placed at the project origin, so only then does a bare
     // attached row with no system chosen warn.
@@ -407,6 +412,15 @@ StandardPage {
         const width = Math.min(maximum, Math.max(minimum, requestedWidth))
         columnWidthsId[keys[column]] = width
         columnSettingsId.setValue(keys[column], width)
+    }
+
+    //! Puts every column back at its default width, which follows the font
+    //! scale, by storing the default sentinel 0 in place of each dragged width.
+    function resetColumnWidths(): void {
+        for (const key of fixStationPage.columnWidthKeys) {
+            columnWidthsId[key] = 0
+            columnSettingsId.setValue(key, 0)
+        }
     }
 
     //! Picks up the stored column widths, including ones dragged on this
@@ -1177,20 +1191,40 @@ StandardPage {
             }
         }
 
-        QQ.Row {
+        QQ.Item {
             visible: !fixStationPage.isNarrow
+            implicitWidth: headerRowId.implicitWidth
+            implicitHeight: headerRowId.implicitHeight
             Layout.fillWidth: true
 
-            QQ.Repeater {
-                model: columnModelId
+            QQ.Row {
+                id: headerRowId
 
-                delegate: TableStaticHeaderColumn {
-                    required property int index
+                QQ.Repeater {
+                    model: columnModelId
 
-                    model: treeFilterId
-                    resizable: true
+                    delegate: TableStaticHeaderColumn {
+                        required property int index
 
-                    onResizeRequested: (newWidth) => fixStationPage.resizeColumn(index, newWidth)
+                        model: treeFilterId
+                        resizable: true
+
+                        onResizeRequested: (newWidth) => fixStationPage.resizeColumn(index, newWidth)
+                    }
+                }
+            }
+
+            // Above the header cells so a touch long-press reaches it; a left
+            // click still sorts and a drag still resizes.
+            ContextMenuArea {
+                objectName: "fixColumnHeaderMenu"
+                anchors.fill: parent
+
+                QC.MenuItem {
+                    objectName: "resetColumnWidthsMenuItem"
+                    text: qsTr("Reset column widths")
+                    enabled: fixStationPage.hasCustomColumnWidths
+                    onTriggered: fixStationPage.resetColumnWidths()
                 }
             }
         }

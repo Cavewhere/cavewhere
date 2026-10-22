@@ -147,13 +147,18 @@ MainWindowTest {
             RootData.newProject()
 
             // Puts back the widths a test dragged, on the page's own category.
-            for (const key of ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]) {
+            for (const key of columnWidthKeys) {
                 fixColumnSettingsId.setValue(key, 0)
             }
             fixColumnSettingsId.sync()
+            RootData.settings.fontSettings.fontBaseSize = RootData.settings.fontSettings.defaultFontBaseSize
         }
 
         readonly property string coordinateTitle: "Coordinate (East, North / Lat, Long)"
+        readonly property list<string> columnWidthKeys: ["stationColumnWidth", "inputCSColumnWidth", "coordinateColumnWidth"]
+        readonly property int columnDrag: 80
+        readonly property int columnWidthTolerance: 2
+        readonly property int largerFontStep: 4
 
         //! The resize grip on the right edge of header \a title.
         function resizeGripOf(title) {
@@ -1819,16 +1824,15 @@ MainWindowTest {
             verify(header !== null, "the page has a Coordinate header")
             const startWidth = header.width
             const startMinimum = page.wideMinimumWidth
-            const drag = 80
 
-            dragColumnEdge(coordinateTitle, -drag)
-            tryVerify(() => Math.abs(header.width - (startWidth - drag)) <= 2, 5000,
+            dragColumnEdge(coordinateTitle, -columnDrag)
+            tryVerify(() => Math.abs(header.width - (startWidth - columnDrag)) <= columnWidthTolerance, 5000,
                       "the Coordinate header narrows by the drag, from " + startWidth
-                      + " to about " + (startWidth - drag) + ", got " + header.width)
+                      + " to about " + (startWidth - columnDrag) + ", got " + header.width)
             const draggedWidth = header.width
             tryCompare(coordinateCell.parent, "width", draggedWidth, 5000,
                        "the fix row's coordinate cell follows its column")
-            verify(Math.abs(page.wideMinimumWidth - (startMinimum - drag)) <= 2,
+            verify(Math.abs(page.wideMinimumWidth - (startMinimum - columnDrag)) <= columnWidthTolerance,
                    "the table needs less room once a column narrows")
             verify(!page.isNarrow, "the page keeps the wide layout")
 
@@ -1889,6 +1893,121 @@ MainWindowTest {
             verify(page.wideMinimumWidth <= page.width,
                    "the widened table (" + page.wideMinimumWidth + ") still fits the page ("
                    + page.width + ")")
+        }
+
+        //! Right-clicks header \a title and returns the header's menu area
+        //! once its menu is open.
+        function openColumnHeaderMenu(title) {
+            const page = RootData.pageView.currentPageItem
+            const menuArea = findChild(page, "fixColumnHeaderMenu")
+            verify(menuArea !== null, "the column header carries a context menu")
+            const cell = rootId.headerCell(title)
+            verify(cell !== null, "the page has a " + title + " header")
+            mouseClick(cell, cell.width / 2, cell.height / 2, Qt.RightButton)
+            tryVerify(() => menuArea.menu.opened, 5000,
+                      "right-clicking the " + title + " header opens its menu")
+            return menuArea
+        }
+
+        //! The item named \a name in \a menuArea's menu, null when there is none.
+        function menuItemNamed(menuArea, name) {
+            const menu = menuArea.menu
+            for (let i = 0; i < menu.count; ++i) {
+                const item = menu.itemAt(i)
+                if (item !== null && item.objectName === name) {
+                    return item
+                }
+            }
+            return null
+        }
+
+        // The header's "Reset column widths" puts a dragged column back at its
+        // default width and stores the default sentinel in its place.
+        function test_resetColumnWidthsRestoresTheDefaults() {
+            const cave = gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            cave.fixStations.addFixStation()
+            findCoordinateCell(0)
+            waitForRendering(page)
+
+            const header = rootId.headerCell(coordinateTitle)
+            verify(header !== null, "the page has a Coordinate header")
+            const defaultWidth = header.width
+
+            let menuArea = openColumnHeaderMenu(coordinateTitle)
+            let resetItem = menuItemNamed(menuArea, "resetColumnWidthsMenuItem")
+            verify(resetItem !== null, "the header menu offers Reset column widths")
+            verify(!resetItem.enabled, "the reset is disabled while every column has its default width")
+            menuArea.menu.close()
+            tryVerify(() => !menuArea.menu.visible, 5000, "the header menu closes")
+
+            dragColumnEdge(coordinateTitle, -columnDrag)
+            tryVerify(() => Math.abs(header.width - (defaultWidth - columnDrag)) <= columnWidthTolerance, 5000,
+                      "the Coordinate header narrows by the drag, got " + header.width)
+            const draggedWidth = header.width
+            compare(Number(fixColumnSettingsId.value("coordinateColumnWidth", 0)), draggedWidth,
+                    "the dragged width is stored")
+
+            menuArea = openColumnHeaderMenu(coordinateTitle)
+            resetItem = menuItemNamed(menuArea, "resetColumnWidthsMenuItem")
+            verify(resetItem !== null, "the header menu offers Reset column widths")
+            verify(resetItem.enabled, "the reset is enabled once a column has a stored width")
+            mouseClick(resetItem)
+            tryVerify(() => !menuArea.menu.visible, 5000, "choosing the reset closes the menu")
+
+            tryCompare(header, "width", defaultWidth, 5000,
+                       "the Coordinate header returns to its default width")
+            tryCompare(findCoordinateCell(0).parent, "width", defaultWidth, 5000,
+                       "and the fix row's coordinate cell follows it")
+            for (const key of columnWidthKeys) {
+                compare(Number(fixColumnSettingsId.value(key, 0)), 0,
+                        key + " holds the default sentinel after the reset")
+            }
+
+            menuArea = openColumnHeaderMenu(coordinateTitle)
+            resetItem = menuItemNamed(menuArea, "resetColumnWidthsMenuItem")
+            verify(!resetItem.enabled, "the reset is disabled again once every width is the default")
+            menuArea.menu.close()
+            tryVerify(() => !menuArea.menu.visible, 5000, "the header menu closes")
+        }
+
+        // A larger font gives a page built afterwards wider default columns,
+        // while a width the user dragged stays as stored.
+        function test_defaultColumnWidthsGrowWithTheFontScale() {
+            const fontSettings = RootData.settings.fontSettings
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize
+            gotoFixStations()
+            waitForRendering(RootData.pageView.currentPageItem)
+            const smallWidth = rootId.headerCell("Input CS").columnWidth
+
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize + largerFontStep
+            RootData.newProject()
+            gotoFixStations()
+            const page = RootData.pageView.currentPageItem
+            waitForRendering(page)
+            let header = null
+            tryVerify(() => {
+                header = rootId.headerCell("Input CS")
+                return header !== null
+            }, 5000, "the rebuilt page has an Input CS header")
+            verify(header.columnWidth > smallWidth,
+                   "the default Input CS width grows with the font, from " + smallWidth
+                   + " to " + header.columnWidth)
+
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize
+            tryVerify(() => !page.isNarrow, 5000, "the page shows its wide layout")
+            waitForRendering(page)
+            const startWidth = header.width
+            dragColumnEdge("Input CS", -Theme.tableColumnMinimumWidth)
+            tryVerify(() => header.width < startWidth, 5000, "the Input CS column narrows")
+            const draggedWidth = header.columnWidth
+
+            fontSettings.fontBaseSize = fontSettings.defaultFontBaseSize + largerFontStep
+            tryVerify(() => Theme.fontScale > fontSettings.defaultFontBaseSize / 16.0, 5000,
+                      "the font scale grows")
+            compare(header.columnWidth, draggedWidth, "a dragged width stays as stored")
+            compare(Number(fixColumnSettingsId.value("inputCSColumnWidth", 0)), draggedWidth,
+                    "and its setting is unchanged")
         }
 
         function test_fixStationsLinkCount() {
