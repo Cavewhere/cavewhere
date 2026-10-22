@@ -104,6 +104,11 @@ StandardPage {
     // system as text. One picker is open at a time.
     property int editingCSRow: -1
 
+    // The id of the node or trip whose bare-fix system picker is open, empty
+    // when every owner shows its system as text. It shares the one open
+    // picker with editingCSRow.
+    property string editingOwnerId: ""
+
     PageView.defaultSelectionProperties: ({ "currentFixRow": -1 })
 
     function addFix() {
@@ -207,6 +212,7 @@ StandardPage {
         if (row !== fixStationPage.editingCSRow) {
             fixStationPage.closeCSPicker()
         }
+        fixStationPage.closeOwnerPicker()
         treeViewId.currentIndex = row
         if (fixStationPage.PageView.page !== null) {
             fixStationPage.PageView.page.selectionProperties = { "currentFixRow": row }
@@ -266,8 +272,22 @@ StandardPage {
         }
     }
 
+    function openCSPicker(row: int): void {
+        fixStationPage.closeOwnerPicker()
+        fixStationPage.editingCSRow = row
+    }
+
     function closeCSPicker(): void {
         fixStationPage.editingCSRow = -1
+    }
+
+    function openOwnerPicker(ownerId: string): void {
+        fixStationPage.closeCSPicker()
+        fixStationPage.editingOwnerId = ownerId
+    }
+
+    function closeOwnerPicker(): void {
+        fixStationPage.editingOwnerId = ""
     }
 
     // The tree's rows renumber, so an open picker would land on another row.
@@ -445,12 +465,14 @@ StandardPage {
             fixStationPage.readColumnWidths()
         } else {
             fixStationPage.closeCSPicker()
+            fixStationPage.closeOwnerPicker()
         }
     }
 
     // The picker is wider and may be taller than the text it replaces, and the
     // view reads row heights only when it lays rows out.
     onEditingCSRowChanged: Qt.callLater(treeViewId.forceLayout)
+    onEditingOwnerIdChanged: Qt.callLater(treeViewId.forceLayout)
 
     QQ.Component.onCompleted: fixStationPage.readColumnWidths()
 
@@ -783,7 +805,7 @@ StandardPage {
             // The default grab is passive, so a single click still reaches
             // the row and selects it.
             QQ.TapHandler {
-                onDoubleTapped: fixStationPage.editingCSRow = inputCSField.rowIndex
+                onDoubleTapped: fixStationPage.openCSPicker(inputCSField.rowIndex)
             }
 
             QQ.HoverHandler {
@@ -881,75 +903,81 @@ StandardPage {
     }
 
     // Chooses the system an attachment's fixes with no system of their own read
-    // in, on the owner's node row. Shown while the owner's files hold any such
-    // fix.
+    // in, on the owner's node row: the system's name as text at rest, and the
+    // picker in its place once a double-click opens it.
     component OwnerSystemControl : RowLayout {
         id: ownerSystemControl
 
         required property QtObject owner
         required property bool isNodeOwner
         property string value: ""
+        readonly property string ownerName: ownerSystemControl.owner?.name ?? ""
+        readonly property string ownerId: String(ownerSystemControl.owner?.id ?? "")
+        readonly property bool editing: ownerSystemControl.ownerId !== ""
+                                        && fixStationPage.editingOwnerId === ownerSystemControl.ownerId
 
         signal committed(string newCS)
 
         spacing: Theme.tightSpacing
 
+        // An owner that leaves the tree with its picker open, by a detach or
+        // a reset, takes the open picker with it.
+        QQ.Component.onDestruction: {
+            if (ownerSystemControl.editing) {
+                fixStationPage.closeOwnerPicker()
+            }
+        }
+
         QC.Label {
             text: ownerSystemControl.isNodeOwner
                   ? "Read fixes with no coordinate system as"
-                  : "Read " + (ownerSystemControl.owner?.name ?? "")
-                    + "'s fixes with no coordinate system as"
+                  : "Read " + ownerSystemControl.ownerName + "'s fixes with no coordinate system as"
             textFormat: QC.Label.PlainText
             font.pixelSize: Theme.fontSizeSmall
         }
 
-        CSComboBox {
-            objectName: "bareFixSystemCombo." + (ownerSystemControl.owner?.name ?? "")
-            offersUnset: true
-            value: ownerSystemControl.value
-            onCommitted: (newCS) => ownerSystemControl.committed(newCS)
+        QC.Label {
+            id: ownerSystemLabel
+            objectName: "bareFixSystemValue." + ownerSystemControl.ownerName
+            visible: !ownerSystemControl.editing
+            text: ownerSystemControl.value !== "" ? CSFormat.displayName(ownerSystemControl.value) : "unset"
+            textFormat: QC.Label.PlainText
+            elide: QC.Label.ElideRight
+            color: Theme.text
+
+            // An exclusive grab keeps the double-click from reaching the
+            // view, which would toggle the node row open or closed.
+            QQ.TapHandler {
+                gesturePolicy: QQ.TapHandler.WithinBounds
+                onDoubleTapped: fixStationPage.openOwnerPicker(ownerSystemControl.ownerId)
+            }
+
+            QQ.HoverHandler {
+                id: ownerSystemHover
+            }
+
+            QC.ToolTip {
+                visible: ownerSystemHover.hovered && ownerSystemLabel.visible
+                         && ownerSystemControl.value !== ""
+                text: CSFormat.inlineDescription(ownerSystemControl.value)
+                delay: Theme.toolTipDelay
+            }
         }
-    }
 
-    // The owner controls of a node's trips that carry attachments, each shown
-    // while its file has a fix with no system of its own.
-    component TripSystemControls : ColumnLayout {
-        id: tripSystemControls
+        QQ.Loader {
+            id: ownerPickerLoader
+            visible: ownerPickerLoader.active
+            active: ownerSystemControl.editing
 
-        required property SurveyNode node
+            // Focus moves into the picker as it opens, so Escape, which the
+            // tree handles, puts the text back.
+            onLoaded: ownerPickerLoader.forceActiveFocus()
 
-        // Recounted from the node's attached rows, which list every trip's
-        // fixes.
-        property int revision: 0
-
-        spacing: Theme.tightSpacing
-
-        QQ.Connections {
-            target: tripSystemControls.node?.attachedFixes ?? null
-
-            function onModelReset() { tripSystemControls.revision++ }
-            function onDataChanged() { tripSystemControls.revision++ }
-        }
-
-        QQ.Repeater {
-            model: tripSystemControls.node?.tripCount ?? 0
-
-            delegate: OwnerSystemControl {
-                id: tripControl
-
-                required property int index
-
-                readonly property Trip trip: tripSystemControls.node?.trip(tripControl.index) ?? null
-
-                owner: tripControl.trip
-                isNodeOwner: false
-                value: tripControl.trip?.externalCenterline.fixCoordinateSystem ?? ""
-                visible: tripSystemControls.revision >= 0
-                         && tripControl.trip !== null
-                         && !tripControl.trip.externalCenterline.isEmpty
-                         && tripSystemControls.node.attachedFixes.bareFixCount(tripControl.trip.id) > 0
-
-                onCommitted: (newCS) => fixStationPage.setOwnerFixCoordinateSystem(tripControl.trip, newCS)
+            sourceComponent: CSComboBox {
+                objectName: "bareFixSystemCombo." + ownerSystemControl.ownerName
+                offersUnset: true
+                value: ownerSystemControl.value
+                onCommitted: (newCS) => ownerSystemControl.committed(newCS)
             }
         }
     }
@@ -1255,6 +1283,17 @@ StandardPage {
 
             onWidthChanged: treeViewId.forceLayout()
 
+            // Handled here rather than on the picker: an attached fix list
+            // that changes under an open owner picker can leave the focus on
+            // the view.
+            QQ.Keys.onEscapePressed: (event) => {
+                if (fixStationPage.editingOwnerId !== "") {
+                    fixStationPage.closeOwnerPicker()
+                } else {
+                    event.accepted = false
+                }
+            }
+
             QC.ScrollBar.vertical: QC.ScrollBar {}
 
             QQ.Component.onCompleted: Qt.callLater(fixStationPage.applyExpansion)
@@ -1347,6 +1386,7 @@ StandardPage {
             required property string fixCoordinateSystem
             required property string inheritedFixCoordinateSystem
             required property SurveyNode inheritedFromNode
+            required property list<Trip> bareFixOwnerTrips
 
             readonly property bool isPageNode: nodeRowId.node === fixStationPage.cave
             // The region's root node has no name of its own.
@@ -1358,6 +1398,18 @@ StandardPage {
 
             implicitWidth: nodeColumnId.implicitWidth + nodeColumnId.anchors.leftMargin + Theme.delegatePadding
             implicitHeight: nodeColumnId.implicitHeight + 2 * Theme.delegatePadding
+
+            // An owner picker open on this row closes as the view puts the
+            // row back in its pool.
+            QQ.TableView.onPooled: {
+                const ownerIds = [String(nodeRowId.node?.id ?? "")]
+                for (const trip of nodeRowId.bareFixOwnerTrips) {
+                    ownerIds.push(String(trip.id))
+                }
+                if (ownerIds.indexOf(fixStationPage.editingOwnerId) >= 0) {
+                    fixStationPage.closeOwnerPicker()
+                }
+            }
 
             QQ.Rectangle {
                 anchors.fill: parent
@@ -1421,21 +1473,43 @@ StandardPage {
                     }
                 }
 
-                OwnerSystemControl {
-                    visible: nodeRowId.isAttachmentOwner && nodeRowId.attachmentBareFixCount > 0
-                    owner: nodeRowId.node
-                    isNodeOwner: true
-                    value: nodeRowId.fixCoordinateSystem
+                QQ.Loader {
+                    id: nodeOwnerLoader
+                    // Hidden while inactive, so the column gives it no spacing.
+                    visible: nodeOwnerLoader.active
+                    active: nodeRowId.isAttachmentOwner && nodeRowId.attachmentBareFixCount > 0
                     Layout.leftMargin: Theme.treeCaretWidth
 
-                    onCommitted: (newCS) => treeFilterId.setData(nodeRowId.treeView.index(nodeRowId.row, 0),
-                                                                 newCS,
-                                                                 FixStationTreeModel.FixCoordinateSystemRole)
+                    sourceComponent: OwnerSystemControl {
+                        owner: nodeRowId.node
+                        isNodeOwner: true
+                        value: nodeRowId.fixCoordinateSystem
+
+                        onCommitted: (newCS) => treeFilterId.setData(nodeRowId.treeView.index(nodeRowId.row, 0),
+                                                                     newCS,
+                                                                     FixStationTreeModel.FixCoordinateSystemRole)
+                    }
                 }
 
-                TripSystemControls {
-                    node: nodeRowId.node
-                    Layout.leftMargin: Theme.treeCaretWidth
+                // Only the trips whose files hold a fix with no system get a
+                // control, so a row reused for another node builds none for
+                // the rest.
+                QQ.Repeater {
+                    model: nodeRowId.bareFixOwnerTrips
+
+                    delegate: OwnerSystemControl {
+                        id: tripOwnerControl
+
+                        required property Trip modelData
+
+                        owner: tripOwnerControl.modelData
+                        isNodeOwner: false
+                        value: tripOwnerControl.modelData?.externalCenterline.fixCoordinateSystem ?? ""
+                        Layout.leftMargin: Theme.treeCaretWidth
+
+                        onCommitted: (newCS) => fixStationPage.setOwnerFixCoordinateSystem(
+                                         tripOwnerControl.modelData, newCS)
+                    }
                 }
 
                 InheritedSystemRow {

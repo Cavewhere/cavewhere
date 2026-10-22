@@ -61,6 +61,34 @@ MainWindowTest {
         return null
     }
 
+    //! How many items under \a item, hidden ones included, satisfy \a matches.
+    function countDescendants(item, matches) {
+        let count = 0
+        if (item === null) {
+            return count
+        }
+        const children = item.children
+        for (let i = 0; i < children.length; ++i) {
+            const child = children[i]
+            if (matches(child)) {
+                ++count
+            }
+            count += rootId.countDescendants(child, matches)
+        }
+        return count
+    }
+
+    //! How many items under \a item, hidden ones included, have an objectName
+    //! starting with \a prefix.
+    function countWithPrefix(item, prefix) {
+        return rootId.countDescendants(item, child => String(child.objectName).startsWith(prefix))
+    }
+
+    //! How many CSComboBox items sit under \a item, hidden ones included.
+    function countCSComboBoxes(item) {
+        return rootId.countDescendants(item, child => child instanceof CSComboBox)
+    }
+
     //! The visible descendants of \a item whose text contains \a text.
     function itemsShowingText(item, text) {
         let found = []
@@ -2589,6 +2617,9 @@ MainWindowTest {
         readonly property string subtreeFixture:
             "external-centerlines/survex_subtree_fixes/ridge.svx"
         readonly property int subtreeFixCount: 4
+        readonly property int sweepStep: 40
+        readonly property int sweepMaxSteps: 500
+        readonly property int toggleRuns: 3
 
         function init() {
             RootData.project.newProject()
@@ -2652,6 +2683,26 @@ MainWindowTest {
                 return item !== null && item.visible
             }, 5000, objectName + " should be on screen")
             return item
+        }
+
+        //! Opens the bare-fix system picker of the owner named \a ownerName:
+        //! at rest its node row shows the system as text, and a double-click on
+        //! that text loads the picker. Returns the picker.
+        function openOwnerPicker(ownerName) {
+            const label = waitForChild("bareFixSystemValue." + ownerName)
+            waitForRendering(rootId)
+            doubleTap(label)
+            return waitForChild("bareFixSystemCombo." + ownerName)
+        }
+
+        //! A new cave named \a caveName with \a tripCount trips, named t0, t1, ….
+        function makeManyTripCave(caveName, tripCount) {
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, caveName)
+            for (let i = 0; i < tripCount; ++i) {
+                cave.addTrip()
+                cave.trip(i).name = "t" + i
+            }
+            return cave
         }
 
         //! How many attached fixes \a node and its descendants list: a file's
@@ -2768,6 +2819,51 @@ MainWindowTest {
             compare(waitForChild("noCoordinateSystemBadge.0").text, "none \u2192 origin")
             compare(liveChild("pickFromViewButton.0"), null)
             rootId.width = wideWidth
+        }
+
+        //! The Fix Stations page's tree at \a address, once the page is current.
+        function openFixStationTree(address) {
+            RootData.pageSelectionModel.currentPageAddress = address
+            tryVerify(() => RootData.pageView.currentPageItem !== null
+                            && RootData.pageView.currentPageItem.objectName === "fixStationPage",
+                      5000, "should land on fixStationPage at " + address)
+            return findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
+        }
+
+        //! Scrolls \a view from the top to the bottom and back in sweepStep
+        //! steps, laying it out and calling \a visit after every step.
+        //! Returns the number of steps.
+        function sweep(view, visit) {
+            let steps = 0
+            while (view.contentY + view.height < view.contentHeight - 1 && steps < sweepMaxSteps) {
+                view.contentY = Math.min(view.contentY + sweepStep, view.contentHeight - view.height)
+                view.forceLayout()
+                visit()
+                ++steps
+            }
+            while (view.contentY > 0 && steps < 2 * sweepMaxSteps) {
+                view.contentY = Math.max(view.contentY - sweepStep, 0)
+                view.forceLayout()
+                visit()
+                ++steps
+            }
+            return steps
+        }
+
+        //! Collapses and expands \a view's root toggleRuns times, logging each
+        //! run's timings tagged \a tag.
+        function timeRootToggles(view, tag) {
+            for (let run = 0; run < toggleRuns; ++run) {
+                const start = Date.now()
+                view.collapse(0)
+                view.forceLayout()
+                const collapsed = Date.now()
+                view.expand(0)
+                view.forceLayout()
+                const expanded = Date.now()
+                console.info(tag, "root collapse ms", collapsed - start, "expand ms", expanded - collapsed,
+                             "rows", view.rows)
+            }
         }
 
         // The lock's tooltip names the file in the tooltip colors in the
@@ -2943,11 +3039,15 @@ MainWindowTest {
             tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
             compare(waitForChild("stationCell.0").text, "bare.A")
 
-            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null,
-                   "the owner's page offers a system for the file's bare fixes")
+            const ownerRow = waitForChild("nodeRow.AttachedCave")
+            compare(rootId.countWithPrefix(ownerRow, "bareFixSystemCombo."), 0,
+                    "the owner's row builds no picker at rest")
+            compare(waitForChild("bareFixSystemValue.AttachedCave").text, "unset",
+                    "the owner's page names the unset system for the file's bare fixes")
             const badge = waitForChild("noCoordinateSystemBadge.0")
 
-            page.setBareFixCoordinateSystem(0, "UTM48N")
+            const combo = openOwnerPicker("AttachedCave")
+            combo.committed("UTM48N")
             tryVerify(() => cave.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
                       "the choice lands on the attachment")
             tryVerify(() => badge.text.indexOf("UTM48N") >= 0, 5000,
@@ -2983,7 +3083,7 @@ MainWindowTest {
 
             const page = openFixStationsOf(cave)
             tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
-            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null)
+            verify(waitForChild("bareFixSystemValue.AttachedCave") !== null)
 
             page.setBareFixCoordinateSystem(0, "UTM48N")
             tryVerify(() => cave.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
@@ -3008,7 +3108,7 @@ MainWindowTest {
 
             const page = openFixStationsOf(cave)
             tryCompare(findChild(page, "fixStationTreeView"), "count", 1)
-            verify(waitForChild("bareFixSystemCombo.AttachedCave") !== null)
+            verify(waitForChild("bareFixSystemValue.AttachedCave") !== null)
             page.setBareFixCoordinateSystem(0, "UTM48N")
             tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 10000,
                       "the choice gives the project a frame")
@@ -3125,8 +3225,10 @@ MainWindowTest {
 
             // The owner's control sits on the owner's node row.
             const ownerRow = waitForChild("nodeRow.ridge")
-            tryVerify(() => findChild(ownerRow, "bareFixSystemCombo.ridge") !== null, 5000,
-                      "the owner's row offers a system for the file's bare fixes")
+            tryVerify(() => findChild(ownerRow, "bareFixSystemValue.ridge") !== null, 5000,
+                      "the owner's row names a system for the file's bare fixes")
+            verify(isInside(openOwnerPicker("ridge"), ownerRow),
+                   "and opens its picker there on a double-click")
 
             const entrancesRow = waitForChild("tripRow.entrances")
             tryVerify(() => rootId.showsText(entrancesRow, "without coordinate system"), 5000,
@@ -3193,6 +3295,8 @@ MainWindowTest {
                       "the trip row carries the block's badge")
             compare(findChild(tripRow, "bareFixSystemCombo.simmons_hall"), null,
                     "the trip row offers no system of its own")
+            compare(findChild(tripRow, "bareFixSystemValue.simmons_hall"), null,
+                    "nor names one")
 
             const unsetInherited = liveChild("inheritedSystem.simmons_hall")
             verify(unsetInherited === null || !unsetInherited.visible,
@@ -3200,8 +3304,10 @@ MainWindowTest {
 
             // The owner's control stays on the owner's node row.
             const ownerRow = waitForChild("nodeRow.leaf")
-            tryVerify(() => findChild(ownerRow, "bareFixSystemCombo.leaf") !== null, 5000,
-                      "the owner's row offers a system for the file's bare fixes")
+            tryVerify(() => findChild(ownerRow, "bareFixSystemValue.leaf") !== null, 5000,
+                      "the owner's row names a system for the file's bare fixes")
+            verify(isInside(openOwnerPicker("leaf"), ownerRow),
+                   "and opens its picker there on a double-click")
             page.setBareFixCoordinateSystem(0, "UTM48N")
             tryVerify(() => root.externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
                       "the choice lands on the attachment")
@@ -3224,6 +3330,119 @@ MainWindowTest {
             const toggle = findChild(page, "expandToggleButton")
             verify(toggle !== null, "the page has one expand/collapse toggle")
             tryVerify(() => toggle.visible, 5000, "a page whose rows are trip rows offers Collapse all")
+        }
+
+        //! Attaches bare_fix.svx to trips t3 and t17 of \a cave and waits for
+        //! the scan to list each one's bare fix on the cave.
+        function attachBareFixesToTwoTrips(cave) {
+            const source = TestHelper.testcasesDatasetPath(
+                             "external-centerlines/survex_bare_fix/bare_fix.svx")
+            attachSourceToTrip(cave.trip(3), source)
+            attachSourceToTrip(cave.trip(17), source)
+            tryVerify(() => cave.attachedFixes.bareFixCount(cave.trip(3).id) > 0
+                            && cave.attachedFixes.bareFixCount(cave.trip(17).id) > 0,
+                      20000, "the scan lists both trips' bare fixes on the cave")
+        }
+
+        //! Logs the owner labels and pickers under \a item, tagged \a what.
+        function logOwnerControls(what, item) {
+            console.info("SP1", what,
+                         "bareFixSystemValue", rootId.countWithPrefix(item, "bareFixSystemValue."),
+                         "bareFixSystemCombo", rootId.countWithPrefix(item, "bareFixSystemCombo."),
+                         "CSComboBox", rootId.countCSComboBoxes(item))
+        }
+
+        // A node row names the system of each trip whose attachment holds a
+        // fix with no coordinate system, and builds a picker only for the one
+        // the user double-clicks: a cave of many trips builds nothing for the
+        // trips that need none.
+        function test_aNodeRowBuildsOwnerControlsOnlyForTripsWithBareFixes() {
+            saveProjectAs("fix-station-owner-controls")
+            const big = makeManyTripCave("Big", 40)
+            attachBareFixesToTwoTrips(big)
+
+            openFixStationsOf(big)
+            const row = waitForChild("nodeRow.Big")
+            waitForRendering(rootId)
+            logOwnerControls("Big row at rest", row)
+            compare(rootId.countWithPrefix(row, "bareFixSystemCombo."), 0,
+                    "no picker at rest")
+            compare(rootId.countCSComboBoxes(row), 0, "no CSComboBox at rest")
+            waitForChild("bareFixSystemValue.t3")
+            waitForChild("bareFixSystemValue.t17")
+            compare(rootId.countWithPrefix(row, "bareFixSystemValue."), 2,
+                    "one owner label per trip whose file holds a bare fix")
+
+            // One picker is open at a time.
+            openOwnerPicker("t17")
+            const combo = openOwnerPicker("t3")
+            logOwnerControls("Big row with t3's picker open", row)
+            compare(rootId.countWithPrefix(row, "bareFixSystemCombo."), 1,
+                    "opening t3's picker closes t17's")
+            compare(rootId.countCSComboBoxes(row), 1)
+            compare(liveChild("bareFixSystemCombo.t17"), null)
+
+            combo.committed("UTM48N")
+            tryVerify(() => big.trip(3).externalCenterline.fixCoordinateSystem === "UTM48N", 5000,
+                      "the choice lands on t3's attachment")
+            compare(big.trip(17).externalCenterline.fixCoordinateSystem, "",
+                    "and on no other trip")
+            RootData.futureManagerModel.waitForFinished()
+            compare(liveChild("bareFixSystemCombo.t3"), combo,
+                    "the picker stays open across the rescan its choice starts")
+
+            keyClick(Qt.Key_Escape)
+            tryVerify(() => rootId.countWithPrefix(row, "bareFixSystemCombo.") === 0, 5000,
+                      "Escape closes the picker")
+            tryCompare(waitForChild("bareFixSystemValue.t3"), "text", CSFormat.displayName("UTM48N"),
+                       5000, "and the label names the chosen system")
+            compare(waitForChild("bareFixSystemValue.t17").text, "unset")
+        }
+
+        // A node none of whose trips' files holds a bare fix builds no owner
+        // control at all.
+        function test_aNodeRowWithNoBareFixOwnersBuildsNoOwnerControls() {
+            const plain = makeManyTripCave("Plain", 40)
+            openFixStationsOf(plain)
+            const row = waitForChild("nodeRow.Plain")
+            logOwnerControls("Plain row", row)
+            compare(rootId.countWithPrefix(row, "bareFixSystemValue."), 0, "no owner label")
+            compare(rootId.countWithPrefix(row, "bareFixSystemCombo."), 0, "no owner picker")
+            compare(rootId.countCSComboBoxes(row), 0, "no CSComboBox")
+        }
+
+        // Collapsing and expanding the region's root and scrolling the whole
+        // tree build no system picker on any node row; only the double-click
+        // does. The timings are logged for comparison, never asserted.
+        function test_aRootCollapseAndExpandBuildsNoSystemPickers() {
+            saveProjectAs("fix-station-owner-controls-toggle")
+            const big = makeManyTripCave("Big", 40)
+            attachBareFixesToTwoTrips(big)
+            const caveCount = 40
+            for (let c = 1; c <= caveCount; ++c) {
+                makeManyTripCave("C" + c, 20 + (c * 7) % 30)
+            }
+
+            const view = openFixStationTree("Source/Data/Fix Stations")
+            // The root, Big, Big's two attached fixes and every cave.
+            tryCompare(view, "rows", caveCount + 4, 10000, "every node and fix has a row")
+            waitForChild("nodeRow.Big")
+            waitForRendering(rootId)
+            logOwnerControls("tree at open", view.contentItem)
+            const pickersAtOpen = rootId.countWithPrefix(view.contentItem, "bareFixSystemCombo.")
+
+            timeRootToggles(view, "SP1")
+
+            const scrollStart = Date.now()
+            const steps = sweep(view, () => {})
+            console.info("SP1 scroll top-bottom-top ms", Date.now() - scrollStart, "steps", steps)
+
+            logOwnerControls("tree after the toggles and the scroll", view.contentItem)
+            compare(pickersAtOpen, 0, "the open tree builds no picker")
+            compare(rootId.countWithPrefix(view.contentItem, "bareFixSystemCombo."), 0,
+                    "the toggles and the scroll build no picker")
+            compare(rootId.countWithPrefix(waitForChild("nodeRow.Big"), "bareFixSystemValue."), 2,
+                    "Big's row still names its two owners' systems")
         }
     }
 }

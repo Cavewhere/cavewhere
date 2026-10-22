@@ -1203,3 +1203,172 @@ TEST_CASE("Removing a node announces the page rows of the fixes after it",
     CHECK(announcements.announcedRows(kBehindFirstFix) == QList<int>({0}));
     CHECK(fixes.pageRowOf(kBehindNodeName, kBehindFirstFix) == 0);
 }
+
+namespace {
+
+const QByteArray kBareFixOwnerTripsRoleName = QByteArrayLiteral("bareFixOwnerTrips");
+const QString kSyntheticEntryFile = QStringLiteral("synthetic.svx");
+const QString kTripName = QStringLiteral("t%1");
+constexpr int kOwnerFixtureTripCount = 40;
+constexpr int kFirstBareOwner = 3;
+constexpr int kSecondBareOwner = 17;
+//! Its attachment's only fix names its own system.
+constexpr int kSystemOwner = 25;
+//! Holds fixes of its own, so it has a trip row, and attaches nothing.
+constexpr int kTripRowTrip = 30;
+
+//! A fix \a owner's attachment lists at \a line, in \a system (bare when empty).
+cwAttachedFix ownerFix(const cwTrip* owner, int line, const QString& system = QString())
+{
+    cwAttachedFix fix;
+    fix.station = QStringLiteral("s%1").arg(line);
+    fix.coordinate = QStringLiteral("0 0 0");
+    fix.coordinateSystem = system;
+    fix.fileName = kSyntheticEntryFile;
+    fix.filePath = kSyntheticEntryFile;
+    fix.line = line;
+    fix.ownerId = owner->id();
+    return fix;
+}
+
+//! The trips \a index's bareFixOwnerTrips role lists, in order.
+QList<cwTrip*> ownerTrips(const QModelIndex& index, int role)
+{
+    return index.data(role).value<QList<cwTrip*>>();
+}
+
+//! The names of the trips \a index's bareFixOwnerTrips role lists, in order.
+QStringList ownerTripNames(const QModelIndex& index, int role)
+{
+    QStringList names;
+    for (const cwTrip* trip : ownerTrips(index, role)) {
+        names.append(trip->name());
+    }
+    return names;
+}
+
+//! The dataChanged emissions \a spy caught that cover \a row and announce \a role.
+int roleAnnouncements(const QSignalSpy& spy, const QModelIndex& row, int role)
+{
+    int count = 0;
+    for (const QList<QVariant>& emission : spy) {
+        const QModelIndex topLeft = emission.at(0).toModelIndex();
+        const QModelIndex bottomRight = emission.at(1).toModelIndex();
+        const QList<int> roles = emission.at(2).value<QList<int>>();
+        const bool coversRow = topLeft.parent() == row.parent()
+                               && topLeft.row() <= row.row() && row.row() <= bottomRight.row();
+        if (coversRow && (roles.isEmpty() || roles.contains(role))) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+//! A standalone node, outside any project so no scan replaces its attached
+//! fixes, with kOwnerFixtureTripCount trips named t0, t1, …. Trips
+//! kFirstBareOwner and kSecondBareOwner attach a file holding a bare fix,
+//! kSystemOwner one whose fix names its system; the node lists those fixes.
+struct BareFixOwnerFixture
+{
+    cwCave node;
+    cwFixStationTreeModel model;
+
+    BareFixOwnerFixture()
+    {
+        for (int i = 0; i < kOwnerFixtureTripCount; ++i) {
+            node.addTrip();
+            node.trip(i)->setName(kTripName.arg(i));
+        }
+        for (const int owner : {kFirstBareOwner, kSecondBareOwner, kSystemOwner}) {
+            node.trip(owner)->setExternalCenterline(cwExternalCenterline(kSyntheticEntryFile));
+        }
+        node.setAttachedFixes({ownerFix(trip(kFirstBareOwner), 1),
+                               ownerFix(trip(kSecondBareOwner), 2),
+                               ownerFix(trip(kSystemOwner), 3, kUtm48N)});
+        model.setRootNode(&node);
+    }
+
+    cwTrip* trip(int i) const { return node.trip(i); }
+    QModelIndex rootRow() const { return model.index(0, 0); }
+    int role() const { return roleId(model, kBareFixOwnerTripsRoleName); }
+    QStringList ownerNames() const { return ownerTripNames(rootRow(), role()); }
+};
+
+} // namespace
+
+TEST_CASE("A node row lists the trips whose attachment holds a fix with no coordinate system",
+          "[FixStationTreeModel]")
+{
+    BareFixOwnerFixture fixture;
+    fixture.trip(kTripRowTrip)->setAttachedFixes({ownerFix(fixture.trip(kTripRowTrip), 4)});
+    const int role = fixture.role();
+
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSecondBareOwner)}));
+
+    const QModelIndex root = fixture.rootRow();
+    int tripRows = 0;
+    for (int row = 0; row < fixture.model.rowCount(root); ++row) {
+        const QModelIndex child = fixture.model.index(row, 0, root);
+        if (rowKind(child) == cwFixStationTreeModel::TripRow) {
+            ++tripRows;
+        }
+        INFO("row " << row << " kind " << rowKind(child));
+        CHECK(ownerTripNames(child, role).isEmpty());
+    }
+    CHECK(tripRows == 1);
+}
+
+TEST_CASE("A node row announces its bare-fix owner trips only when the list changes",
+          "[FixStationTreeModel]")
+{
+    BareFixOwnerFixture fixture;
+    const int role = fixture.role();
+    QSignalSpy spy(&fixture.model, &QAbstractItemModel::dataChanged);
+
+    // Committing a system: the rescan moves only what the fixes read in.
+    QList<cwAttachedFix> readIn = fixture.node.attachedFixes()->attachedFixes();
+    for (cwAttachedFix& fix : readIn) {
+        fix.readInSystem = kUtm48N;
+    }
+    fixture.node.setAttachedFixes(readIn);
+    cwExternalCenterline chosen = fixture.trip(kFirstBareOwner)->externalCenterline();
+    chosen.setFixCoordinateSystem(kUtm48N);
+    fixture.trip(kFirstBareOwner)->setExternalCenterline(chosen);
+    CHECK(roleAnnouncements(spy, fixture.rootRow(), role) == 0);
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSecondBareOwner)}));
+
+    spy.clear();
+    QList<cwAttachedFix> withThirdOwner = readIn;
+    withThirdOwner.append(ownerFix(fixture.trip(kSystemOwner), 5));
+    fixture.node.setAttachedFixes(withThirdOwner);
+    CHECK(roleAnnouncements(spy, fixture.rootRow(), role) == 1);
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSecondBareOwner),
+                          kTripName.arg(kSystemOwner)}));
+
+    spy.clear();
+    fixture.trip(kSecondBareOwner)->setExternalCenterline(cwExternalCenterline());
+    CHECK(roleAnnouncements(spy, fixture.rootRow(), role) == 1);
+    CHECK(fixture.ownerNames()
+          == QStringList({kTripName.arg(kFirstBareOwner), kTripName.arg(kSystemOwner)}));
+}
+
+TEST_CASE("A trip removed from its node leaves the node row's bare-fix owners before it is deleted",
+          "[FixStationTreeModel]")
+{
+    BareFixOwnerFixture fixture;
+    const int role = fixture.role();
+    cwTrip* const leaving = fixture.trip(kFirstBareOwner);
+
+    QList<cwTrip*> ownersAfterRemoval;
+    QObject::connect(&fixture.node, &cwSurveyNode::removedTrips, &fixture.model, [&]() {
+        ownersAfterRemoval = ownerTrips(fixture.rootRow(), role);
+    });
+    fixture.node.removeTrip(kFirstBareOwner);
+
+    CHECK_FALSE(ownersAfterRemoval.contains(leaving));
+    CHECK(ownersAfterRemoval.size() == 1);
+    CHECK(fixture.ownerNames() == QStringList({kTripName.arg(kSecondBareOwner)}));
+}
