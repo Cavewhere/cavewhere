@@ -204,6 +204,8 @@ recordings and the analysis are designed around them.</p>
       <td>Thread state: peak runnable threads against the core count, and time spent Runnable or Preempted, per context. This is the measured quantity. The cache thrash the issue describes is a consequence of oversubscription; it shows up as longer per-task durations and is read from them, not counted.</td><td>F4</td></tr>
   <tr><td>H5</td><td>Deep queues are the norm, so the order of submission decides the order of completion.</td>
       <td>The queued count per context from the sampler; queue wait per task.</td><td>F2, F3</td></tr>
+  <tr><td>H6</td><td>The octree's polling orchestrator leaves slots idle and oversubscribes the pool.</td>
+      <td>Admission latency between consecutive <code>octree</code> task intervals; the orchestrator thread's Blocked time; running <code>octree</code> tasks above the pool maximum.</td><td>F2 (octree site)</td></tr>
 </table>
 
 <!-- ================================================================== -->
@@ -352,7 +354,7 @@ separate runs:</p>
   <tr><th>Run</th><th>xctrace</th><th>Answers</th></tr>
   <tr><td>A: timing</td><td><code>--template "Time Profiler" --instrument os_signpost --instrument "Thread State Trace"</code></td><td>H2–H5, time to idle, where CPU time goes</td></tr>
   <tr><td>B: memory</td><td><code>--template Allocations --instrument os_signpost</code></td><td>H1 totals, the footprint curve, transient bytes per size class</td></tr>
-  <tr><td>B′: memory at the peak (optional)</td><td>Run B with <code>--time-limit</code> set to the peak time from A</td><td>H1 attribution: allocations live at the peak, by responsible caller</td></tr>
+  <tr><td>B′: memory at the peak (optional)</td><td>Run B with <code>--time-limit</code> set to the peak time from B (Allocations slows the app, so A peaks earlier)</td><td>H1 attribution: allocations live at the peak, by responsible caller</td></tr>
 </table>
 
 <p><b>Cold starts.</b> <code>--cold</code> deletes the project's <code>.cw_cache</code> before each recording. It
@@ -387,7 +389,8 @@ It writes <code>&lt;out&gt;/report.md</code>:</p>
       happened and (iOS) the budget left at that moment; the contexts running at the peak;
       peak runnable threads against the core count; total CPU time; CPU time inside <code>dropped</code>.</td></tr>
   <tr><td>Per context</td><td>Task count; CPU time; wall span; peak running and peak queued; queue wait p50 and p95;
-      time Running against Runnable or Preempted; footprint growth while it ran; top stacks by CPU samples.</td></tr>
+      time Running against Runnable or Preempted; footprint growth while it ran; top stacks by CPU samples;
+      admission latency (gap from one task's end to the next task's start when the context has work queued), p50 and p95.</td></tr>
   <tr><td>Overlap</td><td>A context × context matrix of overlapping running seconds.</td></tr>
   <tr><td>Memory (run B)</td><td>Transient and persistent bytes by size class; with B′, the largest live allocations at the peak and their callers.
       Two things to look for there: queued closures still holding their inputs, and finished results waiting for the
@@ -424,6 +427,7 @@ dominated by LiDAR, one with LAZ layers, and the Marble clone as the everything-
   <tr><td>H3 unrelated jobs overlap</td><td class="blank">—</td><td></td></tr>
   <tr><td>H4 workers oversubscribed</td><td class="blank">—</td><td></td></tr>
   <tr><td>H5 deep queues</td><td class="blank">—</td><td></td></tr>
+  <tr><td>H6 octree poll idles slots</td><td class="blank">—</td><td></td></tr>
 </table>
 
 <div class="callout warn">
@@ -447,13 +451,93 @@ stops early instead of running to the end. The smallest and most contained chang
 
 <h3><span class="cp fix">F2</span>Bounded fan-out inside a pipeline <span class="pill new">new</span> <span class="pill todo">H1 H5</span></h3>
 <p>Replace “submit all N, then combine” with a windowed launcher: start <i>K</i> items, then start the next as
-each finishes. Generalize the admission loop the octree already has (<code>cwPointOctreeBuilder.cpp:1394-1410</code>,
-<code>maxRunning</code> plus <code>inFlightBytes</code>) into a <code>cwConcurrent</code> helper instead of
-writing a second copy. Apply it to LiDAR first, then scraps. Admit by an estimated byte budget, not just a count,
-so mobile can admit one or two meshes while desktop admits a core's worth. Queued inputs are only built when
-admitted, which also covers item 4 in §1.</p>
+each finishes. Admit by an estimated byte budget, not just a count, so mobile can admit one or two meshes while
+desktop admits a core's worth. Queued inputs are only built when admitted, which also covers item 4 in §1.</p>
+
+<p><b>The pattern.</b> This is a bounded fan-out, a weighted semaphore in front of a launcher. Every ecosystem has
+the count form (<code>errgroup.SetLimit</code>, <code>p-limit</code>, <code>buffer_unordered</code>,
+<code>Parallel.ForEachAsync</code>); the weight form is rarer (Go's <code>semaphore.Weighted</code>) and is the one
+CaveWhere needs, since LiDAR meshes differ in size by 100×. Qt only offers the pool-wide thread count, which is why
+three producers wrote their own:</p>
+<table>
+  <tr><th>Site</th><th>Shape today</th></tr>
+  <tr><td><code>cwPointOctreeBuilder::runPassB</code> (<code>cwPointOctreeBuilder.cpp:1373-1485</code>)</td>
+      <td>Weighted: <code>maxRunning</code> plus <code>inFlightBytes</code>, and a rule worth keeping: the first item of a
+      window always runs, so an item larger than the whole budget still builds, alone. Runs on a worker thread with
+      no event loop, so it polls <code>isFinished()</code> with <code>msleep(kMapPollMs)</code> and
+      <code>releaseThread()</code>s its slot. <code>awaitMapped</code> (<code>:544-566</code>) does the same for pass A.</td></tr>
+  <tr><td><code>cwTileStreamer</code> (<code>cwTileStreamer.h:73,181-192</code>)</td>
+      <td><code>kMaxConcurrentLoads = 4</code> plus <code>m_inFlightBytes</code>, a pending queue and a <code>QWaitCondition</code>.
+      A streaming cache with eviction and supersede; it keeps its own loop.</td></tr>
+  <tr><td><code>cwKtx2Codec</code> (<code>cwKtx2Codec.cpp:173-192</code>)</td><td>A set of in-flight paths. Dedupe, not a limiter.</td></tr>
+  <tr><td>LiDAR (<code>cwTriangulateLiDARTask.cpp:126</code>), scraps (<code>cwTriangulateTask.cpp:70</code>)</td>
+      <td>None. Both consumers observe per-item futures (<code>cwNoteLiDARManager.cpp:671</code> delivers each note as it
+      lands), so the limiter has to hand out one future per input, before admission.</td></tr>
+</table>
+
+<p><b>Where it lives: asyncfuture.</b> The limiter decides <i>when</i> to call a launcher and never touches a pool;
+<code>cwConcurrent</code> stays about <i>where</i> work runs and carries the trace tags. The fork already grows this
+kind of primitive (<code>Restarter</code>, <code>shield()</code>, <code>CancelPropagation</code>, the
+<code>FailFast</code> combine mode, chained progress), each with its own tests, and a limiter composes with all of
+them: a <code>Restarter</code> cancel stops admission, <code>FailFast</code> gives the octree's one-failure-stops-the-rest,
+chained progress feeds the flyout. The building block exists too: each input gets a <code>Deferred&lt;T&gt;</code> up
+front, and admission calls <code>Deferred::complete(QFuture&lt;T&gt;, CancelPropagation::Propagate)</code>.</p>
+<pre><code>namespace AsyncFuture {
+struct Limit {
+    int maxRunning = 1;
+    qint64 budget = 0;          // 0 = count only
+};
+
+template &lt;typename T&gt;
+struct Limited {
+    QList&lt;QFuture&lt;T&gt;&gt; items;    // one per input, in input order, observable before admission
+    QFuture&lt;void&gt; all;          // settles when every item settles; cancel() stops admission and cancels running items
+};
+
+template &lt;typename T, typename Input, typename Launch, typename Weight&gt;
+Limited&lt;T&gt; limited(QObject* context, const QList&lt;Input&gt;&amp; inputs,
+                   Launch launch /* Input -&gt; QFuture&lt;T&gt; */,
+                   Weight weight /* Input -&gt; qint64 */,
+                   Limit limit);
+}</code></pre>
+<p>Semantics to pin down, each borrowed from the octree loop or from §1:</p>
+<ul>
+  <li>FIFO admission. The first item of a window always runs, whatever its weight.</li>
+  <li><code>launch</code> runs only on admission, so a queued input is the cheap <code>Input</code> value and the heavy
+      <code>cwTriangulateLiDARInData</code> is built inside the launcher.</li>
+  <li>Canceling <code>all</code> cancels the running items and every unadmitted item's future. Canceling one item's
+      future before admission skips it.</li>
+  <li>Main thread only, documented the way <code>Restarter</code> is.</li>
+  <li>The byte estimate stays in CaveWhere: glTF file size for LiDAR, crop pixels × 4 for scraps.</li>
+</ul>
+<p>CaveWhere's side is then small. <code>cwTriangulateLiDARTask::triangulate</code> returns <code>limited(...).items</code>
+with a <code>Limit</code> chosen per platform; scraps follow. <code>cwConcurrent</code> gains no API, and F3's
+<code>cwJobQueue</code> sits outside this as the one-job-at-a-time gate. A <code>cwConcurrent::runLimited</code> would
+weld admission to the pool and the trace, and could only be tested through <code>cavewhere-test</code>.</p>
+
+<p><b>The octree move, and what to measure first.</b> The octree is the third site, and the only one where F2 changes
+the threading model: the orchestrator would move off its worker thread onto main-thread <code>observe().context()</code>
+callbacks, which deletes the <code>msleep</code> poll and the <code>releaseThread()</code> pair. Before that, the baseline
+has to say what the poll costs today (H6):</p>
+<ul>
+  <li><b>Admission latency.</b> The gap between a column's <code>task</code> interval ending and the next column's
+      beginning on the pool. The poll bounds it at <code>kMapPollMs</code> (30&nbsp;ms) per slot; across hundreds of
+      columns that is seconds of idle slots on a build.</li>
+  <li><b>The orchestrator's own thread.</b> Its thread-state rows: time Blocked in the sleep against Running. A
+      healthy orchestrator is Blocked nearly all the time, which is the sign it should be an event-loop callback.</li>
+  <li><b>Oversubscription from the release.</b> Running <code>octree</code> tasks above <code>maxThreadCount</code>
+      while the orchestrator and its map run at once, from the <code>pool</code> and <code>queue</code> events.</li>
+  <li><b>Main-thread cost of the move.</b> Each callback reaps one column result; the chunks move, so the work per
+      callback is small, but the count is large. Run A on the LAZ project shows the main thread's load today, and
+      the re-measure after F2 shows what the callbacks add.</li>
+</ul>
+<p>If H6 comes back small, the cheaper fix is a wake on a <code>QWaitCondition</code> signaled by each column's
+completion, which keeps the orchestrator on its worker and removes only the sleep. The main-thread move still
+removes the <code>releaseThread()</code>, so H4 decides between the two.</p>
+
 <p><b>Pass:</b> on the iPhone the Marble cold open finishes with the budget at peak above 25% of the device's
-starting budget; on the Mac peak footprint drops by at least the LiDAR share H1 attributed, within the spread.</p>
+starting budget; on the Mac peak footprint drops by at least the LiDAR share H1 attributed, within the spread; octree
+admission latency at or below one scheduler quantum, and the LAZ build's time to idle no worse than baseline.</p>
 
 <h3><span class="cp fix">F3</span>One top-level job at a time <span class="pill new">new</span> <span class="pill todo">H3</span></h3>
 <p>This is what #711 asks for. A <code>cwJobQueue</code> takes jobs as <code>QFuture</code>-returning callables
