@@ -14,6 +14,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import QtQml.Models
 import cavewherelib
+import "Utils.js" as Utils
 
 StandardPage {
     id: fixStationPage
@@ -87,6 +88,7 @@ StandardPage {
 
     // Set while the page's own node has a node or trip row under it to close.
     property bool hasCollapsibleRows: false
+    readonly property bool isFiltering: treeFilterId.filterText.length > 0
 
     // Set when the tree's rows were inserted, removed or reset and the view
     // has yet to lay them out; the view's next layout re-announces the fix
@@ -208,6 +210,12 @@ StandardPage {
         filterFieldId.text = ""
     }
 
+    // "N fixes", or while filtering "V of N fixes", V being the ones it shows.
+    function fixCountText(visibleCount: int, count: int): string {
+        const noun = count === 1 ? " fix" : " fixes"
+        return fixStationPage.isFiltering ? visibleCount + " of " + count + noun : count + noun
+    }
+
     // Page row \a fixRow's index in the view's model, clearing the filter
     // when it hides that row.
     function viewIndexOfFixRow(fixRow: int): var {
@@ -256,14 +264,13 @@ StandardPage {
     // root and always open. Walks the model rather than the view's rows,
     // which the view only recounts at its next layout.
     function applyExpansion(): void {
-        const isFiltering = treeFilterId.filterText.length > 0
         const open = (index, isRoot) => {
             const row = treeViewId.rowAtIndex(index)
             if (row < 0) {
                 return
             }
             const id = String(treeFilterId.data(index, FixStationTreeModel.NodeIdRole))
-            if (!isRoot && !isFiltering && fixStationPage.isCollapsedId(id)) {
+            if (!isRoot && !fixStationPage.isFiltering && fixStationPage.isCollapsedId(id)) {
                 if (treeViewId.isExpanded(row)) {
                     treeViewId.collapse(row)
                 }
@@ -416,6 +423,7 @@ StandardPage {
             if (fixStationPage.rowsShifted) {
                 fixStationPage.rowsShifted = false
                 treeModelId.announceFixRows()
+                treeFilterId.announceVisibleFixCounts()
             }
         }
     }
@@ -1048,7 +1056,7 @@ StandardPage {
                 hasCollapsedRows: fixStationPage.hasCollapsedNodes
                 // Every node and trip row is open while filtering.
                 visible: fixStationPage.hasCollapsibleRows
-                         && treeFilterId.filterText.length === 0
+                         && !fixStationPage.isFiltering
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
 
                 onExpandAllRequested: fixStationPage.expandAll()
@@ -1113,6 +1121,18 @@ StandardPage {
         visible: fixStationPage.cave !== null && treeModelId.fixRowCount === 0
     }
 
+    HelpBox {
+        objectName: "noFilterMatchesHelpBox"
+        anchors.centerIn: parent
+        textFormat: QC.Label.StyledText
+        text: "No fixes match \"" + Utils.escapeHtml(treeFilterId.filterText) + "\". "
+              + "<a href=\"clear\">Clear the filter</a>"
+        visible: fixStationPage.cave !== null && fixStationPage.isFiltering
+                 && treeModelId.fixRowCount > 0 && treeFilterId.visibleFixRowCount === 0
+
+        onLinkActivated: fixStationPage.clearFilter()
+    }
+
     DelegateChooser {
         id: wideChooserId
         role: "rowKind"
@@ -1172,6 +1192,7 @@ StandardPage {
             required property string nodeKindLabel
             required property SurveyNode node
             required property int ownFixCount
+            required property int visibleFixCount
             required property int subtreeBareFixCount
             required property int subtreeUnsetFixCount
             required property int attachmentBareFixCount
@@ -1245,8 +1266,7 @@ StandardPage {
 
                     Chip {
                         text: nodeRowId.ownFixCount === 0 ? "No fixed stations"
-                            : nodeRowId.ownFixCount === 1 ? "1 fix"
-                            : nodeRowId.ownFixCount + " fixes"
+                            : fixStationPage.fixCountText(nodeRowId.visibleFixCount, nodeRowId.ownFixCount)
                     }
 
                     UnsetFixesBadge {
@@ -1300,6 +1320,7 @@ StandardPage {
             required property string nodeKindLabel
             required property Trip trip
             required property int ownFixCount
+            required property int visibleFixCount
             required property int subtreeBareFixCount
             required property int subtreeUnsetFixCount
             required property string inheritedFixCoordinateSystem
@@ -1349,7 +1370,7 @@ StandardPage {
                     }
 
                     Chip {
-                        text: tripRowId.ownFixCount === 1 ? "1 fix" : tripRowId.ownFixCount + " fixes"
+                        text: fixStationPage.fixCountText(tripRowId.visibleFixCount, tripRowId.ownFixCount)
                     }
 
                     UnsetFixesBadge {

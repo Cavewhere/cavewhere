@@ -2117,6 +2117,94 @@ MainWindowTest {
             verify(!rootId.showsText(rowA, "No fixed stations"), "a row with fixes shows no empty-state text")
         }
 
+        //! The page's help box named \a objectName, checked present.
+        function pageHelpBox(objectName) {
+            const help = findChild(RootData.pageView.currentPageItem, objectName)
+            verify(help !== null, objectName + " must exist")
+            return help
+        }
+
+        // While a filter is active, a node row counts the fixes the filter
+        // shows out of its own; a node with none at all keeps its one
+        // "No fixed stations" chip.
+        function test_aFilteredNodeRowCountsTheFixesTheFilterShows() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            typeInto(filterField(), "s1")
+            tryCompare(view, "rows", 4, 5000, "the filter keeps s1 and its node rows")
+
+            const rowA = shownRow(view, "nodeRow.A")
+            verify(rowA !== null, "A's row is shown")
+            tryVerify(() => rootId.showsText(rowA, "0 of 3 fixes"), 5000,
+                      "A shows none of its three fixes, got \""
+                      + rootId.itemsShowingText(rowA, "fix").map(item => item.text).join("\", \"") + "\"")
+            const rowSub = shownRow(view, "nodeRow.Sub")
+            verify(rowSub !== null, "Sub's row is shown")
+            tryVerify(() => rootId.showsText(rowSub, "1 of 2 fixes"), 5000,
+                      "Sub shows one of its two fixes, got \""
+                      + rootId.itemsShowingText(rowSub, "fix").map(item => item.text).join("\", \"") + "\"")
+
+            const rootRow = shownRow(view, "nodeRow.")
+            verify(rootRow !== null, "the project root's row is shown")
+            compare(rootId.itemsShowingText(rootRow, "No fixed stations").length, 1,
+                    "the fixless root keeps one \"No fixed stations\" chip")
+            verify(!rootId.showsText(rootRow, " of "), "the fixless root shows no filtered count")
+        }
+
+        // A filter that matches nothing says so, names the filter and offers
+        // to clear it; the project still has fixes, so the empty-project box
+        // stays hidden.
+        function test_aFilterThatMatchesNothingSaysSoAndClears() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const field = filterField()
+            typeInto(field, "zzz")
+            tryCompare(view, "rows", 1, 5000, "only the page's own row is left")
+
+            const noMatches = pageHelpBox("noFilterMatchesHelpBox")
+            tryVerify(() => noMatches.visible, 5000, "the no-match box shows")
+            verify(noMatches.text.indexOf("zzz") >= 0,
+                   "the no-match box names the filter, got \"" + noMatches.text + "\"")
+            verify(!pageHelpBox("noFixStationsHelpBox").visible,
+                   "the project has fixes, so the empty-project box stays hidden")
+
+            noMatches.linkActivated("clear")
+            tryCompare(field, "text", "", 5000, "the link clears the filter")
+            tryVerify(() => !noMatches.visible, 5000, "the no-match box hides once the filter clears")
+            verifyRowsMatchModel(view, initialRowCount, "every row is back")
+        }
+
+        // Clearing the filter puts every node row back on its whole count.
+        function test_clearingTheFilterRestoresTheWholeCounts() {
+            makeCaves()
+            const view = openProjectFixStations(initialRowCount)
+            const field = filterField()
+            typeInto(field, "s1")
+            tryCompare(view, "rows", 4, 5000, "the filter keeps s1 and its node rows")
+            const filteredA = shownRow(view, "nodeRow.A")
+            verify(filteredA !== null, "A's row is shown")
+            tryVerify(() => rootId.showsText(filteredA, "0 of 3 fixes"), 5000,
+                      "A counts its filtered fixes first")
+
+            clearField(field)
+            tryCompare(field, "text", "")
+            verifyRowsMatchModel(view, initialRowCount, "every row is back")
+
+            const expected = { "A": "3 fixes", "Sub": "2 fixes", "B": "4 fixes" }
+            for (const name in expected) {
+                tryVerify(() => {
+                    const row = shownRow(view, "nodeRow." + name)
+                    return row !== null && rootId.showsText(row, expected[name])
+                }, 5000, name + " shows " + expected[name])
+            }
+            for (const name of ["", "A", "Sub", "B"]) {
+                tryVerify(() => {
+                    const row = shownRow(view, "nodeRow." + name)
+                    return row !== null && !rootId.showsText(row, " of ")
+                }, 5000, "node row \"" + name + "\" shows no filtered count")
+            }
+        }
+
         // One button collapses every node below the page's own row and expands
         // them again; it follows a single node's chevron too.
         function test_oneButtonTogglesExpandAndCollapseAll() {

@@ -133,6 +133,19 @@ cwFixStationTreeFilterModel::cwFixStationTreeFilterModel(QObject* parent) :
     setFilterCaseSensitivity(Qt::CaseInsensitive);
     // cwSortFilterProxyModel's setFilterRole(QByteArray) hides the role-id one.
     QSortFilterProxyModel::setFilterRole(cwFixStationModel::StationNameRole);
+
+    const auto recount = [this]() {
+        if (!m_isRefiltering) {
+            recountVisibleFixRows();
+        }
+    };
+    connect(this, &QAbstractItemModel::rowsInserted, this, recount);
+    connect(this, &QAbstractItemModel::rowsRemoved, this, recount);
+    connect(this, &QAbstractItemModel::modelReset, this, recount);
+    connect(this, &QAbstractProxyModel::sourceModelChanged, this, [this]() {
+        connectSourceFixRowCount();
+        recountVisibleFixRows();
+    });
 }
 
 void cwFixStationTreeFilterModel::setFilterText(const QString& filterText)
@@ -141,8 +154,91 @@ void cwFixStationTreeFilterModel::setFilterText(const QString& filterText)
         return;
     }
     m_filterText = filterText;
+    m_isRefiltering = true;
     setFilterFixedString(m_filterText);
+    m_isRefiltering = false;
     emit filterTextChanged();
+    recountVisibleFixRows();
+}
+
+void cwFixStationTreeFilterModel::announceVisibleFixCounts()
+{
+    announceVisibleFixCountsUnder(QModelIndex());
+}
+
+QVariant cwFixStationTreeFilterModel::data(const QModelIndex& index, int role) const
+{
+    if (role == VisibleFixCountRole) {
+        if (!index.isValid() || isFixRow(index)) {
+            return 0;
+        }
+        const int rows = rowCount(index);
+        int count = 0;
+        for (int row = 0; row < rows; ++row) {
+            if (isFixRow(this->index(row, 0, index))) {
+                ++count;
+            }
+        }
+        return count;
+    }
+    return cwSortFilterProxyModel::data(index, role);
+}
+
+QHash<int, QByteArray> cwFixStationTreeFilterModel::roleNames() const
+{
+    QHash<int, QByteArray> names = cwSortFilterProxyModel::roleNames();
+    names.insert(VisibleFixCountRole, QByteArrayLiteral("visibleFixCount"));
+    return names;
+}
+
+// Unfiltered, every fix row shows, so the source's own count answers without
+// a walk; the source announces that count after its rows have moved.
+void cwFixStationTreeFilterModel::connectSourceFixRowCount()
+{
+    disconnect(m_sourceFixRowCountConnection);
+    if (auto* treeModel = qobject_cast<cwFixStationTreeModel*>(sourceModel())) {
+        m_sourceFixRowCountConnection = connect(treeModel, &cwFixStationTreeModel::fixRowCountChanged,
+                                                this, [this]() {
+                                                    if (m_filterText.isEmpty()) {
+                                                        recountVisibleFixRows();
+                                                    }
+                                                });
+    }
+}
+
+void cwFixStationTreeFilterModel::recountVisibleFixRows()
+{
+    const auto* treeModel = qobject_cast<const cwFixStationTreeModel*>(sourceModel());
+    const int count = m_filterText.isEmpty() && treeModel != nullptr ? treeModel->fixRowCount()
+                                                                     : countFixRowsUnder(QModelIndex());
+    if (m_visibleFixRowCount == count) {
+        return;
+    }
+    m_visibleFixRowCount = count;
+    emit visibleFixRowCountChanged();
+}
+
+int cwFixStationTreeFilterModel::countFixRowsUnder(const QModelIndex& parent) const
+{
+    const int rows = rowCount(parent);
+    int count = 0;
+    for (int row = 0; row < rows; ++row) {
+        const QModelIndex child = index(row, 0, parent);
+        count += isFixRow(child) ? 1 : countFixRowsUnder(child);
+    }
+    return count;
+}
+
+void cwFixStationTreeFilterModel::announceVisibleFixCountsUnder(const QModelIndex& parent)
+{
+    const int rows = rowCount(parent);
+    for (int row = 0; row < rows; ++row) {
+        const QModelIndex child = index(row, 0, parent);
+        if (!isFixRow(child)) {
+            emit dataChanged(child, child, {VisibleFixCountRole});
+            announceVisibleFixCountsUnder(child);
+        }
+    }
 }
 
 bool cwFixStationTreeFilterModel::filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const

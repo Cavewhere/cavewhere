@@ -753,6 +753,151 @@ TEST_CASE("A filter nothing matches keeps the page's own row, and clearing it re
 
 namespace {
 
+const QByteArray kVisibleFixCountRoleName = QByteArrayLiteral("visibleFixCount");
+const QString kNoMatchFilter = QStringLiteral("zzz");
+constexpr int kSortFilterRootFixCount = 3;
+constexpr int kSortFilterNorthFixCount = 2;
+// "st1" matches st1 and st10; "n9" matches north.n9 alone.
+constexpr int kSt1MatchCount = 2;
+constexpr int kN9MatchCount = 1;
+
+//! \a row's count of the fix rows under it that the filter shows.
+int visibleFixCount(const QAbstractItemModel& model, const QModelIndex& row)
+{
+    return row.data(roleId(model, kVisibleFixCountRoleName)).toInt();
+}
+
+} // namespace
+
+TEST_CASE("While filtering, a node row counts the fix rows the filter shows under it",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-counts"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    fixture.proxy.setFilterText(kSt1);
+
+    const QModelIndex rootRow = fixture.rootRow();
+    REQUIRE(rootRow.isValid());
+    CHECK(childLabels(fixture.proxy, rootRow) == QStringList({kSt1, kSt10}));
+    CHECK(rootRow.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == kSortFilterRootFixCount);
+    CHECK(visibleFixCount(fixture.proxy, rootRow) == kSt1MatchCount);
+    CHECK_FALSE(fixture.northRow().isValid());
+    CHECK(fixture.proxy.visibleFixRowCount() == kSt1MatchCount);
+}
+
+TEST_CASE("While filtering, a trip row counts its fix rows the filter shows",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-trip-counts"));
+    INFO("tree:\n" << describeTree(fixture.root));
+
+    fixture.proxy.setFilterText(QStringLiteral("n9"));
+
+    const QModelIndex rootRow = fixture.rootRow();
+    REQUIRE(rootRow.isValid());
+    CHECK(rootRow.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == kSortFilterRootFixCount);
+    CHECK(visibleFixCount(fixture.proxy, rootRow) == 0);
+    const QModelIndex north = fixture.northRow();
+    REQUIRE(north.isValid());
+    CHECK(north.data(cwFixStationTreeModel::OwnFixCountRole).toInt() == kSortFilterNorthFixCount);
+    CHECK(visibleFixCount(fixture.proxy, north) == kN9MatchCount);
+    CHECK(fixture.proxy.visibleFixRowCount() == kN9MatchCount);
+}
+
+TEST_CASE("A filter nothing matches shows no fix rows, and clearing it counts every one again",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-count-none"));
+    INFO("tree:\n" << describeTree(fixture.root));
+    CHECK(fixture.proxy.visibleFixRowCount() == kSortFilterFixCount);
+
+    fixture.proxy.setFilterText(kNoMatchFilter);
+    CHECK(fixture.proxy.visibleFixRowCount() == 0);
+    CHECK(visibleFixCount(fixture.proxy, fixture.rootRow()) == 0);
+
+    fixture.proxy.setFilterText(QString());
+    CHECK(fixture.proxy.visibleFixRowCount() == kSortFilterFixCount);
+    CHECK(visibleFixCount(fixture.proxy, fixture.rootRow()) == kSortFilterRootFixCount);
+    REQUIRE(fixture.northRow().isValid());
+    CHECK(visibleFixCount(fixture.proxy, fixture.northRow()) == kSortFilterNorthFixCount);
+}
+
+TEST_CASE("The visible fix count announces itself once per filter change",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-count-signal"));
+    QSignalSpy changed(&fixture.proxy, &cwFixStationTreeFilterModel::visibleFixRowCountChanged);
+
+    fixture.proxy.setFilterText(kSt1);
+    CHECK(changed.count() == 1);
+
+    fixture.proxy.setFilterText(kNoMatchFilter);
+    CHECK(changed.count() == 2);
+
+    fixture.proxy.setFilterText(QString());
+    CHECK(changed.count() == 3);
+}
+
+TEST_CASE("A fix added while filtering joins the counts when it matches",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    SortFilterFixture fixture(QStringLiteral("fix-tree-filter-count-live"));
+    INFO("tree:\n" << describeTree(fixture.root));
+    // "st" matches the root's st2, st1 and st10, and neither of north's fixes.
+    constexpr int kStMatchCount = 3;
+
+    fixture.proxy.setFilterText(QStringLiteral("st"));
+    REQUIRE(fixture.proxy.visibleFixRowCount() == kStMatchCount);
+
+    addNativeFix(fixture.root, kSt3, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    drainPipelines(fixture.project.get());
+
+    CHECK(fixture.proxy.visibleFixRowCount() == kStMatchCount + 1);
+    CHECK(visibleFixCount(fixture.proxy, fixture.rootRow()) == kStMatchCount + 1);
+}
+
+TEST_CASE("The bare-fix system set through a filtered row lands on that row's node",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    auto fixture = makeProject(QStringLiteral("fix-tree-filter-set-data"));
+    cwSurveyNode* regionRoot = fixture->project->cavingRegion()->rootNode();
+    cwCave* north = addChildNode(regionRoot, kNativeFolderName, cwSurveyNode::Kind::Folder);
+    cwCave* pit = addChildNode(north, kNativeCaveName, cwSurveyNode::Kind::Cave);
+    addNativeFix(pit, kNativeStation, kUtm48NFrame, kNativeFixEasting, kNativeFixNorthing,
+                 kNativeFixElevation);
+    cwCave* attached = attachAndWaitForFixes(fixture.get(), kSortFilterFixture, kSortFilterFixCount);
+    INFO("tree:\n" << describeTree(regionRoot));
+
+    cwFixStationTreeModel treeModel;
+    treeModel.setRootNode(regionRoot);
+    cwFixStationTreeFilterModel proxy;
+    proxy.setSourceModel(&treeModel);
+
+    const QModelIndex sourceNorth = nodeRow(treeModel, kNativeFolderName);
+    const QModelIndex sourceAttached = nodeRow(treeModel, attached->name());
+    REQUIRE(sourceNorth.isValid());
+    REQUIRE(sourceAttached.isValid());
+    REQUIRE(sourceNorth.parent() == sourceAttached.parent());
+    REQUIRE(sourceNorth.row() < sourceAttached.row());
+
+    proxy.setFilterText(QStringLiteral("st"));
+    CHECK_FALSE(nodeRow(proxy, kNativeFolderName).isValid());
+    const QModelIndex proxyAttached = nodeRow(proxy, attached->name());
+    REQUIRE(proxyAttached.isValid());
+    REQUIRE(proxyAttached.row() != sourceAttached.row());
+
+    CHECK(proxy.setData(proxyAttached, kUtm48N, cwFixStationTreeModel::FixCoordinateSystemRole));
+    CHECK(attached->externalCenterline().fixCoordinateSystem() == kUtm48N);
+    CHECK(sourceAttached.data(cwFixStationTreeModel::FixCoordinateSystemRole).toString() == kUtm48N);
+    CHECK(sourceNorth.data(cwFixStationTreeModel::FixCoordinateSystemRole).toString().isEmpty());
+    CHECK(north->externalCenterline().fixCoordinateSystem().isEmpty());
+    drainPipelines(fixture.get());
+}
+
+namespace {
+
 // survex_block_rows/leaf.svx: one leaf block, simmons_hall, whose bare *fix
 // st1 is the derived trip's.
 const QString kLeafFixture = QStringLiteral("survex_block_rows/leaf.svx");
