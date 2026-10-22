@@ -113,6 +113,8 @@ read once you have survey data of your own to relate it to.
   Survex, Compass, and Walls surveys in as new caves.
 - [Import a CSV or Spreadsheet](import-export/import-csv.md) — map columns to
   stations, distance, compass, clino, and LRUD.
+- [Attach a PocketTopo Survey](import-export/attach-pockettopo.md) — solve a
+  DistoX `.top` file in CaveWhere while PocketTopo stays the master copy.
 
 ### Export
 - [Export Surveys to Other Programs](import-export/export-surveys.md) — write
