@@ -53,6 +53,15 @@ public:
     };
     Q_ENUM(RowKind)
 
+    //! The delegate that draws a row (DelegateKindRole).
+    enum DelegateKind {
+        NodeDelegate = 0,
+        TripDelegate = 1,
+        EditableFix = 2,
+        ReadOnlyFix = 3
+    };
+    Q_ENUM(DelegateKind)
+
     //! Numbered clear of the fix table's role blocks (cwFixStationModel's
     //! Qt::UserRole + 1…, cwFixStationDiagnosticsModel's + 100…,
     //! cwAttachedFixModel's + 200…), which fix rows forward.
@@ -93,7 +102,10 @@ public:
         //! On a node row, the node's trips, in trip order, whose own
         //! attachment lists a fix that names no coordinate system; each
         //! chooses the system those fixes read in. Empty on every other row.
-        BareFixOwnerTripsRole
+        BareFixOwnerTripsRole,
+        //! The delegate that draws the row: a node row, a trip row, one of a
+        //! node's own editable fixes, or a fix an attached file holds.
+        DelegateKindRole
     };
     Q_ENUM(Roles)
 

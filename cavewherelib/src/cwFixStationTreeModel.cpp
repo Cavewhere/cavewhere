@@ -190,6 +190,14 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
                                                  static_cast<const cwSurveyNode*>(holder)));
         case TripObjectRole:
             return QVariant::fromValue(const_cast<cwTrip*>(trip));
+        case DelegateKindRole: {
+            if (trip != nullptr) {
+                return ReadOnlyFix;
+            }
+            const bool readOnly = static_cast<const cwSurveyNode*>(holder)
+                ->fixStationTable()->index(index.row(), 0).data(cwAttachedFixModel::ReadOnlyRole).toBool();
+            return readOnly ? ReadOnlyFix : EditableFix;
+        }
         case FixRowRole:
             if (isLeaving(holder, index.row())) {
                 return -1;
@@ -214,6 +222,8 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
             return trip->name();
         case RowKindRole:
             return TripRow;
+        case DelegateKindRole:
+            return TripDelegate;
         case NodeIdRole:
             return trip->id();
         case NodeKindLabelRole:
@@ -265,6 +275,8 @@ QVariant cwFixStationTreeModel::data(const QModelIndex& index, int role) const
         return node->name();
     case RowKindRole:
         return NodeRow;
+    case DelegateKindRole:
+        return NodeDelegate;
     case NodeIdRole:
         return node->id();
     case NodeKindRole:
@@ -377,7 +389,8 @@ QHash<int, QByteArray> cwFixStationTreeModel::roleNames() const
         {FixRowRole,                        "fixRow"},
         {SubtreeUnsetFixCountRole,          "subtreeUnsetFixCount"},
         {TripObjectRole,                    "trip"},
-        {BareFixOwnerTripsRole,             "bareFixOwnerTrips"}
+        {BareFixOwnerTripsRole,             "bareFixOwnerTrips"},
+        {DelegateKindRole,                  "delegateKind"}
     });
     return names;
 }

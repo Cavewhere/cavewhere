@@ -1372,3 +1372,167 @@ TEST_CASE("A trip removed from its node leaves the node row's bare-fix owners be
     CHECK(ownersAfterRemoval.size() == 1);
     CHECK(fixture.ownerNames() == QStringList({kTripName.arg(kSecondBareOwner)}));
 }
+
+namespace {
+
+const QByteArray kDelegateKindRoleName = QByteArrayLiteral("delegateKind");
+const QString kKindEntryFile = QStringLiteral("kinds.svx");
+const QString kKindTripName = QStringLiteral("held");
+// Named so a sort by station interleaves the node's own fixes with its
+// attached ones.
+const QString kOwnFirst = QStringLiteral("k1");
+const QString kAttachedSecond = QStringLiteral("k2");
+const QString kOwnThird = QStringLiteral("k3");
+const QString kAttachedFourth = QStringLiteral("k4");
+const QString kTripHeldFix = QStringLiteral("k5");
+constexpr int kAttachedSecondLine = 1;
+constexpr int kAttachedFourthLine = 2;
+constexpr int kTripHeldFixLine = 3;
+
+//! A fix \a ownerId's attachment lists at \a line, as \a station.
+cwAttachedFix kindFix(const QString& station, const QUuid& ownerId, int line)
+{
+    cwAttachedFix fix;
+    fix.station = station;
+    fix.coordinate = QStringLiteral("0 0 0");
+    fix.fileName = kKindEntryFile;
+    fix.filePath = kKindEntryFile;
+    fix.line = line;
+    fix.ownerId = ownerId;
+    return fix;
+}
+
+int delegateKind(const QModelIndex& index)
+{
+    return index.data(cwFixStationTreeModel::DelegateKindRole).toInt();
+}
+
+//! A standalone node, outside any project so no scan replaces its attached
+//! fixes: two fixes of its own, two its attachment lists, and one trip whose
+//! attachment lists one more, so the trip has a row.
+struct DelegateKindFixture
+{
+    cwCave node;
+    cwFixStationTreeModel model;
+    cwFixStationTreeFilterModel proxy;
+
+    DelegateKindFixture()
+    {
+        node.addTrip();
+        cwTrip* trip = node.trip(0);
+        trip->setName(kKindTripName);
+        node.fixStations()->addFixStation(kOwnFirst);
+        node.fixStations()->addFixStation(kOwnThird);
+        node.setAttachedFixes({kindFix(kAttachedSecond, node.id(), kAttachedSecondLine),
+                               kindFix(kAttachedFourth, node.id(), kAttachedFourthLine)});
+        trip->setAttachedFixes({kindFix(kTripHeldFix, trip->id(), kTripHeldFixLine)});
+        model.setRootNode(&node);
+        proxy.setSourceModel(&model);
+    }
+};
+
+//! The delegate kind each fix station of DelegateKindFixture's rows answers.
+QHash<QString, int> expectedFixKinds()
+{
+    return {
+        {kOwnFirst, cwFixStationTreeModel::EditableFix},
+        {kOwnThird, cwFixStationTreeModel::EditableFix},
+        {kAttachedSecond, cwFixStationTreeModel::ReadOnlyFix},
+        {kAttachedFourth, cwFixStationTreeModel::ReadOnlyFix},
+        {kTripHeldFix, cwFixStationTreeModel::ReadOnlyFix}
+    };
+}
+
+//! Checks every row of \a model: a node row answers NodeDelegate, a trip row
+//! TripDelegate, and a fix row the kind \a expected names for its station,
+//! with RowKindRole still FixRow. Returns the stations of the fix rows seen.
+QStringList checkDelegateKinds(const QAbstractItemModel& model, const QModelIndex& parent,
+                               const QHash<QString, int>& expected)
+{
+    const int stationRole = roleId(model, QByteArrayLiteral("stationName"));
+    QStringList stations;
+    for (int row = 0; row < model.rowCount(parent); ++row) {
+        const QModelIndex child = model.index(row, 0, parent);
+        const int kind = rowKind(child);
+        INFO("row " << row << " rowKind " << kind);
+        switch (kind) {
+        case cwFixStationTreeModel::NodeRow:
+            CHECK(delegateKind(child) == cwFixStationTreeModel::NodeDelegate);
+            break;
+        case cwFixStationTreeModel::TripRow:
+            CHECK(delegateKind(child) == cwFixStationTreeModel::TripDelegate);
+            break;
+        case cwFixStationTreeModel::FixRow: {
+            const QString station = child.data(stationRole).toString();
+            INFO("station " << station.toStdString());
+            REQUIRE(expected.contains(station));
+            CHECK(delegateKind(child) == expected.value(station));
+            stations.append(station);
+            break;
+        }
+        default:
+            FAIL("A row answers no RowKind");
+        }
+        stations.append(checkDelegateKinds(model, child, expected));
+    }
+    return stations;
+}
+
+} // namespace
+
+TEST_CASE("Own fix rows and attached fix rows answer separate delegate kinds",
+          "[FixStationTreeModel][FixStationTreeFilterModel]")
+{
+    DelegateKindFixture fixture;
+    const QHash<QString, int> expected = expectedFixKinds();
+    QStringList allStations = expected.keys();
+    allStations.sort();
+
+    SECTION("through the tree model")
+    {
+        CHECK(roleId(fixture.model, kDelegateKindRoleName) == cwFixStationTreeModel::DelegateKindRole);
+        const QModelIndex root = fixture.model.index(0, 0);
+        CHECK(rowKind(root) == cwFixStationTreeModel::NodeRow);
+        CHECK(delegateKind(root) == cwFixStationTreeModel::NodeDelegate);
+
+        const QModelIndex trip = tripRow(fixture.model, kKindTripName);
+        REQUIRE(trip.isValid());
+        CHECK(delegateKind(trip) == cwFixStationTreeModel::TripDelegate);
+        const QModelIndex tripFix = fixRow(fixture.model, trip, kTripHeldFix);
+        REQUIRE(tripFix.isValid());
+        CHECK(rowKind(tripFix) == cwFixStationTreeModel::FixRow);
+        CHECK(delegateKind(tripFix) == cwFixStationTreeModel::ReadOnlyFix);
+
+        const QModelIndex own = fixRow(fixture.model, root, kOwnFirst);
+        const QModelIndex attached = fixRow(fixture.model, root, kAttachedSecond);
+        REQUIRE(own.isValid());
+        REQUIRE(attached.isValid());
+        CHECK(rowKind(own) == cwFixStationTreeModel::FixRow);
+        CHECK(rowKind(attached) == cwFixStationTreeModel::FixRow);
+        CHECK(delegateKind(own) == cwFixStationTreeModel::EditableFix);
+        CHECK(delegateKind(attached) == cwFixStationTreeModel::ReadOnlyFix);
+
+        QStringList seen = checkDelegateKinds(fixture.model, QModelIndex(), expected);
+        seen.sort();
+        CHECK(seen == allStations);
+    }
+
+    SECTION("through the filter proxy, unsorted and sorted by station")
+    {
+        CHECK(roleId(fixture.proxy, kDelegateKindRoleName) == cwFixStationTreeModel::DelegateKindRole);
+        QStringList seen = checkDelegateKinds(fixture.proxy, QModelIndex(), expected);
+        seen.sort();
+        CHECK(seen == allStations);
+
+        sortBy(fixture.proxy, roleId(fixture.proxy, QByteArrayLiteral("stationName")),
+               Qt::AscendingOrder);
+        const QModelIndex root = fixture.proxy.index(0, 0);
+        const QStringList rootLabels = childLabels(fixture.proxy, root);
+        INFO("root rows " << rootLabels.join(QStringLiteral(", ")).toStdString());
+        REQUIRE(rootLabels.mid(0, 4)
+                == QStringList({kOwnFirst, kAttachedSecond, kOwnThird, kAttachedFourth}));
+        seen = checkDelegateKinds(fixture.proxy, QModelIndex(), expected);
+        seen.sort();
+        CHECK(seen == allStations);
+    }
+}

@@ -2617,9 +2617,16 @@ MainWindowTest {
         readonly property string subtreeFixture:
             "external-centerlines/survex_subtree_fixes/ridge.svx"
         readonly property int subtreeFixCount: 4
+        // A tree tall enough to scroll, where every cave's own fixes meet
+        // the read-only rows its attachment lists.
+        readonly property int mixedCaveCount: 10
+        readonly property int mixedOwnFixCount: 5
+        readonly property string mixedOwnPrefix: "own"
         readonly property int sweepStep: 40
         readonly property int sweepMaxSteps: 500
         readonly property int toggleRuns: 3
+        readonly property int toggledCaveCount: 2
+        readonly property list<string> fixControlPrefixes: ["readOnlyLock.", "fixRowMenu.", "pickFromViewButton."]
 
         function init() {
             RootData.project.newProject()
@@ -2830,6 +2837,90 @@ MainWindowTest {
             return findChild(RootData.pageView.currentPageItem, "fixStationTreeView")
         }
 
+        //! The choice of \a chooser whose roleValue is \a value, null for none.
+        function delegateChoiceFor(chooser, value) {
+            const choices = chooser.choices
+            for (let i = 0; i < choices.length; ++i) {
+                if (choices[i].roleValue === value) {
+                    return choices[i]
+                }
+            }
+            return null
+        }
+
+        //! Checks that \a view's current chooser, the \a layout one, picks by
+        //! delegateKind and gives each of the four kinds a delegate of its own.
+        function verifyOneDelegatePerKind(view, layout) {
+            const chooser = view.delegate
+            compare(chooser.role, "delegateKind", "the " + layout + " chooser picks by delegateKind")
+            const kinds = [FixStationTreeModel.NodeDelegate, FixStationTreeModel.TripDelegate,
+                           FixStationTreeModel.EditableFix, FixStationTreeModel.ReadOnlyFix]
+            const delegates = kinds.map(kind => {
+                verify(kind !== undefined, "every delegate kind is a FixStationTreeModel value")
+                const choice = delegateChoiceFor(chooser, kind)
+                verify(choice !== null, "the " + layout + " chooser has a choice for kind " + kind)
+                verify(choice.delegate !== null, "and that choice has a delegate")
+                return choice.delegate
+            })
+            for (let i = 0; i < delegates.length; ++i) {
+                for (let j = i + 1; j < delegates.length; ++j) {
+                    verify(delegates[i] !== delegates[j],
+                           "the " + layout + " kinds " + kinds[i] + " and " + kinds[j]
+                           + " each have their own delegate")
+                }
+            }
+        }
+
+        // A node's own, editable fix rows and its attached, read-only ones
+        // come from separate delegates in both layouts, so the view pools
+        // each kind apart and a reused delegate never switches kind.
+        function test_fixRowKindsEachHaveTheirOwnDelegate() {
+            const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "Kinds")
+            cave.fixStations.addFixStation("k1")
+            const view = openFixStationTree("Source/Data/Node=Kinds/Fix Stations")
+            tryVerify(() => view.rows > 0, 5000, "the tree shows the cave's fix")
+
+            const wideWidth = rootId.width
+            try {
+                verifyOneDelegatePerKind(view, "wide")
+                const wideChooser = view.delegate
+                rootId.width = Theme.breakpointPanelCollapse / 2
+                tryVerify(() => view.delegate !== wideChooser, 5000, "the narrow layout has its own chooser")
+                verifyOneDelegatePerKind(view, "narrow")
+            } finally {
+                rootId.width = wideWidth
+            }
+        }
+
+        //! Saves the project and builds mixedCaveCount caves, each with
+        //! mixedOwnFixCount fixes of its own and one trip that attaches
+        //! bare_fix.svx, so every cave's own rows meet read-only rows.
+        //! Returns the number of fix rows the caves hold.
+        function makeMixedFixCaves(projectBaseName) {
+            saveProjectAs(projectBaseName)
+            const source = TestHelper.testcasesDatasetPath(
+                             "external-centerlines/survex_bare_fix/bare_fix.svx")
+            const attachedCount = (cave) => {
+                let count = cave.attachedFixes.count
+                for (let i = 0; i < cave.tripCount; ++i) {
+                    count += cave.trip(i).attachedFixes.count
+                }
+                return count
+            }
+            let fixRows = 0
+            for (let c = 0; c < mixedCaveCount; ++c) {
+                const cave = RootData.region.addNode(null, SurveyNodeKind.Cave, "M" + c)
+                cave.addTrip()
+                for (let f = 0; f < mixedOwnFixCount; ++f) {
+                    cave.fixStations.addFixStation(mixedOwnPrefix + c + "_" + f)
+                }
+                attachSourceToTrip(cave.trip(0), source)
+                tryVerify(() => attachedCount(cave) > 0, 20000, "the scan lists M" + c + "'s attached fix")
+                fixRows += mixedOwnFixCount + attachedCount(cave)
+            }
+            return fixRows
+        }
+
         //! Scrolls \a view from the top to the bottom and back in sweepStep
         //! steps, laying it out and calling \a visit after every step.
         //! Returns the number of steps.
@@ -2864,6 +2955,131 @@ MainWindowTest {
                 console.info(tag, "root collapse ms", collapsed - start, "expand ms", expanded - collapsed,
                              "rows", view.rows)
             }
+        }
+
+        function addUnique(list, value) {
+            if (list.indexOf(value) < 0) {
+                list.push(value)
+            }
+        }
+
+        // Scrolling across the meeting of a node's own fix rows and its
+        // attached ones, and collapsing and expanding a cave above them,
+        // hands each fix delegate rows of one kind only, and
+        // the lock, the right-click menu and the pick button a delegate built
+        // stay the objects it built. The timings and object counts are
+        // logged for comparison; only the kinds and identities are asserted.
+        function test_aScrolledFixDelegateKeepsOneKindAndItsControls() {
+            const fixRows = makeMixedFixCaves("fix-station-delegate-kinds")
+            const view = openFixStationTree("Source/Data/Fix Stations")
+            // The root, every cave's node row and every fix.
+            tryVerify(() => view.rows >= 1 + mixedCaveCount + fixRows, 10000, "every node and fix has a row")
+            waitForRendering(rootId)
+            verify(view.contentHeight > 2 * view.height,
+                   "the tree is tall enough to scroll, content " + view.contentHeight
+                   + " view " + view.height + "; raise mixedCaveCount")
+            const rowCount = view.rows
+
+            timeRootToggles(view, "SP2")
+            tryCompare(view, "rows", rowCount, 5000, "expanding the root shows every row again")
+
+            const scrollStart = Date.now()
+            const timedSteps = sweep(view, () => {})
+            console.info("SP2 scroll top-bottom-top ms", Date.now() - scrollStart, "steps", timedSteps,
+                         "rows", rowCount)
+
+            // One record per fix delegate: the stations and kinds it showed
+            // and the lock, menu and pick button objects found under it.
+            const records = []
+            const recordOf = (item) => {
+                const known = records.find(record => record.item === item)
+                if (known !== undefined) {
+                    return known
+                }
+                const record = { item: item, stations: [], kinds: [], controls: [[], [], []] }
+                records.push(record)
+                return record
+            }
+            const shownFixItems = () => {
+                const items = []
+                for (let row = 0; row < view.rows; ++row) {
+                    const item = view.itemAtCell(Qt.point(0, row))
+                    if (item !== null && String(item.objectName).startsWith("fixRow.")) {
+                        items.push(item)
+                    }
+                }
+                return items
+            }
+            const kindOf = (item) => String(item.stationName).startsWith(mixedOwnPrefix) ? "editable" : "readOnly"
+            const visit = () => {
+                for (const item of shownFixItems()) {
+                    const record = recordOf(item)
+                    addUnique(record.stations, String(item.stationName))
+                    addUnique(record.kinds, kindOf(item))
+                    for (let p = 0; p < fixControlPrefixes.length; ++p) {
+                        const control = rootId.findChildWithPrefix(item, fixControlPrefixes[p])
+                        if (control !== null) {
+                            addUnique(record.controls[p], control)
+                        }
+                    }
+                }
+            }
+            visit()
+            const trackedSteps = sweep(view, visit)
+
+            // Collapsing a cave mid-tree shifts every row below it, and the
+            // pool hands each shifted row the delegate last used at that
+            // table row, which can be a delegate of the other fix kind.
+            const nodeRowOf = (name) => {
+                for (let row = 0; row < view.rows; ++row) {
+                    const item = view.itemAtCell(Qt.point(0, row))
+                    if (item !== null && item.objectName === "nodeRow." + name) {
+                        return row
+                    }
+                }
+                return -1
+            }
+            for (let c = 0; c < toggledCaveCount; ++c) {
+                const name = "M" + c
+                const nodeRow = nodeRowOf(name)
+                verify(nodeRow >= 0, name + " has a row on screen")
+                const start = Date.now()
+                view.collapse(nodeRow)
+                view.forceLayout()
+                visit()
+                view.expand(nodeRow)
+                view.forceLayout()
+                visit()
+                console.info("SP2 node", name, "collapse+expand ms", Date.now() - start)
+            }
+            tryCompare(view, "rows", rowCount, 5000, "expanding the caves shows every row again")
+
+            const reused = records.filter(record => record.stations.length > 1)
+            const mixed = records.filter(record => record.kinds.length > 1)
+            const rebuilt = records.filter(record => record.controls.some(objects => objects.length > 1))
+            const editable = records.filter(record => record.kinds.indexOf("editable") >= 0)
+            const readOnly = records.filter(record => record.kinds.indexOf("readOnly") >= 0)
+            const distinct = fixControlPrefixes.map((prefix, p) =>
+                records.reduce((sum, record) => sum + record.controls[p].length, 0))
+            console.info("SP2 sweep steps", trackedSteps, "fix delegates", records.length,
+                         "reused", reused.length, "showing both kinds", mixed.length,
+                         "rebuilding a control", rebuilt.length,
+                         "editable delegates", editable.length, "read-only delegates", readOnly.length)
+            console.info("SP2 distinct objects seen: locks", distinct[0], "menus", distinct[1],
+                         "pick buttons", distinct[2])
+
+            for (const kind of ["editable", "readOnly"]) {
+                const item = shownFixItems().find(shown => kindOf(shown) === kind)
+                if (item !== undefined) {
+                    console.info("SP2 one", kind, "fix delegate: loaders",
+                                 rootId.countDescendants(item, child => child instanceof Loader),
+                                 "items", rootId.countDescendants(item, () => true))
+                }
+            }
+
+            verify(reused.length > 0, "the sweep hands some fix delegate a second row")
+            compare(mixed.length, 0, "every fix delegate shows rows of one kind only")
+            compare(rebuilt.length, 0, "every fix delegate keeps the lock, menu and pick button it built")
         }
 
         // The lock's tooltip names the file in the tooltip colors in the

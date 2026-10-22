@@ -778,9 +778,12 @@ StandardPage {
         id: inputCSField
         property string value
         property int rowIndex
-        //! See CSCell.
+        //! The row's own coordinate and whether anything records which axis it
+        //! leads with — see fixStationPage.commitCS().
         property string coordinateText: ""
         property bool orderUnknown: false
+        //! What the row's datum combo may offer, and whether it may be used at
+        //! all — see CSPicker.availableDatums / datumEnabled.
         property list<string> availableDatums: []
         property bool datumEnabled: false
         readonly property bool editing: fixStationPage.editingCSRow === inputCSField.rowIndex
@@ -843,62 +846,56 @@ StandardPage {
         }
     }
 
-    component CSCell : QQ.Item {
-        id: csCell
+    // The wide layout's coordinate system column: clips the field it holds,
+    // declared as a child, to the column's width.
+    component CSColumnCell : QQ.Item {
+        id: csColumnCell
         property int columnWidth: 0
-        property string value
-        property int rowIndex
-        //! The row's own coordinate and whether anything records which axis it
-        //! leads with — see fixStationPage.commitCS().
-        property string coordinateText: ""
-        property bool orderUnknown: false
-        //! What the row's datum combo may offer, and whether it may be used at
-        //! all — see CSPicker.availableDatums / datumEnabled.
-        property list<string> availableDatums: []
-        property bool datumEnabled: false
-        //! A row an attached file fixes: the system is shown as text, with no
-        //! combo to change it.
-        property bool readOnly: false
-        //! See ReadOnlyCSCell.
-        property string readInSystem: ""
-        property string readInWarning: ""
-        property string sourceFile: ""
+        property QQ.Item field: null
 
-        implicitWidth: columnWidth
-        implicitHeight: csLoader.implicitHeight
+        implicitWidth: csColumnCell.columnWidth
+        implicitHeight: csColumnCell.field ? csColumnCell.field.implicitHeight : 0
         clip: true
+    }
 
-        QQ.Loader {
-            id: csLoader
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            sourceComponent: csCell.readOnly ? readOnlyCSComponent : inputCSComponent
+    // What every fix row's delegate shares: the row's fix, the selection
+    // background, and closing an editor open in the row as the view pools it.
+    // An editable row and a read-only one each have a delegate of their own,
+    // so the view hands a pooled delegate rows of its own kind only.
+    component FixRowItem : QQ.Item {
+        id: fixRowItem
+        objectName: "fixRow." + fixRowItem.stationName
+
+        //! The row's page row, which names its cells and every commit.
+        required property int fixRow
+        required property int depth
+        required property string stationName
+        required property string inputCS
+        required property double easting
+        required property double northing
+        required property double elevation
+        required property string coordinateText
+        required property string stationError
+
+        //! The row's numbers in the project's units, in the axis order its
+        //! system reads them in.
+        function formattedCoordinate(): string {
+            return CoordinateText.format(fixRowItem.easting, fixRowItem.northing, fixRowItem.elevation,
+                                         ProjectUnits.unitSystem,
+                                         CoordinateText.axisOrderFor(fixRowItem.inputCS))
         }
 
-        QQ.Component {
-            id: inputCSComponent
-
-            InputCSField {
-                value: csCell.value
-                rowIndex: csCell.rowIndex
-                coordinateText: csCell.coordinateText
-                orderUnknown: csCell.orderUnknown
-                availableDatums: csCell.availableDatums
-                datumEnabled: csCell.datumEnabled
+        QQ.TableView.onPooled: {
+            fixStationPage.closeEditorIn(fixRowItem)
+            if (fixRowItem.fixRow === fixStationPage.editingCSRow) {
+                fixStationPage.closeCSPicker()
             }
         }
 
-        QQ.Component {
-            id: readOnlyCSComponent
-
-            ReadOnlyCSCell {
-                value: csCell.value
-                rowIndex: csCell.rowIndex
-                readInSystem: csCell.readInSystem
-                readInWarning: csCell.readInWarning
-                sourceFile: csCell.sourceFile
-            }
+        TableRowBackground {
+            isSelected: treeViewId.currentIndex === fixRowItem.fixRow
+            rowIndex: fixRowItem.fixRow
+            anchors.fill: parent
         }
     }
 
@@ -1321,41 +1318,51 @@ StandardPage {
 
     DelegateChooser {
         id: wideChooserId
-        role: "rowKind"
+        role: "delegateKind"
 
         DelegateChoice {
-            roleValue: FixStationTreeModel.NodeRow
+            roleValue: FixStationTreeModel.NodeDelegate
             delegate: nodeRowComponent
         }
 
         DelegateChoice {
-            roleValue: FixStationTreeModel.TripRow
+            roleValue: FixStationTreeModel.TripDelegate
             delegate: tripRowComponent
         }
 
         DelegateChoice {
-            roleValue: FixStationTreeModel.FixRow
-            delegate: wideDelegateComponent
+            roleValue: FixStationTreeModel.EditableFix
+            delegate: wideEditableFixComponent
+        }
+
+        DelegateChoice {
+            roleValue: FixStationTreeModel.ReadOnlyFix
+            delegate: wideReadOnlyFixComponent
         }
     }
 
     DelegateChooser {
         id: narrowChooserId
-        role: "rowKind"
+        role: "delegateKind"
 
         DelegateChoice {
-            roleValue: FixStationTreeModel.NodeRow
+            roleValue: FixStationTreeModel.NodeDelegate
             delegate: nodeRowComponent
         }
 
         DelegateChoice {
-            roleValue: FixStationTreeModel.TripRow
+            roleValue: FixStationTreeModel.TripDelegate
             delegate: tripRowComponent
         }
 
         DelegateChoice {
-            roleValue: FixStationTreeModel.FixRow
-            delegate: narrowDelegateComponent
+            roleValue: FixStationTreeModel.EditableFix
+            delegate: narrowEditableFixComponent
+        }
+
+        DelegateChoice {
+            roleValue: FixStationTreeModel.ReadOnlyFix
+            delegate: narrowReadOnlyFixComponent
         }
     }
 
@@ -1614,144 +1621,96 @@ StandardPage {
         pageSelectionModel: RootData.pageSelectionModel
     }
 
+    // One of a node's own fixes: every cell edits, the right-click menu
+    // removes it, and the crosshair picks its coordinate from the view.
     QQ.Component {
-        id: wideDelegateComponent
+        id: wideEditableFixComponent
 
-        QQ.Item {
-            id: wideDelegateId
-            objectName: "fixRow." + wideDelegateId.stationName
+        FixRowItem {
+            id: wideEditableId
 
-            //! The row's page row, which names its cells and every commit.
-            required property int fixRow
-            required property int depth
-            required property string stationName
-            required property string inputCS
-            required property double easting
-            required property double northing
-            required property double elevation
-            required property string coordinateText
             required property string domainError
             required property bool eastingDomainError
             required property bool northingDomainError
             required property string coordinateError
             required property bool coordinateOrderUnknown
-            required property string stationError
             required property list<string> availableDatums
             required property bool datumEnabled
-            //! Set on a row an attached file fixes itself, named by sourceFile.
-            required property bool readOnly
-            required property string sourceFile
-            //! On an attached row whose fix the file gives no system: what the
-            //! solve reads it in, and the line that left it without one.
-            required property string readInWarning
-            //! Set on an attached row the file marks as a reference point.
-            required property bool reference
-            //! On an attached row whose fix the file gives no system: the system
-            //! the solve reads it in, empty while none is chosen.
-            required property string readInSystem
 
-            readonly property int indent: Math.min(wideDelegateId.depth,
+            readonly property int indent: Math.min(wideEditableId.depth,
                                                    fixStationPage.stationIndentLevels) * Theme.treeIndent
 
             // The two coordinate complaints can't both speak: the domain check
             // judges a coordinate the row has, and this one says there isn't one
             // to judge. So they share the single warning beside the row rather
-            // than competing for space that only ever holds one of them. The
-            // read-in note sits on an attached row, which has neither.
-            readonly property string coordinateWarning: wideDelegateId.coordinateError !== ""
-                                                        ? wideDelegateId.coordinateError
-                                                        : wideDelegateId.domainError !== ""
-                                                          ? wideDelegateId.domainError
-                                                          : wideDelegateId.readInWarning
+            // than competing for space that only ever holds one of them.
+            readonly property string coordinateWarning: wideEditableId.coordinateError !== ""
+                                                        ? wideEditableId.coordinateError
+                                                        : wideEditableId.domainError
 
-            implicitHeight: rowLayoutId.implicitHeight + Theme.tightSpacing * 2
-            implicitWidth: rowLayoutId.implicitWidth
+            implicitHeight: wideEditableLayout.implicitHeight + Theme.tightSpacing * 2
+            implicitWidth: wideEditableLayout.implicitWidth
 
-            QQ.TableView.onPooled: {
-                fixStationPage.closeEditorIn(wideDelegateId)
-                if (wideDelegateId.fixRow === fixStationPage.editingCSRow) {
-                    fixStationPage.closeCSPicker()
-                }
-            }
-
-            TableRowBackground {
-                isSelected: treeViewId.currentIndex === wideDelegateId.fixRow
-                rowIndex: wideDelegateId.fixRow
+            // Sits between the background and the left-button area, so a
+            // touch long-press reaches it.
+            DataRightClickMouseMenu {
+                objectName: "fixRowMenu." + wideEditableId.fixRow
                 anchors.fill: parent
-            }
-
-            // Only the node's own rows can be removed here.
-            QQ.Loader {
-                anchors.fill: parent
-                active: !wideDelegateId.readOnly
-                sourceComponent: DataRightClickMouseMenu {
-                    objectName: "fixRowMenu." + wideDelegateId.fixRow
-                    removeChallenge: removeChallengeId
-                    row: wideDelegateId.fixRow
-                    name: wideDelegateId.stationName
-                }
+                removeChallenge: removeChallengeId
+                row: wideEditableId.fixRow
+                name: wideEditableId.stationName
             }
 
             QQ.MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
-                onClicked: fixStationPage.pickRow(wideDelegateId.fixRow)
+                onClicked: fixStationPage.pickRow(wideEditableId.fixRow)
             }
 
             RowLayout {
-                id: rowLayoutId
+                id: wideEditableLayout
                 spacing: 0
                 anchors.verticalCenter: parent.verticalCenter
 
                 // Only the station cell takes the tree's indentation, so the
                 // other columns line up at every depth.
                 QQ.Item {
-                    Layout.preferredWidth: wideDelegateId.indent
+                    Layout.preferredWidth: wideEditableId.indent
                     Layout.preferredHeight: 1
                 }
 
                 WideCell {
-                    fieldObjectName: "stationCell." + wideDelegateId.fixRow
-                    columnWidth: stationColumn.columnWidth - wideDelegateId.indent
-                    leadingItem: wideDelegateId.readOnly ? wideLockLoader : null
-                    value: wideDelegateId.stationName
+                    fieldObjectName: "stationCell." + wideEditableId.fixRow
+                    columnWidth: stationColumn.columnWidth - wideEditableId.indent
+                    value: wideEditableId.stationName
                     role: FixStationModel.StationNameRole
-                    rowIndex: wideDelegateId.fixRow
-                    readOnly: wideDelegateId.readOnly
-                    error: wideDelegateId.stationError !== ""
+                    rowIndex: wideEditableId.fixRow
+                    error: wideEditableId.stationError !== ""
+                }
 
-                    QQ.Loader {
-                        id: wideLockLoader
+                CSColumnCell {
+                    columnWidth: csColumn.columnWidth
+                    field: wideInputCS
+
+                    InputCSField {
+                        id: wideInputCS
                         anchors.left: parent.left
+                        anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        active: wideDelegateId.readOnly
-                        sourceComponent: ReadOnlyLock {
-                            objectName: "readOnlyLock." + wideDelegateId.fixRow
-                            sourceFile: wideDelegateId.sourceFile
-                        }
+                        value: wideEditableId.inputCS
+                        rowIndex: wideEditableId.fixRow
+                        coordinateText: wideEditableId.coordinateText
+                        orderUnknown: wideEditableId.coordinateOrderUnknown
+                        availableDatums: wideEditableId.availableDatums
+                        datumEnabled: wideEditableId.datumEnabled
                     }
                 }
 
-                CSCell {
-                    columnWidth: csColumn.columnWidth
-                    value: wideDelegateId.inputCS
-                    rowIndex: wideDelegateId.fixRow
-                    coordinateText: wideDelegateId.coordinateText
-                    orderUnknown: wideDelegateId.coordinateOrderUnknown
-                    availableDatums: wideDelegateId.availableDatums
-                    datumEnabled: wideDelegateId.datumEnabled
-                    readOnly: wideDelegateId.readOnly
-                    readInSystem: wideDelegateId.readInSystem
-                    readInWarning: wideDelegateId.readInWarning
-                    sourceFile: wideDelegateId.sourceFile
-                }
-
                 WideCell {
-                    fieldObjectName: "coordinateCell." + wideDelegateId.fixRow
+                    fieldObjectName: "coordinateCell." + wideEditableId.fixRow
                     columnWidth: coordinateColumn.columnWidth
                     coordinate: true
-                    readOnly: wideDelegateId.readOnly
-                    trailingItem: wideDelegateId.readOnly ? null : pickButtonLoader
+                    trailingItem: widePickButton
                     // Normally the cell renders the numbers, so it needs the
                     // same axis order they were read under. A CS flip swaps the
                     // numbers and the render order together, so what this
@@ -1762,248 +1721,339 @@ StandardPage {
                     // three zeros, and rendering those would hide the very text
                     // that is wrong with it behind a coordinate at the origin.
                     // So it shows what was written, which is all such a row has.
-                    // A read-only row renders through the formatter when the
-                    // scan's text reads as a grid coordinate, and
-                    // otherwise (lat/long, unreadable text) keeps its text.
-                    value: wideDelegateId.coordinateError !== ""
-                           || (wideDelegateId.readOnly && isNaN(wideDelegateId.easting))
-                           ? wideDelegateId.coordinateText
-                           : CoordinateText.format(wideDelegateId.easting,
-                                                   wideDelegateId.northing,
-                                                   wideDelegateId.elevation,
-                                                   ProjectUnits.unitSystem,
-                                                   CoordinateText.axisOrderFor(wideDelegateId.inputCS))
+                    value: wideEditableId.coordinateError !== ""
+                           ? wideEditableId.coordinateText
+                           : wideEditableId.formattedCoordinate()
                     // The cell above renders the numbers in the project's
                     // units; the editor re-offers the coordinate as written.
-                    editValue: wideDelegateId.coordinateText
-                    rowIndex: wideDelegateId.fixRow
-                    axisOrder: CoordinateText.axisOrderFor(wideDelegateId.inputCS)
+                    editValue: wideEditableId.coordinateText
+                    rowIndex: wideEditableId.fixRow
+                    axisOrder: CoordinateText.axisOrderFor(wideEditableId.inputCS)
                     // One field now holds both horizontal components, so the
                     // two per-axis domain flags share the one tint — and so does
                     // a coordinate that couldn't be read at all.
-                    error: wideDelegateId.coordinateError !== ""
-                           || wideDelegateId.eastingDomainError
-                           || wideDelegateId.northingDomainError
+                    error: wideEditableId.coordinateError !== ""
+                           || wideEditableId.eastingDomainError
+                           || wideEditableId.northingDomainError
 
-                    QQ.Loader {
-                        id: pickButtonLoader
+                    PickFromViewButton {
+                        id: widePickButton
+                        objectName: "pickFromViewButton." + wideEditableId.fixRow
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
-                        active: !wideDelegateId.readOnly
-                        sourceComponent: PickFromViewButton {
-                            objectName: "pickFromViewButton." + wideDelegateId.fixRow
-                            onClicked: fixStationPage.pickFromView(wideDelegateId.fixRow)
-                        }
+
+                        onClicked: fixStationPage.pickFromView(wideEditableId.fixRow)
                     }
+                }
+
+                InlineWarning {
+                    objectName: "stationWarning." + wideEditableId.fixRow
+                    Layout.leftMargin: Theme.tightSpacing
+                    Layout.alignment: Qt.AlignVCenter
+                    message: wideEditableId.stationError
+                }
+
+                InlineWarning {
+                    objectName: "coordinateWarning." + wideEditableId.fixRow
+                    Layout.leftMargin: Theme.tightSpacing
+                    Layout.alignment: Qt.AlignVCenter
+                    message: wideEditableId.coordinateWarning
+                }
+            }
+        }
+    }
+
+    // A fix an attached file holds: shown behind a lock naming the file, which
+    // is the only place it can be changed.
+    QQ.Component {
+        id: wideReadOnlyFixComponent
+
+        FixRowItem {
+            id: wideReadOnlyId
+
+            required property string sourceFile
+            //! When the file gives the fix no system: what the solve reads it
+            //! in, and the line that left it without one.
+            required property string readInWarning
+            //! Set when the file marks the fix as a reference point.
+            required property bool reference
+            //! When the file gives the fix no system: the system the solve
+            //! reads it in, empty while none is chosen.
+            required property string readInSystem
+
+            readonly property int indent: Math.min(wideReadOnlyId.depth,
+                                                   fixStationPage.stationIndentLevels) * Theme.treeIndent
+
+            implicitHeight: wideReadOnlyLayout.implicitHeight + Theme.tightSpacing * 2
+            implicitWidth: wideReadOnlyLayout.implicitWidth
+
+            QQ.MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: fixStationPage.pickRow(wideReadOnlyId.fixRow)
+            }
+
+            RowLayout {
+                id: wideReadOnlyLayout
+                spacing: 0
+                anchors.verticalCenter: parent.verticalCenter
+
+                QQ.Item {
+                    Layout.preferredWidth: wideReadOnlyId.indent
+                    Layout.preferredHeight: 1
+                }
+
+                WideCell {
+                    fieldObjectName: "stationCell." + wideReadOnlyId.fixRow
+                    columnWidth: stationColumn.columnWidth - wideReadOnlyId.indent
+                    leadingItem: wideLock
+                    value: wideReadOnlyId.stationName
+                    role: FixStationModel.StationNameRole
+                    rowIndex: wideReadOnlyId.fixRow
+                    readOnly: true
+
+                    ReadOnlyLock {
+                        id: wideLock
+                        objectName: "readOnlyLock." + wideReadOnlyId.fixRow
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                        sourceFile: wideReadOnlyId.sourceFile
+                    }
+                }
+
+                CSColumnCell {
+                    columnWidth: csColumn.columnWidth
+                    field: wideReadOnlyCS
+
+                    ReadOnlyCSCell {
+                        id: wideReadOnlyCS
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        value: wideReadOnlyId.inputCS
+                        rowIndex: wideReadOnlyId.fixRow
+                        readInSystem: wideReadOnlyId.readInSystem
+                        readInWarning: wideReadOnlyId.readInWarning
+                        sourceFile: wideReadOnlyId.sourceFile
+                    }
+                }
+
+                WideCell {
+                    fieldObjectName: "coordinateCell." + wideReadOnlyId.fixRow
+                    columnWidth: coordinateColumn.columnWidth
+                    coordinate: true
+                    readOnly: true
+                    // Rendered through the formatter when the scan's text reads
+                    // as a grid coordinate, and otherwise (lat/long, unreadable
+                    // text) kept as written.
+                    value: isNaN(wideReadOnlyId.easting)
+                           ? wideReadOnlyId.coordinateText
+                           : wideReadOnlyId.formattedCoordinate()
+                    editValue: wideReadOnlyId.coordinateText
+                    rowIndex: wideReadOnlyId.fixRow
+                    axisOrder: CoordinateText.axisOrderFor(wideReadOnlyId.inputCS)
                 }
 
                 QQ.Loader {
                     Layout.leftMargin: Theme.tightSpacing
                     Layout.alignment: Qt.AlignVCenter
-                    active: wideDelegateId.reference
-                    visible: wideDelegateId.reference
+                    active: wideReadOnlyId.reference
+                    visible: wideReadOnlyId.reference
                     sourceComponent: ReferenceChip {
-                        objectName: "referenceChip." + wideDelegateId.fixRow
+                        objectName: "referenceChip." + wideReadOnlyId.fixRow
                     }
                 }
 
                 InlineWarning {
-                    objectName: "stationWarning." + wideDelegateId.fixRow
+                    objectName: "coordinateWarning." + wideReadOnlyId.fixRow
                     Layout.leftMargin: Theme.tightSpacing
                     Layout.alignment: Qt.AlignVCenter
-                    message: wideDelegateId.stationError
-                }
-
-                InlineWarning {
-                    objectName: "coordinateWarning." + wideDelegateId.fixRow
-                    Layout.leftMargin: Theme.tightSpacing
-                    Layout.alignment: Qt.AlignVCenter
-                    message: wideDelegateId.coordinateWarning
+                    message: wideReadOnlyId.readInWarning
                 }
             }
         }
     }
 
     QQ.Component {
-        id: narrowDelegateComponent
+        id: narrowEditableFixComponent
 
-        QQ.Item {
-            id: narrowDelegateId
-            objectName: "fixRow." + narrowDelegateId.stationName
+        FixRowItem {
+            id: narrowEditableId
 
-            //! The row's page row, which names its cells and every commit.
-            required property int fixRow
-            required property int depth
-            required property string stationName
-            required property string inputCS
-            required property double easting
-            required property double northing
-            required property double elevation
-            required property string coordinateText
             required property string domainError
             required property bool eastingDomainError
             required property bool northingDomainError
             required property string coordinateError
             required property bool coordinateOrderUnknown
-            required property string stationError
             required property list<string> availableDatums
             required property bool datumEnabled
-            //! Set on a row an attached file fixes itself, named by sourceFile.
-            required property bool readOnly
-            required property string sourceFile
-            //! See the wide delegate.
-            required property string readInWarning
-            required property bool reference
-            required property string readInSystem
 
             //! Mutually exclusive with the domain error — see the wide delegate.
-            readonly property string coordinateWarning: narrowDelegateId.coordinateError !== ""
-                                                        ? narrowDelegateId.coordinateError
-                                                        : narrowDelegateId.domainError !== ""
-                                                          ? narrowDelegateId.domainError
-                                                          : narrowDelegateId.readInWarning
+            readonly property string coordinateWarning: narrowEditableId.coordinateError !== ""
+                                                        ? narrowEditableId.coordinateError
+                                                        : narrowEditableId.domainError
 
             implicitHeight: narrowFlow.implicitHeight + Theme.delegatePadding * 2
 
-            QQ.TableView.onPooled: {
-                fixStationPage.closeEditorIn(narrowDelegateId)
-                if (narrowDelegateId.fixRow === fixStationPage.editingCSRow) {
-                    fixStationPage.closeCSPicker()
-                }
-            }
-
-            TableRowBackground {
-                isSelected: treeViewId.currentIndex === narrowDelegateId.fixRow
-                rowIndex: narrowDelegateId.fixRow
+            DataRightClickMouseMenu {
+                objectName: "fixRowMenu." + narrowEditableId.fixRow
                 anchors.fill: parent
-            }
-
-            QQ.Loader {
-                anchors.fill: parent
-                active: !narrowDelegateId.readOnly
-                sourceComponent: DataRightClickMouseMenu {
-                    objectName: "fixRowMenu." + narrowDelegateId.fixRow
-                    removeChallenge: removeChallengeId
-                    row: narrowDelegateId.fixRow
-                    name: narrowDelegateId.stationName
-                }
+                removeChallenge: removeChallengeId
+                row: narrowEditableId.fixRow
+                name: narrowEditableId.stationName
             }
 
             QQ.MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
-                onClicked: fixStationPage.pickRow(narrowDelegateId.fixRow)
+                onClicked: fixStationPage.pickRow(narrowEditableId.fixRow)
             }
 
             QQ.Flow {
                 id: narrowFlow
-                objectName: "narrowFixRow." + narrowDelegateId.fixRow
+                objectName: "narrowFixRow." + narrowEditableId.fixRow
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: Theme.delegatePadding + narrowDelegateId.depth * Theme.treeIndent
+                anchors.leftMargin: Theme.delegatePadding + narrowEditableId.depth * Theme.treeIndent
                 anchors.rightMargin: Theme.delegatePadding
                 spacing: Theme.flowSpacing
 
                 InlineWarning {
-                    objectName: "stationWarning." + narrowDelegateId.fixRow
-                    message: narrowDelegateId.stationError
+                    objectName: "stationWarning." + narrowEditableId.fixRow
+                    message: narrowEditableId.stationError
                 }
 
                 InlineWarning {
-                    objectName: "coordinateWarning." + narrowDelegateId.fixRow
-                    message: narrowDelegateId.coordinateWarning
-                }
-
-                QQ.Loader {
-                    active: narrowDelegateId.readOnly
-                    visible: narrowDelegateId.readOnly
-                    sourceComponent: ReadOnlyLock {
-                        objectName: "readOnlyLock." + narrowDelegateId.fixRow
-                        sourceFile: narrowDelegateId.sourceFile
-                    }
+                    objectName: "coordinateWarning." + narrowEditableId.fixRow
+                    message: narrowEditableId.coordinateWarning
                 }
 
                 FixField {
-                    objectName: "stationCell." + narrowDelegateId.fixRow
-                    value: narrowDelegateId.stationName
+                    objectName: "stationCell." + narrowEditableId.fixRow
+                    value: narrowEditableId.stationName
                     role: FixStationModel.StationNameRole
-                    rowIndex: narrowDelegateId.fixRow
-                    readOnly: narrowDelegateId.readOnly
+                    rowIndex: narrowEditableId.fixRow
                     font.bold: true
-                    error: narrowDelegateId.stationError !== ""
+                    error: narrowEditableId.stationError !== ""
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
-                QQ.Loader {
-                    sourceComponent: narrowDelegateId.readOnly ? narrowReadOnlyCSComponent
-                                                               : narrowInputCSComponent
-                }
-
-                QQ.Component {
-                    id: narrowInputCSComponent
-
-                    InputCSField {
-                        value: narrowDelegateId.inputCS
-                        rowIndex: narrowDelegateId.fixRow
-                        coordinateText: narrowDelegateId.coordinateText
-                        orderUnknown: narrowDelegateId.coordinateOrderUnknown
-                        availableDatums: narrowDelegateId.availableDatums
-                        datumEnabled: narrowDelegateId.datumEnabled
-                    }
-                }
-
-                QQ.Component {
-                    id: narrowReadOnlyCSComponent
-
-                    ReadOnlyCSCell {
-                        value: narrowDelegateId.inputCS
-                        rowIndex: narrowDelegateId.fixRow
-                        readInSystem: narrowDelegateId.readInSystem
-                        readInWarning: narrowDelegateId.readInWarning
-                        sourceFile: narrowDelegateId.sourceFile
-                    }
+                InputCSField {
+                    value: narrowEditableId.inputCS
+                    rowIndex: narrowEditableId.fixRow
+                    coordinateText: narrowEditableId.coordinateText
+                    orderUnknown: narrowEditableId.coordinateOrderUnknown
+                    availableDatums: narrowEditableId.availableDatums
+                    datumEnabled: narrowEditableId.datumEnabled
                 }
 
                 QC.Label { text: "·"; color: Theme.textSubtle }
 
                 FixField {
-                    objectName: "coordinateCell." + narrowDelegateId.fixRow
+                    objectName: "coordinateCell." + narrowEditableId.fixRow
                     //! The text itself when there are no numbers to render —
                     //! see the wide delegate.
-                    value: narrowDelegateId.coordinateError !== ""
-                           || (narrowDelegateId.readOnly && isNaN(narrowDelegateId.easting))
-                           ? narrowDelegateId.coordinateText
-                           : CoordinateText.format(narrowDelegateId.easting,
-                                                   narrowDelegateId.northing,
-                                                   narrowDelegateId.elevation,
-                                                   ProjectUnits.unitSystem,
-                                                   CoordinateText.axisOrderFor(narrowDelegateId.inputCS))
-                    editValue: narrowDelegateId.coordinateText
-                    rowIndex: narrowDelegateId.fixRow
+                    value: narrowEditableId.coordinateError !== ""
+                           ? narrowEditableId.coordinateText
+                           : narrowEditableId.formattedCoordinate()
+                    editValue: narrowEditableId.coordinateText
+                    rowIndex: narrowEditableId.fixRow
                     coordinate: true
-                    readOnly: narrowDelegateId.readOnly
-                    axisOrder: CoordinateText.axisOrderFor(narrowDelegateId.inputCS)
-                    error: narrowDelegateId.coordinateError !== ""
-                           || narrowDelegateId.eastingDomainError
-                           || narrowDelegateId.northingDomainError
+                    axisOrder: CoordinateText.axisOrderFor(narrowEditableId.inputCS)
+                    error: narrowEditableId.coordinateError !== ""
+                           || narrowEditableId.eastingDomainError
+                           || narrowEditableId.northingDomainError
+                }
+
+                PickFromViewButton {
+                    objectName: "pickFromViewButton." + narrowEditableId.fixRow
+
+                    onClicked: fixStationPage.pickFromView(narrowEditableId.fixRow)
+                }
+            }
+        }
+    }
+
+    QQ.Component {
+        id: narrowReadOnlyFixComponent
+
+        FixRowItem {
+            id: narrowReadOnlyId
+
+            //! See the wide delegate.
+            required property string sourceFile
+            required property string readInWarning
+            required property bool reference
+            required property string readInSystem
+
+            implicitHeight: narrowReadOnlyFlow.implicitHeight + Theme.delegatePadding * 2
+
+            QQ.MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: fixStationPage.pickRow(narrowReadOnlyId.fixRow)
+            }
+
+            QQ.Flow {
+                id: narrowReadOnlyFlow
+                objectName: "narrowFixRow." + narrowReadOnlyId.fixRow
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: Theme.delegatePadding + narrowReadOnlyId.depth * Theme.treeIndent
+                anchors.rightMargin: Theme.delegatePadding
+                spacing: Theme.flowSpacing
+
+                InlineWarning {
+                    objectName: "coordinateWarning." + narrowReadOnlyId.fixRow
+                    message: narrowReadOnlyId.readInWarning
+                }
+
+                ReadOnlyLock {
+                    objectName: "readOnlyLock." + narrowReadOnlyId.fixRow
+                    sourceFile: narrowReadOnlyId.sourceFile
+                }
+
+                FixField {
+                    objectName: "stationCell." + narrowReadOnlyId.fixRow
+                    value: narrowReadOnlyId.stationName
+                    role: FixStationModel.StationNameRole
+                    rowIndex: narrowReadOnlyId.fixRow
+                    readOnly: true
+                    font.bold: true
+                }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                ReadOnlyCSCell {
+                    value: narrowReadOnlyId.inputCS
+                    rowIndex: narrowReadOnlyId.fixRow
+                    readInSystem: narrowReadOnlyId.readInSystem
+                    readInWarning: narrowReadOnlyId.readInWarning
+                    sourceFile: narrowReadOnlyId.sourceFile
+                }
+
+                QC.Label { text: "·"; color: Theme.textSubtle }
+
+                FixField {
+                    objectName: "coordinateCell." + narrowReadOnlyId.fixRow
+                    value: isNaN(narrowReadOnlyId.easting)
+                           ? narrowReadOnlyId.coordinateText
+                           : narrowReadOnlyId.formattedCoordinate()
+                    editValue: narrowReadOnlyId.coordinateText
+                    rowIndex: narrowReadOnlyId.fixRow
+                    coordinate: true
+                    readOnly: true
+                    axisOrder: CoordinateText.axisOrderFor(narrowReadOnlyId.inputCS)
                 }
 
                 QQ.Loader {
-                    active: narrowDelegateId.reference
-                    visible: narrowDelegateId.reference
+                    active: narrowReadOnlyId.reference
+                    visible: narrowReadOnlyId.reference
                     sourceComponent: ReferenceChip {
-                        objectName: "referenceChip." + narrowDelegateId.fixRow
-                    }
-                }
-
-                QQ.Loader {
-                    active: !narrowDelegateId.readOnly
-                    visible: !narrowDelegateId.readOnly
-                    sourceComponent: PickFromViewButton {
-                        objectName: "pickFromViewButton." + narrowDelegateId.fixRow
-                        onClicked: fixStationPage.pickFromView(narrowDelegateId.fixRow)
+                        objectName: "referenceChip." + narrowReadOnlyId.fixRow
                     }
                 }
             }
