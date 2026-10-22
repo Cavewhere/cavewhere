@@ -247,6 +247,24 @@ class DetailTests(unittest.TestCase):
         ])
 
 
+ATTRIBUTE_ROWS_XML = b"""<?xml version="1.0"?>
+<trace-query-result>
+<node xpath='//trace-toc[1]/run[1]/tracks[1]/track[1]/details[1]/detail[1]'><row category="All Heap Allocations" persistent-bytes="13107200" count-transient="4"/>
+<row category="Malloc 48.00 MiB" persistent-bytes="0" count-transient="0"/>
+</node></trace-query-result>
+"""
+
+
+class DetailAttributeRowTests(unittest.TestCase):
+    def test_rows_written_as_attributes_are_read(self):
+        rows = tasks.parse_detail_rows(io.BytesIO(ATTRIBUTE_ROWS_XML))
+
+        self.assertEqual(rows, [
+            {"category": "All Heap Allocations", "persistent-bytes": "13107200", "count-transient": "4"},
+            {"category": "Malloc 48.00 MiB", "persistent-bytes": "0", "count-transient": "0"},
+        ])
+
+
 class ThreadPeakTests(unittest.TestCase):
     def test_peak_counts_threads_wanting_a_core_at_once(self):
         states = [
@@ -286,6 +304,21 @@ class FootprintTests(unittest.TestCase):
         self.assertEqual(metrics, {"peak_footprint_mb": 300, "peak_time_s": 0.003,
                                    "available_at_peak_mb": 700})
         self.assertEqual(running, ["lidar", "scraps"])
+
+    def test_peak_is_the_first_sample_on_the_plateau(self):
+        # Freed large blocks keep the footprint up, so the first sample near the
+        # top is when the blocks were live
+        events = [
+            memory_event(1 * MS, 100 * MB),
+            memory_event(2 * MS, 290 * MB),
+            memory_event(3 * MS, 300 * MB),
+            memory_event(4 * MS, 295 * MB),
+        ]
+
+        metrics, _ = tasks.footprint_metrics(events, [])
+
+        self.assertEqual(metrics["peak_footprint_mb"], 290)
+        self.assertEqual(metrics["peak_time_s"], 0.002)
 
     def test_no_memory_events_reports_nothing(self):
         self.assertEqual(tasks.footprint_metrics([], [task("lidar", 0, 1, 1)]), ({}, []))

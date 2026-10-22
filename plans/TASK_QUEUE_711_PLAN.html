@@ -399,8 +399,17 @@ It writes <code>&lt;out&gt;/report.md</code>:</p>
 <p><code>--compare baseline after-F1</code> prints the differences between two output folders. Claude reads the
 reports, checks anything surprising against the raw tables, and writes the findings into §4.</p>
 
-<p><b>Release builds only.</b> Address Sanitizer in Debug inflates memory and changes timing too much for the
-numbers to mean anything.</p>
+<p><b>Release builds only, with debug info.</b> Address Sanitizer in Debug inflates memory and changes timing too
+much for the numbers to mean anything. A plain Release build leaves our frames as addresses in the CPU samples, so
+the profiling build is configured with <code>CMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG -g"</code>: the same code, plus
+symbols.</p>
+
+<p><b>What the smoke run taught the runner (2026-10-22).</b> <code>xctrace --launch</code> resolves a
+<code>CaveWhere.app</code> path by name and refuses when another copy is installed, so on the Mac the runner starts the
+app itself, holds it in <code>SIGSTOP</code>, attaches by pid, waits for xctrace's tracing-started notification and
+resumes it; that also puts the app's stderr in the log. Only one recording may run at a time: a second one is starved
+of kernel samples. The footprint plateaus after the peak because malloc keeps freed large blocks dirty, so B′ stops at
+the first sample on the plateau, where the blocks were still live.</p>
 
 <!-- ================================================================== -->
 <h2 id="baseline">4. Baseline runs</h2>

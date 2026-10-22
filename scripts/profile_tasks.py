@@ -28,6 +28,7 @@ import json
 import os
 import platform
 import shutil
+import signal
 import statistics
 import subprocess
 import sys
@@ -43,6 +44,11 @@ DEFAULT_PAGE = "View"
 DEFAULTS_DOMAIN = "com.cavewhere.CaveWhere"
 SETTING_KEYS = ["threadCount", "automaticUpdate"]
 APP_NAME = "CaveWhere"
+RECORDED_PROCESS_TYPES = ("launched", "attached")
+# Key under which export_rows() keeps a row's own attributes, beside its cells
+ROW_ATTRIBUTES = "@attributes"
+# Darwin notification xctrace posts once it records; the app is held stopped until then
+TRACING_STARTED_NOTIFICATION = "com.cavewhere.profile_tasks.started"
 METRICS_FILE = "metrics.json"
 REPORT_FILE = "report.md"
 BUNDLE_SUFFIX = ".cw"
@@ -51,6 +57,8 @@ UNKNOWN = "unknown"
 NS_PER_US = 1_000
 NS_PER_S = 1_000_000_000
 BYTES_PER_MB = 1024 * 1024
+# A sample this close to the largest footprint counts as the peak
+PEAK_PLATEAU_FRACTION = 0.95
 
 # Thread states in which a thread wants a core
 WANTS_CORE_STATES = ("Running", "Runnable", "Preempted")
@@ -200,7 +208,7 @@ def export_rows(source):
         if element.tag == "schema":
             columns = [column.findtext("mnemonic") for column in element.findall("col")]
         elif element.tag == "row":
-            row = {}
+            row = {ROW_ATTRIBUTES: dict(element.attrib)}
             for mnemonic, cell in zip(columns, element):
                 row[mnemonic] = None if cell.tag == "sentinel" else resolve(slim(cell, registry))
             yield row, resolve
@@ -310,18 +318,24 @@ def parse_samples(source, pid=None):
 
 
 def parse_detail_rows(source):
-    """The rows of an Allocations detail export as {column: displayed text}."""
+    """The rows of an Allocations detail export as {column: displayed text}.
+
+    xctrace 16 writes a detail row's cells as attributes of the row; the schema
+    form with one child element per cell is also read."""
     rows = []
     for row, _ in export_rows(source):
-        rows.append({name: (cell.get("fmt") or text(cell)) if cell is not None else ""
-                     for name, cell in row.items()})
+        if row.get(ROW_ATTRIBUTES):
+            rows.append(dict(row[ROW_ATTRIBUTES]))
+        else:
+            rows.append({name: (cell.get("fmt") or text(cell)) if cell is not None else ""
+                         for name, cell in row.items() if name != ROW_ATTRIBUTES})
     return rows
 
 
 def parse_launched_pid(source):
-    """The pid of the launched process named in an export --toc, or None."""
+    """The pid of the launched or attached process named in an export --toc, or None."""
     for _, element in ElementTree.iterparse(source, events=("end",)):
-        if element.tag == "process" and element.get("type") == "launched" and element.get("pid"):
+        if element.tag == "process" and element.get("type") in RECORDED_PROCESS_TYPES and element.get("pid"):
             return int(element.get("pid"))
     return None
 
@@ -509,7 +523,12 @@ def footprint_metrics(events, intervals):
     memory = memory_events(events)
     if not memory:
         return {}, []
-    peak = max(memory, key=lambda event: int(event.args.get("footprint", 0)))
+    largest = max(int(event.args.get("footprint", 0)) for event in memory)
+    # The footprint plateaus once malloc keeps freed large blocks, so the peak is
+    # the first sample on the plateau: that is when the blocks were live, and
+    # where the B′ recording has to stop to list them
+    peak = next(event for event in memory
+                if int(event.args.get("footprint", 0)) >= largest * PEAK_PLATEAU_FRACTION)
     metrics = {"peak_footprint_mb": int(peak.args["footprint"]) / BYTES_PER_MB,
                "peak_time_s": peak.time_ns / NS_PER_S}
     if "available" in peak.args:
@@ -616,24 +635,51 @@ def export(trace, xpath, output):
     return output
 
 
-def launch_target(arguments, project):
-    if arguments.device:
-        target = [APP_NAME]
-    else:
-        target = [str(Path(arguments.build) / (APP_NAME + ".app"))]
-    return target + [project, "--page", arguments.page, "--profile-log", "--profile-tasks-quit"]
+def app_arguments(arguments, project):
+    return [project, "--page", arguments.page, "--profile-log", "--profile-tasks-quit"]
+
+
+def record_on_device(arguments, project, command, log):
+    xctrace(*(command + ["--device", arguments.device, "--launch", "--", APP_NAME]
+              + app_arguments(arguments, project)), log=log)
+
+
+def record_on_mac(arguments, project, command, log):
+    """Starts the app itself and attaches xctrace to it. `xctrace --launch` resolves
+    a CaveWhere.app path by name and refuses when other copies are installed. The
+    app is held stopped until xctrace reports that it records, so the recording
+    covers the project open from its first task, and its stdout and stderr (where
+    --profile-log writes) land in the log."""
+    executable = Path(arguments.build).resolve() / (APP_NAME + ".app") / "Contents" / "MacOS" / APP_NAME
+    with open(log, "w") as output:
+        app = subprocess.Popen([str(executable)] + app_arguments(arguments, project),
+                               stdout=output, stderr=subprocess.STDOUT)
+        os.kill(app.pid, signal.SIGSTOP)
+        notification = "{}.{}".format(TRACING_STARTED_NOTIFICATION, app.pid)
+        recorder = subprocess.Popen(["xcrun", "xctrace"] + command
+                                    + ["--notify-tracing-started", notification, "--attach", str(app.pid)],
+                                    stdout=output, stderr=subprocess.STDOUT)
+        try:
+            subprocess.run(["notifyutil", "-1", notification], check=True, stdout=subprocess.DEVNULL)
+        finally:
+            os.kill(app.pid, signal.SIGCONT)
+        app.wait()
+        recorder.wait()
+    if recorder.returncode != 0:
+        raise subprocess.CalledProcessError(recorder.returncode, recorder.args)
 
 
 def record_one(arguments, project, trace, instruments, log, time_limit_s=None):
     if trace.exists():
         shutil.rmtree(trace)
     clear_cache(arguments, project)
-    command = ["record", "--output", str(trace), "--target-stdout", "-"] + instruments
-    if arguments.device:
-        command += ["--device", arguments.device]
+    command = ["record", "--output", str(trace)] + instruments
     if time_limit_s is not None:
         command += ["--time-limit", "{}ms".format(int(time_limit_s * 1000))]
-    xctrace(*(command + ["--launch", "--"] + launch_target(arguments, project)), log=log)
+    if arguments.device:
+        record_on_device(arguments, project, command, log)
+    else:
+        record_on_mac(arguments, project, command, log)
     toc = trace.with_suffix(".toc.xml")
     xctrace("export", "--input", str(trace), "--toc", "--output", str(toc))
     return toc
@@ -855,14 +901,31 @@ def project_report(head, timing, timing_details, memory, memory_details, allocat
     if memory_details:
         parts.append("Running at the peak (last run): {}\n".format(
             ", ".join(memory_details[-1]["running_at_peak"]) or "nothing"))
-    for title, rows in (("Allocation statistics, last run", allocations),
-                        ("Live allocations at the peak (B′), last run", peak_allocations)):
-        if rows:
-            columns = list(rows[0])
-            parts.append("{}:\n".format(title))
-            parts.append(markdown(columns, [[row.get(column, "") for column in columns]
-                                            for row in rows[:ALLOCATION_ROWS]]))
+    if allocations:
+        columns = list(allocations[0])
+        parts.append("Allocation statistics, last run:\n")
+        parts.append(markdown(columns, [[row.get(column, "") for column in columns]
+                                        for row in allocations[:ALLOCATION_ROWS]]))
+    if peak_allocations:
+        parts.append("Live allocations at the peak (B′), last run, grouped by caller:\n")
+        parts.append(markdown(["MB", "Blocks", "Category", "Library", "Responsible caller"],
+                              live_by_caller(peak_allocations)[:ALLOCATION_ROWS]))
     return "\n".join(parts)
+
+
+def live_by_caller(rows):
+    """The live allocation list summed per (category, library, caller), largest
+    first. One row per block is unreadable: the list runs to hundreds of
+    thousands of small blocks, and the question is who holds the bytes."""
+    totals = collections.Counter()
+    counts = collections.Counter()
+    for row in rows:
+        key = (row.get("category", ""), row.get("responsible-library", ""),
+               row.get("responsible-caller", ""))
+        totals[key] += int(row.get("size", "0") or 0)
+        counts[key] += 1
+    return [["{:.1f}".format(total / BYTES_PER_MB), counts[key], *key]
+            for key, total in totals.most_common()]
 
 
 def profile(arguments):
