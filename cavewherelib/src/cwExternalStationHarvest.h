@@ -57,7 +57,9 @@ namespace cwExternalStationHarvest {
  * the lines naming the throwaway driver — the per-file verdict the region solve
  * can only give for the region as a whole.
  * \a entryFile may name any format cavern reads through "*include": Survex,
- * Compass (.dat/.mak) and Walls (.srv/.wpj).
+ * Compass (.dat/.mak) and Walls (.srv/.wpj), or a PocketTopo .top, whose
+ * translation the driver holds in place of the "*include"
+ * (cwExternalIncludeWriter).
  *
  * Runs cavern in-process, so it is serialized against every other cavern
  * caller and must not be called on the main thread.

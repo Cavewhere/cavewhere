@@ -8,9 +8,11 @@
 //Our includes
 #include "cwExternalStationHarvest.h"
 #include "cwCavernRunner.h"
+#include "cwExternalIncludeWriter.h"
 #include "cwLinePlotErrorCodes.h"
 #include "cwStation.h"
 #include "cwStationPositionLookup.h"
+#include "cwSurvexCS.h"
 #include "cwSurvex3DFileReader.h"
 #include "cwSurvexExporterUtils.h"
 
@@ -151,7 +153,13 @@ Monad::Result<cwExternalStationHarvest::Stations> run(const QString& entryFile,
         if(!bareFixSystem.isEmpty()) {
             cwSurvexExporterUtils::writeFileOutputSystem(stream, bareFixSystem);
         }
-        stream << "*include \"" << absoluteEntry << "\"" << Qt::endl;
+        cwSurvexCS::SidecarWriter sidecars;
+        cwSurvexExporterUtils::CsScope scope(sidecars);
+        if(!cwExternalIncludeWriter::write(stream, absoluteEntry, {}, scope)) {
+            return harvestError(QStringLiteral("Couldn't read %1 as a PocketTopo file")
+                                    .arg(absoluteEntry),
+                                LinePlotErrorCode::ParseFailed);
+        }
 
         //A driver that only partly reached the disk is still valid Survex — an
         //empty or truncated one just includes nothing — so without this the

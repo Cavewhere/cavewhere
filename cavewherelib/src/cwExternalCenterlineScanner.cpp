@@ -43,6 +43,8 @@ constexpr const char* kCompassDatExtension = ".dat";
 constexpr const char* kWallsWpjExtension = ".wpj";
 constexpr const char* kWallsSrvExtension = ".srv";
 constexpr const char* kPocketTopoExtension = ".top";
+// Starts the sourcePath segment of an entry that writes no name.
+constexpr QLatin1Char kPositionalPrefix('#');
 // Walls .STATUS bit for an entry processed on its own, never as part of its
 // parent (cavern's WALLS_WPJ_STATUS_DETACHED).
 constexpr int kWallsDetachedStatusBit = 0x2;
@@ -773,7 +775,7 @@ QString joined(const QString& head, QChar separator, const QString& tail)
 // position, which no written name collides with since '#' starts a reference.
 QString positionalSegment(qsizetype index)
 {
-    return QLatin1Char('#') + QString::number(index + 1);
+    return kPositionalPrefix + QString::number(index + 1);
 }
 
 /**
@@ -2770,6 +2772,19 @@ cwFileDeclination attachmentDeclination(const ScanResult& scan)
         }
     }
     return common.value_or(cwFileDeclination());
+}
+
+std::optional<qsizetype> positionalIndex(const QString& segment)
+{
+    if (!segment.startsWith(kPositionalPrefix)) {
+        return std::nullopt;
+    }
+    bool isNumber = false;
+    const qsizetype position = segment.mid(1).toLongLong(&isNumber);
+    if (!isNumber || position < 1) {
+        return std::nullopt;
+    }
+    return position - 1;
 }
 
 QString resolveCompassReference(const QString& makPath, const QString& reference)

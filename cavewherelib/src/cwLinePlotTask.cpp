@@ -281,6 +281,7 @@ private:
         exportOptions.caveAttachmentDirs = InputData.caveAttachmentDirs;
         exportOptions.tripAttachmentDirs = InputData.tripAttachmentDirs;
         exportOptions.tripInjectedDeclinations = InputData.tripInjectedDeclinations;
+        exportOptions.sourceUnitInjectedDeclinations = InputData.sourceUnitInjectedDeclinations;
         exportOptions.excludedExternalOwners = InputData.excludedExternalOwners;
         exportOptions.externalFixedStations = InputData.externalFixedStations;
         exportOptions.externalOutputSystems = InputData.externalOutputSystems;
@@ -842,6 +843,13 @@ cwLinePlotTask::Input cwLinePlotTask::buildInput(const cwCavingRegion* region,
         // missing from fileOwnsDeclination stay uninjected — same outcome
         // as a file that owns its declination.
         for (cwTrip* trip : region->rootNode()->allTrips()) {
+            if (trip->isDerived()) {
+                if (trip->fileDeclination().kind == cwFileDeclination::Kind::Auto) {
+                    input.sourceUnitInjectedDeclinations.insert(trip->id(),
+                                                                trip->calibrations()->declination());
+                }
+                continue;
+            }
             if (trip->externalCenterline().isEmpty()) {
                 continue;
             }

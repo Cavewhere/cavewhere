@@ -71,6 +71,12 @@ public:
      * the file's own directive would override an injected value anyway
      * (cavern-verified, master plan §8.8 q7).
      *
+     * \c sourceUnitInjectedDeclinations maps a derived trip's
+     * \c cwTrip::id() to its resolved declination when its unit's file
+     * leaves declination to auto. A PocketTopo .top's translation writes
+     * it in that trip's switch when the node has no location for
+     * \c *declination \c auto.
+     *
      * \c excludedExternalOwners lists caves and trips that carry an
      * \c externalCenterline the solve cannot read: dependencies reaching
      * outside the project's data root, so the attachment cannot travel with
@@ -109,6 +115,7 @@ public:
         QHash<QUuid, QString> caveAttachmentDirs;
         QHash<QUuid, QString> tripAttachmentDirs;
         QHash<QUuid, double> tripInjectedDeclinations;
+        QHash<QUuid, double> sourceUnitInjectedDeclinations;
         QSet<QUuid> excludedExternalOwners;
         QHash<QUuid, QStringList> externalFixedStations;
         QHash<QUuid, QString> externalOutputSystems;

@@ -10,6 +10,7 @@
 #include "cwCompassMakFile.h"
 #include "cwCompassMakTranslator.h"
 #include "cwExternalCenterlineScanner.h"
+#include "cwExternalIncludeWriter.h"
 #include "cwFixStationDiagnostics.h"
 #include "cwLocalProjection.h"
 #include "cwSurvexExporterTripTask.h"
@@ -334,11 +335,14 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
         }
         cwSurvexExporterUtils::CsScope& scopeAtInclude = fixesLeaveSystem ? includeScope : fixesScope;
         writeIncludeSystem(stream, node.id, node.externalCenterline, globalCS, scopeAtInclude);
+        const auto ownLocation = cwSurvexExporterUtils::makeDeclinationContext(written.kept);
+        const auto location = ownLocation.has_value() ? ownLocation : inherited.location;
         if (!writeExternalInclude(stream, node.id,
                                   ExportOptions.caveAttachmentDirs,
                                   node.externalCenterline.entryFile(),
                                   node.name, globalCS, scopeAtInclude,
-                                  written.makFixes.value(node.id))) {
+                                  written.makFixes.value(node.id),
+                                  pocketTopoInput(node, location, scopeAtInclude))) {
             return false;
         }
 
@@ -393,6 +397,7 @@ bool cwSurvexExporterCaveTask::writeNodeBlock(QTextStream& stream,
     const auto ownLocation = cwSurvexExporterUtils::makeDeclinationContext(written.kept);
     if (ownLocation.has_value()) {
         here.undeclaredLocation = ownLocation;
+        here.location = ownLocation;
         // One convergence for the whole block: it is a property of the grid at
         // the node's location, and every trip inside is solved on the same grid.
         here.gridConvergence = cwSurvexExporterUtils::gridConvergenceForBlock(ownLocation, globalCS);
@@ -798,7 +803,8 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
                                                     const QString& ownerLabel,
                                                     const QString& globalCS,
                                                     cwSurvexExporterUtils::CsScope& scope,
-                                                    const QList<cwFixStation>& makFixes)
+                                                    const QList<cwFixStation>& makFixes,
+                                                    const cwPocketTopoTranslator::Input& pocketTopo)
 {
     const auto it = attachmentDirs.constFind(ownerId);
     if (it == attachmentDirs.constEnd()) {
@@ -837,6 +843,31 @@ bool cwSurvexExporterCaveTask::writeExternalInclude(QTextStream& stream,
         cwSurvexExporterUtils::writeFixStations(stream, makFixes, QString(), globalCS, scope);
     }
 
-    stream << "*include \"" << absolutePath << "\"" << Qt::endl;
+    if (!cwExternalIncludeWriter::write(stream, absolutePath, pocketTopo, scope)) {
+        Errors.append(QStringLiteral("External centerline for '%1' cannot be read as a "
+                                     "PocketTopo file: %2").arg(ownerLabel, absolutePath));
+        return false;
+    }
     return true;
+}
+
+cwPocketTopoTranslator::Input cwSurvexExporterCaveTask::pocketTopoInput(
+    const cwCaveData& node,
+    const std::optional<cwSurvexExporterUtils::DeclinationContext>& location,
+    const cwSurvexExporterUtils::CsScope& scope) const
+{
+    cwPocketTopoTranslator::Input input;
+    input.fixCS = scope.system();
+    input.autoDeclinationLocation = location;
+    for (const cwTripData& trip : node.trips) {
+        const auto declination = ExportOptions.sourceUnitInjectedDeclinations.constFind(trip.id);
+        if (declination == ExportOptions.sourceUnitInjectedDeclinations.constEnd()) {
+            continue;
+        }
+        const auto unitIndex = cwExternalCenterlineScanner::positionalIndex(trip.sourcePath);
+        if (unitIndex.has_value()) {
+            input.injectedDeclinations.insert(static_cast<int>(*unitIndex), declination.value());
+        }
+    }
+    return input;
 }

@@ -11,6 +11,7 @@
 //Our includes
 #include "cwCaveExporterTask.h"
 #include "cwEquate.h"
+#include "cwPocketTopoTranslator.h"
 #include "cwScopeLabels.h"
 #include "cwSurvexExporterRegion.h"
 #include "cwSurvexExporterUtils.h"
@@ -182,6 +183,9 @@ private:
         //! wrote no `*declination auto` for its whole scope, so a nested block
         //! still has one to declare.
         std::optional<cwSurvexExporterUtils::DeclinationContext> undeclaredLocation;
+        //! The nearest enclosing located block's location, declared or not, for
+        //! an attached file that writes `*declination auto` per trip itself.
+        std::optional<cwSurvexExporterUtils::DeclinationContext> location;
     };
 
     cwSurvexExporterTripTask* TripExporter;
@@ -255,7 +259,17 @@ private:
                               const QString& ownerLabel,
                               const QString& globalCS,
                               cwSurvexExporterUtils::CsScope& scope,
-                              const QList<cwFixStation>& makFixes);
+                              const QList<cwFixStation>& makFixes,
+                              const cwPocketTopoTranslator::Input& pocketTopo = {});
+
+    //! What a PocketTopo .top attached to \a node needs to write each of its
+    //! trips' declination: \a location for its Auto trips, else the value
+    //! resolved for the derived trip (Options::sourceUnitInjectedDeclinations).
+    //! The fix system is the one \a scope holds at the *include.
+    cwPocketTopoTranslator::Input pocketTopoInput(
+        const cwCaveData& node,
+        const std::optional<cwSurvexExporterUtils::DeclinationContext>& location,
+        const cwSurvexExporterUtils::CsScope& scope) const;
 };
 
 #endif // CWSURVEXEXPORTERCAVETASK_H

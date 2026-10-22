@@ -557,6 +557,13 @@ CAVEWHERE_LIB_EXPORT Monad::Result<ScanResult> scanPocketTopo(const QString& ent
 CAVEWHERE_LIB_EXPORT cwFileDeclination attachmentDeclination(const ScanResult& scan);
 
 /**
+ * The 0-based position among its siblings of the entry a sourcePath segment
+ * names by position ('#' and its 1-based position, "#3"), or nothing for a
+ * named segment.
+ */
+CAVEWHERE_LIB_EXPORT std::optional<qsizetype> positionalIndex(const QString& segment);
+
+/**
  * The file a Compass .mak's '#' line names, resolved against the .mak's
  * directory the way the scan resolves it (a case-insensitive match where the
  * file system is case-sensitive). Empty when no such file exists.
