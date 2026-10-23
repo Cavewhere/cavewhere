@@ -177,8 +177,8 @@ stay as they are, so a missing Right still shows up.
 **Every warning in the trip.** The warning total at the top of the trip has a
 small arrow. Click it, or anywhere on the total, and choose
 **Accept all *n* warnings**. **Un-accept all *n* warnings** in the same menu puts
-them all back. When only accepted warnings are left, the total turns gray and
-reads "*n* accepted warnings", so the menu is still there.
+them all back. Once every warning is accepted the arrow goes away, and so does
+the total if the trip has no errors. The accepted line under it brings them back.
 
 **Review what you accepted.** Accept-all on an imported trip can bury a 40°
 backsight disagreement under 300 missing LRUDs. Under the warning total, a gray

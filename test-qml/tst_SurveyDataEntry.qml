@@ -926,7 +926,8 @@ MainWindowTest {
 
             waitForRendering(rootId);
 
-            let checkbox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.1.1->suppress")
+            //The warnings are a Popup, so they live in the window's overlay, outside rootId
+            let checkbox = findChild(findChild(rootId.parent, "errorBoxdataBox.1.1"), "suppress")
             mouseClick(checkbox)
 
             waitForRendering(rootId);
@@ -947,10 +948,10 @@ MainWindowTest {
 
             //Make sure the warning message that was shown before is now hidden
             tryVerify(() => !errorIcon_obj1.checked)
-            tryVerify(() => ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.1.1") === null)
+            tryVerify(() => findChild(rootId.parent, "errorBoxdataBox.1.1") === null)
 
             //Make sure the error message is correct
-            let errorText = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.2.5->errorText")
+            let errorText = findChild(findChild(rootId.parent, "errorBoxdataBox.2.5"), "errorText")
             verify(errorText.text === "Missing \"distance\" from shot \"a1\" ➔ \"a2\"")
 
             //Deselect the current message
@@ -958,7 +959,7 @@ MainWindowTest {
             waitForRendering(rootId);
 
             //Make sure the error quote box is hidden
-            let quoteBox = ObjectFinder.findObjectByChain(rootId.mainWindow, "rootId->errorBoxdataBox.2.5")
+            let quoteBox = findChild(rootId.parent, "errorBoxdataBox.2.5")
             tryVerify(()=>{ return quoteBox === null });
             verify(distanceError.checked === false);
         }

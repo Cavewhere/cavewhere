@@ -3,7 +3,7 @@ import QtQuick.Controls as QC
 import QtQuick.Layouts
 import cavewherelib
 
-// Per-trip options. The Columns row hides the LRUD or Splays column of the
+// Per-trip options. The two checkboxes hide the LRUD or Splays column of the
 // survey table, which a trip can do only while that column is empty.
 ColumnLayout {
     id: settingsEditorId
@@ -22,10 +22,6 @@ ColumnLayout {
 
     RowLayout {
         spacing: Theme.flowSpacing
-
-        QC.Label {
-            text: "Columns:"
-        }
 
         ColumnToggle {
             name: "lrud"

@@ -62,8 +62,8 @@ every shot in a trip complains at once.
 ## Hide the LRUD or Splays column
 
 Some trips never had LRUDs, or never shot splays. An old Compass file is the
-usual one. The **Settings** section under Calibration has a **Columns:** row
-with 2 checkboxes, **LRUD** and **Splays**. Untick LRUD and the L, R, U and D
+usual one. The **Settings** section under Calibration has 2 checkboxes,
+**LRUD** and **Splays**. Untick LRUD and the L, R, U and D
 boxes leave the survey table, and CaveWhere stops raising the 4 "Missing"
 warnings on every station, including stations you add later. Untick Splays and
 the splay column goes the same way.

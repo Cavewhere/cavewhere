@@ -13,7 +13,8 @@ import QmlTestRecorder
 // (SurveyErrorOverview) is surveyErrorOverview with its text in overviewText;
 // tripWarningsMenuButton opens a menu with acceptAllWarnings and
 // unacceptAllWarnings; ErrorListQuoteBox offers an acceptSimilar link; the
-// errorIcon's image is errorIconImage.
+// errorIcon's image is errorIconImage. The cell's warnings are a Popup, so they
+// are found under the window's content item (rootId.parent), not under rootId.
 MainWindowTest {
     id: rootId
 
@@ -95,6 +96,20 @@ MainWindowTest {
         function test_menuAcceptsAndUnacceptsEveryWarning() {
             const context = gotoSurveyTable(true)
 
+            // A complete shot leaves the trip with warnings and no errors
+            const shotRow = context.editorModel.toModelRow(
+                              context.editorModel.rowIndex(context.chunk, 0, SurveyEditorRowIndex.ShotRow))
+            verify(shotRow >= 0, "the chunk should have a shot row")
+            for (const [cellRole, value] of [[SurveyEditorCellIndex.ShotDistanceCell, "10"],
+                                             [SurveyEditorCellIndex.ShotCompassCell, "10"],
+                                             [SurveyEditorCellIndex.ShotBackCompassCell, "190"],
+                                             [SurveyEditorCellIndex.ShotClinoCell, "0"],
+                                             [SurveyEditorCellIndex.ShotBackClinoCell, "0"]]) {
+                context.editorModel.setDataAt(context.editorModel.cellIndex(shotRow, cellRole), value)
+            }
+            tryCompare(context.trip.errorModel, "fatalCount", 0)
+            tryCompare(context.trip.errorModel, "warningCount", 4)
+
             const menuButton = findInEditor("tripWarningsMenuButton")
             tryVerify(() => menuButton.visible, 5000, "the badge should offer its menu")
 
@@ -106,23 +121,24 @@ MainWindowTest {
             tryCompare(context.trip.errorModel, "warningCount", 0)
             tryCompare(context.trip.errorModel, "suppressedWarningCount", 4)
 
-            // The badge stays up for the trip's errors; the accepted-warnings
-            // section under it says what was accepted
+            // With every warning accepted the badge steps aside; the section
+            // under it says what was accepted and can put them back
             const badge = findInEditor("surveyErrorOverview")
             const section = findInEditor("acceptedWarningsSection")
             const sectionText = findChild(section, "acceptedWarningsHeaderText")
             verify(sectionText !== null, "the accepted-warnings section should carry its text")
-            tryVerify(() => badge.visible && section.visible && sectionText.text.indexOf("4 accepted") >= 0, 5000,
-                      "the badge should stay up and the section say what was accepted: " + sectionText.text)
-            verify(menuButton.visible, "the menu should stay reachable with only accepted warnings")
+            tryVerify(() => !badge.visible && section.visible && sectionText.text.indexOf("4 accepted") >= 0, 5000,
+                      "the badge should hide and the section say what was accepted: " + sectionText.text)
+            verify(!menuButton.visible, "the menu button should hide with the badge")
 
-            mouseClick(menuButton)
-            const unacceptAll = menuItem(menuButton, "unacceptAllWarnings")
-            verify(unacceptAll.enabled, "Un-accept all should be on while warnings are accepted")
-            unacceptAll.triggered()
+            const unacceptAll = findChild(section, "unacceptAllAccepted")
+            verify(unacceptAll !== null, "the section should offer Un-accept all")
+            mouseClick(unacceptAll)
 
             tryCompare(context.trip.errorModel, "warningCount", 4)
             tryCompare(context.trip.errorModel, "suppressedWarningCount", 0)
+            tryVerify(() => badge.visible && menuButton.visible, 5000,
+                      "the badge and its menu should return with the warnings")
         }
 
         function test_acceptSimilarAcceptsOnlyThatKind() {
@@ -135,8 +151,8 @@ MainWindowTest {
             const quoteBoxName = "errorBoxdataBox." + row + "." + SurveyEditorCellIndex.StationLeftCell
             let acceptSimilar = null
             tryVerify(() => {
-                acceptSimilar = ObjectFinder.findObjectByChain(rootId.mainWindow,
-                                                               "rootId->" + quoteBoxName + "->acceptSimilar")
+                const quoteBox = findChild(rootId.parent, quoteBoxName)
+                acceptSimilar = quoteBox === null ? null : findChild(quoteBox, "acceptSimilar")
                 return acceptSimilar !== null && acceptSimilar.visible
             }, 5000, "the Missing Left popup should offer to accept every similar warning")
             verify(acceptSimilar.text.indexOf("(2)") >= 0, "the link should count both Left warnings: " + acceptSimilar.text)
@@ -146,6 +162,41 @@ MainWindowTest {
             tryCompare(context.trip.errorModel, "warningCount", 6)
             compare(context.trip.warningCountForTypeId(missingLeftId), 0)
             compare(context.trip.errorModel.suppressedWarningCount, 2)
+        }
+
+        function test_cellPopupClosesOnPressOutside() {
+            const context = gotoSurveyTable(false)
+
+            const icon = leftErrorIcon(context)
+            mouseClick(icon)
+
+            const row = surveyTableId.stationRow(context, 0)
+            const quoteBoxName = "errorBoxdataBox." + row + "." + SurveyEditorCellIndex.StationLeftCell
+            tryVerify(() => {
+                const quoteBox = findChild(rootId.parent, quoteBoxName)
+                return quoteBox !== null && quoteBox.visible
+            }, 5000, "clicking the icon should open the cell's warnings")
+            verify(icon.checked, "the icon should read as open")
+
+            const otherRow = surveyTableId.stationRow(context, 1)
+            surveyTableId.rowItem(this, context, otherRow)
+            const otherStation = ObjectFinder.findObjectByChain(rootId.mainWindow,
+                                                                "rootId->tripPage->surveyEditor->view->dataBox."
+                                                                + otherRow + "." + SurveyEditorCellIndex.StationNameCell)
+            verify(otherStation !== null, "A2's station cell should be on screen")
+            mouseClick(otherStation)
+
+            tryVerify(() => findChild(rootId.parent, quoteBoxName) === null, 5000,
+                      "a press outside should close the cell's warnings")
+            verify(!icon.checked, "the icon should uncheck so it can reopen")
+
+            mouseClick(icon)
+            tryVerify(() => findChild(rootId.parent, quoteBoxName) !== null, 5000,
+                      "the icon should reopen the cell's warnings")
+            mouseClick(icon)
+            tryVerify(() => findChild(rootId.parent, quoteBoxName) === null, 5000,
+                      "clicking the icon again should close them")
+            verify(!icon.checked, "the icon should read as closed")
         }
 
         function test_acceptedCellKeepsAMutedMarker() {

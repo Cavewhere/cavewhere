@@ -90,6 +90,7 @@ Item {
         sourceComponent: SurveyEditorColumnTitles {
             id: titleColumnId
             width: itemId.columnTemplate.width
+            columnTemplate: itemId.columnTemplate
             y: titleOffset
             shotOffset: Math.floor(50.0 / 2.0);
             chunk: itemId.model.chunkForRow(itemId.index)

@@ -15,6 +15,11 @@ Item {
     //columns after it close up
     required property bool lrudVisible
     required property bool splaysVisible
+    //The invisible template whose widths the data boxes use. A title row copies
+    //them rather than laying out on its own, so a hidden column can't reflow
+    //the titles away from the cells under them
+    property SurveyEditorColumnTitles columnTemplate: null
+    readonly property bool _ownsWidths: columnTemplate === null
 
     readonly property real lWidth: lrudVisible ? lLabelId.width : 0
     readonly property real rWidth: lrudVisible ? rLabelId.width : 0
@@ -61,20 +66,24 @@ Item {
     RowLayout {
         id: titleRowLayoutId
         spacing: -1
-        width: titleId.width > 0 ? titleId.width : implicitWidth
+        width: titleId.width > 0 && titleId._ownsWidths ? titleId.width : implicitWidth
 
         TitleLabel {
             id: stationLabelId
+            objectName: "stationTitle"
             text: "Station"
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.stationWidth
         }
 
         Item {
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.distanceWidth
             implicitWidth: distanceLabelId.implicitWidth
             height: distanceLabelId.height
             TitleLabel {
                 id: distanceLabelId
+                objectName: "distanceTitle"
                 y: shotOffset
                 text: "Distance"
                 width: parent.width
@@ -82,11 +91,13 @@ Item {
         }
 
         Item {
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.compassWidth
             implicitWidth: compassLabelId.implicitWidth
             height: compassLabelId.height
             TitleLabel {
                 id: compassLabelId
+                objectName: "compassTitle"
                 y: shotOffset
                 text: "Compass"
                 width: parent.width
@@ -94,11 +105,13 @@ Item {
         }
 
         Item {
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.clinoWidth
             implicitWidth: clinoLabelId.implicitWidth
             height: clinoLabelId.height
             TitleLabel {
                 id: clinoLabelId
+                objectName: "clinoTitle"
                 y: shotOffset
                 text: "Vertical\nAngle"
                 width: parent.width
@@ -110,7 +123,8 @@ Item {
             objectName: "lTitle"
             visible: titleId.lrudVisible
             text: "L"
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.lWidth
         }
 
         TitleLabel {
@@ -118,7 +132,8 @@ Item {
             objectName: "rTitle"
             visible: titleId.lrudVisible
             text: "R"
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.rWidth
         }
 
         TitleLabel {
@@ -126,7 +141,8 @@ Item {
             objectName: "uTitle"
             visible: titleId.lrudVisible
             text: "U"
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.uWidth
         }
 
         TitleLabel {
@@ -134,7 +150,8 @@ Item {
             objectName: "dTitle"
             visible: titleId.lrudVisible
             text: "D"
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.dWidth
         }
 
         TitleLabel {
@@ -142,7 +159,8 @@ Item {
             objectName: "splaysTitle"
             visible: titleId.splaysVisible
             text: "Splays"
-            Layout.fillWidth: true
+            Layout.fillWidth: titleId._ownsWidths
+            Layout.preferredWidth: titleId._ownsWidths ? -1 : titleId.columnTemplate.splaysWidth
         }
     }
 

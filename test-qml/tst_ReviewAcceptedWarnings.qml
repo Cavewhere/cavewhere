@@ -203,6 +203,11 @@ MainWindowTest {
                 row = findChild(lrud, "acceptedWarningRow.0")
                 return row !== null
             }, 5000, "the LRUD group should list its warnings")
+            // Opening the group grows the header past the table's top edge;
+            // scroll back to the top so the row is on screen
+            const view = findChild(surveyTableId.surveyEditor(), "view")
+            verify(waitForPolish(view.Window.window), "the group should finish growing first")
+            view.contentY = view.originY
             tapChild(row, "errorText")
 
             const a1Row = surveyTableId.stationRow(context, 0)

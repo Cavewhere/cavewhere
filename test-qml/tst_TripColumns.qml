@@ -3,15 +3,17 @@ import QtTest
 import cavewherelib
 import cw.TestLib
 
-// The trip page's Settings section and its Columns row (#174): two checkboxes,
-// LRUD and Splays, that hide a column of the survey table. A column can be
-// hidden only while it is empty, and a disabled checkbox says why on hover.
+// The trip page's Settings section (#174): two checkboxes, LRUD and Splays,
+// that hide a column of the survey table. A column can be hidden only while it
+// is empty, and a disabled checkbox says why on hover. The title row keeps the
+// cells' widths whichever columns show.
 //
 // Phase 2 names the pieces this test reaches for: tripSettingsEditor holds
 // lrudCheckBox and splaysCheckBox, each inside an enabled wrapper
 // (lrudCheckBoxWrapper, splaysCheckBoxWrapper) that carries the hover tooltip
-// (lrudCheckBoxToolTip, splaysCheckBoxToolTip). The column titles are lTitle,
-// rTitle, uTitle, dTitle and splaysTitle.
+// (lrudCheckBoxToolTip, splaysCheckBoxToolTip). The column titles are
+// stationTitle, distanceTitle, compassTitle, clinoTitle, lTitle, rTitle, uTitle,
+// dTitle and splaysTitle.
 MainWindowTest {
     id: rootId
 
@@ -84,6 +86,70 @@ MainWindowTest {
 
         function hover(item) {
             mouseMove(item, item.width * 0.5, item.height * 0.5)
+        }
+
+        function shotBox(context, cellRole) {
+            const row = context.editorModel.toModelRow(
+                          context.editorModel.rowIndex(context.chunk, 0, SurveyEditorRowIndex.ShotRow))
+            verify(row >= 0, "the chunk should have a shot row")
+            const item = surveyTableId.rowItem(this, context, row)
+            let found = null
+            tryVerify(() => {
+                found = findChild(item, "dataBox." + row + "." + cellRole)
+                return found !== null
+            }, 5000, "the shot row should have cell " + cellRole)
+            return found
+        }
+
+        function splaysCell(context) {
+            const row = surveyTableId.stationRow(context, 0)
+            const item = surveyTableId.rowItem(this, context, row)
+            let found = null
+            tryVerify(() => {
+                found = findChild(item, "splaysBox." + row)
+                return found !== null
+            }, 5000, "A1 should have a splays cell")
+            return found
+        }
+
+        // Each visible title spans exactly the cells under it
+        function verifyTitlesMatchCells(context, includeLrud) {
+            const pairs = [["stationTitle", () => stationBox(context, 0, SurveyEditorCellIndex.StationNameCell)],
+                           ["distanceTitle", () => shotBox(context, SurveyEditorCellIndex.ShotDistanceCell)],
+                           ["compassTitle", () => shotBox(context, SurveyEditorCellIndex.ShotCompassCell)],
+                           ["clinoTitle", () => shotBox(context, SurveyEditorCellIndex.ShotClinoCell)],
+                           ["splaysTitle", () => splaysCell(context)]]
+            if (includeLrud) {
+                pairs.push(["lTitle", () => stationBox(context, 0, SurveyEditorCellIndex.StationLeftCell)])
+                pairs.push(["dTitle", () => stationBox(context, 0, SurveyEditorCellIndex.StationDownCell)])
+            }
+
+            for (const [titleName, cellFor] of pairs) {
+                tryVerify(() => {
+                    const title = titleLabel(context, titleName)
+                    const cell = cellFor()
+                    if (title === null || cell === null) {
+                        return false
+                    }
+                    const titleX = title.mapToItem(null, 0, 0).x
+                    const cellX = cell.mapToItem(null, 0, 0).x
+                    return Math.abs(titleX - cellX) <= 1 && Math.abs(title.width - cell.width) <= 1
+                }, 5000, titleName + " should line up with its cells: title "
+                         + titleLabel(context, titleName).mapToItem(null, 0, 0).x + "+" + titleLabel(context, titleName).width
+                         + " cell " + cellFor().mapToItem(null, 0, 0).x + "+" + cellFor().width)
+            }
+        }
+
+        function test_titlesLineUpWithTheirCells() {
+            const context = gotoSurveyTable()
+            verifyTitlesMatchCells(context, true)
+
+            const lrud = findInEditor("lrudCheckBox")
+            mouseClick(lrud)
+            tryVerify(() => !context.trip.calibration.lruds, 5000, "the calibration should drop LRUDs")
+            tryVerify(() => !titleLabel(context, "lTitle").visible, 5000, "the L title should hide")
+
+            verifyTitlesMatchCells(context, false)
         }
 
         function test_columnsStartOn() {

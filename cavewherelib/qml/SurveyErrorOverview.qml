@@ -10,7 +10,6 @@ QQ.Item {
 
     property int _numWarnings: trip.errorModel.warningCount
     property int _numErrors: trip.errorModel.fatalCount
-    property int _numAccepted: trip.errorModel.suppressedWarningCount
 
     readonly property int iconSize: 16
     readonly property int horizontalPadding: 20
@@ -58,13 +57,6 @@ QQ.Item {
                 sourceSize: Qt.size(overviewId.iconSize, overviewId.iconSize)
             }
 
-            QQ.Image {
-                id: acceptedImage
-                source: "qrc:icons/svg/warningAccepted.svg"
-                visible: overviewId._numErrors === 0 && overviewId._numWarnings === 0 && overviewId._numAccepted > 0
-                sourceSize: Qt.size(overviewId.iconSize, overviewId.iconSize)
-            }
-
             QC.Label {
                 id: errorText
                 objectName: "overviewText"
@@ -74,7 +66,7 @@ QQ.Item {
                 id: menuButtonId
                 objectName: "tripWarningsMenuButton"
 
-                visible: overviewId._numWarnings > 0 || overviewId._numAccepted > 0
+                visible: overviewId._numWarnings > 0
                 focusPolicy: Qt.NoFocus
                 menu: tripWarningsMenuComponent
             }
@@ -92,7 +84,7 @@ QQ.Item {
     states: [
         QQ.State {
             name: "noErrorsOrWarnings"
-            when: overviewId._numErrors == 0 && overviewId._numWarnings == 0 && overviewId._numAccepted == 0
+            when: overviewId._numErrors == 0 && overviewId._numWarnings == 0
 
             QQ.PropertyChanges {
                 overviewId {
@@ -131,25 +123,6 @@ QQ.Item {
                 borderRectangle {
                     border.color: Theme.warning
                     color: Theme.warning
-                }
-            }
-        },
-
-        // Only accepted warnings remain: the badge stays so the menu can
-        // un-accept them, but it reads as resolved
-        QQ.State {
-            name: "onlyAccepted"
-            when: overviewId._numErrors == 0 && overviewId._numWarnings == 0 && overviewId._numAccepted > 0
-            extend: "hasErrorOrWarning"
-
-            QQ.PropertyChanges {
-                borderRectangle {
-                    border.color: Theme.border
-                    color: Theme.surfaceMuted
-                }
-                errorText {
-                    text: overviewId._numAccepted === 1 ? qsTr("1 accepted warning")
-                                                         : qsTr("%1 accepted warnings").arg(overviewId._numAccepted)
                 }
             }
         },
