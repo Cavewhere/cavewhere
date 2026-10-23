@@ -158,7 +158,7 @@ namespace {
 cwMemoryBudget* cwMemoryBudget::Budget = nullptr;
 
 cwMemoryBudget::cwMemoryBudget(QObject* parent) :
-    QObject(parent)
+    AsyncFuture::Ledger(parent)
 {
 }
 
@@ -219,9 +219,15 @@ bool cwMemoryBudget::tryCharge(qint64 bytes)
     return true;
 }
 
+void cwMemoryBudget::charge(qint64 bytes)
+{
+    m_inFlightBytes.fetch_add(bytes);
+}
+
 void cwMemoryBudget::release(qint64 bytes)
 {
     m_inFlightBytes.fetch_sub(bytes);
+    emit released();
 }
 
 qint64 cwMemoryBudget::availableBytes()

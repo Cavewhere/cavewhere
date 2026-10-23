@@ -22,7 +22,7 @@
  * when it is above zero, otherwise the platform's availableBytes() minus a
  * reserve for graphics and Qt, re-read on every charge. Thread-safe.
  */
-class CAVEWHERE_LIB_EXPORT cwMemoryBudget : public QObject, public AsyncFuture::Ledger
+class CAVEWHERE_LIB_EXPORT cwMemoryBudget : public AsyncFuture::Ledger
 {
     Q_OBJECT
 
@@ -42,6 +42,7 @@ public:
     bool isPaused() const;
 
     bool tryCharge(qint64 bytes) override;
+    void charge(qint64 bytes) override;
     void release(qint64 bytes) override;
 
     static qint64 availableBytes();
@@ -71,11 +72,11 @@ public:
             instance()
         };
 
-        return AsyncFuture::limited<T>(context,
-                                       inputs,
-                                       cwTaskContextScope::wrap(std::move(chargedLaunch)),
-                                       std::move(weight),
-                                       limit);
+        return AsyncFuture::limited(context,
+                                    inputs,
+                                    cwTaskContextScope::wrap(std::move(chargedLaunch)),
+                                    std::move(weight),
+                                    limit);
     }
 
 private:
