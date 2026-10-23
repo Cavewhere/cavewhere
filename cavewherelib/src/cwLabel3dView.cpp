@@ -17,6 +17,7 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <algorithm>
+#include <cmath>
 #include <QRectF>
 #include <QSizeF>
 
@@ -27,6 +28,19 @@ namespace {
 // win against local clutter while a more distant wall still occludes it. World
 // units (cave coordinates are metres); tunable.
 constexpr float kLabelDepthBias = 1.0f;
+
+// Collision rects are padded around the label text: a little for labels already
+// shown (so they stay put), more for hidden ones (so they only appear with room).
+constexpr double kVisibleMarginFactor = 1.05;
+constexpr double kInvisibleMarginFactor = 2.0;
+
+// Declutter grid cell sized to one padded average visible label, so an average
+// label covers at most 2x2 cells.
+QSize declutterCellSize(const QSizeF& averageLabelSize)
+{
+    return QSize(int(std::ceil(averageLabelSize.width() * kVisibleMarginFactor)),
+                 int(std::ceil(averageLabelSize.height() * kVisibleMarginFactor)));
+}
 }
 cwLabel3dView::cwLabel3dView(QQuickItem *parent) :
     cwBillboardOverlayItem(parent),
@@ -248,8 +262,6 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
     const QSizeF averageSize = m_averageLabelSize;
 
     const int labelCount = labels.size();
-    constexpr double visibleMarginFactor = 1.05;
-    constexpr double invisibleMarginFactor = 2.0;
 
     auto processIndex = [&](int i) {
         QQuickItem* item = labelItem(group, i);
@@ -292,13 +304,13 @@ void cwLabel3dView::updateGroupPositions(cwLabel3dGroup* group)
         }
 
         const double marginFactor = (item != nullptr && item->isVisible())
-                ? visibleMarginFactor
-                : invisibleMarginFactor;
+                ? kVisibleMarginFactor
+                : kInvisibleMarginFactor;
         stationNameTextSize = stationNameTextSize * marginFactor;
         QRectF stationRect(QPointF(topLeftPoint.x() - stationNameTextSize.width() * 0.5,
                                    topLeftPoint.y() - stationNameTextSize.height() * 0.5),
                            stationNameTextSize);
-        bool couldAddText = m_labelKdTree.addRect(stationRect.toAlignedRect());
+        bool couldAddText = m_labelGrid.addRect(stationRect.toAlignedRect());
 
         if(couldAddText) {
             accept();
@@ -387,6 +399,8 @@ void cwLabel3dView::updatePositions()
     if(camera() == nullptr) { return; }
 
     if(isVisible()) {
+        m_labelGrid.reset(camera()->viewport(), declutterCellSize(m_averageLabelSize));
+
         for(cwLabel3dGroup* group : std::as_const(m_labelGroups)) {
             // Hidden groups already released their items when toggled; skip the
             // per-frame work entirely rather than re-walking an empty list.
@@ -396,6 +410,8 @@ void cwLabel3dView::updatePositions()
             updateGroupPositions(group);
         }
 
-        m_labelKdTree.clear();
+        // Leave the grid empty for updateGroup, which declutters a single group
+        // between frames.
+        m_labelGrid.clear();
     }
 }

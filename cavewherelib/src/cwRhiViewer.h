@@ -32,7 +32,6 @@ class cwScene;
 // #include "cwStation.h"
 // #include "cwRegularTile.h"
 // #include "cwEdgeTile.h"
-// #include "cwCollisionRectKdTree.h"
 
 
 class cwRhiViewer : public QQuickRhiItem
