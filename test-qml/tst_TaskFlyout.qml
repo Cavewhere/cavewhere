@@ -14,6 +14,20 @@ QQ.Item {
         id: testModelId
     }
 
+    // Stands in for the 3D view the flyout floats over: a sibling underneath,
+    // with a WheelHandler like the turntable's.
+    QQ.Item {
+        id: underlayId
+        anchors.fill: parent
+
+        property int wheelCount: 0
+
+        QQ.WheelHandler {
+            acceptedDevices: QQ.PointerDevice.Mouse | QQ.PointerDevice.TouchPad
+            onWheel: underlayId.wheelCount++
+        }
+    }
+
     TaskFlyout {
         id: flyoutId
         objectName: "taskFlyout"
@@ -40,6 +54,7 @@ QQ.Item {
             flyoutId.previewHovered = false
             flyoutId.openLatched = false
             flyoutId.hostVisible = true
+            underlayId.wheelCount = 0
             // Park the pointer clear of the card, so a test that moved it onto
             // the panel can't leave it hovered for whatever runs next.
             mouseMove(rootId, rootId.width - 1, 0)
@@ -227,6 +242,63 @@ QQ.Item {
 
             verify(flyoutId.shown, "still logically open")
             verify(!flyoutId.visible, "but not visible where the sidebar isn't")
+        }
+
+        function wheelOver(item, x, y) {
+            mouseMove(item, x, y)
+            for (let i = 0; i < 5; ++i) {
+                mouseWheel(item, x, y, 0, -120)
+            }
+        }
+
+        // A list too short to scroll has nowhere to take the wheel, and the
+        // view under the card must not pick it up instead.
+        function test_wheelOverAShortListStaysOnTheCard() {
+            addTask("Saving", 0, 0)
+            flyoutId.togglePin()
+            waitForRendering(flyoutId)
+
+            let list = find("taskFlyoutList")
+            verify(list !== null, "taskFlyoutList not found")
+            wheelOver(list, list.width / 2, list.height / 2)
+
+            compare(underlayId.wheelCount, 0, "the view under the card saw no wheel")
+        }
+
+        // Scrolling a long list past its end is where the leak shows most: the
+        // list stops and the remaining ticks spin the view behind it.
+        function test_wheelPastTheEndOfALongListStaysOnTheCard() {
+            for (let i = 0; i < 20; ++i) {
+                addTask("Loading cave" + i + ".laz", i, 20)
+            }
+            flyoutId.togglePin()
+            waitForRendering(flyoutId)
+
+            let list = find("taskFlyoutList")
+            verify(list !== null, "taskFlyoutList not found")
+            verify(list.contentHeight > list.height, "the list scrolls")
+            const startY = list.contentY
+
+            wheelOver(list, list.width / 2, list.height / 2)
+            tryVerify(function() { return list.contentY > startY }, 1000,
+                      "the list itself still scrolls under the wheel")
+
+            list.positionViewAtEnd()
+            wheelOver(list, list.width / 2, list.height / 2)
+
+            compare(underlayId.wheelCount, 0, "the view under the card saw no wheel")
+        }
+
+        function test_wheelOverTheHeaderStaysOnTheCard() {
+            addTask("Saving", 0, 0)
+            flyoutId.togglePin()
+            waitForRendering(flyoutId)
+
+            let title = find("flyoutCardTitle")
+            verify(title !== null, "flyoutCardTitle not found")
+            wheelOver(title, title.width / 2, title.height / 2)
+
+            compare(underlayId.wheelCount, 0, "the view under the card saw no wheel")
         }
     }
 }

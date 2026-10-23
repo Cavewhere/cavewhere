@@ -36,6 +36,10 @@ QQ.Rectangle {
     // one means clicking a button that is itself holding the card open.
     readonly property alias hovered: cardHoverId.hovered
 
+    // Whether the card keeps the wheel from the view it floats over. A card
+    // placed in line in a scrolling page turns this off, so the page scrolls.
+    property bool blocksWheel: true
+
     default property alias bodyData: bodyLayoutId.data
 
     signal closeRequested()
@@ -53,6 +57,16 @@ QQ.Rectangle {
     data: [
         QQ.HoverHandler {
             id: cardHoverId
+        },
+
+        // A floating card would otherwise let any wheel it leaves unaccepted
+        // fall through to the view behind it — over the header, over a list too
+        // short to scroll, or past the end of one that does. A scrolling body
+        // still sees the wheel first, being a child. Null target, because a
+        // WheelHandler's default is to scale its parent.
+        QQ.WheelHandler {
+            target: null
+            enabled: cardId.blocksWheel
         },
 
         ColumnLayout {

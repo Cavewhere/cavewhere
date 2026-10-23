@@ -42,6 +42,7 @@ QQ.Item {
     }
 
     QC.ScrollView {
+        objectName: "toolsTabScrollView"
         anchors.fill: parent
 
         contentWidth: availableWidth
@@ -109,6 +110,10 @@ QQ.Item {
                 Layout.leftMargin: Theme.pageMargin
                 Layout.rightMargin: Theme.pageMargin
                 Layout.topMargin: Theme.pageMargin
+
+                // In line in the drawer's scrolling column, so the wheel belongs
+                // to the drawer.
+                blocksWheel: false
 
                 interactionManager: toolsTabId.interactionManager
                 toolModel: toolsTabId.toolModel
