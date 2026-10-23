@@ -198,6 +198,25 @@ TEST_CASE("Editing a backsight clears the pair's disagreement acceptance", "[cwS
     CHECK_FALSE(fixture.chunk->shot(0).isWarningAccepted(cwErrorTypeId::SurveyCompassDisagreement));
 }
 
+TEST_CASE("Committing a shot cell's same text keeps its acceptance", "[cwSurveyChunk][acceptedWarnings]")
+{
+    AcceptFixture fixture;
+    const int disagreement = toInt(cwErrorTypeId::SurveyCompassDisagreement);
+
+    fixture.chunk->setWarningAccepted(0, cwSurveyChunk::ShotCompassRole, disagreement, true);
+
+    fixture.chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, QStringLiteral("195"));
+    fixture.chunk->setData(cwSurveyChunk::ShotCompassRole, 0, QStringLiteral("10"));
+
+    CHECK(fixture.chunk->shot(0).isWarningAccepted(cwErrorTypeId::SurveyCompassDisagreement));
+    CHECK(fixture.warningWithId(0, cwSurveyChunk::ShotCompassRole, cwErrorTypeId::SurveyCompassDisagreement).suppressed());
+
+    SECTION("Clearing the backsight clears the acceptance") {
+        fixture.chunk->setData(cwSurveyChunk::ShotBackCompassRole, 0, QString());
+        CHECK_FALSE(fixture.chunk->shot(0).isWarningAccepted(cwErrorTypeId::SurveyCompassDisagreement));
+    }
+}
+
 TEST_CASE("Accepted warnings move with the station row", "[cwSurveyChunk][acceptedWarnings]")
 {
     AcceptFixture fixture;

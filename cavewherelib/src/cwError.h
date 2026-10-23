@@ -22,8 +22,8 @@ class cwErrorData;
  * Stable, cross-version identifiers for the cwErrors whose user suppression must
  * survive their message text changing between releases (see cwError::errorTypeId).
  * Allocate every new id here, never as a bare literal at the use site, so two
- * features cannot silently collide on the same value. The numeric values are
- * serialized with the project's suppression state, so they must never be reused
+ * features cannot silently collide on the same value. The survey ids are
+ * written to disk in StationShot.acceptedWarnings, so values are never reused
  * or renumbered. 0 is the default "no stable identity" for transient errors.
  */
 enum class cwErrorTypeId : int {

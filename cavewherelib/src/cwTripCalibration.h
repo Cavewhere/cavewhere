@@ -101,6 +101,8 @@ private:
             , m_DistanceUnit(cwUnits::Meters)
             , m_FrontSights(true)
             , m_BackSights(true)
+            , m_Lruds(true)
+            , m_Splays(true)
         {}
 
         PrivateData(const PrivateData &other)
@@ -119,6 +121,8 @@ private:
             , m_DistanceUnit(other.m_DistanceUnit)
             , m_FrontSights(other.m_FrontSights)
             , m_BackSights(other.m_BackSights)
+            , m_Lruds(other.m_Lruds)
+            , m_Splays(other.m_Splays)
         {}
 
         bool m_CorrectedCompassBacksight;
@@ -135,6 +139,8 @@ private:
         cwUnits::LengthUnit m_DistanceUnit;
         bool m_FrontSights;
         bool m_BackSights;
+        bool m_Lruds;
+        bool m_Splays;
     };
 
     QSharedDataPointer<PrivateData> d;

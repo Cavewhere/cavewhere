@@ -96,6 +96,8 @@ private:
         cwDistanceReading m_down;
 
         QList<cwShotMeasurement> m_splays;
+
+        QSet<int> m_acceptedWarnings;
     };
 
     QSharedDataPointer<PrivateData> Data;

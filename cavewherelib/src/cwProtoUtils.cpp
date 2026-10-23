@@ -27,6 +27,10 @@
 
 //Qt includes
 #include <QFileInfo>
+#include <QSet>
+
+//Std includes
+#include <algorithm>
 
 namespace {
 
@@ -41,6 +45,21 @@ void saveReading(StringFunc getProtoString, const cwReading& reading, State empt
     if(reading.state() != static_cast<int>(emptyState)) {
         *getProtoString() = reading.value().toUtf8().toStdString();
     }
+}
+
+//Sorted, so a .cwproj's Git diff stays stable across saves
+void saveAcceptedWarnings(CavewhereProto::StationShot* proto, const QSet<int>& acceptedWarnings)
+{
+    QList<int> sorted(acceptedWarnings.cbegin(), acceptedWarnings.cend());
+    std::sort(sorted.begin(), sorted.end());
+    for(int id : std::as_const(sorted)) {
+        proto->add_acceptedwarnings(id);
+    }
+}
+
+QSet<int> fromProtoAcceptedWarnings(const CavewhereProto::StationShot& proto)
+{
+    return QSet<int>(proto.acceptedwarnings().cbegin(), proto.acceptedwarnings().cend());
 }
 
 } // anonymous namespace
@@ -245,6 +264,7 @@ void saveNoteTranformation(CavewhereProto::NoteTransformation* protoNoteTransfor
 void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation& station)
 {
     saveQUuid(protoStation->mutable_id(), station.id());
+    saveAcceptedWarnings(protoStation, station.acceptedWarnings());
 
     if(!station.name().isEmpty()) {
         saveString(protoStation->mutable_name(), station.name());
@@ -269,6 +289,7 @@ void saveStationShot(CavewhereProto::StationShot* protoStation, const cwStation&
 void saveStationShot(CavewhereProto::StationShot* protoShot, const cwShot& shot)
 {
     saveQUuid(protoShot->mutable_id(), shot.id());
+    saveAcceptedWarnings(protoShot, shot.acceptedWarnings());
 
     if(!shot.isDistanceIncluded()) {
         //By default distance is included, only write it if it's not include
@@ -296,6 +317,8 @@ void saveTripCalibration(CavewhereProto::TripCalibration* proto, cwTripCalibrati
     proto->set_distanceunit((CavewhereProto::Units_LengthUnit)tripCalibration->distanceUnit());
     proto->set_frontsights(tripCalibration->hasFrontSights());
     proto->set_backsights(tripCalibration->hasBackSights());
+    proto->set_lruds(tripCalibration->hasLruds());
+    proto->set_splays(tripCalibration->hasSplays());
     proto->set_correctedcompassfrontsight(tripCalibration->hasCorrectedCompassFrontsight());
     proto->set_correctedclinofrontsight(tripCalibration->hasCorrectedClinoFrontsight());
 }
@@ -408,6 +431,8 @@ cwTripCalibrationData fromProtoTripCalibration(const CavewhereProto::TripCalibra
     tripCalibration.setDistanceUnit((cwUnits::LengthUnit)proto.distanceunit());
     tripCalibration.setFrontSights(proto.has_frontsights() ? proto.frontsights() : true);
     tripCalibration.setBackSights(proto.has_backsights() ? proto.backsights() : false);
+    tripCalibration.setLruds(proto.has_lruds() ? proto.lruds() : true);
+    tripCalibration.setSplays(proto.has_splays() ? proto.splays() : true);
     return tripCalibration;
 }
 
@@ -466,6 +491,7 @@ cwStation fromProtoStation(const CavewhereProto::StationShot& protoStation)
     cwStation station;
 
     station.setId(toUuid(protoStation.id()));
+    station.setAcceptedWarnings(fromProtoAcceptedWarnings(protoStation));
 
     if (protoStation.has_name()) {
         station.setName(QString::fromStdString(protoStation.name()));
@@ -506,6 +532,7 @@ cwShot fromProtoShot(const CavewhereProto::StationShot& protoShot)
     cwShot shot;
 
     shot.setId(toUuid(protoShot.id()));
+    shot.setAcceptedWarnings(fromProtoAcceptedWarnings(protoShot));
 
     if (protoShot.has_includedistance()) {
         shot.setDistanceIncluded(protoShot.includedistance());

@@ -4105,6 +4105,7 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(chunk, &cwSurveyChunk::removed, this, saveTrip);
 
         connect(chunk, &cwSurveyChunk::dataChanged, this, saveTrip);
+        connect(chunk, &cwSurveyChunk::acceptedWarningsChanged, this, saveTrip);
         connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, saveTrip);
     };
 
@@ -4180,6 +4181,8 @@ void cwSaveLoad::connectTrip(cwTrip* trip)
         connect(cal, &cwTripCalibration::supportedUnitsChanged, this, saveTrip);
         connect(cal, &cwTripCalibration::frontSightsChanged, this, saveTrip);
         connect(cal, &cwTripCalibration::backSightsChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::lrudsChanged, this, saveTrip);
+        connect(cal, &cwTripCalibration::splaysChanged, this, saveTrip);
     }
 
     // parentCaveChanged intentionally omitted (no re-parenting)

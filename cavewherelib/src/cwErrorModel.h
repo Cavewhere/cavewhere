@@ -57,6 +57,7 @@ signals:
 private:
     mutable int FatalCount; //!< Cached values for FatalCount
     mutable int WarningCount; //!< Cached values for WaringCount
+    mutable int SuppressedWarningCount; //!< Cached count of accepted warnings
 
     mutable bool FatalWaringCountUptoDate;
 

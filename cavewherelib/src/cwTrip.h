@@ -145,8 +145,8 @@ public:
     // Current unsuppressed warning count for one kind across the trip's chunks
     Q_INVOKABLE int warningCountForTypeId(int errorTypeId) const;
 
-    bool hasLrudData() const;
-    bool hasSplayData() const;
+    bool hasLrudData() const { return m_hasLrudData; }
+    bool hasSplayData() const { return m_hasSplayData; }
 
 signals:
     void nameChanged();
@@ -227,6 +227,16 @@ private:
 
 
     void updateKeywordMetadata();
+
+    void connectColumnData(cwSurveyChunk* chunk);
+    void scheduleColumnDataUpdate();
+    void updateColumnData();
+
+    bool m_hasLrudData = false;
+    bool m_hasSplayData = false;
+    // Collapses a burst of chunk edits into one hasLrudData/hasSplayData
+    // recompute on the next event-loop turn
+    bool m_columnDataPending = false;
 };
 
 // Q_DECLARE_METATYPE(cwTrip*)

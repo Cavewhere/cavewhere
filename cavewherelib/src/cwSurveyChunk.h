@@ -139,8 +139,12 @@ public:
     // (empty = all kinds). Returns how many were newly accepted.
     int acceptWarnings(const QList<int>& ids = {});
 
-    // Drop every acceptance in the chunk. Returns how many were cleared.
-    int clearAcceptedWarnings();
+    // Drops the chunk's acceptances whose ids are in `ids` (empty = all kinds).
+    // Returns how many were cleared.
+    int clearAcceptedWarnings(const QList<int>& ids = {});
+
+    // Current unsuppressed warning count for one kind in this chunk
+    int warningCountForTypeId(int errorTypeId) const;
 
     // The cell that owns errorModel, for jumping from a listed warning to its cell
     Q_INVOKABLE cwSurveyChunkCell cellIndexForErrorModel(cwErrorModel* errorModel) const;
@@ -204,6 +208,9 @@ private:
     public:
         CellIndex() : Index(-1), Role(-1) {}
         CellIndex(int index, int role) : Index(index), Role(role) {}
+
+        int index() const { return Index; }
+        int role() const { return Role; }
 
         bool operator<(const CellIndex& other) const {
             if(Index == other.Index) {
@@ -291,11 +298,13 @@ private:
     void updateErrors();
     bool isClinoDownOrUp(cwSurveyChunk::DataRole role, int index) const;
     bool isClinoDownOrUpHelper(cwSurveyChunk::DataRole role, int index) const;
+    void connectAcceptanceWriteThrough(cwErrorModel* cellModel, DataRole role, int index);
 
 private slots:
     void updateCompassErrors();
     void updateClinoErrors();
     void updateCompassClinoErrors();
+    void updateLrudErrors();
 
 };
 

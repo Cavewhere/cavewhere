@@ -136,16 +136,15 @@ bool cwShot::isValid() const {
 
 QSet<int> cwShot::acceptedWarnings() const
 {
-    return {};
+    return m_acceptedWarnings;
 }
 
 void cwShot::setAcceptedWarnings(const QSet<int>& ids)
 {
-    Q_UNUSED(ids)
+    m_acceptedWarnings = ids;
 }
 
 bool cwShot::isWarningAccepted(cwErrorTypeId id) const
 {
-    Q_UNUSED(id)
-    return false;
+    return m_acceptedWarnings.contains(static_cast<int>(id));
 }

@@ -64,6 +64,13 @@ void checkLRUDWarnings(cwSurveyChunk* chunk, int index) {
     directions.append("up");
     directions.append("down");
 
+    const QList<cwErrorTypeId> ids {
+        cwErrorTypeId::SurveyMissingLeft,
+        cwErrorTypeId::SurveyMissingRight,
+        cwErrorTypeId::SurveyMissingUp,
+        cwErrorTypeId::SurveyMissingDown
+    };
+
     QString stationName = chunk->data(cwSurveyChunk::StationNameRole, index).toString();
 
     for(int i = 0; i < models.size(); i++) {
@@ -76,6 +83,7 @@ void checkLRUDWarnings(cwSurveyChunk* chunk, int index) {
 
         CHECK(model->errors()->first().type() == cwError::Warning);
         CHECK(model->errors()->first().message() == QString("Missing \"%1\" for station \"%2\"").arg(directions.at(i)).arg(stationName));
+        CHECK(model->errors()->first().errorTypeId() == static_cast<int>(ids.at(i)));
     }
 
 }
@@ -86,6 +94,7 @@ void checkNoShotDataError(cwSurveyChunk* chunk, int index, cwSurveyChunk::DataRo
     INFO("Model:" << model << " chunk:" << chunk << " index:" << index << " role:" << role << " type:" << type);
 
     QString roleName;
+    cwErrorTypeId warningId = cwErrorTypeId::None;
 
     switch(role) {
     case cwSurveyChunk::ShotDistanceRole:
@@ -93,15 +102,19 @@ void checkNoShotDataError(cwSurveyChunk* chunk, int index, cwSurveyChunk::DataRo
         break;
     case cwSurveyChunk::ShotCompassRole:
         roleName = "compass";
+        warningId = cwErrorTypeId::SurveyMissingCompass;
         break;
     case cwSurveyChunk::ShotBackCompassRole:
         roleName = "backsite compass";
+        warningId = cwErrorTypeId::SurveyMissingBackCompass;
         break;
     case cwSurveyChunk::ShotClinoRole:
         roleName = "clino";
+        warningId = cwErrorTypeId::SurveyMissingClino;
         break;
     case cwSurveyChunk::ShotBackClinoRole:
         roleName = "backsite clino";
+        warningId = cwErrorTypeId::SurveyMissingBackClino;
         break;
     default:
         REQUIRE(false); //Error in the testcase
@@ -121,6 +134,11 @@ void checkNoShotDataError(cwSurveyChunk* chunk, int index, cwSurveyChunk::DataRo
     INFO(model->errors()->first().message() << "|" << QString("Missing \"%1\" from shot \"%2\" ➔ \"%3\"").arg(roleName, fromStation, toStation));
     CHECK(model->errors()->first().message() == QString("Missing \"%1\" from shot \"%2\" ➔ \"%3\"").arg(roleName, fromStation, toStation));
     CHECK(model->errors()->first().type() == type);
+
+    //Only warnings carry a stable id, since only warnings can be accepted
+    if(type == cwError::Warning) {
+        CHECK(model->errors()->first().errorTypeId() == static_cast<int>(warningId));
+    }
 }
 
 /**
@@ -345,6 +363,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
         REQUIRE(errorModel->errors()->size() == 1);
         CHECK(errorModel->errors()->first().message() == QString("Frontsight and backsight differs by 3°"));
         CHECK(errorModel->errors()->first().type() == cwError::Warning);
+        CHECK(errorModel->errors()->first().errorTypeId() == static_cast<int>(cwErrorTypeId::SurveyCompassDisagreement));
 
         chunk->setData(cwSurveyChunk::ShotClinoRole, shotIndex, -1.1);
 
@@ -357,6 +376,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
         REQUIRE(errorModel->errors()->size() == 1);
         CHECK(errorModel->errors()->first().message() == QString("Frontsight and backsight differs by 3.4°"));
         CHECK(errorModel->errors()->first().type() == cwError::Warning);
+        CHECK(errorModel->errors()->first().errorTypeId() == static_cast<int>(cwErrorTypeId::SurveyClinoDisagreement));
     }
 
     SECTION("Off by two change back sight") {
@@ -369,6 +389,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
         REQUIRE(errorModel->errors()->size() == 1);
         CHECK(errorModel->errors()->first().message() == QString("Frontsight and backsight differs by 3°"));
         CHECK(errorModel->errors()->first().type() == cwError::Warning);
+        CHECK(errorModel->errors()->first().errorTypeId() == static_cast<int>(cwErrorTypeId::SurveyCompassDisagreement));
 
         chunk->setData(cwSurveyChunk::ShotBackClinoRole, shotIndex, 7.9);
 
@@ -382,6 +403,7 @@ TEST_CASE("Checks cwSurveyChunk errors", "[cwSurveyChunk]")
         INFO(errorModel->errors()->first().message());
         CHECK(errorModel->errors()->first().message() == QString("Frontsight and backsight differs by 3.6°"));
         CHECK(errorModel->errors()->first().type() == cwError::Warning);
+        CHECK(errorModel->errors()->first().errorTypeId() == static_cast<int>(cwErrorTypeId::SurveyClinoDisagreement));
     }
 
     SECTION("Off by two change calibration") {

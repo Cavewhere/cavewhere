@@ -157,12 +157,20 @@ void cwTripCalibration::setBackSights(bool value)
 
 void cwTripCalibration::setLruds(bool value)
 {
-    Q_UNUSED(value)
+    if (m_data.hasLruds() != value) {
+        m_data.setLruds(value);
+        emit lrudsChanged();
+        emit calibrationsChanged();
+    }
 }
 
 void cwTripCalibration::setSplays(bool value)
 {
-    Q_UNUSED(value)
+    if (m_data.hasSplays() != value) {
+        m_data.setSplays(value);
+        emit splaysChanged();
+        emit calibrationsChanged();
+    }
 }
 
 QStringList cwTripCalibration::supportedUnits() const
@@ -206,6 +214,8 @@ void cwTripCalibration::setData(const cwTripCalibrationData &data) {
 
     setFrontSights(data.hasFrontSights());
     setBackSights(data.hasBackSights());
+    setLruds(data.hasLruds());
+    setSplays(data.hasSplays());
 }
 
 void cwTripCalibration::setParentTrip(cwTrip* trip)
@@ -403,26 +413,43 @@ int cwTripCalibration::mapToSupportUnit(int lengthUnit)
 
 bool cwTripCalibrationData::hasLruds() const
 {
-    return false;
+    return d->m_Lruds;
 }
 
 void cwTripCalibrationData::setLruds(bool value)
 {
-    Q_UNUSED(value)
+    d->m_Lruds = value;
 }
 
 bool cwTripCalibrationData::hasSplays() const
 {
-    return false;
+    return d->m_Splays;
 }
 
 void cwTripCalibrationData::setSplays(bool value)
 {
-    Q_UNUSED(value)
+    d->m_Splays = value;
 }
 
 bool cwTripCalibrationData::operator==(const cwTripCalibrationData& other) const
 {
-    Q_UNUSED(other)
-    return true;
+    if (d == other.d) {
+        return true;
+    }
+    return hasCorrectedCompassBacksight() == other.hasCorrectedCompassBacksight()
+           && hasCorrectedClinoBacksight() == other.hasCorrectedClinoBacksight()
+           && hasCorrectedCompassFrontsight() == other.hasCorrectedCompassFrontsight()
+           && hasCorrectedClinoFrontsight() == other.hasCorrectedClinoFrontsight()
+           && tapeCalibration() == other.tapeCalibration()
+           && frontCompassCalibration() == other.frontCompassCalibration()
+           && frontClinoCalibration() == other.frontClinoCalibration()
+           && backCompassCalibration() == other.backCompassCalibration()
+           && backClinoCalibration() == other.backClinoCalibration()
+           && declinationManual() == other.declinationManual()
+           && autoDeclination() == other.autoDeclination()
+           && distanceUnit() == other.distanceUnit()
+           && hasFrontSights() == other.hasFrontSights()
+           && hasBackSights() == other.hasBackSights()
+           && hasLruds() == other.hasLruds()
+           && hasSplays() == other.hasSplays();
 }

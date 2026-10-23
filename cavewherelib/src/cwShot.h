@@ -82,6 +82,7 @@ private:
     QUuid m_id;
     QList<cwShotMeasurement> measurements;
     bool IncludeDistance = true;
+    QSet<int> m_acceptedWarnings;
 };
 
 inline int cwShot::measurementCount() const {

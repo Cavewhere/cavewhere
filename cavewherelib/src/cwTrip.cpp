@@ -262,6 +262,7 @@ void cwTrip::removeChunks(int begin, int end) {
 
     emit chunksRemoved(begin, end);
     emit numberOfChunksChanged();
+    scheduleColumnDataUpdate();
 }
 
 /**
@@ -278,6 +279,7 @@ void cwTrip::insertChunk(int row, cwSurveyChunk* chunk) {
     chunk->setParentTrip(this);
     chunk->errorModel()->setParentModel(errorModel());
     Chunks.insert(row, chunk);
+    connectColumnData(chunk);
 
     emit chunksInserted(row, row);
     emit numberOfChunksChanged();
@@ -335,6 +337,7 @@ void cwTrip::setChucks(QList<cwSurveyChunk*> chunks) {
     foreach(cwSurveyChunk* chunk, Chunks) {
         chunk->setParentTrip(this);
         chunk->errorModel()->setParentModel(errorModel());
+        connectColumnData(chunk);
     }
 
     emit chunksInserted(0, chunkCount() - 1);
@@ -624,33 +627,93 @@ QList<cwStation> cwTrip::stations() const {
 
 int cwTrip::acceptAllWarnings(const QList<int>& errorTypeIds)
 {
-    Q_UNUSED(errorTypeIds)
-    return 0;
+    int accepted = 0;
+    for(cwSurveyChunk* chunk : std::as_const(Chunks)) {
+        accepted += chunk->acceptWarnings(errorTypeIds);
+    }
+    return accepted;
 }
 
 int cwTrip::clearAcceptedWarnings()
 {
-    return 0;
+    return clearAcceptedWarnings(QList<int>());
 }
 
 int cwTrip::clearAcceptedWarnings(const QList<int>& errorTypeIds)
 {
-    Q_UNUSED(errorTypeIds)
-    return 0;
+    int cleared = 0;
+    for(cwSurveyChunk* chunk : std::as_const(Chunks)) {
+        cleared += chunk->clearAcceptedWarnings(errorTypeIds);
+    }
+    return cleared;
 }
 
 int cwTrip::warningCountForTypeId(int errorTypeId) const
 {
-    Q_UNUSED(errorTypeId)
-    return 0;
+    int count = 0;
+    for(const cwSurveyChunk* chunk : Chunks) {
+        count += chunk->warningCountForTypeId(errorTypeId);
+    }
+    return count;
 }
 
-bool cwTrip::hasLrudData() const
+void cwTrip::connectColumnData(cwSurveyChunk* chunk)
 {
-    return false;
+    connect(chunk, &cwSurveyChunk::dataChanged, this, [this](cwSurveyChunk::DataRole role, int) {
+        switch(role) {
+        case cwSurveyChunk::StationLeftRole:
+        case cwSurveyChunk::StationRightRole:
+        case cwSurveyChunk::StationUpRole:
+        case cwSurveyChunk::StationDownRole:
+            scheduleColumnDataUpdate();
+            break;
+        default:
+            break;
+        }
+    });
+    connect(chunk, &cwSurveyChunk::stationSplaysChanged, this, &cwTrip::scheduleColumnDataUpdate);
+    connect(chunk, &cwSurveyChunk::added, this, &cwTrip::scheduleColumnDataUpdate);
+    connect(chunk, &cwSurveyChunk::removed, this, &cwTrip::scheduleColumnDataUpdate);
+    scheduleColumnDataUpdate();
 }
 
-bool cwTrip::hasSplayData() const
+void cwTrip::scheduleColumnDataUpdate()
 {
-    return false;
+    if(m_columnDataPending) {
+        return;
+    }
+    m_columnDataPending = true;
+    QMetaObject::invokeMethod(this, [this]() {
+        m_columnDataPending = false;
+        updateColumnData();
+    }, Qt::QueuedConnection);
+}
+
+void cwTrip::updateColumnData()
+{
+    const auto hasLrudText = [](const cwStation& station) {
+        return station.left().state() != cwDistanceReading::State::Empty
+               || station.right().state() != cwDistanceReading::State::Empty
+               || station.up().state() != cwDistanceReading::State::Empty
+               || station.down().state() != cwDistanceReading::State::Empty;
+    };
+
+    bool hasLrud = false;
+    bool hasSplay = false;
+    for(const cwSurveyChunk* chunk : std::as_const(Chunks)) {
+        for(int i = 0; i < chunk->stationCount(); ++i) {
+            const cwStation station = chunk->station(i);
+            hasLrud = hasLrud || hasLrudText(station);
+            hasSplay = hasSplay || station.splayCount() > 0;
+        }
+    }
+
+    if(m_hasLrudData != hasLrud) {
+        m_hasLrudData = hasLrud;
+        emit hasLrudDataChanged();
+    }
+    if(m_hasSplayData != hasSplay) {
+        m_hasSplayData = hasSplay;
+        emit hasSplayDataChanged();
+    }
 }
