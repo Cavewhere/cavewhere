@@ -14,6 +14,7 @@
 #include "cwTrip.h"
 
 //Qt includes
+#include <QCoreApplication>
 #include <QSignalSpy>
 
 namespace {
@@ -56,20 +57,24 @@ TEST_CASE("cwNodePageModel counts the trips at every depth below its node", "[No
     SECTION("a trip in a Section counts toward the cave") {
         cwCave* section = makeChild(&cave, QStringLiteral("Upper level"));
         makeTrip(section, QStringLiteral("Upper"), day(2024, 2, 1));
+        QCoreApplication::processEvents();
         CHECK(model.tripCount() == 2);
 
         cwCave* deeper = makeChild(section, QStringLiteral("Deeper"));
         makeTrip(deeper, QStringLiteral("Deep"), day(2024, 3, 1));
+        QCoreApplication::processEvents();
         CHECK(model.tripCount() == 3);
 
         SECTION("removing the Section takes its trips off the count") {
             cave.removeNode(cave.indexOfNode(section));
+            QCoreApplication::processEvents();
             CHECK(model.tripCount() == 1);
         }
     }
 
     SECTION("removing a direct trip lowers the count") {
         cave.removeTrip(0);
+        QCoreApplication::processEvents();
         CHECK(model.tripCount() == 0);
     }
 
@@ -94,6 +99,7 @@ TEST_CASE("cwNodePageModel reports the latest trip date below its node", "[NodeP
     SECTION("a newer trip in a Section moves the date") {
         cwCave* section = makeChild(&cave, QStringLiteral("Upper level"));
         cwTrip* upper = makeTrip(section, QStringLiteral("Upper"), day(2024, 2, 1));
+        QCoreApplication::processEvents();
         CHECK(model.lastSurvey().date() == QDate(2024, 2, 1));
 
         SECTION("editing that trip's date follows the edit") {
@@ -104,6 +110,7 @@ TEST_CASE("cwNodePageModel reports the latest trip date below its node", "[NodeP
 
     SECTION("an older trip leaves the date alone") {
         makeTrip(&cave, QStringLiteral("Old"), day(2001, 5, 5));
+        QCoreApplication::processEvents();
         CHECK(model.lastSurvey().date() == QDate(2023, 11, 12));
         CHECK(lastSurveySpy.count() == 0);
     }
@@ -111,7 +118,50 @@ TEST_CASE("cwNodePageModel reports the latest trip date below its node", "[NodeP
     SECTION("a trip without a date is passed over") {
         makeTrip(&cave, QStringLiteral("Undated"), QDateTime());
         cave.removeTrip(cave.indexOf(entrance));
+        QCoreApplication::processEvents();
         CHECK_FALSE(model.lastSurvey().isValid());
+    }
+}
+
+TEST_CASE("cwNodePageModel recounts trips added or removed in one turn once", "[NodePageModel][CoalescedPass]")
+{
+    constexpr int kTripsPerTurn = 3;
+
+    cwCave cave;
+    makeTrip(&cave, QStringLiteral("Entrance"), day(2023, 11, 12));
+
+    cwNodePageModel model;
+    model.setNode(&cave);
+    REQUIRE(model.tripCount() == 1);
+    QSignalSpy countSpy(&model, &cwNodePageModel::tripCountChanged);
+    QSignalSpy lastSurveySpy(&model, &cwNodePageModel::lastSurveyChanged);
+
+    SECTION("added") {
+        for(int i = 0; i < kTripsPerTurn; ++i) {
+            makeTrip(&cave, QStringLiteral("Trip %1").arg(i), day(2024, 1, 1 + i));
+        }
+        QCoreApplication::processEvents();
+
+        CHECK(countSpy.count() == 1);
+        CHECK(model.tripCount() == 1 + kTripsPerTurn);
+        CHECK(lastSurveySpy.count() == 1);
+        CHECK(model.lastSurvey().date() == QDate(2024, 1, kTripsPerTurn));
+    }
+
+    SECTION("removed") {
+        for(int i = 0; i < kTripsPerTurn; ++i) {
+            makeTrip(&cave, QStringLiteral("Trip %1").arg(i), day(2001, 1, 1 + i));
+        }
+        QCoreApplication::processEvents();
+        countSpy.clear();
+
+        for(int i = 0; i < kTripsPerTurn; ++i) {
+            cave.removeTrip(cave.tripCount() - 1);
+        }
+        QCoreApplication::processEvents();
+
+        CHECK(countSpy.count() == 1);
+        CHECK(model.tripCount() == 1);
     }
 }
 

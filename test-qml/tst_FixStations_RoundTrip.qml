@@ -89,8 +89,9 @@ MainWindowTest {
             tryVerify(() => m.data(m.index(1), FixStationModel.StationNameRole) === "B1")
             tryVerify(() => m.data(m.index(1), FixStationModel.InputCSRole) === "EPSG:32612")
 
+            tryVerify(() => RootData.region.geoReference.localCoordinateSystem.length > 0, 5000,
+                      "the first fix must have anchored a frame")
             const frameBeforeSave = RootData.region.geoReference.localCoordinateSystem
-            verify(frameBeforeSave.length > 0, "the first fix must have anchored a frame")
 
             // tempDirectoryUrl() is PID-suffixed so parallel test processes don't collide.
             const tempDir = RootData.urlToLocal(TestHelper.tempDirectoryUrl())

@@ -31,7 +31,7 @@ void cwNodePageModel::setNode(cwSurveyNode* node)
 
     if(m_node != nullptr) {
         m_subtreeConnection = connect(m_node, &cwSurveyNode::subtreeChanged,
-                                      this, &cwNodePageModel::rewireTrips);
+                                      this, &cwNodePageModel::scheduleRewireTrips);
         m_kindConnection = connect(m_node, &cwSurveyNode::kindChanged,
                                    this, &cwNodePageModel::kindLabelChanged);
         m_sectionConnection = connect(m_node, &cwSurveyNode::isSectionChanged,
@@ -56,8 +56,25 @@ QString cwNodePageModel::kindLabel() const
     return m_node != nullptr ? cwSurveyTreeModel::kindLabel(m_node.data()) : QString();
 }
 
+void cwNodePageModel::scheduleRewireTrips()
+{
+    if(m_rewireTripsPending) {
+        return;
+    }
+    m_rewireTripsPending = true;
+    QMetaObject::invokeMethod(this, &cwNodePageModel::runPendingRewireTrips, Qt::QueuedConnection);
+}
+
+void cwNodePageModel::runPendingRewireTrips()
+{
+    if(m_rewireTripsPending) {
+        rewireTrips();
+    }
+}
+
 void cwNodePageModel::rewireTrips()
 {
+    m_rewireTripsPending = false;
     disconnectTrips();
 
     if(m_node == nullptr) {

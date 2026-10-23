@@ -67,6 +67,9 @@ MainWindowTest {
         function addUtm16NFix() {
             RootData.region.addCave()
             addFix(0, "entrance", 0.0, 0.0)
+            // The frame settles on the next event-loop turn.
+            tryVerify(() => RootData.region.geoReference.hasCoordinateSystem, 5000,
+                      "the entrance must anchor the frame")
         }
 
         // Two stations a kilometer apart: one the frame anchors on, one it

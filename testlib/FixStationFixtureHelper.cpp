@@ -11,6 +11,8 @@
 #include "cwCavingRegion.h"
 #include "cwFixStationModel.h"
 
+#include <QCoreApplication>
+
 cwFixStation makeFix(const QString& name,
                      const QString& cs,
                      double easting,
@@ -29,5 +31,7 @@ cwCave* addCaveWithFixes(cwCavingRegion* region, const QList<cwFixStation>& fixe
     auto* cave = new cwCave();
     region->addCave(cave);
     cave->fixStations()->setFixStations(fixes);
+    // The frame follows the fixes in a queued pass.
+    QCoreApplication::processEvents();
     return cave;
 }

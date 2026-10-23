@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QString>
 
 //Our includes
@@ -63,6 +64,8 @@ namespace cwGeoreferenceFixture {
         fix.setNorthing(point.y);
         fix.setElevation(point.z);
         cave->fixStations()->appendFixStation(fix);
+        // The frame and the grid convergence follow the fix in a queued pass.
+        QCoreApplication::processEvents();
     }
 
     /**

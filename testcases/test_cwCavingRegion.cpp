@@ -15,6 +15,7 @@
 
 //Qt includes
 #include <QAbstractItemModel>
+#include <QCoreApplication>
 #include <QUndoStack>
 
 
@@ -70,6 +71,7 @@ TEST_CASE("A cave the region no longer lists stops following its coordinate syst
     anchor->setName(QStringLiteral("Anchor"));
     region.addCave(anchor);
     anchor->fixStations()->appendFixStation(anchorFix);
+    QCoreApplication::processEvents();
     REQUIRE(region.geoReference()->hasCoordinateSystem());
 
     cwFixStation fix = anchorFix;

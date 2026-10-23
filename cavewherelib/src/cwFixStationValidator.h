@@ -183,6 +183,13 @@ private:
     //! revalidate()'s body: writes every node's warning rows.
     void revalidateNodes();
 
+    //! Queue one revalidate() for this event-loop turn: an attach or a scan
+    //! apply relists the attached fixes of every node it touches, and each
+    //! pass walks the whole region. A synchronous revalidate() in between
+    //! covers the queued one, which then does nothing.
+    void scheduleRevalidate();
+    void runPendingRevalidate();
+
     void syncNodeConnections();
 
     //! Collects fixStationWarnings() from the nodes' error lists. Also runs on a
@@ -243,6 +250,9 @@ private:
     //! Set while revalidate() writes warnings, so the list is rebuilt once per
     //! pass rather than once per written row.
     bool m_isRevalidating = false;
+
+    //! Whether a scheduleRevalidate() is still waiting for its turn.
+    bool m_revalidatePending = false;
 };
 
 #endif // CWFIXSTATIONVALIDATOR_H

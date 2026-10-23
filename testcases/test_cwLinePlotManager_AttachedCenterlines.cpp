@@ -968,6 +968,7 @@ TEST_CASE("A file whose fixes name their own system leaves a native fix's frame 
     nativeFix.setInputCS(kCompassProjectCS);
     nativeFix.setCoordinate(kNativeFixEasting, kNativeFixNorthing, kNativeFixElevation);
     project->cave->fixStations()->appendFixStation(nativeFix);
+    QCoreApplication::processEvents();
     const cwGeoReference* geoReference = project->project->cavingRegion()->geoReference();
     REQUIRE(geoReference->anchor().kind == cwGeoReference::Anchor::FixStation);
     const QString before = geoReference->localCoordinateSystem();

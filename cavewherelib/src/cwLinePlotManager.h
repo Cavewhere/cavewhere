@@ -205,6 +205,9 @@ private:
     // to m_restarter, so a burst of edits queues one start.
     bool m_solveScheduled = false;
 
+    // True while a connectNodeInputs() pass is queued for this event-loop turn.
+    bool m_connectNodeInputsPending = false;
+
     //! Starts the solve once the external scan in flight, if any, has applied.
     void scheduleSolve();
     void startSolveAfterScan();
@@ -219,9 +222,13 @@ private:
     void connectFixStations(cwSurveyNode* node);
 
     //! Hooks the fix stations of every node in the tree. Safe to repeat: each
-    //! connection is unique, so the subtreeChanged handler can call it after
-    //! every insert without stacking re-solves.
+    //! connection is unique, so repeating it never stacks re-solves.
     void connectNodeInputs();
+
+    //! Marks the plot dirty at once and hooks the new nodes' fix stations once
+    //! per event-loop turn: the hookup walks the whole tree, and the solve
+    //! snapshot is queued behind it anyway.
+    void handleSubtreeChanged();
 
     //! Re-solve when the region's equate list changes. An equate is a survey
     //! input like a shot or a fix — it is what joins two scopes cavern would

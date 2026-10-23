@@ -79,6 +79,8 @@ void appendFix(cwCavingRegion* region,
     fix.setInputCS(inputCS);
     fix.setCoordinate(easting, northing, elevation);
     region->cave(0)->fixStations()->appendFixStation(fix);
+    // The frame the fix anchors settles on the next event-loop turn.
+    QCoreApplication::processEvents();
 }
 
 //! Append a fix that carries a coordinate system but no coordinate — the shape

@@ -39,6 +39,7 @@
 #include <algorithm>
 #include <functional>
 #include <tuple>
+#include <utility>
 
 namespace {
 
@@ -905,6 +906,7 @@ void cwExternalCenterlineManager::applyScanResult(ExternalScanResult result)
     m_solveOnScanApply = false;
     m_fileOwnsDeclination = std::move(result.fileOwnsDeclination);
     m_ownerFixes = std::move(result.ownerFixes);
+    indexOwnerFixes();
     m_ownerFixedStations = std::move(result.ownerFixedStations);
     m_ownerDefaultedDatums = std::move(result.ownerDefaultedDatums);
     m_ownerOutputSystems = std::move(result.ownerOutputSystems);
@@ -994,6 +996,15 @@ void cwExternalCenterlineManager::applyHarvest(const ExternalScanResult& result)
 
         refreshAttachedFixes(node);
     }
+    // allNodes() leaves out the root, so a refresh recorded for it stays
+    // pending for the queued drain.
+    const cwSurveyNode* root = m_region->rootNode();
+    const bool rootPending = m_pendingFixNodes.contains(root) || m_pendingFixSubtrees.contains(root);
+    m_pendingFixNodes.clear();
+    m_pendingFixSubtrees.clear();
+    if (rootPending) {
+        m_pendingFixNodes.insert(root);
+    }
 
     if (memberViewsMoved) {
         m_region->invalidateMemberViews();
@@ -1008,26 +1019,38 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
     // stations sit under its scopePrefix(), as in fileFixedStations(). A fix
     // listed on a derived node keeps the owner's name for it.
     using ScannedFix = cwExternalCenterlineScanner::ScannedFix;
+    struct Listing {
+        QUuid ownerId;
+        QString scope;
+        QString fileName;
+        ReadInSystem readIn;
+    };
+    const auto listingFor = [this](const QUuid& ownerId, const QString& scope,
+                                   const cwExternalCenterline& centerline) {
+        return Listing{ownerId, scope, QFileInfo(centerline.entryFile()).fileName(),
+                       readInSystemFor(ownerId, centerline)};
+    };
+    const auto listed = [](const Listing& listing, const ScannedFix& fix) {
+        const bool bare = !fix.hasCoordinateSystem();
+        return cwAttachedFix{listing.scope + fix.station, fix.coordinate, fix.coordinateSystem,
+                             listing.fileName, fix.file, fix.line,
+                             bare ? listing.readIn.system : QString(),
+                             fix.reference,
+                             bare && listing.readIn.fileOutput,
+                             listing.ownerId,
+                             fix.placementSystem};
+    };
     const auto ownerFixes = [&](const QUuid& ownerId, const QString& scope,
                                 const cwExternalCenterline& centerline,
                                 const std::function<bool(const ScannedFix&)>& holds) {
-        QList<cwAttachedFix> listed;
-        const QString fileName = QFileInfo(centerline.entryFile()).fileName();
-        const ReadInSystem readIn = readInSystemFor(ownerId, centerline);
+        QList<cwAttachedFix> fixes;
+        const Listing listing = listingFor(ownerId, scope, centerline);
         for (const ScannedFix& fix : m_ownerFixes.value(ownerId)) {
-            if (!holds(fix)) {
-                continue;
+            if (holds(fix)) {
+                fixes.append(listed(listing, fix));
             }
-            const bool bare = !fix.hasCoordinateSystem();
-            listed.append({scope + fix.station, fix.coordinate, fix.coordinateSystem,
-                           fileName, fix.file, fix.line,
-                           bare ? readIn.system : QString(),
-                           fix.reference,
-                           bare && readIn.fileOutput,
-                           ownerId,
-                           fix.placementSystem});
         }
-        return listed;
+        return fixes;
     };
     const auto addFileFixedStations = [&](const QUuid& ownerId) {
         const auto fixed = m_ownerFixedStations.constFind(ownerId);
@@ -1054,26 +1077,43 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
     const auto takenByTrip = [&tripPaths](const ScannedFix& fix) {
         return tripPaths.contains(fix.tripPath);
     };
-    const auto fixesFromOwner = [&](const std::function<bool(const ScannedFix&)>& holds) {
-        return ownerFixes(owner->id(), QString(), owner->externalCenterline(), holds);
+    // A derived record reads only its own bucket of the owner's fixes, so a
+    // node with a thousand derived trips costs one pass over the fixes, not a
+    // thousand.
+    const QList<ScannedFix> ownerFixList = ownerAttaches ? m_ownerFixes.value(owner->id())
+                                                         : QList<ScannedFix>();
+    const OwnerFixIndex ownerIndex = ownerAttaches ? m_ownerFixIndex.value(owner->id())
+                                                   : OwnerFixIndex();
+    const Listing ownerListing = ownerAttaches
+        ? listingFor(owner->id(), QString(), owner->externalCenterline())
+        : Listing();
+    const auto bucketFixes = [&](const QList<qsizetype>& bucket,
+                                 const std::function<bool(const ScannedFix&)>& holds) {
+        QList<cwAttachedFix> fixes;
+        for (const qsizetype index : bucket) {
+            const ScannedFix& fix = ownerFixList.at(index);
+            if (holds(fix)) {
+                fixes.append(listed(ownerListing, fix));
+            }
+        }
+        return fixes;
     };
     if (ownsAttachment) {
         const QSet<QString> derivedPaths = derivedNodePaths(node);
-        attachedFixes.append(fixesFromOwner([&](const ScannedFix& fix) {
+        attachedFixes.append(ownerFixes(owner->id(), QString(), owner->externalCenterline(),
+                                        [&](const ScannedFix& fix) {
             return !derivedPaths.contains(fix.nodePath) && !takenByTrip(fix);
         }));
         addFileFixedStations(node->id());
     } else if (ownerAttaches) {
-        const QString sourcePath = node->sourcePath();
-        attachedFixes.append(fixesFromOwner([&](const ScannedFix& fix) {
-            return fix.nodePath == sourcePath && !takenByTrip(fix);
-        }));
+        attachedFixes.append(bucketFixes(ownerIndex.byNodePath.value(node->sourcePath()),
+                                         [&](const ScannedFix& fix) { return !takenByTrip(fix); }));
     }
     for (cwTrip* trip : node->trips()) {
         if (trip->isDerived()) {
-            const QString tripPath = trip->sourcePath();
             trip->setAttachedFixes(ownerAttaches
-                ? fixesFromOwner([&tripPath](const ScannedFix& fix) { return fix.tripPath == tripPath; })
+                ? bucketFixes(ownerIndex.byTripPath.value(trip->sourcePath()),
+                              [](const ScannedFix&) { return true; })
                 : QList<cwAttachedFix>());
             continue;
         }
@@ -1084,6 +1124,20 @@ void cwExternalCenterlineManager::refreshAttachedFixes(cwSurveyNode* node)
 
     node->setAttachedFixes(attachedFixes);
     node->setFileFixedStations(fileFixedStations);
+}
+
+void cwExternalCenterlineManager::indexOwnerFixes()
+{
+    m_ownerFixIndex.clear();
+    m_ownerFixIndex.reserve(m_ownerFixes.size());
+    for (auto it = m_ownerFixes.constBegin(); it != m_ownerFixes.constEnd(); ++it) {
+        OwnerFixIndex& index = m_ownerFixIndex[it.key()];
+        const QList<cwExternalCenterlineScanner::ScannedFix>& fixes = it.value();
+        for (qsizetype i = 0; i < fixes.size(); ++i) {
+            index.byTripPath[fixes.at(i).tripPath].append(i);
+            index.byNodePath[fixes.at(i).nodePath].append(i);
+        }
+    }
 }
 
 QSet<QString> cwExternalCenterlineManager::derivedNodePaths(const cwSurveyNode* owner)
@@ -1116,17 +1170,56 @@ cwExternalCenterlineManager::ReadInSystem cwExternalCenterlineManager::readInSys
 void cwExternalCenterlineManager::refreshSenderAttachedFixes()
 {
     if (const auto* trip = qobject_cast<cwTrip*>(sender())) {
-        if (trip->parentNode() != nullptr) {
-            refreshAttachedFixes(trip->parentNode());
+        if (trip->parentNode() == nullptr) {
+            return;
         }
+        m_pendingFixNodes.insert(trip->parentNode());
+    } else if (const auto* node = qobject_cast<cwSurveyNode*>(sender())) {
+        // A node's attachment reaches the derived nodes under it, which list
+        // the fixes their files hold.
+        m_pendingFixSubtrees.insert(node);
+    } else {
         return;
     }
-    // A node's attachment reaches the derived nodes under it, which list the
-    // fixes their files hold.
-    if (auto* node = qobject_cast<cwSurveyNode*>(sender())) {
-        refreshAttachedFixes(node);
-        for (cwSurveyNode* descendant : node->allNodes()) {
-            refreshAttachedFixes(descendant);
+
+    if (m_fixRefreshPending) {
+        return;
+    }
+    m_fixRefreshPending = true;
+    QMetaObject::invokeMethod(this, &cwExternalCenterlineManager::refreshPendingAttachedFixes,
+                              Qt::QueuedConnection);
+}
+
+void cwExternalCenterlineManager::refreshPendingAttachedFixes()
+{
+    m_fixRefreshPending = false;
+    // The sets are matched against the live tree and never dereferenced, so a
+    // node destroyed since it was recorded is skipped by construction.
+    const QSet<const cwSurveyNode*> nodes = std::exchange(m_pendingFixNodes, {});
+    const QSet<const cwSurveyNode*> subtrees = std::exchange(m_pendingFixSubtrees, {});
+    if (m_region.isNull() || (nodes.isEmpty() && subtrees.isEmpty())) {
+        return;
+    }
+
+    const auto pending = [&](const cwSurveyNode* node) {
+        if (nodes.contains(node)) {
+            return true;
+        }
+        for (const cwSurveyNode* current = node; current != nullptr; current = current->parentNode()) {
+            if (subtrees.contains(current)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    cwSurveyNode* root = m_region->rootNode();
+    if (pending(root)) {
+        refreshAttachedFixes(root);
+    }
+    for (cwSurveyNode* node : root->allNodes()) {
+        if (pending(node)) {
+            refreshAttachedFixes(node);
         }
     }
 }

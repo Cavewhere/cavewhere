@@ -346,6 +346,7 @@ TEST_CASE("A frame that moves takes its clouds with it", "[cwLocalProjectionFram
     cwFixStation corrected = fix;
     corrected.setCoordinate(500000.0, 4294000.0, 110.0);
     cave->fixStations()->setFixStations({corrected});
+    QCoreApplication::processEvents();
     REQUIRE(waitForFrame(&region));
 
     CHECK(layer->loadStatus() == cwLazLayer::LoadStatus::Loaded);
@@ -383,6 +384,7 @@ TEST_CASE("A frame that only changes hands leaves its clouds alone",
     // that moving the origin would be churn. Every coordinate stays where it
     // was, so re-reading a directory of clouds off disk would buy nothing.
     cave->fixStations()->setFixStations({});
+    QCoreApplication::processEvents();
     REQUIRE(geoReference->state() == cwGeoReference::Frozen);
     REQUIRE(geoReference->localCoordinateSystem() == frame);
 

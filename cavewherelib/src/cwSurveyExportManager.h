@@ -107,6 +107,13 @@ private:
     // the manager outliving any individual cave/trip in the region.
     QList<QMetaObject::Connection> m_externalCenterlineConnections;
 
+    // The region root's subtreeChanged, which schedules the rewire. Held apart
+    // from the rewire's own connections so a rewire never drops it.
+    QMetaObject::Connection m_subtreeConnection;
+
+    // Whether a scheduleRewire() is still waiting for its turn.
+    bool m_rewirePending = false;
+
     void updateCaveActions(const QModelIndex& index);
     void updateTripActions(const QModelIndex& index);
 
@@ -114,11 +121,12 @@ private:
     cwTrip* currentTrip() const;
 
     // Tears down and re-establishes every signal connection used to drive
-    // recomputeCanExport(): the root node's subtreeChanged and per-node /
-    // per-trip externalCenterlineChanged, at every depth.
-    // Cheap (a handful of nodes and trips in normal projects) and run only
-    // on structural changes.
+    // recomputeCanExport(): the per-node / per-trip externalCenterlineChanged,
+    // at every depth. Walks the whole tree, so structural changes reach it
+    // through scheduleRewire(), once per event-loop turn.
     void rewireExternalCenterlineTracking();
+    void scheduleRewire();
+    void runPendingRewire();
 
     // Walks every node (and its trips) in the current region; updates
     // m_canExport / m_exportDisabledReason and emits canExportChanged()

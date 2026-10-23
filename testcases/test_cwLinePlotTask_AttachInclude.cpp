@@ -1541,6 +1541,7 @@ TEST_CASE("A trip-attached file's bare *fix reads in the system in scope around 
         // warning follows on the re-solve.
         attached->setName(QStringLiteral("Renamed"));
         REQUIRE(scopedD1() != originalD1);
+        QCoreApplication::processEvents();
         CHECK(host->attachedFixes()->attachedFixes().first().station == scopedD1());
         manager.waitToFinish();
         const QStringList renamedWarnings = attachedFixWarnings(host);

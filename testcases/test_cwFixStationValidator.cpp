@@ -27,6 +27,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 //Qt includes
+#include <QCoreApplication>
 #include <QSignalSpy>
 #include <QUuid>
 
@@ -79,6 +80,8 @@ void appendGoodFixes(cwCave* cave)
         makeFix(QStringLiteral("A3"), QStringLiteral("EPSG:32612"), 499900.0, 4193900.0, 2705.0));
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("A4"), QStringLiteral("EPSG:32612"), 500100.0, 4193950.0, 2708.0));
+    // The frame the classification reads settles on the next event-loop turn.
+    QCoreApplication::processEvents();
 }
 
 } // namespace
@@ -284,6 +287,7 @@ TEST_CASE("currentClassification flags a typo'd fix across caves with provenance
     const QUuid badId = badFix.id();
     caveB->fixStations()->appendFixStation(badFix);
 
+    QCoreApplication::processEvents();
     const auto result = region.fixStationValidator()->currentClassification();
 
     REQUIRE(result.outliers.size() == 1);
@@ -328,6 +332,7 @@ TEST_CASE("currentClassification reprojects a fix entered in a different CS",
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("W1"), QStringLiteral("EPSG:4326"), -111.0, 37.871, 2700.0));
 
+    QCoreApplication::processEvents();
     const auto result = region.fixStationValidator()->currentClassification();
 
     CHECK(result.outliers.isEmpty());
@@ -363,6 +368,7 @@ TEST_CASE("currentClassification drops fixes with no usable CS of their own",
     cave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("Bad"), QStringLiteral("NOT_A_CS"), 9000000.0, 9000000.0, 0.0));
 
+    QCoreApplication::processEvents();
     const auto result = region.fixStationValidator()->currentClassification();
 
     CHECK(result.outliers.isEmpty());
@@ -409,6 +415,7 @@ TEST_CASE("currentClassification drops a fix that has a CS but no coordinate yet
     REQUIRE_FALSE(blank.inputCS().isEmpty());
     REQUIRE(cwCoordinateTransform::isValidCS(blank.inputCS()));
 
+    QCoreApplication::processEvents();
     const auto result = region.fixStationValidator()->currentClassification();
 
     CHECK(result.outliers.isEmpty());
@@ -747,6 +754,7 @@ TEST_CASE("revalidate flags a lone domain-bad fix on a project with no frame",
     // Correcting it anchors the frame and clears the warning.
     cave->fixStations()->setData(cave->fixStations()->index(0), 478000.0,
                                  cwFixStationModel::EastingRole);
+    QCoreApplication::processEvents();
     CHECK(region.geoReference()->state() == cwGeoReference::Anchored);
     CHECK(cave->errorModel()->warningCount() == 0);
     CHECK(region.fixStationValidator()->warningMessage().isEmpty());
@@ -779,6 +787,7 @@ TEST_CASE("revalidate flags a distant in-domain cave",
     REQUIRE(caveC != nullptr);
     caveC->fixStations()->appendFixStation(
         makeFix(QStringLiteral("C"), QStringLiteral("EPSG:32613"), 478000.0, 5430000.0, 1655.0));
+    QCoreApplication::processEvents();
 
     REQUIRE(caveC->errorModel()->warningCount() == 1);
     // One outlier, so the singular verb. The distance is computed, so the
@@ -853,6 +862,7 @@ TEST_CASE("revalidate flags a two-cave project whose second fix is a continent a
     strayCave->setName(QStringLiteral("Cave 2"));
     strayCave->fixStations()->appendFixStation(
         makeFix(QStringLiteral("b2"), QStringLiteral("EPSG:4326"), -98.370455, 41.936678, 0.0));
+    QCoreApplication::processEvents();
 
     REQUIRE(bcCave->errorModel()->warningCount() == 0);
     REQUIRE(strayCave->errorModel()->warningCount() == 1);
@@ -1123,6 +1133,7 @@ TEST_CASE("a fix on a station an attached file fixes itself is flagged",
 
     // As the attach scan's harvest reports the file's own *fix.
     cave->setFileFixedStations({{cave->id(), {QStringLiteral("doghill.d1")}}});
+    QCoreApplication::processEvents();
 
     const QString collision = QStringLiteral(
         "survex_blocks.svx already fixes doghill.d1; remove that fix from the file or fix "
@@ -1135,6 +1146,7 @@ TEST_CASE("a fix on a station an attached file fixes itself is flagged",
 
     // A file that stops fixing the station frees it for the node's fix.
     cave->setFileFixedStations({});
+    QCoreApplication::processEvents();
     CHECK(cave->errorModel()->warningCount() == 0);
 }
 

@@ -222,6 +222,9 @@ private:
     //! Whether a project load is replacing the region's data — see setLoading().
     bool m_loading = false;
 
+    //! Whether runInputsPass() is already queued for this event-loop turn.
+    bool m_inputsPassPending = false;
+
     //! anchorDescription() as it last read, so the signal reports a change
     //! rather than an opportunity for one. Bookkeeping for the notification
     //! only: every read still resolves against the region.
@@ -390,6 +393,15 @@ private:
     bool anchorToFirstUsable(const QList<Input>& inputs);
 
     void syncNodeConnections();
+
+    //! Queue one runInputsPass() for this event-loop turn. Every per-node and
+    //! per-trip input signal lands here, so an attach that touches a thousand
+    //! trips settles the frame once.
+    void scheduleInputsPass();
+    //! The queued call: a direct runInputsPass() in between (setLoading(false))
+    //! already settled the frame, so this one does nothing.
+    void runPendingInputsPass();
+    void runInputsPass();
 };
 
 #endif // CWLOCALPROJECTIONMANAGER_H

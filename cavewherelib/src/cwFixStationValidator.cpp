@@ -285,11 +285,29 @@ QString stationNameFor(cwSurveyNode* node, const QUuid& fixId)
 
 void cwFixStationValidator::revalidate()
 {
+    m_revalidatePending = false;
     {
         const QScopedValueRollback revalidating(m_isRevalidating, true);
         revalidateNodes();
     }
     rebuildFixStationWarnings();
+}
+
+void cwFixStationValidator::scheduleRevalidate()
+{
+    if (m_revalidatePending) {
+        return;
+    }
+    m_revalidatePending = true;
+    QMetaObject::invokeMethod(this, &cwFixStationValidator::runPendingRevalidate,
+                              Qt::QueuedConnection);
+}
+
+void cwFixStationValidator::runPendingRevalidate()
+{
+    if (m_revalidatePending) {
+        revalidate();
+    }
 }
 
 void cwFixStationValidator::rebuildFixStationWarnings()
@@ -568,7 +586,7 @@ void cwFixStationValidator::syncNodeConnections()
         // The stations the node's attached files fix themselves decide
         // collisions, so a change to them must re-attribute.
         connect(node, &cwSurveyNode::attachedFixesChanged,
-                this, &cwFixStationValidator::revalidate, Qt::UniqueConnection);
+                this, &cwFixStationValidator::scheduleRevalidate, Qt::UniqueConnection);
         connect(node->errorModel()->errors(), &cwErrorListModel::warningMessagesChanged,
                 this, &cwFixStationValidator::rebuildFixStationWarnings, Qt::UniqueConnection);
         m_connectedNodes.insert(node);

@@ -186,6 +186,7 @@ TEST_CASE("Attaching a trip added after region setup is still tracked",
     cwTrip* lateTrip = new cwTrip();
     lateTrip->setName(QStringLiteral("Late"));
     cave->addTrip(lateTrip);
+    QCoreApplication::processEvents();
     REQUIRE(manager.canExport() == true);
 
     lateTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
@@ -205,6 +206,7 @@ TEST_CASE("Attaching a cave added after region setup is still tracked",
     REQUIRE(manager.canExport() == true);
 
     cwCave* lateCave = addCaveWithOneShot(region, QStringLiteral("LateCave"));
+    QCoreApplication::processEvents();
     REQUIRE(manager.canExport() == true);
 
     lateCave->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));
@@ -230,6 +232,7 @@ TEST_CASE("Attaching a trip in a depth-2 node added after region setup is still 
     cwTrip* lateTrip = new cwTrip();
     lateTrip->setName(QStringLiteral("Late"));
     section->addTrip(lateTrip);
+    QCoreApplication::processEvents();
     REQUIRE(manager.canExport() == true);
 
     lateTrip->setExternalCenterline(cwExternalCenterline(QStringLiteral("late.svx")));

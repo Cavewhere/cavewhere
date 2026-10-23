@@ -296,10 +296,8 @@ void cwLinePlotManager::setRegion(cwCavingRegion* region) {
 
     // A trip or node added or removed at any depth changes what cavern reads,
     // and a node added anywhere brings fix stations to hook.
-    connect(Region->rootNode(), &cwSurveyNode::subtreeChanged, this, [this]() {
-        connectNodeInputs();
-        runSurvex();
-    });
+    connect(Region->rootNode(), &cwSurveyNode::subtreeChanged,
+            this, &cwLinePlotManager::handleSubtreeChanged);
 
     // The local projection is what *cs out names, and cavern reports the solved
     // stations in it — so the scene's coordinates are only meaningful in the
@@ -344,7 +342,15 @@ void cwLinePlotManager::connectEquates(cwEquateModel* equates) {
     connect(equates, &cwEquateModel::modelReset,   this, &cwLinePlotManager::runSurvex, Qt::UniqueConnection);
 }
 
+void cwLinePlotManager::handleSubtreeChanged() {
+    runSurvex();
+    if (m_connectNodeInputsPending) { return; }
+    m_connectNodeInputsPending = true;
+    QMetaObject::invokeMethod(this, &cwLinePlotManager::connectNodeInputs, Qt::QueuedConnection);
+}
+
 void cwLinePlotManager::connectNodeInputs() {
+    m_connectNodeInputsPending = false;
     if (Region == nullptr) { return; }
     for (cwSurveyNode* node : Region->rootNode()->allNodes()) {
         connectFixStations(node);

@@ -310,6 +310,12 @@ cwCavingRegion* cwSurveyExportManager::cavingRegion() const {
 void cwSurveyExportManager::setCavingRegion(cwCavingRegion* cavingRegion) {
     if(CavingRegion != cavingRegion) {
         CavingRegion = cavingRegion;
+        QObject::disconnect(m_subtreeConnection);
+        if (!CavingRegion.isNull()) {
+            m_subtreeConnection = connect(
+                CavingRegion->rootNode(), &cwSurveyNode::subtreeChanged,
+                this, &cwSurveyExportManager::scheduleRewire);
+        }
         rewireExternalCenterlineTracking();
         updateActions();
         emit cavingRegionChanged();
@@ -319,12 +325,14 @@ void cwSurveyExportManager::setCavingRegion(cwCavingRegion* cavingRegion) {
 /**
   \brief Tears down every signal connection that drives the canExport gate
   and re-wires against the current region, every node in its tree, and each
-  node's trips. Called whenever the region pointer changes or any structural
-  mutation (a node or trip inserted or removed at any depth) fires. Always
+  node's trips. Called when the region pointer changes and, once per
+  event-loop turn through scheduleRewire(), after a node or trip is inserted or
+  removed at any depth. Always
   finishes with a recomputeCanExport() so the gate state stays consistent with
   the freshly-wired set.
   */
 void cwSurveyExportManager::rewireExternalCenterlineTracking() {
+    m_rewirePending = false;
     for (const auto& connection : m_externalCenterlineConnections) {
         QObject::disconnect(connection);
     }
@@ -332,10 +340,6 @@ void cwSurveyExportManager::rewireExternalCenterlineTracking() {
 
     if (!CavingRegion.isNull()) {
         const cwSurveyNode* root = CavingRegion->rootNode();
-        m_externalCenterlineConnections.append(connect(
-            root, &cwSurveyNode::subtreeChanged,
-            this, &cwSurveyExportManager::rewireExternalCenterlineTracking));
-
         const QList<cwSurveyNode*> nodes = root->allNodes();
         for (cwSurveyNode* node : nodes) {
             m_externalCenterlineConnections.append(connect(
@@ -352,6 +356,21 @@ void cwSurveyExportManager::rewireExternalCenterlineTracking() {
     }
 
     recomputeCanExport();
+}
+
+void cwSurveyExportManager::scheduleRewire() {
+    if (m_rewirePending) {
+        return;
+    }
+    m_rewirePending = true;
+    QMetaObject::invokeMethod(this, &cwSurveyExportManager::runPendingRewire,
+                              Qt::QueuedConnection);
+}
+
+void cwSurveyExportManager::runPendingRewire() {
+    if (m_rewirePending) {
+        rewireExternalCenterlineTracking();
+    }
 }
 
 /**

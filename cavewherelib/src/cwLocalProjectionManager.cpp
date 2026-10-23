@@ -72,10 +72,8 @@ cwLocalProjectionManager::cwLocalProjectionManager(cwCavingRegion* region) :
 {
     Q_ASSERT(m_region != nullptr);
 
-    connect(m_region->rootNode(), &cwSurveyNode::subtreeChanged, this, [this] {
-        syncNodeConnections();
-        evaluate();
-    });
+    connect(m_region->rootNode(), &cwSurveyNode::subtreeChanged,
+            this, &cwLocalProjectionManager::scheduleInputsPass);
 
     // Everything evaluate() reads off a layer arrives through the model, so
     // these three connections are the whole layer dependency. The row signals
@@ -113,10 +111,10 @@ cwLocalProjectionManager::cwLocalProjectionManager(cwCavingRegion* region) :
     });
 
     // A frame written from outside this class, such as a reset, is measured
-    // against the inputs again. Queued, so a move this class makes has
-    // recorded itself before the frame is read back.
+    // against the inputs again. Through the queued pass, so a move this class
+    // makes has recorded itself before the frame is read back.
     connect(m_region->geoReference(), &cwGeoReference::localProjectionChanged,
-            this, &cwLocalProjectionManager::evaluate, Qt::QueuedConnection);
+            this, &cwLocalProjectionManager::scheduleInputsPass);
 
     syncNodeConnections();
     evaluate();
@@ -191,8 +189,32 @@ void cwLocalProjectionManager::setLoading(bool loading)
         // loads into a frame that is being replaced wholesale.
         cancelEpoch();
     } else {
-        evaluate();
+        runInputsPass();
     }
+}
+
+void cwLocalProjectionManager::scheduleInputsPass()
+{
+    if (m_inputsPassPending) {
+        return;
+    }
+    m_inputsPassPending = true;
+    QMetaObject::invokeMethod(this, &cwLocalProjectionManager::runPendingInputsPass,
+                              Qt::QueuedConnection);
+}
+
+void cwLocalProjectionManager::runPendingInputsPass()
+{
+    if (m_inputsPassPending) {
+        runInputsPass();
+    }
+}
+
+void cwLocalProjectionManager::runInputsPass()
+{
+    m_inputsPassPending = false;
+    syncNodeConnections();
+    evaluate();
 }
 
 QList<cwLocalProjectionManager::Input> cwLocalProjectionManager::gatherInputs() const
@@ -932,13 +954,13 @@ void cwLocalProjectionManager::syncNodeConnections()
     for (cwSurveyNode* node : nodes) {
         cwFixStationModel* model = node->fixStations();
         connect(model, &QAbstractItemModel::rowsInserted,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+                this, &cwLocalProjectionManager::scheduleInputsPass, Qt::UniqueConnection);
         connect(model, &QAbstractItemModel::rowsRemoved,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+                this, &cwLocalProjectionManager::scheduleInputsPass, Qt::UniqueConnection);
         connect(model, &QAbstractItemModel::dataChanged,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+                this, &cwLocalProjectionManager::scheduleInputsPass, Qt::UniqueConnection);
         connect(model, &QAbstractItemModel::modelReset,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+                this, &cwLocalProjectionManager::scheduleInputsPass, Qt::UniqueConnection);
 
         // A node's name is half of what an anchored fix station is called, and
         // it is the one part of that no input signal reports.
@@ -949,12 +971,12 @@ void cwLocalProjectionManager::syncNodeConnections()
         // An attached fix is an input once a system places it: a bare fix's
         // choice arrives on the owner, the fix itself with the scan.
         connect(node, &cwSurveyNode::attachedFixesChanged,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+                this, &cwLocalProjectionManager::scheduleInputsPass, Qt::UniqueConnection);
         connect(node, &cwSurveyNode::externalCenterlineChanged,
-                this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+                this, &cwLocalProjectionManager::scheduleInputsPass, Qt::UniqueConnection);
         for (cwTrip* trip : node->trips()) {
             connect(trip, &cwTrip::externalCenterlineChanged,
-                    this, &cwLocalProjectionManager::evaluate, Qt::UniqueConnection);
+                    this, &cwLocalProjectionManager::scheduleInputsPass, Qt::UniqueConnection);
             connect(trip, &cwTrip::nameChanged, this,
                     &cwLocalProjectionManager::updateAnchorDescription,
                     Qt::UniqueConnection);

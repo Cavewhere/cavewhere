@@ -91,8 +91,15 @@ private:
     QDateTime m_lastSurvey;
     int m_stationCount = 0;
     bool m_stationCountKnown = true;
+    bool m_rewireTripsPending = false;
 
     void rewireTrips();
+
+    //! Queues one rewireTrips() for this event-loop turn, since it walks the
+    //! node's whole subtree and a fill or a Reload changes it many times per turn.
+    void scheduleRewireTrips();
+    void runPendingRewireTrips();
+
     void updateLastSurvey();
     void disconnectTrips();
     void setTripCount(int count);

@@ -21,6 +21,7 @@
 #include "FixStationFixtureHelper.h"
 
 //Qt includes
+#include <QCoreApplication>
 #include <QtMath>
 
 //Std includes
@@ -207,6 +208,7 @@ TEST_CASE("cwGridConvergence: moving the frame recomputes the caves that didn't 
     REQUIRE(fixes->setData(fixes->index(0),
                            kCentralMeridianEasting + kCorrectionEast,
                            cwFixStationModel::EastingRole));
+    QCoreApplication::processEvents();
 
     CHECK_THAT(anchorCave->gridConvergence()->angle(), WithinAbs(0.0, 1e-6));
     CHECK_THAT(eastCave->gridConvergence()->angle(),
@@ -228,6 +230,7 @@ TEST_CASE("cwGridConvergence: a cave outside a region has no grid to converge to
     cwCavingRegion region;
     cwCave* joined = cave.release();
     region.addCave(joined);
+    QCoreApplication::processEvents();
 
     CHECK(joined->gridConvergence()->state() == cwGridConvergence::Valid);
 }

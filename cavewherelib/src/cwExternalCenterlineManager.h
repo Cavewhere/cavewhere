@@ -538,6 +538,22 @@ private:
     // folder), from the most recent recompute; handed to each
     // solve through solveInputs(). Rebuilt wholesale on every recompute.
     QHash<QUuid, QList<cwExternalCenterlineScanner::ScannedFix>> m_ownerFixes;
+
+    // Each owner's m_ownerFixes, as positions into its list in list order,
+    // grouped by the leaf block (tripPath) and by the file (nodePath) that
+    // holds the fix. Rebuilt by indexOwnerFixes() whenever m_ownerFixes is.
+    struct OwnerFixIndex {
+        QHash<QString, QList<qsizetype>> byTripPath;
+        QHash<QString, QList<qsizetype>> byNodePath;
+    };
+    QHash<QUuid, OwnerFixIndex> m_ownerFixIndex;
+
+    // Nodes whose attached fixes refreshPendingAttachedFixes() re-lists: the
+    // nodes themselves, and whole subtrees. Compared against the live tree
+    // only, never dereferenced.
+    QSet<const cwSurveyNode*> m_pendingFixNodes;
+    QSet<const cwSurveyNode*> m_pendingFixSubtrees;
+    bool m_fixRefreshPending = false;
     QHash<QUuid, QStringList> m_ownerFixedStations;
     QHash<QUuid, QList<cwExternalCenterlineScanner::DefaultedDatum>> m_ownerDefaultedDatums;
     QHash<QUuid, QString> m_ownerOutputSystems;
@@ -740,6 +756,11 @@ private:
     // ones from its own file, the owner the rest, an attached trip's under its
     // live scopePrefix(); and the stations each file fixes on the owner.
     void refreshAttachedFixes(cwSurveyNode* node);
+    void indexOwnerFixes();
+
+    // Re-lists the attached fixes of every node refreshSenderAttachedFixes()
+    // recorded since the last pass, once per event-loop turn.
+    void refreshPendingAttachedFixes();
 
     // The sourcePaths of the derived nodes under \a owner, the source root
     // whose file they come from; empty for an owner that is no source root.
@@ -840,7 +861,7 @@ private slots:
     void rebuildAttachedRowsFromNames();
 
     // Trip scopes moved under the sending node, or the sending trip's
-    // centerline changed: re-list that node's attached fixes.
+    // centerline changed: queue a re-list of that node's attached fixes.
     void refreshSenderAttachedFixes();
 };
 
