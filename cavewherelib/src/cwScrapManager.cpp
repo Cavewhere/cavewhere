@@ -1143,8 +1143,8 @@ cwScrapManager::TriangulatedScrapRun cwScrapManager::triangulateScraps(const QLi
     task.setScrapData(scrapData);
     task.setFormatType(cwTextureUploadTask::format());
 
-    const auto limited = task.triangulate(this);
-    run.all = limited.all;
+    run.limited = task.triangulate(this);
+    const auto& limited = run.limited;
 
     const int count = qMin(scraps.size(), limited.items.size());
     run.scraps.reserve(count);

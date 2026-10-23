@@ -76,11 +76,12 @@ public:
         QFuture<cwTriangulatedData> data;
     };
 
-    //One run's scraps, plus the run's `all`: it settles when every scrap
-    //settles, and canceling it stops admission and cancels every scrap.
+    //One run's scraps, plus the limited() run behind them: limited.all settles
+    //when every scrap settles. A run stops when this manager is destroyed; a
+    //caller that keeps the run can stop it sooner with limited.cancel().
     struct TriangulatedScrapRun {
         QList<TriangulatedScrapResult> scraps;
-        QFuture<void> all;
+        AsyncFuture::Limited<cwTriangulatedData> limited;
     };
 
     // Snapshot of data the sketch-scrap derivation pipeline produced for one
