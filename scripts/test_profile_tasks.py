@@ -590,5 +590,41 @@ class GpuTests(unittest.TestCase):
         self.assertIn("Footprint growth MB", report)
 
 
+class ChargedTests(unittest.TestCase):
+    """A limited() launcher's task carries charged_bytes=, the weight the limiter charged it."""
+
+    def intervals(self, scale=1):
+        return [
+            task("scraps", 2 * MS, 4 * MS, 11, charged_bytes=128 * MB * scale),
+            task("scraps", 4 * MS, 6 * MS, 11, charged_bytes=64 * MB * scale),
+            task("lidar", 2 * MS, 6 * MS, 12),
+        ]
+
+    def test_reads_charged_argument(self):
+        self.assertEqual(tasks.parse_arguments("ctx=scraps charged_bytes=30")[tasks.CHARGED_BYTES_ARG], "30")
+
+    def test_context_sums_its_charged_weights(self):
+        metrics, _ = tasks.analyze_timing(self.intervals(), [], [], [], 8)
+
+        self.assertEqual(metrics["scraps/charged_mb"], 192)
+
+    def test_context_without_charges_reports_zero(self):
+        metrics, _ = tasks.analyze_timing(self.intervals(), [], [], [], 8)
+
+        self.assertEqual(metrics["lidar/charged_mb"], 0)
+
+    def test_report_shows_the_median_beside_footprint_growth(self):
+        runs = [tasks.analyze_timing(self.intervals(scale), [], [], [], 8)[0] for scale in (1, 2, 2)]
+        report = tasks.project_report([("Project", "synthetic.cwproj")], tasks.collect(runs), [], {}, [], [], [])
+
+        lines = report.splitlines()
+        columns = [cell.strip() for cell in next(line for line in lines
+                                                 if line.startswith("| Context |")).strip("|").split("|")]
+        self.assertEqual(columns.index("Charged MB"), columns.index("Footprint growth MB") + 1)
+        scraps = [cell.strip() for cell in next(line for line in lines
+                                                if line.startswith("| scraps |")).strip("|").split("|")]
+        self.assertEqual(scraps[columns.index("Charged MB")], "384 ± 192")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -42,7 +42,7 @@ UNTAGGED_CONTEXT = "untagged"
 DEFAULT_RUNS = 3
 DEFAULT_PAGE = "View"
 DEFAULTS_DOMAIN = "com.cavewhere.CaveWhere"
-SETTING_KEYS = ["threadCount", "automaticUpdate"]
+SETTING_KEYS = ["threadCount", "memoryBudgetMb", "automaticUpdate"]
 APP_NAME = "CaveWhere"
 RECORDED_PROCESS_TYPES = ("launched", "attached")
 # Key under which export_rows() keeps a row's own attributes, beside its cells
@@ -53,6 +53,8 @@ METRICS_FILE = "metrics.json"
 REPORT_FILE = "report.md"
 BUNDLE_SUFFIX = ".cw"
 UNKNOWN = "unknown"
+# Signpost field with the bytes a limiter charged a task, to set against footprint growth
+CHARGED_BYTES_ARG = "charged_bytes"
 
 NS_PER_US = 1_000
 NS_PER_S = 1_000_000_000
@@ -608,6 +610,7 @@ def analyze_timing(intervals, events, states, samples, cores):
             "wait_p95_us": waits.get(context, {}).get("p95", 0),
             "running_s": times.get("Running", 0) / NS_PER_S,
             "waiting_s": sum(times.get(state, 0) for state in WAITING_STATES) / NS_PER_S,
+            "charged_mb": sum(int(task.args.get(CHARGED_BYTES_ARG, 0)) for task in tasks) / BYTES_PER_MB,
         }
         # A context that starts before the sampler's first tick has no baseline
         for key in ("footprint", "gpu"):
@@ -809,6 +812,7 @@ def header(arguments, project):
         ("OS", os_version),
         ("Cores", cores),
         ("Thread count", settings["threadCount"]),
+        ("Memory budget MB", settings["memoryBudgetMb"]),
         ("Automatic update", settings["automaticUpdate"]),
         ("Build", str(arguments.build)),
         ("Project", project),
@@ -850,7 +854,8 @@ CONTEXT_COLUMNS = [
     ("peak_running", "Peak running"), ("peak_queued", "Peak queued"),
     ("wait_p50_us", "Wait p50 µs"), ("wait_p95_us", "Wait p95 µs"),
     ("running_s", "Running s"), ("waiting_s", "Runnable + Preempted s"),
-    ("footprint_growth_mb", "Footprint growth MB"), ("gpu_growth_mb", "GPU growth MB"),
+    ("footprint_growth_mb", "Footprint growth MB"), ("charged_mb", "Charged MB"),
+    ("gpu_growth_mb", "GPU growth MB"),
 ]
 
 WHOLE_RUN_ROWS = [
